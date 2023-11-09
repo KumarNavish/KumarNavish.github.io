@@ -2,7 +2,7 @@
 layout: about
 title: about
 permalink: /
-subtitle: > One day or day one, You decide.
+subtitle: "One day or day one, You decide."
 
 profile:
   align: right
