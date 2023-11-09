@@ -6,10 +6,10 @@ subtitle: "One day or day one, You decide."
 
 profile:
   align: right
-  image: prof_pic.jpg
+  image: navish.jpeg
   image_circular: false # crops the image to make it circular
   more_info: 
-    <p>Dep. of Mathematics and CSc.</p>
+    <p>[DMI](https://dmi.unibas.ch/de/)</p>
     <p>University of Basel</p>
     <p>Basel, Switzerland</p>
 
