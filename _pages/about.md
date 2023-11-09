@@ -9,10 +9,9 @@ profile:
   image: navish.jpeg
   image_circular: false # crops the image to make it circular
   more_info: 
-    <em>image_caption</em>
-    <p><DMI, Spielgasse 1</p>
-    <p>University of Basel</p>
-    <p>Basel, Switzerland</p>
+    <em><DMI, Spielgasse 1</em>
+    <em>University of Basel</em>
+    <em>Basel, Switzerland</em>
 
 selected_papers: true # includes a list of papers marked as "selected={true}"
 news: false  # includes a list of news items
