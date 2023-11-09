@@ -2,16 +2,15 @@
 layout: about
 title: About
 permalink: /
-subtitle: One day or day one, You decide.
+subtitle: Basel, Switzerland
 
 profile:
   align: right
   image: navish.jpeg
   image_circular: false # crops the image to make it circular
   more_info: 
-    <em><DMI, Spielgasse 1</em>
-    <em>University of Basel</em>
-    <em>Basel, Switzerland</em>
+    <em><One day or day one, You decide.</em>
+    <em>One day or day one, You decide.</em>
 
 selected_papers: true # includes a list of papers marked as "selected={true}"
 news: false  # includes a list of news items
