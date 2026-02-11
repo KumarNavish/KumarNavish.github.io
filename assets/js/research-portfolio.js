@@ -20,6 +20,10 @@
     return data.curation.overview || {};
   }
 
+  function workYear(work) {
+    return work.year ? String(work.year) : "Undated";
+  }
+
   function renderHero(data) {
     var site = data.curation.site || {};
     var overview = getOverview(data);
@@ -59,10 +63,10 @@
     root.innerHTML = signature
       .map(function (item) {
         return (
-          '<li class="overview-v4-pillar intentional-reveal">' +
+          '<li class="overview-v6-pillar intentional-reveal">' +
             '<h3>' + escape(item.title) + '</h3>' +
             '<p>' + escape(item.text) + '</p>' +
-          '</li>'
+          "</li>"
         );
       })
       .join("");
@@ -78,14 +82,12 @@
 
     root.innerHTML = logic
       .map(function (item, index) {
-        var connector = index < logic.length - 1 ? '<span class="overview-v4-logic-connector" aria-hidden="true"></span>' : "";
         return (
-          '<article class="overview-v4-logic-step intentional-reveal">' +
-            '<p class="overview-v4-step-index">' + String(index + 1).padStart(2, "0") + '</p>' +
-            '<h3>' + escape(item.title) + '</h3>' +
-            '<p>' + escape(item.text) + '</p>' +
-            connector +
-          '</article>'
+          '<article class="overview-v6-logic-step intentional-reveal">' +
+            '<p class="overview-v6-index">' + String(index + 1).padStart(2, "0") + "</p>" +
+            "<h3>" + escape(item.title) + "</h3>" +
+            "<p>" + escape(item.text) + "</p>" +
+          "</article>"
         );
       })
       .join("");
@@ -107,10 +109,10 @@
     root.innerHTML = questions
       .map(function (question, index) {
         return (
-          '<li class="overview-v4-question intentional-reveal">' +
-            '<span class="overview-v4-question-index">Q' + String(index + 1) + '</span>' +
-            '<p>' + escape(question) + '</p>' +
-          '</li>'
+          '<li class="overview-v6-question intentional-reveal">' +
+            '<span class="overview-v6-question-index">Q' + String(index + 1) + "</span>" +
+            "<p>" + escape(question) + "</p>" +
+          "</li>"
         );
       })
       .join("");
@@ -148,73 +150,136 @@
         var inArc = worksByArc[arc.id] || [];
         var anchor = pickArcAnchor(inArc);
         var anchorLink = anchor ? window.ResearchCore.workPrimaryLink(anchor) : "";
+        var countLabel = inArc.length === 1 ? "1 work" : String(inArc.length) + " works";
 
         return (
-          '<article class="overview-v4-arc intentional-reveal">' +
-            '<header class="overview-v4-arc-head">' +
-              '<p class="overview-v4-step-index">' + String(index + 1).padStart(2, "0") + '</p>' +
-              '<h3>' + escape(arc.name) + '</h3>' +
-              '<span>' + inArc.length + ' works</span>' +
-            '</header>' +
-            '<p class="overview-v4-arc-thesis">' + escape(arc.thesis || "") + '</p>' +
-            '<p class="overview-v4-arc-line"><strong>Methods:</strong> ' + escape(arc.methods || "") + '</p>' +
-            '<p class="overview-v4-arc-line"><strong>Practice:</strong> ' + escape(arc.practice || "") + '</p>' +
+          '<article class="overview-v6-arc intentional-reveal">' +
+            '<header class="overview-v6-arc-head">' +
+              '<p class="overview-v6-index">' + String(index + 1).padStart(2, "0") + "</p>" +
+              "<h3>" + escape(arc.name) + "</h3>" +
+              '<span class="overview-v6-arc-count">' + countLabel + "</span>" +
+            "</header>" +
+            '<p class="overview-v6-arc-thesis">' + escape(arc.thesis || "") + "</p>" +
+            '<p class="overview-v6-arc-line"><strong>Methods:</strong> ' + escape(arc.methods || "") + "</p>" +
+            '<p class="overview-v6-arc-line"><strong>Practice:</strong> ' + escape(arc.practice || "") + "</p>" +
             (anchor
-              ? '<p class="overview-v4-arc-anchor"><span>Anchor work:</span> ' +
+              ? '<p class="overview-v6-arc-anchor"><span>Anchor work:</span> ' +
                 (anchorLink
-                  ? '<a href="' + escape(anchorLink) + '" target="_blank" rel="noreferrer">' + escape(anchor.title) + '</a>'
+                  ? '<a href="' + escape(anchorLink) + '" target="_blank" rel="noreferrer">' + escape(anchor.title) + "</a>"
                   : escape(anchor.title)) +
-                '</p>'
+                "</p>"
               : "") +
-            '<a class="intentional-link" href="/publications/?arc=' + escape(arc.id) + '">Open Program</a>' +
-          '</article>'
+            '<a class="intentional-link" href="/publications/?arc=' + escape(arc.id) + '">View Program</a>' +
+          "</article>"
         );
       })
       .join("");
   }
 
-  function evidenceSpotlight(work, arcName) {
-    var primary = window.ResearchCore.workPrimaryLink(work);
-    var reasoning = toText(work.contribution);
-    var system = toText(work.build);
-    var relevance = toText(work.impact);
+  function arcLeadingWork(data, arcId) {
+    var pool = data.works
+      .filter(function (work) {
+        return work.arc === arcId;
+      })
+      .sort(function (a, b) {
+        if ((b.year || 0) !== (a.year || 0)) {
+          return (b.year || 0) - (a.year || 0);
+        }
+        return (b.citations || 0) - (a.citations || 0);
+      });
 
+    return pool[0] || null;
+  }
+
+  function selectEvidenceWorks(data) {
+    var selected = [];
+    var picked = {};
+
+    (data.curation.arcs || []).forEach(function (arc) {
+      if (selected.length >= 3) {
+        return;
+      }
+
+      var candidate = arcLeadingWork(data, arc.id);
+      if (candidate && !picked[candidate.id]) {
+        selected.push(candidate);
+        picked[candidate.id] = true;
+      }
+    });
+
+    var featured = data.works.filter(function (work) {
+      return work.featured;
+    });
+
+    featured.forEach(function (work) {
+      if (selected.length >= 3 || picked[work.id]) {
+        return;
+      }
+      selected.push(work);
+      picked[work.id] = true;
+    });
+
+    data.works.forEach(function (work) {
+      if (selected.length >= 3 || picked[work.id]) {
+        return;
+      }
+      selected.push(work);
+      picked[work.id] = true;
+    });
+
+    return selected.slice(0, 3);
+  }
+
+  function spotlightAxisLine(label, value) {
+    var text = toText(value);
+    if (!text) {
+      return "";
+    }
+
+    return "<p><strong>" + escape(label) + ":</strong> " + escape(text) + "</p>";
+  }
+
+  function renderEvidenceLinks(work) {
     var links = (work.links || [])
       .map(function (link) {
-        return '<a href="' + escape(link.href) + '" target="_blank" rel="noreferrer">' + escape(link.label) + '</a>';
+        return '<a href="' + escape(link.href) + '" target="_blank" rel="noreferrer">' + escape(link.label) + "</a>";
       })
       .join("");
 
+    return links ? '<div class="intentional-work-links">' + links + "</div>" : "";
+  }
+
+  function evidenceSpotlight(work, arcName) {
+    var primary = window.ResearchCore.workPrimaryLink(work);
+    var axis =
+      spotlightAxisLine("Reasoning", work.contribution) +
+      spotlightAxisLine("System", work.build) +
+      spotlightAxisLine("Relevance", work.impact);
+
     return (
-      '<article class="overview-v4-spotlight intentional-reveal">' +
-        '<div class="overview-v4-spotlight-meta">' +
-          '<span class="intentional-chip">' + escape(arcName) + '</span>' +
-          '<span class="overview-v4-work-meta">' + escape(work.year) + ' | cited by ' + window.ResearchCore.formatNumber(work.citations) + '</span>' +
-        '</div>' +
-        '<h3>' + (primary
-          ? '<a href="' + escape(primary) + '" target="_blank" rel="noreferrer">' + escape(work.title) + '</a>'
-          : escape(work.title)) + '</h3>' +
-        '<p class="overview-v4-spotlight-summary">' + escape(work.summary) + '</p>' +
-        '<div class="overview-v4-spotlight-axis">' +
-          (reasoning ? '<p><strong>Reasoning:</strong> ' + escape(reasoning) + '</p>' : "") +
-          (system ? '<p><strong>System:</strong> ' + escape(system) + '</p>' : "") +
-          (relevance ? '<p><strong>Relevance:</strong> ' + escape(relevance) + '</p>' : "") +
-        '</div>' +
-        '<div class="intentional-work-links">' + links + '</div>' +
-      '</article>'
+      '<article class="overview-v6-spotlight intentional-reveal">' +
+        '<p class="overview-v6-spotlight-meta">' + escape(arcName) + " | " + escape(workYear(work)) + " | cited by " + window.ResearchCore.formatNumber(work.citations || 0) + "</p>" +
+        "<h3>" + (primary
+          ? '<a href="' + escape(primary) + '" target="_blank" rel="noreferrer">' + escape(work.title) + "</a>"
+          : escape(work.title)) + "</h3>" +
+        '<p class="overview-v6-spotlight-summary">' + escape(work.summary) + "</p>" +
+        (axis ? '<div class="overview-v6-spotlight-axis">' + axis + "</div>" : "") +
+        renderEvidenceLinks(work) +
+      "</article>"
     );
   }
 
-  function evidenceCompact(work, arcName) {
+  function evidenceItem(work, arcName) {
     var primary = window.ResearchCore.workPrimaryLink(work);
     return (
-      '<article class="overview-v4-compact intentional-reveal">' +
-        '<p class="overview-v4-compact-meta">' + escape(arcName) + ' | ' + escape(work.year) + '</p>' +
-        '<h3>' + (primary
-          ? '<a href="' + escape(primary) + '" target="_blank" rel="noreferrer">' + escape(work.title) + '</a>'
-          : escape(work.title)) + '</h3>' +
-        '<p>' + escape(work.summary) + '</p>' +
-      '</article>'
+      '<article class="overview-v6-evidence-item intentional-reveal">' +
+        '<p class="overview-v6-spotlight-meta">' + escape(arcName) + " | " + escape(workYear(work)) + " | cited by " + window.ResearchCore.formatNumber(work.citations || 0) + "</p>" +
+        "<h3>" + (primary
+          ? '<a href="' + escape(primary) + '" target="_blank" rel="noreferrer">' + escape(work.title) + "</a>"
+          : escape(work.title)) + "</h3>" +
+        "<p>" + escape(work.summary) + "</p>" +
+        renderEvidenceLinks(work) +
+      "</article>"
     );
   }
 
@@ -224,33 +289,26 @@
       return;
     }
 
-    var featured = data.works.filter(function (work) {
-      return work.featured;
-    });
-    if (!featured.length) {
-      featured = data.works.slice(0, 3);
-    }
-
-    featured = featured.slice(0, 3);
-    if (!featured.length) {
+    var selected = selectEvidenceWorks(data);
+    if (!selected.length) {
       root.innerHTML = "";
       return;
     }
 
-    var first = featured[0];
-    var rest = featured.slice(1);
-    var firstArc = data.arcMap[first.arc] || { name: "Unsorted" };
+    var spotlight = selected[0];
+    var supporting = selected.slice(1);
+    var spotlightArc = data.arcMap[spotlight.arc] || { name: "Unsorted" };
 
     root.innerHTML =
-      evidenceSpotlight(first, firstArc.name) +
-      '<div class="overview-v4-compact-grid">' +
-        rest
+      evidenceSpotlight(spotlight, spotlightArc.name) +
+      '<div class="overview-v6-evidence-list">' +
+        supporting
           .map(function (work) {
             var arc = data.arcMap[work.arc] || { name: "Unsorted" };
-            return evidenceCompact(work, arc.name);
+            return evidenceItem(work, arc.name);
           })
           .join("") +
-      '</div>';
+      "</div>";
   }
 
   function renderProgression(data) {
@@ -260,7 +318,6 @@
     }
 
     var timeline = data.curation.timeline || [];
-
     if (!timeline.length) {
       timeline = data.works
         .slice()
@@ -277,13 +334,13 @@
     root.innerHTML = timeline
       .map(function (item) {
         return (
-          '<li class="overview-v4-progress-item intentional-reveal">' +
-            '<div class="overview-v4-progress-year">' + escape(item.year) + '</div>' +
-            '<div>' +
-              '<h3>' + escape(item.title) + '</h3>' +
-              '<p>' + escape(item.note) + '</p>' +
-            '</div>' +
-          '</li>'
+          '<li class="overview-v6-progress-item intentional-reveal">' +
+            '<div class="overview-v6-progress-year">' + escape(item.year) + "</div>" +
+            "<div>" +
+              "<h3>" + escape(item.title) + "</h3>" +
+              "<p>" + escape(item.note) + "</p>" +
+            "</div>" +
+          "</li>"
         );
       })
       .join("");
@@ -301,7 +358,7 @@
     var nodes = Array.prototype.slice.call(document.querySelectorAll(".intentional-reveal"));
 
     nodes.forEach(function (node, index) {
-      node.style.transitionDelay = String(Math.min(index * 0.045, 0.3)) + "s";
+      node.style.transitionDelay = String(Math.min(index * 0.04, 0.26)) + "s";
     });
 
     if (!("IntersectionObserver" in window)) {
@@ -320,7 +377,7 @@
           }
         });
       },
-      { threshold: 0.15 }
+      { threshold: 0.14 }
     );
 
     nodes.forEach(function (node) {
