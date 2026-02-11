@@ -3,8 +3,7 @@ layout: research-home
 title: Research
 permalink: /
 subtitle: Basel, Switzerland
-nav: true
-nav_order: 1
+nav: false
 custom_css:
   - /assets/css/research-portfolio.css
 custom_js:

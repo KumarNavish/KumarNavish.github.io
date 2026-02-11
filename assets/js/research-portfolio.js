@@ -182,7 +182,7 @@ function renderResearchArcs(curation, works) {
   root.innerHTML = arcs
     .map((arc) => {
       const inArc = works.filter((work) => work.arc === arc.id);
-      if (!inArc.length && arc.id !== RESEARCH_DEFAULT_ARC) {
+      if (!inArc.length) {
         return "";
       }
 
