@@ -1,0 +1,429 @@
+.overview-v3 {
+  box-shadow: 0 22px 48px rgba(22, 16, 12, 0.08);
+}
+
+.overview-v3-hero {
+  border-bottom: 1px solid var(--intent-line);
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.9fr);
+  padding-bottom: clamp(1.35rem, 2.8vw, 2.3rem);
+}
+
+.overview-v3-hero-main .intentional-title {
+  font-size: clamp(2.1rem, 5.4vw, 4.7rem);
+  line-height: 1.04;
+  max-width: 13ch;
+}
+
+.overview-v3-hero-main .intentional-subtitle {
+  color: color-mix(in srgb, var(--intent-ink) 90%, var(--intent-muted));
+  font-size: clamp(1.08rem, 1.8vw, 1.26rem);
+  line-height: 1.5;
+  margin-top: 0.95rem;
+  max-width: 52ch;
+}
+
+.overview-v3-hero-main .intentional-context {
+  font-size: 0.92rem;
+  line-height: 1.55;
+  margin-top: 0.76rem;
+  max-width: 63ch;
+}
+
+.overview-v3-scroll-note {
+  color: color-mix(in srgb, var(--intent-muted) 84%, var(--intent-ink));
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.11em;
+  margin: 0.95rem 0 0;
+  text-transform: uppercase;
+}
+
+.overview-v3-identity {
+  background:
+    linear-gradient(150deg, rgba(49, 95, 89, 0.1), transparent 43%),
+    color-mix(in srgb, var(--intent-card) 92%, white);
+  border: 1px solid color-mix(in srgb, var(--intent-line) 82%, white);
+  border-radius: 16px;
+  display: grid;
+  gap: 0.72rem;
+  padding: 1rem;
+}
+
+.overview-v3-identity-kicker {
+  color: var(--intent-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.61rem;
+  letter-spacing: 0.14em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.overview-v3-identity-line {
+  font-family: "Fraunces", serif;
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: -0.008em;
+  line-height: 1.24;
+  margin: 0;
+}
+
+.overview-v3-signature {
+  display: grid;
+  gap: 0.44rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.overview-v3-signature-item {
+  border-top: 1px solid color-mix(in srgb, var(--intent-line) 80%, white);
+  padding-top: 0.45rem;
+}
+
+.overview-v3-signature-item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.overview-v3-signature-item h3 {
+  font-family: "Fraunces", serif;
+  font-size: 0.97rem;
+  font-weight: 600;
+  letter-spacing: -0.004em;
+  margin: 0;
+}
+
+.overview-v3-signature-item p {
+  color: var(--intent-muted);
+  font-size: 0.81rem;
+  margin: 0.24rem 0 0;
+}
+
+.overview-v3-stats {
+  display: grid;
+  gap: 0.45rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.overview-v3-stat {
+  min-height: 76px;
+  padding: 0.56rem 0.58rem;
+}
+
+.overview-v3-stat .intentional-stat-value {
+  font-size: clamp(1.08rem, 2.2vw, 1.4rem);
+}
+
+.overview-v3-stat .intentional-stat-label {
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  margin-top: 0.24rem;
+}
+
+.overview-v3 .intentional-section {
+  padding: clamp(1.7rem, 4vw, 2.8rem) 0;
+}
+
+.overview-v3-logic {
+  display: grid;
+  gap: 0.74rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.overview-v3-logic-step {
+  background: color-mix(in srgb, var(--intent-card) 90%, white);
+  border: 1px solid var(--intent-line);
+  border-radius: 14px;
+  display: grid;
+  gap: 0.34rem;
+  padding: 0.9rem;
+}
+
+.overview-v3-step-index {
+  color: var(--intent-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.overview-v3-logic-step h3 {
+  font-family: "Fraunces", serif;
+  font-size: 1.03rem;
+  font-weight: 600;
+  letter-spacing: -0.006em;
+  margin: 0;
+}
+
+.overview-v3-logic-step p {
+  color: var(--intent-muted);
+  font-size: 0.84rem;
+  margin: 0;
+}
+
+.overview-v3-questions {
+  display: grid;
+  gap: 0.7rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.overview-v3-question {
+  background: color-mix(in srgb, var(--intent-card) 89%, white);
+  border: 1px solid var(--intent-line);
+  border-radius: 14px;
+  display: grid;
+  gap: 0.36rem;
+  min-height: 158px;
+  padding: 0.9rem;
+}
+
+.overview-v3-question p {
+  color: var(--intent-muted);
+  font-size: 0.84rem;
+  margin: 0;
+}
+
+.overview-v3-arcs {
+  display: grid;
+  gap: 0.74rem;
+}
+
+.overview-v3-arc {
+  background: color-mix(in srgb, var(--intent-card) 90%, white);
+  border: 1px solid var(--intent-line);
+  border-radius: 15px;
+  display: grid;
+  gap: 0.44rem;
+  padding: 0.95rem;
+}
+
+.overview-v3-arc-head {
+  align-items: baseline;
+  display: grid;
+  gap: 0.34rem;
+  grid-template-columns: auto 1fr auto;
+}
+
+.overview-v3-arc-head h3 {
+  font-family: "Fraunces", serif;
+  font-size: 1.13rem;
+  font-weight: 600;
+  letter-spacing: -0.006em;
+  margin: 0;
+}
+
+.overview-v3-arc-head span {
+  color: var(--intent-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.overview-v3-arc-line {
+  color: var(--intent-muted);
+  font-size: 0.84rem;
+  margin: 0;
+}
+
+.overview-v3-arc-line strong {
+  color: var(--intent-ink);
+  font-weight: 600;
+}
+
+.overview-v3-arc-anchor {
+  color: var(--intent-muted);
+  font-size: 0.8rem;
+  margin: 0.1rem 0 0;
+}
+
+.overview-v3-arc-anchor span {
+  color: var(--intent-ink);
+  font-weight: 600;
+}
+
+.overview-v3-arc-anchor a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.overview-v3-arc-anchor a:hover,
+.overview-v3-arc-anchor a:focus-visible {
+  text-decoration: underline;
+}
+
+.overview-v3-featured {
+  display: grid;
+  gap: 0.72rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.overview-v3-work {
+  background: color-mix(in srgb, var(--intent-card) 90%, white);
+  border: 1px solid var(--intent-line);
+  border-radius: 15px;
+  display: grid;
+  gap: 0.42rem;
+  padding: 0.95rem;
+}
+
+.overview-v3-work:nth-child(1) {
+  grid-column: 1 / -1;
+}
+
+.overview-v3-work-head {
+  align-items: center;
+  display: flex;
+  gap: 0.6rem;
+  justify-content: space-between;
+}
+
+.overview-v3-work-meta {
+  color: var(--intent-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.overview-v3-work h3 {
+  font-family: "Fraunces", serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  line-height: 1.22;
+  margin: 0.18rem 0 0;
+}
+
+.overview-v3-work h3 a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.overview-v3-work h3 a:hover,
+.overview-v3-work h3 a:focus-visible {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+}
+
+.overview-v3-work-summary {
+  color: var(--intent-muted);
+  font-size: 0.84rem;
+  margin: 0;
+}
+
+.overview-v3-work-axis {
+  display: grid;
+  gap: 0.36rem;
+  margin: 0;
+}
+
+.overview-v3-work-axis div {
+  border-left: 2px solid color-mix(in srgb, var(--intent-line) 84%, white);
+  padding-left: 0.52rem;
+}
+
+.overview-v3-work-axis dt {
+  color: var(--intent-ink);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.61rem;
+  letter-spacing: 0.1em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.overview-v3-work-axis dd {
+  color: var(--intent-muted);
+  font-size: 0.82rem;
+  margin: 0.14rem 0 0;
+}
+
+.overview-v3-progression {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.overview-v3-progress-item {
+  border-top: 1px solid var(--intent-line);
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: 88px minmax(0, 1fr);
+  padding: 0.82rem 0;
+}
+
+.overview-v3-progress-item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.overview-v3-progress-year {
+  color: var(--intent-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.67rem;
+  letter-spacing: 0.13em;
+  margin-top: 0.2rem;
+  text-transform: uppercase;
+}
+
+.overview-v3-progress-item h3 {
+  font-family: "Fraunces", serif;
+  font-size: 1.01rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.overview-v3-progress-item p {
+  color: var(--intent-muted);
+  font-size: 0.84rem;
+  margin: 0.3rem 0 0;
+}
+
+.overview-v3-invite-wrap {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.66rem;
+  margin-top: 1rem;
+}
+
+.overview-v3-invite {
+  color: var(--intent-muted);
+  font-size: 0.86rem;
+  margin: 0;
+  max-width: 66ch;
+}
+
+@media (max-width: 980px) {
+  .overview-v3-hero,
+  .overview-v3-logic,
+  .overview-v3-questions,
+  .overview-v3-featured {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-v3-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .overview-v3-work:nth-child(1) {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 700px) {
+  .overview-v3-hero-main .intentional-title {
+    font-size: clamp(1.9rem, 10vw, 2.8rem);
+  }
+
+  .overview-v3-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-v3-progress-item {
+    gap: 0.38rem;
+    grid-template-columns: 1fr;
+  }
+}
