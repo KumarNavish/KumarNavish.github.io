@@ -23,6 +23,14 @@ USER_AGENT = (
 )
 
 
+def canonicalize_scholar_url(url: str) -> str:
+    parsed = urllib.parse.urlparse(url)
+    query_items = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
+    filtered = [(key, value) for key, value in query_items if key not in {"cstart", "pagesize"}]
+    canonical_query = urllib.parse.urlencode(filtered, doseq=True, safe=":")
+    return urllib.parse.urlunparse(parsed._replace(query=canonical_query))
+
+
 def fetch_html(url: str) -> str:
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(request, timeout=30) as response:  # nosec B310
@@ -88,7 +96,11 @@ def parse_profile(profile_html: str, user_id: str) -> Dict[str, object]:
                 "venue": clean_text(gray_lines[1]) if len(gray_lines) > 1 else "",
                 "year": int(year_match.group(1)) if year_match else None,
                 "citations": citation_count_int,
-                "scholar_citation_url": urllib.parse.urljoin(BASE_URL, scholar_link) if scholar_link else "",
+                "scholar_citation_url": (
+                    canonicalize_scholar_url(urllib.parse.urljoin(BASE_URL, scholar_link))
+                    if scholar_link
+                    else ""
+                ),
             }
         )
 
@@ -138,6 +150,7 @@ def main() -> int:
     parser.add_argument("--lang", default="en", help="Scholar language code")
     parser.add_argument("--output", default="assets/data/works_raw.json", help="Output JSON path")
     parser.add_argument("--pause", type=float, default=0.4, help="Pause seconds between detail requests")
+    parser.add_argument("--pagesize", type=int, default=100, help="Number of works to request per page")
     parser.add_argument(
         "--save-html-dir",
         default="assets/data/scholar_cache",
@@ -148,24 +161,55 @@ def main() -> int:
     save_dir = pathlib.Path(args.save_html_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
 
-    profile_params = {
+    base_profile_params = {
         "user": args.user,
         "hl": args.lang,
         "view_op": "list_works",
         "sortby": "pubdate",
     }
-    profile_url = f"{BASE_URL}?{urllib.parse.urlencode(profile_params)}"
+    profile_url = f"{BASE_URL}?{urllib.parse.urlencode(base_profile_params)}"
 
-    try:
-        profile_html = fetch_html(profile_url)
-    except Exception as exc:  # pragma: no cover - network path
-        print(f"Failed to fetch profile page: {exc}", file=sys.stderr)
-        return 1
+    profile_meta: Dict[str, str] | None = None
+    works: List[Dict[str, object]] = []
+    seen_ids = set()
 
-    (save_dir / "profile.html").write_text(profile_html, encoding="utf-8")
+    start = 0
+    while True:
+        profile_params = dict(base_profile_params)
+        profile_params["cstart"] = str(start)
+        profile_params["pagesize"] = str(max(args.pagesize, 1))
+        page_url = f"{BASE_URL}?{urllib.parse.urlencode(profile_params)}"
 
-    parsed = parse_profile(profile_html, args.user)
-    works = parsed["works"]
+        try:
+            profile_html = fetch_html(page_url)
+        except Exception as exc:  # pragma: no cover - network path
+            print(f"Failed to fetch profile page at cstart={start}: {exc}", file=sys.stderr)
+            return 1
+
+        if start == 0:
+            (save_dir / "profile.html").write_text(profile_html, encoding="utf-8")
+        (save_dir / f"profile-{start}.html").write_text(profile_html, encoding="utf-8")
+
+        parsed = parse_profile(profile_html, args.user)
+        if profile_meta is None:
+            profile_meta = parsed["profile"]
+
+        page_works = parsed["works"]
+        if not page_works:
+            break
+
+        for work in page_works:
+            key = work.get("id") or work.get("title")
+            if key in seen_ids:
+                continue
+            seen_ids.add(key)
+            works.append(work)
+
+        if len(page_works) < max(args.pagesize, 1):
+            break
+
+        start += max(args.pagesize, 1)
+        time.sleep(max(args.pause, 0.0))
 
     for work in works:
         citation_id = work.get("id")
@@ -217,7 +261,7 @@ def main() -> int:
     payload = {
         "fetched_at": dt.date.today().isoformat(),
         "source": profile_url,
-        "profile": parsed["profile"],
+        "profile": profile_meta or {},
         "works": works,
     }
 
