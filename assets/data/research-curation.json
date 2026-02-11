@@ -7,22 +7,32 @@
     "scholar_url": "https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en"
   },
   "overview": {
-    "thesis": "My core question is consistent: what structure must be explicit so that a model remains reliable when transferred to real constraints?",
-    "scroll_note": "Read top to bottom as a single argument: reasoning loop, lens, arcs, case studies, progression.",
+    "scroll_note": "Read downward as one argument: method, questions, programs, evidence, progression.",
     "signature": [
       {
-        "title": "Structure First",
-        "text": "I define invariants and failure boundaries before choosing algorithms."
+        "title": "Structure Before Optimization",
+        "text": "I make invariants and failure boundaries explicit before selecting methods."
       },
       {
-        "title": "Build For Observability",
-        "text": "I design datasets and pipelines so behavior is measurable, not assumed."
+        "title": "Systems Built For Evidence",
+        "text": "I build datasets and pipelines so claims can be audited under realistic conditions."
       },
       {
-        "title": "Decisions, Not Demos",
-        "text": "I evaluate methods by whether they improve concrete design or policy choices."
+        "title": "Theory To Decision",
+        "text": "I evaluate success by whether results improve design, policy, or operations."
       }
-    ]
+    ],
+    "hero_byline": "Navish Kumar",
+    "hero_title": "I design learning systems that stay reliable when they leave the lab.",
+    "hero_subtitle": "My work lives at the boundary of mathematical structure, empirical behavior, and operational decisions.",
+    "hero_context": "Across graph theory, variational inference, and urban systems, I use one method: formalize precisely, test observably, and decide responsibly.",
+    "identity_line": "Theory is useful only when it survives contact with constraints.",
+    "questions": [
+      "What structural assumptions make learning updates stable rather than merely fast?",
+      "How should model behavior be measured so it supports deployment decisions, not only benchmarks?",
+      "Where can formal guarantees and domain constraints be coupled to reduce real operational risk?"
+    ],
+    "closing_invite": "The archive traces each paper back to its program, method choice, and practical consequence."
   },
   "frames": [
     {
