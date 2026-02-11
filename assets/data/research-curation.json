@@ -1,0 +1,115 @@
+{
+  "site": {
+    "name": "Navish Kumar",
+    "title": "Research Portfolio",
+    "subtitle": "A minimal map of ideas, methods, and progression.",
+    "statement": "I treat research as designed intellectual work: each project is a component in a longer argument about how to model complex systems with precision and care.",
+    "scholar_url": "https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en"
+  },
+  "arcs": [
+    {
+      "id": "geometric-inference",
+      "name": "Geometry for Reliable Inference",
+      "thesis": "Design optimization geometry so variational inference is not only fast in practice, but provably stable.",
+      "motif": "geometry"
+    },
+    {
+      "id": "urban-logistics",
+      "name": "AI for Urban Logistics Transition",
+      "thesis": "Use spatial data and predictive modeling to make low-emission delivery systems operationally credible.",
+      "motif": "hex"
+    },
+    {
+      "id": "spectral-graphs",
+      "name": "Spectral Methods in Gain Graphs",
+      "thesis": "Connect graph structure, balance, and eigenvalue bounds to characterize stability in signed and gain networks.",
+      "motif": "spectrum"
+    },
+    {
+      "id": "social-dynamics",
+      "name": "Harm and Counterspeech Dynamics",
+      "thesis": "Study how antagonistic and protective speech behaviors co-evolve in social systems.",
+      "motif": "dialogue"
+    },
+    {
+      "id": "general",
+      "name": "Emerging Directions",
+      "thesis": "New work appears here until curated into a dedicated arc.",
+      "motif": "lines"
+    }
+  ],
+  "overrides": {
+    "08ZZubdj9fEC": {
+      "arc": "geometric-inference",
+      "featured": true,
+      "schematic": "geometry",
+      "summary": "Establishes convergence guarantees for natural-gradient variational inference through a square-root covariance parameterization.",
+      "contribution": "Bridges practical natural-gradient performance with theoretical guarantees under concave log-likelihood settings.",
+      "tags": [
+        "variational inference",
+        "natural gradients",
+        "optimization theory"
+      ],
+      "related_to": [
+        "WbkHhVStYXYC",
+        "738O_yMBCRsC"
+      ]
+    },
+    "738O_yMBCRsC": {
+      "arc": "urban-logistics",
+      "featured": true,
+      "schematic": "hex",
+      "summary": "Models delivery performance across urban micro-regions to evaluate where cargo-bike logistics can outperform van-based fleets.",
+      "contribution": "Combines H3 spatial partitioning and OpenStreetMap features to forecast service-time dynamics by neighborhood context.",
+      "tags": [
+        "urban AI",
+        "sustainable logistics",
+        "spatial modeling"
+      ],
+      "related_to": [
+        "SP6oXDckpogC"
+      ]
+    },
+    "WbkHhVStYXYC": {
+      "arc": "spectral-graphs",
+      "featured": true,
+      "schematic": "spectrum",
+      "summary": "Derives lower and upper bounds for extremal eigenvalues of gain Laplacians, linking spectral behavior to graph frustration.",
+      "contribution": "Extends spectral analysis for complex-unit gain graphs and clarifies how balance constraints shape eigen-structure.",
+      "tags": [
+        "spectral graph theory",
+        "gain Laplacians",
+        "eigenvalue bounds"
+      ],
+      "related_to": [
+        "OU6Ihb5iCvQC"
+      ]
+    },
+    "OU6Ihb5iCvQC": {
+      "arc": "spectral-graphs",
+      "featured": false,
+      "schematic": "spectrum",
+      "summary": "Introduces normalized Laplacians for gain graphs and studies spectral implications of balancedness and bipartiteness.",
+      "contribution": "Builds a foundational spectral toolkit and extends interlacing results to gain-graph settings.",
+      "tags": [
+        "normalized Laplacian",
+        "gain graphs",
+        "spectral foundations"
+      ],
+      "related_to": []
+    },
+    "SP6oXDckpogC": {
+      "arc": "social-dynamics",
+      "featured": false,
+      "schematic": "dialogue",
+      "summary": "Analyzes interaction patterns between hate and counter users on Twitter, with a released paired-user dataset.",
+      "contribution": "Shows how counterspeech strategies differ by community while exposing behavioral and linguistic asymmetries in hate accounts.",
+      "tags": [
+        "social computing",
+        "hate speech",
+        "counterspeech"
+      ],
+      "related_to": []
+    }
+  }
+}
