@@ -2,9 +2,27 @@
   "site": {
     "name": "Navish Kumar",
     "kicker": "Designed Intellectual Work",
-    "statement": "I study learning systems where formal structure, empirical behavior, and operational constraints must align.",
-    "context": "This portfolio is a single argument: formalize precisely, build observably, and decide with evidence.",
+    "statement": "I build learning systems where mathematical structure and empirical behavior must agree before decisions are made.",
+    "context": "This is a portfolio of one method expressed across multiple domains.",
     "scholar_url": "https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en"
+  },
+  "overview": {
+    "thesis": "My core question is consistent: what structure must be explicit so that a model remains reliable when transferred to real constraints?",
+    "scroll_note": "Read top to bottom as a single argument: reasoning loop, lens, arcs, case studies, progression.",
+    "signature": [
+      {
+        "title": "Structure First",
+        "text": "I define invariants and failure boundaries before choosing algorithms."
+      },
+      {
+        "title": "Build For Observability",
+        "text": "I design datasets and pipelines so behavior is measurable, not assumed."
+      },
+      {
+        "title": "Decisions, Not Demos",
+        "text": "I evaluate methods by whether they improve concrete design or policy choices."
+      }
+    ]
   },
   "frames": [
     {

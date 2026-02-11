@@ -271,102 +271,10 @@ body.intentional-body {
   max-width: 62ch;
 }
 
-.intentional-logic {
-  display: grid;
-  gap: 0.75rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.intentional-logic-step {
-  background: color-mix(in srgb, var(--intent-card) 88%, white);
-  border: 1px solid var(--intent-line);
-  border-radius: 14px;
-  padding: 1rem;
-}
-
-.intentional-logic-step h3 {
-  font-family: "Fraunces", serif;
-  font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: -0.005em;
-  margin: 0;
-}
-
-.intentional-logic-step p {
-  color: var(--intent-muted);
-  font-size: 0.84rem;
-  margin: 0.5rem 0 0;
-}
-
 .intentional-frames {
   display: grid;
   gap: 0.75rem;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.intentional-frame {
-  background: color-mix(in srgb, var(--intent-card) 88%, white);
-  border: 1px solid var(--intent-line);
-  border-radius: 14px;
-  padding: 1rem;
-}
-
-.intentional-frame h3 {
-  font-size: 0.98rem;
-  font-weight: 650;
-  line-height: 1.3;
-  margin: 0;
-}
-
-.intentional-frame p {
-  color: var(--intent-muted);
-  font-size: 0.87rem;
-  margin: 0.52rem 0 0;
-}
-
-.intentional-arcs {
-  display: grid;
-  gap: 0.8rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.intentional-arc {
-  background: color-mix(in srgb, var(--intent-card) 88%, white);
-  border: 1px solid var(--intent-line);
-  border-radius: 15px;
-  display: grid;
-  gap: 0.52rem;
-  padding: 1rem;
-}
-
-.intentional-arc h3 {
-  font-family: "Fraunces", serif;
-  font-size: 1.22rem;
-  font-weight: 600;
-  letter-spacing: -0.005em;
-  margin: 0;
-}
-
-.intentional-arc p {
-  color: var(--intent-muted);
-  font-size: 0.86rem;
-  margin: 0;
-}
-
-.intentional-arc p strong {
-  color: var(--intent-ink);
-  font-weight: 600;
-}
-
-.intentional-arc ul {
-  color: var(--intent-muted);
-  margin: 0.12rem 0 0;
-  padding-left: 1rem;
-}
-
-.intentional-arc li {
-  font-size: 0.82rem;
-  margin: 0.14rem 0;
 }
 
 .intentional-works {
@@ -510,6 +418,270 @@ body.intentional-body {
   font-size: 0.79rem;
   margin-top: 1.2rem;
   padding-top: 0.9rem;
+}
+
+.page-overview .intentional-panel {
+  box-shadow: 0 20px 42px rgba(24, 18, 13, 0.08);
+}
+
+.page-overview .intentional-title {
+  font-size: clamp(2.2rem, 5.8vw, 4.8rem);
+  max-width: 11ch;
+}
+
+.overview-hero-grid {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.9fr);
+}
+
+.overview-hero-main .intentional-subtitle {
+  font-size: clamp(1.08rem, 1.7vw, 1.25rem);
+  line-height: 1.48;
+  max-width: 54ch;
+}
+
+.overview-signature {
+  background:
+    linear-gradient(156deg, rgba(49, 95, 89, 0.08), transparent 46%),
+    color-mix(in srgb, var(--intent-card) 90%, white);
+  border: 1px solid color-mix(in srgb, var(--intent-line) 85%, white);
+  border-radius: 16px;
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.95rem;
+}
+
+.overview-signature-kicker {
+  color: var(--intent-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.61rem;
+  letter-spacing: 0.14em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.overview-signature-list {
+  display: grid;
+  gap: 0.45rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.overview-signature-item {
+  border-top: 1px solid color-mix(in srgb, var(--intent-line) 85%, white);
+  padding-top: 0.45rem;
+}
+
+.overview-signature-item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.overview-signature-item h3 {
+  font-family: "Fraunces", serif;
+  font-size: 0.96rem;
+  font-weight: 600;
+  letter-spacing: -0.004em;
+  margin: 0;
+}
+
+.overview-signature-item p {
+  color: var(--intent-muted);
+  font-size: 0.8rem;
+  margin: 0.26rem 0 0;
+}
+
+.overview-signature-stats {
+  gap: 0.45rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 0.18rem;
+  max-width: none;
+}
+
+.overview-signature-stats .intentional-stat {
+  min-height: 72px;
+  padding: 0.52rem 0.56rem;
+}
+
+.overview-signature-stats .intentional-stat-value {
+  font-size: clamp(1.06rem, 2.2vw, 1.35rem);
+}
+
+.overview-signature-stats .intentional-stat-label {
+  font-size: 0.56rem;
+  letter-spacing: 0.1em;
+  margin-top: 0.24rem;
+}
+
+.overview-scroll-note {
+  color: color-mix(in srgb, var(--intent-muted) 86%, var(--intent-ink));
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  margin: 0.9rem 0 0;
+  text-transform: uppercase;
+}
+
+.overview-logic {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.overview-logic-step {
+  background: color-mix(in srgb, var(--intent-card) 88%, white);
+  border: 1px solid var(--intent-line);
+  border-radius: 14px;
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.92rem;
+}
+
+.overview-step-index {
+  color: var(--intent-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.61rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.overview-logic-step h3 {
+  font-family: "Fraunces", serif;
+  font-size: 1.02rem;
+  font-weight: 600;
+  letter-spacing: -0.006em;
+  margin: 0;
+}
+
+.overview-logic-step p {
+  color: var(--intent-muted);
+  font-size: 0.83rem;
+  margin: 0;
+}
+
+.overview-thesis {
+  border-left: 2px solid color-mix(in srgb, var(--intent-accent) 52%, white);
+  color: color-mix(in srgb, var(--intent-ink) 88%, var(--intent-muted));
+  font-family: "Fraunces", serif;
+  font-size: clamp(1.15rem, 2.35vw, 1.55rem);
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+  margin: 0 0 1.08rem;
+  max-width: 50ch;
+  padding-left: 0.85rem;
+}
+
+.overview-frames {
+  gap: 0.7rem;
+}
+
+.overview-frame {
+  background: color-mix(in srgb, var(--intent-card) 90%, white);
+  border: 1px solid var(--intent-line);
+  border-radius: 14px;
+  padding: 0.9rem;
+}
+
+.overview-frame h3 {
+  font-size: 0.95rem;
+  font-weight: 650;
+  margin: 0;
+}
+
+.overview-frame p {
+  color: var(--intent-muted);
+  font-size: 0.83rem;
+  margin: 0.42rem 0 0;
+}
+
+.overview-arcs {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.overview-arc {
+  background: color-mix(in srgb, var(--intent-card) 90%, white);
+  border: 1px solid var(--intent-line);
+  border-radius: 15px;
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.95rem;
+}
+
+.overview-arc-head {
+  align-items: baseline;
+  display: grid;
+  gap: 0.3rem;
+  grid-template-columns: auto 1fr auto;
+}
+
+.overview-arc h3 {
+  font-family: "Fraunces", serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.006em;
+  margin: 0;
+}
+
+.overview-arc-count {
+  color: var(--intent-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.overview-arc-text {
+  color: var(--intent-muted);
+  font-size: 0.84rem;
+  margin: 0;
+}
+
+.overview-arc-text strong {
+  color: var(--intent-ink);
+  font-weight: 600;
+}
+
+.overview-arc-examples {
+  color: var(--intent-muted);
+  margin: 0.12rem 0 0;
+  padding-left: 1rem;
+}
+
+.overview-arc-examples li {
+  font-size: 0.79rem;
+  margin: 0.14rem 0;
+}
+
+.overview-arc-examples a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.overview-arc-examples a:hover,
+.overview-arc-examples a:focus-visible {
+  text-decoration: underline;
+}
+
+.overview-featured .intentional-work:first-child {
+  grid-column: 1 / -1;
+}
+
+.overview-work-meta {
+  color: var(--intent-muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.61rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.overview-step h3 {
+  font-family: "Fraunces", serif;
+  font-size: 1.02rem;
+  font-weight: 600;
+  margin: 0;
 }
 
 .intentional-controls {
@@ -807,12 +979,18 @@ body.intentional-body {
 }
 
 @media (max-width: 960px) {
-  .intentional-logic,
+  .overview-hero-grid,
+  .overview-logic,
+  .overview-arcs,
+  .overview-featured,
   .intentional-frames,
   .intentional-arc-map,
-  .intentional-arcs,
   .intentional-works {
     grid-template-columns: 1fr;
+  }
+
+  .overview-signature-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .intentional-step {
@@ -828,6 +1006,14 @@ body.intentional-body {
   .intentional-panel {
     border-radius: 16px;
     padding: 0.9rem;
+  }
+
+  .overview-signature-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .overview-featured .intentional-work:first-child {
+    grid-column: auto;
   }
 
   .intentional-stats {

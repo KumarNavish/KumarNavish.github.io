@@ -14,11 +14,13 @@
 
   function renderHero(data) {
     var site = data.curation.site || {};
+    var overview = data.curation.overview || {};
 
     setText("home-kicker", site.kicker || "Research Portfolio");
     setText("home-title", site.name || data.raw.profile.name || "Research");
     setText("home-statement", site.statement || "");
     setText("home-context", site.context || data.raw.profile.affiliation || "");
+    setText("home-scroll-note", overview.scroll_note || "");
 
     setText("home-stat-works", String(data.stats.works));
     setText("home-stat-citations", window.ResearchCore.formatNumber(data.stats.citations));
@@ -30,21 +32,33 @@
     }
   }
 
-  function renderFrames(data) {
-    var root = document.getElementById("home-frames");
+  function renderSignature(data) {
+    var root = document.getElementById("home-signature");
     if (!root) {
       return;
     }
 
-    var frames = data.curation.frames || data.curation.principles || [];
+    var overview = data.curation.overview || {};
+    var signature = overview.signature || [];
 
-    root.innerHTML = frames
+    if (!signature.length) {
+      signature = (data.curation.frames || [])
+        .slice(0, 3)
+        .map(function (frame) {
+          return {
+            title: frame.title,
+            text: frame.text
+          };
+        });
+    }
+
+    root.innerHTML = signature
       .map(function (item) {
         return (
-          '<article class="intentional-frame intentional-reveal">' +
+          '<li class="overview-signature-item">' +
             '<h3>' + escape(item.title) + '</h3>' +
             '<p>' + escape(item.text) + '</p>' +
-          '</article>'
+          '</li>'
         );
       })
       .join("");
@@ -59,9 +73,37 @@
     var logic = data.curation.logic || [];
 
     root.innerHTML = logic
+      .map(function (item, index) {
+        var step = String(index + 1).padStart(2, "0");
+        return (
+          '<article class="overview-logic-step intentional-reveal">' +
+            '<span class="overview-step-index">' + step + '</span>' +
+            '<h3>' + escape(item.title) + '</h3>' +
+            '<p>' + escape(item.text) + '</p>' +
+          '</article>'
+        );
+      })
+      .join("");
+  }
+
+  function renderThesis(data) {
+    var overview = data.curation.overview || {};
+    var thesis = overview.thesis || (data.curation.site && data.curation.site.context) || "";
+    setText("home-thesis", thesis);
+  }
+
+  function renderFrames(data) {
+    var root = document.getElementById("home-frames");
+    if (!root) {
+      return;
+    }
+
+    var frames = data.curation.frames || data.curation.principles || [];
+
+    root.innerHTML = frames
       .map(function (item) {
         return (
-          '<article class="intentional-logic-step intentional-reveal">' +
+          '<article class="overview-frame intentional-reveal">' +
             '<h3>' + escape(item.title) + '</h3>' +
             '<p>' + escape(item.text) + '</p>' +
           '</article>'
@@ -88,8 +130,9 @@
       .filter(function (arc) {
         return Boolean(worksByArc[arc.id] && worksByArc[arc.id].length);
       })
-      .map(function (arc) {
-        var examples = (worksByArc[arc.id] || [])
+      .map(function (arc, index) {
+        var inArc = worksByArc[arc.id] || [];
+        var examples = inArc
           .slice(0, 2)
           .map(function (work) {
             var link = window.ResearchCore.workPrimaryLink(work);
@@ -102,12 +145,16 @@
           .join("");
 
         return (
-          '<article class="intentional-arc intentional-reveal">' +
-            '<h3>' + escape(arc.name) + '</h3>' +
-            '<p>' + escape(arc.thesis || "") + '</p>' +
-            '<p><strong>Methods:</strong> ' + escape(arc.methods || "") + '</p>' +
-            '<p><strong>Practice:</strong> ' + escape(arc.practice || "") + '</p>' +
-            '<ul>' + examples + '</ul>' +
+          '<article class="overview-arc intentional-reveal">' +
+            '<div class="overview-arc-head">' +
+              '<span class="overview-step-index">' + String(index + 1).padStart(2, "0") + '</span>' +
+              '<h3>' + escape(arc.name) + '</h3>' +
+              '<span class="overview-arc-count">' + inArc.length + ' works</span>' +
+            '</div>' +
+            '<p class="overview-arc-text">' + escape(arc.thesis || "") + '</p>' +
+            '<p class="overview-arc-text"><strong>Methods:</strong> ' + escape(arc.methods || "") + '</p>' +
+            '<p class="overview-arc-text"><strong>Practice:</strong> ' + escape(arc.practice || "") + '</p>' +
+            '<ul class="overview-arc-examples">' + examples + '</ul>' +
             '<a class="intentional-link" href="/publications/?arc=' + escape(arc.id) + '">Open Arc</a>' +
           '</article>'
         );
@@ -144,7 +191,7 @@
           '<article class="intentional-work intentional-reveal">' +
             '<div class="intentional-work-top">' +
               '<span class="intentional-chip">' + escape(arc.name) + '</span>' +
-              '<span class="intentional-year">' + escape(work.year) + '</span>' +
+              '<span class="overview-work-meta">' + escape(work.year) + ' | cited by ' + window.ResearchCore.formatNumber(work.citations) + '</span>' +
             '</div>' +
             '<h3>' + (primary ? '<a href="' + escape(primary) + '" target="_blank" rel="noreferrer">' + escape(work.title) + '</a>' : escape(work.title)) + '</h3>' +
             '<p>' + escape(work.summary) + '</p>' +
@@ -182,7 +229,7 @@
     root.innerHTML = timeline
       .map(function (item) {
         return (
-          '<li class="intentional-step intentional-reveal">' +
+          '<li class="intentional-step overview-step intentional-reveal">' +
             '<div class="intentional-step-year">' + escape(item.year) + '</div>' +
             '<div>' +
               '<h3>' + escape(item.title) + '</h3>' +
@@ -237,7 +284,9 @@
     try {
       var data = await window.ResearchCore.loadData();
       renderHero(data);
+      renderSignature(data);
       renderLogic(data);
+      renderThesis(data);
       renderFrames(data);
       renderArcs(data);
       renderFeatured(data);
