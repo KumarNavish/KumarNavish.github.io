@@ -1,9 +1,18 @@
 ---
-layout: page
+layout: intentional
 permalink: /404.html
-title: "Page not found"
-description: "Looks like there has been a mistake. Nothing exists here."
-redirect: true
+title: Not Found
+description: The requested page does not exist.
 ---
 
-<p>You will be redirected to the main page within 3 seconds. If not redirected, please go back to the <a href="{{ site.baseurl }}/">home page</a>.</p>
+<article class="intentional-panel" aria-label="Page not found">
+  <section class="intentional-hero">
+    <p class="intentional-kicker">404</p>
+    <h1 class="intentional-title">Page Not Found</h1>
+    <p class="intentional-subtitle">The page you requested does not exist, or its path has changed.</p>
+    <div class="intentional-links">
+      <a class="intentional-link intentional-link-primary" href="{{ '/' | relative_url }}">Return to Overview</a>
+      <a class="intentional-link" href="{{ '/publications/' | relative_url }}">Open Archive</a>
+    </div>
+  </section>
+</article>

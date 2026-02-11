@@ -2,11 +2,11 @@
   "use strict";
 
   var state = {
-    query: "",
-    arc: "all"
+    arc: "all",
+    query: ""
   };
 
-  var currentData = null;
+  var dataStore = null;
 
   function setText(id, value) {
     var node = document.getElementById(id);
@@ -15,7 +15,11 @@
     }
   }
 
-  function parseArcFromUrl() {
+  function escape(value) {
+    return window.ResearchCore.escapeHtml(value);
+  }
+
+  function readArcFromUrl() {
     try {
       var params = new URLSearchParams(window.location.search);
       return params.get("arc") || "all";
@@ -31,12 +35,12 @@
     setText("archive-stat-arcs", String(data.stats.arcs));
   }
 
-  function matchesQuery(work, query) {
+  function workMatchesQuery(work, query) {
     if (!query) {
       return true;
     }
 
-    var haystack = [
+    var corpus = [
       work.title,
       work.authors,
       work.venue,
@@ -54,54 +58,72 @@
       .split(/\s+/)
       .filter(Boolean)
       .every(function (token) {
-        return haystack.indexOf(token) >= 0;
+        return corpus.indexOf(token) >= 0;
       });
   }
 
   function filteredWorks() {
-    return currentData.works.filter(function (work) {
-      var arcOk = state.arc === "all" || work.arc === state.arc;
-      var queryOk = matchesQuery(work, state.query);
-      return arcOk && queryOk;
+    return dataStore.works.filter(function (work) {
+      var arcPass = state.arc === "all" || work.arc === state.arc;
+      var queryPass = workMatchesQuery(work, state.query);
+      return arcPass && queryPass;
     });
+  }
+
+  function arcCountMap(works) {
+    var counts = {};
+    works.forEach(function (work) {
+      counts[work.arc] = (counts[work.arc] || 0) + 1;
+    });
+    return counts;
+  }
+
+  function orderedArcIds(works) {
+    var counts = arcCountMap(works);
+    var known = {};
+    var ids = [];
+
+    (dataStore.curation.arcs || []).forEach(function (arc) {
+      if (counts[arc.id]) {
+        ids.push(arc.id);
+        known[arc.id] = true;
+      }
+    });
+
+    Object.keys(counts).forEach(function (arcId) {
+      if (!known[arcId]) {
+        ids.push(arcId);
+      }
+    });
+
+    return ids;
   }
 
   function renderFilters() {
     var root = document.getElementById("archive-filters");
-    if (!root || !currentData) {
+    if (!root || !dataStore) {
       return;
     }
 
-    var counts = {};
-    currentData.works.forEach(function (work) {
-      counts[work.arc] = (counts[work.arc] || 0) + 1;
-    });
+    var counts = arcCountMap(dataStore.works);
 
-    var buttons = [
-      {
-        id: "all",
-        label: "All",
-        count: currentData.works.length
-      }
+    var options = [
+      { id: "all", label: "All", count: dataStore.works.length }
     ];
 
-    (currentData.curation.arcs || []).forEach(function (arc) {
+    (dataStore.curation.arcs || []).forEach(function (arc) {
       if (counts[arc.id]) {
-        buttons.push({
-          id: arc.id,
-          label: arc.name,
-          count: counts[arc.id]
-        });
+        options.push({ id: arc.id, label: arc.name, count: counts[arc.id] });
       }
     });
 
-    root.innerHTML = buttons
-      .map(function (button) {
-        var active = button.id === state.arc ? " active" : "";
+    root.innerHTML = options
+      .map(function (item) {
+        var active = item.id === state.arc ? " active" : "";
         return (
-          '<button class="intentional-filter' + active + '" type="button" data-filter="' + window.ResearchCore.escapeHtml(button.id) + '">' +
-            '<span>' + window.ResearchCore.escapeHtml(button.label) + '</span>' +
-            '<em>' + button.count + '</em>' +
+          '<button class="intentional-filter' + active + '" type="button" data-filter="' + escape(item.id) + '">' +
+            '<span>' + escape(item.label) + '</span>' +
+            '<em>' + item.count + '</em>' +
           '</button>'
         );
       })
@@ -111,15 +133,143 @@
       button.addEventListener("click", function () {
         state.arc = button.dataset.filter || "all";
         renderFilters();
+        renderArcMap();
         renderList();
       });
     });
   }
 
+  function renderArcMap() {
+    var root = document.getElementById("archive-arc-map");
+    if (!root || !dataStore) {
+      return;
+    }
+
+    var counts = arcCountMap(dataStore.works);
+    var cards = (dataStore.curation.arcs || [])
+      .filter(function (arc) {
+        return Boolean(counts[arc.id]);
+      })
+      .map(function (arc) {
+        var activeClass = state.arc === arc.id ? " active" : "";
+        var buttonLabel = state.arc === arc.id ? "Arc active" : "Focus arc";
+
+        return (
+          '<article class="intentional-arc-map-card' + activeClass + '">' +
+            '<header class="intentional-arc-map-head">' +
+              '<h3>' + escape(arc.name) + '</h3>' +
+              '<span>' + counts[arc.id] + ' works</span>' +
+            '</header>' +
+            '<p>' + escape(arc.thesis || "") + '</p>' +
+            '<p><strong>Methods:</strong> ' + escape(arc.methods || "") + '</p>' +
+            '<p><strong>Practice:</strong> ' + escape(arc.practice || "") + '</p>' +
+            '<button type="button" class="intentional-link" data-arc-map="' + escape(arc.id) + '">' + buttonLabel + '</button>' +
+          '</article>'
+        );
+      })
+      .join("");
+
+    root.innerHTML = cards;
+
+    root.querySelectorAll("button[data-arc-map]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        state.arc = button.dataset.arcMap || "all";
+        renderFilters();
+        renderArcMap();
+        renderList();
+      });
+    });
+  }
+
+  function renderWorkItem(work, arc) {
+    var primary = window.ResearchCore.workPrimaryLink(work);
+    var links = (work.links || [])
+      .map(function (link) {
+        return '<a href="' + escape(link.href) + '" target="_blank" rel="noreferrer">' + escape(link.label) + '</a>';
+      })
+      .join("");
+
+    var tags = work.tags && work.tags.length
+      ? '<p class="intentional-item-tags">' + work.tags.map(escape).join(" | ") + "</p>"
+      : "";
+
+    return (
+      '<article class="intentional-item">' +
+        '<header class="intentional-item-head">' +
+          '<span class="intentional-chip">' + escape(arc.name || "Unsorted") + '</span>' +
+          '<span class="intentional-year">Cited by ' + window.ResearchCore.formatNumber(work.citations) + '</span>' +
+        '</header>' +
+        '<h3>' + (primary ? '<a href="' + escape(primary) + '" target="_blank" rel="noreferrer">' + escape(work.title) + '</a>' : escape(work.title)) + '</h3>' +
+        '<p class="intentional-item-meta">' + escape(work.authors) + '</p>' +
+        '<p class="intentional-item-meta">' + escape(work.venue) + '</p>' +
+        '<p class="intentional-item-meta">' + escape(work.summary) + '</p>' +
+        (work.contribution ? '<p class="intentional-item-meta"><strong>Reasoning:</strong> ' + escape(work.contribution) + '</p>' : "") +
+        (work.build ? '<p class="intentional-item-meta"><strong>System:</strong> ' + escape(work.build) + '</p>' : "") +
+        (work.impact ? '<p class="intentional-item-meta"><strong>Relevance:</strong> ' + escape(work.impact) + '</p>' : "") +
+        tags +
+        '<div class="intentional-work-links">' + links + '</div>' +
+      "</article>"
+    );
+  }
+
+  function renderArcSection(arcId, worksInArc) {
+    var arc = dataStore.arcMap[arcId] || {
+      name: "Unsorted",
+      thesis: "",
+      methods: "",
+      practice: ""
+    };
+
+    var grouped = window.ResearchCore.groupByYear(worksInArc);
+    var years = Object.keys(grouped).sort(function (a, b) {
+      if (a === "Undated") {
+        return 1;
+      }
+      if (b === "Undated") {
+        return -1;
+      }
+      return Number(b) - Number(a);
+    });
+
+    var yearMarkup = years
+      .map(function (year) {
+        var entries = grouped[year]
+          .slice()
+          .sort(function (a, b) {
+            return (b.citations || 0) - (a.citations || 0);
+          })
+          .map(function (work) {
+            return renderWorkItem(work, arc);
+          })
+          .join("");
+
+        return (
+          '<section class="intentional-year-group">' +
+            '<h3 class="intentional-year-title">' + escape(year) + "</h3>" +
+            '<div class="intentional-year-items">' + entries + "</div>" +
+          "</section>"
+        );
+      })
+      .join("");
+
+    return (
+      '<section class="intentional-arc-group">' +
+        '<header class="intentional-arc-group-head">' +
+          '<h3>' + escape(arc.name) + '</h3>' +
+          '<span>' + worksInArc.length + ' works</span>' +
+        '</header>' +
+        (arc.thesis ? '<p class="intentional-arc-group-meta">' + escape(arc.thesis) + '</p>' : "") +
+        (arc.methods ? '<p class="intentional-arc-group-meta"><strong>Methods:</strong> ' + escape(arc.methods) + '</p>' : "") +
+        (arc.practice ? '<p class="intentional-arc-group-meta"><strong>Practice:</strong> ' + escape(arc.practice) + '</p>' : "") +
+        '<div class="intentional-arc-group-list">' + yearMarkup + "</div>" +
+      "</section>"
+    );
+  }
+
   function renderList() {
     var root = document.getElementById("archive-list");
     var empty = document.getElementById("archive-empty");
-    if (!root || !currentData) {
+    if (!root || !dataStore) {
       return;
     }
 
@@ -137,63 +287,19 @@
       empty.hidden = true;
     }
 
-    var grouped = window.ResearchCore.groupByYear(works);
-    var years = Object.keys(grouped).sort(function (a, b) {
-      if (a === "Undated") {
-        return 1;
+    var byArc = {};
+    works.forEach(function (work) {
+      if (!byArc[work.arc]) {
+        byArc[work.arc] = [];
       }
-      if (b === "Undated") {
-        return -1;
-      }
-      return Number(b) - Number(a);
+      byArc[work.arc].push(work);
     });
 
-    root.innerHTML = years
-      .map(function (year) {
-        var entries = grouped[year]
-          .sort(function (a, b) {
-            return (b.citations || 0) - (a.citations || 0);
-          })
-          .map(function (work) {
-            var arc = currentData.arcMap[work.arc] || { name: "Unsorted" };
-            var primary = window.ResearchCore.workPrimaryLink(work);
-            var title = window.ResearchCore.escapeHtml(work.title);
-            var links = (work.links || [])
-              .map(function (link) {
-                return '<a href="' + window.ResearchCore.escapeHtml(link.href) + '" target="_blank" rel="noreferrer">' + window.ResearchCore.escapeHtml(link.label) + '</a>';
-              })
-              .join("");
+    var arcIds = orderedArcIds(works);
 
-            var tags = work.tags && work.tags.length
-              ? '<p class="intentional-item-tags">' + work.tags.map(window.ResearchCore.escapeHtml).join(" | ") + '</p>'
-              : "";
-
-            return (
-              '<article class="intentional-item">' +
-                '<header class="intentional-item-head">' +
-                  '<span class="intentional-chip">' + window.ResearchCore.escapeHtml(arc.name) + '</span>' +
-                  '<span class="intentional-citations">Cited by ' + window.ResearchCore.formatNumber(work.citations) + '</span>' +
-                '</header>' +
-                '<h3>' + (primary ? '<a href="' + window.ResearchCore.escapeHtml(primary) + '" target="_blank" rel="noreferrer">' + title + '</a>' : title) + '</h3>' +
-                '<p class="intentional-item-meta">' + window.ResearchCore.escapeHtml(work.authors) + '</p>' +
-                '<p class="intentional-item-meta">' + window.ResearchCore.escapeHtml(work.venue) + '</p>' +
-                '<p class="intentional-summary">' + window.ResearchCore.escapeHtml(work.summary) + '</p>' +
-                (work.contribution ? '<p class="intentional-detail"><strong>Contribution:</strong> ' + window.ResearchCore.escapeHtml(work.contribution) + '</p>' : '') +
-                (work.build ? '<p class="intentional-detail"><strong>Build:</strong> ' + window.ResearchCore.escapeHtml(work.build) + '</p>' : '') +
-                (work.impact ? '<p class="intentional-detail"><strong>Practice:</strong> ' + window.ResearchCore.escapeHtml(work.impact) + '</p>' : '') +
-                tags +
-                '<div class="intentional-links">' + links + '</div>' +
-              '</article>'
-            );
-          })
-          .join("");
-
-        return (
-          '<section class="intentional-year-group">' +
-            '<h3 class="intentional-year-title">' + window.ResearchCore.escapeHtml(year) + '</h3>' +
-            '<div class="intentional-year-items">' + entries + '</div>' +
-          '</section>'
-        );
+    root.innerHTML = arcIds
+      .map(function (arcId) {
+        return renderArcSection(arcId, byArc[arcId]);
       })
       .join("");
   }
@@ -217,21 +323,20 @@
     }
 
     try {
-      currentData = await window.ResearchCore.loadData();
-      state.arc = parseArcFromUrl();
-
-      var arcExists = state.arc === "all" || Boolean(currentData.arcMap[state.arc]);
-      if (!arcExists) {
+      dataStore = await window.ResearchCore.loadData();
+      state.arc = readArcFromUrl();
+      if (state.arc !== "all" && !dataStore.arcMap[state.arc]) {
         state.arc = "all";
       }
 
-      renderTop(currentData);
+      renderTop(dataStore);
       wireSearch();
       renderFilters();
+      renderArcMap();
       renderList();
     } catch (error) {
       console.error(error);
-      app.innerHTML = "<p class=\"intentional-error\">Unable to load publication archive. Check /assets/data/works_raw.json and /assets/data/research-curation.json.</p>";
+      app.innerHTML = '<p class="intentional-error">Unable to load archive data. Check assets/data/works_raw.json and assets/data/research-curation.json.</p>';
     }
   }
 
