@@ -6,7 +6,7 @@ function pubGetUserId(sourceUrl) {
   try {
     const parsed = new URL(sourceUrl);
     return parsed.searchParams.get("user") || "";
-  } catch {
+  } catch (error) {
     return "";
   }
 }

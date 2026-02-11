@@ -241,6 +241,7 @@ sass:
 
 jekyll-minifier:
   exclude: ['robots.txt']
+  compress_javascript: false
   uglifier_args:
     harmony: true
 
