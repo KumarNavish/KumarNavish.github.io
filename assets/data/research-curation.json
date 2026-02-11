@@ -2,38 +2,38 @@
   "site": {
     "name": "Navish Kumar",
     "kicker": "Designed Intellectual Work",
-    "statement": "I build learning systems where mathematical structure and empirical behavior must agree before decisions are made.",
-    "context": "This is a portfolio of one method expressed across multiple domains.",
+    "statement": "I build machine learning systems where formal structure and operational behavior stay aligned.",
+    "context": "This portfolio presents one method carried across multiple research settings.",
     "scholar_url": "https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en"
   },
   "overview": {
-    "scroll_note": "Read downward as one argument: identity, method, questions, programs, evidence, progression.",
+    "scroll_note": "Read downward as one argument: stance, method, questions, programs, evidence, trajectory.",
     "signature": [
       {
-        "title": "Formalize Early",
+        "title": "Begin With Structure",
         "text": "I start by making invariants and failure modes explicit."
       },
       {
-        "title": "Instrument Deeply",
-        "text": "I build pipelines that reveal behavior, not only outcomes."
+        "title": "Build For Observability",
+        "text": "I build pipelines that expose behavior, not only outcomes."
       },
       {
-        "title": "Optimize For Consequence",
-        "text": "I value methods by their effect on design and operations."
+        "title": "Judge By Consequence",
+        "text": "I evaluate methods by what they change in design and operations."
       }
     ],
     "hero_byline": "Navish Kumar",
-    "hero_title": "I design machine learning systems that remain reliable under real constraints.",
-    "hero_subtitle": "My work connects mathematical structure, empirical behavior, and decision consequence.",
-    "hero_context": "Across variational inference, graph learning, and urban operations, I use one discipline: formalize assumptions, expose behavior, and optimize for what decisions require.",
-    "identity_line": "I am a theory-minded builder: guarantees matter only when they survive deployment constraints.",
+    "hero_title": "I design learning systems where formal guarantees and real decisions stay aligned.",
+    "hero_subtitle": "Across variational inference, graph learning, and urban operations, I pursue one standard: reasoning should survive contact with reality.",
+    "hero_context": "I treat research as systems design: make assumptions explicit, instrument behavior, and translate results into choices people can trust.",
+    "identity_line": "The throughline is disciplined synthesis: theory as a design constraint, experiments as evidence, deployment as the final test.",
     "questions": [
-      "Which structural assumptions make learning updates stable, interpretable, and trustworthy?",
-      "How should experimental systems be designed so evidence remains meaningful outside benchmark settings?",
-      "Where can formal guarantees be coupled with operational constraints to improve real decisions?"
+      "What structural assumptions keep optimization stable, interpretable, and reliable?",
+      "Which experimental designs preserve meaning when methods leave benchmark settings?",
+      "How can guarantees and operational constraints be coupled to improve real decisions?"
     ],
-    "closing_invite": "The archive maps each paper to its governing question, method choice, and practical implication.",
-    "method_thesis": "Performance is not enough. A method is complete only when assumptions, behavior, and downstream decisions are aligned."
+    "closing_invite": "The archive maps each paper to its question, method, and practical consequence.",
+    "method_thesis": "An algorithm is not complete when it performs well. It is complete when assumptions, behavior, and downstream decisions are coherent."
   },
   "frames": [
     {
