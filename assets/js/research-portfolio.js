@@ -12,15 +12,21 @@
     return window.ResearchCore.escapeHtml(value);
   }
 
+  function toText(value) {
+    return String(value || "").trim();
+  }
+
   function renderHero(data) {
     var site = data.curation.site || {};
     var overview = data.curation.overview || {};
 
-    setText("home-kicker", site.kicker || "Research Portfolio");
-    setText("home-title", site.name || data.raw.profile.name || "Research");
-    setText("home-statement", site.statement || "");
-    setText("home-context", site.context || data.raw.profile.affiliation || "");
+    setText("home-kicker", overview.hero_byline || site.name || data.raw.profile.name || "Research Portfolio");
+    setText("home-title", overview.hero_title || site.statement || site.name || "Research");
+    setText("home-statement", overview.hero_subtitle || site.context || "");
+    setText("home-context", overview.hero_context || "");
+    setText("home-identity-line", overview.identity_line || site.context || "");
     setText("home-scroll-note", overview.scroll_note || "");
+    setText("home-invite", overview.closing_invite || "");
 
     setText("home-stat-works", String(data.stats.works));
     setText("home-stat-citations", window.ResearchCore.formatNumber(data.stats.citations));
@@ -42,20 +48,18 @@
     var signature = overview.signature || [];
 
     if (!signature.length) {
-      signature = (data.curation.frames || [])
-        .slice(0, 3)
-        .map(function (frame) {
-          return {
-            title: frame.title,
-            text: frame.text
-          };
-        });
+      signature = (data.curation.frames || []).slice(0, 3).map(function (item) {
+        return {
+          title: item.title,
+          text: item.text
+        };
+      });
     }
 
     root.innerHTML = signature
       .map(function (item) {
         return (
-          '<li class="overview-signature-item">' +
+          '<li class="overview-v3-signature-item intentional-reveal">' +
             '<h3>' + escape(item.title) + '</h3>' +
             '<p>' + escape(item.text) + '</p>' +
           '</li>'
@@ -74,10 +78,9 @@
 
     root.innerHTML = logic
       .map(function (item, index) {
-        var step = String(index + 1).padStart(2, "0");
         return (
-          '<article class="overview-logic-step intentional-reveal">' +
-            '<span class="overview-step-index">' + step + '</span>' +
+          '<article class="overview-v3-logic-step intentional-reveal">' +
+            '<p class="overview-v3-step-index">' + String(index + 1).padStart(2, "0") + '</p>' +
             '<h3>' + escape(item.title) + '</h3>' +
             '<p>' + escape(item.text) + '</p>' +
           '</article>'
@@ -86,30 +89,41 @@
       .join("");
   }
 
-  function renderThesis(data) {
-    var overview = data.curation.overview || {};
-    var thesis = overview.thesis || (data.curation.site && data.curation.site.context) || "";
-    setText("home-thesis", thesis);
-  }
-
-  function renderFrames(data) {
-    var root = document.getElementById("home-frames");
+  function renderQuestions(data) {
+    var root = document.getElementById("home-questions");
     if (!root) {
       return;
     }
 
-    var frames = data.curation.frames || data.curation.principles || [];
+    var overview = data.curation.overview || {};
+    var questions = overview.questions || [];
 
-    root.innerHTML = frames
-      .map(function (item) {
+    if (!questions.length) {
+      questions = (data.curation.arcs || []).map(function (arc) {
+        return arc.thesis;
+      });
+    }
+
+    root.innerHTML = questions
+      .map(function (question, index) {
         return (
-          '<article class="overview-frame intentional-reveal">' +
-            '<h3>' + escape(item.title) + '</h3>' +
-            '<p>' + escape(item.text) + '</p>' +
+          '<article class="overview-v3-question intentional-reveal">' +
+            '<p class="overview-v3-step-index">Q' + String(index + 1) + '</p>' +
+            '<p>' + escape(question) + '</p>' +
           '</article>'
         );
       })
       .join("");
+  }
+
+  function pickArcAnchor(worksInArc) {
+    var sorted = worksInArc.slice().sort(function (a, b) {
+      if ((b.citations || 0) !== (a.citations || 0)) {
+        return (b.citations || 0) - (a.citations || 0);
+      }
+      return (b.year || 0) - (a.year || 0);
+    });
+    return sorted[0] || null;
   }
 
   function renderArcs(data) {
@@ -132,30 +146,27 @@
       })
       .map(function (arc, index) {
         var inArc = worksByArc[arc.id] || [];
-        var examples = inArc
-          .slice(0, 2)
-          .map(function (work) {
-            var link = window.ResearchCore.workPrimaryLink(work);
-            var title = escape(work.title);
-            if (!link) {
-              return '<li>' + title + '</li>';
-            }
-            return '<li><a href="' + escape(link) + '" target="_blank" rel="noreferrer">' + title + '</a></li>';
-          })
-          .join("");
+        var anchor = pickArcAnchor(inArc);
+        var anchorLink = anchor ? window.ResearchCore.workPrimaryLink(anchor) : "";
 
         return (
-          '<article class="overview-arc intentional-reveal">' +
-            '<div class="overview-arc-head">' +
-              '<span class="overview-step-index">' + String(index + 1).padStart(2, "0") + '</span>' +
+          '<article class="overview-v3-arc intentional-reveal">' +
+            '<header class="overview-v3-arc-head">' +
+              '<p class="overview-v3-step-index">' + String(index + 1).padStart(2, "0") + '</p>' +
               '<h3>' + escape(arc.name) + '</h3>' +
-              '<span class="overview-arc-count">' + inArc.length + ' works</span>' +
-            '</div>' +
-            '<p class="overview-arc-text">' + escape(arc.thesis || "") + '</p>' +
-            '<p class="overview-arc-text"><strong>Methods:</strong> ' + escape(arc.methods || "") + '</p>' +
-            '<p class="overview-arc-text"><strong>Practice:</strong> ' + escape(arc.practice || "") + '</p>' +
-            '<ul class="overview-arc-examples">' + examples + '</ul>' +
-            '<a class="intentional-link" href="/publications/?arc=' + escape(arc.id) + '">Open Arc</a>' +
+              '<span>' + inArc.length + ' works</span>' +
+            '</header>' +
+            '<p class="overview-v3-arc-line">' + escape(arc.thesis || "") + '</p>' +
+            '<p class="overview-v3-arc-line"><strong>Methods:</strong> ' + escape(arc.methods || "") + '</p>' +
+            '<p class="overview-v3-arc-line"><strong>Practice:</strong> ' + escape(arc.practice || "") + '</p>' +
+            (anchor
+              ? '<p class="overview-v3-arc-anchor"><span>Anchor work:</span> ' +
+                (anchorLink
+                  ? '<a href="' + escape(anchorLink) + '" target="_blank" rel="noreferrer">' + escape(anchor.title) + '</a>'
+                  : escape(anchor.title)) +
+                '</p>'
+              : "") +
+            '<a class="intentional-link" href="/publications/?arc=' + escape(arc.id) + '">Open Program</a>' +
           '</article>'
         );
       })
@@ -176,10 +187,15 @@
       featured = data.works.slice(0, 3);
     }
 
+    featured = featured.slice(0, 3);
+
     root.innerHTML = featured
       .map(function (work) {
         var arc = data.arcMap[work.arc] || { name: "Unsorted" };
         var primary = window.ResearchCore.workPrimaryLink(work);
+        var reasoning = toText(work.contribution);
+        var system = toText(work.build);
+        var relevance = toText(work.impact);
 
         var links = (work.links || [])
           .map(function (link) {
@@ -188,16 +204,20 @@
           .join("");
 
         return (
-          '<article class="intentional-work intentional-reveal">' +
-            '<div class="intentional-work-top">' +
+          '<article class="overview-v3-work intentional-reveal">' +
+            '<div class="overview-v3-work-head">' +
               '<span class="intentional-chip">' + escape(arc.name) + '</span>' +
-              '<span class="overview-work-meta">' + escape(work.year) + ' | cited by ' + window.ResearchCore.formatNumber(work.citations) + '</span>' +
+              '<span class="overview-v3-work-meta">' + escape(work.year) + ' | cited by ' + window.ResearchCore.formatNumber(work.citations) + '</span>' +
             '</div>' +
-            '<h3>' + (primary ? '<a href="' + escape(primary) + '" target="_blank" rel="noreferrer">' + escape(work.title) + '</a>' : escape(work.title)) + '</h3>' +
-            '<p>' + escape(work.summary) + '</p>' +
-            '<p><strong>Reasoning:</strong> ' + escape(work.contribution) + '</p>' +
-            '<p><strong>System:</strong> ' + escape(work.build) + '</p>' +
-            '<p><strong>Relevance:</strong> ' + escape(work.impact) + '</p>' +
+            '<h3>' + (primary
+              ? '<a href="' + escape(primary) + '" target="_blank" rel="noreferrer">' + escape(work.title) + '</a>'
+              : escape(work.title)) + '</h3>' +
+            '<p class="overview-v3-work-summary">' + escape(work.summary) + '</p>' +
+            '<dl class="overview-v3-work-axis">' +
+              (reasoning ? '<div><dt>Reasoning</dt><dd>' + escape(reasoning) + '</dd></div>' : "") +
+              (system ? '<div><dt>System</dt><dd>' + escape(system) + '</dd></div>' : "") +
+              (relevance ? '<div><dt>Relevance</dt><dd>' + escape(relevance) + '</dd></div>' : "") +
+            '</dl>' +
             '<div class="intentional-work-links">' + links + '</div>' +
           '</article>'
         );
@@ -229,8 +249,8 @@
     root.innerHTML = timeline
       .map(function (item) {
         return (
-          '<li class="intentional-step overview-step intentional-reveal">' +
-            '<div class="intentional-step-year">' + escape(item.year) + '</div>' +
+          '<li class="overview-v3-progress-item intentional-reveal">' +
+            '<div class="overview-v3-progress-year">' + escape(item.year) + '</div>' +
             '<div>' +
               '<h3>' + escape(item.title) + '</h3>' +
               '<p>' + escape(item.note) + '</p>' +
@@ -250,7 +270,12 @@
   }
 
   function reveal() {
-    var nodes = document.querySelectorAll(".intentional-reveal");
+    var nodes = Array.prototype.slice.call(document.querySelectorAll(".intentional-reveal"));
+
+    nodes.forEach(function (node, index) {
+      node.style.transitionDelay = String(Math.min(index * 0.04, 0.24)) + "s";
+    });
+
     if (!("IntersectionObserver" in window)) {
       nodes.forEach(function (node) {
         node.classList.add("is-visible");
@@ -267,7 +292,7 @@
           }
         });
       },
-      { threshold: 0.13 }
+      { threshold: 0.14 }
     );
 
     nodes.forEach(function (node) {
@@ -286,8 +311,7 @@
       renderHero(data);
       renderSignature(data);
       renderLogic(data);
-      renderThesis(data);
-      renderFrames(data);
+      renderQuestions(data);
       renderArcs(data);
       renderFeatured(data);
       renderProgression(data);
