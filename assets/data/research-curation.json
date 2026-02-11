@@ -7,7 +7,7 @@
     "scholar_url": "https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en"
   },
   "overview": {
-    "scroll_note": "Read this page as one argument: identity, method, questions, programs, evidence, progression.",
+    "scroll_note": "Read downward as one argument: identity, method, questions, programs, evidence, progression.",
     "signature": [
       {
         "title": "Formalize Early",
@@ -23,17 +23,17 @@
       }
     ],
     "hero_byline": "Navish Kumar",
-    "hero_title": "I build machine learning systems that stay reliable when assumptions meet reality.",
-    "hero_subtitle": "My work sits at the intersection of mathematical structure, empirical behavior, and decision consequence.",
+    "hero_title": "I design machine learning systems that remain reliable under real constraints.",
+    "hero_subtitle": "My work connects mathematical structure, empirical behavior, and decision consequence.",
     "hero_context": "Across variational inference, graph learning, and urban operations, I use one discipline: formalize assumptions, expose behavior, and optimize for what decisions require.",
-    "identity_line": "I am a theory-minded builder: guarantees matter only if they survive deployment constraints.",
+    "identity_line": "I am a theory-minded builder: guarantees matter only when they survive deployment constraints.",
     "questions": [
       "Which structural assumptions make learning updates stable, interpretable, and trustworthy?",
       "How should experimental systems be designed so evidence remains meaningful outside benchmark settings?",
       "Where can formal guarantees be coupled with operational constraints to improve real decisions?"
     ],
     "closing_invite": "The archive maps each paper to its governing question, method choice, and practical implication.",
-    "method_thesis": "Performance is not enough. A method is complete only when assumptions, behavior, and downstream decisions align."
+    "method_thesis": "Performance is not enough. A method is complete only when assumptions, behavior, and downstream decisions are aligned."
   },
   "frames": [
     {
