@@ -1,1 +1,162 @@
-{"site":{"name":"Navish Kumar","role":"PhD student, University of Basel","kicker":"Designed Intellectual Work","statement":"I study how learning systems remain reliable when mathematical assumptions, noisy data, and deployment constraints pull in different directions.","context":"The portfolio is organized as a chain of arguments: formal structure, measurable systems, and decisions that matter in real settings.","scholar_url":"https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en"},"principles":[{"id":"structure-first","title":"Think in Structure","text":"Start from invariants, failure modes, and geometry so the problem is defined by what must remain true, not by convenient heuristics."},{"id":"build-for-measurement","title":"Build for Measurement","text":"Convert ideas into datasets, pipelines, and evaluation loops that expose whether a method actually behaves as intended."},{"id":"theory-to-decisions","title":"Link Theory to Decisions","text":"Treat proofs and models as decision tools: they should change how one allocates effort, risk, and resources in practice."}],"arcs":[{"id":"mathematical-structure","name":"Mathematical Structure for Reliable Learning","thesis":"Use spectral and geometric structure to derive guarantees for complex learning dynamics.","methods":"Spectral graph theory, variational optimization, convergence analysis","practice":"Sharper guarantees reduce fragile optimization behavior and improve confidence in model updates."},{"id":"urban-logistics","name":"Data-Driven Urban Logistics","thesis":"Model city context at micro-region level so sustainability transitions become operationally testable.","methods":"H3 spatial indexing, OpenStreetMap aggregation, predictive service-time modeling","practice":"Supports route-planning and fleet-transition choices for cargo-bike adoption."},{"id":"social-resilience","name":"Social Interaction and Counterspeech","thesis":"Study how antagonistic and protective speech behaviors evolve in online communities.","methods":"Dataset construction, lexical and psycholinguistic analysis, interaction modeling","practice":"Informs moderation and intervention strategies beyond blunt account suspension."}],"timeline":[{"year":2020,"title":"Behavioral dynamics in adversarial online discourse","note":"Established an empirical baseline through a paired hate/counter dataset and behavior analysis."},{"year":2020,"title":"Normalized Laplacians for gain graphs","note":"Shifted toward structural analysis, linking balance properties to spectral behavior."},{"year":2021,"title":"Extremal eigenvalue bounds in gain Laplacians","note":"Extended the spectral program with concrete lower and upper bounds tied to graph frustration."},{"year":2023,"title":"Urban micro-region delivery modeling","note":"Applied model-building to operational sustainability questions in last-mile logistics."},{"year":2025,"title":"Optimization guarantees for natural-gradient variational inference","note":"Unified practical optimization behavior with formal guarantees under a square-root covariance geometry."}],"overrides":{"08ZZubdj9fEC":{"arc":"mathematical-structure","featured":true,"summary":"Provides convergence guarantees for natural-gradient variational Gaussian inference by using a square-root covariance parameterization.","contribution":"Bridges an important theory-practice gap: methods known to work well empirically now come with provable behavior under concave likelihood settings.","build":"Derives both discrete optimization and continuous-time flow guarantees, then validates behavior against Euclidean and Wasserstein baselines.","impact":"Improves trust in natural-gradient VI for high-stakes modeling workflows where instability is costly.","tags":["variational inference","natural gradients","optimization guarantees"],"timeline_note":"Formalized why natural-gradient updates can be both fast and stable."},"738O_yMBCRsC":{"arc":"urban-logistics","featured":true,"summary":"Models delivery performance by urban micro-region to estimate where cargo-bike logistics can replace polluting van fleets.","contribution":"Introduces datasets and a context-aware modeling setup that makes sustainability transitions measurable rather than aspirational.","build":"Combines Uber H3 geospatial partitioning with OpenStreetMap features to predict service-time components by neighborhood.","impact":"Enables operators and cities to evaluate low-emission last-mile strategies with operational evidence.","tags":["urban AI","sustainable logistics","spatial modeling"],"timeline_note":"Translated modeling work into an operational decision framework for real logistics systems."},"WbkHhVStYXYC":{"arc":"mathematical-structure","featured":true,"summary":"Derives lower and upper bounds for extremal eigenvalues of gain Laplacian matrices and links them to frustration measures.","contribution":"Extends spectral guarantees beyond signed graphs and clarifies how structural imbalance governs stability-related eigenvalues.","build":"Develops proofs that connect graph deletion notions (frustration number/index) to explicit Laplacian spectral bounds.","impact":"Strengthens spectral tools for analyzing stability in signed and gain-network models.","tags":["spectral graph theory","gain Laplacians","eigenvalue bounds"],"timeline_note":"Turned structural intuition into explicit, reusable spectral bounds."},"OU6Ihb5iCvQC":{"arc":"mathematical-structure","featured":false,"summary":"Introduces normalized Laplacians for gain graphs and studies their spectral properties, including balance and bipartiteness relationships.","contribution":"Builds foundational definitions and interlacing extensions needed for later gain-graph spectral results.","build":"Constructs the normalized operator framework, then proves bounds and characterizes equality cases.","impact":"Provides a base layer for principled analysis of complex-unit gain networks.","tags":["normalized Laplacian","gain graphs","spectral foundations"],"timeline_note":"Established the normalized operator framework that later bounds build upon."},"SP6oXDckpogC":{"arc":"social-resilience","featured":true,"summary":"Analyzes interaction dynamics between hate and counter users on Twitter using a curated paired-user dataset.","contribution":"Shows asymmetries in behavior, sentiment, and strategy, and demonstrates that counterspeech patterns vary by targeted community.","build":"Releases an annotated hate/counter account-pair dataset and applies lexical, linguistic, and psycholinguistic analyses.","impact":"Provides evidence for moderation strategies that preserve speech while reducing harm.","tags":["social computing","hate speech","counterspeech"],"timeline_note":"Started from measurable social harm dynamics before moving deeper into formal structure and optimization."}}}
+{
+  "site": {
+    "name": "Navish Kumar",
+    "kicker": "Designed Intellectual Work",
+    "statement": "I study learning systems where formal structure, empirical behavior, and operational constraints must align.",
+    "context": "This portfolio is a single argument: formalize precisely, build observably, and decide with evidence.",
+    "scholar_url": "https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en"
+  },
+  "frames": [
+    {
+      "id": "thinking",
+      "title": "How I Think",
+      "text": "I begin with invariants and failure modes, then formalize what must remain true as complexity increases."
+    },
+    {
+      "id": "building",
+      "title": "How I Build",
+      "text": "I translate abstractions into datasets, optimization routines, and evaluation pipelines that expose actual behavior."
+    },
+    {
+      "id": "bridging",
+      "title": "How I Connect Theory to Practice",
+      "text": "I treat formal results as decision tools. A method is complete when it changes system design or operation."
+    }
+  ],
+  "logic": [
+    {
+      "title": "Question",
+      "text": "Specify the structural claim and the failure mode."
+    },
+    {
+      "title": "System",
+      "text": "Build data and optimization pipelines where the claim can be tested."
+    },
+    {
+      "title": "Decision",
+      "text": "Convert results into constraints, policy, or deployment guidance."
+    }
+  ],
+  "arcs": [
+    {
+      "id": "mathematical-structure",
+      "name": "Mathematical Structure for Reliable Learning",
+      "thesis": "Use spectral and geometric structure to explain and guarantee learning behavior.",
+      "methods": "Spectral graph analysis, variational optimization, convergence proofs",
+      "practice": "Improves trust in learning updates when optimization instability carries real cost."
+    },
+    {
+      "id": "urban-logistics",
+      "name": "Data-Driven Urban Logistics",
+      "thesis": "Model city context at micro-region level so sustainability transitions become operationally testable.",
+      "methods": "H3 spatial indexing, OpenStreetMap feature aggregation, predictive service-time models",
+      "practice": "Supports concrete fleet and routing decisions for low-emission delivery systems."
+    },
+    {
+      "id": "social-resilience",
+      "name": "Social Interaction and Counterspeech",
+      "thesis": "Measure how harmful and protective speech behaviors co-evolve in online communities.",
+      "methods": "Dataset construction, linguistic analysis, behavioral interaction study",
+      "practice": "Informs interventions that reduce harm without relying only on blunt account removal."
+    }
+  ],
+  "timeline": [
+    {
+      "year": 2020,
+      "title": "Interaction dynamics between hate and counter users",
+      "note": "Built an annotated paired-account dataset and established empirical asymmetries in behavior and strategy."
+    },
+    {
+      "year": 2020,
+      "title": "Normalized Laplacians for gain graphs",
+      "note": "Shifted toward structural analysis by defining normalized operators and studying their spectral implications."
+    },
+    {
+      "year": 2021,
+      "title": "Extremal eigenvalue bounds for gain Laplacians",
+      "note": "Extended the spectral program with explicit bounds linked to graph frustration measures."
+    },
+    {
+      "year": 2023,
+      "title": "Urban micro-region delivery performance modeling",
+      "note": "Applied system modeling to practical sustainability decisions in last-mile logistics."
+    },
+    {
+      "year": 2025,
+      "title": "Optimization guarantees for natural-gradient variational inference",
+      "note": "Unified practical optimization behavior with formal guarantees via square-root covariance geometry."
+    }
+  ],
+  "overrides": {
+    "08ZZubdj9fEC": {
+      "arc": "mathematical-structure",
+      "featured": true,
+      "summary": "Provides convergence guarantees for natural-gradient variational Gaussian inference using square-root covariance parameterization.",
+      "contribution": "Closes a key theory-practice gap for methods known to perform strongly in empirical settings.",
+      "build": "Derives guarantees for both discrete updates and continuous-time flow, then compares optimization geometries empirically.",
+      "impact": "Supports more reliable inference pipelines where unstable updates are expensive.",
+      "tags": [
+        "variational inference",
+        "natural gradients",
+        "optimization guarantees"
+      ],
+      "timeline_note": "Made natural-gradient behavior formally tractable without losing practical relevance."
+    },
+    "738O_yMBCRsC": {
+      "arc": "urban-logistics",
+      "featured": true,
+      "summary": "Models delivery performance by urban micro-region to estimate where cargo-bike fleets can replace vans.",
+      "contribution": "Turns a sustainability ambition into a measurable operational question with replicable data abstractions.",
+      "build": "Combines Uber H3 partitioning with OpenStreetMap features to predict service-time components by neighborhood.",
+      "impact": "Provides evidence for fleet-transition and routing decisions in real city operations.",
+      "tags": [
+        "urban AI",
+        "sustainable logistics",
+        "spatial modeling"
+      ],
+      "timeline_note": "Connected machine learning modeling to operational decision-making in urban systems."
+    },
+    "WbkHhVStYXYC": {
+      "arc": "mathematical-structure",
+      "featured": true,
+      "summary": "Derives lower and upper bounds for extremal eigenvalues of gain Laplacian matrices.",
+      "contribution": "Extends spectral guarantees beyond signed graphs and links structure imbalance to stability-relevant eigenvalues.",
+      "build": "Relates frustration number and frustration index to explicit spectral bounds through constructive proofs.",
+      "impact": "Strengthens analytical tools for structured networks used in learning and control contexts.",
+      "tags": [
+        "spectral graph theory",
+        "gain Laplacians",
+        "eigenvalue bounds"
+      ],
+      "timeline_note": "Converted structural intuition in gain graphs into concrete spectral guarantees."
+    },
+    "OU6Ihb5iCvQC": {
+      "arc": "mathematical-structure",
+      "featured": false,
+      "summary": "Introduces normalized Laplacians for gain graphs and studies balance, bipartiteness, and spectrum relationships.",
+      "contribution": "Builds the operator-level foundations required for later extremal eigenvalue analysis.",
+      "build": "Defines normalized operators, proves bounds, and extends interlacing concepts in gain-graph settings.",
+      "impact": "Provides reusable formal tools for future structured graph-learning analysis.",
+      "tags": [
+        "normalized Laplacian",
+        "gain graphs",
+        "spectral foundations"
+      ],
+      "timeline_note": "Established the formal baseline for subsequent gain-Laplacian results."
+    },
+    "SP6oXDckpogC": {
+      "arc": "social-resilience",
+      "featured": true,
+      "summary": "Analyzes dynamics between hate and counterspeech users on Twitter using a released paired-user dataset.",
+      "contribution": "Shows behavioral and linguistic asymmetries, and how counterspeech strategies differ by community context.",
+      "build": "Constructs and releases annotated user-pair data, then applies lexical and psycholinguistic analyses.",
+      "impact": "Supports moderation and intervention designs that balance harm reduction and free-expression concerns.",
+      "tags": [
+        "social computing",
+        "hate speech",
+        "counterspeech"
+      ],
+      "timeline_note": "Grounded early work in measurable social dynamics with immediate policy relevance."
+    }
+  }
+}

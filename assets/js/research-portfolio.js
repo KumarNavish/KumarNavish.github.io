@@ -8,15 +8,19 @@
     }
   }
 
+  function escape(value) {
+    return window.ResearchCore.escapeHtml(value);
+  }
+
   function renderHero(data) {
     var site = data.curation.site || {};
 
     setText("home-kicker", site.kicker || "Research Portfolio");
     setText("home-title", site.name || data.raw.profile.name || "Research");
     setText("home-statement", site.statement || "");
-    setText("home-context", (site.role || data.raw.profile.affiliation || "") + (site.context ? " | " + site.context : ""));
+    setText("home-context", site.context || data.raw.profile.affiliation || "");
 
-    setText("home-stat-works", data.stats.works);
+    setText("home-stat-works", String(data.stats.works));
     setText("home-stat-citations", window.ResearchCore.formatNumber(data.stats.citations));
     setText("home-stat-years", data.stats.years);
 
@@ -26,20 +30,40 @@
     }
   }
 
-  function renderPrinciples(data) {
-    var root = document.getElementById("home-principles");
+  function renderFrames(data) {
+    var root = document.getElementById("home-frames");
     if (!root) {
       return;
     }
 
-    var principles = data.curation.principles || [];
+    var frames = data.curation.frames || data.curation.principles || [];
 
-    root.innerHTML = principles
+    root.innerHTML = frames
       .map(function (item) {
         return (
-          '<article class="intentional-principle intentional-reveal">' +
-            '<h3>' + window.ResearchCore.escapeHtml(item.title) + '</h3>' +
-            '<p>' + window.ResearchCore.escapeHtml(item.text) + '</p>' +
+          '<article class="intentional-frame intentional-reveal">' +
+            '<h3>' + escape(item.title) + '</h3>' +
+            '<p>' + escape(item.text) + '</p>' +
+          '</article>'
+        );
+      })
+      .join("");
+  }
+
+  function renderLogic(data) {
+    var root = document.getElementById("home-logic");
+    if (!root) {
+      return;
+    }
+
+    var logic = data.curation.logic || [];
+
+    root.innerHTML = logic
+      .map(function (item) {
+        return (
+          '<article class="intentional-logic-step intentional-reveal">' +
+            '<h3>' + escape(item.title) + '</h3>' +
+            '<p>' + escape(item.text) + '</p>' +
           '</article>'
         );
       })
@@ -65,30 +89,26 @@
         return Boolean(worksByArc[arc.id] && worksByArc[arc.id].length);
       })
       .map(function (arc) {
-        var inArc = worksByArc[arc.id] || [];
-        var keyWorks = inArc
+        var examples = (worksByArc[arc.id] || [])
           .slice(0, 2)
           .map(function (work) {
             var link = window.ResearchCore.workPrimaryLink(work);
-            var title = window.ResearchCore.escapeHtml(work.title);
+            var title = escape(work.title);
             if (!link) {
               return '<li>' + title + '</li>';
             }
-            return '<li><a href="' + window.ResearchCore.escapeHtml(link) + '" target="_blank" rel="noreferrer">' + title + '</a></li>';
+            return '<li><a href="' + escape(link) + '" target="_blank" rel="noreferrer">' + title + '</a></li>';
           })
           .join("");
 
         return (
           '<article class="intentional-arc intentional-reveal">' +
-            '<header class="intentional-arc-head">' +
-              '<h3>' + window.ResearchCore.escapeHtml(arc.name) + '</h3>' +
-              '<span>' + inArc.length + (inArc.length === 1 ? ' work' : ' works') + '</span>' +
-            '</header>' +
-            '<p class="intentional-arc-thesis">' + window.ResearchCore.escapeHtml(arc.thesis || "") + '</p>' +
-            '<p class="intentional-arc-meta"><strong>Methods:</strong> ' + window.ResearchCore.escapeHtml(arc.methods || "") + '</p>' +
-            '<p class="intentional-arc-meta"><strong>Practice:</strong> ' + window.ResearchCore.escapeHtml(arc.practice || "") + '</p>' +
-            '<ul class="intentional-arc-works">' + keyWorks + '</ul>' +
-            '<a class="intentional-inline-link" href="/publications/?arc=' + window.ResearchCore.escapeHtml(arc.id) + '">View all in this arc</a>' +
+            '<h3>' + escape(arc.name) + '</h3>' +
+            '<p>' + escape(arc.thesis || "") + '</p>' +
+            '<p><strong>Methods:</strong> ' + escape(arc.methods || "") + '</p>' +
+            '<p><strong>Practice:</strong> ' + escape(arc.practice || "") + '</p>' +
+            '<ul>' + examples + '</ul>' +
+            '<a class="intentional-link" href="/publications/?arc=' + escape(arc.id) + '">Open Arc</a>' +
           '</article>'
         );
       })
@@ -113,26 +133,25 @@
       .map(function (work) {
         var arc = data.arcMap[work.arc] || { name: "Unsorted" };
         var primary = window.ResearchCore.workPrimaryLink(work);
-        var safeTitle = window.ResearchCore.escapeHtml(work.title);
 
         var links = (work.links || [])
           .map(function (link) {
-            return '<a href="' + window.ResearchCore.escapeHtml(link.href) + '" target="_blank" rel="noreferrer">' + window.ResearchCore.escapeHtml(link.label) + '</a>';
+            return '<a href="' + escape(link.href) + '" target="_blank" rel="noreferrer">' + escape(link.label) + '</a>';
           })
           .join("");
 
         return (
           '<article class="intentional-work intentional-reveal">' +
             '<div class="intentional-work-top">' +
-              '<span class="intentional-chip">' + window.ResearchCore.escapeHtml(arc.name) + '</span>' +
-              '<span class="intentional-year">' + window.ResearchCore.escapeHtml(work.year) + '</span>' +
+              '<span class="intentional-chip">' + escape(arc.name) + '</span>' +
+              '<span class="intentional-year">' + escape(work.year) + '</span>' +
             '</div>' +
-            '<h3>' + (primary ? '<a href="' + window.ResearchCore.escapeHtml(primary) + '" target="_blank" rel="noreferrer">' + safeTitle + '</a>' : safeTitle) + '</h3>' +
-            '<p class="intentional-summary">' + window.ResearchCore.escapeHtml(work.summary) + '</p>' +
-            '<p class="intentional-detail"><strong>Contribution:</strong> ' + window.ResearchCore.escapeHtml(work.contribution) + '</p>' +
-            '<p class="intentional-detail"><strong>Build:</strong> ' + window.ResearchCore.escapeHtml(work.build) + '</p>' +
-            '<p class="intentional-detail"><strong>Practice:</strong> ' + window.ResearchCore.escapeHtml(work.impact) + '</p>' +
-            '<div class="intentional-links">' + links + '</div>' +
+            '<h3>' + (primary ? '<a href="' + escape(primary) + '" target="_blank" rel="noreferrer">' + escape(work.title) + '</a>' : escape(work.title)) + '</h3>' +
+            '<p>' + escape(work.summary) + '</p>' +
+            '<p><strong>Reasoning:</strong> ' + escape(work.contribution) + '</p>' +
+            '<p><strong>System:</strong> ' + escape(work.build) + '</p>' +
+            '<p><strong>Relevance:</strong> ' + escape(work.impact) + '</p>' +
+            '<div class="intentional-work-links">' + links + '</div>' +
           '</article>'
         );
       })
@@ -162,28 +181,12 @@
 
     root.innerHTML = timeline
       .map(function (item) {
-        var yearWorks = data.works.filter(function (work) {
-          return String(work.year || "") === String(item.year || "");
-        });
-
-        var workLinks = yearWorks
-          .map(function (work) {
-            var href = window.ResearchCore.workPrimaryLink(work);
-            var title = window.ResearchCore.escapeHtml(work.title);
-            if (!href) {
-              return '<li>' + title + '</li>';
-            }
-            return '<li><a href="' + window.ResearchCore.escapeHtml(href) + '" target="_blank" rel="noreferrer">' + title + '</a></li>';
-          })
-          .join("");
-
         return (
           '<li class="intentional-step intentional-reveal">' +
-            '<div class="intentional-step-year">' + window.ResearchCore.escapeHtml(item.year) + '</div>' +
-            '<div class="intentional-step-body">' +
-              '<h3>' + window.ResearchCore.escapeHtml(item.title || "") + '</h3>' +
-              '<p>' + window.ResearchCore.escapeHtml(item.note || "") + '</p>' +
-              (workLinks ? '<ul class="intentional-step-works">' + workLinks + '</ul>' : '') +
+            '<div class="intentional-step-year">' + escape(item.year) + '</div>' +
+            '<div>' +
+              '<h3>' + escape(item.title) + '</h3>' +
+              '<p>' + escape(item.note) + '</p>' +
             '</div>' +
           '</li>'
         );
@@ -191,15 +194,15 @@
       .join("");
   }
 
-  function renderSyncNote(data) {
-    var text = "Data source: Google Scholar profile BFCHfngAAAAJ.";
+  function renderSync(data) {
+    var note = "Source: Google Scholar profile BFCHfngAAAAJ.";
     if (data.fetchedLabel) {
-      text += " Last synchronized on " + data.fetchedLabel + ".";
+      note += " Last synchronized on " + data.fetchedLabel + ".";
     }
-    setText("home-sync", text);
+    setText("home-sync", note);
   }
 
-  function applyReveal() {
+  function reveal() {
     var nodes = document.querySelectorAll(".intentional-reveal");
     if (!("IntersectionObserver" in window)) {
       nodes.forEach(function (node) {
@@ -217,7 +220,7 @@
           }
         });
       },
-      { threshold: 0.14 }
+      { threshold: 0.13 }
     );
 
     nodes.forEach(function (node) {
@@ -234,15 +237,16 @@
     try {
       var data = await window.ResearchCore.loadData();
       renderHero(data);
-      renderPrinciples(data);
+      renderLogic(data);
+      renderFrames(data);
       renderArcs(data);
       renderFeatured(data);
       renderProgression(data);
-      renderSyncNote(data);
-      applyReveal();
+      renderSync(data);
+      reveal();
     } catch (error) {
       console.error(error);
-      app.innerHTML = "<p class=\"intentional-error\">Unable to load research content. Check /assets/data/works_raw.json and /assets/data/research-curation.json.</p>";
+      app.innerHTML = '<p class="intentional-error">Unable to load portfolio data. Check assets/data/works_raw.json and assets/data/research-curation.json.</p>';
     }
   }
 
