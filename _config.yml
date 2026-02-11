@@ -8,10 +8,10 @@ middle_name:
 last_name: Kumar
 email: navish (dot) kumar <at> unibas dot ch
 description: > # the ">" symbol means to ignore newlines until "footer_text:"
-  Research website for Navish Kumar, focused on continual learning, Bayesian optimization, and mathematically grounded machine learning.
+  Crafted research portfolio of Navish Kumar: mathematical machine learning, urban systems modeling, and theory-to-practice AI.
 footer_text: >
-  Focused research portfolio by Navish Kumar.
-keywords: navish kumar, machine learning, continual learning, bayesian optimization, variational inference, spectral graph theory
+  Designed and maintained by Navish Kumar.
+keywords: navish kumar, mathematical machine learning, variational inference, spectral graph theory, urban logistics modeling, social computing
 
 lang: en # the language of your site (for example: en, fr, cn, ru, etc.)
 icon: ⚛️  # the emoji used as the favicon (alternatively, provide image name in /assets/img/)
@@ -29,7 +29,7 @@ impressum_path:  # set to path to include impressum link in the footer, use the 
 repo_theme_light: default       # https://github.com/anuraghazra/github-readme-stats/blob/master/themes/README.md
 repo_theme_dark: dark           # https://github.com/anuraghazra/github-readme-stats/blob/master/themes/README.md
 repo_trophies:
-  enabled: true
+  enabled: false
   theme_light: flat    # https://github.com/ryo-ma/github-profile-trophy
   theme_dark: gitdimmed  # https://github.com/ryo-ma/github-profile-trophy
 
@@ -46,7 +46,7 @@ rss_icon: true
 # -----------------------------------------------------------------------------
 
 navbar_fixed: true
-footer_fixed: true
+footer_fixed: false
 
 # Dimensions
 max_width: 800px
@@ -358,17 +358,17 @@ enable_google_analytics:    false  # enables google analytics
 enable_cronitor_analytics: false  # enables cronitor RUM analytics
 enable_google_verification: false  # enables google site verification
 enable_bing_verification:   false  # enables bing site verification
-enable_masonry:             true   # enables automatic project cards arrangement
-enable_math:                true   # enables math typesetting (uses MathJax)
+enable_masonry:             false   # enables automatic project cards arrangement
+enable_math:                false   # enables math typesetting (uses MathJax)
 enable_tooltips:            false  # enables automatic tooltip links generated
                                    # for each section titles on pages and posts
-enable_darkmode:            true   # enables switching between light/dark modes
+enable_darkmode:            false   # enables switching between light/dark modes
 enable_navbar_social:       false  # enables displaying social links in the
                                    # navbar on the about page
 enable_project_categories:  true   # enables categorization of projects into
                                    # multiple categories
-enable_medium_zoom:         true   # enables image zoom feature (as on medium.com)
-enable_progressbar:         true   # enables a horizontal progress bar linked to the vertical scroll position
+enable_medium_zoom:         false   # enables image zoom feature (as on medium.com)
+enable_progressbar:         false   # enables a horizontal progress bar linked to the vertical scroll position
 
 # -----------------------------------------------------------------------------
 # Library versions
