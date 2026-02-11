@@ -7,32 +7,33 @@
     "scholar_url": "https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en"
   },
   "overview": {
-    "scroll_note": "Read downward as one argument: method, questions, programs, evidence, progression.",
+    "scroll_note": "Read this page as one argument: identity, method, questions, programs, evidence, progression.",
     "signature": [
       {
-        "title": "Structure Before Optimization",
-        "text": "I make invariants and failure boundaries explicit before selecting methods."
+        "title": "Formalize Early",
+        "text": "I start by making invariants and failure modes explicit."
       },
       {
-        "title": "Systems Built For Evidence",
-        "text": "I build datasets and pipelines so claims can be audited under realistic conditions."
+        "title": "Instrument Deeply",
+        "text": "I build pipelines that reveal behavior, not only outcomes."
       },
       {
-        "title": "Theory To Decision",
-        "text": "I evaluate success by whether results improve design, policy, or operations."
+        "title": "Optimize For Consequence",
+        "text": "I value methods by their effect on design and operations."
       }
     ],
     "hero_byline": "Navish Kumar",
-    "hero_title": "I design learning systems that stay reliable when they leave the lab.",
-    "hero_subtitle": "My work lives at the boundary of mathematical structure, empirical behavior, and operational decisions.",
-    "hero_context": "Across graph theory, variational inference, and urban systems, I use one method: formalize precisely, test observably, and decide responsibly.",
-    "identity_line": "Theory is useful only when it survives contact with constraints.",
+    "hero_title": "I work on machine learning systems that remain reliable under real constraints.",
+    "hero_subtitle": "My research combines mathematical structure, system-level experimentation, and decision relevance.",
+    "hero_context": "Across variational inference, graph methods, and urban operations, I use one discipline: formalize assumptions, expose behavior, and optimize for consequence.",
+    "identity_line": "I am a theory-minded builder: I care about guarantees that survive deployment reality.",
     "questions": [
-      "What structural assumptions make learning updates stable rather than merely fast?",
-      "How should model behavior be measured so it supports deployment decisions, not only benchmarks?",
-      "Where can formal guarantees and domain constraints be coupled to reduce real operational risk?"
+      "Which structural assumptions make learning updates stable, interpretable, and trustworthy?",
+      "How should experimental systems be designed so evidence remains meaningful outside benchmark settings?",
+      "Where can formal guarantees be coupled with operational constraints to improve real decisions?"
     ],
-    "closing_invite": "The archive traces each paper back to its program, method choice, and practical consequence."
+    "closing_invite": "The archive maps each paper to its governing question, method choice, and practical implication.",
+    "method_thesis": "Performance is not enough. A method is complete when its assumptions, behavior, and downstream decisions align."
   },
   "frames": [
     {
