@@ -169,7 +169,7 @@
                   : escape(anchor.title)) +
                 "</p>"
               : "") +
-            '<a class="intentional-link" href="/publications/?arc=' + escape(arc.id) + '">View Program</a>' +
+            '<a class="intentional-link" href="/publications/?arc=' + escape(arc.id) + '">Trace Program</a>' +
           "</article>"
         );
       })
@@ -278,7 +278,6 @@
           ? '<a href="' + escape(primary) + '" target="_blank" rel="noreferrer">' + escape(work.title) + "</a>"
           : escape(work.title)) + "</h3>" +
         "<p>" + escape(work.summary) + "</p>" +
-        renderEvidenceLinks(work) +
       "</article>"
     );
   }
