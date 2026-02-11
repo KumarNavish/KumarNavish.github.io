@@ -30,7 +30,7 @@ custom_js:
     </div>
 
     <aside class="overview-v6-aside intentional-reveal" aria-label="Orientation">
-      <p class="overview-v6-aside-label">How to Read</p>
+      <p class="overview-v6-aside-label">Reading Guide</p>
       <p id="home-scroll-note" class="overview-v6-scroll-note"></p>
 
       <dl class="overview-v6-stats" aria-label="Research statistics">
@@ -53,7 +53,7 @@ custom_js:
   <section class="intentional-section overview-v6-section" data-step="01" aria-labelledby="home-logic-title">
     <header class="intentional-section-head">
       <h2 id="home-logic-title">Method</h2>
-      <p>The same operating protocol across domains: formalize structure, instrument behavior, translate to decisions.</p>
+      <p>A repeatable protocol for moving from abstraction to deployable decision support.</p>
     </header>
     <p id="home-method-thesis" class="overview-v6-method-thesis intentional-reveal"></p>
     <div id="home-logic" class="overview-v6-logic"></div>
@@ -70,7 +70,7 @@ custom_js:
   <section class="intentional-section overview-v6-section" data-step="03" aria-labelledby="home-arcs-title">
     <header class="intentional-section-head">
       <h2 id="home-arcs-title">Research Programs</h2>
-      <p>Each program turns one question into methods, systems, and operational consequence.</p>
+      <p>Each program turns a question into concrete methods, systems, and operational consequence.</p>
     </header>
     <div id="home-arcs" class="overview-v6-arcs"></div>
   </section>
@@ -78,7 +78,7 @@ custom_js:
   <section class="intentional-section overview-v6-section" data-step="04" aria-labelledby="home-featured-title">
     <header class="intentional-section-head">
       <h2 id="home-featured-title">Evidence</h2>
-      <p>Selected papers where abstract claims are tested through implemented systems.</p>
+      <p>Selected papers where theory is tested through implementation and decision impact.</p>
     </header>
     <div id="home-featured" class="overview-v6-evidence"></div>
   </section>
@@ -86,7 +86,7 @@ custom_js:
   <section class="intentional-section overview-v6-section overview-v6-section-last" data-step="05" aria-labelledby="home-progression-title">
     <header class="intentional-section-head">
       <h2 id="home-progression-title">Trajectory</h2>
-      <p>A concise progression from foundational analysis to decision-facing systems.</p>
+      <p>A concise timeline of how the agenda has sharpened.</p>
     </header>
     <ol id="home-progression" class="overview-v6-progression"></ol>
 

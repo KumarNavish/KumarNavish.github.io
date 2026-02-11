@@ -462,7 +462,7 @@
 }
 
 .overview-v6-spotlight-summary,
-.overview-v6-evidence-item p {
+.overview-v6-evidence-item > p:not(.overview-v6-spotlight-meta) {
   color: var(--ov6-muted);
   font-size: 0.84rem;
   margin: 0;
