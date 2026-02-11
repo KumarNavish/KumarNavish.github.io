@@ -23,17 +23,17 @@
       }
     ],
     "hero_byline": "Navish Kumar",
-    "hero_title": "I work on machine learning systems that remain reliable under real constraints.",
-    "hero_subtitle": "My research combines mathematical structure, system-level experimentation, and decision relevance.",
-    "hero_context": "Across variational inference, graph methods, and urban operations, I use one discipline: formalize assumptions, expose behavior, and optimize for consequence.",
-    "identity_line": "I am a theory-minded builder: I care about guarantees that survive deployment reality.",
+    "hero_title": "I build machine learning systems that stay reliable when assumptions meet reality.",
+    "hero_subtitle": "My work sits at the intersection of mathematical structure, empirical behavior, and decision consequence.",
+    "hero_context": "Across variational inference, graph learning, and urban operations, I use one discipline: formalize assumptions, expose behavior, and optimize for what decisions require.",
+    "identity_line": "I am a theory-minded builder: guarantees matter only if they survive deployment constraints.",
     "questions": [
       "Which structural assumptions make learning updates stable, interpretable, and trustworthy?",
       "How should experimental systems be designed so evidence remains meaningful outside benchmark settings?",
       "Where can formal guarantees be coupled with operational constraints to improve real decisions?"
     ],
     "closing_invite": "The archive maps each paper to its governing question, method choice, and practical implication.",
-    "method_thesis": "Performance is not enough. A method is complete when its assumptions, behavior, and downstream decisions align."
+    "method_thesis": "Performance is not enough. A method is complete only when assumptions, behavior, and downstream decisions align."
   },
   "frames": [
     {

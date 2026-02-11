@@ -51,7 +51,7 @@ custom_js:
     </aside>
   </section>
 
-  <section class="intentional-section" aria-labelledby="home-logic-title">
+  <section class="intentional-section overview-v4-section" data-step="01" aria-labelledby="home-logic-title">
     <header class="intentional-section-head">
       <h2 id="home-logic-title">How I Think</h2>
       <p>A stable reasoning protocol used across problems, domains, and scales.</p>
@@ -60,7 +60,7 @@ custom_js:
     <div id="home-logic" class="overview-v4-logic"></div>
   </section>
 
-  <section class="intentional-section" aria-labelledby="home-questions-title">
+  <section class="intentional-section overview-v4-section" data-step="02" aria-labelledby="home-questions-title">
     <header class="intentional-section-head">
       <h2 id="home-questions-title">Questions That Drive The Work</h2>
       <p>These questions determine what gets built, measured, and proven.</p>
@@ -68,7 +68,7 @@ custom_js:
     <ol id="home-questions" class="overview-v4-questions"></ol>
   </section>
 
-  <section class="intentional-section" aria-labelledby="home-arcs-title">
+  <section class="intentional-section overview-v4-section" data-step="03" aria-labelledby="home-arcs-title">
     <header class="intentional-section-head">
       <h2 id="home-arcs-title">Research Programs</h2>
       <p>Each program translates one question into methods, systems, and operational implications.</p>
@@ -76,7 +76,7 @@ custom_js:
     <div id="home-arcs" class="overview-v4-arcs"></div>
   </section>
 
-  <section class="intentional-section" aria-labelledby="home-featured-title">
+  <section class="intentional-section overview-v4-section" data-step="04" aria-labelledby="home-featured-title">
     <header class="intentional-section-head">
       <h2 id="home-featured-title">Signals In Practice</h2>
       <p>Selected papers that show how abstract structure becomes deployable evidence.</p>
@@ -84,7 +84,7 @@ custom_js:
     <div id="home-featured" class="overview-v4-evidence"></div>
   </section>
 
-  <section class="intentional-section" aria-labelledby="home-progression-title">
+  <section class="intentional-section overview-v4-section overview-v4-section-last" data-step="05" aria-labelledby="home-progression-title">
     <header class="intentional-section-head">
       <h2 id="home-progression-title">Intellectual Progression</h2>
       <p>A compact timeline of how the agenda sharpened over time.</p>
