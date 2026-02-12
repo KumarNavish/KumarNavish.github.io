@@ -2,38 +2,38 @@
   "site": {
     "name": "Navish Kumar",
     "kicker": "Designed Intellectual Work",
-    "statement": "I build machine learning systems where formal structure and operational behavior stay aligned.",
-    "context": "This portfolio presents one method carried across multiple research settings.",
+    "statement": "I design learning systems where mathematical guarantees and operational constraints can coexist.",
+    "context": "This site presents one research method carried across multiple domains.",
     "scholar_url": "https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en"
   },
   "overview": {
-    "scroll_note": "Read downward as one argument: stance, method, questions, programs, evidence, trajectory.",
+    "scroll_note": "Read top to bottom as one argument: stance, method, questions, programs, evidence, trajectory.",
     "signature": [
       {
-        "title": "Begin With Structure",
+        "title": "Structure First",
         "text": "I start by making invariants and failure modes explicit."
       },
       {
-        "title": "Build For Observability",
+        "title": "Measure Behavior",
         "text": "I build pipelines that expose behavior, not only outcomes."
       },
       {
-        "title": "Judge By Consequence",
+        "title": "Design For Decisions",
         "text": "I evaluate methods by what they change in design and operations."
       }
     ],
     "hero_byline": "Navish Kumar",
-    "hero_title": "I design learning systems where formal guarantees and real decisions stay aligned.",
-    "hero_subtitle": "Across variational inference, graph learning, and urban operations, I pursue one standard: reasoning should survive contact with reality.",
-    "hero_context": "I treat research as systems design: make assumptions explicit, instrument behavior, and translate results into choices people can trust.",
-    "identity_line": "The throughline is disciplined synthesis: theory as a design constraint, experiments as evidence, deployment as the final test.",
+    "hero_title": "I build learning systems that stay reliable when theory meets real constraints.",
+    "hero_subtitle": "Across variational inference, graph learning, and urban operations, I use one standard: reasoning should survive implementation.",
+    "hero_context": "I treat research as systems design: make assumptions explicit, instrument behavior, and convert results into decisions people can trust.",
+    "identity_line": "My work sits at the boundary of proof and deployment, where rigor must remain useful.",
     "questions": [
-      "What structural assumptions keep optimization stable, interpretable, and reliable?",
-      "Which experimental designs preserve meaning when methods leave benchmark settings?",
-      "How can guarantees and operational constraints be coupled to improve real decisions?"
+      "Which structural assumptions keep optimization stable and interpretable as complexity grows?",
+      "How should systems be instrumented so evidence remains meaningful outside benchmark settings?",
+      "Where can guarantees and operational constraints be coupled to improve real decisions?"
     ],
-    "closing_invite": "The archive maps each paper to its question, method, and practical consequence.",
-    "method_thesis": "An algorithm is not complete when it performs well. It is complete when assumptions, behavior, and downstream decisions are coherent."
+    "closing_invite": "The archive maps each paper to the question it answers, the method it uses, and the decision it informs.",
+    "method_thesis": "A method is complete only when assumptions, observed behavior, and downstream decisions remain coherent."
   },
   "frames": [
     {
