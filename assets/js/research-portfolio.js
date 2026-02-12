@@ -31,8 +31,8 @@
     setText("home-kicker", overview.hero_byline || site.name || data.raw.profile.name || "Research Portfolio");
     setText("home-title", overview.hero_title || site.statement || site.name || "Research");
     setText("home-statement", overview.hero_subtitle || site.context || "");
-    setText("home-context", overview.hero_context || "");
     setText("home-identity-line", overview.identity_line || site.context || "");
+    setText("home-context", overview.hero_context || "");
     setText("home-scroll-note", overview.scroll_note || "");
     setText("home-method-thesis", overview.method_thesis || overview.identity_line || "");
     setText("home-invite", overview.closing_invite || "");
@@ -63,7 +63,7 @@
     root.innerHTML = signature
       .map(function (item) {
         return (
-          '<li class="overview-v6-pillar intentional-reveal">' +
+          '<li class="overview-v7-pillar intentional-reveal">' +
             '<h3>' + escape(item.title) + '</h3>' +
             '<p>' + escape(item.text) + '</p>' +
           "</li>"
@@ -83,8 +83,8 @@
     root.innerHTML = logic
       .map(function (item, index) {
         return (
-          '<article class="overview-v6-logic-step intentional-reveal">' +
-            '<p class="overview-v6-index">' + String(index + 1).padStart(2, "0") + "</p>" +
+          '<article class="overview-v7-logic-step intentional-reveal">' +
+            '<p class="overview-v7-index">' + String(index + 1).padStart(2, "0") + "</p>" +
             "<h3>" + escape(item.title) + "</h3>" +
             "<p>" + escape(item.text) + "</p>" +
           "</article>"
@@ -109,8 +109,8 @@
     root.innerHTML = questions
       .map(function (question, index) {
         return (
-          '<li class="overview-v6-question intentional-reveal">' +
-            '<span class="overview-v6-question-index">Q' + String(index + 1) + "</span>" +
+          '<li class="overview-v7-question intentional-reveal">' +
+            '<span class="overview-v7-question-index">Q' + String(index + 1) + "</span>" +
             "<p>" + escape(question) + "</p>" +
           "</li>"
         );
@@ -125,6 +125,7 @@
       }
       return (b.year || 0) - (a.year || 0);
     });
+
     return sorted[0] || null;
   }
 
@@ -148,28 +149,28 @@
       })
       .map(function (arc, index) {
         var inArc = worksByArc[arc.id] || [];
+        var countLabel = inArc.length === 1 ? "1 work" : String(inArc.length) + " works";
         var anchor = pickArcAnchor(inArc);
         var anchorLink = anchor ? window.ResearchCore.workPrimaryLink(anchor) : "";
-        var countLabel = inArc.length === 1 ? "1 work" : String(inArc.length) + " works";
 
         return (
-          '<article class="overview-v6-arc intentional-reveal">' +
-            '<header class="overview-v6-arc-head">' +
-              '<p class="overview-v6-index">' + String(index + 1).padStart(2, "0") + "</p>" +
+          '<article class="overview-v7-arc intentional-reveal">' +
+            '<header class="overview-v7-arc-head">' +
+              '<p class="overview-v7-index">' + String(index + 1).padStart(2, "0") + "</p>" +
               "<h3>" + escape(arc.name) + "</h3>" +
-              '<span class="overview-v6-arc-count">' + countLabel + "</span>" +
+              '<span class="overview-v7-arc-count">' + countLabel + "</span>" +
             "</header>" +
-            '<p class="overview-v6-arc-thesis">' + escape(arc.thesis || "") + "</p>" +
-            '<p class="overview-v6-arc-line"><strong>Methods:</strong> ' + escape(arc.methods || "") + "</p>" +
-            '<p class="overview-v6-arc-line"><strong>Practice:</strong> ' + escape(arc.practice || "") + "</p>" +
+            '<p class="overview-v7-arc-thesis">' + escape(arc.thesis || "") + "</p>" +
+            '<p class="overview-v7-arc-line"><strong>Methods:</strong> ' + escape(arc.methods || "") + "</p>" +
+            '<p class="overview-v7-arc-line"><strong>Practice:</strong> ' + escape(arc.practice || "") + "</p>" +
             (anchor
-              ? '<p class="overview-v6-arc-anchor"><span>Anchor work:</span> ' +
+              ? '<p class="overview-v7-arc-anchor"><span>Anchor:</span> ' +
                 (anchorLink
                   ? '<a href="' + escape(anchorLink) + '" target="_blank" rel="noreferrer">' + escape(anchor.title) + "</a>"
                   : escape(anchor.title)) +
                 "</p>"
               : "") +
-            '<a class="intentional-link" href="/publications/?arc=' + escape(arc.id) + '">Trace Program</a>' +
+            '<a class="intentional-link" href="/publications/?arc=' + escape(arc.id) + '">Trace in Archive</a>' +
           "</article>"
         );
       })
@@ -193,44 +194,44 @@
 
   function selectEvidenceWorks(data) {
     var selected = [];
-    var picked = {};
+    var selectedMap = {};
 
     (data.curation.arcs || []).forEach(function (arc) {
       if (selected.length >= 3) {
         return;
       }
 
-      var candidate = arcLeadingWork(data, arc.id);
-      if (candidate && !picked[candidate.id]) {
-        selected.push(candidate);
-        picked[candidate.id] = true;
+      var lead = arcLeadingWork(data, arc.id);
+      if (lead && !selectedMap[lead.id]) {
+        selected.push(lead);
+        selectedMap[lead.id] = true;
       }
     });
 
     var featured = data.works.filter(function (work) {
-      return work.featured;
+      return Boolean(work.featured);
     });
 
     featured.forEach(function (work) {
-      if (selected.length >= 3 || picked[work.id]) {
+      if (selected.length >= 3 || selectedMap[work.id]) {
         return;
       }
       selected.push(work);
-      picked[work.id] = true;
+      selectedMap[work.id] = true;
     });
 
     data.works.forEach(function (work) {
-      if (selected.length >= 3 || picked[work.id]) {
+      if (selected.length >= 3 || selectedMap[work.id]) {
         return;
       }
       selected.push(work);
-      picked[work.id] = true;
+      selectedMap[work.id] = true;
     });
 
     return selected.slice(0, 3);
   }
 
-  function spotlightAxisLine(label, value) {
+  function spotlightAxis(label, value) {
     var text = toText(value);
     if (!text) {
       return "";
@@ -239,7 +240,7 @@
     return "<p><strong>" + escape(label) + ":</strong> " + escape(text) + "</p>";
   }
 
-  function renderEvidenceLinks(work) {
+  function workLinks(work) {
     var links = (work.links || [])
       .map(function (link) {
         return '<a href="' + escape(link.href) + '" target="_blank" rel="noreferrer">' + escape(link.label) + "</a>";
@@ -249,31 +250,31 @@
     return links ? '<div class="intentional-work-links">' + links + "</div>" : "";
   }
 
-  function evidenceSpotlight(work, arcName) {
+  function renderEvidenceSpotlight(work, arcName) {
     var primary = window.ResearchCore.workPrimaryLink(work);
     var axis =
-      spotlightAxisLine("Reasoning", work.contribution) +
-      spotlightAxisLine("System", work.build) +
-      spotlightAxisLine("Relevance", work.impact);
+      spotlightAxis("Reasoning", work.contribution) +
+      spotlightAxis("System", work.build) +
+      spotlightAxis("Relevance", work.impact);
 
     return (
-      '<article class="overview-v6-spotlight intentional-reveal">' +
-        '<p class="overview-v6-spotlight-meta">' + escape(arcName) + " | " + escape(workYear(work)) + " | cited by " + window.ResearchCore.formatNumber(work.citations || 0) + "</p>" +
+      '<article class="overview-v7-spotlight intentional-reveal">' +
+        '<p class="overview-v7-evidence-meta">' + escape(arcName) + " | " + escape(workYear(work)) + " | cited by " + window.ResearchCore.formatNumber(work.citations || 0) + "</p>" +
         "<h3>" + (primary
           ? '<a href="' + escape(primary) + '" target="_blank" rel="noreferrer">' + escape(work.title) + "</a>"
           : escape(work.title)) + "</h3>" +
-        '<p class="overview-v6-spotlight-summary">' + escape(work.summary) + "</p>" +
-        (axis ? '<div class="overview-v6-spotlight-axis">' + axis + "</div>" : "") +
-        renderEvidenceLinks(work) +
+        '<p class="overview-v7-evidence-summary">' + escape(work.summary) + "</p>" +
+        (axis ? '<div class="overview-v7-spotlight-axis">' + axis + "</div>" : "") +
+        workLinks(work) +
       "</article>"
     );
   }
 
-  function evidenceItem(work, arcName) {
+  function renderEvidenceItem(work, arcName) {
     var primary = window.ResearchCore.workPrimaryLink(work);
     return (
-      '<article class="overview-v6-evidence-item intentional-reveal">' +
-        '<p class="overview-v6-spotlight-meta">' + escape(arcName) + " | " + escape(workYear(work)) + " | cited by " + window.ResearchCore.formatNumber(work.citations || 0) + "</p>" +
+      '<article class="overview-v7-evidence-item intentional-reveal">' +
+        '<p class="overview-v7-evidence-meta">' + escape(arcName) + " | " + escape(workYear(work)) + "</p>" +
         "<h3>" + (primary
           ? '<a href="' + escape(primary) + '" target="_blank" rel="noreferrer">' + escape(work.title) + "</a>"
           : escape(work.title)) + "</h3>" +
@@ -299,12 +300,12 @@
     var spotlightArc = data.arcMap[spotlight.arc] || { name: "Unsorted" };
 
     root.innerHTML =
-      evidenceSpotlight(spotlight, spotlightArc.name) +
-      '<div class="overview-v6-evidence-list">' +
+      renderEvidenceSpotlight(spotlight, spotlightArc.name) +
+      '<div class="overview-v7-evidence-list">' +
         supporting
           .map(function (work) {
             var arc = data.arcMap[work.arc] || { name: "Unsorted" };
-            return evidenceItem(work, arc.name);
+            return renderEvidenceItem(work, arc.name);
           })
           .join("") +
       "</div>";
@@ -333,8 +334,8 @@
     root.innerHTML = timeline
       .map(function (item) {
         return (
-          '<li class="overview-v6-progress-item intentional-reveal">' +
-            '<div class="overview-v6-progress-year">' + escape(item.year) + "</div>" +
+          '<li class="overview-v7-progress-item intentional-reveal">' +
+            '<div class="overview-v7-progress-year">' + escape(item.year) + "</div>" +
             "<div>" +
               "<h3>" + escape(item.title) + "</h3>" +
               "<p>" + escape(item.note) + "</p>" +
