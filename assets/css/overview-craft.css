@@ -210,33 +210,27 @@
 }
 
 .overview-v7-section {
-  padding-left: clamp(1.14rem, 2.35vw, 1.92rem);
+  padding-left: 0;
   position: relative;
 }
 
 .overview-v7-section::before {
+  align-items: center;
+  background: color-mix(in srgb, var(--ov7-paper-soft) 72%, white);
+  border: 1px solid var(--ov7-line);
+  border-radius: 999px;
   color: color-mix(in srgb, var(--intent-muted) 88%, black);
   content: attr(data-step);
+  display: inline-flex;
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.58rem;
-  left: 0;
+  justify-content: center;
   letter-spacing: 0.13em;
-  position: absolute;
+  margin-bottom: 0.84rem;
+  min-width: 2.48rem;
+  padding: 0.2rem 0.5rem;
+  position: relative;
   text-transform: uppercase;
-  top: clamp(2.46rem, 5.2vw, 3.18rem);
-}
-
-.overview-v7-section::after {
-  border-left: 1px solid color-mix(in srgb, var(--ov7-line) 88%, white);
-  bottom: -1rem;
-  content: "";
-  left: 0.31rem;
-  position: absolute;
-  top: calc(clamp(2.46rem, 5.2vw, 3.18rem) + 0.9rem);
-}
-
-.overview-v7-section-last::after {
-  display: none;
 }
 
 .overview-v7-method-thesis {
@@ -603,7 +597,6 @@
     padding-left: 0;
   }
 
-  .overview-v7-section::before,
   .overview-v7-section::after {
     display: none;
   }
