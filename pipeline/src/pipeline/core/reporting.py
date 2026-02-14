@@ -89,6 +89,14 @@ def emit_ops_reports(
                 "started_at": task.started_at.isoformat(),
                 "finished_at": task.finished_at.isoformat(),
                 "duration_seconds": task.duration_seconds,
+                "logs": [
+                    {
+                        "level": log.level,
+                        "message": log.message,
+                        "timestamp": log.timestamp,
+                    }
+                    for log in task.logs
+                ],
                 "error": task.error,
             }
             for task in run.task_executions
@@ -150,4 +158,3 @@ def emit_ops_reports(
         "dag": dag_path,
         "provenance": provenance_path,
     }
-

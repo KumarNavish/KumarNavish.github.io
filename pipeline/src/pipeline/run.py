@@ -9,20 +9,46 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Sequence
 
+import yaml
+
 from pipeline.core import Task, TaskContext, TaskRunner, emit_ops_reports
-from pipeline.ingest import ingest_github_repositories
+from pipeline.ingest import ingest_github_repositories, ingest_semantic_scholar_publications
 from pipeline.registry import load_registry
-from pipeline.transform import normalize_projects
+from pipeline.transform import compute_metrics, normalize_projects, normalize_publications
 
 REGISTRY_DIR = Path("registry")
 GITHUB_RAW_RELATIVE_PATH = Path("artifacts/github/repos.raw.json")
+SEMANTIC_SCHOLAR_RAW_RELATIVE_PATH = Path("artifacts/semantic-scholar/publications.raw.json")
 PROJECTS_API_RELATIVE_PATH = Path("api/v1/projects.json")
+PUBLICATIONS_API_RELATIVE_PATH = Path("api/v1/publications.json")
+METRICS_API_RELATIVE_PATH = Path("api/v1/metrics.json")
+PUBLICATIONS_OVERRIDES_PATH = REGISTRY_DIR / "publications_overrides.yaml"
 
 
 def _write_json(path: Path, payload: Dict[str, Any]) -> None:
     """Write JSON to disk with deterministic formatting."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _load_publication_overrides(path: Path) -> list[Dict[str, Any]]:
+    """Load publication overrides from registry YAML file."""
+    if not path.exists():
+        return []
+
+    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if payload is None:
+        return []
+
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+
+    if isinstance(payload, dict):
+        publications = payload.get("publications")
+        if isinstance(publications, list):
+            return [item for item in publications if isinstance(item, dict)]
+
+    return []
 
 
 def _task_emit_status_api(context: TaskContext) -> None:
@@ -73,6 +99,62 @@ def _task_emit_projects_api(context: TaskContext) -> None:
     _write_json(context.out_dir / PROJECTS_API_RELATIVE_PATH, projects_payload)
 
 
+def _task_ingest_publications(context: TaskContext) -> None:
+    """Ingest publications from Semantic Scholar with graceful fallback."""
+    bundle = load_registry(REGISTRY_DIR)
+    overrides = _load_publication_overrides(PUBLICATIONS_OVERRIDES_PATH)
+    result = ingest_semantic_scholar_publications(
+        author_id=bundle.config.semantic_scholar_author_id,
+        out_dir=context.out_dir,
+        overrides=overrides,
+        api_key=context.env.get("SEMANTIC_SCHOLAR_API_KEY"),
+    )
+    if result.warning:
+        context.warn(result.warning)
+    context.info(f"publication source: {result.source} ({len(result.publications)} records)")
+
+
+def _task_emit_publications_api(context: TaskContext) -> None:
+    """Emit normalized publications API from ingested artifact."""
+    raw_path = context.out_dir / SEMANTIC_SCHOLAR_RAW_RELATIVE_PATH
+    payload = json.loads(raw_path.read_text(encoding="utf-8"))
+    raw_publications = payload.get("publications", [])
+    if not isinstance(raw_publications, list):
+        raw_publications = []
+
+    items = normalize_publications([item for item in raw_publications if isinstance(item, dict)])
+    publications_payload: Dict[str, Any] = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "source": payload.get("source", "unknown"),
+        "warning": payload.get("warning"),
+        "count": len(items),
+        "items": items,
+    }
+    _write_json(context.out_dir / PUBLICATIONS_API_RELATIVE_PATH, publications_payload)
+
+
+def _task_emit_metrics_api(context: TaskContext) -> None:
+    """Emit derived metrics from normalized publications."""
+    publications_payload = json.loads((context.out_dir / PUBLICATIONS_API_RELATIVE_PATH).read_text(encoding="utf-8"))
+    raw_payload = json.loads((context.out_dir / SEMANTIC_SCHOLAR_RAW_RELATIVE_PATH).read_text(encoding="utf-8"))
+
+    publications_items = publications_payload.get("items", [])
+    if not isinstance(publications_items, list):
+        publications_items = []
+
+    metrics_payload = compute_metrics(
+        publications=[item for item in publications_items if isinstance(item, dict)],
+        citations_total_hint=(
+            raw_payload.get("citation_count_total")
+            if isinstance(raw_payload.get("citation_count_total"), int)
+            else None
+        ),
+        citations_by_year=raw_payload.get("citations_by_year") if isinstance(raw_payload.get("citations_by_year"), list) else [],
+        source=raw_payload.get("source", "unknown"),
+    )
+    _write_json(context.out_dir / METRICS_API_RELATIVE_PATH, metrics_payload)
+
+
 def build_tasks() -> Sequence[Task]:
     """Declare pipeline tasks and dependencies."""
     return [
@@ -91,11 +173,32 @@ def build_tasks() -> Sequence[Task]:
             deps=("ingest_github",),
         ),
         Task(
+            name="ingest_publications",
+            action=_task_ingest_publications,
+            inputs=(str(PUBLICATIONS_OVERRIDES_PATH), "registry/config.yaml"),
+            outputs=(str(SEMANTIC_SCHOLAR_RAW_RELATIVE_PATH),),
+            deps=(),
+        ),
+        Task(
+            name="emit_publications_api",
+            action=_task_emit_publications_api,
+            inputs=(str(SEMANTIC_SCHOLAR_RAW_RELATIVE_PATH),),
+            outputs=(str(PUBLICATIONS_API_RELATIVE_PATH),),
+            deps=("ingest_publications",),
+        ),
+        Task(
+            name="emit_metrics_api",
+            action=_task_emit_metrics_api,
+            inputs=(str(PUBLICATIONS_API_RELATIVE_PATH), str(SEMANTIC_SCHOLAR_RAW_RELATIVE_PATH)),
+            outputs=(str(METRICS_API_RELATIVE_PATH),),
+            deps=("emit_publications_api",),
+        ),
+        Task(
             name="emit_status_api",
             action=_task_emit_status_api,
-            inputs=(str(PROJECTS_API_RELATIVE_PATH),),
+            inputs=(str(PROJECTS_API_RELATIVE_PATH), str(METRICS_API_RELATIVE_PATH)),
             outputs=("api/v1/status.json",),
-            deps=("emit_projects_api",),
+            deps=("emit_projects_api", "emit_metrics_api"),
         ),
     ]
 
