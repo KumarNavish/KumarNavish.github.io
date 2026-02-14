@@ -10,7 +10,7 @@ import { WorkPage } from './pages/WorkPage'
 const NAVIGATION = [
   { href: '/', label: 'Overview' },
   { href: '/work', label: 'Case Studies' },
-  { href: '/proof', label: 'System Board' },
+  { href: '/proof', label: 'Approach' },
 ]
 
 function Navigation() {

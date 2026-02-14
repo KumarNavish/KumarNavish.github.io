@@ -2,26 +2,16 @@ import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import {
-  fetchLatestRunApi,
   fetchMetricsApi,
   fetchProfileApi,
   fetchProjectsApi,
-  fetchProvenanceApi,
   fetchPublicationsApi,
   fetchSearchIndexApi,
-  fetchStatusApi,
-  type LatestRunApi,
   type ProjectItem,
   type PublicationItem,
   type SearchDocument,
 } from '../lib/api'
-import {
-  compactList,
-  formatDate,
-  formatDateTime,
-  formatDuration,
-  formatNumber,
-} from '../lib/formatters'
+import { compactList, formatDateTime, formatNumber } from '../lib/formatters'
 import { useResource } from '../lib/useResource'
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks'
 
@@ -31,9 +21,6 @@ interface DashboardData {
   publications: Awaited<ReturnType<typeof fetchPublicationsApi>>
   metrics: Awaited<ReturnType<typeof fetchMetricsApi>>
   searchIndex: Awaited<ReturnType<typeof fetchSearchIndexApi>>
-  status: Awaited<ReturnType<typeof fetchStatusApi>> | null
-  latestRun: Awaited<ReturnType<typeof fetchLatestRunApi>> | null
-  provenance: Awaited<ReturnType<typeof fetchProvenanceApi>> | null
 }
 
 type SearchScope = 'all' | 'project' | 'publication'
@@ -43,7 +30,7 @@ interface DecisionTrack {
   title: string
   decision: string
   keywords: string[]
-  actionPrompt: string
+  value: string
 }
 
 interface RankedEvidence {
@@ -60,22 +47,22 @@ const DECISION_TRACKS: DecisionTrack[] = [
   {
     id: 'stability',
     title: 'Stable continual updates',
-    decision: 'Select an update strategy that preserves performance across sequential tasks.',
-    actionPrompt: 'Use this when selecting update policy for long-lived model deployments.',
+    decision: 'Choose update strategies that preserve performance as tasks evolve.',
+    value: 'Use this to reduce model regression risk in long-lived deployments.',
     keywords: ['continual', 'optimization', 'policy', 'natural', 'gradient', 'stability'],
   },
   {
     id: 'safety',
     title: 'Online harm mitigation',
-    decision: 'Prioritize signals that justify earlier intervention in harmful interactions.',
-    actionPrompt: 'Use this when designing moderation triage and intervention thresholds.',
+    decision: 'Prioritize behavioral signals that justify earlier intervention.',
+    value: 'Use this to design more reliable moderation triage and intervention policies.',
     keywords: ['hate', 'counter', 'interaction', 'moderation', 'social', 'twitter'],
   },
   {
     id: 'logistics',
     title: 'Urban transition planning',
-    decision: 'Rank micro-regions for phased logistics transition and pilot rollout.',
-    actionPrompt: 'Use this when sequencing rollout candidates under operational constraints.',
+    decision: 'Rank regions for phased logistics transition and pilot sequencing.',
+    value: 'Use this to sequence rollout decisions with practical operational constraints.',
     keywords: ['urban', 'logistics', 'micro', 'regions', 'delivery', 'cargo'],
   },
 ]
@@ -110,15 +97,11 @@ function yearsSince(dateValue: string | null): number | null {
   return new Date().getFullYear() - date.getFullYear()
 }
 
-function computeProjectScore(
-  project: ProjectItem,
-  matchedTerms: string[],
-  baseScore: number,
-): number {
+function computeProjectScore(project: ProjectItem, matchedTerms: string[], baseScore: number): number {
   const featuredBoost = project.featured || project.pinned ? 7 : 0
-  const starBoost = Math.min(6, Math.log10(project.stars + 1) * 4)
+  const starBoost = Math.min(5, Math.log10(project.stars + 1) * 3)
   const recencyYears = yearsSince(project.last_push)
-  const recencyBoost = recencyYears === null ? 0 : Math.max(0, 5 - recencyYears)
+  const recencyBoost = recencyYears === null ? 0 : Math.max(0, 4 - recencyYears)
   const tagBoost = matchedTerms.some((term) =>
     project.tags.some((tag) => tag.toLowerCase().includes(term)),
   )
@@ -133,7 +116,7 @@ function computePublicationScore(
   matchedTerms: string[],
   baseScore: number,
 ): number {
-  const citationBoost = Math.min(12, Math.log10((publication.citation_count ?? 0) + 1) * 6)
+  const citationBoost = Math.min(10, Math.log10((publication.citation_count ?? 0) + 1) * 5)
   const recencyBoost = publication.year
     ? Math.max(0, 4 - (new Date().getFullYear() - publication.year))
     : 0
@@ -146,41 +129,37 @@ function computePublicationScore(
   return baseScore + citationBoost + recencyBoost + keywordBoost
 }
 
-function runAgeHours(run: LatestRunApi | null): number | null {
-  const timestamp = run?.run.timestamp
-  if (!timestamp) {
-    return null
+function describeStrength(score: number, maxScore: number): string {
+  if (maxScore <= 0) {
+    return 'Exploratory fit'
   }
-  const date = new Date(timestamp)
-  if (Number.isNaN(date.getTime())) {
-    return null
+  const ratio = score / maxScore
+  if (ratio >= 0.75) {
+    return 'High fit'
   }
-  const elapsed = Date.now() - date.getTime()
-  if (elapsed < 0) {
-    return 0
+  if (ratio >= 0.45) {
+    return 'Solid fit'
   }
-  return elapsed / (1000 * 60 * 60)
+  return 'Exploratory fit'
 }
 
 function buildNextMove(project: ProjectItem | null, publication: PublicationItem | null): string {
   if (project && publication) {
-    return `Start with ${project.name} and validate assumptions against ${publication.title}.`
+    return `Start with ${project.name}, then validate assumptions against ${publication.title}.`
   }
   if (project) {
-    return `Start by extending ${project.name} with the selected track constraints.`
+    return `Start by extending ${project.name} under the selected decision constraints.`
   }
   if (publication) {
-    return `Use ${publication.title} as the primary evidence anchor for this track.`
+    return `Use ${publication.title} as the primary evidence anchor.`
   }
-  return 'Broaden the query terms to surface stronger project and publication alignment.'
+  return 'Broaden the query to surface stronger project and evidence alignment.'
 }
 
 export function DashboardPage() {
   const [selectedTrackId, setSelectedTrackId] = useState<string>(DECISION_TRACKS[0].id)
   const [query, setQuery] = useState('')
   const [scope, setScope] = useState<SearchScope>('all')
-  const [featuredOnly, setFeaturedOnly] = useState(false)
-  const [publicationFloor, setPublicationFloor] = useState<string>('all')
 
   const loadDashboard = useCallback(
     () =>
@@ -190,30 +169,13 @@ export function DashboardPage() {
         fetchPublicationsApi(),
         fetchMetricsApi(),
         fetchSearchIndexApi(),
-        fetchStatusApi().catch(() => null),
-        fetchLatestRunApi().catch(() => null),
-        fetchProvenanceApi().catch(() => null),
-      ]).then(
-        ([
-          profile,
-          projects,
-          publications,
-          metrics,
-          searchIndex,
-          status,
-          latestRun,
-          provenance,
-        ]) => ({
-          profile,
-          projects,
-          publications,
-          metrics,
-          searchIndex,
-          status,
-          latestRun,
-          provenance,
-        }),
-      ),
+      ]).then(([profile, projects, publications, metrics, searchIndex]) => ({
+        profile,
+        projects,
+        publications,
+        metrics,
+        searchIndex,
+      })),
     [],
   )
 
@@ -224,25 +186,11 @@ export function DashboardPage() {
     [selectedTrackId],
   )
 
-  const publicationYears = useMemo(() => {
-    if (!state.data) {
-      return []
-    }
-    return Array.from(
-      new Set(
-        state.data.publications.items
-          .map((publication) => publication.year)
-          .filter((year): year is number => typeof year === 'number'),
-      ),
-    ).sort((left, right) => right - left)
-  }, [state.data])
-
   const rankedEvidence = useMemo(() => {
     if (!state.data) {
       return []
     }
 
-    const floorYear = publicationFloor === 'all' ? null : Number(publicationFloor)
     const terms = Array.from(
       new Set([
         ...selectedTrack.keywords.map(normalizeTerm),
@@ -295,15 +243,11 @@ export function DashboardPage() {
         if (!project) {
           continue
         }
-        if (featuredOnly && !(project.featured || project.pinned)) {
-          continue
-        }
 
-        const score = computeProjectScore(project, matchedTerms, baseScore)
         results.push({
           key: doc.id,
           type: 'project',
-          score,
+          score: computeProjectScore(project, matchedTerms, baseScore),
           matchedTerms,
           doc,
           project,
@@ -317,15 +261,11 @@ export function DashboardPage() {
       if (!publication) {
         continue
       }
-      if (floorYear && publication.year && publication.year < floorYear) {
-        continue
-      }
 
-      const score = computePublicationScore(publication, matchedTerms, baseScore)
       results.push({
         key: doc.id,
         type: 'publication',
-        score,
+        score: computePublicationScore(publication, matchedTerms, baseScore),
         matchedTerms,
         doc,
         project: null,
@@ -336,7 +276,7 @@ export function DashboardPage() {
     return results.sort(
       (left, right) => right.score - left.score || left.doc.title.localeCompare(right.doc.title),
     )
-  }, [featuredOnly, publicationFloor, query, scope, selectedTrack, state.data])
+  }, [query, scope, selectedTrack, state.data])
 
   const topProject = useMemo(
     () => rankedEvidence.find((item) => item.type === 'project')?.project ?? null,
@@ -354,21 +294,6 @@ export function DashboardPage() {
     return { projectMatches, publicationMatches }
   }, [rankedEvidence])
 
-  const topWarnings = useMemo(() => {
-    const latestRun = state.data?.latestRun
-    if (!latestRun) {
-      return []
-    }
-
-    return latestRun.tasks
-      .flatMap((task) =>
-        task.logs
-          .filter((log) => log.level === 'warning' || log.level === 'error')
-          .map((log) => ({ task: task.name, ...log })),
-      )
-      .slice(0, 4)
-  }, [state.data])
-
   if (state.loading) {
     return <LoadingBlock label="Loading capability overview." />
   }
@@ -382,31 +307,25 @@ export function DashboardPage() {
     )
   }
 
-  const { latestRun, metrics, profile, provenance, status } = state.data
-  const runAge = runAgeHours(latestRun)
-  const warningCount = topWarnings.length
+  const { metrics, profile } = state.data
   const maxScore = rankedEvidence[0]?.score ?? 1
-  const maxTaskDuration = Math.max(...(latestRun?.tasks.map((task) => task.duration_seconds) ?? [1]))
 
   return (
     <div className="page">
       <section className="hero hero-primary">
         <p className="eyebrow">Overview</p>
-        <h1>Portfolio as a live decision system.</h1>
+        <h1>Research organized for practical decisions.</h1>
         <p className="hero-copy">
-          Choose a decision track, inspect ranked evidence, and verify the pipeline run that produced
-          the result.
+          Select a decision track to surface the most relevant systems and evidence, then move
+          directly into case work.
         </p>
         <div className="action-row">
-          <Link className="action-link action-link-primary" to="/proof">
-            Open system board
+          <Link className="action-link action-link-primary" to="/work">
+            Open case studies
           </Link>
-          <Link className="action-link" to="/work">
-            See applied cases
+          <Link className="action-link" to="/proof">
+            View approach
           </Link>
-          <a className="action-link" href="/api/v1/profile.json" target="_blank" rel="noreferrer">
-            API endpoint
-          </a>
         </div>
       </section>
 
@@ -424,8 +343,8 @@ export function DashboardPage() {
           <p className="metric-value">{formatNumber(profile.counts.citations_total)}</p>
         </article>
         <article className="metric-card">
-          <p className="metric-label">Search docs</p>
-          <p className="metric-value">{formatNumber(state.data.searchIndex.document_count)}</p>
+          <p className="metric-label">Featured systems</p>
+          <p className="metric-value">{formatNumber(profile.counts.featured_projects)}</p>
         </article>
       </section>
 
@@ -448,10 +367,10 @@ export function DashboardPage() {
         </div>
 
         <p className="meta-line">
-          <strong>Decision:</strong> {selectedTrack.decision}
+          <strong>Focus:</strong> {selectedTrack.decision}
         </p>
 
-        <div className="controls-panel workbench-controls">
+        <div className="controls-panel controls-panel-2 workbench-controls">
           <label>
             Focus query
             <input
@@ -469,78 +388,31 @@ export function DashboardPage() {
               <option value="publication">Publications only</option>
             </select>
           </label>
-
-          <label>
-            Publication floor year
-            <select
-              value={publicationFloor}
-              onChange={(event) => setPublicationFloor(event.target.value)}
-            >
-              <option value="all">All years</option>
-              {publicationYears.map((year) => (
-                <option key={year} value={String(year)}>
-                  {year}+
-                </option>
-              ))}
-            </select>
-          </label>
         </div>
 
-        <label className="toggle-line">
-          <input
-            type="checkbox"
-            checked={featuredOnly}
-            onChange={(event) => setFeaturedOnly(event.target.checked)}
-          />
-          Featured systems only
-        </label>
+        <p className="meta-line">
+          <strong>Track keywords:</strong> {compactList(selectedTrack.keywords, 6)}
+        </p>
 
         <div className="card-grid decision-output-grid">
           <article className="item-card decision-output-card">
-            <p className="eyebrow">Recommended next move</p>
+            <p className="eyebrow">Recommended move</p>
             <h3>{buildNextMove(topProject, topPublication)}</h3>
-            <p>{selectedTrack.actionPrompt}</p>
-            <p className="meta-line">
-              {topProject ? (
-                <>
-                  Project: <strong>{topProject.name}</strong>
-                  {' · '}
-                  <a href={topProject.demo_url ?? topProject.html_url} target="_blank" rel="noreferrer">
-                    Open implementation
-                  </a>
-                </>
-              ) : (
-                'No project match under current constraints.'
-              )}
-            </p>
-            <p className="meta-line">
-              {topPublication ? (
-                <>
-                  Paper: <strong>{topPublication.title}</strong>
-                  {' · '}
-                  {formatNumber(topPublication.citation_count)} citations
-                </>
-              ) : (
-                'No publication match under current constraints.'
-              )}
-            </p>
+            <p>{selectedTrack.value}</p>
           </article>
 
           <article className="item-card decision-output-card">
-            <p className="eyebrow">Evidence mix</p>
-            <h3>{formatNumber(rankedEvidence.length)} matched records</h3>
+            <p className="eyebrow">Current match mix</p>
+            <h3>{formatNumber(rankedEvidence.length)} relevant records</h3>
             <p className="meta-line">
               {formatNumber(evidenceMix.projectMatches)} projects ·{' '}
               {formatNumber(evidenceMix.publicationMatches)} publications
             </p>
             <p className="meta-line">
-              Top terms:{' '}
-              {rankedEvidence[0]?.matchedTerms.length
-                ? compactList(rankedEvidence[0].matchedTerms, 5)
+              Core themes:{' '}
+              {metrics.topics.length > 0
+                ? compactList(metrics.topics.slice(0, 4).map((topic) => topic.topic), 4)
                 : 'n/a'}
-            </p>
-            <p className="meta-line">
-              Last sync {formatDateTime(profile.last_sync.last_run_timestamp)}
             </p>
           </article>
         </div>
@@ -553,23 +425,23 @@ export function DashboardPage() {
               <article key={item.key} className="stack-item evidence-item">
                 <div className="evidence-top-row">
                   <h3>{item.doc.title}</h3>
-                  <span className="score-pill">{item.score.toFixed(1)}</span>
+                  <span className="score-pill">{describeStrength(item.score, maxScore)}</span>
                 </div>
                 <div className="evidence-bar" aria-hidden="true">
                   <span style={{ width: `${percent}%` }} />
                 </div>
                 <p className="meta-line">
-                  {item.type === 'project' ? 'Project' : 'Publication'} · matched:{' '}
+                  {item.type === 'project' ? 'Build artifact' : 'Evidence anchor'} · matched:{' '}
                   {compactList(item.matchedTerms, 6)}
                 </p>
                 {subtitle ? <p className="meta-line">{subtitle}</p> : null}
                 <p className="meta-line">
                   {item.doc.url ? (
                     <a href={item.doc.url} target="_blank" rel="noreferrer">
-                      Open source
+                      Open
                     </a>
                   ) : (
-                    <Link to={item.doc.route}>Open record</Link>
+                    <Link to={item.doc.route}>Open</Link>
                   )}
                 </p>
               </article>
@@ -577,92 +449,15 @@ export function DashboardPage() {
           })}
           {rankedEvidence.length === 0 ? (
             <article className="stack-item evidence-item">
-              <h3>No evidence matches yet</h3>
-              <p className="meta-line">Loosen filters or add broader query terms.</p>
+              <h3>No strong matches yet</h3>
+              <p className="meta-line">Try broader terms for a wider evidence set.</p>
             </article>
           ) : null}
         </div>
       </section>
 
-      <section className="panel">
-        <header className="panel-header">
-          <h2>Automation Trail</h2>
-          <a href="/ops/latest-run.json" target="_blank" rel="noreferrer">
-            raw run JSON
-          </a>
-        </header>
-
-        <div className="metric-grid ops-metric-grid">
-          <article className="metric-card">
-            <p className="metric-label">Pipeline status</p>
-            <p className="metric-value">{latestRun?.run.status ?? status?.status ?? 'n/a'}</p>
-          </article>
-          <article className="metric-card">
-            <p className="metric-label">Tasks passed</p>
-            <p className="metric-value">{formatNumber(latestRun?.summary.success ?? null)}</p>
-          </article>
-          <article className="metric-card">
-            <p className="metric-label">Warnings</p>
-            <p className="metric-value">{formatNumber(warningCount)}</p>
-          </article>
-          <article className="metric-card">
-            <p className="metric-label">Run age</p>
-            <p className="metric-value">{runAge === null ? 'n/a' : `${Math.round(runAge)}h`}</p>
-          </article>
-        </div>
-
-        {latestRun ? (
-          <div className="stack-list task-timeline">
-            {latestRun.tasks.map((task) => {
-              const widthPercent = Math.max(
-                10,
-                Math.round((task.duration_seconds / maxTaskDuration) * 100),
-              )
-              return (
-                <article key={task.name} className="stack-item task-item">
-                  <div className="evidence-top-row">
-                    <h3>{task.name}</h3>
-                    <span className={`status-pill status-${task.status}`}>{task.status}</span>
-                  </div>
-                  <div className="evidence-bar" aria-hidden="true">
-                    <span style={{ width: `${widthPercent}%` }} />
-                  </div>
-                  <p className="meta-line">
-                    {formatDuration(task.duration_seconds)} · deps {task.deps.length} · outputs{' '}
-                    {task.outputs.length}
-                  </p>
-                  {task.outputs.length > 0 ? (
-                    <p className="meta-line">{compactList(task.outputs, 2)}</p>
-                  ) : null}
-                </article>
-              )
-            })}
-          </div>
-        ) : (
-          <p className="meta-line">Ops endpoint unavailable in this environment.</p>
-        )}
-
-        {topWarnings.length > 0 ? (
-          <div className="ops-warning-block">
-            <p className="matrix-label">Warnings and errors</p>
-            <ul>
-              {topWarnings.map((warning) => (
-                <li key={`${warning.task}-${warning.timestamp}-${warning.message}`}>
-                  <strong>{warning.task}</strong>: {warning.message}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-
-        <p className="meta-line">
-          Refresh {formatDateTime(profile.last_sync.last_run_timestamp)} · metric source {metrics.source}
-          {provenance?.git_sha ? ` · git ${provenance.git_sha.slice(0, 10)}` : ''}
-          {latestRun?.run.trigger?.event_name ? ` · trigger ${latestRun.run.trigger.event_name}` : ''}
-        </p>
-        {topProject?.last_push ? (
-          <p className="meta-line">Top project updated {formatDate(topProject.last_push)}.</p>
-        ) : null}
+      <section className="panel panel-note">
+        <p className="meta-line">Updated {formatDateTime(profile.last_sync.last_run_timestamp)}</p>
       </section>
     </div>
   )
