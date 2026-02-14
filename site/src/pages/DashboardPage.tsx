@@ -24,29 +24,43 @@ interface DashboardData {
   publications: Awaited<ReturnType<typeof fetchPublicationsApi>>
 }
 
-type OutputView = 'plan' | 'kpis' | 'risks'
-
-interface CapabilityTrack {
+interface ScenarioPreset {
+  id: string
+  label: string
   challenge: ChallengeId
-  title: string
-  statement: string
+  goal: GoalId
+  horizon: HorizonId
+  risk: RiskId
+  context: string
 }
 
-const CAPABILITY_TRACKS: CapabilityTrack[] = [
+const SCENARIO_PRESETS: ScenarioPreset[] = [
   {
+    id: 'drift',
+    label: 'Model drift after updates',
     challenge: 'continual_reliability',
-    title: 'Continual Learning Reliability',
-    statement: 'Policy design for stable sequential model updates.',
+    goal: 'pilot',
+    horizon: '6w',
+    risk: 'balanced',
+    context: 'Recent updates improved latest-task score but retained-task quality is dropping.',
   },
   {
+    id: 'moderation',
+    label: 'Escalation before intervention',
     challenge: 'online_safety',
-    title: 'Online Safety Intervention',
-    statement: 'Interaction-driven trigger design for earlier moderation action.',
+    goal: 'diagnose',
+    horizon: '2w',
+    risk: 'conservative',
+    context: 'High-risk threads escalate faster than current moderation trigger thresholds.',
   },
   {
+    id: 'rollout',
+    label: 'Transition rollout sequencing',
     challenge: 'urban_transition',
-    title: 'Urban Transition Sequencing',
-    statement: 'Evidence-based rollout ordering under operational constraints.',
+    goal: 'production',
+    horizon: '12w',
+    risk: 'balanced',
+    context: 'City regions have uneven readiness and service quality drops during rushed transitions.',
   },
 ]
 
@@ -64,7 +78,6 @@ export function DashboardPage() {
   const [horizon, setHorizon] = useState<HorizonId>('6w')
   const [risk, setRisk] = useState<RiskId>('balanced')
   const [context, setContext] = useState('')
-  const [view, setView] = useState<OutputView>('plan')
   const [copyStatus, setCopyStatus] = useState('')
 
   const loadDashboard = useCallback(
@@ -101,36 +114,6 @@ export function DashboardPage() {
     )
   }, [challenge, context, goal, horizon, risk, state.data])
 
-  const capabilityAnchors = useMemo(() => {
-    const data = state.data
-    if (!data) {
-      return []
-    }
-
-    return CAPABILITY_TRACKS.map((track) => {
-      const anchor = createDecisionBlueprint(
-        {
-          challenge: track.challenge,
-          goal: 'pilot',
-          horizon: '6w',
-          risk: 'balanced',
-          context: '',
-        },
-        {
-          projects: data.projects.items,
-          publications: data.publications.items,
-        },
-      )
-
-      return {
-        ...track,
-        project: anchor.matchedProject,
-        publication: anchor.matchedPublication,
-        decisionQuestion: anchor.decisionQuestion,
-      }
-    })
-  }, [state.data])
-
   const briefMarkdown = useMemo(() => {
     if (!blueprint) {
       return ''
@@ -148,6 +131,28 @@ export function DashboardPage() {
     )
   }, [blueprint, challenge, goal, horizon, risk, context])
 
+  const activePresetId = useMemo(
+    () =>
+      SCENARIO_PRESETS.find(
+        (preset) =>
+          preset.challenge === challenge &&
+          preset.goal === goal &&
+          preset.horizon === horizon &&
+          preset.risk === risk &&
+          preset.context.trim() === context.trim(),
+      )?.id ?? null,
+    [challenge, context, goal, horizon, risk],
+  )
+
+  function applyPreset(preset: ScenarioPreset) {
+    setChallenge(preset.challenge)
+    setGoal(preset.goal)
+    setHorizon(preset.horizon)
+    setRisk(preset.risk)
+    setContext(preset.context)
+    setCopyStatus('')
+  }
+
   async function handleCopyBrief() {
     if (!briefMarkdown) {
       return
@@ -155,7 +160,7 @@ export function DashboardPage() {
 
     try {
       await navigator.clipboard.writeText(briefMarkdown)
-      setCopyStatus('Execution brief copied to clipboard.')
+      setCopyStatus('Brief copied to clipboard.')
     } catch {
       setCopyStatus('Clipboard unavailable. Use download instead.')
     }
@@ -178,14 +183,14 @@ export function DashboardPage() {
   }
 
   if (state.loading) {
-    return <LoadingBlock label="Loading decision builder." />
+    return <LoadingBlock label="Loading overview." />
   }
 
   if (!state.data || state.error || !blueprint) {
     return (
       <ErrorBlock
-        label="Unable to load decision builder."
-        details={state.error ?? 'unknown dashboard error'}
+        label="Unable to load overview."
+        details={state.error ?? 'unknown overview error'}
       />
     )
   }
@@ -198,11 +203,11 @@ export function DashboardPage() {
   return (
     <div className="page builder-page">
       <section className="hero hero-primary builder-hero">
-        <p className="eyebrow">Decision Builder</p>
-        <h1>Evidence-backed systems design, from first decision to delivery brief.</h1>
+        <p className="eyebrow">Overview</p>
+        <h1>Turn one concrete problem statement into an execution-ready strategy.</h1>
         <p className="hero-copy">
-          This page combines prior systems work with a live planning utility. A visitor can see what
-          has been built and generate what should be built next.
+          This is a working planning surface. Define the operating pressure, then inspect how decisions,
+          controls, and evidence anchors change.
         </p>
         <div className="builder-stat-row" aria-label="Profile snapshot">
           <article className="builder-stat">
@@ -222,43 +227,18 @@ export function DashboardPage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Built Systems Track Record</h2>
+          <h2>Fast scenario presets</h2>
         </header>
-        <div className="capability-grid">
-          {capabilityAnchors.map((track) => (
-            <article key={track.challenge} className="capability-card">
-              <p className="matrix-label">{track.title}</p>
-              <h3>{track.statement}</h3>
-              <p className="meta-line">{track.decisionQuestion}</p>
-              <p className="meta-line">
-                Build:{' '}
-                {track.project ? (
-                  <a
-                    href={track.project.demo_url ?? track.project.html_url}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {track.project.name}
-                  </a>
-                ) : (
-                  'unavailable'
-                )}
-              </p>
-              <p className="meta-line">
-                Evidence:{' '}
-                {track.publication ? (
-                  track.publication.url ? (
-                    <a href={track.publication.url} target="_blank" rel="noreferrer">
-                      {track.publication.title}
-                    </a>
-                  ) : (
-                    track.publication.title
-                  )
-                ) : (
-                  'unavailable'
-                )}
-              </p>
-            </article>
+        <div className="track-row" role="tablist" aria-label="Scenario presets">
+          {SCENARIO_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              className={preset.id === activePresetId ? 'track-chip track-chip-active' : 'track-chip'}
+              onClick={() => applyPreset(preset)}
+            >
+              {preset.label}
+            </button>
           ))}
         </div>
       </section>
@@ -266,10 +246,10 @@ export function DashboardPage() {
       <section className="builder-layout" aria-label="Decision workflow">
         <aside className="panel builder-config-panel">
           <header className="panel-header">
-            <h2>1. Configure</h2>
+            <h2>1. Input</h2>
           </header>
           <p className="meta-line">
-            Define one practical decision context and the operating constraints around it.
+            Keep input narrow: one decision, one operational context, one risk posture.
           </p>
 
           <div className="track-row" role="tablist" aria-label="Challenge selection">
@@ -327,10 +307,10 @@ export function DashboardPage() {
             <label>
               Current situation
               <textarea
-                rows={4}
+                rows={5}
                 value={context}
                 onChange={(event) => setContext(event.target.value)}
-                placeholder="Describe the immediate operating issue and decision pressure."
+                placeholder="Describe what is breaking, where risk is rising, and what decision is blocked."
               />
             </label>
           </div>
@@ -346,15 +326,19 @@ export function DashboardPage() {
 
         <section className="panel builder-output-panel">
           <header className="panel-header">
-            <h2>2. Execution Brief</h2>
+            <h2>2. Generated strategy</h2>
           </header>
 
-          <p className="builder-output-lead">{blueprint.valueStatement}</p>
+          <article className="builder-primary-card">
+            <p className="matrix-label">Decision now</p>
+            <h3>{blueprint.decisionQuestion}</h3>
+            <p className="meta-line">{blueprint.valueStatement}</p>
+          </article>
 
           <div className="builder-summary-grid">
             <article className="builder-summary-card">
-              <p className="matrix-label">Decision</p>
-              <h3>{blueprint.decisionQuestion}</h3>
+              <p className="matrix-label">Operating priority</p>
+              <h3>{blueprint.operatingPriority}</h3>
             </article>
             <article className="builder-summary-card">
               <p className="matrix-label">System move</p>
@@ -370,134 +354,113 @@ export function DashboardPage() {
             </article>
           </div>
 
-          <div className="builder-view-tabs" role="tablist" aria-label="Brief views">
-            <button
-              type="button"
-              className={view === 'plan' ? 'builder-view-tab builder-view-tab-active' : 'builder-view-tab'}
-              onClick={() => setView('plan')}
-            >
-              Plan
-            </button>
-            <button
-              type="button"
-              className={view === 'kpis' ? 'builder-view-tab builder-view-tab-active' : 'builder-view-tab'}
-              onClick={() => setView('kpis')}
-            >
-              KPIs
-            </button>
-            <button
-              type="button"
-              className={view === 'risks' ? 'builder-view-tab builder-view-tab-active' : 'builder-view-tab'}
-              onClick={() => setView('risks')}
-            >
-              Risks
-            </button>
+          <section className="builder-signal-panel" aria-label="Detected operating signals">
+            <p className="matrix-label">Detected operating signals</p>
+            <div className="pill-row">
+              {blueprint.contextSignals.map((signal) => (
+                <span key={signal} className="pill">
+                  {signal}
+                </span>
+              ))}
+            </div>
+          </section>
+
+          <div className="builder-plan-columns">
+            <article className="builder-block">
+              <p className="matrix-label">Next 72 hours</p>
+              <ol className="builder-ordered-list">
+                {blueprint.immediateActions.map((action) => (
+                  <li key={action}>{action}</li>
+                ))}
+              </ol>
+            </article>
+
+            <article className="builder-block">
+              <p className="matrix-label">Implementation + evidence anchors</p>
+              {blueprint.matchedProject ? (
+                <p className="meta-line">
+                  Build anchor:{' '}
+                  <a
+                    href={blueprint.matchedProject.demo_url ?? blueprint.matchedProject.html_url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {blueprint.matchedProject.name}
+                  </a>
+                </p>
+              ) : (
+                <p className="meta-line">Build anchor unavailable.</p>
+              )}
+              {blueprint.matchedPublication ? (
+                <p className="meta-line">
+                  Evidence anchor:{' '}
+                  {blueprint.matchedPublication.url ? (
+                    <a href={blueprint.matchedPublication.url} target="_blank" rel="noreferrer">
+                      {blueprint.matchedPublication.title}
+                    </a>
+                  ) : (
+                    blueprint.matchedPublication.title
+                  )}
+                </p>
+              ) : (
+                <p className="meta-line">Evidence anchor unavailable.</p>
+              )}
+            </article>
           </div>
 
-          {view === 'plan' ? (
-            <div className="builder-plan-columns">
-              <article className="builder-block">
-                <p className="matrix-label">Next 72 Hours</p>
-                <ol className="builder-ordered-list">
-                  {blueprint.immediateActions.map((action) => (
-                    <li key={action}>{action}</li>
-                  ))}
-                </ol>
-              </article>
-
-              <article className="builder-block">
-                <p className="matrix-label">Timeline</p>
-                <div className="builder-timeline">
-                  {blueprint.executionPlan.map((step) => (
-                    <article key={step.phase} className="builder-timeline-step">
-                      <p className="sequence-index">{step.phase}</p>
-                      <h3>{step.objective}</h3>
-                      <p>{step.deliverable}</p>
-                    </article>
-                  ))}
-                </div>
-              </article>
+          <article className="builder-block">
+            <p className="matrix-label">Execution timeline</p>
+            <div className="builder-timeline">
+              {blueprint.executionPlan.map((step) => (
+                <article key={step.phase} className="builder-timeline-step">
+                  <p className="sequence-index">{step.phase}</p>
+                  <h3>{step.objective}</h3>
+                  <p>{step.deliverable}</p>
+                </article>
+              ))}
             </div>
-          ) : null}
+          </article>
 
-          {view === 'kpis' ? (
-            <div className="builder-plan-columns">
-              <article className="builder-block">
-                <p className="matrix-label">KPI Set</p>
-                <ul className="checklist-list">
-                  {blueprint.kpis.map((kpi) => (
-                    <li key={kpi.metric}>
-                      <strong>{kpi.metric}</strong>
-                      <br />
-                      target: {kpi.target}
-                      <br />
-                      cadence: {kpi.cadence}
-                    </li>
-                  ))}
-                </ul>
-              </article>
+          <div className="builder-plan-columns">
+            <article className="builder-block">
+              <p className="matrix-label">KPI set</p>
+              <ul className="checklist-list">
+                {blueprint.kpis.map((kpi) => (
+                  <li key={kpi.metric}>
+                    <strong>{kpi.metric}</strong>
+                    <br />
+                    target: {kpi.target}
+                    <br />
+                    cadence: {kpi.cadence}
+                  </li>
+                ))}
+              </ul>
+            </article>
 
-              <article className="builder-block">
-                <p className="matrix-label">Implementation + Evidence</p>
-                {blueprint.matchedProject ? (
-                  <p className="meta-line">
-                    Build anchor:{' '}
-                    <a
-                      href={blueprint.matchedProject.demo_url ?? blueprint.matchedProject.html_url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {blueprint.matchedProject.name}
-                    </a>
-                  </p>
-                ) : (
-                  <p className="meta-line">Build anchor unavailable.</p>
-                )}
-                {blueprint.matchedPublication ? (
-                  <p className="meta-line">
-                    Evidence anchor:{' '}
-                    {blueprint.matchedPublication.url ? (
-                      <a href={blueprint.matchedPublication.url} target="_blank" rel="noreferrer">
-                        {blueprint.matchedPublication.title}
-                      </a>
-                    ) : (
-                      blueprint.matchedPublication.title
-                    )}
-                  </p>
-                ) : (
-                  <p className="meta-line">Evidence anchor unavailable.</p>
-                )}
-              </article>
-            </div>
-          ) : null}
+            <article className="builder-block">
+              <p className="matrix-label">Risk controls</p>
+              <ul className="checklist-list">
+                {blueprint.risks.map((riskItem) => (
+                  <li key={riskItem.risk}>
+                    <strong>{riskItem.risk}</strong>
+                    <br />
+                    trigger: {riskItem.trigger}
+                    <br />
+                    guardrail: {riskItem.guardrail}
+                  </li>
+                ))}
+              </ul>
+            </article>
+          </div>
 
-          {view === 'risks' ? (
-            <div className="builder-plan-columns">
-              <article className="builder-block">
-                <p className="matrix-label">Risk Controls</p>
-                <ul className="checklist-list">
-                  {blueprint.risks.map((riskItem) => (
-                    <li key={riskItem.risk}>
-                      <strong>{riskItem.risk}</strong>
-                      <br />
-                      trigger: {riskItem.trigger}
-                      <br />
-                      guardrail: {riskItem.guardrail}
-                    </li>
-                  ))}
-                </ul>
-              </article>
-
-              <article className="builder-block">
-                <p className="matrix-label">Handoff Checklist</p>
-                <ul className="checklist-list">
-                  {blueprint.handoffChecklist.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </article>
-            </div>
-          ) : null}
+          <article className="builder-block">
+            <p className="matrix-label">Handoff checklist</p>
+            <ul className="checklist-list">
+              {blueprint.handoffChecklist.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </article>
 
           <div className="action-row builder-actions">
             <button type="button" className="action-link action-link-primary" onClick={handleCopyBrief}>
@@ -515,9 +478,7 @@ export function DashboardPage() {
       </section>
 
       <section className="panel panel-note">
-        <p className="meta-line">
-          Updated {formatDateTime(state.data.profile.last_sync.last_run_timestamp)}
-        </p>
+        <p className="meta-line">Updated {formatDateTime(state.data.profile.last_sync.last_run_timestamp)}</p>
       </section>
     </div>
   )
