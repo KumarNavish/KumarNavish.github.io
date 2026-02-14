@@ -86,14 +86,6 @@ function sleep(milliseconds: number): Promise<void> {
   })
 }
 
-function excerpt(text: string, maxLength = 280): string {
-  const normalized = text.replace(/\s+/g, ' ').trim()
-  if (normalized.length <= maxLength) {
-    return normalized
-  }
-  return `${normalized.slice(0, maxLength - 3)}...`
-}
-
 function sampleHint(sample: IntakeSample | null): string {
   if (!sample) {
     return 'Pick a workflow example to begin.'
@@ -112,13 +104,6 @@ function toNumber(value: string | number | null | undefined): number | null {
     }
   }
   return null
-}
-
-function toPercentString(value: number | null): string {
-  if (value === null) {
-    return 'n/a'
-  }
-  return `${value}%`
 }
 
 function formatDays(value: number | null): string {
@@ -313,8 +298,20 @@ function App() {
 
   const hasResult = Boolean(result)
   const previewBaselineDays = selectedSample?.ground_truth.baseline_cycle_time_days ?? null
-  const previewRisk = selectedSample?.ground_truth.risk_level ?? null
   const previewVolume = selectedSample?.ground_truth.volume_per_month ?? null
+  const inferredTargetDays =
+    previewBaselineDays !== null ? Math.max(1, Math.round(previewBaselineDays * 0.65)) : null
+  const beforeCycleTime = impactSnapshot?.baselineDays ?? previewBaselineDays
+  const afterCycleTime = impactSnapshot?.targetDays ?? inferredTargetDays
+  const totalArtifacts = impactSnapshot ? impactSnapshot.outputCount + impactSnapshot.payloadCount : null
+  const primaryOutcome = impactSnapshot
+    ? impactSnapshot.cycleGainDays !== null
+      ? `${impactSnapshot.cycleGainDays} days removed from cycle time`
+      : `${impactSnapshot.monthlyHoursSaved} hours saved each month`
+    : 'Run once to transform this request into a ready process pack'
+  const secondaryOutcome = impactSnapshot
+    ? `${impactSnapshot.monthlyHoursSaved} hours/month saved and ${totalArtifacts ?? 0} handoff artifacts generated.`
+    : 'You will get a clear before/after impact view and copy-ready outputs in one click.'
 
   const hintText = useMemo(() => {
     if (error) {
@@ -511,79 +508,56 @@ function App() {
 
           <section className="magic-panel" aria-live="polite">
             <p className="moment-tag">{automationNarrative.title}</p>
-            <h2>Proof of value</h2>
+            <h2>Automation moment</h2>
             <p className="magic-lede">{automationNarrative.impactSummary}</p>
 
             <section className="value-hero">
-              {impactSnapshot ? (
-                <>
-                  <h3>
-                    {impactSnapshot.cycleGainDays !== null
-                      ? `${impactSnapshot.cycleGainDays} days faster turnaround`
-                      : `${impactSnapshot.monthlyHoursSaved} hours/month saved potential`}
-                  </h3>
-                  <p>
-                    Generated in one run: {impactSnapshot.outputCount} core outputs +{' '}
-                    {impactSnapshot.payloadCount} export payloads.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <h3>Run once to see exact time savings and delivery outputs.</h3>
-                  <p>The tool will show measurable before/after change from this request.</p>
-                </>
-              )}
+              <p className="hero-label">Main result</p>
+              <h3>{primaryOutcome}</h3>
+              <p>{secondaryOutcome}</p>
             </section>
 
-            <div className="comparison-grid">
-              <article className="state-card before-state">
-                <h3>Before (manual)</h3>
-                <p className="state-caption">Current pain</p>
-                <ul className="comparison-list">
-                  <li>
-                    <span>Cycle time</span>
-                    <strong>{formatDays(impactSnapshot?.baselineDays ?? previewBaselineDays)}</strong>
-                  </li>
-                  <li>
-                    <span>Monthly volume</span>
-                    <strong>{metricToText(previewVolume)}</strong>
-                  </li>
-                  <li>
-                    <span>Risk level</span>
-                    <strong>{prettyCategory(impactSnapshot ? result.triage.risk_level : previewRisk ?? 'medium')}</strong>
-                  </li>
-                </ul>
-              </article>
-
-              <article className="state-card after-state">
-                <h3>After (automated)</h3>
-                <p className="state-caption">Delivered outcome</p>
-                {impactSnapshot ? (
-                  <ul className="comparison-list">
-                    <li>
-                      <span>Target cycle time</span>
-                      <strong>{formatDays(impactSnapshot.targetDays)}</strong>
-                    </li>
-                    <li>
-                      <span>Cycle reduction</span>
-                      <strong>{toPercentString(impactSnapshot.cycleReductionPct)}</strong>
-                    </li>
-                    <li>
-                      <span>Hours saved / month</span>
-                      <strong>{impactSnapshot.monthlyHoursSaved}</strong>
-                    </li>
-                  </ul>
-                ) : (
-                  <>
-                    <p>
-                      Click <strong>Run automation</strong> to generate measurable results and
-                      ready-to-use outputs.
-                    </p>
-                    <p className="preview-text">Preview: {excerpt(requestText)}</p>
-                  </>
-                )}
-              </article>
-            </div>
+            <section className="before-after-proof">
+              <div className="before-after-head">
+                <h3>Before (manual) vs After (automated)</h3>
+                <p>What changed in this workflow after one run.</p>
+              </div>
+              <ul className="proof-list">
+                <li>
+                  <span className="proof-label">Cycle time</span>
+                  <span className="proof-before">{formatDays(beforeCycleTime)}</span>
+                  <span className="proof-arrow">→</span>
+                  <span className="proof-after">{formatDays(afterCycleTime)}</span>
+                  <strong className="proof-impact">
+                    {impactSnapshot?.cycleGainDays !== null
+                      ? `${impactSnapshot.cycleGainDays} days faster`
+                      : 'Calculated after run'}
+                  </strong>
+                </li>
+                <li>
+                  <span className="proof-label">Manual effort</span>
+                  <span className="proof-before">
+                    {impactSnapshot ? `${impactSnapshot.manualTouches} touchpoints` : 'Manual routing and follow-up'}
+                  </span>
+                  <span className="proof-arrow">→</span>
+                  <span className="proof-after">
+                    {impactSnapshot ? `${impactSnapshot.generatedSteps} standard steps` : 'Structured workflow'}
+                  </span>
+                  <strong className="proof-impact">
+                    {impactSnapshot ? `${impactSnapshot.monthlyHoursSaved} hrs/month released` : 'Measured after run'}
+                  </strong>
+                </li>
+                <li>
+                  <span className="proof-label">Execution readiness</span>
+                  <span className="proof-before">Unstructured notes</span>
+                  <span className="proof-arrow">→</span>
+                  <span className="proof-after">
+                    {impactSnapshot ? `${totalArtifacts ?? 0} ready artifacts` : 'Ready artifacts'}
+                  </span>
+                  <strong className="proof-impact">Copy into Jira / ServiceNow immediately</strong>
+                </li>
+              </ul>
+            </section>
 
             <div className="transform-center">
               <p className="transform-label">Run status</p>
@@ -609,9 +583,21 @@ function App() {
       {!result ? (
         <section className="panel placeholder-panel">
           <h2>Your outputs</h2>
-          <p>
-            Summary, flow map, and export JSON will appear here right after the run.
-          </p>
+          <p className="placeholder-lede">Run automation once. You immediately get three practical deliverables.</p>
+          <div className="placeholder-grid">
+            <article>
+              <h3>1) Charter summary</h3>
+              <p>Clear problem, target, owners, and next action.</p>
+            </article>
+            <article>
+              <h3>2) Process map</h3>
+              <p>Simple visual of current flow and optimized flow.</p>
+            </article>
+            <article>
+              <h3>3) Export payloads</h3>
+              <p>Copy-ready JSON for Jira, ServiceNow, and trackers.</p>
+            </article>
+          </div>
         </section>
       ) : (
         <section className="panel pack-panel" ref={packSectionRef}>
@@ -619,47 +605,39 @@ function App() {
           <p className="pack-subhead">Everything below is ready to use right now.</p>
 
           <section className="outputs-hero">
-            <h3>Automation package ready</h3>
-            <p>
-              Review, copy, and hand off in minutes. This is the exact output produced from the
-              request above.
-            </p>
-            {impactSnapshot ? (
-              <div className="outputs-proof">
-                <span>{impactSnapshot.outputCount} deliverables generated</span>
-                <span>{impactSnapshot.payloadCount} system payloads ready</span>
-                <span>{impactSnapshot.monthlyHoursSaved} hrs/month impact potential</span>
-              </div>
-            ) : null}
+            <p className="outputs-tag">Ready now</p>
+            <h3>Your process pack is ready for handoff</h3>
+            <p>Copy and share these outputs with delivery teams without reformatting.</p>
+            <div className="outputs-proof">
+              <span>
+                {impactSnapshot?.cycleReductionPct !== null
+                  ? `${impactSnapshot?.cycleReductionPct}% faster target cycle`
+                  : 'Target cycle calculated'}
+              </span>
+              <span>{impactSnapshot?.monthlyHoursSaved ?? 0} hrs/month impact potential</span>
+              <span>{totalArtifacts ?? 0} artifacts ready to share</span>
+            </div>
+            <div className="outputs-actions">
+              <button className="secondary-btn" onClick={() => copyJson('Charter JSON', result.charter)}>
+                Copy summary JSON
+              </button>
+              <button className="secondary-btn" onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}>
+                Copy Jira JSON
+              </button>
+              <button className="primary-btn" onClick={sendToDeliveryQueue}>
+                Send package
+              </button>
+            </div>
           </section>
-
-          <div className="kpi-grid">
-            <article>
-              <span>Workflow type</span>
-              <strong>{prettyCategory(result.triage.category)}</strong>
-            </article>
-            <article>
-              <span>Risk</span>
-              <strong>{prettyCategory(result.triage.risk_level)}</strong>
-            </article>
-            <article>
-              <span>Priority</span>
-              <strong>{result.triage.priority}</strong>
-            </article>
-            <article>
-              <span>Hours saved / month</span>
-              <strong>{result.triage.est_savings_hours_per_month}</strong>
-            </article>
-          </div>
 
           <section className="artifact-panel">
             <section className="artifact-card">
               <div className="artifact-head">
-                <h3>1. Summary</h3>
+                <h3>1. Charter summary</h3>
                 <span className="artifact-badge">Use for kickoff</span>
               </div>
               <p className="artifact-purpose">
-                Gives stakeholders a clean problem statement, baseline, and next action.
+                Gives stakeholders a clear problem statement, target, and recommended action.
               </p>
               <p>
                 <strong>Problem:</strong> {result.charter.problem_statement}
@@ -667,13 +645,24 @@ function App() {
               <p>
                 <strong>Recommended next action:</strong> {result.triage.next_action}
               </p>
-              <ul className="metric-list">
-                <li>Baseline cycle time: {metricToText(result.charter.baseline_metrics.cycle_time_days)}</li>
-                <li>
-                  Target cycle time: {metricToText(result.charter.target_metrics.cycle_time_days_target)}
-                </li>
-                <li>Monthly volume: {metricToText(result.charter.baseline_metrics.volume_per_month)}</li>
-              </ul>
+              <div className="artifact-facts">
+                <p>
+                  <span>Workflow</span>
+                  <strong>{prettyCategory(result.triage.category)}</strong>
+                </p>
+                <p>
+                  <span>Priority</span>
+                  <strong>{result.triage.priority}</strong>
+                </p>
+                <p>
+                  <span>Risk</span>
+                  <strong>{prettyCategory(result.triage.risk_level)}</strong>
+                </p>
+                <p>
+                  <span>Monthly volume</span>
+                  <strong>{metricToText(previewVolume)}</strong>
+                </p>
+              </div>
               <div className="card-actions">
                 <button className="secondary-btn" onClick={() => copyJson('Charter JSON', result.charter)}>
                   Copy summary JSON
@@ -698,11 +687,11 @@ function App() {
 
             <section className="artifact-card" id="export-output">
               <div className="artifact-head">
-                <h3>3. Export JSON</h3>
+                <h3>3. Export payloads</h3>
                 <span className="artifact-badge">Use for handoff</span>
               </div>
               <p className="artifact-purpose">
-                Copy these payloads into Jira, ServiceNow, or your tracker to start execution.
+                Copy these payloads into Jira, ServiceNow, or your tracker to start execution now.
               </p>
               <div className="button-column">
                 <button className="secondary-btn" onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}>
@@ -717,9 +706,19 @@ function App() {
                 <button className="secondary-btn" onClick={() => copyJson('Tracker payload', result.exports.process_tracker_row)}>
                   Copy tracker JSON
                 </button>
-                <button className="secondary-btn" onClick={() => copyJson('Blueprint JSON', result.blueprint)}>
-                  Copy automation plan JSON
-                </button>
+              </div>
+
+              <details className="advanced-block">
+                <summary>Show automation blueprint JSON</summary>
+                <div className="button-column inline-open-btn">
+                  <button className="secondary-btn" onClick={() => copyJson('Blueprint JSON', result.blueprint)}>
+                    Copy automation plan JSON
+                  </button>
+                </div>
+                <pre>{JSON.stringify(result.blueprint, null, 2)}</pre>
+              </details>
+
+              <div className="card-actions">
                 <button className="primary-btn" onClick={sendToDeliveryQueue}>
                   Send package
                 </button>
@@ -739,7 +738,7 @@ function App() {
           </section>
 
           <details className="advanced-block">
-            <summary>Technical details (optional)</summary>
+            <summary>How impact was estimated (optional)</summary>
             <p>
               Estimated from {impactRationale?.manual_steps ?? 'n/a'} manual touchpoints, volume{' '}
               {metricToText(impactRationale?.monthly_volume)}, cycle time{' '}
