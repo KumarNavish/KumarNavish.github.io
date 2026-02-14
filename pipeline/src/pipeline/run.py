@@ -12,6 +12,7 @@ from typing import Any, Dict, Sequence
 import yaml
 
 from pipeline.core import Task, TaskContext, TaskRunner, emit_ops_reports
+from pipeline.emit import build_profile, build_search_index
 from pipeline.ingest import ingest_github_repositories, ingest_semantic_scholar_publications
 from pipeline.registry import load_registry
 from pipeline.transform import compute_metrics, normalize_projects, normalize_publications
@@ -22,6 +23,8 @@ SEMANTIC_SCHOLAR_RAW_RELATIVE_PATH = Path("artifacts/semantic-scholar/publicatio
 PROJECTS_API_RELATIVE_PATH = Path("api/v1/projects.json")
 PUBLICATIONS_API_RELATIVE_PATH = Path("api/v1/publications.json")
 METRICS_API_RELATIVE_PATH = Path("api/v1/metrics.json")
+SEARCH_INDEX_API_RELATIVE_PATH = Path("api/v1/search-index.json")
+PROFILE_API_RELATIVE_PATH = Path("api/v1/profile.json")
 PUBLICATIONS_OVERRIDES_PATH = REGISTRY_DIR / "publications_overrides.yaml"
 
 
@@ -155,6 +158,48 @@ def _task_emit_metrics_api(context: TaskContext) -> None:
     _write_json(context.out_dir / METRICS_API_RELATIVE_PATH, metrics_payload)
 
 
+def _task_emit_search_index(context: TaskContext) -> None:
+    """Emit compact search index across projects and publications."""
+    projects_payload = json.loads((context.out_dir / PROJECTS_API_RELATIVE_PATH).read_text(encoding="utf-8"))
+    publications_payload = json.loads((context.out_dir / PUBLICATIONS_API_RELATIVE_PATH).read_text(encoding="utf-8"))
+
+    projects_items = projects_payload.get("items", [])
+    if not isinstance(projects_items, list):
+        projects_items = []
+    publications_items = publications_payload.get("items", [])
+    if not isinstance(publications_items, list):
+        publications_items = []
+
+    search_index_payload = build_search_index(
+        projects=[item for item in projects_items if isinstance(item, dict)],
+        publications=[item for item in publications_items if isinstance(item, dict)],
+        generated_at=datetime.now(timezone.utc).isoformat(),
+        source_provenance={
+            "projects_source": projects_payload.get("source"),
+            "publications_source": publications_payload.get("source"),
+        },
+    )
+    _write_json(context.out_dir / SEARCH_INDEX_API_RELATIVE_PATH, search_index_payload)
+
+
+def _task_emit_profile_api(context: TaskContext) -> None:
+    """Emit unified profile endpoint with counts, links, and provenance."""
+    bundle = load_registry(REGISTRY_DIR)
+    projects_payload = json.loads((context.out_dir / PROJECTS_API_RELATIVE_PATH).read_text(encoding="utf-8"))
+    publications_payload = json.loads((context.out_dir / PUBLICATIONS_API_RELATIVE_PATH).read_text(encoding="utf-8"))
+    metrics_payload = json.loads((context.out_dir / METRICS_API_RELATIVE_PATH).read_text(encoding="utf-8"))
+
+    profile_payload = build_profile(
+        config=bundle.config.model_dump(mode="json"),
+        projects_payload=projects_payload,
+        publications_payload=publications_payload,
+        metrics_payload=metrics_payload,
+        last_run_timestamp=context.env.get("PIPELINE_RUN_TIMESTAMP", datetime.now(timezone.utc).isoformat()),
+        generated_at=datetime.now(timezone.utc).isoformat(),
+    )
+    _write_json(context.out_dir / PROFILE_API_RELATIVE_PATH, profile_payload)
+
+
 def build_tasks() -> Sequence[Task]:
     """Declare pipeline tasks and dependencies."""
     return [
@@ -194,18 +239,33 @@ def build_tasks() -> Sequence[Task]:
             deps=("emit_publications_api",),
         ),
         Task(
+            name="emit_search_index",
+            action=_task_emit_search_index,
+            inputs=(str(PROJECTS_API_RELATIVE_PATH), str(PUBLICATIONS_API_RELATIVE_PATH)),
+            outputs=(str(SEARCH_INDEX_API_RELATIVE_PATH),),
+            deps=("emit_projects_api", "emit_publications_api"),
+        ),
+        Task(
+            name="emit_profile_api",
+            action=_task_emit_profile_api,
+            inputs=(str(PROJECTS_API_RELATIVE_PATH), str(PUBLICATIONS_API_RELATIVE_PATH), str(METRICS_API_RELATIVE_PATH)),
+            outputs=(str(PROFILE_API_RELATIVE_PATH),),
+            deps=("emit_projects_api", "emit_publications_api", "emit_metrics_api"),
+        ),
+        Task(
             name="emit_status_api",
             action=_task_emit_status_api,
-            inputs=(str(PROJECTS_API_RELATIVE_PATH), str(METRICS_API_RELATIVE_PATH)),
+            inputs=(str(PROJECTS_API_RELATIVE_PATH), str(METRICS_API_RELATIVE_PATH), str(PROFILE_API_RELATIVE_PATH)),
             outputs=("api/v1/status.json",),
-            deps=("emit_projects_api", "emit_metrics_api"),
+            deps=("emit_search_index", "emit_profile_api"),
         ),
     ]
 
 
 def run(out_dir: Path, *, env: Dict[str, str] | None = None) -> int:
     """Run task graph and emit operations telemetry reports."""
-    runtime_env = env if env is not None else dict(os.environ)
+    runtime_env = dict(env) if env is not None else dict(os.environ)
+    runtime_env.setdefault("PIPELINE_RUN_TIMESTAMP", datetime.now(timezone.utc).isoformat())
     context = TaskContext(out_dir=out_dir, env=runtime_env)
     tasks = list(build_tasks())
     runner = TaskRunner(tasks)
