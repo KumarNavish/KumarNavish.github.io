@@ -15,7 +15,7 @@ body {
 }
 
 .page-shell {
-  width: min(1180px, 100%);
+  width: min(1200px, 100%);
   margin: 0 auto;
   padding: 1.1rem 1rem 2rem;
   display: grid;
@@ -250,6 +250,10 @@ button:disabled {
   gap: 0.46rem;
 }
 
+.summary-row.four-up {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .summary-card {
   border: 1px solid #dde6f1;
   border-radius: 10px;
@@ -278,13 +282,13 @@ button:disabled {
   gap: 0.64rem;
 }
 
-.packet-grid {
+.dmaic-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.56rem;
 }
 
-.packet-card {
+.dmaic-card {
   border: 1px solid #dce6f2;
   border-radius: 11px;
   background: #fff;
@@ -293,11 +297,12 @@ button:disabled {
   gap: 0.42rem;
 }
 
-.packet-card.span-2 {
+.dmaic-card.span-2 {
   grid-column: 1 / -1;
 }
 
-.value-list {
+.field-list,
+.control-list {
   margin: 0;
   padding-left: 0;
   list-style: none;
@@ -305,7 +310,8 @@ button:disabled {
   gap: 0.35rem;
 }
 
-.value-list li {
+.field-list li,
+.control-list li {
   display: grid;
   gap: 0.08rem;
   padding: 0.38rem 0.42rem;
@@ -314,43 +320,75 @@ button:disabled {
   background: #f8fbff;
 }
 
-.value-list strong {
+.field-list strong,
+.control-list strong {
   font-size: 0.74rem;
   color: #47658f;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
-.value-list span {
+.field-list span,
+.control-list span {
   color: #254670;
   font-size: 0.84rem;
 }
 
-.value-list.compact li {
+.field-list.compact li {
   gap: 0;
 }
 
-.checklist {
+.control-list small {
+  color: #4c6992;
+  font-size: 0.78rem;
+}
+
+.cause-list,
+.action-list {
   margin: 0;
   padding-left: 1.1rem;
   display: grid;
   gap: 0.44rem;
 }
 
-.checklist li {
+.cause-list li,
+.action-list li {
   color: #2a4a74;
   display: grid;
   gap: 0.1rem;
 }
 
-.checklist li span {
-  font-size: 0.82rem;
-  color: #45648e;
+.cause-list header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
 }
 
-.checklist li small {
-  font-size: 0.76rem;
+.cause-list header span {
+  border: 1px solid #d2deee;
+  border-radius: 999px;
+  padding: 0.05rem 0.4rem;
+  font-size: 0.72rem;
+  color: #35557f;
+  background: #f2f6fd;
+}
+
+.cause-list p {
+  margin: 0;
+  color: #385780;
+  font-size: 0.83rem;
+}
+
+.cause-list small,
+.action-list small {
   color: #5b759b;
+  font-size: 0.76rem;
+}
+
+.action-list li span {
+  font-size: 0.82rem;
+  color: #45648e;
 }
 
 .actions-row {
@@ -387,6 +425,10 @@ button:disabled {
   .workspace-panel {
     grid-template-columns: 1fr;
   }
+
+  .summary-row.four-up {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 760px) {
@@ -395,7 +437,8 @@ button:disabled {
   }
 
   .summary-row,
-  .packet-grid {
+  .summary-row.four-up,
+  .dmaic-grid {
     grid-template-columns: 1fr;
   }
 
