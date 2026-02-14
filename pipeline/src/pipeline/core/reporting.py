@@ -53,6 +53,40 @@ def _count_statuses(run: PipelineRun) -> Dict[str, int]:
     return {"success": success, "failed": failed, "skipped": skipped}
 
 
+def _resolve_schedule_expression(env: Mapping[str, str]) -> str | None:
+    """Resolve schedule expression from GitHub event payload when available."""
+    event_name = env.get("GITHUB_EVENT_NAME")
+    event_path = env.get("GITHUB_EVENT_PATH")
+    if event_name != "schedule" or not event_path:
+        return None
+
+    event_file = Path(event_path)
+    if not event_file.exists():
+        return None
+
+    try:
+        payload = json.loads(event_file.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+    schedule_value = payload.get("schedule")
+    if isinstance(schedule_value, str) and schedule_value.strip():
+        return schedule_value.strip()
+    return None
+
+
+def _resolve_trigger_metadata(env: Mapping[str, str]) -> Dict[str, Any]:
+    """Build trigger metadata block for run and provenance reports."""
+    event_name = env.get("GITHUB_EVENT_NAME")
+    return {
+        "event_name": event_name,
+        "workflow": env.get("GITHUB_WORKFLOW"),
+        "run_attempt": env.get("GITHUB_RUN_ATTEMPT"),
+        "is_scheduled": event_name == "schedule",
+        "schedule": _resolve_schedule_expression(env),
+    }
+
+
 def emit_ops_reports(
     *,
     out_dir: Path,
@@ -66,6 +100,7 @@ def emit_ops_reports(
     git_sha = _resolve_git_sha(repo_root=repo_root)
     action_run_url = _resolve_action_run_url(env)
     status_counts = _count_statuses(run)
+    trigger_metadata = _resolve_trigger_metadata(env)
     ops_dir = out_dir / "ops"
 
     latest_run_payload: Dict[str, Any] = {
@@ -77,6 +112,7 @@ def emit_ops_reports(
             "duration_seconds": round(run.duration_seconds, 6),
             "git_sha": git_sha,
             "task_count": len(run.task_executions),
+            "trigger": trigger_metadata,
         },
         "summary": status_counts,
         "tasks": [
@@ -144,7 +180,9 @@ def emit_ops_reports(
             "github_run_id": env.get("GITHUB_RUN_ID"),
             "github_ref": env.get("GITHUB_REF"),
             "github_actor": env.get("GITHUB_ACTOR"),
+            "github_event_name": env.get("GITHUB_EVENT_NAME"),
         },
+        "trigger": trigger_metadata,
         "artifacts": artifacts_map,
     }
     if action_run_url:
