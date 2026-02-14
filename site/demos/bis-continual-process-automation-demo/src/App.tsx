@@ -33,25 +33,44 @@ interface RegressionSuiteRow {
   mean_drop: number
 }
 
-type FlowStep = 'start' | 'correct' | 'regression'
+type StageState = 'pending' | 'active' | 'done'
 
 const PRESET_OPTIONS: Array<{ id: ReplayPreset; label: string; intent: string }> = [
   {
     id: 'balanced',
     label: 'Balanced',
-    intent: 'Good default for daily process updates and retention.',
+    intent: 'Good default for day-to-day automation updates with stable retention.',
   },
   {
     id: 'fast_adaptation',
     label: 'Fast adaptation',
-    intent: 'Adapts quickest to new patterns, with higher regression risk.',
+    intent: 'Learns new request patterns fastest, with higher non-regression risk.',
   },
   {
     id: 'retention_first',
     label: 'Retention-first',
-    intent: 'Prioritizes high-risk replay to protect established workflows.',
+    intent: 'Prioritizes high-risk replay to protect previously stable workflows.',
   },
 ]
+
+const STAGES = [
+  {
+    title: 'Read and structure intake',
+    detail: 'Extract systems, approval chain, risk clues, and bottleneck signals from raw text.',
+  },
+  {
+    title: 'Classify and prioritize',
+    detail: 'Predict workflow category and estimate automation potential and savings.',
+  },
+  {
+    title: 'Generate delivery artifacts',
+    detail: 'Build charter, process map, and implementation blueprint.',
+  },
+  {
+    title: 'Prepare export payloads',
+    detail: 'Create copy-ready payloads for Jira, ServiceNow, and process tracking.',
+  },
+] as const
 
 const DRIFT_REPLACEMENTS: Array<[RegExp, string]> = [
   [/approval/gi, 'sign-off'],
@@ -91,18 +110,6 @@ function formatPct(value: number): string {
   return `${(value * 100).toFixed(1)}%`
 }
 
-function renderMetricEntries(metrics: Record<string, number | string | null>) {
-  return (
-    <ul className="bullet-list">
-      {Object.entries(metrics).map(([key, value]) => (
-        <li key={key}>
-          <strong>{key}:</strong> {value === null ? 'n/a' : String(value)}
-        </li>
-      ))}
-    </ul>
-  )
-}
-
 function runPresetRegressionSuite(
   samples: IntakeSample[],
   preset: ReplayPreset,
@@ -118,6 +125,7 @@ function runPresetRegressionSuite(
   const memory = new ReplayMemory(64, 17)
   const warmup = oldSlice.map((sample) => asTrainingExample(sample))
   model.train(warmup, { epochs: 22, learningRate: 0.2 })
+
   for (const example of warmup) {
     memory.add(example)
   }
@@ -130,6 +138,7 @@ function runPresetRegressionSuite(
       preset,
       preset === 'fast_adaptation' ? 0 : replayCount,
     )
+
     model.train([current, ...replay], {
       epochs: 16,
       learningRate: preset === 'fast_adaptation' ? 0.24 : 0.16,
@@ -139,6 +148,7 @@ function runPresetRegressionSuite(
           risk_level: example.risk_level ?? 'low',
         }),
     })
+
     memory.add(current)
   }
 
@@ -166,24 +176,28 @@ function App() {
   const [samples, setSamples] = useState<IntakeSample[]>([])
   const [catalog, setCatalog] = useState<CategoryCatalog | null>(null)
   const [selectedSampleId, setSelectedSampleId] = useState<string>('')
-  const [result, setResult] = useState<ReturnType<typeof runIntakePipeline> | null>(null)
 
   const [preset, setPreset] = useState<ReplayPreset>('balanced')
+  const [simulateDrift, setSimulateDrift] = useState(false)
+  const [memoryReplaySize, setMemoryReplaySize] = useState(5)
+
+  const [result, setResult] = useState<ReturnType<typeof runIntakePipeline> | null>(null)
   const [predictedCategory, setPredictedCategory] = useState<IntakeCategory | null>(null)
+  const [copyStatus, setCopyStatus] = useState<string | null>(null)
+
+  const [isRunning, setIsRunning] = useState(false)
+  const [stageIndex, setStageIndex] = useState<number>(-1)
+
   const [correctionCategory, setCorrectionCategory] = useState<IntakeCategory>(intakeCategories[0])
   const [updateSummary, setUpdateSummary] = useState<UpdateSummary | null>(null)
   const [suiteRows, setSuiteRows] = useState<RegressionSuiteRow[]>([])
 
-  const [showAdvanced, setShowAdvanced] = useState(false)
-  const [simulateDrift, setSimulateDrift] = useState(false)
-  const [memoryReplaySize, setMemoryReplaySize] = useState(5)
-
-  const [flowStep, setFlowStep] = useState<FlowStep>('start')
-  const [copyStatus, setCopyStatus] = useState<string | null>(null)
+  const [showExpert, setShowExpert] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const modelRef = useRef<OnlineCategoryModel | null>(null)
   const memoryRef = useRef<ReplayMemory | null>(null)
+  const runTimerRef = useRef<number | null>(null)
 
   useEffect(() => {
     Promise.all([loadIntakeSamples(), loadCategoryCatalog()])
@@ -223,6 +237,14 @@ function App() {
       })
   }, [])
 
+  useEffect(() => {
+    return () => {
+      if (runTimerRef.current !== null) {
+        window.clearInterval(runTimerRef.current)
+      }
+    }
+  }, [])
+
   const selectedSample = useMemo(
     () => samples.find((sample) => sample.id === selectedSampleId) ?? samples[0] ?? null,
     [samples, selectedSampleId],
@@ -230,20 +252,105 @@ function App() {
 
   const activePreset = PRESET_OPTIONS.find((option) => option.id === preset)
 
+  const progress =
+    stageIndex < 0
+      ? 0
+      : Math.round(
+          (Math.min(stageIndex + (isRunning ? 0.4 : 1), STAGES.length) / STAGES.length) * 100,
+        )
+
+  const stageState = (index: number): StageState => {
+    if (stageIndex < 0) {
+      return 'pending'
+    }
+    if (index < stageIndex) {
+      return 'done'
+    }
+    if (index === stageIndex) {
+      return isRunning ? 'active' : 'done'
+    }
+    return 'pending'
+  }
+
+  const nextHint = useMemo(() => {
+    if (error) {
+      return 'Resolve data-loading issue before running the demo.'
+    }
+    if (!result) {
+      return 'Start demo to transform one real intake into ready-to-implement artifacts.'
+    }
+    if (isRunning) {
+      return 'Pipeline is running. Watch each transformation stage complete.'
+    }
+    return 'Review outputs, then open Expert mode only if you want model correction and regression analysis.'
+  }, [error, isRunning, result])
+
+  const automationPack = useMemo(() => {
+    if (!result) {
+      return null
+    }
+
+    return {
+      generated_for: result.sample.id,
+      intake_title: result.sample.title,
+      model_context: {
+        preset,
+        predicted_category: predictedCategory,
+        extracted_signals: result.extracted,
+      },
+      outputs: {
+        triage: result.triage,
+        charter: result.charter,
+        process_map_to_be: result.toBeMermaid,
+        blueprint: result.blueprint,
+        export_payloads: result.exports,
+      },
+    }
+  }, [predictedCategory, preset, result])
+
+  function clearRunTimer() {
+    if (runTimerRef.current !== null) {
+      window.clearInterval(runTimerRef.current)
+      runTimerRef.current = null
+    }
+  }
+
   function runPipeline(sample: IntakeSample | null) {
     if (!sample || !catalog || !modelRef.current) {
       return
     }
 
     const adaptedSample = withOptionalDrift(sample, simulateDrift)
-    setResult(runIntakePipeline(adaptedSample, catalog))
-
+    const nextResult = runIntakePipeline(adaptedSample, catalog)
     const prediction = modelRef.current.predict(adaptedSample.text)
+
+    setResult(nextResult)
     setPredictedCategory(prediction)
     setCorrectionCategory(prediction)
     setUpdateSummary(null)
+    setSuiteRows([])
     setCopyStatus(null)
-    setFlowStep('correct')
+
+    clearRunTimer()
+    setStageIndex(0)
+    setIsRunning(true)
+
+    runTimerRef.current = window.setInterval(() => {
+      setStageIndex((current) => {
+        if (current >= STAGES.length - 1) {
+          clearRunTimer()
+          setIsRunning(false)
+          return current
+        }
+
+        const next = current + 1
+        if (next >= STAGES.length - 1) {
+          clearRunTimer()
+          setIsRunning(false)
+        }
+        return next
+      })
+    }, 700)
   }
 
   function startDemo() {
@@ -301,10 +408,9 @@ function App() {
       after_accuracy: after.overall_accuracy,
       predicted_after: predictedAfter,
     })
-    setFlowStep('regression')
   }
 
-  function runRegressionAndExport() {
+  function runRegressionSuite() {
     if (samples.length === 0) {
       return
     }
@@ -314,153 +420,239 @@ function App() {
     )
 
     setSuiteRows(rows)
-    setCopyStatus('Regression refreshed. Export payloads are ready below.')
-    setFlowStep('regression')
   }
 
+  const revealSignals = result !== null && stageIndex >= 0
+  const revealTriage = result !== null && stageIndex >= 1
+  const revealArtifacts = result !== null && stageIndex >= 2
+  const revealExports = result !== null && stageIndex >= 3 && !isRunning
+
   return (
-    <main className="shell">
-      <header className="hero card">
+    <main className="app-shell">
+      <header className="hero-card">
         <p className="eyebrow">BIS Process Optimisation Copilot</p>
-        <h1>Intake a messy request. Get charter, process maps, blueprint, and export payloads.</h1>
-        <p className="value-prop">
-          Turn process-improvement requests into structured work artifacts with built-in regression
-          safety, so updates do not break previously stable workflows.
+        <h1>Turn one messy request into execution-ready process automation artifacts.</h1>
+        <p className="subhead">
+          One click generates a standardized charter, process map, blueprint, and export payloads
+          your team can directly move into delivery tools.
         </p>
       </header>
 
-      <div className="layout">
-        <aside className="rail">
-          <section className="card rail-card">
-            <h2>Intake</h2>
-            {error ? <p className="status error">{error}</p> : null}
-            {!error && samples.length === 0 ? <p className="status">Loading intake samples...</p> : null}
-            {samples.length > 0 ? (
-              <>
-                <label>
-                  Sample request
-                  <select
-                    value={selectedSampleId}
-                    onChange={(event) => setSelectedSampleId(event.target.value)}
-                  >
-                    {samples.map((sample) => (
-                      <option key={sample.id} value={sample.id}>
-                        {sample.title}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+      <section className="control-card">
+        <div className="control-row">
+          <label>
+            Intake sample
+            <select
+              value={selectedSampleId}
+              onChange={(event) => setSelectedSampleId(event.target.value)}
+            >
+              {samples.map((sample) => (
+                <option key={sample.id} value={sample.id}>
+                  {sample.title}
+                </option>
+              ))}
+            </select>
+          </label>
 
-                <label>
-                  Update preset
-                  <select
-                    value={preset}
-                    onChange={(event) => setPreset(event.target.value as ReplayPreset)}
-                  >
-                    {PRESET_OPTIONS.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+          <div className="preset-group" role="radiogroup" aria-label="Training preset">
+            {PRESET_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                className={`preset-chip ${preset === option.id ? 'active' : ''}`}
+                onClick={() => setPreset(option.id)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
 
-                <p className="helper">{activePreset?.intent}</p>
-              </>
-            ) : null}
+          <button className="primary-btn" onClick={startDemo} disabled={!selectedSample || isRunning}>
+            {isRunning ? 'Running...' : 'Start demo'}
+          </button>
+        </div>
+
+        <p className="preset-intent">{activePreset?.intent}</p>
+        <p className="next-hint">{nextHint}</p>
+        {copyStatus ? <p className="copy-status">{copyStatus}</p> : null}
+
+        <div className="progress-wrap" aria-label="Pipeline progress">
+          <div className="progress-bar" style={{ width: `${progress}%` }} />
+        </div>
+
+        <ol className="stage-list">
+          {STAGES.map((stage, index) => {
+            const status = stageState(index)
+            return (
+              <li key={stage.title} className={`stage-item ${status}`}>
+                <p className="stage-title">{stage.title}</p>
+                <p className="stage-detail">{stage.detail}</p>
+              </li>
+            )
+          })}
+        </ol>
+      </section>
+
+      {!result ? (
+        <section className="artifact-card">
+          <h2>What You Will See</h2>
+          <p>
+            The demo reveals each transformation step, so you can track exactly how the intake is
+            converted into operational deliverables.
+          </p>
+        </section>
+      ) : (
+        <section className="artifact-stack">
+          <section className="artifact-card">
+            <h2>Input to Output</h2>
+            <div className="before-after">
+              <article>
+                <h3>Raw Intake</h3>
+                <p>{result.sample.text}</p>
+              </article>
+              <article>
+                <h3>Automation Outcome</h3>
+                <p>
+                  Category <strong>{result.triage.category}</strong>, priority{' '}
+                  <strong>{result.triage.priority}</strong>, estimated savings{' '}
+                  <strong>{result.triage.est_savings_hours_per_month}h/month</strong>.
+                </p>
+              </article>
+            </div>
           </section>
 
-          <section className="card rail-card">
-            <h2>Guided Flow</h2>
-            <ol className="flow-list">
-              <li className={flowStep === 'start' ? 'active' : ''}>
-                <button className="primary" onClick={startDemo}>
-                  Start demo
-                </button>
-                <p>Generate triage, charter, process maps, blueprint, and exports instantly.</p>
-              </li>
-              <li className={flowStep === 'correct' ? 'active' : ''}>
-                <button className="secondary" onClick={applyCorrection} disabled={!result}>
-                  Apply correction
-                </button>
-                <p>Correct category prediction to update the online model safely.</p>
-              </li>
-              <li className={flowStep === 'regression' ? 'active' : ''}>
-                <button className="secondary" onClick={runRegressionAndExport} disabled={!result}>
-                  Run regression + export
-                </button>
-                <p>Check retention metrics and use ticketing-ready payloads.</p>
-              </li>
-            </ol>
-
-            <button className="link-button" onClick={() => setShowAdvanced((current) => !current)}>
-              {showAdvanced ? 'Hide advanced' : 'Show advanced'}
-            </button>
-
-            {showAdvanced ? (
-              <div className="advanced-panel">
-                <label className="checkbox-row">
-                  <input
-                    type="checkbox"
-                    checked={simulateDrift}
-                    onChange={(event) => setSimulateDrift(event.target.checked)}
-                  />
-                  Simulate wording/policy drift
-                </label>
-                <label>
-                  Memory replay size: {memoryReplaySize}
-                  <input
-                    type="range"
-                    min={1}
-                    max={10}
-                    value={memoryReplaySize}
-                    onChange={(event) => setMemoryReplaySize(Number(event.target.value))}
-                  />
-                </label>
+          {revealSignals ? (
+            <section className="artifact-card">
+              <h2>What The Model Understood</h2>
+              <div className="signal-grid">
+                <article>
+                  <h3>Predicted category</h3>
+                  <p>{predictedCategory ?? 'n/a'}</p>
+                </article>
+                <article>
+                  <h3>Key systems</h3>
+                  <div className="chip-row">
+                    {result.extracted.key_systems.length > 0
+                      ? result.extracted.key_systems.map((item) => <span key={item}>{item}</span>)
+                      : 'None detected'}
+                  </div>
+                </article>
+                <article>
+                  <h3>Approval roles</h3>
+                  <div className="chip-row">
+                    {result.extracted.approval_roles.length > 0
+                      ? result.extracted.approval_roles.map((item) => <span key={item}>{item}</span>)
+                      : 'None detected'}
+                  </div>
+                </article>
+                <article>
+                  <h3>Pain signals</h3>
+                  <div className="chip-row">
+                    {result.extracted.pain_keywords.length > 0
+                      ? result.extracted.pain_keywords.map((item) => <span key={item}>{item}</span>)
+                      : 'None detected'}
+                  </div>
+                </article>
               </div>
-            ) : null}
-
-            {copyStatus ? <p className="status">{copyStatus}</p> : null}
-          </section>
-        </aside>
-
-        <section className="content">
-          {!result ? (
-            <section className="card artifact-card">
-              <h2>Ready</h2>
-              <p>Click “Start demo” to produce complete artifacts in one pass.</p>
             </section>
-          ) : (
-            <>
-              <section className="card artifact-card">
-                <h2>Triage & Correction</h2>
-                <div className="kv-grid">
-                  <p>
-                    <span>Predicted category</span>
-                    <strong>{predictedCategory ?? 'n/a'}</strong>
-                  </p>
-                  <p>
-                    <span>Target category</span>
-                    <strong>{result.triage.category}</strong>
-                  </p>
-                  <p>
-                    <span>Risk</span>
-                    <strong>{result.triage.risk_level}</strong>
-                  </p>
-                  <p>
-                    <span>Priority</span>
-                    <strong>{result.triage.priority}</strong>
-                  </p>
-                  <p>
-                    <span>Automation score</span>
-                    <strong>{result.triage.automation_score}</strong>
-                  </p>
-                  <p>
-                    <span>Estimated monthly savings</span>
-                    <strong>{result.triage.est_savings_hours_per_month} hours</strong>
-                  </p>
-                </div>
+          ) : null}
 
+          {revealTriage ? (
+            <section className="artifact-card">
+              <h2>Triage Snapshot</h2>
+              <div className="kv-grid">
+                <p>
+                  <span>Risk</span>
+                  <strong>{result.triage.risk_level}</strong>
+                </p>
+                <p>
+                  <span>Automation score</span>
+                  <strong>{result.triage.automation_score}</strong>
+                </p>
+                <p>
+                  <span>Next action</span>
+                  <strong>{result.triage.next_action}</strong>
+                </p>
+                <p>
+                  <span>Manual touchpoints</span>
+                  <strong>{result.extracted.manual_step_count}</strong>
+                </p>
+              </div>
+            </section>
+          ) : null}
+
+          {revealArtifacts ? (
+            <>
+              <section className="artifact-card">
+                <h2>Project Charter</h2>
+                <p>
+                  <strong>Problem statement:</strong> {result.charter.problem_statement}
+                </p>
+                <h3>Target metrics</h3>
+                <ul className="bullet-list">
+                  {Object.entries(result.charter.target_metrics).map(([key, value]) => (
+                    <li key={key}>
+                      <strong>{key}:</strong> {value === null ? 'n/a' : String(value)}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+
+              <section className="artifact-card">
+                <h2>To-Be Process Map</h2>
+                <MermaidDiagram title="Optimized workflow" chart={result.toBeMermaid} />
+              </section>
+
+              <section className="artifact-card">
+                <h2>Automation Blueprint</h2>
+                <pre>{JSON.stringify(result.blueprint, null, 2)}</pre>
+              </section>
+            </>
+          ) : null}
+
+          {revealExports ? (
+            <section className="artifact-card">
+              <h2>Export Payload Bundle</h2>
+              <pre>{JSON.stringify(result.exports, null, 2)}</pre>
+              <div className="button-row">
+                <button className="secondary-btn" onClick={() => copyJson('Export payload bundle', result.exports)}>
+                  Copy export payloads
+                </button>
+                <button className="secondary-btn" onClick={() => copyJson('Automation pack', automationPack)}>
+                  Copy full automation pack
+                </button>
+              </div>
+              <p className="integration-note">
+                Payload shape mirrors common ticketing/tracker APIs, so this output can be moved
+                directly into internal execution workflows.
+              </p>
+            </section>
+          ) : null}
+
+          <details className="expert-panel" open={showExpert} onToggle={(event) => setShowExpert(event.currentTarget.open)}>
+            <summary>Expert mode (optional): correction + non-regression checks</summary>
+
+            <div className="expert-content">
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={simulateDrift}
+                  onChange={(event) => setSimulateDrift(event.target.checked)}
+                />
+                Simulate wording/policy drift
+              </label>
+
+              <label>
+                Memory replay size: {memoryReplaySize}
+                <input
+                  type="range"
+                  min={1}
+                  max={10}
+                  value={memoryReplaySize}
+                  onChange={(event) => setMemoryReplaySize(Number(event.target.value))}
+                />
+              </label>
+
+              <div className="expert-row">
                 <label>
                   Correct predicted category
                   <select
@@ -474,123 +666,54 @@ function App() {
                     ))}
                   </select>
                 </label>
+                <button className="secondary-btn" onClick={applyCorrection}>
+                  Apply correction
+                </button>
+                <button className="secondary-btn" onClick={runRegressionSuite}>
+                  Run regression suite
+                </button>
+              </div>
 
-                {updateSummary ? (
-                  <p className="status">
-                    Update ({updateSummary.preset}): overall accuracy {formatPct(updateSummary.before_accuracy)} →{' '}
-                    {formatPct(updateSummary.after_accuracy)}. Current sample now predicts{' '}
-                    <strong>{updateSummary.predicted_after}</strong>.
-                  </p>
-                ) : null}
-              </section>
-
-              <section className="card artifact-card">
-                <h2>Project Charter</h2>
-                <p>
-                  <strong>Problem statement:</strong> {result.charter.problem_statement}
+              {updateSummary ? (
+                <p className="status-text">
+                  Updated with {updateSummary.preset}: accuracy {formatPct(updateSummary.before_accuracy)} →{' '}
+                  {formatPct(updateSummary.after_accuracy)}; now predicts{' '}
+                  <strong>{updateSummary.predicted_after}</strong>.
                 </p>
-                <h3>Scope In</h3>
-                <ul className="bullet-list">
-                  {result.charter.scope_in.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-                <h3>Scope Out</h3>
-                <ul className="bullet-list">
-                  {result.charter.scope_out.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-                <h3>Baseline Metrics</h3>
-                {renderMetricEntries(result.charter.baseline_metrics)}
-                <h3>Target Metrics</h3>
-                {renderMetricEntries(result.charter.target_metrics)}
-                <button className="secondary" onClick={() => copyJson('Charter JSON', result.charter)}>
-                  Copy charter JSON
-                </button>
-              </section>
+              ) : null}
 
-              <section className="card artifact-card">
-                <h2>Process Maps</h2>
-                <div className="maps-grid">
-                  <MermaidDiagram title="As-Is Map" chart={result.asIsMermaid} />
-                  <MermaidDiagram title="To-Be Map" chart={result.toBeMermaid} />
-                </div>
-              </section>
-
-              <section className="card artifact-card">
-                <h2>Automation Blueprint</h2>
-                <pre>{JSON.stringify(result.blueprint, null, 2)}</pre>
-                <button className="secondary" onClick={() => copyJson('Blueprint JSON', result.blueprint)}>
-                  Copy blueprint JSON
-                </button>
-              </section>
-
-              <section className="card artifact-card">
-                <h2>Regression Safety</h2>
-                {suiteRows.length === 0 ? (
-                  <p className="status">Run “Run regression + export” to compare retention across presets.</p>
-                ) : (
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Preset</th>
-                          <th>Old accuracy (before)</th>
-                          <th>Old accuracy (after)</th>
-                          <th>Retention</th>
-                          <th>Mean regression drop</th>
-                          <th>Overall accuracy</th>
+              {suiteRows.length > 0 ? (
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Preset</th>
+                        <th>Old accuracy (before)</th>
+                        <th>Old accuracy (after)</th>
+                        <th>Retention</th>
+                        <th>Mean regression drop</th>
+                        <th>Overall accuracy</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {suiteRows.map((row) => (
+                        <tr key={row.preset}>
+                          <td>{PRESET_OPTIONS.find((option) => option.id === row.preset)?.label}</td>
+                          <td>{formatPct(row.before_old_accuracy)}</td>
+                          <td>{formatPct(row.after_old_accuracy)}</td>
+                          <td>{formatPct(row.retention_ratio)}</td>
+                          <td>{formatPct(row.mean_drop)}</td>
+                          <td>{formatPct(row.overall_accuracy)}</td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {suiteRows.map((row) => (
-                          <tr key={row.preset}>
-                            <td>{PRESET_OPTIONS.find((item) => item.id === row.preset)?.label}</td>
-                            <td>{formatPct(row.before_old_accuracy)}</td>
-                            <td>{formatPct(row.after_old_accuracy)}</td>
-                            <td>{formatPct(row.retention_ratio)}</td>
-                            <td>{formatPct(row.mean_drop)}</td>
-                            <td>{formatPct(row.overall_accuracy)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </section>
-
-              <section className="card artifact-card">
-                <h2>Export Payloads</h2>
-                <h3>Jira issue create</h3>
-                <pre>{JSON.stringify(result.exports.jira_issue_create, null, 2)}</pre>
-                <button
-                  className="secondary"
-                  onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}
-                >
-                  Copy Jira payload
-                </button>
-
-                <h3>ServiceNow record create</h3>
-                <pre>{JSON.stringify(result.exports.servicenow_record_create, null, 2)}</pre>
-                <button
-                  className="secondary"
-                  onClick={() => copyJson('ServiceNow payload', result.exports.servicenow_record_create)}
-                >
-                  Copy ServiceNow payload
-                </button>
-
-                <h3>Process tracker row</h3>
-                <pre>{JSON.stringify(result.exports.process_tracker_row, null, 2)}</pre>
-                <p className="integration-note">
-                  These payloads mirror ticketing/tracker API shapes to show direct transferability into
-                  internal delivery systems.
-                </p>
-              </section>
-            </>
-          )}
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+            </div>
+          </details>
         </section>
-      </div>
+      )}
     </main>
   )
 }
