@@ -83,6 +83,13 @@ function excerpt(text: string, maxLength = 280): string {
   return `${normalized.slice(0, maxLength - 3)}...`
 }
 
+function sampleHint(sample: IntakeSample | null): string {
+  if (!sample) {
+    return 'Pick a workflow example to begin.'
+  }
+  return `${prettyCategory(sample.ground_truth.category)} · ${prettyCategory(sample.ground_truth.risk_level)} risk`
+}
+
 function buildImpactRationale(result: PipelineResult): ImpactRationale {
   const monthlyVolume =
     result.extracted.volume_per_month ?? result.sample.ground_truth.volume_per_month ?? null
@@ -238,6 +245,7 @@ function App() {
     () => (result ? buildPostRunNarrative(result) : buildPreRunNarrative(selectedSample, catalog)),
     [catalog, result, selectedSample],
   )
+  const selectedSampleHint = useMemo(() => sampleHint(selectedSample), [selectedSample])
 
   const hasResult = Boolean(result)
 
@@ -370,16 +378,27 @@ function App() {
             <h2>Try it</h2>
             <p className="control-caption">Pick an example, edit if needed, then click Run automation.</p>
 
-            <label>
-              Choose an example
-              <select value={selectedSampleId} onChange={(event) => handleSampleChange(event.target.value)}>
-                {samples.map((sample) => (
-                  <option key={sample.id} value={sample.id}>
-                    {sample.title}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <section className="example-picker">
+              <label htmlFor="example-select">Choose an example</label>
+              <div className="select-shell">
+                <select
+                  id="example-select"
+                  className="example-select"
+                  value={selectedSampleId}
+                  onChange={(event) => handleSampleChange(event.target.value)}
+                >
+                  {samples.map((sample) => (
+                    <option key={sample.id} value={sample.id}>
+                      {sample.title}
+                    </option>
+                  ))}
+                </select>
+                <span className="select-caret" aria-hidden="true">
+                  ▾
+                </span>
+              </div>
+              <p className="field-help">{selectedSampleHint}</p>
+            </section>
 
             <label>
               Request text
