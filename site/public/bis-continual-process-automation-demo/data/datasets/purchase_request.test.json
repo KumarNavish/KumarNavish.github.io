@@ -2,30 +2,30 @@
   {
     "id": "purchase_request-test-001",
     "process_id": "purchase_request",
-    "request_text": "Create a purchase request from marketing for backup storage extension via Apex Systems; estimated spend is $3400.",
+    "request_text": "Create a procurement request from it_security for archival storage extension via EuroData Supply; estimated spend is $3400.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve backup storage extension purchase",
-      "owner_role": "procurement_specialist",
+      "title": "Approve archival storage extension purchase",
+      "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
       "approvals": [
         "budget_owner",
-        "procurement_lead"
+        "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "marketing",
-        "item_description": "backup storage extension",
+        "requester_department": "it_security",
+        "item_description": "archival storage extension",
         "estimated_cost_usd": "3400",
-        "budget_code": "BUD-6604",
-        "preferred_supplier": "Apex Systems"
+        "budget_code": "BUD-7810",
+        "preferred_supplier": "EuroData Supply"
       },
       "next_actions": [
         "Validate budget availability",
-        "Compare supplier quote against policy threshold",
-        "Issue purchase order after approval"
+        "Compare supplier quote against procurement policy thresholds",
+        "Issue purchase order after approvals and audit log"
       ],
       "controls": [
         "Budget limit validation",
@@ -37,30 +37,30 @@
   {
     "id": "purchase_request-test-002",
     "process_id": "purchase_request",
-    "request_text": "Create a purchase request from marketing for backup storage extension via Contoso Supply; estimated spend is $4200.",
+    "request_text": "Create a procurement request from it_security for archival storage extension via Arcadia Tech; estimated spend is $4200.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve backup storage extension purchase",
-      "owner_role": "procurement_specialist",
+      "title": "Approve archival storage extension purchase",
+      "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
       "approvals": [
         "budget_owner",
-        "procurement_lead"
+        "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "marketing",
-        "item_description": "backup storage extension",
+        "requester_department": "it_security",
+        "item_description": "archival storage extension",
         "estimated_cost_usd": "4200",
-        "budget_code": "BUD-6604",
-        "preferred_supplier": "Contoso Supply"
+        "budget_code": "BUD-7810",
+        "preferred_supplier": "Arcadia Tech"
       },
       "next_actions": [
         "Validate budget availability",
-        "Compare supplier quote against policy threshold",
-        "Issue purchase order after approval"
+        "Compare supplier quote against procurement policy thresholds",
+        "Issue purchase order after approvals and audit log"
       ],
       "controls": [
         "Budget limit validation",
@@ -72,30 +72,30 @@
   {
     "id": "purchase_request-test-003",
     "process_id": "purchase_request",
-    "request_text": "Create a purchase request from customer_support for customer survey package via Nexa Devices; estimated spend is $10400.",
+    "request_text": "Create a procurement request from communications for document workflow subscription via Summit Systems; estimated spend is $10400.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve customer survey package purchase",
-      "owner_role": "procurement_specialist",
+      "title": "Approve document workflow subscription purchase",
+      "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "medium",
       "approvals": [
         "budget_owner",
-        "procurement_lead"
+        "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "customer_support",
-        "item_description": "customer survey package",
+        "requester_department": "communications",
+        "item_description": "document workflow subscription",
         "estimated_cost_usd": "10400",
-        "budget_code": "BUD-6604",
-        "preferred_supplier": "Nexa Devices"
+        "budget_code": "BUD-7810",
+        "preferred_supplier": "Summit Systems"
       },
       "next_actions": [
         "Validate budget availability",
-        "Compare supplier quote against policy threshold",
-        "Issue purchase order after approval"
+        "Compare supplier quote against procurement policy thresholds",
+        "Issue purchase order after approvals and audit log"
       ],
       "controls": [
         "Budget limit validation",
@@ -107,30 +107,30 @@
   {
     "id": "purchase_request-test-004",
     "process_id": "purchase_request",
-    "request_text": "Create a purchase request from engineering for security license expansion via Contoso Supply; estimated spend is $4400.",
+    "request_text": "Create a procurement request from research for market data license renewal via Arcadia Tech; estimated spend is $4400.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve security license expansion purchase",
-      "owner_role": "procurement_specialist",
+      "title": "Approve market data license renewal purchase",
+      "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "high",
       "approvals": [
         "budget_owner",
-        "procurement_lead"
+        "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "engineering",
-        "item_description": "security license expansion",
+        "requester_department": "research",
+        "item_description": "market data license renewal",
         "estimated_cost_usd": "4400",
-        "budget_code": "BUD-7731",
-        "preferred_supplier": "Contoso Supply"
+        "budget_code": "BUD-5590",
+        "preferred_supplier": "Arcadia Tech"
       },
       "next_actions": [
         "Validate budget availability",
-        "Compare supplier quote against policy threshold",
-        "Issue purchase order after approval"
+        "Compare supplier quote against procurement policy thresholds",
+        "Issue purchase order after approvals and audit log"
       ],
       "controls": [
         "Budget limit validation",
@@ -142,30 +142,30 @@
   {
     "id": "purchase_request-test-005",
     "process_id": "purchase_request",
-    "request_text": "Create a purchase request from customer_support for GPU workstation via Apex Systems; estimated spend is $2200.",
+    "request_text": "Create a procurement request from communications for secure workstation refresh via EuroData Supply; estimated spend is $2200.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve GPU workstation purchase",
-      "owner_role": "procurement_specialist",
+      "title": "Approve secure workstation refresh purchase",
+      "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
       "approvals": [
         "budget_owner",
-        "procurement_lead"
+        "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "customer_support",
-        "item_description": "GPU workstation",
+        "requester_department": "communications",
+        "item_description": "secure workstation refresh",
         "estimated_cost_usd": "2200",
-        "budget_code": "BUD-6604",
-        "preferred_supplier": "Apex Systems"
+        "budget_code": "BUD-7810",
+        "preferred_supplier": "EuroData Supply"
       },
       "next_actions": [
         "Validate budget availability",
-        "Compare supplier quote against policy threshold",
-        "Issue purchase order after approval"
+        "Compare supplier quote against procurement policy thresholds",
+        "Issue purchase order after approvals and audit log"
       ],
       "controls": [
         "Budget limit validation",
@@ -177,30 +177,30 @@
   {
     "id": "purchase_request-test-006",
     "process_id": "purchase_request",
-    "request_text": "Create a purchase request from marketing for security license expansion via Contoso Supply; estimated spend is $11100.",
+    "request_text": "Create a procurement request from it_security for market data license renewal via Arcadia Tech; estimated spend is $11100.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve security license expansion purchase",
-      "owner_role": "procurement_specialist",
+      "title": "Approve market data license renewal purchase",
+      "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
       "approvals": [
         "budget_owner",
-        "procurement_lead"
+        "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "marketing",
-        "item_description": "security license expansion",
+        "requester_department": "it_security",
+        "item_description": "market data license renewal",
         "estimated_cost_usd": "11100",
         "budget_code": "BUD-6604",
-        "preferred_supplier": "Contoso Supply"
+        "preferred_supplier": "Arcadia Tech"
       },
       "next_actions": [
         "Validate budget availability",
-        "Compare supplier quote against policy threshold",
-        "Issue purchase order after approval"
+        "Compare supplier quote against procurement policy thresholds",
+        "Issue purchase order after approvals and audit log"
       ],
       "controls": [
         "Budget limit validation",
@@ -212,30 +212,30 @@
   {
     "id": "purchase_request-test-007",
     "process_id": "purchase_request",
-    "request_text": "Create a purchase request from customer_support for security license expansion via Apex Systems; estimated spend is $5000.",
+    "request_text": "Create a procurement request from communications for market data license renewal via EuroData Supply; estimated spend is $5000.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve security license expansion purchase",
-      "owner_role": "procurement_specialist",
+      "title": "Approve market data license renewal purchase",
+      "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "medium",
       "approvals": [
         "budget_owner",
-        "procurement_lead"
+        "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "customer_support",
-        "item_description": "security license expansion",
+        "requester_department": "communications",
+        "item_description": "market data license renewal",
         "estimated_cost_usd": "5000",
         "budget_code": "BUD-4012",
-        "preferred_supplier": "Apex Systems"
+        "preferred_supplier": "EuroData Supply"
       },
       "next_actions": [
         "Validate budget availability",
-        "Compare supplier quote against policy threshold",
-        "Issue purchase order after approval"
+        "Compare supplier quote against procurement policy thresholds",
+        "Issue purchase order after approvals and audit log"
       ],
       "controls": [
         "Budget limit validation",
@@ -247,30 +247,30 @@
   {
     "id": "purchase_request-test-008",
     "process_id": "purchase_request",
-    "request_text": "Create a purchase request from marketing for backup storage extension via Apex Systems; estimated spend is $2300.",
+    "request_text": "Create a procurement request from it_security for archival storage extension via EuroData Supply; estimated spend is $2300.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve backup storage extension purchase",
-      "owner_role": "procurement_specialist",
+      "title": "Approve archival storage extension purchase",
+      "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "high",
       "approvals": [
         "budget_owner",
-        "procurement_lead"
+        "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "marketing",
-        "item_description": "backup storage extension",
+        "requester_department": "it_security",
+        "item_description": "archival storage extension",
         "estimated_cost_usd": "2300",
         "budget_code": "BUD-4012",
-        "preferred_supplier": "Apex Systems"
+        "preferred_supplier": "EuroData Supply"
       },
       "next_actions": [
         "Validate budget availability",
-        "Compare supplier quote against policy threshold",
-        "Issue purchase order after approval"
+        "Compare supplier quote against procurement policy thresholds",
+        "Issue purchase order after approvals and audit log"
       ],
       "controls": [
         "Budget limit validation",
@@ -282,30 +282,30 @@
   {
     "id": "purchase_request-test-009",
     "process_id": "purchase_request",
-    "request_text": "Create a purchase request from marketing for backup storage extension via Summit Retail; estimated spend is $9200.",
+    "request_text": "Create a procurement request from it_security for archival storage extension via Helix Procurement; estimated spend is $9200.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve backup storage extension purchase",
-      "owner_role": "procurement_specialist",
+      "title": "Approve archival storage extension purchase",
+      "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
       "approvals": [
         "budget_owner",
-        "procurement_lead"
+        "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "marketing",
-        "item_description": "backup storage extension",
+        "requester_department": "it_security",
+        "item_description": "archival storage extension",
         "estimated_cost_usd": "9200",
         "budget_code": "BUD-7731",
-        "preferred_supplier": "Summit Retail"
+        "preferred_supplier": "Helix Procurement"
       },
       "next_actions": [
         "Validate budget availability",
-        "Compare supplier quote against policy threshold",
-        "Issue purchase order after approval"
+        "Compare supplier quote against procurement policy thresholds",
+        "Issue purchase order after approvals and audit log"
       ],
       "controls": [
         "Budget limit validation",
@@ -317,30 +317,30 @@
   {
     "id": "purchase_request-test-010",
     "process_id": "purchase_request",
-    "request_text": "Create a purchase request from finance for customer survey package via Nexa Devices; estimated spend is $5100.",
+    "request_text": "Create a procurement request from operations for document workflow subscription via Summit Systems; estimated spend is $5100.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve customer survey package purchase",
-      "owner_role": "procurement_specialist",
+      "title": "Approve document workflow subscription purchase",
+      "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
       "approvals": [
         "budget_owner",
-        "procurement_lead"
+        "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "finance",
-        "item_description": "customer survey package",
+        "requester_department": "operations",
+        "item_description": "document workflow subscription",
         "estimated_cost_usd": "5100",
         "budget_code": "BUD-6604",
-        "preferred_supplier": "Nexa Devices"
+        "preferred_supplier": "Summit Systems"
       },
       "next_actions": [
         "Validate budget availability",
-        "Compare supplier quote against policy threshold",
-        "Issue purchase order after approval"
+        "Compare supplier quote against procurement policy thresholds",
+        "Issue purchase order after approvals and audit log"
       ],
       "controls": [
         "Budget limit validation",
@@ -352,30 +352,30 @@
   {
     "id": "purchase_request-test-011",
     "process_id": "purchase_request",
-    "request_text": "Create a purchase request from finance for GPU workstation via Contoso Supply; estimated spend is $9700.",
+    "request_text": "Create a procurement request from operations for secure workstation refresh via Arcadia Tech; estimated spend is $9700.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve GPU workstation purchase",
-      "owner_role": "procurement_specialist",
+      "title": "Approve secure workstation refresh purchase",
+      "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "medium",
       "approvals": [
         "budget_owner",
-        "procurement_lead"
+        "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "finance",
-        "item_description": "GPU workstation",
+        "requester_department": "operations",
+        "item_description": "secure workstation refresh",
         "estimated_cost_usd": "9700",
-        "budget_code": "BUD-4012",
-        "preferred_supplier": "Contoso Supply"
+        "budget_code": "BUD-7731",
+        "preferred_supplier": "Arcadia Tech"
       },
       "next_actions": [
         "Validate budget availability",
-        "Compare supplier quote against policy threshold",
-        "Issue purchase order after approval"
+        "Compare supplier quote against procurement policy thresholds",
+        "Issue purchase order after approvals and audit log"
       ],
       "controls": [
         "Budget limit validation",
@@ -387,30 +387,30 @@
   {
     "id": "purchase_request-test-012",
     "process_id": "purchase_request",
-    "request_text": "Create a purchase request from customer_support for security license expansion via Summit Retail; estimated spend is $1700.",
+    "request_text": "Create a procurement request from communications for market data license renewal via Helix Procurement; estimated spend is $1700.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve security license expansion purchase",
-      "owner_role": "procurement_specialist",
+      "title": "Approve market data license renewal purchase",
+      "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "high",
       "approvals": [
         "budget_owner",
-        "procurement_lead"
+        "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "customer_support",
-        "item_description": "security license expansion",
+        "requester_department": "communications",
+        "item_description": "market data license renewal",
         "estimated_cost_usd": "1700",
         "budget_code": "BUD-6604",
-        "preferred_supplier": "Summit Retail"
+        "preferred_supplier": "Helix Procurement"
       },
       "next_actions": [
         "Validate budget availability",
-        "Compare supplier quote against policy threshold",
-        "Issue purchase order after approval"
+        "Compare supplier quote against procurement policy thresholds",
+        "Issue purchase order after approvals and audit log"
       ],
       "controls": [
         "Budget limit validation",
@@ -422,30 +422,30 @@
   {
     "id": "purchase_request-test-013",
     "process_id": "purchase_request",
-    "request_text": "Create a purchase request from finance for security license expansion via Contoso Supply; estimated spend is $3200.",
+    "request_text": "Create a procurement request from operations for market data license renewal via Arcadia Tech; estimated spend is $3200.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve security license expansion purchase",
-      "owner_role": "procurement_specialist",
+      "title": "Approve market data license renewal purchase",
+      "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
       "approvals": [
         "budget_owner",
-        "procurement_lead"
+        "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "finance",
-        "item_description": "security license expansion",
+        "requester_department": "operations",
+        "item_description": "market data license renewal",
         "estimated_cost_usd": "3200",
         "budget_code": "BUD-7731",
-        "preferred_supplier": "Contoso Supply"
+        "preferred_supplier": "Arcadia Tech"
       },
       "next_actions": [
         "Validate budget availability",
-        "Compare supplier quote against policy threshold",
-        "Issue purchase order after approval"
+        "Compare supplier quote against procurement policy thresholds",
+        "Issue purchase order after approvals and audit log"
       ],
       "controls": [
         "Budget limit validation",
@@ -457,30 +457,30 @@
   {
     "id": "purchase_request-test-014",
     "process_id": "purchase_request",
-    "request_text": "Create a purchase request from marketing for GPU workstation via Nexa Devices; estimated spend is $9200.",
+    "request_text": "Create a procurement request from it_security for secure workstation refresh via Summit Systems; estimated spend is $9200.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve GPU workstation purchase",
-      "owner_role": "procurement_specialist",
+      "title": "Approve secure workstation refresh purchase",
+      "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
       "approvals": [
         "budget_owner",
-        "procurement_lead"
+        "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "marketing",
-        "item_description": "GPU workstation",
+        "requester_department": "it_security",
+        "item_description": "secure workstation refresh",
         "estimated_cost_usd": "9200",
-        "budget_code": "BUD-6604",
-        "preferred_supplier": "Nexa Devices"
+        "budget_code": "BUD-7810",
+        "preferred_supplier": "Summit Systems"
       },
       "next_actions": [
         "Validate budget availability",
-        "Compare supplier quote against policy threshold",
-        "Issue purchase order after approval"
+        "Compare supplier quote against procurement policy thresholds",
+        "Issue purchase order after approvals and audit log"
       ],
       "controls": [
         "Budget limit validation",
@@ -492,30 +492,30 @@
   {
     "id": "purchase_request-test-015",
     "process_id": "purchase_request",
-    "request_text": "Create a purchase request from finance for customer survey package via Summit Retail; estimated spend is $1100.",
+    "request_text": "Create a procurement request from operations for document workflow subscription via Helix Procurement; estimated spend is $1100.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve customer survey package purchase",
-      "owner_role": "procurement_specialist",
+      "title": "Approve document workflow subscription purchase",
+      "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "medium",
       "approvals": [
         "budget_owner",
-        "procurement_lead"
+        "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "finance",
-        "item_description": "customer survey package",
+        "requester_department": "operations",
+        "item_description": "document workflow subscription",
         "estimated_cost_usd": "1100",
         "budget_code": "BUD-4012",
-        "preferred_supplier": "Summit Retail"
+        "preferred_supplier": "Helix Procurement"
       },
       "next_actions": [
         "Validate budget availability",
-        "Compare supplier quote against policy threshold",
-        "Issue purchase order after approval"
+        "Compare supplier quote against procurement policy thresholds",
+        "Issue purchase order after approvals and audit log"
       ],
       "controls": [
         "Budget limit validation",
@@ -527,30 +527,30 @@
   {
     "id": "purchase_request-test-016",
     "process_id": "purchase_request",
-    "request_text": "Create a purchase request from engineering for customer survey package via Apex Systems; estimated spend is $5100.",
+    "request_text": "Create a procurement request from research for document workflow subscription via EuroData Supply; estimated spend is $5100.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve customer survey package purchase",
-      "owner_role": "procurement_specialist",
+      "title": "Approve document workflow subscription purchase",
+      "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "high",
       "approvals": [
         "budget_owner",
-        "procurement_lead"
+        "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "engineering",
-        "item_description": "customer survey package",
+        "requester_department": "research",
+        "item_description": "document workflow subscription",
         "estimated_cost_usd": "5100",
         "budget_code": "BUD-4012",
-        "preferred_supplier": "Apex Systems"
+        "preferred_supplier": "EuroData Supply"
       },
       "next_actions": [
         "Validate budget availability",
-        "Compare supplier quote against policy threshold",
-        "Issue purchase order after approval"
+        "Compare supplier quote against procurement policy thresholds",
+        "Issue purchase order after approvals and audit log"
       ],
       "controls": [
         "Budget limit validation",
@@ -562,30 +562,30 @@
   {
     "id": "purchase_request-test-017",
     "process_id": "purchase_request",
-    "request_text": "Create a purchase request from marketing for backup storage extension via Summit Retail; estimated spend is $4500.",
+    "request_text": "Create a procurement request from it_security for archival storage extension via Helix Procurement; estimated spend is $4500.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve backup storage extension purchase",
-      "owner_role": "procurement_specialist",
+      "title": "Approve archival storage extension purchase",
+      "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
       "approvals": [
         "budget_owner",
-        "procurement_lead"
+        "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "marketing",
-        "item_description": "backup storage extension",
+        "requester_department": "it_security",
+        "item_description": "archival storage extension",
         "estimated_cost_usd": "4500",
         "budget_code": "BUD-4012",
-        "preferred_supplier": "Summit Retail"
+        "preferred_supplier": "Helix Procurement"
       },
       "next_actions": [
         "Validate budget availability",
-        "Compare supplier quote against policy threshold",
-        "Issue purchase order after approval"
+        "Compare supplier quote against procurement policy thresholds",
+        "Issue purchase order after approvals and audit log"
       ],
       "controls": [
         "Budget limit validation",
@@ -597,30 +597,30 @@
   {
     "id": "purchase_request-test-018",
     "process_id": "purchase_request",
-    "request_text": "Create a purchase request from finance for security license expansion via Summit Retail; estimated spend is $7300.",
+    "request_text": "Create a procurement request from operations for market data license renewal via Helix Procurement; estimated spend is $7300.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve security license expansion purchase",
-      "owner_role": "procurement_specialist",
+      "title": "Approve market data license renewal purchase",
+      "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
       "approvals": [
         "budget_owner",
-        "procurement_lead"
+        "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "finance",
-        "item_description": "security license expansion",
+        "requester_department": "operations",
+        "item_description": "market data license renewal",
         "estimated_cost_usd": "7300",
-        "budget_code": "BUD-5590",
-        "preferred_supplier": "Summit Retail"
+        "budget_code": "BUD-6604",
+        "preferred_supplier": "Helix Procurement"
       },
       "next_actions": [
         "Validate budget availability",
-        "Compare supplier quote against policy threshold",
-        "Issue purchase order after approval"
+        "Compare supplier quote against procurement policy thresholds",
+        "Issue purchase order after approvals and audit log"
       ],
       "controls": [
         "Budget limit validation",
@@ -632,30 +632,30 @@
   {
     "id": "purchase_request-test-019",
     "process_id": "purchase_request",
-    "request_text": "Create a purchase request from customer_support for GPU workstation via Summit Retail; estimated spend is $9700.",
+    "request_text": "Create a procurement request from communications for secure workstation refresh via Helix Procurement; estimated spend is $9700.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve GPU workstation purchase",
-      "owner_role": "procurement_specialist",
+      "title": "Approve secure workstation refresh purchase",
+      "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "medium",
       "approvals": [
         "budget_owner",
-        "procurement_lead"
+        "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "customer_support",
-        "item_description": "GPU workstation",
+        "requester_department": "communications",
+        "item_description": "secure workstation refresh",
         "estimated_cost_usd": "9700",
-        "budget_code": "BUD-6604",
-        "preferred_supplier": "Summit Retail"
+        "budget_code": "BUD-7810",
+        "preferred_supplier": "Helix Procurement"
       },
       "next_actions": [
         "Validate budget availability",
-        "Compare supplier quote against policy threshold",
-        "Issue purchase order after approval"
+        "Compare supplier quote against procurement policy thresholds",
+        "Issue purchase order after approvals and audit log"
       ],
       "controls": [
         "Budget limit validation",
@@ -667,30 +667,30 @@
   {
     "id": "purchase_request-test-020",
     "process_id": "purchase_request",
-    "request_text": "Create a purchase request from finance for security license expansion via Contoso Supply; estimated spend is $6600.",
+    "request_text": "Create a procurement request from operations for market data license renewal via Arcadia Tech; estimated spend is $6600.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve security license expansion purchase",
-      "owner_role": "procurement_specialist",
+      "title": "Approve market data license renewal purchase",
+      "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "high",
       "approvals": [
         "budget_owner",
-        "procurement_lead"
+        "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "finance",
-        "item_description": "security license expansion",
+        "requester_department": "operations",
+        "item_description": "market data license renewal",
         "estimated_cost_usd": "6600",
-        "budget_code": "BUD-5590",
-        "preferred_supplier": "Contoso Supply"
+        "budget_code": "BUD-6604",
+        "preferred_supplier": "Arcadia Tech"
       },
       "next_actions": [
         "Validate budget availability",
-        "Compare supplier quote against policy threshold",
-        "Issue purchase order after approval"
+        "Compare supplier quote against procurement policy thresholds",
+        "Issue purchase order after approvals and audit log"
       ],
       "controls": [
         "Budget limit validation",
