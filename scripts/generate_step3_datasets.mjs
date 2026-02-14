@@ -13,7 +13,7 @@ const PROCESS_DEFINITIONS = [
     process_id: "access_request",
     display_name: "Access Entitlement Change",
     description:
-      "Handle joiner/mover/leaver access changes for internal platforms with governance controls.",
+      "Handle joiner/mover/leaver access changes for BIS internal policy, risk, and operations platforms.",
     required_fields: [
       "subject_user",
       "system_name",
@@ -29,7 +29,7 @@ const PROCESS_DEFINITIONS = [
     process_id: "vendor_onboarding",
     display_name: "Third-Party Due Diligence Intake",
     description:
-      "Screen, assess, and onboard external vendors with sanctions, security, and compliance checks.",
+      "Screen, assess, and onboard external vendors with sanctions, security, and compliance checks for BIS operations.",
     required_fields: [
       "vendor_name",
       "country",
@@ -44,7 +44,7 @@ const PROCESS_DEFINITIONS = [
   {
     process_id: "purchase_request",
     display_name: "Policy-Compliant Procurement Request",
-    description: "Route spend requests through budget, procurement, and policy controls.",
+    description: "Route BIS spend requests through budget, procurement, and policy controls.",
     required_fields: [
       "requester_department",
       "item_description",
@@ -60,7 +60,7 @@ const PROCESS_DEFINITIONS = [
     process_id: "incident_escalation",
     display_name: "Critical Operations Incident Escalation",
     description:
-      "Escalate high-impact internal service incidents with clear ownership, severity, and SLA controls.",
+      "Escalate high-impact BIS internal service incidents with clear ownership, severity, and SLA controls.",
     required_fields: [
       "incident_id",
       "severity",
@@ -138,14 +138,19 @@ function buildAccessExample(rand, index, split) {
     "E. Vogel",
     "S. Dubois",
   ]);
-  const systems = ["Policy Analytics Portal", "Document Vault", "Treasury Dashboard", "Risk Control Hub"];
+  const systems = [
+    "Policy Briefing Workspace",
+    "BIS Data Hub",
+    "Control Evidence Vault",
+    "Reserve Monitoring Dashboard",
+  ];
   const levels = ["read", "editor", "approver", "admin"];
-  const teams = ["monetary_policy", "operations_risk", "internal_audit", "legal_compliance"];
+  const teams = ["monetary_and_economic", "banking_operations", "risk_control", "legal_compliance"];
   const justification = pick(rand, [
-    "policy note preparation",
-    "control evidence review",
-    "quarterly risk reporting",
-    "urgent issue triage",
+    "Monetary Policy Committee briefing preparation",
+    "Basel process control evidence review",
+    "quarterly risk governance reporting",
+    "high-priority incident coordination",
   ]);
   const system = pick(rand, systems);
   const level = pick(rand, levels);
@@ -184,13 +189,18 @@ function buildAccessExample(rand, index, split) {
 
 function buildVendorExample(rand, index, split) {
   const vendors = [
-    "Northshore Analytics",
-    "Helios Data Labs",
-    "Alpine Control Services",
-    "Arcadia Cloud Operations",
+    "Helios Market Data Services",
+    "Alpine Risk Analytics",
+    "Nordic Compliance Support",
+    "Arcadia Cloud Security Operations",
   ];
   const countries = ["US", "DE", "IN", "CH", "SG", "GB"];
-  const scopes = ["market data services", "cloud platform support", "cyber monitoring", "document processing"];
+  const scopes = [
+    "market data feed support",
+    "cyber monitoring services",
+    "document processing for policy workflows",
+    "cloud compliance monitoring",
+  ];
   const taxStatus = ["w9_received", "w8ben_required", "pending_submission"];
   const vendor = pick(rand, vendors);
   const country = pick(rand, countries);
@@ -201,7 +211,7 @@ function buildVendorExample(rand, index, split) {
   return {
     id: `vendor_onboarding-${split}-${String(index + 1).padStart(3, "0")}`,
     process_id: "vendor_onboarding",
-    request_text: `Start due diligence for ${vendor} in ${country} for ${scope}; include sanctions, security, and tax checks.`,
+    request_text: `Start due diligence for ${vendor} in ${country} for ${scope}; include sanctions, security, and tax checks for BIS onboarding.`,
     risk_tag: risk,
     target: {
       plan_version: "1.0",
@@ -229,12 +239,12 @@ function buildVendorExample(rand, index, split) {
 }
 
 function buildPurchaseExample(rand, index, split) {
-  const departments = ["operations", "research", "it_security", "communications"];
+  const departments = ["monetary_and_economic", "banking", "it_services", "communications"];
   const items = [
-    "market data license renewal",
-    "secure workstation refresh",
-    "document workflow subscription",
-    "archival storage extension",
+    "market data terminal license renewal",
+    "secure workstation fleet refresh",
+    "policy document workflow subscription",
+    "compliance archival storage extension",
   ];
   const suppliers = ["Arcadia Tech", "EuroData Supply", "Summit Systems", "Helix Procurement"];
   const budgetCodes = ["BUD-4012", "BUD-7731", "BUD-5590", "BUD-6604", "BUD-7810"];
@@ -247,7 +257,7 @@ function buildPurchaseExample(rand, index, split) {
   return {
     id: `purchase_request-${split}-${String(index + 1).padStart(3, "0")}`,
     process_id: "purchase_request",
-    request_text: `Create a procurement request from ${dept} for ${item} via ${supplier}; estimated spend is $${estimatedCost}.`,
+    request_text: `Create a procurement request from ${dept} for ${item} via ${supplier}; estimated spend is $${estimatedCost} for BIS operations.`,
     risk_tag: risk,
     target: {
       plan_version: "1.0",
@@ -275,12 +285,17 @@ function buildPurchaseExample(rand, index, split) {
 }
 
 function buildIncidentExample(rand, index, split) {
-  const services = ["policy-briefing-portal", "market-data-ingestion", "document-collaboration", "internal-auth-gateway"];
+  const services = [
+    "policy-briefing-portal",
+    "market-data-ingestion",
+    "document-collaboration",
+    "internal-auth-gateway",
+  ];
   const impacts = [
-    "briefing dashboards unavailable",
-    "elevated login failures for staff",
-    "delayed regulatory reporting jobs",
-    "intermittent outage in operations portal",
+    "briefing dashboards unavailable for policy teams",
+    "elevated login failures for BIS staff",
+    "delayed central reporting jobs",
+    "intermittent outage in internal operations portal",
   ];
   const oncall = ["ops-oncall-eu", "platform-oncall", "infra-oncall", "security-oncall"];
   const severities = ["sev1", "sev2", "sev3"];
@@ -293,7 +308,7 @@ function buildIncidentExample(rand, index, split) {
   return {
     id: `incident_escalation-${split}-${String(index + 1).padStart(3, "0")}`,
     process_id: "incident_escalation",
-    request_text: `Escalate ${incidentId} for ${service} due to ${impact}; treat as ${severity}.`,
+    request_text: `Escalate ${incidentId} for ${service} due to ${impact}; treat as ${severity} and start major-incident protocol.`,
     risk_tag: risk,
     target: {
       plan_version: "1.0",

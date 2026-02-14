@@ -2,12 +2,12 @@
   {
     "id": "vendor_onboarding-train-001",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Northshore Analytics in IN for cloud platform support; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Helios Market Data Services in IN for cyber monitoring services; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Northshore Analytics",
+      "title": "Assess and onboard vendor Helios Market Data Services",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
@@ -17,9 +17,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Northshore Analytics",
+        "vendor_name": "Helios Market Data Services",
         "country": "IN",
-        "service_scope": "cloud platform support",
+        "service_scope": "cyber monitoring services",
         "security_review_ticket": "VR-1395",
         "tax_form_status": "pending_submission"
       },
@@ -38,12 +38,12 @@
   {
     "id": "vendor_onboarding-train-002",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Northshore Analytics in IN for cloud platform support; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Helios Market Data Services in IN for cyber monitoring services; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Northshore Analytics",
+      "title": "Assess and onboard vendor Helios Market Data Services",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
@@ -53,9 +53,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Northshore Analytics",
+        "vendor_name": "Helios Market Data Services",
         "country": "IN",
-        "service_scope": "cloud platform support",
+        "service_scope": "cyber monitoring services",
         "security_review_ticket": "VR-1415",
         "tax_form_status": "w8ben_required"
       },
@@ -74,12 +74,12 @@
   {
     "id": "vendor_onboarding-train-003",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Helios Data Labs in SG for market data services; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Alpine Risk Analytics in SG for market data feed support; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Helios Data Labs",
+      "title": "Assess and onboard vendor Alpine Risk Analytics",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
@@ -89,9 +89,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Helios Data Labs",
+        "vendor_name": "Alpine Risk Analytics",
         "country": "SG",
-        "service_scope": "market data services",
+        "service_scope": "market data feed support",
         "security_review_ticket": "VR-1761",
         "tax_form_status": "w8ben_required"
       },
@@ -110,12 +110,12 @@
   {
     "id": "vendor_onboarding-train-004",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Northshore Analytics in CH for market data services; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Helios Market Data Services in CH for market data feed support; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Northshore Analytics",
+      "title": "Assess and onboard vendor Helios Market Data Services",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
@@ -125,9 +125,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Northshore Analytics",
+        "vendor_name": "Helios Market Data Services",
         "country": "CH",
-        "service_scope": "market data services",
+        "service_scope": "market data feed support",
         "security_review_ticket": "VR-1384",
         "tax_form_status": "pending_submission"
       },
@@ -146,12 +146,12 @@
   {
     "id": "vendor_onboarding-train-005",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Northshore Analytics in IN for cloud platform support; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Helios Market Data Services in IN for cyber monitoring services; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Northshore Analytics",
+      "title": "Assess and onboard vendor Helios Market Data Services",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
@@ -161,9 +161,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Northshore Analytics",
+        "vendor_name": "Helios Market Data Services",
         "country": "IN",
-        "service_scope": "cloud platform support",
+        "service_scope": "cyber monitoring services",
         "security_review_ticket": "VR-1598",
         "tax_form_status": "pending_submission"
       },
@@ -182,12 +182,12 @@
   {
     "id": "vendor_onboarding-train-006",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Helios Data Labs in IN for document processing; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Alpine Risk Analytics in IN for cloud compliance monitoring; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Helios Data Labs",
+      "title": "Assess and onboard vendor Alpine Risk Analytics",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
@@ -197,9 +197,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Helios Data Labs",
+        "vendor_name": "Alpine Risk Analytics",
         "country": "IN",
-        "service_scope": "document processing",
+        "service_scope": "cloud compliance monitoring",
         "security_review_ticket": "VR-1937",
         "tax_form_status": "w9_received"
       },
@@ -218,12 +218,12 @@
   {
     "id": "vendor_onboarding-train-007",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Northshore Analytics in CH for market data services; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Helios Market Data Services in CH for market data feed support; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Northshore Analytics",
+      "title": "Assess and onboard vendor Helios Market Data Services",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
@@ -233,9 +233,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Northshore Analytics",
+        "vendor_name": "Helios Market Data Services",
         "country": "CH",
-        "service_scope": "market data services",
+        "service_scope": "market data feed support",
         "security_review_ticket": "VR-1489",
         "tax_form_status": "w8ben_required"
       },
@@ -254,12 +254,12 @@
   {
     "id": "vendor_onboarding-train-008",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Northshore Analytics in IN for cloud platform support; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Helios Market Data Services in IN for cyber monitoring services; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Northshore Analytics",
+      "title": "Assess and onboard vendor Helios Market Data Services",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
@@ -269,9 +269,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Northshore Analytics",
+        "vendor_name": "Helios Market Data Services",
         "country": "IN",
-        "service_scope": "cloud platform support",
+        "service_scope": "cyber monitoring services",
         "security_review_ticket": "VR-1892",
         "tax_form_status": "w9_received"
       },
@@ -290,12 +290,12 @@
   {
     "id": "vendor_onboarding-train-009",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Helios Data Labs in IN for cloud platform support; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Alpine Risk Analytics in IN for cyber monitoring services; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Helios Data Labs",
+      "title": "Assess and onboard vendor Alpine Risk Analytics",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
@@ -305,9 +305,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Helios Data Labs",
+        "vendor_name": "Alpine Risk Analytics",
         "country": "IN",
-        "service_scope": "cloud platform support",
+        "service_scope": "cyber monitoring services",
         "security_review_ticket": "VR-1383",
         "tax_form_status": "w8ben_required"
       },
@@ -326,12 +326,12 @@
   {
     "id": "vendor_onboarding-train-010",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Helios Data Labs in US for cyber monitoring; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Alpine Risk Analytics in US for document processing for policy workflows; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Helios Data Labs",
+      "title": "Assess and onboard vendor Alpine Risk Analytics",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
@@ -341,9 +341,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Helios Data Labs",
+        "vendor_name": "Alpine Risk Analytics",
         "country": "US",
-        "service_scope": "cyber monitoring",
+        "service_scope": "document processing for policy workflows",
         "security_review_ticket": "VR-1412",
         "tax_form_status": "w8ben_required"
       },
@@ -362,12 +362,12 @@
   {
     "id": "vendor_onboarding-train-011",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Northshore Analytics in CH for document processing; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Helios Market Data Services in CH for cloud compliance monitoring; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Northshore Analytics",
+      "title": "Assess and onboard vendor Helios Market Data Services",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
@@ -377,9 +377,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Northshore Analytics",
+        "vendor_name": "Helios Market Data Services",
         "country": "CH",
-        "service_scope": "document processing",
+        "service_scope": "cloud compliance monitoring",
         "security_review_ticket": "VR-1652",
         "tax_form_status": "w8ben_required"
       },
@@ -398,12 +398,12 @@
   {
     "id": "vendor_onboarding-train-012",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Alpine Control Services in DE for market data services; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Nordic Compliance Support in DE for market data feed support; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Alpine Control Services",
+      "title": "Assess and onboard vendor Nordic Compliance Support",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
@@ -413,9 +413,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Alpine Control Services",
+        "vendor_name": "Nordic Compliance Support",
         "country": "DE",
-        "service_scope": "market data services",
+        "service_scope": "market data feed support",
         "security_review_ticket": "VR-1674",
         "tax_form_status": "w9_received"
       },
@@ -434,12 +434,12 @@
   {
     "id": "vendor_onboarding-train-013",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Alpine Control Services in GB for market data services; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Nordic Compliance Support in GB for market data feed support; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Alpine Control Services",
+      "title": "Assess and onboard vendor Nordic Compliance Support",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
@@ -449,9 +449,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Alpine Control Services",
+        "vendor_name": "Nordic Compliance Support",
         "country": "GB",
-        "service_scope": "market data services",
+        "service_scope": "market data feed support",
         "security_review_ticket": "VR-1319",
         "tax_form_status": "w9_received"
       },
@@ -470,12 +470,12 @@
   {
     "id": "vendor_onboarding-train-014",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Arcadia Cloud Operations in GB for cloud platform support; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Arcadia Cloud Security Operations in GB for cyber monitoring services; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Arcadia Cloud Operations",
+      "title": "Assess and onboard vendor Arcadia Cloud Security Operations",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
@@ -485,9 +485,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Arcadia Cloud Operations",
+        "vendor_name": "Arcadia Cloud Security Operations",
         "country": "GB",
-        "service_scope": "cloud platform support",
+        "service_scope": "cyber monitoring services",
         "security_review_ticket": "VR-1768",
         "tax_form_status": "pending_submission"
       },
@@ -506,12 +506,12 @@
   {
     "id": "vendor_onboarding-train-015",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Northshore Analytics in GB for document processing; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Helios Market Data Services in GB for cloud compliance monitoring; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Northshore Analytics",
+      "title": "Assess and onboard vendor Helios Market Data Services",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
@@ -521,9 +521,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Northshore Analytics",
+        "vendor_name": "Helios Market Data Services",
         "country": "GB",
-        "service_scope": "document processing",
+        "service_scope": "cloud compliance monitoring",
         "security_review_ticket": "VR-1663",
         "tax_form_status": "pending_submission"
       },
@@ -542,12 +542,12 @@
   {
     "id": "vendor_onboarding-train-016",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Helios Data Labs in DE for cloud platform support; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Alpine Risk Analytics in DE for cyber monitoring services; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Helios Data Labs",
+      "title": "Assess and onboard vendor Alpine Risk Analytics",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
@@ -557,9 +557,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Helios Data Labs",
+        "vendor_name": "Alpine Risk Analytics",
         "country": "DE",
-        "service_scope": "cloud platform support",
+        "service_scope": "cyber monitoring services",
         "security_review_ticket": "VR-1877",
         "tax_form_status": "w9_received"
       },
@@ -578,12 +578,12 @@
   {
     "id": "vendor_onboarding-train-017",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Alpine Control Services in SG for cyber monitoring; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Nordic Compliance Support in SG for document processing for policy workflows; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Alpine Control Services",
+      "title": "Assess and onboard vendor Nordic Compliance Support",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
@@ -593,9 +593,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Alpine Control Services",
+        "vendor_name": "Nordic Compliance Support",
         "country": "SG",
-        "service_scope": "cyber monitoring",
+        "service_scope": "document processing for policy workflows",
         "security_review_ticket": "VR-1686",
         "tax_form_status": "w8ben_required"
       },
@@ -614,12 +614,12 @@
   {
     "id": "vendor_onboarding-train-018",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Alpine Control Services in SG for cloud platform support; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Nordic Compliance Support in SG for cyber monitoring services; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Alpine Control Services",
+      "title": "Assess and onboard vendor Nordic Compliance Support",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
@@ -629,9 +629,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Alpine Control Services",
+        "vendor_name": "Nordic Compliance Support",
         "country": "SG",
-        "service_scope": "cloud platform support",
+        "service_scope": "cyber monitoring services",
         "security_review_ticket": "VR-1934",
         "tax_form_status": "pending_submission"
       },
@@ -650,12 +650,12 @@
   {
     "id": "vendor_onboarding-train-019",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Northshore Analytics in US for cyber monitoring; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Helios Market Data Services in US for document processing for policy workflows; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Northshore Analytics",
+      "title": "Assess and onboard vendor Helios Market Data Services",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
@@ -665,9 +665,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Northshore Analytics",
+        "vendor_name": "Helios Market Data Services",
         "country": "US",
-        "service_scope": "cyber monitoring",
+        "service_scope": "document processing for policy workflows",
         "security_review_ticket": "VR-1318",
         "tax_form_status": "w9_received"
       },
@@ -686,12 +686,12 @@
   {
     "id": "vendor_onboarding-train-020",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Northshore Analytics in DE for cyber monitoring; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Helios Market Data Services in DE for document processing for policy workflows; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Northshore Analytics",
+      "title": "Assess and onboard vendor Helios Market Data Services",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
@@ -701,9 +701,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Northshore Analytics",
+        "vendor_name": "Helios Market Data Services",
         "country": "DE",
-        "service_scope": "cyber monitoring",
+        "service_scope": "document processing for policy workflows",
         "security_review_ticket": "VR-1606",
         "tax_form_status": "pending_submission"
       },
@@ -722,12 +722,12 @@
   {
     "id": "vendor_onboarding-train-021",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Helios Data Labs in DE for cyber monitoring; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Alpine Risk Analytics in DE for document processing for policy workflows; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Helios Data Labs",
+      "title": "Assess and onboard vendor Alpine Risk Analytics",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
@@ -737,9 +737,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Helios Data Labs",
+        "vendor_name": "Alpine Risk Analytics",
         "country": "DE",
-        "service_scope": "cyber monitoring",
+        "service_scope": "document processing for policy workflows",
         "security_review_ticket": "VR-1604",
         "tax_form_status": "w8ben_required"
       },
@@ -758,12 +758,12 @@
   {
     "id": "vendor_onboarding-train-022",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Arcadia Cloud Operations in SG for cloud platform support; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Arcadia Cloud Security Operations in SG for cyber monitoring services; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Arcadia Cloud Operations",
+      "title": "Assess and onboard vendor Arcadia Cloud Security Operations",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
@@ -773,9 +773,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Arcadia Cloud Operations",
+        "vendor_name": "Arcadia Cloud Security Operations",
         "country": "SG",
-        "service_scope": "cloud platform support",
+        "service_scope": "cyber monitoring services",
         "security_review_ticket": "VR-1791",
         "tax_form_status": "w9_received"
       },
@@ -794,12 +794,12 @@
   {
     "id": "vendor_onboarding-train-023",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Northshore Analytics in DE for market data services; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Helios Market Data Services in DE for market data feed support; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Northshore Analytics",
+      "title": "Assess and onboard vendor Helios Market Data Services",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
@@ -809,9 +809,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Northshore Analytics",
+        "vendor_name": "Helios Market Data Services",
         "country": "DE",
-        "service_scope": "market data services",
+        "service_scope": "market data feed support",
         "security_review_ticket": "VR-1348",
         "tax_form_status": "w8ben_required"
       },
@@ -830,12 +830,12 @@
   {
     "id": "vendor_onboarding-train-024",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Arcadia Cloud Operations in GB for cloud platform support; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Arcadia Cloud Security Operations in GB for cyber monitoring services; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Arcadia Cloud Operations",
+      "title": "Assess and onboard vendor Arcadia Cloud Security Operations",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
@@ -845,9 +845,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Arcadia Cloud Operations",
+        "vendor_name": "Arcadia Cloud Security Operations",
         "country": "GB",
-        "service_scope": "cloud platform support",
+        "service_scope": "cyber monitoring services",
         "security_review_ticket": "VR-1921",
         "tax_form_status": "pending_submission"
       },
@@ -866,12 +866,12 @@
   {
     "id": "vendor_onboarding-train-025",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Arcadia Cloud Operations in IN for document processing; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Arcadia Cloud Security Operations in IN for cloud compliance monitoring; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Arcadia Cloud Operations",
+      "title": "Assess and onboard vendor Arcadia Cloud Security Operations",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
@@ -881,9 +881,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Arcadia Cloud Operations",
+        "vendor_name": "Arcadia Cloud Security Operations",
         "country": "IN",
-        "service_scope": "document processing",
+        "service_scope": "cloud compliance monitoring",
         "security_review_ticket": "VR-1834",
         "tax_form_status": "w9_received"
       },
@@ -902,12 +902,12 @@
   {
     "id": "vendor_onboarding-train-026",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Arcadia Cloud Operations in SG for cloud platform support; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Arcadia Cloud Security Operations in SG for cyber monitoring services; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Arcadia Cloud Operations",
+      "title": "Assess and onboard vendor Arcadia Cloud Security Operations",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
@@ -917,9 +917,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Arcadia Cloud Operations",
+        "vendor_name": "Arcadia Cloud Security Operations",
         "country": "SG",
-        "service_scope": "cloud platform support",
+        "service_scope": "cyber monitoring services",
         "security_review_ticket": "VR-1220",
         "tax_form_status": "pending_submission"
       },
@@ -938,12 +938,12 @@
   {
     "id": "vendor_onboarding-train-027",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Northshore Analytics in US for market data services; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Helios Market Data Services in US for market data feed support; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Northshore Analytics",
+      "title": "Assess and onboard vendor Helios Market Data Services",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
@@ -953,9 +953,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Northshore Analytics",
+        "vendor_name": "Helios Market Data Services",
         "country": "US",
-        "service_scope": "market data services",
+        "service_scope": "market data feed support",
         "security_review_ticket": "VR-1704",
         "tax_form_status": "pending_submission"
       },
@@ -974,12 +974,12 @@
   {
     "id": "vendor_onboarding-train-028",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Northshore Analytics in CH for market data services; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Helios Market Data Services in CH for market data feed support; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Northshore Analytics",
+      "title": "Assess and onboard vendor Helios Market Data Services",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
@@ -989,9 +989,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Northshore Analytics",
+        "vendor_name": "Helios Market Data Services",
         "country": "CH",
-        "service_scope": "market data services",
+        "service_scope": "market data feed support",
         "security_review_ticket": "VR-1616",
         "tax_form_status": "w8ben_required"
       },
@@ -1010,12 +1010,12 @@
   {
     "id": "vendor_onboarding-train-029",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Helios Data Labs in SG for cloud platform support; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Alpine Risk Analytics in SG for cyber monitoring services; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Helios Data Labs",
+      "title": "Assess and onboard vendor Alpine Risk Analytics",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
@@ -1025,9 +1025,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Helios Data Labs",
+        "vendor_name": "Alpine Risk Analytics",
         "country": "SG",
-        "service_scope": "cloud platform support",
+        "service_scope": "cyber monitoring services",
         "security_review_ticket": "VR-1556",
         "tax_form_status": "w9_received"
       },
@@ -1046,12 +1046,12 @@
   {
     "id": "vendor_onboarding-train-030",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Arcadia Cloud Operations in GB for cloud platform support; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Arcadia Cloud Security Operations in GB for cyber monitoring services; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Arcadia Cloud Operations",
+      "title": "Assess and onboard vendor Arcadia Cloud Security Operations",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
@@ -1061,9 +1061,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Arcadia Cloud Operations",
+        "vendor_name": "Arcadia Cloud Security Operations",
         "country": "GB",
-        "service_scope": "cloud platform support",
+        "service_scope": "cyber monitoring services",
         "security_review_ticket": "VR-1414",
         "tax_form_status": "w8ben_required"
       },
@@ -1082,12 +1082,12 @@
   {
     "id": "vendor_onboarding-train-031",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Northshore Analytics in US for document processing; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Helios Market Data Services in US for cloud compliance monitoring; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Northshore Analytics",
+      "title": "Assess and onboard vendor Helios Market Data Services",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
@@ -1097,9 +1097,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Northshore Analytics",
+        "vendor_name": "Helios Market Data Services",
         "country": "US",
-        "service_scope": "document processing",
+        "service_scope": "cloud compliance monitoring",
         "security_review_ticket": "VR-1716",
         "tax_form_status": "w9_received"
       },
@@ -1118,12 +1118,12 @@
   {
     "id": "vendor_onboarding-train-032",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Alpine Control Services in SG for cloud platform support; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Nordic Compliance Support in SG for cyber monitoring services; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Alpine Control Services",
+      "title": "Assess and onboard vendor Nordic Compliance Support",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
@@ -1133,9 +1133,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Alpine Control Services",
+        "vendor_name": "Nordic Compliance Support",
         "country": "SG",
-        "service_scope": "cloud platform support",
+        "service_scope": "cyber monitoring services",
         "security_review_ticket": "VR-1931",
         "tax_form_status": "pending_submission"
       },
@@ -1154,12 +1154,12 @@
   {
     "id": "vendor_onboarding-train-033",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Northshore Analytics in GB for cyber monitoring; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Helios Market Data Services in GB for document processing for policy workflows; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Northshore Analytics",
+      "title": "Assess and onboard vendor Helios Market Data Services",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
@@ -1169,9 +1169,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Northshore Analytics",
+        "vendor_name": "Helios Market Data Services",
         "country": "GB",
-        "service_scope": "cyber monitoring",
+        "service_scope": "document processing for policy workflows",
         "security_review_ticket": "VR-1263",
         "tax_form_status": "w8ben_required"
       },
@@ -1190,12 +1190,12 @@
   {
     "id": "vendor_onboarding-train-034",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Alpine Control Services in SG for cloud platform support; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Nordic Compliance Support in SG for cyber monitoring services; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Alpine Control Services",
+      "title": "Assess and onboard vendor Nordic Compliance Support",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
@@ -1205,9 +1205,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Alpine Control Services",
+        "vendor_name": "Nordic Compliance Support",
         "country": "SG",
-        "service_scope": "cloud platform support",
+        "service_scope": "cyber monitoring services",
         "security_review_ticket": "VR-1902",
         "tax_form_status": "w8ben_required"
       },
@@ -1226,12 +1226,12 @@
   {
     "id": "vendor_onboarding-train-035",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Alpine Control Services in IN for cyber monitoring; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Nordic Compliance Support in IN for document processing for policy workflows; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Alpine Control Services",
+      "title": "Assess and onboard vendor Nordic Compliance Support",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
@@ -1241,9 +1241,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Alpine Control Services",
+        "vendor_name": "Nordic Compliance Support",
         "country": "IN",
-        "service_scope": "cyber monitoring",
+        "service_scope": "document processing for policy workflows",
         "security_review_ticket": "VR-1556",
         "tax_form_status": "w8ben_required"
       },
@@ -1262,12 +1262,12 @@
   {
     "id": "vendor_onboarding-train-036",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Alpine Control Services in US for document processing; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Nordic Compliance Support in US for cloud compliance monitoring; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Alpine Control Services",
+      "title": "Assess and onboard vendor Nordic Compliance Support",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
@@ -1277,9 +1277,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Alpine Control Services",
+        "vendor_name": "Nordic Compliance Support",
         "country": "US",
-        "service_scope": "document processing",
+        "service_scope": "cloud compliance monitoring",
         "security_review_ticket": "VR-1436",
         "tax_form_status": "pending_submission"
       },
@@ -1298,12 +1298,12 @@
   {
     "id": "vendor_onboarding-train-037",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Alpine Control Services in SG for market data services; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Nordic Compliance Support in SG for market data feed support; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Alpine Control Services",
+      "title": "Assess and onboard vendor Nordic Compliance Support",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
@@ -1313,9 +1313,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Alpine Control Services",
+        "vendor_name": "Nordic Compliance Support",
         "country": "SG",
-        "service_scope": "market data services",
+        "service_scope": "market data feed support",
         "security_review_ticket": "VR-1217",
         "tax_form_status": "pending_submission"
       },
@@ -1334,12 +1334,12 @@
   {
     "id": "vendor_onboarding-train-038",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Alpine Control Services in SG for market data services; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Nordic Compliance Support in SG for market data feed support; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Alpine Control Services",
+      "title": "Assess and onboard vendor Nordic Compliance Support",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
@@ -1349,9 +1349,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Alpine Control Services",
+        "vendor_name": "Nordic Compliance Support",
         "country": "SG",
-        "service_scope": "market data services",
+        "service_scope": "market data feed support",
         "security_review_ticket": "VR-1519",
         "tax_form_status": "w8ben_required"
       },
@@ -1370,12 +1370,12 @@
   {
     "id": "vendor_onboarding-train-039",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Northshore Analytics in US for document processing; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Helios Market Data Services in US for cloud compliance monitoring; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Northshore Analytics",
+      "title": "Assess and onboard vendor Helios Market Data Services",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
@@ -1385,9 +1385,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Northshore Analytics",
+        "vendor_name": "Helios Market Data Services",
         "country": "US",
-        "service_scope": "document processing",
+        "service_scope": "cloud compliance monitoring",
         "security_review_ticket": "VR-1731",
         "tax_form_status": "pending_submission"
       },
@@ -1406,12 +1406,12 @@
   {
     "id": "vendor_onboarding-train-040",
     "process_id": "vendor_onboarding",
-    "request_text": "Start due diligence for Alpine Control Services in DE for cloud platform support; include sanctions, security, and tax checks.",
+    "request_text": "Start due diligence for Nordic Compliance Support in DE for cyber monitoring services; include sanctions, security, and tax checks for BIS onboarding.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Assess and onboard vendor Alpine Control Services",
+      "title": "Assess and onboard vendor Nordic Compliance Support",
       "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
@@ -1421,9 +1421,9 @@
         "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Alpine Control Services",
+        "vendor_name": "Nordic Compliance Support",
         "country": "DE",
-        "service_scope": "cloud platform support",
+        "service_scope": "cyber monitoring services",
         "security_review_ticket": "VR-1952",
         "tax_form_status": "w8ben_required"
       },

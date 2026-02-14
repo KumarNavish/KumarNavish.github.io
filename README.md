@@ -17,6 +17,32 @@ This v2 pass is framed around internal operations workflows that BIS teams run d
 The goal is immediate operational relevance: convert unstructured requests into governed, audit-ready JSON plans
 that can be handed off to internal workflow systems.
 
+## Four BIS Workflow Journeys
+
+Each workflow is modeled as a concrete business transformation:
+
+1. **Access Entitlement Change**
+   - Input: free-text access request from a division manager.
+   - Transformation: extract subject/system/access level/justification, enforce approvals.
+   - Output handoff: IAM-ready payload for ServiceNow + SailPoint/Okta flow.
+2. **Third-Party Due Diligence Intake**
+   - Input: new vendor onboarding email with incomplete context.
+   - Transformation: capture mandatory vendor risk attributes, apply compliance checks.
+   - Output handoff: risk/compliance intake payload for Archer + ServiceNow GRC.
+3. **Policy-Compliant Procurement Request**
+   - Input: spend request from operations/research staff.
+   - Transformation: normalize spend metadata, validate budget/procurement policy fields.
+   - Output handoff: approval-ready request payload for SAP/Coupa workflows.
+4. **Critical Operations Incident Escalation**
+   - Input: incident escalation message during internal platform degradation.
+   - Transformation: enforce severity/ownership fields and escalation controls.
+   - Output handoff: response plan payload for ServiceNow Incident + PagerDuty/Opsgenie.
+
+The novice UI shows this as:
+- the exact incoming request text,
+- policy checks that are applied,
+- field-level mapping from generated JSON to destination systems.
+
 ## What This Demo Proves
 
 - Continual learning for intent routing in a workflow automation setting (naive SGD vs rehearsal vs EWC).

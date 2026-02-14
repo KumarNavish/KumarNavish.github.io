@@ -20,6 +20,7 @@ import {
   type TrainOptions,
 } from "./cl/router";
 import { applyTextDrift } from "./domain/drift";
+import { BIS_WORKFLOW_BY_PROCESS, BIS_WORKFLOWS } from "./domain/bis_workflows";
 import { PROCESS_IDS, type Example, type ProcessDefinition, type ProcessId, type StreamStep } from "./domain/types";
 import { runContinualComparison, type ContinualComparisonResult, type MemoryStrategyId } from "./eval/continual_comparison";
 import { VectorStore } from "./retrieval/vector_store";
@@ -50,22 +51,6 @@ interface SampleRequestOption {
   text: string;
 }
 
-interface BisScenario {
-  id: string;
-  label: string;
-  processId: ProcessId;
-  requestText: string;
-  expectedOutcome: string;
-}
-
-interface ProcessValueProfile {
-  workflowLabel: string;
-  operationalProblem: string;
-  automationOutcome: string;
-  transferability: string;
-  systemTargets: string[];
-}
-
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: "inbox", label: "Intake" },
   { id: "teach", label: "Teach Policy" },
@@ -74,73 +59,7 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: "audit", label: "Audit" },
 ];
 
-const BIS_SCENARIOS: BisScenario[] = [
-  {
-    id: "access-reviewer",
-    label: "New Analyst Access Change",
-    processId: "access_request",
-    requestText:
-      "Please request editor access for A. Meier in Document Vault for operations_risk to support policy note preparation.",
-    expectedOutcome: "Create governed entitlement plan with approver chain and SLA.",
-  },
-  {
-    id: "vendor-diligence",
-    label: "Third-Party Due Diligence",
-    processId: "vendor_onboarding",
-    requestText:
-      "Start due diligence for Helios Data Labs in CH for market data services; include sanctions, security, and tax checks.",
-    expectedOutcome: "Route vendor intake with compliance controls and risk review tasks.",
-  },
-  {
-    id: "procurement-urgent",
-    label: "Policy Procurement Intake",
-    processId: "purchase_request",
-    requestText:
-      "Create a procurement request from operations for market data license renewal via EuroData Supply; estimated spend is $7800.",
-    expectedOutcome: "Prepare policy-compliant purchase plan with budget and procurement approvals.",
-  },
-  {
-    id: "incident-critical",
-    label: "Critical Operations Incident",
-    processId: "incident_escalation",
-    requestText:
-      "Escalate INC-33888 for market-data-ingestion due to briefing dashboards unavailable; treat as sev1.",
-    expectedOutcome: "Launch incident escalation workflow with owner, severity, and audit controls.",
-  },
-];
-
-const PROCESS_VALUE_PROFILES: Record<ProcessId, ProcessValueProfile> = {
-  access_request: {
-    workflowLabel: "Access Entitlement Change",
-    operationalProblem: "Manual access triage is slow and increases control exceptions.",
-    automationOutcome: "Routes request, validates required fields, and enforces approval gates before provisioning.",
-    transferability: "Directly maps to IAM tools and ticketing queues via JSON payload fields.",
-    systemTargets: ["ServiceNow", "SailPoint", "Okta Workflows"],
-  },
-  vendor_onboarding: {
-    workflowLabel: "Third-Party Due Diligence Intake",
-    operationalProblem: "Vendor requests arrive unstructured and miss compliance details.",
-    automationOutcome: "Extracts mandatory onboarding data and queues sanctions, security, and tax checks.",
-    transferability: "Fits third-party risk systems and procurement intake APIs without backend changes.",
-    systemTargets: ["Archer", "SAP Ariba", "ServiceNow GRC"],
-  },
-  purchase_request: {
-    workflowLabel: "Policy-Compliant Procurement Request",
-    operationalProblem: "Policy and budget checks are repeated manually for every spend request.",
-    automationOutcome: "Prepares approval-ready procurement plans with budget code and supplier controls.",
-    transferability: "Payload fields can be posted to ERP/procurement workflows as structured requests.",
-    systemTargets: ["SAP", "Coupa", "Jira Service Management"],
-  },
-  incident_escalation: {
-    workflowLabel: "Critical Operations Incident Escalation",
-    operationalProblem: "Escalations depend on inconsistent manual interpretation of severity.",
-    automationOutcome: "Normalizes severity, assigns ownership, and creates a governed response plan.",
-    transferability: "Maps to incident platforms and status workflows with strict schema output.",
-    systemTargets: ["PagerDuty", "ServiceNow Incident", "Opsgenie"],
-  },
-};
-
-const DEFAULT_INBOX_REQUEST = BIS_SCENARIOS[0].requestText;
+const DEFAULT_INBOX_REQUEST = BIS_WORKFLOWS[0].sampleRequest;
 const DEFAULT_MEMORY_QUERY = "market data outage sev1 incident";
 
 function makeRouter(seed = 13): LinearSoftmaxClassifier {
@@ -251,6 +170,33 @@ function strategyLabel(mode: RouterMode): string {
   return "Naive";
 }
 
+function resolvePlanValue(plan: PipelineResult["plan"] | null, path: string): string {
+  if (!plan) {
+    return "pending run";
+  }
+
+  if (path.startsWith("required_fields.")) {
+    const key = path.replace("required_fields.", "");
+    return plan.required_fields[key] ?? "missing";
+  }
+
+  if (path === "approvals") {
+    return plan.approvals.join(", ");
+  }
+
+  const raw = (plan as unknown as Record<string, unknown>)[path];
+  if (typeof raw === "string") {
+    return raw;
+  }
+  if (typeof raw === "number") {
+    return String(raw);
+  }
+  if (Array.isArray(raw)) {
+    return raw.map((value) => String(value)).join(", ");
+  }
+  return "n/a";
+}
+
 function bootstrapSeed(
   streamSchedule: StreamStep[],
   trainSets: Partial<Record<ProcessId, Example[]>>,
@@ -286,7 +232,7 @@ function App() {
   const [teachStatus, setTeachStatus] = useState("Idle");
 
   const [inboxRequest, setInboxRequest] = useState(DEFAULT_INBOX_REQUEST);
-  const [selectedScenarioId, setSelectedScenarioId] = useState(BIS_SCENARIOS[0].id);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<ProcessId>(BIS_WORKFLOWS[0].processId);
   const [inboxStatus, setInboxStatus] = useState("Idle");
   const [inboxResult, setInboxResult] = useState<PipelineResult | null>(null);
   const [inboxError, setInboxError] = useState("");
@@ -398,10 +344,10 @@ function App() {
             setEvalSnapshots(persisted.evalSnapshots);
             setComparisonResult(persisted.comparisonResult);
             setInboxRequest(persisted.inboxRequest);
-            const persistedScenario = BIS_SCENARIOS.find(
-              (scenario) => scenario.requestText === persisted.inboxRequest,
+            const persistedWorkflow = BIS_WORKFLOWS.find(
+              (workflow) => workflow.sampleRequest === persisted.inboxRequest,
             );
-            setSelectedScenarioId(persistedScenario?.id ?? BIS_SCENARIOS[0].id);
+            setSelectedWorkflowId(persistedWorkflow?.processId ?? BIS_WORKFLOWS[0].processId);
             setInboxResult(null);
             setInboxError("");
             setInboxStatus("Restored previous browser session.");
@@ -441,7 +387,7 @@ function App() {
         setComparisonResult(null);
         setEvalSnapshots([]);
         setInboxRequest(DEFAULT_INBOX_REQUEST);
-        setSelectedScenarioId(BIS_SCENARIOS[0].id);
+        setSelectedWorkflowId(BIS_WORKFLOWS[0].processId);
         setInboxResult(null);
         setInboxError("");
         setInboxStatus("Idle");
@@ -525,11 +471,11 @@ function App() {
   ]);
 
   useEffect(() => {
-    const matched = BIS_SCENARIOS.find((scenario) => scenario.requestText === inboxRequest);
-    if (matched && matched.id !== selectedScenarioId) {
-      setSelectedScenarioId(matched.id);
+    const matched = BIS_WORKFLOWS.find((workflow) => workflow.sampleRequest === inboxRequest);
+    if (matched && matched.processId !== selectedWorkflowId) {
+      setSelectedWorkflowId(matched.processId);
     }
-  }, [inboxRequest, selectedScenarioId]);
+  }, [inboxRequest, selectedWorkflowId]);
 
   const memoryStore = useMemo(() => {
     const store = new VectorStore<Example>();
@@ -758,7 +704,7 @@ function App() {
     setComparisonResult(null);
     setTeachStatus("Demo reset to initial state.");
     setInboxRequest(DEFAULT_INBOX_REQUEST);
-    setSelectedScenarioId(BIS_SCENARIOS[0].id);
+    setSelectedWorkflowId(BIS_WORKFLOWS[0].processId);
     setInboxStatus("Idle");
     setInboxResult(null);
     setInboxError("");
@@ -794,13 +740,12 @@ function App() {
       : "pending";
   const evalStepStatus = hasEvaluation ? "done" : novicePhase === "evaluate" ? "active" : "pending";
   const allNoviceStepsDone = hasRunPipeline && hasTaughtAdditionalProcess && hasEvaluation;
-  const selectedScenario =
-    BIS_SCENARIOS.find((scenario) => scenario.id === selectedScenarioId) ?? BIS_SCENARIOS[0];
-  const inferredProcess = (inboxResult?.predictedIntent ?? selectedScenario.processId) as ProcessId;
-  const processProfile = PROCESS_VALUE_PROFILES[inferredProcess];
+  const selectedWorkflow = BIS_WORKFLOW_BY_PROCESS[selectedWorkflowId] ?? BIS_WORKFLOWS[0];
+  const inferredProcess = (inboxResult?.predictedIntent ?? selectedWorkflow.processId) as ProcessId;
+  const processProfile = BIS_WORKFLOW_BY_PROCESS[inferredProcess];
   const handoffPreview = inboxResult
     ? {
-        workflow_type: processProfile.workflowLabel,
+        workflow_type: processProfile.workflowName,
         process_id: inboxResult.plan.process_id,
         owner_role: inboxResult.plan.owner_role,
         sla_hours: inboxResult.plan.sla_hours,
@@ -886,55 +831,62 @@ function App() {
 
         {experienceMode === "novice" ? (
           <>
-            <section className="panel value-strip">
-              <h2>BIS Workflow Automation Value</h2>
+            <section className="panel purpose-strip">
+              <h2>What This Demo Does For BIS In Seconds</h2>
               <p>
-                This demo focuses on real internal operations work: request intake, policy-compliant routing, and
-                consistent handoff into execution systems.
+                Takes a real-style BIS operational request, applies policy routing logic, and outputs a structured
+                handoff payload your internal systems can execute.
               </p>
-              <div className="value-grid">
+              <div className="purpose-grid">
                 <article>
-                  <h3>Operational bottleneck</h3>
-                  <p>{processProfile.operationalProblem}</p>
+                  <h3>Input</h3>
+                  <p>Unstructured request from staff email or service intake channel.</p>
                 </article>
                 <article>
-                  <h3>Automation outcome</h3>
-                  <p>{processProfile.automationOutcome}</p>
+                  <h3>Transformation</h3>
+                  <p>Detect workflow, enforce required policy fields, and route approvals with SLA ownership.</p>
                 </article>
                 <article>
-                  <h3>System transferability</h3>
-                  <p>{processProfile.transferability}</p>
+                  <h3>Output</h3>
+                  <p>Audit-ready JSON packet for workflow systems (no manual copy/paste triage).</p>
                 </article>
               </div>
             </section>
 
-            <section className="panel novice-panel">
-              <h2>Run a BIS-Aligned Workflow</h2>
-              <p className="legend">
-                Pick an internal operations scenario and run intake to continual update to retention check. Expert
-                controls stay hidden unless you switch modes.
-              </p>
-              <div className="novice-controls">
-                <label className="compact-control">
-                  BIS scenario
-                  <select
-                    onChange={(event) => {
-                      const scenarioId = event.target.value;
-                      setSelectedScenarioId(scenarioId);
-                      const scenario = BIS_SCENARIOS.find((item) => item.id === scenarioId);
-                      if (scenario) {
-                        setInboxRequest(scenario.requestText);
-                      }
+            <section className="panel workflow-selector">
+              <h2>Choose The BIS Workflow To Automate</h2>
+              <div className="workflow-grid">
+                {BIS_WORKFLOWS.map((workflow) => (
+                  <button
+                    key={workflow.processId}
+                    type="button"
+                    className={selectedWorkflowId === workflow.processId ? "workflow-card active" : "workflow-card"}
+                    onClick={() => {
+                      setSelectedWorkflowId(workflow.processId);
+                      setInboxRequest(workflow.sampleRequest);
                     }}
-                    value={selectedScenarioId}
                   >
-                    {BIS_SCENARIOS.map((scenario) => (
-                      <option key={scenario.id} value={scenario.id}>
-                        {scenario.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    <p className="workflow-card-kicker">{workflow.workflowName}</p>
+                    <p>{workflow.dayToDayContext}</p>
+                    <p>
+                      <strong>Teams:</strong> {workflow.primaryTeams.join(", ")}
+                    </p>
+                    <p>
+                      <strong>Why this matters:</strong> {workflow.businessImpact}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="panel novice-panel">
+              <h2>Run The End-To-End BIS Flow</h2>
+              <p className="legend">{selectedWorkflow.headline}</p>
+              <div className="request-preview">
+                <p className="label">Representative Incoming Request</p>
+                <pre className="summary summary-block">{inboxRequest}</pre>
+              </div>
+              <div className="novice-controls">
                 <button
                   type="button"
                   className="primary-btn"
@@ -949,63 +901,111 @@ function App() {
                 </button>
               </div>
               <p className="legend">
-                Selected scenario outcome: <strong>{selectedScenario.expectedOutcome}</strong>
+                Expected result: <strong>{selectedWorkflow.expectedOutcome}</strong>
               </p>
               <p className="legend">
-                Default continual strategy in novice mode: <strong>Replay</strong> (balanced adaptation and
-                retention).
+                Baseline triage time: <strong>{selectedWorkflow.manualCycleMinutes} min</strong> to automated plan
+                prep: <strong>{selectedWorkflow.automatedCycleMinutes} min</strong>.
               </p>
             </section>
 
             <section className="stepper">
               <article className={`step-pill ${runStepStatus}`}>
-                <h3>1. Intake and Route</h3>
-                <p>{runStepStatus === "done" ? "Completed" : "Classify request and create governed action plan."}</p>
+                <h3>1. Interpret Intake</h3>
+                <p>
+                  {runStepStatus === "done"
+                    ? "Completed"
+                    : "Map request text to the right BIS workflow and populate required fields."}
+                </p>
               </article>
               <article className={`step-pill ${teachStepStatus}`}>
-                <h3>2. Teach New Policy Family</h3>
-                <p>{teachStepStatus === "done" ? "Completed" : "Continuously update router with new process data."}</p>
+                <h3>2. Learn New Variants</h3>
+                <p>
+                  {teachStepStatus === "done"
+                    ? "Completed"
+                    : "Update the router with new process examples without forgetting earlier workflows."}
+                </p>
               </article>
               <article className={`step-pill ${evalStepStatus}`}>
-                <h3>3. Prove Retention</h3>
-                <p>{evalStepStatus === "done" ? "Completed" : "Compare forgetting versus naive update baseline."}</p>
+                <h3>3. Prove Reliability</h3>
+                <p>
+                  {evalStepStatus === "done"
+                    ? "Completed"
+                    : "Show retention against naive updates so quality remains stable over time."}
+                </p>
               </article>
             </section>
 
             <section className="impact-card">
-              <h3>Operational Impact for BIS</h3>
+              <h3>Operational Proof For BIS</h3>
+              <div className="impact-grid">
+                <article>
+                  <h4>Current Bottleneck</h4>
+                  <p>{processProfile.manualPain}</p>
+                </article>
+                <article>
+                  <h4>Automation Transformation</h4>
+                  <p>{processProfile.transformationSummary}</p>
+                </article>
+                <article>
+                  <h4>Systems It Can Drive</h4>
+                  <p>{processProfile.systemTargets.join(", ")}</p>
+                </article>
+              </div>
+
               <div className="metric-grid">
                 <p>
-                  Workflow category: <strong>{processProfile.workflowLabel}</strong>
+                  Workflow selected: <strong>{processProfile.workflowName}</strong>
                 </p>
                 <p>
-                  Internal system targets: <strong>{processProfile.systemTargets.join(", ")}</strong>
+                  Policy checks applied: <strong>{processProfile.policyChecks.length}</strong>
+                </p>
+                <p>
+                  Forgetting reduction vs naive: <strong>{(forgettingReduction * 100).toFixed(2)}%</strong>
                 </p>
               </div>
+
               {comparisonResult ? (
                 <>
-                  <div className="metric-grid">
-                    <p>
-                      Predicted workflow: <strong>{inboxResult?.plan.title ?? "n/a"}</strong>
-                    </p>
-                    <p>
-                      Plan schema status: <strong>{inboxResult ? "valid" : "not generated"}</strong>
-                    </p>
-                    <p>
-                      Forgetting reduction vs naive: <strong>{(forgettingReduction * 100).toFixed(2)}%</strong>
-                    </p>
-                  </div>
                   <p className="legend">
-                    Using <strong>{strategyLabel(selectedMode)}</strong>, older process retention improved by{" "}
-                    {(forgettingReduction * 100).toFixed(2)} percentage points versus naive updates.
+                    Continual strategy used: <strong>{strategyLabel(selectedMode)}</strong>. Retention improvement
+                    over naive: {(forgettingReduction * 100).toFixed(2)} percentage points.
                   </p>
+                  <div className="policy-check-grid">
+                    {processProfile.policyChecks.map((policyCheck) => (
+                      <p key={policyCheck} className="policy-check-pill">
+                        {policyCheck}
+                      </p>
+                    ))}
+                  </div>
+                  <h4>System Handoff Mapping</h4>
+                  <table className="handoff-table">
+                    <thead>
+                      <tr>
+                        <th>Output Field</th>
+                        <th>Current Value</th>
+                        <th>Destination</th>
+                        <th>Operational Purpose</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {processProfile.handoffMappings.map((mapping) => (
+                        <tr key={`${processProfile.processId}-${mapping.field}-${mapping.destination}`}>
+                          <td>{mapping.field}</td>
+                          <td>{resolvePlanValue(inboxResult?.plan ?? null, mapping.field)}</td>
+                          <td>{mapping.destination}</td>
+                          <td>{mapping.purpose}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                   {handoffPreview ? (
                     <pre className="summary summary-block">{JSON.stringify(handoffPreview, null, 2)}</pre>
                   ) : null}
                 </>
               ) : (
                 <p className="legend">
-                  Run the end-to-end workflow to generate a handoff payload and measurable retention metrics.
+                  Run the workflow once to see live field extraction, policy checks, and system-handoff mapping.
                 </p>
               )}
             </section>
