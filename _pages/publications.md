@@ -12,8 +12,8 @@ custom_js:
 <article id="intentional-archive" class="intentional-panel" aria-label="Publication archive">
   <section class="intentional-hero" aria-labelledby="archive-title">
     <p class="intentional-kicker">Research Archive</p>
-    <h1 id="archive-title" class="intentional-title">Complete Publication Record</h1>
-    <p class="intentional-subtitle">Each paper is positioned inside a larger arc so progression is visible, not implied.</p>
+    <h1 id="archive-title" class="intentional-title">Publication Archive</h1>
+    <p class="intentional-subtitle">Each paper is placed in a program so intellectual progression is explicit, not inferred.</p>
     <p id="archive-sync" class="intentional-context"></p>
 
     <div class="intentional-stats" aria-label="Archive statistics">
@@ -35,15 +35,15 @@ custom_js:
   <section class="intentional-section" aria-labelledby="archive-map-title">
     <header class="intentional-section-head">
       <h2 id="archive-map-title">Arc Map</h2>
-      <p>Use this as a thematic map first, then read individual papers.</p>
+      <p>Start with programs, then move into individual works.</p>
     </header>
     <div id="archive-arc-map" class="intentional-arc-map"></div>
   </section>
 
   <section class="intentional-section" aria-labelledby="archive-controls-title">
     <header class="intentional-section-head">
-      <h2 id="archive-controls-title">Browse With Intent</h2>
-      <p>Filter by arc and search by idea, method, or domain.</p>
+      <h2 id="archive-controls-title">Browse</h2>
+      <p>Filter by program and search by method, concept, or domain.</p>
     </header>
 
     <div class="intentional-controls">
@@ -58,7 +58,7 @@ custom_js:
   <section class="intentional-section" aria-labelledby="archive-list-title">
     <header class="intentional-section-head">
       <h2 id="archive-list-title">All Works</h2>
-      <p>Organized by arc, then year, with concise context for fast review.</p>
+      <p>Organized by program, then year, with concise context for fast review.</p>
     </header>
     <div id="archive-list" class="intentional-archive-list"></div>
     <p id="archive-empty" class="intentional-empty" hidden>No works match the current filter.</p>
