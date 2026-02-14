@@ -28,6 +28,7 @@ const EXTRA_ARTIFACTS: ArtifactLink[] = [
   { name: 'Search Index API', kind: 'api', path: '/api/v1/search-index.json' },
   { name: 'Profile API', kind: 'api', path: '/api/v1/profile.json' },
   { name: 'Status API', kind: 'api', path: '/api/v1/status.json' },
+  { name: 'Resume PDF', kind: 'artifact', path: '/artifacts/resume.pdf' },
   {
     name: 'GitHub Raw Ingest',
     kind: 'artifact',

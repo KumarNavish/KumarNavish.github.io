@@ -34,6 +34,9 @@ jobs:
       - name: Run pipeline
         run: make pipe-run
 
+      - name: Verify resume artifact
+        run: test -f site/public/artifacts/resume.pdf
+
       - name: Build site
         run: make site-build
 

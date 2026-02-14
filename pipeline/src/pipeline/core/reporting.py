@@ -123,6 +123,15 @@ def emit_ops_reports(
         ],
     }
 
+    artifacts_map: Dict[str, str] = {
+        "latest_run": "ops/latest-run.json",
+        "dag": "ops/dag.json",
+        "provenance": "ops/provenance.json",
+    }
+    resume_path = out_dir / "artifacts" / "resume.pdf"
+    if resume_path.exists():
+        artifacts_map["resume_pdf"] = "artifacts/resume.pdf"
+
     provenance_payload: Dict[str, Any] = {
         "generated_at": run.finished_at.isoformat(),
         "git_sha": git_sha,
@@ -136,11 +145,7 @@ def emit_ops_reports(
             "github_ref": env.get("GITHUB_REF"),
             "github_actor": env.get("GITHUB_ACTOR"),
         },
-        "artifacts": {
-            "latest_run": "ops/latest-run.json",
-            "dag": "ops/dag.json",
-            "provenance": "ops/provenance.json",
-        },
+        "artifacts": artifacts_map,
     }
     if action_run_url:
         provenance_payload["action_run_url"] = action_run_url
