@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { MermaidDiagram } from './components/MermaidDiagram'
 import { loadCategoryCatalog, loadIntakeSamples } from './domain/loadData'
@@ -32,6 +32,7 @@ interface DemoPhase {
 }
 
 type PhaseState = 'pending' | 'active' | 'done'
+type ArtifactTab = 'charter' | 'map' | 'exports'
 
 const DEMO_PHASES: DemoPhase[] = [
   {
@@ -205,6 +206,9 @@ function App() {
   const [dispatchStatus, setDispatchStatus] = useState<string | null>(null)
   const [dispatchLog, setDispatchLog] = useState<DispatchRecord[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<ArtifactTab>('charter')
+
+  const packSectionRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     Promise.all([loadIntakeSamples(), loadCategoryCatalog()])
@@ -259,6 +263,7 @@ function App() {
       setImpactRationale(null)
       setRunProgress(0)
       setActivePhaseIndex(0)
+      setActiveTab('charter')
       setCopyStatus(null)
       setDispatchStatus(null)
     }
@@ -279,6 +284,7 @@ function App() {
     setImpactRationale(null)
     setCopyStatus(null)
     setDispatchStatus(null)
+    setActiveTab('charter')
 
     setIsRunning(true)
     setActivePhaseIndex(0)
@@ -303,6 +309,13 @@ function App() {
 
     setRunProgress(100)
     setIsRunning(false)
+  }
+
+  function openDeliverables() {
+    packSectionRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    })
   }
 
   async function copyJson(label: string, payload: unknown) {
@@ -347,6 +360,7 @@ function App() {
         <div className="intake-layout">
           <section className="intake-controls">
             <h2>Start here</h2>
+            <p className="control-caption">One-click flow: pick scenario, run automation, export artifacts.</p>
 
             <label>
               Workflow scenario
@@ -376,6 +390,25 @@ function App() {
             {error ? <p className="error-text">{error}</p> : null}
             {copyStatus ? <p className="status-text">{copyStatus}</p> : null}
             {dispatchStatus ? <p className="status-text success-text">{dispatchStatus}</p> : null}
+
+            <section className="next-step-card">
+              <p className="next-step-tag">Next step</p>
+              {hasResult ? (
+                <>
+                  <p>Open deliverables and copy or dispatch what you need.</p>
+                  <div className="inline-actions">
+                    <button className="secondary-btn" onClick={openDeliverables}>
+                      Open deliverables
+                    </button>
+                    <button className="secondary-btn" onClick={() => setActiveTab('exports')}>
+                      Jump to exports
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p>Click Start demo to generate charter, process map, and export payloads.</p>
+              )}
+            </section>
           </section>
 
           <section className="magic-panel" aria-live="polite">
@@ -430,6 +463,9 @@ function App() {
                         Target cycle {metricToText(result.charter.target_metrics.cycle_time_days_target)} days
                       </span>
                     </div>
+                    <button className="secondary-btn inline-open-btn" onClick={openDeliverables}>
+                      View delivery-ready outputs
+                    </button>
                   </>
                 ) : (
                   <>
@@ -455,8 +491,9 @@ function App() {
           </p>
         </section>
       ) : (
-        <section className="panel pack-panel">
-          <h2>Automation pack (delivery-ready)</h2>
+        <section className="panel pack-panel" ref={packSectionRef}>
+          <h2>Delivery-ready outputs</h2>
+          <p className="pack-subhead">Use tabs to move through the pack in a simple sequence.</p>
 
           <div className="kpi-grid">
             <article>
@@ -477,68 +514,114 @@ function App() {
             </article>
           </div>
 
-          <div className="artifact-grid">
-            <section className="artifact-card">
-              <h3>Charter</h3>
-              <p>
-                <strong>Problem:</strong> {result.charter.problem_statement}
-              </p>
-              <p>
-                <strong>Next action:</strong> {result.triage.next_action}
-              </p>
-              <ul className="metric-list">
-                <li>Baseline cycle time: {metricToText(result.charter.baseline_metrics.cycle_time_days)}</li>
-                <li>
-                  Target cycle time: {metricToText(result.charter.target_metrics.cycle_time_days_target)}
-                </li>
-                <li>Monthly volume: {metricToText(result.charter.baseline_metrics.volume_per_month)}</li>
-              </ul>
-              <button className="secondary-btn" onClick={() => copyJson('Charter JSON', result.charter)}>
-                Copy charter JSON
-              </button>
-            </section>
-
-            <section className="artifact-card">
-              <h3>To-be process map</h3>
-              <MermaidDiagram title="Optimized workflow" chart={result.toBeMermaid} />
-              <details className="advanced-block">
-                <summary>Show as-is flow</summary>
-                <pre>{result.asIsMermaid}</pre>
-              </details>
-            </section>
-
-            <section className="artifact-card">
-              <h3>Export payloads</h3>
-              <div className="button-column">
-                <button className="secondary-btn" onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}>
-                  Copy Jira payload
-                </button>
-                <button
-                  className="secondary-btn"
-                  onClick={() => copyJson('ServiceNow payload', result.exports.servicenow_record_create)}
-                >
-                  Copy ServiceNow payload
-                </button>
-                <button className="secondary-btn" onClick={() => copyJson('Tracker payload', result.exports.process_tracker_row)}>
-                  Copy tracker payload
-                </button>
-                <button className="primary-btn" onClick={sendToDeliveryQueue}>
-                  Send pack to delivery queue
-                </button>
-              </div>
-
-              {dispatchLog.length > 0 ? (
-                <ul className="dispatch-list">
-                  {dispatchLog.map((entry) => (
-                    <li key={entry.dispatch_id}>
-                      <strong>{entry.dispatch_id}</strong> · {entry.timestamp} ·{' '}
-                      {entry.destinations.join(', ')}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </section>
+          <div className="tab-row" role="tablist" aria-label="Output sections">
+            <button
+              className={`tab-btn ${activeTab === 'charter' ? 'active' : ''}`}
+              role="tab"
+              aria-selected={activeTab === 'charter'}
+              onClick={() => setActiveTab('charter')}
+            >
+              1. Charter
+            </button>
+            <button
+              className={`tab-btn ${activeTab === 'map' ? 'active' : ''}`}
+              role="tab"
+              aria-selected={activeTab === 'map'}
+              onClick={() => setActiveTab('map')}
+            >
+              2. Process Map
+            </button>
+            <button
+              className={`tab-btn ${activeTab === 'exports' ? 'active' : ''}`}
+              role="tab"
+              aria-selected={activeTab === 'exports'}
+              onClick={() => setActiveTab('exports')}
+            >
+              3. Exports
+            </button>
           </div>
+
+          <section className="artifact-panel">
+            {activeTab === 'charter' ? (
+              <section className="artifact-card">
+                <h3>Charter</h3>
+                <p>
+                  <strong>Problem:</strong> {result.charter.problem_statement}
+                </p>
+                <p>
+                  <strong>Next action:</strong> {result.triage.next_action}
+                </p>
+                <ul className="metric-list">
+                  <li>Baseline cycle time: {metricToText(result.charter.baseline_metrics.cycle_time_days)}</li>
+                  <li>
+                    Target cycle time: {metricToText(result.charter.target_metrics.cycle_time_days_target)}
+                  </li>
+                  <li>Monthly volume: {metricToText(result.charter.baseline_metrics.volume_per_month)}</li>
+                </ul>
+                <div className="inline-actions">
+                  <button className="secondary-btn" onClick={() => copyJson('Charter JSON', result.charter)}>
+                    Copy charter JSON
+                  </button>
+                  <button className="secondary-btn" onClick={() => setActiveTab('map')}>
+                    Next: Process map
+                  </button>
+                </div>
+              </section>
+            ) : null}
+
+            {activeTab === 'map' ? (
+              <section className="artifact-card">
+                <h3>To-be process map</h3>
+                <MermaidDiagram title="Optimized workflow" chart={result.toBeMermaid} />
+                <div className="inline-actions">
+                  <button className="secondary-btn" onClick={() => setActiveTab('exports')}>
+                    Next: Export payloads
+                  </button>
+                </div>
+                <details className="advanced-block">
+                  <summary>Show as-is flow</summary>
+                  <pre>{result.asIsMermaid}</pre>
+                </details>
+              </section>
+            ) : null}
+
+            {activeTab === 'exports' ? (
+              <section className="artifact-card">
+                <h3>Export payloads</h3>
+                <div className="button-column">
+                  <button className="secondary-btn" onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}>
+                    Copy Jira payload
+                  </button>
+                  <button
+                    className="secondary-btn"
+                    onClick={() => copyJson('ServiceNow payload', result.exports.servicenow_record_create)}
+                  >
+                    Copy ServiceNow payload
+                  </button>
+                  <button className="secondary-btn" onClick={() => copyJson('Tracker payload', result.exports.process_tracker_row)}>
+                    Copy tracker payload
+                  </button>
+                  <button className="secondary-btn" onClick={() => copyJson('Blueprint JSON', result.blueprint)}>
+                    Copy blueprint JSON
+                  </button>
+                  <button className="primary-btn" onClick={sendToDeliveryQueue}>
+                    Send pack to delivery queue
+                  </button>
+                </div>
+
+                {dispatchLog.length > 0 ? (
+                  <ul className="dispatch-list">
+                    {dispatchLog.map((entry) => (
+                      <li key={entry.dispatch_id}>
+                        <strong>{entry.dispatch_id}</strong> · {entry.timestamp} ·{' '}
+                        {entry.destinations.join(', ')}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </section>
+            ) : null}
+          </section>
 
           <details className="advanced-block">
             <summary>Advanced details</summary>
@@ -549,9 +632,6 @@ function App() {
               <strong>{impactRationale ? prettyCategory(impactRationale.confidence) : 'Not available'}</strong>
               .
             </p>
-            <button className="secondary-btn" onClick={() => copyJson('Blueprint JSON', result.blueprint)}>
-              Copy blueprint JSON
-            </button>
           </details>
         </section>
       )}
