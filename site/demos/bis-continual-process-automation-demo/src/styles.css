@@ -15,11 +15,11 @@ body {
 }
 
 .page-shell {
-  width: min(1080px, 100%);
+  width: min(1120px, 100%);
   margin: 0 auto;
-  padding: 1.5rem 1rem 2.2rem;
+  padding: 1.25rem 1rem 2rem;
   display: grid;
-  gap: 1rem;
+  gap: 0.9rem;
 }
 
 .hero,
@@ -30,11 +30,11 @@ body {
 }
 
 .hero {
-  padding: 1.35rem;
+  padding: 1.2rem;
 }
 
 .panel {
-  padding: 1rem;
+  padding: 0.85rem;
 }
 
 .eyebrow {
@@ -47,8 +47,8 @@ body {
 }
 
 h1 {
-  margin: 0.38rem 0 0;
-  font-size: clamp(1.75rem, 3.3vw, 2.35rem);
+  margin: 0.34rem 0 0;
+  font-size: clamp(1.6rem, 3.1vw, 2.2rem);
   line-height: 1.08;
   letter-spacing: -0.02em;
 }
@@ -61,25 +61,19 @@ h2 {
 
 h3 {
   margin: 0;
-  font-size: 0.94rem;
-  color: #2a466e;
+  font-size: 0.93rem;
+  color: #27456f;
 }
 
 p {
-  margin: 0.45rem 0 0;
-  line-height: 1.45;
-}
-
-.hero-subhead {
-  margin: 0.72rem 0 0;
-  max-width: 700px;
-  color: #355077;
+  margin: 0.4rem 0 0;
+  line-height: 1.4;
 }
 
 .workspace-panel {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
-  gap: 0.9rem;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 0.8rem;
 }
 
 .control-pane,
@@ -87,28 +81,22 @@ p {
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   background: #fff;
-  padding: 0.85rem;
-}
-
-.control-caption {
-  margin-top: 0.4rem;
-  color: #3c5b86;
-  font-size: 0.86rem;
+  padding: 0.78rem;
 }
 
 .example-picker {
-  margin-top: 0.72rem;
+  margin-top: 0.64rem;
   border: 1px solid #e3e8f0;
   border-radius: 10px;
   background: #fafcff;
-  padding: 0.52rem 0.56rem 0.58rem;
+  padding: 0.5rem 0.55rem 0.56rem;
 }
 
 .example-picker > label {
   margin: 0;
   display: block;
   color: #2f4d79;
-  font-size: 0.86rem;
+  font-size: 0.84rem;
   font-weight: 600;
 }
 
@@ -149,12 +137,6 @@ p {
   font-size: 0.85rem;
 }
 
-.field-help {
-  margin-top: 0.34rem;
-  color: #4a6993;
-  font-size: 0.78rem;
-}
-
 select,
 textarea,
 button {
@@ -174,11 +156,11 @@ textarea {
 }
 
 .inline-advanced {
-  margin-top: 0.72rem;
+  margin-top: 0.7rem;
 }
 
 .inline-advanced textarea {
-  margin-top: 0.5rem;
+  margin-top: 0.48rem;
 }
 
 .primary-btn,
@@ -217,7 +199,7 @@ button:disabled {
 .error-text,
 .success-text {
   margin-top: 0.46rem;
-  font-size: 0.86rem;
+  font-size: 0.84rem;
 }
 
 .hint-text,
@@ -233,22 +215,19 @@ button:disabled {
   color: #2f6d44;
 }
 
-.result-pane {
+.moment-shell {
   display: grid;
+  gap: 0.58rem;
 }
 
-.moment-tag {
+.moment-tag,
+.doc-tag {
   margin: 0;
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  color: #2f5886;
+  color: #44638f;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-}
-
-.outcome-shell {
-  display: grid;
-  gap: 0.62rem;
 }
 
 .input-preview {
@@ -256,7 +235,7 @@ button:disabled {
   border: 1px solid #dbe5f1;
   border-radius: 10px;
   background: #f8fbff;
-  padding: 0.58rem;
+  padding: 0.56rem;
   white-space: pre-wrap;
   word-break: break-word;
   color: #2f4d77;
@@ -267,20 +246,20 @@ button:disabled {
 .impact-strip {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.48rem;
+  gap: 0.46rem;
 }
 
 .impact-strip article {
   border: 1px solid #dde6f1;
   border-radius: 10px;
   background: #fff;
-  padding: 0.55rem 0.6rem;
+  padding: 0.52rem 0.56rem;
   display: grid;
-  gap: 0.2rem;
+  gap: 0.16rem;
 }
 
 .impact-strip span {
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   color: #4a678f;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -288,7 +267,7 @@ button:disabled {
 
 .impact-strip strong {
   color: #1f4067;
-  font-size: 1rem;
+  font-size: 0.95rem;
 }
 
 .transformation-grid {
@@ -301,9 +280,9 @@ button:disabled {
   border: 1px solid #dce6f2;
   border-radius: 12px;
   background: #fff;
-  padding: 0.68rem;
+  padding: 0.62rem;
   display: grid;
-  gap: 0.5rem;
+  gap: 0.48rem;
 }
 
 .before-card {
@@ -311,68 +290,46 @@ button:disabled {
   border-color: #ecd8dc;
 }
 
-.after-pack {
+.after-card {
   background: #f8fbff;
   border-color: #d8e4f4;
-}
-
-.outputs-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.44rem;
 }
 
 .artifact-card {
   border: 1px solid #dce6f2;
   border-radius: 11px;
   background: #fff;
-  padding: 0.66rem;
+  padding: 0.62rem;
   display: grid;
-  gap: 0.44rem;
+  gap: 0.4rem;
 }
 
 .artifact-card pre {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 0.78rem;
-  line-height: 1.4;
+  font-size: 0.77rem;
+  line-height: 1.35;
   color: #2f4d77;
   background: #f2f6fd;
   border: 1px solid #d6dfec;
   border-radius: 8px;
-  padding: 0.5rem;
+  padding: 0.46rem;
 }
 
-.doc-tag {
+.key-list {
   margin: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #4d6791;
-  font-size: 0.7rem;
-  font-weight: 700;
+  padding-left: 1.05rem;
+  display: grid;
+  gap: 0.24rem;
+  color: #35557f;
+  font-size: 0.82rem;
 }
 
-.pack-metrics {
+.outputs-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.34rem;
-}
-
-.pack-pill {
-  border: 1px solid #d2deee;
-  border-radius: 999px;
-  background: #f5f9ff;
-  color: #33527b;
-  font-size: 0.76rem;
-  padding: 0.2rem 0.5rem;
-}
-
-.map-card {
-  border: 1px solid #d7dfea;
-  border-radius: 10px;
-  background: #f6f9fe;
-  padding: 0.62rem;
+  gap: 0.42rem;
 }
 
 .mermaid-svg {
@@ -383,26 +340,13 @@ button:disabled {
   border: 1px solid #dbe5f1;
   border-radius: 10px;
   background: #fafcff;
-  padding: 0.58rem 0.66rem;
+  padding: 0.56rem 0.64rem;
 }
 
 .advanced-block summary {
   cursor: pointer;
   color: #2b4a75;
   font-weight: 620;
-}
-
-.advanced-block pre {
-  margin: 0.55rem 0 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-size: 0.77rem;
-  line-height: 1.35;
-  color: #2f4d77;
-  background: #f2f6fd;
-  border: 1px solid #d6dfec;
-  border-radius: 8px;
-  padding: 0.5rem;
 }
 
 @media (max-width: 980px) {
@@ -413,7 +357,12 @@ button:disabled {
 
 @media (max-width: 760px) {
   .page-shell {
-    padding: 1rem 0.8rem 1.5rem;
+    padding: 0.95rem 0.78rem 1.35rem;
+  }
+
+  .impact-strip,
+  .transformation-grid {
+    grid-template-columns: 1fr;
   }
 
   .outputs-actions {
@@ -422,21 +371,5 @@ button:disabled {
 
   .outputs-actions button {
     width: 100%;
-  }
-
-  .impact-strip,
-  .transformation-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@keyframes reveal-up {
-  from {
-    opacity: 0.62;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }
