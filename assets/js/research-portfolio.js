@@ -22,9 +22,9 @@
       return "";
     }
 
-    var firstSentence = text.split(/\.\s+/)[0].trim();
-    if (firstSentence && firstSentence.length <= maxLength) {
-      return firstSentence.replace(/[.\s]*$/, "") + ".";
+    var first = text.split(/\.\s+/)[0].trim();
+    if (first && first.length <= maxLength) {
+      return first.replace(/[.\s]*$/, "") + ".";
     }
 
     if (text.length <= maxLength) {
@@ -34,24 +34,41 @@
     return text.slice(0, Math.max(24, maxLength - 1)).trim().replace(/[,:;\s]+$/, "") + "…";
   }
 
-  function compactWords(value, maxWords, maxLength) {
+  function compactPhrase(value, maxWords, maxLength) {
     var text = toText(value);
     if (!text) {
       return "";
     }
 
-    var words = text
+    var phrase = text
       .replace(/[|]/g, " ")
+      .split(/[;,]/)[0]
       .split(/\s+/)
       .filter(Boolean)
-      .slice(0, Math.max(1, maxWords));
+      .slice(0, Math.max(1, maxWords))
+      .join(" ");
 
-    var phrase = words.join(" ").replace(/[,:;\s]+$/, "");
     if (phrase.length > maxLength) {
-      phrase = phrase.slice(0, Math.max(16, maxLength - 1)).trim().replace(/[,:;\s]+$/, "");
+      phrase = phrase.slice(0, Math.max(16, maxLength - 1)).trim().replace(/[,:;\s]+$/, "") + "…";
     }
 
-    return phrase + (phrase.length < text.length ? "…" : "");
+    return phrase;
+  }
+
+  function shortArcName(name) {
+    var text = toText(name);
+    if (!text) {
+      return "Program";
+    }
+
+    var parts = text.split(/\s+for\s+/i);
+    var candidate = parts[0] || text;
+
+    if (candidate.length <= 34) {
+      return candidate;
+    }
+
+    return compactPhrase(candidate, 4, 34);
   }
 
   function getOverview(data) {
@@ -73,17 +90,8 @@
     var scholarUrl = site.scholar_url || data.raw.source || "#";
 
     setText("home-kicker", overview.hero_byline || site.name || data.raw.profile.name || "Research Portfolio");
-    setText("home-title", compactSentence(overview.hero_title || site.statement || "Research", 108));
-    setText("home-statement", compactSentence(overview.hero_subtitle || site.context || "", 120));
-    setText("home-context", compactSentence(overview.hero_context || site.context || "", 90));
-    setText("home-identity-line", compactSentence(overview.identity_line || site.context || "", 92));
-    setText(
-      "home-invite",
-      compactSentence(
-        overview.closing_invite || "Open the archive to view each work by program, method, and practical use.",
-        100
-      )
-    );
+    setText("home-title", compactSentence(overview.hero_title || site.statement || "Research", 92));
+    setText("home-statement", compactSentence(overview.hero_subtitle || site.context || "", 96));
 
     setText("home-stat-works", String(data.stats.works));
     setText("home-stat-citations", window.ResearchCore.formatNumber(data.stats.citations));
@@ -112,9 +120,9 @@
       .slice(0, 3)
       .map(function (item) {
         return (
-          '<article class="overview-v9-principle intentional-reveal">' +
+          '<article class="overview-v10-principle intentional-reveal">' +
             "<h3>" + escape(item.title) + "</h3>" +
-            "<p>" + escape(compactWords(item.text, 7, 52)) + "</p>" +
+            "<p>" + escape(compactPhrase(item.text, 5, 36)) + "</p>" +
           "</article>"
         );
       })
@@ -146,15 +154,14 @@
         var countLabel = count === 1 ? "1 work" : String(count) + " works";
 
         return (
-          '<article class="overview-v9-arc intentional-reveal">' +
-            '<header class="overview-v9-arc-head">' +
-              "<h3>" + escape(arc.name) + "</h3>" +
-              '<span class="overview-v9-arc-count">' + escape(countLabel) + "</span>" +
+          '<article class="overview-v10-arc intentional-reveal">' +
+            '<header class="overview-v10-arc-head">' +
+              "<h3>" + escape(shortArcName(arc.name)) + "</h3>" +
+              '<span class="overview-v10-arc-count">' + escape(countLabel) + "</span>" +
             "</header>" +
-            '<p class="overview-v9-arc-thesis">' + escape(compactSentence(arc.thesis, 92)) + "</p>" +
-            '<ul class="overview-v9-arc-signals">' +
-              "<li><span>Method</span><strong>" + escape(compactWords(arc.methods, 8, 56)) + "</strong></li>" +
-              "<li><span>Use</span><strong>" + escape(compactWords(arc.practice, 8, 56)) + "</strong></li>" +
+            '<ul class="overview-v10-arc-tags">' +
+              "<li>" + escape(compactPhrase(arc.methods, 4, 28)) + "</li>" +
+              "<li>" + escape(compactPhrase(arc.practice, 4, 28)) + "</li>" +
             "</ul>" +
             '<a class="intentional-link" href="/publications/?arc=' + escape(arc.id) + '">Open</a>' +
           "</article>"
@@ -183,22 +190,22 @@
 
   function selectFeaturedWorks(data) {
     var selected = [];
-    var selectedMap = {};
+    var map = {};
 
     (data.curation.arcs || []).forEach(function (arc) {
       var lead = arcLeadWork(data, arc.id);
-      if (lead && !selectedMap[lead.id]) {
+      if (lead && !map[lead.id]) {
         selected.push(lead);
-        selectedMap[lead.id] = true;
+        map[lead.id] = true;
       }
     });
 
     data.works.forEach(function (work) {
-      if (selected.length >= 3 || selectedMap[work.id]) {
+      if (selected.length >= 3 || map[work.id]) {
         return;
       }
       selected.push(work);
-      selectedMap[work.id] = true;
+      map[work.id] = true;
     });
 
     return selected.slice(0, 3);
@@ -220,23 +227,6 @@
     return links ? '<div class="intentional-work-links">' + links + "</div>" : "";
   }
 
-  function renderWorkTags(work) {
-    var tags = (work.tags || []).slice(0, 2);
-    if (!tags.length) {
-      return "";
-    }
-
-    return (
-      '<ul class="overview-v9-work-tags">' +
-      tags
-        .map(function (tag) {
-          return "<li>" + escape(compactWords(tag, 3, 26)) + "</li>";
-        })
-        .join("") +
-      "</ul>"
-    );
-  }
-
   function renderFeatured(data) {
     var root = document.getElementById("home-featured");
     if (!root) {
@@ -251,21 +241,18 @@
 
     root.innerHTML = selected
       .map(function (work) {
-        var arc = data.arcMap[work.arc] || { name: "Unsorted" };
+        var arc = data.arcMap[work.arc] || { name: "Program" };
         var primary = window.ResearchCore.workPrimaryLink(work);
 
         return (
-          '<article class="overview-v9-work intentional-reveal">' +
-            '<p class="overview-v9-work-arc">' + escape(arc.name) + "</p>" +
+          '<article class="overview-v10-work intentional-reveal">' +
+            '<p class="overview-v10-work-arc">' + escape(shortArcName(arc.name)) + "</p>" +
             "<h3>" +
               (primary
                 ? '<a href="' + escape(primary) + '" target="_blank" rel="noreferrer">' + escape(work.title) + "</a>"
                 : escape(work.title)) +
             "</h3>" +
-            '<p class="overview-v9-work-metrics">' +
-              escape(work.year || "Undated") + " | cited by " + window.ResearchCore.formatNumber(work.citations || 0) +
-            "</p>" +
-            renderWorkTags(work) +
+            '<p class="overview-v10-work-meta">' + escape(work.year || "Undated") + " | cited by " + window.ResearchCore.formatNumber(work.citations || 0) + "</p>" +
             renderWorkLinks(work) +
           "</article>"
         );
