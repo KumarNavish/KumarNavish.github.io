@@ -51,8 +51,8 @@ interface SampleRequestOption {
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: "inbox", label: "Inbox" },
-  { id: "teach", label: "Teach" },
-  { id: "evaluate", label: "Evaluate" },
+  { id: "teach", label: "Improve Model" },
+  { id: "evaluate", label: "Results" },
   { id: "memory", label: "Memory" },
   { id: "audit", label: "Audit" },
 ];
@@ -158,14 +158,14 @@ function forgettingChartPoints(
     .join(" ");
 }
 
-function mermaidForResult(result: PipelineResult, retrievalK: number): string {
-  return [
-    "flowchart LR",
-    `A["Request"] --> B["Embed + Retrieve (k=${retrievalK})"]`,
-    `B --> C["Intent: ${result.predictedIntent}"]`,
-    `C --> D["Plan Mode: ${result.modeUsed}"]`,
-    "D --> E[\"Strict TargetPlan JSON\"]",
-  ].join("\n");
+function strategyLabel(mode: RouterMode): string {
+  if (mode === "rehearsal") {
+    return "Replay";
+  }
+  if (mode === "ewc") {
+    return "EWC";
+  }
+  return "Naive";
 }
 
 function bootstrapSeed(
@@ -186,6 +186,8 @@ function App() {
   const [activeTab, setActiveTab] = useState<TabId>("inbox");
   const [loadingData, setLoadingData] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [firstTimeMode, setFirstTimeMode] = useState(true);
+  const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
 
   const [memoryStrategyId, setMemoryStrategyId] = useState<MemoryStrategyId>("reservoir");
   const [memoryBudget, setMemoryBudget] = useState(32);
@@ -296,6 +298,8 @@ function App() {
             setRetrievalK(persisted.controls.retrievalK);
             setClMode(persisted.controls.clMode);
             setDriftEnabled(persisted.controls.driftEnabled);
+            setFirstTimeMode(persisted.seenProcesses.length <= 1 && persisted.evalSnapshots.length === 0);
+            setAdvancedSettingsOpen(false);
 
             setSeenProcesses(restoredSeen.length > 0 ? restoredSeen : [firstProcess]);
             setTrainStream(restoredTrain.length > 0 ? restoredTrain : initialExamples);
@@ -340,6 +344,8 @@ function App() {
         setRetrievalK(3);
         setClMode("rehearsal");
         setDriftEnabled(false);
+        setFirstTimeMode(true);
+        setAdvancedSettingsOpen(false);
         setSeenProcesses([firstProcess]);
         setTrainStream(initialExamples);
         setMemoryItems([]);
@@ -635,6 +641,8 @@ function App() {
     setRetrievalK(3);
     setClMode("rehearsal");
     setDriftEnabled(false);
+    setFirstTimeMode(true);
+    setAdvancedSettingsOpen(false);
     setSeenProcesses([firstProcess]);
     setTrainStream(initialExamples);
     setMemoryItems([]);
@@ -654,12 +662,46 @@ function App() {
   };
 
   const riskCounts = countByRisk(memoryItems);
+  const hasRunPipeline = inboxResult !== null;
+  const hasTaughtAdditionalProcess = seenProcesses.length > 1;
+  const hasEvaluation = comparisonResult !== null;
+  const firstTimeStep = !hasRunPipeline ? 1 : !hasTaughtAdditionalProcess ? 2 : !hasEvaluation ? 3 : 4;
+
   const rehearsalBeatsNaive = comparisonResult
     ? comparisonResult.modes.rehearsal.meanForgetting < comparisonResult.modes.naive.meanForgetting
     : false;
   const ewcBeatsNaive = comparisonResult
     ? comparisonResult.modes.ewc.meanForgetting < comparisonResult.modes.naive.meanForgetting
     : false;
+  const selectedMode = clMode === "naive" ? "naive" : clMode === "rehearsal" ? "rehearsal" : "ewc";
+  const selectedForgetting = comparisonResult ? comparisonResult.modes[selectedMode].meanForgetting : 0;
+  const forgettingReduction = comparisonResult
+    ? Math.max(0, comparisonResult.modes.naive.meanForgetting - selectedForgetting)
+    : 0;
+  const guidedActionLabel =
+    firstTimeStep === 1
+      ? "Step 1: Run Request"
+      : firstTimeStep === 2
+        ? "Step 2: Improve Model"
+        : firstTimeStep === 3
+          ? "Step 3: Compare Retention"
+          : "Open Full Workspace";
+
+  const handleGuidedPrimaryAction = async () => {
+    if (firstTimeStep === 1) {
+      await handleRunInbox();
+      return;
+    }
+    if (firstTimeStep === 2) {
+      handleTeachUpdate();
+      return;
+    }
+    if (firstTimeStep === 3) {
+      handleEvaluate();
+      return;
+    }
+    setFirstTimeMode(false);
+  };
 
   if (loadingData) {
     return (
@@ -688,281 +730,424 @@ function App() {
       <section className="hero full-width">
         <p className="label">Interactive Demo</p>
         <h1>Continual Process Automation Copilot</h1>
-        <p>Teach incrementally, inspect memory, run pipeline plans, and compare forgetting behavior.</p>
+        <p>Route requests, improve the intent model, and measure retention in a single browser session.</p>
 
-        <div className="control-grid">
-          <label>
-            Memory strategy
-            <select
-              value={memoryStrategyId}
-              onChange={(event) => setMemoryStrategyId(event.target.value as MemoryStrategyId)}
-            >
-              <option value="fifo">FIFO</option>
-              <option value="reservoir">Reservoir</option>
-              <option value="kcenter">k-center</option>
-              <option value="risk-aware">Risk-aware</option>
-            </select>
-          </label>
-
-          <label>
-            Memory budget: {memoryBudget}
-            <input
-              type="range"
-              min={8}
-              max={80}
-              step={2}
-              value={memoryBudget}
-              onChange={(event) => setMemoryBudget(Number(event.target.value))}
-            />
-          </label>
-
-          <label>
-            Retrieval k: {retrievalK}
-            <input
-              type="range"
-              min={1}
-              max={8}
-              step={1}
-              value={retrievalK}
-              onChange={(event) => setRetrievalK(Number(event.target.value))}
-            />
-          </label>
-
-          <label>
-            CL mode
+        <div className="row wrap mode-row">
+          <label className="compact-control">
+            Learning strategy
             <select value={clMode} onChange={(event) => setClMode(event.target.value as RouterMode)}>
-              <option value="naive">naive</option>
-              <option value="rehearsal">rehearsal</option>
-              <option value="ewc">ewc</option>
+              <option value="naive">Naive</option>
+              <option value="rehearsal">Replay</option>
+              <option value="ewc">EWC</option>
             </select>
           </label>
-
-          <label className="inline-toggle">
-            <input
-              type="checkbox"
-              checked={driftEnabled}
-              onChange={(event) => setDriftEnabled(event.target.checked)}
-            />
-            Drift toggle
-          </label>
-        </div>
-
-        <div className="row wrap">
+          {firstTimeMode ? (
+            <button type="button" className="secondary-btn" onClick={() => setFirstTimeMode(false)}>
+              Open full workspace
+            </button>
+          ) : (
+            <button type="button" className="secondary-btn" onClick={() => setFirstTimeMode(true)}>
+              Return to guided mode
+            </button>
+          )}
           <button type="button" className="secondary-btn" onClick={handleResetDemoState}>
             Reset demo state
           </button>
-          <p className="legend">Clears persisted local state, memory, router parameters, audit, and snapshots.</p>
         </div>
 
-        <div className="tab-row">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              className={activeTab === tab.id ? "tab-btn active" : "tab-btn"}
-              onClick={() => setActiveTab(tab.id)}
+        {firstTimeMode ? (
+          <>
+            <section className="start-strip">
+              <p className="label">Start Here</p>
+              <h2>Complete these 3 steps to see continual learning in action.</h2>
+              <p className="legend">
+                Current step: {firstTimeStep} of 3 {firstTimeStep > 3 ? "(complete)" : ""}
+              </p>
+              <button type="button" onClick={() => void handleGuidedPrimaryAction()}>
+                {guidedActionLabel}
+              </button>
+            </section>
+
+            <section className="guided-grid">
+              <article className={firstTimeStep === 1 ? "guided-step active" : "guided-step"}>
+                <h3>1. Run a Request</h3>
+                <label>
+                  Scenario
+                  <select onChange={(event) => setInboxRequest(event.target.value)} value={inboxRequest}>
+                    {sampleRequestOptions.map((sample) => (
+                      <option key={`${sample.label}-${sample.text.slice(0, 16)}`} value={sample.text}>
+                        {sample.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <textarea
+                  className="pipeline-input"
+                  value={inboxRequest}
+                  onChange={(event) => setInboxRequest(event.target.value)}
+                />
+                <button type="button" onClick={() => void handleRunInbox()}>
+                  Run request
+                </button>
+                <p className="status">{inboxStatus}</p>
+                {inboxError ? <p className="warning">{inboxError}</p> : null}
+              </article>
+
+              <article className={firstTimeStep === 2 ? "guided-step active" : "guided-step"}>
+                <h3>2. Improve Model</h3>
+                <p className="legend">Seen: {seenProcesses.join(", ")}</p>
+                {nextTeachStep ? (
+                  <>
+                    <p>
+                      Next process: <strong>{nextTeachStep.process_id}</strong>
+                    </p>
+                    <button type="button" onClick={handleTeachUpdate}>
+                      Teach next process
+                    </button>
+                  </>
+                ) : (
+                  <p>All processes already taught.</p>
+                )}
+                <p className="status">{teachStatus}</p>
+              </article>
+
+              <article className={firstTimeStep === 3 ? "guided-step active" : "guided-step"}>
+                <h3>3. Compare Retention</h3>
+                <button type="button" onClick={handleEvaluate}>
+                  Run comparison
+                </button>
+                <p className="status">{evalStatus}</p>
+                {comparisonResult ? (
+                  <div className="metric-grid">
+                    <p>
+                      Naive forgetting:{" "}
+                      <strong>{(comparisonResult.modes.naive.meanForgetting * 100).toFixed(2)}%</strong>
+                    </p>
+                    <p>
+                      {strategyLabel(selectedMode)} forgetting:{" "}
+                      <strong>{(selectedForgetting * 100).toFixed(2)}%</strong>
+                    </p>
+                    <p>
+                      Reduction vs naive: <strong>{(forgettingReduction * 100).toFixed(2)}%</strong>
+                    </p>
+                  </div>
+                ) : null}
+              </article>
+            </section>
+
+            {inboxResult ? (
+              <section className="result-card">
+                <h3>Action Plan</h3>
+                <p className="legend">
+                  Predicted process: <strong>{inboxResult.predictedIntent}</strong> | output repaired:{" "}
+                  <strong>{inboxResult.validation.repaired ? "yes" : "no"}</strong>
+                </p>
+                <details>
+                  <summary>View plan JSON</summary>
+                  <pre className="summary summary-block">{JSON.stringify(inboxResult.plan, null, 2)}</pre>
+                </details>
+              </section>
+            ) : null}
+
+            <details
+              className="advanced-settings"
+              open={advancedSettingsOpen}
+              onToggle={(event) => {
+                const next = (event.currentTarget as HTMLDetailsElement).open;
+                setAdvancedSettingsOpen(next);
+              }}
             >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {activeTab === "inbox" ? (
-          <div className="panel">
-            <h3>Inbox</h3>
-            <div className="row wrap">
+              <summary>Advanced settings</summary>
+              <div className="control-grid">
+                <label>
+                  Memory strategy
+                  <select
+                    value={memoryStrategyId}
+                    onChange={(event) => setMemoryStrategyId(event.target.value as MemoryStrategyId)}
+                  >
+                    <option value="fifo">FIFO</option>
+                    <option value="reservoir">Reservoir</option>
+                    <option value="kcenter">k-center</option>
+                    <option value="risk-aware">Risk-aware</option>
+                  </select>
+                </label>
+                <label>
+                  Memory budget: {memoryBudget}
+                  <input
+                    type="range"
+                    min={8}
+                    max={80}
+                    step={2}
+                    value={memoryBudget}
+                    onChange={(event) => setMemoryBudget(Number(event.target.value))}
+                  />
+                </label>
+                <label>
+                  Retrieval k: {retrievalK}
+                  <input
+                    type="range"
+                    min={1}
+                    max={8}
+                    step={1}
+                    value={retrievalK}
+                    onChange={(event) => setRetrievalK(Number(event.target.value))}
+                  />
+                </label>
+                <label className="inline-toggle">
+                  <input
+                    type="checkbox"
+                    checked={driftEnabled}
+                    onChange={(event) => setDriftEnabled(event.target.checked)}
+                  />
+                  Drift toggle
+                </label>
+              </div>
+            </details>
+          </>
+        ) : (
+          <>
+            <div className="control-grid">
               <label>
-                Sample request
-                <select onChange={(event) => setInboxRequest(event.target.value)} value={inboxRequest}>
-                  {sampleRequestOptions.map((sample) => (
-                    <option key={`${sample.label}-${sample.text.slice(0, 16)}`} value={sample.text}>
-                      {sample.label}
-                    </option>
-                  ))}
+                Memory strategy
+                <select
+                  value={memoryStrategyId}
+                  onChange={(event) => setMemoryStrategyId(event.target.value as MemoryStrategyId)}
+                >
+                  <option value="fifo">FIFO</option>
+                  <option value="reservoir">Reservoir</option>
+                  <option value="kcenter">k-center</option>
+                  <option value="risk-aware">Risk-aware</option>
                 </select>
               </label>
+              <label>
+                Memory budget: {memoryBudget}
+                <input
+                  type="range"
+                  min={8}
+                  max={80}
+                  step={2}
+                  value={memoryBudget}
+                  onChange={(event) => setMemoryBudget(Number(event.target.value))}
+                />
+              </label>
+              <label>
+                Retrieval k: {retrievalK}
+                <input
+                  type="range"
+                  min={1}
+                  max={8}
+                  step={1}
+                  value={retrievalK}
+                  onChange={(event) => setRetrievalK(Number(event.target.value))}
+                />
+              </label>
+              <label className="inline-toggle">
+                <input
+                  type="checkbox"
+                  checked={driftEnabled}
+                  onChange={(event) => setDriftEnabled(event.target.checked)}
+                />
+                Drift toggle
+              </label>
             </div>
-            <textarea
-              className="pipeline-input"
-              value={inboxRequest}
-              onChange={(event) => setInboxRequest(event.target.value)}
-            />
-            <button type="button" onClick={() => void handleRunInbox()}>
-              Run pipeline
-            </button>
-            <p className="status">{inboxStatus}</p>
-            {inboxError ? <p className="warning">{inboxError}</p> : null}
-            {inboxResult ? (
-              <>
-                <pre className="summary summary-block">{JSON.stringify(inboxResult.plan, null, 2)}</pre>
-                <pre className="summary summary-block mermaid-block">
-{`mermaid
-${mermaidForResult(inboxResult, retrievalK)}`}
-                </pre>
-              </>
-            ) : null}
-          </div>
-        ) : null}
 
-        {activeTab === "teach" ? (
-          <div className="panel">
-            <h3>Teach</h3>
-            <p className="status">Seen processes: {seenProcesses.join(", ")}</p>
-            {nextTeachStep ? (
-              <>
-                <p>
-                  Next process from stream: <strong>{nextTeachStep.process_id}</strong>{" "}
-                  {nextTeachStep.drift ? "(drift-enabled step)" : ""}
-                </p>
-                <ul className="example-list">
-                  {(appData.trainSets[nextTeachStep.process_id] ?? [])
-                    .slice(0, 3)
-                    .map((example) => (
-                      <li key={example.id}>{example.request_text}</li>
-                    ))}
-                </ul>
-                <button type="button" onClick={handleTeachUpdate}>
-                  Update with next process
+            <div className="tab-row">
+              {TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={activeTab === tab.id ? "tab-btn active" : "tab-btn"}
+                  onClick={() => setActiveTab(tab.id)}
+                >
+                  {tab.label}
                 </button>
-              </>
-            ) : (
-              <p>All scheduled processes already taught.</p>
-            )}
-            <p className="status">{teachStatus}</p>
-          </div>
-        ) : null}
-
-        {activeTab === "evaluate" ? (
-          <div className="panel">
-            <h3>Evaluate</h3>
-            <button type="button" onClick={handleEvaluate}>
-              Run regression + forgetting comparison
-            </button>
-            <p className="status">{evalStatus}</p>
-            {comparisonResult ? (
-              <>
-                <table className="eval-table">
-                  <thead>
-                    <tr>
-                      <th>Mode</th>
-                      <th>Mean Accuracy</th>
-                      <th>Mean Forgetting</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(Object.keys(comparisonResult.modes) as RouterMode[]).map((mode) => (
-                      <tr key={mode}>
-                        <td>{mode}</td>
-                        <td>{(comparisonResult.modes[mode].meanAccuracy * 100).toFixed(1)}%</td>
-                        <td>{(comparisonResult.modes[mode].meanForgetting * 100).toFixed(2)}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-
-                <p className="status">
-                  Retention check: rehearsal {rehearsalBeatsNaive ? "improves" : "does not improve"} vs
-                  naive, EWC {ewcBeatsNaive ? "improves" : "does not improve"} vs naive.
-                </p>
-
-                <svg width="460" height="190" viewBox="0 0 460 190" role="img" aria-label="Forgetting comparison curve">
-                  <line x1="20" y1="170" x2="440" y2="170" stroke="#94a3b8" />
-                  <line x1="20" y1="20" x2="20" y2="170" stroke="#94a3b8" />
-                  <polyline
-                    fill="none"
-                    stroke="#8b1f1f"
-                    strokeWidth="2"
-                    points={forgettingChartPoints(comparisonResult, "naive", 460, 190)}
-                  />
-                  <polyline
-                    fill="none"
-                    stroke="#1e3a8a"
-                    strokeWidth="2"
-                    points={forgettingChartPoints(comparisonResult, "rehearsal", 460, 190)}
-                  />
-                  <polyline
-                    fill="none"
-                    stroke="#0f766e"
-                    strokeWidth="2"
-                    points={forgettingChartPoints(comparisonResult, "ewc", 460, 190)}
-                  />
-                </svg>
-                <p className="legend">naive (red), rehearsal (blue), ewc (teal)</p>
-
-                <p className="legend">Saved evaluation snapshots: {evalSnapshots.length}</p>
-              </>
-            ) : null}
-          </div>
-        ) : null}
-
-        {activeTab === "memory" ? (
-          <div className="panel">
-            <h3>Memory</h3>
-            <p className="status">
-              Items retained: {memoryItems.length} | high={riskCounts.high}, medium={riskCounts.medium},
-              low={riskCounts.low}
-            </p>
-
-            <div className="row wrap">
-              <input
-                value={memoryQuery}
-                onChange={(event) => setMemoryQuery(event.target.value)}
-                placeholder="Query for retrieval"
-              />
-              <button type="button" onClick={handleMemoryQuery}>
-                Retrieve top-k
-              </button>
+              ))}
             </div>
 
-            {memoryHits.length > 0 ? (
-              <ul className="example-list">
-                {memoryHits.map((hit) => (
-                  <li key={hit.id}>
-                    [{hit.score.toFixed(3)}] {hit.example.process_id}: {hit.example.request_text}
-                  </li>
-                ))}
-              </ul>
+            {activeTab === "inbox" ? (
+              <div className="panel">
+                <h3>Inbox</h3>
+                <div className="row wrap">
+                  <label>
+                    Sample request
+                    <select onChange={(event) => setInboxRequest(event.target.value)} value={inboxRequest}>
+                      {sampleRequestOptions.map((sample) => (
+                        <option key={`${sample.label}-${sample.text.slice(0, 16)}`} value={sample.text}>
+                          {sample.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <textarea
+                  className="pipeline-input"
+                  value={inboxRequest}
+                  onChange={(event) => setInboxRequest(event.target.value)}
+                />
+                <button type="button" onClick={() => void handleRunInbox()}>
+                  Run request
+                </button>
+                <p className="status">{inboxStatus}</p>
+                {inboxError ? <p className="warning">{inboxError}</p> : null}
+                {inboxResult ? <pre className="summary summary-block">{JSON.stringify(inboxResult.plan, null, 2)}</pre> : null}
+              </div>
             ) : null}
 
-            <details>
-              <summary>Show retained exemplars</summary>
-              <ul className="example-list">
-                {memoryItems.slice(0, 20).map((item) => {
-                  const example = memoryItemToExample(item);
-                  return (
-                    <li key={item.id}>
-                      {item.id} ({item.risk_tag}) - {example?.request_text ?? "missing payload"}
-                    </li>
-                  );
-                })}
-              </ul>
-            </details>
-          </div>
-        ) : null}
+            {activeTab === "teach" ? (
+              <div className="panel">
+                <h3>Improve Model</h3>
+                <p className="status">Seen processes: {seenProcesses.join(", ")}</p>
+                {nextTeachStep ? (
+                  <>
+                    <p>
+                      Next process from stream: <strong>{nextTeachStep.process_id}</strong>{" "}
+                      {nextTeachStep.drift ? "(drift-enabled step)" : ""}
+                    </p>
+                    <ul className="example-list">
+                      {(appData.trainSets[nextTeachStep.process_id] ?? [])
+                        .slice(0, 3)
+                        .map((example) => (
+                          <li key={example.id}>{example.request_text}</li>
+                        ))}
+                    </ul>
+                    <button type="button" onClick={handleTeachUpdate}>
+                      Update with next process
+                    </button>
+                  </>
+                ) : (
+                  <p>All scheduled processes already taught.</p>
+                )}
+                <p className="status">{teachStatus}</p>
+              </div>
+            ) : null}
 
-        {activeTab === "audit" ? (
-          <div className="panel">
-            <h3>Audit</h3>
-            <ul className="example-list">
-              {auditLog.map((entry) => (
-                <li key={entry.id}>
-                  [{entry.timestamp}] <strong>{entry.action}</strong>: {entry.detail}
-                </li>
-              ))}
-            </ul>
-            <details>
-              <summary>Evaluation snapshots ({evalSnapshots.length})</summary>
-              <ul className="example-list">
-                {evalSnapshots.map((snapshot) => (
-                  <li key={snapshot.id}>
-                    [{snapshot.timestamp}] seen={snapshot.seenProcesses.join(", ")} | naive forgetting=
-                    {(snapshot.result.modes.naive.meanForgetting * 100).toFixed(2)}%
-                  </li>
-                ))}
-              </ul>
-            </details>
-          </div>
-        ) : null}
+            {activeTab === "evaluate" ? (
+              <div className="panel">
+                <h3>Results</h3>
+                <button type="button" onClick={handleEvaluate}>
+                  Run regression + forgetting comparison
+                </button>
+                <p className="status">{evalStatus}</p>
+                {comparisonResult ? (
+                  <>
+                    <table className="eval-table">
+                      <thead>
+                        <tr>
+                          <th>Mode</th>
+                          <th>Mean Accuracy</th>
+                          <th>Mean Forgetting</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(Object.keys(comparisonResult.modes) as RouterMode[]).map((mode) => (
+                          <tr key={mode}>
+                            <td>{strategyLabel(mode)}</td>
+                            <td>{(comparisonResult.modes[mode].meanAccuracy * 100).toFixed(1)}%</td>
+                            <td>{(comparisonResult.modes[mode].meanForgetting * 100).toFixed(2)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <p className="status">
+                      Retention check: rehearsal {rehearsalBeatsNaive ? "improves" : "does not improve"} vs
+                      naive, EWC {ewcBeatsNaive ? "improves" : "does not improve"} vs naive.
+                    </p>
+                    <svg width="460" height="190" viewBox="0 0 460 190" role="img" aria-label="Forgetting comparison curve">
+                      <line x1="20" y1="170" x2="440" y2="170" stroke="#94a3b8" />
+                      <line x1="20" y1="20" x2="20" y2="170" stroke="#94a3b8" />
+                      <polyline
+                        fill="none"
+                        stroke="#8b1f1f"
+                        strokeWidth="2"
+                        points={forgettingChartPoints(comparisonResult, "naive", 460, 190)}
+                      />
+                      <polyline
+                        fill="none"
+                        stroke="#1e3a8a"
+                        strokeWidth="2"
+                        points={forgettingChartPoints(comparisonResult, "rehearsal", 460, 190)}
+                      />
+                      <polyline
+                        fill="none"
+                        stroke="#0f766e"
+                        strokeWidth="2"
+                        points={forgettingChartPoints(comparisonResult, "ewc", 460, 190)}
+                      />
+                    </svg>
+                    <p className="legend">naive (red), replay (blue), ewc (teal)</p>
+                    <p className="legend">Saved evaluation snapshots: {evalSnapshots.length}</p>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+
+            {activeTab === "memory" ? (
+              <div className="panel">
+                <h3>Memory</h3>
+                <p className="status">
+                  Items retained: {memoryItems.length} | high={riskCounts.high}, medium={riskCounts.medium},
+                  low={riskCounts.low}
+                </p>
+                <div className="row wrap">
+                  <input
+                    value={memoryQuery}
+                    onChange={(event) => setMemoryQuery(event.target.value)}
+                    placeholder="Query for retrieval"
+                  />
+                  <button type="button" onClick={handleMemoryQuery}>
+                    Retrieve top-k
+                  </button>
+                </div>
+                {memoryHits.length > 0 ? (
+                  <ul className="example-list">
+                    {memoryHits.map((hit) => (
+                      <li key={hit.id}>
+                        [{hit.score.toFixed(3)}] {hit.example.process_id}: {hit.example.request_text}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                <details>
+                  <summary>Show retained exemplars</summary>
+                  <ul className="example-list">
+                    {memoryItems.slice(0, 20).map((item) => {
+                      const example = memoryItemToExample(item);
+                      return (
+                        <li key={item.id}>
+                          {item.id} ({item.risk_tag}) - {example?.request_text ?? "missing payload"}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </details>
+              </div>
+            ) : null}
+
+            {activeTab === "audit" ? (
+              <div className="panel">
+                <h3>Audit</h3>
+                <ul className="example-list">
+                  {auditLog.map((entry) => (
+                    <li key={entry.id}>
+                      [{entry.timestamp}] <strong>{entry.action}</strong>: {entry.detail}
+                    </li>
+                  ))}
+                </ul>
+                <details>
+                  <summary>Evaluation snapshots ({evalSnapshots.length})</summary>
+                  <ul className="example-list">
+                    {evalSnapshots.map((snapshot) => (
+                      <li key={snapshot.id}>
+                        [{snapshot.timestamp}] seen={snapshot.seenProcesses.join(", ")} | naive forgetting=
+                        {(snapshot.result.modes.naive.meanForgetting * 100).toFixed(2)}%
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              </div>
+            ) : null}
+          </>
+        )}
       </section>
     </main>
   );

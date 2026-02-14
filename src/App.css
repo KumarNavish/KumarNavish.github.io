@@ -52,6 +52,16 @@
   gap: 0.85rem;
 }
 
+.mode-row {
+  justify-content: space-between;
+}
+
+.compact-control {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 210px;
+}
+
 .control-grid label {
   display: grid;
   gap: 0.38rem;
@@ -82,6 +92,76 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.55rem;
+}
+
+.start-strip {
+  border: 1px solid #d8dfec;
+  border-radius: 16px;
+  background: linear-gradient(120deg, #fff8eb 0%, #f6fbff 100%);
+  padding: 1rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.start-strip h2 {
+  margin: 0;
+  font-size: 1.3rem;
+}
+
+.guided-grid {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+.guided-step {
+  border: 1px solid #d1deee;
+  border-radius: 14px;
+  background: #fbfdff;
+  padding: 0.9rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.guided-step.active {
+  border-color: #d26a1f;
+  box-shadow: inset 0 0 0 1px #d26a1f33;
+}
+
+.guided-step h3 {
+  margin: 0;
+  font-size: 1.02rem;
+}
+
+.result-card {
+  border: 1px solid #d1deee;
+  border-radius: 14px;
+  background: #f9fcff;
+  padding: 0.9rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.result-card h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.advanced-settings {
+  border: 1px solid #d1deee;
+  border-radius: 14px;
+  background: #fbfdff;
+  padding: 0.7rem 0.9rem;
+}
+
+.advanced-settings[open] {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.metric-grid {
+  display: grid;
+  gap: 0.35rem;
 }
 
 .tab-btn {
@@ -246,6 +326,10 @@ details summary {
   }
 
   .control-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .guided-grid {
     grid-template-columns: 1fr;
   }
 
