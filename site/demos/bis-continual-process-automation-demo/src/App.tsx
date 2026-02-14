@@ -154,25 +154,20 @@ function App() {
 
   const hasResult = Boolean(result)
   const previewBaselineDays = selectedSample?.ground_truth.baseline_cycle_time_days ?? null
-  const previewVolume = selectedSample?.ground_truth.volume_per_month ?? null
   const inferredTargetDays =
     previewBaselineDays !== null ? Math.max(1, Math.round(previewBaselineDays * 0.65)) : null
   const beforeCycleTime = impactSnapshot?.baselineDays ?? previewBaselineDays
   const afterCycleTime = impactSnapshot?.targetDays ?? inferredTargetDays
 
-  const totalArtifacts = impactSnapshot
-    ? impactSnapshot.outputCount + impactSnapshot.payloadCount
-    : null
-
-  const outcomeHeadline = impactSnapshot
-    ? impactSnapshot.cycleReductionPct !== null
-      ? `${impactSnapshot.cycleReductionPct}% faster target cycle`
+  const mainResult = impactSnapshot
+    ? impactSnapshot.cycleGainDays !== null
+      ? `${impactSnapshot.cycleGainDays} days faster turnaround`
       : `${impactSnapshot.monthlyHoursSaved} hours saved per month`
-    : 'From manual request to execution-ready package'
+    : 'Start automation to generate measurable results'
 
-  const outcomeSubline = impactSnapshot
-    ? `${impactSnapshot.monthlyHoursSaved} hrs/month impact with ${totalArtifacts ?? 0} ready handoff artifacts.`
-    : 'One run creates a charter, a process map, and payloads your team can use immediately.'
+  const resultSubline = impactSnapshot
+    ? `${impactSnapshot.monthlyHoursSaved} hrs/month impact with ${impactSnapshot.outputCount + impactSnapshot.payloadCount} ready artifacts.`
+    : 'You will get a charter, process map, and handoff payloads from this request.'
 
   const hintText = useMemo(() => {
     if (error) {
@@ -184,7 +179,7 @@ function App() {
     if (!result) {
       return 'Click Start automation.'
     }
-    return 'Automation complete.'
+    return 'Automation complete. Copy the package below.'
   }, [error, isRunning, result])
 
   function handleSampleChange(sampleId: string) {
@@ -214,7 +209,7 @@ function App() {
     setCopyStatus(null)
     setIsRunning(true)
 
-    await sleep(280)
+    await sleep(300)
 
     const nextResult = runIntakePipeline(sampleForRun, catalog)
     setResult(nextResult)
@@ -255,16 +250,17 @@ function App() {
     <main className="page-shell">
       <header className="hero">
         <p className="eyebrow">BIS Process Optimisation Copilot</p>
-        <h1>Convert a messy process request into a package your team can execute.</h1>
+        <h1>Turn one messy request into a ready automation package.</h1>
         <p className="hero-subhead">
-          This demo automates intake analysis and instantly produces real work artifacts for delivery.
+          You start with a real process pain point. In one click, you get a charter, a process map,
+          and payloads ready for Jira and ServiceNow.
         </p>
       </header>
 
       <section className="panel workspace-panel">
         <section className="control-pane">
-          <h2>1) Choose request</h2>
-          <p className="control-caption">Select a BIS workflow, then run automation.</p>
+          <h2>Start</h2>
+          <p className="control-caption">Choose a workflow, then click Start automation.</p>
 
           <section className="example-picker">
             <label htmlFor="example-select">Workflow example</label>
@@ -298,7 +294,7 @@ function App() {
           </details>
 
           <button className="primary-btn" onClick={() => void runPipeline()} disabled={!selectedSample || isRunning}>
-            {isRunning ? 'Running…' : '2) Start automation'}
+            {isRunning ? 'Running…' : 'Start automation'}
           </button>
 
           <p className="hint-text">{hintText}</p>
@@ -307,97 +303,64 @@ function App() {
         </section>
 
         <section className="result-pane" aria-live="polite">
+          <p className="moment-tag">{hasResult ? 'Automation complete' : 'Automation preview'}</p>
+          <h2>{hasResult ? 'Manual request converted into execution-ready output.' : 'Before automation vs after automation.'}</h2>
+
+          <section className="value-hero">
+            <p className="hero-label">Primary outcome</p>
+            <h3>{mainResult}</h3>
+            <p>{resultSubline}</p>
+          </section>
+
+          <article className={`reveal-card ${hasResult ? 'revealed' : ''}`}>
+            <p className="reveal-label">Cycle time</p>
+            <div className="reveal-track">
+              <section className="reveal-state before">
+                <span className="reveal-tag">Before</span>
+                <strong>{formatDays(beforeCycleTime)}</strong>
+                <small>manual follow-up and approvals</small>
+              </section>
+              <section className="reveal-state after">
+                <span className="reveal-tag">After</span>
+                <strong>{formatDays(afterCycleTime)}</strong>
+                <small>standard flow with automation handoff</small>
+              </section>
+            </div>
+          </article>
+
           {!result ? (
-            <section className="outcome-shell preview-shell">
-              <p className="moment-tag">Automation preview</p>
-              <h2>What changes after one run</h2>
-              <p className="outcome-lede">
-                Current intake is slow and hard to execute. Automation turns it into a standard package.
-              </p>
-              <ul className="quick-list">
-                <li>
-                  <strong>Current pain:</strong> {formatDays(previewBaselineDays)} cycle time and{' '}
-                  {metricToText(previewVolume)} requests per month.
-                </li>
-                <li>
-                  <strong>Automated output:</strong> Charter summary, process map, and handoff payloads.
-                </li>
-                <li>
-                  <strong>Business value:</strong> Faster turnaround with less manual coordination.
-                </li>
-              </ul>
-            </section>
+            <p className="placeholder-lede">Run once to generate charter, process map, and export payloads.</p>
           ) : (
-            <section className="outcome-shell live-shell">
-              <p className="moment-tag">Automation complete</p>
-              <h2>{outcomeHeadline}</h2>
-              <p className="outcome-lede">{outcomeSubline}</p>
-
-              <article className={`reveal-card ${hasResult ? 'revealed' : ''}`}>
-                <p className="reveal-label">Before vs After</p>
-                <div className="reveal-track">
-                  <section className="reveal-state before">
-                    <span className="reveal-tag">Before</span>
-                    <strong>{formatDays(beforeCycleTime)}</strong>
-                    <small>manual follow-up and approvals</small>
-                  </section>
-                  <section className="reveal-state after">
-                    <span className="reveal-tag">After</span>
-                    <strong>{formatDays(afterCycleTime)}</strong>
-                    <small>standard flow with automation handoff</small>
-                  </section>
-                </div>
-              </article>
-
-              <div className="metric-row">
-                <article>
-                  <span>Hours saved / month</span>
-                  <strong>{impactSnapshot.monthlyHoursSaved}</strong>
-                </article>
-                <article>
-                  <span>Ready artifacts</span>
-                  <strong>{totalArtifacts ?? 0}</strong>
-                </article>
-                <article>
-                  <span>Workflow type</span>
-                  <strong>{prettyCategory(result.triage.category)}</strong>
-                </article>
+            <section className="pack-panel">
+              <h3>Use this package now</h3>
+              <div className="outputs-actions">
+                <button className="primary-btn" onClick={() => void copyFullPack()}>
+                  Copy full package
+                </button>
+                <button className="secondary-btn" onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}>
+                  Copy Jira JSON
+                </button>
+                <button className="secondary-btn" onClick={() => copyJson('ServiceNow payload', result.exports.servicenow_record_create)}>
+                  Copy ServiceNow JSON
+                </button>
               </div>
 
-              <section className="handoff-strip">
-                <h3>3) Use this package now</h3>
-                <div className="outputs-actions">
-                  <button className="primary-btn" onClick={() => void copyFullPack()}>
-                    Copy full package
-                  </button>
-                  <button className="secondary-btn" onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}>
-                    Copy Jira JSON
-                  </button>
-                  <button className="secondary-btn" onClick={() => copyJson('ServiceNow payload', result.exports.servicenow_record_create)}>
-                    Copy ServiceNow JSON
-                  </button>
-                </div>
-              </section>
+              <div className="artifact-panel">
+                <section className="artifact-card">
+                  <h3>Charter summary</h3>
+                  <p>
+                    <strong>Problem:</strong> {result.charter.problem_statement}
+                  </p>
+                  <p>
+                    <strong>Next action:</strong> {result.triage.next_action}
+                  </p>
+                </section>
 
-              <details className="advanced-block preview-details">
-                <summary>Preview generated charter and process map</summary>
-                <div className="artifact-panel">
-                  <section className="artifact-card">
-                    <h3>Charter summary</h3>
-                    <p>
-                      <strong>Problem:</strong> {result.charter.problem_statement}
-                    </p>
-                    <p>
-                      <strong>Next action:</strong> {result.triage.next_action}
-                    </p>
-                  </section>
-
-                  <section className="artifact-card">
-                    <h3>To-be process map</h3>
-                    <MermaidDiagram title="To-be process" chart={result.toBeMermaid} />
-                  </section>
-                </div>
-              </details>
+                <section className="artifact-card">
+                  <h3>Process map</h3>
+                  <MermaidDiagram title="To-be process" chart={result.toBeMermaid} />
+                </section>
+              </div>
 
               <details className="advanced-block">
                 <summary>Show technical details</summary>
