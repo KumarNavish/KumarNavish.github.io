@@ -1,6 +1,7 @@
 import { useState } from "react";
 import "./App.css";
 import { runRouterIncrementalDemo } from "./cl/router";
+import { PipelinePanel } from "./components/pipeline_panel";
 import { WebLlmPanel } from "./components/webllm_panel";
 import { embed } from "./retrieval/embed_client";
 
@@ -73,6 +74,7 @@ function App() {
             <pre className="summary summary-block">{routerSummary}</pre>
           ) : null}
         </div>
+        <PipelinePanel />
         <WebLlmPanel />
       </section>
     </main>

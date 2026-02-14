@@ -83,6 +83,11 @@
   font-size: 1rem;
 }
 
+.smoke-box h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
 .inline-toggle {
   display: flex;
   align-items: center;
@@ -108,4 +113,14 @@
 .warning {
   color: #9b2f1f;
   margin: 0;
+}
+
+.pipeline-input {
+  min-height: 92px;
+  width: 100%;
+  resize: vertical;
+  border-radius: 8px;
+  border: 1px solid #c3cfdf;
+  padding: 0.55rem;
+  font-family: inherit;
 }
