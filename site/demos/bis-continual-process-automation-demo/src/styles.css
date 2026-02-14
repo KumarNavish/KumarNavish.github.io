@@ -110,12 +110,20 @@ select,
 textarea {
   background: #fafcff;
   color: #1e3558;
+  width: 100%;
 }
 
 textarea {
   resize: vertical;
   min-height: 118px;
   line-height: 1.45;
+}
+
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible {
+  outline: 2px solid #3f73b3;
+  outline-offset: 2px;
 }
 
 button {
@@ -162,6 +170,64 @@ button:disabled {
   margin-top: 0.4rem;
   color: #3c5b86;
   font-size: 0.86rem;
+}
+
+.example-picker {
+  margin-top: 0.72rem;
+  border: 1px solid #d6dfec;
+  border-radius: 10px;
+  background: #f5f8ff;
+  padding: 0.52rem 0.56rem 0.58rem;
+}
+
+.example-picker > label {
+  margin: 0;
+  display: block;
+  color: #2f4d79;
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.select-shell {
+  position: relative;
+  margin-top: 0.38rem;
+  border: 1px solid #bfd0e6;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.select-shell:focus-within {
+  border-color: #3f73b3;
+  box-shadow: 0 0 0 3px rgba(63, 115, 179, 0.14);
+}
+
+.example-select {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 0.54rem 2rem 0.54rem 0.66rem;
+  background: transparent;
+  color: #1e3558;
+}
+
+.example-select:focus-visible {
+  outline: none;
+}
+
+.select-caret {
+  position: absolute;
+  right: 0.62rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #43638d;
+  pointer-events: none;
+  font-size: 0.85rem;
+}
+
+.field-help {
+  margin-top: 0.34rem;
+  color: #4a6993;
+  font-size: 0.78rem;
 }
 
 .intake-controls .primary-btn {
