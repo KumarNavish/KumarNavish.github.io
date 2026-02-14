@@ -1,0 +1,58 @@
+{
+  "categories": [
+    {
+      "id": "procurement_approvals",
+      "description": "Purchase approvals stall across finance, budget owner, and compliance checkpoints.",
+      "typical_automation_patterns": [
+        "Form normalization with mandatory fields",
+        "Rule-based routing by spend band",
+        "SLA reminders with escalation"
+      ]
+    },
+    {
+      "id": "vendor_onboarding_compliance",
+      "description": "Vendor setup is delayed by fragmented KYC, contract, and risk checks.",
+      "typical_automation_patterns": [
+        "Checklist orchestration across teams",
+        "Document completeness validation",
+        "Risk-score driven approval routing"
+      ]
+    },
+    {
+      "id": "access_provisioning",
+      "description": "User access requests wait on multi-step approvals and manual ticket updates.",
+      "typical_automation_patterns": [
+        "Identity form parsing",
+        "Approval chain automation",
+        "Ticket status sync with IAM events"
+      ]
+    },
+    {
+      "id": "monthly_reporting",
+      "description": "Recurring reporting depends on manual extraction and spreadsheet consolidation.",
+      "typical_automation_patterns": [
+        "Scheduled data pulls",
+        "Template-driven report assembly",
+        "Exception flagging and owner notifications"
+      ]
+    },
+    {
+      "id": "incident_escalation",
+      "description": "Operational incidents lose time during handoff and unclear severity ownership.",
+      "typical_automation_patterns": [
+        "Severity classification templates",
+        "On-call routing and paging",
+        "Incident timeline audit logging"
+      ]
+    },
+    {
+      "id": "travel_expense_approvals",
+      "description": "Travel and expense approvals are slowed by policy checks and missing receipts.",
+      "typical_automation_patterns": [
+        "Policy rule validation",
+        "Auto-request for missing evidence",
+        "Reimbursement workflow triggers"
+      ]
+    }
+  ]
+}
