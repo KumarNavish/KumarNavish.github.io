@@ -4,6 +4,7 @@ import {
   fetchLatestRunApi,
   fetchMetricsApi,
   fetchProfileApi,
+  fetchProvenanceApi,
   fetchProjectsApi,
   type ProjectItem,
 } from '../lib/api'
@@ -20,6 +21,7 @@ interface DashboardData {
   profile: Awaited<ReturnType<typeof fetchProfileApi>>
   metrics: Awaited<ReturnType<typeof fetchMetricsApi>>
   latestRun: Awaited<ReturnType<typeof fetchLatestRunApi>>
+  provenance: Awaited<ReturnType<typeof fetchProvenanceApi>>
   projects: Awaited<ReturnType<typeof fetchProjectsApi>>
 }
 
@@ -45,11 +47,13 @@ export function DashboardPage() {
         fetchProfileApi(),
         fetchMetricsApi(),
         fetchLatestRunApi(),
+        fetchProvenanceApi(),
         fetchProjectsApi(),
-      ]).then(([profile, metrics, latestRun, projects]) => ({
+      ]).then(([profile, metrics, latestRun, provenance, projects]) => ({
         profile,
         metrics,
         latestRun,
+        provenance,
         projects,
       })),
     [],
@@ -82,12 +86,15 @@ export function DashboardPage() {
     )
   }
 
-  const { profile, metrics, latestRun, projects } = state.data
+  const { profile, metrics, latestRun, provenance, projects } = state.data
   const featured = profile.featured.projects.length
     ? profile.featured.projects
     : projects.items.filter((project) => project.featured).slice(0, 4)
   const focusTopics = uniqueProjectTopics(projects.items).slice(0, 8)
-  const runUrl = latestRun.run.action_run_url
+  const runUrl = latestRun.run.action_run_url ?? provenance.action_run_url
+  const sources = Object.entries(profile.source_provenance)
+    .map(([name, source]) => `${name}: ${source ?? 'n/a'}`)
+    .join(' · ')
 
   return (
     <div className="page">
@@ -147,6 +154,31 @@ export function DashboardPage() {
             <strong>{latestRun.run.git_sha.slice(0, 12)}</strong>
           </p>
         </div>
+      </section>
+
+      <section className="panel">
+        <header className="panel-header">
+          <h2>Provenance</h2>
+        </header>
+        <div className="kv-grid">
+          <p>
+            <span>Data sources</span>
+            <strong>{compactList(Object.keys(profile.source_provenance), 4)}</strong>
+          </p>
+          <p>
+            <span>Last sync</span>
+            <strong>{formatDateTime(profile.last_sync.last_run_timestamp)}</strong>
+          </p>
+          <p>
+            <span>Git SHA</span>
+            <strong>{provenance.git_sha.slice(0, 12)}</strong>
+          </p>
+          <p>
+            <span>Run link</span>
+            <strong>{runUrl ? 'available' : 'local run'}</strong>
+          </p>
+        </div>
+        <p className="meta-line">{sources}</p>
       </section>
 
       <section className="panel">
