@@ -33,6 +33,20 @@ interface RegressionSuiteRow {
   mean_drop: number
 }
 
+interface ImpactRationale {
+  monthly_volume: number | null
+  cycle_time_days: number | null
+  manual_steps: number
+  confidence: 'high' | 'medium' | 'low'
+}
+
+interface DispatchRecord {
+  dispatch_id: string
+  timestamp: string
+  destinations: string[]
+}
+
+type ArtifactTab = 'charter' | 'map' | 'blueprint' | 'export'
 type StageState = 'pending' | 'active' | 'done'
 
 const PRESET_OPTIONS: Array<{ id: ReplayPreset; label: string }> = [
@@ -42,10 +56,17 @@ const PRESET_OPTIONS: Array<{ id: ReplayPreset; label: string }> = [
 ]
 
 const STAGES = [
-  'Understand the request context',
-  'Generate charter, maps, and blueprint',
-  'Prepare export payloads for delivery tools',
+  'Read intake context',
+  'Generate optimisation artifacts',
+  'Package delivery payloads',
 ] as const
+
+const ARTIFACT_TABS: Array<{ id: ArtifactTab; label: string }> = [
+  { id: 'charter', label: 'Charter' },
+  { id: 'map', label: 'Process map' },
+  { id: 'blueprint', label: 'Blueprint' },
+  { id: 'export', label: 'Export' },
+]
 
 const DRIFT_REPLACEMENTS: Array<[RegExp, string]> = [
   [/approval/gi, 'sign-off'],
@@ -101,6 +122,34 @@ function prettyCategory(value: string): string {
 
 function presetLabel(preset: ReplayPreset): string {
   return PRESET_OPTIONS.find((option) => option.id === preset)?.label ?? preset
+}
+
+function nextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => resolve())
+  })
+}
+
+function buildImpactRationale(result: ReturnType<typeof runIntakePipeline>): ImpactRationale {
+  const monthlyVolume =
+    result.extracted.volume_per_month ?? result.sample.ground_truth.volume_per_month ?? null
+  const cycleTimeDays =
+    result.extracted.cycle_time_days ?? result.sample.ground_truth.baseline_cycle_time_days ?? null
+  const manualSteps = result.extracted.manual_step_count
+
+  let confidence: ImpactRationale['confidence'] = 'low'
+  if (monthlyVolume !== null && cycleTimeDays !== null) {
+    confidence = 'high'
+  } else if (monthlyVolume !== null || cycleTimeDays !== null) {
+    confidence = 'medium'
+  }
+
+  return {
+    monthly_volume: monthlyVolume,
+    cycle_time_days: cycleTimeDays,
+    manual_steps: manualSteps,
+    confidence,
+  }
 }
 
 function runPresetRegressionSuite(
@@ -169,15 +218,21 @@ function App() {
   const [samples, setSamples] = useState<IntakeSample[]>([])
   const [catalog, setCatalog] = useState<CategoryCatalog | null>(null)
   const [selectedSampleId, setSelectedSampleId] = useState<string>('')
+  const [requestText, setRequestText] = useState('')
 
   const [preset, setPreset] = useState<ReplayPreset>('balanced')
   const [simulateDrift, setSimulateDrift] = useState(false)
   const [memoryReplaySize, setMemoryReplaySize] = useState(5)
 
   const [result, setResult] = useState<ReturnType<typeof runIntakePipeline> | null>(null)
+  const [impactRationale, setImpactRationale] = useState<ImpactRationale | null>(null)
   const [predictedCategory, setPredictedCategory] = useState<IntakeCategory | null>(null)
-  const [copyStatus, setCopyStatus] = useState<string | null>(null)
 
+  const [copyStatus, setCopyStatus] = useState<string | null>(null)
+  const [dispatchStatus, setDispatchStatus] = useState<string | null>(null)
+  const [dispatchLog, setDispatchLog] = useState<DispatchRecord[]>([])
+
+  const [activeTab, setActiveTab] = useState<ArtifactTab>('charter')
   const [isRunning, setIsRunning] = useState(false)
   const [stageIndex, setStageIndex] = useState<number>(-1)
 
@@ -189,7 +244,6 @@ function App() {
 
   const modelRef = useRef<OnlineCategoryModel | null>(null)
   const memoryRef = useRef<ReplayMemory | null>(null)
-  const runTimerRef = useRef<number | null>(null)
 
   useEffect(() => {
     Promise.all([loadIntakeSamples(), loadCategoryCatalog()])
@@ -199,6 +253,7 @@ function App() {
 
         const firstSample = loadedSamples[0]
         setSelectedSampleId(firstSample?.id ?? '')
+        setRequestText(firstSample?.text ?? '')
 
         const model = new OnlineCategoryModel()
         const warmupExamples = loadedSamples
@@ -229,20 +284,33 @@ function App() {
       })
   }, [])
 
-  useEffect(() => {
-    return () => {
-      if (runTimerRef.current !== null) {
-        window.clearInterval(runTimerRef.current)
-      }
-    }
-  }, [])
-
   const selectedSample = useMemo(
     () => samples.find((sample) => sample.id === selectedSampleId) ?? samples[0] ?? null,
     [samples, selectedSampleId],
   )
 
-  const stageState = (index: number): StageState => {
+  function handleSampleChange(sampleId: string) {
+    setSelectedSampleId(sampleId)
+    const nextSample = samples.find((sample) => sample.id === sampleId)
+    if (nextSample) {
+      setRequestText(nextSample.text)
+    }
+  }
+
+  const nextHint = useMemo(() => {
+    if (error) {
+      return 'Data could not be loaded. Refresh once the source is available.'
+    }
+    if (isRunning) {
+      return `Running step ${Math.min(stageIndex + 1, STAGES.length)} of ${STAGES.length}...`
+    }
+    if (!result) {
+      return 'Click Start demo to generate a full optimisation pack.'
+    }
+    return 'Review the deliverables and send the pack to your workflow tools.'
+  }, [error, isRunning, stageIndex, result])
+
+  function stageState(index: number): StageState {
     if (stageIndex < 0) {
       return 'pending'
     }
@@ -255,69 +323,41 @@ function App() {
     return 'pending'
   }
 
-  const nextHint = useMemo(() => {
-    if (error) {
-      return 'Data could not be loaded. Refresh once the source is available.'
-    }
-    if (!result) {
-      return 'Choose an intake sample and click Start demo.'
-    }
-    if (isRunning) {
-      return 'Generating structured deliverables...'
-    }
-    return 'Review the outputs and copy payloads into your delivery workflow.'
-  }, [error, isRunning, result])
-
-  function clearRunTimer() {
-    if (runTimerRef.current !== null) {
-      window.clearInterval(runTimerRef.current)
-      runTimerRef.current = null
-    }
-  }
-
-  function runPipeline(sample: IntakeSample | null) {
-    if (!sample || !catalog || !modelRef.current) {
+  async function runPipeline() {
+    if (!selectedSample || !catalog || !modelRef.current) {
       return
     }
 
-    const adaptedSample = withOptionalDrift(sample, simulateDrift)
-    const nextResult = runIntakePipeline(adaptedSample, catalog)
-    const prediction = modelRef.current.predict(adaptedSample.text)
+    const normalizedText = requestText.trim() || selectedSample.text
+    const baseSample: IntakeSample = {
+      ...selectedSample,
+      text: normalizedText,
+    }
 
-    setResult(nextResult)
-    setPredictedCategory(prediction)
-    setCorrectionCategory(prediction)
+    setIsRunning(true)
+    setStageIndex(0)
+    setCopyStatus(null)
+    setDispatchStatus(null)
     setUpdateSummary(null)
     setSuiteRows([])
-    setCopyStatus(null)
 
-    clearRunTimer()
-    setStageIndex(0)
-    setIsRunning(true)
+    const adaptedSample = withOptionalDrift(baseSample, simulateDrift)
+    const prediction = modelRef.current.predict(adaptedSample.text)
+    setPredictedCategory(prediction)
+    setCorrectionCategory(prediction)
 
-    runTimerRef.current = window.setInterval(() => {
-      setStageIndex((current) => {
-        if (current >= STAGES.length - 1) {
-          clearRunTimer()
-          setIsRunning(false)
-          return current
-        }
+    await nextPaint()
 
-        const next = current + 1
-        if (next >= STAGES.length - 1) {
-          clearRunTimer()
-          setIsRunning(false)
-        }
-        return next
-      })
-    }, 650)
-  }
+    setStageIndex(1)
+    const nextResult = runIntakePipeline(adaptedSample, catalog)
+    setResult(nextResult)
+    setImpactRationale(buildImpactRationale(nextResult))
+    setActiveTab('charter')
 
-  function startDemo() {
-    if (!selectedSample) {
-      return
-    }
-    runPipeline(selectedSample)
+    await nextPaint()
+
+    setStageIndex(2)
+    setIsRunning(false)
   }
 
   async function copyJson(label: string, payload: unknown) {
@@ -329,6 +369,24 @@ function App() {
     }
   }
 
+  function sendToDeliveryQueue() {
+    if (!result) {
+      return
+    }
+
+    const timestamp = new Date().toLocaleString()
+    const dispatchId = `BIS-${Date.now().toString(36).toUpperCase()}`
+
+    const entry: DispatchRecord = {
+      dispatch_id: dispatchId,
+      timestamp,
+      destinations: ['Jira', 'ServiceNow', 'Process Tracker'],
+    }
+
+    setDispatchLog((prev) => [entry, ...prev].slice(0, 5))
+    setDispatchStatus(`Pack ${dispatchId} sent at ${timestamp}`)
+  }
+
   function applyCorrection() {
     if (!selectedSample || !modelRef.current || !memoryRef.current) {
       return
@@ -336,7 +394,11 @@ function App() {
 
     const model = modelRef.current
     const memory = memoryRef.current
-    const adaptedSample = withOptionalDrift(selectedSample, simulateDrift)
+    const sampleForUpdate: IntakeSample = {
+      ...selectedSample,
+      text: requestText.trim() || selectedSample.text,
+    }
+    const adaptedSample = withOptionalDrift(sampleForUpdate, simulateDrift)
     const corrected = asTrainingExample(adaptedSample, correctionCategory)
 
     const evaluationSet = samples.map((sample) => withOptionalDrift(sample, simulateDrift))
@@ -382,229 +444,135 @@ function App() {
     setSuiteRows(rows)
   }
 
-  const revealSummary = result !== null && stageIndex >= 0
-  const revealArtifacts = result !== null && stageIndex >= 1
-  const revealExports = result !== null && stageIndex >= 2
-
   return (
     <main className="page-shell">
       <header className="hero">
         <p className="eyebrow">BIS Process Optimisation Copilot</p>
-        <h1>From messy intake to delivery-ready automation artifacts in under a minute.</h1>
+        <h1>Turn one messy internal request into delivery-ready automation in under a minute.</h1>
         <p className="hero-subhead">
-          Turn one raw request into a project charter, process redesign map, automation blueprint,
-          and export payloads your team can execute.
+          Generate a decision snapshot, project charter, process redesign map, and export payloads
+          your team can run immediately.
         </p>
-        <div className="hero-actions">
-          <button className="primary-btn hero-btn" onClick={startDemo} disabled={!selectedSample || isRunning}>
-            {isRunning ? 'Generating...' : 'Start demo'}
-          </button>
-          <p className="hero-hint">{nextHint}</p>
-        </div>
       </header>
 
-      <section className="main-grid">
-        <aside className="left-rail">
-          <section className="panel">
-            <h2>1. Intake</h2>
-            <label>
-              Select request example
-              <select
-                value={selectedSampleId}
-                onChange={(event) => setSelectedSampleId(event.target.value)}
-              >
-                {samples.map((sample) => (
-                  <option key={sample.id} value={sample.id}>
-                    {sample.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            {selectedSample ? (
-              <article className="request-preview">
-                <span>{selectedSample.channel.replace('_', ' ')}</span>
-                <p>{selectedSample.text}</p>
-              </article>
-            ) : null}
-
-            {error ? <p className="error-text">{error}</p> : null}
-            {copyStatus ? <p className="copy-status">{copyStatus}</p> : null}
-          </section>
-
-          <section className="panel">
-            <h2>2. Guided Flow</h2>
-            <ol className="stage-list">
-              {STAGES.map((stage, index) => (
-                <li key={stage} className={`stage-item ${stageState(index)}`}>
-                  <strong>{index + 1}</strong>
-                  <span>{stage}</span>
-                </li>
+      <section className="workspace">
+        <aside className="intake-panel">
+          <h2>Intake</h2>
+          <label>
+            Scenario
+            <select
+              value={selectedSampleId}
+              onChange={(event) => handleSampleChange(event.target.value)}
+            >
+              {samples.map((sample) => (
+                <option key={sample.id} value={sample.id}>
+                  {sample.title}
+                </option>
               ))}
-            </ol>
-          </section>
+            </select>
+          </label>
 
-          <details className="expert-panel">
-            <summary>Expert mode (optional)</summary>
-            <div className="expert-content">
-              <p className="status-text">
-                Optional controls for retention behavior and correction testing.
-              </p>
+          <label>
+            Incoming request
+            <textarea
+              value={requestText}
+              onChange={(event) => setRequestText(event.target.value)}
+              rows={7}
+            />
+          </label>
 
-              <label>
-                Update strategy
-                <select
-                  value={preset}
-                  onChange={(event) => setPreset(event.target.value as ReplayPreset)}
-                >
-                  {PRESET_OPTIONS.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+          <button className="primary-btn" onClick={() => void runPipeline()} disabled={!selectedSample || isRunning}>
+            {isRunning ? 'Generating...' : 'Start demo'}
+          </button>
 
-              <label className="checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={simulateDrift}
-                  onChange={(event) => setSimulateDrift(event.target.checked)}
-                />
-                Simulate wording/policy drift
-              </label>
+          <p className="hint-text">{nextHint}</p>
+          {error ? <p className="error-text">{error}</p> : null}
+          {copyStatus ? <p className="status-text">{copyStatus}</p> : null}
+          {dispatchStatus ? <p className="status-text success-text">{dispatchStatus}</p> : null}
 
-              <label>
-                Replay memory size: {memoryReplaySize}
-                <input
-                  type="range"
-                  min={1}
-                  max={10}
-                  value={memoryReplaySize}
-                  onChange={(event) => setMemoryReplaySize(Number(event.target.value))}
-                />
-              </label>
-
-              <div className="expert-row">
-                <label>
-                  Correct predicted category
-                  <select
-                    value={correctionCategory}
-                    onChange={(event) => setCorrectionCategory(event.target.value as IntakeCategory)}
-                  >
-                    {intakeCategories.map((category) => (
-                      <option key={category} value={category}>
-                        {prettyCategory(category)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button className="secondary-btn" onClick={applyCorrection}>
-                  Apply correction
-                </button>
-                <button className="secondary-btn" onClick={runRegressionSuite}>
-                  Run regression suite
-                </button>
-              </div>
-
-              {predictedCategory ? (
-                <p className="status-text">
-                  Current prediction: <strong>{prettyCategory(predictedCategory)}</strong>
-                </p>
-              ) : null}
-
-              {updateSummary ? (
-                <p className="status-text">
-                  {presetLabel(updateSummary.preset)} accuracy: {formatPct(updateSummary.before_accuracy)}
-                  {' -> '}
-                  {formatPct(updateSummary.after_accuracy)}. Updated prediction:{' '}
-                  {prettyCategory(updateSummary.predicted_after)}
-                </p>
-              ) : null}
-
-              {suiteRows.length > 0 ? (
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Preset</th>
-                        <th>Old accuracy before</th>
-                        <th>Old accuracy after</th>
-                        <th>Retention</th>
-                        <th>Mean regression drop</th>
-                        <th>Overall accuracy</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {suiteRows.map((row) => (
-                        <tr key={row.preset}>
-                          <td>{presetLabel(row.preset)}</td>
-                          <td>{formatPct(row.before_old_accuracy)}</td>
-                          <td>{formatPct(row.after_old_accuracy)}</td>
-                          <td>{formatPct(row.retention_ratio)}</td>
-                          <td>{formatPct(row.mean_drop)}</td>
-                          <td>{formatPct(row.overall_accuracy)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : null}
-            </div>
-          </details>
+          <ol className="stage-list">
+            {STAGES.map((stage, index) => (
+              <li key={stage} className={`stage-item ${stageState(index)}`}>
+                <strong>{index + 1}</strong>
+                <span>{stage}</span>
+              </li>
+            ))}
+          </ol>
         </aside>
 
-        <section className="right-rail">
+        <section className="deliverable-panel">
           {!result ? (
-            <section className="panel empty-state">
-              <h2>3. Deliverables</h2>
+            <section className="empty-state">
+              <h2>Deliverables</h2>
               <p>
-                Click <strong>Start demo</strong> to generate the full optimization pack.
+                Click <strong>Start demo</strong> to generate all artifacts in one pass.
               </p>
               <ul className="outcome-list">
                 <li>Decision snapshot with priority and expected savings</li>
-                <li>Project charter with baseline and target metrics</li>
-                <li>As-is/to-be process map and implementation blueprint</li>
-                <li>Copy-ready Jira, ServiceNow, and tracker payloads</li>
+                <li>Lean-style charter with baseline and target metrics</li>
+                <li>As-is/to-be process map plus implementation blueprint</li>
+                <li>Jira, ServiceNow, and process tracker payloads</li>
               </ul>
             </section>
           ) : (
             <>
-              {revealSummary ? (
-                <section className="panel">
-                  <h2>3. Decision Snapshot</h2>
-                  <div className="metric-grid">
-                    <article>
-                      <span>Recommended workflow</span>
-                      <strong>{prettyCategory(result.triage.category)}</strong>
-                    </article>
-                    <article>
-                      <span>Delivery priority</span>
-                      <strong>{result.triage.priority}</strong>
-                    </article>
-                    <article>
-                      <span>Risk level</span>
-                      <strong>{prettyCategory(result.triage.risk_level)}</strong>
-                    </article>
-                    <article>
-                      <span>Estimated hours saved per month</span>
-                      <strong>{result.triage.est_savings_hours_per_month}</strong>
-                    </article>
-                  </div>
-                </section>
+              <section className="decision-strip">
+                <article>
+                  <span>Recommended workflow</span>
+                  <strong>{prettyCategory(result.triage.category)}</strong>
+                </article>
+                <article>
+                  <span>Priority</span>
+                  <strong>{result.triage.priority}</strong>
+                </article>
+                <article>
+                  <span>Risk level</span>
+                  <strong>{prettyCategory(result.triage.risk_level)}</strong>
+                </article>
+                <article>
+                  <span>Savings (hours/month)</span>
+                  <strong>{result.triage.est_savings_hours_per_month}</strong>
+                </article>
+              </section>
+
+              {impactRationale ? (
+                <details className="rationale-panel">
+                  <summary>Why this savings estimate</summary>
+                  <p>
+                    Estimate is derived from {impactRationale.manual_steps} manual touchpoints,
+                    monthly volume of {metricToText(impactRationale.monthly_volume)}, and baseline
+                    cycle time of {metricToText(impactRationale.cycle_time_days)} days.
+                  </p>
+                  <p>
+                    Confidence: <strong>{prettyCategory(impactRationale.confidence)}</strong>
+                  </p>
+                </details>
               ) : null}
 
-              {revealArtifacts ? (
-                <>
-                  <section className="panel">
-                    <h2>4. Project Charter</h2>
+              <nav className="artifact-tabs" aria-label="Deliverable views">
+                {ARTIFACT_TABS.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
+                    onClick={() => setActiveTab(tab.id)}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </nav>
+
+              <section className="artifact-view">
+                {activeTab === 'charter' ? (
+                  <div className="artifact-block">
+                    <h2>Project Charter</h2>
                     <p>
                       <strong>Problem statement:</strong> {result.charter.problem_statement}
                     </p>
                     <p>
-                      <strong>Recommended next action:</strong> {result.triage.next_action}
+                      <strong>Next action:</strong> {result.triage.next_action}
                     </p>
-                    <div className="metric-grid compact">
+                    <div className="metric-grid">
                       <article>
                         <span>Baseline cycle time (days)</span>
                         <strong>{metricToText(result.charter.baseline_metrics.cycle_time_days)}</strong>
@@ -632,22 +600,26 @@ function App() {
                     >
                       Copy charter JSON
                     </button>
-                  </section>
+                  </div>
+                ) : null}
 
-                  <section className="panel">
-                    <h2>5. Process Redesign</h2>
+                {activeTab === 'map' ? (
+                  <div className="artifact-block">
+                    <h2>Process Redesign</h2>
                     <p className="section-note">
-                      Compare the current flow against the optimized future-state process.
+                      Compare the current flow with the optimized future-state design.
                     </p>
                     <div className="map-grid">
-                      <MermaidDiagram title="As-is process" chart={result.asIsMermaid} />
-                      <MermaidDiagram title="To-be process" chart={result.toBeMermaid} />
+                      <MermaidDiagram title="As-is" chart={result.asIsMermaid} />
+                      <MermaidDiagram title="To-be" chart={result.toBeMermaid} />
                     </div>
-                  </section>
+                  </div>
+                ) : null}
 
-                  <section className="panel">
-                    <h2>6. Automation Blueprint</h2>
-                    <div className="two-col-list">
+                {activeTab === 'blueprint' ? (
+                  <div className="artifact-block">
+                    <h2>Automation Blueprint</h2>
+                    <div className="blueprint-grid">
                       <article>
                         <h3>Connected systems</h3>
                         <div className="chip-row">
@@ -656,7 +628,6 @@ function App() {
                           ))}
                         </div>
                       </article>
-
                       <article>
                         <h3>Automation sequence</h3>
                         <ol className="step-list">
@@ -683,50 +654,171 @@ function App() {
                     >
                       Copy blueprint JSON
                     </button>
-                  </section>
-                </>
-              ) : null}
-
-              {revealExports ? (
-                <section className="panel">
-                  <h2>7. Export Pack</h2>
-                  <p className="section-note">
-                    Copy these payloads into your project tracker and service workflow tools.
-                  </p>
-
-                  <div className="button-row">
-                    <button
-                      className="secondary-btn"
-                      onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}
-                    >
-                      Copy Jira payload
-                    </button>
-                    <button
-                      className="secondary-btn"
-                      onClick={() =>
-                        copyJson('ServiceNow payload', result.exports.servicenow_record_create)
-                      }
-                    >
-                      Copy ServiceNow payload
-                    </button>
-                    <button
-                      className="secondary-btn"
-                      onClick={() => copyJson('Tracker payload', result.exports.process_tracker_row)}
-                    >
-                      Copy tracker payload
-                    </button>
                   </div>
+                ) : null}
 
-                  <p className="integration-note">
-                    Integration note: Payloads are shaped like ticketing and tracker APIs to show
-                    direct transferability.
-                  </p>
-                </section>
-              ) : null}
+                {activeTab === 'export' ? (
+                  <div className="artifact-block">
+                    <h2>Export Pack</h2>
+                    <p className="section-note">
+                      Copy payloads or send the pack to downstream delivery tools.
+                    </p>
+
+                    <div className="button-row">
+                      <button
+                        className="secondary-btn"
+                        onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}
+                      >
+                        Copy Jira payload
+                      </button>
+                      <button
+                        className="secondary-btn"
+                        onClick={() =>
+                          copyJson('ServiceNow payload', result.exports.servicenow_record_create)
+                        }
+                      >
+                        Copy ServiceNow payload
+                      </button>
+                      <button
+                        className="secondary-btn"
+                        onClick={() => copyJson('Tracker payload', result.exports.process_tracker_row)}
+                      >
+                        Copy tracker payload
+                      </button>
+                    </div>
+
+                    <button className="primary-btn send-btn" onClick={sendToDeliveryQueue}>
+                      Send pack to delivery queue
+                    </button>
+
+                    {dispatchLog.length > 0 ? (
+                      <div className="dispatch-log">
+                        <h3>Recent dispatches</h3>
+                        <ul>
+                          {dispatchLog.map((entry) => (
+                            <li key={entry.dispatch_id}>
+                              <strong>{entry.dispatch_id}</strong> · {entry.timestamp} ·{' '}
+                              {entry.destinations.join(', ')}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </section>
             </>
           )}
         </section>
       </section>
+
+      <details className="expert-panel">
+        <summary>Governance and safety checks (optional)</summary>
+        <div className="expert-content">
+          <p className="status-text">
+            Use these controls when validating update safety and non-regression behavior.
+          </p>
+
+          <label>
+            Update policy
+            <select
+              value={preset}
+              onChange={(event) => setPreset(event.target.value as ReplayPreset)}
+            >
+              {PRESET_OPTIONS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={simulateDrift}
+              onChange={(event) => setSimulateDrift(event.target.checked)}
+            />
+            Simulate wording and policy drift
+          </label>
+
+          <label>
+            Historical case sampling: {memoryReplaySize}
+            <input
+              type="range"
+              min={1}
+              max={10}
+              value={memoryReplaySize}
+              onChange={(event) => setMemoryReplaySize(Number(event.target.value))}
+            />
+          </label>
+
+          <div className="expert-row">
+            <label>
+              Correct predicted category
+              <select
+                value={correctionCategory}
+                onChange={(event) => setCorrectionCategory(event.target.value as IntakeCategory)}
+              >
+                {intakeCategories.map((category) => (
+                  <option key={category} value={category}>
+                    {prettyCategory(category)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button className="secondary-btn" onClick={applyCorrection}>
+              Apply correction
+            </button>
+            <button className="secondary-btn" onClick={runRegressionSuite}>
+              Run regression suite
+            </button>
+          </div>
+
+          {predictedCategory ? (
+            <p className="status-text">
+              Current prediction: <strong>{prettyCategory(predictedCategory)}</strong>
+            </p>
+          ) : null}
+
+          {updateSummary ? (
+            <p className="status-text">
+              {presetLabel(updateSummary.preset)} accuracy: {formatPct(updateSummary.before_accuracy)}{' '}
+              {'->'} {formatPct(updateSummary.after_accuracy)}. Updated prediction:{' '}
+              {prettyCategory(updateSummary.predicted_after)}
+            </p>
+          ) : null}
+
+          {suiteRows.length > 0 ? (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Policy</th>
+                    <th>Old accuracy before</th>
+                    <th>Old accuracy after</th>
+                    <th>Retention</th>
+                    <th>Mean regression drop</th>
+                    <th>Overall accuracy</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {suiteRows.map((row) => (
+                    <tr key={row.preset}>
+                      <td>{presetLabel(row.preset)}</td>
+                      <td>{formatPct(row.before_old_accuracy)}</td>
+                      <td>{formatPct(row.after_old_accuracy)}</td>
+                      <td>{formatPct(row.retention_ratio)}</td>
+                      <td>{formatPct(row.mean_drop)}</td>
+                      <td>{formatPct(row.overall_accuracy)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
+      </details>
     </main>
   )
 }
