@@ -4,7 +4,7 @@
     {
       "process_id": "access_request",
       "display_name": "Access Entitlement Change",
-      "description": "Handle joiner/mover/leaver access changes for internal platforms with governance controls.",
+      "description": "Handle joiner/mover/leaver access changes for BIS internal policy, risk, and operations platforms.",
       "required_fields": [
         "subject_user",
         "system_name",
@@ -43,7 +43,7 @@
     {
       "process_id": "vendor_onboarding",
       "display_name": "Third-Party Due Diligence Intake",
-      "description": "Screen, assess, and onboard external vendors with sanctions, security, and compliance checks.",
+      "description": "Screen, assess, and onboard external vendors with sanctions, security, and compliance checks for BIS operations.",
       "required_fields": [
         "vendor_name",
         "country",
@@ -83,7 +83,7 @@
     {
       "process_id": "purchase_request",
       "display_name": "Policy-Compliant Procurement Request",
-      "description": "Route spend requests through budget, procurement, and policy controls.",
+      "description": "Route BIS spend requests through budget, procurement, and policy controls.",
       "required_fields": [
         "requester_department",
         "item_description",
@@ -122,7 +122,7 @@
     {
       "process_id": "incident_escalation",
       "display_name": "Critical Operations Incident Escalation",
-      "description": "Escalate high-impact internal service incidents with clear ownership, severity, and SLA controls.",
+      "description": "Escalate high-impact BIS internal service incidents with clear ownership, severity, and SLA controls.",
       "required_fields": [
         "incident_id",
         "severity",

@@ -2,7 +2,7 @@
   {
     "id": "incident_escalation-test-001",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-31806 for internal-auth-gateway due to delayed regulatory reporting jobs; treat as sev2.",
+    "request_text": "Escalate INC-31806 for internal-auth-gateway due to delayed central reporting jobs; treat as sev2 and start major-incident protocol.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
@@ -19,7 +19,7 @@
         "incident_id": "INC-31806",
         "severity": "sev2",
         "service_name": "internal-auth-gateway",
-        "customer_impact": "delayed regulatory reporting jobs",
+        "customer_impact": "delayed central reporting jobs",
         "oncall_owner": "security-oncall"
       },
       "next_actions": [
@@ -37,7 +37,7 @@
   {
     "id": "incident_escalation-test-002",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-33016 for document-collaboration due to delayed regulatory reporting jobs; treat as sev2.",
+    "request_text": "Escalate INC-33016 for document-collaboration due to delayed central reporting jobs; treat as sev2 and start major-incident protocol.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
@@ -54,7 +54,7 @@
         "incident_id": "INC-33016",
         "severity": "sev2",
         "service_name": "document-collaboration",
-        "customer_impact": "delayed regulatory reporting jobs",
+        "customer_impact": "delayed central reporting jobs",
         "oncall_owner": "security-oncall"
       },
       "next_actions": [
@@ -72,7 +72,7 @@
   {
     "id": "incident_escalation-test-003",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-34207 for internal-auth-gateway due to intermittent outage in operations portal; treat as sev2.",
+    "request_text": "Escalate INC-34207 for internal-auth-gateway due to intermittent outage in internal operations portal; treat as sev2 and start major-incident protocol.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
@@ -89,7 +89,7 @@
         "incident_id": "INC-34207",
         "severity": "sev2",
         "service_name": "internal-auth-gateway",
-        "customer_impact": "intermittent outage in operations portal",
+        "customer_impact": "intermittent outage in internal operations portal",
         "oncall_owner": "platform-oncall"
       },
       "next_actions": [
@@ -107,7 +107,7 @@
   {
     "id": "incident_escalation-test-004",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-34072 for internal-auth-gateway due to intermittent outage in operations portal; treat as sev1.",
+    "request_text": "Escalate INC-34072 for internal-auth-gateway due to intermittent outage in internal operations portal; treat as sev1 and start major-incident protocol.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
@@ -124,7 +124,7 @@
         "incident_id": "INC-34072",
         "severity": "sev1",
         "service_name": "internal-auth-gateway",
-        "customer_impact": "intermittent outage in operations portal",
+        "customer_impact": "intermittent outage in internal operations portal",
         "oncall_owner": "security-oncall"
       },
       "next_actions": [
@@ -142,7 +142,7 @@
   {
     "id": "incident_escalation-test-005",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-36940 for internal-auth-gateway due to briefing dashboards unavailable; treat as sev2.",
+    "request_text": "Escalate INC-36940 for internal-auth-gateway due to briefing dashboards unavailable for policy teams; treat as sev2 and start major-incident protocol.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
@@ -159,7 +159,7 @@
         "incident_id": "INC-36940",
         "severity": "sev2",
         "service_name": "internal-auth-gateway",
-        "customer_impact": "briefing dashboards unavailable",
+        "customer_impact": "briefing dashboards unavailable for policy teams",
         "oncall_owner": "security-oncall"
       },
       "next_actions": [
@@ -177,7 +177,7 @@
   {
     "id": "incident_escalation-test-006",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-34694 for internal-auth-gateway due to briefing dashboards unavailable; treat as sev2.",
+    "request_text": "Escalate INC-34694 for internal-auth-gateway due to briefing dashboards unavailable for policy teams; treat as sev2 and start major-incident protocol.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
@@ -194,7 +194,7 @@
         "incident_id": "INC-34694",
         "severity": "sev2",
         "service_name": "internal-auth-gateway",
-        "customer_impact": "briefing dashboards unavailable",
+        "customer_impact": "briefing dashboards unavailable for policy teams",
         "oncall_owner": "infra-oncall"
       },
       "next_actions": [
@@ -212,7 +212,7 @@
   {
     "id": "incident_escalation-test-007",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-34839 for document-collaboration due to delayed regulatory reporting jobs; treat as sev1.",
+    "request_text": "Escalate INC-34839 for document-collaboration due to delayed central reporting jobs; treat as sev1 and start major-incident protocol.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
@@ -229,7 +229,7 @@
         "incident_id": "INC-34839",
         "severity": "sev1",
         "service_name": "document-collaboration",
-        "customer_impact": "delayed regulatory reporting jobs",
+        "customer_impact": "delayed central reporting jobs",
         "oncall_owner": "platform-oncall"
       },
       "next_actions": [
@@ -247,7 +247,7 @@
   {
     "id": "incident_escalation-test-008",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-35032 for document-collaboration due to briefing dashboards unavailable; treat as sev3.",
+    "request_text": "Escalate INC-35032 for document-collaboration due to briefing dashboards unavailable for policy teams; treat as sev3 and start major-incident protocol.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
@@ -264,7 +264,7 @@
         "incident_id": "INC-35032",
         "severity": "sev3",
         "service_name": "document-collaboration",
-        "customer_impact": "briefing dashboards unavailable",
+        "customer_impact": "briefing dashboards unavailable for policy teams",
         "oncall_owner": "platform-oncall"
       },
       "next_actions": [
@@ -282,7 +282,7 @@
   {
     "id": "incident_escalation-test-009",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-32388 for internal-auth-gateway due to intermittent outage in operations portal; treat as sev2.",
+    "request_text": "Escalate INC-32388 for internal-auth-gateway due to intermittent outage in internal operations portal; treat as sev2 and start major-incident protocol.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
@@ -299,7 +299,7 @@
         "incident_id": "INC-32388",
         "severity": "sev2",
         "service_name": "internal-auth-gateway",
-        "customer_impact": "intermittent outage in operations portal",
+        "customer_impact": "intermittent outage in internal operations portal",
         "oncall_owner": "ops-oncall-eu"
       },
       "next_actions": [
@@ -317,7 +317,7 @@
   {
     "id": "incident_escalation-test-010",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-32513 for policy-briefing-portal due to elevated login failures for staff; treat as sev3.",
+    "request_text": "Escalate INC-32513 for policy-briefing-portal due to elevated login failures for BIS staff; treat as sev3 and start major-incident protocol.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
@@ -334,7 +334,7 @@
         "incident_id": "INC-32513",
         "severity": "sev3",
         "service_name": "policy-briefing-portal",
-        "customer_impact": "elevated login failures for staff",
+        "customer_impact": "elevated login failures for BIS staff",
         "oncall_owner": "security-oncall"
       },
       "next_actions": [
@@ -352,7 +352,7 @@
   {
     "id": "incident_escalation-test-011",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-35827 for internal-auth-gateway due to elevated login failures for staff; treat as sev1.",
+    "request_text": "Escalate INC-35827 for internal-auth-gateway due to elevated login failures for BIS staff; treat as sev1 and start major-incident protocol.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
@@ -369,7 +369,7 @@
         "incident_id": "INC-35827",
         "severity": "sev1",
         "service_name": "internal-auth-gateway",
-        "customer_impact": "elevated login failures for staff",
+        "customer_impact": "elevated login failures for BIS staff",
         "oncall_owner": "infra-oncall"
       },
       "next_actions": [
@@ -387,7 +387,7 @@
   {
     "id": "incident_escalation-test-012",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-36495 for document-collaboration due to delayed regulatory reporting jobs; treat as sev2.",
+    "request_text": "Escalate INC-36495 for document-collaboration due to delayed central reporting jobs; treat as sev2 and start major-incident protocol.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
@@ -404,7 +404,7 @@
         "incident_id": "INC-36495",
         "severity": "sev2",
         "service_name": "document-collaboration",
-        "customer_impact": "delayed regulatory reporting jobs",
+        "customer_impact": "delayed central reporting jobs",
         "oncall_owner": "platform-oncall"
       },
       "next_actions": [
@@ -422,7 +422,7 @@
   {
     "id": "incident_escalation-test-013",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-32815 for internal-auth-gateway due to intermittent outage in operations portal; treat as sev1.",
+    "request_text": "Escalate INC-32815 for internal-auth-gateway due to intermittent outage in internal operations portal; treat as sev1 and start major-incident protocol.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
@@ -439,7 +439,7 @@
         "incident_id": "INC-32815",
         "severity": "sev1",
         "service_name": "internal-auth-gateway",
-        "customer_impact": "intermittent outage in operations portal",
+        "customer_impact": "intermittent outage in internal operations portal",
         "oncall_owner": "ops-oncall-eu"
       },
       "next_actions": [
@@ -457,7 +457,7 @@
   {
     "id": "incident_escalation-test-014",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-32392 for internal-auth-gateway due to elevated login failures for staff; treat as sev3.",
+    "request_text": "Escalate INC-32392 for internal-auth-gateway due to elevated login failures for BIS staff; treat as sev3 and start major-incident protocol.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
@@ -474,7 +474,7 @@
         "incident_id": "INC-32392",
         "severity": "sev3",
         "service_name": "internal-auth-gateway",
-        "customer_impact": "elevated login failures for staff",
+        "customer_impact": "elevated login failures for BIS staff",
         "oncall_owner": "platform-oncall"
       },
       "next_actions": [
@@ -492,7 +492,7 @@
   {
     "id": "incident_escalation-test-015",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-32500 for policy-briefing-portal due to delayed regulatory reporting jobs; treat as sev1.",
+    "request_text": "Escalate INC-32500 for policy-briefing-portal due to delayed central reporting jobs; treat as sev1 and start major-incident protocol.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
@@ -509,7 +509,7 @@
         "incident_id": "INC-32500",
         "severity": "sev1",
         "service_name": "policy-briefing-portal",
-        "customer_impact": "delayed regulatory reporting jobs",
+        "customer_impact": "delayed central reporting jobs",
         "oncall_owner": "ops-oncall-eu"
       },
       "next_actions": [
@@ -527,7 +527,7 @@
   {
     "id": "incident_escalation-test-016",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-34996 for market-data-ingestion due to delayed regulatory reporting jobs; treat as sev2.",
+    "request_text": "Escalate INC-34996 for market-data-ingestion due to delayed central reporting jobs; treat as sev2 and start major-incident protocol.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
@@ -544,7 +544,7 @@
         "incident_id": "INC-34996",
         "severity": "sev2",
         "service_name": "market-data-ingestion",
-        "customer_impact": "delayed regulatory reporting jobs",
+        "customer_impact": "delayed central reporting jobs",
         "oncall_owner": "ops-oncall-eu"
       },
       "next_actions": [
@@ -562,7 +562,7 @@
   {
     "id": "incident_escalation-test-017",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-32628 for policy-briefing-portal due to delayed regulatory reporting jobs; treat as sev2.",
+    "request_text": "Escalate INC-32628 for policy-briefing-portal due to delayed central reporting jobs; treat as sev2 and start major-incident protocol.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
@@ -579,7 +579,7 @@
         "incident_id": "INC-32628",
         "severity": "sev2",
         "service_name": "policy-briefing-portal",
-        "customer_impact": "delayed regulatory reporting jobs",
+        "customer_impact": "delayed central reporting jobs",
         "oncall_owner": "security-oncall"
       },
       "next_actions": [
@@ -597,7 +597,7 @@
   {
     "id": "incident_escalation-test-018",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-35148 for policy-briefing-portal due to delayed regulatory reporting jobs; treat as sev3.",
+    "request_text": "Escalate INC-35148 for policy-briefing-portal due to delayed central reporting jobs; treat as sev3 and start major-incident protocol.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
@@ -614,7 +614,7 @@
         "incident_id": "INC-35148",
         "severity": "sev3",
         "service_name": "policy-briefing-portal",
-        "customer_impact": "delayed regulatory reporting jobs",
+        "customer_impact": "delayed central reporting jobs",
         "oncall_owner": "ops-oncall-eu"
       },
       "next_actions": [
@@ -632,7 +632,7 @@
   {
     "id": "incident_escalation-test-019",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-35125 for internal-auth-gateway due to briefing dashboards unavailable; treat as sev3.",
+    "request_text": "Escalate INC-35125 for internal-auth-gateway due to briefing dashboards unavailable for policy teams; treat as sev3 and start major-incident protocol.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
@@ -649,7 +649,7 @@
         "incident_id": "INC-35125",
         "severity": "sev3",
         "service_name": "internal-auth-gateway",
-        "customer_impact": "briefing dashboards unavailable",
+        "customer_impact": "briefing dashboards unavailable for policy teams",
         "oncall_owner": "security-oncall"
       },
       "next_actions": [
@@ -667,7 +667,7 @@
   {
     "id": "incident_escalation-test-020",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-36260 for internal-auth-gateway due to elevated login failures for staff; treat as sev2.",
+    "request_text": "Escalate INC-36260 for internal-auth-gateway due to elevated login failures for BIS staff; treat as sev2 and start major-incident protocol.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
@@ -684,7 +684,7 @@
         "incident_id": "INC-36260",
         "severity": "sev2",
         "service_name": "internal-auth-gateway",
-        "customer_impact": "elevated login failures for staff",
+        "customer_impact": "elevated login failures for BIS staff",
         "oncall_owner": "security-oncall"
       },
       "next_actions": [
