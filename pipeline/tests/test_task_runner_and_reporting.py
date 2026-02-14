@@ -51,6 +51,9 @@ def test_emit_ops_reports_writes_required_schema(tmp_path: Path) -> None:
         "GITHUB_RUN_ID": "12345",
         "GITHUB_REF": "refs/heads/main",
         "GITHUB_ACTOR": "automation-bot",
+        "GITHUB_EVENT_NAME": "push",
+        "GITHUB_WORKFLOW": "pages",
+        "GITHUB_RUN_ATTEMPT": "1",
     }
 
     tasks = [
@@ -90,6 +93,8 @@ def test_emit_ops_reports_writes_required_schema(tmp_path: Path) -> None:
     assert "git_sha" in latest_run["run"]
     assert "timestamp" in latest_run["run"]
     assert latest_run["run"]["action_run_url"] == "https://github.com/example/portfolio/actions/runs/12345"
+    assert latest_run["run"]["trigger"]["event_name"] == "push"
+    assert latest_run["run"]["trigger"]["is_scheduled"] is False
     assert latest_run["summary"]["success"] == 2
     assert latest_run["tasks"][0]["name"] == "emit_marker"
     assert latest_run["tasks"][0]["status"] == "success"
@@ -105,6 +110,8 @@ def test_emit_ops_reports_writes_required_schema(tmp_path: Path) -> None:
     provenance = json.loads(report_paths["provenance"].read_text(encoding="utf-8"))
     assert provenance["action_run_url"] == "https://github.com/example/portfolio/actions/runs/12345"
     assert provenance["environment"]["github_run_id"] == "12345"
+    assert provenance["environment"]["github_event_name"] == "push"
+    assert provenance["trigger"]["workflow"] == "pages"
     assert provenance["artifacts"]["latest_run"] == "ops/latest-run.json"
 
 
@@ -128,3 +135,34 @@ def test_emit_ops_reports_lists_resume_artifact_when_present(tmp_path: Path) -> 
 
     provenance = json.loads(reports["provenance"].read_text(encoding="utf-8"))
     assert provenance["artifacts"]["resume_pdf"] == "artifacts/resume.pdf"
+
+
+def test_emit_ops_reports_includes_schedule_trigger_metadata(tmp_path: Path) -> None:
+    """Scheduled runs should include cron metadata in reports."""
+    event_path = tmp_path / "event.json"
+    event_path.write_text("{\"schedule\": \"0 3 * * 1\"}\n", encoding="utf-8")
+    out_dir = tmp_path / "public"
+    env = {
+        "GITHUB_EVENT_NAME": "schedule",
+        "GITHUB_EVENT_PATH": str(event_path),
+        "GITHUB_WORKFLOW": "schedule",
+        "GITHUB_RUN_ATTEMPT": "2",
+    }
+
+    task = Task(name="extract", action=_noop_task)
+    run = TaskRunner([task]).run(TaskContext(out_dir=out_dir, env=env))
+    reports = emit_ops_reports(
+        out_dir=out_dir,
+        repo_root=REPO_ROOT,
+        tasks=[task],
+        run=run,
+        env=env,
+    )
+
+    latest_run = json.loads(reports["latest_run"].read_text(encoding="utf-8"))
+    provenance = json.loads(reports["provenance"].read_text(encoding="utf-8"))
+
+    assert latest_run["run"]["trigger"]["event_name"] == "schedule"
+    assert latest_run["run"]["trigger"]["is_scheduled"] is True
+    assert latest_run["run"]["trigger"]["schedule"] == "0 3 * * 1"
+    assert provenance["trigger"]["schedule"] == "0 3 * * 1"
