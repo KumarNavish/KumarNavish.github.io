@@ -8,6 +8,7 @@ import {
   HORIZON_OPTIONS,
   RISK_OPTIONS,
   createDecisionBlueprint,
+  renderDecisionBriefMarkdown,
   type ChallengeId,
   type GoalId,
   type HorizonId,
@@ -23,12 +24,17 @@ interface DashboardData {
   publications: Awaited<ReturnType<typeof fetchPublicationsApi>>
 }
 
+function briefFileName(challenge: ChallengeId, horizon: HorizonId): string {
+  return `decision-brief-${challenge}-${horizon}.md`
+}
+
 export function DashboardPage() {
   const [challenge, setChallenge] = useState<ChallengeId>('continual_reliability')
   const [goal, setGoal] = useState<GoalId>('pilot')
   const [horizon, setHorizon] = useState<HorizonId>('6w')
   const [risk, setRisk] = useState<RiskId>('balanced')
   const [context, setContext] = useState('')
+  const [copyStatus, setCopyStatus] = useState('')
 
   const loadDashboard = useCallback(
     () =>
@@ -64,14 +70,59 @@ export function DashboardPage() {
     )
   }, [challenge, context, goal, horizon, risk, state.data])
 
+  const briefMarkdown = useMemo(() => {
+    if (!blueprint) {
+      return ''
+    }
+    return renderDecisionBriefMarkdown(
+      {
+        challenge,
+        goal,
+        horizon,
+        risk,
+        context,
+      },
+      blueprint,
+    )
+  }, [blueprint, challenge, goal, horizon, risk, context])
+
+  async function handleCopyBrief() {
+    if (!briefMarkdown) {
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(briefMarkdown)
+      setCopyStatus('Execution brief copied to clipboard.')
+    } catch {
+      setCopyStatus('Clipboard unavailable. Use download instead.')
+    }
+  }
+
+  function handleDownloadBrief() {
+    if (!briefMarkdown) {
+      return
+    }
+
+    const blob = new Blob([briefMarkdown], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = briefFileName(challenge, horizon)
+    document.body.append(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  }
+
   if (state.loading) {
-    return <LoadingBlock label="Loading live demo." />
+    return <LoadingBlock label="Loading decision builder." />
   }
 
   if (!state.data || state.error || !blueprint) {
     return (
       <ErrorBlock
-        label="Unable to load live demo."
+        label="Unable to load decision builder."
         details={state.error ?? 'unknown dashboard error'}
       />
     )
@@ -80,44 +131,17 @@ export function DashboardPage() {
   return (
     <div className="page">
       <section className="hero hero-primary">
-        <p className="eyebrow">Overview</p>
-        <h1>Experience the kind of systems work I build.</h1>
+        <p className="eyebrow">Decision Builder</p>
+        <h1>One tool: turn a problem into a usable execution brief.</h1>
         <p className="hero-copy">
-          Define a real decision context. The page generates a concrete strategy, automation loop,
-          and delivery plan in real time.
+          Define your operating context, then get an actionable plan you can hand directly to a
+          team.
         </p>
-        <div className="action-row">
-          <Link className="action-link action-link-primary" to="/proof">
-            Open live lab
-          </Link>
-          <Link className="action-link" to="/work">
-            See case studies
-          </Link>
-        </div>
-      </section>
-
-      <section className="metric-grid" aria-label="Snapshot">
-        <article className="metric-card">
-          <p className="metric-label">Projects</p>
-          <p className="metric-value">{formatNumber(state.data.profile.counts.projects)}</p>
-        </article>
-        <article className="metric-card">
-          <p className="metric-label">Publications</p>
-          <p className="metric-value">{formatNumber(state.data.profile.counts.publications)}</p>
-        </article>
-        <article className="metric-card">
-          <p className="metric-label">Citations</p>
-          <p className="metric-value">{formatNumber(state.data.profile.counts.citations_total)}</p>
-        </article>
-        <article className="metric-card">
-          <p className="metric-label">Featured systems</p>
-          <p className="metric-value">{formatNumber(state.data.profile.counts.featured_projects)}</p>
-        </article>
       </section>
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Live Capability Demo</h2>
+          <h2>1. Configure The Decision</h2>
         </header>
 
         <div className="track-row" role="tablist" aria-label="Challenge selection">
@@ -173,11 +197,12 @@ export function DashboardPage() {
 
         <div className="controls-panel controls-panel-compact workbench-controls">
           <label>
-            Context (optional)
-            <input
+            Current situation
+            <textarea
+              rows={3}
               value={context}
               onChange={(event) => setContext(event.target.value)}
-              placeholder="example: rising false positives after policy shift"
+              placeholder="Describe what is failing or what decision needs to be made now."
             />
           </label>
         </div>
@@ -185,27 +210,29 @@ export function DashboardPage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Generated Blueprint</h2>
+          <h2>2. Generated Execution Brief</h2>
         </header>
 
         <div className="card-grid">
           <article className="item-card decision-output-card">
-            <p className="eyebrow">Decision focus</p>
-            <h3>{blueprint.challengeTitle}</h3>
-            <p>{blueprint.decisionQuestion}</p>
-            <p className="meta-line">{blueprint.valueStatement}</p>
+            <p className="eyebrow">Decision</p>
+            <h3>{blueprint.decisionQuestion}</h3>
+            <p>{blueprint.systemDirection}</p>
           </article>
 
           <article className="item-card decision-output-card">
-            <p className="eyebrow">System direction</p>
-            <h3>{blueprint.systemDirection}</h3>
-            <p className="meta-line">{blueprint.automationLoop}</p>
+            <p className="eyebrow">Next 72 hours</p>
+            <ul className="checklist-list">
+              {blueprint.immediateActions.map((action) => (
+                <li key={action}>{action}</li>
+              ))}
+            </ul>
           </article>
 
           <article className="item-card decision-output-card">
-            <p className="eyebrow">Success signal</p>
-            <h3>{blueprint.successMetric}</h3>
-            <p className="meta-line">This signal is used as the go / no-go criterion.</p>
+            <p className="eyebrow">Automation loop</p>
+            <h3>{blueprint.automationLoop}</h3>
+            <p>{blueprint.successMetric}</p>
           </article>
         </div>
 
@@ -221,7 +248,39 @@ export function DashboardPage() {
 
         <div className="card-grid">
           <article className="item-card">
-            <p className="matrix-label">Best starting system</p>
+            <p className="matrix-label">KPI set</p>
+            <ul className="checklist-list">
+              {blueprint.kpis.map((kpi) => (
+                <li key={kpi.metric}>
+                  <strong>{kpi.metric}</strong>
+                  <br />
+                  target: {kpi.target}
+                  <br />
+                  cadence: {kpi.cadence}
+                </li>
+              ))}
+            </ul>
+          </article>
+
+          <article className="item-card">
+            <p className="matrix-label">Risk controls</p>
+            <ul className="checklist-list">
+              {blueprint.risks.map((riskItem) => (
+                <li key={riskItem.risk}>
+                  <strong>{riskItem.risk}</strong>
+                  <br />
+                  trigger: {riskItem.trigger}
+                  <br />
+                  guardrail: {riskItem.guardrail}
+                </li>
+              ))}
+            </ul>
+          </article>
+        </div>
+
+        <div className="card-grid">
+          <article className="item-card">
+            <p className="matrix-label">Implementation anchor</p>
             {blueprint.matchedProject ? (
               <>
                 <h3>{blueprint.matchedProject.name}</h3>
@@ -242,7 +301,7 @@ export function DashboardPage() {
           </article>
 
           <article className="item-card">
-            <p className="matrix-label">Best evidence anchor</p>
+            <p className="matrix-label">Evidence anchor</p>
             {blueprint.matchedPublication ? (
               <>
                 <h3>{blueprint.matchedPublication.title}</h3>
@@ -265,13 +324,26 @@ export function DashboardPage() {
         </div>
 
         <div className="panel panel-note">
-          <p className="matrix-label">Delivery handoff checklist</p>
+          <p className="matrix-label">Handoff checklist</p>
           <ul className="checklist-list">
             {blueprint.handoffChecklist.map((item) => (
               <li key={item}>{item}</li>
             ))}
           </ul>
         </div>
+
+        <div className="action-row">
+          <button type="button" className="action-link action-link-primary" onClick={handleCopyBrief}>
+            Copy brief
+          </button>
+          <button type="button" className="action-link" onClick={handleDownloadBrief}>
+            Download markdown
+          </button>
+          <Link className="action-link" to="/work">
+            Case studies
+          </Link>
+        </div>
+        {copyStatus ? <p className="meta-line">{copyStatus}</p> : null}
       </section>
 
       <section className="panel panel-note">

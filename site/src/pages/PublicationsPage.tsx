@@ -136,8 +136,8 @@ export function PublicationsPage() {
           <Link className="action-link" to="/work">
             Back to case studies
           </Link>
-          <Link className="action-link action-link-primary" to="/proof">
-            Live Lab
+          <Link className="action-link action-link-primary" to="/">
+            Decision Builder
           </Link>
         </div>
       </section>

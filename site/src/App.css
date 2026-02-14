@@ -294,13 +294,19 @@ a:hover {
 }
 
 .controls-panel input,
-.controls-panel select {
+.controls-panel select,
+.controls-panel textarea {
   border: 1px solid var(--line);
   border-radius: 7px;
   padding: 0.54rem 0.64rem;
   background: #fff;
   color: var(--fg);
   font: inherit;
+}
+
+.controls-panel textarea {
+  resize: vertical;
+  min-height: 82px;
 }
 
 .controls-panel-compact {

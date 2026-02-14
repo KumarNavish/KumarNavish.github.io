@@ -4,13 +4,12 @@ import './App.css'
 import { DashboardPage } from './pages/DashboardPage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { PublicationsPage } from './pages/PublicationsPage'
-import { SystemProofPage } from './pages/SystemProofPage'
 import { WorkPage } from './pages/WorkPage'
 
 const NAVIGATION = [
-  { href: '/', label: 'Overview' },
+  { href: '/', label: 'Decision Builder' },
   { href: '/work', label: 'Case Studies' },
-  { href: '/proof', label: 'Live Lab' },
+  { href: '/projects', label: 'Archive' },
 ]
 
 function Navigation() {
@@ -52,7 +51,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/work" element={<WorkPage />} />
-          <Route path="/proof" element={<SystemProofPage />} />
+          <Route path="/proof" element={<Navigate to="/" replace />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/publications" element={<PublicationsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

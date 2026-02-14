@@ -308,8 +308,8 @@ export function WorkPage() {
           <Link className="action-link" to="/publications">
             Publication archive
           </Link>
-          <Link className="action-link action-link-primary" to="/proof">
-            Live Lab
+          <Link className="action-link action-link-primary" to="/">
+            Decision Builder
           </Link>
         </div>
         <p className="meta-line">
