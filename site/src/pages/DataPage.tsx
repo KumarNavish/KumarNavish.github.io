@@ -25,6 +25,7 @@ const ENDPOINTS = [
   '/ops/latest-run.json',
   '/ops/dag.json',
   '/ops/provenance.json',
+  '/artifacts/resume.pdf',
   '/artifacts/github/repos.raw.json',
   '/artifacts/semantic-scholar/publications.raw.json',
 ]

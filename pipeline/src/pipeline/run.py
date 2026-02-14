@@ -12,7 +12,7 @@ from typing import Any, Dict, Sequence
 import yaml
 
 from pipeline.core import Task, TaskContext, TaskRunner, emit_ops_reports
-from pipeline.emit import build_profile, build_search_index
+from pipeline.emit import build_profile, build_search_index, emit_resume_pdf
 from pipeline.ingest import ingest_github_repositories, ingest_semantic_scholar_publications
 from pipeline.registry import load_registry
 from pipeline.transform import compute_metrics, normalize_projects, normalize_publications
@@ -25,7 +25,9 @@ PUBLICATIONS_API_RELATIVE_PATH = Path("api/v1/publications.json")
 METRICS_API_RELATIVE_PATH = Path("api/v1/metrics.json")
 SEARCH_INDEX_API_RELATIVE_PATH = Path("api/v1/search-index.json")
 PROFILE_API_RELATIVE_PATH = Path("api/v1/profile.json")
+RESUME_ARTIFACT_RELATIVE_PATH = Path("artifacts/resume.pdf")
 PUBLICATIONS_OVERRIDES_PATH = REGISTRY_DIR / "publications_overrides.yaml"
+RESUME_TEMPLATE_PATH = REGISTRY_DIR / "resume_template.typ"
 
 
 def _write_json(path: Path, payload: Dict[str, Any]) -> None:
@@ -200,6 +202,32 @@ def _task_emit_profile_api(context: TaskContext) -> None:
     _write_json(context.out_dir / PROFILE_API_RELATIVE_PATH, profile_payload)
 
 
+def _task_emit_resume_pdf(context: TaskContext) -> None:
+    """Emit resume PDF artifact from registry and normalized APIs."""
+    bundle = load_registry(REGISTRY_DIR)
+    projects_payload = json.loads((context.out_dir / PROJECTS_API_RELATIVE_PATH).read_text(encoding="utf-8"))
+    publications_payload = json.loads((context.out_dir / PUBLICATIONS_API_RELATIVE_PATH).read_text(encoding="utf-8"))
+    metrics_payload = json.loads((context.out_dir / METRICS_API_RELATIVE_PATH).read_text(encoding="utf-8"))
+
+    result = emit_resume_pdf(
+        template_path=RESUME_TEMPLATE_PATH,
+        output_path=context.out_dir / RESUME_ARTIFACT_RELATIVE_PATH,
+        config=bundle.config.model_dump(mode="json"),
+        experience_roles=[role.model_dump(mode="json") for role in bundle.experience.roles],
+        programs={
+            program_id: program.model_dump(mode="json")
+            for program_id, program in bundle.programs.programs.items()
+        },
+        projects_payload=projects_payload,
+        publications_payload=publications_payload,
+        metrics_payload=metrics_payload,
+        generated_at=context.env.get("PIPELINE_RUN_TIMESTAMP"),
+    )
+    if result.warning:
+        context.warn(result.warning)
+    context.info(f"resume artifact generated using {result.method}")
+
+
 def build_tasks() -> Sequence[Task]:
     """Declare pipeline tasks and dependencies."""
     return [
@@ -253,11 +281,26 @@ def build_tasks() -> Sequence[Task]:
             deps=("emit_projects_api", "emit_publications_api", "emit_metrics_api"),
         ),
         Task(
+            name="emit_resume_pdf",
+            action=_task_emit_resume_pdf,
+            inputs=(
+                "registry/experience.yaml",
+                "registry/programs.yaml",
+                str(RESUME_TEMPLATE_PATH),
+                str(PROJECTS_API_RELATIVE_PATH),
+                str(PUBLICATIONS_API_RELATIVE_PATH),
+                str(METRICS_API_RELATIVE_PATH),
+                str(PROFILE_API_RELATIVE_PATH),
+            ),
+            outputs=(str(RESUME_ARTIFACT_RELATIVE_PATH),),
+            deps=("emit_profile_api",),
+        ),
+        Task(
             name="emit_status_api",
             action=_task_emit_status_api,
             inputs=(str(PROJECTS_API_RELATIVE_PATH), str(METRICS_API_RELATIVE_PATH), str(PROFILE_API_RELATIVE_PATH)),
             outputs=("api/v1/status.json",),
-            deps=("emit_search_index", "emit_profile_api"),
+            deps=("emit_search_index", "emit_resume_pdf"),
         ),
     ]
 

@@ -106,3 +106,25 @@ def test_emit_ops_reports_writes_required_schema(tmp_path: Path) -> None:
     assert provenance["action_run_url"] == "https://github.com/example/portfolio/actions/runs/12345"
     assert provenance["environment"]["github_run_id"] == "12345"
     assert provenance["artifacts"]["latest_run"] == "ops/latest-run.json"
+
+
+def test_emit_ops_reports_lists_resume_artifact_when_present(tmp_path: Path) -> None:
+    """Provenance should expose generated resume artifact path when emitted."""
+    out_dir = tmp_path / "public"
+    resume_path = out_dir / "artifacts" / "resume.pdf"
+    resume_path.parent.mkdir(parents=True, exist_ok=True)
+    resume_path.write_bytes(b"%PDF-1.4\n%mock\n")
+
+    task = Task(name="extract", action=_noop_task)
+    context = TaskContext(out_dir=out_dir, env={})
+    run = TaskRunner([task]).run(context)
+    reports = emit_ops_reports(
+        out_dir=out_dir,
+        repo_root=REPO_ROOT,
+        tasks=[task],
+        run=run,
+        env={},
+    )
+
+    provenance = json.loads(reports["provenance"].read_text(encoding="utf-8"))
+    assert provenance["artifacts"]["resume_pdf"] == "artifacts/resume.pdf"
