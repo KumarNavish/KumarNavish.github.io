@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "bis-demo:dev": "vite --config vite.bis-demo.config.ts",
+    "bis-demo:build": "vite build --config vite.bis-demo.config.ts",
     "typecheck": "tsc -b --pretty false",
     "lint": "eslint .",
     "preview": "vite preview",

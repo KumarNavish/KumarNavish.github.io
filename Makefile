@@ -1,7 +1,7 @@
 PYTHON ?= python3
 NPM ?= npm
 
-.PHONY: site-install site-dev site-build site-test site-lint site-typecheck pipe-install pipe-test pipe-validate-registry pipe-run check
+.PHONY: site-install site-dev site-build demo-build site-test site-lint site-typecheck pipe-install pipe-test pipe-validate-registry pipe-run check
 
 site-install:
 	cd site && $(NPM) install
@@ -11,6 +11,9 @@ site-dev: site-install
 
 site-build: site-install
 	cd site && $(NPM) run build
+
+demo-build: site-install
+	cd site && $(NPM) run bis-demo:build
 
 site-test: site-install
 	cd site && $(NPM) run test
