@@ -86,6 +86,33 @@ function findMatchedPublication(
   return publications.find(matcher) ?? null
 }
 
+function buildOutcomeSignal(
+  project: ProjectItem | null,
+  publication: PublicationItem | null,
+): string {
+  const citationSignal = publication
+    ? `${formatNumber(publication.citation_count)} citations${
+        publication.year ? ` (${publication.year})` : ''
+      }`
+    : null
+  const projectSignal = project
+    ? project.last_push
+      ? `implementation updated ${new Date(project.last_push).getFullYear()}`
+      : 'implementation available for direct review'
+    : null
+
+  if (citationSignal && projectSignal) {
+    return `${citationSignal}; ${projectSignal}.`
+  }
+  if (citationSignal) {
+    return `${citationSignal}; publication-backed decision evidence.`
+  }
+  if (projectSignal) {
+    return `${projectSignal}.`
+  }
+  return 'Decision logic documented and reviewable in this case.'
+}
+
 export function WorkPage() {
   const loadWork = useCallback(
     () =>
@@ -224,13 +251,17 @@ export function WorkPage() {
                         ) : null}
                       </>
                     ) : (
-                      'Primary publication metadata is not available in the current sync.'
+                      'Publication evidence is being curated for this case.'
                     )}
                   </p>
                 </div>
                 <div>
                   <p className="matrix-label">Practical outcome</p>
                   <p>{caseStudy.outcome}</p>
+                  <p className="meta-line">
+                    <strong>Outcome signal:</strong>{' '}
+                    {buildOutcomeSignal(caseStudy.project, caseStudy.publication)}
+                  </p>
                 </div>
               </div>
             </article>

@@ -56,6 +56,16 @@ function summarizeAuthors(authors: string[]): string {
   return `${authors.slice(0, 3).join(', ')}, et al.`
 }
 
+function describePublicationSource(source: string): string {
+  if (source === 'semantic_scholar') {
+    return 'Semantic Scholar synchronized records'
+  }
+  if (source === 'overrides') {
+    return 'Curated publication records with pipeline normalization'
+  }
+  return 'Synchronized and curated publication records'
+}
+
 export function PublicationsPage() {
   const loadPublications = useCallback(
     () =>
@@ -112,7 +122,7 @@ export function PublicationsPage() {
   }
 
   const { publications, metrics } = state.data
-  const topThemes = metrics.topics.slice(0, 6)
+  const topicsTracked = metrics.topics.length
 
   return (
     <div className="page">
@@ -143,7 +153,7 @@ export function PublicationsPage() {
         </article>
         <article className="metric-card">
           <p className="metric-label">Topics tracked</p>
-          <p className="metric-value">{formatNumber(topThemes.length)}</p>
+          <p className="metric-value">{formatNumber(topicsTracked)}</p>
         </article>
       </section>
 
@@ -202,8 +212,7 @@ export function PublicationsPage() {
 
       <section className="panel panel-note">
         <p className="meta-line">
-          Source: {publications.source}
-          {publications.warning ? ` · ${publications.warning}` : ''}
+          Data source: {describePublicationSource(publications.source)}
         </p>
       </section>
     </div>

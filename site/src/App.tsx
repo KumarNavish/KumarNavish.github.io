@@ -55,9 +55,6 @@ export default function App() {
           <Route path="/proof" element={<SystemProofPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/publications" element={<PublicationsPage />} />
-          <Route path="/ops/console" element={<Navigate to="/proof" replace />} />
-          <Route path="/artifacts" element={<Navigate to="/proof" replace />} />
-          <Route path="/data" element={<Navigate to="/proof" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
