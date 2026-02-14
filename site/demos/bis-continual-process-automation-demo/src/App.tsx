@@ -64,6 +64,7 @@ function formatPct(value: number): string {
 }
 
 function runPresetRegressionSuite(samples: IntakeSample[], preset: ReplayPreset): RegressionSuiteRow {
+  // Fixed split simulates "previously stable workflows" vs "new updates".
   const splitIndex = Math.max(2, Math.floor(samples.length / 2))
   const oldSlice = samples.slice(0, splitIndex)
   const newSlice = samples.slice(splitIndex)
