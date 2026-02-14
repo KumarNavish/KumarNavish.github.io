@@ -24,20 +24,6 @@ interface ImpactSnapshot {
   outputCount: number
 }
 
-interface DispatchRecord {
-  dispatch_id: string
-  timestamp: string
-  destinations: string[]
-}
-
-interface AutomationNarrative {
-  title: string
-  manualWorkflow: string
-  businessPain: string[]
-  automatedChange: string[]
-  impactSummary: string
-}
-
 interface DemoPhase {
   label: string
   detail: string
@@ -158,72 +144,6 @@ function buildImpactSnapshot(result: PipelineResult): ImpactSnapshot {
   }
 }
 
-function findCategoryDescription(catalog: CategoryCatalog | null, categoryId: string): string {
-  const entry = catalog?.categories.find((category) => category.id === categoryId)
-  return entry?.description ?? prettyCategory(categoryId)
-}
-
-function buildPreRunNarrative(
-  sample: IntakeSample | null,
-  catalog: CategoryCatalog | null,
-): AutomationNarrative {
-  if (!sample) {
-    return {
-      title: 'Before and after preview',
-      manualWorkflow: 'Choose an example to preview the manual process.',
-      businessPain: ['Slow turnaround', 'Repetitive manual work', 'Higher risk from manual checks'],
-      automatedChange: [
-        'Reads messy request text',
-        'Builds a clear project summary and flow map',
-        'Prepares export JSON for internal tools',
-      ],
-      impactSummary: 'Click Run automation to see the transformation.',
-    }
-  }
-
-  const baselineCycle = metricToText(sample.ground_truth.baseline_cycle_time_days)
-  const volume = metricToText(sample.ground_truth.volume_per_month)
-  const categoryDescription = findCategoryDescription(catalog, sample.ground_truth.category)
-
-  return {
-    title: 'What will change',
-    manualWorkflow: `${sample.title} is currently handled with manual routing, approvals, and follow-ups. ${categoryDescription}`,
-    businessPain: [
-      `Delay: about ${baselineCycle} days per request.`,
-      `Rework: around ${volume} requests each month need repeated handoffs.`,
-      `Risk: ${prettyCategory(sample.ground_truth.risk_level)} risk because checks are manual.`,
-    ],
-    automatedChange: [
-      `Auto-sorts this as ${prettyCategory(sample.ground_truth.category)}.`,
-      'Creates summary + flow map in one run.',
-      'Prepares export JSON you can copy into delivery tools.',
-    ],
-    impactSummary: 'Press Run automation. The before/after result appears here.',
-  }
-}
-
-function buildPostRunNarrative(result: PipelineResult): AutomationNarrative {
-  const baselineCycle = metricToText(result.charter.baseline_metrics.cycle_time_days)
-  const targetCycle = metricToText(result.charter.target_metrics.cycle_time_days_target)
-  const volume = metricToText(result.charter.baseline_metrics.volume_per_month)
-
-  return {
-    title: 'Automation complete',
-    manualWorkflow: `Before: this workflow needed ${result.extracted.manual_step_count} manual touchpoints and cross-team follow-up.`,
-    businessPain: [
-      `Delay: ${baselineCycle} day baseline cycle time.`,
-      `Rework: ${volume} requests per month with repeated approvals.`,
-      `Risk: ${prettyCategory(result.triage.risk_level)} risk from manual controls.`,
-    ],
-    automatedChange: [
-      `Auto-sorted to ${prettyCategory(result.triage.category)} with ${result.triage.priority} priority.`,
-      'Built a clear summary, flow map, and automation plan.',
-      'Prepared export JSON for Jira, ServiceNow, and tracking.',
-    ],
-    impactSummary: `After: target cycle time ${targetCycle} days and estimated savings ${result.triage.est_savings_hours_per_month} hours per month.`,
-  }
-}
-
 function getPhaseState(index: number, activePhaseIndex: number, isRunning: boolean, hasResult: boolean): PhaseState {
   if (isRunning) {
     if (index < activePhaseIndex) {
@@ -257,7 +177,6 @@ function App() {
 
   const [copyStatus, setCopyStatus] = useState<string | null>(null)
   const [dispatchStatus, setDispatchStatus] = useState<string | null>(null)
-  const [dispatchLog, setDispatchLog] = useState<DispatchRecord[]>([])
   const [error, setError] = useState<string | null>(null)
 
   const packSectionRef = useRef<HTMLElement | null>(null)
@@ -286,10 +205,6 @@ function App() {
     [samples, selectedSampleId],
   )
 
-  const automationNarrative = useMemo(
-    () => (result ? buildPostRunNarrative(result) : buildPreRunNarrative(selectedSample, catalog)),
-    [catalog, result, selectedSample],
-  )
   const selectedSampleHint = useMemo(() => sampleHint(selectedSample), [selectedSample])
   const impactSnapshot = useMemo(
     () => (result ? buildImpactSnapshot(result) : null),
@@ -298,7 +213,6 @@ function App() {
 
   const hasResult = Boolean(result)
   const previewBaselineDays = selectedSample?.ground_truth.baseline_cycle_time_days ?? null
-  const previewVolume = selectedSample?.ground_truth.volume_per_month ?? null
   const inferredTargetDays =
     previewBaselineDays !== null ? Math.max(1, Math.round(previewBaselineDays * 0.65)) : null
   const beforeCycleTime = impactSnapshot?.baselineDays ?? previewBaselineDays
@@ -319,6 +233,10 @@ function App() {
           : `${impactSnapshot.monthlyHoursSaved} hrs/month saved`
       } and ${totalArtifacts ?? 0} handoff artifacts ready.`
     : 'Run automation to reveal measurable before/after impact for this request.'
+  const momentHeadline = hasResult ? 'Automation complete' : 'What will be automated'
+  const momentSummary = hasResult
+    ? `This request is now structured as a ${prettyCategory(result.triage.category)} workflow with ready handoff outputs.`
+    : `The selected request will be converted from manual handling into a standard charter, map, and export payloads.`
 
   const hintText = useMemo(() => {
     if (error) {
@@ -413,14 +331,6 @@ function App() {
 
     const timestamp = new Date().toLocaleString()
     const dispatchId = `BIS-${Date.now().toString(36).toUpperCase()}`
-
-    const entry: DispatchRecord = {
-      dispatch_id: dispatchId,
-      timestamp,
-      destinations: ['Jira', 'ServiceNow', 'Process Tracker'],
-    }
-
-    setDispatchLog((prev) => [entry, ...prev].slice(0, 5))
     setDispatchStatus(`Pack ${dispatchId} sent at ${timestamp}`)
   }
 
@@ -435,23 +345,14 @@ function App() {
         </p>
       </header>
 
-      {hasResult ? (
-        <section className="panel outcome-banner" aria-live="polite">
-          <p>
-            Automation finished: manual intake was converted into a ready-to-use process pack.
-          </p>
-          <p className="outcome-subline">Generated now: 1 summary, 1 flow map, and export JSON files.</p>
-        </section>
-      ) : null}
-
       <section className="panel intake-panel">
         <div className="intake-layout">
           <section className="intake-controls">
-            <h2>Try it</h2>
-            <p className="control-caption">Pick an example, edit if needed, then click Run automation.</p>
+            <h2>Start</h2>
+            <p className="control-caption">Choose a workflow and click Run automation.</p>
 
             <section className="example-picker">
-              <label htmlFor="example-select">Choose an example</label>
+              <label htmlFor="example-select">Example workflow</label>
               <div className="select-shell">
                 <select
                   id="example-select"
@@ -472,14 +373,14 @@ function App() {
               <p className="field-help">{selectedSampleHint}</p>
             </section>
 
-            <label>
-              Request text
+            <details className="advanced-block inline-advanced">
+              <summary>Edit request text (optional)</summary>
               <textarea
                 value={requestText}
                 onChange={(event) => setRequestText(event.target.value)}
                 rows={6}
               />
-            </label>
+            </details>
 
             <button className="primary-btn" onClick={() => void runPipeline()} disabled={!selectedSample || isRunning}>
               {isRunning ? 'Running...' : 'Run automation'}
@@ -489,34 +390,19 @@ function App() {
             {error ? <p className="error-text">{error}</p> : null}
             {copyStatus ? <p className="status-text">{copyStatus}</p> : null}
             {dispatchStatus ? <p className="status-text success-text">{dispatchStatus}</p> : null}
-
-            <section className="next-step-card">
-              <p className="next-step-tag">What to do next</p>
-              {hasResult ? (
-                <>
-                  <p>Open outputs and copy what you need.</p>
-                  <div className="inline-actions">
-                    <button className="secondary-btn" onClick={openDeliverables}>
-                      Open outputs
-                    </button>
-                    <button
-                      className="secondary-btn"
-                      onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}
-                    >
-                      Copy Jira JSON
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <p>Click Run automation to generate the outputs.</p>
-              )}
-            </section>
+            {hasResult ? (
+              <div className="inline-actions">
+                <button className="secondary-btn" onClick={openDeliverables}>
+                  Open outputs
+                </button>
+              </div>
+            ) : null}
           </section>
 
           <section className="magic-panel" aria-live="polite">
-            <p className="moment-tag">{automationNarrative.title}</p>
+            <p className="moment-tag">{momentHeadline}</p>
             <h2>Automation moment</h2>
-            <p className="magic-lede">{automationNarrative.impactSummary}</p>
+            <p className="magic-lede">{momentSummary}</p>
 
             <section className="value-hero">
               <p className="hero-label">Main result</p>
@@ -577,31 +463,16 @@ function App() {
       {!result ? (
         <section className="panel placeholder-panel">
           <h2>Your outputs</h2>
-          <p className="placeholder-lede">Run automation once. You immediately get three practical deliverables.</p>
-          <div className="placeholder-grid">
-            <article>
-              <h3>1) Charter summary</h3>
-              <p>Clear problem, target, owners, and next action.</p>
-            </article>
-            <article>
-              <h3>2) Process map</h3>
-              <p>Simple visual of current flow and optimized flow.</p>
-            </article>
-            <article>
-              <h3>3) Export payloads</h3>
-              <p>Copy-ready JSON for Jira, ServiceNow, and trackers.</p>
-            </article>
-          </div>
+          <p className="placeholder-lede">Run once to generate a charter, a process map, and export payloads.</p>
         </section>
       ) : (
         <section className="panel pack-panel" ref={packSectionRef}>
           <h2>Your outputs</h2>
-          <p className="pack-subhead">Everything below is ready to use right now.</p>
+          <p className="pack-subhead">Ready to copy and share.</p>
 
           <section className="outputs-hero">
-            <p className="outputs-tag">Ready now</p>
-            <h3>Your process pack is ready for handoff</h3>
-            <p>Copy and share these outputs with delivery teams without reformatting.</p>
+            <h3>Process pack ready</h3>
+            <p>What used to be manual is now structured and handoff-ready.</p>
             <div className="outputs-proof">
               <span>
                 {impactSnapshot?.cycleReductionPct !== null
@@ -609,7 +480,6 @@ function App() {
                   : 'Target cycle calculated'}
               </span>
               <span>{impactSnapshot?.monthlyHoursSaved ?? 0} hrs/month impact potential</span>
-              <span>{totalArtifacts ?? 0} artifacts ready to share</span>
             </div>
             <div className="outputs-actions">
               <button className="secondary-btn" onClick={() => copyJson('Charter JSON', result.charter)}>
@@ -628,10 +498,9 @@ function App() {
             <section className="artifact-card">
               <div className="artifact-head">
                 <h3>1. Charter summary</h3>
-                <span className="artifact-badge">Use for kickoff</span>
               </div>
               <p className="artifact-purpose">
-                Gives stakeholders a clear problem statement, target, and recommended action.
+                Problem, target, and next action in one place.
               </p>
               <p>
                 <strong>Problem:</strong> {result.charter.problem_statement}
@@ -639,24 +508,6 @@ function App() {
               <p>
                 <strong>Recommended next action:</strong> {result.triage.next_action}
               </p>
-              <div className="artifact-facts">
-                <p>
-                  <span>Workflow</span>
-                  <strong>{prettyCategory(result.triage.category)}</strong>
-                </p>
-                <p>
-                  <span>Priority</span>
-                  <strong>{result.triage.priority}</strong>
-                </p>
-                <p>
-                  <span>Risk</span>
-                  <strong>{prettyCategory(result.triage.risk_level)}</strong>
-                </p>
-                <p>
-                  <span>Monthly volume</span>
-                  <strong>{metricToText(previewVolume)}</strong>
-                </p>
-              </div>
               <div className="card-actions">
                 <button className="secondary-btn" onClick={() => copyJson('Charter JSON', result.charter)}>
                   Copy summary JSON
@@ -667,10 +518,9 @@ function App() {
             <section className="artifact-card">
               <div className="artifact-head">
                 <h3>2. Flow map</h3>
-                <span className="artifact-badge">Use for design</span>
               </div>
               <p className="artifact-purpose">
-                Shows how work flows after automation so teams can validate the future state.
+                Visual before/after process flow.
               </p>
               <MermaidDiagram title="Optimized workflow" chart={result.toBeMermaid} />
               <details className="advanced-block">
@@ -682,10 +532,9 @@ function App() {
             <section className="artifact-card" id="export-output">
               <div className="artifact-head">
                 <h3>3. Export payloads</h3>
-                <span className="artifact-badge">Use for handoff</span>
               </div>
               <p className="artifact-purpose">
-                Copy these payloads into Jira, ServiceNow, or your tracker to start execution now.
+                Copy these into Jira, ServiceNow, or your tracker.
               </p>
               <div className="button-column">
                 <button className="secondary-btn" onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}>
@@ -704,30 +553,11 @@ function App() {
 
               <details className="advanced-block">
                 <summary>Show automation blueprint JSON</summary>
-                <div className="button-column inline-open-btn">
-                  <button className="secondary-btn" onClick={() => copyJson('Blueprint JSON', result.blueprint)}>
-                    Copy automation plan JSON
-                  </button>
-                </div>
+                <button className="secondary-btn inline-open-btn" onClick={() => copyJson('Blueprint JSON', result.blueprint)}>
+                  Copy automation plan JSON
+                </button>
                 <pre>{JSON.stringify(result.blueprint, null, 2)}</pre>
               </details>
-
-              <div className="card-actions">
-                <button className="primary-btn" onClick={sendToDeliveryQueue}>
-                  Send package
-                </button>
-              </div>
-
-              {dispatchLog.length > 0 ? (
-                <ul className="dispatch-list">
-                  {dispatchLog.map((entry) => (
-                    <li key={entry.dispatch_id}>
-                      <strong>{entry.dispatch_id}</strong> · {entry.timestamp} ·{' '}
-                      {entry.destinations.join(', ')}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
             </section>
           </section>
 
