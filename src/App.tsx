@@ -1,10 +1,13 @@
 import { useState } from "react";
 import "./App.css";
+import { runRouterIncrementalDemo } from "./cl/router";
 import { embed } from "./retrieval/embed_client";
 
 function App() {
   const [embeddingState, setEmbeddingState] = useState("Idle");
   const [embeddingSummary, setEmbeddingSummary] = useState("");
+  const [routerSummary, setRouterSummary] = useState("");
+  const [routerState, setRouterState] = useState("Idle");
 
   const handleEmbeddingSmokeTest = async () => {
     const sampleTexts = [
@@ -30,6 +33,20 @@ function App() {
     }
   };
 
+  const handleRouterDemo = () => {
+    setRouterState("Running incremental router demo...");
+    setRouterSummary("");
+    try {
+      const result = runRouterIncrementalDemo();
+      setRouterState("Router demo complete.");
+      setRouterSummary(JSON.stringify(result, null, 2));
+      console.log("Router CL demo summary", result);
+    } catch (error) {
+      setRouterState("Router demo failed.");
+      setRouterSummary(error instanceof Error ? error.message : "Unknown router demo error");
+    }
+  };
+
   return (
     <main className="app-shell">
       <section className="hero">
@@ -45,6 +62,15 @@ function App() {
           </button>
           <p className="status">{embeddingState}</p>
           {embeddingSummary ? <p className="summary">{embeddingSummary}</p> : null}
+        </div>
+        <div className="smoke-box">
+          <button type="button" onClick={handleRouterDemo}>
+            Run router CL demo
+          </button>
+          <p className="status">{routerState}</p>
+          {routerSummary ? (
+            <pre className="summary summary-block">{routerSummary}</pre>
+          ) : null}
         </div>
       </section>
     </main>
