@@ -1,17 +1,19 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { fetchProfileApi, fetchProjectsApi, fetchPublicationsApi } from '../lib/api'
 import {
-  fetchMetricsApi,
-  fetchProfileApi,
-  fetchProjectsApi,
-  fetchPublicationsApi,
-  fetchSearchIndexApi,
-  type ProjectItem,
-  type PublicationItem,
-  type SearchDocument,
-} from '../lib/api'
-import { compactList, formatDateTime, formatNumber } from '../lib/formatters'
+  CHALLENGE_OPTIONS,
+  GOAL_OPTIONS,
+  HORIZON_OPTIONS,
+  RISK_OPTIONS,
+  createDecisionBlueprint,
+  type ChallengeId,
+  type GoalId,
+  type HorizonId,
+  type RiskId,
+} from '../lib/decisionEngine'
+import { formatDateTime, formatNumber } from '../lib/formatters'
 import { useResource } from '../lib/useResource'
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks'
 
@@ -19,312 +21,77 @@ interface DashboardData {
   profile: Awaited<ReturnType<typeof fetchProfileApi>>
   projects: Awaited<ReturnType<typeof fetchProjectsApi>>
   publications: Awaited<ReturnType<typeof fetchPublicationsApi>>
-  metrics: Awaited<ReturnType<typeof fetchMetricsApi>>
-  searchIndex: Awaited<ReturnType<typeof fetchSearchIndexApi>>
-}
-
-type SearchScope = 'all' | 'project' | 'publication'
-
-interface DecisionTrack {
-  id: string
-  title: string
-  decision: string
-  keywords: string[]
-  value: string
-}
-
-interface RankedEvidence {
-  key: string
-  type: 'project' | 'publication'
-  score: number
-  matchedTerms: string[]
-  doc: SearchDocument
-  project: ProjectItem | null
-  publication: PublicationItem | null
-}
-
-const DECISION_TRACKS: DecisionTrack[] = [
-  {
-    id: 'stability',
-    title: 'Stable continual updates',
-    decision: 'Choose update strategies that preserve performance as tasks evolve.',
-    value: 'Use this to reduce model regression risk in long-lived deployments.',
-    keywords: ['continual', 'optimization', 'policy', 'natural', 'gradient', 'stability'],
-  },
-  {
-    id: 'safety',
-    title: 'Online harm mitigation',
-    decision: 'Prioritize behavioral signals that justify earlier intervention.',
-    value: 'Use this to design more reliable moderation triage and intervention policies.',
-    keywords: ['hate', 'counter', 'interaction', 'moderation', 'social', 'twitter'],
-  },
-  {
-    id: 'logistics',
-    title: 'Urban transition planning',
-    decision: 'Rank regions for phased logistics transition and pilot sequencing.',
-    value: 'Use this to sequence rollout decisions with practical operational constraints.',
-    keywords: ['urban', 'logistics', 'micro', 'regions', 'delivery', 'cargo'],
-  },
-]
-
-function tokenize(text: string): string[] {
-  return Array.from(new Set((text.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(Boolean)))
-}
-
-function normalizeTerm(term: string): string {
-  return term.trim().toLowerCase()
-}
-
-function cleanSnippet(value: string | null | undefined): string {
-  if (!value) {
-    return ''
-  }
-  const trimmed = value.trim()
-  if (!trimmed || trimmed.toLowerCase() === 'none') {
-    return ''
-  }
-  return trimmed
-}
-
-function yearsSince(dateValue: string | null): number | null {
-  if (!dateValue) {
-    return null
-  }
-  const date = new Date(dateValue)
-  if (Number.isNaN(date.getTime())) {
-    return null
-  }
-  return new Date().getFullYear() - date.getFullYear()
-}
-
-function computeProjectScore(project: ProjectItem, matchedTerms: string[], baseScore: number): number {
-  const featuredBoost = project.featured || project.pinned ? 7 : 0
-  const starBoost = Math.min(5, Math.log10(project.stars + 1) * 3)
-  const recencyYears = yearsSince(project.last_push)
-  const recencyBoost = recencyYears === null ? 0 : Math.max(0, 4 - recencyYears)
-  const tagBoost = matchedTerms.some((term) =>
-    project.tags.some((tag) => tag.toLowerCase().includes(term)),
-  )
-    ? 3
-    : 0
-
-  return baseScore + featuredBoost + starBoost + recencyBoost + tagBoost
-}
-
-function computePublicationScore(
-  publication: PublicationItem,
-  matchedTerms: string[],
-  baseScore: number,
-): number {
-  const citationBoost = Math.min(10, Math.log10((publication.citation_count ?? 0) + 1) * 5)
-  const recencyBoost = publication.year
-    ? Math.max(0, 4 - (new Date().getFullYear() - publication.year))
-    : 0
-  const keywordBoost = matchedTerms.some((term) =>
-    publication.keywords.some((keyword) => keyword.toLowerCase().includes(term)),
-  )
-    ? 2
-    : 0
-
-  return baseScore + citationBoost + recencyBoost + keywordBoost
-}
-
-function describeStrength(score: number, maxScore: number): string {
-  if (maxScore <= 0) {
-    return 'Exploratory fit'
-  }
-  const ratio = score / maxScore
-  if (ratio >= 0.75) {
-    return 'High fit'
-  }
-  if (ratio >= 0.45) {
-    return 'Solid fit'
-  }
-  return 'Exploratory fit'
-}
-
-function buildNextMove(project: ProjectItem | null, publication: PublicationItem | null): string {
-  if (project && publication) {
-    return `Start with ${project.name}, then validate assumptions against ${publication.title}.`
-  }
-  if (project) {
-    return `Start by extending ${project.name} under the selected decision constraints.`
-  }
-  if (publication) {
-    return `Use ${publication.title} as the primary evidence anchor.`
-  }
-  return 'Broaden the query to surface stronger project and evidence alignment.'
 }
 
 export function DashboardPage() {
-  const [selectedTrackId, setSelectedTrackId] = useState<string>(DECISION_TRACKS[0].id)
-  const [query, setQuery] = useState('')
-  const [scope, setScope] = useState<SearchScope>('all')
+  const [challenge, setChallenge] = useState<ChallengeId>('continual_reliability')
+  const [goal, setGoal] = useState<GoalId>('pilot')
+  const [horizon, setHorizon] = useState<HorizonId>('6w')
+  const [risk, setRisk] = useState<RiskId>('balanced')
+  const [context, setContext] = useState('')
 
   const loadDashboard = useCallback(
     () =>
-      Promise.all([
-        fetchProfileApi(),
-        fetchProjectsApi(),
-        fetchPublicationsApi(),
-        fetchMetricsApi(),
-        fetchSearchIndexApi(),
-      ]).then(([profile, projects, publications, metrics, searchIndex]) => ({
-        profile,
-        projects,
-        publications,
-        metrics,
-        searchIndex,
-      })),
+      Promise.all([fetchProfileApi(), fetchProjectsApi(), fetchPublicationsApi()]).then(
+        ([profile, projects, publications]) => ({
+          profile,
+          projects,
+          publications,
+        }),
+      ),
     [],
   )
 
   const state = useResource<DashboardData>(loadDashboard)
 
-  const selectedTrack = useMemo(
-    () => DECISION_TRACKS.find((track) => track.id === selectedTrackId) ?? DECISION_TRACKS[0],
-    [selectedTrackId],
-  )
-
-  const rankedEvidence = useMemo(() => {
+  const blueprint = useMemo(() => {
     if (!state.data) {
-      return []
+      return null
     }
 
-    const terms = Array.from(
-      new Set([
-        ...selectedTrack.keywords.map(normalizeTerm),
-        ...tokenize(query).map(normalizeTerm),
-      ]),
-    ).filter((term) => term.length > 1)
-
-    const projectsByName = new Map(
-      state.data.projects.items.map((project) => [project.name.toLowerCase(), project]),
+    return createDecisionBlueprint(
+      {
+        challenge,
+        goal,
+        horizon,
+        risk,
+        context,
+      },
+      {
+        projects: state.data.projects.items,
+        publications: state.data.publications.items,
+      },
     )
-    const publicationsById = new Map(
-      state.data.publications.items.map((publication) => [publication.id, publication]),
-    )
-
-    const hitMap = new Map<number, { score: number; terms: Set<string> }>()
-
-    for (const term of terms) {
-      const docIds = state.data.searchIndex.postings[term] ?? []
-      for (const docId of docIds) {
-        const existing = hitMap.get(docId) ?? { score: 0, terms: new Set<string>() }
-        existing.score += 10
-        existing.terms.add(term)
-        hitMap.set(docId, existing)
-      }
-    }
-
-    const results: RankedEvidence[] = []
-
-    for (const doc of state.data.searchIndex.documents) {
-      if (scope !== 'all' && doc.type !== scope) {
-        continue
-      }
-
-      const signal = hitMap.get(doc.doc_id)
-      const fallbackTerms = terms.filter((term) => {
-        const haystack = `${doc.title} ${doc.subtitle}`.toLowerCase()
-        return haystack.includes(term)
-      })
-
-      if (terms.length > 0 && !signal && fallbackTerms.length === 0) {
-        continue
-      }
-
-      const matchedTerms = signal ? Array.from(signal.terms) : fallbackTerms
-      const baseScore = signal ? signal.score : fallbackTerms.length * 5
-
-      if (doc.type === 'project') {
-        const projectName = doc.id.startsWith('project:') ? doc.id.slice(8) : doc.title
-        const project = projectsByName.get(projectName.toLowerCase()) ?? null
-        if (!project) {
-          continue
-        }
-
-        results.push({
-          key: doc.id,
-          type: 'project',
-          score: computeProjectScore(project, matchedTerms, baseScore),
-          matchedTerms,
-          doc,
-          project,
-          publication: null,
-        })
-        continue
-      }
-
-      const publicationId = doc.id.startsWith('publication:') ? doc.id.slice(12) : doc.id
-      const publication = publicationsById.get(publicationId) ?? null
-      if (!publication) {
-        continue
-      }
-
-      results.push({
-        key: doc.id,
-        type: 'publication',
-        score: computePublicationScore(publication, matchedTerms, baseScore),
-        matchedTerms,
-        doc,
-        project: null,
-        publication,
-      })
-    }
-
-    return results.sort(
-      (left, right) => right.score - left.score || left.doc.title.localeCompare(right.doc.title),
-    )
-  }, [query, scope, selectedTrack, state.data])
-
-  const topProject = useMemo(
-    () => rankedEvidence.find((item) => item.type === 'project')?.project ?? null,
-    [rankedEvidence],
-  )
-
-  const topPublication = useMemo(
-    () => rankedEvidence.find((item) => item.type === 'publication')?.publication ?? null,
-    [rankedEvidence],
-  )
-
-  const evidenceMix = useMemo(() => {
-    const projectMatches = rankedEvidence.filter((item) => item.type === 'project').length
-    const publicationMatches = rankedEvidence.filter((item) => item.type === 'publication').length
-    return { projectMatches, publicationMatches }
-  }, [rankedEvidence])
+  }, [challenge, context, goal, horizon, risk, state.data])
 
   if (state.loading) {
-    return <LoadingBlock label="Loading capability overview." />
+    return <LoadingBlock label="Loading live demo." />
   }
 
-  if (!state.data || state.error) {
+  if (!state.data || state.error || !blueprint) {
     return (
       <ErrorBlock
-        label="Unable to load capability overview."
-        details={state.error ?? 'unknown overview error'}
+        label="Unable to load live demo."
+        details={state.error ?? 'unknown dashboard error'}
       />
     )
   }
-
-  const { metrics, profile } = state.data
-  const maxScore = rankedEvidence[0]?.score ?? 1
 
   return (
     <div className="page">
       <section className="hero hero-primary">
         <p className="eyebrow">Overview</p>
-        <h1>Research organized for practical decisions.</h1>
+        <h1>Experience the kind of systems work I build.</h1>
         <p className="hero-copy">
-          Select a decision track to surface the most relevant systems and evidence, then move
-          directly into case work.
+          Define a real decision context. The page generates a concrete strategy, automation loop,
+          and delivery plan in real time.
         </p>
         <div className="action-row">
-          <Link className="action-link action-link-primary" to="/work">
-            Open case studies
+          <Link className="action-link action-link-primary" to="/proof">
+            Open live lab
           </Link>
-          <Link className="action-link" to="/proof">
-            View approach
+          <Link className="action-link" to="/work">
+            See case studies
           </Link>
         </div>
       </section>
@@ -332,132 +99,183 @@ export function DashboardPage() {
       <section className="metric-grid" aria-label="Snapshot">
         <article className="metric-card">
           <p className="metric-label">Projects</p>
-          <p className="metric-value">{formatNumber(profile.counts.projects)}</p>
+          <p className="metric-value">{formatNumber(state.data.profile.counts.projects)}</p>
         </article>
         <article className="metric-card">
           <p className="metric-label">Publications</p>
-          <p className="metric-value">{formatNumber(profile.counts.publications)}</p>
+          <p className="metric-value">{formatNumber(state.data.profile.counts.publications)}</p>
         </article>
         <article className="metric-card">
           <p className="metric-label">Citations</p>
-          <p className="metric-value">{formatNumber(profile.counts.citations_total)}</p>
+          <p className="metric-value">{formatNumber(state.data.profile.counts.citations_total)}</p>
         </article>
         <article className="metric-card">
           <p className="metric-label">Featured systems</p>
-          <p className="metric-value">{formatNumber(profile.counts.featured_projects)}</p>
+          <p className="metric-value">{formatNumber(state.data.profile.counts.featured_projects)}</p>
         </article>
       </section>
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Decision Studio</h2>
+          <h2>Live Capability Demo</h2>
         </header>
 
-        <div className="track-row" role="tablist" aria-label="Decision tracks">
-          {DECISION_TRACKS.map((track) => (
+        <div className="track-row" role="tablist" aria-label="Challenge selection">
+          {CHALLENGE_OPTIONS.map((item) => (
             <button
-              key={track.id}
+              key={item.id}
               type="button"
-              className={track.id === selectedTrack.id ? 'track-chip track-chip-active' : 'track-chip'}
-              onClick={() => setSelectedTrackId(track.id)}
+              className={item.id === challenge ? 'track-chip track-chip-active' : 'track-chip'}
+              onClick={() => setChallenge(item.id)}
             >
-              {track.title}
+              {item.label}
             </button>
           ))}
         </div>
 
-        <p className="meta-line">
-          <strong>Focus:</strong> {selectedTrack.decision}
-        </p>
-
-        <div className="controls-panel controls-panel-2 workbench-controls">
+        <div className="controls-panel workbench-controls">
           <label>
-            Focus query
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="optional terms"
-            />
+            Goal
+            <select value={goal} onChange={(event) => setGoal(event.target.value as GoalId)}>
+              {GOAL_OPTIONS.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
           </label>
 
           <label>
-            Evidence scope
-            <select value={scope} onChange={(event) => setScope(event.target.value as SearchScope)}>
-              <option value="all">Projects + publications</option>
-              <option value="project">Projects only</option>
-              <option value="publication">Publications only</option>
+            Time horizon
+            <select
+              value={horizon}
+              onChange={(event) => setHorizon(event.target.value as HorizonId)}
+            >
+              {HORIZON_OPTIONS.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Risk mode
+            <select value={risk} onChange={(event) => setRisk(event.target.value as RiskId)}>
+              {RISK_OPTIONS.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
             </select>
           </label>
         </div>
 
-        <p className="meta-line">
-          <strong>Track keywords:</strong> {compactList(selectedTrack.keywords, 6)}
-        </p>
+        <div className="controls-panel controls-panel-compact workbench-controls">
+          <label>
+            Context (optional)
+            <input
+              value={context}
+              onChange={(event) => setContext(event.target.value)}
+              placeholder="example: rising false positives after policy shift"
+            />
+          </label>
+        </div>
+      </section>
 
-        <div className="card-grid decision-output-grid">
+      <section className="panel">
+        <header className="panel-header">
+          <h2>Generated Blueprint</h2>
+        </header>
+
+        <div className="card-grid">
           <article className="item-card decision-output-card">
-            <p className="eyebrow">Recommended move</p>
-            <h3>{buildNextMove(topProject, topPublication)}</h3>
-            <p>{selectedTrack.value}</p>
+            <p className="eyebrow">Decision focus</p>
+            <h3>{blueprint.challengeTitle}</h3>
+            <p>{blueprint.decisionQuestion}</p>
+            <p className="meta-line">{blueprint.valueStatement}</p>
           </article>
 
           <article className="item-card decision-output-card">
-            <p className="eyebrow">Current match mix</p>
-            <h3>{formatNumber(rankedEvidence.length)} relevant records</h3>
-            <p className="meta-line">
-              {formatNumber(evidenceMix.projectMatches)} projects ·{' '}
-              {formatNumber(evidenceMix.publicationMatches)} publications
-            </p>
-            <p className="meta-line">
-              Core themes:{' '}
-              {metrics.topics.length > 0
-                ? compactList(metrics.topics.slice(0, 4).map((topic) => topic.topic), 4)
-                : 'n/a'}
-            </p>
+            <p className="eyebrow">System direction</p>
+            <h3>{blueprint.systemDirection}</h3>
+            <p className="meta-line">{blueprint.automationLoop}</p>
+          </article>
+
+          <article className="item-card decision-output-card">
+            <p className="eyebrow">Success signal</p>
+            <h3>{blueprint.successMetric}</h3>
+            <p className="meta-line">This signal is used as the go / no-go criterion.</p>
           </article>
         </div>
 
-        <div className="stack-list evidence-feed">
-          {rankedEvidence.slice(0, 8).map((item) => {
-            const percent = Math.max(8, Math.round((item.score / maxScore) * 100))
-            const subtitle = cleanSnippet(item.doc.subtitle)
-            return (
-              <article key={item.key} className="stack-item evidence-item">
-                <div className="evidence-top-row">
-                  <h3>{item.doc.title}</h3>
-                  <span className="score-pill">{describeStrength(item.score, maxScore)}</span>
-                </div>
-                <div className="evidence-bar" aria-hidden="true">
-                  <span style={{ width: `${percent}%` }} />
-                </div>
-                <p className="meta-line">
-                  {item.type === 'project' ? 'Build artifact' : 'Evidence anchor'} · matched:{' '}
-                  {compactList(item.matchedTerms, 6)}
-                </p>
-                {subtitle ? <p className="meta-line">{subtitle}</p> : null}
-                <p className="meta-line">
-                  {item.doc.url ? (
-                    <a href={item.doc.url} target="_blank" rel="noreferrer">
-                      Open
-                    </a>
-                  ) : (
-                    <Link to={item.doc.route}>Open</Link>
-                  )}
-                </p>
-              </article>
-            )
-          })}
-          {rankedEvidence.length === 0 ? (
-            <article className="stack-item evidence-item">
-              <h3>No strong matches yet</h3>
-              <p className="meta-line">Try broader terms for a wider evidence set.</p>
+        <div className="sequence-grid plan-sequence">
+          {blueprint.executionPlan.map((step) => (
+            <article key={step.phase} className="sequence-step">
+              <p className="sequence-index">{step.phase}</p>
+              <h3>{step.objective}</h3>
+              <p>{step.deliverable}</p>
             </article>
-          ) : null}
+          ))}
+        </div>
+
+        <div className="card-grid">
+          <article className="item-card">
+            <p className="matrix-label">Best starting system</p>
+            {blueprint.matchedProject ? (
+              <>
+                <h3>{blueprint.matchedProject.name}</h3>
+                <p>{blueprint.matchedProject.one_line ?? blueprint.matchedProject.description}</p>
+                <p className="meta-line">
+                  <a
+                    href={blueprint.matchedProject.demo_url ?? blueprint.matchedProject.html_url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open implementation
+                  </a>
+                </p>
+              </>
+            ) : (
+              <p>No matching implementation surfaced.</p>
+            )}
+          </article>
+
+          <article className="item-card">
+            <p className="matrix-label">Best evidence anchor</p>
+            {blueprint.matchedPublication ? (
+              <>
+                <h3>{blueprint.matchedPublication.title}</h3>
+                <p className="meta-line">
+                  {formatNumber(blueprint.matchedPublication.citation_count)} citations
+                  {blueprint.matchedPublication.year ? ` · ${blueprint.matchedPublication.year}` : ''}
+                </p>
+                {blueprint.matchedPublication.url ? (
+                  <p className="meta-line">
+                    <a href={blueprint.matchedPublication.url} target="_blank" rel="noreferrer">
+                      Read publication
+                    </a>
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <p>No matching publication surfaced.</p>
+            )}
+          </article>
+        </div>
+
+        <div className="panel panel-note">
+          <p className="matrix-label">Delivery handoff checklist</p>
+          <ul className="checklist-list">
+            {blueprint.handoffChecklist.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
         </div>
       </section>
 
       <section className="panel panel-note">
-        <p className="meta-line">Updated {formatDateTime(profile.last_sync.last_run_timestamp)}</p>
+        <p className="meta-line">Updated {formatDateTime(state.data.profile.last_sync.last_run_timestamp)}</p>
       </section>
     </div>
   )

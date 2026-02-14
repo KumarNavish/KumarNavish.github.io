@@ -108,7 +108,7 @@ export function ProjectsPage() {
             Back to case studies
           </Link>
           <Link className="action-link action-link-primary" to="/proof">
-            Approach
+            Live Lab
           </Link>
         </div>
       </section>

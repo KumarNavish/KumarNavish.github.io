@@ -1,91 +1,89 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { fetchProfileApi, fetchProjectsApi, fetchPublicationsApi } from '../lib/api'
 import {
-  fetchProfileApi,
-  fetchProjectsApi,
-  fetchPublicationsApi,
-  type ProjectItem,
-  type PublicationItem,
-} from '../lib/api'
+  CHALLENGE_OPTIONS,
+  GOAL_OPTIONS,
+  HORIZON_OPTIONS,
+  RISK_OPTIONS,
+  createDecisionBlueprint,
+  type ChallengeId,
+  type GoalId,
+  type HorizonId,
+  type RiskId,
+} from '../lib/decisionEngine'
 import { formatDateTime, formatNumber } from '../lib/formatters'
 import { useResource } from '../lib/useResource'
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks'
 
-interface ApproachData {
+interface LabData {
   profile: Awaited<ReturnType<typeof fetchProfileApi>>
   projects: Awaited<ReturnType<typeof fetchProjectsApi>>
   publications: Awaited<ReturnType<typeof fetchPublicationsApi>>
 }
 
-interface ApproachTrack {
+interface Preset {
   id: string
-  title: string
-  decision: string
-  whoBenefits: string
-  practicalOutcome: string
-  nextAction: string
-  projectMatcher?: (project: ProjectItem) => boolean
-  publicationMatcher: (publication: PublicationItem) => boolean
+  label: string
+  challenge: ChallengeId
+  goal: GoalId
+  horizon: HorizonId
+  risk: RiskId
+  context: string
 }
 
-const APPROACH_TRACKS: ApproachTrack[] = [
+const PRESETS: Preset[] = [
   {
-    id: 'continual-learning',
-    title: 'Continual learning reliability',
-    decision: 'Which update strategy stays stable as objectives and tasks shift over time?',
-    whoBenefits: 'Teams maintaining long-lived learning systems',
-    practicalOutcome: 'Lower update risk through implementation-backed policy comparisons.',
-    nextAction: 'Compare update policies under your own task sequence and drift profile.',
-    projectMatcher: (project) => project.name.toLowerCase().includes('cl-plo'),
-    publicationMatcher: (publication) =>
-      publication.title.toLowerCase().includes('square-root natural-gradient'),
+    id: 'model-regression',
+    label: 'Model regression risk',
+    challenge: 'continual_reliability',
+    goal: 'pilot',
+    horizon: '6w',
+    risk: 'balanced',
+    context: 'performance drift after each scheduled update',
   },
   {
-    id: 'moderation',
-    title: 'Interaction safety design',
-    decision: 'Which interaction signatures should trigger earlier intervention?',
-    whoBenefits: 'Trust and safety teams designing moderation workflows',
-    practicalOutcome: 'More actionable triage criteria from observed user interaction patterns.',
-    nextAction: 'Use interaction signatures to define intervention thresholds and escalation rules.',
-    projectMatcher: (project) =>
-      `${project.name} ${project.description}`.toLowerCase().includes('twitter'),
-    publicationMatcher: (publication) =>
-      publication.title.toLowerCase().includes('interaction dynamics between hate'),
+    id: 'moderation-escalation',
+    label: 'Moderation escalation',
+    challenge: 'online_safety',
+    goal: 'diagnose',
+    horizon: '2w',
+    risk: 'conservative',
+    context: 'harmful threads escalate before intervention triggers fire',
   },
   {
-    id: 'urban-logistics',
-    title: 'Urban transition sequencing',
-    decision: 'Where should transition pilots begin for the strongest operational fit?',
-    whoBenefits: 'Urban logistics and mobility planning teams',
-    practicalOutcome: 'Clearer pilot sequencing decisions across heterogeneous micro-regions.',
-    nextAction: 'Rank candidate regions by expected transition fit before field rollout.',
-    publicationMatcher: (publication) =>
-      publication.title.toLowerCase().includes('delivery vehicles across urban micro-regions'),
+    id: 'rollout-sequencing',
+    label: 'Rollout sequencing',
+    challenge: 'urban_transition',
+    goal: 'production',
+    horizon: '12w',
+    risk: 'balanced',
+    context: 'multiple city regions with uneven transition readiness',
   },
 ]
 
-function findMatchedProject(
-  projects: ProjectItem[],
-  matcher?: (project: ProjectItem) => boolean,
-): ProjectItem | null {
-  if (!matcher) {
-    return null
+function describeReadiness(goal: GoalId, horizon: HorizonId, risk: RiskId): string {
+  if (goal === 'production' && horizon === '12w' && risk !== 'aggressive') {
+    return 'High deployment readiness with controlled scale-up.'
   }
-  return projects.find(matcher) ?? null
-}
-
-function findMatchedPublication(
-  publications: PublicationItem[],
-  matcher: (publication: PublicationItem) => boolean,
-): PublicationItem | null {
-  return publications.find(matcher) ?? null
+  if (goal === 'pilot') {
+    return 'Practical pilot readiness with measurable go / no-go criteria.'
+  }
+  if (risk === 'aggressive') {
+    return 'Fast learning mode with explicit containment boundaries.'
+  }
+  return 'Focused discovery mode aimed at fast decision clarity.'
 }
 
 export function SystemProofPage() {
-  const [selectedTrackId, setSelectedTrackId] = useState<string>(APPROACH_TRACKS[0].id)
+  const [challenge, setChallenge] = useState<ChallengeId>('continual_reliability')
+  const [goal, setGoal] = useState<GoalId>('pilot')
+  const [horizon, setHorizon] = useState<HorizonId>('6w')
+  const [risk, setRisk] = useState<RiskId>('balanced')
+  const [context, setContext] = useState('')
 
-  const loadApproach = useCallback(
+  const loadLab = useCallback(
     () =>
       Promise.all([fetchProfileApi(), fetchProjectsApi(), fetchPublicationsApi()]).then(
         ([profile, projects, publications]) => ({
@@ -97,36 +95,37 @@ export function SystemProofPage() {
     [],
   )
 
-  const state = useResource<ApproachData>(loadApproach)
+  const state = useResource<LabData>(loadLab)
 
-  const selectedTrack = useMemo(
-    () => APPROACH_TRACKS.find((track) => track.id === selectedTrackId) ?? APPROACH_TRACKS[0],
-    [selectedTrackId],
-  )
-
-  const selectedProject = useMemo(() => {
+  const blueprint = useMemo(() => {
     if (!state.data) {
       return null
     }
-    return findMatchedProject(state.data.projects.items, selectedTrack.projectMatcher)
-  }, [selectedTrack, state.data])
 
-  const selectedPublication = useMemo(() => {
-    if (!state.data) {
-      return null
-    }
-    return findMatchedPublication(state.data.publications.items, selectedTrack.publicationMatcher)
-  }, [selectedTrack, state.data])
+    return createDecisionBlueprint(
+      {
+        challenge,
+        goal,
+        horizon,
+        risk,
+        context,
+      },
+      {
+        projects: state.data.projects.items,
+        publications: state.data.publications.items,
+      },
+    )
+  }, [challenge, context, goal, horizon, risk, state.data])
 
   if (state.loading) {
-    return <LoadingBlock label="Loading approach." />
+    return <LoadingBlock label="Loading live lab." />
   }
 
-  if (!state.data || state.error) {
+  if (!state.data || state.error || !blueprint) {
     return (
       <ErrorBlock
-        label="Unable to load approach."
-        details={state.error ?? 'unknown approach error'}
+        label="Unable to load live lab."
+        details={state.error ?? 'unknown live lab error'}
       />
     )
   }
@@ -134,28 +133,34 @@ export function SystemProofPage() {
   return (
     <div className="page">
       <section className="hero">
-        <p className="eyebrow">Approach</p>
-        <h1>How decisions are framed, built, and validated.</h1>
+        <p className="eyebrow">Live Lab</p>
+        <h1>Turn a real problem into a delivery-ready plan.</h1>
         <p className="hero-copy">
-          Select a track to see the exact reasoning loop: decision question, implementation, and
-          evidence.
+          Choose a scenario or define your own. The lab returns a practical operating plan with
+          implementation and evidence anchors.
         </p>
       </section>
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Decision Tracks</h2>
+          <h2>Scenario Presets</h2>
         </header>
 
-        <div className="track-row" role="tablist" aria-label="Approach tracks">
-          {APPROACH_TRACKS.map((track) => (
+        <div className="track-row" role="tablist" aria-label="Scenario presets">
+          {PRESETS.map((preset) => (
             <button
-              key={track.id}
+              key={preset.id}
               type="button"
-              className={track.id === selectedTrack.id ? 'track-chip track-chip-active' : 'track-chip'}
-              onClick={() => setSelectedTrackId(track.id)}
+              className="track-chip"
+              onClick={() => {
+                setChallenge(preset.challenge)
+                setGoal(preset.goal)
+                setHorizon(preset.horizon)
+                setRisk(preset.risk)
+                setContext(preset.context)
+              }}
             >
-              {track.title}
+              {preset.label}
             </button>
           ))}
         </div>
@@ -163,81 +168,166 @@ export function SystemProofPage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Execution Loop</h2>
+          <h2>Build Your Plan</h2>
         </header>
 
-        <div className="sequence-grid">
-          <article className="sequence-step">
-            <p className="sequence-index">Step 1</p>
-            <h3>Frame the decision</h3>
-            <p>{selectedTrack.decision}</p>
+        <div className="track-row" role="tablist" aria-label="Challenge type">
+          {CHALLENGE_OPTIONS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={item.id === challenge ? 'track-chip track-chip-active' : 'track-chip'}
+              onClick={() => setChallenge(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="controls-panel workbench-controls">
+          <label>
+            Goal
+            <select value={goal} onChange={(event) => setGoal(event.target.value as GoalId)}>
+              {GOAL_OPTIONS.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Horizon
+            <select
+              value={horizon}
+              onChange={(event) => setHorizon(event.target.value as HorizonId)}
+            >
+              {HORIZON_OPTIONS.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Risk
+            <select value={risk} onChange={(event) => setRisk(event.target.value as RiskId)}>
+              {RISK_OPTIONS.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="controls-panel controls-panel-compact workbench-controls">
+          <label>
+            Context
+            <input
+              value={context}
+              onChange={(event) => setContext(event.target.value)}
+              placeholder="Describe the current operating pain point"
+            />
+          </label>
+        </div>
+      </section>
+
+      <section className="panel">
+        <header className="panel-header">
+          <h2>Delivery Output</h2>
+        </header>
+
+        <div className="card-grid">
+          <article className="item-card decision-output-card">
+            <p className="eyebrow">Primary decision</p>
+            <h3>{blueprint.decisionQuestion}</h3>
+            <p>{blueprint.systemDirection}</p>
           </article>
 
-          <article className="sequence-step">
-            <p className="sequence-index">Step 2</p>
-            <h3>Build the system</h3>
-            {selectedProject ? (
+          <article className="item-card decision-output-card">
+            <p className="eyebrow">Automation loop</p>
+            <h3>{blueprint.automationLoop}</h3>
+            <p>{blueprint.successMetric}</p>
+          </article>
+
+          <article className="item-card decision-output-card">
+            <p className="eyebrow">Readiness signal</p>
+            <h3>{describeReadiness(goal, horizon, risk)}</h3>
+            <p>{blueprint.valueStatement}</p>
+          </article>
+        </div>
+
+        <div className="sequence-grid plan-sequence">
+          {blueprint.executionPlan.map((step) => (
+            <article key={step.phase} className="sequence-step">
+              <p className="sequence-index">{step.phase}</p>
+              <h3>{step.objective}</h3>
+              <p>{step.deliverable}</p>
+            </article>
+          ))}
+        </div>
+
+        <div className="card-grid">
+          <article className="item-card">
+            <p className="matrix-label">Implementation anchor</p>
+            {blueprint.matchedProject ? (
               <>
-                <p>{selectedProject.one_line ?? selectedProject.description ?? selectedProject.name}</p>
+                <h3>{blueprint.matchedProject.name}</h3>
+                <p>{blueprint.matchedProject.one_line ?? blueprint.matchedProject.description}</p>
                 <p className="meta-line">
-                  <a href={selectedProject.demo_url ?? selectedProject.html_url} target="_blank" rel="noreferrer">
+                  <a
+                    href={blueprint.matchedProject.demo_url ?? blueprint.matchedProject.html_url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
                     Open implementation
                   </a>
                 </p>
               </>
             ) : (
-              <p>Implementation pattern is captured directly in the decision design and evaluation flow.</p>
+              <p>No matching implementation surfaced.</p>
             )}
           </article>
 
-          <article className="sequence-step">
-            <p className="sequence-index">Step 3</p>
-            <h3>Validate with evidence</h3>
-            {selectedPublication ? (
+          <article className="item-card">
+            <p className="matrix-label">Evidence anchor</p>
+            {blueprint.matchedPublication ? (
               <>
-                <p>{selectedPublication.title}</p>
+                <h3>{blueprint.matchedPublication.title}</h3>
                 <p className="meta-line">
-                  {formatNumber(selectedPublication.citation_count)} citations
-                  {selectedPublication.year ? ` · ${selectedPublication.year}` : ''}
+                  {formatNumber(blueprint.matchedPublication.citation_count)} citations
+                  {blueprint.matchedPublication.year ? ` · ${blueprint.matchedPublication.year}` : ''}
                 </p>
-                {selectedPublication.url ? (
+                {blueprint.matchedPublication.url ? (
                   <p className="meta-line">
-                    <a href={selectedPublication.url} target="_blank" rel="noreferrer">
+                    <a href={blueprint.matchedPublication.url} target="_blank" rel="noreferrer">
                       Read publication
                     </a>
                   </p>
                 ) : null}
               </>
             ) : (
-              <p>Evidence reference is currently being curated for this track.</p>
+              <p>No matching publication surfaced.</p>
             )}
           </article>
+        </div>
+
+        <div className="panel panel-note">
+          <p className="matrix-label">Handoff checklist</p>
+          <ul className="checklist-list">
+            {blueprint.handoffChecklist.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
         </div>
       </section>
 
       <section className="panel">
-        <header className="panel-header">
-          <h2>Applied Value</h2>
-        </header>
-
-        <div className="card-grid">
-          <article className="item-card">
-            <p className="matrix-label">Who this helps</p>
-            <p>{selectedTrack.whoBenefits}</p>
-          </article>
-          <article className="item-card">
-            <p className="matrix-label">Practical outcome</p>
-            <p>{selectedTrack.practicalOutcome}</p>
-          </article>
-          <article className="item-card">
-            <p className="matrix-label">Next action</p>
-            <p>{selectedTrack.nextAction}</p>
-          </article>
-        </div>
-
         <div className="action-row">
           <Link className="action-link action-link-primary" to="/work">
-            Open case studies
+            Case studies
           </Link>
           <Link className="action-link" to="/projects">
             Projects archive
@@ -249,9 +339,7 @@ export function SystemProofPage() {
       </section>
 
       <section className="panel panel-note">
-        <p className="meta-line">
-          Updated {formatDateTime(state.data.profile.last_sync.last_run_timestamp)}
-        </p>
+        <p className="meta-line">Updated {formatDateTime(state.data.profile.last_sync.last_run_timestamp)}</p>
       </section>
     </div>
   )
