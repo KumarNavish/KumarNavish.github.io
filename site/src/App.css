@@ -274,15 +274,6 @@ a:hover {
   margin: 0.48rem 0 0;
 }
 
-.direction-kpi {
-  color: var(--accent);
-  font-size: 0.8rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  font-family: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Monaco, Consolas,
-    'Liberation Mono', monospace;
-}
-
 .kv-grid {
   display: grid;
   gap: 0.72rem;
@@ -379,6 +370,7 @@ a:hover {
   margin: 0;
   font-size: 1rem;
   line-height: 1.35;
+  word-break: break-word;
 }
 
 .stack-item p {
@@ -394,6 +386,10 @@ a:hover {
   display: grid;
   gap: 0.68rem;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.case-matrix-4 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .matrix-label {
@@ -417,29 +413,6 @@ a:hover {
   margin: 0;
   color: var(--muted);
   line-height: 1.68;
-}
-
-.endpoint-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 0.26rem;
-}
-
-.endpoint-list li {
-  border-bottom: 1px dashed var(--line);
-  padding: 0.24rem 0;
-  word-break: break-word;
-}
-
-.compact-list {
-  gap: 0.16rem;
-}
-
-.compact-list li {
-  border-bottom: 0;
-  padding: 0.08rem 0;
 }
 
 .sequence-grid {
@@ -475,12 +448,6 @@ a:hover {
   color: var(--accent);
   font-family: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Monaco, Consolas,
     'Liberation Mono', monospace;
-}
-
-.surface-grid {
-  display: grid;
-  gap: 0.7rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .state-block {
@@ -540,8 +507,7 @@ a:hover {
 
   .controls-panel,
   .direction-grid,
-  .sequence-grid,
-  .surface-grid {
+  .sequence-grid {
     grid-template-columns: 1fr;
   }
 }

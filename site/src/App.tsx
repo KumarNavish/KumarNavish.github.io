@@ -10,7 +10,7 @@ import { WorkPage } from './pages/WorkPage'
 const NAVIGATION = [
   { href: '/', label: 'Overview' },
   { href: '/work', label: 'Case Studies' },
-  { href: '/proof', label: 'Practical Value' },
+  { href: '/proof', label: 'Applied Value' },
 ]
 
 function Navigation() {
@@ -37,7 +37,7 @@ function SiteHeader() {
     <header className="site-header">
       <div className="header-inner">
         <p className="header-title">Navish Kumar</p>
-        <p className="header-subtitle">Research shaped into deployable systems</p>
+        <p className="header-subtitle">Research systems for real-world decisions</p>
       </div>
       <Navigation />
     </header>

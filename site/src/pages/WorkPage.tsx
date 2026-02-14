@@ -23,6 +23,7 @@ interface CaseStudyDefinition {
   track: string
   title: string
   question: string
+  appliedUse: string
   projectMatcher: (project: ProjectItem) => boolean
   publicationMatcher: (publication: PublicationItem) => boolean
 }
@@ -33,7 +34,8 @@ const CASE_STUDIES: CaseStudyDefinition[] = [
     track: 'Method Design',
     title: 'Square-root Natural-gradient Variational Inference',
     question:
-      'How can variational inference keep formal guarantees and still be practical to implement?',
+      'How can variational inference keep formal guarantees and remain practical to implement?',
+    appliedUse: 'Supports dependable inference updates in continual-learning pipelines.',
     projectMatcher: (project) => project.name.toLowerCase().includes('cl-plo'),
     publicationMatcher: (publication) =>
       publication.title.toLowerCase().includes('square-root natural-gradient'),
@@ -43,7 +45,8 @@ const CASE_STUDIES: CaseStudyDefinition[] = [
     track: 'Operational AI',
     title: 'Urban Micro-region Logistics Modeling',
     question:
-      'How can delivery transitions be evaluated with observed city behavior instead of assumptions?',
+      'How can delivery transitions be evaluated from observed city behavior instead of assumptions?',
+    appliedUse: 'Supports planning decisions for sustainable fleet transitions.',
     projectMatcher: (project) =>
       `${project.name} ${project.description}`.toLowerCase().includes('logistics'),
     publicationMatcher: (publication) =>
@@ -55,6 +58,7 @@ const CASE_STUDIES: CaseStudyDefinition[] = [
     title: 'Hate and Counterspeech Interaction Dynamics',
     question:
       'Which interaction patterns separate harmful behavior from protective response?',
+    appliedUse: 'Supports moderation policy analysis and intervention prioritization.',
     projectMatcher: (project) =>
       `${project.name} ${project.description}`.toLowerCase().includes('twitter'),
     publicationMatcher: (publication) =>
@@ -150,10 +154,10 @@ export function WorkPage() {
     <div className="page">
       <section className="hero">
         <p className="eyebrow">Case Studies</p>
-        <h1>Three examples of how I think, build, and validate.</h1>
+        <h1>How problem framing is converted into systems and evidence.</h1>
         <p className="hero-copy">
-          Each case keeps the same structure so the signal is clear: the question, the system, and
-          the research evidence.
+          Each case follows one structure so review is fast: problem, implementation, applied use,
+          and supporting evidence.
         </p>
       </section>
 
@@ -166,13 +170,13 @@ export function WorkPage() {
             <article key={caseStudy.id} className="stack-item case-study-card">
               <p className="eyebrow">{caseStudy.track}</p>
               <h3>{caseStudy.title}</h3>
-              <div className="case-matrix">
+              <div className="case-matrix case-matrix-4">
                 <div>
-                  <p className="matrix-label">Question</p>
+                  <p className="matrix-label">Problem</p>
                   <p>{caseStudy.question}</p>
                 </div>
                 <div>
-                  <p className="matrix-label">System</p>
+                  <p className="matrix-label">Implementation</p>
                   <p>
                     {caseStudy.project ? (
                       <>
@@ -193,6 +197,10 @@ export function WorkPage() {
                       'Project link is being prepared.'
                     )}
                   </p>
+                </div>
+                <div>
+                  <p className="matrix-label">Applied use</p>
+                  <p>{caseStudy.appliedUse}</p>
                 </div>
                 <div>
                   <p className="matrix-label">Evidence</p>
@@ -229,7 +237,7 @@ export function WorkPage() {
 
       <section id="systems" className="panel">
         <header className="panel-header">
-          <h2>Featured Systems</h2>
+          <h2>Implementation References</h2>
         </header>
         <div className="card-grid">
           {featuredProjects.map((project) => (
@@ -258,7 +266,7 @@ export function WorkPage() {
 
       <section id="archives" className="panel">
         <header className="panel-header">
-          <h2>Need More Depth?</h2>
+          <h2>Need Full Records?</h2>
         </header>
         <div className="action-row">
           <Link className="action-link" to="/projects">
@@ -268,7 +276,7 @@ export function WorkPage() {
             Publication archive
           </Link>
           <Link className="action-link action-link-primary" to="/proof">
-            Practical value
+            Applied value
           </Link>
         </div>
         <p className="meta-line">
