@@ -72,6 +72,13 @@ h1 {
   font-weight: 600;
 }
 
+.outcome-subline {
+  margin-top: 0.34rem;
+  color: #2e6f45;
+  font-size: 0.84rem;
+  font-weight: 500;
+}
+
 h2 {
   margin: 0;
   font-size: 1.02rem;
@@ -486,30 +493,10 @@ button:disabled {
   color: #1f3558;
 }
 
-.tab-row {
-  margin-top: 0.74rem;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.36rem;
-}
-
-.tab-btn {
-  border-radius: 999px;
-  background: #f3f7ff;
-  border: 1px solid #cfdbed;
-  color: #2f4e7c;
-  padding: 0.42rem 0.72rem;
-  font-size: 0.86rem;
-}
-
-.tab-btn.active {
-  background: #1f467d;
-  border-color: #1f467d;
-  color: #fff;
-}
-
 .artifact-panel {
   margin-top: 0.74rem;
+  display: grid;
+  gap: 0.64rem;
 }
 
 .artifact-card {
