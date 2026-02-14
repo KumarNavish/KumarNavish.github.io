@@ -368,6 +368,25 @@ a:hover {
   margin: 0.3rem 0 0;
 }
 
+.capability-grid {
+  display: grid;
+  gap: 0.74rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.capability-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fdfcf8;
+  padding: 0.82rem 0.9rem;
+}
+
+.capability-card h3 {
+  margin: 0.35rem 0 0;
+  font-size: 0.98rem;
+  line-height: 1.36;
+}
+
 .builder-output-panel {
   display: grid;
   gap: 0.95rem;
@@ -701,7 +720,8 @@ a:hover {
   .builder-layout,
   .builder-plan-columns,
   .builder-summary-grid,
-  .builder-stat-row {
+  .builder-stat-row,
+  .capability-grid {
     grid-template-columns: 1fr;
   }
 

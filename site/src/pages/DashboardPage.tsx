@@ -26,14 +26,35 @@ interface DashboardData {
 
 type OutputView = 'plan' | 'kpis' | 'risks'
 
+interface CapabilityTrack {
+  challenge: ChallengeId
+  title: string
+  statement: string
+}
+
+const CAPABILITY_TRACKS: CapabilityTrack[] = [
+  {
+    challenge: 'continual_reliability',
+    title: 'Continual Learning Reliability',
+    statement: 'Policy design for stable sequential model updates.',
+  },
+  {
+    challenge: 'online_safety',
+    title: 'Online Safety Intervention',
+    statement: 'Interaction-driven trigger design for earlier moderation action.',
+  },
+  {
+    challenge: 'urban_transition',
+    title: 'Urban Transition Sequencing',
+    statement: 'Evidence-based rollout ordering under operational constraints.',
+  },
+]
+
 function briefFileName(challenge: ChallengeId, horizon: HorizonId): string {
   return `decision-brief-${challenge}-${horizon}.md`
 }
 
-function labelFor<T extends string>(
-  options: Array<{ id: T; label: string }>,
-  id: T,
-): string {
+function labelFor<T extends string>(options: Array<{ id: T; label: string }>, id: T): string {
   return options.find((option) => option.id === id)?.label ?? id
 }
 
@@ -79,6 +100,36 @@ export function DashboardPage() {
       },
     )
   }, [challenge, context, goal, horizon, risk, state.data])
+
+  const capabilityAnchors = useMemo(() => {
+    const data = state.data
+    if (!data) {
+      return []
+    }
+
+    return CAPABILITY_TRACKS.map((track) => {
+      const anchor = createDecisionBlueprint(
+        {
+          challenge: track.challenge,
+          goal: 'pilot',
+          horizon: '6w',
+          risk: 'balanced',
+          context: '',
+        },
+        {
+          projects: data.projects.items,
+          publications: data.publications.items,
+        },
+      )
+
+      return {
+        ...track,
+        project: anchor.matchedProject,
+        publication: anchor.matchedPublication,
+        decisionQuestion: anchor.decisionQuestion,
+      }
+    })
+  }, [state.data])
 
   const briefMarkdown = useMemo(() => {
     if (!blueprint) {
@@ -148,10 +199,10 @@ export function DashboardPage() {
     <div className="page builder-page">
       <section className="hero hero-primary builder-hero">
         <p className="eyebrow">Decision Builder</p>
-        <h1>Turn one operating problem into a delivery-ready brief.</h1>
+        <h1>Evidence-backed systems design, from first decision to delivery brief.</h1>
         <p className="hero-copy">
-          This is a single utility: define a context and get a practical plan with actions, KPI
-          gates, risk controls, and handoff output.
+          This page combines prior systems work with a live planning utility. A visitor can see what
+          has been built and generate what should be built next.
         </p>
         <div className="builder-stat-row" aria-label="Profile snapshot">
           <article className="builder-stat">
@@ -169,13 +220,56 @@ export function DashboardPage() {
         </div>
       </section>
 
+      <section className="panel">
+        <header className="panel-header">
+          <h2>Built Systems Track Record</h2>
+        </header>
+        <div className="capability-grid">
+          {capabilityAnchors.map((track) => (
+            <article key={track.challenge} className="capability-card">
+              <p className="matrix-label">{track.title}</p>
+              <h3>{track.statement}</h3>
+              <p className="meta-line">{track.decisionQuestion}</p>
+              <p className="meta-line">
+                Build:{' '}
+                {track.project ? (
+                  <a
+                    href={track.project.demo_url ?? track.project.html_url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {track.project.name}
+                  </a>
+                ) : (
+                  'unavailable'
+                )}
+              </p>
+              <p className="meta-line">
+                Evidence:{' '}
+                {track.publication ? (
+                  track.publication.url ? (
+                    <a href={track.publication.url} target="_blank" rel="noreferrer">
+                      {track.publication.title}
+                    </a>
+                  ) : (
+                    track.publication.title
+                  )
+                ) : (
+                  'unavailable'
+                )}
+              </p>
+            </article>
+          ))}
+        </div>
+      </section>
+
       <section className="builder-layout" aria-label="Decision workflow">
         <aside className="panel builder-config-panel">
           <header className="panel-header">
             <h2>1. Configure</h2>
           </header>
           <p className="meta-line">
-            Choose challenge, goal, horizon, and risk mode. Add one clear context line.
+            Define one practical decision context and the operating constraints around it.
           </p>
 
           <div className="track-row" role="tablist" aria-label="Challenge selection">
@@ -344,7 +438,7 @@ export function DashboardPage() {
               </article>
 
               <article className="builder-block">
-                <p className="matrix-label">Implementation and Evidence</p>
+                <p className="matrix-label">Implementation + Evidence</p>
                 {blueprint.matchedProject ? (
                   <p className="meta-line">
                     Build anchor:{' '}
