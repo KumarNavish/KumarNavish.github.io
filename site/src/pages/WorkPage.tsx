@@ -30,20 +30,20 @@ interface CaseStudyDefinition {
 const CASE_STUDIES: CaseStudyDefinition[] = [
   {
     id: 'natural-gradient-vi',
-    track: 'Theory to optimization system',
+    track: 'Method Design',
     title: 'Square-root Natural-gradient Variational Inference',
     question:
-      'How can variational inference keep theoretical guarantees while remaining implementation-ready?',
+      'How can variational inference keep formal guarantees and still be practical to implement?',
     projectMatcher: (project) => project.name.toLowerCase().includes('cl-plo'),
     publicationMatcher: (publication) =>
       publication.title.toLowerCase().includes('square-root natural-gradient'),
   },
   {
     id: 'urban-logistics',
-    track: 'Model to operational planning',
+    track: 'Operational AI',
     title: 'Urban Micro-region Logistics Modeling',
     question:
-      'How can sustainable delivery transitions be evaluated using observed city behavior instead of assumptions?',
+      'How can delivery transitions be evaluated with observed city behavior instead of assumptions?',
     projectMatcher: (project) =>
       `${project.name} ${project.description}`.toLowerCase().includes('logistics'),
     publicationMatcher: (publication) =>
@@ -51,10 +51,10 @@ const CASE_STUDIES: CaseStudyDefinition[] = [
   },
   {
     id: 'social-counterspeech',
-    track: 'Data to social intervention',
+    track: 'Social Systems',
     title: 'Hate and Counterspeech Interaction Dynamics',
     question:
-      'Which behavioral asymmetries identify harmful and protective actors in social systems?',
+      'Which interaction patterns separate harmful behavior from protective response?',
     projectMatcher: (project) =>
       `${project.name} ${project.description}`.toLowerCase().includes('twitter'),
     publicationMatcher: (publication) =>
@@ -134,13 +134,13 @@ export function WorkPage() {
   }, [state.data])
 
   if (state.loading) {
-    return <LoadingBlock label="Loading curated work." />
+    return <LoadingBlock label="Loading case studies." />
   }
 
   if (!state.data || state.error) {
     return (
       <ErrorBlock
-        label="Unable to load curated work."
+        label="Unable to load case studies."
         details={state.error ?? 'unknown work page error'}
       />
     )
@@ -150,9 +150,10 @@ export function WorkPage() {
     <div className="page">
       <section className="hero">
         <p className="eyebrow">Case Studies</p>
-        <h1>How questions become systems and evidence</h1>
+        <h1>Three examples of how I think, build, and validate.</h1>
         <p className="hero-copy">
-          Three compact studies map the flow from framing, to build, to validated output.
+          Each case keeps the same structure so the signal is clear: the question, the system, and
+          the research evidence.
         </p>
       </section>
 
@@ -171,7 +172,7 @@ export function WorkPage() {
                   <p>{caseStudy.question}</p>
                 </div>
                 <div>
-                  <p className="matrix-label">Build</p>
+                  <p className="matrix-label">System</p>
                   <p>
                     {caseStudy.project ? (
                       <>
@@ -185,11 +186,11 @@ export function WorkPage() {
                           target="_blank"
                           rel="noreferrer"
                         >
-                          Open system
+                          Open
                         </a>
                       </>
                     ) : (
-                      'Linked build artifact in active curation.'
+                      'Project link is being prepared.'
                     )}
                   </p>
                 </div>
@@ -210,13 +211,13 @@ export function WorkPage() {
                               target="_blank"
                               rel="noreferrer"
                             >
-                              Read paper
+                              Read
                             </a>
                           </>
                         ) : null}
                       </>
                     ) : (
-                      'Linked publication metadata in active curation.'
+                      'Publication link is being prepared.'
                     )}
                   </p>
                 </div>
@@ -234,7 +235,7 @@ export function WorkPage() {
           {featuredProjects.map((project) => (
             <article key={project.name} className="item-card">
               <h3>{project.name}</h3>
-              <p>{project.one_line ?? 'Technical artifact connected to ongoing research.'}</p>
+              <p>{project.one_line ?? 'Research artifact with implementation details.'}</p>
               <p className="meta-line">
                 {project.last_push ? `Updated ${new Date(project.last_push).getFullYear()} · ` : ''}
                 <a href={project.html_url ?? '/projects'} target="_blank" rel="noreferrer">
@@ -245,7 +246,7 @@ export function WorkPage() {
                     {' '}
                     ·{' '}
                     <a href={project.demo_url} target="_blank" rel="noreferrer">
-                      Live demo
+                      Demo
                     </a>
                   </>
                 ) : null}
@@ -257,7 +258,7 @@ export function WorkPage() {
 
       <section id="archives" className="panel">
         <header className="panel-header">
-          <h2>Full Archives</h2>
+          <h2>Need More Depth?</h2>
         </header>
         <div className="action-row">
           <Link className="action-link" to="/projects">
@@ -267,11 +268,11 @@ export function WorkPage() {
             Publication archive
           </Link>
           <Link className="action-link action-link-primary" to="/proof">
-            System evidence
+            Practical value
           </Link>
         </div>
         <p className="meta-line">
-          Last curated sync {formatDateTime(state.data.profile.last_sync.last_run_timestamp)}
+          Last refresh {formatDateTime(state.data.profile.last_sync.last_run_timestamp)}
         </p>
       </section>
     </div>

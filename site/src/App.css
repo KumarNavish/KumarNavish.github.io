@@ -8,7 +8,6 @@
   --line: #ddd8ca;
   --accent: #1d4a43;
   --accent-soft: #edf3ef;
-  --warning: #8f5a00;
   --error: #a02727;
   --radius: 10px;
   --max-width: 1024px;
@@ -420,32 +419,6 @@ a:hover {
   line-height: 1.68;
 }
 
-.badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.1rem 0.42rem;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  color: var(--accent);
-  background: var(--accent-soft);
-  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
-}
-
-.badge-success {
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-
-.badge-failed {
-  color: var(--error);
-  background: #fdeceb;
-}
-
-.badge-skipped {
-  color: var(--muted);
-  background: #f0f1ee;
-}
-
 .endpoint-list {
   margin: 0;
   padding: 0;
@@ -508,38 +481,6 @@ a:hover {
   display: grid;
   gap: 0.7rem;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.artifact-list {
-  display: grid;
-  gap: 0.68rem;
-}
-
-.artifact-item {
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 0.66rem 0.72rem;
-  display: grid;
-  grid-template-columns: minmax(140px, 0.8fr) minmax(0, 1.5fr) auto auto;
-  gap: 0.52rem;
-  align-items: center;
-}
-
-.artifact-name,
-.artifact-path,
-.artifact-open {
-  margin: 0;
-}
-
-.artifact-name {
-  font-size: 0.9rem;
-  font-weight: 600;
-}
-
-.artifact-path {
-  color: var(--muted);
-  font-size: 0.83rem;
-  word-break: break-word;
 }
 
 .state-block {
@@ -640,8 +581,4 @@ a:hover {
     justify-content: center;
   }
 
-  .artifact-item {
-    grid-template-columns: 1fr;
-    align-items: start;
-  }
 }
