@@ -41,3 +41,62 @@ export interface CategoryDefinition {
 export interface CategoryCatalog {
   categories: CategoryDefinition[]
 }
+
+export interface ExtractedSignals {
+  cycle_time_days: number | null
+  volume_per_month: number | null
+  key_systems: string[]
+  approval_roles: string[]
+  pain_keywords: string[]
+  manual_step_count: number
+  mentions_sla: boolean
+  controls_keywords: string[]
+}
+
+export type PriorityBand = 'P1' | 'P2' | 'P3'
+
+export interface TriageResult {
+  category: IntakeCategory
+  priority: PriorityBand
+  risk_level: RiskLevel
+  automation_score: number
+  next_action: string
+  est_savings_hours_per_month: number
+}
+
+export interface Charter {
+  problem_statement: string
+  scope_in: string[]
+  scope_out: string[]
+  stakeholders: string[]
+  baseline_metrics: Record<string, number | string | null>
+  target_metrics: Record<string, number | string | null>
+  constraints_controls: string[]
+  dmaic_next_steps: Array<{
+    phase: 'Define' | 'Measure' | 'Analyze' | 'Improve' | 'Control'
+    action: string
+  }>
+}
+
+export interface BlueprintStep {
+  id: string
+  name: string
+  type: 'validation' | 'approval' | 'routing' | 'notification' | 'update'
+  description: string
+}
+
+export interface AutomationBlueprint {
+  process_category: IntakeCategory
+  objective: string
+  triggers: Array<{ type: string; description: string }>
+  connectors: Array<{ system: string; purpose: string }>
+  steps: BlueprintStep[]
+  controls: Array<{ control: string; description: string }>
+  monitoring: Array<{ metric: string; target: string; alert_condition: string }>
+}
+
+export interface ExportPayloads {
+  jira_issue_create: Record<string, unknown>
+  servicenow_record_create: Record<string, unknown>
+  process_tracker_row: Record<string, unknown>
+}
