@@ -127,7 +127,7 @@ export function PublicationsPage() {
             Back to case studies
           </Link>
           <Link className="action-link action-link-primary" to="/proof">
-            Applied value
+            Impact overview
           </Link>
         </div>
       </section>

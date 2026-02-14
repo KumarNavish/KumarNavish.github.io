@@ -274,30 +274,6 @@ a:hover {
   margin: 0.48rem 0 0;
 }
 
-.kv-grid {
-  display: grid;
-  gap: 0.72rem;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.kv-grid p {
-  margin: 0;
-  display: grid;
-  gap: 0.18rem;
-}
-
-.kv-grid span {
-  font-size: 0.75rem;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.kv-grid strong {
-  font-size: 0.92rem;
-  line-height: 1.35;
-}
-
 .controls-panel {
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -496,8 +472,7 @@ a:hover {
 }
 
 @media (max-width: 980px) {
-  .metric-grid,
-  .kv-grid {
+  .metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -524,8 +499,7 @@ a:hover {
     padding: 1rem;
   }
 
-  .metric-grid,
-  .kv-grid {
+  .metric-grid {
     grid-template-columns: 1fr;
   }
 

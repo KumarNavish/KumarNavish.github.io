@@ -1,187 +1,231 @@
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 
-import {
-  fetchLatestRunApi,
-  fetchProfileApi,
-  fetchProvenanceApi,
-  fetchStatusApi,
-} from '../lib/api'
-import { formatDateTime, formatDuration } from '../lib/formatters'
+import { fetchProfileApi, fetchProjectsApi, fetchPublicationsApi } from '../lib/api'
+import { formatDateTime, formatNumber } from '../lib/formatters'
 import { useResource } from '../lib/useResource'
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks'
 
-interface ValuePageData {
-  latestRun: Awaited<ReturnType<typeof fetchLatestRunApi>>
-  provenance: Awaited<ReturnType<typeof fetchProvenanceApi>>
+interface ImpactData {
   profile: Awaited<ReturnType<typeof fetchProfileApi>>
-  status: Awaited<ReturnType<typeof fetchStatusApi>>
+  projects: Awaited<ReturnType<typeof fetchProjectsApi>>
+  publications: Awaited<ReturnType<typeof fetchPublicationsApi>>
 }
 
-const VALUE_ENDPOINTS = [
+interface ImpactUseCaseDefinition {
+  id: string
+  title: string
+  owner: string
+  decision: string
+  outcome: string
+  projectMatcher?: (name: string) => boolean
+  publicationMatcher: (title: string) => boolean
+}
+
+const IMPACT_USE_CASES: ImpactUseCaseDefinition[] = [
   {
-    path: '/api/v1/profile.json',
-    purpose: 'Portable profile summary for websites, CV tooling, and identity sync.',
+    id: 'continual-learning-updates',
+    title: 'Continual-learning policy selection',
+    owner: 'ML engineers running long-lived model updates',
+    decision: 'Which policy update strategy preserves stability as tasks evolve?',
+    outcome: 'Reduces update risk by pairing implementation experiments with formal guarantees.',
+    projectMatcher: (name) => name.toLowerCase().includes('cl-plo'),
+    publicationMatcher: (title) => title.toLowerCase().includes('square-root natural-gradient'),
   },
   {
-    path: '/api/v1/projects.json',
-    purpose: 'Structured project metadata for filtering, portfolio widgets, and team review.',
+    id: 'online-moderation',
+    title: 'Harm-mitigation intervention design',
+    owner: 'Trust and safety teams',
+    decision: 'Which interaction signatures justify early intervention?',
+    outcome:
+      'Supports triage and policy testing through observed hate/counterspeech interaction patterns.',
+    projectMatcher: (name) => name.toLowerCase().includes('twitter-hate-and-counter-speakers'),
+    publicationMatcher: (title) => title.toLowerCase().includes('interaction dynamics between hate'),
   },
   {
-    path: '/api/v1/publications.json',
-    purpose: 'Publication metadata and summaries for bibliography and research pages.',
-  },
-  {
-    path: '/api/v1/metrics.json',
-    purpose: 'Roll-up metrics for quick evaluation and reporting.',
-  },
-  {
-    path: '/ops/latest-run.json',
-    purpose: 'Freshness and run-health signal for trust and monitoring.',
+    id: 'urban-transition-planning',
+    title: 'Cargo-bike rollout prioritization',
+    owner: 'Urban logistics and mobility planners',
+    decision: 'Which micro-regions should be prioritized for transition first?',
+    outcome: 'Provides pre-pilot evidence for transition sequencing and planning tradeoffs.',
+    publicationMatcher: (title) =>
+      title.toLowerCase().includes('delivery vehicles across urban micro-regions'),
   },
 ]
 
 export function SystemProofPage() {
-  const loadProof = useCallback(
+  const loadImpact = useCallback(
     () =>
-      Promise.all([
-        fetchLatestRunApi(),
-        fetchProvenanceApi(),
-        fetchProfileApi(),
-        fetchStatusApi(),
-      ]).then(([latestRun, provenance, profile, status]) => ({
-        latestRun,
-        provenance,
-        profile,
-        status,
-      })),
+      Promise.all([fetchProfileApi(), fetchProjectsApi(), fetchPublicationsApi()]).then(
+        ([profile, projects, publications]) => ({
+          profile,
+          projects,
+          publications,
+        }),
+      ),
     [],
   )
 
-  const state = useResource<ValuePageData>(loadProof)
+  const state = useResource<ImpactData>(loadImpact)
+
+  const impactCards = useMemo(() => {
+    const data = state.data
+    if (!data) {
+      return []
+    }
+
+    return IMPACT_USE_CASES.map((item) => {
+      const project = item.projectMatcher
+        ? data.projects.items.find((entry) => item.projectMatcher?.(entry.name)) ?? null
+        : null
+      const publication =
+        data.publications.items.find((entry) => item.publicationMatcher(entry.title)) ?? null
+
+      return {
+        ...item,
+        project,
+        publication,
+      }
+    })
+  }, [state.data])
+
+  const implementationCount = useMemo(() => {
+    if (!state.data) {
+      return 0
+    }
+    return state.data.projects.items.filter((project) => project.featured || project.pinned).length
+  }, [state.data])
 
   if (state.loading) {
-    return <LoadingBlock label="Loading applied-value evidence." />
+    return <LoadingBlock label="Loading impact overview." />
   }
 
   if (!state.data || state.error) {
     return (
       <ErrorBlock
-        label="Unable to load applied-value evidence."
-        details={state.error ?? 'unknown applied-value error'}
+        label="Unable to load impact overview."
+        details={state.error ?? 'unknown impact page error'}
       />
     )
   }
 
-  const { latestRun, provenance, profile, status } = state.data
-  const runUrl = latestRun.run.action_run_url ?? provenance.action_run_url
-  const warningCount = latestRun.tasks.reduce(
-    (count, task) =>
-      count +
-      task.logs.filter((log) => log.level === 'warning' || log.level === 'error').length,
-    0,
-  )
+  const { profile } = state.data
 
   return (
     <div className="page">
       <section className="hero">
-        <p className="eyebrow">Applied Value</p>
-        <h1>The infrastructure exists to keep this portfolio useful, current, and reusable.</h1>
+        <p className="eyebrow">Impact</p>
+        <h1>Evidence is useful only when it supports action.</h1>
         <p className="hero-copy">
-          The goal is practical: faster hiring review, cleaner collaboration handoff, and
-          machine-readable outputs that other tools can consume without scraping.
+          This page shows practical decision tracks, the work outputs behind them, and supporting
+          evidence.
         </p>
       </section>
 
-      <section className="panel">
-        <header className="panel-header">
-          <h2>Practical Use Cases</h2>
-        </header>
-        <div className="sequence-grid">
-          <article className="sequence-step">
-            <p className="sequence-index">01</p>
-            <h3>Hiring review</h3>
-            <p>Evaluate trajectory, implementation depth, and recency in one pass.</p>
-          </article>
-          <article className="sequence-step">
-            <p className="sequence-index">02</p>
-            <h3>Collaboration setup</h3>
-            <p>Share structured project and publication data for faster onboarding.</p>
-          </article>
-          <article className="sequence-step">
-            <p className="sequence-index">03</p>
-            <h3>System integration</h3>
-            <p>Reuse JSON endpoints directly in lab pages, dashboards, or internal tools.</p>
-          </article>
-        </div>
+      <section className="metric-grid" aria-label="Impact snapshot">
+        <article className="metric-card">
+          <p className="metric-label">Decision tracks</p>
+          <p className="metric-value">{formatNumber(impactCards.length)}</p>
+        </article>
+        <article className="metric-card">
+          <p className="metric-label">Implemented systems</p>
+          <p className="metric-value">{formatNumber(implementationCount)}</p>
+        </article>
+        <article className="metric-card">
+          <p className="metric-label">Evidence papers</p>
+          <p className="metric-value">{formatNumber(profile.counts.publications)}</p>
+        </article>
+        <article className="metric-card">
+          <p className="metric-label">Total citations</p>
+          <p className="metric-value">{formatNumber(profile.counts.citations_total)}</p>
+        </article>
       </section>
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Reliability Snapshot</h2>
-          {runUrl ? (
-            <a href={runUrl} target="_blank" rel="noreferrer">
-              Open workflow run
-            </a>
-          ) : null}
-        </header>
-        <div className="kv-grid">
-          <p>
-            <span>Status</span>
-            <strong>{latestRun.run.status}</strong>
-          </p>
-          <p>
-            <span>Last refresh</span>
-            <strong>{formatDateTime(profile.last_sync.last_run_timestamp)}</strong>
-          </p>
-          <p>
-            <span>Run duration</span>
-            <strong>{formatDuration(latestRun.run.duration_seconds)}</strong>
-          </p>
-          <p>
-            <span>Warnings</span>
-            <strong>{warningCount}</strong>
-          </p>
-          <p>
-            <span>Trigger</span>
-            <strong>{provenance.environment.github_event_name ?? 'local/manual'}</strong>
-          </p>
-          <p>
-            <span>Git SHA</span>
-            <strong>{latestRun.run.git_sha.slice(0, 12)}</strong>
-          </p>
-          <p>
-            <span>Status message</span>
-            <strong>{status.message}</strong>
-          </p>
-          <p>
-            <span>Generated at</span>
-            <strong>{formatDateTime(status.generated_at)}</strong>
-          </p>
-        </div>
-      </section>
-
-      <section className="panel">
-        <header className="panel-header">
-          <h2>Public Data Contracts</h2>
+          <h2>Decision Tracks</h2>
         </header>
         <div className="stack-list">
-          {VALUE_ENDPOINTS.map((endpoint) => (
-            <article key={endpoint.path} className="stack-item">
-              <h3>
-                <a href={endpoint.path} target="_blank" rel="noreferrer">
-                  {endpoint.path}
-                </a>
-              </h3>
-              <p className="meta-line">{endpoint.purpose}</p>
+          {impactCards.map((card) => (
+            <article key={card.id} className="stack-item">
+              <h3>{card.title}</h3>
+              <p className="meta-line">
+                <strong>Primary user:</strong> {card.owner}
+              </p>
+              <p className="meta-line">
+                <strong>Decision:</strong> {card.decision}
+              </p>
+              <p>{card.outcome}</p>
+              <p className="meta-line">
+                <strong>Implementation:</strong>{' '}
+                {card.project ? (
+                  <>
+                    {card.project.one_line ?? card.project.name}
+                    {' '}
+                    ·{' '}
+                    <a
+                      href={card.project.demo_url ?? card.project.html_url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Open
+                    </a>
+                  </>
+                ) : (
+                  'Paper-backed modeling output.'
+                )}
+              </p>
+              <p className="meta-line">
+                <strong>Evidence:</strong>{' '}
+                {card.publication ? (
+                  <>
+                    {card.publication.title}
+                    {' '}
+                    · {formatNumber(card.publication.citation_count)} citations
+                    {card.publication.url ? (
+                      <>
+                        {' '}
+                        ·{' '}
+                        <a href={card.publication.url} target="_blank" rel="noreferrer">
+                          Read
+                        </a>
+                      </>
+                    ) : null}
+                  </>
+                ) : (
+                  'Publication metadata unavailable in current sync.'
+                )}
+              </p>
             </article>
           ))}
         </div>
       </section>
 
+      <section className="panel">
+        <header className="panel-header">
+          <h2>Direct Outputs</h2>
+        </header>
+        <div className="action-row">
+          <Link className="action-link" to="/work">
+            Case studies
+          </Link>
+          <Link className="action-link" to="/projects">
+            Projects archive
+          </Link>
+          <Link className="action-link" to="/publications">
+            Publications archive
+          </Link>
+          <a className="action-link" href="/api/v1/profile.json" target="_blank" rel="noreferrer">
+            Data endpoint
+          </a>
+        </div>
+      </section>
+
       <section className="panel panel-note">
         <p className="meta-line">
-          Source provenance: projects from {profile.source_provenance.projects_source ?? 'unknown'}
-          {' · '}publications from {profile.source_provenance.publications_source ?? 'unknown'}
+          Last refresh {formatDateTime(profile.last_sync.last_run_timestamp)} · Sources:{' '}
+          {profile.source_provenance.projects_source ?? 'unknown projects source'} /{' '}
+          {profile.source_provenance.publications_source ?? 'unknown publications source'}
         </p>
       </section>
     </div>
