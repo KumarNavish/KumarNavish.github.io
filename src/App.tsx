@@ -33,6 +33,7 @@ import {
 } from "./state/persistence";
 
 type TabId = DemoTabId;
+type ExperienceMode = "novice" | "expert";
 
 interface AppData {
   processDefinitions: Record<ProcessId, ProcessDefinition>;
@@ -186,8 +187,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<TabId>("inbox");
   const [loadingData, setLoadingData] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [firstTimeMode, setFirstTimeMode] = useState(true);
-  const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
+  const [experienceMode, setExperienceMode] = useState<ExperienceMode>("novice");
 
   const [memoryStrategyId, setMemoryStrategyId] = useState<MemoryStrategyId>("reservoir");
   const [memoryBudget, setMemoryBudget] = useState(32);
@@ -214,6 +214,7 @@ function App() {
   const [evalStatus, setEvalStatus] = useState("Idle");
   const [comparisonResult, setComparisonResult] = useState<ContinualComparisonResult | null>(null);
   const [stateReady, setStateReady] = useState(false);
+  const [novicePhase, setNovicePhase] = useState<"idle" | "run" | "teach" | "evaluate" | "done">("idle");
 
   const routerRef = useRef<LinearSoftmaxClassifier>(makeRouter());
   const ewcStateRef = useRef<EwcState | null>(null);
@@ -298,8 +299,9 @@ function App() {
             setRetrievalK(persisted.controls.retrievalK);
             setClMode(persisted.controls.clMode);
             setDriftEnabled(persisted.controls.driftEnabled);
-            setFirstTimeMode(persisted.seenProcesses.length <= 1 && persisted.evalSnapshots.length === 0);
-            setAdvancedSettingsOpen(false);
+            setExperienceMode(
+              persisted.seenProcesses.length > 1 || persisted.evalSnapshots.length > 0 ? "expert" : "novice",
+            );
 
             setSeenProcesses(restoredSeen.length > 0 ? restoredSeen : [firstProcess]);
             setTrainStream(restoredTrain.length > 0 ? restoredTrain : initialExamples);
@@ -320,6 +322,7 @@ function App() {
             setMemoryHits([]);
             setMemoryQuery(DEFAULT_MEMORY_QUERY);
             setEvalStatus("Idle");
+            setNovicePhase("idle");
 
             auditIdRef.current = nextAuditId(persisted.auditLog);
             setStateReady(true);
@@ -344,8 +347,7 @@ function App() {
         setRetrievalK(3);
         setClMode("rehearsal");
         setDriftEnabled(false);
-        setFirstTimeMode(true);
-        setAdvancedSettingsOpen(false);
+        setExperienceMode("novice");
         setSeenProcesses([firstProcess]);
         setTrainStream(initialExamples);
         setMemoryItems([]);
@@ -360,6 +362,7 @@ function App() {
         setEvalStatus("Idle");
         setTeachStatus("Idle");
         setAuditLog([]);
+        setNovicePhase("idle");
         auditIdRef.current = 1;
         addAudit("bootstrap", `Initialized with first process: ${firstProcess}`);
         setStateReady(true);
@@ -470,10 +473,10 @@ function App() {
     return appData.streamSchedule.find((step) => !seenProcesses.includes(step.process_id)) ?? null;
   }, [appData, seenProcesses]);
 
-  const handleTeachUpdate = () => {
+  const performTeachUpdate = (): ProcessId | null => {
     if (!appData || !nextTeachStep) {
       setTeachStatus("No remaining processes to teach.");
-      return;
+      return null;
     }
 
     const nextProcess = nextTeachStep.process_id;
@@ -533,8 +536,13 @@ function App() {
 
     setSeenProcesses((prev) => [...prev, nextProcess]);
     setTrainStream((prev) => [...prev, ...currentExamples]);
-    setTeachStatus(`Updated with ${nextProcess} using ${mode.toUpperCase()} mode.`);
+    setTeachStatus(`Updated with ${nextProcess} using ${strategyLabel(mode)} strategy.`);
     addAudit("teach_update", `Added ${nextProcess} with CL mode ${mode}.`);
+    return nextProcess;
+  };
+
+  const handleTeachUpdate = () => {
+    void performTeachUpdate();
   };
 
   const handleRunInbox = async () => {
@@ -581,14 +589,14 @@ function App() {
     setMemoryHits(hits);
   };
 
-  const handleEvaluate = () => {
-    if (!appData || seenProcesses.length === 0) {
-      return;
+  const runEvaluation = (processesToEvaluate: ProcessId[]) => {
+    if (!appData || processesToEvaluate.length === 0) {
+      return null;
     }
     setEvalStatus("Running continual comparison (naive/rehearsal/ewc)...");
     const previous = comparisonResult;
     const result = runContinualComparison(
-      seenProcesses,
+      processesToEvaluate,
       appData.trainSets,
       appData.testSets,
       memoryStrategyId,
@@ -613,10 +621,15 @@ function App() {
       {
         id: prev.length + 1,
         timestamp: formatTimestamp(),
-        seenProcesses: [...seenProcesses],
+        seenProcesses: [...processesToEvaluate],
         result,
       },
     ]);
+    return result;
+  };
+
+  const handleEvaluate = () => {
+    void runEvaluation(seenProcesses);
   };
 
   const handleResetDemoState = () => {
@@ -641,8 +654,7 @@ function App() {
     setRetrievalK(3);
     setClMode("rehearsal");
     setDriftEnabled(false);
-    setFirstTimeMode(true);
-    setAdvancedSettingsOpen(false);
+    setExperienceMode("novice");
     setSeenProcesses([firstProcess]);
     setTrainStream(initialExamples);
     setMemoryItems([]);
@@ -657,6 +669,7 @@ function App() {
     setMemoryQuery(DEFAULT_MEMORY_QUERY);
     setMemoryHits([]);
     setEvalStatus("Idle");
+    setNovicePhase("idle");
     auditIdRef.current = 1;
     addAudit("reset", `State cleared and reinitialized with ${firstProcess}.`);
   };
@@ -665,7 +678,6 @@ function App() {
   const hasRunPipeline = inboxResult !== null;
   const hasTaughtAdditionalProcess = seenProcesses.length > 1;
   const hasEvaluation = comparisonResult !== null;
-  const firstTimeStep = !hasRunPipeline ? 1 : !hasTaughtAdditionalProcess ? 2 : !hasEvaluation ? 3 : 4;
 
   const rehearsalBeatsNaive = comparisonResult
     ? comparisonResult.modes.rehearsal.meanForgetting < comparisonResult.modes.naive.meanForgetting
@@ -678,29 +690,34 @@ function App() {
   const forgettingReduction = comparisonResult
     ? Math.max(0, comparisonResult.modes.naive.meanForgetting - selectedForgetting)
     : 0;
-  const guidedActionLabel =
-    firstTimeStep === 1
-      ? "Step 1: Run Request"
-      : firstTimeStep === 2
-        ? "Step 2: Improve Model"
-        : firstTimeStep === 3
-          ? "Step 3: Compare Retention"
-          : "Open Full Workspace";
+  const runStepStatus = hasRunPipeline ? "done" : novicePhase === "run" ? "active" : "pending";
+  const teachStepStatus = hasTaughtAdditionalProcess
+    ? "done"
+    : novicePhase === "teach"
+      ? "active"
+      : "pending";
+  const evalStepStatus = hasEvaluation ? "done" : novicePhase === "evaluate" ? "active" : "pending";
+  const allNoviceStepsDone = hasRunPipeline && hasTaughtAdditionalProcess && hasEvaluation;
 
-  const handleGuidedPrimaryAction = async () => {
-    if (firstTimeStep === 1) {
-      await handleRunInbox();
+  const handleRunEndToEnd = async () => {
+    if (!appData) {
       return;
     }
-    if (firstTimeStep === 2) {
-      handleTeachUpdate();
-      return;
-    }
-    if (firstTimeStep === 3) {
-      handleEvaluate();
-      return;
-    }
-    setFirstTimeMode(false);
+
+    setActiveTab("inbox");
+    setNovicePhase("run");
+    await handleRunInbox();
+
+    setNovicePhase("teach");
+    const taughtProcess = performTeachUpdate();
+    const evaluationProcesses =
+      taughtProcess && !seenProcesses.includes(taughtProcess)
+        ? [...seenProcesses, taughtProcess]
+        : seenProcesses;
+
+    setNovicePhase("evaluate");
+    void runEvaluation(evaluationProcesses);
+    setNovicePhase("done");
   };
 
   if (loadingData) {
@@ -733,45 +750,35 @@ function App() {
         <p>Route requests, improve the intent model, and measure retention in a single browser session.</p>
 
         <div className="row wrap mode-row">
-          <label className="compact-control">
-            Learning strategy
-            <select value={clMode} onChange={(event) => setClMode(event.target.value as RouterMode)}>
-              <option value="naive">Naive</option>
-              <option value="rehearsal">Replay</option>
-              <option value="ewc">EWC</option>
-            </select>
-          </label>
-          {firstTimeMode ? (
-            <button type="button" className="secondary-btn" onClick={() => setFirstTimeMode(false)}>
-              Open full workspace
-            </button>
-          ) : (
-            <button type="button" className="secondary-btn" onClick={() => setFirstTimeMode(true)}>
-              Return to guided mode
-            </button>
-          )}
+          <button
+            type="button"
+            className={experienceMode === "novice" ? "tab-btn active" : "tab-btn"}
+            onClick={() => setExperienceMode("novice")}
+          >
+            Novice Mode
+          </button>
+          <button
+            type="button"
+            className={experienceMode === "expert" ? "tab-btn active" : "tab-btn"}
+            onClick={() => setExperienceMode("expert")}
+          >
+            Expert Mode
+          </button>
           <button type="button" className="secondary-btn" onClick={handleResetDemoState}>
             Reset demo state
           </button>
         </div>
 
-        {firstTimeMode ? (
+        {experienceMode === "novice" ? (
           <>
-            <section className="start-strip">
-              <p className="label">Start Here</p>
-              <h2>Complete these 3 steps to see continual learning in action.</h2>
+            <section className="panel novice-panel">
+              <h2>Run End-to-End Demo</h2>
               <p className="legend">
-                Current step: {firstTimeStep} of 3 {firstTimeStep > 3 ? "(complete)" : ""}
+                Choose a scenario and strategy, then run all steps automatically. Technical controls are hidden
+                until you switch to Expert Mode.
               </p>
-              <button type="button" onClick={() => void handleGuidedPrimaryAction()}>
-                {guidedActionLabel}
-              </button>
-            </section>
-
-            <section className="guided-grid">
-              <article className={firstTimeStep === 1 ? "guided-step active" : "guided-step"}>
-                <h3>1. Run a Request</h3>
-                <label>
+              <div className="novice-controls">
+                <label className="compact-control">
                   Scenario
                   <select onChange={(event) => setInboxRequest(event.target.value)} value={inboxRequest}>
                     {sampleRequestOptions.map((sample) => (
@@ -781,132 +788,94 @@ function App() {
                     ))}
                   </select>
                 </label>
-                <textarea
-                  className="pipeline-input"
-                  value={inboxRequest}
-                  onChange={(event) => setInboxRequest(event.target.value)}
-                />
-                <button type="button" onClick={() => void handleRunInbox()}>
-                  Run request
+                <label className="compact-control">
+                  Strategy
+                  <select value={clMode} onChange={(event) => setClMode(event.target.value as RouterMode)}>
+                    <option value="naive">Fast (Naive)</option>
+                    <option value="rehearsal">Balanced (Replay)</option>
+                    <option value="ewc">Stable (EWC)</option>
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={() => void handleRunEndToEnd()}
+                  disabled={novicePhase === "run" || novicePhase === "teach" || novicePhase === "evaluate"}
+                >
+                  {novicePhase === "run" || novicePhase === "teach" || novicePhase === "evaluate"
+                    ? "Running..."
+                    : allNoviceStepsDone
+                      ? "Run Again"
+                      : "Run End-to-End Demo"}
                 </button>
-                <p className="status">{inboxStatus}</p>
-                {inboxError ? <p className="warning">{inboxError}</p> : null}
-              </article>
+              </div>
+            </section>
 
-              <article className={firstTimeStep === 2 ? "guided-step active" : "guided-step"}>
-                <h3>2. Improve Model</h3>
-                <p className="legend">Seen: {seenProcesses.join(", ")}</p>
-                {nextTeachStep ? (
-                  <>
-                    <p>
-                      Next process: <strong>{nextTeachStep.process_id}</strong>
-                    </p>
-                    <button type="button" onClick={handleTeachUpdate}>
-                      Teach next process
-                    </button>
-                  </>
-                ) : (
-                  <p>All processes already taught.</p>
-                )}
-                <p className="status">{teachStatus}</p>
+            <section className="stepper">
+              <article className={`step-pill ${runStepStatus}`}>
+                <h3>1. Route Request</h3>
+                <p>{runStepStatus === "done" ? "Completed" : "Predict process intent and generate plan."}</p>
               </article>
-
-              <article className={firstTimeStep === 3 ? "guided-step active" : "guided-step"}>
-                <h3>3. Compare Retention</h3>
-                <button type="button" onClick={handleEvaluate}>
-                  Run comparison
-                </button>
-                <p className="status">{evalStatus}</p>
-                {comparisonResult ? (
-                  <div className="metric-grid">
-                    <p>
-                      Naive forgetting:{" "}
-                      <strong>{(comparisonResult.modes.naive.meanForgetting * 100).toFixed(2)}%</strong>
-                    </p>
-                    <p>
-                      {strategyLabel(selectedMode)} forgetting:{" "}
-                      <strong>{(selectedForgetting * 100).toFixed(2)}%</strong>
-                    </p>
-                    <p>
-                      Reduction vs naive: <strong>{(forgettingReduction * 100).toFixed(2)}%</strong>
-                    </p>
-                  </div>
-                ) : null}
+              <article className={`step-pill ${teachStepStatus}`}>
+                <h3>2. Teach Next Process</h3>
+                <p>{teachStepStatus === "done" ? "Completed" : "Update model with the next process family."}</p>
+              </article>
+              <article className={`step-pill ${evalStepStatus}`}>
+                <h3>3. Measure Retention</h3>
+                <p>{evalStepStatus === "done" ? "Completed" : "Compare forgetting against baseline."}</p>
               </article>
             </section>
 
-            {inboxResult ? (
-              <section className="result-card">
-                <h3>Action Plan</h3>
-                <p className="legend">
-                  Predicted process: <strong>{inboxResult.predictedIntent}</strong> | output repaired:{" "}
-                  <strong>{inboxResult.validation.repaired ? "yes" : "no"}</strong>
-                </p>
-                <details>
-                  <summary>View plan JSON</summary>
-                  <pre className="summary summary-block">{JSON.stringify(inboxResult.plan, null, 2)}</pre>
-                </details>
-              </section>
-            ) : null}
+            <section className="impact-card">
+              <h3>Practical Impact</h3>
+              {comparisonResult ? (
+                <>
+                  <div className="metric-grid">
+                    <p>
+                      Predicted process: <strong>{inboxResult?.predictedIntent ?? "n/a"}</strong>
+                    </p>
+                    <p>
+                      Plan schema status: <strong>{inboxResult ? "valid" : "not generated"}</strong>
+                    </p>
+                    <p>
+                      Forgetting reduction vs naive: <strong>{(forgettingReduction * 100).toFixed(2)}%</strong>
+                    </p>
+                  </div>
+                  <p className="legend">
+                    Using <strong>{strategyLabel(selectedMode)}</strong>, older process retention improved by{" "}
+                    {(forgettingReduction * 100).toFixed(2)} percentage points versus naive updates.
+                  </p>
+                </>
+              ) : (
+                <p className="legend">Run the end-to-end demo to see measurable impact.</p>
+              )}
+            </section>
 
-            <details
-              className="advanced-settings"
-              open={advancedSettingsOpen}
-              onToggle={(event) => {
-                const next = (event.currentTarget as HTMLDetailsElement).open;
-                setAdvancedSettingsOpen(next);
-              }}
-            >
-              <summary>Advanced settings</summary>
-              <div className="control-grid">
-                <label>
-                  Memory strategy
-                  <select
-                    value={memoryStrategyId}
-                    onChange={(event) => setMemoryStrategyId(event.target.value as MemoryStrategyId)}
-                  >
-                    <option value="fifo">FIFO</option>
-                    <option value="reservoir">Reservoir</option>
-                    <option value="kcenter">k-center</option>
-                    <option value="risk-aware">Risk-aware</option>
-                  </select>
-                </label>
-                <label>
-                  Memory budget: {memoryBudget}
-                  <input
-                    type="range"
-                    min={8}
-                    max={80}
-                    step={2}
-                    value={memoryBudget}
-                    onChange={(event) => setMemoryBudget(Number(event.target.value))}
-                  />
-                </label>
-                <label>
-                  Retrieval k: {retrievalK}
-                  <input
-                    type="range"
-                    min={1}
-                    max={8}
-                    step={1}
-                    value={retrievalK}
-                    onChange={(event) => setRetrievalK(Number(event.target.value))}
-                  />
-                </label>
-                <label className="inline-toggle">
-                  <input
-                    type="checkbox"
-                    checked={driftEnabled}
-                    onChange={(event) => setDriftEnabled(event.target.checked)}
-                  />
-                  Drift toggle
-                </label>
+            <details className="advanced-settings">
+              <summary>View technical details</summary>
+              <div className="metric-grid">
+                <p className="status">{inboxStatus}</p>
+                <p className="status">{teachStatus}</p>
+                <p className="status">{evalStatus}</p>
               </div>
+              {inboxError ? <p className="warning">{inboxError}</p> : null}
+              {inboxResult ? (
+                <pre className="summary summary-block">{JSON.stringify(inboxResult.plan, null, 2)}</pre>
+              ) : null}
+              <p className="legend">For memory, audit, and full tuning controls, switch to Expert Mode.</p>
             </details>
           </>
         ) : (
           <>
             <div className="control-grid">
+              <label>
+                Learning strategy
+                <select value={clMode} onChange={(event) => setClMode(event.target.value as RouterMode)}>
+                  <option value="naive">Naive</option>
+                  <option value="rehearsal">Replay</option>
+                  <option value="ewc">EWC</option>
+                </select>
+              </label>
               <label>
                 Memory strategy
                 <select
