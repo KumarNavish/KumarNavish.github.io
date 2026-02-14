@@ -28,20 +28,20 @@ interface DirectionCard {
 const DIRECTIONS: DirectionCard[] = [
   {
     title: 'Reliable Learning',
-    framing: 'Optimization and inference that remain stable during continual updates.',
-    question: 'How do we improve reliability without losing learning speed?',
+    framing: 'Methods that stay stable as data and objectives change.',
+    question: 'How do we improve reliability without slowing learning?',
     keywords: ['natural-gradient', 'optimization', 'spectral', 'laplacian'],
   },
   {
     title: 'Urban Decision Systems',
-    framing: 'Operational models for logistics transitions in real city constraints.',
-    question: 'How do we evaluate sustainable operations with measurable evidence?',
+    framing: 'Operational modeling for sustainability decisions under city constraints.',
+    question: 'How do we evaluate transition plans with evidence, not assumptions?',
     keywords: ['urban', 'logistics', 'delivery', 'spatial'],
   },
   {
     title: 'Interaction Safety',
-    framing: 'Empirical analysis of harmful and protective behavior in online systems.',
-    question: 'Which signals separate harm amplification from harm reduction?',
+    framing: 'Empirical analysis of harmful and protective behavior in social platforms.',
+    question: 'Which signals separate amplification of harm from reduction of harm?',
     keywords: ['hate', 'counterspeech', 'social', 'twitter'],
   },
 ]
@@ -92,6 +92,7 @@ export function DashboardPage() {
     if (!state.data) {
       return null
     }
+
     const profileFeatured = state.data.profile.featured.projects[0]
     if (profileFeatured) {
       return profileFeatured
@@ -145,6 +146,7 @@ export function DashboardPage() {
     if (!state.data) {
       return 'n/a'
     }
+
     const years = state.data.publications.items
       .map((publication) => publication.year)
       .filter((year): year is number => typeof year === 'number')
@@ -179,22 +181,22 @@ export function DashboardPage() {
     <div className="page">
       <section className="hero hero-primary">
         <p className="eyebrow">Overview</p>
-        <h1>Research that moves from mathematical framing to deployable systems.</h1>
+        <h1>I turn research questions into systems people can use.</h1>
         <p className="hero-copy">
-          I work at the intersection of optimization, real-world operations, and social-system
-          safety.
+          This portfolio is built for collaborators and hiring teams: you can assess thinking,
+          execution, and practical relevance in a few minutes.
         </p>
-        <div className="pill-row" aria-label="Core working style">
-          <span className="pill">Think in structures</span>
-          <span className="pill">Build executable artifacts</span>
-          <span className="pill">Validate on real constraints</span>
+        <div className="pill-row" aria-label="Working principles">
+          <span className="pill">Frame precisely</span>
+          <span className="pill">Build end-to-end</span>
+          <span className="pill">Validate in practice</span>
         </div>
         <div className="action-row">
           <Link className="action-link action-link-primary" to="/work">
-            Explore case studies
+            Read case studies
           </Link>
           <Link className="action-link" to="/proof">
-            Verify execution evidence
+            See practical value
           </Link>
           <a className="action-link" href={profile.links.github} target="_blank" rel="noreferrer">
             GitHub
@@ -202,9 +204,9 @@ export function DashboardPage() {
         </div>
       </section>
 
-      <section className="metric-grid" aria-label="At a glance">
+      <section className="metric-grid" aria-label="Snapshot">
         <article className="metric-card">
-          <p className="metric-label">Publications</p>
+          <p className="metric-label">Papers</p>
           <p className="metric-value">{formatNumber(profile.counts.publications)}</p>
         </article>
         <article className="metric-card">
@@ -216,14 +218,14 @@ export function DashboardPage() {
           <p className="metric-value">{formatNumber(profile.counts.projects)}</p>
         </article>
         <article className="metric-card">
-          <p className="metric-label">Publication Window</p>
+          <p className="metric-label">Active Span</p>
           <p className="metric-value">{publicationWindow}</p>
         </article>
       </section>
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Research Arc</h2>
+          <h2>Research Programs</h2>
         </header>
         <div className="direction-grid">
           {directionEvidence.map((direction) => (
@@ -231,10 +233,10 @@ export function DashboardPage() {
               <h3>{direction.title}</h3>
               <p>{direction.framing}</p>
               <p className="meta-line">
-                <strong>Driving question:</strong> {direction.question}
+                <strong>Core question:</strong> {direction.question}
               </p>
               <p className="direction-kpi">
-                {direction.publicationCount} papers · {direction.projectCount} systems
+                Evidence: {direction.publicationCount} papers · {direction.projectCount} systems
               </p>
             </article>
           ))}
@@ -243,14 +245,14 @@ export function DashboardPage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Anchor Outputs</h2>
+          <h2>Representative Outputs</h2>
         </header>
         <div className="card-grid">
           {topPublication ? (
             <article className="item-card">
-              <p className="eyebrow">Influence</p>
+              <p className="eyebrow">High impact paper</p>
               <h3>{topPublication.title}</h3>
-              <p>{topPublication.venue ?? 'Publication venue unavailable'}</p>
+              <p>{topPublication.venue ?? 'Venue unavailable'}</p>
               <p className="meta-line">
                 {formatNumber(topPublication.citation_count)} citations
                 {topPublication.url ? (
@@ -258,7 +260,7 @@ export function DashboardPage() {
                     {' '}
                     ·{' '}
                     <a href={topPublication.url} target="_blank" rel="noreferrer">
-                      Read paper
+                      Read
                     </a>
                   </>
                 ) : null}
@@ -268,16 +270,16 @@ export function DashboardPage() {
 
           {latestPublication && latestPublication.id !== topPublication?.id ? (
             <article className="item-card">
-              <p className="eyebrow">Latest</p>
+              <p className="eyebrow">Recent paper</p>
               <h3>{latestPublication.title}</h3>
               <p>
-                {latestPublication.venue ?? 'Publication venue unavailable'}
+                {latestPublication.venue ?? 'Venue unavailable'}
                 {latestPublication.year ? ` · ${latestPublication.year}` : ''}
               </p>
               {latestPublication.url ? (
                 <p className="meta-line">
                   <a href={latestPublication.url} target="_blank" rel="noreferrer">
-                    Open publication
+                    Open
                   </a>
                 </p>
               ) : null}
@@ -286,9 +288,9 @@ export function DashboardPage() {
 
           {flagshipProject ? (
             <article className="item-card">
-              <p className="eyebrow">Flagship Build</p>
+              <p className="eyebrow">Flagship system</p>
               <h3>{flagshipProject.name}</h3>
-              <p>{flagshipProject.one_line ?? 'Production-oriented system linked to research.'}</p>
+              <p>{flagshipProject.one_line ?? 'Research artifact with deployable implementation.'}</p>
               <p className="meta-line">
                 <a
                   href={flagshipProject.demo_url ?? flagshipProject.html_url ?? '/work'}
@@ -305,37 +307,37 @@ export function DashboardPage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Reading Sequence</h2>
+          <h2>How to Review</h2>
         </header>
         <div className="sequence-grid">
           <article className="sequence-step">
             <p className="sequence-index">01</p>
-            <h3>Case Studies</h3>
-            <p>Start with the compact question-build-evidence breakdown.</p>
+            <h3>Start with cases</h3>
+            <p>See how each question becomes an implemented result.</p>
           </article>
           <article className="sequence-step">
             <p className="sequence-index">02</p>
-            <h3>Archives</h3>
-            <p>Open full project and publication records only when needed.</p>
+            <h3>Open archives</h3>
+            <p>Use full project and publication records when you need depth.</p>
           </article>
           <article className="sequence-step">
             <p className="sequence-index">03</p>
-            <h3>Execution Proof</h3>
-            <p>Inspect provenance, pipeline runs, and deploy artifacts.</p>
+            <h3>Check utility</h3>
+            <p>Confirm freshness, provenance, and machine-readable outputs.</p>
           </article>
         </div>
       </section>
 
       <section className="panel panel-note">
         <p className="meta-line">
-          Last synchronized {formatDateTime(profile.last_sync.last_run_timestamp)} · Pipeline{' '}
+          Updated {formatDateTime(profile.last_sync.last_run_timestamp)} · Pipeline status{' '}
           {latestRun.run.status}
           {runUrl ? (
             <>
               {' '}
               ·{' '}
               <a href={runUrl} target="_blank" rel="noreferrer">
-                latest workflow
+                workflow run
               </a>
             </>
           ) : null}

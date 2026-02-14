@@ -31,7 +31,12 @@ export function ProjectsPage() {
     }
     return state.data.items
       .filter((project) => project.featured || project.pinned)
-      .sort((left, right) => right.stars - left.stars || left.name.localeCompare(right.name))
+      .sort(
+        (left, right) =>
+          new Date(right.last_push ?? 0).getTime() -
+            new Date(left.last_push ?? 0).getTime() ||
+          left.name.localeCompare(right.name),
+      )
   }, [state.data])
 
   const archive = useMemo(() => {
@@ -81,31 +86,31 @@ export function ProjectsPage() {
     <div className="page">
       <section className="hero">
         <p className="eyebrow">Projects Archive</p>
-        <h1>Systems and experiments</h1>
+        <h1>Complete project record</h1>
         <p className="hero-copy">
-          Curated systems are shown first. Expand only when you need complete historical coverage.
+          Highlighted systems are shown first. Expand only when you need full historical coverage.
         </p>
         <div className="action-row">
           <Link className="action-link" to="/work">
-            Back to curated work
+            Back to case studies
           </Link>
           <Link className="action-link action-link-primary" to="/proof">
-            Verify pipeline proof
+            Practical value
           </Link>
         </div>
       </section>
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Curated Systems ({featured.length})</h2>
+          <h2>Highlighted Systems ({featured.length})</h2>
         </header>
         {themeSummary.length > 0 ? <p className="tag-cloud">{themeSummary.join(' · ')}</p> : null}
         <div className="card-grid">
           {featured.map((project) => (
             <article key={project.name} className="item-card">
               <h3>{project.name}</h3>
-              <p>{(project.one_line ?? project.description) || 'No summary available.'}</p>
-              <p className="meta-line">Last push {formatDate(project.last_push)}</p>
+              <p>{(project.one_line ?? project.description) || 'Summary pending.'}</p>
+              <p className="meta-line">Updated {formatDate(project.last_push)}</p>
               <p className="meta-line">
                 <a href={project.html_url} target="_blank" rel="noreferrer">
                   Repository
@@ -133,7 +138,7 @@ export function ProjectsPage() {
             className="action-link"
             onClick={() => setShowArchive((value) => !value)}
           >
-            {showArchive ? 'Hide archive' : 'Show archive'}
+            {showArchive ? 'Hide full archive' : 'Show full archive'}
           </button>
         </header>
         {showArchive ? (
@@ -144,7 +149,7 @@ export function ProjectsPage() {
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="project name or summary"
+                  placeholder="name or summary"
                 />
               </label>
             </div>
@@ -152,8 +157,8 @@ export function ProjectsPage() {
               {archive.map((project) => (
                 <article key={project.name} className="item-card">
                   <h3>{project.name}</h3>
-                  <p>{(project.one_line ?? project.description) || 'No summary available.'}</p>
-                  <p className="meta-line">Last push {formatDate(project.last_push)}</p>
+                  <p>{(project.one_line ?? project.description) || 'Summary pending.'}</p>
+                  <p className="meta-line">Updated {formatDate(project.last_push)}</p>
                   <p className="meta-line">
                     <a href={project.html_url} target="_blank" rel="noreferrer">
                       Repository
@@ -165,7 +170,7 @@ export function ProjectsPage() {
           </>
         ) : (
           <p className="meta-line">
-            Hidden by default to keep focus on the strongest systems.
+            Hidden by default to keep this page focused.
           </p>
         )}
       </section>

@@ -49,6 +49,13 @@ function CitationsChart({
   )
 }
 
+function summarizeAuthors(authors: string[]): string {
+  if (authors.length <= 3) {
+    return authors.join(', ')
+  }
+  return `${authors.slice(0, 3).join(', ')}, et al.`
+}
+
 export function PublicationsPage() {
   const loadPublications = useCallback(
     () =>
@@ -60,6 +67,7 @@ export function PublicationsPage() {
       ),
     [],
   )
+
   const state = useResource<PublicationsData>(loadPublications)
   const [query, setQuery] = useState('')
 
@@ -67,6 +75,7 @@ export function PublicationsPage() {
     if (!state.data) {
       return []
     }
+
     const normalizedQuery = query.trim().toLowerCase()
     return state.data.publications.items
       .filter((publication) => {
@@ -109,24 +118,23 @@ export function PublicationsPage() {
     <div className="page">
       <section className="hero">
         <p className="eyebrow">Publications Archive</p>
-        <h1>Selected research record</h1>
+        <h1>Publication record</h1>
         <p className="hero-copy">
-          The archive is intentionally concise and searchable. Use this view when
-          you need bibliographic detail beyond the curated work page.
+          A concise, searchable record for citation checks, topic coverage, and publication context.
         </p>
         <div className="action-row">
-          <Link className="action-link" to="/work#papers">
-            Back to curated papers
+          <Link className="action-link" to="/work">
+            Back to case studies
           </Link>
           <Link className="action-link action-link-primary" to="/proof">
-            Verify source pipeline
+            Practical value
           </Link>
         </div>
       </section>
 
       <section className="metric-grid">
         <article className="metric-card">
-          <p className="metric-label">Works</p>
+          <p className="metric-label">Papers</p>
           <p className="metric-value">{formatNumber(metrics.works_count)}</p>
         </article>
         <article className="metric-card">
@@ -134,7 +142,7 @@ export function PublicationsPage() {
           <p className="metric-value">{formatNumber(metrics.citations_total)}</p>
         </article>
         <article className="metric-card">
-          <p className="metric-label">Themes</p>
+          <p className="metric-label">Topics tracked</p>
           <p className="metric-value">{formatNumber(topThemes.length)}</p>
         </article>
       </section>
@@ -142,7 +150,7 @@ export function PublicationsPage() {
       {metrics.citations_by_year.length > 0 ? (
         <section className="panel">
           <header className="panel-header">
-            <h2>Citations by Year</h2>
+            <h2>Citation Trend</h2>
           </header>
           <CitationsChart points={metrics.citations_by_year} />
         </section>
@@ -150,33 +158,30 @@ export function PublicationsPage() {
 
       <section className="controls-panel controls-panel-compact">
         <label>
-          Search archive
+          Filter publications
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="title, venue, keyword"
+            placeholder="title, venue, or keyword"
           />
         </label>
       </section>
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Results ({filtered.length})</h2>
+          <h2>Publications ({filtered.length})</h2>
         </header>
         <div className="stack-list">
           {filtered.map((publication) => (
             <article key={publication.id} className="stack-item">
               <h3>{publication.title}</h3>
               <p className="meta-line">
-                {(publication.venue ?? 'Unknown venue') +
+                {(publication.venue ?? 'Venue unavailable') +
                   (publication.year ? ` · ${publication.year}` : '')}
               </p>
-              {publication.summary ? (
-                <p className="meta-line">{publication.summary}</p>
-              ) : null}
+              {publication.summary ? <p className="meta-line">{publication.summary}</p> : null}
               <p className="meta-line">
-                Citations {formatNumber(publication.citation_count)} · Authors{' '}
-                {publication.authors.slice(0, 4).join(', ')}
+                {formatNumber(publication.citation_count)} citations · {summarizeAuthors(publication.authors)}
               </p>
               <p className="meta-line">
                 {publication.keywords.slice(0, 4).join(' · ')}
@@ -185,7 +190,7 @@ export function PublicationsPage() {
                     {' '}
                     ·{' '}
                     <a href={publication.url} target="_blank" rel="noreferrer">
-                      Read paper
+                      Read
                     </a>
                   </>
                 ) : null}
@@ -197,7 +202,7 @@ export function PublicationsPage() {
 
       <section className="panel panel-note">
         <p className="meta-line">
-          Source {publications.source}
+          Source: {publications.source}
           {publications.warning ? ` · ${publications.warning}` : ''}
         </p>
       </section>

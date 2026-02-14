@@ -168,20 +168,6 @@ export interface LatestRunApi {
   tasks: LatestRunTask[]
 }
 
-export interface DagApi {
-  generated_at: string
-  tasks: {
-    name: string
-    inputs: string[]
-    outputs: string[]
-    deps: string[]
-  }[]
-  edges: {
-    from: string
-    to: string
-  }[]
-}
-
 export interface ProvenanceApi {
   generated_at: string
   git_sha: string
@@ -548,35 +534,6 @@ export function parseLatestRunApi(payload: unknown): LatestRunApi {
   }
 }
 
-export function parseDagApi(payload: unknown): DagApi {
-  const root = asObject(payload, 'dag payload')
-  const tasksRaw = root.tasks
-  const edgesRaw = root.edges
-  if (!Array.isArray(tasksRaw) || !Array.isArray(edgesRaw)) {
-    throw new Error('invalid dag payload: arrays missing')
-  }
-
-  return {
-    generated_at: asString(root.generated_at, 'dag.generated_at'),
-    tasks: tasksRaw.map((taskRaw, index) => {
-      const task = asObject(taskRaw, `dag.tasks[${index}]`)
-      return {
-        name: asString(task.name, `dag.tasks[${index}].name`),
-        inputs: asStringArray(task.inputs),
-        outputs: asStringArray(task.outputs),
-        deps: asStringArray(task.deps),
-      }
-    }),
-    edges: edgesRaw.map((edgeRaw, index) => {
-      const edge = asObject(edgeRaw, `dag.edges[${index}]`)
-      return {
-        from: asString(edge.from, `dag.edges[${index}].from`),
-        to: asString(edge.to, `dag.edges[${index}].to`),
-      }
-    }),
-  }
-}
-
 export function parseProvenanceApi(payload: unknown): ProvenanceApi {
   const root = asObject(payload, 'provenance payload')
   const pipeline = asObject(root.pipeline, 'provenance.pipeline')
@@ -635,11 +592,6 @@ export function fetchLatestRunApi(): Promise<LatestRunApi> {
   return fetchJson('/ops/latest-run.json', parseLatestRunApi)
 }
 
-export function fetchDagApi(): Promise<DagApi> {
-  return fetchJson('/ops/dag.json', parseDagApi)
-}
-
 export function fetchProvenanceApi(): Promise<ProvenanceApi> {
   return fetchJson('/ops/provenance.json', parseProvenanceApi)
 }
-
