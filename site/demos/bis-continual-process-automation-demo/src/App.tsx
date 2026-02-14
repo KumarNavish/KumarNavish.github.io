@@ -32,7 +32,6 @@ interface DemoPhase {
 }
 
 type PhaseState = 'pending' | 'active' | 'done'
-type ArtifactTab = 'charter' | 'map' | 'exports'
 
 const DEMO_PHASES: DemoPhase[] = [
   {
@@ -213,7 +212,6 @@ function App() {
   const [dispatchStatus, setDispatchStatus] = useState<string | null>(null)
   const [dispatchLog, setDispatchLog] = useState<DispatchRecord[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<ArtifactTab>('charter')
 
   const packSectionRef = useRef<HTMLElement | null>(null)
 
@@ -271,7 +269,6 @@ function App() {
       setImpactRationale(null)
       setRunProgress(0)
       setActivePhaseIndex(0)
-      setActiveTab('charter')
       setCopyStatus(null)
       setDispatchStatus(null)
     }
@@ -292,7 +289,6 @@ function App() {
     setImpactRationale(null)
     setCopyStatus(null)
     setDispatchStatus(null)
-    setActiveTab('charter')
 
     setIsRunning(true)
     setActivePhaseIndex(0)
@@ -317,6 +313,8 @@ function App() {
 
     setRunProgress(100)
     setIsRunning(false)
+    await sleep(120)
+    openDeliverables()
   }
 
   function openDeliverables() {
@@ -369,6 +367,7 @@ function App() {
           <p>
             Automation finished: manual intake was converted into a ready-to-use process pack.
           </p>
+          <p className="outcome-subline">Generated now: 1 summary, 1 flow map, and export JSON files.</p>
         </section>
       ) : null}
 
@@ -427,8 +426,11 @@ function App() {
                     <button className="secondary-btn" onClick={openDeliverables}>
                       Open outputs
                     </button>
-                    <button className="secondary-btn" onClick={() => setActiveTab('exports')}>
-                      Go to exports
+                    <button
+                      className="secondary-btn"
+                      onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}
+                    >
+                      Copy Jira JSON
                     </button>
                   </div>
                 </>
@@ -519,7 +521,7 @@ function App() {
       ) : (
         <section className="panel pack-panel" ref={packSectionRef}>
           <h2>Your outputs</h2>
-          <p className="pack-subhead">Read left to right: summary, flow map, then exports.</p>
+          <p className="pack-subhead">Use in this order: review summary, review flow map, then copy exports.</p>
 
           <div className="kpi-grid">
             <article>
@@ -540,113 +542,70 @@ function App() {
             </article>
           </div>
 
-          <div className="tab-row" role="tablist" aria-label="Output sections">
-            <button
-              className={`tab-btn ${activeTab === 'charter' ? 'active' : ''}`}
-              role="tab"
-              aria-selected={activeTab === 'charter'}
-              onClick={() => setActiveTab('charter')}
-            >
-              1. Summary
-            </button>
-            <button
-              className={`tab-btn ${activeTab === 'map' ? 'active' : ''}`}
-              role="tab"
-              aria-selected={activeTab === 'map'}
-              onClick={() => setActiveTab('map')}
-            >
-              2. Flow Map
-            </button>
-            <button
-              className={`tab-btn ${activeTab === 'exports' ? 'active' : ''}`}
-              role="tab"
-              aria-selected={activeTab === 'exports'}
-              onClick={() => setActiveTab('exports')}
-            >
-              3. Export JSON
-            </button>
-          </div>
-
           <section className="artifact-panel">
-            {activeTab === 'charter' ? (
-              <section className="artifact-card">
-                <h3>Summary</h3>
-                <p>
-                  <strong>Problem:</strong> {result.charter.problem_statement}
-                </p>
-                <p>
-                  <strong>Recommended next action:</strong> {result.triage.next_action}
-                </p>
-                <ul className="metric-list">
-                  <li>Baseline cycle time: {metricToText(result.charter.baseline_metrics.cycle_time_days)}</li>
-                  <li>
-                    Target cycle time: {metricToText(result.charter.target_metrics.cycle_time_days_target)}
-                  </li>
-                  <li>Monthly volume: {metricToText(result.charter.baseline_metrics.volume_per_month)}</li>
+            <section className="artifact-card">
+              <h3>1. Summary</h3>
+              <p>
+                <strong>Problem:</strong> {result.charter.problem_statement}
+              </p>
+              <p>
+                <strong>Recommended next action:</strong> {result.triage.next_action}
+              </p>
+              <ul className="metric-list">
+                <li>Baseline cycle time: {metricToText(result.charter.baseline_metrics.cycle_time_days)}</li>
+                <li>
+                  Target cycle time: {metricToText(result.charter.target_metrics.cycle_time_days_target)}
+                </li>
+                <li>Monthly volume: {metricToText(result.charter.baseline_metrics.volume_per_month)}</li>
+              </ul>
+              <button className="secondary-btn" onClick={() => copyJson('Charter JSON', result.charter)}>
+                Copy summary JSON
+              </button>
+            </section>
+
+            <section className="artifact-card">
+              <h3>2. Flow map</h3>
+              <MermaidDiagram title="Optimized workflow" chart={result.toBeMermaid} />
+              <details className="advanced-block">
+                <summary>Show current flow (raw)</summary>
+                <pre>{result.asIsMermaid}</pre>
+              </details>
+            </section>
+
+            <section className="artifact-card" id="export-output">
+              <h3>3. Export JSON</h3>
+              <div className="button-column">
+                <button className="secondary-btn" onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}>
+                  Copy Jira JSON
+                </button>
+                <button
+                  className="secondary-btn"
+                  onClick={() => copyJson('ServiceNow payload', result.exports.servicenow_record_create)}
+                >
+                  Copy ServiceNow JSON
+                </button>
+                <button className="secondary-btn" onClick={() => copyJson('Tracker payload', result.exports.process_tracker_row)}>
+                  Copy tracker JSON
+                </button>
+                <button className="secondary-btn" onClick={() => copyJson('Blueprint JSON', result.blueprint)}>
+                  Copy automation plan JSON
+                </button>
+                <button className="primary-btn" onClick={sendToDeliveryQueue}>
+                  Send package
+                </button>
+              </div>
+
+              {dispatchLog.length > 0 ? (
+                <ul className="dispatch-list">
+                  {dispatchLog.map((entry) => (
+                    <li key={entry.dispatch_id}>
+                      <strong>{entry.dispatch_id}</strong> · {entry.timestamp} ·{' '}
+                      {entry.destinations.join(', ')}
+                    </li>
+                  ))}
                 </ul>
-                <div className="inline-actions">
-                  <button className="secondary-btn" onClick={() => copyJson('Charter JSON', result.charter)}>
-                    Copy summary JSON
-                  </button>
-                  <button className="secondary-btn" onClick={() => setActiveTab('map')}>
-                    Next: Flow map
-                  </button>
-                </div>
-              </section>
-            ) : null}
-
-            {activeTab === 'map' ? (
-              <section className="artifact-card">
-                <h3>Flow map</h3>
-                <MermaidDiagram title="Optimized workflow" chart={result.toBeMermaid} />
-                <div className="inline-actions">
-                  <button className="secondary-btn" onClick={() => setActiveTab('exports')}>
-                    Next: Export JSON
-                  </button>
-                </div>
-                <details className="advanced-block">
-                  <summary>Show current flow (raw)</summary>
-                  <pre>{result.asIsMermaid}</pre>
-                </details>
-              </section>
-            ) : null}
-
-            {activeTab === 'exports' ? (
-              <section className="artifact-card">
-                <h3>Export JSON</h3>
-                <div className="button-column">
-                  <button className="secondary-btn" onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}>
-                    Copy Jira JSON
-                  </button>
-                  <button
-                    className="secondary-btn"
-                    onClick={() => copyJson('ServiceNow payload', result.exports.servicenow_record_create)}
-                  >
-                    Copy ServiceNow JSON
-                  </button>
-                  <button className="secondary-btn" onClick={() => copyJson('Tracker payload', result.exports.process_tracker_row)}>
-                    Copy tracker JSON
-                  </button>
-                  <button className="secondary-btn" onClick={() => copyJson('Blueprint JSON', result.blueprint)}>
-                    Copy automation plan JSON
-                  </button>
-                  <button className="primary-btn" onClick={sendToDeliveryQueue}>
-                    Send package
-                  </button>
-                </div>
-
-                {dispatchLog.length > 0 ? (
-                  <ul className="dispatch-list">
-                    {dispatchLog.map((entry) => (
-                      <li key={entry.dispatch_id}>
-                        <strong>{entry.dispatch_id}</strong> · {entry.timestamp} ·{' '}
-                        {entry.destinations.join(', ')}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </section>
-            ) : null}
+              ) : null}
+            </section>
           </section>
 
           <details className="advanced-block">
