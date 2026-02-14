@@ -50,16 +50,98 @@ interface SampleRequestOption {
   text: string;
 }
 
+interface BisScenario {
+  id: string;
+  label: string;
+  processId: ProcessId;
+  requestText: string;
+  expectedOutcome: string;
+}
+
+interface ProcessValueProfile {
+  workflowLabel: string;
+  operationalProblem: string;
+  automationOutcome: string;
+  transferability: string;
+  systemTargets: string[];
+}
+
 const TABS: Array<{ id: TabId; label: string }> = [
-  { id: "inbox", label: "Inbox" },
-  { id: "teach", label: "Improve Model" },
-  { id: "evaluate", label: "Results" },
+  { id: "inbox", label: "Intake" },
+  { id: "teach", label: "Teach Policy" },
+  { id: "evaluate", label: "Impact" },
   { id: "memory", label: "Memory" },
   { id: "audit", label: "Audit" },
 ];
 
-const DEFAULT_INBOX_REQUEST = "Please escalate INC-9901 for checkout outage and treat as sev1.";
-const DEFAULT_MEMORY_QUERY = "checkout outage sev1 incident";
+const BIS_SCENARIOS: BisScenario[] = [
+  {
+    id: "access-reviewer",
+    label: "New Analyst Access Change",
+    processId: "access_request",
+    requestText:
+      "Please request editor access for A. Meier in Document Vault for operations_risk to support policy note preparation.",
+    expectedOutcome: "Create governed entitlement plan with approver chain and SLA.",
+  },
+  {
+    id: "vendor-diligence",
+    label: "Third-Party Due Diligence",
+    processId: "vendor_onboarding",
+    requestText:
+      "Start due diligence for Helios Data Labs in CH for market data services; include sanctions, security, and tax checks.",
+    expectedOutcome: "Route vendor intake with compliance controls and risk review tasks.",
+  },
+  {
+    id: "procurement-urgent",
+    label: "Policy Procurement Intake",
+    processId: "purchase_request",
+    requestText:
+      "Create a procurement request from operations for market data license renewal via EuroData Supply; estimated spend is $7800.",
+    expectedOutcome: "Prepare policy-compliant purchase plan with budget and procurement approvals.",
+  },
+  {
+    id: "incident-critical",
+    label: "Critical Operations Incident",
+    processId: "incident_escalation",
+    requestText:
+      "Escalate INC-33888 for market-data-ingestion due to briefing dashboards unavailable; treat as sev1.",
+    expectedOutcome: "Launch incident escalation workflow with owner, severity, and audit controls.",
+  },
+];
+
+const PROCESS_VALUE_PROFILES: Record<ProcessId, ProcessValueProfile> = {
+  access_request: {
+    workflowLabel: "Access Entitlement Change",
+    operationalProblem: "Manual access triage is slow and increases control exceptions.",
+    automationOutcome: "Routes request, validates required fields, and enforces approval gates before provisioning.",
+    transferability: "Directly maps to IAM tools and ticketing queues via JSON payload fields.",
+    systemTargets: ["ServiceNow", "SailPoint", "Okta Workflows"],
+  },
+  vendor_onboarding: {
+    workflowLabel: "Third-Party Due Diligence Intake",
+    operationalProblem: "Vendor requests arrive unstructured and miss compliance details.",
+    automationOutcome: "Extracts mandatory onboarding data and queues sanctions, security, and tax checks.",
+    transferability: "Fits third-party risk systems and procurement intake APIs without backend changes.",
+    systemTargets: ["Archer", "SAP Ariba", "ServiceNow GRC"],
+  },
+  purchase_request: {
+    workflowLabel: "Policy-Compliant Procurement Request",
+    operationalProblem: "Policy and budget checks are repeated manually for every spend request.",
+    automationOutcome: "Prepares approval-ready procurement plans with budget code and supplier controls.",
+    transferability: "Payload fields can be posted to ERP/procurement workflows as structured requests.",
+    systemTargets: ["SAP", "Coupa", "Jira Service Management"],
+  },
+  incident_escalation: {
+    workflowLabel: "Critical Operations Incident Escalation",
+    operationalProblem: "Escalations depend on inconsistent manual interpretation of severity.",
+    automationOutcome: "Normalizes severity, assigns ownership, and creates a governed response plan.",
+    transferability: "Maps to incident platforms and status workflows with strict schema output.",
+    systemTargets: ["PagerDuty", "ServiceNow Incident", "Opsgenie"],
+  },
+};
+
+const DEFAULT_INBOX_REQUEST = BIS_SCENARIOS[0].requestText;
+const DEFAULT_MEMORY_QUERY = "market data outage sev1 incident";
 
 function makeRouter(seed = 13): LinearSoftmaxClassifier {
   return new LinearSoftmaxClassifier(4, 4, { seed, initScale: 0.01 });
@@ -204,6 +286,7 @@ function App() {
   const [teachStatus, setTeachStatus] = useState("Idle");
 
   const [inboxRequest, setInboxRequest] = useState(DEFAULT_INBOX_REQUEST);
+  const [selectedScenarioId, setSelectedScenarioId] = useState(BIS_SCENARIOS[0].id);
   const [inboxStatus, setInboxStatus] = useState("Idle");
   const [inboxResult, setInboxResult] = useState<PipelineResult | null>(null);
   const [inboxError, setInboxError] = useState("");
@@ -315,6 +398,10 @@ function App() {
             setEvalSnapshots(persisted.evalSnapshots);
             setComparisonResult(persisted.comparisonResult);
             setInboxRequest(persisted.inboxRequest);
+            const persistedScenario = BIS_SCENARIOS.find(
+              (scenario) => scenario.requestText === persisted.inboxRequest,
+            );
+            setSelectedScenarioId(persistedScenario?.id ?? BIS_SCENARIOS[0].id);
             setInboxResult(null);
             setInboxError("");
             setInboxStatus("Restored previous browser session.");
@@ -354,6 +441,7 @@ function App() {
         setComparisonResult(null);
         setEvalSnapshots([]);
         setInboxRequest(DEFAULT_INBOX_REQUEST);
+        setSelectedScenarioId(BIS_SCENARIOS[0].id);
         setInboxResult(null);
         setInboxError("");
         setInboxStatus("Idle");
@@ -436,6 +524,13 @@ function App() {
     inboxRequest,
   ]);
 
+  useEffect(() => {
+    const matched = BIS_SCENARIOS.find((scenario) => scenario.requestText === inboxRequest);
+    if (matched && matched.id !== selectedScenarioId) {
+      setSelectedScenarioId(matched.id);
+    }
+  }, [inboxRequest, selectedScenarioId]);
+
   const memoryStore = useMemo(() => {
     const store = new VectorStore<Example>();
     for (const item of memoryItems) {
@@ -473,7 +568,7 @@ function App() {
     return appData.streamSchedule.find((step) => !seenProcesses.includes(step.process_id)) ?? null;
   }, [appData, seenProcesses]);
 
-  const performTeachUpdate = (): ProcessId | null => {
+  const performTeachUpdate = (modeOverride?: RouterMode): ProcessId | null => {
     if (!appData || !nextTeachStep) {
       setTeachStatus("No remaining processes to teach.");
       return null;
@@ -486,7 +581,7 @@ function App() {
       .filter((example): example is Example => example !== null)
       .map(toIntentExample);
 
-    const mode: RouterMode = clMode;
+    const mode: RouterMode = modeOverride ?? clMode;
     let trainOptions: TrainOptions;
     if (mode === "ewc" && ewcStateRef.current) {
       trainOptions = {
@@ -663,6 +758,7 @@ function App() {
     setComparisonResult(null);
     setTeachStatus("Demo reset to initial state.");
     setInboxRequest(DEFAULT_INBOX_REQUEST);
+    setSelectedScenarioId(BIS_SCENARIOS[0].id);
     setInboxStatus("Idle");
     setInboxResult(null);
     setInboxError("");
@@ -698,18 +794,34 @@ function App() {
       : "pending";
   const evalStepStatus = hasEvaluation ? "done" : novicePhase === "evaluate" ? "active" : "pending";
   const allNoviceStepsDone = hasRunPipeline && hasTaughtAdditionalProcess && hasEvaluation;
+  const selectedScenario =
+    BIS_SCENARIOS.find((scenario) => scenario.id === selectedScenarioId) ?? BIS_SCENARIOS[0];
+  const inferredProcess = (inboxResult?.predictedIntent ?? selectedScenario.processId) as ProcessId;
+  const processProfile = PROCESS_VALUE_PROFILES[inferredProcess];
+  const handoffPreview = inboxResult
+    ? {
+        workflow_type: processProfile.workflowLabel,
+        process_id: inboxResult.plan.process_id,
+        owner_role: inboxResult.plan.owner_role,
+        sla_hours: inboxResult.plan.sla_hours,
+        approvals: inboxResult.plan.approvals,
+        required_fields: inboxResult.plan.required_fields,
+      }
+    : null;
 
   const handleRunEndToEnd = async () => {
     if (!appData) {
       return;
     }
 
+    const noviceClMode: RouterMode = "rehearsal";
+    setClMode(noviceClMode);
     setActiveTab("inbox");
     setNovicePhase("run");
     await handleRunInbox();
 
     setNovicePhase("teach");
-    const taughtProcess = performTeachUpdate();
+    const taughtProcess = performTeachUpdate(noviceClMode);
     const evaluationProcesses =
       taughtProcess && !seenProcesses.includes(taughtProcess)
         ? [...seenProcesses, taughtProcess]
@@ -745,9 +857,12 @@ function App() {
   return (
     <main className="app-shell">
       <section className="hero full-width">
-        <p className="label">Interactive Demo</p>
+        <p className="label">BIS Operations Demo</p>
         <h1>Continual Process Automation Copilot</h1>
-        <p>Route requests, improve the intent model, and measure retention in a single browser session.</p>
+        <p>
+          Turn unstructured BIS internal requests into governed workflow plans with approvals, SLA ownership, and
+          audit-ready JSON handoff.
+        </p>
 
         <div className="row wrap mode-row">
           <button
@@ -771,29 +886,53 @@ function App() {
 
         {experienceMode === "novice" ? (
           <>
+            <section className="panel value-strip">
+              <h2>BIS Workflow Automation Value</h2>
+              <p>
+                This demo focuses on real internal operations work: request intake, policy-compliant routing, and
+                consistent handoff into execution systems.
+              </p>
+              <div className="value-grid">
+                <article>
+                  <h3>Operational bottleneck</h3>
+                  <p>{processProfile.operationalProblem}</p>
+                </article>
+                <article>
+                  <h3>Automation outcome</h3>
+                  <p>{processProfile.automationOutcome}</p>
+                </article>
+                <article>
+                  <h3>System transferability</h3>
+                  <p>{processProfile.transferability}</p>
+                </article>
+              </div>
+            </section>
+
             <section className="panel novice-panel">
-              <h2>Run End-to-End Demo</h2>
+              <h2>Run a BIS-Aligned Workflow</h2>
               <p className="legend">
-                Choose a scenario and strategy, then run all steps automatically. Technical controls are hidden
-                until you switch to Expert Mode.
+                Pick an internal operations scenario and run intake to continual update to retention check. Expert
+                controls stay hidden unless you switch modes.
               </p>
               <div className="novice-controls">
                 <label className="compact-control">
-                  Scenario
-                  <select onChange={(event) => setInboxRequest(event.target.value)} value={inboxRequest}>
-                    {sampleRequestOptions.map((sample) => (
-                      <option key={`${sample.label}-${sample.text.slice(0, 16)}`} value={sample.text}>
-                        {sample.label}
+                  BIS scenario
+                  <select
+                    onChange={(event) => {
+                      const scenarioId = event.target.value;
+                      setSelectedScenarioId(scenarioId);
+                      const scenario = BIS_SCENARIOS.find((item) => item.id === scenarioId);
+                      if (scenario) {
+                        setInboxRequest(scenario.requestText);
+                      }
+                    }}
+                    value={selectedScenarioId}
+                  >
+                    {BIS_SCENARIOS.map((scenario) => (
+                      <option key={scenario.id} value={scenario.id}>
+                        {scenario.label}
                       </option>
                     ))}
-                  </select>
-                </label>
-                <label className="compact-control">
-                  Strategy
-                  <select value={clMode} onChange={(event) => setClMode(event.target.value as RouterMode)}>
-                    <option value="naive">Fast (Naive)</option>
-                    <option value="rehearsal">Balanced (Replay)</option>
-                    <option value="ewc">Stable (EWC)</option>
                   </select>
                 </label>
                 <button
@@ -809,30 +948,45 @@ function App() {
                       : "Run End-to-End Demo"}
                 </button>
               </div>
+              <p className="legend">
+                Selected scenario outcome: <strong>{selectedScenario.expectedOutcome}</strong>
+              </p>
+              <p className="legend">
+                Default continual strategy in novice mode: <strong>Replay</strong> (balanced adaptation and
+                retention).
+              </p>
             </section>
 
             <section className="stepper">
               <article className={`step-pill ${runStepStatus}`}>
-                <h3>1. Route Request</h3>
-                <p>{runStepStatus === "done" ? "Completed" : "Predict process intent and generate plan."}</p>
+                <h3>1. Intake and Route</h3>
+                <p>{runStepStatus === "done" ? "Completed" : "Classify request and create governed action plan."}</p>
               </article>
               <article className={`step-pill ${teachStepStatus}`}>
-                <h3>2. Teach Next Process</h3>
-                <p>{teachStepStatus === "done" ? "Completed" : "Update model with the next process family."}</p>
+                <h3>2. Teach New Policy Family</h3>
+                <p>{teachStepStatus === "done" ? "Completed" : "Continuously update router with new process data."}</p>
               </article>
               <article className={`step-pill ${evalStepStatus}`}>
-                <h3>3. Measure Retention</h3>
-                <p>{evalStepStatus === "done" ? "Completed" : "Compare forgetting against baseline."}</p>
+                <h3>3. Prove Retention</h3>
+                <p>{evalStepStatus === "done" ? "Completed" : "Compare forgetting versus naive update baseline."}</p>
               </article>
             </section>
 
             <section className="impact-card">
-              <h3>Practical Impact</h3>
+              <h3>Operational Impact for BIS</h3>
+              <div className="metric-grid">
+                <p>
+                  Workflow category: <strong>{processProfile.workflowLabel}</strong>
+                </p>
+                <p>
+                  Internal system targets: <strong>{processProfile.systemTargets.join(", ")}</strong>
+                </p>
+              </div>
               {comparisonResult ? (
                 <>
                   <div className="metric-grid">
                     <p>
-                      Predicted process: <strong>{inboxResult?.predictedIntent ?? "n/a"}</strong>
+                      Predicted workflow: <strong>{inboxResult?.plan.title ?? "n/a"}</strong>
                     </p>
                     <p>
                       Plan schema status: <strong>{inboxResult ? "valid" : "not generated"}</strong>
@@ -845,9 +999,14 @@ function App() {
                     Using <strong>{strategyLabel(selectedMode)}</strong>, older process retention improved by{" "}
                     {(forgettingReduction * 100).toFixed(2)} percentage points versus naive updates.
                   </p>
+                  {handoffPreview ? (
+                    <pre className="summary summary-block">{JSON.stringify(handoffPreview, null, 2)}</pre>
+                  ) : null}
                 </>
               ) : (
-                <p className="legend">Run the end-to-end demo to see measurable impact.</p>
+                <p className="legend">
+                  Run the end-to-end workflow to generate a handoff payload and measurable retention metrics.
+                </p>
               )}
             </section>
 
@@ -935,7 +1094,7 @@ function App() {
 
             {activeTab === "inbox" ? (
               <div className="panel">
-                <h3>Inbox</h3>
+                <h3>Intake</h3>
                 <div className="row wrap">
                   <label>
                     Sample request
@@ -964,7 +1123,7 @@ function App() {
 
             {activeTab === "teach" ? (
               <div className="panel">
-                <h3>Improve Model</h3>
+                <h3>Teach Policy</h3>
                 <p className="status">Seen processes: {seenProcesses.join(", ")}</p>
                 {nextTeachStep ? (
                   <>
@@ -992,7 +1151,7 @@ function App() {
 
             {activeTab === "evaluate" ? (
               <div className="panel">
-                <h3>Results</h3>
+                <h3>Impact</h3>
                 <button type="button" onClick={handleEvaluate}>
                   Run regression + forgetting comparison
                 </button>

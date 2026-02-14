@@ -11,8 +11,9 @@ const DATASET_ROOT = path.join(DATA_ROOT, "datasets");
 const PROCESS_DEFINITIONS = [
   {
     process_id: "access_request",
-    display_name: "Access Request",
-    description: "Provision, modify, or revoke system access for users.",
+    display_name: "Access Entitlement Change",
+    description:
+      "Handle joiner/mover/leaver access changes for internal platforms with governance controls.",
     required_fields: [
       "subject_user",
       "system_name",
@@ -20,14 +21,15 @@ const PROCESS_DEFINITIONS = [
       "justification",
       "manager_approval",
     ],
-    default_owner_role: "iam_analyst",
-    default_sla_hours: 24,
-    required_approvals: ["line_manager", "system_owner"],
+    default_owner_role: "identity_governance_analyst",
+    default_sla_hours: 12,
+    required_approvals: ["line_manager", "application_owner"],
   },
   {
     process_id: "vendor_onboarding",
-    display_name: "Vendor Onboarding",
-    description: "Assess and onboard external vendors under security and compliance rules.",
+    display_name: "Third-Party Due Diligence Intake",
+    description:
+      "Screen, assess, and onboard external vendors with sanctions, security, and compliance checks.",
     required_fields: [
       "vendor_name",
       "country",
@@ -35,14 +37,14 @@ const PROCESS_DEFINITIONS = [
       "security_review_ticket",
       "tax_form_status",
     ],
-    default_owner_role: "vendor_risk_analyst",
+    default_owner_role: "third_party_risk_analyst",
     default_sla_hours: 72,
-    required_approvals: ["procurement_manager", "security_officer"],
+    required_approvals: ["procurement_owner", "information_security", "compliance_officer"],
   },
   {
     process_id: "purchase_request",
-    display_name: "Purchase Request",
-    description: "Evaluate and approve internal spending and procurement requests.",
+    display_name: "Policy-Compliant Procurement Request",
+    description: "Route spend requests through budget, procurement, and policy controls.",
     required_fields: [
       "requester_department",
       "item_description",
@@ -50,14 +52,15 @@ const PROCESS_DEFINITIONS = [
       "budget_code",
       "preferred_supplier",
     ],
-    default_owner_role: "procurement_specialist",
+    default_owner_role: "procurement_operations",
     default_sla_hours: 48,
-    required_approvals: ["budget_owner", "procurement_lead"],
+    required_approvals: ["budget_owner", "procurement_owner"],
   },
   {
     process_id: "incident_escalation",
-    display_name: "Incident Escalation",
-    description: "Escalate incidents by severity and coordinate incident response.",
+    display_name: "Critical Operations Incident Escalation",
+    description:
+      "Escalate high-impact internal service incidents with clear ownership, severity, and SLA controls.",
     required_fields: [
       "incident_id",
       "severity",
@@ -65,9 +68,9 @@ const PROCESS_DEFINITIONS = [
       "customer_impact",
       "oncall_owner",
     ],
-    default_owner_role: "incident_commander",
-    default_sla_hours: 4,
-    required_approvals: ["oncall_manager", "sre_lead"],
+    default_owner_role: "operations_incident_manager",
+    default_sla_hours: 2,
+    required_approvals: ["operations_oncall", "service_owner"],
   },
 ];
 
@@ -126,23 +129,23 @@ function riskFor(processId, index) {
 
 function buildAccessExample(rand, index, split) {
   const user = pick(rand, [
-    "A. Patel",
-    "J. Kim",
-    "L. Rodriguez",
-    "R. Singh",
-    "T. Nguyen",
-    "M. Carter",
-    "E. Miller",
-    "S. Hassan",
+    "A. Meier",
+    "J. Keller",
+    "L. Weber",
+    "R. Schmid",
+    "T. Baumann",
+    "M. Fischer",
+    "E. Vogel",
+    "S. Dubois",
   ]);
-  const systems = ["Finance BI", "CRM Portal", "Payroll Hub", "Audit Vault"];
-  const levels = ["read", "editor", "approver"];
-  const teams = ["finance ops", "internal audit", "revops", "compliance"];
+  const systems = ["Policy Analytics Portal", "Document Vault", "Treasury Dashboard", "Risk Control Hub"];
+  const levels = ["read", "editor", "approver", "admin"];
+  const teams = ["monetary_policy", "operations_risk", "internal_audit", "legal_compliance"];
   const justification = pick(rand, [
-    "quarter-end reconciliation",
+    "policy note preparation",
     "control evidence review",
-    "customer account correction",
-    "exception handling during close",
+    "quarterly risk reporting",
+    "urgent issue triage",
   ]);
   const system = pick(rand, systems);
   const level = pick(rand, levels);
@@ -158,10 +161,10 @@ function buildAccessExample(rand, index, split) {
       plan_version: "1.0",
       process_id: "access_request",
       title: `Provision ${level} access in ${system}`,
-      owner_role: "iam_analyst",
-      sla_hours: 24,
+      owner_role: "identity_governance_analyst",
+      sla_hours: 12,
       risk_tag: risk,
-      approvals: ["line_manager", "system_owner"],
+      approvals: ["line_manager", "application_owner"],
       required_fields: {
         subject_user: user,
         system_name: system,
@@ -170,9 +173,9 @@ function buildAccessExample(rand, index, split) {
         manager_approval: "pending",
       },
       next_actions: [
-        "Validate user employment status",
-        "Create IAM entitlement change ticket",
-        "Notify requester when provisioning completes",
+        "Validate user identity and employment status",
+        "Create entitlement change ticket in IAM queue",
+        "Notify requester and log approval evidence",
       ],
       controls: ["SoD check", "Manager authorization", "Quarterly recertification"],
     },
@@ -181,13 +184,13 @@ function buildAccessExample(rand, index, split) {
 
 function buildVendorExample(rand, index, split) {
   const vendors = [
-    "Northwind Data Services",
-    "BluePeak Consulting",
-    "OrbitFulfill Logistics",
-    "Cedar Compliance Labs",
+    "Northshore Analytics",
+    "Helios Data Labs",
+    "Alpine Control Services",
+    "Arcadia Cloud Operations",
   ];
-  const countries = ["US", "DE", "IN", "CH", "SG"];
-  const scopes = ["analytics support", "payment processing", "cloud hosting", "KYC operations"];
+  const countries = ["US", "DE", "IN", "CH", "SG", "GB"];
+  const scopes = ["market data services", "cloud platform support", "cyber monitoring", "document processing"];
   const taxStatus = ["w9_received", "w8ben_required", "pending_submission"];
   const vendor = pick(rand, vendors);
   const country = pick(rand, countries);
@@ -198,16 +201,16 @@ function buildVendorExample(rand, index, split) {
   return {
     id: `vendor_onboarding-${split}-${String(index + 1).padStart(3, "0")}`,
     process_id: "vendor_onboarding",
-    request_text: `Start vendor onboarding for ${vendor} in ${country} for ${scope}; include security and tax checks.`,
+    request_text: `Start due diligence for ${vendor} in ${country} for ${scope}; include sanctions, security, and tax checks.`,
     risk_tag: risk,
     target: {
       plan_version: "1.0",
       process_id: "vendor_onboarding",
-      title: `Onboard vendor ${vendor}`,
-      owner_role: "vendor_risk_analyst",
+      title: `Assess and onboard vendor ${vendor}`,
+      owner_role: "third_party_risk_analyst",
       sla_hours: 72,
       risk_tag: risk,
-      approvals: ["procurement_manager", "security_officer"],
+      approvals: ["procurement_owner", "information_security", "compliance_officer"],
       required_fields: {
         vendor_name: vendor,
         country,
@@ -216,9 +219,9 @@ function buildVendorExample(rand, index, split) {
         tax_form_status: pick(rand, taxStatus),
       },
       next_actions: [
-        "Run sanctions and legal entity checks",
-        "Complete security questionnaire review",
-        "Record onboarding decision in vendor register",
+        "Run sanctions and beneficial ownership checks",
+        "Complete security questionnaire and data handling review",
+        "Record onboarding decision in third-party register",
       ],
       controls: ["Third-party risk tiering", "Data processing addendum", "Tax compliance check"],
     },
@@ -226,15 +229,15 @@ function buildVendorExample(rand, index, split) {
 }
 
 function buildPurchaseExample(rand, index, split) {
-  const departments = ["finance", "engineering", "marketing", "customer_support"];
+  const departments = ["operations", "research", "it_security", "communications"];
   const items = [
-    "security license expansion",
-    "GPU workstation",
-    "customer survey package",
-    "backup storage extension",
+    "market data license renewal",
+    "secure workstation refresh",
+    "document workflow subscription",
+    "archival storage extension",
   ];
-  const suppliers = ["Contoso Supply", "Apex Systems", "Nexa Devices", "Summit Retail"];
-  const budgetCodes = ["BUD-4012", "BUD-7731", "BUD-5590", "BUD-6604"];
+  const suppliers = ["Arcadia Tech", "EuroData Supply", "Summit Systems", "Helix Procurement"];
+  const budgetCodes = ["BUD-4012", "BUD-7731", "BUD-5590", "BUD-6604", "BUD-7810"];
   const dept = pick(rand, departments);
   const item = pick(rand, items);
   const supplier = pick(rand, suppliers);
@@ -244,16 +247,16 @@ function buildPurchaseExample(rand, index, split) {
   return {
     id: `purchase_request-${split}-${String(index + 1).padStart(3, "0")}`,
     process_id: "purchase_request",
-    request_text: `Create a purchase request from ${dept} for ${item} via ${supplier}; estimated spend is $${estimatedCost}.`,
+    request_text: `Create a procurement request from ${dept} for ${item} via ${supplier}; estimated spend is $${estimatedCost}.`,
     risk_tag: risk,
     target: {
       plan_version: "1.0",
       process_id: "purchase_request",
       title: `Approve ${item} purchase`,
-      owner_role: "procurement_specialist",
+      owner_role: "procurement_operations",
       sla_hours: 48,
       risk_tag: risk,
-      approvals: ["budget_owner", "procurement_lead"],
+      approvals: ["budget_owner", "procurement_owner"],
       required_fields: {
         requester_department: dept,
         item_description: item,
@@ -263,8 +266,8 @@ function buildPurchaseExample(rand, index, split) {
       },
       next_actions: [
         "Validate budget availability",
-        "Compare supplier quote against policy threshold",
-        "Issue purchase order after approval",
+        "Compare supplier quote against procurement policy thresholds",
+        "Issue purchase order after approvals and audit log",
       ],
       controls: ["Budget limit validation", "Preferred supplier check", "Dual approval policy"],
     },
@@ -272,14 +275,14 @@ function buildPurchaseExample(rand, index, split) {
 }
 
 function buildIncidentExample(rand, index, split) {
-  const services = ["payments-api", "auth-gateway", "data-pipeline", "customer-portal"];
+  const services = ["policy-briefing-portal", "market-data-ingestion", "document-collaboration", "internal-auth-gateway"];
   const impacts = [
-    "intermittent checkout failures",
-    "elevated login errors",
-    "delayed reporting jobs",
-    "dashboard unavailable for premium customers",
+    "briefing dashboards unavailable",
+    "elevated login failures for staff",
+    "delayed regulatory reporting jobs",
+    "intermittent outage in operations portal",
   ];
-  const oncall = ["sre-west", "sre-eu", "platform-oncall", "infra-oncall"];
+  const oncall = ["ops-oncall-eu", "platform-oncall", "infra-oncall", "security-oncall"];
   const severities = ["sev1", "sev2", "sev3"];
   const service = pick(rand, services);
   const impact = pick(rand, impacts);
@@ -296,10 +299,10 @@ function buildIncidentExample(rand, index, split) {
       plan_version: "1.0",
       process_id: "incident_escalation",
       title: `Escalate incident ${incidentId}`,
-      owner_role: "incident_commander",
-      sla_hours: 4,
+      owner_role: "operations_incident_manager",
+      sla_hours: 2,
       risk_tag: risk,
-      approvals: ["oncall_manager", "sre_lead"],
+      approvals: ["operations_oncall", "service_owner"],
       required_fields: {
         incident_id: incidentId,
         severity,
@@ -308,9 +311,9 @@ function buildIncidentExample(rand, index, split) {
         oncall_owner: pick(rand, oncall),
       },
       next_actions: [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update",
+        "Publish first internal status update",
       ],
       controls: ["Severity rubric enforcement", "Escalation SLA timer", "Post-incident review requirement"],
     },

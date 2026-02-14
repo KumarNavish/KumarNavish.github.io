@@ -2,30 +2,30 @@
   {
     "id": "incident_escalation-train-001",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-36844 for payments-api due to dashboard unavailable for premium customers; treat as sev1.",
+    "request_text": "Escalate INC-36844 for policy-briefing-portal due to intermittent outage in operations portal; treat as sev1.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-36844",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-36844",
         "severity": "sev1",
-        "service_name": "payments-api",
-        "customer_impact": "dashboard unavailable for premium customers",
-        "oncall_owner": "sre-eu"
+        "service_name": "policy-briefing-portal",
+        "customer_impact": "intermittent outage in operations portal",
+        "oncall_owner": "platform-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -37,30 +37,30 @@
   {
     "id": "incident_escalation-train-002",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-32665 for data-pipeline due to intermittent checkout failures; treat as sev1.",
+    "request_text": "Escalate INC-32665 for document-collaboration due to briefing dashboards unavailable; treat as sev1.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-32665",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-32665",
         "severity": "sev1",
-        "service_name": "data-pipeline",
-        "customer_impact": "intermittent checkout failures",
-        "oncall_owner": "sre-eu"
+        "service_name": "document-collaboration",
+        "customer_impact": "briefing dashboards unavailable",
+        "oncall_owner": "platform-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -72,30 +72,30 @@
   {
     "id": "incident_escalation-train-003",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-33780 for customer-portal due to delayed reporting jobs; treat as sev1.",
+    "request_text": "Escalate INC-33780 for internal-auth-gateway due to delayed regulatory reporting jobs; treat as sev1.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-33780",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "medium",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-33780",
         "severity": "sev1",
-        "service_name": "customer-portal",
-        "customer_impact": "delayed reporting jobs",
-        "oncall_owner": "platform-oncall"
+        "service_name": "internal-auth-gateway",
+        "customer_impact": "delayed regulatory reporting jobs",
+        "oncall_owner": "infra-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -107,30 +107,30 @@
   {
     "id": "incident_escalation-train-004",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-34792 for auth-gateway due to elevated login errors; treat as sev2.",
+    "request_text": "Escalate INC-34792 for market-data-ingestion due to elevated login failures for staff; treat as sev2.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-34792",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-34792",
         "severity": "sev2",
-        "service_name": "auth-gateway",
-        "customer_impact": "elevated login errors",
-        "oncall_owner": "platform-oncall"
+        "service_name": "market-data-ingestion",
+        "customer_impact": "elevated login failures for staff",
+        "oncall_owner": "infra-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -142,30 +142,30 @@
   {
     "id": "incident_escalation-train-005",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-34165 for auth-gateway due to intermittent checkout failures; treat as sev2.",
+    "request_text": "Escalate INC-34165 for market-data-ingestion due to briefing dashboards unavailable; treat as sev2.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-34165",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-34165",
         "severity": "sev2",
-        "service_name": "auth-gateway",
-        "customer_impact": "intermittent checkout failures",
-        "oncall_owner": "sre-west"
+        "service_name": "market-data-ingestion",
+        "customer_impact": "briefing dashboards unavailable",
+        "oncall_owner": "ops-oncall-eu"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -177,30 +177,30 @@
   {
     "id": "incident_escalation-train-006",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-31698 for data-pipeline due to delayed reporting jobs; treat as sev3.",
+    "request_text": "Escalate INC-31698 for document-collaboration due to delayed regulatory reporting jobs; treat as sev3.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-31698",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-31698",
         "severity": "sev3",
-        "service_name": "data-pipeline",
-        "customer_impact": "delayed reporting jobs",
-        "oncall_owner": "infra-oncall"
+        "service_name": "document-collaboration",
+        "customer_impact": "delayed regulatory reporting jobs",
+        "oncall_owner": "security-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -212,30 +212,30 @@
   {
     "id": "incident_escalation-train-007",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-33933 for customer-portal due to delayed reporting jobs; treat as sev2.",
+    "request_text": "Escalate INC-33933 for internal-auth-gateway due to delayed regulatory reporting jobs; treat as sev2.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-33933",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "medium",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-33933",
         "severity": "sev2",
-        "service_name": "customer-portal",
-        "customer_impact": "delayed reporting jobs",
-        "oncall_owner": "sre-eu"
+        "service_name": "internal-auth-gateway",
+        "customer_impact": "delayed regulatory reporting jobs",
+        "oncall_owner": "platform-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -247,30 +247,30 @@
   {
     "id": "incident_escalation-train-008",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-36702 for payments-api due to elevated login errors; treat as sev3.",
+    "request_text": "Escalate INC-36702 for policy-briefing-portal due to elevated login failures for staff; treat as sev3.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-36702",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-36702",
         "severity": "sev3",
-        "service_name": "payments-api",
-        "customer_impact": "elevated login errors",
-        "oncall_owner": "sre-eu"
+        "service_name": "policy-briefing-portal",
+        "customer_impact": "elevated login failures for staff",
+        "oncall_owner": "platform-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -282,30 +282,30 @@
   {
     "id": "incident_escalation-train-009",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-33243 for payments-api due to dashboard unavailable for premium customers; treat as sev3.",
+    "request_text": "Escalate INC-33243 for policy-briefing-portal due to intermittent outage in operations portal; treat as sev3.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-33243",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-33243",
         "severity": "sev3",
-        "service_name": "payments-api",
-        "customer_impact": "dashboard unavailable for premium customers",
-        "oncall_owner": "sre-west"
+        "service_name": "policy-briefing-portal",
+        "customer_impact": "intermittent outage in operations portal",
+        "oncall_owner": "ops-oncall-eu"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -317,30 +317,30 @@
   {
     "id": "incident_escalation-train-010",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-31123 for payments-api due to dashboard unavailable for premium customers; treat as sev3.",
+    "request_text": "Escalate INC-31123 for policy-briefing-portal due to intermittent outage in operations portal; treat as sev3.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-31123",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-31123",
         "severity": "sev3",
-        "service_name": "payments-api",
-        "customer_impact": "dashboard unavailable for premium customers",
-        "oncall_owner": "sre-eu"
+        "service_name": "policy-briefing-portal",
+        "customer_impact": "intermittent outage in operations portal",
+        "oncall_owner": "platform-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -352,30 +352,30 @@
   {
     "id": "incident_escalation-train-011",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-33974 for auth-gateway due to delayed reporting jobs; treat as sev3.",
+    "request_text": "Escalate INC-33974 for market-data-ingestion due to delayed regulatory reporting jobs; treat as sev3.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-33974",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "medium",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-33974",
         "severity": "sev3",
-        "service_name": "auth-gateway",
-        "customer_impact": "delayed reporting jobs",
-        "oncall_owner": "sre-eu"
+        "service_name": "market-data-ingestion",
+        "customer_impact": "delayed regulatory reporting jobs",
+        "oncall_owner": "platform-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -387,30 +387,30 @@
   {
     "id": "incident_escalation-train-012",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-33875 for data-pipeline due to dashboard unavailable for premium customers; treat as sev1.",
+    "request_text": "Escalate INC-33875 for document-collaboration due to intermittent outage in operations portal; treat as sev1.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-33875",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-33875",
         "severity": "sev1",
-        "service_name": "data-pipeline",
-        "customer_impact": "dashboard unavailable for premium customers",
-        "oncall_owner": "sre-eu"
+        "service_name": "document-collaboration",
+        "customer_impact": "intermittent outage in operations portal",
+        "oncall_owner": "platform-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -422,30 +422,30 @@
   {
     "id": "incident_escalation-train-013",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-36586 for payments-api due to delayed reporting jobs; treat as sev2.",
+    "request_text": "Escalate INC-36586 for policy-briefing-portal due to delayed regulatory reporting jobs; treat as sev2.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-36586",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-36586",
         "severity": "sev2",
-        "service_name": "payments-api",
-        "customer_impact": "delayed reporting jobs",
-        "oncall_owner": "sre-west"
+        "service_name": "policy-briefing-portal",
+        "customer_impact": "delayed regulatory reporting jobs",
+        "oncall_owner": "ops-oncall-eu"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -457,30 +457,30 @@
   {
     "id": "incident_escalation-train-014",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-31282 for payments-api due to intermittent checkout failures; treat as sev2.",
+    "request_text": "Escalate INC-31282 for policy-briefing-portal due to briefing dashboards unavailable; treat as sev2.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-31282",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-31282",
         "severity": "sev2",
-        "service_name": "payments-api",
-        "customer_impact": "intermittent checkout failures",
-        "oncall_owner": "sre-west"
+        "service_name": "policy-briefing-portal",
+        "customer_impact": "briefing dashboards unavailable",
+        "oncall_owner": "ops-oncall-eu"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -492,30 +492,30 @@
   {
     "id": "incident_escalation-train-015",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-35291 for data-pipeline due to intermittent checkout failures; treat as sev1.",
+    "request_text": "Escalate INC-35291 for document-collaboration due to briefing dashboards unavailable; treat as sev1.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-35291",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "medium",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-35291",
         "severity": "sev1",
-        "service_name": "data-pipeline",
-        "customer_impact": "intermittent checkout failures",
-        "oncall_owner": "infra-oncall"
+        "service_name": "document-collaboration",
+        "customer_impact": "briefing dashboards unavailable",
+        "oncall_owner": "security-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -527,30 +527,30 @@
   {
     "id": "incident_escalation-train-016",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-34209 for auth-gateway due to dashboard unavailable for premium customers; treat as sev2.",
+    "request_text": "Escalate INC-34209 for market-data-ingestion due to intermittent outage in operations portal; treat as sev2.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-34209",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-34209",
         "severity": "sev2",
-        "service_name": "auth-gateway",
-        "customer_impact": "dashboard unavailable for premium customers",
-        "oncall_owner": "sre-eu"
+        "service_name": "market-data-ingestion",
+        "customer_impact": "intermittent outage in operations portal",
+        "oncall_owner": "platform-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -562,30 +562,30 @@
   {
     "id": "incident_escalation-train-017",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-34544 for customer-portal due to intermittent checkout failures; treat as sev1.",
+    "request_text": "Escalate INC-34544 for internal-auth-gateway due to briefing dashboards unavailable; treat as sev1.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-34544",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-34544",
         "severity": "sev1",
-        "service_name": "customer-portal",
-        "customer_impact": "intermittent checkout failures",
-        "oncall_owner": "platform-oncall"
+        "service_name": "internal-auth-gateway",
+        "customer_impact": "briefing dashboards unavailable",
+        "oncall_owner": "infra-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -597,30 +597,30 @@
   {
     "id": "incident_escalation-train-018",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-31634 for auth-gateway due to dashboard unavailable for premium customers; treat as sev3.",
+    "request_text": "Escalate INC-31634 for market-data-ingestion due to intermittent outage in operations portal; treat as sev3.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-31634",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-31634",
         "severity": "sev3",
-        "service_name": "auth-gateway",
-        "customer_impact": "dashboard unavailable for premium customers",
-        "oncall_owner": "platform-oncall"
+        "service_name": "market-data-ingestion",
+        "customer_impact": "intermittent outage in operations portal",
+        "oncall_owner": "infra-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -632,30 +632,30 @@
   {
     "id": "incident_escalation-train-019",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-32892 for data-pipeline due to elevated login errors; treat as sev1.",
+    "request_text": "Escalate INC-32892 for document-collaboration due to elevated login failures for staff; treat as sev1.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-32892",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "medium",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-32892",
         "severity": "sev1",
-        "service_name": "data-pipeline",
-        "customer_impact": "elevated login errors",
-        "oncall_owner": "infra-oncall"
+        "service_name": "document-collaboration",
+        "customer_impact": "elevated login failures for staff",
+        "oncall_owner": "security-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -667,30 +667,30 @@
   {
     "id": "incident_escalation-train-020",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-36626 for data-pipeline due to delayed reporting jobs; treat as sev3.",
+    "request_text": "Escalate INC-36626 for document-collaboration due to delayed regulatory reporting jobs; treat as sev3.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-36626",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-36626",
         "severity": "sev3",
-        "service_name": "data-pipeline",
-        "customer_impact": "delayed reporting jobs",
-        "oncall_owner": "sre-eu"
+        "service_name": "document-collaboration",
+        "customer_impact": "delayed regulatory reporting jobs",
+        "oncall_owner": "platform-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -702,30 +702,30 @@
   {
     "id": "incident_escalation-train-021",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-36489 for data-pipeline due to intermittent checkout failures; treat as sev2.",
+    "request_text": "Escalate INC-36489 for document-collaboration due to briefing dashboards unavailable; treat as sev2.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-36489",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-36489",
         "severity": "sev2",
-        "service_name": "data-pipeline",
-        "customer_impact": "intermittent checkout failures",
-        "oncall_owner": "platform-oncall"
+        "service_name": "document-collaboration",
+        "customer_impact": "briefing dashboards unavailable",
+        "oncall_owner": "infra-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -737,30 +737,30 @@
   {
     "id": "incident_escalation-train-022",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-33444 for customer-portal due to intermittent checkout failures; treat as sev1.",
+    "request_text": "Escalate INC-33444 for internal-auth-gateway due to briefing dashboards unavailable; treat as sev1.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-33444",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-33444",
         "severity": "sev1",
-        "service_name": "customer-portal",
-        "customer_impact": "intermittent checkout failures",
-        "oncall_owner": "infra-oncall"
+        "service_name": "internal-auth-gateway",
+        "customer_impact": "briefing dashboards unavailable",
+        "oncall_owner": "security-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -772,30 +772,30 @@
   {
     "id": "incident_escalation-train-023",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-36654 for customer-portal due to delayed reporting jobs; treat as sev3.",
+    "request_text": "Escalate INC-36654 for internal-auth-gateway due to delayed regulatory reporting jobs; treat as sev3.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-36654",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "medium",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-36654",
         "severity": "sev3",
-        "service_name": "customer-portal",
-        "customer_impact": "delayed reporting jobs",
-        "oncall_owner": "sre-eu"
+        "service_name": "internal-auth-gateway",
+        "customer_impact": "delayed regulatory reporting jobs",
+        "oncall_owner": "platform-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -807,30 +807,30 @@
   {
     "id": "incident_escalation-train-024",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-32746 for auth-gateway due to dashboard unavailable for premium customers; treat as sev1.",
+    "request_text": "Escalate INC-32746 for market-data-ingestion due to intermittent outage in operations portal; treat as sev1.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-32746",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-32746",
         "severity": "sev1",
-        "service_name": "auth-gateway",
-        "customer_impact": "dashboard unavailable for premium customers",
-        "oncall_owner": "platform-oncall"
+        "service_name": "market-data-ingestion",
+        "customer_impact": "intermittent outage in operations portal",
+        "oncall_owner": "infra-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -842,30 +842,30 @@
   {
     "id": "incident_escalation-train-025",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-36199 for data-pipeline due to delayed reporting jobs; treat as sev2.",
+    "request_text": "Escalate INC-36199 for document-collaboration due to delayed regulatory reporting jobs; treat as sev2.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-36199",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-36199",
         "severity": "sev2",
-        "service_name": "data-pipeline",
-        "customer_impact": "delayed reporting jobs",
-        "oncall_owner": "platform-oncall"
+        "service_name": "document-collaboration",
+        "customer_impact": "delayed regulatory reporting jobs",
+        "oncall_owner": "infra-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -877,30 +877,30 @@
   {
     "id": "incident_escalation-train-026",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-32774 for customer-portal due to dashboard unavailable for premium customers; treat as sev2.",
+    "request_text": "Escalate INC-32774 for internal-auth-gateway due to intermittent outage in operations portal; treat as sev2.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-32774",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-32774",
         "severity": "sev2",
-        "service_name": "customer-portal",
-        "customer_impact": "dashboard unavailable for premium customers",
-        "oncall_owner": "infra-oncall"
+        "service_name": "internal-auth-gateway",
+        "customer_impact": "intermittent outage in operations portal",
+        "oncall_owner": "security-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -912,30 +912,30 @@
   {
     "id": "incident_escalation-train-027",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-31754 for auth-gateway due to intermittent checkout failures; treat as sev3.",
+    "request_text": "Escalate INC-31754 for market-data-ingestion due to briefing dashboards unavailable; treat as sev3.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-31754",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "medium",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-31754",
         "severity": "sev3",
-        "service_name": "auth-gateway",
-        "customer_impact": "intermittent checkout failures",
-        "oncall_owner": "infra-oncall"
+        "service_name": "market-data-ingestion",
+        "customer_impact": "briefing dashboards unavailable",
+        "oncall_owner": "security-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -947,30 +947,30 @@
   {
     "id": "incident_escalation-train-028",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-35042 for auth-gateway due to dashboard unavailable for premium customers; treat as sev2.",
+    "request_text": "Escalate INC-35042 for market-data-ingestion due to intermittent outage in operations portal; treat as sev2.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-35042",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-35042",
         "severity": "sev2",
-        "service_name": "auth-gateway",
-        "customer_impact": "dashboard unavailable for premium customers",
-        "oncall_owner": "infra-oncall"
+        "service_name": "market-data-ingestion",
+        "customer_impact": "intermittent outage in operations portal",
+        "oncall_owner": "security-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -982,30 +982,30 @@
   {
     "id": "incident_escalation-train-029",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-35863 for auth-gateway due to dashboard unavailable for premium customers; treat as sev2.",
+    "request_text": "Escalate INC-35863 for market-data-ingestion due to intermittent outage in operations portal; treat as sev2.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-35863",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-35863",
         "severity": "sev2",
-        "service_name": "auth-gateway",
-        "customer_impact": "dashboard unavailable for premium customers",
-        "oncall_owner": "sre-eu"
+        "service_name": "market-data-ingestion",
+        "customer_impact": "intermittent outage in operations portal",
+        "oncall_owner": "platform-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -1017,30 +1017,30 @@
   {
     "id": "incident_escalation-train-030",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-33219 for auth-gateway due to dashboard unavailable for premium customers; treat as sev3.",
+    "request_text": "Escalate INC-33219 for market-data-ingestion due to intermittent outage in operations portal; treat as sev3.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-33219",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-33219",
         "severity": "sev3",
-        "service_name": "auth-gateway",
-        "customer_impact": "dashboard unavailable for premium customers",
-        "oncall_owner": "platform-oncall"
+        "service_name": "market-data-ingestion",
+        "customer_impact": "intermittent outage in operations portal",
+        "oncall_owner": "infra-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -1052,30 +1052,30 @@
   {
     "id": "incident_escalation-train-031",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-33619 for auth-gateway due to dashboard unavailable for premium customers; treat as sev3.",
+    "request_text": "Escalate INC-33619 for market-data-ingestion due to intermittent outage in operations portal; treat as sev3.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-33619",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "medium",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-33619",
         "severity": "sev3",
-        "service_name": "auth-gateway",
-        "customer_impact": "dashboard unavailable for premium customers",
-        "oncall_owner": "sre-west"
+        "service_name": "market-data-ingestion",
+        "customer_impact": "intermittent outage in operations portal",
+        "oncall_owner": "ops-oncall-eu"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -1087,30 +1087,30 @@
   {
     "id": "incident_escalation-train-032",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-36089 for payments-api due to elevated login errors; treat as sev2.",
+    "request_text": "Escalate INC-36089 for policy-briefing-portal due to elevated login failures for staff; treat as sev2.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-36089",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-36089",
         "severity": "sev2",
-        "service_name": "payments-api",
-        "customer_impact": "elevated login errors",
-        "oncall_owner": "platform-oncall"
+        "service_name": "policy-briefing-portal",
+        "customer_impact": "elevated login failures for staff",
+        "oncall_owner": "infra-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -1122,30 +1122,30 @@
   {
     "id": "incident_escalation-train-033",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-34097 for auth-gateway due to intermittent checkout failures; treat as sev2.",
+    "request_text": "Escalate INC-34097 for market-data-ingestion due to briefing dashboards unavailable; treat as sev2.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-34097",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-34097",
         "severity": "sev2",
-        "service_name": "auth-gateway",
-        "customer_impact": "intermittent checkout failures",
-        "oncall_owner": "sre-west"
+        "service_name": "market-data-ingestion",
+        "customer_impact": "briefing dashboards unavailable",
+        "oncall_owner": "ops-oncall-eu"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -1157,30 +1157,30 @@
   {
     "id": "incident_escalation-train-034",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-34376 for payments-api due to dashboard unavailable for premium customers; treat as sev3.",
+    "request_text": "Escalate INC-34376 for policy-briefing-portal due to intermittent outage in operations portal; treat as sev3.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-34376",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-34376",
         "severity": "sev3",
-        "service_name": "payments-api",
-        "customer_impact": "dashboard unavailable for premium customers",
-        "oncall_owner": "sre-west"
+        "service_name": "policy-briefing-portal",
+        "customer_impact": "intermittent outage in operations portal",
+        "oncall_owner": "ops-oncall-eu"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -1192,30 +1192,30 @@
   {
     "id": "incident_escalation-train-035",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-35415 for data-pipeline due to dashboard unavailable for premium customers; treat as sev1.",
+    "request_text": "Escalate INC-35415 for document-collaboration due to intermittent outage in operations portal; treat as sev1.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-35415",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "medium",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-35415",
         "severity": "sev1",
-        "service_name": "data-pipeline",
-        "customer_impact": "dashboard unavailable for premium customers",
-        "oncall_owner": "sre-eu"
+        "service_name": "document-collaboration",
+        "customer_impact": "intermittent outage in operations portal",
+        "oncall_owner": "platform-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -1227,30 +1227,30 @@
   {
     "id": "incident_escalation-train-036",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-31468 for customer-portal due to delayed reporting jobs; treat as sev3.",
+    "request_text": "Escalate INC-31468 for internal-auth-gateway due to delayed regulatory reporting jobs; treat as sev3.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-31468",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-31468",
         "severity": "sev3",
-        "service_name": "customer-portal",
-        "customer_impact": "delayed reporting jobs",
-        "oncall_owner": "sre-eu"
+        "service_name": "internal-auth-gateway",
+        "customer_impact": "delayed regulatory reporting jobs",
+        "oncall_owner": "platform-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -1262,30 +1262,30 @@
   {
     "id": "incident_escalation-train-037",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-33999 for payments-api due to delayed reporting jobs; treat as sev3.",
+    "request_text": "Escalate INC-33999 for policy-briefing-portal due to delayed regulatory reporting jobs; treat as sev3.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-33999",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-33999",
         "severity": "sev3",
-        "service_name": "payments-api",
-        "customer_impact": "delayed reporting jobs",
-        "oncall_owner": "infra-oncall"
+        "service_name": "policy-briefing-portal",
+        "customer_impact": "delayed regulatory reporting jobs",
+        "oncall_owner": "security-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -1297,30 +1297,30 @@
   {
     "id": "incident_escalation-train-038",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-34644 for payments-api due to intermittent checkout failures; treat as sev1.",
+    "request_text": "Escalate INC-34644 for policy-briefing-portal due to briefing dashboards unavailable; treat as sev1.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-34644",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-34644",
         "severity": "sev1",
-        "service_name": "payments-api",
-        "customer_impact": "intermittent checkout failures",
-        "oncall_owner": "sre-eu"
+        "service_name": "policy-briefing-portal",
+        "customer_impact": "briefing dashboards unavailable",
+        "oncall_owner": "platform-oncall"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -1332,30 +1332,30 @@
   {
     "id": "incident_escalation-train-039",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-36103 for auth-gateway due to elevated login errors; treat as sev1.",
+    "request_text": "Escalate INC-36103 for market-data-ingestion due to elevated login failures for staff; treat as sev1.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-36103",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "medium",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-36103",
         "severity": "sev1",
-        "service_name": "auth-gateway",
-        "customer_impact": "elevated login errors",
-        "oncall_owner": "sre-west"
+        "service_name": "market-data-ingestion",
+        "customer_impact": "elevated login failures for staff",
+        "oncall_owner": "ops-oncall-eu"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",
@@ -1367,30 +1367,30 @@
   {
     "id": "incident_escalation-train-040",
     "process_id": "incident_escalation",
-    "request_text": "Escalate INC-32269 for data-pipeline due to elevated login errors; treat as sev1.",
+    "request_text": "Escalate INC-32269 for document-collaboration due to elevated login failures for staff; treat as sev1.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "incident_escalation",
       "title": "Escalate incident INC-32269",
-      "owner_role": "incident_commander",
-      "sla_hours": 4,
+      "owner_role": "operations_incident_manager",
+      "sla_hours": 2,
       "risk_tag": "high",
       "approvals": [
-        "oncall_manager",
-        "sre_lead"
+        "operations_oncall",
+        "service_owner"
       ],
       "required_fields": {
         "incident_id": "INC-32269",
         "severity": "sev1",
-        "service_name": "data-pipeline",
-        "customer_impact": "elevated login errors",
-        "oncall_owner": "sre-west"
+        "service_name": "document-collaboration",
+        "customer_impact": "elevated login failures for staff",
+        "oncall_owner": "ops-oncall-eu"
       },
       "next_actions": [
-        "Open incident bridge and page stakeholders",
+        "Open incident bridge and page internal stakeholders",
         "Assign triage and communications leads",
-        "Publish first external status update"
+        "Publish first internal status update"
       ],
       "controls": [
         "Severity rubric enforcement",

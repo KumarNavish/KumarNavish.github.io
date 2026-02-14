@@ -5,6 +5,18 @@ Fully static, client-side demo that combines retrieval, continual learning, and 
 Target live URL:
 `https://kumarnavish.github.io/bis-continual-process-automation-demo/`
 
+## BIS-Focused Demo Objective
+
+This v2 pass is framed around internal operations workflows that BIS teams run daily:
+
+- access entitlement changes
+- third-party due diligence intake
+- policy-compliant procurement requests
+- critical operations incident escalations
+
+The goal is immediate operational relevance: convert unstructured requests into governed, audit-ready JSON plans
+that can be handed off to internal workflow systems.
+
 ## What This Demo Proves
 
 - Continual learning for intent routing in a workflow automation setting (naive SGD vs rehearsal vs EWC).

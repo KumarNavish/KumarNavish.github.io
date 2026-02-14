@@ -34,10 +34,10 @@ export interface PipelineResult {
 }
 
 const PROCESS_KEYWORDS: Record<ProcessId, string[]> = {
-  access_request: ["access", "permission", "entitlement", "provision", "iam"],
-  vendor_onboarding: ["vendor", "supplier", "onboard", "third-party", "procurement"],
-  purchase_request: ["purchase", "buy", "spend", "budget", "invoice"],
-  incident_escalation: ["incident", "outage", "sev", "escalate", "oncall"],
+  access_request: ["access", "permission", "entitlement", "provision", "iam", "joiner", "mover", "leaver"],
+  vendor_onboarding: ["vendor", "supplier", "onboard", "third-party", "due diligence", "sanctions", "kyc"],
+  purchase_request: ["purchase", "buy", "spend", "budget", "invoice", "procurement", "po", "license"],
+  incident_escalation: ["incident", "outage", "sev", "escalate", "oncall", "major incident", "degradation"],
 };
 
 function inferRiskTag(requestText: string, processId: ProcessId): RiskTag {
