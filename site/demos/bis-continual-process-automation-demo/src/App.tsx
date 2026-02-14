@@ -42,9 +42,9 @@ const PRESET_OPTIONS: Array<{ id: ReplayPreset; label: string }> = [
 ]
 
 const STAGES = [
-  'Understand the request',
-  'Generate optimized workflow artifacts',
-  'Prepare export-ready payloads',
+  'Understand the request context',
+  'Generate charter, maps, and blueprint',
+  'Prepare export payloads for delivery tools',
 ] as const
 
 const DRIFT_REPLACEMENTS: Array<[RegExp, string]> = [
@@ -242,13 +242,6 @@ function App() {
     [samples, selectedSampleId],
   )
 
-  const progress =
-    stageIndex < 0
-      ? 0
-      : Math.round(
-          (Math.min(stageIndex + (isRunning ? 0.5 : 1), STAGES.length) / STAGES.length) * 100,
-        )
-
   const stageState = (index: number): StageState => {
     if (stageIndex < 0) {
       return 'pending'
@@ -264,15 +257,15 @@ function App() {
 
   const nextHint = useMemo(() => {
     if (error) {
-      return 'Data could not be loaded. Refresh once the data source is available.'
+      return 'Data could not be loaded. Refresh once the source is available.'
     }
     if (!result) {
-      return 'Click Start demo. You will immediately get a charter, process maps, and export payloads.'
+      return 'Choose an intake sample and click Start demo.'
     }
     if (isRunning) {
-      return 'Building your process optimisation pack...'
+      return 'Generating structured deliverables...'
     }
-    return 'Review outputs and copy export payloads into your delivery tracker.'
+    return 'Review the outputs and copy payloads into your delivery workflow.'
   }, [error, isRunning, result])
 
   function clearRunTimer() {
@@ -394,230 +387,68 @@ function App() {
   const revealExports = result !== null && stageIndex >= 2
 
   return (
-    <main className="app-shell">
-      <header className="hero-card">
+    <main className="page-shell">
+      <header className="hero">
         <p className="eyebrow">BIS Process Optimisation Copilot</p>
-        <h1>
-          Turn messy process requests into a clear charter, process maps, and an automation-ready
-          delivery pack.
-        </h1>
-        <p className="subhead">
-          One click creates practical work artifacts your team can execute immediately.
+        <h1>From messy intake to delivery-ready automation artifacts in under a minute.</h1>
+        <p className="hero-subhead">
+          Turn one raw request into a project charter, process redesign map, automation blueprint,
+          and export payloads your team can execute.
         </p>
+        <div className="hero-actions">
+          <button className="primary-btn hero-btn" onClick={startDemo} disabled={!selectedSample || isRunning}>
+            {isRunning ? 'Generating...' : 'Start demo'}
+          </button>
+          <p className="hero-hint">{nextHint}</p>
+        </div>
       </header>
 
-      <section className="workflow-grid">
-        <aside className="intake-card">
-          <h2>Start Here</h2>
-          <label>
-            Process request example
-            <select
-              value={selectedSampleId}
-              onChange={(event) => setSelectedSampleId(event.target.value)}
-            >
-              {samples.map((sample) => (
-                <option key={sample.id} value={sample.id}>
-                  {sample.title}
-                </option>
+      <section className="main-grid">
+        <aside className="left-rail">
+          <section className="panel">
+            <h2>1. Intake</h2>
+            <label>
+              Select request example
+              <select
+                value={selectedSampleId}
+                onChange={(event) => setSelectedSampleId(event.target.value)}
+              >
+                {samples.map((sample) => (
+                  <option key={sample.id} value={sample.id}>
+                    {sample.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {selectedSample ? (
+              <article className="request-preview">
+                <span>{selectedSample.channel.replace('_', ' ')}</span>
+                <p>{selectedSample.text}</p>
+              </article>
+            ) : null}
+
+            {error ? <p className="error-text">{error}</p> : null}
+            {copyStatus ? <p className="copy-status">{copyStatus}</p> : null}
+          </section>
+
+          <section className="panel">
+            <h2>2. Guided Flow</h2>
+            <ol className="stage-list">
+              {STAGES.map((stage, index) => (
+                <li key={stage} className={`stage-item ${stageState(index)}`}>
+                  <strong>{index + 1}</strong>
+                  <span>{stage}</span>
+                </li>
               ))}
-            </select>
-          </label>
-
-          <button className="primary-btn" onClick={startDemo} disabled={!selectedSample || isRunning}>
-            {isRunning ? 'Generating artifacts...' : 'Start demo'}
-          </button>
-
-          {error ? <p className="error-text">{error}</p> : null}
-          <p className="next-hint">{nextHint}</p>
-          {copyStatus ? <p className="copy-status">{copyStatus}</p> : null}
-
-          <div className="progress-wrap" aria-label="Pipeline progress">
-            <div className="progress-bar" style={{ width: `${progress}%` }} />
-          </div>
-
-          <ol className="stage-list">
-            {STAGES.map((stage, index) => (
-              <li key={stage} className={`stage-item ${stageState(index)}`}>
-                {stage}
-              </li>
-            ))}
-          </ol>
-        </aside>
-
-        <section className="output-stack">
-          {!result ? (
-            <section className="artifact-card empty-card">
-              <h2>What You Will Get</h2>
-              <p>
-                A project charter, as-is and to-be process maps, an implementation blueprint, and
-                copy-ready export payloads.
-              </p>
-            </section>
-          ) : (
-            <>
-              {revealSummary ? (
-                <section className="artifact-card">
-                  <h2>Triage Outcome</h2>
-                  <p className="artifact-intro">
-                    The intake is prioritized and translated into an execution-ready optimisation
-                    track.
-                  </p>
-                  <div className="metric-grid">
-                    <article>
-                      <span>Recommended workflow</span>
-                      <strong>{prettyCategory(result.triage.category)}</strong>
-                    </article>
-                    <article>
-                      <span>Delivery priority</span>
-                      <strong>{result.triage.priority}</strong>
-                    </article>
-                    <article>
-                      <span>Risk level</span>
-                      <strong>{prettyCategory(result.triage.risk_level)}</strong>
-                    </article>
-                    <article>
-                      <span>Estimated hours saved / month</span>
-                      <strong>{result.triage.est_savings_hours_per_month}</strong>
-                    </article>
-                  </div>
-                </section>
-              ) : null}
-
-              {revealArtifacts ? (
-                <>
-                  <section className="artifact-card">
-                    <h2>Project Charter</h2>
-                    <p>
-                      <strong>Problem statement:</strong> {result.charter.problem_statement}
-                    </p>
-                    <p>
-                      <strong>Recommended next action:</strong> {result.triage.next_action}
-                    </p>
-                    <div className="metric-grid compact">
-                      <article>
-                        <span>Baseline cycle time (days)</span>
-                        <strong>{metricToText(result.charter.baseline_metrics.cycle_time_days)}</strong>
-                      </article>
-                      <article>
-                        <span>Target cycle time (days)</span>
-                        <strong>{metricToText(result.charter.target_metrics.cycle_time_days_target)}</strong>
-                      </article>
-                      <article>
-                        <span>Baseline monthly volume</span>
-                        <strong>{metricToText(result.charter.baseline_metrics.volume_per_month)}</strong>
-                      </article>
-                      <article>
-                        <span>Expected monthly savings (hours)</span>
-                        <strong>
-                          {metricToText(
-                            result.charter.target_metrics.expected_savings_hours_per_month,
-                          )}
-                        </strong>
-                      </article>
-                    </div>
-                    <button
-                      className="secondary-btn"
-                      onClick={() => copyJson('Charter JSON', result.charter)}
-                    >
-                      Copy charter JSON
-                    </button>
-                  </section>
-
-                  <section className="artifact-card">
-                    <h2>Process Maps</h2>
-                    <p className="artifact-intro">
-                      Compare the current process with the optimized automation flow.
-                    </p>
-                    <div className="map-grid">
-                      <MermaidDiagram title="As-is process" chart={result.asIsMermaid} />
-                      <MermaidDiagram title="To-be process" chart={result.toBeMermaid} />
-                    </div>
-                  </section>
-
-                  <section className="artifact-card">
-                    <h2>Automation Blueprint</h2>
-                    <p className="artifact-intro">
-                      Systems, automation sequence, and controls required for implementation.
-                    </p>
-
-                    <h3>Connected systems</h3>
-                    <div className="chip-row">
-                      {result.blueprint.connectors.map((connector) => (
-                        <span key={connector.system}>{connector.system}</span>
-                      ))}
-                    </div>
-
-                    <h3>Automation sequence</h3>
-                    <ol className="step-list">
-                      {result.blueprint.steps.map((step) => (
-                        <li key={step.id}>{step.name}</li>
-                      ))}
-                    </ol>
-
-                    <h3>Controls and monitoring</h3>
-                    <ul className="bullet-list">
-                      {result.blueprint.controls.slice(0, 2).map((control) => (
-                        <li key={control.control}>{control.control}</li>
-                      ))}
-                      {result.blueprint.monitoring.slice(0, 2).map((metric) => (
-                        <li key={metric.metric}>{metric.metric}</li>
-                      ))}
-                    </ul>
-
-                    <button
-                      className="secondary-btn"
-                      onClick={() => copyJson('Blueprint JSON', result.blueprint)}
-                    >
-                      Copy blueprint JSON
-                    </button>
-                  </section>
-                </>
-              ) : null}
-
-              {revealExports ? (
-                <section className="artifact-card">
-                  <h2>Export Pack</h2>
-                  <p className="artifact-intro">
-                    Copy these payloads into your project tracker or service platform.
-                  </p>
-
-                  <div className="button-row">
-                    <button
-                      className="secondary-btn"
-                      onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}
-                    >
-                      Copy Jira payload
-                    </button>
-                    <button
-                      className="secondary-btn"
-                      onClick={() =>
-                        copyJson('ServiceNow payload', result.exports.servicenow_record_create)
-                      }
-                    >
-                      Copy ServiceNow payload
-                    </button>
-                    <button
-                      className="secondary-btn"
-                      onClick={() => copyJson('Tracker payload', result.exports.process_tracker_row)}
-                    >
-                      Copy tracker payload
-                    </button>
-                  </div>
-
-                  <p className="integration-note">
-                    Integration note: Payloads are shaped like internal ticketing and tracker APIs
-                    to demonstrate direct transferability.
-                  </p>
-                </section>
-              ) : null}
-            </>
-          )}
+            </ol>
+          </section>
 
           <details className="expert-panel">
             <summary>Expert mode (optional)</summary>
             <div className="expert-content">
               <p className="status-text">
-                Use this section only when you want to inspect update behavior and retention safety.
+                Optional controls for retention behavior and correction testing.
               </p>
 
               <label>
@@ -721,6 +552,179 @@ function App() {
               ) : null}
             </div>
           </details>
+        </aside>
+
+        <section className="right-rail">
+          {!result ? (
+            <section className="panel empty-state">
+              <h2>3. Deliverables</h2>
+              <p>
+                Click <strong>Start demo</strong> to generate the full optimization pack.
+              </p>
+              <ul className="outcome-list">
+                <li>Decision snapshot with priority and expected savings</li>
+                <li>Project charter with baseline and target metrics</li>
+                <li>As-is/to-be process map and implementation blueprint</li>
+                <li>Copy-ready Jira, ServiceNow, and tracker payloads</li>
+              </ul>
+            </section>
+          ) : (
+            <>
+              {revealSummary ? (
+                <section className="panel">
+                  <h2>3. Decision Snapshot</h2>
+                  <div className="metric-grid">
+                    <article>
+                      <span>Recommended workflow</span>
+                      <strong>{prettyCategory(result.triage.category)}</strong>
+                    </article>
+                    <article>
+                      <span>Delivery priority</span>
+                      <strong>{result.triage.priority}</strong>
+                    </article>
+                    <article>
+                      <span>Risk level</span>
+                      <strong>{prettyCategory(result.triage.risk_level)}</strong>
+                    </article>
+                    <article>
+                      <span>Estimated hours saved per month</span>
+                      <strong>{result.triage.est_savings_hours_per_month}</strong>
+                    </article>
+                  </div>
+                </section>
+              ) : null}
+
+              {revealArtifacts ? (
+                <>
+                  <section className="panel">
+                    <h2>4. Project Charter</h2>
+                    <p>
+                      <strong>Problem statement:</strong> {result.charter.problem_statement}
+                    </p>
+                    <p>
+                      <strong>Recommended next action:</strong> {result.triage.next_action}
+                    </p>
+                    <div className="metric-grid compact">
+                      <article>
+                        <span>Baseline cycle time (days)</span>
+                        <strong>{metricToText(result.charter.baseline_metrics.cycle_time_days)}</strong>
+                      </article>
+                      <article>
+                        <span>Target cycle time (days)</span>
+                        <strong>{metricToText(result.charter.target_metrics.cycle_time_days_target)}</strong>
+                      </article>
+                      <article>
+                        <span>Baseline monthly volume</span>
+                        <strong>{metricToText(result.charter.baseline_metrics.volume_per_month)}</strong>
+                      </article>
+                      <article>
+                        <span>Expected monthly savings (hours)</span>
+                        <strong>
+                          {metricToText(
+                            result.charter.target_metrics.expected_savings_hours_per_month,
+                          )}
+                        </strong>
+                      </article>
+                    </div>
+                    <button
+                      className="secondary-btn"
+                      onClick={() => copyJson('Charter JSON', result.charter)}
+                    >
+                      Copy charter JSON
+                    </button>
+                  </section>
+
+                  <section className="panel">
+                    <h2>5. Process Redesign</h2>
+                    <p className="section-note">
+                      Compare the current flow against the optimized future-state process.
+                    </p>
+                    <div className="map-grid">
+                      <MermaidDiagram title="As-is process" chart={result.asIsMermaid} />
+                      <MermaidDiagram title="To-be process" chart={result.toBeMermaid} />
+                    </div>
+                  </section>
+
+                  <section className="panel">
+                    <h2>6. Automation Blueprint</h2>
+                    <div className="two-col-list">
+                      <article>
+                        <h3>Connected systems</h3>
+                        <div className="chip-row">
+                          {result.blueprint.connectors.map((connector) => (
+                            <span key={connector.system}>{connector.system}</span>
+                          ))}
+                        </div>
+                      </article>
+
+                      <article>
+                        <h3>Automation sequence</h3>
+                        <ol className="step-list">
+                          {result.blueprint.steps.map((step) => (
+                            <li key={step.id}>{step.name}</li>
+                          ))}
+                        </ol>
+                      </article>
+                    </div>
+
+                    <h3>Controls and monitoring</h3>
+                    <ul className="bullet-list">
+                      {result.blueprint.controls.slice(0, 2).map((control) => (
+                        <li key={control.control}>{control.control}</li>
+                      ))}
+                      {result.blueprint.monitoring.slice(0, 2).map((metric) => (
+                        <li key={metric.metric}>{metric.metric}</li>
+                      ))}
+                    </ul>
+
+                    <button
+                      className="secondary-btn"
+                      onClick={() => copyJson('Blueprint JSON', result.blueprint)}
+                    >
+                      Copy blueprint JSON
+                    </button>
+                  </section>
+                </>
+              ) : null}
+
+              {revealExports ? (
+                <section className="panel">
+                  <h2>7. Export Pack</h2>
+                  <p className="section-note">
+                    Copy these payloads into your project tracker and service workflow tools.
+                  </p>
+
+                  <div className="button-row">
+                    <button
+                      className="secondary-btn"
+                      onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}
+                    >
+                      Copy Jira payload
+                    </button>
+                    <button
+                      className="secondary-btn"
+                      onClick={() =>
+                        copyJson('ServiceNow payload', result.exports.servicenow_record_create)
+                      }
+                    >
+                      Copy ServiceNow payload
+                    </button>
+                    <button
+                      className="secondary-btn"
+                      onClick={() => copyJson('Tracker payload', result.exports.process_tracker_row)}
+                    >
+                      Copy tracker payload
+                    </button>
+                  </div>
+
+                  <p className="integration-note">
+                    Integration note: Payloads are shaped like ticketing and tracker APIs to show
+                    direct transferability.
+                  </p>
+                </section>
+              ) : null}
+            </>
+          )}
         </section>
       </section>
     </main>
