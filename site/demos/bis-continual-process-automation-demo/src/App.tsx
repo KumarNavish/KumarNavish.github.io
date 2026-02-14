@@ -12,6 +12,15 @@ interface ImpactRationale {
   confidence: 'high' | 'medium' | 'low'
 }
 
+interface ImpactSnapshot {
+  baselineDays: number | null
+  targetDays: number | null
+  cycleGainDays: number | null
+  manualTouches: number
+  generatedSteps: number
+  monthlyHoursSaved: number
+}
+
 interface DispatchRecord {
   dispatch_id: string
   timestamp: string
@@ -89,6 +98,19 @@ function sampleHint(sample: IntakeSample | null): string {
   return `${prettyCategory(sample.ground_truth.category)} · ${prettyCategory(sample.ground_truth.risk_level)} risk`
 }
 
+function toNumber(value: string | number | null | undefined): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) {
+      return parsed
+    }
+  }
+  return null
+}
+
 function buildImpactRationale(result: PipelineResult): ImpactRationale {
   const monthlyVolume =
     result.extracted.volume_per_month ?? result.sample.ground_truth.volume_per_month ?? null
@@ -108,6 +130,22 @@ function buildImpactRationale(result: PipelineResult): ImpactRationale {
     cycle_time_days: cycleTimeDays,
     manual_steps: manualSteps,
     confidence,
+  }
+}
+
+function buildImpactSnapshot(result: PipelineResult): ImpactSnapshot {
+  const baselineDays = toNumber(result.charter.baseline_metrics.cycle_time_days)
+  const targetDays = toNumber(result.charter.target_metrics.cycle_time_days_target)
+  const cycleGainDays =
+    baselineDays !== null && targetDays !== null ? Math.max(0, baselineDays - targetDays) : null
+
+  return {
+    baselineDays,
+    targetDays,
+    cycleGainDays,
+    manualTouches: result.extracted.manual_step_count,
+    generatedSteps: result.blueprint.steps.length,
+    monthlyHoursSaved: result.triage.est_savings_hours_per_month,
   }
 }
 
@@ -244,6 +282,10 @@ function App() {
     [catalog, result, selectedSample],
   )
   const selectedSampleHint = useMemo(() => sampleHint(selectedSample), [selectedSample])
+  const impactSnapshot = useMemo(
+    () => (result ? buildImpactSnapshot(result) : null),
+    [result],
+  )
 
   const hasResult = Boolean(result)
 
@@ -444,6 +486,33 @@ function App() {
             <p className="moment-tag">{automationNarrative.title}</p>
             <h2>See what changed</h2>
             <p className="magic-lede">{automationNarrative.impactSummary}</p>
+            {impactSnapshot ? (
+              <section className="insight-strip">
+                <article className="insight-card">
+                  <p>Turnaround improvement</p>
+                  <strong>
+                    {impactSnapshot.baselineDays !== null && impactSnapshot.targetDays !== null
+                      ? `${impactSnapshot.baselineDays}d -> ${impactSnapshot.targetDays}d`
+                      : 'Cycle target generated'}
+                  </strong>
+                  <span>
+                    {impactSnapshot.cycleGainDays !== null
+                      ? `${impactSnapshot.cycleGainDays} days faster`
+                      : 'Baseline/target tracked'}
+                  </span>
+                </article>
+                <article className="insight-card">
+                  <p>Manual effort reduced</p>
+                  <strong>{impactSnapshot.manualTouches} manual touches</strong>
+                  <span>{impactSnapshot.generatedSteps} automated steps generated</span>
+                </article>
+                <article className="insight-card">
+                  <p>Business impact</p>
+                  <strong>{impactSnapshot.monthlyHoursSaved} hrs saved / month</strong>
+                  <span>Ready for delivery handoff</span>
+                </article>
+              </section>
+            ) : null}
 
             <div className="magic-main">
               <article className="state-card before-state">
@@ -544,7 +613,13 @@ function App() {
 
           <section className="artifact-panel">
             <section className="artifact-card">
-              <h3>1. Summary</h3>
+              <div className="artifact-head">
+                <h3>1. Summary</h3>
+                <span className="artifact-badge">Use for kickoff</span>
+              </div>
+              <p className="artifact-purpose">
+                Gives stakeholders a clean problem statement, baseline, and next action.
+              </p>
               <p>
                 <strong>Problem:</strong> {result.charter.problem_statement}
               </p>
@@ -564,7 +639,13 @@ function App() {
             </section>
 
             <section className="artifact-card">
-              <h3>2. Flow map</h3>
+              <div className="artifact-head">
+                <h3>2. Flow map</h3>
+                <span className="artifact-badge">Use for design</span>
+              </div>
+              <p className="artifact-purpose">
+                Shows how work flows after automation so teams can validate the future state.
+              </p>
               <MermaidDiagram title="Optimized workflow" chart={result.toBeMermaid} />
               <details className="advanced-block">
                 <summary>Show current flow (raw)</summary>
@@ -573,7 +654,13 @@ function App() {
             </section>
 
             <section className="artifact-card" id="export-output">
-              <h3>3. Export JSON</h3>
+              <div className="artifact-head">
+                <h3>3. Export JSON</h3>
+                <span className="artifact-badge">Use for handoff</span>
+              </div>
+              <p className="artifact-purpose">
+                Copy these payloads into Jira, ServiceNow, or your tracker to start execution.
+              </p>
               <div className="button-column">
                 <button className="secondary-btn" onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}>
                   Copy Jira JSON

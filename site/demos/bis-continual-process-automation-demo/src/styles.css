@@ -300,6 +300,38 @@ button:disabled {
   font-weight: 540;
 }
 
+.insight-strip {
+  margin-top: 0.62rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.46rem;
+}
+
+.insight-card {
+  border: 1px solid #c7d9ef;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 0.5rem 0.56rem;
+  display: grid;
+  gap: 0.22rem;
+}
+
+.insight-card p {
+  margin: 0;
+  font-size: 0.76rem;
+  color: #46638c;
+}
+
+.insight-card strong {
+  color: #1f3f68;
+  font-size: 0.96rem;
+}
+
+.insight-card span {
+  color: #36587f;
+  font-size: 0.78rem;
+}
+
 .magic-main {
   margin-top: 0.68rem;
   display: grid;
@@ -337,15 +369,25 @@ button:disabled {
   color: #2d4b76;
 }
 
+.before-state {
+  border-color: #dcbfc1;
+  background: linear-gradient(180deg, #fff8f8 0%, #ffffff 100%);
+}
+
+.after-state {
+  border-color: #b9d8c1;
+  background: linear-gradient(180deg, #f4fbf4 0%, #ffffff 100%);
+}
+
 .preview-text {
   border-top: 1px dashed #cbd7e7;
   padding-top: 0.42rem;
 }
 
 .transform-center {
-  border: 1px solid #c9d8ec;
+  border: 1px solid #b8cde8;
   border-radius: 10px;
-  background: #f4f8ff;
+  background: linear-gradient(180deg, #edf4ff 0%, #f7faff 100%);
   padding: 0.58rem;
   display: grid;
   gap: 0.45rem;
@@ -503,10 +545,35 @@ button:disabled {
   border: 1px solid #d9e1ec;
   border-radius: 11px;
   background: #fbfdff;
-  padding: 0.66rem;
+  padding: 0.72rem;
   display: grid;
   gap: 0.5rem;
   align-content: start;
+  box-shadow: 0 1px 0 rgba(21, 40, 65, 0.04);
+}
+
+.artifact-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.artifact-badge {
+  border: 1px solid #c3d6ed;
+  border-radius: 999px;
+  background: #eff5ff;
+  color: #2c507c;
+  font-size: 0.74rem;
+  padding: 0.18rem 0.46rem;
+  font-weight: 600;
+}
+
+.artifact-purpose {
+  margin-top: -0.1rem;
+  font-size: 0.84rem;
+  color: #43608b;
 }
 
 .metric-list {
@@ -573,6 +640,10 @@ button:disabled {
 
 @media (max-width: 1080px) {
   .intake-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .insight-strip {
     grid-template-columns: 1fr;
   }
 
