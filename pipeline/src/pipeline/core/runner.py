@@ -75,8 +75,10 @@ class TaskRunner:
 
         for index, task_name in enumerate(order):
             task = self._task_map[task_name]
+            context.consume_logs()
 
             if failed:
+                context.warn("skipped because a previous task failed")
                 skipped_at = datetime.now(timezone.utc)
                 results[task_name] = TaskExecution(
                     name=task.name,
@@ -87,12 +89,14 @@ class TaskRunner:
                     started_at=skipped_at,
                     finished_at=skipped_at,
                     duration_seconds=0.0,
+                    logs=context.consume_logs(),
                     error="skipped because a previous task failed",
                 )
                 continue
 
             # If a dependency is not successful, mark this task as skipped.
             if any(results[dep].status != "success" for dep in task.deps):
+                context.warn("skipped because a dependency did not complete successfully")
                 skipped_at = datetime.now(timezone.utc)
                 results[task_name] = TaskExecution(
                     name=task.name,
@@ -103,6 +107,7 @@ class TaskRunner:
                     started_at=skipped_at,
                     finished_at=skipped_at,
                     duration_seconds=0.0,
+                    logs=context.consume_logs(),
                     error="skipped because a dependency did not complete successfully",
                 )
                 continue
@@ -112,6 +117,7 @@ class TaskRunner:
             try:
                 task.action(context)
             except Exception as exc:  # pragma: no cover - covered via integration-style tests
+                context.error(f"{type(exc).__name__}: {exc}")
                 task_end = datetime.now(timezone.utc)
                 results[task_name] = TaskExecution(
                     name=task.name,
@@ -122,6 +128,7 @@ class TaskRunner:
                     started_at=task_start,
                     finished_at=task_end,
                     duration_seconds=round(perf_counter() - timer_start, 6),
+                    logs=context.consume_logs(),
                     error=f"{type(exc).__name__}: {exc}",
                 )
                 failed = True
@@ -129,6 +136,7 @@ class TaskRunner:
                 # Explicitly mark remaining tasks as skipped.
                 for pending in order[index + 1 :]:
                     pending_task = self._task_map[pending]
+                    context.warn("skipped because a previous task failed")
                     skipped_at = datetime.now(timezone.utc)
                     results[pending] = TaskExecution(
                         name=pending_task.name,
@@ -139,6 +147,7 @@ class TaskRunner:
                         started_at=skipped_at,
                         finished_at=skipped_at,
                         duration_seconds=0.0,
+                        logs=context.consume_logs(),
                         error="skipped because a previous task failed",
                     )
                 break
@@ -153,6 +162,7 @@ class TaskRunner:
                 started_at=task_start,
                 finished_at=task_end,
                 duration_seconds=round(perf_counter() - timer_start, 6),
+                logs=context.consume_logs(),
             )
 
         ordered_results = tuple(results[name] for name in order)
@@ -164,4 +174,3 @@ class TaskRunner:
             finished_at=run_end,
             task_executions=ordered_results,
         )
-

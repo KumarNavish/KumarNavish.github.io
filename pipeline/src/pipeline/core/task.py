@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable, Literal, Mapping
 
@@ -11,11 +11,51 @@ TaskStatus = Literal["success", "failed", "skipped"]
 
 
 @dataclass(frozen=True)
+class TaskLog:
+    """Structured task log entry surfaced in run reports."""
+
+    level: Literal["info", "warning", "error"]
+    message: str
+    timestamp: str
+
+
+@dataclass
 class TaskContext:
     """Runtime context passed to each task action."""
 
     out_dir: Path
     env: Mapping[str, str]
+    logs: list[TaskLog] = field(default_factory=list)
+
+    def log(self, *, level: Literal["info", "warning", "error"], message: str) -> None:
+        """Append a structured log line for the active task."""
+        if not message.strip():
+            return
+        self.logs.append(
+            TaskLog(
+                level=level,
+                message=message.strip(),
+                timestamp=datetime.now(timezone.utc).isoformat(),
+            )
+        )
+
+    def info(self, message: str) -> None:
+        """Log an informational task message."""
+        self.log(level="info", message=message)
+
+    def warn(self, message: str) -> None:
+        """Log a warning task message."""
+        self.log(level="warning", message=message)
+
+    def error(self, message: str) -> None:
+        """Log an error task message."""
+        self.log(level="error", message=message)
+
+    def consume_logs(self) -> tuple[TaskLog, ...]:
+        """Return and clear accumulated log entries."""
+        emitted = tuple(self.logs)
+        self.logs.clear()
+        return emitted
 
 
 TaskAction = Callable[[TaskContext], None]
@@ -52,6 +92,7 @@ class TaskExecution:
     started_at: datetime
     finished_at: datetime
     duration_seconds: float
+    logs: tuple[TaskLog, ...] = field(default_factory=tuple)
     error: str | None = None
 
 
@@ -68,4 +109,3 @@ class PipelineRun:
     def duration_seconds(self) -> float:
         """Compute wall-clock duration for the full pipeline run."""
         return (self.finished_at - self.started_at).total_seconds()
-

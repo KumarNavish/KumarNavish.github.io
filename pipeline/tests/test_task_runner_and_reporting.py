@@ -14,6 +14,11 @@ def _noop_task(_: TaskContext) -> None:
     """No-op task action for DAG ordering tests."""
 
 
+def _warn_task(context: TaskContext) -> None:
+    """Emit a warning log for report serialization checks."""
+    context.warn("test warning")
+
+
 def test_task_runner_topological_order_respects_dependencies() -> None:
     """Runner should return deterministic order that respects the DAG."""
     tasks = [
@@ -55,6 +60,13 @@ def test_emit_ops_reports_writes_required_schema(tmp_path: Path) -> None:
             inputs=("registry/config.yaml",),
             outputs=("api/v1/marker.json",),
             deps=(),
+        ),
+        Task(
+            name="warn_marker",
+            action=_warn_task,
+            inputs=("api/v1/marker.json",),
+            outputs=(),
+            deps=("emit_marker",),
         )
     ]
     context = TaskContext(out_dir=out_dir, env=env)
@@ -78,18 +90,19 @@ def test_emit_ops_reports_writes_required_schema(tmp_path: Path) -> None:
     assert "git_sha" in latest_run["run"]
     assert "timestamp" in latest_run["run"]
     assert latest_run["run"]["action_run_url"] == "https://github.com/example/portfolio/actions/runs/12345"
-    assert latest_run["summary"]["success"] == 1
+    assert latest_run["summary"]["success"] == 2
     assert latest_run["tasks"][0]["name"] == "emit_marker"
     assert latest_run["tasks"][0]["status"] == "success"
     assert latest_run["tasks"][0]["duration_seconds"] >= 0.0
+    assert latest_run["tasks"][1]["name"] == "warn_marker"
+    assert latest_run["tasks"][1]["logs"][0]["level"] == "warning"
 
     dag = json.loads(report_paths["dag"].read_text(encoding="utf-8"))
-    assert len(dag["tasks"]) == 1
+    assert len(dag["tasks"]) == 2
     assert dag["tasks"][0]["name"] == "emit_marker"
-    assert dag["edges"] == []
+    assert dag["edges"] == [{"from": "emit_marker", "to": "warn_marker"}]
 
     provenance = json.loads(report_paths["provenance"].read_text(encoding="utf-8"))
     assert provenance["action_run_url"] == "https://github.com/example/portfolio/actions/runs/12345"
     assert provenance["environment"]["github_run_id"] == "12345"
     assert provenance["artifacts"]["latest_run"] == "ops/latest-run.json"
-
