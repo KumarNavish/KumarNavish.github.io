@@ -22,6 +22,8 @@ interface ImpactSnapshot {
   outputCount: number
 }
 
+type ArtifactTab = 'charter' | 'map' | 'payload'
+
 function metricToText(value: string | number | null | undefined): string {
   if (value === null || value === undefined) {
     return 'Not provided'
@@ -128,6 +130,7 @@ function App() {
 
   const [result, setResult] = useState<PipelineResult | null>(null)
   const [impactRationale, setImpactRationale] = useState<ImpactRationale | null>(null)
+  const [activeArtifact, setActiveArtifact] = useState<ArtifactTab>('charter')
 
   const [isRunning, setIsRunning] = useState(false)
   const [copyStatus, setCopyStatus] = useState<string | null>(null)
@@ -162,7 +165,6 @@ function App() {
 
   const hasResult = Boolean(result)
   const previewBaselineDays = selectedSample?.ground_truth.baseline_cycle_time_days ?? null
-  const previewVolume = selectedSample?.ground_truth.volume_per_month ?? null
   const inferredTargetDays =
     previewBaselineDays !== null ? Math.max(1, Math.round(previewBaselineDays * 0.65)) : null
   const beforeCycleTime = impactSnapshot?.baselineDays ?? previewBaselineDays
@@ -170,18 +172,22 @@ function App() {
 
   const totalArtifacts = impactSnapshot
     ? impactSnapshot.outputCount + impactSnapshot.payloadCount
-    : null
+    : 0
   const requestPreview = excerpt(requestText || selectedSample?.text || '', 360)
 
   const outcomeHeadline = impactSnapshot
-    ? impactSnapshot.cycleGainDays !== null
-      ? `${impactSnapshot.cycleReductionPct ?? 0}% faster target cycle`
-      : `${impactSnapshot.monthlyHoursSaved} hours saved per month`
-    : 'From manual request to execution-ready package'
+    ? 'Automation complete: execution pack generated'
+    : 'From manual intake to execution-ready package'
 
   const outcomeSubline = impactSnapshot
-    ? `${impactSnapshot.monthlyHoursSaved} hrs/month impact with ${totalArtifacts ?? 0} ready handoff artifacts.`
-    : 'One run creates a charter, a process map, and payloads your team can use immediately.'
+    ? `${formatDays(beforeCycleTime)} -> ${formatDays(afterCycleTime)} target cycle and ${impactSnapshot.monthlyHoursSaved} hours saved per month.`
+    : 'One click generates a charter, process map, and handoff payloads.'
+  const charterTargetCycle = result
+    ? metricToText(result.charter.target_metrics.cycle_time_days_target)
+    : 'n/a'
+  const trackerStatus = result
+    ? metricToText((result.exports.process_tracker_row as Record<string, unknown>).status)
+    : 'n/a'
   const jiraFields =
     result && typeof result.exports.jira_issue_create.fields === 'object'
       ? (result.exports.jira_issue_create.fields as Record<string, unknown>)
@@ -203,6 +209,22 @@ function App() {
         tracker_owner: trackerPayload?.owner ?? 'n/a',
       }
     : null
+  const beforePainPoints = [
+    `Cycle time: ${formatDays(previewBaselineDays)}`,
+    'Manual triage and follow-ups across teams',
+    'No standard charter or implementation ticket payload',
+  ]
+  const afterOutcomePoints = result
+    ? [
+        `Target cycle: ${formatDays(afterCycleTime)}`,
+        `${result.triage.est_savings_hours_per_month} hours/month saved`,
+        `${totalArtifacts} ready artifacts generated`,
+      ]
+    : [
+        `Projected target cycle: ${formatDays(inferredTargetDays)}`,
+        'Standard charter and map in one run',
+        'Ready payloads for Jira and ServiceNow',
+      ]
 
   const hintText = useMemo(() => {
     if (error) {
@@ -212,7 +234,7 @@ function App() {
       return 'Running automation…'
     }
     if (!result) {
-      return 'Click Start automation.'
+      return 'Click Start demo.'
     }
     return 'Automation complete.'
   }, [error, isRunning, result])
@@ -224,6 +246,7 @@ function App() {
       setRequestText(nextSample.text)
       setResult(null)
       setImpactRationale(null)
+      setActiveArtifact('charter')
       setCopyStatus(null)
     }
   }
@@ -249,6 +272,7 @@ function App() {
     const nextResult = runIntakePipeline(sampleForRun, catalog)
     setResult(nextResult)
     setImpactRationale(buildImpactRationale(nextResult))
+    setActiveArtifact('charter')
     setIsRunning(false)
   }
 
@@ -294,8 +318,8 @@ function App() {
 
       <section className="panel workspace-panel">
         <section className="control-pane">
-          <h2>1) Choose request</h2>
-          <p className="control-caption">Select a BIS workflow, then run automation.</p>
+          <h2>Choose a request</h2>
+          <p className="control-caption">Pick a BIS workflow example and run the automation.</p>
 
           <section className="example-picker">
             <label htmlFor="example-select">Workflow example</label>
@@ -329,7 +353,7 @@ function App() {
           </details>
 
           <button className="primary-btn" onClick={() => void runPipeline()} disabled={!selectedSample || isRunning}>
-            {isRunning ? 'Running…' : '2) Start automation'}
+            {isRunning ? 'Running…' : 'Start demo'}
           </button>
 
           <p className="hint-text">{hintText}</p>
@@ -340,43 +364,94 @@ function App() {
         <section className="result-pane" aria-live="polite">
           {!result ? (
             <section className="outcome-shell preview-shell">
-              <p className="moment-tag">Before automation</p>
-              <h2>Messy intake request</h2>
+              <p className="moment-tag">Automation moment</p>
+              <h2>Click Start demo to convert this request.</h2>
               <pre className="input-preview">{requestPreview}</pre>
-              <p className="placeholder-lede">
-                Baseline: {formatDays(previewBaselineDays)} cycle time, {metricToText(previewVolume)} requests/month.
-              </p>
-            </section>
-          ) : (
-            <section className="outcome-shell live-shell">
-              <p className="moment-tag">Automation complete</p>
-              <h2>{outcomeHeadline}</h2>
-              <p className="outcome-lede">{outcomeSubline}</p>
 
-              <article className={`reveal-card ${hasResult ? 'revealed' : ''}`}>
-                <p className="reveal-label">Before vs After</p>
+              <article className="reveal-card">
+                <p className="reveal-label">Before to After</p>
                 <div className="reveal-track">
                   <section className="reveal-state before">
                     <span className="reveal-tag">Before</span>
-                    <strong>{formatDays(beforeCycleTime)}</strong>
-                    <small>manual follow-up and approvals</small>
+                    <strong>{formatDays(previewBaselineDays)}</strong>
+                    <small>email back-and-forth and manual routing</small>
                   </section>
                   <section className="reveal-state after">
                     <span className="reveal-tag">After</span>
-                    <strong>{formatDays(afterCycleTime)}</strong>
-                    <small>standard flow with automation handoff</small>
+                    <strong>{formatDays(inferredTargetDays)}</strong>
+                    <small>structured pack ready for execution</small>
                   </section>
                 </div>
               </article>
 
+              <section className="proof-grid">
+                <article className="proof-card before-card">
+                  <h3>Before (manual)</h3>
+                  <ul>
+                    {beforePainPoints.map((point) => (
+                      <li key={`before-${point}`}>{point}</li>
+                    ))}
+                  </ul>
+                </article>
+                <article className="proof-card after-card">
+                  <h3>After (automated)</h3>
+                  <ul>
+                    {afterOutcomePoints.map((point) => (
+                      <li key={`after-preview-${point}`}>{point}</li>
+                    ))}
+                  </ul>
+                </article>
+              </section>
+            </section>
+          ) : (
+            <section className="outcome-shell live-shell">
+              <p className="moment-tag">Automation delivered</p>
+              <h2>{outcomeHeadline}</h2>
+              <p className="outcome-lede">{outcomeSubline}</p>
+
+              <article className={`reveal-card ${hasResult ? 'revealed' : ''}`}>
+                <p className="reveal-label">Before to After</p>
+                <div className="reveal-track">
+                  <section className="reveal-state before">
+                    <span className="reveal-tag">Before</span>
+                    <strong>{formatDays(beforeCycleTime)}</strong>
+                    <small>manual triage and follow-up</small>
+                  </section>
+                  <section className="reveal-state after">
+                    <span className="reveal-tag">After</span>
+                    <strong>{formatDays(afterCycleTime)}</strong>
+                    <small>standardized pack and controlled handoff</small>
+                  </section>
+                </div>
+              </article>
+
+              <section className="proof-grid">
+                <article className="proof-card before-card">
+                  <h3>Before (manual)</h3>
+                  <ul>
+                    {beforePainPoints.map((point) => (
+                      <li key={`before-live-${point}`}>{point}</li>
+                    ))}
+                  </ul>
+                </article>
+                <article className="proof-card after-card">
+                  <h3>After (automated)</h3>
+                  <ul>
+                    {afterOutcomePoints.map((point) => (
+                      <li key={`after-live-${point}`}>{point}</li>
+                    ))}
+                  </ul>
+                </article>
+              </section>
+
               <div className="metric-row">
                 <article>
-                  <span>Hours saved / month</span>
+                  <span>Saved per month</span>
                   <strong>{impactSnapshot.monthlyHoursSaved}</strong>
                 </article>
                 <article>
                   <span>Ready artifacts</span>
-                  <strong>{totalArtifacts ?? 0}</strong>
+                  <strong>{totalArtifacts}</strong>
                 </article>
                 <article>
                   <span>Workflow type</span>
@@ -384,44 +459,104 @@ function App() {
                 </article>
               </div>
 
-              <section className="handoff-strip">
-                <h3>3) Use this package now</h3>
-                <div className="outputs-actions">
-                  <button className="primary-btn" onClick={() => void copyFullPack()}>
-                    Copy full package
-                  </button>
-                  <button className="secondary-btn" onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}>
-                    Copy Jira JSON
+              <section className="output-workbench">
+                <header className="output-header">
+                  <h3>Your outputs</h3>
+                  <p>Switch between the generated charter, process map, and payload pack.</p>
+                </header>
+
+                <div className="artifact-tabs" role="tablist" aria-label="Output tabs">
+                  <button
+                    className={`tab-btn ${activeArtifact === 'charter' ? 'active' : ''}`}
+                    onClick={() => setActiveArtifact('charter')}
+                    role="tab"
+                    aria-selected={activeArtifact === 'charter'}
+                  >
+                    Charter
                   </button>
                   <button
-                    className="secondary-btn"
-                    onClick={() => copyJson('ServiceNow payload', result.exports.servicenow_record_create)}
+                    className={`tab-btn ${activeArtifact === 'map' ? 'active' : ''}`}
+                    onClick={() => setActiveArtifact('map')}
+                    role="tab"
+                    aria-selected={activeArtifact === 'map'}
                   >
-                    Copy ServiceNow JSON
+                    Process map
+                  </button>
+                  <button
+                    className={`tab-btn ${activeArtifact === 'payload' ? 'active' : ''}`}
+                    onClick={() => setActiveArtifact('payload')}
+                    role="tab"
+                    aria-selected={activeArtifact === 'payload'}
+                  >
+                    Export payloads
                   </button>
                 </div>
-              </section>
 
-              <section className="artifact-panel">
-                <section className="artifact-card">
-                  <h3>Charter summary</h3>
-                  <p>
-                    <strong>Problem:</strong> {result.charter.problem_statement}
-                  </p>
-                  <p>
-                    <strong>Next action:</strong> {result.triage.next_action}
-                  </p>
-                </section>
+                {activeArtifact === 'charter' ? (
+                  <section className="artifact-card artifact-view">
+                    <h3>Charter summary</h3>
+                    <p>
+                      <strong>Problem:</strong> {result.charter.problem_statement}
+                    </p>
+                    <p>
+                      <strong>Target cycle:</strong> {charterTargetCycle}
+                    </p>
+                    <p>
+                      <strong>Next action:</strong> {result.triage.next_action}
+                    </p>
+                    <p>
+                      <strong>Priority and risk:</strong> {result.triage.priority} /{' '}
+                      {prettyCategory(result.triage.risk_level)}
+                    </p>
+                    <div className="outputs-actions">
+                      <button className="primary-btn" onClick={() => copyJson('Charter JSON', result.charter)}>
+                        Copy charter JSON
+                      </button>
+                    </div>
+                  </section>
+                ) : null}
 
-                <section className="artifact-card">
-                  <h3>To-be process map</h3>
-                  <MermaidDiagram title="To-be process" chart={result.toBeMermaid} />
-                </section>
+                {activeArtifact === 'map' ? (
+                  <section className="artifact-card artifact-view">
+                    <h3>To-be process map</h3>
+                    <MermaidDiagram title="To-be process" chart={result.toBeMermaid} />
+                    <div className="outputs-actions">
+                      <button
+                        className="primary-btn"
+                        onClick={() => copyJson('Process map', { to_be_mermaid: result.toBeMermaid })}
+                      >
+                        Copy process map
+                      </button>
+                    </div>
+                  </section>
+                ) : null}
 
-                <section className="artifact-card payload-card">
-                  <h3>Handoff payload preview</h3>
-                  <pre>{JSON.stringify(payloadPreview, null, 2)}</pre>
-                </section>
+                {activeArtifact === 'payload' ? (
+                  <section className="artifact-card artifact-view">
+                    <h3>Handoff payloads</h3>
+                    <pre>{JSON.stringify(payloadPreview, null, 2)}</pre>
+                    <p>
+                      <strong>Tracker status:</strong> {trackerStatus}
+                    </p>
+                    <div className="outputs-actions">
+                      <button className="primary-btn" onClick={() => void copyFullPack()}>
+                        Copy full package
+                      </button>
+                      <button
+                        className="secondary-btn"
+                        onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}
+                      >
+                        Copy Jira JSON
+                      </button>
+                      <button
+                        className="secondary-btn"
+                        onClick={() => copyJson('ServiceNow payload', result.exports.servicenow_record_create)}
+                      >
+                        Copy ServiceNow JSON
+                      </button>
+                    </div>
+                  </section>
+                ) : null}
               </section>
 
               <details className="advanced-block">
