@@ -5,10 +5,10 @@ permalink: /
 description: A crafted portfolio of research thinking, systems-building, and theory-to-practice work.
 page_class: page-overview
 custom_css:
-  - /assets/css/overview-craft.css
+  - /assets/css/overview-craft.css?v=20260214a
 custom_js:
   - /assets/js/research-core.js
-  - /assets/js/research-portfolio.js
+  - /assets/js/research-portfolio.js?v=20260214a
 ---
 
 <article id="intentional-home" class="intentional-panel overview-v8" aria-label="Research overview">
