@@ -33,3 +33,36 @@
   margin: 0;
   color: #36486b;
 }
+
+.smoke-box {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid #d6dfeb;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.smoke-box button {
+  justify-self: start;
+  border: 0;
+  border-radius: 10px;
+  padding: 0.55rem 0.9rem;
+  font-weight: 700;
+  color: #fff;
+  background: #243b78;
+  cursor: pointer;
+}
+
+.smoke-box button:hover {
+  background: #1c315f;
+}
+
+.status {
+  font-weight: 600;
+}
+
+.summary {
+  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+  font-size: 0.85rem;
+  color: #1e2f55;
+}
