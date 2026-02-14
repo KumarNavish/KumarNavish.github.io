@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-import { fetchProjectsApi } from '../lib/api'
+import { fetchProjectsApi, type ProjectItem } from '../lib/api'
 import { formatDate } from '../lib/formatters'
 import { useResource } from '../lib/useResource'
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks'
@@ -18,6 +18,18 @@ function buildThemeSummary(values: string[]): string[] {
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
     .slice(0, 8)
     .map(([value, count]) => `${value} (${count})`)
+}
+
+function summarizeProject(project: ProjectItem): string | null {
+  const oneLine = project.one_line?.trim()
+  if (oneLine) {
+    return oneLine
+  }
+  const description = project.description?.trim()
+  if (description) {
+    return description
+  }
+  return null
 }
 
 export function ProjectsPage() {
@@ -46,14 +58,15 @@ export function ProjectsPage() {
     const normalizedQuery = query.trim().toLowerCase()
     return state.data.items
       .filter((project) => !project.featured && !project.pinned)
+      .filter((project) => summarizeProject(project) !== null)
       .filter((project) => {
         if (!normalizedQuery) {
           return true
         }
+        const summary = summarizeProject(project) ?? ''
         return (
           project.name.toLowerCase().includes(normalizedQuery) ||
-          project.description.toLowerCase().includes(normalizedQuery) ||
-          (project.one_line ?? '').toLowerCase().includes(normalizedQuery)
+          summary.toLowerCase().includes(normalizedQuery)
         )
       })
       .sort(
@@ -109,7 +122,7 @@ export function ProjectsPage() {
           {featured.map((project) => (
             <article key={project.name} className="item-card">
               <h3>{project.name}</h3>
-              <p>{(project.one_line ?? project.description) || 'Summary pending.'}</p>
+              <p>{summarizeProject(project) ?? 'Repository artifact with reproducible code.'}</p>
               <p className="meta-line">Updated {formatDate(project.last_push)}</p>
               <p className="meta-line">
                 <a href={project.html_url} target="_blank" rel="noreferrer">
@@ -157,7 +170,7 @@ export function ProjectsPage() {
               {archive.map((project) => (
                 <article key={project.name} className="item-card">
                   <h3>{project.name}</h3>
-                  <p>{(project.one_line ?? project.description) || 'Summary pending.'}</p>
+                  <p>{summarizeProject(project)}</p>
                   <p className="meta-line">Updated {formatDate(project.last_push)}</p>
                   <p className="meta-line">
                     <a href={project.html_url} target="_blank" rel="noreferrer">

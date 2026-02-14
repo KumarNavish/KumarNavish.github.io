@@ -1,7 +1,13 @@
 import { useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 
-import { fetchProfileApi, fetchProjectsApi, fetchPublicationsApi } from '../lib/api'
+import {
+  fetchProfileApi,
+  fetchProjectsApi,
+  fetchPublicationsApi,
+  type ProjectItem,
+  type PublicationItem,
+} from '../lib/api'
 import { formatDateTime, formatNumber } from '../lib/formatters'
 import { useResource } from '../lib/useResource'
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks'
@@ -52,6 +58,33 @@ const IMPACT_USE_CASES: ImpactUseCaseDefinition[] = [
       title.toLowerCase().includes('delivery vehicles across urban micro-regions'),
   },
 ]
+
+function buildOutcomeSignal(
+  project: ProjectItem | null,
+  publication: PublicationItem | null,
+): string {
+  const citationSignal = publication
+    ? `${formatNumber(publication.citation_count)} citations${
+        publication.year ? ` (${publication.year})` : ''
+      }`
+    : null
+  const implementationSignal = project
+    ? project.last_push
+      ? `implementation updated ${new Date(project.last_push).getFullYear()}`
+      : 'implementation available for direct review'
+    : null
+
+  if (citationSignal && implementationSignal) {
+    return `${citationSignal}; ${implementationSignal}.`
+  }
+  if (citationSignal) {
+    return `${citationSignal}; publication-backed decision evidence.`
+  }
+  if (implementationSignal) {
+    return `${implementationSignal}.`
+  }
+  return 'Decision logic captured in publication-backed modeling.'
+}
 
 export function SystemProofPage() {
   const loadImpact = useCallback(
@@ -193,8 +226,12 @@ export function SystemProofPage() {
                     ) : null}
                   </>
                 ) : (
-                  'Publication metadata unavailable in current sync.'
+                  'Publication evidence is being curated for this track.'
                 )}
+              </p>
+              <p className="meta-line">
+                <strong>Outcome signal:</strong>{' '}
+                {buildOutcomeSignal(card.project, card.publication)}
               </p>
             </article>
           ))}
