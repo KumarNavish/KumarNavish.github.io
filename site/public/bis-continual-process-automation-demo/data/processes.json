@@ -1,0 +1,161 @@
+{
+  "version": "1.0",
+  "processes": [
+    {
+      "process_id": "access_request",
+      "display_name": "Access Request",
+      "description": "Provision, modify, or revoke system access for users.",
+      "required_fields": [
+        "subject_user",
+        "system_name",
+        "access_level",
+        "justification",
+        "manager_approval"
+      ],
+      "default_owner_role": "iam_analyst",
+      "default_sla_hours": 24,
+      "required_approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "target_schema": {
+        "required_keys": [
+          "plan_version",
+          "process_id",
+          "title",
+          "owner_role",
+          "sla_hours",
+          "risk_tag",
+          "approvals",
+          "required_fields",
+          "next_actions",
+          "controls"
+        ],
+        "required_fields": [
+          "subject_user",
+          "system_name",
+          "access_level",
+          "justification",
+          "manager_approval"
+        ]
+      }
+    },
+    {
+      "process_id": "vendor_onboarding",
+      "display_name": "Vendor Onboarding",
+      "description": "Assess and onboard external vendors under security and compliance rules.",
+      "required_fields": [
+        "vendor_name",
+        "country",
+        "service_scope",
+        "security_review_ticket",
+        "tax_form_status"
+      ],
+      "default_owner_role": "vendor_risk_analyst",
+      "default_sla_hours": 72,
+      "required_approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "target_schema": {
+        "required_keys": [
+          "plan_version",
+          "process_id",
+          "title",
+          "owner_role",
+          "sla_hours",
+          "risk_tag",
+          "approvals",
+          "required_fields",
+          "next_actions",
+          "controls"
+        ],
+        "required_fields": [
+          "vendor_name",
+          "country",
+          "service_scope",
+          "security_review_ticket",
+          "tax_form_status"
+        ]
+      }
+    },
+    {
+      "process_id": "purchase_request",
+      "display_name": "Purchase Request",
+      "description": "Evaluate and approve internal spending and procurement requests.",
+      "required_fields": [
+        "requester_department",
+        "item_description",
+        "estimated_cost_usd",
+        "budget_code",
+        "preferred_supplier"
+      ],
+      "default_owner_role": "procurement_specialist",
+      "default_sla_hours": 48,
+      "required_approvals": [
+        "budget_owner",
+        "procurement_lead"
+      ],
+      "target_schema": {
+        "required_keys": [
+          "plan_version",
+          "process_id",
+          "title",
+          "owner_role",
+          "sla_hours",
+          "risk_tag",
+          "approvals",
+          "required_fields",
+          "next_actions",
+          "controls"
+        ],
+        "required_fields": [
+          "requester_department",
+          "item_description",
+          "estimated_cost_usd",
+          "budget_code",
+          "preferred_supplier"
+        ]
+      }
+    },
+    {
+      "process_id": "incident_escalation",
+      "display_name": "Incident Escalation",
+      "description": "Escalate incidents by severity and coordinate incident response.",
+      "required_fields": [
+        "incident_id",
+        "severity",
+        "service_name",
+        "customer_impact",
+        "oncall_owner"
+      ],
+      "default_owner_role": "incident_commander",
+      "default_sla_hours": 4,
+      "required_approvals": [
+        "oncall_manager",
+        "sre_lead"
+      ],
+      "target_schema": {
+        "required_keys": [
+          "plan_version",
+          "process_id",
+          "title",
+          "owner_role",
+          "sla_hours",
+          "risk_tag",
+          "approvals",
+          "required_fields",
+          "next_actions",
+          "controls"
+        ],
+        "required_fields": [
+          "incident_id",
+          "severity",
+          "service_name",
+          "customer_impact",
+          "oncall_owner"
+        ]
+      }
+    }
+  ]
+}
