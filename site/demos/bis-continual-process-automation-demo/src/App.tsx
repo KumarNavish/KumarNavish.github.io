@@ -26,6 +26,28 @@ interface AutomationNarrative {
   impactSummary: string
 }
 
+interface DemoPhase {
+  label: string
+  detail: string
+}
+
+type PhaseState = 'pending' | 'active' | 'done'
+
+const DEMO_PHASES: DemoPhase[] = [
+  {
+    label: 'Read intake request',
+    detail: 'Interpreting the request and extracting bottlenecks...',
+  },
+  {
+    label: 'Diagnose business impact',
+    detail: 'Estimating delay, risk, and manual effort from the intake text...',
+  },
+  {
+    label: 'Generate automation pack',
+    detail: 'Building charter, process map, blueprint, and export payloads...',
+  },
+]
+
 function metricToText(value: string | number | null | undefined): string {
   if (value === null || value === undefined) {
     return 'Not provided'
@@ -44,6 +66,20 @@ function nextPaint(): Promise<void> {
   return new Promise((resolve) => {
     window.requestAnimationFrame(() => resolve())
   })
+}
+
+function sleep(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, milliseconds)
+  })
+}
+
+function excerpt(text: string, maxLength = 280): string {
+  const normalized = text.replace(/\s+/g, ' ').trim()
+  if (normalized.length <= maxLength) {
+    return normalized
+  }
+  return `${normalized.slice(0, maxLength - 3)}...`
 }
 
 function buildImpactRationale(result: PipelineResult): ImpactRationale {
@@ -79,15 +115,15 @@ function buildPreRunNarrative(
 ): AutomationNarrative {
   if (!sample) {
     return {
-      title: 'Automation Preview',
-      manualWorkflow: 'Select a scenario to show how the intake workflow is automated.',
-      businessPain: ['Cycle-time delays', 'Manual rework and handoff risk', 'No standard output'],
+      title: 'Automation preview',
+      manualWorkflow: 'Pick a scenario to preview the manual workflow before automation.',
+      businessPain: ['Cycle-time delay', 'Manual rework across teams', 'Control and compliance risk'],
       automatedChange: [
-        'Auto-triage of intake text',
+        'Auto-triage from messy request text',
         'Instant charter + process map + blueprint',
-        'Export payloads for delivery systems',
+        'Delivery payloads for Jira, ServiceNow, and trackers',
       ],
-      impactSummary: 'Click Start demo to generate the automation pack now.',
+      impactSummary: 'Click Start demo to run the full transformation.',
     }
   }
 
@@ -97,18 +133,18 @@ function buildPreRunNarrative(
 
   return {
     title: 'What will be automated',
-    manualWorkflow: `${sample.title} currently runs through ${prettyCategory(sample.channel)} intake, manual routing, and follow-ups. ${categoryDescription}`,
+    manualWorkflow: `${sample.title} currently relies on manual intake, routing, approvals, and follow-up loops. ${categoryDescription}`,
     businessPain: [
-      `Cycle time is ${baselineCycle} days with inconsistent handoffs.`,
-      `Volume is about ${volume} requests per month, creating repetitive triage work.`,
-      `Risk level is ${prettyCategory(sample.ground_truth.risk_level)} because controls depend on manual checks.`,
+      `Delay: average cycle time is ${baselineCycle} days.`,
+      `Rework: around ${volume} requests per month require repeated triage and handoffs.`,
+      `Risk: ${prettyCategory(sample.ground_truth.risk_level)} due to manual control checks.`,
     ],
     automatedChange: [
-      `Classify and prioritize as ${prettyCategory(sample.ground_truth.category)} automatically.`,
-      'Generate a project charter, as-is/to-be process maps, and automation blueprint.',
-      'Prepare copy-ready payloads for Jira, ServiceNow, and process tracking.',
+      `Auto-classify and prioritize into ${prettyCategory(sample.ground_truth.category)}.`,
+      'Generate charter, to-be process map, and automation blueprint in one run.',
+      'Prepare export-ready payloads for delivery systems.',
     ],
-    impactSummary: 'Click Start demo. The transformation appears here immediately.',
+    impactSummary: 'Press Start demo. The workflow transformation appears here immediately.',
   }
 }
 
@@ -118,20 +154,38 @@ function buildPostRunNarrative(result: PipelineResult): AutomationNarrative {
   const volume = metricToText(result.charter.baseline_metrics.volume_per_month)
 
   return {
-    title: 'Automation Completed',
-    manualWorkflow: `Before: ${result.sample.title} required ${result.extracted.manual_step_count} manual touchpoints and coordination across ${result.extracted.key_systems.length || 1} systems.`,
+    title: 'Automation completed',
+    manualWorkflow: `Before automation, this workflow required ${result.extracted.manual_step_count} manual touchpoints and fragmented tracking across teams and systems.`,
     businessPain: [
       `Delay: baseline cycle time ${baselineCycle} days.`,
-      `Rework: monthly load ${volume} requests with repeated approval/routing tasks.`,
-      `Risk: ${prettyCategory(result.triage.risk_level)} due to manual controls and handoffs.`,
+      `Rework: ${volume} requests per month with repetitive triage and approvals.`,
+      `Risk: ${prettyCategory(result.triage.risk_level)} from manual control execution.`,
     ],
     automatedChange: [
       `Auto-triaged to ${prettyCategory(result.triage.category)} with ${result.triage.priority} priority.`,
-      'Generated charter + process map + automation blueprint in one run.',
-      'Prepared export payloads for Jira, ServiceNow, and tracker updates.',
+      'Generated charter + process map + automation blueprint in one action.',
+      'Prepared export payloads for Jira, ServiceNow, and process tracking.',
     ],
-    impactSummary: `After: target cycle time ${targetCycle} days and estimated savings ${result.triage.est_savings_hours_per_month} hours/month.`,
+    impactSummary: `Cycle time target is now ${targetCycle} days with estimated savings of ${result.triage.est_savings_hours_per_month} hours per month.`,
   }
+}
+
+function getPhaseState(index: number, activePhaseIndex: number, isRunning: boolean, hasResult: boolean): PhaseState {
+  if (isRunning) {
+    if (index < activePhaseIndex) {
+      return 'done'
+    }
+    if (index === activePhaseIndex) {
+      return 'active'
+    }
+    return 'pending'
+  }
+
+  if (hasResult) {
+    return 'done'
+  }
+
+  return 'pending'
 }
 
 function App() {
@@ -140,11 +194,13 @@ function App() {
   const [selectedSampleId, setSelectedSampleId] = useState('')
   const [requestText, setRequestText] = useState('')
 
-  const [result, setResult] = useState<ReturnType<typeof runIntakePipeline> | null>(null)
+  const [result, setResult] = useState<PipelineResult | null>(null)
   const [impactRationale, setImpactRationale] = useState<ImpactRationale | null>(null)
 
   const [isRunning, setIsRunning] = useState(false)
-  const [runPhase, setRunPhase] = useState<string | null>(null)
+  const [activePhaseIndex, setActivePhaseIndex] = useState(0)
+  const [runProgress, setRunProgress] = useState(0)
+
   const [copyStatus, setCopyStatus] = useState<string | null>(null)
   const [dispatchStatus, setDispatchStatus] = useState<string | null>(null)
   const [dispatchLog, setDispatchLog] = useState<DispatchRecord[]>([])
@@ -174,31 +230,39 @@ function App() {
     [samples, selectedSampleId],
   )
 
-  function handleSampleChange(sampleId: string) {
-    setSelectedSampleId(sampleId)
-    const nextSample = samples.find((sample) => sample.id === sampleId)
-    if (nextSample) {
-      setRequestText(nextSample.text)
-    }
-  }
-
   const automationNarrative = useMemo(
     () => (result ? buildPostRunNarrative(result) : buildPreRunNarrative(selectedSample, catalog)),
     [catalog, result, selectedSample],
   )
+
+  const hasResult = Boolean(result)
 
   const hintText = useMemo(() => {
     if (error) {
       return 'Data could not be loaded. Refresh once the source is available.'
     }
     if (isRunning) {
-      return runPhase ?? 'Generating automation pack...'
+      return DEMO_PHASES[activePhaseIndex]?.detail ?? 'Running automation...'
     }
     if (!result) {
-      return 'Choose a scenario and click Start demo.'
+      return 'Select a workflow and click Start demo.'
     }
-    return 'Automation completed. Your business-ready artifacts are ready below.'
-  }, [error, isRunning, result, runPhase])
+    return 'Automation complete. Review and export the deliverables below.'
+  }, [activePhaseIndex, error, isRunning, result])
+
+  function handleSampleChange(sampleId: string) {
+    setSelectedSampleId(sampleId)
+    const nextSample = samples.find((sample) => sample.id === sampleId)
+    if (nextSample) {
+      setRequestText(nextSample.text)
+      setResult(null)
+      setImpactRationale(null)
+      setRunProgress(0)
+      setActivePhaseIndex(0)
+      setCopyStatus(null)
+      setDispatchStatus(null)
+    }
+  }
 
   async function runPipeline() {
     if (!selectedSample || !catalog) {
@@ -215,23 +279,30 @@ function App() {
     setImpactRationale(null)
     setCopyStatus(null)
     setDispatchStatus(null)
+
     setIsRunning(true)
-    setRunPhase('Analyzing intake request')
+    setActivePhaseIndex(0)
+    setRunProgress(12)
 
     await nextPaint()
+    await sleep(220)
 
-    setRunPhase('Generating charter, process map, and blueprint')
+    setActivePhaseIndex(1)
+    setRunProgress(48)
+    await nextPaint()
+    await sleep(240)
+
     const nextResult = runIntakePipeline(sampleForRun, catalog)
     setResult(nextResult)
     setImpactRationale(buildImpactRationale(nextResult))
 
+    setActivePhaseIndex(2)
+    setRunProgress(82)
     await nextPaint()
+    await sleep(220)
 
-    setRunPhase('Preparing export payloads for delivery systems')
-    await nextPaint()
-
+    setRunProgress(100)
     setIsRunning(false)
-    setRunPhase(null)
   }
 
   async function copyJson(label: string, payload: unknown) {
@@ -265,95 +336,140 @@ function App() {
     <main className="page-shell">
       <header className="hero">
         <p className="eyebrow">BIS Process Optimisation Copilot</p>
-        <h1>One click from messy request to a delivery-ready automation pack.</h1>
+        <h1>Turn one messy process request into a delivery-ready automation pack in seconds.</h1>
         <p className="hero-subhead">
-          Intake request, generate charter + process map + blueprint, then send export payloads to
-          delivery tools.
+          The demo automates a real BIS-style intake workflow: triage the request, standardize it
+          into charter + process map + blueprint, then export payloads for delivery systems.
         </p>
       </header>
 
       <section className="panel intake-panel">
-        <h2>1. Intake Request</h2>
-        <label>
-          Scenario
-          <select value={selectedSampleId} onChange={(event) => handleSampleChange(event.target.value)}>
-            {samples.map((sample) => (
-              <option key={sample.id} value={sample.id}>
-                {sample.title}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="intake-layout">
+          <section className="intake-controls">
+            <h2>Start here</h2>
 
-        <label>
-          Request text
-          <textarea
-            value={requestText}
-            onChange={(event) => setRequestText(event.target.value)}
-            rows={7}
-          />
-        </label>
-
-        <button className="primary-btn" onClick={() => void runPipeline()} disabled={!selectedSample || isRunning}>
-          {isRunning ? 'Generating pack...' : 'Start demo'}
-        </button>
-
-        <p className="hint-text">{hintText}</p>
-        <section className="automation-moment" aria-live="polite">
-          <p className="moment-tag">{automationNarrative.title}</p>
-          <h3>From manual workflow to automated delivery</h3>
-          <div className="moment-grid">
-            <article>
-              <h4>1. Manual workflow today</h4>
-              <p>{automationNarrative.manualWorkflow}</p>
-            </article>
-            <article>
-              <h4>2. Problem it causes</h4>
-              <ul>
-                {automationNarrative.businessPain.map((line) => (
-                  <li key={line}>{line}</li>
+            <label>
+              Workflow scenario
+              <select value={selectedSampleId} onChange={(event) => handleSampleChange(event.target.value)}>
+                {samples.map((sample) => (
+                  <option key={sample.id} value={sample.id}>
+                    {sample.title}
+                  </option>
                 ))}
-              </ul>
-            </article>
-            <article>
-              <h4>3. What was automated</h4>
-              <ul>
-                {automationNarrative.automatedChange.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
-            </article>
-          </div>
-          <p className="moment-impact">
-            <strong>Automation impact:</strong> {automationNarrative.impactSummary}
-          </p>
-        </section>
-        {error ? <p className="error-text">{error}</p> : null}
-        {copyStatus ? <p className="status-text">{copyStatus}</p> : null}
-        {dispatchStatus ? <p className="status-text success-text">{dispatchStatus}</p> : null}
+              </select>
+            </label>
+
+            <label>
+              Intake request
+              <textarea
+                value={requestText}
+                onChange={(event) => setRequestText(event.target.value)}
+                rows={6}
+              />
+            </label>
+
+            <button className="primary-btn" onClick={() => void runPipeline()} disabled={!selectedSample || isRunning}>
+              {isRunning ? 'Automating...' : 'Start demo'}
+            </button>
+
+            <p className="hint-text">{hintText}</p>
+            {error ? <p className="error-text">{error}</p> : null}
+            {copyStatus ? <p className="status-text">{copyStatus}</p> : null}
+            {dispatchStatus ? <p className="status-text success-text">{dispatchStatus}</p> : null}
+          </section>
+
+          <section className="magic-panel" aria-live="polite">
+            <p className="moment-tag">{automationNarrative.title}</p>
+            <h2>The automation moment</h2>
+            <p className="magic-lede">{automationNarrative.impactSummary}</p>
+
+            <div className="magic-main">
+              <article className="state-card before-state">
+                <h3>Before</h3>
+                <p className="state-caption">Manual workflow</p>
+                <p>{automationNarrative.manualWorkflow}</p>
+                <ul>
+                  {automationNarrative.businessPain.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              </article>
+
+              <div className="transform-center">
+                <p className="transform-label">Transformation</p>
+                <div className="progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={runProgress}>
+                  <span style={{ width: `${runProgress}%` }} />
+                </div>
+                <ol className="phase-list">
+                  {DEMO_PHASES.map((phase, index) => {
+                    const state = getPhaseState(index, activePhaseIndex, isRunning, hasResult)
+                    return (
+                      <li key={phase.label} className={`phase-item ${state}`}>
+                        <span>{index + 1}</span>
+                        {phase.label}
+                      </li>
+                    )
+                  })}
+                </ol>
+              </div>
+
+              <article className="state-card after-state">
+                <h3>After</h3>
+                <p className="state-caption">Automated output</p>
+                {hasResult ? (
+                  <>
+                    <ul>
+                      {automationNarrative.automatedChange.map((line) => (
+                        <li key={line}>{line}</li>
+                      ))}
+                    </ul>
+                    <div className="impact-strip">
+                      <span>{result.triage.priority} priority</span>
+                      <span>{result.triage.est_savings_hours_per_month} hrs/month saved</span>
+                      <span>
+                        Target cycle {metricToText(result.charter.target_metrics.cycle_time_days_target)} days
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p>
+                      Click <strong>Start demo</strong> to convert the intake text into charter,
+                      process map, blueprint, and export payloads.
+                    </p>
+                    <p className="preview-text">Preview: {excerpt(requestText)}</p>
+                  </>
+                )}
+              </article>
+            </div>
+          </section>
+        </div>
       </section>
 
       {!result ? (
         <section className="panel placeholder-panel">
-          <h2>2. Automation Pack</h2>
-          <p>Run the demo to generate an end-to-end pack and dispatch it.</p>
+          <h2>Automation pack</h2>
+          <p>
+            Your charter, process map, blueprint, and export payloads will appear here right after
+            the run.
+          </p>
         </section>
       ) : (
         <section className="panel pack-panel">
-          <h2>2. Automation Pack</h2>
+          <h2>Automation pack (delivery-ready)</h2>
 
           <div className="kpi-grid">
             <article>
-              <span>Workflow</span>
+              <span>Predicted workflow</span>
               <strong>{prettyCategory(result.triage.category)}</strong>
+            </article>
+            <article>
+              <span>Risk level</span>
+              <strong>{prettyCategory(result.triage.risk_level)}</strong>
             </article>
             <article>
               <span>Priority</span>
               <strong>{result.triage.priority}</strong>
-            </article>
-            <article>
-              <span>Risk</span>
-              <strong>{prettyCategory(result.triage.risk_level)}</strong>
             </article>
             <article>
               <span>Savings (hrs/month)</span>
@@ -361,86 +477,82 @@ function App() {
             </article>
           </div>
 
-          {impactRationale ? (
-            <details className="explain-box">
-              <summary>How savings was estimated</summary>
+          <div className="artifact-grid">
+            <section className="artifact-card">
+              <h3>Charter</h3>
               <p>
-                Manual touchpoints: {impactRationale.manual_steps}; monthly volume:{' '}
-                {metricToText(impactRationale.monthly_volume)}; baseline cycle time:{' '}
-                {metricToText(impactRationale.cycle_time_days)} days.
+                <strong>Problem:</strong> {result.charter.problem_statement}
               </p>
               <p>
-                Confidence: <strong>{prettyCategory(impactRationale.confidence)}</strong>
+                <strong>Next action:</strong> {result.triage.next_action}
               </p>
-            </details>
-          ) : null}
+              <ul className="metric-list">
+                <li>Baseline cycle time: {metricToText(result.charter.baseline_metrics.cycle_time_days)}</li>
+                <li>
+                  Target cycle time: {metricToText(result.charter.target_metrics.cycle_time_days_target)}
+                </li>
+                <li>Monthly volume: {metricToText(result.charter.baseline_metrics.volume_per_month)}</li>
+              </ul>
+              <button className="secondary-btn" onClick={() => copyJson('Charter JSON', result.charter)}>
+                Copy charter JSON
+              </button>
+            </section>
 
-          <section className="pack-section">
-            <h3>Project charter</h3>
+            <section className="artifact-card">
+              <h3>To-be process map</h3>
+              <MermaidDiagram title="Optimized workflow" chart={result.toBeMermaid} />
+              <details className="advanced-block">
+                <summary>Show as-is flow</summary>
+                <pre>{result.asIsMermaid}</pre>
+              </details>
+            </section>
+
+            <section className="artifact-card">
+              <h3>Export payloads</h3>
+              <div className="button-column">
+                <button className="secondary-btn" onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}>
+                  Copy Jira payload
+                </button>
+                <button
+                  className="secondary-btn"
+                  onClick={() => copyJson('ServiceNow payload', result.exports.servicenow_record_create)}
+                >
+                  Copy ServiceNow payload
+                </button>
+                <button className="secondary-btn" onClick={() => copyJson('Tracker payload', result.exports.process_tracker_row)}>
+                  Copy tracker payload
+                </button>
+                <button className="primary-btn" onClick={sendToDeliveryQueue}>
+                  Send pack to delivery queue
+                </button>
+              </div>
+
+              {dispatchLog.length > 0 ? (
+                <ul className="dispatch-list">
+                  {dispatchLog.map((entry) => (
+                    <li key={entry.dispatch_id}>
+                      <strong>{entry.dispatch_id}</strong> · {entry.timestamp} ·{' '}
+                      {entry.destinations.join(', ')}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </section>
+          </div>
+
+          <details className="advanced-block">
+            <summary>Advanced details</summary>
             <p>
-              <strong>Problem:</strong> {result.charter.problem_statement}
+              Estimated from {impactRationale?.manual_steps ?? 'n/a'} manual touchpoints, volume{' '}
+              {metricToText(impactRationale?.monthly_volume)}, cycle time{' '}
+              {metricToText(impactRationale?.cycle_time_days)} days. Confidence:{' '}
+              <strong>{impactRationale ? prettyCategory(impactRationale.confidence) : 'Not available'}</strong>
+              .
             </p>
-            <p>
-              <strong>Next action:</strong> {result.triage.next_action}
-            </p>
-            <ul className="metric-list">
-              <li>Baseline cycle time: {metricToText(result.charter.baseline_metrics.cycle_time_days)}</li>
-              <li>Target cycle time: {metricToText(result.charter.target_metrics.cycle_time_days_target)}</li>
-              <li>Baseline monthly volume: {metricToText(result.charter.baseline_metrics.volume_per_month)}</li>
-            </ul>
-            <button className="secondary-btn" onClick={() => copyJson('Charter JSON', result.charter)}>
-              Copy charter JSON
-            </button>
-          </section>
-
-          <section className="pack-section">
-            <h3>To-be process map</h3>
-            <MermaidDiagram title="Optimized workflow" chart={result.toBeMermaid} />
-          </section>
-
-          <section className="pack-section">
-            <h3>Automation blueprint</h3>
-            <ul className="metric-list">
-              {result.blueprint.steps.slice(0, 5).map((step) => (
-                <li key={step.id}>{step.name}</li>
-              ))}
-            </ul>
             <button className="secondary-btn" onClick={() => copyJson('Blueprint JSON', result.blueprint)}>
               Copy blueprint JSON
             </button>
-          </section>
-
-          <section className="pack-section">
-            <h3>Dispatch payloads</h3>
-            <div className="button-row">
-              <button className="secondary-btn" onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}>
-                Copy Jira payload
-              </button>
-              <button
-                className="secondary-btn"
-                onClick={() => copyJson('ServiceNow payload', result.exports.servicenow_record_create)}
-              >
-                Copy ServiceNow payload
-              </button>
-              <button className="secondary-btn" onClick={() => copyJson('Tracker payload', result.exports.process_tracker_row)}>
-                Copy tracker payload
-              </button>
-              <button className="primary-btn" onClick={sendToDeliveryQueue}>
-                Send pack to delivery queue
-              </button>
-            </div>
-
-            {dispatchLog.length > 0 ? (
-              <ul className="dispatch-list">
-                {dispatchLog.map((entry) => (
-                  <li key={entry.dispatch_id}>
-                    <strong>{entry.dispatch_id}</strong> · {entry.timestamp} ·{' '}
-                    {entry.destinations.join(', ')}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </section>
+          </details>
         </section>
       )}
     </main>
