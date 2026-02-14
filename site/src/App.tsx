@@ -12,23 +12,8 @@ import { WorkPage } from './pages/WorkPage'
 
 const NAVIGATION = [
   { href: '/', label: 'Overview' },
-  { href: '/work', label: 'Work' },
-  { href: '/proof', label: 'System Proof' },
-]
-
-const WORKFLOW_BADGES = [
-  {
-    label: 'CI',
-    image:
-      'https://github.com/KumarNavish/KumarNavish.github.io/actions/workflows/ci.yml/badge.svg?branch=master',
-    link: 'https://github.com/KumarNavish/KumarNavish.github.io/actions/workflows/ci.yml',
-  },
-  {
-    label: 'Pages',
-    image:
-      'https://github.com/KumarNavish/KumarNavish.github.io/actions/workflows/pages.yml/badge.svg?branch=master',
-    link: 'https://github.com/KumarNavish/KumarNavish.github.io/actions/workflows/pages.yml',
-  },
+  { href: '/work', label: 'Case Studies' },
+  { href: '/proof', label: 'Evidence' },
 ]
 
 function Navigation() {
@@ -50,32 +35,12 @@ function Navigation() {
   )
 }
 
-function WorkflowBadges() {
-  return (
-    <div className="workflow-badges" aria-label="Automation status">
-      {WORKFLOW_BADGES.map((workflow) => (
-        <a
-          key={workflow.label}
-          className="workflow-badge"
-          href={workflow.link}
-          target="_blank"
-          rel="noreferrer"
-          title={`${workflow.label} workflow status`}
-        >
-          <img src={workflow.image} alt={`${workflow.label} workflow status`} />
-        </a>
-      ))}
-    </div>
-  )
-}
-
 function SiteHeader() {
   return (
     <header className="site-header">
       <div className="header-inner">
-        <p className="header-title">KumarNavish.github.io</p>
-        <p className="header-subtitle">Research, systems, and automation</p>
-        <WorkflowBadges />
+        <p className="header-title">Navish Kumar</p>
+        <p className="header-subtitle">Research portfolio built as a reproducible system</p>
       </div>
       <Navigation />
     </header>
