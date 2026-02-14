@@ -19,7 +19,7 @@ site-lint: site-install
 	cd site && $(NPM) run lint
 
 pipe-install:
-	$(PYTHON) -m pip install pytest
+	cd pipeline && $(PYTHON) -m pip install ".[dev]"
 
 pipe-test: pipe-install
 	cd pipeline && PYTHONPATH=src $(PYTHON) -m pytest

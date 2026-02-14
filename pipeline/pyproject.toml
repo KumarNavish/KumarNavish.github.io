@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=58", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,10 @@ version = "0.1.0"
 description = "Data pipeline for portfolio-as-a-system"
 readme = "README.md"
 requires-python = ">=3.9"
-dependencies = []
+dependencies = [
+  "pydantic>=2.8,<3.0",
+  "PyYAML>=6.0,<7.0"
+]
 
 [project.optional-dependencies]
 dev = [

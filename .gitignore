@@ -13,11 +13,16 @@ assets/data/scholar_cache/
 __pycache__/
 *.pyc
 .pytest_cache/
+pipeline/build/
+pipeline/src/*.egg-info/
 
 # Node/Vite
 site/node_modules/
 site/dist/
 site/.vite/
+site/public/api/
+site/public/ops/
+site/public/artifacts/
 
 # OS/editor
 .DS_Store
