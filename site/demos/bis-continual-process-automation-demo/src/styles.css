@@ -71,6 +71,12 @@ h3 {
   color: #2c496f;
 }
 
+h4 {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #2a466e;
+}
+
 p {
   margin: 0.5rem 0 0;
   line-height: 1.5;
@@ -150,6 +156,48 @@ button:disabled {
 
 .success-text {
   color: #27613d;
+}
+
+.automation-moment {
+  margin-top: 0.7rem;
+  border: 1px solid #cddbf0;
+  border-radius: 12px;
+  background: #eef4ff;
+  padding: 0.72rem;
+  animation: reveal 220ms ease-out;
+}
+
+.automation-moment h3 {
+  margin: 0;
+}
+
+.moment-grid {
+  margin-top: 0.55rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.moment-grid article {
+  border: 1px solid #d2def0;
+  border-radius: 10px;
+  background: #f8fbff;
+  padding: 0.55rem;
+}
+
+.moment-grid article p {
+  margin-top: 0.4rem;
+  color: #2f4c77;
+}
+
+.moment-grid article ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1rem;
+}
+
+.moment-grid article li {
+  margin-bottom: 0.25rem;
+  color: #2f4c77;
 }
 
 .step-track {
@@ -303,6 +351,7 @@ button:disabled {
     padding: 1.2rem 0.85rem 1.6rem;
   }
 
+  .moment-grid,
   .kpi-grid {
     grid-template-columns: 1fr;
   }
@@ -313,5 +362,16 @@ button:disabled {
 
   .button-row button {
     width: 100%;
+  }
+}
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

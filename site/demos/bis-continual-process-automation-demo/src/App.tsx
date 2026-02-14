@@ -139,7 +139,7 @@ function App() {
     if (!result) {
       return 'Choose a scenario and click Start demo.'
     }
-    return 'Pack ready. Copy payloads or send the full pack to delivery queue.'
+    return 'Automation completed. The transformed workflow is shown below.'
   }, [activeStepIndex, error, isRunning, result])
 
   async function runPipeline() {
@@ -238,6 +238,40 @@ function App() {
         </button>
 
         <p className="hint-text">{hintText}</p>
+        {result ? (
+          <section className="automation-moment" aria-live="polite">
+            <h3>Automation Moment: What Changed Just Now</h3>
+            <div className="moment-grid">
+              <article>
+                <h4>Manual workflow before</h4>
+                <p>
+                  Request handling depended on manual triage, {result.extracted.manual_step_count}{' '}
+                  touchpoints, and status chasing across tools.
+                </p>
+              </article>
+              <article>
+                <h4>Problem it caused</h4>
+                <ul>
+                  <li>
+                    Cycle time: {metricToText(result.charter.baseline_metrics.cycle_time_days)} days
+                  </li>
+                  <li>Risk exposure: {prettyCategory(result.triage.risk_level)}</li>
+                  <li>
+                    Monthly volume: {metricToText(result.charter.baseline_metrics.volume_per_month)}
+                  </li>
+                </ul>
+              </article>
+              <article>
+                <h4>Automated now</h4>
+                <ul>
+                  <li>Auto-triaged to {prettyCategory(result.triage.category)}</li>
+                  <li>Generated charter + process map + blueprint + export payloads</li>
+                  <li>Estimated savings: {result.triage.est_savings_hours_per_month} hours/month</li>
+                </ul>
+              </article>
+            </div>
+          </section>
+        ) : null}
         {error ? <p className="error-text">{error}</p> : null}
         {copyStatus ? <p className="status-text">{copyStatus}</p> : null}
         {dispatchStatus ? <p className="status-text success-text">{dispatchStatus}</p> : null}
