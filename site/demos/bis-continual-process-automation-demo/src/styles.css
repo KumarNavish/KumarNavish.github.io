@@ -300,42 +300,30 @@ button:disabled {
   font-weight: 540;
 }
 
-.insight-strip {
+.value-hero {
   margin-top: 0.62rem;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.46rem;
+  border: 1px solid #b8cde8;
+  border-radius: 11px;
+  background: linear-gradient(180deg, #eef5ff 0%, #f9fbff 100%);
+  padding: 0.62rem 0.68rem;
 }
 
-.insight-card {
-  border: 1px solid #c7d9ef;
-  border-radius: 10px;
-  background: #ffffff;
-  padding: 0.5rem 0.56rem;
-  display: grid;
-  gap: 0.22rem;
-}
-
-.insight-card p {
+.value-hero h3 {
   margin: 0;
-  font-size: 0.76rem;
-  color: #46638c;
+  font-size: 1.08rem;
+  color: #153a64;
 }
 
-.insight-card strong {
-  color: #1f3f68;
-  font-size: 0.96rem;
+.value-hero p {
+  margin-top: 0.36rem;
+  color: #35577f;
+  font-size: 0.9rem;
 }
 
-.insight-card span {
-  color: #36587f;
-  font-size: 0.78rem;
-}
-
-.magic-main {
+.comparison-grid {
   margin-top: 0.68rem;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.58rem;
 }
 
@@ -369,6 +357,33 @@ button:disabled {
   color: #2d4b76;
 }
 
+.comparison-list {
+  margin: 0.05rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.comparison-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.45rem;
+  align-items: baseline;
+  border-bottom: 1px dashed #d6dfe9;
+  padding-bottom: 0.26rem;
+}
+
+.comparison-list span {
+  color: #4a688f;
+  font-size: 0.8rem;
+}
+
+.comparison-list strong {
+  color: #1f426e;
+  font-size: 0.9rem;
+}
+
 .before-state {
   border-color: #dcbfc1;
   background: linear-gradient(180deg, #fff8f8 0%, #ffffff 100%);
@@ -388,6 +403,7 @@ button:disabled {
   border: 1px solid #b8cde8;
   border-radius: 10px;
   background: linear-gradient(180deg, #edf4ff 0%, #f7faff 100%);
+  margin-top: 0.58rem;
   padding: 0.58rem;
   display: grid;
   gap: 0.45rem;
@@ -510,6 +526,42 @@ button:disabled {
   font-size: 0.9rem;
 }
 
+.outputs-hero {
+  margin-top: 0.72rem;
+  border: 1px solid #c2d6ef;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f0f6ff 0%, #f9fbff 100%);
+  padding: 0.68rem 0.76rem;
+}
+
+.outputs-hero h3 {
+  margin: 0;
+  color: #18406e;
+  font-size: 1.08rem;
+}
+
+.outputs-hero p {
+  margin-top: 0.35rem;
+  color: #35567e;
+}
+
+.outputs-proof {
+  margin-top: 0.52rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.34rem;
+}
+
+.outputs-proof span {
+  border: 1px solid #c0d4ed;
+  border-radius: 999px;
+  background: #f7faff;
+  color: #2f507b;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.22rem 0.5rem;
+}
+
 .kpi-grid {
   margin-top: 0.72rem;
   display: grid;
@@ -574,6 +626,10 @@ button:disabled {
   margin-top: -0.1rem;
   font-size: 0.84rem;
   color: #43608b;
+}
+
+.card-actions {
+  margin-top: 0.1rem;
 }
 
 .metric-list {
@@ -643,11 +699,7 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
-  .insight-strip {
-    grid-template-columns: 1fr;
-  }
-
-  .magic-main {
+  .comparison-grid {
     grid-template-columns: 1fr;
   }
 

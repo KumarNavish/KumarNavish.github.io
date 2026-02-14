@@ -16,9 +16,12 @@ interface ImpactSnapshot {
   baselineDays: number | null
   targetDays: number | null
   cycleGainDays: number | null
+  cycleReductionPct: number | null
   manualTouches: number
   generatedSteps: number
   monthlyHoursSaved: number
+  payloadCount: number
+  outputCount: number
 }
 
 interface DispatchRecord {
@@ -111,6 +114,20 @@ function toNumber(value: string | number | null | undefined): number | null {
   return null
 }
 
+function toPercentString(value: number | null): string {
+  if (value === null) {
+    return 'n/a'
+  }
+  return `${value}%`
+}
+
+function formatDays(value: number | null): string {
+  if (value === null) {
+    return 'n/a'
+  }
+  return `${value}d`
+}
+
 function buildImpactRationale(result: PipelineResult): ImpactRationale {
   const monthlyVolume =
     result.extracted.volume_per_month ?? result.sample.ground_truth.volume_per_month ?? null
@@ -138,14 +155,21 @@ function buildImpactSnapshot(result: PipelineResult): ImpactSnapshot {
   const targetDays = toNumber(result.charter.target_metrics.cycle_time_days_target)
   const cycleGainDays =
     baselineDays !== null && targetDays !== null ? Math.max(0, baselineDays - targetDays) : null
+  const cycleReductionPct =
+    baselineDays !== null && targetDays !== null && baselineDays > 0
+      ? Math.max(0, Math.round(((baselineDays - targetDays) / baselineDays) * 100))
+      : null
 
   return {
     baselineDays,
     targetDays,
     cycleGainDays,
+    cycleReductionPct,
     manualTouches: result.extracted.manual_step_count,
     generatedSteps: result.blueprint.steps.length,
     monthlyHoursSaved: result.triage.est_savings_hours_per_month,
+    payloadCount: Object.keys(result.exports).length,
+    outputCount: 3,
   }
 }
 
@@ -288,6 +312,9 @@ function App() {
   )
 
   const hasResult = Boolean(result)
+  const previewBaselineDays = selectedSample?.ground_truth.baseline_cycle_time_days ?? null
+  const previewRisk = selectedSample?.ground_truth.risk_level ?? null
+  const previewVolume = selectedSample?.ground_truth.volume_per_month ?? null
 
   const hintText = useMemo(() => {
     if (error) {
@@ -484,97 +511,96 @@ function App() {
 
           <section className="magic-panel" aria-live="polite">
             <p className="moment-tag">{automationNarrative.title}</p>
-            <h2>See what changed</h2>
+            <h2>Proof of value</h2>
             <p className="magic-lede">{automationNarrative.impactSummary}</p>
-            {impactSnapshot ? (
-              <section className="insight-strip">
-                <article className="insight-card">
-                  <p>Turnaround improvement</p>
-                  <strong>
-                    {impactSnapshot.baselineDays !== null && impactSnapshot.targetDays !== null
-                      ? `${impactSnapshot.baselineDays}d -> ${impactSnapshot.targetDays}d`
-                      : 'Cycle target generated'}
-                  </strong>
-                  <span>
-                    {impactSnapshot.cycleGainDays !== null
-                      ? `${impactSnapshot.cycleGainDays} days faster`
-                      : 'Baseline/target tracked'}
-                  </span>
-                </article>
-                <article className="insight-card">
-                  <p>Manual effort reduced</p>
-                  <strong>{impactSnapshot.manualTouches} manual touches</strong>
-                  <span>{impactSnapshot.generatedSteps} automated steps generated</span>
-                </article>
-                <article className="insight-card">
-                  <p>Business impact</p>
-                  <strong>{impactSnapshot.monthlyHoursSaved} hrs saved / month</strong>
-                  <span>Ready for delivery handoff</span>
-                </article>
-              </section>
-            ) : null}
 
-            <div className="magic-main">
+            <section className="value-hero">
+              {impactSnapshot ? (
+                <>
+                  <h3>
+                    {impactSnapshot.cycleGainDays !== null
+                      ? `${impactSnapshot.cycleGainDays} days faster turnaround`
+                      : `${impactSnapshot.monthlyHoursSaved} hours/month saved potential`}
+                  </h3>
+                  <p>
+                    Generated in one run: {impactSnapshot.outputCount} core outputs +{' '}
+                    {impactSnapshot.payloadCount} export payloads.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h3>Run once to see exact time savings and delivery outputs.</h3>
+                  <p>The tool will show measurable before/after change from this request.</p>
+                </>
+              )}
+            </section>
+
+            <div className="comparison-grid">
               <article className="state-card before-state">
                 <h3>Before (manual)</h3>
-                <p className="state-caption">How the work happened before</p>
-                <p>{automationNarrative.manualWorkflow}</p>
-                <ul>
-                  {automationNarrative.businessPain.map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
+                <p className="state-caption">Current pain</p>
+                <ul className="comparison-list">
+                  <li>
+                    <span>Cycle time</span>
+                    <strong>{formatDays(impactSnapshot?.baselineDays ?? previewBaselineDays)}</strong>
+                  </li>
+                  <li>
+                    <span>Monthly volume</span>
+                    <strong>{metricToText(previewVolume)}</strong>
+                  </li>
+                  <li>
+                    <span>Risk level</span>
+                    <strong>{prettyCategory(impactSnapshot ? result.triage.risk_level : previewRisk ?? 'medium')}</strong>
+                  </li>
                 </ul>
               </article>
 
-              <div className="transform-center">
-                <p className="transform-label">Automation in progress</p>
-                <div className="progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={runProgress}>
-                  <span style={{ width: `${runProgress}%` }} />
-                </div>
-                <ol className="phase-list">
-                  {DEMO_PHASES.map((phase, index) => {
-                    const state = getPhaseState(index, activePhaseIndex, isRunning, hasResult)
-                    return (
-                      <li key={phase.label} className={`phase-item ${state}`}>
-                        <span>{index + 1}</span>
-                        {phase.label}
-                      </li>
-                    )
-                  })}
-                </ol>
-              </div>
-
               <article className="state-card after-state">
                 <h3>After (automated)</h3>
-                <p className="state-caption">What the tool produced</p>
-                {hasResult ? (
-                  <>
-                    <ul>
-                      {automationNarrative.automatedChange.map((line) => (
-                        <li key={line}>{line}</li>
-                      ))}
-                    </ul>
-                    <div className="impact-strip">
-                      <span>{result.triage.priority} priority</span>
-                      <span>{result.triage.est_savings_hours_per_month} hrs/month saved</span>
-                      <span>
-                        Target cycle {metricToText(result.charter.target_metrics.cycle_time_days_target)} days
-                      </span>
-                    </div>
-                    <button className="secondary-btn inline-open-btn" onClick={openDeliverables}>
-                      View outputs
-                    </button>
-                  </>
+                <p className="state-caption">Delivered outcome</p>
+                {impactSnapshot ? (
+                  <ul className="comparison-list">
+                    <li>
+                      <span>Target cycle time</span>
+                      <strong>{formatDays(impactSnapshot.targetDays)}</strong>
+                    </li>
+                    <li>
+                      <span>Cycle reduction</span>
+                      <strong>{toPercentString(impactSnapshot.cycleReductionPct)}</strong>
+                    </li>
+                    <li>
+                      <span>Hours saved / month</span>
+                      <strong>{impactSnapshot.monthlyHoursSaved}</strong>
+                    </li>
+                  </ul>
                 ) : (
                   <>
                     <p>
-                      Click <strong>Run automation</strong> to convert this request into ready-to-use
-                      outputs.
+                      Click <strong>Run automation</strong> to generate measurable results and
+                      ready-to-use outputs.
                     </p>
                     <p className="preview-text">Preview: {excerpt(requestText)}</p>
                   </>
                 )}
               </article>
+            </div>
+
+            <div className="transform-center">
+              <p className="transform-label">Run status</p>
+              <div className="progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={runProgress}>
+                <span style={{ width: `${runProgress}%` }} />
+              </div>
+              <ol className="phase-list">
+                {DEMO_PHASES.map((phase, index) => {
+                  const state = getPhaseState(index, activePhaseIndex, isRunning, hasResult)
+                  return (
+                    <li key={phase.label} className={`phase-item ${state}`}>
+                      <span>{index + 1}</span>
+                      {phase.label}
+                    </li>
+                  )
+                })}
+              </ol>
             </div>
           </section>
         </div>
@@ -590,7 +616,22 @@ function App() {
       ) : (
         <section className="panel pack-panel" ref={packSectionRef}>
           <h2>Your outputs</h2>
-          <p className="pack-subhead">Use in this order: review summary, review flow map, then copy exports.</p>
+          <p className="pack-subhead">Everything below is ready to use right now.</p>
+
+          <section className="outputs-hero">
+            <h3>Automation package ready</h3>
+            <p>
+              Review, copy, and hand off in minutes. This is the exact output produced from the
+              request above.
+            </p>
+            {impactSnapshot ? (
+              <div className="outputs-proof">
+                <span>{impactSnapshot.outputCount} deliverables generated</span>
+                <span>{impactSnapshot.payloadCount} system payloads ready</span>
+                <span>{impactSnapshot.monthlyHoursSaved} hrs/month impact potential</span>
+              </div>
+            ) : null}
+          </section>
 
           <div className="kpi-grid">
             <article>
@@ -633,9 +674,11 @@ function App() {
                 </li>
                 <li>Monthly volume: {metricToText(result.charter.baseline_metrics.volume_per_month)}</li>
               </ul>
-              <button className="secondary-btn" onClick={() => copyJson('Charter JSON', result.charter)}>
-                Copy summary JSON
-              </button>
+              <div className="card-actions">
+                <button className="secondary-btn" onClick={() => copyJson('Charter JSON', result.charter)}>
+                  Copy summary JSON
+                </button>
+              </div>
             </section>
 
             <section className="artifact-card">
