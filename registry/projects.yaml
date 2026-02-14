@@ -21,7 +21,7 @@ CL-PLO:
   one_line: Experimental sandbox for continual learning policy optimization strategies.
 
 bis-continual-process-automation-demo:
-  featured: false
+  featured: true
   tags:
     - process-automation
     - benchmarking
@@ -29,5 +29,4 @@ bis-continual-process-automation-demo:
   demo_url: https://kumarnavish.github.io/bis-continual-process-automation-demo/
   paper_url: null
   image: null
-  one_line: Demonstration artifacts connecting continual methods to process automation use cases.
-
+  one_line: "Process optimisation intake automation: charter + process maps + exportable automation blueprints with regression safety."
