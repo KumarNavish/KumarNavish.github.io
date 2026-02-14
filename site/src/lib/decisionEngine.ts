@@ -25,6 +25,18 @@ export interface ExecutionStep {
   deliverable: string
 }
 
+export interface KPI {
+  metric: string
+  target: string
+  cadence: string
+}
+
+export interface RiskControl {
+  risk: string
+  trigger: string
+  guardrail: string
+}
+
 export interface DecisionBlueprint {
   challengeTitle: string
   decisionQuestion: string
@@ -32,7 +44,10 @@ export interface DecisionBlueprint {
   systemDirection: string
   automationLoop: string
   successMetric: string
+  immediateActions: string[]
   executionPlan: ExecutionStep[]
+  kpis: KPI[]
+  risks: RiskControl[]
   handoffChecklist: string[]
   matchedProject: ProjectItem | null
   matchedPublication: PublicationItem | null
@@ -42,86 +57,30 @@ interface Playbook {
   title: string
   question: string
   value: string
+  unit: string
+  failureSignal: string
   matchTerms: string[]
   directionByGoal: Record<GoalId, string>
   successByGoal: Record<GoalId, string>
-}
-
-const PLAYBOOKS: Record<ChallengeId, Playbook> = {
-  continual_reliability: {
-    title: 'Continual learning reliability',
-    question: 'How should model updates be sequenced to avoid performance drift?',
-    value: 'Turn model update risk into a measurable and controlled process.',
-    matchTerms: ['continual', 'optimization', 'policy', 'gradient', 'stability', 'learning'],
-    directionByGoal: {
-      diagnose:
-        'Instrument update behavior first, then isolate where sequential learning regressions begin.',
-      pilot:
-        'Run side-by-side update-policy experiments with explicit rollback criteria and acceptance gates.',
-      production:
-        'Deploy a policy-governed update pipeline with automated regression checks before release.',
-    },
-    successByGoal: {
-      diagnose: 'Failure modes ranked with clear trigger thresholds for intervention.',
-      pilot: 'Update policies compared with evidence on stability, recovery speed, and retained quality.',
-      production: 'Update cadence sustained without unacceptable quality regression across sequential tasks.',
-    },
-  },
-  online_safety: {
-    title: 'Online safety intervention design',
-    question: 'Which interaction signals should trigger earlier moderation intervention?',
-    value: 'Convert moderation from reactive action to proactive system design.',
-    matchTerms: ['hate', 'counter', 'interaction', 'moderation', 'safety', 'twitter'],
-    directionByGoal: {
-      diagnose:
-        'Map harmful interaction signatures and identify thresholds where escalation risk increases.',
-      pilot:
-        'Test intervention policies against historical patterns and compare false positive tradeoffs.',
-      production:
-        'Operationalize intervention triggers with continuous monitoring and policy feedback loops.',
-    },
-    successByGoal: {
-      diagnose: 'High-risk interaction signatures identified with decision-ready thresholds.',
-      pilot: 'Intervention policy calibrated with transparent precision and recall tradeoffs.',
-      production: 'Escalation risk reduced while preserving acceptable moderation precision.',
-    },
-  },
-  urban_transition: {
-    title: 'Urban logistics transition planning',
-    question: 'Which regions should be prioritized for transition pilots first?',
-    value: 'Sequence rollout decisions using evidence instead of broad assumptions.',
-    matchTerms: ['urban', 'logistics', 'micro', 'regions', 'delivery', 'cargo', 'transition'],
-    directionByGoal: {
-      diagnose:
-        'Profile regional constraints and identify where transition feasibility is immediately highest.',
-      pilot:
-        'Launch staged pilots in high-fit regions while measuring operational and service stability.',
-      production:
-        'Scale transition sequencing with region-specific operating playbooks and monitoring.',
-    },
-    successByGoal: {
-      diagnose: 'Regions prioritized with transparent fit criteria and expected constraints.',
-      pilot: 'Pilot regions validated with measurable service quality and operational viability.',
-      production: 'Transition rollout scaled with predictable service and cost performance.',
-    },
-  },
+  kpiNames: string[]
+  challengeRisks: Array<{ risk: string; trigger: string; guardrail: string }>
 }
 
 export const CHALLENGE_OPTIONS: Array<Option<ChallengeId>> = [
   {
     id: 'continual_reliability',
     label: 'Continual reliability',
-    description: 'Long-lived model update quality.',
+    description: 'Keep model updates stable over time.',
   },
   {
     id: 'online_safety',
     label: 'Online safety',
-    description: 'Early intervention policy design.',
+    description: 'Trigger moderation intervention earlier and better.',
   },
   {
     id: 'urban_transition',
     label: 'Urban transition',
-    description: 'Region-level rollout sequencing.',
+    description: 'Sequence operational rollouts by evidence.',
   },
 ]
 
@@ -129,7 +88,7 @@ export const GOAL_OPTIONS: Array<Option<GoalId>> = [
   {
     id: 'diagnose',
     label: 'Diagnose',
-    description: 'Understand failure patterns quickly.',
+    description: 'Find where the system is failing.',
   },
   {
     id: 'pilot',
@@ -139,7 +98,7 @@ export const GOAL_OPTIONS: Array<Option<GoalId>> = [
   {
     id: 'production',
     label: 'Productionize',
-    description: 'Harden and scale with guardrails.',
+    description: 'Scale with guardrails and automation.',
   },
 ]
 
@@ -147,17 +106,17 @@ export const HORIZON_OPTIONS: Array<Option<HorizonId>> = [
   {
     id: '2w',
     label: '2 weeks',
-    description: 'Rapid clarity sprint.',
+    description: 'Rapid decision sprint.',
   },
   {
     id: '6w',
     label: '6 weeks',
-    description: 'Practical pilot cycle.',
+    description: 'Pilot cycle with measurable outcomes.',
   },
   {
     id: '12w',
     label: '12 weeks',
-    description: 'Scale-ready rollout arc.',
+    description: 'Scale-ready rollout cycle.',
   },
 ]
 
@@ -165,7 +124,7 @@ export const RISK_OPTIONS: Array<Option<RiskId>> = [
   {
     id: 'conservative',
     label: 'Conservative',
-    description: 'Prioritize safety and rollback readiness.',
+    description: 'Protect quality first.',
   },
   {
     id: 'balanced',
@@ -175,9 +134,126 @@ export const RISK_OPTIONS: Array<Option<RiskId>> = [
   {
     id: 'aggressive',
     label: 'Aggressive',
-    description: 'Favor learning speed with explicit controls.',
+    description: 'Move fast with explicit containment.',
   },
 ]
+
+const PLAYBOOKS: Record<ChallengeId, Playbook> = {
+  continual_reliability: {
+    title: 'Continual learning reliability',
+    question: 'How should model updates be sequenced to avoid performance drift?',
+    value: 'Turn update risk into a measurable operating process.',
+    unit: 'model update cycle',
+    failureSignal: 'retained-task regression',
+    matchTerms: ['continual', 'optimization', 'policy', 'gradient', 'stability', 'learning'],
+    directionByGoal: {
+      diagnose:
+        'Instrument update behavior first, then isolate where sequential regressions begin.',
+      pilot:
+        'Run side-by-side update-policy experiments with acceptance and rollback gates.',
+      production:
+        'Deploy a policy-governed update pipeline with automatic regression checks before release.',
+    },
+    successByGoal: {
+      diagnose: 'Failure modes ranked with explicit threshold bands.',
+      pilot: 'One policy demonstrates stable retained performance across sequential tasks.',
+      production: 'Update cadence remains stable across consecutive release cycles.',
+    },
+    kpiNames: [
+      'Retained-task performance after update',
+      'Regression detection lead time',
+      'Rollback-required update rate',
+    ],
+    challengeRisks: [
+      {
+        risk: 'Silent regression on prior tasks.',
+        trigger: 'Retained-task score drops below guardrail in two consecutive runs.',
+        guardrail: 'Block release and run rollback policy branch immediately.',
+      },
+      {
+        risk: 'Overfitting to the latest task slice.',
+        trigger: 'Latest-task gain rises while retained-task quality drops.',
+        guardrail: 'Require balanced retained/new-task score before promotion.',
+      },
+    ],
+  },
+  online_safety: {
+    title: 'Online safety intervention design',
+    question: 'Which interaction signals should trigger earlier moderation intervention?',
+    value: 'Convert moderation from reactive triage to proactive operations.',
+    unit: 'moderation decision queue',
+    failureSignal: 'escalation before intervention',
+    matchTerms: ['hate', 'counter', 'interaction', 'moderation', 'safety', 'twitter'],
+    directionByGoal: {
+      diagnose:
+        'Map escalation signatures first, then locate thresholds where intervention is consistently late.',
+      pilot:
+        'Test intervention rules against historical interactions and compare false-positive tradeoffs.',
+      production:
+        'Operationalize intervention triggers with continuous policy feedback and threshold updates.',
+    },
+    successByGoal: {
+      diagnose: 'Escalation signatures are ranked with clear trigger candidates.',
+      pilot: 'Trigger policy improves intervention timing without unacceptable false positives.',
+      production: 'Escalation risk declines while moderation precision remains within bounds.',
+    },
+    kpiNames: [
+      'Escalation-before-intervention rate',
+      'False intervention rate',
+      'Median intervention latency',
+    ],
+    challengeRisks: [
+      {
+        risk: 'Trigger thresholds generate excessive false positives.',
+        trigger: 'False intervention rate exceeds weekly guardrail.',
+        guardrail: 'Auto-revert to prior threshold profile and review edge cases.',
+      },
+      {
+        risk: 'High-risk interactions bypass intervention.',
+        trigger: 'Escalation events occur without trigger activation.',
+        guardrail: 'Expand trigger rule set and raise alert for policy review.',
+      },
+    ],
+  },
+  urban_transition: {
+    title: 'Urban transition sequencing',
+    question: 'Which regions should be prioritized for transition pilots first?',
+    value: 'Replace rollout by intuition with rollout by evidence.',
+    unit: 'regional rollout unit',
+    failureSignal: 'service-quality degradation during transition',
+    matchTerms: ['urban', 'logistics', 'micro', 'regions', 'delivery', 'cargo', 'transition'],
+    directionByGoal: {
+      diagnose:
+        'Profile regional constraints and identify where transition readiness is already high.',
+      pilot:
+        'Launch staged pilots in high-fit regions and compare service stability outcomes.',
+      production:
+        'Scale sequencing with region-specific playbooks and weekly operating checkpoints.',
+    },
+    successByGoal: {
+      diagnose: 'Regions ranked with transparent readiness criteria.',
+      pilot: 'Pilot regions sustain service quality while transition constraints are managed.',
+      production: 'Transition rollout scales without sustained service degradation.',
+    },
+    kpiNames: [
+      'On-time service rate in transitioned regions',
+      'Transition cost per operational unit',
+      'Service exception rate during rollout',
+    ],
+    challengeRisks: [
+      {
+        risk: 'Rollout starts in low-readiness regions.',
+        trigger: 'Pilot readiness score falls below threshold before launch.',
+        guardrail: 'Re-rank candidate regions and delay launch until readiness passes.',
+      },
+      {
+        risk: 'Service instability during transition ramp-up.',
+        trigger: 'Service exception rate rises above weekly guardrail.',
+        guardrail: 'Pause expansion and resolve root causes before next region.',
+      },
+    ],
+  },
+}
 
 const PHASE_LABELS: Record<HorizonId, string[]> = {
   '2w': ['Week 1', 'Week 2'],
@@ -185,12 +261,12 @@ const PHASE_LABELS: Record<HorizonId, string[]> = {
   '12w': ['Weeks 1-3', 'Weeks 4-6', 'Weeks 7-9', 'Weeks 10-12'],
 }
 
-function normalizeText(value: string): string {
-  return value.toLowerCase()
-}
-
 function cleanContext(value: string): string {
   return value.trim().replace(/\s+/g, ' ')
+}
+
+function normalizeText(value: string): string {
+  return value.toLowerCase()
 }
 
 function scoreByTerms(text: string, terms: string[]): number {
@@ -260,116 +336,266 @@ function findBestPublication(publications: PublicationItem[], terms: string[]): 
   return best.item
 }
 
-function buildAutomationLoop(goal: GoalId, risk: RiskId): string {
-  const goalLoop: Record<GoalId, string> = {
-    diagnose: 'Daily data sync, daily anomaly scan, and a weekly decision checkpoint.',
-    pilot: 'Daily updates, weekly experiment comparisons, and weekly decision gates.',
-    production:
-      'Scheduled refresh cycles, automatic quality gates, and release approvals with rollback paths.',
+function targetForGoal(goal: GoalId): string {
+  if (goal === 'diagnose') {
+    return 'Baseline and threshold bands defined.'
+  }
+  if (goal === 'pilot') {
+    return 'Measurable improvement over baseline with reproducible evidence.'
+  }
+  return 'Stable performance across consecutive operating cycles.'
+}
+
+function cadenceForGoal(goal: GoalId): string {
+  if (goal === 'diagnose') {
+    return 'Daily measurement, weekly review.'
+  }
+  if (goal === 'pilot') {
+    return 'Per experiment run, weekly gate review.'
+  }
+  return 'Per release cycle, weekly operating review.'
+}
+
+function buildKpis(playbook: Playbook, goal: GoalId): KPI[] {
+  return playbook.kpiNames.map((metric) => ({
+    metric,
+    target: targetForGoal(goal),
+    cadence: cadenceForGoal(goal),
+  }))
+}
+
+function buildAutomationLoop(playbook: Playbook, goal: GoalId, risk: RiskId): string {
+  const baseByGoal: Record<GoalId, string> = {
+    diagnose: `Daily sync for ${playbook.unit} signals, then weekly decision checkpoint.`,
+    pilot: `Daily sync plus weekly experiment gate for ${playbook.unit}.`,
+    production: `Scheduled refresh, release gate checks, and rollback readiness for ${playbook.unit}.`,
   }
 
   if (risk === 'conservative') {
-    return `${goalLoop[goal]} Add explicit rollback rehearsal before each major release.`
+    return `${baseByGoal[goal]} Run a rollback drill before each major release.`
   }
 
   if (risk === 'aggressive') {
-    return `${goalLoop[goal]} Add parallel experiment tracks with strict exit criteria.`
+    return `${baseByGoal[goal]} Run parallel experiment lanes with hard stop conditions.`
   }
 
-  return goalLoop[goal]
+  return baseByGoal[goal]
+}
+
+function buildImmediateActions(playbook: Playbook, goal: GoalId): string[] {
+  const actionTwo =
+    goal === 'diagnose'
+      ? `Within 48 hours: establish baseline for ${playbook.failureSignal} and define alert thresholds.`
+      : `Within 48 hours: implement baseline + candidate strategy instrumentation for ${playbook.unit}.`
+
+  return [
+    `Within 24 hours: lock scope, owner, and success criteria for this ${playbook.unit}.`,
+    actionTwo,
+    `Within 72 hours: run first decision review and approve the next controlled iteration.`,
+  ]
 }
 
 function buildExecutionPlan(goal: GoalId, horizon: HorizonId, risk: RiskId): ExecutionStep[] {
-  const baseByGoal: Record<GoalId, Array<{ objective: string; deliverable: string }>> = {
+  const templates: Record<GoalId, Array<{ objective: string; deliverable: string }>> = {
     diagnose: [
       {
-        objective: 'Establish baseline behavior and map failure surfaces.',
-        deliverable: 'Decision map with ranked failure patterns.',
+        objective: 'Map failure surfaces and boundary conditions.',
+        deliverable: 'Decision map with ranked failure patterns and confidence notes.',
       },
       {
-        objective: 'Define trigger thresholds and intervention points.',
-        deliverable: 'Decision memo with threshold rules and confidence notes.',
+        objective: 'Define thresholds, alerts, and intervention triggers.',
+        deliverable: 'Threshold rulebook with escalation conditions.',
       },
       {
-        objective: 'Validate assumptions with fast backtests.',
-        deliverable: 'Evidence-backed shortlist of next implementation moves.',
+        objective: 'Validate assumptions against observed data.',
+        deliverable: 'Shortlist of next actions backed by measured evidence.',
       },
     ],
     pilot: [
       {
         objective: 'Design pilot scope and comparison criteria.',
-        deliverable: 'Pilot spec with acceptance and stop conditions.',
+        deliverable: 'Pilot specification with acceptance and stop rules.',
       },
       {
-        objective: 'Implement and run controlled comparisons.',
+        objective: 'Run controlled comparisons and capture outcomes.',
         deliverable: 'Pilot report with performance and tradeoff analysis.',
       },
       {
-        objective: 'Select rollout-ready strategy.',
-        deliverable: 'Go / no-go recommendation with rollout prerequisites.',
+        objective: 'Select the rollout candidate strategy.',
+        deliverable: 'Go / no-go recommendation with required prerequisites.',
       },
     ],
     production: [
       {
-        objective: 'Harden architecture, interfaces, and quality gates.',
-        deliverable: 'Production-ready system contract and validation suite.',
+        objective: 'Harden interfaces, quality gates, and ownership model.',
+        deliverable: 'Production contract with validation checklist.',
       },
       {
-        objective: 'Automate refresh, evaluation, and rollback flows.',
-        deliverable: 'Operational runbook with automation ownership map.',
+        objective: 'Automate refresh, monitoring, and intervention flows.',
+        deliverable: 'Runbook with escalation and rollback procedures.',
       },
       {
         objective: 'Roll out in staged increments.',
-        deliverable: 'Progressive rollout plan with monitored release checkpoints.',
+        deliverable: 'Staged rollout plan with monitored checkpoints.',
       },
     ],
   }
 
   const labels = PHASE_LABELS[horizon]
-  const templates = baseByGoal[goal]
-
-  const steps: ExecutionStep[] = []
+  const plan: ExecutionStep[] = []
   const targetCount = horizon === '2w' ? 2 : horizon === '6w' ? 3 : 4
 
   for (let index = 0; index < targetCount; index += 1) {
-    const template = templates[Math.min(index, templates.length - 1)]
+    const template = templates[goal][Math.min(index, templates[goal].length - 1)]
     const riskSuffix =
       risk === 'conservative'
-        ? ' Include fallback criteria.'
+        ? ' Include explicit rollback criteria.'
         : risk === 'aggressive'
-          ? ' Include acceleration criteria.'
+          ? ' Include acceleration and containment criteria.'
           : ''
 
-    steps.push({
+    plan.push({
       phase: labels[index] ?? `Phase ${index + 1}`,
       objective: `${template.objective}${riskSuffix}`,
       deliverable: template.deliverable,
     })
   }
 
-  return steps
+  return plan
+}
+
+function buildRiskControls(playbook: Playbook, horizon: HorizonId, risk: RiskId): RiskControl[] {
+  const controls = [...playbook.challengeRisks]
+
+  if (risk === 'conservative') {
+    controls.push({
+      risk: 'Progress stalls due to excessive caution.',
+      trigger: 'No material decision after two weekly cycles.',
+      guardrail: 'Enforce timeboxed decisions with predefined fallback options.',
+    })
+  } else if (risk === 'aggressive') {
+    controls.push({
+      risk: 'Speed compromises quality thresholds.',
+      trigger: 'Two consecutive KPI guardrail misses after acceleration.',
+      guardrail: 'Freeze expansion and return to previous stable configuration.',
+    })
+  } else {
+    controls.push({
+      risk: 'Scope drift reduces delivery clarity.',
+      trigger: 'New requirements alter core KPI targets mid-cycle.',
+      guardrail: 'Require explicit change approval and updated success criteria.',
+    })
+  }
+
+  if (horizon === '12w') {
+    controls.push({
+      risk: 'Long-horizon ownership erosion.',
+      trigger: 'Checkpoint responsibilities become unclear across phases.',
+      guardrail: 'Attach named owners to each phase gate and review weekly.',
+    })
+  }
+
+  return controls.slice(0, 4)
 }
 
 function buildHandoffChecklist(goal: GoalId, risk: RiskId): string[] {
-  const base = [
-    'Decision objective agreed with measurable success criteria.',
-    'Data assumptions documented with known failure boundaries.',
-    'Owner assigned for implementation and review cadence.',
+  const items = [
+    'Problem statement is constrained to one measurable decision.',
+    'Success metric and threshold are explicit before implementation.',
+    'Owner and review cadence are assigned and visible.',
   ]
 
   if (goal !== 'diagnose') {
-    base.push('Experiment or rollout gate defined before implementation starts.')
+    items.push('Go / no-go gate is defined before rollout work starts.')
   }
 
   if (risk === 'conservative') {
-    base.push('Rollback and recovery procedure verified before release.')
+    items.push('Rollback procedure has been tested prior to release.')
   } else if (risk === 'aggressive') {
-    base.push('Parallel experiment branches tracked with explicit stop conditions.')
+    items.push('Containment conditions are defined for accelerated experiments.')
   } else {
-    base.push('Monitoring thresholds reviewed weekly and adjusted by evidence.')
+    items.push('Monitoring thresholds are reviewed and adjusted weekly.')
   }
 
-  return base
+  return items
+}
+
+function optionLabel<T extends string>(
+  options: Array<Option<T>>,
+  id: T,
+): string {
+  return options.find((option) => option.id === id)?.label ?? id
+}
+
+export function renderDecisionBriefMarkdown(
+  input: DecisionInput,
+  blueprint: DecisionBlueprint,
+): string {
+  const lines: string[] = []
+
+  lines.push(`# Decision Brief: ${blueprint.challengeTitle}`)
+  lines.push('')
+  lines.push(`- Challenge: ${optionLabel(CHALLENGE_OPTIONS, input.challenge)}`)
+  lines.push(`- Goal: ${optionLabel(GOAL_OPTIONS, input.goal)}`)
+  lines.push(`- Horizon: ${optionLabel(HORIZON_OPTIONS, input.horizon)}`)
+  lines.push(`- Risk Mode: ${optionLabel(RISK_OPTIONS, input.risk)}`)
+  if (input.context.trim()) {
+    lines.push(`- Context: ${input.context.trim()}`)
+  }
+  lines.push('')
+
+  lines.push('## Decision')
+  lines.push(blueprint.decisionQuestion)
+  lines.push('')
+
+  lines.push('## System Direction')
+  lines.push(blueprint.systemDirection)
+  lines.push('')
+
+  lines.push('## Next 72 Hours')
+  for (const action of blueprint.immediateActions) {
+    lines.push(`- ${action}`)
+  }
+  lines.push('')
+
+  lines.push('## Automation Loop')
+  lines.push(blueprint.automationLoop)
+  lines.push('')
+
+  lines.push('## Execution Plan')
+  for (const step of blueprint.executionPlan) {
+    lines.push(`- ${step.phase}: ${step.objective} -> ${step.deliverable}`)
+  }
+  lines.push('')
+
+  lines.push('## KPI Set')
+  for (const kpi of blueprint.kpis) {
+    lines.push(`- ${kpi.metric} | target: ${kpi.target} | cadence: ${kpi.cadence}`)
+  }
+  lines.push('')
+
+  lines.push('## Risk Controls')
+  for (const risk of blueprint.risks) {
+    lines.push(`- Risk: ${risk.risk}`)
+    lines.push(`  - Trigger: ${risk.trigger}`)
+    lines.push(`  - Guardrail: ${risk.guardrail}`)
+  }
+  lines.push('')
+
+  lines.push('## Handoff Checklist')
+  for (const item of blueprint.handoffChecklist) {
+    lines.push(`- ${item}`)
+  }
+  lines.push('')
+
+  if (blueprint.matchedProject) {
+    lines.push(`Implementation Anchor: ${blueprint.matchedProject.name}`)
+  }
+  if (blueprint.matchedPublication) {
+    lines.push(`Evidence Anchor: ${blueprint.matchedPublication.title}`)
+  }
+
+  return lines.join('\n')
 }
 
 export function createDecisionBlueprint(
@@ -381,17 +607,19 @@ export function createDecisionBlueprint(
 ): DecisionBlueprint {
   const playbook = PLAYBOOKS[input.challenge]
   const context = cleanContext(input.context)
-  const systemDirection = playbook.directionByGoal[input.goal]
   const contextSuffix = context ? ` Applied context: ${context}.` : ''
 
   return {
     challengeTitle: playbook.title,
     decisionQuestion: playbook.question,
     valueStatement: `${playbook.value}${contextSuffix}`,
-    systemDirection,
-    automationLoop: buildAutomationLoop(input.goal, input.risk),
+    systemDirection: playbook.directionByGoal[input.goal],
+    automationLoop: buildAutomationLoop(playbook, input.goal, input.risk),
     successMetric: playbook.successByGoal[input.goal],
+    immediateActions: buildImmediateActions(playbook, input.goal),
     executionPlan: buildExecutionPlan(input.goal, input.horizon, input.risk),
+    kpis: buildKpis(playbook, input.goal),
+    risks: buildRiskControls(playbook, input.horizon, input.risk),
     handoffChecklist: buildHandoffChecklist(input.goal, input.risk),
     matchedProject: findBestProject(data.projects, playbook.matchTerms),
     matchedPublication: findBestPublication(data.publications, playbook.matchTerms),
