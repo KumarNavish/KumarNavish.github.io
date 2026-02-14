@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { MermaidDiagram } from './components/MermaidDiagram'
 import { loadCategoryCatalog, loadIntakeSamples } from './domain/loadData'
-import { runIntakePipeline } from './domain/pipeline'
+import { runIntakePipeline, type PipelineResult } from './domain/pipeline'
 import type { CategoryCatalog, IntakeSample } from './domain/types'
 
 interface ImpactRationale {
@@ -18,13 +18,13 @@ interface DispatchRecord {
   destinations: string[]
 }
 
-type StepState = 'pending' | 'active' | 'done'
-
-const STEPS = [
-  'Analyze intake request',
-  'Generate automation pack',
-  'Prepare delivery payloads',
-] as const
+interface AutomationNarrative {
+  title: string
+  manualWorkflow: string
+  businessPain: string[]
+  automatedChange: string[]
+  impactSummary: string
+}
 
 function metricToText(value: string | number | null | undefined): string {
   if (value === null || value === undefined) {
@@ -46,7 +46,7 @@ function nextPaint(): Promise<void> {
   })
 }
 
-function buildImpactRationale(result: ReturnType<typeof runIntakePipeline>): ImpactRationale {
+function buildImpactRationale(result: PipelineResult): ImpactRationale {
   const monthlyVolume =
     result.extracted.volume_per_month ?? result.sample.ground_truth.volume_per_month ?? null
   const cycleTimeDays =
@@ -68,6 +68,72 @@ function buildImpactRationale(result: ReturnType<typeof runIntakePipeline>): Imp
   }
 }
 
+function findCategoryDescription(catalog: CategoryCatalog | null, categoryId: string): string {
+  const entry = catalog?.categories.find((category) => category.id === categoryId)
+  return entry?.description ?? prettyCategory(categoryId)
+}
+
+function buildPreRunNarrative(
+  sample: IntakeSample | null,
+  catalog: CategoryCatalog | null,
+): AutomationNarrative {
+  if (!sample) {
+    return {
+      title: 'Automation Preview',
+      manualWorkflow: 'Select a scenario to show how the intake workflow is automated.',
+      businessPain: ['Cycle-time delays', 'Manual rework and handoff risk', 'No standard output'],
+      automatedChange: [
+        'Auto-triage of intake text',
+        'Instant charter + process map + blueprint',
+        'Export payloads for delivery systems',
+      ],
+      impactSummary: 'Click Start demo to generate the automation pack now.',
+    }
+  }
+
+  const baselineCycle = metricToText(sample.ground_truth.baseline_cycle_time_days)
+  const volume = metricToText(sample.ground_truth.volume_per_month)
+  const categoryDescription = findCategoryDescription(catalog, sample.ground_truth.category)
+
+  return {
+    title: 'What will be automated',
+    manualWorkflow: `${sample.title} currently runs through ${prettyCategory(sample.channel)} intake, manual routing, and follow-ups. ${categoryDescription}`,
+    businessPain: [
+      `Cycle time is ${baselineCycle} days with inconsistent handoffs.`,
+      `Volume is about ${volume} requests per month, creating repetitive triage work.`,
+      `Risk level is ${prettyCategory(sample.ground_truth.risk_level)} because controls depend on manual checks.`,
+    ],
+    automatedChange: [
+      `Classify and prioritize as ${prettyCategory(sample.ground_truth.category)} automatically.`,
+      'Generate a project charter, as-is/to-be process maps, and automation blueprint.',
+      'Prepare copy-ready payloads for Jira, ServiceNow, and process tracking.',
+    ],
+    impactSummary: 'Click Start demo. The transformation appears here immediately.',
+  }
+}
+
+function buildPostRunNarrative(result: PipelineResult): AutomationNarrative {
+  const baselineCycle = metricToText(result.charter.baseline_metrics.cycle_time_days)
+  const targetCycle = metricToText(result.charter.target_metrics.cycle_time_days_target)
+  const volume = metricToText(result.charter.baseline_metrics.volume_per_month)
+
+  return {
+    title: 'Automation Completed',
+    manualWorkflow: `Before: ${result.sample.title} required ${result.extracted.manual_step_count} manual touchpoints and coordination across ${result.extracted.key_systems.length || 1} systems.`,
+    businessPain: [
+      `Delay: baseline cycle time ${baselineCycle} days.`,
+      `Rework: monthly load ${volume} requests with repeated approval/routing tasks.`,
+      `Risk: ${prettyCategory(result.triage.risk_level)} due to manual controls and handoffs.`,
+    ],
+    automatedChange: [
+      `Auto-triaged to ${prettyCategory(result.triage.category)} with ${result.triage.priority} priority.`,
+      'Generated charter + process map + automation blueprint in one run.',
+      'Prepared export payloads for Jira, ServiceNow, and tracker updates.',
+    ],
+    impactSummary: `After: target cycle time ${targetCycle} days and estimated savings ${result.triage.est_savings_hours_per_month} hours/month.`,
+  }
+}
+
 function App() {
   const [samples, setSamples] = useState<IntakeSample[]>([])
   const [catalog, setCatalog] = useState<CategoryCatalog | null>(null)
@@ -77,8 +143,8 @@ function App() {
   const [result, setResult] = useState<ReturnType<typeof runIntakePipeline> | null>(null)
   const [impactRationale, setImpactRationale] = useState<ImpactRationale | null>(null)
 
-  const [activeStepIndex, setActiveStepIndex] = useState<number>(-1)
   const [isRunning, setIsRunning] = useState(false)
+  const [runPhase, setRunPhase] = useState<string | null>(null)
   const [copyStatus, setCopyStatus] = useState<string | null>(null)
   const [dispatchStatus, setDispatchStatus] = useState<string | null>(null)
   const [dispatchLog, setDispatchLog] = useState<DispatchRecord[]>([])
@@ -116,31 +182,23 @@ function App() {
     }
   }
 
-  function stepState(index: number): StepState {
-    if (activeStepIndex < 0) {
-      return 'pending'
-    }
-    if (index < activeStepIndex) {
-      return 'done'
-    }
-    if (index === activeStepIndex) {
-      return isRunning ? 'active' : 'done'
-    }
-    return 'pending'
-  }
+  const automationNarrative = useMemo(
+    () => (result ? buildPostRunNarrative(result) : buildPreRunNarrative(selectedSample, catalog)),
+    [catalog, result, selectedSample],
+  )
 
   const hintText = useMemo(() => {
     if (error) {
       return 'Data could not be loaded. Refresh once the source is available.'
     }
     if (isRunning) {
-      return `Running step ${Math.min(activeStepIndex + 1, STEPS.length)} of ${STEPS.length}...`
+      return runPhase ?? 'Generating automation pack...'
     }
     if (!result) {
       return 'Choose a scenario and click Start demo.'
     }
-    return 'Automation completed. The transformed workflow is shown below.'
-  }, [activeStepIndex, error, isRunning, result])
+    return 'Automation completed. Your business-ready artifacts are ready below.'
+  }, [error, isRunning, result, runPhase])
 
   async function runPipeline() {
     if (!selectedSample || !catalog) {
@@ -158,19 +216,22 @@ function App() {
     setCopyStatus(null)
     setDispatchStatus(null)
     setIsRunning(true)
-    setActiveStepIndex(0)
+    setRunPhase('Analyzing intake request')
 
     await nextPaint()
 
-    setActiveStepIndex(1)
+    setRunPhase('Generating charter, process map, and blueprint')
     const nextResult = runIntakePipeline(sampleForRun, catalog)
     setResult(nextResult)
     setImpactRationale(buildImpactRationale(nextResult))
 
     await nextPaint()
 
-    setActiveStepIndex(2)
+    setRunPhase('Preparing export payloads for delivery systems')
+    await nextPaint()
+
     setIsRunning(false)
+    setRunPhase(null)
   }
 
   async function copyJson(label: string, payload: unknown) {
@@ -238,52 +299,38 @@ function App() {
         </button>
 
         <p className="hint-text">{hintText}</p>
-        {result ? (
-          <section className="automation-moment" aria-live="polite">
-            <h3>Automation Moment: What Changed Just Now</h3>
-            <div className="moment-grid">
-              <article>
-                <h4>Manual workflow before</h4>
-                <p>
-                  Request handling depended on manual triage, {result.extracted.manual_step_count}{' '}
-                  touchpoints, and status chasing across tools.
-                </p>
-              </article>
-              <article>
-                <h4>Problem it caused</h4>
-                <ul>
-                  <li>
-                    Cycle time: {metricToText(result.charter.baseline_metrics.cycle_time_days)} days
-                  </li>
-                  <li>Risk exposure: {prettyCategory(result.triage.risk_level)}</li>
-                  <li>
-                    Monthly volume: {metricToText(result.charter.baseline_metrics.volume_per_month)}
-                  </li>
-                </ul>
-              </article>
-              <article>
-                <h4>Automated now</h4>
-                <ul>
-                  <li>Auto-triaged to {prettyCategory(result.triage.category)}</li>
-                  <li>Generated charter + process map + blueprint + export payloads</li>
-                  <li>Estimated savings: {result.triage.est_savings_hours_per_month} hours/month</li>
-                </ul>
-              </article>
-            </div>
-          </section>
-        ) : null}
+        <section className="automation-moment" aria-live="polite">
+          <p className="moment-tag">{automationNarrative.title}</p>
+          <h3>From manual workflow to automated delivery</h3>
+          <div className="moment-grid">
+            <article>
+              <h4>1. Manual workflow today</h4>
+              <p>{automationNarrative.manualWorkflow}</p>
+            </article>
+            <article>
+              <h4>2. Problem it causes</h4>
+              <ul>
+                {automationNarrative.businessPain.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </article>
+            <article>
+              <h4>3. What was automated</h4>
+              <ul>
+                {automationNarrative.automatedChange.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </article>
+          </div>
+          <p className="moment-impact">
+            <strong>Automation impact:</strong> {automationNarrative.impactSummary}
+          </p>
+        </section>
         {error ? <p className="error-text">{error}</p> : null}
         {copyStatus ? <p className="status-text">{copyStatus}</p> : null}
         {dispatchStatus ? <p className="status-text success-text">{dispatchStatus}</p> : null}
-
-        <ol className="step-track">
-          {STEPS.map((step, index) => (
-            <li key={step} className={`step-pill ${stepState(index)}`}>
-              <span>{index + 1}</span>
-              {step}
-            </li>
-          ))}
-        </ol>
       </section>
 
       {!result ? (
