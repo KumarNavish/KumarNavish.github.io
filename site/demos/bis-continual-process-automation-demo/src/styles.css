@@ -160,29 +160,38 @@ button:disabled {
 
 .automation-moment {
   margin-top: 0.7rem;
-  border: 1px solid #cddbf0;
+  border: 1px solid #9db6da;
   border-radius: 12px;
-  background: #eef4ff;
-  padding: 0.72rem;
+  background: linear-gradient(180deg, #edf4ff 0%, #f8fbff 100%);
+  padding: 0.78rem;
   animation: reveal 220ms ease-out;
 }
 
-.automation-moment h3 {
+.moment-tag {
   margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #365988;
+}
+
+.automation-moment h3 {
+  margin: 0.22rem 0 0;
 }
 
 .moment-grid {
-  margin-top: 0.55rem;
+  margin-top: 0.52rem;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.45rem;
+  gap: 0.5rem;
 }
 
 .moment-grid article {
-  border: 1px solid #d2def0;
+  border: 1px solid #cddbee;
   border-radius: 10px;
   background: #f8fbff;
-  padding: 0.55rem;
+  padding: 0.6rem;
 }
 
 .moment-grid article p {
@@ -200,57 +209,11 @@ button:disabled {
   color: #2f4c77;
 }
 
-.step-track {
-  list-style: none;
-  margin: 0.75rem 0 0;
-  padding: 0;
-  display: grid;
-  gap: 0.45rem;
-}
-
-.step-pill {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0.55rem;
-  align-items: center;
-  border: 1px solid #d5deeb;
-  border-radius: 10px;
-  background: #f5f8fd;
-  padding: 0.45rem 0.55rem;
-  font-size: 0.88rem;
-  color: #36537f;
-}
-
-.step-pill span {
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 999px;
-  background: #dfe8f7;
-  color: #2c486f;
-  display: grid;
-  place-items: center;
-  font-size: 0.78rem;
-  font-weight: 700;
-}
-
-.step-pill.active {
-  border-color: #7f98c0;
-  background: #e8eef9;
-}
-
-.step-pill.active span {
-  background: #2f568e;
-  color: #fff;
-}
-
-.step-pill.done {
-  border-color: #8aac8d;
-  background: #edf7ec;
-}
-
-.step-pill.done span {
-  background: #427a47;
-  color: #fff;
+.moment-impact {
+  margin-top: 0.62rem;
+  border-top: 1px solid #cddbee;
+  padding-top: 0.56rem;
+  color: #23446f;
 }
 
 .placeholder-panel {
