@@ -352,6 +352,12 @@ function App() {
   const previewManualSteps = estimateManualSteps(requestText || selectedSample?.text || '')
   const beforeManualSteps = result?.extracted.manual_step_count ?? previewManualSteps
   const afterManualSteps = result ? Math.max(2, Math.min(beforeManualSteps, result.blueprint.steps.length)) : null
+  const leadTimeReduction = impactSnapshot?.leadTimeReductionPct ?? null
+  const outcomeHeadline = result
+    ? `${impactSnapshot?.monthlyHoursSaved ?? 0} hours/month saved, ${
+        leadTimeReduction ?? 0
+      }% faster cycle`
+    : null
 
   const jiraFields =
     result && typeof result.exports.jira_issue_create.fields === 'object'
@@ -483,15 +489,15 @@ function App() {
     <main className="page-shell">
       <header className="hero">
         <p className="eyebrow">BIS Process Optimisation Copilot</p>
-        <h1>Turn a messy BIS request into an execution-ready automation packet.</h1>
+        <h1>From messy request to ready automation plan in one click.</h1>
         <p className="hero-subtitle">
-          Start once. Get a project charter, before/after process maps, automation blueprint, and export payloads.
+          Pick a real operations request, run automation, and export actionable payloads for execution tools.
         </p>
       </header>
 
       <section className="panel workspace-panel">
         <section className="control-pane">
-          <h2>1. Choose request</h2>
+          <h2>1. Pick workflow</h2>
 
           <section className="example-picker">
             <label htmlFor="example-select">Use case</label>
@@ -524,12 +530,12 @@ function App() {
           </details>
 
           <button className="primary-btn" onClick={() => void runPipeline()} disabled={!selectedSample || isRunning}>
-            {isRunning ? 'Running...' : 'Start demo'}
+            {isRunning ? 'Running...' : 'Run automation'}
           </button>
 
           {result ? (
             <button className="secondary-btn export-btn" onClick={() => exportTicketBundle()}>
-              Export Jira + ServiceNow payloads
+              Download export bundle
             </button>
           ) : null}
 
@@ -543,6 +549,7 @@ function App() {
             <header className="moment-header">
               <p className="label">Automation moment</p>
               <h2>Before and after in one run</h2>
+              {outcomeHeadline ? <p className="moment-headline">{outcomeHeadline}</p> : null}
             </header>
             <div className="moment-grid">
               <article className="moment-card before-card">
@@ -575,10 +582,9 @@ function App() {
                 {result ? (
                   <>
                     <ul className="outcome-list">
-                      <li>Project charter generated</li>
-                      <li>As-is and to-be process maps generated</li>
-                      <li>Automation blueprint generated</li>
-                      <li>Jira and ServiceNow payloads generated</li>
+                      <li>Charter drafted with baseline and target metrics</li>
+                      <li>Future-state flow and controls generated</li>
+                      <li>Jira + ServiceNow payloads prepared for handoff</li>
                     </ul>
                     <div className="impact-strip">
                       <article className="metric-pill">
@@ -618,8 +624,9 @@ function App() {
             <>
               <section className="executive-card">
                 <p className="card-kicker">Your outputs</p>
-                <h2>Execution packet ready to send</h2>
+                <h2>Execution packet ready</h2>
                 <p className="exec-summary">{result.charter.problem_statement}</p>
+                {outcomeHeadline ? <p className="exec-value">{outcomeHeadline}</p> : null}
                 <div className="summary-row">
                   <article className="summary-card">
                     <span>Category</span>
@@ -645,10 +652,10 @@ function App() {
                 </ol>
                 <div className="actions-row">
                   <button className="primary-btn" onClick={() => exportTicketBundle()}>
-                    Export Jira + ServiceNow payloads
+                    Download export bundle
                   </button>
                   <button className="secondary-btn" onClick={() => void copyFullPack()}>
-                    Copy full packet JSON
+                    Copy full packet
                   </button>
                 </div>
                 <p className="integration-note">
