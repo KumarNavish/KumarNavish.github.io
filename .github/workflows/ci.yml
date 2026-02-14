@@ -17,11 +17,21 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: pipeline/pyproject.toml
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: site/package-lock.json
+
+      - name: Validate registry schema
+        run: make pipe-validate-registry
+
+      - name: Typecheck frontend
+        run: make site-typecheck
 
       - name: Run quality gates
         run: make check
