@@ -36,16 +36,16 @@ type ArtifactTab = 'charter' | 'map' | 'exports'
 
 const DEMO_PHASES: DemoPhase[] = [
   {
-    label: 'Read intake request',
-    detail: 'Interpreting the request and extracting bottlenecks...',
+    label: 'Read request',
+    detail: 'Reading the request text...',
   },
   {
-    label: 'Diagnose business impact',
-    detail: 'Estimating delay, risk, and manual effort from the intake text...',
+    label: 'Find pain points',
+    detail: 'Finding delay, rework, and risk...',
   },
   {
-    label: 'Generate automation pack',
-    detail: 'Building charter, process map, blueprint, and export payloads...',
+    label: 'Create outputs',
+    detail: 'Creating summary, flow map, and export files...',
   },
 ]
 
@@ -116,15 +116,15 @@ function buildPreRunNarrative(
 ): AutomationNarrative {
   if (!sample) {
     return {
-      title: 'Automation preview',
-      manualWorkflow: 'Pick a scenario to preview the manual workflow before automation.',
-      businessPain: ['Cycle-time delay', 'Manual rework across teams', 'Control and compliance risk'],
+      title: 'Before and after preview',
+      manualWorkflow: 'Choose an example to preview the manual process.',
+      businessPain: ['Slow turnaround', 'Repetitive manual work', 'Higher risk from manual checks'],
       automatedChange: [
-        'Auto-triage from messy request text',
-        'Instant charter + process map + blueprint',
-        'Delivery payloads for Jira, ServiceNow, and trackers',
+        'Reads messy request text',
+        'Builds a clear project summary and flow map',
+        'Prepares export JSON for internal tools',
       ],
-      impactSummary: 'Click Start demo to run the full transformation.',
+      impactSummary: 'Click Run automation to see the transformation.',
     }
   }
 
@@ -133,19 +133,19 @@ function buildPreRunNarrative(
   const categoryDescription = findCategoryDescription(catalog, sample.ground_truth.category)
 
   return {
-    title: 'What will be automated',
-    manualWorkflow: `${sample.title} currently relies on manual intake, routing, approvals, and follow-up loops. ${categoryDescription}`,
+    title: 'What will change',
+    manualWorkflow: `${sample.title} is currently handled with manual routing, approvals, and follow-ups. ${categoryDescription}`,
     businessPain: [
-      `Delay: average cycle time is ${baselineCycle} days.`,
-      `Rework: around ${volume} requests per month require repeated triage and handoffs.`,
-      `Risk: ${prettyCategory(sample.ground_truth.risk_level)} due to manual control checks.`,
+      `Delay: about ${baselineCycle} days per request.`,
+      `Rework: around ${volume} requests each month need repeated handoffs.`,
+      `Risk: ${prettyCategory(sample.ground_truth.risk_level)} risk because checks are manual.`,
     ],
     automatedChange: [
-      `Auto-classify and prioritize into ${prettyCategory(sample.ground_truth.category)}.`,
-      'Generate charter, to-be process map, and automation blueprint in one run.',
-      'Prepare export-ready payloads for delivery systems.',
+      `Auto-sorts this as ${prettyCategory(sample.ground_truth.category)}.`,
+      'Creates summary + flow map in one run.',
+      'Prepares export JSON you can copy into delivery tools.',
     ],
-    impactSummary: 'Press Start demo. The workflow transformation appears here immediately.',
+    impactSummary: 'Press Run automation. The before/after result appears here.',
   }
 }
 
@@ -155,19 +155,19 @@ function buildPostRunNarrative(result: PipelineResult): AutomationNarrative {
   const volume = metricToText(result.charter.baseline_metrics.volume_per_month)
 
   return {
-    title: 'Automation completed',
-    manualWorkflow: `Before automation, this workflow required ${result.extracted.manual_step_count} manual touchpoints and fragmented tracking across teams and systems.`,
+    title: 'Automation complete',
+    manualWorkflow: `Before: this workflow needed ${result.extracted.manual_step_count} manual touchpoints and cross-team follow-up.`,
     businessPain: [
-      `Delay: baseline cycle time ${baselineCycle} days.`,
-      `Rework: ${volume} requests per month with repetitive triage and approvals.`,
-      `Risk: ${prettyCategory(result.triage.risk_level)} from manual control execution.`,
+      `Delay: ${baselineCycle} day baseline cycle time.`,
+      `Rework: ${volume} requests per month with repeated approvals.`,
+      `Risk: ${prettyCategory(result.triage.risk_level)} risk from manual controls.`,
     ],
     automatedChange: [
-      `Auto-triaged to ${prettyCategory(result.triage.category)} with ${result.triage.priority} priority.`,
-      'Generated charter + process map + automation blueprint in one action.',
-      'Prepared export payloads for Jira, ServiceNow, and process tracking.',
+      `Auto-sorted to ${prettyCategory(result.triage.category)} with ${result.triage.priority} priority.`,
+      'Built a clear summary, flow map, and automation plan.',
+      'Prepared export JSON for Jira, ServiceNow, and tracking.',
     ],
-    impactSummary: `Cycle time target is now ${targetCycle} days with estimated savings of ${result.triage.est_savings_hours_per_month} hours per month.`,
+    impactSummary: `After: target cycle time ${targetCycle} days and estimated savings ${result.triage.est_savings_hours_per_month} hours per month.`,
   }
 }
 
@@ -243,15 +243,15 @@ function App() {
 
   const hintText = useMemo(() => {
     if (error) {
-      return 'Data could not be loaded. Refresh once the source is available.'
+      return 'Could not load data. Please refresh.'
     }
     if (isRunning) {
       return DEMO_PHASES[activePhaseIndex]?.detail ?? 'Running automation...'
     }
     if (!result) {
-      return 'Select a workflow and click Start demo.'
+      return 'Choose an example and click Run automation.'
     }
-    return 'Automation complete. Review and export the deliverables below.'
+    return 'Done. Scroll to view and copy your outputs.'
   }, [activePhaseIndex, error, isRunning, result])
 
   function handleSampleChange(sampleId: string) {
@@ -349,21 +349,29 @@ function App() {
     <main className="page-shell">
       <header className="hero">
         <p className="eyebrow">BIS Process Optimisation Copilot</p>
-        <h1>Turn one messy process request into a delivery-ready automation pack in seconds.</h1>
+        <h1>Paste a messy request. Get a clear automation plan.</h1>
         <p className="hero-subhead">
-          The demo automates a real BIS-style intake workflow: triage the request, standardize it
-          into charter + process map + blueprint, then export payloads for delivery systems.
+          This tool turns a manual process request into three practical outputs: summary, flow map,
+          and export JSON.
         </p>
       </header>
+
+      {hasResult ? (
+        <section className="panel outcome-banner" aria-live="polite">
+          <p>
+            Automation finished: manual intake was converted into a ready-to-use process pack.
+          </p>
+        </section>
+      ) : null}
 
       <section className="panel intake-panel">
         <div className="intake-layout">
           <section className="intake-controls">
-            <h2>Start here</h2>
-            <p className="control-caption">One-click flow: pick scenario, run automation, export artifacts.</p>
+            <h2>Try it</h2>
+            <p className="control-caption">Pick an example, edit if needed, then click Run automation.</p>
 
             <label>
-              Workflow scenario
+              Choose an example
               <select value={selectedSampleId} onChange={(event) => handleSampleChange(event.target.value)}>
                 {samples.map((sample) => (
                   <option key={sample.id} value={sample.id}>
@@ -374,7 +382,7 @@ function App() {
             </label>
 
             <label>
-              Intake request
+              Request text
               <textarea
                 value={requestText}
                 onChange={(event) => setRequestText(event.target.value)}
@@ -383,7 +391,7 @@ function App() {
             </label>
 
             <button className="primary-btn" onClick={() => void runPipeline()} disabled={!selectedSample || isRunning}>
-              {isRunning ? 'Automating...' : 'Start demo'}
+              {isRunning ? 'Running...' : 'Run automation'}
             </button>
 
             <p className="hint-text">{hintText}</p>
@@ -392,34 +400,34 @@ function App() {
             {dispatchStatus ? <p className="status-text success-text">{dispatchStatus}</p> : null}
 
             <section className="next-step-card">
-              <p className="next-step-tag">Next step</p>
+              <p className="next-step-tag">What to do next</p>
               {hasResult ? (
                 <>
-                  <p>Open deliverables and copy or dispatch what you need.</p>
+                  <p>Open outputs and copy what you need.</p>
                   <div className="inline-actions">
                     <button className="secondary-btn" onClick={openDeliverables}>
-                      Open deliverables
+                      Open outputs
                     </button>
                     <button className="secondary-btn" onClick={() => setActiveTab('exports')}>
-                      Jump to exports
+                      Go to exports
                     </button>
                   </div>
                 </>
               ) : (
-                <p>Click Start demo to generate charter, process map, and export payloads.</p>
+                <p>Click Run automation to generate the outputs.</p>
               )}
             </section>
           </section>
 
           <section className="magic-panel" aria-live="polite">
             <p className="moment-tag">{automationNarrative.title}</p>
-            <h2>The automation moment</h2>
+            <h2>See what changed</h2>
             <p className="magic-lede">{automationNarrative.impactSummary}</p>
 
             <div className="magic-main">
               <article className="state-card before-state">
-                <h3>Before</h3>
-                <p className="state-caption">Manual workflow</p>
+                <h3>Before (manual)</h3>
+                <p className="state-caption">How the work happened before</p>
                 <p>{automationNarrative.manualWorkflow}</p>
                 <ul>
                   {automationNarrative.businessPain.map((line) => (
@@ -429,7 +437,7 @@ function App() {
               </article>
 
               <div className="transform-center">
-                <p className="transform-label">Transformation</p>
+                <p className="transform-label">Automation in progress</p>
                 <div className="progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={runProgress}>
                   <span style={{ width: `${runProgress}%` }} />
                 </div>
@@ -447,8 +455,8 @@ function App() {
               </div>
 
               <article className="state-card after-state">
-                <h3>After</h3>
-                <p className="state-caption">Automated output</p>
+                <h3>After (automated)</h3>
+                <p className="state-caption">What the tool produced</p>
                 {hasResult ? (
                   <>
                     <ul>
@@ -464,14 +472,14 @@ function App() {
                       </span>
                     </div>
                     <button className="secondary-btn inline-open-btn" onClick={openDeliverables}>
-                      View delivery-ready outputs
+                      View outputs
                     </button>
                   </>
                 ) : (
                   <>
                     <p>
-                      Click <strong>Start demo</strong> to convert the intake text into charter,
-                      process map, blueprint, and export payloads.
+                      Click <strong>Run automation</strong> to convert this request into ready-to-use
+                      outputs.
                     </p>
                     <p className="preview-text">Preview: {excerpt(requestText)}</p>
                   </>
@@ -484,24 +492,23 @@ function App() {
 
       {!result ? (
         <section className="panel placeholder-panel">
-          <h2>Automation pack</h2>
+          <h2>Your outputs</h2>
           <p>
-            Your charter, process map, blueprint, and export payloads will appear here right after
-            the run.
+            Summary, flow map, and export JSON will appear here right after the run.
           </p>
         </section>
       ) : (
         <section className="panel pack-panel" ref={packSectionRef}>
-          <h2>Delivery-ready outputs</h2>
-          <p className="pack-subhead">Use tabs to move through the pack in a simple sequence.</p>
+          <h2>Your outputs</h2>
+          <p className="pack-subhead">Read left to right: summary, flow map, then exports.</p>
 
           <div className="kpi-grid">
             <article>
-              <span>Predicted workflow</span>
+              <span>Workflow type</span>
               <strong>{prettyCategory(result.triage.category)}</strong>
             </article>
             <article>
-              <span>Risk level</span>
+              <span>Risk</span>
               <strong>{prettyCategory(result.triage.risk_level)}</strong>
             </article>
             <article>
@@ -509,7 +516,7 @@ function App() {
               <strong>{result.triage.priority}</strong>
             </article>
             <article>
-              <span>Savings (hrs/month)</span>
+              <span>Hours saved / month</span>
               <strong>{result.triage.est_savings_hours_per_month}</strong>
             </article>
           </div>
@@ -521,7 +528,7 @@ function App() {
               aria-selected={activeTab === 'charter'}
               onClick={() => setActiveTab('charter')}
             >
-              1. Charter
+              1. Summary
             </button>
             <button
               className={`tab-btn ${activeTab === 'map' ? 'active' : ''}`}
@@ -529,7 +536,7 @@ function App() {
               aria-selected={activeTab === 'map'}
               onClick={() => setActiveTab('map')}
             >
-              2. Process Map
+              2. Flow Map
             </button>
             <button
               className={`tab-btn ${activeTab === 'exports' ? 'active' : ''}`}
@@ -537,19 +544,19 @@ function App() {
               aria-selected={activeTab === 'exports'}
               onClick={() => setActiveTab('exports')}
             >
-              3. Exports
+              3. Export JSON
             </button>
           </div>
 
           <section className="artifact-panel">
             {activeTab === 'charter' ? (
               <section className="artifact-card">
-                <h3>Charter</h3>
+                <h3>Summary</h3>
                 <p>
                   <strong>Problem:</strong> {result.charter.problem_statement}
                 </p>
                 <p>
-                  <strong>Next action:</strong> {result.triage.next_action}
+                  <strong>Recommended next action:</strong> {result.triage.next_action}
                 </p>
                 <ul className="metric-list">
                   <li>Baseline cycle time: {metricToText(result.charter.baseline_metrics.cycle_time_days)}</li>
@@ -560,10 +567,10 @@ function App() {
                 </ul>
                 <div className="inline-actions">
                   <button className="secondary-btn" onClick={() => copyJson('Charter JSON', result.charter)}>
-                    Copy charter JSON
+                    Copy summary JSON
                   </button>
                   <button className="secondary-btn" onClick={() => setActiveTab('map')}>
-                    Next: Process map
+                    Next: Flow map
                   </button>
                 </div>
               </section>
@@ -571,15 +578,15 @@ function App() {
 
             {activeTab === 'map' ? (
               <section className="artifact-card">
-                <h3>To-be process map</h3>
+                <h3>Flow map</h3>
                 <MermaidDiagram title="Optimized workflow" chart={result.toBeMermaid} />
                 <div className="inline-actions">
                   <button className="secondary-btn" onClick={() => setActiveTab('exports')}>
-                    Next: Export payloads
+                    Next: Export JSON
                   </button>
                 </div>
                 <details className="advanced-block">
-                  <summary>Show as-is flow</summary>
+                  <summary>Show current flow (raw)</summary>
                   <pre>{result.asIsMermaid}</pre>
                 </details>
               </section>
@@ -587,25 +594,25 @@ function App() {
 
             {activeTab === 'exports' ? (
               <section className="artifact-card">
-                <h3>Export payloads</h3>
+                <h3>Export JSON</h3>
                 <div className="button-column">
                   <button className="secondary-btn" onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}>
-                    Copy Jira payload
+                    Copy Jira JSON
                   </button>
                   <button
                     className="secondary-btn"
                     onClick={() => copyJson('ServiceNow payload', result.exports.servicenow_record_create)}
                   >
-                    Copy ServiceNow payload
+                    Copy ServiceNow JSON
                   </button>
                   <button className="secondary-btn" onClick={() => copyJson('Tracker payload', result.exports.process_tracker_row)}>
-                    Copy tracker payload
+                    Copy tracker JSON
                   </button>
                   <button className="secondary-btn" onClick={() => copyJson('Blueprint JSON', result.blueprint)}>
-                    Copy blueprint JSON
+                    Copy automation plan JSON
                   </button>
                   <button className="primary-btn" onClick={sendToDeliveryQueue}>
-                    Send pack to delivery queue
+                    Send package
                   </button>
                 </div>
 
@@ -624,7 +631,7 @@ function App() {
           </section>
 
           <details className="advanced-block">
-            <summary>Advanced details</summary>
+            <summary>Technical details (optional)</summary>
             <p>
               Estimated from {impactRationale?.manual_steps ?? 'n/a'} manual touchpoints, volume{' '}
               {metricToText(impactRationale?.monthly_volume)}, cycle time{' '}

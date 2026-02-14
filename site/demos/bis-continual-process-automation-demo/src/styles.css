@@ -24,17 +24,17 @@ body {
 
 .hero,
 .panel {
-  border: 1px solid #d9e1eb;
-  border-radius: 16px;
+  border: 1px solid #d6dfeb;
+  border-radius: 14px;
   background: #fff;
 }
 
 .hero {
-  padding: 1.25rem 1.3rem;
+  padding: 1.4rem 1.4rem;
 }
 
 .panel {
-  padding: 1rem;
+  padding: 1.05rem;
 }
 
 .eyebrow {
@@ -54,10 +54,22 @@ h1 {
 }
 
 .hero-subhead {
-  margin: 0.65rem 0 0;
-  max-width: 980px;
-  color: #3f5a80;
-  line-height: 1.45;
+  margin: 0.72rem 0 0;
+  max-width: 860px;
+  color: #355077;
+  line-height: 1.5;
+}
+
+.outcome-banner {
+  border-color: #abd4b8;
+  background: #f1faef;
+  padding: 0.72rem 0.9rem;
+}
+
+.outcome-banner p {
+  margin: 0;
+  color: #1f5d34;
+  font-weight: 600;
 }
 
 h2 {
@@ -147,9 +159,9 @@ button:disabled {
 }
 
 .control-caption {
-  margin-top: 0.35rem;
-  color: #4a668f;
-  font-size: 0.84rem;
+  margin-top: 0.4rem;
+  color: #3c5b86;
+  font-size: 0.86rem;
 }
 
 .intake-controls .primary-btn {
@@ -188,10 +200,8 @@ button:disabled {
 
 .next-step-tag {
   margin: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 0.69rem;
-  color: #496991;
+  font-size: 0.78rem;
+  color: #31557f;
   font-weight: 700;
 }
 
@@ -205,17 +215,16 @@ button:disabled {
 
 .moment-tag {
   margin: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 0.68rem;
+  font-size: 0.76rem;
   font-weight: 700;
-  color: #365988;
+  color: #2f5886;
 }
 
 .magic-lede {
-  margin-top: 0.36rem;
+  margin-top: 0.42rem;
   color: #2d4d78;
-  font-size: 0.92rem;
+  font-size: 0.98rem;
+  font-weight: 540;
 }
 
 .magic-main {
@@ -236,10 +245,8 @@ button:disabled {
 
 .state-caption {
   margin: 0;
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #53719a;
+  font-size: 0.82rem;
+  color: #4c6990;
 }
 
 .state-card p {
@@ -274,10 +281,9 @@ button:disabled {
 
 .transform-label {
   margin: 0;
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-size: 0.8rem;
   color: #4b6790;
+  font-weight: 600;
 }
 
 .progress-track {
@@ -426,8 +432,8 @@ button:disabled {
   background: #f3f7ff;
   border: 1px solid #cfdbed;
   color: #2f4e7c;
-  padding: 0.36rem 0.62rem;
-  font-size: 0.82rem;
+  padding: 0.42rem 0.72rem;
+  font-size: 0.86rem;
 }
 
 .tab-btn.active {
@@ -495,7 +501,7 @@ button:disabled {
 
 .advanced-block summary {
   cursor: pointer;
-  color: #2a4670;
+  color: #2b4a75;
   font-weight: 620;
 }
 
