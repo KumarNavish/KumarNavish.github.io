@@ -527,7 +527,7 @@ function App() {
                 </button>
               </header>
 
-              <div className="summary-row four-up">
+              <div className="summary-row">
                 <article className="summary-card">
                   <span>Lead Time</span>
                   <strong>
@@ -535,27 +535,26 @@ function App() {
                   </strong>
                 </article>
                 <article className="summary-card">
-                  <span>Reduction</span>
-                  <strong>{impactSnapshot.leadTimeReductionPct ?? 0}%</strong>
+                  <span>Hours Saved / Month</span>
+                  <strong>{impactSnapshot.monthlyHoursSaved}h</strong>
                 </article>
                 <article className="summary-card">
-                  <span>Sigma</span>
+                  <span>Quality Shift</span>
                   <strong>
                     {sigmaSnapshot.baselineSigma} to {sigmaSnapshot.targetSigma}
                   </strong>
                 </article>
-                <article className="summary-card">
-                  <span>DPMO</span>
-                  <strong>
-                    {sigmaSnapshot.baselineDPMO.toLocaleString()} to{' '}
-                    {sigmaSnapshot.targetDPMO.toLocaleString()}
-                  </strong>
-                </article>
               </div>
 
-              <section className="dmaic-grid">
-                <article className="dmaic-card">
-                  <p className="card-kicker">Define</p>
+              <section className="dmaic-flow">
+                <article className="dmaic-step">
+                  <header className="step-header">
+                    <span className="step-badge">D</span>
+                    <div>
+                      <h3>Define</h3>
+                      <p className="step-caption">Problem, scope, and CTQ</p>
+                    </div>
+                  </header>
                   <ul className="field-list">
                     <li>
                       <strong>Problem</strong>
@@ -569,33 +568,66 @@ function App() {
                       <strong>Critical-to-quality</strong>
                       <span>Cycle time, first-pass completeness, approval control.</span>
                     </li>
+                    <li>
+                      <strong>In scope</strong>
+                      <span>{result.charter.scope_in.slice(0, 2).join(' | ')}</span>
+                    </li>
                   </ul>
                 </article>
 
-                <article className="dmaic-card">
-                  <p className="card-kicker">Measure</p>
-                  <ul className="field-list">
-                    <li>
-                      <strong>Demand per month</strong>
-                      <span>{sigmaSnapshot.opportunitiesPerMonth.toLocaleString()} opportunities</span>
-                    </li>
-                    <li>
-                      <strong>First-pass yield</strong>
-                      <span>
+                <article className="dmaic-step">
+                  <header className="step-header">
+                    <span className="step-badge">M</span>
+                    <div>
+                      <h3>Measure</h3>
+                      <p className="step-caption">Baseline vs target</p>
+                    </div>
+                  </header>
+                  <div className="measure-grid">
+                    <article className="measure-item">
+                      <span>Lead time (days)</span>
+                      <strong>
+                        {formatDays(beforeCycleTime)} to {formatDays(afterCycleTime)}
+                      </strong>
+                    </article>
+                    <article className="measure-item">
+                      <span>Lead time reduction</span>
+                      <strong>{impactSnapshot.leadTimeReductionPct ?? 0}%</strong>
+                    </article>
+                    <article className="measure-item">
+                      <span>First-pass yield</span>
+                      <strong>
                         {sigmaSnapshot.firstPassCurrentPct}% to {sigmaSnapshot.firstPassTargetPct}%
-                      </span>
-                    </li>
-                    <li>
-                      <strong>COPQ hours</strong>
-                      <span>
+                      </strong>
+                    </article>
+                    <article className="measure-item">
+                      <span>DPMO</span>
+                      <strong>
+                        {sigmaSnapshot.baselineDPMO.toLocaleString()} to{' '}
+                        {sigmaSnapshot.targetDPMO.toLocaleString()}
+                      </strong>
+                    </article>
+                    <article className="measure-item">
+                      <span>COPQ effort</span>
+                      <strong>
                         {sigmaSnapshot.copqHoursCurrent}h to {sigmaSnapshot.copqHoursTarget}h
-                      </span>
-                    </li>
-                  </ul>
+                      </strong>
+                    </article>
+                    <article className="measure-item">
+                      <span>Demand</span>
+                      <strong>{sigmaSnapshot.opportunitiesPerMonth.toLocaleString()} ops/month</strong>
+                    </article>
+                  </div>
                 </article>
 
-                <article className="dmaic-card">
-                  <p className="card-kicker">Analyze</p>
+                <article className="dmaic-step">
+                  <header className="step-header">
+                    <span className="step-badge">A</span>
+                    <div>
+                      <h3>Analyze</h3>
+                      <p className="step-caption">Root causes with evidence</p>
+                    </div>
+                  </header>
                   <ol className="cause-list">
                     {rootCauses.map((cause) => (
                       <li key={cause.cause}>
@@ -610,8 +642,14 @@ function App() {
                   </ol>
                 </article>
 
-                <article className="dmaic-card">
-                  <p className="card-kicker">Improve</p>
+                <article className="dmaic-step span-2">
+                  <header className="step-header">
+                    <span className="step-badge">I</span>
+                    <div>
+                      <h3>Improve</h3>
+                      <p className="step-caption">Execution plan and future-state flow</p>
+                    </div>
+                  </header>
                   <ol className="action-list">
                     {improvePlan.map((item) => (
                       <li key={item.id}>
@@ -623,10 +661,17 @@ function App() {
                       </li>
                     ))}
                   </ol>
+                  <MermaidDiagram title="Future-state flow" chart={result.toBeMermaid} />
                 </article>
 
-                <article className="dmaic-card">
-                  <p className="card-kicker">Control</p>
+                <article className="dmaic-step span-2">
+                  <header className="step-header">
+                    <span className="step-badge">C</span>
+                    <div>
+                      <h3>Control</h3>
+                      <p className="step-caption">Monitoring plan and handoff payloads</p>
+                    </div>
+                  </header>
                   <ul className="control-list">
                     {controlPlan.map((item) => (
                       <li key={item.metric}>
@@ -638,15 +683,6 @@ function App() {
                       </li>
                     ))}
                   </ul>
-                </article>
-
-                <article className="dmaic-card span-2">
-                  <p className="card-kicker">To-Be Process Map</p>
-                  <MermaidDiagram title="Future-state flow" chart={result.toBeMermaid} />
-                </article>
-
-                <article className="dmaic-card span-2">
-                  <p className="card-kicker">Handoff Payload</p>
                   <ul className="field-list compact">
                     <li>
                       <strong>Jira title</strong>
