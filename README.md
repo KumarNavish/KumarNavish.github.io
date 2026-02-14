@@ -46,6 +46,41 @@ Exact GitHub setup:
 6. Wait for workflow success, then open:
    `https://kumarnavish.github.io/bis-continual-process-automation-demo/`
 
+## Repository Reliability (Long-Term Fix)
+
+If you ever see `Repository not found` during `git push`, run:
+
+- `npm run remote:check`
+
+This repo now includes a hardened push path:
+
+- `npm run push:safe`
+
+Behavior:
+
+- If canonical `origin` works, it pushes normally.
+- If `origin` is unavailable, it automatically mirrors source to:
+  `https://github.com/KumarNavish/KumarNavish.github.io/tree/bis-continual-process-automation-demo-source`
+
+Permanent one-time setup (recommended so canonical origin always works):
+
+1. Create public repo `KumarNavish/bis-continual-process-automation-demo`.
+2. Create an account-level SSH key (not deploy-key-only):
+   `ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_kumar_account -C "kumar-navish-account"`
+3. Add key in GitHub: **Settings -> SSH and GPG keys -> New SSH key**.
+4. Add SSH alias to `~/.ssh/config`:
+   ```text
+   Host github-kumar-account
+     HostName github.com
+     User git
+     IdentityFile ~/.ssh/id_ed25519_kumar_account
+     IdentitiesOnly yes
+   ```
+5. Point origin to canonical repo:
+   `git remote set-url origin git@github-kumar-account:KumarNavish/bis-continual-process-automation-demo.git`
+6. Verify:
+   `npm run remote:check`
+
 ## WebGPU And LLM Fallback
 
 - Optional WebLLM mode requires WebGPU support in the browser (`navigator.gpu`).

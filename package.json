@@ -11,7 +11,9 @@
     "lint": "eslint src --ext .ts,.tsx --max-warnings 0",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"*.{ts,json,md}\" index.html",
     "check": "npm run lint && npm run test && npm run build",
-    "generate:data": "node scripts/generate_step3_datasets.mjs"
+    "generate:data": "node scripts/generate_step3_datasets.mjs",
+    "remote:check": "bash scripts/remote_preflight.sh",
+    "push:safe": "bash scripts/push_safe.sh"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
