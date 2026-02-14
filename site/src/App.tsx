@@ -7,9 +7,10 @@ import { PublicationsPage } from './pages/PublicationsPage'
 import { WorkPage } from './pages/WorkPage'
 
 const NAVIGATION = [
-  { href: '/', label: 'Decision Builder' },
+  { href: '/', label: 'Overview' },
   { href: '/work', label: 'Case Studies' },
   { href: '/projects', label: 'Archive' },
+  { href: '/publications', label: 'Publications' },
 ]
 
 function Navigation() {
@@ -36,7 +37,7 @@ function SiteHeader() {
     <header className="site-header">
       <div className="header-inner">
         <p className="header-title">Navish Kumar</p>
-        <p className="header-subtitle">Research translated into deployable decision systems</p>
+        <p className="header-subtitle">Applied research translated into operational systems</p>
       </div>
       <Navigation />
     </header>
@@ -51,7 +52,6 @@ export default function App() {
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/work" element={<WorkPage />} />
-          <Route path="/proof" element={<Navigate to="/" replace />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/publications" element={<PublicationsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

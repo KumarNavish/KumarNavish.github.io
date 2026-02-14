@@ -41,6 +41,8 @@ export interface DecisionBlueprint {
   challengeTitle: string
   decisionQuestion: string
   valueStatement: string
+  operatingPriority: string
+  contextSignals: string[]
   systemDirection: string
   automationLoop: string
   successMetric: string
@@ -64,6 +66,13 @@ interface Playbook {
   successByGoal: Record<GoalId, string>
   kpiNames: string[]
   challengeRisks: Array<{ risk: string; trigger: string; guardrail: string }>
+}
+
+interface SignalRule {
+  id: string
+  label: string
+  operatingPriority: string
+  keywords: string[]
 }
 
 export const CHALLENGE_OPTIONS: Array<Option<ChallengeId>> = [
@@ -261,8 +270,128 @@ const PHASE_LABELS: Record<HorizonId, string[]> = {
   '12w': ['Weeks 1-3', 'Weeks 4-6', 'Weeks 7-9', 'Weeks 10-12'],
 }
 
+const CONTEXT_STOPWORDS = new Set([
+  'the',
+  'and',
+  'for',
+  'with',
+  'from',
+  'this',
+  'that',
+  'into',
+  'while',
+  'where',
+  'when',
+  'then',
+  'over',
+  'under',
+  'between',
+  'across',
+  'should',
+  'could',
+  'would',
+  'have',
+  'has',
+  'been',
+  'are',
+  'your',
+  'you',
+  'our',
+  'their',
+  'they',
+  'them',
+  'than',
+  'more',
+  'less',
+  'very',
+  'also',
+  'about',
+  'after',
+  'before',
+  'during',
+  'through',
+  'because',
+  'using',
+  'used',
+  'need',
+  'needs',
+  'must',
+  'will',
+  'real',
+  'time',
+])
+
+const SIGNAL_RULES: SignalRule[] = [
+  {
+    id: 'latency',
+    label: 'Latency pressure',
+    operatingPriority: 'Shorten decision-to-action latency without dropping quality.',
+    keywords: ['latency', 'slow', 'delay', 'timing', 'queue', 'backlog', 'response', 'urgent'],
+  },
+  {
+    id: 'cost',
+    label: 'Cost pressure',
+    operatingPriority: 'Reduce operating cost while preserving service stability.',
+    keywords: ['cost', 'budget', 'spend', 'expense', 'resource', 'efficiency', 'capacity'],
+  },
+  {
+    id: 'reliability',
+    label: 'Reliability risk',
+    operatingPriority: 'Protect reliability with explicit regression and rollback gates.',
+    keywords: ['drift', 'regression', 'failure', 'error', 'reliability', 'quality', 'stability'],
+  },
+  {
+    id: 'compliance',
+    label: 'Policy constraints',
+    operatingPriority: 'Keep intervention policies auditable and policy-safe.',
+    keywords: ['policy', 'compliance', 'legal', 'audit', 'governance', 'regulatory'],
+  },
+  {
+    id: 'adoption',
+    label: 'Adoption risk',
+    operatingPriority: 'Design for team adoption so the system is actually used.',
+    keywords: ['adoption', 'operator', 'workflow', 'handoff', 'stakeholder', 'training'],
+  },
+]
+
 function cleanContext(value: string): string {
   return value.trim().replace(/\s+/g, ' ')
+}
+
+function tokenizeContext(value: string): string[] {
+  return (value.toLowerCase().match(/[a-z][a-z-]+/g) ?? []).map((token) => token.trim())
+}
+
+function topContextTerms(context: string): string[] {
+  const tokens = tokenizeContext(context)
+  const counts = new Map<string, number>()
+  for (const token of tokens) {
+    if (token.length < 4 || CONTEXT_STOPWORDS.has(token)) {
+      continue
+    }
+    counts.set(token, (counts.get(token) ?? 0) + 1)
+  }
+
+  return Array.from(counts.entries())
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 4)
+    .map(([token]) => token)
+}
+
+function detectContextSignals(context: string): SignalRule[] {
+  const normalized = normalizeText(context)
+  return SIGNAL_RULES
+    .map((rule) => ({
+      rule,
+      score: rule.keywords.reduce(
+        (count, keyword) => (normalized.includes(keyword) ? count + 1 : count),
+        0,
+      ),
+    }))
+    .filter((item) => item.score > 0)
+    .sort((left, right) => right.score - left.score || left.rule.label.localeCompare(right.rule.label))
+    .slice(0, 2)
+    .map((item) => item.rule)
 }
 
 function normalizeText(value: string): string {
@@ -356,46 +485,84 @@ function cadenceForGoal(goal: GoalId): string {
   return 'Per release cycle, weekly operating review.'
 }
 
-function buildKpis(playbook: Playbook, goal: GoalId): KPI[] {
-  return playbook.kpiNames.map((metric) => ({
-    metric,
-    target: targetForGoal(goal),
-    cadence: cadenceForGoal(goal),
-  }))
+function buildKpis(playbook: Playbook, goal: GoalId, signals: SignalRule[]): KPI[] {
+  const metricSet = new Set(playbook.kpiNames)
+  if (signals.some((signal) => signal.id === 'cost')) {
+    metricSet.add('Unit operating cost trend')
+  }
+  if (signals.some((signal) => signal.id === 'latency')) {
+    metricSet.add('Decision-to-action latency')
+  }
+  if (signals.some((signal) => signal.id === 'compliance')) {
+    metricSet.add('Policy exception rate')
+  }
+  if (signals.some((signal) => signal.id === 'adoption')) {
+    metricSet.add('Operator adoption rate')
+  }
+
+  return Array.from(metricSet)
+    .slice(0, 4)
+    .map((metric) => ({
+      metric,
+      target: targetForGoal(goal),
+      cadence: cadenceForGoal(goal),
+    }))
 }
 
-function buildAutomationLoop(playbook: Playbook, goal: GoalId, risk: RiskId): string {
+function buildAutomationLoop(
+  playbook: Playbook,
+  goal: GoalId,
+  risk: RiskId,
+  signals: SignalRule[],
+): string {
   const baseByGoal: Record<GoalId, string> = {
     diagnose: `Daily sync for ${playbook.unit} signals, then weekly decision checkpoint.`,
     pilot: `Daily sync plus weekly experiment gate for ${playbook.unit}.`,
     production: `Scheduled refresh, release gate checks, and rollback readiness for ${playbook.unit}.`,
   }
+  const signalSuffix =
+    signals.length > 0 ? ` Each cycle explicitly checks ${signals[0].label.toLowerCase()}.` : ''
 
   if (risk === 'conservative') {
-    return `${baseByGoal[goal]} Run a rollback drill before each major release.`
+    return `${baseByGoal[goal]} Run a rollback drill before each major release.${signalSuffix}`
   }
 
   if (risk === 'aggressive') {
-    return `${baseByGoal[goal]} Run parallel experiment lanes with hard stop conditions.`
+    return `${baseByGoal[goal]} Run parallel experiment lanes with hard stop conditions.${signalSuffix}`
   }
 
-  return baseByGoal[goal]
+  return `${baseByGoal[goal]}${signalSuffix}`
 }
 
-function buildImmediateActions(playbook: Playbook, goal: GoalId): string[] {
+function buildImmediateActions(playbook: Playbook, goal: GoalId, signals: SignalRule[]): string[] {
+  const signalAction =
+    signals.length > 0
+      ? `Within 48 hours: instrument ${signals[0].label.toLowerCase()} on the current ${playbook.unit}.`
+      : null
   const actionTwo =
     goal === 'diagnose'
       ? `Within 48 hours: establish baseline for ${playbook.failureSignal} and define alert thresholds.`
       : `Within 48 hours: implement baseline + candidate strategy instrumentation for ${playbook.unit}.`
 
-  return [
+  const actions = [
     `Within 24 hours: lock scope, owner, and success criteria for this ${playbook.unit}.`,
-    actionTwo,
+    signalAction ?? actionTwo,
     `Within 72 hours: run first decision review and approve the next controlled iteration.`,
   ]
+
+  if (signalAction && goal !== 'diagnose') {
+    actions.splice(2, 0, actionTwo)
+  }
+
+  return actions
 }
 
-function buildExecutionPlan(goal: GoalId, horizon: HorizonId, risk: RiskId): ExecutionStep[] {
+function buildExecutionPlan(
+  goal: GoalId,
+  horizon: HorizonId,
+  risk: RiskId,
+  signals: SignalRule[],
+): ExecutionStep[] {
   const templates: Record<GoalId, Array<{ objective: string; deliverable: string }>> = {
     diagnose: [
       {
@@ -453,10 +620,14 @@ function buildExecutionPlan(goal: GoalId, horizon: HorizonId, risk: RiskId): Exe
         : risk === 'aggressive'
           ? ' Include acceleration and containment criteria.'
           : ''
+    const signalSuffix =
+      signals.length > 0 && index === 0
+        ? ` Prioritize ${signals[0].label.toLowerCase()} in this phase.`
+        : ''
 
     plan.push({
       phase: labels[index] ?? `Phase ${index + 1}`,
-      objective: `${template.objective}${riskSuffix}`,
+      objective: `${template.objective}${riskSuffix}${signalSuffix}`,
       deliverable: template.deliverable,
     })
   }
@@ -464,7 +635,12 @@ function buildExecutionPlan(goal: GoalId, horizon: HorizonId, risk: RiskId): Exe
   return plan
 }
 
-function buildRiskControls(playbook: Playbook, horizon: HorizonId, risk: RiskId): RiskControl[] {
+function buildRiskControls(
+  playbook: Playbook,
+  horizon: HorizonId,
+  risk: RiskId,
+  signals: SignalRule[],
+): RiskControl[] {
   const controls = [...playbook.challengeRisks]
 
   if (risk === 'conservative') {
@@ -495,10 +671,34 @@ function buildRiskControls(playbook: Playbook, horizon: HorizonId, risk: RiskId)
     })
   }
 
+  if (signals.some((signal) => signal.id === 'cost')) {
+    controls.push({
+      risk: 'Cost reduction undermines service quality.',
+      trigger: 'Cost drops while quality KPI misses increase.',
+      guardrail: 'Require paired cost and quality checks at every gate.',
+    })
+  }
+
+  if (signals.some((signal) => signal.id === 'compliance')) {
+    controls.push({
+      risk: 'Intervention logic violates policy constraints.',
+      trigger: 'Policy exceptions rise above accepted threshold.',
+      guardrail: 'Run policy audit before each rollout increment.',
+    })
+  }
+
+  if (signals.some((signal) => signal.id === 'adoption')) {
+    controls.push({
+      risk: 'Workflow bypass by operational teams.',
+      trigger: 'Manual overrides trend upward for two cycles.',
+      guardrail: 'Track adoption explicitly and retrain before expanding scope.',
+    })
+  }
+
   return controls.slice(0, 4)
 }
 
-function buildHandoffChecklist(goal: GoalId, risk: RiskId): string[] {
+function buildHandoffChecklist(goal: GoalId, risk: RiskId, signals: SignalRule[]): string[] {
   const items = [
     'Problem statement is constrained to one measurable decision.',
     'Success metric and threshold are explicit before implementation.',
@@ -515,6 +715,14 @@ function buildHandoffChecklist(goal: GoalId, risk: RiskId): string[] {
     items.push('Containment conditions are defined for accelerated experiments.')
   } else {
     items.push('Monitoring thresholds are reviewed and adjusted weekly.')
+  }
+
+  if (signals.some((signal) => signal.id === 'adoption')) {
+    items.push('Adoption owner is assigned with weekly usage checks.')
+  }
+
+  if (signals.some((signal) => signal.id === 'compliance')) {
+    items.push('Policy review sign-off is captured before launch.')
   }
 
   return items
@@ -551,6 +759,18 @@ export function renderDecisionBriefMarkdown(
   lines.push('## System Direction')
   lines.push(blueprint.systemDirection)
   lines.push('')
+
+  lines.push('## Operating Priority')
+  lines.push(blueprint.operatingPriority)
+  lines.push('')
+
+  if (blueprint.contextSignals.length > 0) {
+    lines.push('## Detected Context Signals')
+    for (const signal of blueprint.contextSignals) {
+      lines.push(`- ${signal}`)
+    }
+    lines.push('')
+  }
 
   lines.push('## Next 72 Hours')
   for (const action of blueprint.immediateActions) {
@@ -608,20 +828,30 @@ export function createDecisionBlueprint(
   const playbook = PLAYBOOKS[input.challenge]
   const context = cleanContext(input.context)
   const contextSuffix = context ? ` Applied context: ${context}.` : ''
+  const detectedSignals = detectContextSignals(context)
+  const contextTerms = topContextTerms(context)
+  const matchTerms = [...playbook.matchTerms, ...contextTerms]
+  const contextSignals =
+    detectedSignals.length > 0 ? detectedSignals.map((signal) => signal.label) : ['No explicit signal detected']
+  const operatingPriority =
+    detectedSignals[0]?.operatingPriority ??
+    'Define one measurable decision and run a tightly scoped first iteration.'
 
   return {
     challengeTitle: playbook.title,
     decisionQuestion: playbook.question,
     valueStatement: `${playbook.value}${contextSuffix}`,
+    operatingPriority,
+    contextSignals,
     systemDirection: playbook.directionByGoal[input.goal],
-    automationLoop: buildAutomationLoop(playbook, input.goal, input.risk),
+    automationLoop: buildAutomationLoop(playbook, input.goal, input.risk, detectedSignals),
     successMetric: playbook.successByGoal[input.goal],
-    immediateActions: buildImmediateActions(playbook, input.goal),
-    executionPlan: buildExecutionPlan(input.goal, input.horizon, input.risk),
-    kpis: buildKpis(playbook, input.goal),
-    risks: buildRiskControls(playbook, input.horizon, input.risk),
-    handoffChecklist: buildHandoffChecklist(input.goal, input.risk),
-    matchedProject: findBestProject(data.projects, playbook.matchTerms),
-    matchedPublication: findBestPublication(data.publications, playbook.matchTerms),
+    immediateActions: buildImmediateActions(playbook, input.goal, detectedSignals),
+    executionPlan: buildExecutionPlan(input.goal, input.horizon, input.risk, detectedSignals),
+    kpis: buildKpis(playbook, input.goal, detectedSignals),
+    risks: buildRiskControls(playbook, input.horizon, input.risk, detectedSignals),
+    handoffChecklist: buildHandoffChecklist(input.goal, input.risk, detectedSignals),
+    matchedProject: findBestProject(data.projects, matchTerms),
+    matchedPublication: findBestPublication(data.publications, matchTerms),
   }
 }
