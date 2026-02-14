@@ -11,6 +11,14 @@ interface ImpactSnapshot {
   monthlyHoursSaved: number
 }
 
+interface ActionItem {
+  id: string
+  title: string
+  detail: string
+  owner: string
+  dueDay: number
+}
+
 function metricToText(value: string | number | null | undefined): string {
   if (value === null || value === undefined) {
     return 'Not provided'
@@ -70,6 +78,18 @@ function buildImpactSnapshot(result: PipelineResult): ImpactSnapshot {
   }
 }
 
+function buildActionItems(result: PipelineResult): ActionItem[] {
+  const fallbackOwners = ['Process Lead', 'Ops Manager', 'Control Owner', 'System Owner']
+
+  return result.blueprint.steps.slice(0, 4).map((step, index) => ({
+    id: step.id,
+    title: step.name,
+    detail: step.description,
+    owner: result.extracted.approval_roles[index] ?? fallbackOwners[index] ?? 'Operations Team',
+    dueDay: index + 1,
+  }))
+}
+
 function App() {
   const [samples, setSamples] = useState<IntakeSample[]>([])
   const [catalog, setCatalog] = useState<CategoryCatalog | null>(null)
@@ -106,15 +126,19 @@ function App() {
   )
 
   const impactSnapshot = useMemo(() => (result ? buildImpactSnapshot(result) : null), [result])
+  const actionItems = useMemo(() => (result ? buildActionItems(result) : []), [result])
 
   const previewBaselineDays = selectedSample?.ground_truth.baseline_cycle_time_days ?? null
+  const previewVolume = selectedSample?.ground_truth.volume_per_month ?? null
+  const previewRisk = selectedSample?.ground_truth.risk_level ?? null
+
   const inferredTargetDays =
     previewBaselineDays !== null ? Math.max(1, Math.round(previewBaselineDays * 0.65)) : null
 
   const beforeCycleTime = impactSnapshot?.baselineDays ?? previewBaselineDays
   const afterCycleTime = impactSnapshot?.targetDays ?? inferredTargetDays
 
-  const requestPreview = excerpt(requestText || selectedSample?.text || '', 420)
+  const requestPreview = excerpt(requestText || selectedSample?.text || '', 460)
 
   const jiraFields =
     result && typeof result.exports.jira_issue_create.fields === 'object'
@@ -214,10 +238,10 @@ function App() {
 
       <section className="panel workspace-panel">
         <section className="control-pane">
-          <h2>Request</h2>
+          <h2>Input request</h2>
 
           <section className="example-picker">
-            <label htmlFor="example-select">Choose example</label>
+            <label htmlFor="example-select">Example workflow</label>
             <div className="select-shell">
               <select
                 id="example-select"
@@ -257,103 +281,133 @@ function App() {
 
         <section className="result-pane" aria-live="polite">
           {!result ? (
-            <section className="moment-shell">
-              <p className="moment-tag">Before</p>
-              <h2>Manual intake request</h2>
+            <section className="stage-shell">
+              <p className="label">Before</p>
+              <h2>Manual request</h2>
               <pre className="input-preview">{requestPreview}</pre>
-
-              <div className="impact-strip">
-                <article>
+              <div className="summary-row">
+                <article className="summary-card">
                   <span>Cycle</span>
                   <strong>{formatDays(previewBaselineDays)}</strong>
                 </article>
-                <article>
-                  <span>State</span>
-                  <strong>Manual</strong>
+                <article className="summary-card">
+                  <span>Volume</span>
+                  <strong>{previewVolume ?? 'n/a'}</strong>
                 </article>
-                <article>
-                  <span>Output</span>
-                  <strong>Not standardized</strong>
+                <article className="summary-card">
+                  <span>Risk</span>
+                  <strong>{previewRisk ? prettyCategory(previewRisk) : 'n/a'}</strong>
                 </article>
               </div>
             </section>
           ) : (
-            <section className="moment-shell">
-              <p className="moment-tag">After</p>
-              <h2>Execution packet generated</h2>
+            <section className="packet-shell">
+              <header className="packet-header">
+                <div>
+                  <p className="label">After</p>
+                  <h2>Execution packet ready</h2>
+                </div>
+                <button className="primary-btn" onClick={() => void copyFullPack()}>
+                  Copy work packet
+                </button>
+              </header>
 
-              <div className="impact-strip">
-                <article>
+              <div className="summary-row">
+                <article className="summary-card">
                   <span>Cycle</span>
                   <strong>
                     {formatDays(beforeCycleTime)} to {formatDays(afterCycleTime)}
                   </strong>
                 </article>
-                <article>
+                <article className="summary-card">
                   <span>Saved / month</span>
                   <strong>{impactSnapshot.monthlyHoursSaved}h</strong>
                 </article>
-                <article>
-                  <span>Status</span>
-                  <strong>Ready to hand off</strong>
+                <article className="summary-card">
+                  <span>Score</span>
+                  <strong>{result.triage.automation_score}/100</strong>
                 </article>
               </div>
 
-              <section className="transformation-grid">
-                <article className="moment-card before-card">
-                  <p className="doc-tag">Input</p>
-                  <pre className="input-preview">{excerpt(result.sample.text, 520)}</pre>
+              <section className="packet-grid">
+                <article className="packet-card">
+                  <p className="card-kicker">Project charter</p>
+                  <ul className="value-list">
+                    <li>
+                      <strong>Problem</strong>
+                      <span>{result.charter.problem_statement}</span>
+                    </li>
+                    <li>
+                      <strong>Category</strong>
+                      <span>{prettyCategory(result.triage.category)}</span>
+                    </li>
+                    <li>
+                      <strong>Priority</strong>
+                      <span>{result.triage.priority}</span>
+                    </li>
+                    <li>
+                      <strong>Risk</strong>
+                      <span>{prettyCategory(result.triage.risk_level)}</span>
+                    </li>
+                    <li>
+                      <strong>Target cycle</strong>
+                      <span>{metricToText(result.charter.target_metrics.cycle_time_days_target)}</span>
+                    </li>
+                  </ul>
                 </article>
 
-                <article className="moment-card after-card">
-                  <p className="doc-tag">Output</p>
+                <article className="packet-card">
+                  <p className="card-kicker">Execution checklist</p>
+                  <ol className="checklist">
+                    {actionItems.map((item) => (
+                      <li key={item.id}>
+                        <strong>{item.title}</strong>
+                        <span>{item.detail}</span>
+                        <small>
+                          Owner: {item.owner} | Due: Day {item.dueDay}
+                        </small>
+                      </li>
+                    ))}
+                  </ol>
+                </article>
 
-                  <section className="artifact-card">
-                    <h3>Project charter</h3>
-                    <ul className="key-list">
-                      <li>
-                        <strong>Problem:</strong> {result.charter.problem_statement}
-                      </li>
-                      <li>
-                        <strong>Target cycle:</strong>{' '}
-                        {metricToText(result.charter.target_metrics.cycle_time_days_target)}
-                      </li>
-                      <li>
-                        <strong>Priority:</strong> {result.triage.priority}
-                      </li>
-                      <li>
-                        <strong>Next step:</strong> {result.triage.next_action}
-                      </li>
-                    </ul>
-                  </section>
+                <article className="packet-card span-2">
+                  <p className="card-kicker">To-be process map</p>
+                  <MermaidDiagram title="Future-state flow" chart={result.toBeMermaid} />
+                </article>
 
-                  <section className="artifact-card">
-                    <h3>To-be process map</h3>
-                    <MermaidDiagram title="To-be process" chart={result.toBeMermaid} />
-                  </section>
-
-                  <section className="artifact-card">
-                    <h3>Handoff payload</h3>
-                    <ul className="key-list">
-                      <li>
-                        <strong>Jira:</strong> {metricToText(jiraFields?.summary)}
-                      </li>
-                      <li>
-                        <strong>ServiceNow:</strong>{' '}
-                        {metricToText(servicenowPayload?.short_description)}
-                      </li>
-                      <li>
-                        <strong>Owner:</strong> {metricToText(trackerPayload?.owner)}
-                      </li>
-                      <li>
-                        <strong>Risk:</strong> {prettyCategory(result.triage.risk_level)}
-                      </li>
-                    </ul>
-                  </section>
-
-                  <div className="outputs-actions">
-                    <button className="primary-btn" onClick={() => void copyFullPack()}>
-                      Copy work packet
+                <article className="packet-card span-2">
+                  <p className="card-kicker">Handoff payload</p>
+                  <ul className="value-list compact">
+                    <li>
+                      <strong>Jira title</strong>
+                      <span>{metricToText(jiraFields?.summary)}</span>
+                    </li>
+                    <li>
+                      <strong>ServiceNow short description</strong>
+                      <span>{metricToText(servicenowPayload?.short_description)}</span>
+                    </li>
+                    <li>
+                      <strong>Tracker owner</strong>
+                      <span>{metricToText(trackerPayload?.owner)}</span>
+                    </li>
+                    <li>
+                      <strong>Tracker status</strong>
+                      <span>{metricToText(trackerPayload?.status)}</span>
+                    </li>
+                  </ul>
+                  <div className="actions-row">
+                    <button
+                      className="secondary-btn"
+                      onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}
+                    >
+                      Copy Jira JSON
+                    </button>
+                    <button
+                      className="secondary-btn"
+                      onClick={() => copyJson('ServiceNow payload', result.exports.servicenow_record_create)}
+                    >
+                      Copy ServiceNow JSON
                     </button>
                   </div>
                 </article>
