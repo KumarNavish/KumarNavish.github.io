@@ -1,0 +1,24 @@
+mathematical-structure:
+  name: Mathematical Structure for Reliable Learning
+  description: Uses spectral and geometric structure to keep optimization behavior stable and explainable.
+  related_works_tags:
+    - variational-inference
+    - natural-gradients
+    - spectral-graph-theory
+
+urban-logistics:
+  name: Data-Driven Urban Logistics
+  description: Models city micro-regions so sustainability transitions can be evaluated as operational decisions.
+  related_works_tags:
+    - urban-ai
+    - sustainable-logistics
+    - spatial-modeling
+
+social-resilience:
+  name: Social Interaction and Counterspeech
+  description: Studies harmful and protective speech interactions to support practical harm-reduction policy.
+  related_works_tags:
+    - social-computing
+    - counterspeech
+    - moderation-policy
+

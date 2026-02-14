@@ -1,0 +1,11 @@
+roles:
+  - title: PhD Student
+    org: University of Basel
+    location: Basel, Switzerland
+    start: "2022-09"
+    end: present
+    bullet_points:
+      - Researches continual learning, variational inference, and robust optimization methods.
+      - Builds evaluation pipelines that connect theoretical guarantees with operational constraints.
+      - Publishes across machine learning theory, graph methods, and real-world delivery systems.
+
