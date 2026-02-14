@@ -1,35 +1,65 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
+import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
+
 import './App.css'
+import { DataPage } from './pages/DataPage'
+import { DashboardPage } from './pages/DashboardPage'
+import { OpsConsolePage } from './pages/OpsConsolePage'
+import { ProjectsPage } from './pages/ProjectsPage'
+import { PublicationsPage } from './pages/PublicationsPage'
 
-function App() {
-  const [count, setCount] = useState(0)
+const NAVIGATION = [
+  { href: '/', label: 'Dashboard' },
+  { href: '/projects', label: 'Projects' },
+  { href: '/publications', label: 'Publications' },
+  { href: '/ops/console', label: 'Ops Console' },
+  { href: '/data', label: 'Data' },
+]
 
+function Navigation() {
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
+    <nav className="site-nav" aria-label="Primary">
+      {NAVIGATION.map((item) => (
+        <NavLink
+          key={item.href}
+          to={item.href}
+          className={({ isActive }) =>
+            isActive ? 'nav-link nav-link-active' : 'nav-link'
+          }
+          end={item.href === '/'}
+        >
+          {item.label}
+        </NavLink>
+      ))}
+    </nav>
   )
 }
 
-export default App
+function SiteHeader() {
+  return (
+    <header className="site-header">
+      <div className="header-inner">
+        <p className="header-title">KumarNavish.github.io</p>
+        <p className="header-subtitle">Capability-first portfolio system</p>
+      </div>
+      <Navigation />
+    </header>
+  )
+}
+
+export default function App() {
+  return (
+    <div className="app-shell">
+      <SiteHeader />
+      <main className="content-shell">
+        <Routes>
+          <Route path="/" element={<DashboardPage />} />
+          <Route path="/projects" element={<ProjectsPage />} />
+          <Route path="/publications" element={<PublicationsPage />} />
+          <Route path="/ops/console" element={<OpsConsolePage />} />
+          <Route path="/data" element={<DataPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </main>
+    </div>
+  )
+}
