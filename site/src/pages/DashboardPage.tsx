@@ -14,25 +14,25 @@ interface DashboardData {
 
 interface FocusArea {
   title: string
-  focus: string
-  appliedUse: string
+  lens: string
+  decision: string
 }
 
 const FOCUS_AREAS: FocusArea[] = [
   {
     title: 'Reliable Learning Systems',
-    focus: 'Optimization and inference that remain stable as objectives shift.',
-    appliedUse: 'Supports dependable model updates in continual-learning settings.',
+    lens: 'Stability-first optimization under shifting objectives.',
+    decision: 'How to update models over time without degrading reliability.',
   },
   {
     title: 'Urban Logistics Decisions',
-    focus: 'Data-driven modeling for delivery operations across city micro-regions.',
-    appliedUse: 'Supports evidence-based transition planning for sustainable fleets.',
+    lens: 'Micro-region performance modeling from observed city behavior.',
+    decision: 'Where cargo-bike transitions should start for highest operational fit.',
   },
   {
     title: 'Interaction Safety',
-    focus: 'Empirical analysis of harmful and protective behavior in online platforms.',
-    appliedUse: 'Supports moderation strategy and intervention design.',
+    lens: 'Behavioral dynamics between harmful and protective online actors.',
+    decision: 'Which intervention patterns are likely to de-escalate harm.',
   },
 ]
 
@@ -132,10 +132,10 @@ export function DashboardPage() {
     <div className="page">
       <section className="hero hero-primary">
         <p className="eyebrow">Overview</p>
-        <h1>I build research that becomes usable infrastructure for decisions.</h1>
+        <h1>I build research that can be used to make better decisions.</h1>
         <p className="hero-copy">
-          This portfolio is designed for practical review. In minutes, you can evaluate problem
-          framing, implementation quality, and real-world relevance.
+          The structure is simple: decision context, implementation, and evidence. You can scan it
+          quickly and verify details only where needed.
         </p>
         <div className="pill-row" aria-label="Working principles">
           <span className="pill">Precise framing</span>
@@ -147,7 +147,7 @@ export function DashboardPage() {
             Review case studies
           </Link>
           <Link className="action-link" to="/proof">
-            Check applied value
+            See impact cases
           </Link>
           <a className="action-link" href={profile.links.github} target="_blank" rel="noreferrer">
             View GitHub
@@ -182,9 +182,9 @@ export function DashboardPage() {
           {FOCUS_AREAS.map((area) => (
             <article key={area.title} className="direction-card">
               <h3>{area.title}</h3>
-              <p>{area.focus}</p>
+              <p>{area.lens}</p>
               <p className="meta-line">
-                <strong>Practical value:</strong> {area.appliedUse}
+                <strong>Decision supported:</strong> {area.decision}
               </p>
             </article>
           ))}
@@ -193,7 +193,7 @@ export function DashboardPage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Representative Outputs</h2>
+          <h2>Evidence at a Glance</h2>
         </header>
         <div className="card-grid">
           {topPublication ? (
@@ -238,7 +238,7 @@ export function DashboardPage() {
             <article className="item-card">
               <p className="eyebrow">Flagship system</p>
               <h3>{flagshipProject.name}</h3>
-              <p>{flagshipProject.one_line ?? 'Research artifact with deployable implementation.'}</p>
+              <p>{flagshipProject.one_line ?? 'Research implementation with reproducible setup.'}</p>
               <p className="meta-line">
                 <a
                   href={flagshipProject.demo_url ?? flagshipProject.html_url ?? '/work'}
@@ -270,8 +270,8 @@ export function DashboardPage() {
           </article>
           <article className="sequence-step">
             <p className="sequence-index">03</p>
-            <h3>Applied value</h3>
-            <p>Check freshness, provenance, and reusable outputs.</p>
+            <h3>Impact</h3>
+            <p>See who can use the work, what they can decide, and why it matters.</p>
           </article>
         </div>
       </section>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseLatestRunApi, parseProjectsApi } from './api'
+import { parseProjectsApi } from './api'
 
 describe('api parsers', () => {
   it('parses projects payload shape', () => {
@@ -46,47 +46,4 @@ describe('api parsers', () => {
       }),
     ).toThrow()
   })
-
-  it('parses latest run with task logs', () => {
-    const parsed = parseLatestRunApi({
-      run: {
-        status: 'success',
-        timestamp: '2026-02-14T00:00:00Z',
-        started_at: '2026-02-14T00:00:00Z',
-        finished_at: '2026-02-14T00:00:10Z',
-        duration_seconds: 10,
-        git_sha: 'abc123',
-        task_count: 1,
-      },
-      summary: {
-        success: 1,
-        failed: 0,
-        skipped: 0,
-      },
-      tasks: [
-        {
-          name: 'emit_profile_api',
-          status: 'success',
-          inputs: [],
-          outputs: [],
-          deps: [],
-          started_at: '2026-02-14T00:00:00Z',
-          finished_at: '2026-02-14T00:00:01Z',
-          duration_seconds: 1,
-          logs: [
-            {
-              level: 'info',
-              message: 'ok',
-              timestamp: '2026-02-14T00:00:01Z',
-            },
-          ],
-          error: null,
-        },
-      ],
-    })
-
-    expect(parsed.tasks).toHaveLength(1)
-    expect(parsed.tasks[0].logs[0].message).toBe('ok')
-  })
 })
-

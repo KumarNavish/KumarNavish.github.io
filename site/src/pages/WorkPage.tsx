@@ -22,54 +22,60 @@ interface CaseStudyDefinition {
   id: string
   track: string
   title: string
-  question: string
-  appliedUse: string
-  projectMatcher: (project: ProjectItem) => boolean
+  decision: string
+  implementation: string
+  outcome: string
+  projectMatcher?: (project: ProjectItem) => boolean
   publicationMatcher: (publication: PublicationItem) => boolean
 }
 
 const CASE_STUDIES: CaseStudyDefinition[] = [
   {
-    id: 'natural-gradient-vi',
-    track: 'Method Design',
-    title: 'Square-root Natural-gradient Variational Inference',
-    question:
-      'How can variational inference keep formal guarantees and remain practical to implement?',
-    appliedUse: 'Supports dependable inference updates in continual-learning pipelines.',
+    id: 'continual-learning-policy',
+    track: 'Model Reliability',
+    title: 'Continual-learning update policy',
+    decision: 'Which update strategy stays stable as data and objectives shift over time?',
+    implementation: 'CL-PLO sandbox for side-by-side strategy comparison under continual updates.',
+    outcome:
+      'Supports safer update-policy selection for long-lived learning systems where regressions are costly.',
     projectMatcher: (project) => project.name.toLowerCase().includes('cl-plo'),
     publicationMatcher: (publication) =>
       publication.title.toLowerCase().includes('square-root natural-gradient'),
   },
   {
-    id: 'urban-logistics',
-    track: 'Operational AI',
-    title: 'Urban Micro-region Logistics Modeling',
-    question:
-      'How can delivery transitions be evaluated from observed city behavior instead of assumptions?',
-    appliedUse: 'Supports planning decisions for sustainable fleet transitions.',
-    projectMatcher: (project) =>
-      `${project.name} ${project.description}`.toLowerCase().includes('logistics'),
-    publicationMatcher: (publication) =>
-      publication.title.toLowerCase().includes('delivery vehicles across urban micro-regions'),
-  },
-  {
-    id: 'social-counterspeech',
-    track: 'Social Systems',
-    title: 'Hate and Counterspeech Interaction Dynamics',
-    question:
-      'Which interaction patterns separate harmful behavior from protective response?',
-    appliedUse: 'Supports moderation policy analysis and intervention prioritization.',
-    projectMatcher: (project) =>
-      `${project.name} ${project.description}`.toLowerCase().includes('twitter'),
+    id: 'moderation-intervention',
+    track: 'Safety Analytics',
+    title: 'Hate and counterspeech intervention analysis',
+    decision: 'Which behavior patterns should trigger intervention before harmful escalation?',
+    implementation:
+      'Dataset-backed interaction analysis between hate and counter users with reproducible code context.',
+    outcome:
+      'Supports moderation triage and policy evaluation with observed interaction signatures rather than guesswork.',
+    projectMatcher: (project) => `${project.name} ${project.description}`.toLowerCase().includes('twitter'),
     publicationMatcher: (publication) =>
       publication.title.toLowerCase().includes('interaction dynamics between hate'),
+  },
+  {
+    id: 'urban-transition-planning',
+    track: 'Operational Planning',
+    title: 'Cargo-bike transition prioritization',
+    decision: 'Which urban micro-regions are best candidates for delivery-fleet transition first?',
+    implementation:
+      'Micro-region performance modeling from observed delivery behavior to compare transition scenarios.',
+    outcome:
+      'Supports rollout prioritization decisions before field pilots, reducing planning by assumption.',
+    publicationMatcher: (publication) =>
+      publication.title.toLowerCase().includes('delivery vehicles across urban micro-regions'),
   },
 ]
 
 function findMatchedProject(
   projects: ProjectItem[],
-  matcher: (project: ProjectItem) => boolean,
+  matcher?: (project: ProjectItem) => boolean,
 ): ProjectItem | null {
+  if (!matcher) {
+    return null
+  }
   return projects.find(matcher) ?? null
 }
 
@@ -104,10 +110,7 @@ export function WorkPage() {
     return CASE_STUDIES.map((definition) => ({
       ...definition,
       project: findMatchedProject(data.projects.items, definition.projectMatcher),
-      publication: findMatchedPublication(
-        data.publications.items,
-        definition.publicationMatcher,
-      ),
+      publication: findMatchedPublication(data.publications.items, definition.publicationMatcher),
     }))
   }, [state.data])
 
@@ -154,16 +157,16 @@ export function WorkPage() {
     <div className="page">
       <section className="hero">
         <p className="eyebrow">Case Studies</p>
-        <h1>How problem framing is converted into systems and evidence.</h1>
+        <h1>Three applied cases, each tied to a real decision.</h1>
         <p className="hero-copy">
-          Each case follows one structure so review is fast: problem, implementation, applied use,
-          and supporting evidence.
+          Every case follows one format: decision, implementation, evidence, and practical outcome.
+          This keeps review fast and comparable.
         </p>
       </section>
 
       <section id="cases" className="panel">
         <header className="panel-header">
-          <h2>Primary Cases</h2>
+          <h2>Decision Cases</h2>
         </header>
         <div className="stack-list">
           {caseStudies.map((caseStudy) => (
@@ -172,11 +175,11 @@ export function WorkPage() {
               <h3>{caseStudy.title}</h3>
               <div className="case-matrix case-matrix-4">
                 <div>
-                  <p className="matrix-label">Problem</p>
-                  <p>{caseStudy.question}</p>
+                  <p className="matrix-label">Decision</p>
+                  <p>{caseStudy.decision}</p>
                 </div>
                 <div>
-                  <p className="matrix-label">Implementation</p>
+                  <p className="matrix-label">Built</p>
                   <p>
                     {caseStudy.project ? (
                       <>
@@ -190,17 +193,13 @@ export function WorkPage() {
                           target="_blank"
                           rel="noreferrer"
                         >
-                          Open
+                          Open implementation
                         </a>
                       </>
                     ) : (
-                      'Project link is being prepared.'
+                      `${caseStudy.implementation} No standalone repository is required for this track.`
                     )}
                   </p>
-                </div>
-                <div>
-                  <p className="matrix-label">Applied use</p>
-                  <p>{caseStudy.appliedUse}</p>
                 </div>
                 <div>
                   <p className="matrix-label">Evidence</p>
@@ -225,9 +224,13 @@ export function WorkPage() {
                         ) : null}
                       </>
                     ) : (
-                      'Publication link is being prepared.'
+                      'Primary publication metadata is not available in the current sync.'
                     )}
                   </p>
+                </div>
+                <div>
+                  <p className="matrix-label">Practical outcome</p>
+                  <p>{caseStudy.outcome}</p>
                 </div>
               </div>
             </article>
@@ -243,7 +246,7 @@ export function WorkPage() {
           {featuredProjects.map((project) => (
             <article key={project.name} className="item-card">
               <h3>{project.name}</h3>
-              <p>{project.one_line ?? 'Research artifact with implementation details.'}</p>
+              <p>{project.one_line ?? 'Research implementation with reproducible setup.'}</p>
               <p className="meta-line">
                 {project.last_push ? `Updated ${new Date(project.last_push).getFullYear()} · ` : ''}
                 <a href={project.html_url ?? '/projects'} target="_blank" rel="noreferrer">
@@ -276,7 +279,7 @@ export function WorkPage() {
             Publication archive
           </Link>
           <Link className="action-link action-link-primary" to="/proof">
-            Applied value
+            Impact view
           </Link>
         </div>
         <p className="meta-line">
