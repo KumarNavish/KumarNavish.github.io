@@ -11,7 +11,7 @@ export interface PipelineDependencies {
   memoryStore: Pick<VectorStore<Example>, "topK">;
   router: Pick<LinearSoftmaxClassifier, "predict">;
   processDefinitions: Record<ProcessId, ProcessDefinition>;
-  intentOrder: ProcessId[];
+  intentOrder: readonly ProcessId[];
   retrievalK: number;
   mode: PipelineMode;
   llmGeneratePlan?: (messages: LlmMessage[], schema: JsonSchema) => Promise<Record<string, unknown>>;
@@ -187,7 +187,7 @@ function buildLlmMessages(
   ];
 }
 
-function resolveIntent(index: number, intentOrder: ProcessId[]): ProcessId {
+function resolveIntent(index: number, intentOrder: readonly ProcessId[]): ProcessId {
   if (intentOrder.length === 0) {
     throw new Error("intentOrder cannot be empty.");
   }
