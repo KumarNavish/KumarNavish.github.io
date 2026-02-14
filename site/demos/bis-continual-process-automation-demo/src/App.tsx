@@ -35,41 +35,16 @@ interface RegressionSuiteRow {
 
 type StageState = 'pending' | 'active' | 'done'
 
-const PRESET_OPTIONS: Array<{ id: ReplayPreset; label: string; intent: string }> = [
-  {
-    id: 'balanced',
-    label: 'Balanced',
-    intent: 'Good default for day-to-day automation updates with stable retention.',
-  },
-  {
-    id: 'fast_adaptation',
-    label: 'Fast adaptation',
-    intent: 'Learns new request patterns fastest, with higher non-regression risk.',
-  },
-  {
-    id: 'retention_first',
-    label: 'Retention-first',
-    intent: 'Prioritizes high-risk replay to protect previously stable workflows.',
-  },
+const PRESET_OPTIONS: Array<{ id: ReplayPreset; label: string }> = [
+  { id: 'balanced', label: 'Balanced' },
+  { id: 'fast_adaptation', label: 'Fast adaptation' },
+  { id: 'retention_first', label: 'Retention-first' },
 ]
 
 const STAGES = [
-  {
-    title: 'Read and structure intake',
-    detail: 'Extract systems, approval chain, risk clues, and bottleneck signals from raw text.',
-  },
-  {
-    title: 'Classify and prioritize',
-    detail: 'Predict workflow category and estimate automation potential and savings.',
-  },
-  {
-    title: 'Generate delivery artifacts',
-    detail: 'Build charter, process map, and implementation blueprint.',
-  },
-  {
-    title: 'Prepare export payloads',
-    detail: 'Create copy-ready payloads for Jira, ServiceNow, and process tracking.',
-  },
+  'Understand the request',
+  'Generate optimized workflow artifacts',
+  'Prepare export-ready payloads',
 ] as const
 
 const DRIFT_REPLACEMENTS: Array<[RegExp, string]> = [
@@ -108,6 +83,24 @@ function asTrainingExample(sample: IntakeSample, label?: IntakeCategory) {
 
 function formatPct(value: number): string {
   return `${(value * 100).toFixed(1)}%`
+}
+
+function metricToText(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return 'Not provided'
+  }
+  return String(value)
+}
+
+function prettyCategory(value: string): string {
+  return value
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function presetLabel(preset: ReplayPreset): string {
+  return PRESET_OPTIONS.find((option) => option.id === preset)?.label ?? preset
 }
 
 function runPresetRegressionSuite(
@@ -192,7 +185,6 @@ function App() {
   const [updateSummary, setUpdateSummary] = useState<UpdateSummary | null>(null)
   const [suiteRows, setSuiteRows] = useState<RegressionSuiteRow[]>([])
 
-  const [showExpert, setShowExpert] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const modelRef = useRef<OnlineCategoryModel | null>(null)
@@ -250,13 +242,11 @@ function App() {
     [samples, selectedSampleId],
   )
 
-  const activePreset = PRESET_OPTIONS.find((option) => option.id === preset)
-
   const progress =
     stageIndex < 0
       ? 0
       : Math.round(
-          (Math.min(stageIndex + (isRunning ? 0.4 : 1), STAGES.length) / STAGES.length) * 100,
+          (Math.min(stageIndex + (isRunning ? 0.5 : 1), STAGES.length) / STAGES.length) * 100,
         )
 
   const stageState = (index: number): StageState => {
@@ -274,39 +264,16 @@ function App() {
 
   const nextHint = useMemo(() => {
     if (error) {
-      return 'Resolve data-loading issue before running the demo.'
+      return 'Data could not be loaded. Refresh once the data source is available.'
     }
     if (!result) {
-      return 'Start demo to transform one real intake into ready-to-implement artifacts.'
+      return 'Click Start demo. You will immediately get a charter, process maps, and export payloads.'
     }
     if (isRunning) {
-      return 'Pipeline is running. Watch each transformation stage complete.'
+      return 'Building your process optimisation pack...'
     }
-    return 'Review outputs, then open Expert mode only if you want model correction and regression analysis.'
+    return 'Review outputs and copy export payloads into your delivery tracker.'
   }, [error, isRunning, result])
-
-  const automationPack = useMemo(() => {
-    if (!result) {
-      return null
-    }
-
-    return {
-      generated_for: result.sample.id,
-      intake_title: result.sample.title,
-      model_context: {
-        preset,
-        predicted_category: predictedCategory,
-        extracted_signals: result.extracted,
-      },
-      outputs: {
-        triage: result.triage,
-        charter: result.charter,
-        process_map_to_be: result.toBeMermaid,
-        blueprint: result.blueprint,
-        export_payloads: result.exports,
-      },
-    }
-  }, [predictedCategory, preset, result])
 
   function clearRunTimer() {
     if (runTimerRef.current !== null) {
@@ -350,7 +317,7 @@ function App() {
         }
         return next
       })
-    }, 700)
+    }, 650)
   }
 
   function startDemo() {
@@ -422,26 +389,28 @@ function App() {
     setSuiteRows(rows)
   }
 
-  const revealSignals = result !== null && stageIndex >= 0
-  const revealTriage = result !== null && stageIndex >= 1
-  const revealArtifacts = result !== null && stageIndex >= 2
-  const revealExports = result !== null && stageIndex >= 3 && !isRunning
+  const revealSummary = result !== null && stageIndex >= 0
+  const revealArtifacts = result !== null && stageIndex >= 1
+  const revealExports = result !== null && stageIndex >= 2
 
   return (
     <main className="app-shell">
       <header className="hero-card">
         <p className="eyebrow">BIS Process Optimisation Copilot</p>
-        <h1>Turn one messy request into execution-ready process automation artifacts.</h1>
+        <h1>
+          Turn messy process requests into a clear charter, process maps, and an automation-ready
+          delivery pack.
+        </h1>
         <p className="subhead">
-          One click generates a standardized charter, process map, blueprint, and export payloads
-          your team can directly move into delivery tools.
+          One click creates practical work artifacts your team can execute immediately.
         </p>
       </header>
 
-      <section className="control-card">
-        <div className="control-row">
+      <section className="workflow-grid">
+        <aside className="intake-card">
+          <h2>Start Here</h2>
           <label>
-            Intake sample
+            Process request example
             <select
               value={selectedSampleId}
               onChange={(event) => setSelectedSampleId(event.target.value)}
@@ -454,184 +423,217 @@ function App() {
             </select>
           </label>
 
-          <div className="preset-group" role="radiogroup" aria-label="Training preset">
-            {PRESET_OPTIONS.map((option) => (
-              <button
-                key={option.id}
-                className={`preset-chip ${preset === option.id ? 'active' : ''}`}
-                onClick={() => setPreset(option.id)}
-              >
-                {option.label}
-              </button>
-            ))}
+          <button className="primary-btn" onClick={startDemo} disabled={!selectedSample || isRunning}>
+            {isRunning ? 'Generating artifacts...' : 'Start demo'}
+          </button>
+
+          {error ? <p className="error-text">{error}</p> : null}
+          <p className="next-hint">{nextHint}</p>
+          {copyStatus ? <p className="copy-status">{copyStatus}</p> : null}
+
+          <div className="progress-wrap" aria-label="Pipeline progress">
+            <div className="progress-bar" style={{ width: `${progress}%` }} />
           </div>
 
-          <button className="primary-btn" onClick={startDemo} disabled={!selectedSample || isRunning}>
-            {isRunning ? 'Running...' : 'Start demo'}
-          </button>
-        </div>
-
-        <p className="preset-intent">{activePreset?.intent}</p>
-        <p className="next-hint">{nextHint}</p>
-        {copyStatus ? <p className="copy-status">{copyStatus}</p> : null}
-
-        <div className="progress-wrap" aria-label="Pipeline progress">
-          <div className="progress-bar" style={{ width: `${progress}%` }} />
-        </div>
-
-        <ol className="stage-list">
-          {STAGES.map((stage, index) => {
-            const status = stageState(index)
-            return (
-              <li key={stage.title} className={`stage-item ${status}`}>
-                <p className="stage-title">{stage.title}</p>
-                <p className="stage-detail">{stage.detail}</p>
+          <ol className="stage-list">
+            {STAGES.map((stage, index) => (
+              <li key={stage} className={`stage-item ${stageState(index)}`}>
+                {stage}
               </li>
-            )
-          })}
-        </ol>
-      </section>
+            ))}
+          </ol>
+        </aside>
 
-      {!result ? (
-        <section className="artifact-card">
-          <h2>What You Will See</h2>
-          <p>
-            The demo reveals each transformation step, so you can track exactly how the intake is
-            converted into operational deliverables.
-          </p>
-        </section>
-      ) : (
-        <section className="artifact-stack">
-          <section className="artifact-card">
-            <h2>Input to Output</h2>
-            <div className="before-after">
-              <article>
-                <h3>Raw Intake</h3>
-                <p>{result.sample.text}</p>
-              </article>
-              <article>
-                <h3>Automation Outcome</h3>
-                <p>
-                  Category <strong>{result.triage.category}</strong>, priority{' '}
-                  <strong>{result.triage.priority}</strong>, estimated savings{' '}
-                  <strong>{result.triage.est_savings_hours_per_month}h/month</strong>.
-                </p>
-              </article>
-            </div>
-          </section>
-
-          {revealSignals ? (
-            <section className="artifact-card">
-              <h2>What The Model Understood</h2>
-              <div className="signal-grid">
-                <article>
-                  <h3>Predicted category</h3>
-                  <p>{predictedCategory ?? 'n/a'}</p>
-                </article>
-                <article>
-                  <h3>Key systems</h3>
-                  <div className="chip-row">
-                    {result.extracted.key_systems.length > 0
-                      ? result.extracted.key_systems.map((item) => <span key={item}>{item}</span>)
-                      : 'None detected'}
-                  </div>
-                </article>
-                <article>
-                  <h3>Approval roles</h3>
-                  <div className="chip-row">
-                    {result.extracted.approval_roles.length > 0
-                      ? result.extracted.approval_roles.map((item) => <span key={item}>{item}</span>)
-                      : 'None detected'}
-                  </div>
-                </article>
-                <article>
-                  <h3>Pain signals</h3>
-                  <div className="chip-row">
-                    {result.extracted.pain_keywords.length > 0
-                      ? result.extracted.pain_keywords.map((item) => <span key={item}>{item}</span>)
-                      : 'None detected'}
-                  </div>
-                </article>
-              </div>
-            </section>
-          ) : null}
-
-          {revealTriage ? (
-            <section className="artifact-card">
-              <h2>Triage Snapshot</h2>
-              <div className="kv-grid">
-                <p>
-                  <span>Risk</span>
-                  <strong>{result.triage.risk_level}</strong>
-                </p>
-                <p>
-                  <span>Automation score</span>
-                  <strong>{result.triage.automation_score}</strong>
-                </p>
-                <p>
-                  <span>Next action</span>
-                  <strong>{result.triage.next_action}</strong>
-                </p>
-                <p>
-                  <span>Manual touchpoints</span>
-                  <strong>{result.extracted.manual_step_count}</strong>
-                </p>
-              </div>
-            </section>
-          ) : null}
-
-          {revealArtifacts ? (
-            <>
-              <section className="artifact-card">
-                <h2>Project Charter</h2>
-                <p>
-                  <strong>Problem statement:</strong> {result.charter.problem_statement}
-                </p>
-                <h3>Target metrics</h3>
-                <ul className="bullet-list">
-                  {Object.entries(result.charter.target_metrics).map(([key, value]) => (
-                    <li key={key}>
-                      <strong>{key}:</strong> {value === null ? 'n/a' : String(value)}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-
-              <section className="artifact-card">
-                <h2>To-Be Process Map</h2>
-                <MermaidDiagram title="Optimized workflow" chart={result.toBeMermaid} />
-              </section>
-
-              <section className="artifact-card">
-                <h2>Automation Blueprint</h2>
-                <pre>{JSON.stringify(result.blueprint, null, 2)}</pre>
-              </section>
-            </>
-          ) : null}
-
-          {revealExports ? (
-            <section className="artifact-card">
-              <h2>Export Payload Bundle</h2>
-              <pre>{JSON.stringify(result.exports, null, 2)}</pre>
-              <div className="button-row">
-                <button className="secondary-btn" onClick={() => copyJson('Export payload bundle', result.exports)}>
-                  Copy export payloads
-                </button>
-                <button className="secondary-btn" onClick={() => copyJson('Automation pack', automationPack)}>
-                  Copy full automation pack
-                </button>
-              </div>
-              <p className="integration-note">
-                Payload shape mirrors common ticketing/tracker APIs, so this output can be moved
-                directly into internal execution workflows.
+        <section className="output-stack">
+          {!result ? (
+            <section className="artifact-card empty-card">
+              <h2>What You Will Get</h2>
+              <p>
+                A project charter, as-is and to-be process maps, an implementation blueprint, and
+                copy-ready export payloads.
               </p>
             </section>
-          ) : null}
+          ) : (
+            <>
+              {revealSummary ? (
+                <section className="artifact-card">
+                  <h2>Triage Outcome</h2>
+                  <p className="artifact-intro">
+                    The intake is prioritized and translated into an execution-ready optimisation
+                    track.
+                  </p>
+                  <div className="metric-grid">
+                    <article>
+                      <span>Recommended workflow</span>
+                      <strong>{prettyCategory(result.triage.category)}</strong>
+                    </article>
+                    <article>
+                      <span>Delivery priority</span>
+                      <strong>{result.triage.priority}</strong>
+                    </article>
+                    <article>
+                      <span>Risk level</span>
+                      <strong>{prettyCategory(result.triage.risk_level)}</strong>
+                    </article>
+                    <article>
+                      <span>Estimated hours saved / month</span>
+                      <strong>{result.triage.est_savings_hours_per_month}</strong>
+                    </article>
+                  </div>
+                </section>
+              ) : null}
 
-          <details className="expert-panel" open={showExpert} onToggle={(event) => setShowExpert(event.currentTarget.open)}>
-            <summary>Expert mode (optional): correction + non-regression checks</summary>
+              {revealArtifacts ? (
+                <>
+                  <section className="artifact-card">
+                    <h2>Project Charter</h2>
+                    <p>
+                      <strong>Problem statement:</strong> {result.charter.problem_statement}
+                    </p>
+                    <p>
+                      <strong>Recommended next action:</strong> {result.triage.next_action}
+                    </p>
+                    <div className="metric-grid compact">
+                      <article>
+                        <span>Baseline cycle time (days)</span>
+                        <strong>{metricToText(result.charter.baseline_metrics.cycle_time_days)}</strong>
+                      </article>
+                      <article>
+                        <span>Target cycle time (days)</span>
+                        <strong>{metricToText(result.charter.target_metrics.cycle_time_days_target)}</strong>
+                      </article>
+                      <article>
+                        <span>Baseline monthly volume</span>
+                        <strong>{metricToText(result.charter.baseline_metrics.volume_per_month)}</strong>
+                      </article>
+                      <article>
+                        <span>Expected monthly savings (hours)</span>
+                        <strong>
+                          {metricToText(
+                            result.charter.target_metrics.expected_savings_hours_per_month,
+                          )}
+                        </strong>
+                      </article>
+                    </div>
+                    <button
+                      className="secondary-btn"
+                      onClick={() => copyJson('Charter JSON', result.charter)}
+                    >
+                      Copy charter JSON
+                    </button>
+                  </section>
 
+                  <section className="artifact-card">
+                    <h2>Process Maps</h2>
+                    <p className="artifact-intro">
+                      Compare the current process with the optimized automation flow.
+                    </p>
+                    <div className="map-grid">
+                      <MermaidDiagram title="As-is process" chart={result.asIsMermaid} />
+                      <MermaidDiagram title="To-be process" chart={result.toBeMermaid} />
+                    </div>
+                  </section>
+
+                  <section className="artifact-card">
+                    <h2>Automation Blueprint</h2>
+                    <p className="artifact-intro">
+                      Systems, automation sequence, and controls required for implementation.
+                    </p>
+
+                    <h3>Connected systems</h3>
+                    <div className="chip-row">
+                      {result.blueprint.connectors.map((connector) => (
+                        <span key={connector.system}>{connector.system}</span>
+                      ))}
+                    </div>
+
+                    <h3>Automation sequence</h3>
+                    <ol className="step-list">
+                      {result.blueprint.steps.map((step) => (
+                        <li key={step.id}>{step.name}</li>
+                      ))}
+                    </ol>
+
+                    <h3>Controls and monitoring</h3>
+                    <ul className="bullet-list">
+                      {result.blueprint.controls.slice(0, 2).map((control) => (
+                        <li key={control.control}>{control.control}</li>
+                      ))}
+                      {result.blueprint.monitoring.slice(0, 2).map((metric) => (
+                        <li key={metric.metric}>{metric.metric}</li>
+                      ))}
+                    </ul>
+
+                    <button
+                      className="secondary-btn"
+                      onClick={() => copyJson('Blueprint JSON', result.blueprint)}
+                    >
+                      Copy blueprint JSON
+                    </button>
+                  </section>
+                </>
+              ) : null}
+
+              {revealExports ? (
+                <section className="artifact-card">
+                  <h2>Export Pack</h2>
+                  <p className="artifact-intro">
+                    Copy these payloads into your project tracker or service platform.
+                  </p>
+
+                  <div className="button-row">
+                    <button
+                      className="secondary-btn"
+                      onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}
+                    >
+                      Copy Jira payload
+                    </button>
+                    <button
+                      className="secondary-btn"
+                      onClick={() =>
+                        copyJson('ServiceNow payload', result.exports.servicenow_record_create)
+                      }
+                    >
+                      Copy ServiceNow payload
+                    </button>
+                    <button
+                      className="secondary-btn"
+                      onClick={() => copyJson('Tracker payload', result.exports.process_tracker_row)}
+                    >
+                      Copy tracker payload
+                    </button>
+                  </div>
+
+                  <p className="integration-note">
+                    Integration note: Payloads are shaped like internal ticketing and tracker APIs
+                    to demonstrate direct transferability.
+                  </p>
+                </section>
+              ) : null}
+            </>
+          )}
+
+          <details className="expert-panel">
+            <summary>Expert mode (optional)</summary>
             <div className="expert-content">
+              <p className="status-text">
+                Use this section only when you want to inspect update behavior and retention safety.
+              </p>
+
+              <label>
+                Update strategy
+                <select
+                  value={preset}
+                  onChange={(event) => setPreset(event.target.value as ReplayPreset)}
+                >
+                  {PRESET_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               <label className="checkbox-row">
                 <input
                   type="checkbox"
@@ -642,7 +644,7 @@ function App() {
               </label>
 
               <label>
-                Memory replay size: {memoryReplaySize}
+                Replay memory size: {memoryReplaySize}
                 <input
                   type="range"
                   min={1}
@@ -661,7 +663,7 @@ function App() {
                   >
                     {intakeCategories.map((category) => (
                       <option key={category} value={category}>
-                        {category}
+                        {prettyCategory(category)}
                       </option>
                     ))}
                   </select>
@@ -674,11 +676,18 @@ function App() {
                 </button>
               </div>
 
+              {predictedCategory ? (
+                <p className="status-text">
+                  Current prediction: <strong>{prettyCategory(predictedCategory)}</strong>
+                </p>
+              ) : null}
+
               {updateSummary ? (
                 <p className="status-text">
-                  Updated with {updateSummary.preset}: accuracy {formatPct(updateSummary.before_accuracy)} →{' '}
-                  {formatPct(updateSummary.after_accuracy)}; now predicts{' '}
-                  <strong>{updateSummary.predicted_after}</strong>.
+                  {presetLabel(updateSummary.preset)} accuracy: {formatPct(updateSummary.before_accuracy)}
+                  {' -> '}
+                  {formatPct(updateSummary.after_accuracy)}. Updated prediction:{' '}
+                  {prettyCategory(updateSummary.predicted_after)}
                 </p>
               ) : null}
 
@@ -688,8 +697,8 @@ function App() {
                     <thead>
                       <tr>
                         <th>Preset</th>
-                        <th>Old accuracy (before)</th>
-                        <th>Old accuracy (after)</th>
+                        <th>Old accuracy before</th>
+                        <th>Old accuracy after</th>
                         <th>Retention</th>
                         <th>Mean regression drop</th>
                         <th>Overall accuracy</th>
@@ -698,7 +707,7 @@ function App() {
                     <tbody>
                       {suiteRows.map((row) => (
                         <tr key={row.preset}>
-                          <td>{PRESET_OPTIONS.find((option) => option.id === row.preset)?.label}</td>
+                          <td>{presetLabel(row.preset)}</td>
                           <td>{formatPct(row.before_old_accuracy)}</td>
                           <td>{formatPct(row.after_old_accuracy)}</td>
                           <td>{formatPct(row.retention_ratio)}</td>
@@ -713,7 +722,7 @@ function App() {
             </div>
           </details>
         </section>
-      )}
+      </section>
     </main>
   )
 }
