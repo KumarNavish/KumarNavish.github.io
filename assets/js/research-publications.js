@@ -152,7 +152,7 @@
       })
       .map(function (arc) {
         var activeClass = state.arc === arc.id ? " active" : "";
-        var buttonLabel = state.arc === arc.id ? "Arc active" : "Focus arc";
+        var buttonLabel = state.arc === arc.id ? "Active" : "Filter";
 
         return (
           '<article class="intentional-arc-map-card' + activeClass + '">' +
@@ -181,6 +181,20 @@
     });
   }
 
+  function compactSignal(value) {
+    var text = String(value || "").trim();
+    if (!text) {
+      return "";
+    }
+
+    var sentence = text.split(/(?<=[.!?])\s+/)[0] || text;
+    if (sentence.length > 120) {
+      return sentence.slice(0, 117).trimEnd() + "...";
+    }
+
+    return sentence;
+  }
+
   function renderWorkItem(work, arc) {
     var primary = window.ResearchCore.workPrimaryLink(work);
     var links = (work.links || [])
@@ -193,6 +207,25 @@
       ? '<p class="intentional-item-tags">' + work.tags.map(escape).join(" | ") + "</p>"
       : "";
 
+    var signals = [
+      { label: "Reasoning", text: compactSignal(work.contribution) },
+      { label: "System", text: compactSignal(work.build) },
+      { label: "Relevance", text: compactSignal(work.impact) }
+    ].filter(function (item) {
+      return Boolean(item.text);
+    });
+
+    var signalMarkup = signals.length
+      ? '<ul class="intentional-item-signals">' + signals.map(function (item) {
+          return (
+            '<li class="intentional-item-signal">' +
+              '<strong>' + escape(item.label) + '</strong>' +
+              '<span>' + escape(item.text) + '</span>' +
+            '</li>'
+          );
+        }).join("") + "</ul>"
+      : "";
+
     return (
       '<article class="intentional-item">' +
         '<header class="intentional-item-head">' +
@@ -203,9 +236,7 @@
         '<p class="intentional-item-meta">' + escape(work.authors) + '</p>' +
         '<p class="intentional-item-meta">' + escape(work.venue) + '</p>' +
         '<p class="intentional-item-meta">' + escape(work.summary) + '</p>' +
-        (work.contribution ? '<p class="intentional-item-meta"><strong>Reasoning:</strong> ' + escape(work.contribution) + '</p>' : "") +
-        (work.build ? '<p class="intentional-item-meta"><strong>System:</strong> ' + escape(work.build) + '</p>' : "") +
-        (work.impact ? '<p class="intentional-item-meta"><strong>Relevance:</strong> ' + escape(work.impact) + '</p>' : "") +
+        signalMarkup +
         tags +
         '<div class="intentional-work-links">' + links + '</div>' +
       "</article>"
