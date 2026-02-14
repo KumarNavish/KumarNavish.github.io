@@ -2,12 +2,12 @@
   {
     "id": "purchase_request-train-001",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from operations for market data license renewal via Helix Procurement; estimated spend is $9200.",
+    "request_text": "Create a procurement request from monetary_and_economic for market data terminal license renewal via Helix Procurement; estimated spend is $9200 for BIS operations.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve market data license renewal purchase",
+      "title": "Approve market data terminal license renewal purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
@@ -16,8 +16,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "operations",
-        "item_description": "market data license renewal",
+        "requester_department": "monetary_and_economic",
+        "item_description": "market data terminal license renewal",
         "estimated_cost_usd": "9200",
         "budget_code": "BUD-7810",
         "preferred_supplier": "Helix Procurement"
@@ -37,12 +37,12 @@
   {
     "id": "purchase_request-train-002",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from communications for market data license renewal via Helix Procurement; estimated spend is $11800.",
+    "request_text": "Create a procurement request from communications for market data terminal license renewal via Helix Procurement; estimated spend is $11800 for BIS operations.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve market data license renewal purchase",
+      "title": "Approve market data terminal license renewal purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
@@ -52,7 +52,7 @@
       ],
       "required_fields": {
         "requester_department": "communications",
-        "item_description": "market data license renewal",
+        "item_description": "market data terminal license renewal",
         "estimated_cost_usd": "11800",
         "budget_code": "BUD-7810",
         "preferred_supplier": "Helix Procurement"
@@ -72,12 +72,12 @@
   {
     "id": "purchase_request-train-003",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from it_security for secure workstation refresh via Helix Procurement; estimated spend is $2500.",
+    "request_text": "Create a procurement request from it_services for secure workstation fleet refresh via Helix Procurement; estimated spend is $2500 for BIS operations.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve secure workstation refresh purchase",
+      "title": "Approve secure workstation fleet refresh purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "medium",
@@ -86,8 +86,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "it_security",
-        "item_description": "secure workstation refresh",
+        "requester_department": "it_services",
+        "item_description": "secure workstation fleet refresh",
         "estimated_cost_usd": "2500",
         "budget_code": "BUD-7731",
         "preferred_supplier": "Helix Procurement"
@@ -107,12 +107,12 @@
   {
     "id": "purchase_request-train-004",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from it_security for secure workstation refresh via EuroData Supply; estimated spend is $9700.",
+    "request_text": "Create a procurement request from it_services for secure workstation fleet refresh via EuroData Supply; estimated spend is $9700 for BIS operations.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve secure workstation refresh purchase",
+      "title": "Approve secure workstation fleet refresh purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "high",
@@ -121,8 +121,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "it_security",
-        "item_description": "secure workstation refresh",
+        "requester_department": "it_services",
+        "item_description": "secure workstation fleet refresh",
         "estimated_cost_usd": "9700",
         "budget_code": "BUD-7810",
         "preferred_supplier": "EuroData Supply"
@@ -142,12 +142,12 @@
   {
     "id": "purchase_request-train-005",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from it_security for archival storage extension via EuroData Supply; estimated spend is $4000.",
+    "request_text": "Create a procurement request from it_services for compliance archival storage extension via EuroData Supply; estimated spend is $4000 for BIS operations.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve archival storage extension purchase",
+      "title": "Approve compliance archival storage extension purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
@@ -156,8 +156,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "it_security",
-        "item_description": "archival storage extension",
+        "requester_department": "it_services",
+        "item_description": "compliance archival storage extension",
         "estimated_cost_usd": "4000",
         "budget_code": "BUD-6604",
         "preferred_supplier": "EuroData Supply"
@@ -177,12 +177,12 @@
   {
     "id": "purchase_request-train-006",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from research for secure workstation refresh via Helix Procurement; estimated spend is $11500.",
+    "request_text": "Create a procurement request from banking for secure workstation fleet refresh via Helix Procurement; estimated spend is $11500 for BIS operations.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve secure workstation refresh purchase",
+      "title": "Approve secure workstation fleet refresh purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
@@ -191,8 +191,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "research",
-        "item_description": "secure workstation refresh",
+        "requester_department": "banking",
+        "item_description": "secure workstation fleet refresh",
         "estimated_cost_usd": "11500",
         "budget_code": "BUD-6604",
         "preferred_supplier": "Helix Procurement"
@@ -212,12 +212,12 @@
   {
     "id": "purchase_request-train-007",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from communications for document workflow subscription via Helix Procurement; estimated spend is $1500.",
+    "request_text": "Create a procurement request from communications for policy document workflow subscription via Helix Procurement; estimated spend is $1500 for BIS operations.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve document workflow subscription purchase",
+      "title": "Approve policy document workflow subscription purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "medium",
@@ -227,7 +227,7 @@
       ],
       "required_fields": {
         "requester_department": "communications",
-        "item_description": "document workflow subscription",
+        "item_description": "policy document workflow subscription",
         "estimated_cost_usd": "1500",
         "budget_code": "BUD-7731",
         "preferred_supplier": "Helix Procurement"
@@ -247,12 +247,12 @@
   {
     "id": "purchase_request-train-008",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from research for document workflow subscription via Arcadia Tech; estimated spend is $6300.",
+    "request_text": "Create a procurement request from banking for policy document workflow subscription via Arcadia Tech; estimated spend is $6300 for BIS operations.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve document workflow subscription purchase",
+      "title": "Approve policy document workflow subscription purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "high",
@@ -261,8 +261,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "research",
-        "item_description": "document workflow subscription",
+        "requester_department": "banking",
+        "item_description": "policy document workflow subscription",
         "estimated_cost_usd": "6300",
         "budget_code": "BUD-6604",
         "preferred_supplier": "Arcadia Tech"
@@ -282,12 +282,12 @@
   {
     "id": "purchase_request-train-009",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from research for market data license renewal via Arcadia Tech; estimated spend is $10800.",
+    "request_text": "Create a procurement request from banking for market data terminal license renewal via Arcadia Tech; estimated spend is $10800 for BIS operations.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve market data license renewal purchase",
+      "title": "Approve market data terminal license renewal purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
@@ -296,8 +296,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "research",
-        "item_description": "market data license renewal",
+        "requester_department": "banking",
+        "item_description": "market data terminal license renewal",
         "estimated_cost_usd": "10800",
         "budget_code": "BUD-6604",
         "preferred_supplier": "Arcadia Tech"
@@ -317,12 +317,12 @@
   {
     "id": "purchase_request-train-010",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from communications for secure workstation refresh via Arcadia Tech; estimated spend is $8700.",
+    "request_text": "Create a procurement request from communications for secure workstation fleet refresh via Arcadia Tech; estimated spend is $8700 for BIS operations.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve secure workstation refresh purchase",
+      "title": "Approve secure workstation fleet refresh purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
@@ -332,7 +332,7 @@
       ],
       "required_fields": {
         "requester_department": "communications",
-        "item_description": "secure workstation refresh",
+        "item_description": "secure workstation fleet refresh",
         "estimated_cost_usd": "8700",
         "budget_code": "BUD-5590",
         "preferred_supplier": "Arcadia Tech"
@@ -352,12 +352,12 @@
   {
     "id": "purchase_request-train-011",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from research for secure workstation refresh via Summit Systems; estimated spend is $2600.",
+    "request_text": "Create a procurement request from banking for secure workstation fleet refresh via Summit Systems; estimated spend is $2600 for BIS operations.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve secure workstation refresh purchase",
+      "title": "Approve secure workstation fleet refresh purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "medium",
@@ -366,8 +366,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "research",
-        "item_description": "secure workstation refresh",
+        "requester_department": "banking",
+        "item_description": "secure workstation fleet refresh",
         "estimated_cost_usd": "2600",
         "budget_code": "BUD-6604",
         "preferred_supplier": "Summit Systems"
@@ -387,12 +387,12 @@
   {
     "id": "purchase_request-train-012",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from operations for archival storage extension via Helix Procurement; estimated spend is $3200.",
+    "request_text": "Create a procurement request from monetary_and_economic for compliance archival storage extension via Helix Procurement; estimated spend is $3200 for BIS operations.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve archival storage extension purchase",
+      "title": "Approve compliance archival storage extension purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "high",
@@ -401,8 +401,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "operations",
-        "item_description": "archival storage extension",
+        "requester_department": "monetary_and_economic",
+        "item_description": "compliance archival storage extension",
         "estimated_cost_usd": "3200",
         "budget_code": "BUD-7731",
         "preferred_supplier": "Helix Procurement"
@@ -422,12 +422,12 @@
   {
     "id": "purchase_request-train-013",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from research for archival storage extension via Helix Procurement; estimated spend is $8900.",
+    "request_text": "Create a procurement request from banking for compliance archival storage extension via Helix Procurement; estimated spend is $8900 for BIS operations.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve archival storage extension purchase",
+      "title": "Approve compliance archival storage extension purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
@@ -436,8 +436,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "research",
-        "item_description": "archival storage extension",
+        "requester_department": "banking",
+        "item_description": "compliance archival storage extension",
         "estimated_cost_usd": "8900",
         "budget_code": "BUD-7731",
         "preferred_supplier": "Helix Procurement"
@@ -457,12 +457,12 @@
   {
     "id": "purchase_request-train-014",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from research for archival storage extension via Arcadia Tech; estimated spend is $10600.",
+    "request_text": "Create a procurement request from banking for compliance archival storage extension via Arcadia Tech; estimated spend is $10600 for BIS operations.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve archival storage extension purchase",
+      "title": "Approve compliance archival storage extension purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
@@ -471,8 +471,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "research",
-        "item_description": "archival storage extension",
+        "requester_department": "banking",
+        "item_description": "compliance archival storage extension",
         "estimated_cost_usd": "10600",
         "budget_code": "BUD-5590",
         "preferred_supplier": "Arcadia Tech"
@@ -492,12 +492,12 @@
   {
     "id": "purchase_request-train-015",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from it_security for document workflow subscription via Summit Systems; estimated spend is $5300.",
+    "request_text": "Create a procurement request from it_services for policy document workflow subscription via Summit Systems; estimated spend is $5300 for BIS operations.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve document workflow subscription purchase",
+      "title": "Approve policy document workflow subscription purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "medium",
@@ -506,8 +506,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "it_security",
-        "item_description": "document workflow subscription",
+        "requester_department": "it_services",
+        "item_description": "policy document workflow subscription",
         "estimated_cost_usd": "5300",
         "budget_code": "BUD-7810",
         "preferred_supplier": "Summit Systems"
@@ -527,12 +527,12 @@
   {
     "id": "purchase_request-train-016",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from it_security for secure workstation refresh via Arcadia Tech; estimated spend is $1900.",
+    "request_text": "Create a procurement request from it_services for secure workstation fleet refresh via Arcadia Tech; estimated spend is $1900 for BIS operations.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve secure workstation refresh purchase",
+      "title": "Approve secure workstation fleet refresh purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "high",
@@ -541,8 +541,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "it_security",
-        "item_description": "secure workstation refresh",
+        "requester_department": "it_services",
+        "item_description": "secure workstation fleet refresh",
         "estimated_cost_usd": "1900",
         "budget_code": "BUD-7731",
         "preferred_supplier": "Arcadia Tech"
@@ -562,12 +562,12 @@
   {
     "id": "purchase_request-train-017",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from it_security for secure workstation refresh via Arcadia Tech; estimated spend is $10400.",
+    "request_text": "Create a procurement request from it_services for secure workstation fleet refresh via Arcadia Tech; estimated spend is $10400 for BIS operations.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve secure workstation refresh purchase",
+      "title": "Approve secure workstation fleet refresh purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
@@ -576,8 +576,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "it_security",
-        "item_description": "secure workstation refresh",
+        "requester_department": "it_services",
+        "item_description": "secure workstation fleet refresh",
         "estimated_cost_usd": "10400",
         "budget_code": "BUD-5590",
         "preferred_supplier": "Arcadia Tech"
@@ -597,12 +597,12 @@
   {
     "id": "purchase_request-train-018",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from it_security for archival storage extension via EuroData Supply; estimated spend is $3000.",
+    "request_text": "Create a procurement request from it_services for compliance archival storage extension via EuroData Supply; estimated spend is $3000 for BIS operations.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve archival storage extension purchase",
+      "title": "Approve compliance archival storage extension purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
@@ -611,8 +611,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "it_security",
-        "item_description": "archival storage extension",
+        "requester_department": "it_services",
+        "item_description": "compliance archival storage extension",
         "estimated_cost_usd": "3000",
         "budget_code": "BUD-5590",
         "preferred_supplier": "EuroData Supply"
@@ -632,12 +632,12 @@
   {
     "id": "purchase_request-train-019",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from communications for archival storage extension via Summit Systems; estimated spend is $9300.",
+    "request_text": "Create a procurement request from communications for compliance archival storage extension via Summit Systems; estimated spend is $9300 for BIS operations.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve archival storage extension purchase",
+      "title": "Approve compliance archival storage extension purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "medium",
@@ -647,7 +647,7 @@
       ],
       "required_fields": {
         "requester_department": "communications",
-        "item_description": "archival storage extension",
+        "item_description": "compliance archival storage extension",
         "estimated_cost_usd": "9300",
         "budget_code": "BUD-4012",
         "preferred_supplier": "Summit Systems"
@@ -667,12 +667,12 @@
   {
     "id": "purchase_request-train-020",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from it_security for secure workstation refresh via Summit Systems; estimated spend is $1500.",
+    "request_text": "Create a procurement request from it_services for secure workstation fleet refresh via Summit Systems; estimated spend is $1500 for BIS operations.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve secure workstation refresh purchase",
+      "title": "Approve secure workstation fleet refresh purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "high",
@@ -681,8 +681,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "it_security",
-        "item_description": "secure workstation refresh",
+        "requester_department": "it_services",
+        "item_description": "secure workstation fleet refresh",
         "estimated_cost_usd": "1500",
         "budget_code": "BUD-6604",
         "preferred_supplier": "Summit Systems"
@@ -702,12 +702,12 @@
   {
     "id": "purchase_request-train-021",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from research for archival storage extension via Arcadia Tech; estimated spend is $11700.",
+    "request_text": "Create a procurement request from banking for compliance archival storage extension via Arcadia Tech; estimated spend is $11700 for BIS operations.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve archival storage extension purchase",
+      "title": "Approve compliance archival storage extension purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
@@ -716,8 +716,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "research",
-        "item_description": "archival storage extension",
+        "requester_department": "banking",
+        "item_description": "compliance archival storage extension",
         "estimated_cost_usd": "11700",
         "budget_code": "BUD-6604",
         "preferred_supplier": "Arcadia Tech"
@@ -737,12 +737,12 @@
   {
     "id": "purchase_request-train-022",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from operations for archival storage extension via Arcadia Tech; estimated spend is $6800.",
+    "request_text": "Create a procurement request from monetary_and_economic for compliance archival storage extension via Arcadia Tech; estimated spend is $6800 for BIS operations.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve archival storage extension purchase",
+      "title": "Approve compliance archival storage extension purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
@@ -751,8 +751,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "operations",
-        "item_description": "archival storage extension",
+        "requester_department": "monetary_and_economic",
+        "item_description": "compliance archival storage extension",
         "estimated_cost_usd": "6800",
         "budget_code": "BUD-7731",
         "preferred_supplier": "Arcadia Tech"
@@ -772,12 +772,12 @@
   {
     "id": "purchase_request-train-023",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from communications for market data license renewal via Arcadia Tech; estimated spend is $6600.",
+    "request_text": "Create a procurement request from communications for market data terminal license renewal via Arcadia Tech; estimated spend is $6600 for BIS operations.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve market data license renewal purchase",
+      "title": "Approve market data terminal license renewal purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "medium",
@@ -787,7 +787,7 @@
       ],
       "required_fields": {
         "requester_department": "communications",
-        "item_description": "market data license renewal",
+        "item_description": "market data terminal license renewal",
         "estimated_cost_usd": "6600",
         "budget_code": "BUD-6604",
         "preferred_supplier": "Arcadia Tech"
@@ -807,12 +807,12 @@
   {
     "id": "purchase_request-train-024",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from research for archival storage extension via Summit Systems; estimated spend is $8100.",
+    "request_text": "Create a procurement request from banking for compliance archival storage extension via Summit Systems; estimated spend is $8100 for BIS operations.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve archival storage extension purchase",
+      "title": "Approve compliance archival storage extension purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "high",
@@ -821,8 +821,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "research",
-        "item_description": "archival storage extension",
+        "requester_department": "banking",
+        "item_description": "compliance archival storage extension",
         "estimated_cost_usd": "8100",
         "budget_code": "BUD-7731",
         "preferred_supplier": "Summit Systems"
@@ -842,12 +842,12 @@
   {
     "id": "purchase_request-train-025",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from it_security for archival storage extension via Helix Procurement; estimated spend is $4600.",
+    "request_text": "Create a procurement request from it_services for compliance archival storage extension via Helix Procurement; estimated spend is $4600 for BIS operations.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve archival storage extension purchase",
+      "title": "Approve compliance archival storage extension purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
@@ -856,8 +856,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "it_security",
-        "item_description": "archival storage extension",
+        "requester_department": "it_services",
+        "item_description": "compliance archival storage extension",
         "estimated_cost_usd": "4600",
         "budget_code": "BUD-5590",
         "preferred_supplier": "Helix Procurement"
@@ -877,12 +877,12 @@
   {
     "id": "purchase_request-train-026",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from research for document workflow subscription via Helix Procurement; estimated spend is $5700.",
+    "request_text": "Create a procurement request from banking for policy document workflow subscription via Helix Procurement; estimated spend is $5700 for BIS operations.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve document workflow subscription purchase",
+      "title": "Approve policy document workflow subscription purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
@@ -891,8 +891,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "research",
-        "item_description": "document workflow subscription",
+        "requester_department": "banking",
+        "item_description": "policy document workflow subscription",
         "estimated_cost_usd": "5700",
         "budget_code": "BUD-7810",
         "preferred_supplier": "Helix Procurement"
@@ -912,12 +912,12 @@
   {
     "id": "purchase_request-train-027",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from operations for market data license renewal via EuroData Supply; estimated spend is $5700.",
+    "request_text": "Create a procurement request from monetary_and_economic for market data terminal license renewal via EuroData Supply; estimated spend is $5700 for BIS operations.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve market data license renewal purchase",
+      "title": "Approve market data terminal license renewal purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "medium",
@@ -926,8 +926,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "operations",
-        "item_description": "market data license renewal",
+        "requester_department": "monetary_and_economic",
+        "item_description": "market data terminal license renewal",
         "estimated_cost_usd": "5700",
         "budget_code": "BUD-4012",
         "preferred_supplier": "EuroData Supply"
@@ -947,12 +947,12 @@
   {
     "id": "purchase_request-train-028",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from it_security for document workflow subscription via Summit Systems; estimated spend is $10600.",
+    "request_text": "Create a procurement request from it_services for policy document workflow subscription via Summit Systems; estimated spend is $10600 for BIS operations.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve document workflow subscription purchase",
+      "title": "Approve policy document workflow subscription purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "high",
@@ -961,8 +961,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "it_security",
-        "item_description": "document workflow subscription",
+        "requester_department": "it_services",
+        "item_description": "policy document workflow subscription",
         "estimated_cost_usd": "10600",
         "budget_code": "BUD-4012",
         "preferred_supplier": "Summit Systems"
@@ -982,12 +982,12 @@
   {
     "id": "purchase_request-train-029",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from communications for market data license renewal via Arcadia Tech; estimated spend is $5900.",
+    "request_text": "Create a procurement request from communications for market data terminal license renewal via Arcadia Tech; estimated spend is $5900 for BIS operations.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve market data license renewal purchase",
+      "title": "Approve market data terminal license renewal purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
@@ -997,7 +997,7 @@
       ],
       "required_fields": {
         "requester_department": "communications",
-        "item_description": "market data license renewal",
+        "item_description": "market data terminal license renewal",
         "estimated_cost_usd": "5900",
         "budget_code": "BUD-4012",
         "preferred_supplier": "Arcadia Tech"
@@ -1017,12 +1017,12 @@
   {
     "id": "purchase_request-train-030",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from research for market data license renewal via Summit Systems; estimated spend is $11900.",
+    "request_text": "Create a procurement request from banking for market data terminal license renewal via Summit Systems; estimated spend is $11900 for BIS operations.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve market data license renewal purchase",
+      "title": "Approve market data terminal license renewal purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
@@ -1031,8 +1031,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "research",
-        "item_description": "market data license renewal",
+        "requester_department": "banking",
+        "item_description": "market data terminal license renewal",
         "estimated_cost_usd": "11900",
         "budget_code": "BUD-6604",
         "preferred_supplier": "Summit Systems"
@@ -1052,12 +1052,12 @@
   {
     "id": "purchase_request-train-031",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from it_security for market data license renewal via EuroData Supply; estimated spend is $11300.",
+    "request_text": "Create a procurement request from it_services for market data terminal license renewal via EuroData Supply; estimated spend is $11300 for BIS operations.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve market data license renewal purchase",
+      "title": "Approve market data terminal license renewal purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "medium",
@@ -1066,8 +1066,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "it_security",
-        "item_description": "market data license renewal",
+        "requester_department": "it_services",
+        "item_description": "market data terminal license renewal",
         "estimated_cost_usd": "11300",
         "budget_code": "BUD-5590",
         "preferred_supplier": "EuroData Supply"
@@ -1087,12 +1087,12 @@
   {
     "id": "purchase_request-train-032",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from it_security for document workflow subscription via EuroData Supply; estimated spend is $5900.",
+    "request_text": "Create a procurement request from it_services for policy document workflow subscription via EuroData Supply; estimated spend is $5900 for BIS operations.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve document workflow subscription purchase",
+      "title": "Approve policy document workflow subscription purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "high",
@@ -1101,8 +1101,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "it_security",
-        "item_description": "document workflow subscription",
+        "requester_department": "it_services",
+        "item_description": "policy document workflow subscription",
         "estimated_cost_usd": "5900",
         "budget_code": "BUD-6604",
         "preferred_supplier": "EuroData Supply"
@@ -1122,12 +1122,12 @@
   {
     "id": "purchase_request-train-033",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from research for document workflow subscription via EuroData Supply; estimated spend is $3800.",
+    "request_text": "Create a procurement request from banking for policy document workflow subscription via EuroData Supply; estimated spend is $3800 for BIS operations.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve document workflow subscription purchase",
+      "title": "Approve policy document workflow subscription purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
@@ -1136,8 +1136,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "research",
-        "item_description": "document workflow subscription",
+        "requester_department": "banking",
+        "item_description": "policy document workflow subscription",
         "estimated_cost_usd": "3800",
         "budget_code": "BUD-4012",
         "preferred_supplier": "EuroData Supply"
@@ -1157,12 +1157,12 @@
   {
     "id": "purchase_request-train-034",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from communications for document workflow subscription via Arcadia Tech; estimated spend is $1500.",
+    "request_text": "Create a procurement request from communications for policy document workflow subscription via Arcadia Tech; estimated spend is $1500 for BIS operations.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve document workflow subscription purchase",
+      "title": "Approve policy document workflow subscription purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
@@ -1172,7 +1172,7 @@
       ],
       "required_fields": {
         "requester_department": "communications",
-        "item_description": "document workflow subscription",
+        "item_description": "policy document workflow subscription",
         "estimated_cost_usd": "1500",
         "budget_code": "BUD-6604",
         "preferred_supplier": "Arcadia Tech"
@@ -1192,12 +1192,12 @@
   {
     "id": "purchase_request-train-035",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from research for market data license renewal via EuroData Supply; estimated spend is $1000.",
+    "request_text": "Create a procurement request from banking for market data terminal license renewal via EuroData Supply; estimated spend is $1000 for BIS operations.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve market data license renewal purchase",
+      "title": "Approve market data terminal license renewal purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "medium",
@@ -1206,8 +1206,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "research",
-        "item_description": "market data license renewal",
+        "requester_department": "banking",
+        "item_description": "market data terminal license renewal",
         "estimated_cost_usd": "1000",
         "budget_code": "BUD-7810",
         "preferred_supplier": "EuroData Supply"
@@ -1227,12 +1227,12 @@
   {
     "id": "purchase_request-train-036",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from operations for archival storage extension via EuroData Supply; estimated spend is $4500.",
+    "request_text": "Create a procurement request from monetary_and_economic for compliance archival storage extension via EuroData Supply; estimated spend is $4500 for BIS operations.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve archival storage extension purchase",
+      "title": "Approve compliance archival storage extension purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "high",
@@ -1241,8 +1241,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "operations",
-        "item_description": "archival storage extension",
+        "requester_department": "monetary_and_economic",
+        "item_description": "compliance archival storage extension",
         "estimated_cost_usd": "4500",
         "budget_code": "BUD-5590",
         "preferred_supplier": "EuroData Supply"
@@ -1262,12 +1262,12 @@
   {
     "id": "purchase_request-train-037",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from communications for document workflow subscription via Helix Procurement; estimated spend is $1200.",
+    "request_text": "Create a procurement request from communications for policy document workflow subscription via Helix Procurement; estimated spend is $1200 for BIS operations.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve document workflow subscription purchase",
+      "title": "Approve policy document workflow subscription purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
@@ -1277,7 +1277,7 @@
       ],
       "required_fields": {
         "requester_department": "communications",
-        "item_description": "document workflow subscription",
+        "item_description": "policy document workflow subscription",
         "estimated_cost_usd": "1200",
         "budget_code": "BUD-7731",
         "preferred_supplier": "Helix Procurement"
@@ -1297,12 +1297,12 @@
   {
     "id": "purchase_request-train-038",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from it_security for secure workstation refresh via Arcadia Tech; estimated spend is $10500.",
+    "request_text": "Create a procurement request from it_services for secure workstation fleet refresh via Arcadia Tech; estimated spend is $10500 for BIS operations.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve secure workstation refresh purchase",
+      "title": "Approve secure workstation fleet refresh purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "low",
@@ -1311,8 +1311,8 @@
         "procurement_owner"
       ],
       "required_fields": {
-        "requester_department": "it_security",
-        "item_description": "secure workstation refresh",
+        "requester_department": "it_services",
+        "item_description": "secure workstation fleet refresh",
         "estimated_cost_usd": "10500",
         "budget_code": "BUD-7731",
         "preferred_supplier": "Arcadia Tech"
@@ -1332,12 +1332,12 @@
   {
     "id": "purchase_request-train-039",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from communications for market data license renewal via Helix Procurement; estimated spend is $1300.",
+    "request_text": "Create a procurement request from communications for market data terminal license renewal via Helix Procurement; estimated spend is $1300 for BIS operations.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve market data license renewal purchase",
+      "title": "Approve market data terminal license renewal purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "medium",
@@ -1347,7 +1347,7 @@
       ],
       "required_fields": {
         "requester_department": "communications",
-        "item_description": "market data license renewal",
+        "item_description": "market data terminal license renewal",
         "estimated_cost_usd": "1300",
         "budget_code": "BUD-7810",
         "preferred_supplier": "Helix Procurement"
@@ -1367,12 +1367,12 @@
   {
     "id": "purchase_request-train-040",
     "process_id": "purchase_request",
-    "request_text": "Create a procurement request from communications for market data license renewal via Helix Procurement; estimated spend is $11200.",
+    "request_text": "Create a procurement request from communications for market data terminal license renewal via Helix Procurement; estimated spend is $11200 for BIS operations.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "purchase_request",
-      "title": "Approve market data license renewal purchase",
+      "title": "Approve market data terminal license renewal purchase",
       "owner_role": "procurement_operations",
       "sla_hours": 48,
       "risk_tag": "high",
@@ -1382,7 +1382,7 @@
       ],
       "required_fields": {
         "requester_department": "communications",
-        "item_description": "market data license renewal",
+        "item_description": "market data terminal license renewal",
         "estimated_cost_usd": "11200",
         "budget_code": "BUD-7810",
         "preferred_supplier": "Helix Procurement"

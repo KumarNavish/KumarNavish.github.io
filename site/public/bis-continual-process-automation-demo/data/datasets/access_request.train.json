@@ -2,12 +2,12 @@
   {
     "id": "access_request-train-001",
     "process_id": "access_request",
-    "request_text": "Please request admin access for M. Fischer in Treasury Dashboard for monetary_policy to support control evidence review.",
+    "request_text": "Please request admin access for M. Fischer in Control Evidence Vault for monetary_and_economic to support Basel process control evidence review.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision admin access in Treasury Dashboard",
+      "title": "Provision admin access in Control Evidence Vault",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "low",
@@ -17,9 +17,9 @@
       ],
       "required_fields": {
         "subject_user": "M. Fischer",
-        "system_name": "Treasury Dashboard",
+        "system_name": "Control Evidence Vault",
         "access_level": "admin",
-        "justification": "control evidence review",
+        "justification": "Basel process control evidence review",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -37,12 +37,12 @@
   {
     "id": "access_request-train-002",
     "process_id": "access_request",
-    "request_text": "Please request read access for A. Meier in Treasury Dashboard for monetary_policy to support quarterly risk reporting.",
+    "request_text": "Please request read access for A. Meier in Control Evidence Vault for monetary_and_economic to support quarterly risk governance reporting.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision read access in Treasury Dashboard",
+      "title": "Provision read access in Control Evidence Vault",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "medium",
@@ -52,9 +52,9 @@
       ],
       "required_fields": {
         "subject_user": "A. Meier",
-        "system_name": "Treasury Dashboard",
+        "system_name": "Control Evidence Vault",
         "access_level": "read",
-        "justification": "quarterly risk reporting",
+        "justification": "quarterly risk governance reporting",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -72,12 +72,12 @@
   {
     "id": "access_request-train-003",
     "process_id": "access_request",
-    "request_text": "Please request read access for A. Meier in Treasury Dashboard for monetary_policy to support policy note preparation.",
+    "request_text": "Please request read access for A. Meier in Control Evidence Vault for monetary_and_economic to support Monetary Policy Committee briefing preparation.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision read access in Treasury Dashboard",
+      "title": "Provision read access in Control Evidence Vault",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "medium",
@@ -87,9 +87,9 @@
       ],
       "required_fields": {
         "subject_user": "A. Meier",
-        "system_name": "Treasury Dashboard",
+        "system_name": "Control Evidence Vault",
         "access_level": "read",
-        "justification": "policy note preparation",
+        "justification": "Monetary Policy Committee briefing preparation",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -107,12 +107,12 @@
   {
     "id": "access_request-train-004",
     "process_id": "access_request",
-    "request_text": "Please request approver access for M. Fischer in Treasury Dashboard for operations_risk to support policy note preparation.",
+    "request_text": "Please request approver access for M. Fischer in Control Evidence Vault for banking_operations to support Monetary Policy Committee briefing preparation.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision approver access in Treasury Dashboard",
+      "title": "Provision approver access in Control Evidence Vault",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "high",
@@ -122,9 +122,9 @@
       ],
       "required_fields": {
         "subject_user": "M. Fischer",
-        "system_name": "Treasury Dashboard",
+        "system_name": "Control Evidence Vault",
         "access_level": "approver",
-        "justification": "policy note preparation",
+        "justification": "Monetary Policy Committee briefing preparation",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -142,12 +142,12 @@
   {
     "id": "access_request-train-005",
     "process_id": "access_request",
-    "request_text": "Please request read access for T. Baumann in Treasury Dashboard for legal_compliance to support urgent issue triage.",
+    "request_text": "Please request read access for T. Baumann in Control Evidence Vault for legal_compliance to support high-priority incident coordination.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision read access in Treasury Dashboard",
+      "title": "Provision read access in Control Evidence Vault",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "low",
@@ -157,9 +157,9 @@
       ],
       "required_fields": {
         "subject_user": "T. Baumann",
-        "system_name": "Treasury Dashboard",
+        "system_name": "Control Evidence Vault",
         "access_level": "read",
-        "justification": "urgent issue triage",
+        "justification": "high-priority incident coordination",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -177,12 +177,12 @@
   {
     "id": "access_request-train-006",
     "process_id": "access_request",
-    "request_text": "Please request admin access for T. Baumann in Document Vault for internal_audit to support policy note preparation.",
+    "request_text": "Please request admin access for T. Baumann in BIS Data Hub for risk_control to support Monetary Policy Committee briefing preparation.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision admin access in Document Vault",
+      "title": "Provision admin access in BIS Data Hub",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "medium",
@@ -192,9 +192,9 @@
       ],
       "required_fields": {
         "subject_user": "T. Baumann",
-        "system_name": "Document Vault",
+        "system_name": "BIS Data Hub",
         "access_level": "admin",
-        "justification": "policy note preparation",
+        "justification": "Monetary Policy Committee briefing preparation",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -212,12 +212,12 @@
   {
     "id": "access_request-train-007",
     "process_id": "access_request",
-    "request_text": "Please request read access for T. Baumann in Policy Analytics Portal for internal_audit to support control evidence review.",
+    "request_text": "Please request read access for T. Baumann in Policy Briefing Workspace for risk_control to support Basel process control evidence review.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision read access in Policy Analytics Portal",
+      "title": "Provision read access in Policy Briefing Workspace",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "medium",
@@ -227,9 +227,9 @@
       ],
       "required_fields": {
         "subject_user": "T. Baumann",
-        "system_name": "Policy Analytics Portal",
+        "system_name": "Policy Briefing Workspace",
         "access_level": "read",
-        "justification": "control evidence review",
+        "justification": "Basel process control evidence review",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -247,12 +247,12 @@
   {
     "id": "access_request-train-008",
     "process_id": "access_request",
-    "request_text": "Please request read access for A. Meier in Policy Analytics Portal for legal_compliance to support urgent issue triage.",
+    "request_text": "Please request read access for A. Meier in Policy Briefing Workspace for legal_compliance to support high-priority incident coordination.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision read access in Policy Analytics Portal",
+      "title": "Provision read access in Policy Briefing Workspace",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "high",
@@ -262,9 +262,9 @@
       ],
       "required_fields": {
         "subject_user": "A. Meier",
-        "system_name": "Policy Analytics Portal",
+        "system_name": "Policy Briefing Workspace",
         "access_level": "read",
-        "justification": "urgent issue triage",
+        "justification": "high-priority incident coordination",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -282,12 +282,12 @@
   {
     "id": "access_request-train-009",
     "process_id": "access_request",
-    "request_text": "Please request admin access for S. Dubois in Treasury Dashboard for internal_audit to support policy note preparation.",
+    "request_text": "Please request admin access for S. Dubois in Control Evidence Vault for risk_control to support Monetary Policy Committee briefing preparation.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision admin access in Treasury Dashboard",
+      "title": "Provision admin access in Control Evidence Vault",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "low",
@@ -297,9 +297,9 @@
       ],
       "required_fields": {
         "subject_user": "S. Dubois",
-        "system_name": "Treasury Dashboard",
+        "system_name": "Control Evidence Vault",
         "access_level": "admin",
-        "justification": "policy note preparation",
+        "justification": "Monetary Policy Committee briefing preparation",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -317,12 +317,12 @@
   {
     "id": "access_request-train-010",
     "process_id": "access_request",
-    "request_text": "Please request admin access for T. Baumann in Policy Analytics Portal for monetary_policy to support urgent issue triage.",
+    "request_text": "Please request admin access for T. Baumann in Policy Briefing Workspace for monetary_and_economic to support high-priority incident coordination.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision admin access in Policy Analytics Portal",
+      "title": "Provision admin access in Policy Briefing Workspace",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "medium",
@@ -332,9 +332,9 @@
       ],
       "required_fields": {
         "subject_user": "T. Baumann",
-        "system_name": "Policy Analytics Portal",
+        "system_name": "Policy Briefing Workspace",
         "access_level": "admin",
-        "justification": "urgent issue triage",
+        "justification": "high-priority incident coordination",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -352,12 +352,12 @@
   {
     "id": "access_request-train-011",
     "process_id": "access_request",
-    "request_text": "Please request approver access for E. Vogel in Treasury Dashboard for internal_audit to support policy note preparation.",
+    "request_text": "Please request approver access for E. Vogel in Control Evidence Vault for risk_control to support Monetary Policy Committee briefing preparation.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision approver access in Treasury Dashboard",
+      "title": "Provision approver access in Control Evidence Vault",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "medium",
@@ -367,9 +367,9 @@
       ],
       "required_fields": {
         "subject_user": "E. Vogel",
-        "system_name": "Treasury Dashboard",
+        "system_name": "Control Evidence Vault",
         "access_level": "approver",
-        "justification": "policy note preparation",
+        "justification": "Monetary Policy Committee briefing preparation",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -387,12 +387,12 @@
   {
     "id": "access_request-train-012",
     "process_id": "access_request",
-    "request_text": "Please request read access for E. Vogel in Policy Analytics Portal for monetary_policy to support urgent issue triage.",
+    "request_text": "Please request read access for E. Vogel in Policy Briefing Workspace for monetary_and_economic to support high-priority incident coordination.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision read access in Policy Analytics Portal",
+      "title": "Provision read access in Policy Briefing Workspace",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "high",
@@ -402,9 +402,9 @@
       ],
       "required_fields": {
         "subject_user": "E. Vogel",
-        "system_name": "Policy Analytics Portal",
+        "system_name": "Policy Briefing Workspace",
         "access_level": "read",
-        "justification": "urgent issue triage",
+        "justification": "high-priority incident coordination",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -422,12 +422,12 @@
   {
     "id": "access_request-train-013",
     "process_id": "access_request",
-    "request_text": "Please request editor access for S. Dubois in Document Vault for monetary_policy to support policy note preparation.",
+    "request_text": "Please request editor access for S. Dubois in BIS Data Hub for monetary_and_economic to support Monetary Policy Committee briefing preparation.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision editor access in Document Vault",
+      "title": "Provision editor access in BIS Data Hub",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "low",
@@ -437,9 +437,9 @@
       ],
       "required_fields": {
         "subject_user": "S. Dubois",
-        "system_name": "Document Vault",
+        "system_name": "BIS Data Hub",
         "access_level": "editor",
-        "justification": "policy note preparation",
+        "justification": "Monetary Policy Committee briefing preparation",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -457,12 +457,12 @@
   {
     "id": "access_request-train-014",
     "process_id": "access_request",
-    "request_text": "Please request editor access for S. Dubois in Risk Control Hub for monetary_policy to support urgent issue triage.",
+    "request_text": "Please request editor access for S. Dubois in Reserve Monitoring Dashboard for monetary_and_economic to support high-priority incident coordination.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision editor access in Risk Control Hub",
+      "title": "Provision editor access in Reserve Monitoring Dashboard",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "medium",
@@ -472,9 +472,9 @@
       ],
       "required_fields": {
         "subject_user": "S. Dubois",
-        "system_name": "Risk Control Hub",
+        "system_name": "Reserve Monitoring Dashboard",
         "access_level": "editor",
-        "justification": "urgent issue triage",
+        "justification": "high-priority incident coordination",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -492,12 +492,12 @@
   {
     "id": "access_request-train-015",
     "process_id": "access_request",
-    "request_text": "Please request editor access for T. Baumann in Treasury Dashboard for monetary_policy to support policy note preparation.",
+    "request_text": "Please request editor access for T. Baumann in Control Evidence Vault for monetary_and_economic to support Monetary Policy Committee briefing preparation.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision editor access in Treasury Dashboard",
+      "title": "Provision editor access in Control Evidence Vault",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "medium",
@@ -507,9 +507,9 @@
       ],
       "required_fields": {
         "subject_user": "T. Baumann",
-        "system_name": "Treasury Dashboard",
+        "system_name": "Control Evidence Vault",
         "access_level": "editor",
-        "justification": "policy note preparation",
+        "justification": "Monetary Policy Committee briefing preparation",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -527,12 +527,12 @@
   {
     "id": "access_request-train-016",
     "process_id": "access_request",
-    "request_text": "Please request admin access for S. Dubois in Policy Analytics Portal for legal_compliance to support quarterly risk reporting.",
+    "request_text": "Please request admin access for S. Dubois in Policy Briefing Workspace for legal_compliance to support quarterly risk governance reporting.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision admin access in Policy Analytics Portal",
+      "title": "Provision admin access in Policy Briefing Workspace",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "high",
@@ -542,9 +542,9 @@
       ],
       "required_fields": {
         "subject_user": "S. Dubois",
-        "system_name": "Policy Analytics Portal",
+        "system_name": "Policy Briefing Workspace",
         "access_level": "admin",
-        "justification": "quarterly risk reporting",
+        "justification": "quarterly risk governance reporting",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -562,12 +562,12 @@
   {
     "id": "access_request-train-017",
     "process_id": "access_request",
-    "request_text": "Please request approver access for E. Vogel in Document Vault for internal_audit to support urgent issue triage.",
+    "request_text": "Please request approver access for E. Vogel in BIS Data Hub for risk_control to support high-priority incident coordination.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision approver access in Document Vault",
+      "title": "Provision approver access in BIS Data Hub",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "low",
@@ -577,9 +577,9 @@
       ],
       "required_fields": {
         "subject_user": "E. Vogel",
-        "system_name": "Document Vault",
+        "system_name": "BIS Data Hub",
         "access_level": "approver",
-        "justification": "urgent issue triage",
+        "justification": "high-priority incident coordination",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -597,12 +597,12 @@
   {
     "id": "access_request-train-018",
     "process_id": "access_request",
-    "request_text": "Please request editor access for A. Meier in Document Vault for legal_compliance to support control evidence review.",
+    "request_text": "Please request editor access for A. Meier in BIS Data Hub for legal_compliance to support Basel process control evidence review.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision editor access in Document Vault",
+      "title": "Provision editor access in BIS Data Hub",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "medium",
@@ -612,9 +612,9 @@
       ],
       "required_fields": {
         "subject_user": "A. Meier",
-        "system_name": "Document Vault",
+        "system_name": "BIS Data Hub",
         "access_level": "editor",
-        "justification": "control evidence review",
+        "justification": "Basel process control evidence review",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -632,12 +632,12 @@
   {
     "id": "access_request-train-019",
     "process_id": "access_request",
-    "request_text": "Please request editor access for L. Weber in Policy Analytics Portal for legal_compliance to support quarterly risk reporting.",
+    "request_text": "Please request editor access for L. Weber in Policy Briefing Workspace for legal_compliance to support quarterly risk governance reporting.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision editor access in Policy Analytics Portal",
+      "title": "Provision editor access in Policy Briefing Workspace",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "medium",
@@ -647,9 +647,9 @@
       ],
       "required_fields": {
         "subject_user": "L. Weber",
-        "system_name": "Policy Analytics Portal",
+        "system_name": "Policy Briefing Workspace",
         "access_level": "editor",
-        "justification": "quarterly risk reporting",
+        "justification": "quarterly risk governance reporting",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -667,12 +667,12 @@
   {
     "id": "access_request-train-020",
     "process_id": "access_request",
-    "request_text": "Please request admin access for A. Meier in Risk Control Hub for legal_compliance to support quarterly risk reporting.",
+    "request_text": "Please request admin access for A. Meier in Reserve Monitoring Dashboard for legal_compliance to support quarterly risk governance reporting.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision admin access in Risk Control Hub",
+      "title": "Provision admin access in Reserve Monitoring Dashboard",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "high",
@@ -682,9 +682,9 @@
       ],
       "required_fields": {
         "subject_user": "A. Meier",
-        "system_name": "Risk Control Hub",
+        "system_name": "Reserve Monitoring Dashboard",
         "access_level": "admin",
-        "justification": "quarterly risk reporting",
+        "justification": "quarterly risk governance reporting",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -702,12 +702,12 @@
   {
     "id": "access_request-train-021",
     "process_id": "access_request",
-    "request_text": "Please request editor access for S. Dubois in Treasury Dashboard for monetary_policy to support policy note preparation.",
+    "request_text": "Please request editor access for S. Dubois in Control Evidence Vault for monetary_and_economic to support Monetary Policy Committee briefing preparation.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision editor access in Treasury Dashboard",
+      "title": "Provision editor access in Control Evidence Vault",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "low",
@@ -717,9 +717,9 @@
       ],
       "required_fields": {
         "subject_user": "S. Dubois",
-        "system_name": "Treasury Dashboard",
+        "system_name": "Control Evidence Vault",
         "access_level": "editor",
-        "justification": "policy note preparation",
+        "justification": "Monetary Policy Committee briefing preparation",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -737,12 +737,12 @@
   {
     "id": "access_request-train-022",
     "process_id": "access_request",
-    "request_text": "Please request admin access for T. Baumann in Treasury Dashboard for monetary_policy to support urgent issue triage.",
+    "request_text": "Please request admin access for T. Baumann in Control Evidence Vault for monetary_and_economic to support high-priority incident coordination.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision admin access in Treasury Dashboard",
+      "title": "Provision admin access in Control Evidence Vault",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "medium",
@@ -752,9 +752,9 @@
       ],
       "required_fields": {
         "subject_user": "T. Baumann",
-        "system_name": "Treasury Dashboard",
+        "system_name": "Control Evidence Vault",
         "access_level": "admin",
-        "justification": "urgent issue triage",
+        "justification": "high-priority incident coordination",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -772,12 +772,12 @@
   {
     "id": "access_request-train-023",
     "process_id": "access_request",
-    "request_text": "Please request approver access for R. Schmid in Policy Analytics Portal for operations_risk to support urgent issue triage.",
+    "request_text": "Please request approver access for R. Schmid in Policy Briefing Workspace for banking_operations to support high-priority incident coordination.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision approver access in Policy Analytics Portal",
+      "title": "Provision approver access in Policy Briefing Workspace",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "medium",
@@ -787,9 +787,9 @@
       ],
       "required_fields": {
         "subject_user": "R. Schmid",
-        "system_name": "Policy Analytics Portal",
+        "system_name": "Policy Briefing Workspace",
         "access_level": "approver",
-        "justification": "urgent issue triage",
+        "justification": "high-priority incident coordination",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -807,12 +807,12 @@
   {
     "id": "access_request-train-024",
     "process_id": "access_request",
-    "request_text": "Please request approver access for S. Dubois in Risk Control Hub for operations_risk to support urgent issue triage.",
+    "request_text": "Please request approver access for S. Dubois in Reserve Monitoring Dashboard for banking_operations to support high-priority incident coordination.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision approver access in Risk Control Hub",
+      "title": "Provision approver access in Reserve Monitoring Dashboard",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "high",
@@ -822,9 +822,9 @@
       ],
       "required_fields": {
         "subject_user": "S. Dubois",
-        "system_name": "Risk Control Hub",
+        "system_name": "Reserve Monitoring Dashboard",
         "access_level": "approver",
-        "justification": "urgent issue triage",
+        "justification": "high-priority incident coordination",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -842,12 +842,12 @@
   {
     "id": "access_request-train-025",
     "process_id": "access_request",
-    "request_text": "Please request read access for T. Baumann in Policy Analytics Portal for legal_compliance to support quarterly risk reporting.",
+    "request_text": "Please request read access for T. Baumann in Policy Briefing Workspace for legal_compliance to support quarterly risk governance reporting.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision read access in Policy Analytics Portal",
+      "title": "Provision read access in Policy Briefing Workspace",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "low",
@@ -857,9 +857,9 @@
       ],
       "required_fields": {
         "subject_user": "T. Baumann",
-        "system_name": "Policy Analytics Portal",
+        "system_name": "Policy Briefing Workspace",
         "access_level": "read",
-        "justification": "quarterly risk reporting",
+        "justification": "quarterly risk governance reporting",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -877,12 +877,12 @@
   {
     "id": "access_request-train-026",
     "process_id": "access_request",
-    "request_text": "Please request admin access for E. Vogel in Document Vault for internal_audit to support control evidence review.",
+    "request_text": "Please request admin access for E. Vogel in BIS Data Hub for risk_control to support Basel process control evidence review.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision admin access in Document Vault",
+      "title": "Provision admin access in BIS Data Hub",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "medium",
@@ -892,9 +892,9 @@
       ],
       "required_fields": {
         "subject_user": "E. Vogel",
-        "system_name": "Document Vault",
+        "system_name": "BIS Data Hub",
         "access_level": "admin",
-        "justification": "control evidence review",
+        "justification": "Basel process control evidence review",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -912,12 +912,12 @@
   {
     "id": "access_request-train-027",
     "process_id": "access_request",
-    "request_text": "Please request admin access for M. Fischer in Policy Analytics Portal for monetary_policy to support control evidence review.",
+    "request_text": "Please request admin access for M. Fischer in Policy Briefing Workspace for monetary_and_economic to support Basel process control evidence review.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision admin access in Policy Analytics Portal",
+      "title": "Provision admin access in Policy Briefing Workspace",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "medium",
@@ -927,9 +927,9 @@
       ],
       "required_fields": {
         "subject_user": "M. Fischer",
-        "system_name": "Policy Analytics Portal",
+        "system_name": "Policy Briefing Workspace",
         "access_level": "admin",
-        "justification": "control evidence review",
+        "justification": "Basel process control evidence review",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -947,12 +947,12 @@
   {
     "id": "access_request-train-028",
     "process_id": "access_request",
-    "request_text": "Please request editor access for L. Weber in Treasury Dashboard for monetary_policy to support control evidence review.",
+    "request_text": "Please request editor access for L. Weber in Control Evidence Vault for monetary_and_economic to support Basel process control evidence review.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision editor access in Treasury Dashboard",
+      "title": "Provision editor access in Control Evidence Vault",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "high",
@@ -962,9 +962,9 @@
       ],
       "required_fields": {
         "subject_user": "L. Weber",
-        "system_name": "Treasury Dashboard",
+        "system_name": "Control Evidence Vault",
         "access_level": "editor",
-        "justification": "control evidence review",
+        "justification": "Basel process control evidence review",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -982,12 +982,12 @@
   {
     "id": "access_request-train-029",
     "process_id": "access_request",
-    "request_text": "Please request editor access for T. Baumann in Risk Control Hub for operations_risk to support control evidence review.",
+    "request_text": "Please request editor access for T. Baumann in Reserve Monitoring Dashboard for banking_operations to support Basel process control evidence review.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision editor access in Risk Control Hub",
+      "title": "Provision editor access in Reserve Monitoring Dashboard",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "low",
@@ -997,9 +997,9 @@
       ],
       "required_fields": {
         "subject_user": "T. Baumann",
-        "system_name": "Risk Control Hub",
+        "system_name": "Reserve Monitoring Dashboard",
         "access_level": "editor",
-        "justification": "control evidence review",
+        "justification": "Basel process control evidence review",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -1017,12 +1017,12 @@
   {
     "id": "access_request-train-030",
     "process_id": "access_request",
-    "request_text": "Please request admin access for E. Vogel in Risk Control Hub for operations_risk to support urgent issue triage.",
+    "request_text": "Please request admin access for E. Vogel in Reserve Monitoring Dashboard for banking_operations to support high-priority incident coordination.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision admin access in Risk Control Hub",
+      "title": "Provision admin access in Reserve Monitoring Dashboard",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "medium",
@@ -1032,9 +1032,9 @@
       ],
       "required_fields": {
         "subject_user": "E. Vogel",
-        "system_name": "Risk Control Hub",
+        "system_name": "Reserve Monitoring Dashboard",
         "access_level": "admin",
-        "justification": "urgent issue triage",
+        "justification": "high-priority incident coordination",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -1052,12 +1052,12 @@
   {
     "id": "access_request-train-031",
     "process_id": "access_request",
-    "request_text": "Please request admin access for T. Baumann in Policy Analytics Portal for monetary_policy to support urgent issue triage.",
+    "request_text": "Please request admin access for T. Baumann in Policy Briefing Workspace for monetary_and_economic to support high-priority incident coordination.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision admin access in Policy Analytics Portal",
+      "title": "Provision admin access in Policy Briefing Workspace",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "medium",
@@ -1067,9 +1067,9 @@
       ],
       "required_fields": {
         "subject_user": "T. Baumann",
-        "system_name": "Policy Analytics Portal",
+        "system_name": "Policy Briefing Workspace",
         "access_level": "admin",
-        "justification": "urgent issue triage",
+        "justification": "high-priority incident coordination",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -1087,12 +1087,12 @@
   {
     "id": "access_request-train-032",
     "process_id": "access_request",
-    "request_text": "Please request admin access for L. Weber in Risk Control Hub for operations_risk to support policy note preparation.",
+    "request_text": "Please request admin access for L. Weber in Reserve Monitoring Dashboard for banking_operations to support Monetary Policy Committee briefing preparation.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision admin access in Risk Control Hub",
+      "title": "Provision admin access in Reserve Monitoring Dashboard",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "high",
@@ -1102,9 +1102,9 @@
       ],
       "required_fields": {
         "subject_user": "L. Weber",
-        "system_name": "Risk Control Hub",
+        "system_name": "Reserve Monitoring Dashboard",
         "access_level": "admin",
-        "justification": "policy note preparation",
+        "justification": "Monetary Policy Committee briefing preparation",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -1122,12 +1122,12 @@
   {
     "id": "access_request-train-033",
     "process_id": "access_request",
-    "request_text": "Please request approver access for E. Vogel in Document Vault for internal_audit to support policy note preparation.",
+    "request_text": "Please request approver access for E. Vogel in BIS Data Hub for risk_control to support Monetary Policy Committee briefing preparation.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision approver access in Document Vault",
+      "title": "Provision approver access in BIS Data Hub",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "low",
@@ -1137,9 +1137,9 @@
       ],
       "required_fields": {
         "subject_user": "E. Vogel",
-        "system_name": "Document Vault",
+        "system_name": "BIS Data Hub",
         "access_level": "approver",
-        "justification": "policy note preparation",
+        "justification": "Monetary Policy Committee briefing preparation",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -1157,12 +1157,12 @@
   {
     "id": "access_request-train-034",
     "process_id": "access_request",
-    "request_text": "Please request approver access for M. Fischer in Treasury Dashboard for monetary_policy to support urgent issue triage.",
+    "request_text": "Please request approver access for M. Fischer in Control Evidence Vault for monetary_and_economic to support high-priority incident coordination.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision approver access in Treasury Dashboard",
+      "title": "Provision approver access in Control Evidence Vault",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "medium",
@@ -1172,9 +1172,9 @@
       ],
       "required_fields": {
         "subject_user": "M. Fischer",
-        "system_name": "Treasury Dashboard",
+        "system_name": "Control Evidence Vault",
         "access_level": "approver",
-        "justification": "urgent issue triage",
+        "justification": "high-priority incident coordination",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -1192,12 +1192,12 @@
   {
     "id": "access_request-train-035",
     "process_id": "access_request",
-    "request_text": "Please request read access for L. Weber in Policy Analytics Portal for operations_risk to support control evidence review.",
+    "request_text": "Please request read access for L. Weber in Policy Briefing Workspace for banking_operations to support Basel process control evidence review.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision read access in Policy Analytics Portal",
+      "title": "Provision read access in Policy Briefing Workspace",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "medium",
@@ -1207,9 +1207,9 @@
       ],
       "required_fields": {
         "subject_user": "L. Weber",
-        "system_name": "Policy Analytics Portal",
+        "system_name": "Policy Briefing Workspace",
         "access_level": "read",
-        "justification": "control evidence review",
+        "justification": "Basel process control evidence review",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -1227,12 +1227,12 @@
   {
     "id": "access_request-train-036",
     "process_id": "access_request",
-    "request_text": "Please request editor access for T. Baumann in Document Vault for monetary_policy to support policy note preparation.",
+    "request_text": "Please request editor access for T. Baumann in BIS Data Hub for monetary_and_economic to support Monetary Policy Committee briefing preparation.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision editor access in Document Vault",
+      "title": "Provision editor access in BIS Data Hub",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "high",
@@ -1242,9 +1242,9 @@
       ],
       "required_fields": {
         "subject_user": "T. Baumann",
-        "system_name": "Document Vault",
+        "system_name": "BIS Data Hub",
         "access_level": "editor",
-        "justification": "policy note preparation",
+        "justification": "Monetary Policy Committee briefing preparation",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -1262,12 +1262,12 @@
   {
     "id": "access_request-train-037",
     "process_id": "access_request",
-    "request_text": "Please request editor access for S. Dubois in Risk Control Hub for monetary_policy to support urgent issue triage.",
+    "request_text": "Please request editor access for S. Dubois in Reserve Monitoring Dashboard for monetary_and_economic to support high-priority incident coordination.",
     "risk_tag": "low",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision editor access in Risk Control Hub",
+      "title": "Provision editor access in Reserve Monitoring Dashboard",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "low",
@@ -1277,9 +1277,9 @@
       ],
       "required_fields": {
         "subject_user": "S. Dubois",
-        "system_name": "Risk Control Hub",
+        "system_name": "Reserve Monitoring Dashboard",
         "access_level": "editor",
-        "justification": "urgent issue triage",
+        "justification": "high-priority incident coordination",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -1297,12 +1297,12 @@
   {
     "id": "access_request-train-038",
     "process_id": "access_request",
-    "request_text": "Please request approver access for E. Vogel in Treasury Dashboard for monetary_policy to support urgent issue triage.",
+    "request_text": "Please request approver access for E. Vogel in Control Evidence Vault for monetary_and_economic to support high-priority incident coordination.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision approver access in Treasury Dashboard",
+      "title": "Provision approver access in Control Evidence Vault",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "medium",
@@ -1312,9 +1312,9 @@
       ],
       "required_fields": {
         "subject_user": "E. Vogel",
-        "system_name": "Treasury Dashboard",
+        "system_name": "Control Evidence Vault",
         "access_level": "approver",
-        "justification": "urgent issue triage",
+        "justification": "high-priority incident coordination",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -1332,12 +1332,12 @@
   {
     "id": "access_request-train-039",
     "process_id": "access_request",
-    "request_text": "Please request admin access for J. Keller in Policy Analytics Portal for legal_compliance to support urgent issue triage.",
+    "request_text": "Please request admin access for J. Keller in Policy Briefing Workspace for legal_compliance to support high-priority incident coordination.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision admin access in Policy Analytics Portal",
+      "title": "Provision admin access in Policy Briefing Workspace",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "medium",
@@ -1347,9 +1347,9 @@
       ],
       "required_fields": {
         "subject_user": "J. Keller",
-        "system_name": "Policy Analytics Portal",
+        "system_name": "Policy Briefing Workspace",
         "access_level": "admin",
-        "justification": "urgent issue triage",
+        "justification": "high-priority incident coordination",
         "manager_approval": "pending"
       },
       "next_actions": [
@@ -1367,12 +1367,12 @@
   {
     "id": "access_request-train-040",
     "process_id": "access_request",
-    "request_text": "Please request read access for E. Vogel in Treasury Dashboard for operations_risk to support urgent issue triage.",
+    "request_text": "Please request read access for E. Vogel in Control Evidence Vault for banking_operations to support high-priority incident coordination.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "access_request",
-      "title": "Provision read access in Treasury Dashboard",
+      "title": "Provision read access in Control Evidence Vault",
       "owner_role": "identity_governance_analyst",
       "sla_hours": 12,
       "risk_tag": "high",
@@ -1382,9 +1382,9 @@
       ],
       "required_fields": {
         "subject_user": "E. Vogel",
-        "system_name": "Treasury Dashboard",
+        "system_name": "Control Evidence Vault",
         "access_level": "read",
-        "justification": "urgent issue triage",
+        "justification": "high-priority incident coordination",
         "manager_approval": "pending"
       },
       "next_actions": [
