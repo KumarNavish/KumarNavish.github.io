@@ -309,7 +309,7 @@ export function WorkPage() {
             Publication archive
           </Link>
           <Link className="action-link action-link-primary" to="/proof">
-            System board
+            Approach
           </Link>
         </div>
         <p className="meta-line">

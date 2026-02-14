@@ -2,396 +2,256 @@ import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import {
-  fetchDagApi,
-  fetchLatestRunApi,
   fetchProfileApi,
-  fetchProvenanceApi,
-  fetchStatusApi,
-  type DagTask,
-  type LatestRunTask,
+  fetchProjectsApi,
+  fetchPublicationsApi,
+  type ProjectItem,
+  type PublicationItem,
 } from '../lib/api'
-import { compactList, formatDateTime, formatDuration, formatNumber } from '../lib/formatters'
+import { formatDateTime, formatNumber } from '../lib/formatters'
 import { useResource } from '../lib/useResource'
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks'
 
-interface SystemData {
+interface ApproachData {
   profile: Awaited<ReturnType<typeof fetchProfileApi>>
-  status: Awaited<ReturnType<typeof fetchStatusApi>> | null
-  latestRun: Awaited<ReturnType<typeof fetchLatestRunApi>> | null
-  provenance: Awaited<ReturnType<typeof fetchProvenanceApi>> | null
-  dag: Awaited<ReturnType<typeof fetchDagApi>> | null
+  projects: Awaited<ReturnType<typeof fetchProjectsApi>>
+  publications: Awaited<ReturnType<typeof fetchPublicationsApi>>
 }
 
-type LaneId = 'ingest' | 'transform' | 'publish'
-
-interface LaneDefinition {
-  id: LaneId
+interface ApproachTrack {
+  id: string
   title: string
-  hint: string
+  decision: string
+  whoBenefits: string
+  practicalOutcome: string
+  nextAction: string
+  projectMatcher?: (project: ProjectItem) => boolean
+  publicationMatcher: (publication: PublicationItem) => boolean
 }
 
-const LANES: LaneDefinition[] = [
+const APPROACH_TRACKS: ApproachTrack[] = [
   {
-    id: 'ingest',
-    title: 'Ingest',
-    hint: 'Collect from registry and external APIs.',
+    id: 'continual-learning',
+    title: 'Continual learning reliability',
+    decision: 'Which update strategy stays stable as objectives and tasks shift over time?',
+    whoBenefits: 'Teams maintaining long-lived learning systems',
+    practicalOutcome: 'Lower update risk through implementation-backed policy comparisons.',
+    nextAction: 'Compare update policies under your own task sequence and drift profile.',
+    projectMatcher: (project) => project.name.toLowerCase().includes('cl-plo'),
+    publicationMatcher: (publication) =>
+      publication.title.toLowerCase().includes('square-root natural-gradient'),
   },
   {
-    id: 'transform',
-    title: 'Transform',
-    hint: 'Normalize records and compute signals.',
+    id: 'moderation',
+    title: 'Interaction safety design',
+    decision: 'Which interaction signatures should trigger earlier intervention?',
+    whoBenefits: 'Trust and safety teams designing moderation workflows',
+    practicalOutcome: 'More actionable triage criteria from observed user interaction patterns.',
+    nextAction: 'Use interaction signatures to define intervention thresholds and escalation rules.',
+    projectMatcher: (project) =>
+      `${project.name} ${project.description}`.toLowerCase().includes('twitter'),
+    publicationMatcher: (publication) =>
+      publication.title.toLowerCase().includes('interaction dynamics between hate'),
   },
   {
-    id: 'publish',
-    title: 'Publish',
-    hint: 'Emit APIs, artifacts, and final status.',
+    id: 'urban-logistics',
+    title: 'Urban transition sequencing',
+    decision: 'Where should transition pilots begin for the strongest operational fit?',
+    whoBenefits: 'Urban logistics and mobility planning teams',
+    practicalOutcome: 'Clearer pilot sequencing decisions across heterogeneous micro-regions.',
+    nextAction: 'Rank candidate regions by expected transition fit before field rollout.',
+    publicationMatcher: (publication) =>
+      publication.title.toLowerCase().includes('delivery vehicles across urban micro-regions'),
   },
 ]
 
-function classifyLane(taskName: string): LaneId {
-  if (taskName.startsWith('ingest_')) {
-    return 'ingest'
-  }
-  if (taskName === 'emit_resume_pdf' || taskName === 'emit_status_api') {
-    return 'publish'
-  }
-  return 'transform'
-}
-
-function normalizePublicPath(path: string): string {
-  if (!path) {
-    return '/'
-  }
-  return path.startsWith('/') ? path : `/${path}`
-}
-
-function runAgeHours(timestamp: string | null | undefined): number | null {
-  if (!timestamp) {
+function findMatchedProject(
+  projects: ProjectItem[],
+  matcher?: (project: ProjectItem) => boolean,
+): ProjectItem | null {
+  if (!matcher) {
     return null
   }
-  const date = new Date(timestamp)
-  if (Number.isNaN(date.getTime())) {
-    return null
-  }
-  const elapsed = Date.now() - date.getTime()
-  if (elapsed < 0) {
-    return 0
-  }
-  return elapsed / (1000 * 60 * 60)
+  return projects.find(matcher) ?? null
 }
 
-function warningCount(tasks: LatestRunTask[]): number {
-  return tasks.reduce(
-    (total, task) =>
-      total + task.logs.filter((log) => log.level === 'warning' || log.level === 'error').length,
-    0,
-  )
-}
-
-function buildTaskMap(tasks: LatestRunTask[]): Map<string, LatestRunTask> {
-  return new Map(tasks.map((task) => [task.name, task]))
-}
-
-function taskStatus(task: LatestRunTask | null): string {
-  return task?.status ?? 'unknown'
+function findMatchedPublication(
+  publications: PublicationItem[],
+  matcher: (publication: PublicationItem) => boolean,
+): PublicationItem | null {
+  return publications.find(matcher) ?? null
 }
 
 export function SystemProofPage() {
-  const [selectedTaskName, setSelectedTaskName] = useState<string>('')
+  const [selectedTrackId, setSelectedTrackId] = useState<string>(APPROACH_TRACKS[0].id)
 
-  const loadSystem = useCallback(
+  const loadApproach = useCallback(
     () =>
-      Promise.all([
-        fetchProfileApi(),
-        fetchStatusApi().catch(() => null),
-        fetchLatestRunApi().catch(() => null),
-        fetchProvenanceApi().catch(() => null),
-        fetchDagApi().catch(() => null),
-      ]).then(([profile, status, latestRun, provenance, dag]) => ({
-        profile,
-        status,
-        latestRun,
-        provenance,
-        dag,
-      })),
+      Promise.all([fetchProfileApi(), fetchProjectsApi(), fetchPublicationsApi()]).then(
+        ([profile, projects, publications]) => ({
+          profile,
+          projects,
+          publications,
+        }),
+      ),
     [],
   )
 
-  const state = useResource<SystemData>(loadSystem)
+  const state = useResource<ApproachData>(loadApproach)
 
-  const allTasks = useMemo(() => {
-    if (!state.data?.dag) {
-      return []
-    }
-    return state.data.dag.tasks
-  }, [state.data])
-
-  const latestRunTasks = useMemo(() => state.data?.latestRun?.tasks ?? [], [state.data])
-
-  const latestTaskMap = useMemo(() => buildTaskMap(latestRunTasks), [latestRunTasks])
-
-  const defaultTaskName = useMemo(() => {
-    if (latestRunTasks.length === 0) {
-      return allTasks[0]?.name ?? ''
-    }
-
-    const failed = latestRunTasks.find((task) => task.status === 'failed')
-    if (failed) {
-      return failed.name
-    }
-
-    const warned = latestRunTasks.find((task) =>
-      task.logs.some((log) => log.level === 'warning' || log.level === 'error'),
-    )
-    if (warned) {
-      return warned.name
-    }
-
-    return (
-      latestRunTasks
-        .slice()
-        .sort((left, right) => right.duration_seconds - left.duration_seconds)[0]?.name ??
-      latestRunTasks[0]?.name ??
-      allTasks[0]?.name ??
-      ''
-    )
-  }, [allTasks, latestRunTasks])
-
-  const activeTaskName = useMemo(() => {
-    if (!selectedTaskName) {
-      return defaultTaskName
-    }
-    const existsInDag = allTasks.some((task) => task.name === selectedTaskName)
-    return existsInDag ? selectedTaskName : defaultTaskName
-  }, [allTasks, defaultTaskName, selectedTaskName])
-
-  const selectedDagTask = useMemo(
-    () => allTasks.find((task) => task.name === activeTaskName) ?? null,
-    [activeTaskName, allTasks],
+  const selectedTrack = useMemo(
+    () => APPROACH_TRACKS.find((track) => track.id === selectedTrackId) ?? APPROACH_TRACKS[0],
+    [selectedTrackId],
   )
 
-  const selectedRunTask = useMemo(
-    () => (activeTaskName ? latestTaskMap.get(activeTaskName) ?? null : null),
-    [activeTaskName, latestTaskMap],
-  )
-
-  const laneTasks = useMemo(() => {
-    const dagTasks = state.data?.dag?.tasks ?? []
-    const grouped: Record<LaneId, DagTask[]> = {
-      ingest: [],
-      transform: [],
-      publish: [],
+  const selectedProject = useMemo(() => {
+    if (!state.data) {
+      return null
     }
+    return findMatchedProject(state.data.projects.items, selectedTrack.projectMatcher)
+  }, [selectedTrack, state.data])
 
-    for (const task of dagTasks) {
-      grouped[classifyLane(task.name)].push(task)
+  const selectedPublication = useMemo(() => {
+    if (!state.data) {
+      return null
     }
-
-    return grouped
-  }, [state.data])
+    return findMatchedPublication(state.data.publications.items, selectedTrack.publicationMatcher)
+  }, [selectedTrack, state.data])
 
   if (state.loading) {
-    return <LoadingBlock label="Loading system board." />
+    return <LoadingBlock label="Loading approach." />
   }
 
   if (!state.data || state.error) {
     return (
       <ErrorBlock
-        label="Unable to load system board."
-        details={state.error ?? 'unknown system board error'}
+        label="Unable to load approach."
+        details={state.error ?? 'unknown approach error'}
       />
     )
   }
 
-  const { dag, latestRun, profile, provenance, status } = state.data
-  const runAge = runAgeHours(latestRun?.run.timestamp)
-  const runWarningCount = warningCount(latestRunTasks)
-  const workflowUrl = latestRun?.run.action_run_url ?? provenance?.action_run_url ?? null
-
   return (
     <div className="page">
       <section className="hero">
-        <p className="eyebrow">System Board</p>
-        <h1>Inspect the pipeline that powers the portfolio.</h1>
+        <p className="eyebrow">Approach</p>
+        <h1>How decisions are framed, built, and validated.</h1>
         <p className="hero-copy">
-          Trace the full run path from ingestion to published APIs, then inspect each task directly.
+          Select a track to see the exact reasoning loop: decision question, implementation, and
+          evidence.
         </p>
       </section>
 
-      <section className="metric-grid" aria-label="System snapshot">
-        <article className="metric-card">
-          <p className="metric-label">Current status</p>
-          <p className="metric-value">{latestRun?.run.status ?? status?.status ?? 'n/a'}</p>
-        </article>
-        <article className="metric-card">
-          <p className="metric-label">Tasks</p>
-          <p className="metric-value">{formatNumber(latestRun?.run.task_count ?? dag?.tasks.length ?? null)}</p>
-        </article>
-        <article className="metric-card">
-          <p className="metric-label">Warnings</p>
-          <p className="metric-value">{formatNumber(runWarningCount)}</p>
-        </article>
-        <article className="metric-card">
-          <p className="metric-label">Run age</p>
-          <p className="metric-value">{runAge === null ? 'n/a' : `${Math.round(runAge)}h`}</p>
-        </article>
-      </section>
-
       <section className="panel">
         <header className="panel-header">
-          <h2>Pipeline Map</h2>
-          {workflowUrl ? (
-            <a href={workflowUrl} target="_blank" rel="noreferrer">
-              workflow run
-            </a>
-          ) : (
-            <a href="/ops/dag.json" target="_blank" rel="noreferrer">
-              raw DAG JSON
-            </a>
-          )}
+          <h2>Decision Tracks</h2>
         </header>
 
-        {dag ? (
-          <div className="pipeline-lanes">
-            {LANES.map((lane) => (
-              <section key={lane.id} className="pipeline-lane">
-                <p className="matrix-label">{lane.title}</p>
-                <p className="meta-line">{lane.hint}</p>
-                <div className="pipeline-task-list">
-                  {laneTasks[lane.id].map((task) => {
-                    const runTask = latestTaskMap.get(task.name) ?? null
-                    const active = task.name === activeTaskName
-                    return (
-                      <button
-                        key={task.name}
-                        type="button"
-                        className={active ? 'pipeline-task pipeline-task-active' : 'pipeline-task'}
-                        onClick={() => setSelectedTaskName(task.name)}
-                      >
-                        <span className="pipeline-task-name">{task.name}</span>
-                        <span className={`status-pill status-${taskStatus(runTask)}`}>{taskStatus(runTask)}</span>
-                        <span className="pipeline-task-meta">
-                          {runTask ? formatDuration(runTask.duration_seconds) : `${task.deps.length} deps`}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </section>
-            ))}
-          </div>
-        ) : (
-          <p className="meta-line">DAG endpoint unavailable in this environment.</p>
-        )}
-      </section>
-
-      <section className="panel">
-        <header className="panel-header">
-          <h2>Task Inspector</h2>
-          {activeTaskName ? <span className="meta-line">Selected: {activeTaskName}</span> : null}
-        </header>
-
-        {selectedDagTask ? (
-          <div className="card-grid">
-            <article className="item-card">
-              <p className="matrix-label">Dependencies</p>
-              <p>{selectedDagTask.deps.length > 0 ? compactList(selectedDagTask.deps, 6) : 'None'}</p>
-              <p className="meta-line">Inputs: {selectedDagTask.inputs.length}</p>
-              <p className="meta-line">Outputs: {selectedDagTask.outputs.length}</p>
-            </article>
-
-            <article className="item-card">
-              <p className="matrix-label">Inputs</p>
-              <p>{selectedDagTask.inputs.length > 0 ? compactList(selectedDagTask.inputs, 3) : 'None'}</p>
-              <p className="matrix-label">Outputs</p>
-              <p>{selectedDagTask.outputs.length > 0 ? compactList(selectedDagTask.outputs, 3) : 'None'}</p>
-            </article>
-
-            <article className="item-card">
-              <p className="matrix-label">Run status</p>
-              <p>
-                {selectedRunTask ? (
-                  <>
-                    <span className={`status-pill status-${selectedRunTask.status}`}>{selectedRunTask.status}</span>
-                    {' · '}
-                    {formatDuration(selectedRunTask.duration_seconds)}
-                  </>
-                ) : (
-                  'No run details available.'
-                )}
-              </p>
-              {selectedRunTask?.error ? <p className="meta-line">{selectedRunTask.error}</p> : null}
-              {selectedRunTask?.logs.length ? (
-                <ul className="ops-log-list">
-                  {selectedRunTask.logs.map((log) => (
-                    <li key={`${log.timestamp}-${log.message}`}>
-                      <strong>{log.level}</strong>: {log.message}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="meta-line">No logs for this task.</p>
-              )}
-            </article>
-          </div>
-        ) : (
-          <p className="meta-line">Select a task from the pipeline map.</p>
-        )}
-      </section>
-
-      <section className="panel">
-        <header className="panel-header">
-          <h2>Published Outputs</h2>
-        </header>
-
-        <div className="action-row">
-          <a className="action-link" href="/api/v1/profile.json" target="_blank" rel="noreferrer">
-            profile.json
-          </a>
-          <a className="action-link" href="/api/v1/projects.json" target="_blank" rel="noreferrer">
-            projects.json
-          </a>
-          <a className="action-link" href="/api/v1/publications.json" target="_blank" rel="noreferrer">
-            publications.json
-          </a>
-          <a className="action-link" href="/api/v1/search-index.json" target="_blank" rel="noreferrer">
-            search-index.json
-          </a>
+        <div className="track-row" role="tablist" aria-label="Approach tracks">
+          {APPROACH_TRACKS.map((track) => (
+            <button
+              key={track.id}
+              type="button"
+              className={track.id === selectedTrack.id ? 'track-chip track-chip-active' : 'track-chip'}
+              onClick={() => setSelectedTrackId(track.id)}
+            >
+              {track.title}
+            </button>
+          ))}
         </div>
+      </section>
 
-        {provenance ? (
-          <div className="stack-list">
-            {Object.entries(provenance.artifacts).map(([name, path]) => (
-              <article key={name} className="stack-item">
-                <h3>{name}</h3>
-                <p className="meta-line">{path}</p>
+      <section className="panel">
+        <header className="panel-header">
+          <h2>Execution Loop</h2>
+        </header>
+
+        <div className="sequence-grid">
+          <article className="sequence-step">
+            <p className="sequence-index">Step 1</p>
+            <h3>Frame the decision</h3>
+            <p>{selectedTrack.decision}</p>
+          </article>
+
+          <article className="sequence-step">
+            <p className="sequence-index">Step 2</p>
+            <h3>Build the system</h3>
+            {selectedProject ? (
+              <>
+                <p>{selectedProject.one_line ?? selectedProject.description ?? selectedProject.name}</p>
                 <p className="meta-line">
-                  <a href={normalizePublicPath(path)} target="_blank" rel="noreferrer">
-                    Open artifact
+                  <a href={selectedProject.demo_url ?? selectedProject.html_url} target="_blank" rel="noreferrer">
+                    Open implementation
                   </a>
                 </p>
-              </article>
-            ))}
-          </div>
-        ) : null}
+              </>
+            ) : (
+              <p>Implementation pattern is captured directly in the decision design and evaluation flow.</p>
+            )}
+          </article>
 
-        <p className="meta-line">
-          Last refresh {formatDateTime(profile.last_sync.last_run_timestamp)}
-          {latestRun?.run.trigger?.event_name ? ` · trigger ${latestRun.run.trigger.event_name}` : ''}
-          {provenance?.git_sha ? ` · git ${provenance.git_sha.slice(0, 10)}` : ''}
-        </p>
+          <article className="sequence-step">
+            <p className="sequence-index">Step 3</p>
+            <h3>Validate with evidence</h3>
+            {selectedPublication ? (
+              <>
+                <p>{selectedPublication.title}</p>
+                <p className="meta-line">
+                  {formatNumber(selectedPublication.citation_count)} citations
+                  {selectedPublication.year ? ` · ${selectedPublication.year}` : ''}
+                </p>
+                {selectedPublication.url ? (
+                  <p className="meta-line">
+                    <a href={selectedPublication.url} target="_blank" rel="noreferrer">
+                      Read publication
+                    </a>
+                  </p>
+                ) : null}
+              </>
+            ) : (
+              <p>Evidence reference is currently being curated for this track.</p>
+            )}
+          </article>
+        </div>
+      </section>
+
+      <section className="panel">
+        <header className="panel-header">
+          <h2>Applied Value</h2>
+        </header>
+
+        <div className="card-grid">
+          <article className="item-card">
+            <p className="matrix-label">Who this helps</p>
+            <p>{selectedTrack.whoBenefits}</p>
+          </article>
+          <article className="item-card">
+            <p className="matrix-label">Practical outcome</p>
+            <p>{selectedTrack.practicalOutcome}</p>
+          </article>
+          <article className="item-card">
+            <p className="matrix-label">Next action</p>
+            <p>{selectedTrack.nextAction}</p>
+          </article>
+        </div>
 
         <div className="action-row">
-          <Link className="action-link" to="/">
-            Back to overview
-          </Link>
-          <Link className="action-link" to="/work">
-            Case studies
+          <Link className="action-link action-link-primary" to="/work">
+            Open case studies
           </Link>
           <Link className="action-link" to="/projects">
-            Project archive
+            Projects archive
+          </Link>
+          <Link className="action-link" to="/publications">
+            Publications archive
           </Link>
         </div>
+      </section>
+
+      <section className="panel panel-note">
+        <p className="meta-line">
+          Updated {formatDateTime(state.data.profile.last_sync.last_run_timestamp)}
+        </p>
       </section>
     </div>
   )
