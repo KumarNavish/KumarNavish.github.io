@@ -44,6 +44,9 @@ jobs:
       - name: Verify resume artifact
         run: test -f site/public/artifacts/resume.pdf
 
+      - name: Build BIS demo artifact
+        run: make demo-build
+
       - name: Build site
         run: make site-build
 
