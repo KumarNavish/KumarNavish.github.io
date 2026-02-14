@@ -387,7 +387,7 @@ function App() {
       return 'Running automation pipeline...'
     }
     if (!result) {
-      return 'Pick a request, then click Start demo.'
+      return 'Pick a workflow, then run automation.'
     }
     return 'Automation packet ready to export.'
   }, [error, isRunning, result])
@@ -489,15 +489,16 @@ function App() {
     <main className="page-shell">
       <header className="hero">
         <p className="eyebrow">BIS Process Optimisation Copilot</p>
-        <h1>From messy request to ready automation plan in one click.</h1>
+        <h1>Turn one manual workflow into an execution-ready automation handoff.</h1>
         <p className="hero-subtitle">
-          Pick a real operations request, run automation, and export actionable payloads for execution tools.
+          Choose a real BIS request. In one run, get a charter, a future process map, and payloads ready for Jira and
+          ServiceNow.
         </p>
       </header>
 
-      <section className="panel workspace-panel">
-        <section className="control-pane">
-          <h2>1. Pick workflow</h2>
+      <section className="flow-surface">
+        <aside className="intake-panel">
+          <h2>Choose workflow</h2>
 
           <section className="example-picker">
             <label htmlFor="example-select">Use case</label>
@@ -530,7 +531,7 @@ function App() {
           </details>
 
           <button className="primary-btn" onClick={() => void runPipeline()} disabled={!selectedSample || isRunning}>
-            {isRunning ? 'Running...' : 'Run automation'}
+            {isRunning ? 'Running...' : 'Start demo'}
           </button>
 
           {result ? (
@@ -542,237 +543,220 @@ function App() {
           <p className="hint-text">{hintText}</p>
           {error ? <p className="error-text">{error}</p> : null}
           {copyStatus ? <p className="status-text success-text">{copyStatus}</p> : null}
-        </section>
+        </aside>
 
-        <section className="result-pane" aria-live="polite">
-          <section className={`automation-moment ${result ? 'is-complete' : ''}`}>
-            <header className="moment-header">
-              <p className="label">Automation moment</p>
-              <h2>Before and after in one run</h2>
-              {outcomeHeadline ? <p className="moment-headline">{outcomeHeadline}</p> : null}
-            </header>
-            <div className="moment-grid">
-              <article className="moment-card before-card">
-                <h3>Before (manual)</h3>
-                <p className="moment-request">{requestPreview}</p>
-                <ul className="moment-list">
-                  <li>
-                    <span>Cycle time</span>
-                    <strong>{formatDays(previewBaselineDays)}</strong>
-                  </li>
-                  <li>
-                    <span>Monthly volume</span>
-                    <strong>{previewVolume ?? 'n/a'}</strong>
-                  </li>
-                  <li>
-                    <span>Risk level</span>
-                    <strong>{previewRisk ? prettyCategory(previewRisk) : 'n/a'}</strong>
-                  </li>
-                  <li>
-                    <span>Manual handoffs</span>
-                    <strong>{beforeManualSteps}</strong>
-                  </li>
-                </ul>
-              </article>
-              <div className="moment-arrow" aria-hidden="true">
-                →
-              </div>
-              <article className="moment-card after-card">
-                <h3>After (automated)</h3>
-                {result ? (
-                  <>
-                    <ul className="outcome-list">
-                      <li>Charter drafted with baseline and target metrics</li>
-                      <li>Future-state flow and controls generated</li>
-                      <li>Jira + ServiceNow payloads prepared for handoff</li>
-                    </ul>
-                    <div className="impact-strip">
-                      <article className="metric-pill">
-                        <span>Lead time</span>
-                        <strong>
-                          {formatDays(beforeCycleTime)} to {formatDays(afterCycleTime)}
-                        </strong>
-                      </article>
-                      <article className="metric-pill">
-                        <span>Hours saved</span>
-                        <strong>{impactSnapshot?.monthlyHoursSaved ?? 0}h / month</strong>
-                      </article>
-                      <article className="metric-pill">
-                        <span>Quality</span>
-                        <strong>
-                          {sigmaSnapshot?.baselineSigma ?? 0}σ to {sigmaSnapshot?.targetSigma ?? 0}σ
-                        </strong>
-                      </article>
-                      <article className="metric-pill">
-                        <span>Touchpoints</span>
-                        <strong>
-                          {beforeManualSteps} to {afterManualSteps ?? 0}
-                        </strong>
-                      </article>
-                    </div>
-                  </>
-                ) : (
-                  <p className="detail-note">
-                    Click <strong>Start demo</strong> to turn this into a complete execution packet.
-                  </p>
-                )}
-              </article>
+        <section className="outcome-panel" aria-live="polite">
+          <section className={`magic-card ${result ? 'ready' : ''}`}>
+            <article className="magic-column before-column">
+              <p className="panel-label">Before</p>
+              <h3>Manual intake request</h3>
+              <p className="magic-text">{requestPreview}</p>
+              <ul className="metric-list">
+                <li>
+                  <span>Cycle time</span>
+                  <strong>{formatDays(previewBaselineDays)}</strong>
+                </li>
+                <li>
+                  <span>Monthly volume</span>
+                  <strong>{previewVolume ?? 'n/a'}</strong>
+                </li>
+                <li>
+                  <span>Risk level</span>
+                  <strong>{previewRisk ? prettyCategory(previewRisk) : 'n/a'}</strong>
+                </li>
+                <li>
+                  <span>Manual touchpoints</span>
+                  <strong>{beforeManualSteps}</strong>
+                </li>
+              </ul>
+            </article>
+
+            <div className="magic-divider" aria-hidden="true">
+              <span>→</span>
             </div>
+
+            <article className="magic-column after-column">
+              <p className="panel-label">After</p>
+              <h3>Automation packet produced</h3>
+              {result ? (
+                <>
+                  <p className="impact-headline">{outcomeHeadline}</p>
+                  <div className="impact-grid">
+                    <article className="impact-card">
+                      <span>Cycle time</span>
+                      <strong>
+                        {formatDays(beforeCycleTime)} to {formatDays(afterCycleTime)}
+                      </strong>
+                    </article>
+                    <article className="impact-card">
+                      <span>Recovered capacity</span>
+                      <strong>{impactSnapshot?.monthlyHoursSaved ?? 0}h per month</strong>
+                    </article>
+                    <article className="impact-card">
+                      <span>Manual touchpoints</span>
+                      <strong>
+                        {beforeManualSteps} to {afterManualSteps ?? 0}
+                      </strong>
+                    </article>
+                  </div>
+                  <ul className="artifact-list">
+                    <li>Project charter</li>
+                    <li>Future-state process map</li>
+                    <li>Automation blueprint with controls</li>
+                    <li>Jira and ServiceNow payloads</li>
+                  </ul>
+                </>
+              ) : (
+                <p className="waiting-note">
+                  Press <strong>Start demo</strong> to generate the full automation packet.
+                </p>
+              )}
+            </article>
           </section>
 
           {result ? (
-            <>
-              <section className="executive-card">
-                <p className="card-kicker">Your outputs</p>
-                <h2>Execution packet ready</h2>
-                <p className="exec-summary">{result.charter.problem_statement}</p>
-                {outcomeHeadline ? <p className="exec-value">{outcomeHeadline}</p> : null}
-                <div className="summary-row">
-                  <article className="summary-card">
-                    <span>Category</span>
-                    <strong>{prettyCategory(result.triage.category)}</strong>
-                  </article>
-                  <article className="summary-card">
-                    <span>Priority</span>
-                    <strong>{result.triage.priority}</strong>
-                  </article>
-                  <article className="summary-card">
-                    <span>Risk</span>
-                    <strong>{prettyCategory(result.triage.risk_level)}</strong>
-                  </article>
-                </div>
-                {categoryDefinition ? <p className="detail-note">{categoryDefinition.description}</p> : null}
-                <ol className="action-list compact-list">
-                  {improvePlan.slice(0, 3).map((item) => (
-                    <li key={item.id}>
-                      <strong>{item.step}</strong>
-                      <span>{item.expectedEffect}</span>
-                    </li>
-                  ))}
-                </ol>
-                <div className="actions-row">
-                  <button className="primary-btn" onClick={() => exportTicketBundle()}>
-                    Download export bundle
-                  </button>
-                  <button className="secondary-btn" onClick={() => void copyFullPack()}>
-                    Copy full packet
-                  </button>
-                </div>
-                <p className="integration-note">
-                  These payloads are shaped like ticketing and tracker APIs to show transferability.
-                </p>
-              </section>
-
-              <details className="packet-details">
-                <summary>View full DMAIC packet</summary>
-                <section className="details-grid">
-                  <article className="detail-card">
-                    <h3>Charter</h3>
-                    <ul className="detail-list">
-                      <li>
-                        <strong>Problem</strong>
-                        <span>{result.charter.problem_statement}</span>
-                      </li>
-                      <li>
-                        <strong>Scope in</strong>
-                        <span>{result.charter.scope_in.join(' | ')}</span>
-                      </li>
-                      <li>
-                        <strong>Stakeholders</strong>
-                        <span>{result.charter.stakeholders.join(', ')}</span>
-                      </li>
-                      <li>
-                        <strong>Baseline cycle</strong>
-                        <span>{metricToText(result.charter.baseline_metrics.cycle_time_days)}</span>
-                      </li>
-                      <li>
-                        <strong>Target cycle</strong>
-                        <span>{metricToText(result.charter.target_metrics.cycle_time_days_target)}</span>
-                      </li>
-                    </ul>
-                  </article>
-
-                  <article className="detail-card">
-                    <h3>Root causes and controls</h3>
-                    <ul className="detail-list">
-                      {rootCauses.map((cause) => (
-                        <li key={cause.cause}>
-                          <strong>{cause.cause}</strong>
-                          <span>{cause.effect}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <ul className="detail-list">
-                      {controlPlan.map((item) => (
-                        <li key={item.metric}>
-                          <strong>{item.metric}</strong>
-                          <span>
-                            {item.frequency} | {item.trigger}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </article>
-
-                  <MermaidDiagram title="As-is process map" chart={result.asIsMermaid} />
-                  <MermaidDiagram title="To-be process map" chart={result.toBeMermaid} />
-
-                  <article className="detail-card span-2">
-                    <h3>Export preview</h3>
-                    <ul className="detail-list compact">
-                      <li>
-                        <strong>Jira summary</strong>
-                        <span>{metricToText(jiraFields?.summary)}</span>
-                      </li>
-                      <li>
-                        <strong>ServiceNow short description</strong>
-                        <span>{metricToText(servicenowBody?.short_description)}</span>
-                      </li>
-                      <li>
-                        <strong>Tracker owner</strong>
-                        <span>{metricToText(trackerPayload?.owner)}</span>
-                      </li>
-                      <li>
-                        <strong>Target SLA</strong>
-                        <span>{metricToText(trackerPayload?.target_sla_days)}</span>
-                      </li>
-                    </ul>
-                    <div className="actions-row copy-group">
-                      <button
-                        className="secondary-btn"
-                        onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}
-                      >
-                        Copy Jira JSON
-                      </button>
-                      <button
-                        className="secondary-btn"
-                        onClick={() => copyJson('ServiceNow payload', result.exports.servicenow_record_create)}
-                      >
-                        Copy ServiceNow JSON
-                      </button>
-                      <button
-                        className="secondary-btn"
-                        onClick={() => copyJson('Tracker payload', result.exports.process_tracker_row)}
-                      >
-                        Copy tracker JSON
-                      </button>
-                    </div>
-                  </article>
-                </section>
-              </details>
-            </>
+            <section className="handoff-card">
+              <p className="card-kicker">Ready to send</p>
+              <h2>Execution handoff payloads</h2>
+              <p className="handoff-subtitle">
+                Use these directly in your delivery workflow or copy the full packet for project kickoff.
+              </p>
+              <div className="handoff-grid">
+                <article className="handoff-item">
+                  <span>Jira summary</span>
+                  <strong>{metricToText(jiraFields?.summary)}</strong>
+                </article>
+                <article className="handoff-item">
+                  <span>ServiceNow short description</span>
+                  <strong>{metricToText(servicenowBody?.short_description)}</strong>
+                </article>
+                <article className="handoff-item">
+                  <span>Tracker owner</span>
+                  <strong>{metricToText(trackerPayload?.owner)}</strong>
+                </article>
+              </div>
+              <div className="actions-row">
+                <button className="primary-btn" onClick={() => exportTicketBundle()}>
+                  Download export bundle
+                </button>
+                <button className="secondary-btn" onClick={() => void copyFullPack()}>
+                  Copy full packet
+                </button>
+              </div>
+              {categoryDefinition ? <p className="integration-note">{categoryDefinition.description}</p> : null}
+            </section>
           ) : (
-            <section className="executive-card placeholder-card">
-              <p className="card-kicker">Your outputs</p>
-              <h2>Run once to generate ready-to-use deliverables</h2>
-              <ul className="outcome-list">
-                <li>Lean charter with baseline and target metrics</li>
+            <section className="handoff-card placeholder-card">
+              <p className="card-kicker">What you will get</p>
+              <h2>Four deliverables, instantly</h2>
+              <ul className="artifact-list">
+                <li>Clear charter with baseline and target</li>
                 <li>As-is and to-be process maps</li>
-                <li>Automation blueprint with controls</li>
-                <li>Export payloads for Jira and ServiceNow</li>
+                <li>Blueprint with controls and monitoring</li>
+                <li>Execution payloads for internal tools</li>
               </ul>
             </section>
           )}
+
+          {result ? (
+            <details className="packet-details">
+              <summary>Open full packet details</summary>
+              <section className="details-grid">
+                <article className="detail-card">
+                  <h3>Charter</h3>
+                  <ul className="detail-list">
+                    <li>
+                      <strong>Problem</strong>
+                      <span>{result.charter.problem_statement}</span>
+                    </li>
+                    <li>
+                      <strong>Scope in</strong>
+                      <span>{result.charter.scope_in.join(' | ')}</span>
+                    </li>
+                    <li>
+                      <strong>Stakeholders</strong>
+                      <span>{result.charter.stakeholders.join(', ')}</span>
+                    </li>
+                    <li>
+                      <strong>Baseline cycle</strong>
+                      <span>{metricToText(result.charter.baseline_metrics.cycle_time_days)}</span>
+                    </li>
+                    <li>
+                      <strong>Target cycle</strong>
+                      <span>{metricToText(result.charter.target_metrics.cycle_time_days_target)}</span>
+                    </li>
+                  </ul>
+                </article>
+
+                <article className="detail-card">
+                  <h3>Root causes and controls</h3>
+                  <ul className="detail-list">
+                    {rootCauses.map((cause) => (
+                      <li key={cause.cause}>
+                        <strong>{cause.cause}</strong>
+                        <span>{cause.effect}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <ul className="detail-list">
+                    {controlPlan.map((item) => (
+                      <li key={item.metric}>
+                        <strong>{item.metric}</strong>
+                        <span>
+                          {item.frequency} | {item.trigger}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+
+                <MermaidDiagram title="As-is process map" chart={result.asIsMermaid} />
+                <MermaidDiagram title="To-be process map" chart={result.toBeMermaid} />
+
+                <article className="detail-card span-2">
+                  <h3>Export preview</h3>
+                  <ul className="detail-list compact">
+                    <li>
+                      <strong>Jira summary</strong>
+                      <span>{metricToText(jiraFields?.summary)}</span>
+                    </li>
+                    <li>
+                      <strong>ServiceNow short description</strong>
+                      <span>{metricToText(servicenowBody?.short_description)}</span>
+                    </li>
+                    <li>
+                      <strong>Tracker owner</strong>
+                      <span>{metricToText(trackerPayload?.owner)}</span>
+                    </li>
+                    <li>
+                      <strong>Target SLA</strong>
+                      <span>{metricToText(trackerPayload?.target_sla_days)}</span>
+                    </li>
+                  </ul>
+                  <div className="actions-row copy-group">
+                    <button
+                      className="secondary-btn"
+                      onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}
+                    >
+                      Copy Jira JSON
+                    </button>
+                    <button
+                      className="secondary-btn"
+                      onClick={() => copyJson('ServiceNow payload', result.exports.servicenow_record_create)}
+                    >
+                      Copy ServiceNow JSON
+                    </button>
+                    <button
+                      className="secondary-btn"
+                      onClick={() => copyJson('Tracker payload', result.exports.process_tracker_row)}
+                    >
+                      Copy tracker JSON
+                    </button>
+                  </div>
+                </article>
+              </section>
+            </details>
+          ) : null}
         </section>
       </section>
     </main>
