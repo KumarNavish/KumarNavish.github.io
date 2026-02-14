@@ -312,6 +312,13 @@ function App() {
   const secondaryOutcome = impactSnapshot
     ? `${impactSnapshot.monthlyHoursSaved} hours/month saved and ${totalArtifacts ?? 0} handoff artifacts generated.`
     : 'You will get a clear before/after impact view and copy-ready outputs in one click.'
+  const revealImpact = impactSnapshot
+    ? `${
+        impactSnapshot.cycleGainDays !== null
+          ? `${impactSnapshot.cycleGainDays} days faster`
+          : `${impactSnapshot.monthlyHoursSaved} hrs/month saved`
+      } and ${totalArtifacts ?? 0} handoff artifacts ready.`
+    : 'Run automation to reveal measurable before/after impact for this request.'
 
   const hintText = useMemo(() => {
     if (error) {
@@ -520,62 +527,49 @@ function App() {
             <section className="before-after-proof">
               <div className="before-after-head">
                 <h3>Before (manual) vs After (automated)</h3>
-                <p>What changed in this workflow after one run.</p>
+                <p>One clear transformation from this request.</p>
               </div>
-              <ul className="proof-list">
-                <li>
-                  <span className="proof-label">Cycle time</span>
-                  <span className="proof-before">{formatDays(beforeCycleTime)}</span>
-                  <span className="proof-arrow">→</span>
-                  <span className="proof-after">{formatDays(afterCycleTime)}</span>
-                  <strong className="proof-impact">
-                    {impactSnapshot?.cycleGainDays !== null
-                      ? `${impactSnapshot.cycleGainDays} days faster`
-                      : 'Calculated after run'}
-                  </strong>
-                </li>
-                <li>
-                  <span className="proof-label">Manual effort</span>
-                  <span className="proof-before">
-                    {impactSnapshot ? `${impactSnapshot.manualTouches} touchpoints` : 'Manual routing and follow-up'}
+              <article className={`reveal-card ${hasResult ? 'revealed' : ''}`} aria-live="polite">
+                <p className="reveal-label">Cycle time</p>
+                <div className="reveal-track">
+                  <section className="reveal-state before">
+                    <span className="reveal-tag">Before</span>
+                    <strong>{formatDays(beforeCycleTime)}</strong>
+                    <small>manual routing and follow-up</small>
+                  </section>
+                  <span className="reveal-arrow" aria-hidden="true">
+                    →
                   </span>
-                  <span className="proof-arrow">→</span>
-                  <span className="proof-after">
-                    {impactSnapshot ? `${impactSnapshot.generatedSteps} standard steps` : 'Structured workflow'}
-                  </span>
-                  <strong className="proof-impact">
-                    {impactSnapshot ? `${impactSnapshot.monthlyHoursSaved} hrs/month released` : 'Measured after run'}
-                  </strong>
-                </li>
-                <li>
-                  <span className="proof-label">Execution readiness</span>
-                  <span className="proof-before">Unstructured notes</span>
-                  <span className="proof-arrow">→</span>
-                  <span className="proof-after">
-                    {impactSnapshot ? `${totalArtifacts ?? 0} ready artifacts` : 'Ready artifacts'}
-                  </span>
-                  <strong className="proof-impact">Copy into Jira / ServiceNow immediately</strong>
-                </li>
-              </ul>
+                  <section className="reveal-state after">
+                    <span className="reveal-tag">After</span>
+                    <strong>{formatDays(afterCycleTime)}</strong>
+                    <small>automation-ready flow</small>
+                  </section>
+                </div>
+                <p className="reveal-impact">{revealImpact}</p>
+              </article>
             </section>
 
-            <div className="transform-center">
-              <p className="transform-label">Run status</p>
-              <div className="progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={runProgress}>
-                <span style={{ width: `${runProgress}%` }} />
+            <details className="advanced-block run-details" open={isRunning}>
+              <summary>Show run progress</summary>
+              <div className="transform-center">
+                <p className="transform-label">Run status</p>
+                <div className="progress-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={runProgress}>
+                  <span style={{ width: `${runProgress}%` }} />
+                </div>
+                <ol className="phase-list">
+                  {DEMO_PHASES.map((phase, index) => {
+                    const state = getPhaseState(index, activePhaseIndex, isRunning, hasResult)
+                    return (
+                      <li key={phase.label} className={`phase-item ${state}`}>
+                        <span>{index + 1}</span>
+                        {phase.label}
+                      </li>
+                    )
+                  })}
+                </ol>
               </div>
-              <ol className="phase-list">
-                {DEMO_PHASES.map((phase, index) => {
-                  const state = getPhaseState(index, activePhaseIndex, isRunning, hasResult)
-                  return (
-                    <li key={phase.label} className={`phase-item ${state}`}>
-                      <span>{index + 1}</span>
-                      {phase.label}
-                    </li>
-                  )
-                })}
-              </ol>
-            </div>
+            </details>
           </section>
         </div>
       </section>
