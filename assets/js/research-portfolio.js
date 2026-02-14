@@ -16,13 +16,13 @@
     return String(value || "").trim();
   }
 
-  function compactText(value, maxLength) {
+  function compactSentence(value, maxLength) {
     var text = toText(value);
     if (!text) {
       return "";
     }
 
-    var firstSentence = text.split(/\.\s+/)[0];
+    var firstSentence = text.split(/\.\s+/)[0].trim();
     if (firstSentence && firstSentence.length <= maxLength) {
       return firstSentence.replace(/[.\s]*$/, "") + ".";
     }
@@ -31,29 +31,40 @@
       return text;
     }
 
-    return text.slice(0, Math.max(24, maxLength - 1)).trim().replace(/[,;:\s]+$/, "") + "…";
+    return text.slice(0, Math.max(24, maxLength - 1)).trim().replace(/[,:;\s]+$/, "") + "…";
   }
 
-  function compactPhrase(value, maxLength) {
+  function compactWords(value, maxWords, maxLength) {
     var text = toText(value);
     if (!text) {
       return "";
     }
 
-    var first = text.split(/[;,]/)[0].trim();
-    if (first.length <= maxLength) {
-      return first;
+    var words = text
+      .replace(/[|]/g, " ")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, Math.max(1, maxWords));
+
+    var phrase = words.join(" ").replace(/[,:;\s]+$/, "");
+    if (phrase.length > maxLength) {
+      phrase = phrase.slice(0, Math.max(16, maxLength - 1)).trim().replace(/[,:;\s]+$/, "");
     }
 
-    return first.slice(0, Math.max(24, maxLength - 1)).trim().replace(/[\s]+$/, "") + "…";
+    return phrase + (phrase.length < text.length ? "…" : "");
   }
 
   function getOverview(data) {
     return data.curation.overview || {};
   }
 
-  function workYear(work) {
-    return work.year ? String(work.year) : "Undated";
+  function setScholarLinks(url) {
+    ["home-scholar-link", "home-scholar-link-secondary"].forEach(function (id) {
+      var node = document.getElementById(id);
+      if (node) {
+        node.href = url;
+      }
+    });
   }
 
   function renderHero(data) {
@@ -62,16 +73,15 @@
     var scholarUrl = site.scholar_url || data.raw.source || "#";
 
     setText("home-kicker", overview.hero_byline || site.name || data.raw.profile.name || "Research Portfolio");
-    setText("home-title", overview.hero_title || site.statement || "Research");
-    setText("home-statement", compactText(overview.hero_subtitle || site.context || "", 180));
-    setText("home-context", compactText(overview.hero_context || "", 180));
-    setText("home-identity-line", compactText(overview.identity_line || site.context || "", 145));
+    setText("home-title", compactSentence(overview.hero_title || site.statement || "Research", 108));
+    setText("home-statement", compactSentence(overview.hero_subtitle || site.context || "", 120));
+    setText("home-context", compactSentence(overview.hero_context || site.context || "", 90));
+    setText("home-identity-line", compactSentence(overview.identity_line || site.context || "", 92));
     setText(
       "home-invite",
-      compactText(
-        overview.closing_invite ||
-          "The archive maps each work to the question it answers, the method it uses, and the decision it informs.",
-        180
+      compactSentence(
+        overview.closing_invite || "Open the archive to view each work by program, method, and practical use.",
+        100
       )
     );
 
@@ -80,19 +90,11 @@
     setText("home-stat-years", data.stats.years);
     setText("home-stat-arcs", String(data.stats.arcs));
 
-    var scholarPrimary = document.getElementById("home-scholar-link");
-    if (scholarPrimary) {
-      scholarPrimary.href = scholarUrl;
-    }
-
-    var scholarSecondary = document.getElementById("home-scholar-link-secondary");
-    if (scholarSecondary) {
-      scholarSecondary.href = scholarUrl;
-    }
+    setScholarLinks(scholarUrl);
   }
 
-  function renderSignature(data) {
-    var root = document.getElementById("home-signature");
+  function renderPrinciples(data) {
+    var root = document.getElementById("home-principles");
     if (!root) {
       return;
     }
@@ -110,38 +112,9 @@
       .slice(0, 3)
       .map(function (item) {
         return (
-          '<article class="overview-v8-signature-item intentional-reveal">' +
+          '<article class="overview-v9-principle intentional-reveal">' +
             "<h3>" + escape(item.title) + "</h3>" +
-            "<p>" + escape(compactText(item.text, 90)) + "</p>" +
-          "</article>"
-        );
-      })
-      .join("");
-  }
-
-  function renderLogic(data) {
-    var root = document.getElementById("home-logic");
-    if (!root) {
-      return;
-    }
-
-    var logic = data.curation.logic || [];
-    if (!logic.length) {
-      logic = [
-        { title: "Question", text: "Define the structural claim." },
-        { title: "System", text: "Build and instrument the testbed." },
-        { title: "Decision", text: "Translate evidence into design choices." }
-      ];
-    }
-
-    root.innerHTML = logic
-      .slice(0, 3)
-      .map(function (item, index) {
-        return (
-          '<article class="overview-v8-logic-step intentional-reveal">' +
-            '<p class="overview-v8-index">' + String(index + 1).padStart(2, "0") + "</p>" +
-            "<h3>" + escape(item.title) + "</h3>" +
-            "<p>" + escape(compactText(item.text, 92)) + "</p>" +
+            "<p>" + escape(compactWords(item.text, 7, 52)) + "</p>" +
           "</article>"
         );
       })
@@ -154,20 +127,6 @@
       counts[work.arc] = (counts[work.arc] || 0) + 1;
     });
     return counts;
-  }
-
-  function renderArcMetaRow(label, value) {
-    var text = compactPhrase(value, 82);
-    if (!text) {
-      return "";
-    }
-
-    return (
-      "<div>" +
-        "<dt>" + escape(label) + "</dt>" +
-        "<dd>" + escape(text) + "</dd>" +
-      "</div>"
-    );
   }
 
   function renderArcs(data) {
@@ -184,20 +143,20 @@
       })
       .map(function (arc) {
         var count = counts[arc.id] || 0;
-        var label = count === 1 ? "1 work" : String(count) + " works";
-        var meta =
-          renderArcMetaRow("Method", arc.methods) +
-          renderArcMetaRow("Use", arc.practice);
+        var countLabel = count === 1 ? "1 work" : String(count) + " works";
 
         return (
-          '<article class="overview-v8-arc intentional-reveal">' +
-            '<header class="overview-v8-arc-head">' +
+          '<article class="overview-v9-arc intentional-reveal">' +
+            '<header class="overview-v9-arc-head">' +
               "<h3>" + escape(arc.name) + "</h3>" +
-              '<span class="overview-v8-arc-count">' + label + "</span>" +
+              '<span class="overview-v9-arc-count">' + escape(countLabel) + "</span>" +
             "</header>" +
-            '<p class="overview-v8-arc-thesis">' + escape(compactText(arc.thesis, 120)) + "</p>" +
-            (meta ? '<dl class="overview-v8-arc-meta">' + meta + "</dl>" : "") +
-            '<a class="intentional-link" href="/publications/?arc=' + escape(arc.id) + '">Open Program</a>' +
+            '<p class="overview-v9-arc-thesis">' + escape(compactSentence(arc.thesis, 92)) + "</p>" +
+            '<ul class="overview-v9-arc-signals">' +
+              "<li><span>Method</span><strong>" + escape(compactWords(arc.methods, 8, 56)) + "</strong></li>" +
+              "<li><span>Use</span><strong>" + escape(compactWords(arc.practice, 8, 56)) + "</strong></li>" +
+            "</ul>" +
+            '<a class="intentional-link" href="/publications/?arc=' + escape(arc.id) + '">Open</a>' +
           "</article>"
         );
       })
@@ -224,22 +183,22 @@
 
   function selectFeaturedWorks(data) {
     var selected = [];
-    var seen = {};
+    var selectedMap = {};
 
     (data.curation.arcs || []).forEach(function (arc) {
       var lead = arcLeadWork(data, arc.id);
-      if (lead && !seen[lead.id]) {
+      if (lead && !selectedMap[lead.id]) {
         selected.push(lead);
-        seen[lead.id] = true;
+        selectedMap[lead.id] = true;
       }
     });
 
     data.works.forEach(function (work) {
-      if (selected.length >= 3 || seen[work.id]) {
+      if (selected.length >= 3 || selectedMap[work.id]) {
         return;
       }
       selected.push(work);
-      seen[work.id] = true;
+      selectedMap[work.id] = true;
     });
 
     return selected.slice(0, 3);
@@ -261,6 +220,23 @@
     return links ? '<div class="intentional-work-links">' + links + "</div>" : "";
   }
 
+  function renderWorkTags(work) {
+    var tags = (work.tags || []).slice(0, 2);
+    if (!tags.length) {
+      return "";
+    }
+
+    return (
+      '<ul class="overview-v9-work-tags">' +
+      tags
+        .map(function (tag) {
+          return "<li>" + escape(compactWords(tag, 3, 26)) + "</li>";
+        })
+        .join("") +
+      "</ul>"
+    );
+  }
+
   function renderFeatured(data) {
     var root = document.getElementById("home-featured");
     if (!root) {
@@ -277,21 +253,19 @@
       .map(function (work) {
         var arc = data.arcMap[work.arc] || { name: "Unsorted" };
         var primary = window.ResearchCore.workPrimaryLink(work);
-        var summary = compactText(work.summary || work.description, 130);
 
         return (
-          '<article class="overview-v8-work intentional-reveal">' +
-            '<p class="overview-v8-work-meta">' +
-              escape(arc.name) + " | " +
-              escape(workYear(work)) + " | cited by " +
-              window.ResearchCore.formatNumber(work.citations || 0) +
-            "</p>" +
+          '<article class="overview-v9-work intentional-reveal">' +
+            '<p class="overview-v9-work-arc">' + escape(arc.name) + "</p>" +
             "<h3>" +
               (primary
                 ? '<a href="' + escape(primary) + '" target="_blank" rel="noreferrer">' + escape(work.title) + "</a>"
                 : escape(work.title)) +
             "</h3>" +
-            '<p class="overview-v8-work-summary">' + escape(summary) + "</p>" +
+            '<p class="overview-v9-work-metrics">' +
+              escape(work.year || "Undated") + " | cited by " + window.ResearchCore.formatNumber(work.citations || 0) +
+            "</p>" +
+            renderWorkTags(work) +
             renderWorkLinks(work) +
           "</article>"
         );
@@ -311,7 +285,7 @@
     var nodes = Array.prototype.slice.call(document.querySelectorAll(".intentional-reveal"));
 
     nodes.forEach(function (node, index) {
-      node.style.transitionDelay = String(Math.min(index * 0.03, 0.18)) + "s";
+      node.style.transitionDelay = String(Math.min(index * 0.02, 0.14)) + "s";
     });
 
     if (!("IntersectionObserver" in window)) {
@@ -347,8 +321,7 @@
     try {
       var data = await window.ResearchCore.loadData();
       renderHero(data);
-      renderSignature(data);
-      renderLogic(data);
+      renderPrinciples(data);
       renderArcs(data);
       renderFeatured(data);
       renderSync(data);
