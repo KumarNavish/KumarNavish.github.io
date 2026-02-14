@@ -2,30 +2,31 @@
   {
     "id": "vendor_onboarding-test-001",
     "process_id": "vendor_onboarding",
-    "request_text": "Start vendor onboarding for OrbitFulfill Logistics in CH for cloud hosting; include security and tax checks.",
+    "request_text": "Start due diligence for Alpine Control Services in SG for cyber monitoring; include sanctions, security, and tax checks.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Onboard vendor OrbitFulfill Logistics",
-      "owner_role": "vendor_risk_analyst",
+      "title": "Assess and onboard vendor Alpine Control Services",
+      "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
       "approvals": [
-        "procurement_manager",
-        "security_officer"
+        "procurement_owner",
+        "information_security",
+        "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "OrbitFulfill Logistics",
-        "country": "CH",
-        "service_scope": "cloud hosting",
+        "vendor_name": "Alpine Control Services",
+        "country": "SG",
+        "service_scope": "cyber monitoring",
         "security_review_ticket": "VR-1392",
         "tax_form_status": "pending_submission"
       },
       "next_actions": [
-        "Run sanctions and legal entity checks",
-        "Complete security questionnaire review",
-        "Record onboarding decision in vendor register"
+        "Run sanctions and beneficial ownership checks",
+        "Complete security questionnaire and data handling review",
+        "Record onboarding decision in third-party register"
       ],
       "controls": [
         "Third-party risk tiering",
@@ -37,30 +38,31 @@
   {
     "id": "vendor_onboarding-test-002",
     "process_id": "vendor_onboarding",
-    "request_text": "Start vendor onboarding for Cedar Compliance Labs in SG for payment processing; include security and tax checks.",
+    "request_text": "Start due diligence for Arcadia Cloud Operations in GB for cloud platform support; include sanctions, security, and tax checks.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Onboard vendor Cedar Compliance Labs",
-      "owner_role": "vendor_risk_analyst",
+      "title": "Assess and onboard vendor Arcadia Cloud Operations",
+      "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
       "approvals": [
-        "procurement_manager",
-        "security_officer"
+        "procurement_owner",
+        "information_security",
+        "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Cedar Compliance Labs",
-        "country": "SG",
-        "service_scope": "payment processing",
+        "vendor_name": "Arcadia Cloud Operations",
+        "country": "GB",
+        "service_scope": "cloud platform support",
         "security_review_ticket": "VR-1951",
         "tax_form_status": "pending_submission"
       },
       "next_actions": [
-        "Run sanctions and legal entity checks",
-        "Complete security questionnaire review",
-        "Record onboarding decision in vendor register"
+        "Run sanctions and beneficial ownership checks",
+        "Complete security questionnaire and data handling review",
+        "Record onboarding decision in third-party register"
       ],
       "controls": [
         "Third-party risk tiering",
@@ -72,30 +74,31 @@
   {
     "id": "vendor_onboarding-test-003",
     "process_id": "vendor_onboarding",
-    "request_text": "Start vendor onboarding for BluePeak Consulting in US for analytics support; include security and tax checks.",
+    "request_text": "Start due diligence for Helios Data Labs in US for market data services; include sanctions, security, and tax checks.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Onboard vendor BluePeak Consulting",
-      "owner_role": "vendor_risk_analyst",
+      "title": "Assess and onboard vendor Helios Data Labs",
+      "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
       "approvals": [
-        "procurement_manager",
-        "security_officer"
+        "procurement_owner",
+        "information_security",
+        "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "BluePeak Consulting",
+        "vendor_name": "Helios Data Labs",
         "country": "US",
-        "service_scope": "analytics support",
+        "service_scope": "market data services",
         "security_review_ticket": "VR-1918",
         "tax_form_status": "w9_received"
       },
       "next_actions": [
-        "Run sanctions and legal entity checks",
-        "Complete security questionnaire review",
-        "Record onboarding decision in vendor register"
+        "Run sanctions and beneficial ownership checks",
+        "Complete security questionnaire and data handling review",
+        "Record onboarding decision in third-party register"
       ],
       "controls": [
         "Third-party risk tiering",
@@ -107,30 +110,31 @@
   {
     "id": "vendor_onboarding-test-004",
     "process_id": "vendor_onboarding",
-    "request_text": "Start vendor onboarding for Cedar Compliance Labs in US for KYC operations; include security and tax checks.",
+    "request_text": "Start due diligence for Arcadia Cloud Operations in US for document processing; include sanctions, security, and tax checks.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Onboard vendor Cedar Compliance Labs",
-      "owner_role": "vendor_risk_analyst",
+      "title": "Assess and onboard vendor Arcadia Cloud Operations",
+      "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
       "approvals": [
-        "procurement_manager",
-        "security_officer"
+        "procurement_owner",
+        "information_security",
+        "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Cedar Compliance Labs",
+        "vendor_name": "Arcadia Cloud Operations",
         "country": "US",
-        "service_scope": "KYC operations",
+        "service_scope": "document processing",
         "security_review_ticket": "VR-1380",
         "tax_form_status": "w8ben_required"
       },
       "next_actions": [
-        "Run sanctions and legal entity checks",
-        "Complete security questionnaire review",
-        "Record onboarding decision in vendor register"
+        "Run sanctions and beneficial ownership checks",
+        "Complete security questionnaire and data handling review",
+        "Record onboarding decision in third-party register"
       ],
       "controls": [
         "Third-party risk tiering",
@@ -142,30 +146,31 @@
   {
     "id": "vendor_onboarding-test-005",
     "process_id": "vendor_onboarding",
-    "request_text": "Start vendor onboarding for Cedar Compliance Labs in DE for analytics support; include security and tax checks.",
+    "request_text": "Start due diligence for Arcadia Cloud Operations in DE for market data services; include sanctions, security, and tax checks.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Onboard vendor Cedar Compliance Labs",
-      "owner_role": "vendor_risk_analyst",
+      "title": "Assess and onboard vendor Arcadia Cloud Operations",
+      "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
       "approvals": [
-        "procurement_manager",
-        "security_officer"
+        "procurement_owner",
+        "information_security",
+        "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Cedar Compliance Labs",
+        "vendor_name": "Arcadia Cloud Operations",
         "country": "DE",
-        "service_scope": "analytics support",
+        "service_scope": "market data services",
         "security_review_ticket": "VR-1501",
         "tax_form_status": "w9_received"
       },
       "next_actions": [
-        "Run sanctions and legal entity checks",
-        "Complete security questionnaire review",
-        "Record onboarding decision in vendor register"
+        "Run sanctions and beneficial ownership checks",
+        "Complete security questionnaire and data handling review",
+        "Record onboarding decision in third-party register"
       ],
       "controls": [
         "Third-party risk tiering",
@@ -177,30 +182,31 @@
   {
     "id": "vendor_onboarding-test-006",
     "process_id": "vendor_onboarding",
-    "request_text": "Start vendor onboarding for Cedar Compliance Labs in US for cloud hosting; include security and tax checks.",
+    "request_text": "Start due diligence for Arcadia Cloud Operations in US for cyber monitoring; include sanctions, security, and tax checks.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Onboard vendor Cedar Compliance Labs",
-      "owner_role": "vendor_risk_analyst",
+      "title": "Assess and onboard vendor Arcadia Cloud Operations",
+      "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
       "approvals": [
-        "procurement_manager",
-        "security_officer"
+        "procurement_owner",
+        "information_security",
+        "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Cedar Compliance Labs",
+        "vendor_name": "Arcadia Cloud Operations",
         "country": "US",
-        "service_scope": "cloud hosting",
+        "service_scope": "cyber monitoring",
         "security_review_ticket": "VR-1293",
         "tax_form_status": "w9_received"
       },
       "next_actions": [
-        "Run sanctions and legal entity checks",
-        "Complete security questionnaire review",
-        "Record onboarding decision in vendor register"
+        "Run sanctions and beneficial ownership checks",
+        "Complete security questionnaire and data handling review",
+        "Record onboarding decision in third-party register"
       ],
       "controls": [
         "Third-party risk tiering",
@@ -212,30 +218,31 @@
   {
     "id": "vendor_onboarding-test-007",
     "process_id": "vendor_onboarding",
-    "request_text": "Start vendor onboarding for Cedar Compliance Labs in CH for cloud hosting; include security and tax checks.",
+    "request_text": "Start due diligence for Arcadia Cloud Operations in SG for cyber monitoring; include sanctions, security, and tax checks.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Onboard vendor Cedar Compliance Labs",
-      "owner_role": "vendor_risk_analyst",
+      "title": "Assess and onboard vendor Arcadia Cloud Operations",
+      "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
       "approvals": [
-        "procurement_manager",
-        "security_officer"
+        "procurement_owner",
+        "information_security",
+        "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Cedar Compliance Labs",
-        "country": "CH",
-        "service_scope": "cloud hosting",
+        "vendor_name": "Arcadia Cloud Operations",
+        "country": "SG",
+        "service_scope": "cyber monitoring",
         "security_review_ticket": "VR-1705",
         "tax_form_status": "pending_submission"
       },
       "next_actions": [
-        "Run sanctions and legal entity checks",
-        "Complete security questionnaire review",
-        "Record onboarding decision in vendor register"
+        "Run sanctions and beneficial ownership checks",
+        "Complete security questionnaire and data handling review",
+        "Record onboarding decision in third-party register"
       ],
       "controls": [
         "Third-party risk tiering",
@@ -247,30 +254,31 @@
   {
     "id": "vendor_onboarding-test-008",
     "process_id": "vendor_onboarding",
-    "request_text": "Start vendor onboarding for Cedar Compliance Labs in CH for payment processing; include security and tax checks.",
+    "request_text": "Start due diligence for Arcadia Cloud Operations in CH for cloud platform support; include sanctions, security, and tax checks.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Onboard vendor Cedar Compliance Labs",
-      "owner_role": "vendor_risk_analyst",
+      "title": "Assess and onboard vendor Arcadia Cloud Operations",
+      "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
       "approvals": [
-        "procurement_manager",
-        "security_officer"
+        "procurement_owner",
+        "information_security",
+        "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Cedar Compliance Labs",
+        "vendor_name": "Arcadia Cloud Operations",
         "country": "CH",
-        "service_scope": "payment processing",
+        "service_scope": "cloud platform support",
         "security_review_ticket": "VR-1336",
         "tax_form_status": "pending_submission"
       },
       "next_actions": [
-        "Run sanctions and legal entity checks",
-        "Complete security questionnaire review",
-        "Record onboarding decision in vendor register"
+        "Run sanctions and beneficial ownership checks",
+        "Complete security questionnaire and data handling review",
+        "Record onboarding decision in third-party register"
       ],
       "controls": [
         "Third-party risk tiering",
@@ -282,30 +290,31 @@
   {
     "id": "vendor_onboarding-test-009",
     "process_id": "vendor_onboarding",
-    "request_text": "Start vendor onboarding for Cedar Compliance Labs in CH for analytics support; include security and tax checks.",
+    "request_text": "Start due diligence for Arcadia Cloud Operations in CH for market data services; include sanctions, security, and tax checks.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Onboard vendor Cedar Compliance Labs",
-      "owner_role": "vendor_risk_analyst",
+      "title": "Assess and onboard vendor Arcadia Cloud Operations",
+      "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
       "approvals": [
-        "procurement_manager",
-        "security_officer"
+        "procurement_owner",
+        "information_security",
+        "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Cedar Compliance Labs",
+        "vendor_name": "Arcadia Cloud Operations",
         "country": "CH",
-        "service_scope": "analytics support",
+        "service_scope": "market data services",
         "security_review_ticket": "VR-1265",
         "tax_form_status": "w8ben_required"
       },
       "next_actions": [
-        "Run sanctions and legal entity checks",
-        "Complete security questionnaire review",
-        "Record onboarding decision in vendor register"
+        "Run sanctions and beneficial ownership checks",
+        "Complete security questionnaire and data handling review",
+        "Record onboarding decision in third-party register"
       ],
       "controls": [
         "Third-party risk tiering",
@@ -317,30 +326,31 @@
   {
     "id": "vendor_onboarding-test-010",
     "process_id": "vendor_onboarding",
-    "request_text": "Start vendor onboarding for OrbitFulfill Logistics in IN for analytics support; include security and tax checks.",
+    "request_text": "Start due diligence for Alpine Control Services in CH for market data services; include sanctions, security, and tax checks.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Onboard vendor OrbitFulfill Logistics",
-      "owner_role": "vendor_risk_analyst",
+      "title": "Assess and onboard vendor Alpine Control Services",
+      "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
       "approvals": [
-        "procurement_manager",
-        "security_officer"
+        "procurement_owner",
+        "information_security",
+        "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "OrbitFulfill Logistics",
-        "country": "IN",
-        "service_scope": "analytics support",
+        "vendor_name": "Alpine Control Services",
+        "country": "CH",
+        "service_scope": "market data services",
         "security_review_ticket": "VR-1262",
         "tax_form_status": "w8ben_required"
       },
       "next_actions": [
-        "Run sanctions and legal entity checks",
-        "Complete security questionnaire review",
-        "Record onboarding decision in vendor register"
+        "Run sanctions and beneficial ownership checks",
+        "Complete security questionnaire and data handling review",
+        "Record onboarding decision in third-party register"
       ],
       "controls": [
         "Third-party risk tiering",
@@ -352,30 +362,31 @@
   {
     "id": "vendor_onboarding-test-011",
     "process_id": "vendor_onboarding",
-    "request_text": "Start vendor onboarding for Northwind Data Services in DE for KYC operations; include security and tax checks.",
+    "request_text": "Start due diligence for Northshore Analytics in DE for document processing; include sanctions, security, and tax checks.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Onboard vendor Northwind Data Services",
-      "owner_role": "vendor_risk_analyst",
+      "title": "Assess and onboard vendor Northshore Analytics",
+      "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
       "approvals": [
-        "procurement_manager",
-        "security_officer"
+        "procurement_owner",
+        "information_security",
+        "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Northwind Data Services",
+        "vendor_name": "Northshore Analytics",
         "country": "DE",
-        "service_scope": "KYC operations",
+        "service_scope": "document processing",
         "security_review_ticket": "VR-1402",
         "tax_form_status": "w8ben_required"
       },
       "next_actions": [
-        "Run sanctions and legal entity checks",
-        "Complete security questionnaire review",
-        "Record onboarding decision in vendor register"
+        "Run sanctions and beneficial ownership checks",
+        "Complete security questionnaire and data handling review",
+        "Record onboarding decision in third-party register"
       ],
       "controls": [
         "Third-party risk tiering",
@@ -387,30 +398,31 @@
   {
     "id": "vendor_onboarding-test-012",
     "process_id": "vendor_onboarding",
-    "request_text": "Start vendor onboarding for Cedar Compliance Labs in IN for cloud hosting; include security and tax checks.",
+    "request_text": "Start due diligence for Arcadia Cloud Operations in CH for cyber monitoring; include sanctions, security, and tax checks.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Onboard vendor Cedar Compliance Labs",
-      "owner_role": "vendor_risk_analyst",
+      "title": "Assess and onboard vendor Arcadia Cloud Operations",
+      "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
       "approvals": [
-        "procurement_manager",
-        "security_officer"
+        "procurement_owner",
+        "information_security",
+        "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Cedar Compliance Labs",
-        "country": "IN",
-        "service_scope": "cloud hosting",
+        "vendor_name": "Arcadia Cloud Operations",
+        "country": "CH",
+        "service_scope": "cyber monitoring",
         "security_review_ticket": "VR-1898",
         "tax_form_status": "w8ben_required"
       },
       "next_actions": [
-        "Run sanctions and legal entity checks",
-        "Complete security questionnaire review",
-        "Record onboarding decision in vendor register"
+        "Run sanctions and beneficial ownership checks",
+        "Complete security questionnaire and data handling review",
+        "Record onboarding decision in third-party register"
       ],
       "controls": [
         "Third-party risk tiering",
@@ -422,30 +434,31 @@
   {
     "id": "vendor_onboarding-test-013",
     "process_id": "vendor_onboarding",
-    "request_text": "Start vendor onboarding for Northwind Data Services in IN for KYC operations; include security and tax checks.",
+    "request_text": "Start due diligence for Northshore Analytics in IN for document processing; include sanctions, security, and tax checks.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Onboard vendor Northwind Data Services",
-      "owner_role": "vendor_risk_analyst",
+      "title": "Assess and onboard vendor Northshore Analytics",
+      "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
       "approvals": [
-        "procurement_manager",
-        "security_officer"
+        "procurement_owner",
+        "information_security",
+        "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Northwind Data Services",
+        "vendor_name": "Northshore Analytics",
         "country": "IN",
-        "service_scope": "KYC operations",
+        "service_scope": "document processing",
         "security_review_ticket": "VR-1587",
         "tax_form_status": "w8ben_required"
       },
       "next_actions": [
-        "Run sanctions and legal entity checks",
-        "Complete security questionnaire review",
-        "Record onboarding decision in vendor register"
+        "Run sanctions and beneficial ownership checks",
+        "Complete security questionnaire and data handling review",
+        "Record onboarding decision in third-party register"
       ],
       "controls": [
         "Third-party risk tiering",
@@ -457,30 +470,31 @@
   {
     "id": "vendor_onboarding-test-014",
     "process_id": "vendor_onboarding",
-    "request_text": "Start vendor onboarding for Northwind Data Services in US for cloud hosting; include security and tax checks.",
+    "request_text": "Start due diligence for Northshore Analytics in US for cyber monitoring; include sanctions, security, and tax checks.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Onboard vendor Northwind Data Services",
-      "owner_role": "vendor_risk_analyst",
+      "title": "Assess and onboard vendor Northshore Analytics",
+      "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
       "approvals": [
-        "procurement_manager",
-        "security_officer"
+        "procurement_owner",
+        "information_security",
+        "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Northwind Data Services",
+        "vendor_name": "Northshore Analytics",
         "country": "US",
-        "service_scope": "cloud hosting",
+        "service_scope": "cyber monitoring",
         "security_review_ticket": "VR-1658",
         "tax_form_status": "w9_received"
       },
       "next_actions": [
-        "Run sanctions and legal entity checks",
-        "Complete security questionnaire review",
-        "Record onboarding decision in vendor register"
+        "Run sanctions and beneficial ownership checks",
+        "Complete security questionnaire and data handling review",
+        "Record onboarding decision in third-party register"
       ],
       "controls": [
         "Third-party risk tiering",
@@ -492,30 +506,31 @@
   {
     "id": "vendor_onboarding-test-015",
     "process_id": "vendor_onboarding",
-    "request_text": "Start vendor onboarding for Northwind Data Services in US for cloud hosting; include security and tax checks.",
+    "request_text": "Start due diligence for Northshore Analytics in DE for cyber monitoring; include sanctions, security, and tax checks.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Onboard vendor Northwind Data Services",
-      "owner_role": "vendor_risk_analyst",
+      "title": "Assess and onboard vendor Northshore Analytics",
+      "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
       "approvals": [
-        "procurement_manager",
-        "security_officer"
+        "procurement_owner",
+        "information_security",
+        "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Northwind Data Services",
-        "country": "US",
-        "service_scope": "cloud hosting",
+        "vendor_name": "Northshore Analytics",
+        "country": "DE",
+        "service_scope": "cyber monitoring",
         "security_review_ticket": "VR-1526",
         "tax_form_status": "pending_submission"
       },
       "next_actions": [
-        "Run sanctions and legal entity checks",
-        "Complete security questionnaire review",
-        "Record onboarding decision in vendor register"
+        "Run sanctions and beneficial ownership checks",
+        "Complete security questionnaire and data handling review",
+        "Record onboarding decision in third-party register"
       ],
       "controls": [
         "Third-party risk tiering",
@@ -527,30 +542,31 @@
   {
     "id": "vendor_onboarding-test-016",
     "process_id": "vendor_onboarding",
-    "request_text": "Start vendor onboarding for Northwind Data Services in DE for KYC operations; include security and tax checks.",
+    "request_text": "Start due diligence for Northshore Analytics in DE for document processing; include sanctions, security, and tax checks.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Onboard vendor Northwind Data Services",
-      "owner_role": "vendor_risk_analyst",
+      "title": "Assess and onboard vendor Northshore Analytics",
+      "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
       "approvals": [
-        "procurement_manager",
-        "security_officer"
+        "procurement_owner",
+        "information_security",
+        "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Northwind Data Services",
+        "vendor_name": "Northshore Analytics",
         "country": "DE",
-        "service_scope": "KYC operations",
+        "service_scope": "document processing",
         "security_review_ticket": "VR-1915",
         "tax_form_status": "w9_received"
       },
       "next_actions": [
-        "Run sanctions and legal entity checks",
-        "Complete security questionnaire review",
-        "Record onboarding decision in vendor register"
+        "Run sanctions and beneficial ownership checks",
+        "Complete security questionnaire and data handling review",
+        "Record onboarding decision in third-party register"
       ],
       "controls": [
         "Third-party risk tiering",
@@ -562,30 +578,31 @@
   {
     "id": "vendor_onboarding-test-017",
     "process_id": "vendor_onboarding",
-    "request_text": "Start vendor onboarding for Cedar Compliance Labs in CH for KYC operations; include security and tax checks.",
+    "request_text": "Start due diligence for Arcadia Cloud Operations in SG for document processing; include sanctions, security, and tax checks.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Onboard vendor Cedar Compliance Labs",
-      "owner_role": "vendor_risk_analyst",
+      "title": "Assess and onboard vendor Arcadia Cloud Operations",
+      "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
       "approvals": [
-        "procurement_manager",
-        "security_officer"
+        "procurement_owner",
+        "information_security",
+        "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "Cedar Compliance Labs",
-        "country": "CH",
-        "service_scope": "KYC operations",
+        "vendor_name": "Arcadia Cloud Operations",
+        "country": "SG",
+        "service_scope": "document processing",
         "security_review_ticket": "VR-1210",
         "tax_form_status": "w9_received"
       },
       "next_actions": [
-        "Run sanctions and legal entity checks",
-        "Complete security questionnaire review",
-        "Record onboarding decision in vendor register"
+        "Run sanctions and beneficial ownership checks",
+        "Complete security questionnaire and data handling review",
+        "Record onboarding decision in third-party register"
       ],
       "controls": [
         "Third-party risk tiering",
@@ -597,30 +614,31 @@
   {
     "id": "vendor_onboarding-test-018",
     "process_id": "vendor_onboarding",
-    "request_text": "Start vendor onboarding for OrbitFulfill Logistics in US for cloud hosting; include security and tax checks.",
+    "request_text": "Start due diligence for Alpine Control Services in US for cyber monitoring; include sanctions, security, and tax checks.",
     "risk_tag": "medium",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Onboard vendor OrbitFulfill Logistics",
-      "owner_role": "vendor_risk_analyst",
+      "title": "Assess and onboard vendor Alpine Control Services",
+      "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "medium",
       "approvals": [
-        "procurement_manager",
-        "security_officer"
+        "procurement_owner",
+        "information_security",
+        "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "OrbitFulfill Logistics",
+        "vendor_name": "Alpine Control Services",
         "country": "US",
-        "service_scope": "cloud hosting",
+        "service_scope": "cyber monitoring",
         "security_review_ticket": "VR-1320",
         "tax_form_status": "w9_received"
       },
       "next_actions": [
-        "Run sanctions and legal entity checks",
-        "Complete security questionnaire review",
-        "Record onboarding decision in vendor register"
+        "Run sanctions and beneficial ownership checks",
+        "Complete security questionnaire and data handling review",
+        "Record onboarding decision in third-party register"
       ],
       "controls": [
         "Third-party risk tiering",
@@ -632,30 +650,31 @@
   {
     "id": "vendor_onboarding-test-019",
     "process_id": "vendor_onboarding",
-    "request_text": "Start vendor onboarding for OrbitFulfill Logistics in SG for analytics support; include security and tax checks.",
+    "request_text": "Start due diligence for Alpine Control Services in SG for market data services; include sanctions, security, and tax checks.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Onboard vendor OrbitFulfill Logistics",
-      "owner_role": "vendor_risk_analyst",
+      "title": "Assess and onboard vendor Alpine Control Services",
+      "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
       "approvals": [
-        "procurement_manager",
-        "security_officer"
+        "procurement_owner",
+        "information_security",
+        "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "OrbitFulfill Logistics",
+        "vendor_name": "Alpine Control Services",
         "country": "SG",
-        "service_scope": "analytics support",
+        "service_scope": "market data services",
         "security_review_ticket": "VR-1589",
         "tax_form_status": "pending_submission"
       },
       "next_actions": [
-        "Run sanctions and legal entity checks",
-        "Complete security questionnaire review",
-        "Record onboarding decision in vendor register"
+        "Run sanctions and beneficial ownership checks",
+        "Complete security questionnaire and data handling review",
+        "Record onboarding decision in third-party register"
       ],
       "controls": [
         "Third-party risk tiering",
@@ -667,30 +686,31 @@
   {
     "id": "vendor_onboarding-test-020",
     "process_id": "vendor_onboarding",
-    "request_text": "Start vendor onboarding for BluePeak Consulting in CH for cloud hosting; include security and tax checks.",
+    "request_text": "Start due diligence for Helios Data Labs in CH for cyber monitoring; include sanctions, security, and tax checks.",
     "risk_tag": "high",
     "target": {
       "plan_version": "1.0",
       "process_id": "vendor_onboarding",
-      "title": "Onboard vendor BluePeak Consulting",
-      "owner_role": "vendor_risk_analyst",
+      "title": "Assess and onboard vendor Helios Data Labs",
+      "owner_role": "third_party_risk_analyst",
       "sla_hours": 72,
       "risk_tag": "high",
       "approvals": [
-        "procurement_manager",
-        "security_officer"
+        "procurement_owner",
+        "information_security",
+        "compliance_officer"
       ],
       "required_fields": {
-        "vendor_name": "BluePeak Consulting",
+        "vendor_name": "Helios Data Labs",
         "country": "CH",
-        "service_scope": "cloud hosting",
+        "service_scope": "cyber monitoring",
         "security_review_ticket": "VR-1799",
         "tax_form_status": "pending_submission"
       },
       "next_actions": [
-        "Run sanctions and legal entity checks",
-        "Complete security questionnaire review",
-        "Record onboarding decision in vendor register"
+        "Run sanctions and beneficial ownership checks",
+        "Complete security questionnaire and data handling review",
+        "Record onboarding decision in third-party register"
       ],
       "controls": [
         "Third-party risk tiering",
