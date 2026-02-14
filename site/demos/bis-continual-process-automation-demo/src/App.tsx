@@ -5,13 +5,6 @@ import { loadCategoryCatalog, loadIntakeSamples } from './domain/loadData'
 import { runIntakePipeline, type PipelineResult } from './domain/pipeline'
 import type { CategoryCatalog, IntakeSample } from './domain/types'
 
-interface ImpactRationale {
-  monthly_volume: number | null
-  cycle_time_days: number | null
-  manual_steps: number
-  confidence: 'high' | 'medium' | 'low'
-}
-
 interface ImpactSnapshot {
   baselineDays: number | null
   targetDays: number | null
@@ -77,28 +70,6 @@ function excerpt(text: string, maxLength = 280): string {
   return `${normalized.slice(0, maxLength - 3)}...`
 }
 
-function buildImpactRationale(result: PipelineResult): ImpactRationale {
-  const monthlyVolume =
-    result.extracted.volume_per_month ?? result.sample.ground_truth.volume_per_month ?? null
-  const cycleTimeDays =
-    result.extracted.cycle_time_days ?? result.sample.ground_truth.baseline_cycle_time_days ?? null
-  const manualSteps = result.extracted.manual_step_count
-
-  let confidence: ImpactRationale['confidence'] = 'low'
-  if (monthlyVolume !== null && cycleTimeDays !== null) {
-    confidence = 'high'
-  } else if (monthlyVolume !== null || cycleTimeDays !== null) {
-    confidence = 'medium'
-  }
-
-  return {
-    monthly_volume: monthlyVolume,
-    cycle_time_days: cycleTimeDays,
-    manual_steps: manualSteps,
-    confidence,
-  }
-}
-
 function buildImpactSnapshot(result: PipelineResult): ImpactSnapshot {
   const baselineDays = toNumber(result.charter.baseline_metrics.cycle_time_days)
   const targetDays = toNumber(result.charter.target_metrics.cycle_time_days_target)
@@ -127,7 +98,6 @@ function App() {
   const [requestText, setRequestText] = useState('')
 
   const [result, setResult] = useState<PipelineResult | null>(null)
-  const [impactRationale, setImpactRationale] = useState<ImpactRationale | null>(null)
 
   const [isRunning, setIsRunning] = useState(false)
   const [copyStatus, setCopyStatus] = useState<string | null>(null)
@@ -175,10 +145,6 @@ function App() {
   const outcomeHeadline = impactSnapshot
     ? 'Execution pack generated'
     : 'From manual intake to execution-ready package'
-
-  const outcomeSubline = impactSnapshot
-    ? `${formatDays(beforeCycleTime)} to ${formatDays(afterCycleTime)} target cycle`
-    : 'Run once to generate charter, map, and payloads.'
   const charterTargetCycle = result
     ? metricToText(result.charter.target_metrics.cycle_time_days_target)
     : 'n/a'
@@ -206,7 +172,6 @@ function App() {
         tracker_owner: trackerPayload?.owner ?? 'n/a',
       }
     : null
-  const blueprintPreview = result?.blueprint.steps.slice(0, 4) ?? []
 
   const hintText = useMemo(() => {
     if (error) {
@@ -227,7 +192,6 @@ function App() {
     if (nextSample) {
       setRequestText(nextSample.text)
       setResult(null)
-      setImpactRationale(null)
       setCopyStatus(null)
     }
   }
@@ -244,7 +208,6 @@ function App() {
     }
 
     setResult(null)
-    setImpactRationale(null)
     setCopyStatus(null)
     setIsRunning(true)
 
@@ -252,7 +215,6 @@ function App() {
 
     const nextResult = runIntakePipeline(sampleForRun, catalog)
     setResult(nextResult)
-    setImpactRationale(buildImpactRationale(nextResult))
     setIsRunning(false)
   }
 
@@ -344,156 +306,95 @@ function App() {
         <section className="result-pane" aria-live="polite">
           {!result ? (
             <section className="outcome-shell preview-shell">
-              <p className="moment-tag">Automation preview</p>
-              <h2>Click Start demo. The execution pack appears here.</h2>
+              <p className="moment-tag">Before</p>
+              <h2>Manual intake request</h2>
               <pre className="input-preview">{requestPreview}</pre>
-
-              <article className="reveal-card">
-                <p className="reveal-label">Before to after cycle</p>
-                <div className="reveal-track">
-                  <section className="reveal-state before">
-                    <span className="reveal-tag">Before</span>
-                    <strong>{formatDays(previewBaselineDays)}</strong>
-                    <small>manual email and routing</small>
-                  </section>
-                  <section className="reveal-state after">
-                    <span className="reveal-tag">After</span>
-                    <strong>{formatDays(inferredTargetDays)}</strong>
-                    <small>standard output pack</small>
-                  </section>
-                </div>
-              </article>
-
-              <section className="deliverables-grid">
-                <article className="artifact-card placeholder-card">
-                  <p className="doc-tag">Project charter</p>
-                  <p>Problem statement, scope, baseline, target.</p>
+              <div className="impact-strip">
+                <article>
+                  <span>Cycle</span>
+                  <strong>{formatDays(previewBaselineDays)}</strong>
                 </article>
-                <article className="artifact-card placeholder-card">
-                  <p className="doc-tag">To-be process map</p>
-                  <p>Clear future-state process flow.</p>
+                <article>
+                  <span>State</span>
+                  <strong>Manual</strong>
                 </article>
-                <article className="artifact-card placeholder-card">
-                  <p className="doc-tag">Automation blueprint</p>
-                  <p>Connectors, steps, controls, monitoring.</p>
+                <article>
+                  <span>Output</span>
+                  <strong>Not standardized</strong>
                 </article>
-              </section>
+              </div>
             </section>
           ) : (
             <section className="outcome-shell live-shell">
-              <p className="moment-tag">Automation result</p>
+              <p className="moment-tag">Automation moment</p>
               <h2>{outcomeHeadline}</h2>
-              <p className="outcome-lede">{outcomeSubline}</p>
 
-              <article className={`reveal-card ${hasResult ? 'revealed' : ''}`}>
-                <p className="reveal-label">Before to after cycle</p>
-                <div className="reveal-track">
-                  <section className="reveal-state before">
-                    <span className="reveal-tag">Before</span>
-                    <strong>{formatDays(beforeCycleTime)}</strong>
-                    <small>manual triage and follow-up</small>
-                  </section>
-                  <section className="reveal-state after">
-                    <span className="reveal-tag">After</span>
-                    <strong>{formatDays(afterCycleTime)}</strong>
-                    <small>standard output pack and handoff</small>
-                  </section>
-                </div>
-              </article>
-
-              <div className="metric-row">
+              <div className="impact-strip">
+                <article>
+                  <span>Cycle</span>
+                  <strong>
+                    {formatDays(beforeCycleTime)} to {formatDays(afterCycleTime)}
+                  </strong>
+                </article>
                 <article>
                   <span>Saved / month</span>
-                  <strong>{impactSnapshot.monthlyHoursSaved}</strong>
+                  <strong>{impactSnapshot.monthlyHoursSaved}h</strong>
                 </article>
                 <article>
                   <span>Ready artifacts</span>
                   <strong>{totalArtifacts}</strong>
                 </article>
-                <article>
-                  <span>Workflow type</span>
-                  <strong>{prettyCategory(result.triage.category)}</strong>
-                </article>
               </div>
 
-              <section className="deliverables-grid">
-                <section className="artifact-card deliverable-card">
-                  <p className="doc-tag">Project charter</p>
-                  <h3>{result.sample.title}</h3>
-                  <p>{result.charter.problem_statement}</p>
-                  <dl className="doc-grid">
-                    <div>
-                      <dt>Target cycle</dt>
-                      <dd>{charterTargetCycle}</dd>
-                    </div>
-                    <div>
-                      <dt>Priority</dt>
-                      <dd>{result.triage.priority}</dd>
-                    </div>
-                    <div>
-                      <dt>Risk</dt>
-                      <dd>{prettyCategory(result.triage.risk_level)}</dd>
-                    </div>
-                    <div>
-                      <dt>Next action</dt>
-                      <dd>{result.triage.next_action}</dd>
-                    </div>
-                  </dl>
-                  <div className="outputs-actions">
-                    <button className="primary-btn" onClick={() => copyJson('Charter JSON', result.charter)}>
-                      Copy charter JSON
-                    </button>
-                  </div>
-                </section>
+              <section className="transformation-grid">
+                <article className={`moment-card before-card ${hasResult ? 'revealed' : ''}`}>
+                  <p className="doc-tag">Before request</p>
+                  <pre className="input-preview">{excerpt(result.sample.text, 540)}</pre>
+                </article>
 
-                <section className="artifact-card deliverable-card">
-                  <p className="doc-tag">To-be process map</p>
-                  <MermaidDiagram title="To-be process" chart={result.toBeMermaid} />
-                  <div className="outputs-actions">
-                    <button
-                      className="primary-btn"
-                      onClick={() => copyJson('Process map', { to_be_mermaid: result.toBeMermaid })}
-                    >
-                      Copy process map
-                    </button>
-                  </div>
-                </section>
+                <article className={`moment-card after-pack ${hasResult ? 'revealed' : ''}`}>
+                  <p className="doc-tag">After execution pack</p>
 
-                <section className="artifact-card deliverable-card">
-                  <p className="doc-tag">Automation blueprint</p>
-                  <ol className="step-list">
-                    {blueprintPreview.map((step) => (
-                      <li key={step.id}>
-                        <strong>{step.name}</strong>
-                        <span>{step.description}</span>
-                      </li>
-                    ))}
-                  </ol>
-                  <div className="outputs-actions">
-                    <button className="primary-btn" onClick={() => copyJson('Blueprint JSON', result.blueprint)}>
-                      Copy blueprint JSON
-                    </button>
-                  </div>
-                </section>
-              </section>
+                  <section className="artifact-card">
+                    <p className="doc-tag">Project charter</p>
+                    <h3>{result.sample.title}</h3>
+                    <p>{result.charter.problem_statement}</p>
+                    <div className="pack-metrics">
+                      <span className="pack-pill">Target {charterTargetCycle}</span>
+                      <span className="pack-pill">{result.triage.priority}</span>
+                      <span className="pack-pill">{prettyCategory(result.triage.risk_level)}</span>
+                    </div>
+                  </section>
 
-              <section className="payload-grid">
-                <section className="artifact-card payload-card">
-                  <p className="doc-tag">Jira payload</p>
-                  <p>{metricToText(jiraFields?.summary)}</p>
+                  <section className="artifact-card">
+                    <p className="doc-tag">To-be process map</p>
+                    <MermaidDiagram title="To-be process" chart={result.toBeMermaid} />
+                  </section>
+
+                  <section className="artifact-card">
+                    <p className="doc-tag">Handoff payloads</p>
+                    <pre>{JSON.stringify(payloadPreview, null, 2)}</pre>
+                    <p>
+                      <strong>Jira:</strong> {metricToText(jiraFields?.summary)}
+                    </p>
+                    <p>
+                      <strong>ServiceNow:</strong> {metricToText(servicenowPayload?.short_description)}
+                    </p>
+                    <p>
+                      <strong>Status:</strong> {trackerStatus}
+                    </p>
+                  </section>
+
                   <div className="outputs-actions">
+                    <button className="primary-btn" onClick={() => void copyFullPack()}>
+                      Copy full package
+                    </button>
                     <button
                       className="secondary-btn"
                       onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}
                     >
                       Copy Jira JSON
                     </button>
-                  </div>
-                </section>
-                <section className="artifact-card payload-card">
-                  <p className="doc-tag">ServiceNow payload</p>
-                  <p>{metricToText(servicenowPayload?.short_description)}</p>
-                  <div className="outputs-actions">
                     <button
                       className="secondary-btn"
                       onClick={() => copyJson('ServiceNow payload', result.exports.servicenow_record_create)}
@@ -501,31 +402,8 @@ function App() {
                       Copy ServiceNow JSON
                     </button>
                   </div>
-                </section>
-                <section className="artifact-card payload-card">
-                  <p className="doc-tag">Process tracker row</p>
-                  <pre>{JSON.stringify(payloadPreview, null, 2)}</pre>
-                  <p>
-                    <strong>Status:</strong> {trackerStatus}
-                  </p>
-                  <div className="outputs-actions">
-                    <button className="primary-btn" onClick={() => void copyFullPack()}>
-                      Copy full package
-                    </button>
-                  </div>
-                </section>
+                </article>
               </section>
-
-              <details className="advanced-block">
-                <summary>Show technical details</summary>
-                <p>
-                  Estimated from {impactRationale?.manual_steps ?? 'n/a'} manual touchpoints, volume{' '}
-                  {metricToText(impactRationale?.monthly_volume)}, cycle time{' '}
-                  {metricToText(impactRationale?.cycle_time_days)} days. Confidence:{' '}
-                  <strong>{impactRationale ? prettyCategory(impactRationale.confidence) : 'Not available'}</strong>.
-                </p>
-                <pre>{JSON.stringify(result.blueprint, null, 2)}</pre>
-              </details>
             </section>
           )}
         </section>

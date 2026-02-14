@@ -251,11 +251,6 @@ button:disabled {
   gap: 0.62rem;
 }
 
-.outcome-lede {
-  margin-top: 0.2rem;
-  color: #35557f;
-}
-
 .input-preview {
   margin: 0;
   border: 1px solid #dbe5f1;
@@ -269,94 +264,13 @@ button:disabled {
   line-height: 1.4;
 }
 
-.preview-shell .reveal-state.after {
-  opacity: 1;
-  transform: none;
-}
-
-.reveal-card {
-  border: 1px solid #dbe5f1;
-  border-radius: 12px;
-  background: linear-gradient(180deg, #fbfcfe 0%, #f5f9ff 100%);
-  padding: 0.62rem;
-  display: grid;
-  gap: 0.42rem;
-}
-
-.reveal-label {
-  margin: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: #3a618f;
-}
-
-.reveal-track {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.42rem;
-}
-
-.reveal-state {
-  border: 1px solid #d5dfec;
-  border-radius: 9px;
-  background: #fff;
-  padding: 0.42rem 0.46rem;
-  display: grid;
-  gap: 0.16rem;
-}
-
-.reveal-tag {
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-size: 0.68rem;
-  font-weight: 700;
-  color: #537099;
-}
-
-.reveal-state strong {
-  font-size: 1.18rem;
-  letter-spacing: -0.01em;
-}
-
-.reveal-state small {
-  color: #45648e;
-  font-size: 0.75rem;
-  line-height: 1.3;
-}
-
-.reveal-state.before {
-  border-color: #ebd3d5;
-  background: #fffafb;
-}
-
-.reveal-state.before strong {
-  color: #8a3f43;
-}
-
-.reveal-state.after {
-  border-color: #c8dfcf;
-  background: #f6fcf6;
-  opacity: 0.72;
-  transform: translateY(3px);
-}
-
-.reveal-state.after strong {
-  color: #1e6d3c;
-}
-
-.reveal-card.revealed .reveal-state.after {
-  animation: reveal-up 360ms ease-out forwards;
-}
-
-.metric-row {
+.impact-strip {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.48rem;
 }
 
-.metric-row article {
+.impact-strip article {
   border: 1px solid #dde6f1;
   border-radius: 10px;
   background: #fff;
@@ -365,28 +279,47 @@ button:disabled {
   gap: 0.2rem;
 }
 
-.metric-row span {
+.impact-strip span {
   font-size: 0.74rem;
   color: #4a678f;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
-.metric-row strong {
+.impact-strip strong {
   color: #1f4067;
   font-size: 1rem;
+}
+
+.transformation-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 0.56rem;
+}
+
+.moment-card {
+  border: 1px solid #dce6f2;
+  border-radius: 12px;
+  background: #fff;
+  padding: 0.68rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.before-card {
+  background: #fffafb;
+  border-color: #ecd8dc;
+}
+
+.after-pack {
+  background: #f8fbff;
+  border-color: #d8e4f4;
 }
 
 .outputs-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.44rem;
-}
-
-.deliverables-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.52rem;
 }
 
 .artifact-card {
@@ -411,17 +344,6 @@ button:disabled {
   padding: 0.5rem;
 }
 
-.placeholder-card {
-  background: #f9fbff;
-  border-style: dashed;
-}
-
-.placeholder-card p {
-  margin: 0;
-  color: #4a668f;
-  font-size: 0.83rem;
-}
-
 .doc-tag {
   margin: 0;
   text-transform: uppercase;
@@ -431,62 +353,19 @@ button:disabled {
   font-weight: 700;
 }
 
-.deliverable-card h3 {
-  margin-top: -0.05rem;
-}
-
-.doc-grid {
-  margin: 0;
-  display: grid;
-  gap: 0.42rem;
-}
-
-.doc-grid div {
-  border: 1px solid #e3ebf5;
-  border-radius: 8px;
-  background: #f8fbff;
-  padding: 0.38rem 0.42rem;
-}
-
-.doc-grid dt {
-  font-size: 0.7rem;
-  color: #506b93;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.doc-grid dd {
-  margin: 0.16rem 0 0;
-  color: #1f3f66;
-  font-size: 0.84rem;
-}
-
-.step-list {
-  margin: 0;
-  padding-left: 1.05rem;
-  display: grid;
+.pack-metrics {
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.34rem;
 }
 
-.step-list li {
-  display: grid;
-  gap: 0.12rem;
-  color: #33527c;
-}
-
-.step-list span {
-  font-size: 0.81rem;
-  color: #4b6994;
-}
-
-.payload-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.52rem;
-}
-
-.payload-card p {
-  margin: 0;
+.pack-pill {
+  border: 1px solid #d2deee;
+  border-radius: 999px;
+  background: #f5f9ff;
+  color: #33527b;
+  font-size: 0.76rem;
+  padding: 0.2rem 0.5rem;
 }
 
 .map-card {
@@ -545,16 +424,8 @@ button:disabled {
     width: 100%;
   }
 
-  .reveal-track {
-    grid-template-columns: 1fr;
-  }
-
-  .metric-row {
-    grid-template-columns: 1fr;
-  }
-
-  .deliverables-grid,
-  .payload-grid {
+  .impact-strip,
+  .transformation-grid {
     grid-template-columns: 1fr;
   }
 }
