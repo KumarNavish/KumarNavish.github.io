@@ -1,10 +1,23 @@
+# Legacy Jekyll artifacts
 _site
 .bundle
 .sass-cache
 .jekyll-cache
 .jekyll-metadata
-.DS_Store
 .ruby-version
 Gemfile.lock
 vendor
 assets/data/scholar_cache/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Node/Vite
+site/node_modules/
+site/dist/
+site/.vite/
+
+# OS/editor
+.DS_Store
