@@ -98,6 +98,13 @@ function excerpt(text: string, maxLength = 280): string {
   return `${normalized.slice(0, maxLength - 3)}...`
 }
 
+function estimateManualSteps(text: string): number {
+  const normalized = text.toLowerCase()
+  const signalCount = (normalized.match(/\b(approve|review|handoff|email|manually|rework|follow up)\b/g) ?? [])
+    .length
+  return clamp(3 + signalCount, 3, 10)
+}
+
 function buildImpactSnapshot(result: PipelineResult): ImpactSnapshot {
   const baselineDays = toNumber(result.charter.baseline_metrics.cycle_time_days)
   const targetDays = toNumber(result.charter.target_metrics.cycle_time_days_target)
@@ -342,6 +349,9 @@ function App() {
   const afterCycleTime = impactSnapshot?.targetDays ?? inferredTargetDays
 
   const requestPreview = excerpt(requestText || selectedSample?.text || '', 460)
+  const previewManualSteps = estimateManualSteps(requestText || selectedSample?.text || '')
+  const beforeManualSteps = result?.extracted.manual_step_count ?? previewManualSteps
+  const afterManualSteps = result ? Math.max(2, Math.min(beforeManualSteps, result.blueprint.steps.length)) : null
 
   const jiraFields =
     result && typeof result.exports.jira_issue_create.fields === 'object'
@@ -368,12 +378,12 @@ function App() {
       return 'Could not load data. Please refresh.'
     }
     if (isRunning) {
-      return 'Running automation...'
+      return 'Running automation pipeline...'
     }
     if (!result) {
-      return 'Click Start demo.'
+      return 'Pick a request, then click Start demo.'
     }
-    return 'DMAIC packet ready.'
+    return 'Automation packet ready to export.'
   }, [error, isRunning, result])
 
   function handleSampleChange(sampleId: string) {
@@ -444,19 +454,47 @@ function App() {
     await copyJson('DMAIC work packet', packagePayload)
   }
 
+  function exportTicketBundle() {
+    if (!result) {
+      return
+    }
+
+    const exportBundle = {
+      jira: result.exports.jira_issue_create,
+      servicenow: result.exports.servicenow_record_create,
+      process_tracker: result.exports.process_tracker_row,
+    }
+
+    const blob = new Blob([JSON.stringify(exportBundle, null, 2)], { type: 'application/json' })
+    const objectUrl = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = objectUrl
+    anchor.download = 'bis-automation-exports.json'
+    anchor.click()
+    URL.revokeObjectURL(objectUrl)
+    setCopyStatus('Export bundle downloaded')
+  }
+
+  const categoryDefinition = result
+    ? catalog?.categories.find((item) => item.id === result.triage.category) ?? null
+    : null
+
   return (
     <main className="page-shell">
       <header className="hero">
         <p className="eyebrow">BIS Process Optimisation Copilot</p>
-        <h1>Turn one messy request into a DMAIC execution packet.</h1>
+        <h1>Turn a messy BIS request into an execution-ready automation packet.</h1>
+        <p className="hero-subtitle">
+          Start once. Get a project charter, before/after process maps, automation blueprint, and export payloads.
+        </p>
       </header>
 
       <section className="panel workspace-panel">
         <section className="control-pane">
-          <h2>Input request</h2>
+          <h2>1. Choose request</h2>
 
           <section className="example-picker">
-            <label htmlFor="example-select">Example workflow</label>
+            <label htmlFor="example-select">Use case</label>
             <div className="select-shell">
               <select
                 id="example-select"
@@ -489,234 +527,243 @@ function App() {
             {isRunning ? 'Running...' : 'Start demo'}
           </button>
 
+          {result ? (
+            <button className="secondary-btn export-btn" onClick={() => exportTicketBundle()}>
+              Export Jira + ServiceNow payloads
+            </button>
+          ) : null}
+
           <p className="hint-text">{hintText}</p>
           {error ? <p className="error-text">{error}</p> : null}
           {copyStatus ? <p className="status-text success-text">{copyStatus}</p> : null}
         </section>
 
         <section className="result-pane" aria-live="polite">
-          {!result ? (
-            <section className="stage-shell">
-              <p className="label">Before</p>
-              <h2>Manual request</h2>
-              <pre className="input-preview">{requestPreview}</pre>
-              <div className="summary-row">
-                <article className="summary-card">
-                  <span>Cycle</span>
-                  <strong>{formatDays(previewBaselineDays)}</strong>
-                </article>
-                <article className="summary-card">
-                  <span>Volume</span>
-                  <strong>{previewVolume ?? 'n/a'}</strong>
-                </article>
-                <article className="summary-card">
-                  <span>Risk</span>
-                  <strong>{previewRisk ? prettyCategory(previewRisk) : 'n/a'}</strong>
-                </article>
+          <section className={`automation-moment ${result ? 'is-complete' : ''}`}>
+            <header className="moment-header">
+              <p className="label">Automation moment</p>
+              <h2>Before and after in one run</h2>
+            </header>
+            <div className="moment-grid">
+              <article className="moment-card before-card">
+                <h3>Before (manual)</h3>
+                <p className="moment-request">{requestPreview}</p>
+                <ul className="moment-list">
+                  <li>
+                    <span>Cycle time</span>
+                    <strong>{formatDays(previewBaselineDays)}</strong>
+                  </li>
+                  <li>
+                    <span>Monthly volume</span>
+                    <strong>{previewVolume ?? 'n/a'}</strong>
+                  </li>
+                  <li>
+                    <span>Risk level</span>
+                    <strong>{previewRisk ? prettyCategory(previewRisk) : 'n/a'}</strong>
+                  </li>
+                  <li>
+                    <span>Manual handoffs</span>
+                    <strong>{beforeManualSteps}</strong>
+                  </li>
+                </ul>
+              </article>
+              <div className="moment-arrow" aria-hidden="true">
+                →
               </div>
-            </section>
-          ) : (
-            <section className="packet-shell">
-              <header className="packet-header">
-                <div>
-                  <p className="label">After</p>
-                  <h2>DMAIC execution packet ready</h2>
+              <article className="moment-card after-card">
+                <h3>After (automated)</h3>
+                {result ? (
+                  <>
+                    <ul className="outcome-list">
+                      <li>Project charter generated</li>
+                      <li>As-is and to-be process maps generated</li>
+                      <li>Automation blueprint generated</li>
+                      <li>Jira and ServiceNow payloads generated</li>
+                    </ul>
+                    <div className="impact-strip">
+                      <article className="metric-pill">
+                        <span>Lead time</span>
+                        <strong>
+                          {formatDays(beforeCycleTime)} to {formatDays(afterCycleTime)}
+                        </strong>
+                      </article>
+                      <article className="metric-pill">
+                        <span>Hours saved</span>
+                        <strong>{impactSnapshot?.monthlyHoursSaved ?? 0}h / month</strong>
+                      </article>
+                      <article className="metric-pill">
+                        <span>Quality</span>
+                        <strong>
+                          {sigmaSnapshot?.baselineSigma ?? 0}σ to {sigmaSnapshot?.targetSigma ?? 0}σ
+                        </strong>
+                      </article>
+                      <article className="metric-pill">
+                        <span>Touchpoints</span>
+                        <strong>
+                          {beforeManualSteps} to {afterManualSteps ?? 0}
+                        </strong>
+                      </article>
+                    </div>
+                  </>
+                ) : (
+                  <p className="detail-note">
+                    Click <strong>Start demo</strong> to turn this into a complete execution packet.
+                  </p>
+                )}
+              </article>
+            </div>
+          </section>
+
+          {result ? (
+            <>
+              <section className="executive-card">
+                <p className="card-kicker">Your outputs</p>
+                <h2>Execution packet ready to send</h2>
+                <p className="exec-summary">{result.charter.problem_statement}</p>
+                <div className="summary-row">
+                  <article className="summary-card">
+                    <span>Category</span>
+                    <strong>{prettyCategory(result.triage.category)}</strong>
+                  </article>
+                  <article className="summary-card">
+                    <span>Priority</span>
+                    <strong>{result.triage.priority}</strong>
+                  </article>
+                  <article className="summary-card">
+                    <span>Risk</span>
+                    <strong>{prettyCategory(result.triage.risk_level)}</strong>
+                  </article>
                 </div>
-                <button className="primary-btn" onClick={() => void copyFullPack()}>
-                  Copy DMAIC packet
-                </button>
-              </header>
-
-              <div className="summary-row">
-                <article className="summary-card">
-                  <span>Lead Time</span>
-                  <strong>
-                    {formatDays(beforeCycleTime)} to {formatDays(afterCycleTime)}
-                  </strong>
-                </article>
-                <article className="summary-card">
-                  <span>Hours Saved / Month</span>
-                  <strong>{impactSnapshot.monthlyHoursSaved}h</strong>
-                </article>
-                <article className="summary-card">
-                  <span>Quality Shift</span>
-                  <strong>
-                    {sigmaSnapshot.baselineSigma} to {sigmaSnapshot.targetSigma}
-                  </strong>
-                </article>
-              </div>
-
-              <section className="dmaic-flow">
-                <article className="dmaic-step">
-                  <header className="step-header">
-                    <span className="step-badge">D</span>
-                    <div>
-                      <h3>Define</h3>
-                      <p className="step-caption">Problem, scope, and CTQ</p>
-                    </div>
-                  </header>
-                  <ul className="field-list">
-                    <li>
-                      <strong>Problem</strong>
-                      <span>{result.charter.problem_statement}</span>
+                {categoryDefinition ? <p className="detail-note">{categoryDefinition.description}</p> : null}
+                <ol className="action-list compact-list">
+                  {improvePlan.slice(0, 3).map((item) => (
+                    <li key={item.id}>
+                      <strong>{item.step}</strong>
+                      <span>{item.expectedEffect}</span>
                     </li>
-                    <li>
-                      <strong>Category</strong>
-                      <span>{prettyCategory(result.triage.category)}</span>
-                    </li>
-                    <li>
-                      <strong>Critical-to-quality</strong>
-                      <span>Cycle time, first-pass completeness, approval control.</span>
-                    </li>
-                    <li>
-                      <strong>In scope</strong>
-                      <span>{result.charter.scope_in.slice(0, 2).join(' | ')}</span>
-                    </li>
-                  </ul>
-                </article>
-
-                <article className="dmaic-step">
-                  <header className="step-header">
-                    <span className="step-badge">M</span>
-                    <div>
-                      <h3>Measure</h3>
-                      <p className="step-caption">Baseline vs target</p>
-                    </div>
-                  </header>
-                  <div className="measure-grid">
-                    <article className="measure-item">
-                      <span>Lead time (days)</span>
-                      <strong>
-                        {formatDays(beforeCycleTime)} to {formatDays(afterCycleTime)}
-                      </strong>
-                    </article>
-                    <article className="measure-item">
-                      <span>Lead time reduction</span>
-                      <strong>{impactSnapshot.leadTimeReductionPct ?? 0}%</strong>
-                    </article>
-                    <article className="measure-item">
-                      <span>First-pass yield</span>
-                      <strong>
-                        {sigmaSnapshot.firstPassCurrentPct}% to {sigmaSnapshot.firstPassTargetPct}%
-                      </strong>
-                    </article>
-                    <article className="measure-item">
-                      <span>DPMO</span>
-                      <strong>
-                        {sigmaSnapshot.baselineDPMO.toLocaleString()} to{' '}
-                        {sigmaSnapshot.targetDPMO.toLocaleString()}
-                      </strong>
-                    </article>
-                    <article className="measure-item">
-                      <span>COPQ effort</span>
-                      <strong>
-                        {sigmaSnapshot.copqHoursCurrent}h to {sigmaSnapshot.copqHoursTarget}h
-                      </strong>
-                    </article>
-                    <article className="measure-item">
-                      <span>Demand</span>
-                      <strong>{sigmaSnapshot.opportunitiesPerMonth.toLocaleString()} ops/month</strong>
-                    </article>
-                  </div>
-                </article>
-
-                <article className="dmaic-step">
-                  <header className="step-header">
-                    <span className="step-badge">A</span>
-                    <div>
-                      <h3>Analyze</h3>
-                      <p className="step-caption">Root causes with evidence</p>
-                    </div>
-                  </header>
-                  <ol className="cause-list">
-                    {rootCauses.map((cause) => (
-                      <li key={cause.cause}>
-                        <header>
-                          <strong>{cause.cause}</strong>
-                          <span>{cause.priority}</span>
-                        </header>
-                        <p>{cause.effect}</p>
-                        <small>{cause.evidence}</small>
-                      </li>
-                    ))}
-                  </ol>
-                </article>
-
-                <article className="dmaic-step span-2">
-                  <header className="step-header">
-                    <span className="step-badge">I</span>
-                    <div>
-                      <h3>Improve</h3>
-                      <p className="step-caption">Execution plan and future-state flow</p>
-                    </div>
-                  </header>
-                  <ol className="action-list">
-                    {improvePlan.map((item) => (
-                      <li key={item.id}>
-                        <strong>{item.step}</strong>
-                        <span>{item.expectedEffect}</span>
-                        <small>
-                          Owner: {item.owner} | Week {item.dueWeek}
-                        </small>
-                      </li>
-                    ))}
-                  </ol>
-                  <MermaidDiagram title="Future-state flow" chart={result.toBeMermaid} />
-                </article>
-
-                <article className="dmaic-step span-2">
-                  <header className="step-header">
-                    <span className="step-badge">C</span>
-                    <div>
-                      <h3>Control</h3>
-                      <p className="step-caption">Monitoring plan and handoff payloads</p>
-                    </div>
-                  </header>
-                  <ul className="control-list">
-                    {controlPlan.map((item) => (
-                      <li key={item.metric}>
-                        <strong>{item.metric}</strong>
-                        <span>
-                          {item.frequency} | {item.owner}
-                        </span>
-                        <small>{item.trigger}</small>
-                      </li>
-                    ))}
-                  </ul>
-                  <ul className="field-list compact">
-                    <li>
-                      <strong>Jira title</strong>
-                      <span>{metricToText(jiraFields?.summary)}</span>
-                    </li>
-                    <li>
-                      <strong>ServiceNow short description</strong>
-                      <span>{metricToText(servicenowBody?.short_description)}</span>
-                    </li>
-                    <li>
-                      <strong>Tracker owner</strong>
-                      <span>{metricToText(trackerPayload?.owner)}</span>
-                    </li>
-                    <li>
-                      <strong>Tracker status</strong>
-                      <span>{metricToText(trackerPayload?.status)}</span>
-                    </li>
-                  </ul>
-                  <div className="actions-row">
-                    <button
-                      className="secondary-btn"
-                      onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}
-                    >
-                      Copy Jira JSON
-                    </button>
-                    <button
-                      className="secondary-btn"
-                      onClick={() => copyJson('ServiceNow payload', result.exports.servicenow_record_create)}
-                    >
-                      Copy ServiceNow JSON
-                    </button>
-                  </div>
-                </article>
+                  ))}
+                </ol>
+                <div className="actions-row">
+                  <button className="primary-btn" onClick={() => exportTicketBundle()}>
+                    Export Jira + ServiceNow payloads
+                  </button>
+                  <button className="secondary-btn" onClick={() => void copyFullPack()}>
+                    Copy full packet JSON
+                  </button>
+                </div>
+                <p className="integration-note">
+                  These payloads are shaped like ticketing and tracker APIs to show transferability.
+                </p>
               </section>
+
+              <details className="packet-details">
+                <summary>View full DMAIC packet</summary>
+                <section className="details-grid">
+                  <article className="detail-card">
+                    <h3>Charter</h3>
+                    <ul className="detail-list">
+                      <li>
+                        <strong>Problem</strong>
+                        <span>{result.charter.problem_statement}</span>
+                      </li>
+                      <li>
+                        <strong>Scope in</strong>
+                        <span>{result.charter.scope_in.join(' | ')}</span>
+                      </li>
+                      <li>
+                        <strong>Stakeholders</strong>
+                        <span>{result.charter.stakeholders.join(', ')}</span>
+                      </li>
+                      <li>
+                        <strong>Baseline cycle</strong>
+                        <span>{metricToText(result.charter.baseline_metrics.cycle_time_days)}</span>
+                      </li>
+                      <li>
+                        <strong>Target cycle</strong>
+                        <span>{metricToText(result.charter.target_metrics.cycle_time_days_target)}</span>
+                      </li>
+                    </ul>
+                  </article>
+
+                  <article className="detail-card">
+                    <h3>Root causes and controls</h3>
+                    <ul className="detail-list">
+                      {rootCauses.map((cause) => (
+                        <li key={cause.cause}>
+                          <strong>{cause.cause}</strong>
+                          <span>{cause.effect}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <ul className="detail-list">
+                      {controlPlan.map((item) => (
+                        <li key={item.metric}>
+                          <strong>{item.metric}</strong>
+                          <span>
+                            {item.frequency} | {item.trigger}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </article>
+
+                  <MermaidDiagram title="As-is process map" chart={result.asIsMermaid} />
+                  <MermaidDiagram title="To-be process map" chart={result.toBeMermaid} />
+
+                  <article className="detail-card span-2">
+                    <h3>Export preview</h3>
+                    <ul className="detail-list compact">
+                      <li>
+                        <strong>Jira summary</strong>
+                        <span>{metricToText(jiraFields?.summary)}</span>
+                      </li>
+                      <li>
+                        <strong>ServiceNow short description</strong>
+                        <span>{metricToText(servicenowBody?.short_description)}</span>
+                      </li>
+                      <li>
+                        <strong>Tracker owner</strong>
+                        <span>{metricToText(trackerPayload?.owner)}</span>
+                      </li>
+                      <li>
+                        <strong>Target SLA</strong>
+                        <span>{metricToText(trackerPayload?.target_sla_days)}</span>
+                      </li>
+                    </ul>
+                    <div className="actions-row copy-group">
+                      <button
+                        className="secondary-btn"
+                        onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}
+                      >
+                        Copy Jira JSON
+                      </button>
+                      <button
+                        className="secondary-btn"
+                        onClick={() => copyJson('ServiceNow payload', result.exports.servicenow_record_create)}
+                      >
+                        Copy ServiceNow JSON
+                      </button>
+                      <button
+                        className="secondary-btn"
+                        onClick={() => copyJson('Tracker payload', result.exports.process_tracker_row)}
+                      >
+                        Copy tracker JSON
+                      </button>
+                    </div>
+                  </article>
+                </section>
+              </details>
+            </>
+          ) : (
+            <section className="executive-card placeholder-card">
+              <p className="card-kicker">Your outputs</p>
+              <h2>Run once to generate ready-to-use deliverables</h2>
+              <ul className="outcome-list">
+                <li>Lean charter with baseline and target metrics</li>
+                <li>As-is and to-be process maps</li>
+                <li>Automation blueprint with controls</li>
+                <li>Export payloads for Jira and ServiceNow</li>
+              </ul>
             </section>
           )}
         </section>
