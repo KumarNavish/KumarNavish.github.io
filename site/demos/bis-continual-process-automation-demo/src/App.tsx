@@ -1,8 +1,20 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
+import {
+  ReplayMemory,
+  replayWeightForPreset,
+  type ReplayPreset,
+} from './cl/memory'
+import { OnlineCategoryModel } from './cl/onlineModel'
+import { evaluateIntakeSamples, regressionDelta } from './cl/regression'
 import { loadCategoryCatalog, loadIntakeSamples } from './domain/loadData'
 import { runIntakePipeline } from './domain/pipeline'
-import type { CategoryCatalog, IntakeSample } from './domain/types'
+import {
+  intakeCategories,
+  type CategoryCatalog,
+  type IntakeCategory,
+  type IntakeSample,
+} from './domain/types'
 
 function renderMetricEntries(metrics: Record<string, number | string | null>) {
   return (
@@ -16,20 +28,131 @@ function renderMetricEntries(metrics: Record<string, number | string | null>) {
   )
 }
 
+interface UpdateSummary {
+  preset: ReplayPreset
+  before_accuracy: number
+  after_accuracy: number
+  predicted_after: IntakeCategory
+}
+
+interface RegressionSuiteRow {
+  preset: ReplayPreset
+  before_old_accuracy: number
+  after_old_accuracy: number
+  overall_accuracy: number
+  retention_ratio: number
+  mean_drop: number
+}
+
+const PRESET_OPTIONS: Array<{ id: ReplayPreset; label: string }> = [
+  { id: 'balanced', label: 'Balanced' },
+  { id: 'fast_adaptation', label: 'Fast adaptation' },
+  { id: 'retention_first', label: 'Retention-first' },
+]
+
+function asTrainingExample(sample: IntakeSample, label?: IntakeCategory) {
+  return {
+    id: sample.id,
+    text: sample.text,
+    label: label ?? sample.ground_truth.category,
+    risk_level: sample.ground_truth.risk_level,
+  }
+}
+
+function formatPct(value: number): string {
+  return `${(value * 100).toFixed(1)}%`
+}
+
+function runPresetRegressionSuite(samples: IntakeSample[], preset: ReplayPreset): RegressionSuiteRow {
+  const splitIndex = Math.max(2, Math.floor(samples.length / 2))
+  const oldSlice = samples.slice(0, splitIndex)
+  const newSlice = samples.slice(splitIndex)
+
+  const model = new OnlineCategoryModel()
+  const memory = new ReplayMemory(64, 17)
+  const warmup = oldSlice.map((sample) => asTrainingExample(sample))
+  model.train(warmup, { epochs: 20, learningRate: 0.2 })
+  for (const example of warmup) {
+    memory.add(example)
+  }
+
+  const beforeOld = evaluateIntakeSamples(oldSlice, model)
+
+  for (const sample of newSlice) {
+    const current = asTrainingExample(sample)
+    const replay = memory.sampleForPreset(preset, preset === 'fast_adaptation' ? 0 : 5)
+    model.train([current, ...replay], {
+      epochs: 16,
+      learningRate: preset === 'fast_adaptation' ? 0.24 : 0.16,
+      exampleWeight: (example) =>
+        replayWeightForPreset(preset, {
+          ...example,
+          risk_level: example.risk_level ?? 'low',
+        }),
+    })
+    memory.add(current)
+  }
+
+  const afterOld = evaluateIntakeSamples(oldSlice, model)
+  const overall = evaluateIntakeSamples(samples, model)
+  const delta = regressionDelta([
+    { step: 'before_old', metrics: beforeOld },
+    { step: 'after_old', metrics: afterOld },
+  ])
+
+  return {
+    preset,
+    before_old_accuracy: beforeOld.overall_accuracy,
+    after_old_accuracy: afterOld.overall_accuracy,
+    overall_accuracy: overall.overall_accuracy,
+    retention_ratio:
+      beforeOld.overall_accuracy === 0
+        ? 1
+        : afterOld.overall_accuracy / beforeOld.overall_accuracy,
+    mean_drop: delta.mean_drop,
+  }
+}
+
 function App() {
   const [samples, setSamples] = useState<IntakeSample[]>([])
   const [catalog, setCatalog] = useState<CategoryCatalog | null>(null)
   const [selectedSampleId, setSelectedSampleId] = useState<string>('')
   const [result, setResult] = useState<ReturnType<typeof runIntakePipeline> | null>(null)
+  const [preset, setPreset] = useState<ReplayPreset>('balanced')
+  const [predictedCategory, setPredictedCategory] = useState<IntakeCategory | null>(null)
+  const [correctionCategory, setCorrectionCategory] = useState<IntakeCategory>(intakeCategories[0])
+  const [updateSummary, setUpdateSummary] = useState<UpdateSummary | null>(null)
+  const [suiteRows, setSuiteRows] = useState<RegressionSuiteRow[]>([])
   const [copyStatus, setCopyStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const modelRef = useRef<OnlineCategoryModel | null>(null)
+  const memoryRef = useRef<ReplayMemory | null>(null)
 
   useEffect(() => {
     Promise.all([loadIntakeSamples(), loadCategoryCatalog()])
       .then(([loadedSamples, loadedCatalog]) => {
         setSamples(loadedSamples)
         setCatalog(loadedCatalog)
-        setSelectedSampleId(loadedSamples[0]?.id ?? '')
+        const firstSample = loadedSamples[0]
+        setSelectedSampleId(firstSample?.id ?? '')
+
+        const model = new OnlineCategoryModel()
+        const warmupExamples = loadedSamples
+          .slice(0, Math.min(4, loadedSamples.length))
+          .map((sample) => asTrainingExample(sample))
+        model.train(warmupExamples, { epochs: 24, learningRate: 0.23 })
+        const memory = new ReplayMemory(64, 41)
+        for (const example of warmupExamples) {
+          memory.add(example)
+        }
+        modelRef.current = model
+        memoryRef.current = memory
+
+        if (firstSample) {
+          const firstPrediction = model.predict(firstSample.text)
+          setPredictedCategory(firstPrediction)
+          setCorrectionCategory(firstPrediction)
+        }
       })
       .catch((unknownError) => {
         if (unknownError instanceof Error) {
@@ -46,10 +169,13 @@ function App() {
   )
 
   function runPipeline(sample: IntakeSample | null) {
-    if (!sample || !catalog) {
+    if (!sample || !catalog || !modelRef.current) {
       return
     }
     setResult(runIntakePipeline(sample, catalog))
+    const prediction = modelRef.current.predict(sample.text)
+    setPredictedCategory(prediction)
+    setCorrectionCategory(prediction)
   }
 
   function startDemo() {
@@ -68,6 +194,46 @@ function App() {
     } catch {
       setCopyStatus(`Could not copy ${label}`)
     }
+  }
+
+  function applyCorrection() {
+    if (!selectedSample || !modelRef.current || !memoryRef.current) {
+      return
+    }
+
+    const model = modelRef.current
+    const memory = memoryRef.current
+    const corrected = asTrainingExample(selectedSample, correctionCategory)
+
+    const before = evaluateIntakeSamples(samples, model)
+    const replay = memory.sampleForPreset(preset, preset === 'fast_adaptation' ? 0 : 5)
+    model.train([corrected, ...replay], {
+      epochs: 18,
+      learningRate: preset === 'fast_adaptation' ? 0.25 : 0.17,
+      exampleWeight: (example) =>
+        replayWeightForPreset(preset, {
+          ...example,
+          risk_level: example.risk_level ?? 'low',
+        }),
+    })
+    memory.add(corrected)
+    const after = evaluateIntakeSamples(samples, model)
+    const predictedAfter = model.predict(selectedSample.text)
+    setPredictedCategory(predictedAfter)
+    setUpdateSummary({
+      preset,
+      before_accuracy: before.overall_accuracy,
+      after_accuracy: after.overall_accuracy,
+      predicted_after: predictedAfter,
+    })
+  }
+
+  function runRegressionSuite() {
+    if (samples.length === 0) {
+      return
+    }
+    const rows = PRESET_OPTIONS.map((option) => runPresetRegressionSuite(samples, option.id))
+    setSuiteRows(rows)
   }
 
   return (
@@ -92,6 +258,19 @@ function App() {
                 Start demo
               </button>
               <label>
+                Update preset
+                <select
+                  value={preset}
+                  onChange={(event) => setPreset(event.target.value as ReplayPreset)}
+                >
+                  {PRESET_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
                 Sample
                 <select
                   value={selectedSampleId}
@@ -106,6 +285,9 @@ function App() {
               </label>
               <button className="secondary" onClick={() => runPipeline(selectedSample)}>
                 Run selected sample
+              </button>
+              <button className="secondary" onClick={runRegressionSuite}>
+                Run regression suite
               </button>
             </div>
             <p className="status">
@@ -124,6 +306,10 @@ function App() {
               <p>
                 <span>Category</span>
                 <strong>{result.triage.category}</strong>
+              </p>
+              <p>
+                <span>Predicted category</span>
+                <strong>{predictedCategory ?? 'n/a'}</strong>
               </p>
               <p>
                 <span>Risk</span>
@@ -146,6 +332,68 @@ function App() {
                 <strong>{result.triage.next_action}</strong>
               </p>
             </div>
+            <div className="controls compact">
+              <label>
+                Correct category
+                <select
+                  value={correctionCategory}
+                  onChange={(event) => setCorrectionCategory(event.target.value as IntakeCategory)}
+                >
+                  {intakeCategories.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button className="secondary" onClick={applyCorrection}>
+                Apply correction (update model)
+              </button>
+            </div>
+            {updateSummary ? (
+              <p className="status">
+                Last update ({updateSummary.preset}) overall accuracy {formatPct(updateSummary.before_accuracy)} →{' '}
+                {formatPct(updateSummary.after_accuracy)}. Current sample now predicts{' '}
+                <strong>{updateSummary.predicted_after}</strong>.
+              </p>
+            ) : null}
+          </section>
+
+          <section className="card">
+            <h2>Regression Safety</h2>
+            <p>
+              Compare retention of previously seen workflows after new updates using each preset.
+            </p>
+            {suiteRows.length === 0 ? (
+              <p className="status">Run regression suite to view before/after retention metrics.</p>
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Preset</th>
+                      <th>Old accuracy (before)</th>
+                      <th>Old accuracy (after)</th>
+                      <th>Retention</th>
+                      <th>Mean regression drop</th>
+                      <th>Overall accuracy</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {suiteRows.map((row) => (
+                      <tr key={row.preset}>
+                        <td>{PRESET_OPTIONS.find((option) => option.id === row.preset)?.label}</td>
+                        <td>{formatPct(row.before_old_accuracy)}</td>
+                        <td>{formatPct(row.after_old_accuracy)}</td>
+                        <td>{formatPct(row.retention_ratio)}</td>
+                        <td>{formatPct(row.mean_drop)}</td>
+                        <td>{formatPct(row.overall_accuracy)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
 
           <section className="card">

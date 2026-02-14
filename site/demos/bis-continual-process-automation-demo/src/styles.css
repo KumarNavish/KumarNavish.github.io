@@ -72,6 +72,10 @@ p {
   margin-bottom: 0.7rem;
 }
 
+.controls.compact {
+  margin-top: 0.8rem;
+}
+
 .status {
   font-size: 1rem;
   color: #27395f;
@@ -172,6 +176,29 @@ pre {
   overflow: auto;
   font-size: 0.84rem;
   line-height: 1.4;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.8rem;
+  font-size: 0.9rem;
+}
+
+th,
+td {
+  border: 1px solid #ced7e8;
+  padding: 0.45rem 0.5rem;
+  text-align: left;
+}
+
+th {
+  background: #e8edf7;
+  color: #24375f;
+}
+
+.table-wrap {
+  overflow-x: auto;
 }
 
 @media (max-width: 760px) {
