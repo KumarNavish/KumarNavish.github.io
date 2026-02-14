@@ -25,6 +25,6 @@ pipe-test: pipe-install
 	cd pipeline && PYTHONPATH=src $(PYTHON) -m pytest
 
 pipe-run: pipe-install
-	cd pipeline && PYTHONPATH=src $(PYTHON) -m pipeline.run
+	PYTHONPATH=pipeline/src $(PYTHON) -m pipeline.run --out site/public
 
 check: pipe-test site-lint site-test site-build
