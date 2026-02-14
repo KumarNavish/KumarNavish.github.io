@@ -256,15 +256,16 @@ button:disabled {
   color: #35557f;
 }
 
-.quick-list {
+.input-preview {
   margin: 0;
-  padding-left: 1rem;
-  display: grid;
-  gap: 0.32rem;
-  color: #2f4e78;
-}
-
-.quick-list li {
+  border: 1px solid #dbe5f1;
+  border-radius: 10px;
+  background: #f8fbff;
+  padding: 0.58rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #2f4d77;
+  font-size: 0.8rem;
   line-height: 1.4;
 }
 
@@ -369,6 +370,10 @@ button:disabled {
   font-size: 0.9rem;
 }
 
+.placeholder-lede {
+  color: #4a678f;
+}
+
 .handoff-strip {
   border: 1px solid #d8e4f0;
   border-radius: 11px;
@@ -384,13 +389,10 @@ button:disabled {
   gap: 0.38rem;
 }
 
-.preview-details {
-  margin-top: 0.12rem;
-}
-
 .artifact-panel {
   margin-top: 0.52rem;
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.56rem;
 }
 
@@ -401,6 +403,23 @@ button:disabled {
   padding: 0.62rem;
   display: grid;
   gap: 0.4rem;
+}
+
+.artifact-card pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: #2f4d77;
+  background: #f2f6fd;
+  border: 1px solid #d6dfec;
+  border-radius: 8px;
+  padding: 0.5rem;
+}
+
+.payload-card {
+  grid-column: 1 / -1;
 }
 
 .map-card {
@@ -464,6 +483,10 @@ button:disabled {
   }
 
   .metric-row {
+    grid-template-columns: 1fr;
+  }
+
+  .artifact-panel {
     grid-template-columns: 1fr;
   }
 }

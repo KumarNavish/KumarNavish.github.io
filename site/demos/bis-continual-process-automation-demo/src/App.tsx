@@ -69,6 +69,14 @@ function formatDays(value: number | null): string {
   return `${value}d`
 }
 
+function excerpt(text: string, maxLength = 280): string {
+  const normalized = text.replace(/\s+/g, ' ').trim()
+  if (normalized.length <= maxLength) {
+    return normalized
+  }
+  return `${normalized.slice(0, maxLength - 3)}...`
+}
+
 function buildImpactRationale(result: PipelineResult): ImpactRationale {
   const monthlyVolume =
     result.extracted.volume_per_month ?? result.sample.ground_truth.volume_per_month ?? null
@@ -163,6 +171,7 @@ function App() {
   const totalArtifacts = impactSnapshot
     ? impactSnapshot.outputCount + impactSnapshot.payloadCount
     : null
+  const requestPreview = excerpt(requestText || selectedSample?.text || '', 360)
 
   const outcomeHeadline = impactSnapshot
     ? impactSnapshot.cycleGainDays !== null
@@ -173,6 +182,27 @@ function App() {
   const outcomeSubline = impactSnapshot
     ? `${impactSnapshot.monthlyHoursSaved} hrs/month impact with ${totalArtifacts ?? 0} ready handoff artifacts.`
     : 'One run creates a charter, a process map, and payloads your team can use immediately.'
+  const jiraFields =
+    result && typeof result.exports.jira_issue_create.fields === 'object'
+      ? (result.exports.jira_issue_create.fields as Record<string, unknown>)
+      : null
+  const servicenowPayload =
+    result && typeof result.exports.servicenow_record_create === 'object'
+      ? (result.exports.servicenow_record_create as Record<string, unknown>)
+      : null
+  const trackerPayload =
+    result && typeof result.exports.process_tracker_row === 'object'
+      ? (result.exports.process_tracker_row as Record<string, unknown>)
+      : null
+  const payloadPreview = result
+    ? {
+        jira_summary: jiraFields?.summary ?? 'n/a',
+        priority: result.triage.priority,
+        risk_level: result.triage.risk_level,
+        servicenow_table: servicenowPayload?.table ?? 'n/a',
+        tracker_owner: trackerPayload?.owner ?? 'n/a',
+      }
+    : null
 
   const hintText = useMemo(() => {
     if (error) {
@@ -310,25 +340,12 @@ function App() {
         <section className="result-pane" aria-live="polite">
           {!result ? (
             <section className="outcome-shell preview-shell">
-              <p className="moment-tag">Automation preview</p>
-              <h2>What changes after one run</h2>
-              <p className="outcome-lede">
-                Current intake is slow and hard to execute. Automation turns it into a standard
-                package.
+              <p className="moment-tag">Before automation</p>
+              <h2>Messy intake request</h2>
+              <pre className="input-preview">{requestPreview}</pre>
+              <p className="placeholder-lede">
+                Baseline: {formatDays(previewBaselineDays)} cycle time, {metricToText(previewVolume)} requests/month.
               </p>
-              <ul className="quick-list">
-                <li>
-                  <strong>Current pain:</strong> {formatDays(previewBaselineDays)} cycle time and{' '}
-                  {metricToText(previewVolume)} requests per month.
-                </li>
-                <li>
-                  <strong>Automated output:</strong> Charter summary, process map, and handoff
-                  payloads.
-                </li>
-                <li>
-                  <strong>Business value:</strong> Faster turnaround with less manual coordination.
-                </li>
-              </ul>
             </section>
           ) : (
             <section className="outcome-shell live-shell">
@@ -385,25 +402,27 @@ function App() {
                 </div>
               </section>
 
-              <details className="advanced-block preview-details">
-                <summary>Preview generated charter and process map</summary>
-                <div className="artifact-panel">
-                  <section className="artifact-card">
-                    <h3>Charter summary</h3>
-                    <p>
-                      <strong>Problem:</strong> {result.charter.problem_statement}
-                    </p>
-                    <p>
-                      <strong>Next action:</strong> {result.triage.next_action}
-                    </p>
-                  </section>
+              <section className="artifact-panel">
+                <section className="artifact-card">
+                  <h3>Charter summary</h3>
+                  <p>
+                    <strong>Problem:</strong> {result.charter.problem_statement}
+                  </p>
+                  <p>
+                    <strong>Next action:</strong> {result.triage.next_action}
+                  </p>
+                </section>
 
-                  <section className="artifact-card">
-                    <h3>To-be process map</h3>
-                    <MermaidDiagram title="To-be process" chart={result.toBeMermaid} />
-                  </section>
-                </div>
-              </details>
+                <section className="artifact-card">
+                  <h3>To-be process map</h3>
+                  <MermaidDiagram title="To-be process" chart={result.toBeMermaid} />
+                </section>
+
+                <section className="artifact-card payload-card">
+                  <h3>Handoff payload preview</h3>
+                  <pre>{JSON.stringify(payloadPreview, null, 2)}</pre>
+                </section>
+              </section>
 
               <details className="advanced-block">
                 <summary>Show technical details</summary>
