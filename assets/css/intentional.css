@@ -613,6 +613,37 @@ body.intentional-body {
   font-weight: 600;
 }
 
+.intentional-item-signals {
+  display: grid;
+  gap: 0.34rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.intentional-item-signal {
+  align-items: baseline;
+  border-left: 2px solid color-mix(in srgb, var(--intent-line-strong) 70%, white);
+  display: grid;
+  gap: 0.12rem;
+  padding-left: 0.5rem;
+}
+
+.intentional-item-signal strong {
+  color: var(--intent-ink);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.58rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.intentional-item-signal span {
+  color: var(--intent-muted);
+  font-size: 0.79rem;
+  line-height: 1.48;
+}
+
 .intentional-item-tags {
   color: var(--intent-muted);
   font-family: "IBM Plex Mono", monospace;
