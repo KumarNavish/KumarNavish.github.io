@@ -1,24 +1,24 @@
 .overview-v7 {
-  --ov7-paper: #fffdf9;
-  --ov7-paper-soft: #f7f2ea;
-  --ov7-line: color-mix(in srgb, var(--intent-line) 84%, white);
-  --ov7-line-strong: color-mix(in srgb, var(--intent-accent) 38%, var(--intent-line));
-  --ov7-ink: color-mix(in srgb, var(--intent-ink) 95%, black);
-  --ov7-muted: color-mix(in srgb, var(--intent-muted) 92%, black);
+  --ov7-paper: #fffdfa;
+  --ov7-paper-soft: #f5f1e9;
+  --ov7-line: color-mix(in srgb, var(--intent-line) 86%, white);
+  --ov7-line-strong: color-mix(in srgb, var(--intent-accent) 42%, var(--intent-line));
+  --ov7-ink: color-mix(in srgb, var(--intent-ink) 96%, black);
+  --ov7-muted: color-mix(in srgb, var(--intent-muted) 94%, black);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.75)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.76)),
     var(--ov7-paper);
-  border-color: color-mix(in srgb, var(--intent-line) 82%, white);
-  box-shadow: 0 20px 40px rgba(20, 15, 11, 0.065);
+  border-color: color-mix(in srgb, var(--intent-line) 84%, white);
+  box-shadow: 0 22px 42px rgba(18, 15, 13, 0.07);
   overflow: hidden;
   position: relative;
 }
 
 .overview-v7::before {
   background:
-    radial-gradient(circle at 90% 5%, rgba(49, 95, 89, 0.095), transparent 36%),
-    radial-gradient(circle at 6% 96%, rgba(126, 107, 86, 0.085), transparent 31%),
-    linear-gradient(0deg, transparent 96%, rgba(23, 22, 21, 0.018) 100%);
+    radial-gradient(circle at 90% 4%, rgba(31, 79, 114, 0.09), transparent 36%),
+    radial-gradient(circle at 7% 96%, rgba(86, 96, 106, 0.08), transparent 32%),
+    linear-gradient(0deg, transparent 96%, rgba(17, 19, 20, 0.02) 100%);
   content: "";
   inset: 0;
   pointer-events: none;
@@ -34,9 +34,9 @@
 .overview-v7-hero {
   border-bottom: 1px solid var(--ov7-line);
   display: grid;
-  gap: clamp(2rem, 4vw, 3.4rem);
-  grid-template-columns: minmax(0, 1.56fr) minmax(260px, 0.84fr);
-  padding-bottom: clamp(2.2rem, 4.8vw, 3.9rem);
+  gap: clamp(2rem, 4vw, 3.6rem);
+  grid-template-columns: minmax(0, 1.55fr) minmax(260px, 0.82fr);
+  padding-bottom: clamp(2.2rem, 4.8vw, 3.8rem);
 }
 
 .overview-v7-hero-main {
@@ -45,30 +45,30 @@
 
 .overview-v7-title {
   color: var(--ov7-ink);
-  font-size: clamp(2.65rem, 6.3vw, 5.6rem);
+  font-size: clamp(2.68rem, 6.4vw, 5.65rem);
   letter-spacing: -0.02em;
   line-height: 0.98;
-  margin-top: 0.4rem;
-  max-width: 10.8ch;
+  margin-top: 0.42rem;
+  max-width: 10.5ch;
   text-wrap: balance;
 }
 
 .overview-v7-subtitle {
-  color: color-mix(in srgb, var(--intent-ink) 91%, var(--intent-muted));
-  font-size: clamp(1.1rem, 2vw, 1.34rem);
-  line-height: 1.54;
-  margin-top: 1.22rem;
-  max-width: 44ch;
+  color: color-mix(in srgb, var(--intent-ink) 90%, var(--intent-muted));
+  font-size: clamp(1.08rem, 2vw, 1.33rem);
+  line-height: 1.56;
+  margin-top: 1.24rem;
+  max-width: 46ch;
   text-wrap: pretty;
 }
 
 .overview-v7-identity-line {
   border-left: 2px solid var(--ov7-line-strong);
   color: color-mix(in srgb, var(--intent-ink) 88%, var(--intent-muted));
-  font-family: "Fraunces", serif;
-  font-size: clamp(1.16rem, 2.32vw, 1.53rem);
-  letter-spacing: -0.011em;
-  line-height: 1.35;
+  font-family: "STIX Two Text", serif;
+  font-size: clamp(1.14rem, 2.3vw, 1.52rem);
+  letter-spacing: -0.01em;
+  line-height: 1.36;
   margin: 1.2rem 0 0;
   max-width: 49ch;
   padding-left: 0.9rem;
@@ -77,18 +77,17 @@
 
 .overview-v7-context {
   color: var(--ov7-muted);
-  font-size: 0.93rem;
+  font-size: 0.92rem;
   line-height: 1.62;
-  margin-top: 0.86rem;
+  margin-top: 0.84rem;
   max-width: 63ch;
 }
 
 .overview-v7-links {
-  margin-top: 1.4rem;
+  margin-top: 1.44rem;
 }
 
 .overview-v7-links .intentional-link {
-  background: transparent;
   border-color: color-mix(in srgb, var(--ov7-line) 94%, white);
 }
 
@@ -101,8 +100,8 @@
   align-content: start;
   border-left: 1px solid var(--ov7-line);
   display: grid;
-  gap: 1rem;
-  padding-left: 1.25rem;
+  gap: 1.02rem;
+  padding-left: 1.28rem;
 }
 
 .overview-v7-rail-label {
@@ -126,7 +125,7 @@
 
 .overview-v7-pillars {
   display: grid;
-  gap: 0.55rem;
+  gap: 0.58rem;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -135,8 +134,8 @@
 .overview-v7-pillar {
   border-top: 1px solid var(--ov7-line);
   display: grid;
-  gap: 0.2rem;
-  padding-top: 0.54rem;
+  gap: 0.22rem;
+  padding-top: 0.56rem;
 }
 
 .overview-v7-pillar:first-child {
@@ -145,8 +144,8 @@
 
 .overview-v7-pillar h3 {
   color: var(--ov7-ink);
-  font-family: "Fraunces", serif;
-  font-size: 0.88rem;
+  font-family: "STIX Two Text", serif;
+  font-size: 0.89rem;
   font-weight: 600;
   letter-spacing: -0.004em;
   line-height: 1.26;
@@ -156,7 +155,7 @@
 .overview-v7-pillar p {
   color: var(--ov7-muted);
   font-size: 0.77rem;
-  line-height: 1.44;
+  line-height: 1.45;
   margin: 0;
 }
 
@@ -170,7 +169,6 @@
   align-items: baseline;
   border-top: 1px solid var(--ov7-line);
   display: flex;
-  gap: 0.64rem;
   justify-content: space-between;
   padding-top: 0.58rem;
 }
@@ -191,18 +189,18 @@
 
 .overview-v7-stats dd {
   color: var(--ov7-ink);
-  font-family: "Fraunces", serif;
-  font-size: clamp(1.06rem, 1.85vw, 1.34rem);
+  font-family: "STIX Two Text", serif;
+  font-size: clamp(1.06rem, 1.84vw, 1.33rem);
   letter-spacing: -0.01em;
   margin: 0;
 }
 
 .overview-v7 .intentional-section {
-  padding: clamp(2.4rem, 5.2vw, 3.95rem) 0;
+  padding: clamp(2.45rem, 5.3vw, 4rem) 0;
 }
 
 .overview-v7 .intentional-section-head {
-  margin-bottom: 1.48rem;
+  margin-bottom: 1.55rem;
 }
 
 .overview-v7 .intentional-section-head p {
@@ -226,8 +224,8 @@
   font-size: 0.58rem;
   justify-content: center;
   letter-spacing: 0.13em;
-  margin-bottom: 0.84rem;
-  min-width: 2.48rem;
+  margin-bottom: 0.9rem;
+  min-width: 2.52rem;
   padding: 0.2rem 0.5rem;
   position: relative;
   text-transform: uppercase;
@@ -236,11 +234,11 @@
 .overview-v7-method-thesis {
   border-left: 2px solid var(--ov7-line-strong);
   color: color-mix(in srgb, var(--intent-ink) 90%, var(--intent-muted));
-  font-family: "Fraunces", serif;
-  font-size: clamp(1.25rem, 2.35vw, 1.66rem);
+  font-family: "STIX Two Text", serif;
+  font-size: clamp(1.24rem, 2.34vw, 1.64rem);
   letter-spacing: -0.011em;
   line-height: 1.36;
-  margin: 0 0 1.4rem;
+  margin: 0 0 1.42rem;
   max-width: 50ch;
   padding-left: 0.92rem;
   text-wrap: pretty;
@@ -248,7 +246,7 @@
 
 .overview-v7-logic {
   display: grid;
-  gap: 1.02rem;
+  gap: 1rem;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
@@ -271,7 +269,7 @@
 
 .overview-v7-logic-step h3 {
   color: var(--ov7-ink);
-  font-family: "Fraunces", serif;
+  font-family: "STIX Two Text", serif;
   font-size: 1.03rem;
   font-weight: 600;
   letter-spacing: -0.006em;
@@ -287,7 +285,7 @@
 
 .overview-v7-questions {
   display: grid;
-  gap: 0.94rem;
+  gap: 0.96rem;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -296,9 +294,9 @@
 .overview-v7-question {
   border-top: 1px solid var(--ov7-line);
   display: grid;
-  gap: 0.86rem;
-  grid-template-columns: 63px minmax(0, 1fr);
-  padding-top: 0.88rem;
+  gap: 0.88rem;
+  grid-template-columns: 64px minmax(0, 1fr);
+  padding-top: 0.9rem;
 }
 
 .overview-v7-question:first-child {
@@ -317,8 +315,8 @@
 
 .overview-v7-question p {
   color: color-mix(in srgb, var(--intent-ink) 91%, var(--intent-muted));
-  font-family: "Fraunces", serif;
-  font-size: clamp(1.09rem, 1.95vw, 1.34rem);
+  font-family: "STIX Two Text", serif;
+  font-size: clamp(1.08rem, 1.95vw, 1.32rem);
   letter-spacing: -0.007em;
   line-height: 1.42;
   margin: 0;
@@ -327,13 +325,13 @@
 
 .overview-v7-arcs {
   display: grid;
-  gap: 1.34rem;
+  gap: 1.36rem;
 }
 
 .overview-v7-arc {
   border-top: 1px solid var(--ov7-line);
   display: grid;
-  gap: 0.54rem;
+  gap: 0.55rem;
   padding-top: 0.9rem;
 }
 
@@ -350,8 +348,8 @@
 
 .overview-v7-arc-head h3 {
   color: var(--ov7-ink);
-  font-family: "Fraunces", serif;
-  font-size: clamp(1.15rem, 2vw, 1.34rem);
+  font-family: "STIX Two Text", serif;
+  font-size: clamp(1.14rem, 2vw, 1.32rem);
   font-weight: 600;
   letter-spacing: -0.006em;
   margin: 0;
@@ -377,6 +375,7 @@
 .overview-v7-arc-anchor {
   color: var(--ov7-muted);
   font-size: 0.81rem;
+  line-height: 1.52;
   margin: 0;
 }
 
@@ -404,19 +403,19 @@
 .overview-v7-evidence {
   align-items: start;
   display: grid;
-  gap: clamp(1rem, 2.2vw, 1.5rem);
+  gap: clamp(1rem, 2.2vw, 1.48rem);
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
 }
 
 .overview-v7-spotlight {
   background:
-    linear-gradient(164deg, rgba(49, 95, 89, 0.05), transparent 42%),
+    linear-gradient(164deg, rgba(31, 79, 114, 0.05), transparent 42%),
     color-mix(in srgb, var(--ov7-paper-soft) 84%, white);
   border: 1px solid var(--ov7-line);
-  border-radius: 16px;
+  border-radius: 14px;
   display: grid;
-  gap: 0.5rem;
-  padding: 1.12rem;
+  gap: 0.52rem;
+  padding: 1.1rem;
 }
 
 .overview-v7-evidence-list {
@@ -443,17 +442,17 @@
 .overview-v7-spotlight h3,
 .overview-v7-evidence-item h3 {
   color: var(--ov7-ink);
-  font-family: "Fraunces", serif;
-  font-size: clamp(1.25rem, 2.12vw, 1.55rem);
+  font-family: "STIX Two Text", serif;
+  font-size: clamp(1.24rem, 2.12vw, 1.5rem);
   font-weight: 600;
   letter-spacing: -0.007em;
-  line-height: 1.24;
+  line-height: 1.25;
   margin: 0;
   text-wrap: balance;
 }
 
 .overview-v7-evidence-item h3 {
-  font-size: 1.06rem;
+  font-size: 1.05rem;
 }
 
 .overview-v7-spotlight h3 a,
@@ -510,7 +509,7 @@
   display: grid;
   gap: 0.86rem;
   grid-template-columns: 90px minmax(0, 1fr);
-  padding: 0.9rem 0;
+  padding: 0.92rem 0;
 }
 
 .overview-v7-progress-item:first-child {
@@ -529,7 +528,7 @@
 
 .overview-v7-progress-item h3 {
   color: var(--ov7-ink);
-  font-family: "Fraunces", serif;
+  font-family: "STIX Two Text", serif;
   font-size: 1rem;
   font-weight: 600;
   margin: 0;
@@ -548,25 +547,16 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.74rem;
-  margin-top: 1.3rem;
-  padding-top: 0.94rem;
+  margin-top: 1.28rem;
+  padding-top: 0.95rem;
 }
 
 .overview-v7-invite {
   color: var(--ov7-muted);
   font-size: 0.86rem;
+  line-height: 1.56;
   margin: 0;
   max-width: 64ch;
-}
-
-.overview-v7-spotlight,
-.overview-v7-rail {
-  transition: border-color 0.22s ease, box-shadow 0.22s ease;
-}
-
-.overview-v7-spotlight:hover,
-.overview-v7-rail:hover {
-  border-color: color-mix(in srgb, var(--intent-accent) 42%, var(--ov7-line));
 }
 
 @media (max-width: 1080px) {
@@ -592,14 +582,6 @@
   .overview-v7-evidence {
     grid-template-columns: 1fr;
   }
-
-  .overview-v7-section {
-    padding-left: 0;
-  }
-
-  .overview-v7-section::after {
-    display: none;
-  }
 }
 
 @media (max-width: 760px) {
@@ -619,12 +601,5 @@
   .overview-v7-progress-item {
     gap: 0.38rem;
     grid-template-columns: 1fr;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .overview-v7-spotlight,
-  .overview-v7-rail {
-    transition: none;
   }
 }
