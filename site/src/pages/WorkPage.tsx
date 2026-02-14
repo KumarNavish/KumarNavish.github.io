@@ -184,10 +184,9 @@ export function WorkPage() {
     <div className="page">
       <section className="hero">
         <p className="eyebrow">Case Studies</p>
-        <h1>Three applied cases, each tied to a real decision.</h1>
+        <h1>Applied decisions backed by code and evidence.</h1>
         <p className="hero-copy">
-          Every case follows one format: decision, implementation, evidence, and practical outcome.
-          This keeps review fast and comparable.
+          Each case is structured the same way: decision, build, evidence, and outcome.
         </p>
       </section>
 
@@ -300,7 +299,7 @@ export function WorkPage() {
 
       <section id="archives" className="panel">
         <header className="panel-header">
-          <h2>Need Full Records?</h2>
+          <h2>Need Full Archives?</h2>
         </header>
         <div className="action-row">
           <Link className="action-link" to="/projects">
@@ -310,7 +309,7 @@ export function WorkPage() {
             Publication archive
           </Link>
           <Link className="action-link action-link-primary" to="/proof">
-            Impact view
+            System board
           </Link>
         </div>
         <p className="meta-line">

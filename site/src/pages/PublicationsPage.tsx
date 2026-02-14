@@ -128,16 +128,16 @@ export function PublicationsPage() {
     <div className="page">
       <section className="hero">
         <p className="eyebrow">Publications Archive</p>
-        <h1>Publication record</h1>
+        <h1>Publication record with quick signal extraction.</h1>
         <p className="hero-copy">
-          A concise, searchable record for citation checks, topic coverage, and publication context.
+          Search by topic or venue, then validate impact through citations and trend context.
         </p>
         <div className="action-row">
           <Link className="action-link" to="/work">
             Back to case studies
           </Link>
           <Link className="action-link action-link-primary" to="/proof">
-            Impact overview
+            System board
           </Link>
         </div>
       </section>

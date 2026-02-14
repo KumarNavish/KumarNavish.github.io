@@ -99,16 +99,16 @@ export function ProjectsPage() {
     <div className="page">
       <section className="hero">
         <p className="eyebrow">Projects Archive</p>
-        <h1>Complete project record</h1>
+        <h1>Project record, prioritized for fast review.</h1>
         <p className="hero-copy">
-          Highlighted systems are shown first. Expand only when you need full historical coverage.
+          High-signal systems first. Expand only when you need full history.
         </p>
         <div className="action-row">
           <Link className="action-link" to="/work">
             Back to case studies
           </Link>
           <Link className="action-link action-link-primary" to="/proof">
-            Impact overview
+            System board
           </Link>
         </div>
       </section>

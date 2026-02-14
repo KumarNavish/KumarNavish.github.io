@@ -307,6 +307,218 @@ a:hover {
   grid-template-columns: 1fr;
 }
 
+.workbench-controls {
+  margin-top: 0.72rem;
+}
+
+.track-row {
+  display: grid;
+  gap: 0.52rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.track-chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.52rem 0.74rem;
+  background: #fbfaf6;
+  color: var(--muted);
+  text-align: center;
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.track-chip:hover {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+  color: var(--accent);
+}
+
+.track-chip-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--line));
+}
+
+.toggle-line {
+  margin-top: 0.7rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.decision-output-grid {
+  margin-top: 0.75rem;
+}
+
+.decision-output-card h3 {
+  font-size: 1.1rem;
+  line-height: 1.35;
+}
+
+.evidence-feed {
+  margin-top: 0.8rem;
+}
+
+.evidence-item {
+  background: #fbfaf6;
+}
+
+.evidence-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.evidence-bar {
+  margin-top: 0.5rem;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: #ece7d8;
+  overflow: hidden;
+}
+
+.evidence-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--accent) 72%, #85a99f);
+}
+
+.score-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  color: var(--accent);
+  font-size: 0.74rem;
+  font-family: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Monaco, Consolas,
+    'Liberation Mono', monospace;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  padding: 0.15rem 0.48rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-family: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Monaco, Consolas,
+    'Liberation Mono', monospace;
+}
+
+.status-success {
+  border-color: #88b3a8;
+  color: #20584e;
+  background: #ecf6f2;
+}
+
+.status-failed {
+  border-color: #cc8c84;
+  color: #8e2e28;
+  background: #fff1ef;
+}
+
+.status-skipped,
+.status-unknown {
+  border-color: #c7c2b2;
+  color: #6d6a61;
+  background: #f3f1e8;
+}
+
+.task-timeline {
+  margin-top: 0.85rem;
+}
+
+.ops-warning-block {
+  margin-top: 0.78rem;
+  border: 1px solid color-mix(in srgb, var(--error) 24%, var(--line));
+  border-radius: var(--radius);
+  padding: 0.75rem 0.88rem;
+  background: #fff5f2;
+}
+
+.ops-warning-block ul {
+  margin: 0.45rem 0 0;
+  padding-left: 1rem;
+  color: var(--muted);
+}
+
+.ops-warning-block li + li {
+  margin-top: 0.24rem;
+}
+
+.pipeline-lanes {
+  display: grid;
+  gap: 0.72rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.pipeline-lane {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.72rem 0.8rem;
+  background: #fcfbf7;
+}
+
+.pipeline-task-list {
+  margin-top: 0.58rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.pipeline-task {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.55rem 0.62rem;
+  background: #fff;
+  display: grid;
+  gap: 0.35rem;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.pipeline-task:hover {
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--line));
+}
+
+.pipeline-task-active {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--line));
+  background: #f4f8f6;
+}
+
+.pipeline-task-name {
+  font-size: 0.85rem;
+  font-family: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Monaco, Consolas,
+    'Liberation Mono', monospace;
+}
+
+.pipeline-task-meta {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.ops-log-list {
+  margin: 0.5rem 0 0;
+  padding-left: 1rem;
+  color: var(--muted);
+}
+
+.ops-log-list li + li {
+  margin-top: 0.25rem;
+}
+
 .card-grid {
   display: grid;
   gap: 0.74rem;
@@ -482,7 +694,9 @@ a:hover {
 
   .controls-panel,
   .direction-grid,
-  .sequence-grid {
+  .sequence-grid,
+  .track-row,
+  .pipeline-lanes {
     grid-template-columns: 1fr;
   }
 }
