@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { fetchProjectsApi } from '../lib/api'
-import { formatDate, formatNumber } from '../lib/formatters'
+import { formatDate } from '../lib/formatters'
 import { useResource } from '../lib/useResource'
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks'
 
@@ -83,8 +83,7 @@ export function ProjectsPage() {
         <p className="eyebrow">Projects Archive</p>
         <h1>Systems and experiments</h1>
         <p className="hero-copy">
-          Start with the curated systems first. Expand the archive only when you
-          need complete historical coverage.
+          Curated systems are shown first. Expand only when you need complete historical coverage.
         </p>
         <div className="action-row">
           <Link className="action-link" to="/work">
@@ -106,9 +105,7 @@ export function ProjectsPage() {
             <article key={project.name} className="item-card">
               <h3>{project.name}</h3>
               <p>{(project.one_line ?? project.description) || 'No summary available.'}</p>
-              <p className="meta-line">
-                Stars {formatNumber(project.stars)} · Last push {formatDate(project.last_push)}
-              </p>
+              <p className="meta-line">Last push {formatDate(project.last_push)}</p>
               <p className="meta-line">
                 <a href={project.html_url} target="_blank" rel="noreferrer">
                   Repository
@@ -156,9 +153,7 @@ export function ProjectsPage() {
                 <article key={project.name} className="item-card">
                   <h3>{project.name}</h3>
                   <p>{(project.one_line ?? project.description) || 'No summary available.'}</p>
-                  <p className="meta-line">
-                    Stars {formatNumber(project.stars)} · Last push {formatDate(project.last_push)}
-                  </p>
+                  <p className="meta-line">Last push {formatDate(project.last_push)}</p>
                   <p className="meta-line">
                     <a href={project.html_url} target="_blank" rel="noreferrer">
                       Repository
