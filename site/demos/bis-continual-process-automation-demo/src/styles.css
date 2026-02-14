@@ -350,40 +350,6 @@ button:disabled {
   animation: reveal-up 360ms ease-out forwards;
 }
 
-.proof-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.48rem;
-}
-
-.proof-card {
-  border: 1px solid #dde5ef;
-  border-radius: 10px;
-  background: #fff;
-  padding: 0.55rem 0.58rem;
-  display: grid;
-  gap: 0.35rem;
-}
-
-.proof-card ul {
-  margin: 0;
-  padding-left: 1.05rem;
-  display: grid;
-  gap: 0.2rem;
-  color: #3e5b84;
-  font-size: 0.82rem;
-}
-
-.before-card {
-  background: #fffafb;
-  border-color: #eed7d9;
-}
-
-.after-card {
-  background: #f7fcf8;
-  border-color: #c9dfcf;
-}
-
 .metric-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -417,45 +383,10 @@ button:disabled {
   gap: 0.44rem;
 }
 
-.output-workbench {
-  border: 1px solid #dce6f2;
-  border-radius: 12px;
-  background: #f9fbff;
-  padding: 0.68rem;
-  display: grid;
-  gap: 0.54rem;
-}
-
-.output-header p {
-  margin-top: 0.2rem;
-  color: #3f5e88;
-  font-size: 0.84rem;
-}
-
-.artifact-tabs {
+.deliverables-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.36rem;
-}
-
-.tab-btn {
-  border: 1px solid #c6d5e8;
-  border-radius: 9px;
-  background: #fff;
-  color: #2d4c76;
-  font-size: 0.83rem;
-  font-weight: 600;
-  padding: 0.5rem;
-}
-
-.tab-btn.active {
-  background: #1f467d;
-  border-color: #1f467d;
-  color: #fff;
-}
-
-.artifact-view {
-  margin: 0;
+  gap: 0.52rem;
 }
 
 .artifact-card {
@@ -478,6 +409,84 @@ button:disabled {
   border: 1px solid #d6dfec;
   border-radius: 8px;
   padding: 0.5rem;
+}
+
+.placeholder-card {
+  background: #f9fbff;
+  border-style: dashed;
+}
+
+.placeholder-card p {
+  margin: 0;
+  color: #4a668f;
+  font-size: 0.83rem;
+}
+
+.doc-tag {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #4d6791;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.deliverable-card h3 {
+  margin-top: -0.05rem;
+}
+
+.doc-grid {
+  margin: 0;
+  display: grid;
+  gap: 0.42rem;
+}
+
+.doc-grid div {
+  border: 1px solid #e3ebf5;
+  border-radius: 8px;
+  background: #f8fbff;
+  padding: 0.38rem 0.42rem;
+}
+
+.doc-grid dt {
+  font-size: 0.7rem;
+  color: #506b93;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.doc-grid dd {
+  margin: 0.16rem 0 0;
+  color: #1f3f66;
+  font-size: 0.84rem;
+}
+
+.step-list {
+  margin: 0;
+  padding-left: 1.05rem;
+  display: grid;
+  gap: 0.34rem;
+}
+
+.step-list li {
+  display: grid;
+  gap: 0.12rem;
+  color: #33527c;
+}
+
+.step-list span {
+  font-size: 0.81rem;
+  color: #4b6994;
+}
+
+.payload-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.52rem;
+}
+
+.payload-card p {
+  margin: 0;
 }
 
 .map-card {
@@ -544,8 +553,8 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
-  .proof-grid,
-  .artifact-tabs {
+  .deliverables-grid,
+  .payload-grid {
     grid-template-columns: 1fr;
   }
 }
