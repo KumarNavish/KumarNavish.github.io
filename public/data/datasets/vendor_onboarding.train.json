@@ -1,0 +1,1402 @@
+[
+  {
+    "id": "vendor_onboarding-train-001",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for Northwind Data Services in IN for payment processing; include security and tax checks.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor Northwind Data Services",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "medium",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "Northwind Data Services",
+        "country": "IN",
+        "service_scope": "payment processing",
+        "security_review_ticket": "VR-1395",
+        "tax_form_status": "pending_submission"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-002",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for Northwind Data Services in IN for payment processing; include security and tax checks.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor Northwind Data Services",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "medium",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "Northwind Data Services",
+        "country": "IN",
+        "service_scope": "payment processing",
+        "security_review_ticket": "VR-1415",
+        "tax_form_status": "w8ben_required"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-003",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for BluePeak Consulting in CH for analytics support; include security and tax checks.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor BluePeak Consulting",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "high",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "BluePeak Consulting",
+        "country": "CH",
+        "service_scope": "analytics support",
+        "security_review_ticket": "VR-1761",
+        "tax_form_status": "w8ben_required"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-004",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for Northwind Data Services in CH for analytics support; include security and tax checks.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor Northwind Data Services",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "high",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "Northwind Data Services",
+        "country": "CH",
+        "service_scope": "analytics support",
+        "security_review_ticket": "VR-1384",
+        "tax_form_status": "pending_submission"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-005",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for Northwind Data Services in DE for payment processing; include security and tax checks.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor Northwind Data Services",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "medium",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "Northwind Data Services",
+        "country": "DE",
+        "service_scope": "payment processing",
+        "security_review_ticket": "VR-1598",
+        "tax_form_status": "pending_submission"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-006",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for BluePeak Consulting in DE for KYC operations; include security and tax checks.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor BluePeak Consulting",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "medium",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "BluePeak Consulting",
+        "country": "DE",
+        "service_scope": "KYC operations",
+        "security_review_ticket": "VR-1937",
+        "tax_form_status": "w9_received"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-007",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for Northwind Data Services in IN for analytics support; include security and tax checks.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor Northwind Data Services",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "high",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "Northwind Data Services",
+        "country": "IN",
+        "service_scope": "analytics support",
+        "security_review_ticket": "VR-1489",
+        "tax_form_status": "w8ben_required"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-008",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for Northwind Data Services in IN for payment processing; include security and tax checks.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor Northwind Data Services",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "high",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "Northwind Data Services",
+        "country": "IN",
+        "service_scope": "payment processing",
+        "security_review_ticket": "VR-1892",
+        "tax_form_status": "w9_received"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-009",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for BluePeak Consulting in IN for payment processing; include security and tax checks.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor BluePeak Consulting",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "medium",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "BluePeak Consulting",
+        "country": "IN",
+        "service_scope": "payment processing",
+        "security_review_ticket": "VR-1383",
+        "tax_form_status": "w8ben_required"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-010",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for BluePeak Consulting in US for cloud hosting; include security and tax checks.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor BluePeak Consulting",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "medium",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "BluePeak Consulting",
+        "country": "US",
+        "service_scope": "cloud hosting",
+        "security_review_ticket": "VR-1412",
+        "tax_form_status": "w8ben_required"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-011",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for Northwind Data Services in IN for KYC operations; include security and tax checks.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor Northwind Data Services",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "high",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "Northwind Data Services",
+        "country": "IN",
+        "service_scope": "KYC operations",
+        "security_review_ticket": "VR-1652",
+        "tax_form_status": "w8ben_required"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-012",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for OrbitFulfill Logistics in DE for analytics support; include security and tax checks.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor OrbitFulfill Logistics",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "high",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "OrbitFulfill Logistics",
+        "country": "DE",
+        "service_scope": "analytics support",
+        "security_review_ticket": "VR-1674",
+        "tax_form_status": "w9_received"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-013",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for OrbitFulfill Logistics in SG for analytics support; include security and tax checks.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor OrbitFulfill Logistics",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "medium",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "OrbitFulfill Logistics",
+        "country": "SG",
+        "service_scope": "analytics support",
+        "security_review_ticket": "VR-1319",
+        "tax_form_status": "w9_received"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-014",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for Cedar Compliance Labs in SG for payment processing; include security and tax checks.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor Cedar Compliance Labs",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "medium",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "Cedar Compliance Labs",
+        "country": "SG",
+        "service_scope": "payment processing",
+        "security_review_ticket": "VR-1768",
+        "tax_form_status": "pending_submission"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-015",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for Northwind Data Services in SG for KYC operations; include security and tax checks.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor Northwind Data Services",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "high",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "Northwind Data Services",
+        "country": "SG",
+        "service_scope": "KYC operations",
+        "security_review_ticket": "VR-1663",
+        "tax_form_status": "pending_submission"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-016",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for BluePeak Consulting in DE for payment processing; include security and tax checks.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor BluePeak Consulting",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "high",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "BluePeak Consulting",
+        "country": "DE",
+        "service_scope": "payment processing",
+        "security_review_ticket": "VR-1877",
+        "tax_form_status": "w9_received"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-017",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for OrbitFulfill Logistics in CH for cloud hosting; include security and tax checks.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor OrbitFulfill Logistics",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "medium",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "OrbitFulfill Logistics",
+        "country": "CH",
+        "service_scope": "cloud hosting",
+        "security_review_ticket": "VR-1686",
+        "tax_form_status": "w8ben_required"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-018",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for OrbitFulfill Logistics in CH for payment processing; include security and tax checks.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor OrbitFulfill Logistics",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "medium",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "OrbitFulfill Logistics",
+        "country": "CH",
+        "service_scope": "payment processing",
+        "security_review_ticket": "VR-1934",
+        "tax_form_status": "pending_submission"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-019",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for Northwind Data Services in US for cloud hosting; include security and tax checks.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor Northwind Data Services",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "high",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "Northwind Data Services",
+        "country": "US",
+        "service_scope": "cloud hosting",
+        "security_review_ticket": "VR-1318",
+        "tax_form_status": "w9_received"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-020",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for Northwind Data Services in DE for cloud hosting; include security and tax checks.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor Northwind Data Services",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "high",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "Northwind Data Services",
+        "country": "DE",
+        "service_scope": "cloud hosting",
+        "security_review_ticket": "VR-1606",
+        "tax_form_status": "pending_submission"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-021",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for BluePeak Consulting in DE for cloud hosting; include security and tax checks.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor BluePeak Consulting",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "medium",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "BluePeak Consulting",
+        "country": "DE",
+        "service_scope": "cloud hosting",
+        "security_review_ticket": "VR-1604",
+        "tax_form_status": "w8ben_required"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-022",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for Cedar Compliance Labs in CH for payment processing; include security and tax checks.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor Cedar Compliance Labs",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "medium",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "Cedar Compliance Labs",
+        "country": "CH",
+        "service_scope": "payment processing",
+        "security_review_ticket": "VR-1791",
+        "tax_form_status": "w9_received"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-023",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for Northwind Data Services in DE for analytics support; include security and tax checks.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor Northwind Data Services",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "high",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "Northwind Data Services",
+        "country": "DE",
+        "service_scope": "analytics support",
+        "security_review_ticket": "VR-1348",
+        "tax_form_status": "w8ben_required"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-024",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for Cedar Compliance Labs in SG for payment processing; include security and tax checks.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor Cedar Compliance Labs",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "high",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "Cedar Compliance Labs",
+        "country": "SG",
+        "service_scope": "payment processing",
+        "security_review_ticket": "VR-1921",
+        "tax_form_status": "pending_submission"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-025",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for Cedar Compliance Labs in DE for KYC operations; include security and tax checks.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor Cedar Compliance Labs",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "medium",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "Cedar Compliance Labs",
+        "country": "DE",
+        "service_scope": "KYC operations",
+        "security_review_ticket": "VR-1834",
+        "tax_form_status": "w9_received"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-026",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for Cedar Compliance Labs in CH for payment processing; include security and tax checks.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor Cedar Compliance Labs",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "medium",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "Cedar Compliance Labs",
+        "country": "CH",
+        "service_scope": "payment processing",
+        "security_review_ticket": "VR-1220",
+        "tax_form_status": "pending_submission"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-027",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for Northwind Data Services in US for analytics support; include security and tax checks.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor Northwind Data Services",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "high",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "Northwind Data Services",
+        "country": "US",
+        "service_scope": "analytics support",
+        "security_review_ticket": "VR-1704",
+        "tax_form_status": "pending_submission"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-028",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for Northwind Data Services in IN for analytics support; include security and tax checks.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor Northwind Data Services",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "high",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "Northwind Data Services",
+        "country": "IN",
+        "service_scope": "analytics support",
+        "security_review_ticket": "VR-1616",
+        "tax_form_status": "w8ben_required"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-029",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for BluePeak Consulting in CH for payment processing; include security and tax checks.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor BluePeak Consulting",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "medium",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "BluePeak Consulting",
+        "country": "CH",
+        "service_scope": "payment processing",
+        "security_review_ticket": "VR-1556",
+        "tax_form_status": "w9_received"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-030",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for Cedar Compliance Labs in SG for payment processing; include security and tax checks.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor Cedar Compliance Labs",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "medium",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "Cedar Compliance Labs",
+        "country": "SG",
+        "service_scope": "payment processing",
+        "security_review_ticket": "VR-1414",
+        "tax_form_status": "w8ben_required"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-031",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for Northwind Data Services in US for KYC operations; include security and tax checks.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor Northwind Data Services",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "high",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "Northwind Data Services",
+        "country": "US",
+        "service_scope": "KYC operations",
+        "security_review_ticket": "VR-1716",
+        "tax_form_status": "w9_received"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-032",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for OrbitFulfill Logistics in CH for payment processing; include security and tax checks.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor OrbitFulfill Logistics",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "high",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "OrbitFulfill Logistics",
+        "country": "CH",
+        "service_scope": "payment processing",
+        "security_review_ticket": "VR-1931",
+        "tax_form_status": "pending_submission"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-033",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for Northwind Data Services in SG for cloud hosting; include security and tax checks.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor Northwind Data Services",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "medium",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "Northwind Data Services",
+        "country": "SG",
+        "service_scope": "cloud hosting",
+        "security_review_ticket": "VR-1263",
+        "tax_form_status": "w8ben_required"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-034",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for OrbitFulfill Logistics in CH for payment processing; include security and tax checks.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor OrbitFulfill Logistics",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "medium",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "OrbitFulfill Logistics",
+        "country": "CH",
+        "service_scope": "payment processing",
+        "security_review_ticket": "VR-1902",
+        "tax_form_status": "w8ben_required"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-035",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for OrbitFulfill Logistics in IN for cloud hosting; include security and tax checks.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor OrbitFulfill Logistics",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "high",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "OrbitFulfill Logistics",
+        "country": "IN",
+        "service_scope": "cloud hosting",
+        "security_review_ticket": "VR-1556",
+        "tax_form_status": "w8ben_required"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-036",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for OrbitFulfill Logistics in US for KYC operations; include security and tax checks.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor OrbitFulfill Logistics",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "high",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "OrbitFulfill Logistics",
+        "country": "US",
+        "service_scope": "KYC operations",
+        "security_review_ticket": "VR-1436",
+        "tax_form_status": "pending_submission"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-037",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for OrbitFulfill Logistics in CH for analytics support; include security and tax checks.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor OrbitFulfill Logistics",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "medium",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "OrbitFulfill Logistics",
+        "country": "CH",
+        "service_scope": "analytics support",
+        "security_review_ticket": "VR-1217",
+        "tax_form_status": "pending_submission"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-038",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for OrbitFulfill Logistics in CH for analytics support; include security and tax checks.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor OrbitFulfill Logistics",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "medium",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "OrbitFulfill Logistics",
+        "country": "CH",
+        "service_scope": "analytics support",
+        "security_review_ticket": "VR-1519",
+        "tax_form_status": "w8ben_required"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-039",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for Northwind Data Services in US for KYC operations; include security and tax checks.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor Northwind Data Services",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "high",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "Northwind Data Services",
+        "country": "US",
+        "service_scope": "KYC operations",
+        "security_review_ticket": "VR-1731",
+        "tax_form_status": "pending_submission"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  },
+  {
+    "id": "vendor_onboarding-train-040",
+    "process_id": "vendor_onboarding",
+    "request_text": "Start vendor onboarding for OrbitFulfill Logistics in DE for payment processing; include security and tax checks.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "vendor_onboarding",
+      "title": "Onboard vendor OrbitFulfill Logistics",
+      "owner_role": "vendor_risk_analyst",
+      "sla_hours": 72,
+      "risk_tag": "high",
+      "approvals": [
+        "procurement_manager",
+        "security_officer"
+      ],
+      "required_fields": {
+        "vendor_name": "OrbitFulfill Logistics",
+        "country": "DE",
+        "service_scope": "payment processing",
+        "security_review_ticket": "VR-1952",
+        "tax_form_status": "w8ben_required"
+      },
+      "next_actions": [
+        "Run sanctions and legal entity checks",
+        "Complete security questionnaire review",
+        "Record onboarding decision in vendor register"
+      ],
+      "controls": [
+        "Third-party risk tiering",
+        "Data processing addendum",
+        "Tax compliance check"
+      ]
+    }
+  }
+]

@@ -1,0 +1,1402 @@
+[
+  {
+    "id": "access_request-train-001",
+    "process_id": "access_request",
+    "request_text": "Please request approver access for M. Carter in Payroll Hub for finance ops to support control evidence review.",
+    "risk_tag": "low",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision approver access in Payroll Hub",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "low",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "M. Carter",
+        "system_name": "Payroll Hub",
+        "access_level": "approver",
+        "justification": "control evidence review",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-002",
+    "process_id": "access_request",
+    "request_text": "Please request read access for A. Patel in Payroll Hub for finance ops to support customer account correction.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision read access in Payroll Hub",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "medium",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "A. Patel",
+        "system_name": "Payroll Hub",
+        "access_level": "read",
+        "justification": "customer account correction",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-003",
+    "process_id": "access_request",
+    "request_text": "Please request read access for A. Patel in Payroll Hub for finance ops to support quarter-end reconciliation.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision read access in Payroll Hub",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "medium",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "A. Patel",
+        "system_name": "Payroll Hub",
+        "access_level": "read",
+        "justification": "quarter-end reconciliation",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-004",
+    "process_id": "access_request",
+    "request_text": "Please request editor access for M. Carter in Payroll Hub for internal audit to support quarter-end reconciliation.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision editor access in Payroll Hub",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "high",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "M. Carter",
+        "system_name": "Payroll Hub",
+        "access_level": "editor",
+        "justification": "quarter-end reconciliation",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-005",
+    "process_id": "access_request",
+    "request_text": "Please request read access for T. Nguyen in Payroll Hub for compliance to support exception handling during close.",
+    "risk_tag": "low",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision read access in Payroll Hub",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "low",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "T. Nguyen",
+        "system_name": "Payroll Hub",
+        "access_level": "read",
+        "justification": "exception handling during close",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-006",
+    "process_id": "access_request",
+    "request_text": "Please request approver access for T. Nguyen in CRM Portal for revops to support quarter-end reconciliation.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision approver access in CRM Portal",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "medium",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "T. Nguyen",
+        "system_name": "CRM Portal",
+        "access_level": "approver",
+        "justification": "quarter-end reconciliation",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-007",
+    "process_id": "access_request",
+    "request_text": "Please request read access for T. Nguyen in Finance BI for revops to support control evidence review.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision read access in Finance BI",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "medium",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "T. Nguyen",
+        "system_name": "Finance BI",
+        "access_level": "read",
+        "justification": "control evidence review",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-008",
+    "process_id": "access_request",
+    "request_text": "Please request read access for A. Patel in Finance BI for compliance to support exception handling during close.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision read access in Finance BI",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "high",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "A. Patel",
+        "system_name": "Finance BI",
+        "access_level": "read",
+        "justification": "exception handling during close",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-009",
+    "process_id": "access_request",
+    "request_text": "Please request approver access for S. Hassan in Payroll Hub for revops to support quarter-end reconciliation.",
+    "risk_tag": "low",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision approver access in Payroll Hub",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "low",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "S. Hassan",
+        "system_name": "Payroll Hub",
+        "access_level": "approver",
+        "justification": "quarter-end reconciliation",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-010",
+    "process_id": "access_request",
+    "request_text": "Please request approver access for T. Nguyen in Finance BI for finance ops to support exception handling during close.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision approver access in Finance BI",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "medium",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "T. Nguyen",
+        "system_name": "Finance BI",
+        "access_level": "approver",
+        "justification": "exception handling during close",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-011",
+    "process_id": "access_request",
+    "request_text": "Please request editor access for E. Miller in Payroll Hub for revops to support quarter-end reconciliation.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision editor access in Payroll Hub",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "medium",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "E. Miller",
+        "system_name": "Payroll Hub",
+        "access_level": "editor",
+        "justification": "quarter-end reconciliation",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-012",
+    "process_id": "access_request",
+    "request_text": "Please request read access for E. Miller in Finance BI for finance ops to support exception handling during close.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision read access in Finance BI",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "high",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "E. Miller",
+        "system_name": "Finance BI",
+        "access_level": "read",
+        "justification": "exception handling during close",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-013",
+    "process_id": "access_request",
+    "request_text": "Please request editor access for S. Hassan in CRM Portal for finance ops to support quarter-end reconciliation.",
+    "risk_tag": "low",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision editor access in CRM Portal",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "low",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "S. Hassan",
+        "system_name": "CRM Portal",
+        "access_level": "editor",
+        "justification": "quarter-end reconciliation",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-014",
+    "process_id": "access_request",
+    "request_text": "Please request editor access for S. Hassan in Audit Vault for finance ops to support exception handling during close.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision editor access in Audit Vault",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "medium",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "S. Hassan",
+        "system_name": "Audit Vault",
+        "access_level": "editor",
+        "justification": "exception handling during close",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-015",
+    "process_id": "access_request",
+    "request_text": "Please request editor access for T. Nguyen in Payroll Hub for finance ops to support quarter-end reconciliation.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision editor access in Payroll Hub",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "medium",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "T. Nguyen",
+        "system_name": "Payroll Hub",
+        "access_level": "editor",
+        "justification": "quarter-end reconciliation",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-016",
+    "process_id": "access_request",
+    "request_text": "Please request approver access for S. Hassan in Finance BI for compliance to support customer account correction.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision approver access in Finance BI",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "high",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "S. Hassan",
+        "system_name": "Finance BI",
+        "access_level": "approver",
+        "justification": "customer account correction",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-017",
+    "process_id": "access_request",
+    "request_text": "Please request editor access for E. Miller in CRM Portal for revops to support exception handling during close.",
+    "risk_tag": "low",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision editor access in CRM Portal",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "low",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "E. Miller",
+        "system_name": "CRM Portal",
+        "access_level": "editor",
+        "justification": "exception handling during close",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-018",
+    "process_id": "access_request",
+    "request_text": "Please request editor access for A. Patel in CRM Portal for compliance to support control evidence review.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision editor access in CRM Portal",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "medium",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "A. Patel",
+        "system_name": "CRM Portal",
+        "access_level": "editor",
+        "justification": "control evidence review",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-019",
+    "process_id": "access_request",
+    "request_text": "Please request read access for L. Rodriguez in Finance BI for compliance to support customer account correction.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision read access in Finance BI",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "medium",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "L. Rodriguez",
+        "system_name": "Finance BI",
+        "access_level": "read",
+        "justification": "customer account correction",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-020",
+    "process_id": "access_request",
+    "request_text": "Please request approver access for A. Patel in Audit Vault for compliance to support customer account correction.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision approver access in Audit Vault",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "high",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "A. Patel",
+        "system_name": "Audit Vault",
+        "access_level": "approver",
+        "justification": "customer account correction",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-021",
+    "process_id": "access_request",
+    "request_text": "Please request editor access for S. Hassan in Payroll Hub for finance ops to support quarter-end reconciliation.",
+    "risk_tag": "low",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision editor access in Payroll Hub",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "low",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "S. Hassan",
+        "system_name": "Payroll Hub",
+        "access_level": "editor",
+        "justification": "quarter-end reconciliation",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-022",
+    "process_id": "access_request",
+    "request_text": "Please request approver access for T. Nguyen in Payroll Hub for finance ops to support exception handling during close.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision approver access in Payroll Hub",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "medium",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "T. Nguyen",
+        "system_name": "Payroll Hub",
+        "access_level": "approver",
+        "justification": "exception handling during close",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-023",
+    "process_id": "access_request",
+    "request_text": "Please request editor access for R. Singh in Finance BI for internal audit to support exception handling during close.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision editor access in Finance BI",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "medium",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "R. Singh",
+        "system_name": "Finance BI",
+        "access_level": "editor",
+        "justification": "exception handling during close",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-024",
+    "process_id": "access_request",
+    "request_text": "Please request editor access for S. Hassan in Audit Vault for internal audit to support exception handling during close.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision editor access in Audit Vault",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "high",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "S. Hassan",
+        "system_name": "Audit Vault",
+        "access_level": "editor",
+        "justification": "exception handling during close",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-025",
+    "process_id": "access_request",
+    "request_text": "Please request read access for T. Nguyen in Finance BI for compliance to support customer account correction.",
+    "risk_tag": "low",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision read access in Finance BI",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "low",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "T. Nguyen",
+        "system_name": "Finance BI",
+        "access_level": "read",
+        "justification": "customer account correction",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-026",
+    "process_id": "access_request",
+    "request_text": "Please request approver access for E. Miller in CRM Portal for revops to support control evidence review.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision approver access in CRM Portal",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "medium",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "E. Miller",
+        "system_name": "CRM Portal",
+        "access_level": "approver",
+        "justification": "control evidence review",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-027",
+    "process_id": "access_request",
+    "request_text": "Please request approver access for M. Carter in Finance BI for finance ops to support control evidence review.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision approver access in Finance BI",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "medium",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "M. Carter",
+        "system_name": "Finance BI",
+        "access_level": "approver",
+        "justification": "control evidence review",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-028",
+    "process_id": "access_request",
+    "request_text": "Please request read access for L. Rodriguez in Payroll Hub for finance ops to support control evidence review.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision read access in Payroll Hub",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "high",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "L. Rodriguez",
+        "system_name": "Payroll Hub",
+        "access_level": "read",
+        "justification": "control evidence review",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-029",
+    "process_id": "access_request",
+    "request_text": "Please request editor access for T. Nguyen in Audit Vault for internal audit to support control evidence review.",
+    "risk_tag": "low",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision editor access in Audit Vault",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "low",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "T. Nguyen",
+        "system_name": "Audit Vault",
+        "access_level": "editor",
+        "justification": "control evidence review",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-030",
+    "process_id": "access_request",
+    "request_text": "Please request approver access for E. Miller in Audit Vault for internal audit to support exception handling during close.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision approver access in Audit Vault",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "medium",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "E. Miller",
+        "system_name": "Audit Vault",
+        "access_level": "approver",
+        "justification": "exception handling during close",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-031",
+    "process_id": "access_request",
+    "request_text": "Please request approver access for T. Nguyen in Finance BI for finance ops to support exception handling during close.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision approver access in Finance BI",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "medium",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "T. Nguyen",
+        "system_name": "Finance BI",
+        "access_level": "approver",
+        "justification": "exception handling during close",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-032",
+    "process_id": "access_request",
+    "request_text": "Please request approver access for L. Rodriguez in Audit Vault for internal audit to support quarter-end reconciliation.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision approver access in Audit Vault",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "high",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "L. Rodriguez",
+        "system_name": "Audit Vault",
+        "access_level": "approver",
+        "justification": "quarter-end reconciliation",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-033",
+    "process_id": "access_request",
+    "request_text": "Please request editor access for E. Miller in CRM Portal for revops to support quarter-end reconciliation.",
+    "risk_tag": "low",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision editor access in CRM Portal",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "low",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "E. Miller",
+        "system_name": "CRM Portal",
+        "access_level": "editor",
+        "justification": "quarter-end reconciliation",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-034",
+    "process_id": "access_request",
+    "request_text": "Please request approver access for M. Carter in Payroll Hub for finance ops to support exception handling during close.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision approver access in Payroll Hub",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "medium",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "M. Carter",
+        "system_name": "Payroll Hub",
+        "access_level": "approver",
+        "justification": "exception handling during close",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-035",
+    "process_id": "access_request",
+    "request_text": "Please request read access for L. Rodriguez in Finance BI for internal audit to support control evidence review.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision read access in Finance BI",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "medium",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "L. Rodriguez",
+        "system_name": "Finance BI",
+        "access_level": "read",
+        "justification": "control evidence review",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-036",
+    "process_id": "access_request",
+    "request_text": "Please request read access for T. Nguyen in CRM Portal for finance ops to support quarter-end reconciliation.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision read access in CRM Portal",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "high",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "T. Nguyen",
+        "system_name": "CRM Portal",
+        "access_level": "read",
+        "justification": "quarter-end reconciliation",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-037",
+    "process_id": "access_request",
+    "request_text": "Please request read access for S. Hassan in Audit Vault for finance ops to support exception handling during close.",
+    "risk_tag": "low",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision read access in Audit Vault",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "low",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "S. Hassan",
+        "system_name": "Audit Vault",
+        "access_level": "read",
+        "justification": "exception handling during close",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-038",
+    "process_id": "access_request",
+    "request_text": "Please request editor access for E. Miller in Payroll Hub for finance ops to support exception handling during close.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision editor access in Payroll Hub",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "medium",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "E. Miller",
+        "system_name": "Payroll Hub",
+        "access_level": "editor",
+        "justification": "exception handling during close",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-039",
+    "process_id": "access_request",
+    "request_text": "Please request approver access for J. Kim in Finance BI for compliance to support exception handling during close.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision approver access in Finance BI",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "medium",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "J. Kim",
+        "system_name": "Finance BI",
+        "access_level": "approver",
+        "justification": "exception handling during close",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  },
+  {
+    "id": "access_request-train-040",
+    "process_id": "access_request",
+    "request_text": "Please request read access for E. Miller in Payroll Hub for internal audit to support exception handling during close.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "access_request",
+      "title": "Provision read access in Payroll Hub",
+      "owner_role": "iam_analyst",
+      "sla_hours": 24,
+      "risk_tag": "high",
+      "approvals": [
+        "line_manager",
+        "system_owner"
+      ],
+      "required_fields": {
+        "subject_user": "E. Miller",
+        "system_name": "Payroll Hub",
+        "access_level": "read",
+        "justification": "exception handling during close",
+        "manager_approval": "pending"
+      },
+      "next_actions": [
+        "Validate user employment status",
+        "Create IAM entitlement change ticket",
+        "Notify requester when provisioning completes"
+      ],
+      "controls": [
+        "SoD check",
+        "Manager authorization",
+        "Quarterly recertification"
+      ]
+    }
+  }
+]

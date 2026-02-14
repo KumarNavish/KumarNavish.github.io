@@ -1,0 +1,702 @@
+[
+  {
+    "id": "incident_escalation-test-001",
+    "process_id": "incident_escalation",
+    "request_text": "Escalate INC-31806 for customer-portal due to delayed reporting jobs; treat as sev2.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "incident_escalation",
+      "title": "Escalate incident INC-31806",
+      "owner_role": "incident_commander",
+      "sla_hours": 4,
+      "risk_tag": "high",
+      "approvals": [
+        "oncall_manager",
+        "sre_lead"
+      ],
+      "required_fields": {
+        "incident_id": "INC-31806",
+        "severity": "sev2",
+        "service_name": "customer-portal",
+        "customer_impact": "delayed reporting jobs",
+        "oncall_owner": "infra-oncall"
+      },
+      "next_actions": [
+        "Open incident bridge and page stakeholders",
+        "Assign triage and communications leads",
+        "Publish first external status update"
+      ],
+      "controls": [
+        "Severity rubric enforcement",
+        "Escalation SLA timer",
+        "Post-incident review requirement"
+      ]
+    }
+  },
+  {
+    "id": "incident_escalation-test-002",
+    "process_id": "incident_escalation",
+    "request_text": "Escalate INC-33016 for data-pipeline due to delayed reporting jobs; treat as sev2.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "incident_escalation",
+      "title": "Escalate incident INC-33016",
+      "owner_role": "incident_commander",
+      "sla_hours": 4,
+      "risk_tag": "high",
+      "approvals": [
+        "oncall_manager",
+        "sre_lead"
+      ],
+      "required_fields": {
+        "incident_id": "INC-33016",
+        "severity": "sev2",
+        "service_name": "data-pipeline",
+        "customer_impact": "delayed reporting jobs",
+        "oncall_owner": "infra-oncall"
+      },
+      "next_actions": [
+        "Open incident bridge and page stakeholders",
+        "Assign triage and communications leads",
+        "Publish first external status update"
+      ],
+      "controls": [
+        "Severity rubric enforcement",
+        "Escalation SLA timer",
+        "Post-incident review requirement"
+      ]
+    }
+  },
+  {
+    "id": "incident_escalation-test-003",
+    "process_id": "incident_escalation",
+    "request_text": "Escalate INC-34207 for customer-portal due to dashboard unavailable for premium customers; treat as sev2.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "incident_escalation",
+      "title": "Escalate incident INC-34207",
+      "owner_role": "incident_commander",
+      "sla_hours": 4,
+      "risk_tag": "medium",
+      "approvals": [
+        "oncall_manager",
+        "sre_lead"
+      ],
+      "required_fields": {
+        "incident_id": "INC-34207",
+        "severity": "sev2",
+        "service_name": "customer-portal",
+        "customer_impact": "dashboard unavailable for premium customers",
+        "oncall_owner": "sre-eu"
+      },
+      "next_actions": [
+        "Open incident bridge and page stakeholders",
+        "Assign triage and communications leads",
+        "Publish first external status update"
+      ],
+      "controls": [
+        "Severity rubric enforcement",
+        "Escalation SLA timer",
+        "Post-incident review requirement"
+      ]
+    }
+  },
+  {
+    "id": "incident_escalation-test-004",
+    "process_id": "incident_escalation",
+    "request_text": "Escalate INC-34072 for customer-portal due to dashboard unavailable for premium customers; treat as sev1.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "incident_escalation",
+      "title": "Escalate incident INC-34072",
+      "owner_role": "incident_commander",
+      "sla_hours": 4,
+      "risk_tag": "high",
+      "approvals": [
+        "oncall_manager",
+        "sre_lead"
+      ],
+      "required_fields": {
+        "incident_id": "INC-34072",
+        "severity": "sev1",
+        "service_name": "customer-portal",
+        "customer_impact": "dashboard unavailable for premium customers",
+        "oncall_owner": "infra-oncall"
+      },
+      "next_actions": [
+        "Open incident bridge and page stakeholders",
+        "Assign triage and communications leads",
+        "Publish first external status update"
+      ],
+      "controls": [
+        "Severity rubric enforcement",
+        "Escalation SLA timer",
+        "Post-incident review requirement"
+      ]
+    }
+  },
+  {
+    "id": "incident_escalation-test-005",
+    "process_id": "incident_escalation",
+    "request_text": "Escalate INC-36940 for customer-portal due to intermittent checkout failures; treat as sev2.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "incident_escalation",
+      "title": "Escalate incident INC-36940",
+      "owner_role": "incident_commander",
+      "sla_hours": 4,
+      "risk_tag": "high",
+      "approvals": [
+        "oncall_manager",
+        "sre_lead"
+      ],
+      "required_fields": {
+        "incident_id": "INC-36940",
+        "severity": "sev2",
+        "service_name": "customer-portal",
+        "customer_impact": "intermittent checkout failures",
+        "oncall_owner": "infra-oncall"
+      },
+      "next_actions": [
+        "Open incident bridge and page stakeholders",
+        "Assign triage and communications leads",
+        "Publish first external status update"
+      ],
+      "controls": [
+        "Severity rubric enforcement",
+        "Escalation SLA timer",
+        "Post-incident review requirement"
+      ]
+    }
+  },
+  {
+    "id": "incident_escalation-test-006",
+    "process_id": "incident_escalation",
+    "request_text": "Escalate INC-34694 for customer-portal due to intermittent checkout failures; treat as sev2.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "incident_escalation",
+      "title": "Escalate incident INC-34694",
+      "owner_role": "incident_commander",
+      "sla_hours": 4,
+      "risk_tag": "high",
+      "approvals": [
+        "oncall_manager",
+        "sre_lead"
+      ],
+      "required_fields": {
+        "incident_id": "INC-34694",
+        "severity": "sev2",
+        "service_name": "customer-portal",
+        "customer_impact": "intermittent checkout failures",
+        "oncall_owner": "platform-oncall"
+      },
+      "next_actions": [
+        "Open incident bridge and page stakeholders",
+        "Assign triage and communications leads",
+        "Publish first external status update"
+      ],
+      "controls": [
+        "Severity rubric enforcement",
+        "Escalation SLA timer",
+        "Post-incident review requirement"
+      ]
+    }
+  },
+  {
+    "id": "incident_escalation-test-007",
+    "process_id": "incident_escalation",
+    "request_text": "Escalate INC-34839 for data-pipeline due to delayed reporting jobs; treat as sev1.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "incident_escalation",
+      "title": "Escalate incident INC-34839",
+      "owner_role": "incident_commander",
+      "sla_hours": 4,
+      "risk_tag": "medium",
+      "approvals": [
+        "oncall_manager",
+        "sre_lead"
+      ],
+      "required_fields": {
+        "incident_id": "INC-34839",
+        "severity": "sev1",
+        "service_name": "data-pipeline",
+        "customer_impact": "delayed reporting jobs",
+        "oncall_owner": "sre-eu"
+      },
+      "next_actions": [
+        "Open incident bridge and page stakeholders",
+        "Assign triage and communications leads",
+        "Publish first external status update"
+      ],
+      "controls": [
+        "Severity rubric enforcement",
+        "Escalation SLA timer",
+        "Post-incident review requirement"
+      ]
+    }
+  },
+  {
+    "id": "incident_escalation-test-008",
+    "process_id": "incident_escalation",
+    "request_text": "Escalate INC-35032 for data-pipeline due to intermittent checkout failures; treat as sev3.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "incident_escalation",
+      "title": "Escalate incident INC-35032",
+      "owner_role": "incident_commander",
+      "sla_hours": 4,
+      "risk_tag": "high",
+      "approvals": [
+        "oncall_manager",
+        "sre_lead"
+      ],
+      "required_fields": {
+        "incident_id": "INC-35032",
+        "severity": "sev3",
+        "service_name": "data-pipeline",
+        "customer_impact": "intermittent checkout failures",
+        "oncall_owner": "sre-eu"
+      },
+      "next_actions": [
+        "Open incident bridge and page stakeholders",
+        "Assign triage and communications leads",
+        "Publish first external status update"
+      ],
+      "controls": [
+        "Severity rubric enforcement",
+        "Escalation SLA timer",
+        "Post-incident review requirement"
+      ]
+    }
+  },
+  {
+    "id": "incident_escalation-test-009",
+    "process_id": "incident_escalation",
+    "request_text": "Escalate INC-32388 for customer-portal due to dashboard unavailable for premium customers; treat as sev2.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "incident_escalation",
+      "title": "Escalate incident INC-32388",
+      "owner_role": "incident_commander",
+      "sla_hours": 4,
+      "risk_tag": "high",
+      "approvals": [
+        "oncall_manager",
+        "sre_lead"
+      ],
+      "required_fields": {
+        "incident_id": "INC-32388",
+        "severity": "sev2",
+        "service_name": "customer-portal",
+        "customer_impact": "dashboard unavailable for premium customers",
+        "oncall_owner": "sre-west"
+      },
+      "next_actions": [
+        "Open incident bridge and page stakeholders",
+        "Assign triage and communications leads",
+        "Publish first external status update"
+      ],
+      "controls": [
+        "Severity rubric enforcement",
+        "Escalation SLA timer",
+        "Post-incident review requirement"
+      ]
+    }
+  },
+  {
+    "id": "incident_escalation-test-010",
+    "process_id": "incident_escalation",
+    "request_text": "Escalate INC-32513 for payments-api due to elevated login errors; treat as sev3.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "incident_escalation",
+      "title": "Escalate incident INC-32513",
+      "owner_role": "incident_commander",
+      "sla_hours": 4,
+      "risk_tag": "high",
+      "approvals": [
+        "oncall_manager",
+        "sre_lead"
+      ],
+      "required_fields": {
+        "incident_id": "INC-32513",
+        "severity": "sev3",
+        "service_name": "payments-api",
+        "customer_impact": "elevated login errors",
+        "oncall_owner": "infra-oncall"
+      },
+      "next_actions": [
+        "Open incident bridge and page stakeholders",
+        "Assign triage and communications leads",
+        "Publish first external status update"
+      ],
+      "controls": [
+        "Severity rubric enforcement",
+        "Escalation SLA timer",
+        "Post-incident review requirement"
+      ]
+    }
+  },
+  {
+    "id": "incident_escalation-test-011",
+    "process_id": "incident_escalation",
+    "request_text": "Escalate INC-35827 for customer-portal due to elevated login errors; treat as sev1.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "incident_escalation",
+      "title": "Escalate incident INC-35827",
+      "owner_role": "incident_commander",
+      "sla_hours": 4,
+      "risk_tag": "medium",
+      "approvals": [
+        "oncall_manager",
+        "sre_lead"
+      ],
+      "required_fields": {
+        "incident_id": "INC-35827",
+        "severity": "sev1",
+        "service_name": "customer-portal",
+        "customer_impact": "elevated login errors",
+        "oncall_owner": "platform-oncall"
+      },
+      "next_actions": [
+        "Open incident bridge and page stakeholders",
+        "Assign triage and communications leads",
+        "Publish first external status update"
+      ],
+      "controls": [
+        "Severity rubric enforcement",
+        "Escalation SLA timer",
+        "Post-incident review requirement"
+      ]
+    }
+  },
+  {
+    "id": "incident_escalation-test-012",
+    "process_id": "incident_escalation",
+    "request_text": "Escalate INC-36495 for data-pipeline due to delayed reporting jobs; treat as sev2.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "incident_escalation",
+      "title": "Escalate incident INC-36495",
+      "owner_role": "incident_commander",
+      "sla_hours": 4,
+      "risk_tag": "high",
+      "approvals": [
+        "oncall_manager",
+        "sre_lead"
+      ],
+      "required_fields": {
+        "incident_id": "INC-36495",
+        "severity": "sev2",
+        "service_name": "data-pipeline",
+        "customer_impact": "delayed reporting jobs",
+        "oncall_owner": "sre-eu"
+      },
+      "next_actions": [
+        "Open incident bridge and page stakeholders",
+        "Assign triage and communications leads",
+        "Publish first external status update"
+      ],
+      "controls": [
+        "Severity rubric enforcement",
+        "Escalation SLA timer",
+        "Post-incident review requirement"
+      ]
+    }
+  },
+  {
+    "id": "incident_escalation-test-013",
+    "process_id": "incident_escalation",
+    "request_text": "Escalate INC-32815 for customer-portal due to dashboard unavailable for premium customers; treat as sev1.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "incident_escalation",
+      "title": "Escalate incident INC-32815",
+      "owner_role": "incident_commander",
+      "sla_hours": 4,
+      "risk_tag": "high",
+      "approvals": [
+        "oncall_manager",
+        "sre_lead"
+      ],
+      "required_fields": {
+        "incident_id": "INC-32815",
+        "severity": "sev1",
+        "service_name": "customer-portal",
+        "customer_impact": "dashboard unavailable for premium customers",
+        "oncall_owner": "sre-west"
+      },
+      "next_actions": [
+        "Open incident bridge and page stakeholders",
+        "Assign triage and communications leads",
+        "Publish first external status update"
+      ],
+      "controls": [
+        "Severity rubric enforcement",
+        "Escalation SLA timer",
+        "Post-incident review requirement"
+      ]
+    }
+  },
+  {
+    "id": "incident_escalation-test-014",
+    "process_id": "incident_escalation",
+    "request_text": "Escalate INC-32392 for customer-portal due to elevated login errors; treat as sev3.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "incident_escalation",
+      "title": "Escalate incident INC-32392",
+      "owner_role": "incident_commander",
+      "sla_hours": 4,
+      "risk_tag": "high",
+      "approvals": [
+        "oncall_manager",
+        "sre_lead"
+      ],
+      "required_fields": {
+        "incident_id": "INC-32392",
+        "severity": "sev3",
+        "service_name": "customer-portal",
+        "customer_impact": "elevated login errors",
+        "oncall_owner": "sre-eu"
+      },
+      "next_actions": [
+        "Open incident bridge and page stakeholders",
+        "Assign triage and communications leads",
+        "Publish first external status update"
+      ],
+      "controls": [
+        "Severity rubric enforcement",
+        "Escalation SLA timer",
+        "Post-incident review requirement"
+      ]
+    }
+  },
+  {
+    "id": "incident_escalation-test-015",
+    "process_id": "incident_escalation",
+    "request_text": "Escalate INC-32500 for payments-api due to delayed reporting jobs; treat as sev1.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "incident_escalation",
+      "title": "Escalate incident INC-32500",
+      "owner_role": "incident_commander",
+      "sla_hours": 4,
+      "risk_tag": "medium",
+      "approvals": [
+        "oncall_manager",
+        "sre_lead"
+      ],
+      "required_fields": {
+        "incident_id": "INC-32500",
+        "severity": "sev1",
+        "service_name": "payments-api",
+        "customer_impact": "delayed reporting jobs",
+        "oncall_owner": "sre-west"
+      },
+      "next_actions": [
+        "Open incident bridge and page stakeholders",
+        "Assign triage and communications leads",
+        "Publish first external status update"
+      ],
+      "controls": [
+        "Severity rubric enforcement",
+        "Escalation SLA timer",
+        "Post-incident review requirement"
+      ]
+    }
+  },
+  {
+    "id": "incident_escalation-test-016",
+    "process_id": "incident_escalation",
+    "request_text": "Escalate INC-34996 for auth-gateway due to delayed reporting jobs; treat as sev2.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "incident_escalation",
+      "title": "Escalate incident INC-34996",
+      "owner_role": "incident_commander",
+      "sla_hours": 4,
+      "risk_tag": "high",
+      "approvals": [
+        "oncall_manager",
+        "sre_lead"
+      ],
+      "required_fields": {
+        "incident_id": "INC-34996",
+        "severity": "sev2",
+        "service_name": "auth-gateway",
+        "customer_impact": "delayed reporting jobs",
+        "oncall_owner": "sre-west"
+      },
+      "next_actions": [
+        "Open incident bridge and page stakeholders",
+        "Assign triage and communications leads",
+        "Publish first external status update"
+      ],
+      "controls": [
+        "Severity rubric enforcement",
+        "Escalation SLA timer",
+        "Post-incident review requirement"
+      ]
+    }
+  },
+  {
+    "id": "incident_escalation-test-017",
+    "process_id": "incident_escalation",
+    "request_text": "Escalate INC-32628 for payments-api due to delayed reporting jobs; treat as sev2.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "incident_escalation",
+      "title": "Escalate incident INC-32628",
+      "owner_role": "incident_commander",
+      "sla_hours": 4,
+      "risk_tag": "high",
+      "approvals": [
+        "oncall_manager",
+        "sre_lead"
+      ],
+      "required_fields": {
+        "incident_id": "INC-32628",
+        "severity": "sev2",
+        "service_name": "payments-api",
+        "customer_impact": "delayed reporting jobs",
+        "oncall_owner": "infra-oncall"
+      },
+      "next_actions": [
+        "Open incident bridge and page stakeholders",
+        "Assign triage and communications leads",
+        "Publish first external status update"
+      ],
+      "controls": [
+        "Severity rubric enforcement",
+        "Escalation SLA timer",
+        "Post-incident review requirement"
+      ]
+    }
+  },
+  {
+    "id": "incident_escalation-test-018",
+    "process_id": "incident_escalation",
+    "request_text": "Escalate INC-35148 for payments-api due to delayed reporting jobs; treat as sev3.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "incident_escalation",
+      "title": "Escalate incident INC-35148",
+      "owner_role": "incident_commander",
+      "sla_hours": 4,
+      "risk_tag": "high",
+      "approvals": [
+        "oncall_manager",
+        "sre_lead"
+      ],
+      "required_fields": {
+        "incident_id": "INC-35148",
+        "severity": "sev3",
+        "service_name": "payments-api",
+        "customer_impact": "delayed reporting jobs",
+        "oncall_owner": "sre-west"
+      },
+      "next_actions": [
+        "Open incident bridge and page stakeholders",
+        "Assign triage and communications leads",
+        "Publish first external status update"
+      ],
+      "controls": [
+        "Severity rubric enforcement",
+        "Escalation SLA timer",
+        "Post-incident review requirement"
+      ]
+    }
+  },
+  {
+    "id": "incident_escalation-test-019",
+    "process_id": "incident_escalation",
+    "request_text": "Escalate INC-35125 for customer-portal due to intermittent checkout failures; treat as sev3.",
+    "risk_tag": "medium",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "incident_escalation",
+      "title": "Escalate incident INC-35125",
+      "owner_role": "incident_commander",
+      "sla_hours": 4,
+      "risk_tag": "medium",
+      "approvals": [
+        "oncall_manager",
+        "sre_lead"
+      ],
+      "required_fields": {
+        "incident_id": "INC-35125",
+        "severity": "sev3",
+        "service_name": "customer-portal",
+        "customer_impact": "intermittent checkout failures",
+        "oncall_owner": "infra-oncall"
+      },
+      "next_actions": [
+        "Open incident bridge and page stakeholders",
+        "Assign triage and communications leads",
+        "Publish first external status update"
+      ],
+      "controls": [
+        "Severity rubric enforcement",
+        "Escalation SLA timer",
+        "Post-incident review requirement"
+      ]
+    }
+  },
+  {
+    "id": "incident_escalation-test-020",
+    "process_id": "incident_escalation",
+    "request_text": "Escalate INC-36260 for customer-portal due to elevated login errors; treat as sev2.",
+    "risk_tag": "high",
+    "target": {
+      "plan_version": "1.0",
+      "process_id": "incident_escalation",
+      "title": "Escalate incident INC-36260",
+      "owner_role": "incident_commander",
+      "sla_hours": 4,
+      "risk_tag": "high",
+      "approvals": [
+        "oncall_manager",
+        "sre_lead"
+      ],
+      "required_fields": {
+        "incident_id": "INC-36260",
+        "severity": "sev2",
+        "service_name": "customer-portal",
+        "customer_impact": "elevated login errors",
+        "oncall_owner": "infra-oncall"
+      },
+      "next_actions": [
+        "Open incident bridge and page stakeholders",
+        "Assign triage and communications leads",
+        "Publish first external status update"
+      ],
+      "controls": [
+        "Severity rubric enforcement",
+        "Escalation SLA timer",
+        "Post-incident review requirement"
+      ]
+    }
+  }
+]

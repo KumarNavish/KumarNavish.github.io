@@ -10,7 +10,8 @@
     "test": "vitest run",
     "lint": "eslint src --ext .ts,.tsx --max-warnings 0",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"*.{ts,json,md}\" index.html",
-    "check": "npm run lint && npm run test && npm run build"
+    "check": "npm run lint && npm run test && npm run build",
+    "generate:data": "node scripts/generate_step3_datasets.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
