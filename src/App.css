@@ -157,6 +157,16 @@ button:hover {
   filter: brightness(1.05);
 }
 
+.secondary-btn {
+  background: #edf3fb;
+  color: #1b325f;
+  border: 1px solid #b7c8de;
+}
+
+.secondary-btn:hover {
+  background: #e4eefb;
+}
+
 .pipeline-input {
   min-height: 100px;
   resize: vertical;

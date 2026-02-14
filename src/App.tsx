@@ -23,8 +23,16 @@ import { applyTextDrift } from "./domain/drift";
 import { PROCESS_IDS, type Example, type ProcessDefinition, type ProcessId, type StreamStep } from "./domain/types";
 import { runContinualComparison, type ContinualComparisonResult, type MemoryStrategyId } from "./eval/continual_comparison";
 import { VectorStore } from "./retrieval/vector_store";
+import {
+  clearDemoState,
+  loadDemoState,
+  saveDemoState,
+  type AuditEntryState,
+  type DemoTabId,
+  type EvalSnapshotState,
+} from "./state/persistence";
 
-type TabId = "inbox" | "teach" | "evaluate" | "memory" | "audit";
+type TabId = DemoTabId;
 
 interface AppData {
   processDefinitions: Record<ProcessId, ProcessDefinition>;
@@ -33,12 +41,8 @@ interface AppData {
   streamSchedule: StreamStep[];
 }
 
-interface AuditEntry {
-  id: number;
-  timestamp: string;
-  action: string;
-  detail: string;
-}
+type AuditEntry = AuditEntryState;
+type EvalSnapshot = EvalSnapshotState;
 
 interface SampleRequestOption {
   label: string;
@@ -52,6 +56,9 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: "memory", label: "Memory" },
   { id: "audit", label: "Audit" },
 ];
+
+const DEFAULT_INBOX_REQUEST = "Please escalate INC-9901 for checkout outage and treat as sev1.";
+const DEFAULT_MEMORY_QUERY = "checkout outage sev1 incident";
 
 function makeRouter(seed = 13): LinearSoftmaxClassifier {
   return new LinearSoftmaxClassifier(4, 4, { seed, initScale: 0.01 });
@@ -161,6 +168,20 @@ function mermaidForResult(result: PipelineResult, retrievalK: number): string {
   ].join("\n");
 }
 
+function bootstrapSeed(
+  streamSchedule: StreamStep[],
+  trainSets: Partial<Record<ProcessId, Example[]>>,
+): { firstProcess: ProcessId; initialExamples: Example[] } {
+  const firstProcess = streamSchedule[0]?.process_id ?? "access_request";
+  const initialExamples = (trainSets[firstProcess] ?? []).slice(0, 24);
+  return { firstProcess, initialExamples };
+}
+
+function nextAuditId(entries: AuditEntry[]): number {
+  const max = entries.reduce((best, entry) => (entry.id > best ? entry.id : best), 0);
+  return max + 1;
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState<TabId>("inbox");
   const [loadingData, setLoadingData] = useState(true);
@@ -177,24 +198,25 @@ function App() {
   const [trainStream, setTrainStream] = useState<Example[]>([]);
   const [memoryItems, setMemoryItems] = useState<MemoryItem[]>([]);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
+  const [evalSnapshots, setEvalSnapshots] = useState<EvalSnapshot[]>([]);
   const [teachStatus, setTeachStatus] = useState("Idle");
 
-  const [inboxRequest, setInboxRequest] = useState(
-    "Please escalate INC-9901 for checkout outage and treat as sev1.",
-  );
+  const [inboxRequest, setInboxRequest] = useState(DEFAULT_INBOX_REQUEST);
   const [inboxStatus, setInboxStatus] = useState("Idle");
   const [inboxResult, setInboxResult] = useState<PipelineResult | null>(null);
   const [inboxError, setInboxError] = useState("");
 
-  const [memoryQuery, setMemoryQuery] = useState("checkout outage sev1 incident");
+  const [memoryQuery, setMemoryQuery] = useState(DEFAULT_MEMORY_QUERY);
   const [memoryHits, setMemoryHits] = useState<Array<{ id: string; score: number; example: Example }>>([]);
 
   const [evalStatus, setEvalStatus] = useState("Idle");
   const [comparisonResult, setComparisonResult] = useState<ContinualComparisonResult | null>(null);
+  const [stateReady, setStateReady] = useState(false);
 
   const routerRef = useRef<LinearSoftmaxClassifier>(makeRouter());
   const ewcStateRef = useRef<EwcState | null>(null);
   const auditIdRef = useRef(1);
+  const skipNextMemoryRebuildRef = useRef(false);
 
   const addAudit = (action: string, detail: string) => {
     const entry: AuditEntry = {
@@ -248,8 +270,60 @@ function App() {
         }
 
         const sortedSteps = [...streamPayload.steps].sort((a, b) => a.step - b.step);
-        const firstProcess = sortedSteps[0]?.process_id ?? "access_request";
-        const initialExamples = (trainSets[firstProcess] ?? []).slice(0, 24);
+        const { firstProcess, initialExamples } = bootstrapSeed(sortedSteps, trainSets);
+
+        const normalizedData: AppData = {
+          processDefinitions,
+          trainSets,
+          testSets,
+          streamSchedule: sortedSteps,
+        };
+        setAppData(normalizedData);
+
+        const persisted = loadDemoState();
+        if (persisted) {
+          try {
+            const restoredSeen = persisted.seenProcesses.filter((processId) => PROCESS_IDS.includes(processId));
+            const restoredTrain = persisted.trainStream.filter((example) => PROCESS_IDS.includes(example.process_id));
+
+            routerRef.current = makeRouter(31);
+            routerRef.current.setParams(persisted.routerParams);
+            ewcStateRef.current = persisted.ewcState;
+
+            setActiveTab(persisted.activeTab);
+            setMemoryStrategyId(persisted.controls.memoryStrategyId);
+            setMemoryBudget(persisted.controls.memoryBudget);
+            setRetrievalK(persisted.controls.retrievalK);
+            setClMode(persisted.controls.clMode);
+            setDriftEnabled(persisted.controls.driftEnabled);
+
+            setSeenProcesses(restoredSeen.length > 0 ? restoredSeen : [firstProcess]);
+            setTrainStream(restoredTrain.length > 0 ? restoredTrain : initialExamples);
+
+            if (persisted.memoryItems.length > 0) {
+              skipNextMemoryRebuildRef.current = true;
+              setMemoryItems(persisted.memoryItems);
+            }
+
+            setAuditLog(persisted.auditLog);
+            setEvalSnapshots(persisted.evalSnapshots);
+            setComparisonResult(persisted.comparisonResult);
+            setInboxRequest(persisted.inboxRequest);
+            setInboxResult(null);
+            setInboxError("");
+            setInboxStatus("Restored previous browser session.");
+            setTeachStatus("Restored from browser storage.");
+            setMemoryHits([]);
+            setMemoryQuery(DEFAULT_MEMORY_QUERY);
+            setEvalStatus("Idle");
+
+            auditIdRef.current = nextAuditId(persisted.auditLog);
+            setStateReady(true);
+            return;
+          } catch {
+            clearDemoState();
+          }
+        }
 
         routerRef.current = makeRouter(31);
         ewcStateRef.current = null;
@@ -260,20 +334,29 @@ function App() {
           seed: 111,
         });
 
-        setAppData({
-          processDefinitions,
-          trainSets,
-          testSets,
-          streamSchedule: sortedSteps,
-        });
+        setActiveTab("inbox");
+        setMemoryStrategyId("reservoir");
+        setMemoryBudget(32);
+        setRetrievalK(3);
+        setClMode("rehearsal");
+        setDriftEnabled(false);
         setSeenProcesses([firstProcess]);
         setTrainStream(initialExamples);
+        setMemoryItems([]);
         setComparisonResult(null);
+        setEvalSnapshots([]);
+        setInboxRequest(DEFAULT_INBOX_REQUEST);
         setInboxResult(null);
+        setInboxError("");
+        setInboxStatus("Idle");
+        setMemoryQuery(DEFAULT_MEMORY_QUERY);
         setMemoryHits([]);
+        setEvalStatus("Idle");
+        setTeachStatus("Idle");
         setAuditLog([]);
         auditIdRef.current = 1;
         addAudit("bootstrap", `Initialized with first process: ${firstProcess}`);
+        setStateReady(true);
       } catch (error) {
         if (!active) {
           return;
@@ -293,10 +376,56 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (skipNextMemoryRebuildRef.current) {
+      skipNextMemoryRebuildRef.current = false;
+      return;
+    }
     const strategy = createMemoryStrategy(memoryStrategyId, memoryBudget, 79);
     strategy.addExamples(trainStream.map(toMemoryInput));
     setMemoryItems(strategy.getMemory());
   }, [trainStream, memoryStrategyId, memoryBudget]);
+
+  useEffect(() => {
+    if (!stateReady || !appData) {
+      return;
+    }
+
+    saveDemoState({
+      activeTab,
+      controls: {
+        memoryStrategyId,
+        memoryBudget,
+        retrievalK,
+        clMode,
+        driftEnabled,
+      },
+      seenProcesses,
+      trainStream,
+      memoryItems,
+      routerParams: routerRef.current.getParams(),
+      ewcState: ewcStateRef.current,
+      auditLog,
+      evalSnapshots,
+      comparisonResult,
+      inboxRequest,
+    });
+  }, [
+    stateReady,
+    appData,
+    activeTab,
+    memoryStrategyId,
+    memoryBudget,
+    retrievalK,
+    clMode,
+    driftEnabled,
+    seenProcesses,
+    trainStream,
+    memoryItems,
+    auditLog,
+    evalSnapshots,
+    comparisonResult,
+    inboxRequest,
+  ]);
 
   const memoryStore = useMemo(() => {
     const store = new VectorStore<Example>();
@@ -473,6 +602,55 @@ function App() {
         3,
       )}), rehearsal=${rehForget.toFixed(3)}, ewc=${ewcForget.toFixed(3)}.`,
     );
+    setEvalSnapshots((prev) => [
+      ...prev,
+      {
+        id: prev.length + 1,
+        timestamp: formatTimestamp(),
+        seenProcesses: [...seenProcesses],
+        result,
+      },
+    ]);
+  };
+
+  const handleResetDemoState = () => {
+    if (!appData) {
+      return;
+    }
+    clearDemoState();
+    const { firstProcess, initialExamples } = bootstrapSeed(appData.streamSchedule, appData.trainSets);
+
+    routerRef.current = makeRouter(31);
+    ewcStateRef.current = null;
+    trainIntentRouter(routerRef.current, initialExamples.map(toIntentExample), {
+      mode: "naive",
+      epochs: 36,
+      learningRate: 0.09,
+      seed: 111,
+    });
+
+    setActiveTab("inbox");
+    setMemoryStrategyId("reservoir");
+    setMemoryBudget(32);
+    setRetrievalK(3);
+    setClMode("rehearsal");
+    setDriftEnabled(false);
+    setSeenProcesses([firstProcess]);
+    setTrainStream(initialExamples);
+    setMemoryItems([]);
+    setAuditLog([]);
+    setEvalSnapshots([]);
+    setComparisonResult(null);
+    setTeachStatus("Demo reset to initial state.");
+    setInboxRequest(DEFAULT_INBOX_REQUEST);
+    setInboxStatus("Idle");
+    setInboxResult(null);
+    setInboxError("");
+    setMemoryQuery(DEFAULT_MEMORY_QUERY);
+    setMemoryHits([]);
+    setEvalStatus("Idle");
+    auditIdRef.current = 1;
+    addAudit("reset", `State cleared and reinitialized with ${firstProcess}.`);
   };
 
   const riskCounts = countByRisk(memoryItems);
@@ -567,6 +745,13 @@ function App() {
             />
             Drift toggle
           </label>
+        </div>
+
+        <div className="row wrap">
+          <button type="button" className="secondary-btn" onClick={handleResetDemoState}>
+            Reset demo state
+          </button>
+          <p className="legend">Clears persisted local state, memory, router parameters, audit, and snapshots.</p>
         </div>
 
         <div className="tab-row">
@@ -703,6 +888,8 @@ ${mermaidForResult(inboxResult, retrievalK)}`}
                   />
                 </svg>
                 <p className="legend">naive (red), rehearsal (blue), ewc (teal)</p>
+
+                <p className="legend">Saved evaluation snapshots: {evalSnapshots.length}</p>
               </>
             ) : null}
           </div>
@@ -763,6 +950,17 @@ ${mermaidForResult(inboxResult, retrievalK)}`}
                 </li>
               ))}
             </ul>
+            <details>
+              <summary>Evaluation snapshots ({evalSnapshots.length})</summary>
+              <ul className="example-list">
+                {evalSnapshots.map((snapshot) => (
+                  <li key={snapshot.id}>
+                    [{snapshot.timestamp}] seen={snapshot.seenProcesses.join(", ")} | naive forgetting=
+                    {(snapshot.result.modes.naive.meanForgetting * 100).toFixed(2)}%
+                  </li>
+                ))}
+              </ul>
+            </details>
           </div>
         ) : null}
       </section>
