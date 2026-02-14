@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 
 import {
   fetchLatestRunApi,
@@ -6,14 +7,9 @@ import {
   fetchProfileApi,
   fetchProvenanceApi,
   fetchProjectsApi,
-  type ProjectItem,
+  fetchPublicationsApi,
 } from '../lib/api'
-import {
-  compactList,
-  formatDateTime,
-  formatDuration,
-  formatNumber,
-} from '../lib/formatters'
+import { formatDateTime, formatDuration, formatNumber } from '../lib/formatters'
 import { useResource } from '../lib/useResource'
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks'
 
@@ -23,22 +19,14 @@ interface DashboardData {
   latestRun: Awaited<ReturnType<typeof fetchLatestRunApi>>
   provenance: Awaited<ReturnType<typeof fetchProvenanceApi>>
   projects: Awaited<ReturnType<typeof fetchProjectsApi>>
+  publications: Awaited<ReturnType<typeof fetchPublicationsApi>>
 }
 
-function uniqueProjectTopics(projects: ProjectItem[]): string[] {
-  const seen = new Set<string>()
-  const topics: string[] = []
-  for (const project of projects) {
-    for (const tag of project.tags) {
-      if (seen.has(tag)) {
-        continue
-      }
-      seen.add(tag)
-      topics.push(tag)
-    }
-  }
-  return topics
-}
+const INTELLECTUAL_POSITIONING = [
+  'I approach research as system design: assumptions are explicit, outputs are testable.',
+  'I build tooling around ideas so progress is reproducible and inspectable.',
+  'I prioritize methods that survive contact with real operational constraints.',
+]
 
 export function DashboardPage() {
   const loadDashboard = useCallback(
@@ -49,63 +37,119 @@ export function DashboardPage() {
         fetchLatestRunApi(),
         fetchProvenanceApi(),
         fetchProjectsApi(),
-      ]).then(([profile, metrics, latestRun, provenance, projects]) => ({
+        fetchPublicationsApi(),
+      ]).then(([profile, metrics, latestRun, provenance, projects, publications]) => ({
         profile,
         metrics,
         latestRun,
         provenance,
         projects,
+        publications,
       })),
     [],
   )
   const state = useResource<DashboardData>(loadDashboard)
 
-  const warningCount = useMemo(() => {
+  const quickSnapshots = useMemo(() => {
     if (!state.data) {
-      return 0
+      return []
     }
-    return state.data.latestRun.tasks.reduce(
-      (count, task) =>
-        count +
-        task.logs.filter((log) => log.level === 'warning' || log.level === 'error')
-          .length,
-      0,
+
+    const featuredProjects = state.data.profile.featured.projects.slice(0, 2).map((project) => ({
+      id: `project:${project.name}`,
+      title: project.name,
+      detail: project.one_line ?? 'Flagship technical system.',
+      link: project.demo_url ?? project.html_url ?? '/work',
+      meta: `Project · ${formatNumber(project.stars)} stars`,
+    }))
+
+    const publicationById = new Map(
+      state.data.publications.items.map((publication) => [publication.id, publication]),
     )
+
+    const featuredPublications = state.data.profile.featured.publications
+      .slice(0, 2)
+      .map((publication) => {
+        const expanded = publication.id ? publicationById.get(publication.id) : null
+        return {
+          id: `publication:${publication.id ?? publication.title}`,
+          title: publication.title,
+          detail:
+            expanded?.summary ??
+            `${publication.venue ?? 'Publication venue'}${
+              publication.year ? ` (${publication.year})` : ''
+            }`,
+          link: publication.url ?? '/work#papers',
+          meta: `Publication · ${formatNumber(publication.citation_count)} citations`,
+        }
+      })
+
+    return [...featuredProjects, ...featuredPublications]
   }, [state.data])
 
   if (state.loading) {
-    return <LoadingBlock label="Loading dashboard from generated APIs." />
+    return <LoadingBlock label="Loading overview from generated APIs." />
   }
 
   if (!state.data || state.error) {
     return (
       <ErrorBlock
-        label="Unable to load dashboard APIs."
-        details={state.error ?? 'unknown dashboard error'}
+        label="Unable to load overview."
+        details={state.error ?? 'unknown overview error'}
       />
     )
   }
 
-  const { profile, metrics, latestRun, provenance, projects } = state.data
-  const featured = profile.featured.projects.length
-    ? profile.featured.projects
-    : projects.items.filter((project) => project.featured).slice(0, 4)
-  const focusTopics = uniqueProjectTopics(projects.items).slice(0, 8)
+  const { profile, metrics, latestRun, provenance } = state.data
   const runUrl = latestRun.run.action_run_url ?? provenance.action_run_url
-  const sources = Object.entries(profile.source_provenance)
-    .map(([name, source]) => `${name}: ${source ?? 'n/a'}`)
-    .join(' · ')
+  const hasRunIssues = latestRun.summary.failed > 0
 
   return (
     <div className="page">
-      <section className="hero">
-        <p className="eyebrow">Portfolio as a system</p>
-        <h1>{profile.site_title ?? 'Research Portfolio'}</h1>
+      <section className="hero hero-primary">
+        <p className="eyebrow">Overview</p>
+        <h1>{profile.site_title ?? 'Navish Kumar'}</h1>
         <p className="hero-copy">
-          Structured sources are ingested, normalized, measured, indexed, and
-          published as machine-readable APIs. The interface below renders only
-          those artifacts.
+          I build research as deployable systems: each idea is connected to code,
+          metrics, and reproducible outputs.
         </p>
+        <div className="action-row">
+          <Link className="action-link action-link-primary" to="/work">
+            Explore curated work
+          </Link>
+          <Link className="action-link" to="/proof">
+            Validate system proof
+          </Link>
+          <a className="action-link" href={profile.links.github} target="_blank" rel="noreferrer">
+            Open GitHub
+          </a>
+        </div>
+      </section>
+
+      <section className="panel">
+        <header className="panel-header">
+          <h2>How to read this site</h2>
+        </header>
+        <div className="sequence-grid">
+          <article className="sequence-step">
+            <p className="sequence-index">01</p>
+            <h3>Understand the arc</h3>
+            <p>Start with the research arcs and why each line of work exists.</p>
+            <Link to="/work#arcs">Go to arcs</Link>
+          </article>
+          <article className="sequence-step">
+            <p className="sequence-index">02</p>
+            <h3>Inspect flagship builds</h3>
+            <p>See how ideas were translated into systems, experiments, and tools.</p>
+            <Link to="/work#systems">Go to systems</Link>
+          </article>
+          <article className="sequence-step">
+            <p className="sequence-index">03</p>
+            <h3>Verify execution quality</h3>
+            <p>Check generated APIs, run telemetry, and deployment automation.</p>
+            <Link to="/proof">Go to proof</Link>
+          </article>
+        </div>
       </section>
 
       <section className="metric-grid">
@@ -122,85 +166,19 @@ export function DashboardPage() {
           <p className="metric-value">{formatNumber(metrics.citations_total)}</p>
         </article>
         <article className="metric-card">
-          <p className="metric-label">Run Warnings</p>
-          <p className="metric-value">{formatNumber(warningCount)}</p>
+          <p className="metric-label">Pipeline status</p>
+          <p className="metric-value">{latestRun.run.status}</p>
         </article>
       </section>
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Latest Pipeline Run</h2>
-          {runUrl ? (
-            <a href={runUrl} target="_blank" rel="noreferrer">
-              Open workflow
-            </a>
-          ) : null}
+          <h2>Intellectual posture</h2>
         </header>
-        <div className="kv-grid">
-          <p>
-            <span>Status</span>
-            <strong>{latestRun.run.status}</strong>
-          </p>
-          <p>
-            <span>Finished</span>
-            <strong>{formatDateTime(latestRun.run.finished_at)}</strong>
-          </p>
-          <p>
-            <span>Duration</span>
-            <strong>{formatDuration(latestRun.run.duration_seconds)}</strong>
-          </p>
-          <p>
-            <span>Git SHA</span>
-            <strong>{latestRun.run.git_sha.slice(0, 12)}</strong>
-          </p>
-        </div>
-      </section>
-
-      <section className="panel">
-        <header className="panel-header">
-          <h2>Provenance</h2>
-        </header>
-        <div className="kv-grid">
-          <p>
-            <span>Data sources</span>
-            <strong>{compactList(Object.keys(profile.source_provenance), 4)}</strong>
-          </p>
-          <p>
-            <span>Last sync</span>
-            <strong>{formatDateTime(profile.last_sync.last_run_timestamp)}</strong>
-          </p>
-          <p>
-            <span>Git SHA</span>
-            <strong>{provenance.git_sha.slice(0, 12)}</strong>
-          </p>
-          <p>
-            <span>Run link</span>
-            <strong>{runUrl ? 'available' : 'local run'}</strong>
-          </p>
-        </div>
-        <p className="meta-line">{sources}</p>
-      </section>
-
-      <section className="panel">
-        <header className="panel-header">
-          <h2>Featured Projects</h2>
-        </header>
-        <div className="card-grid">
-          {featured.map((project) => (
-            <article key={project.name} className="item-card">
-              <h3>{project.name}</h3>
-              <p>{project.one_line ?? 'No summary available.'}</p>
-              <p className="meta-line">
-                Stars {formatNumber(project.stars)}{' '}
-                {project.demo_url ? (
-                  <>
-                    ·{' '}
-                    <a href={project.demo_url} target="_blank" rel="noreferrer">
-                      Demo
-                    </a>
-                  </>
-                ) : null}
-              </p>
+        <div className="stack-list">
+          {INTELLECTUAL_POSITIONING.map((line) => (
+            <article key={line} className="stack-item">
+              <p>{line}</p>
             </article>
           ))}
         </div>
@@ -208,9 +186,47 @@ export function DashboardPage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Current Focus Tags</h2>
+          <h2>Flagship snapshots</h2>
         </header>
-        <p className="tag-cloud">{compactList(focusTopics, 12)}</p>
+        <div className="card-grid">
+          {quickSnapshots.map((item) => (
+            <article key={item.id} className="item-card">
+              <h3>{item.title}</h3>
+              <p>{item.detail}</p>
+              <p className="meta-line">{item.meta}</p>
+              <p className="meta-line">
+                {item.link.startsWith('http') ? (
+                  <a href={item.link} target="_blank" rel="noreferrer">
+                    Open
+                  </a>
+                ) : (
+                  <Link to={item.link}>Open</Link>
+                )}
+              </p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel panel-note">
+        <header className="panel-header">
+          <h2>Latest run</h2>
+          {runUrl ? (
+            <a href={runUrl} target="_blank" rel="noreferrer">
+              Open workflow
+            </a>
+          ) : null}
+        </header>
+        <p className="meta-line">
+          Finished {formatDateTime(latestRun.run.finished_at)} · Duration{' '}
+          {formatDuration(latestRun.run.duration_seconds)} · Commit{' '}
+          {latestRun.run.git_sha.slice(0, 12)}
+        </p>
+        <p className="meta-line">
+          {hasRunIssues
+            ? 'Latest run has failures. Inspect System Proof before trusting outputs.'
+            : 'Latest run is healthy and publishing machine-readable artifacts.'}
+        </p>
       </section>
     </div>
   )

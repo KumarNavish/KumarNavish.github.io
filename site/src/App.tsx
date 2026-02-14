@@ -7,14 +7,13 @@ import { DashboardPage } from './pages/DashboardPage'
 import { OpsConsolePage } from './pages/OpsConsolePage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { PublicationsPage } from './pages/PublicationsPage'
+import { SystemProofPage } from './pages/SystemProofPage'
+import { WorkPage } from './pages/WorkPage'
 
 const NAVIGATION = [
-  { href: '/', label: 'Dashboard' },
-  { href: '/projects', label: 'Projects' },
-  { href: '/publications', label: 'Publications' },
-  { href: '/ops/console', label: 'Ops Console' },
-  { href: '/artifacts', label: 'Artifacts' },
-  { href: '/data', label: 'Data' },
+  { href: '/', label: 'Overview' },
+  { href: '/work', label: 'Work' },
+  { href: '/proof', label: 'System Proof' },
 ]
 
 const WORKFLOW_BADGES = [
@@ -75,7 +74,7 @@ function SiteHeader() {
     <header className="site-header">
       <div className="header-inner">
         <p className="header-title">KumarNavish.github.io</p>
-        <p className="header-subtitle">Capability-first portfolio system</p>
+        <p className="header-subtitle">Research, systems, and automation</p>
         <WorkflowBadges />
       </div>
       <Navigation />
@@ -90,6 +89,8 @@ export default function App() {
       <main className="content-shell">
         <Routes>
           <Route path="/" element={<DashboardPage />} />
+          <Route path="/work" element={<WorkPage />} />
+          <Route path="/proof" element={<SystemProofPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/publications" element={<PublicationsPage />} />
           <Route path="/ops/console" element={<OpsConsolePage />} />

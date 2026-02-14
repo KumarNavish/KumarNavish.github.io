@@ -1,92 +1,77 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { fetchProjectsApi } from '../lib/api'
 import { formatDate, formatNumber } from '../lib/formatters'
 import { useResource } from '../lib/useResource'
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks'
 
-type SortMode = 'featured' | 'stars' | 'recent' | 'name'
-
-function buildCounts(values: string[]): Array<{ value: string; count: number }> {
-  const map = new Map<string, number>()
+function buildThemeSummary(values: string[]): string[] {
+  const counts = new Map<string, number>()
   for (const value of values) {
-    map.set(value, (map.get(value) ?? 0) + 1)
+    if (!value) {
+      continue
+    }
+    counts.set(value, (counts.get(value) ?? 0) + 1)
   }
-  return Array.from(map.entries())
-    .map(([value, count]) => ({ value, count }))
-    .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value))
+  return Array.from(counts.entries())
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .slice(0, 8)
+    .map(([value, count]) => `${value} (${count})`)
 }
 
 export function ProjectsPage() {
   const state = useResource(fetchProjectsApi)
+  const [showArchive, setShowArchive] = useState(false)
   const [query, setQuery] = useState('')
-  const [topic, setTopic] = useState('all')
-  const [sort, setSort] = useState<SortMode>('featured')
 
-  const topicCounts = useMemo(() => {
+  const featured = useMemo(() => {
     if (!state.data) {
       return []
     }
-    const topics = state.data.items.flatMap((project) => project.tags)
-    return buildCounts(topics)
+    return state.data.items
+      .filter((project) => project.featured || project.pinned)
+      .sort((left, right) => right.stars - left.stars || left.name.localeCompare(right.name))
   }, [state.data])
 
-  const languageCounts = useMemo(() => {
-    if (!state.data) {
-      return []
-    }
-    const languages = state.data.items.flatMap((project) =>
-      Object.keys(project.language_breakdown),
-    )
-    return buildCounts(languages)
-  }, [state.data])
-
-  const filtered = useMemo(() => {
+  const archive = useMemo(() => {
     if (!state.data) {
       return []
     }
     const normalizedQuery = query.trim().toLowerCase()
-    const candidates = state.data.items.filter((project) => {
-      const matchesQuery =
-        normalizedQuery.length === 0 ||
-        project.name.toLowerCase().includes(normalizedQuery) ||
-        project.description.toLowerCase().includes(normalizedQuery) ||
-        (project.one_line ?? '').toLowerCase().includes(normalizedQuery) ||
-        project.tags.some((tag) => tag.toLowerCase().includes(normalizedQuery))
-      const matchesTopic = topic === 'all' || project.tags.includes(topic)
-      return matchesQuery && matchesTopic
-    })
-
-    return candidates.sort((left, right) => {
-      if (sort === 'name') {
-        return left.name.localeCompare(right.name)
-      }
-      if (sort === 'stars') {
-        return right.stars - left.stars || left.name.localeCompare(right.name)
-      }
-      if (sort === 'recent') {
+    return state.data.items
+      .filter((project) => !project.featured && !project.pinned)
+      .filter((project) => {
+        if (!normalizedQuery) {
+          return true
+        }
         return (
+          project.name.toLowerCase().includes(normalizedQuery) ||
+          project.description.toLowerCase().includes(normalizedQuery) ||
+          (project.one_line ?? '').toLowerCase().includes(normalizedQuery)
+        )
+      })
+      .sort(
+        (left, right) =>
           new Date(right.last_push ?? 0).getTime() -
             new Date(left.last_push ?? 0).getTime() ||
-          left.name.localeCompare(right.name)
-        )
-      }
-      return (
-        Number(right.featured) - Number(left.featured) ||
-        right.stars - left.stars ||
-        left.name.localeCompare(right.name)
+          left.name.localeCompare(right.name),
       )
-    })
-  }, [query, sort, state.data, topic])
+  }, [query, state.data])
+
+  const themeSummary = useMemo(
+    () => buildThemeSummary(featured.flatMap((project) => project.tags)),
+    [featured],
+  )
 
   if (state.loading) {
-    return <LoadingBlock label="Loading projects API." />
+    return <LoadingBlock label="Loading project archive." />
   }
 
   if (!state.data || state.error) {
     return (
       <ErrorBlock
-        label="Unable to load projects API."
+        label="Unable to load projects."
         details={state.error ?? 'unknown projects error'}
       />
     )
@@ -95,76 +80,35 @@ export function ProjectsPage() {
   return (
     <div className="page">
       <section className="hero">
-        <p className="eyebrow">Projects</p>
-        <h1>Build Surface</h1>
+        <p className="eyebrow">Projects Archive</p>
+        <h1>Systems and experiments</h1>
         <p className="hero-copy">
-          Repository metadata is merged with curated registry fields. Filters
-          and rankings below are computed client-side from generated JSON.
+          Start with the curated systems first. Expand the archive only when you
+          need complete historical coverage.
         </p>
-      </section>
-
-      <section className="controls-panel">
-        <label>
-          Search
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="project name, tag, summary"
-          />
-        </label>
-        <label>
-          Topic
-          <select value={topic} onChange={(event) => setTopic(event.target.value)}>
-            <option value="all">All topics</option>
-            {topicCounts.map((entry) => (
-              <option key={entry.value} value={entry.value}>
-                {entry.value} ({entry.count})
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Sort
-          <select
-            value={sort}
-            onChange={(event) => setSort(event.target.value as SortMode)}
-          >
-            <option value="featured">Featured</option>
-            <option value="stars">Stars</option>
-            <option value="recent">Recent push</option>
-            <option value="name">Name</option>
-          </select>
-        </label>
+        <div className="action-row">
+          <Link className="action-link" to="/work">
+            Back to curated work
+          </Link>
+          <Link className="action-link action-link-primary" to="/proof">
+            Verify pipeline proof
+          </Link>
+        </div>
       </section>
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Language Breakdown</h2>
+          <h2>Curated Systems ({featured.length})</h2>
         </header>
-        <p className="tag-cloud">
-          {languageCounts.map((entry) => `${entry.value} (${entry.count})`).join(' · ')}
-        </p>
-      </section>
-
-      <section className="panel">
-        <header className="panel-header">
-          <h2>Filtered Projects ({filtered.length})</h2>
-        </header>
+        {themeSummary.length > 0 ? <p className="tag-cloud">{themeSummary.join(' · ')}</p> : null}
         <div className="card-grid">
-          {filtered.map((project) => (
+          {featured.map((project) => (
             <article key={project.name} className="item-card">
-              <h3>
-                {project.name}{' '}
-                {project.featured ? <span className="badge">featured</span> : null}
-              </h3>
-              <p>
-                {(project.one_line ?? project.description) || 'No summary available.'}
-              </p>
+              <h3>{project.name}</h3>
+              <p>{(project.one_line ?? project.description) || 'No summary available.'}</p>
               <p className="meta-line">
-                Stars {formatNumber(project.stars)} · Forks {formatNumber(project.forks)} ·
-                Last push {formatDate(project.last_push)}
+                Stars {formatNumber(project.stars)} · Last push {formatDate(project.last_push)}
               </p>
-              <p className="meta-line">{project.tags.join(' · ')}</p>
               <p className="meta-line">
                 <a href={project.html_url} target="_blank" rel="noreferrer">
                   Repository
@@ -174,7 +118,7 @@ export function ProjectsPage() {
                     {' '}
                     ·{' '}
                     <a href={project.demo_url} target="_blank" rel="noreferrer">
-                      Demo
+                      Live demo
                     </a>
                   </>
                 ) : null}
@@ -182,6 +126,53 @@ export function ProjectsPage() {
             </article>
           ))}
         </div>
+      </section>
+
+      <section className="panel">
+        <header className="panel-header">
+          <h2>Full Archive</h2>
+          <button
+            type="button"
+            className="action-link"
+            onClick={() => setShowArchive((value) => !value)}
+          >
+            {showArchive ? 'Hide archive' : 'Show archive'}
+          </button>
+        </header>
+        {showArchive ? (
+          <>
+            <div className="controls-panel controls-panel-compact">
+              <label>
+                Search archive
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="project name or summary"
+                />
+              </label>
+            </div>
+            <div className="card-grid">
+              {archive.map((project) => (
+                <article key={project.name} className="item-card">
+                  <h3>{project.name}</h3>
+                  <p>{(project.one_line ?? project.description) || 'No summary available.'}</p>
+                  <p className="meta-line">
+                    Stars {formatNumber(project.stars)} · Last push {formatDate(project.last_push)}
+                  </p>
+                  <p className="meta-line">
+                    <a href={project.html_url} target="_blank" rel="noreferrer">
+                      Repository
+                    </a>
+                  </p>
+                </article>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className="meta-line">
+            Hidden by default to keep focus on the strongest systems.
+          </p>
+        )}
       </section>
     </div>
   )

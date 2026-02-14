@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { fetchMetricsApi, fetchPublicationsApi } from '../lib/api'
 import { formatNumber } from '../lib/formatters'
@@ -15,14 +16,13 @@ function CitationsChart({
 }: {
   points: Array<{ year: number; citations: number }>
 }) {
-  if (points.length === 0) {
-    return <p className="meta-line">No citation-by-year series available.</p>
-  }
-
   const width = 740
   const height = 180
   const barGap = 8
-  const barWidth = Math.max(8, Math.floor((width - barGap * (points.length + 1)) / points.length))
+  const barWidth = Math.max(
+    8,
+    Math.floor((width - barGap * (points.length + 1)) / points.length),
+  )
   const maxValue = Math.max(...points.map((point) => point.citations), 1)
 
   return (
@@ -62,66 +62,66 @@ export function PublicationsPage() {
   )
   const state = useResource<PublicationsData>(loadPublications)
   const [query, setQuery] = useState('')
-  const [yearFilter, setYearFilter] = useState('all')
-
-  const yearOptions = useMemo(() => {
-    if (!state.data) {
-      return []
-    }
-    return Array.from(
-      new Set(
-        state.data.publications.items
-          .map((item) => item.year)
-          .filter((year): year is number => typeof year === 'number'),
-      ),
-    ).sort((a, b) => b - a)
-  }, [state.data])
 
   const filtered = useMemo(() => {
     if (!state.data) {
       return []
     }
     const normalizedQuery = query.trim().toLowerCase()
-    const selectedYear = yearFilter === 'all' ? null : Number(yearFilter)
-    return state.data.publications.items.filter((publication) => {
-      const matchesQuery =
-        normalizedQuery.length === 0 ||
-        publication.title.toLowerCase().includes(normalizedQuery) ||
-        (publication.venue ?? '').toLowerCase().includes(normalizedQuery) ||
-        publication.keywords.some((keyword) =>
-          keyword.toLowerCase().includes(normalizedQuery),
+    return state.data.publications.items
+      .filter((publication) => {
+        if (!normalizedQuery) {
+          return true
+        }
+        return (
+          publication.title.toLowerCase().includes(normalizedQuery) ||
+          (publication.venue ?? '').toLowerCase().includes(normalizedQuery) ||
+          publication.keywords.some((keyword) =>
+            keyword.toLowerCase().includes(normalizedQuery),
+          )
         )
-      const matchesYear =
-        selectedYear === null ||
-        (typeof publication.year === 'number' && publication.year === selectedYear)
-      return matchesQuery && matchesYear
-    })
-  }, [query, state.data, yearFilter])
+      })
+      .sort(
+        (left, right) =>
+          (right.citation_count ?? 0) - (left.citation_count ?? 0) ||
+          (right.year ?? 0) - (left.year ?? 0) ||
+          left.title.localeCompare(right.title),
+      )
+  }, [query, state.data])
 
   if (state.loading) {
-    return <LoadingBlock label="Loading publications and metrics APIs." />
+    return <LoadingBlock label="Loading publication archive." />
   }
 
   if (!state.data || state.error) {
     return (
       <ErrorBlock
-        label="Unable to load publications APIs."
+        label="Unable to load publications."
         details={state.error ?? 'unknown publications error'}
       />
     )
   }
 
   const { publications, metrics } = state.data
+  const topThemes = metrics.topics.slice(0, 6)
 
   return (
     <div className="page">
       <section className="hero">
-        <p className="eyebrow">Publications</p>
-        <h1>Research Output</h1>
+        <p className="eyebrow">Publications Archive</p>
+        <h1>Selected research record</h1>
         <p className="hero-copy">
-          The list and charts are generated from normalized publication and
-          metrics endpoints. Filtering here does not require manual edits.
+          The archive is intentionally concise and searchable. Use this view when
+          you need bibliographic detail beyond the curated work page.
         </p>
+        <div className="action-row">
+          <Link className="action-link" to="/work#papers">
+            Back to curated papers
+          </Link>
+          <Link className="action-link action-link-primary" to="/proof">
+            Verify source pipeline
+          </Link>
+        </div>
       </section>
 
       <section className="metric-grid">
@@ -134,50 +134,34 @@ export function PublicationsPage() {
           <p className="metric-value">{formatNumber(metrics.citations_total)}</p>
         </article>
         <article className="metric-card">
-          <p className="metric-label">Venues</p>
-          <p className="metric-value">{formatNumber(metrics.top_venues.length)}</p>
-        </article>
-        <article className="metric-card">
-          <p className="metric-label">Topics</p>
-          <p className="metric-value">{formatNumber(metrics.topics.length)}</p>
+          <p className="metric-label">Themes</p>
+          <p className="metric-value">{formatNumber(topThemes.length)}</p>
         </article>
       </section>
 
-      <section className="panel">
-        <header className="panel-header">
-          <h2>Citations by Year</h2>
-        </header>
-        <CitationsChart points={metrics.citations_by_year} />
-      </section>
+      {metrics.citations_by_year.length > 0 ? (
+        <section className="panel">
+          <header className="panel-header">
+            <h2>Citations by Year</h2>
+          </header>
+          <CitationsChart points={metrics.citations_by_year} />
+        </section>
+      ) : null}
 
-      <section className="controls-panel">
+      <section className="controls-panel controls-panel-compact">
         <label>
-          Search
+          Search archive
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="title, venue, keyword"
           />
         </label>
-        <label>
-          Year
-          <select
-            value={yearFilter}
-            onChange={(event) => setYearFilter(event.target.value)}
-          >
-            <option value="all">All years</option>
-            {yearOptions.map((year) => (
-              <option key={year} value={year}>
-                {year}
-              </option>
-            ))}
-          </select>
-        </label>
       </section>
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Filtered Publications ({filtered.length})</h2>
+          <h2>Results ({filtered.length})</h2>
         </header>
         <div className="stack-list">
           {filtered.map((publication) => (
@@ -187,44 +171,35 @@ export function PublicationsPage() {
                 {(publication.venue ?? 'Unknown venue') +
                   (publication.year ? ` · ${publication.year}` : '')}
               </p>
+              {publication.summary ? (
+                <p className="meta-line">{publication.summary}</p>
+              ) : null}
               <p className="meta-line">
                 Citations {formatNumber(publication.citation_count)} · Authors{' '}
                 {publication.authors.slice(0, 4).join(', ')}
               </p>
-              <p className="meta-line">{publication.keywords.join(' · ')}</p>
-              {publication.url ? (
-                <p className="meta-line">
-                  <a href={publication.url} target="_blank" rel="noreferrer">
-                    Open publication
-                  </a>
-                </p>
-              ) : null}
+              <p className="meta-line">
+                {publication.keywords.slice(0, 4).join(' · ')}
+                {publication.url ? (
+                  <>
+                    {' '}
+                    ·{' '}
+                    <a href={publication.url} target="_blank" rel="noreferrer">
+                      Read paper
+                    </a>
+                  </>
+                ) : null}
+              </p>
             </article>
           ))}
         </div>
       </section>
 
-      <section className="panel">
-        <header className="panel-header">
-          <h2>Top Venues</h2>
-        </header>
-        <p className="tag-cloud">
-          {metrics.top_venues.map((venue) => `${venue.venue} (${venue.works})`).join(' · ')}
-        </p>
-      </section>
-
-      <section className="panel">
-        <header className="panel-header">
-          <h2>Top Topics</h2>
-        </header>
-        <p className="tag-cloud">
-          {metrics.topics.map((topic) => `${topic.topic} (${topic.count})`).join(' · ')}
-        </p>
-      </section>
-
       <section className="panel panel-note">
-        <p>Publication source: {publications.source}</p>
-        {publications.warning ? <p>{publications.warning}</p> : null}
+        <p className="meta-line">
+          Source {publications.source}
+          {publications.warning ? ` · ${publications.warning}` : ''}
+        </p>
       </section>
     </div>
   )
