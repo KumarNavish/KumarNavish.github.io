@@ -358,6 +358,11 @@ function App() {
         leadTimeReduction ?? 0
       }% faster cycle`
     : null
+  const valueSentence = result
+    ? `Cycle time ${formatDays(beforeCycleTime)} to ${formatDays(afterCycleTime)} | ${beforeManualSteps} to ${
+        afterManualSteps ?? 0
+      } touchpoints | ${impactSnapshot?.monthlyHoursSaved ?? 0}h capacity recovered each month.`
+    : null
 
   const jiraFields =
     result && typeof result.exports.jira_issue_create.fields === 'object'
@@ -484,6 +489,26 @@ function App() {
   const categoryDefinition = result
     ? catalog?.categories.find((item) => item.id === result.triage.category) ?? null
     : null
+
+  async function copyKickoffBrief() {
+    if (!result) {
+      return
+    }
+
+    const kickoffBrief = {
+      workflow: result.sample.title,
+      value_summary: valueSentence,
+      immediate_action: result.triage.next_action,
+      first_week_plan: improvePlan.slice(0, 3),
+      controls: controlPlan,
+      handoff: {
+        jira: result.exports.jira_issue_create,
+        servicenow: result.exports.servicenow_record_create,
+      },
+    }
+
+    await copyJson('Kickoff brief', kickoffBrief)
+  }
 
   return (
     <main className="page-shell">
@@ -664,21 +689,54 @@ function App() {
                 <span>Open full packet details</span>
                 <small>Diagnose, redesign, control, and handoff artifacts</small>
               </summary>
-              <section className="details-intro">
-                <article className="intro-card">
-                  <span>Priority</span>
-                  <strong>
-                    {result.triage.priority} | {prettyCategory(result.triage.risk_level)}
-                  </strong>
+              <section className="details-value">
+                <article className="value-banner">
+                  <p className="detail-step">At a glance</p>
+                  <h3>This packet is ready for execution</h3>
+                  <p>{valueSentence}</p>
                 </article>
-                <article className="intro-card">
-                  <span>Recommended next action</span>
-                  <strong>{result.triage.next_action}</strong>
-                </article>
-                <article className="intro-card">
-                  <span>Target gain</span>
-                  <strong>{outcomeHeadline}</strong>
-                </article>
+                <div className="quick-start-grid">
+                  <article className="quick-start-card">
+                    <p className="detail-step">Do this now</p>
+                    <h3>Immediate next actions</h3>
+                    <ol className="quick-list">
+                      <li>{result.triage.next_action}</li>
+                      {improvePlan.slice(0, 2).map((item) => (
+                        <li key={item.id}>
+                          {item.step} ({item.owner})
+                        </li>
+                      ))}
+                    </ol>
+                  </article>
+                  <article className="quick-start-card">
+                    <p className="detail-step">Send this</p>
+                    <h3>Handoff ready</h3>
+                    <div className="quick-chips">
+                      <span>Jira payload ready</span>
+                      <span>ServiceNow payload ready</span>
+                      <span>Tracker row ready</span>
+                    </div>
+                    <div className="actions-row compact-actions">
+                      <button className="secondary-btn" onClick={() => copyKickoffBrief()}>
+                        Copy kickoff brief
+                      </button>
+                      <button className="secondary-btn" onClick={() => exportTicketBundle()}>
+                        Download exports
+                      </button>
+                    </div>
+                  </article>
+                  <article className="quick-start-card">
+                    <p className="detail-step">Watch this</p>
+                    <h3>Control priorities</h3>
+                    <ul className="quick-list">
+                      {controlPlan.slice(0, 3).map((item) => (
+                        <li key={item.metric}>
+                          {item.metric} ({item.frequency})
+                        </li>
+                      ))}
+                    </ul>
+                  </article>
+                </div>
               </section>
               <section className="details-grid">
                 <article className="detail-card">
