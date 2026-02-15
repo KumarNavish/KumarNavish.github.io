@@ -443,6 +443,54 @@ button:disabled {
   background: #fcfdff;
 }
 
+.packet-details summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  padding: 0.1rem 0.08rem;
+}
+
+.packet-details summary span {
+  font-size: 0.92rem;
+}
+
+.packet-details summary small {
+  font-size: 0.77rem;
+  font-weight: 500;
+  color: #5c789b;
+  text-align: right;
+}
+
+.details-intro {
+  margin-top: 0.6rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.46rem;
+}
+
+.intro-card {
+  border: 1px solid #dce7f3;
+  border-radius: 10px;
+  background: #f7fbff;
+  padding: 0.5rem;
+  display: grid;
+  gap: 0.12rem;
+}
+
+.intro-card span {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #577497;
+}
+
+.intro-card strong {
+  font-size: 0.84rem;
+  color: #21456f;
+  line-height: 1.34;
+}
+
 .details-grid {
   margin-top: 0.62rem;
   display: grid;
@@ -458,8 +506,21 @@ button:disabled {
   border-radius: var(--radius-sm);
 }
 
+.detail-step {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #5f7c9f;
+}
+
 .detail-card.span-2 {
   grid-column: 1 / -1;
+}
+
+.detail-card > .secondary-btn {
+  justify-self: start;
 }
 
 .detail-list {
@@ -491,6 +552,11 @@ button:disabled {
 
 .detail-list.compact {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.map-stack {
+  display: grid;
+  gap: 0.45rem;
 }
 
 .copy-group {
@@ -536,6 +602,7 @@ button:disabled {
 
   .impact-grid,
   .handoff-grid,
+  .details-intro,
   .details-grid,
   .detail-list.compact {
     grid-template-columns: 1fr;
