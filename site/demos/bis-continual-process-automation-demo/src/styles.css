@@ -462,33 +462,76 @@ button:disabled {
   text-align: right;
 }
 
-.details-intro {
+.details-value {
   margin-top: 0.6rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.value-banner {
+  border: 1px solid #d6e3f2;
+  border-radius: 11px;
+  background: #f2f8ff;
+  padding: 0.58rem;
+  display: grid;
+  gap: 0.18rem;
+}
+
+.value-banner p {
+  color: #2f5079;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.quick-start-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.46rem;
 }
 
-.intro-card {
+.quick-start-card {
   border: 1px solid #dce7f3;
   border-radius: 10px;
-  background: #f7fbff;
+  background: #fbfdff;
   padding: 0.5rem;
   display: grid;
-  gap: 0.12rem;
+  gap: 0.26rem;
 }
 
-.intro-card span {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #577497;
+.quick-start-card h3 {
+  font-size: 0.9rem;
+  color: #24486f;
 }
 
-.intro-card strong {
-  font-size: 0.84rem;
-  color: #21456f;
-  line-height: 1.34;
+.quick-list {
+  margin: 0;
+  padding-left: 1.03rem;
+  display: grid;
+  gap: 0.24rem;
+}
+
+.quick-list li {
+  color: #2f4f78;
+  font-size: 0.82rem;
+}
+
+.quick-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+}
+
+.quick-chips span {
+  border: 1px solid #d7e4f2;
+  border-radius: 999px;
+  padding: 0.16rem 0.44rem;
+  font-size: 0.75rem;
+  color: #355b88;
+  background: #f4f8ff;
+}
+
+.compact-actions {
+  gap: 0.34rem;
 }
 
 .details-grid {
@@ -602,7 +645,7 @@ button:disabled {
 
   .impact-grid,
   .handoff-grid,
-  .details-intro,
+  .quick-start-grid,
   .details-grid,
   .detail-list.compact {
     grid-template-columns: 1fr;
