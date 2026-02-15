@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 
-import { MermaidDiagram } from './components/MermaidDiagram'
 import { loadCategoryCatalog, loadIntakeSamples } from './domain/loadData'
 import { runIntakePipeline, type PipelineResult } from './domain/pipeline'
 import type { CategoryCatalog, IntakeSample } from './domain/types'
@@ -44,6 +43,13 @@ interface ControlPlanItem {
   owner: string
   frequency: string
   trigger: string
+}
+
+interface FlowComparisonRow {
+  stage: string
+  before: string
+  after: string
+  gain: string
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -316,6 +322,43 @@ function buildAutomatedFlowSteps(result: PipelineResult): string[] {
   ]
 }
 
+function buildFlowComparison(result: PipelineResult): FlowComparisonRow[] {
+  const approverChain = result.extracted.approval_roles.join(', ') || 'multiple approvers'
+
+  return [
+    {
+      stage: 'Intake',
+      before: `Request arrives via ${result.sample.channel} with variable quality.`,
+      after: 'Unified intake with required fields and policy checks.',
+      gain: 'Fewer back-and-forth loops.',
+    },
+    {
+      stage: 'Triage',
+      before: `Manual routing based on analyst judgment (${result.triage.category}).`,
+      after: `Automatic classification into ${prettyCategory(result.triage.category)} workflow.`,
+      gain: 'Consistent routing in seconds.',
+    },
+    {
+      stage: 'Data prep',
+      before: `Data chase across tools (${result.extracted.manual_step_count} touchpoints).`,
+      after: 'Checklist and completeness validation before approvals.',
+      gain: 'Rework removed.',
+    },
+    {
+      stage: 'Approvals',
+      before: `Sequential handoffs through ${approverChain}.`,
+      after: 'Policy-driven approval orchestration with SLA timers.',
+      gain: 'Faster approvals with escalation safety.',
+    },
+    {
+      stage: 'Closure',
+      before: 'Manual status updates and weak audit visibility.',
+      after: 'Closed-loop updates to tracker plus audit trail.',
+      gain: 'Execution visibility by default.',
+    },
+  ]
+}
+
 function App() {
   const [samples, setSamples] = useState<IntakeSample[]>([])
   const [catalog, setCatalog] = useState<CategoryCatalog | null>(null)
@@ -510,6 +553,7 @@ function App() {
     : null
   const manualFlowSteps = result ? buildManualFlowSteps(result) : []
   const automatedFlowSteps = result ? buildAutomatedFlowSteps(result) : []
+  const flowComparisonRows = result ? buildFlowComparison(result) : []
   const removedTouchpoints = result ? Math.max(0, beforeManualSteps - (afterManualSteps ?? beforeManualSteps)) : 0
 
   async function copyKickoffBrief() {
@@ -538,7 +582,7 @@ function App() {
         <p className="eyebrow">BIS Process Optimisation Copilot</p>
         <h1>Turn one manual workflow into an execution-ready automation handoff.</h1>
         <p className="hero-subtitle">
-          Choose a real BIS request. In one run, get a charter, a future process map, and payloads ready for Jira and
+          Choose a real BIS request. In one run, get a charter, a redesigned workflow, and payloads ready for Jira and
           ServiceNow.
         </p>
       </header>
@@ -698,7 +742,7 @@ function App() {
               <h2>Four deliverables, instantly</h2>
               <ul className="artifact-list">
                 <li>Clear charter with baseline and target</li>
-                <li>As-is and to-be process maps</li>
+                <li>Before/after workflow redesign</li>
                 <li>Blueprint with controls and monitoring</li>
                 <li>Execution payloads for internal tools</li>
               </ul>
@@ -835,6 +879,9 @@ function App() {
                 <article className="detail-card span-2 process-delta">
                   <p className="detail-step">4. Process transformation</p>
                   <h3>Before vs after workflow</h3>
+                  <p className="integration-note">
+                    This is the operational redesign your team can execute immediately.
+                  </p>
                   <div className="delta-grid">
                     <section className="delta-column">
                       <p className="delta-label">Before (manual)</p>
@@ -858,13 +905,22 @@ function App() {
                     <span>{leadTimeReduction ?? 0}% faster cycle</span>
                     <span>{impactSnapshot?.monthlyHoursSaved ?? 0}h capacity recovered each month</span>
                   </div>
-                  <details className="technical-maps">
-                    <summary>View technical Mermaid diagrams</summary>
-                    <div className="technical-grid">
-                      <MermaidDiagram title="As-is process map" chart={result.asIsMermaid} />
-                      <MermaidDiagram title="To-be process map" chart={result.toBeMermaid} />
+                  <div className="delta-table" role="table" aria-label="Workflow transformation table">
+                    <div className="delta-table-header" role="row">
+                      <span>Stage</span>
+                      <span>Before</span>
+                      <span>After</span>
+                      <span>Business gain</span>
                     </div>
-                  </details>
+                    {flowComparisonRows.map((row) => (
+                      <div key={row.stage} className="delta-table-row" role="row">
+                        <span>{row.stage}</span>
+                        <span>{row.before}</span>
+                        <span>{row.after}</span>
+                        <span>{row.gain}</span>
+                      </div>
+                    ))}
+                  </div>
                 </article>
 
                 <article className="detail-card span-2">

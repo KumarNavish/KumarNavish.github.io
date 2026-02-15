@@ -653,40 +653,51 @@ button:disabled {
   font-weight: 600;
 }
 
-.technical-maps {
-  border: 1px dashed #cad8e8;
+.delta-table {
+  border: 1px solid #d7e4f2;
   border-radius: 10px;
-  padding: 0.5rem;
-  background: #fafcff;
+  overflow: hidden;
+  background: #fff;
 }
 
-.technical-maps summary {
-  list-style: none;
-  cursor: pointer;
-  font-size: 0.84rem;
-  font-weight: 600;
-  color: #2e4f75;
-}
-
-.technical-maps summary::-webkit-details-marker {
-  display: none;
-}
-
-.technical-maps summary::after {
-  content: '+';
-  float: right;
-  color: #6583a8;
-}
-
-.technical-maps[open] summary::after {
-  content: '-';
-}
-
-.technical-grid {
-  margin-top: 0.5rem;
+.delta-table-header,
+.delta-table-row {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.45rem;
+  grid-template-columns: 120px minmax(0, 1fr) minmax(0, 1fr) 180px;
+  gap: 0.44rem;
+  padding: 0.45rem 0.5rem;
+}
+
+.delta-table-header {
+  background: #f1f6fd;
+  border-bottom: 1px solid #d7e4f2;
+}
+
+.delta-table-header span {
+  font-size: 0.71rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 700;
+  color: #577497;
+}
+
+.delta-table-row {
+  border-bottom: 1px solid #edf2f8;
+}
+
+.delta-table-row:last-child {
+  border-bottom: 0;
+}
+
+.delta-table-row span {
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: #2f4f78;
+}
+
+.delta-table-row span:first-child {
+  font-weight: 700;
+  color: #20456f;
 }
 
 .copy-group {
@@ -742,8 +753,12 @@ button:disabled {
   .quick-start-grid,
   .details-grid,
   .delta-grid,
-  .technical-grid,
   .detail-list.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .delta-table-header,
+  .delta-table-row {
     grid-template-columns: 1fr;
   }
 
