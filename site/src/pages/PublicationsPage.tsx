@@ -128,16 +128,16 @@ export function PublicationsPage() {
     <div className="page">
       <section className="hero">
         <p className="eyebrow">Publications Archive</p>
-        <h1>Publication record with quick signal extraction.</h1>
+        <h1>Publication evidence, structured for quick interpretation.</h1>
         <p className="hero-copy">
-          Search by topic or venue, then validate impact through citations and trend context.
+          Filter by topic or venue, then inspect impact through citation and trend context.
         </p>
         <div className="action-row">
           <Link className="action-link" to="/work">
             Back to case studies
           </Link>
           <Link className="action-link action-link-primary" to="/">
-            Decision Builder
+            Overview
           </Link>
         </div>
       </section>
@@ -179,7 +179,7 @@ export function PublicationsPage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Publications ({filtered.length})</h2>
+          <h2>Publication List ({filtered.length})</h2>
         </header>
         <div className="stack-list">
           {filtered.map((publication) => (

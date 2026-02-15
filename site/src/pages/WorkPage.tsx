@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import {
@@ -9,6 +9,7 @@ import {
   type PublicationItem,
 } from '../lib/api'
 import { formatDateTime, formatNumber } from '../lib/formatters'
+import { simulateLastMilePlan } from '../lib/lastMileSimulator'
 import { useResource } from '../lib/useResource'
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks'
 
@@ -113,7 +114,20 @@ function buildOutcomeSignal(
   return 'Decision logic documented and reviewable in this case.'
 }
 
+function formatPercent(value: number): string {
+  return `${(value * 100).toFixed(1)}%`
+}
+
+function formatSignedPercent(value: number): string {
+  const formatted = (value * 100).toFixed(1)
+  return `${value > 0 ? '+' : ''}${formatted}%`
+}
+
 export function WorkPage() {
+  const [demandVolatility, setDemandVolatility] = useState(0.38)
+  const [bikeLaneCoverage, setBikeLaneCoverage] = useState(0.57)
+  const [serviceLevelTarget, setServiceLevelTarget] = useState(0.95)
+
   const loadWork = useCallback(
     () =>
       Promise.all([fetchProfileApi(), fetchProjectsApi(), fetchPublicationsApi()]).then(
@@ -140,6 +154,16 @@ export function WorkPage() {
       publication: findMatchedPublication(data.publications.items, definition.publicationMatcher),
     }))
   }, [state.data])
+
+  const logisticsSimulation = useMemo(
+    () =>
+      simulateLastMilePlan({
+        demand_volatility: demandVolatility,
+        bike_lane_coverage: bikeLaneCoverage,
+        service_level_target: serviceLevelTarget,
+      }),
+    [bikeLaneCoverage, demandVolatility, serviceLevelTarget],
+  )
 
   const featuredProjects = useMemo(() => {
     const data = state.data
@@ -184,9 +208,9 @@ export function WorkPage() {
     <div className="page">
       <section className="hero">
         <p className="eyebrow">Case Studies</p>
-        <h1>Applied decisions backed by code and evidence.</h1>
+        <h1>Applied decisions, backed by working artifacts.</h1>
         <p className="hero-copy">
-          Each case is structured the same way: decision, build, evidence, and outcome.
+          Each case connects one decision to implementation, evidence, and practical outcome.
         </p>
       </section>
 
@@ -263,6 +287,93 @@ export function WorkPage() {
                   </p>
                 </div>
               </div>
+              {caseStudy.id === 'urban-transition-planning' ? (
+                <section className="case-demo-shell" aria-label="Last-mile logistics simulator">
+                  <header className="case-demo-head">
+                    <p className="matrix-label">In-context simulation</p>
+                    <h4>Last-mile transition planner</h4>
+                    <p className="meta-line">
+                      Adjust three constraints and inspect a rollout plan immediately.
+                    </p>
+                  </header>
+
+                  <div className="case-demo-grid">
+                    <label className="case-demo-slider">
+                      Demand volatility ({formatPercent(demandVolatility)})
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.01"
+                        value={demandVolatility}
+                        onChange={(event) => setDemandVolatility(Number(event.target.value))}
+                      />
+                    </label>
+
+                    <label className="case-demo-slider">
+                      Bike-lane coverage ({formatPercent(bikeLaneCoverage)})
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.01"
+                        value={bikeLaneCoverage}
+                        onChange={(event) => setBikeLaneCoverage(Number(event.target.value))}
+                      />
+                    </label>
+
+                    <label className="case-demo-slider">
+                      Service-level target ({formatPercent(serviceLevelTarget)})
+                      <input
+                        type="range"
+                        min="0.9"
+                        max="0.99"
+                        step="0.005"
+                        value={serviceLevelTarget}
+                        onChange={(event) => setServiceLevelTarget(Number(event.target.value))}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="case-demo-outcomes">
+                    <article className="case-demo-card">
+                      <p className="matrix-label">Fleet split</p>
+                      <p className="case-demo-value">
+                        {formatPercent(logisticsSimulation.bike_share)} bikes ·{' '}
+                        {formatPercent(logisticsSimulation.van_share)} vans
+                      </p>
+                    </article>
+                    <article className="case-demo-card">
+                      <p className="matrix-label">Expected reliability</p>
+                      <p className="case-demo-value">
+                        {formatPercent(logisticsSimulation.expected_reliability)}
+                      </p>
+                    </article>
+                    <article className="case-demo-card">
+                      <p className="matrix-label">Cost delta vs van baseline</p>
+                      <p className="case-demo-value">
+                        {formatSignedPercent(logisticsSimulation.cost_delta_vs_van_baseline)}
+                      </p>
+                    </article>
+                    <article className="case-demo-card">
+                      <p className="matrix-label">Emissions reduction</p>
+                      <p className="case-demo-value">
+                        {formatPercent(logisticsSimulation.emissions_reduction)}
+                      </p>
+                    </article>
+                  </div>
+
+                  <div className="case-demo-plan">
+                    <p className="matrix-label">Suggested first wave</p>
+                    <ol className="case-demo-list">
+                      {logisticsSimulation.first_wave.map((region) => (
+                        <li key={region}>{region}</li>
+                      ))}
+                    </ol>
+                    <p className="meta-line">{logisticsSimulation.rationale}</p>
+                  </div>
+                </section>
+              ) : null}
             </article>
           ))}
         </div>
@@ -270,7 +381,7 @@ export function WorkPage() {
 
       <section id="systems" className="panel">
         <header className="panel-header">
-          <h2>Implementation References</h2>
+          <h2>Supporting Repositories</h2>
         </header>
         <div className="card-grid">
           {featuredProjects.map((project) => (
@@ -299,7 +410,7 @@ export function WorkPage() {
 
       <section id="archives" className="panel">
         <header className="panel-header">
-          <h2>Need Full Archives?</h2>
+          <h2>Explore Full Archives</h2>
         </header>
         <div className="action-row">
           <Link className="action-link" to="/projects">
@@ -309,7 +420,7 @@ export function WorkPage() {
             Publication archive
           </Link>
           <Link className="action-link action-link-primary" to="/">
-            Decision Builder
+            Overview
           </Link>
         </div>
         <p className="meta-line">

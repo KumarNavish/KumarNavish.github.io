@@ -755,6 +755,81 @@ a:hover {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.case-demo-shell {
+  margin-top: 0.86rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent-soft) 52%, #faf9f5);
+  padding: 0.9rem 0.96rem;
+  display: grid;
+  gap: 0.72rem;
+}
+
+.case-demo-head h4 {
+  margin: 0.36rem 0 0;
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 1.06rem;
+  line-height: 1.3;
+}
+
+.case-demo-head .meta-line {
+  margin-top: 0.42rem;
+}
+
+.case-demo-grid {
+  display: grid;
+  gap: 0.56rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.case-demo-slider {
+  display: grid;
+  gap: 0.24rem;
+  color: var(--muted);
+  font-size: 0.73rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.case-demo-slider input[type='range'] {
+  width: 100%;
+}
+
+.case-demo-outcomes {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.case-demo-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fefdf9;
+  padding: 0.64rem 0.7rem;
+}
+
+.case-demo-value {
+  margin: 0.38rem 0 0;
+  font-family: 'Fraunces', Georgia, serif;
+  font-size: 1.08rem;
+  line-height: 1.24;
+}
+
+.case-demo-plan {
+  border-top: 1px solid var(--line);
+  padding-top: 0.58rem;
+}
+
+.case-demo-list {
+  margin: 0.46rem 0 0;
+  padding-left: 1rem;
+  color: var(--muted);
+}
+
+.case-demo-list li + li {
+  margin-top: 0.2rem;
+}
+
 .matrix-label {
   margin: 0;
   color: var(--muted);
@@ -884,6 +959,11 @@ a:hover {
   }
 
   .case-matrix {
+    grid-template-columns: 1fr;
+  }
+
+  .case-demo-grid,
+  .case-demo-outcomes {
     grid-template-columns: 1fr;
   }
 
