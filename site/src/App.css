@@ -98,31 +98,31 @@ a:hover {
 
 .content-shell {
   width: min(var(--max-width), 92vw);
-  margin: 2.1rem auto 3.6rem;
+  margin: 2.4rem auto 4.1rem;
 }
 
 .page {
   display: grid;
-  gap: 1.25rem;
+  gap: 1.35rem;
 }
 
 .builder-page {
-  gap: 1.6rem;
+  gap: 1.45rem;
 }
 
 .hero {
-  padding: 1.85rem;
+  padding: 1.95rem;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--bg-elevated);
 }
 
 .hero-primary {
-  padding: 2.15rem;
+  padding: 2.25rem;
 }
 
 .builder-hero {
-  padding: 2.4rem;
+  padding: 2.5rem;
 }
 
 .builder-stat-row {
@@ -167,17 +167,17 @@ a:hover {
 .hero h1 {
   margin: 0.6rem 0 0;
   font-family: 'Fraunces', Georgia, serif;
-  font-size: clamp(1.9rem, 3.4vw, 2.95rem);
-  line-height: 1.12;
-  letter-spacing: -0.014em;
+  font-size: clamp(2rem, 3.35vw, 3.05rem);
+  line-height: 1.1;
+  letter-spacing: -0.016em;
 }
 
 .hero-copy {
-  margin: 1rem 0 0;
+  margin: 0.92rem 0 0;
   color: var(--muted);
-  max-width: 64ch;
-  line-height: 1.58;
-  font-size: 1.02rem;
+  max-width: 60ch;
+  line-height: 1.62;
+  font-size: 1rem;
 }
 
 .pill-row {
@@ -203,10 +203,10 @@ a:hover {
 }
 
 .action-row {
-  margin-top: 1.15rem;
+  margin-top: 1.2rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.62rem;
+  gap: 0.7rem;
 }
 
 .action-link {
@@ -214,10 +214,10 @@ a:hover {
   align-items: center;
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 0.5rem 0.94rem;
+  padding: 0.52rem 1rem;
   background: #faf9f4;
   color: var(--muted);
-  font-size: 0.84rem;
+  font-size: 0.83rem;
   letter-spacing: 0.03em;
   text-decoration: none;
   cursor: pointer;
@@ -239,7 +239,7 @@ a:hover {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--bg-elevated);
-  padding: 1.2rem 1.25rem;
+  padding: 1.28rem 1.36rem;
 }
 
 .panel-note {
@@ -251,13 +251,13 @@ a:hover {
   justify-content: space-between;
   align-items: baseline;
   gap: 0.7rem;
-  margin-bottom: 0.74rem;
+  margin-bottom: 0.86rem;
 }
 
 .panel-header h2 {
   margin: 0;
   font-family: 'Fraunces', Georgia, serif;
-  font-size: 1.08rem;
+  font-size: 1.12rem;
   font-weight: 600;
 }
 
@@ -1000,73 +1000,90 @@ a:hover {
 
 /* Overview redesign: integrated interactive proof flow */
 .overview-flow {
-  gap: 1rem;
+  gap: 1.2rem;
 }
 
 .overview-hero {
-  padding: 2.2rem;
+  padding: 2.5rem;
 }
 
 .overview-hero h1 {
-  max-width: 18ch;
+  max-width: 16.8ch;
 }
 
 .overview-hero .hero-copy {
-  max-width: 54ch;
+  max-width: 50ch;
 }
 
 .overview-fact-row {
-  margin-top: 1.2rem;
+  margin-top: 1.35rem;
   display: grid;
-  gap: 0.8rem;
+  gap: 0.92rem;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   max-width: 760px;
 }
 
 .overview-fact {
   border-top: 1px solid var(--line);
-  padding-top: 0.64rem;
+  padding-top: 0.72rem;
 }
 
 .overview-fact p {
-  margin: 0.32rem 0 0;
-  font-size: 0.93rem;
+  margin: 0.38rem 0 0;
+  font-size: 0.95rem;
+  line-height: 1.45;
 }
 
 .scenario-panel {
   display: grid;
-  gap: 0.72rem;
+  gap: 0.85rem;
 }
 
 .scenario-claim {
   margin: 0;
-  font-size: 0.97rem;
-  line-height: 1.45;
+  max-width: 64ch;
+  font-size: 1rem;
+  line-height: 1.5;
 }
 
 .scenario-context {
   margin: 0;
   border-left: 2px solid color-mix(in srgb, var(--accent) 30%, var(--line));
-  padding-left: 0.72rem;
+  padding-left: 0.84rem;
   color: var(--muted);
-  line-height: 1.55;
+  line-height: 1.6;
+  max-width: 70ch;
 }
 
 .proof-focus-panel {
   display: grid;
-  gap: 0.74rem;
+  gap: 0.9rem;
 }
 
 .proof-focus-header h2 {
-  margin: 0.4rem 0 0;
+  margin: 0.46rem 0 0;
   font-family: 'Fraunces', Georgia, serif;
-  font-size: 1.24rem;
-  line-height: 1.32;
+  font-size: 1.32rem;
+  line-height: 1.29;
+  letter-spacing: -0.008em;
+}
+
+.proof-focus-panel .clplo-toolbar {
+  gap: 0.58rem;
+}
+
+.proof-focus-panel .proof-chart-card {
+  padding: 0.82rem 0.9rem 0.74rem;
+}
+
+.proof-focus-panel .proof-legend {
+  margin-top: 0.62rem;
+  gap: 0.72rem;
 }
 
 .proof-stat-grid {
   display: grid;
-  gap: 0.66rem;
+  gap: 0.74rem;
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
@@ -1074,40 +1091,90 @@ a:hover {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: #fcfbf7;
-  padding: 0.66rem 0.72rem;
+  padding: 0.76rem 0.82rem;
 }
 
 .proof-stat-main {
-  margin: 0.38rem 0 0;
+  margin: 0.42rem 0 0;
   font-family: 'Fraunces', Georgia, serif;
-  font-size: 1.08rem;
+  font-size: 1.14rem;
   line-height: 1.2;
 }
 
 .compact-proof-grid {
   display: grid;
-  gap: 0.8rem;
+  gap: 0.9rem;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .proof-module-tight {
-  padding: 0.92rem 0.98rem;
+  padding: 1.04rem 1.08rem;
+  gap: 0.78rem;
 }
 
 .proof-module-tight h2 {
-  font-size: 1rem;
-  line-height: 1.35;
+  font-size: 1.03rem;
+  line-height: 1.33;
+}
+
+.proof-module-tight .proof-control-stack {
+  gap: 0.5rem;
+}
+
+.proof-module-tight .proof-control-stack label {
+  gap: 0.28rem;
+}
+
+.proof-module-tight .proof-metric-grid {
+  gap: 0.72rem;
+}
+
+.proof-module-tight .proof-metric-card {
+  padding: 0.72rem 0.78rem;
+}
+
+.proof-module-tight .proof-metric-main {
+  margin-top: 0.42rem;
+  font-size: 1.2rem;
+}
+
+.proof-module-tight .proof-rank-list {
+  line-height: 1.5;
 }
 
 .outcome-panel {
   display: grid;
-  gap: 0.82rem;
+  gap: 0.96rem;
 }
 
 .outcome-grid {
   display: grid;
-  gap: 0.8rem;
+  gap: 0.88rem;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.outcome-panel .builder-primary-card {
+  padding: 1.08rem 1.14rem;
+}
+
+.outcome-panel .builder-primary-card h3 {
+  margin-top: 0.5rem;
+  font-size: 1.24rem;
+  line-height: 1.31;
+}
+
+.outcome-panel .builder-block {
+  padding: 0.96rem 1.02rem;
+}
+
+.outcome-panel .builder-ordered-list {
+  margin-top: 0.62rem;
+  line-height: 1.58;
+}
+
+.proof-claim-line {
+  font-size: 0.88rem;
+  line-height: 1.56;
 }
 
 @media (max-width: 980px) {
@@ -1116,5 +1183,30 @@ a:hover {
   .compact-proof-grid,
   .outcome-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .overview-flow {
+    gap: 0.92rem;
+  }
+
+  .overview-hero {
+    padding: 1.55rem;
+  }
+
+  .overview-hero h1 {
+    font-size: clamp(1.75rem, 8vw, 2.2rem);
+    line-height: 1.14;
+  }
+
+  .proof-focus-header h2 {
+    font-size: 1.16rem;
+  }
+
+  .proof-stat-card,
+  .proof-module-tight,
+  .outcome-panel .builder-block {
+    padding: 0.9rem;
   }
 }
