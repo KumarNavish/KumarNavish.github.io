@@ -99,7 +99,7 @@ export function ProjectsPage() {
     <div className="page">
       <section className="hero">
         <p className="eyebrow">Projects Archive</p>
-        <h1>Project record, prioritized for fast review.</h1>
+        <h1>Implementation archive, curated for signal.</h1>
         <p className="hero-copy">
           High-signal systems first. Expand only when you need full history.
         </p>
@@ -108,14 +108,14 @@ export function ProjectsPage() {
             Back to case studies
           </Link>
           <Link className="action-link action-link-primary" to="/">
-            Decision Builder
+            Overview
           </Link>
         </div>
       </section>
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Highlighted Systems ({featured.length})</h2>
+          <h2>Featured Systems ({featured.length})</h2>
         </header>
         {themeSummary.length > 0 ? <p className="tag-cloud">{themeSummary.join(' · ')}</p> : null}
         <div className="card-grid">
@@ -145,7 +145,7 @@ export function ProjectsPage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Full Archive</h2>
+          <h2>Extended Archive</h2>
           <button
             type="button"
             className="action-link"
