@@ -660,10 +660,30 @@ function App() {
 
           {result ? (
             <details className="packet-details">
-              <summary>Open full packet details</summary>
+              <summary>
+                <span>Open full packet details</span>
+                <small>Diagnose, redesign, control, and handoff artifacts</small>
+              </summary>
+              <section className="details-intro">
+                <article className="intro-card">
+                  <span>Priority</span>
+                  <strong>
+                    {result.triage.priority} | {prettyCategory(result.triage.risk_level)}
+                  </strong>
+                </article>
+                <article className="intro-card">
+                  <span>Recommended next action</span>
+                  <strong>{result.triage.next_action}</strong>
+                </article>
+                <article className="intro-card">
+                  <span>Target gain</span>
+                  <strong>{outcomeHeadline}</strong>
+                </article>
+              </section>
               <section className="details-grid">
                 <article className="detail-card">
-                  <h3>Charter</h3>
+                  <p className="detail-step">1. Diagnose and scope</p>
+                  <h3>Charter summary</h3>
                   <ul className="detail-list">
                     <li>
                       <strong>Problem</strong>
@@ -686,10 +706,32 @@ function App() {
                       <span>{metricToText(result.charter.target_metrics.cycle_time_days_target)}</span>
                     </li>
                   </ul>
+                  <button className="secondary-btn" onClick={() => copyJson('Charter', result.charter)}>
+                    Copy charter JSON
+                  </button>
                 </article>
 
                 <article className="detail-card">
-                  <h3>Root causes and controls</h3>
+                  <p className="detail-step">2. Redesign and implementation</p>
+                  <h3>Improvement actions</h3>
+                  <ul className="detail-list">
+                    {improvePlan.map((item) => (
+                      <li key={item.id}>
+                        <strong>{item.step}</strong>
+                        <span>
+                          {item.expectedEffect} | Owner: {item.owner}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <button className="secondary-btn" onClick={() => copyJson('Automation blueprint', result.blueprint)}>
+                    Copy blueprint JSON
+                  </button>
+                </article>
+
+                <article className="detail-card">
+                  <p className="detail-step">3. Risk controls</p>
+                  <h3>Root causes and monitoring</h3>
                   <ul className="detail-list">
                     {rootCauses.map((cause) => (
                       <li key={cause.cause}>
@@ -710,11 +752,15 @@ function App() {
                   </ul>
                 </article>
 
-                <MermaidDiagram title="As-is process map" chart={result.asIsMermaid} />
-                <MermaidDiagram title="To-be process map" chart={result.toBeMermaid} />
+                <section className="map-stack">
+                  <p className="detail-step">4. Process maps</p>
+                  <MermaidDiagram title="As-is process map" chart={result.asIsMermaid} />
+                  <MermaidDiagram title="To-be process map" chart={result.toBeMermaid} />
+                </section>
 
                 <article className="detail-card span-2">
-                  <h3>Export preview</h3>
+                  <p className="detail-step">5. External handoff</p>
+                  <h3>Export payload preview</h3>
                   <ul className="detail-list compact">
                     <li>
                       <strong>Jira summary</strong>
@@ -753,6 +799,9 @@ function App() {
                       Copy tracker JSON
                     </button>
                   </div>
+                  <p className="integration-note">
+                    Use these payloads as starter objects for your issue tracker and process registry.
+                  </p>
                 </article>
               </section>
             </details>
