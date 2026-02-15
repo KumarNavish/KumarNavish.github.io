@@ -88,7 +88,7 @@ export function DashboardPage() {
   const [risk, setRisk] = useState<RiskId>('balanced')
   const [context, setContext] = useState('')
   const [copyStatus, setCopyStatus] = useState('')
-  const [clPloStatus, setClPloStatus] = useState('Loading live CL-PLO workspace...')
+  const [clPloStatus, setClPloStatus] = useState('Loading CL-PLO run...')
   const [activeClPloPreset, setActiveClPloPreset] = useState<ClPloPresetId>('default')
   const clPloFrameRef = useRef<HTMLIFrameElement | null>(null)
   const clPloAutoRunRef = useRef(false)
@@ -164,6 +164,12 @@ export function DashboardPage() {
     setRisk(preset.risk)
     setContext(preset.context)
     setCopyStatus('')
+
+    if (clPloAutoRunRef.current) {
+      const mappedPreset: ClPloPresetId =
+        preset.id === 'moderation' ? 'stress' : preset.id === 'rollout' ? 'quick' : 'default'
+      window.setTimeout(() => triggerClPloPreset(mappedPreset), 120)
+    }
   }
 
   function triggerClPloPreset(preset: ClPloPresetId, attempt = 0) {
@@ -171,7 +177,7 @@ export function DashboardPage() {
     const frameWindow = frame?.contentWindow
 
     if (!frameWindow) {
-      setClPloStatus('Workspace not ready yet. Try again in a moment.')
+      setClPloStatus('Preparing CL-PLO run...')
       return
     }
 
@@ -182,7 +188,7 @@ export function DashboardPage() {
 
       if (!presetButton || !runButton) {
         if (attempt >= 8) {
-          setClPloStatus('Use the controls inside the workspace if auto-trigger is unavailable.')
+          setClPloStatus('Run controls are available inside the workspace.')
           return
         }
         window.setTimeout(() => triggerClPloPreset(preset, attempt + 1), 220)
@@ -194,18 +200,18 @@ export function DashboardPage() {
       setActiveClPloPreset(preset)
       setClPloStatus(`Running ${preset === 'stress' ? 'Stress+' : preset} scenario...`)
     } catch {
-      setClPloStatus('Interactive controls are available inside the workspace.')
+      setClPloStatus('Run controls are available inside the workspace.')
     }
   }
 
   function handleClPloFrameLoad() {
     if (clPloAutoRunRef.current) {
-      setClPloStatus('Workspace ready. Choose Quick, Default, or Stress+.')
+      setClPloStatus('Live run ready. Switch scenario anytime.')
       return
     }
 
     clPloAutoRunRef.current = true
-    setClPloStatus('Workspace loaded. Running default scenario...')
+    setClPloStatus('Live run ready. Running default scenario...')
     window.setTimeout(() => triggerClPloPreset('default'), 260)
   }
 
@@ -297,51 +303,6 @@ export function DashboardPage() {
             </button>
           ))}
         </div>
-      </section>
-
-      <section className="panel clplo-panel" aria-label="Live CL-PLO run">
-        <header className="panel-header">
-          <h2>Live CL-PLO run</h2>
-          <a className="action-link" href={CL_PLO_WORKSPACE_URL} target="_blank" rel="noreferrer">
-            Open full workspace
-          </a>
-        </header>
-        <p className="meta-line">
-          Start immediately. Choose a mode and the run executes in place with updated charts and decision
-          outputs.
-        </p>
-        <div className="clplo-toolbar" role="group" aria-label="CL-PLO run modes">
-          <button
-            type="button"
-            className={activeClPloPreset === 'quick' ? 'track-chip track-chip-active' : 'track-chip'}
-            onClick={() => triggerClPloPreset('quick')}
-          >
-            Quick
-          </button>
-          <button
-            type="button"
-            className={activeClPloPreset === 'default' ? 'track-chip track-chip-active' : 'track-chip'}
-            onClick={() => triggerClPloPreset('default')}
-          >
-            Default
-          </button>
-          <button
-            type="button"
-            className={activeClPloPreset === 'stress' ? 'track-chip track-chip-active' : 'track-chip'}
-            onClick={() => triggerClPloPreset('stress')}
-          >
-            Stress+
-          </button>
-        </div>
-        <p className="clplo-status">{clPloStatus}</p>
-        <iframe
-          ref={clPloFrameRef}
-          src={CL_PLO_WORKSPACE_URL}
-          title="CL-PLO interactive workspace"
-          className="clplo-frame"
-          loading="lazy"
-          onLoad={handleClPloFrameLoad}
-        />
       </section>
 
       <section className="builder-layout" aria-label="Decision workflow">
@@ -464,6 +425,50 @@ export function DashboardPage() {
                 </span>
               ))}
             </div>
+          </section>
+
+          <section className="builder-validation-shell" aria-label="Live CL-PLO validation">
+            <div className="builder-validation-head">
+              <div>
+                <p className="matrix-label">3. Validate live</p>
+                <h3>Run CL-PLO in place</h3>
+              </div>
+              <a href={CL_PLO_WORKSPACE_URL} target="_blank" rel="noreferrer" className="builder-inline-link">
+                Open full workspace
+              </a>
+            </div>
+            <div className="clplo-toolbar" role="group" aria-label="CL-PLO run modes">
+              <button
+                type="button"
+                className={activeClPloPreset === 'quick' ? 'track-chip track-chip-active' : 'track-chip'}
+                onClick={() => triggerClPloPreset('quick')}
+              >
+                Quick
+              </button>
+              <button
+                type="button"
+                className={activeClPloPreset === 'default' ? 'track-chip track-chip-active' : 'track-chip'}
+                onClick={() => triggerClPloPreset('default')}
+              >
+                Default
+              </button>
+              <button
+                type="button"
+                className={activeClPloPreset === 'stress' ? 'track-chip track-chip-active' : 'track-chip'}
+                onClick={() => triggerClPloPreset('stress')}
+              >
+                Stress+
+              </button>
+            </div>
+            <p className="clplo-status">{clPloStatus}</p>
+            <iframe
+              ref={clPloFrameRef}
+              src={CL_PLO_WORKSPACE_URL}
+              title="CL-PLO interactive workspace"
+              className="clplo-frame"
+              loading="lazy"
+              onLoad={handleClPloFrameLoad}
+            />
           </section>
 
           <div className="builder-plan-columns">
