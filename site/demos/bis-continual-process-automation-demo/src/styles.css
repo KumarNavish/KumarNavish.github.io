@@ -685,7 +685,7 @@ button:disabled {
 .technical-grid {
   margin-top: 0.5rem;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 0.45rem;
 }
 
@@ -698,8 +698,9 @@ button:disabled {
 }
 
 .mermaid-svg svg {
-  min-width: 540px;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   height: auto;
 }
 
