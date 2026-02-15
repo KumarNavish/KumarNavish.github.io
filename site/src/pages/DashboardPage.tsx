@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { fetchProfileApi, fetchProjectsApi, fetchPublicationsApi } from '../lib/api'
@@ -14,6 +14,7 @@ import {
   type HorizonId,
   type RiskId,
 } from '../lib/decisionEngine'
+import { runClPloProof, type ClPloProofConfig, type ProofStrategyId } from '../lib/clploProof'
 import { formatDateTime, formatNumber } from '../lib/formatters'
 import { useResource } from '../lib/useResource'
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks'
@@ -64,13 +65,38 @@ const SCENARIO_PRESETS: ScenarioPreset[] = [
   },
 ]
 
-type ClPloPresetId = 'quick' | 'default' | 'stress'
+type ProofPresetId = 'quick' | 'default' | 'stress'
 
-const CL_PLO_WORKSPACE_URL = 'https://kumarnavish.github.io/CL-PLO/#workspace'
-const CL_PLO_PRESET_BUTTON_IDS: Record<ClPloPresetId, string> = {
-  quick: 'apply-quick',
-  default: 'apply-proposal',
-  stress: 'apply-stress',
+const CL_PLO_PROJECT_URL = 'https://github.com/KumarNavish/CL-PLO'
+
+const PROOF_PRESETS: Record<ProofPresetId, ClPloProofConfig> = {
+  quick: {
+    steps: 40,
+    stress_probability: 0.2,
+    anchor_weight: 0.33,
+    projection_limit: 0.65,
+    seed: 12,
+  },
+  default: {
+    steps: 72,
+    stress_probability: 0.35,
+    anchor_weight: 0.4,
+    projection_limit: 0.6,
+    seed: 23,
+  },
+  stress: {
+    steps: 84,
+    stress_probability: 0.58,
+    anchor_weight: 0.48,
+    projection_limit: 0.56,
+    seed: 31,
+  },
+}
+
+const STRATEGY_COLORS: Record<ProofStrategyId, string> = {
+  naive: '#8e4a3f',
+  replay: '#4b637f',
+  hybrid: '#1d4a43',
 }
 
 function briefFileName(challenge: ChallengeId, horizon: HorizonId): string {
@@ -81,6 +107,37 @@ function labelFor<T extends string>(options: Array<{ id: T; label: string }>, id
   return options.find((option) => option.id === id)?.label ?? id
 }
 
+function formatPercent(value: number): string {
+  return `${(value * 100).toFixed(1)}%`
+}
+
+function linePath(values: number[], width: number, height: number, min: number, max: number): string {
+  if (values.length === 0) {
+    return ''
+  }
+
+  const span = Math.max(max - min, 1e-9)
+  const stepX = values.length > 1 ? width / (values.length - 1) : width
+
+  return values
+    .map((value, index) => {
+      const x = index * stepX
+      const y = height - ((value - min) / span) * height
+      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`
+    })
+    .join(' ')
+}
+
+function mapScenarioToProofPreset(presetId: string): ProofPresetId {
+  if (presetId === 'moderation') {
+    return 'stress'
+  }
+  if (presetId === 'rollout') {
+    return 'quick'
+  }
+  return 'default'
+}
+
 export function DashboardPage() {
   const [challenge, setChallenge] = useState<ChallengeId>('continual_reliability')
   const [goal, setGoal] = useState<GoalId>('pilot')
@@ -88,10 +145,8 @@ export function DashboardPage() {
   const [risk, setRisk] = useState<RiskId>('balanced')
   const [context, setContext] = useState('')
   const [copyStatus, setCopyStatus] = useState('')
-  const [clPloStatus, setClPloStatus] = useState('Loading CL-PLO run...')
-  const [activeClPloPreset, setActiveClPloPreset] = useState<ClPloPresetId>('default')
-  const clPloFrameRef = useRef<HTMLIFrameElement | null>(null)
-  const clPloAutoRunRef = useRef(false)
+  const [proofPreset, setProofPreset] = useState<ProofPresetId>('default')
+  const [proofRunVersion, setProofRunVersion] = useState(0)
 
   const loadDashboard = useCallback(
     () =>
@@ -126,6 +181,26 @@ export function DashboardPage() {
       },
     )
   }, [challenge, context, goal, horizon, risk, state.data])
+
+  const proofConfig = useMemo(() => {
+    const preset = PROOF_PRESETS[proofPreset]
+    return {
+      ...preset,
+      seed: preset.seed + proofRunVersion * 19,
+    }
+  }, [proofPreset, proofRunVersion])
+
+  const proofResult = useMemo(() => runClPloProof(proofConfig), [proofConfig])
+
+  const proofRange = useMemo(() => {
+    const values = proofResult.strategies.flatMap((strategy) => strategy.values)
+    const min = Math.min(...values)
+    const max = Math.max(...values)
+    return {
+      min: min * 0.995,
+      max: max * 1.005,
+    }
+  }, [proofResult.strategies])
 
   const briefMarkdown = useMemo(() => {
     if (!blueprint) {
@@ -164,55 +239,8 @@ export function DashboardPage() {
     setRisk(preset.risk)
     setContext(preset.context)
     setCopyStatus('')
-
-    if (clPloAutoRunRef.current) {
-      const mappedPreset: ClPloPresetId =
-        preset.id === 'moderation' ? 'stress' : preset.id === 'rollout' ? 'quick' : 'default'
-      window.setTimeout(() => triggerClPloPreset(mappedPreset), 120)
-    }
-  }
-
-  function triggerClPloPreset(preset: ClPloPresetId, attempt = 0) {
-    const frame = clPloFrameRef.current
-    const frameWindow = frame?.contentWindow
-
-    if (!frameWindow) {
-      setClPloStatus('Preparing CL-PLO run...')
-      return
-    }
-
-    try {
-      const frameDocument = frameWindow.document
-      const presetButton = frameDocument.getElementById(CL_PLO_PRESET_BUTTON_IDS[preset])
-      const runButton = frameDocument.getElementById('run-demo')
-
-      if (!presetButton || !runButton) {
-        if (attempt >= 8) {
-          setClPloStatus('Run controls are available inside the workspace.')
-          return
-        }
-        window.setTimeout(() => triggerClPloPreset(preset, attempt + 1), 220)
-        return
-      }
-
-      ;(presetButton as HTMLElement).click()
-      ;(runButton as HTMLElement).click()
-      setActiveClPloPreset(preset)
-      setClPloStatus(`Running ${preset === 'stress' ? 'Stress+' : preset} scenario...`)
-    } catch {
-      setClPloStatus('Run controls are available inside the workspace.')
-    }
-  }
-
-  function handleClPloFrameLoad() {
-    if (clPloAutoRunRef.current) {
-      setClPloStatus('Live run ready. Switch scenario anytime.')
-      return
-    }
-
-    clPloAutoRunRef.current = true
-    setClPloStatus('Live run ready. Running default scenario...')
-    window.setTimeout(() => triggerClPloPreset('default'), 260)
+    setProofPreset(mapScenarioToProofPreset(preset.id))
+    setProofRunVersion((value) => value + 1)
   }
 
   async function handleCopyBrief() {
@@ -268,8 +296,8 @@ export function DashboardPage() {
         <p className="eyebrow">Overview</p>
         <h1>Turn one concrete problem statement into an execution-ready strategy.</h1>
         <p className="hero-copy">
-          This is a working planning surface. Define the operating pressure, then inspect how decisions,
-          controls, and evidence anchors change.
+          Define the operating pressure, then move from decision framing to live validation in a single
+          flow.
         </p>
         <div className="builder-stat-row" aria-label="Profile snapshot">
           <article className="builder-stat">
@@ -427,48 +455,99 @@ export function DashboardPage() {
             </div>
           </section>
 
-          <section className="builder-validation-shell" aria-label="Live CL-PLO validation">
+          <section className="builder-validation-shell" aria-label="In-context CL-PLO proof">
             <div className="builder-validation-head">
               <div>
-                <p className="matrix-label">3. Validate live</p>
-                <h3>Run CL-PLO in place</h3>
+                <p className="matrix-label">3. Validate in context</p>
+                <h3>Interactive CL-PLO proof</h3>
               </div>
-              <a href={CL_PLO_WORKSPACE_URL} target="_blank" rel="noreferrer" className="builder-inline-link">
-                Open full workspace
+              <a href={CL_PLO_PROJECT_URL} target="_blank" rel="noreferrer" className="builder-inline-link">
+                Full CL-PLO project
               </a>
             </div>
-            <div className="clplo-toolbar" role="group" aria-label="CL-PLO run modes">
+            <p className="meta-line">
+              Same regime path, three update rules. Switch mode and compare return, drawdown, and stress
+              behavior instantly.
+            </p>
+
+            <div className="clplo-toolbar" role="group" aria-label="Proof modes">
               <button
                 type="button"
-                className={activeClPloPreset === 'quick' ? 'track-chip track-chip-active' : 'track-chip'}
-                onClick={() => triggerClPloPreset('quick')}
+                className={proofPreset === 'quick' ? 'track-chip track-chip-active' : 'track-chip'}
+                onClick={() => {
+                  setProofPreset('quick')
+                  setProofRunVersion((value) => value + 1)
+                }}
               >
                 Quick
               </button>
               <button
                 type="button"
-                className={activeClPloPreset === 'default' ? 'track-chip track-chip-active' : 'track-chip'}
-                onClick={() => triggerClPloPreset('default')}
+                className={proofPreset === 'default' ? 'track-chip track-chip-active' : 'track-chip'}
+                onClick={() => {
+                  setProofPreset('default')
+                  setProofRunVersion((value) => value + 1)
+                }}
               >
                 Default
               </button>
               <button
                 type="button"
-                className={activeClPloPreset === 'stress' ? 'track-chip track-chip-active' : 'track-chip'}
-                onClick={() => triggerClPloPreset('stress')}
+                className={proofPreset === 'stress' ? 'track-chip track-chip-active' : 'track-chip'}
+                onClick={() => {
+                  setProofPreset('stress')
+                  setProofRunVersion((value) => value + 1)
+                }}
               >
                 Stress+
               </button>
             </div>
-            <p className="clplo-status">{clPloStatus}</p>
-            <iframe
-              ref={clPloFrameRef}
-              src={CL_PLO_WORKSPACE_URL}
-              title="CL-PLO interactive workspace"
-              className="clplo-frame"
-              loading="lazy"
-              onLoad={handleClPloFrameLoad}
-            />
+
+            <div className="proof-chart-card">
+              <svg viewBox="0 0 680 220" className="proof-line-chart" role="img" aria-label="CL-PLO value paths">
+                <line x1="0" y1="0" x2="0" y2="220" className="proof-grid-line" />
+                <line x1="0" y1="220" x2="680" y2="220" className="proof-grid-line" />
+                {proofResult.strategies.map((strategy) => (
+                  <path
+                    key={strategy.id}
+                    d={linePath(strategy.values, 680, 220, proofRange.min, proofRange.max)}
+                    stroke={STRATEGY_COLORS[strategy.id]}
+                    strokeWidth={strategy.id === proofResult.winner.id ? 2.6 : 1.9}
+                    fill="none"
+                  />
+                ))}
+              </svg>
+              <div className="proof-legend">
+                {proofResult.strategies.map((strategy) => (
+                  <span key={strategy.id} className="proof-legend-item">
+                    <i style={{ backgroundColor: STRATEGY_COLORS[strategy.id] }} />
+                    {strategy.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="proof-metric-grid" aria-label="Proof metrics">
+              {proofResult.strategies.map((strategy) => (
+                <article
+                  key={strategy.id}
+                  className={
+                    strategy.id === proofResult.winner.id
+                      ? 'proof-metric-card proof-metric-card-active'
+                      : 'proof-metric-card'
+                  }
+                >
+                  <p className="matrix-label">{strategy.label}</p>
+                  <p className="proof-metric-main">{formatPercent(strategy.metrics.total_return)}</p>
+                  <p className="meta-line">max drawdown {formatPercent(strategy.metrics.max_drawdown)}</p>
+                  <p className="meta-line">stress sharpe {strategy.metrics.stress_sharpe.toFixed(2)}</p>
+                </article>
+              ))}
+            </div>
+
+            <p className="proof-decision-line">
+              <strong>{proofResult.winner.label} is recommended on this run.</strong> {proofResult.decision_note}
+            </p>
           </section>
 
           <div className="builder-plan-columns">
