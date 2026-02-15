@@ -297,6 +297,25 @@ function buildControlPlan(result: PipelineResult): ControlPlanItem[] {
   }))
 }
 
+function buildManualFlowSteps(result: PipelineResult): string[] {
+  return [
+    `Request arrives through ${result.sample.channel}.`,
+    'Analyst performs manual triage and ownership assignment.',
+    `Team chases missing data across tools (${result.extracted.manual_step_count} manual touchpoints).`,
+    `Approval handoffs route through ${result.extracted.approval_roles.join(', ') || 'approver chain'}.`,
+    'Status updates are posted manually across systems.',
+  ]
+}
+
+function buildAutomatedFlowSteps(result: PipelineResult): string[] {
+  const automationSteps = result.blueprint.steps.slice(0, 3).map((step) => step.name)
+  return [
+    `Unified intake with required data checks for ${prettyCategory(result.triage.category)}.`,
+    ...automationSteps,
+    'SLA monitoring, escalations, and audit trail update automatically.',
+  ]
+}
+
 function App() {
   const [samples, setSamples] = useState<IntakeSample[]>([])
   const [catalog, setCatalog] = useState<CategoryCatalog | null>(null)
@@ -489,6 +508,9 @@ function App() {
   const categoryDefinition = result
     ? catalog?.categories.find((item) => item.id === result.triage.category) ?? null
     : null
+  const manualFlowSteps = result ? buildManualFlowSteps(result) : []
+  const automatedFlowSteps = result ? buildAutomatedFlowSteps(result) : []
+  const removedTouchpoints = result ? Math.max(0, beforeManualSteps - (afterManualSteps ?? beforeManualSteps)) : 0
 
   async function copyKickoffBrief() {
     if (!result) {
@@ -810,11 +832,40 @@ function App() {
                   </ul>
                 </article>
 
-                <section className="map-stack">
-                  <p className="detail-step">4. Process maps</p>
-                  <MermaidDiagram title="As-is process map" chart={result.asIsMermaid} />
-                  <MermaidDiagram title="To-be process map" chart={result.toBeMermaid} />
-                </section>
+                <article className="detail-card span-2 process-delta">
+                  <p className="detail-step">4. Process transformation</p>
+                  <h3>Before vs after workflow</h3>
+                  <div className="delta-grid">
+                    <section className="delta-column">
+                      <p className="delta-label">Before (manual)</p>
+                      <ol className="delta-steps">
+                        {manualFlowSteps.map((step) => (
+                          <li key={step}>{step}</li>
+                        ))}
+                      </ol>
+                    </section>
+                    <section className="delta-column">
+                      <p className="delta-label">After (automated)</p>
+                      <ol className="delta-steps">
+                        {automatedFlowSteps.map((step) => (
+                          <li key={step}>{step}</li>
+                        ))}
+                      </ol>
+                    </section>
+                  </div>
+                  <div className="delta-highlights">
+                    <span>{removedTouchpoints} manual touchpoints removed</span>
+                    <span>{leadTimeReduction ?? 0}% faster cycle</span>
+                    <span>{impactSnapshot?.monthlyHoursSaved ?? 0}h capacity recovered each month</span>
+                  </div>
+                  <details className="technical-maps">
+                    <summary>View technical Mermaid diagrams</summary>
+                    <div className="technical-grid">
+                      <MermaidDiagram title="As-is process map" chart={result.asIsMermaid} />
+                      <MermaidDiagram title="To-be process map" chart={result.toBeMermaid} />
+                    </div>
+                  </details>
+                </article>
 
                 <article className="detail-card span-2">
                   <p className="detail-step">5. External handoff</p>

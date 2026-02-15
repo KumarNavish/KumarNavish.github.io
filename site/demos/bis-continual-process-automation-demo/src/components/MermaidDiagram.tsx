@@ -30,6 +30,16 @@ export function MermaidDiagram({ title, chart }: MermaidDiagramProps) {
             startOnLoad: false,
             theme: 'neutral',
             securityLevel: 'strict',
+            flowchart: {
+              useMaxWidth: true,
+              htmlLabels: true,
+              nodeSpacing: 40,
+              rankSpacing: 58,
+            },
+            themeVariables: {
+              fontFamily: 'IBM Plex Sans, Avenir Next, Segoe UI, sans-serif',
+              fontSize: '16px',
+            },
           })
           mermaidInitialized = true
         }
