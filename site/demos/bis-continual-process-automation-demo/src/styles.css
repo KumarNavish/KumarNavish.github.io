@@ -597,8 +597,95 @@ button:disabled {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.map-stack {
+.process-delta {
+  gap: 0.55rem;
+}
+
+.delta-grid {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.delta-column {
+  border: 1px solid #dce7f3;
+  border-radius: 10px;
+  background: #f8fbff;
+  padding: 0.5rem;
+  display: grid;
+  gap: 0.32rem;
+}
+
+.delta-label {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #5b779b;
+  font-weight: 700;
+}
+
+.delta-steps {
+  margin: 0;
+  padding-left: 1.04rem;
+  display: grid;
+  gap: 0.28rem;
+}
+
+.delta-steps li {
+  color: #2f4f78;
+  font-size: 0.83rem;
+  line-height: 1.38;
+}
+
+.delta-highlights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.delta-highlights span {
+  border: 1px solid #d6e3f1;
+  border-radius: 999px;
+  padding: 0.2rem 0.5rem;
+  background: #f3f8ff;
+  color: #2c527d;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.technical-maps {
+  border: 1px dashed #cad8e8;
+  border-radius: 10px;
+  padding: 0.5rem;
+  background: #fafcff;
+}
+
+.technical-maps summary {
+  list-style: none;
+  cursor: pointer;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #2e4f75;
+}
+
+.technical-maps summary::-webkit-details-marker {
+  display: none;
+}
+
+.technical-maps summary::after {
+  content: '+';
+  float: right;
+  color: #6583a8;
+}
+
+.technical-maps[open] summary::after {
+  content: '-';
+}
+
+.technical-grid {
+  margin-top: 0.5rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.45rem;
 }
 
@@ -608,6 +695,12 @@ button:disabled {
 
 .mermaid-svg {
   overflow-x: auto;
+}
+
+.mermaid-svg svg {
+  min-width: 540px;
+  width: 100%;
+  height: auto;
 }
 
 .map-card pre {
@@ -647,6 +740,8 @@ button:disabled {
   .handoff-grid,
   .quick-start-grid,
   .details-grid,
+  .delta-grid,
+  .technical-grid,
   .detail-list.compact {
     grid-template-columns: 1fr;
   }
