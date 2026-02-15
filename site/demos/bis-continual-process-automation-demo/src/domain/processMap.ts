@@ -1,12 +1,5 @@
 import type { ExtractedSignals, IntakeSample, TriageResult } from './types'
 
-function toNodeList(roles: string[]): string {
-  if (roles.length === 0) {
-    return 'Approver'
-  }
-  return roles.join(' + ')
-}
-
 /**
  * Build a compact as-is flow in Mermaid syntax.
  */
@@ -15,13 +8,17 @@ export function buildAsIsMermaid(
   triageResult: TriageResult,
   extracted: ExtractedSignals,
 ): string {
+  void sample
+  void triageResult
+  void extracted
+
   return [
     'flowchart TD',
-    `  A["${sample.channel} intake request"] --> B["Manual triage\\n${triageResult.category}"]`,
-    `  B --> C["Data chase\\nemail/spreadsheets\\n${extracted.manual_step_count} touchpoints"]`,
-    `  C --> D["Approvals\\n${toNodeList(extracted.approval_roles)}"]`,
-    '  D --> E["Manual status updates\\nacross systems"]',
-    '  E --> F["Completion\\nlimited audit visibility"]',
+    '  A["Intake request"] --> B["Manual triage"]',
+    '  B --> C["Collect missing data"]',
+    '  C --> D["Approval chain"]',
+    '  D --> E["Manual status updates"]',
+    '  E --> F["Close request"]',
   ].join('\n')
 }
 
@@ -33,14 +30,16 @@ export function buildToBeMermaid(
   triageResult: TriageResult,
   automationPatterns: string[],
 ): string {
-  const patternLine = automationPatterns.slice(0, 2).join(' + ') || 'Automated routing'
+  void sample
+  void triageResult
+  void automationPatterns
 
   return [
     'flowchart TD',
-    `  A["Unified intake\\n${sample.channel}"] --> B["Auto-classify\\n${triageResult.category}"]`,
-    `  B --> C["Policy + completeness\\nchecks"]`,
-    `  C --> D["${patternLine}"]`,
-    '  D --> E["SLA timers\\n+ escalations"]',
-    '  E --> F["Closed-loop updates\\n+ audit log"]',
+    '  A["Unified intake form"] --> B["Auto-classify case"]',
+    '  B --> C["Policy checks"]',
+    '  C --> D["Automated routing"]',
+    '  D --> E["SLA monitoring"]',
+    '  E --> F["Auto updates and audit log"]',
   ].join('\n')
 }
