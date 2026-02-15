@@ -387,6 +387,31 @@ a:hover {
   line-height: 1.36;
 }
 
+.clplo-panel {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.clplo-toolbar {
+  display: grid;
+  gap: 0.52rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.clplo-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.clplo-frame {
+  width: 100%;
+  min-height: 900px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fff;
+}
+
 .builder-output-panel {
   display: grid;
   gap: 1rem;
@@ -756,6 +781,10 @@ a:hover {
   .builder-summary-grid,
   .builder-stat-row,
   .capability-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .clplo-toolbar {
     grid-template-columns: 1fr;
   }
 
