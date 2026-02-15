@@ -393,20 +393,6 @@ a:hover {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.clplo-status {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.84rem;
-}
-
-.clplo-frame {
-  width: 100%;
-  min-height: 680px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: #fff;
-}
-
 .builder-validation-shell {
   border-top: 1px solid var(--line);
   padding-top: 0.85rem;
@@ -438,6 +424,79 @@ a:hover {
   color: var(--accent);
   border-bottom-color: color-mix(in srgb, var(--accent) 50%, transparent);
   text-decoration: none;
+}
+
+.proof-chart-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fefdf9;
+  padding: 0.7rem 0.78rem 0.62rem;
+}
+
+.proof-line-chart {
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
+  background: #fcfbf7;
+}
+
+.proof-grid-line {
+  stroke: #d9d5ca;
+  stroke-width: 1;
+}
+
+.proof-legend {
+  margin-top: 0.54rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.68rem;
+}
+
+.proof-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.proof-legend-item i {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.proof-metric-grid {
+  display: grid;
+  gap: 0.66rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.proof-metric-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fcfbf7;
+  padding: 0.62rem 0.72rem;
+}
+
+.proof-metric-card-active {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 60%, #fafaf7);
+}
+
+.proof-metric-main {
+  margin: 0.4rem 0 0;
+  font-size: 1.18rem;
+  line-height: 1.2;
+  font-family: 'Fraunces', Georgia, serif;
+}
+
+.proof-decision-line {
+  margin: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 0.62rem;
+  color: var(--muted);
 }
 
 .builder-output-panel {
@@ -816,8 +875,8 @@ a:hover {
     grid-template-columns: 1fr;
   }
 
-  .clplo-frame {
-    min-height: 560px;
+  .proof-metric-grid {
+    grid-template-columns: 1fr;
   }
 
   .builder-config-panel {
