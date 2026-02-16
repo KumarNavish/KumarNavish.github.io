@@ -24,8 +24,8 @@ export const ARC_STEPS: ArcStep[] = [
     readerQuestion: 'Why do I do this?',
     purpose: 'Define the decision pressure before selecting methods.',
     question: 'Which decisions must stay reliable as conditions change?',
-    evidence: 'Problem framing, operating constraints, and decision intent.',
-    handoff: 'Next, test the methods under controlled stress.',
+    evidence: 'Problem framing, operational constraints, and decision intent.',
+    handoff: 'Next, inspect the methods built to handle this pressure.',
   },
   {
     id: 'skills',
@@ -34,8 +34,8 @@ export const ARC_STEPS: ArcStep[] = [
     readerQuestion: 'What can I do?',
     purpose: 'Show methods that remain stable under drift and stress.',
     question: 'Do the core methods remain stable under drift and stress?',
-    evidence: 'Interactive optimization proofs and inspectable implementation.',
-    handoff: 'Next, see whether these methods shift operational outcomes.',
+    evidence: 'Interactive optimization proof and inspectable implementations.',
+    handoff: 'Next, verify whether these methods change operational outcomes.',
   },
   {
     id: 'impact',
@@ -44,8 +44,8 @@ export const ARC_STEPS: ArcStep[] = [
     readerQuestion: 'What have I built?',
     purpose: 'Demonstrate systems that change operational decisions.',
     question: 'Do these methods change operational decisions in measurable ways?',
-    evidence: 'Case evidence maps and in-context simulation tied to explicit signals.',
-    handoff: 'Next, trace these outcomes to durable research evidence.',
+    evidence: 'Case evidence and in-context simulation tied to measurable signals.',
+    handoff: 'Next, connect these outcomes to durable research foundations.',
   },
   {
     id: 'research',
@@ -54,8 +54,8 @@ export const ARC_STEPS: ArcStep[] = [
     readerQuestion: 'What have I proven?',
     purpose: 'Anchor implementation choices in published evidence.',
     question: 'How does research justify implementation choices over time?',
-    evidence: 'Publication record, citation patterns, and topic trajectory.',
-    handoff: 'Next, close the loop with execution history.',
+    evidence: 'Publication record, citation trajectory, and topic continuity.',
+    handoff: 'Next, close the loop with execution progression.',
   },
   {
     id: 'experience',
@@ -64,8 +64,8 @@ export const ARC_STEPS: ArcStep[] = [
     readerQuestion: 'Where have I applied it?',
     purpose: 'Show delivery trajectory, artifacts, and execution range.',
     question: 'What sustained trajectory supports delivery at increasing scope?',
-    evidence: 'Execution history, artifacts, and production system practice.',
-    handoff: 'Then return to Motivation and read the full arc as one system.',
+    evidence: 'Execution history, artifacts, and production practice.',
+    handoff: 'Then return to Motivation and read the full arc as one coherent system.',
   },
 ]
 

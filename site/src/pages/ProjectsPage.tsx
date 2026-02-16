@@ -159,10 +159,10 @@ export function ProjectsPage() {
     <div className="page builder-page overview-flow">
       <section className="hero hero-primary">
         <p className="eyebrow">Skills</p>
-        <h1>I demonstrate skills through systems you can inspect, test, and stress.</h1>
+        <h1>I turn reliability requirements into inspectable technical methods.</h1>
         <p className="hero-copy">
-          These methods are the direct response to the motivation layer: build systems that remain
-          reliable under shift.
+          This layer shows the technical toolkit used to satisfy the motivation layer under realistic
+          drift and stress.
         </p>
       </section>
 
@@ -170,8 +170,8 @@ export function ProjectsPage() {
 
       <section className="panel proof-focus-panel" aria-label="Skill proof">
         <header className="proof-focus-header">
-          <p className="matrix-label">Skill proof · Continual reliability</p>
-          <h2>Policy stability under drift and stress</h2>
+          <p className="matrix-label">Interactive proof · Continual reliability</p>
+          <h2>How update policies behave under drift and stress</h2>
         </header>
 
         <div className="clplo-toolbar" role="group" aria-label="CL-PLO modes">
@@ -258,7 +258,7 @@ export function ProjectsPage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Skills Translated Into Systems</h2>
+          <h2>Where These Methods Are Implemented</h2>
         </header>
         {themeSummary.length > 0 ? <p className="tag-cloud">{themeSummary.join(' · ')}</p> : null}
         <div className="card-grid">
@@ -288,7 +288,7 @@ export function ProjectsPage() {
 
       <section className="panel panel-note">
         <p className="meta-line">
-          This layer establishes the technical capabilities that are validated next through impact.
+          The next layer tests whether these methods produce real operational change.
         </p>
       </section>
     </div>

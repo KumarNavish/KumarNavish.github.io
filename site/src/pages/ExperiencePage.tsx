@@ -86,10 +86,10 @@ export function ExperiencePage() {
     <div className="page">
       <section className="hero">
         <p className="eyebrow">Experience</p>
-        <h1>I bring work from inquiry to operational delivery.</h1>
+        <h1>I carry work from inquiry to end-to-end delivery.</h1>
         <p className="hero-copy">
-          Experience closes the arc by showing how motivation, skills, impact, and research were
-          carried into real execution contexts.
+          This final layer shows progression: how the arc translated into sustained, applied
+          execution.
         </p>
       </section>
 
@@ -97,7 +97,7 @@ export function ExperiencePage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Where the Work Has Been Applied</h2>
+          <h2>Execution Progression</h2>
         </header>
         <div className="sequence-grid">
           <article className="sequence-step">
@@ -148,7 +148,7 @@ export function ExperiencePage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Applied Execution Surface</h2>
+          <h2>Execution Artifacts</h2>
         </header>
         <div className="card-grid">
           <article className="item-card">
@@ -187,7 +187,8 @@ export function ExperiencePage() {
 
       <section className="panel panel-note">
         <p className="meta-line">
-          This progression reflects increasing scope, from inquiry to end-to-end delivery.
+          The arc closes here: motivation, skills, impact, and research converging in production
+          execution.
         </p>
       </section>
     </div>
