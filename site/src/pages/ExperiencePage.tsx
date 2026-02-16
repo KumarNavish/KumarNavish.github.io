@@ -87,22 +87,22 @@ export function ExperiencePage() {
     <div className="page">
       <section className="hero">
         <p className="eyebrow">Experience</p>
-        <h1>I carry work from inquiry to production delivery.</h1>
+        <h1>I carry work from research framing to production delivery.</h1>
         <p className="hero-copy">
-          This final layer shows progression over time: how the arc translated into sustained execution.
+          This final layer shows progression: the same arc executed at increasing scope.
         </p>
       </section>
 
       <ArcSpine current="experience" />
 
       <PageCompass
-        title="Read In 20 Seconds"
+        title="Quick Scan"
         steps={[
           'Read the three phases as one progression.',
           'Use metrics for scope and continuity.',
           'Open artifacts for direct proof.',
         ]}
-        outcome="This section closes the arc with a clear execution trajectory."
+        outcome="This section closes the arc with direct evidence of sustained execution."
       />
 
       <section className="panel">
@@ -120,14 +120,14 @@ export function ExperiencePage() {
           </article>
           <article className="sequence-step">
             <p className="sequence-index">Phase 2</p>
-            <h3>Applied ML systems</h3>
+            <h3>Applied systems</h3>
             <p>
               Transition to deployable ML systems with constrained optimization and reliability checks.
             </p>
           </article>
           <article className="sequence-step">
             <p className="sequence-index">Phase 3</p>
-            <h3>End-to-end delivery</h3>
+            <h3>Production delivery</h3>
             <p>
               Systems maintained through {trajectory.latestBuildYear ?? 'current'} with automated
               data generation, testing, and continuous deployment.
@@ -146,11 +146,11 @@ export function ExperiencePage() {
           <p className="metric-value">{formatNumber(publications.count)}</p>
         </article>
         <article className="metric-card">
-          <p className="metric-label">Featured systems</p>
+          <p className="metric-label">Featured builds</p>
           <p className="metric-value">{formatNumber(profile.counts.featured_projects)}</p>
         </article>
         <article className="metric-card">
-          <p className="metric-label">Latest research year</p>
+          <p className="metric-label">Latest research</p>
           <p className="metric-value">{formatNumber(trajectory.latestResearchYear)}</p>
         </article>
       </section>
@@ -171,7 +171,7 @@ export function ExperiencePage() {
           </article>
           <article className="item-card">
             <h3>GitHub profile</h3>
-            <p>Primary record of repository activity and implementation history.</p>
+            <p>Primary record of implementation history and repository activity.</p>
             <p className="meta-line">
               <a href={profile.links.github} target="_blank" rel="noreferrer">
                 Open GitHub
@@ -180,7 +180,7 @@ export function ExperiencePage() {
           </article>
           <article className="item-card">
             <h3>Portfolio system repository</h3>
-            <p>End-to-end source for data pipeline, APIs, frontend, and deployment workflow.</p>
+            <p>End-to-end source for pipeline, APIs, frontend, and deployment workflow.</p>
             <p className="meta-line">
               <a
                 href="https://github.com/KumarNavish/KumarNavish.github.io"
