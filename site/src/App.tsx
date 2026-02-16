@@ -2,15 +2,17 @@ import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 
 import './App.css'
 import { DashboardPage } from './pages/DashboardPage'
+import { ExperiencePage } from './pages/ExperiencePage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { PublicationsPage } from './pages/PublicationsPage'
 import { WorkPage } from './pages/WorkPage'
 
 const NAVIGATION = [
-  { href: '/', label: 'Overview' },
-  { href: '/work', label: 'Case Studies' },
-  { href: '/projects', label: 'Archive' },
-  { href: '/publications', label: 'Publications' },
+  { href: '/', label: 'Motivation' },
+  { href: '/projects', label: 'Skills' },
+  { href: '/work', label: 'Impact' },
+  { href: '/publications', label: 'Research' },
+  { href: '/experience', label: 'Experience' },
 ]
 
 function Navigation() {
@@ -51,9 +53,10 @@ export default function App() {
       <main className="content-shell">
         <Routes>
           <Route path="/" element={<DashboardPage />} />
-          <Route path="/work" element={<WorkPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
+          <Route path="/work" element={<WorkPage />} />
           <Route path="/publications" element={<PublicationsPage />} />
+          <Route path="/experience" element={<ExperiencePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

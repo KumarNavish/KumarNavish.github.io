@@ -194,13 +194,13 @@ export function WorkPage() {
   }, [state.data])
 
   if (state.loading) {
-    return <LoadingBlock label="Loading case studies." />
+    return <LoadingBlock label="Loading impact." />
   }
 
   if (!state.data || state.error) {
     return (
       <ErrorBlock
-        label="Unable to load case studies."
+        label="Unable to load impact view."
         details={state.error ?? 'unknown work page error'}
       />
     )
@@ -209,11 +209,20 @@ export function WorkPage() {
   return (
     <div className="page">
       <section className="hero">
-        <p className="eyebrow">Case Studies</p>
-        <h1>Capability, shown through decisions that execute.</h1>
+        <p className="eyebrow">Impact</p>
+        <h1>Impact is demonstrated where models alter operational decisions.</h1>
         <p className="hero-copy">
-          Each case follows the same structure: claim, artifact, evidence, and operational signal.
+          Each case follows one sequence: claim, artifact, evidence, and measurable operational
+          signal.
         </p>
+        <div className="action-row">
+          <Link className="action-link" to="/projects">
+            Back to Skills
+          </Link>
+          <Link className="action-link action-link-primary" to="/publications">
+            Continue to Research
+          </Link>
+        </div>
       </section>
 
       <section id="cases" className="panel">
@@ -296,7 +305,7 @@ export function WorkPage() {
                     <p className="matrix-label">In-context demonstration</p>
                     <h4>Last-mile transition planner</h4>
                     <p className="meta-line">
-                      Tune two operational conditions. Service target stays explicit as a deployment
+                      Tune two operating conditions. Service target stays explicit as a deployment
                       choice.
                     </p>
                   </header>
@@ -417,17 +426,14 @@ export function WorkPage() {
 
       <section id="archives" className="panel">
         <header className="panel-header">
-          <h2>Explore Full Archives</h2>
+          <h2>Continue the Arc</h2>
         </header>
         <div className="action-row">
           <Link className="action-link" to="/projects">
-            Project archive
+            Skills layer
           </Link>
-          <Link className="action-link" to="/publications">
-            Publication archive
-          </Link>
-          <Link className="action-link action-link-primary" to="/">
-            Overview
+          <Link className="action-link action-link-primary" to="/publications">
+            Research layer
           </Link>
         </div>
         <p className="meta-line">
