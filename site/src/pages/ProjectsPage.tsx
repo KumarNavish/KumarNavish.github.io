@@ -1,9 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 
-import { ArcBridge } from '../components/ArcBridge'
-import { ArcNarrative } from '../components/ArcNarrative'
-import { ArcThread } from '../components/ArcThread'
+import { ArcSpine } from '../components/ArcSpine'
 import { fetchProjectsApi, type ProjectItem } from '../lib/api'
 import { runClPloProof, type ClPloProofConfig, type ProofStrategyId } from '../lib/clploProof'
 import { formatDate } from '../lib/formatters'
@@ -164,18 +161,12 @@ export function ProjectsPage() {
         <p className="eyebrow">Skills</p>
         <h1>I demonstrate skills through systems you can inspect, test, and stress.</h1>
         <p className="hero-copy">
-          This layer answers one question directly: what I can build when reliability is under
-          pressure.
+          These methods are the direct response to the motivation layer: build systems that remain
+          reliable under shift.
         </p>
-        <div className="action-row">
-          <Link className="action-link action-link-primary" to="/work">
-            Continue to Impact
-          </Link>
-        </div>
       </section>
 
-      <ArcThread current="skills" />
-      <ArcNarrative current="skills" />
+      <ArcSpine current="skills" />
 
       <section className="panel proof-focus-panel" aria-label="Skill proof">
         <header className="proof-focus-header">
@@ -267,7 +258,7 @@ export function ProjectsPage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Systems Carrying These Methods</h2>
+          <h2>Skills Translated Into Systems</h2>
         </header>
         {themeSummary.length > 0 ? <p className="tag-cloud">{themeSummary.join(' · ')}</p> : null}
         <div className="card-grid">
@@ -297,11 +288,9 @@ export function ProjectsPage() {
 
       <section className="panel panel-note">
         <p className="meta-line">
-          Skills are validated here, then traced to operational outcomes in the impact layer.
+          This layer establishes the technical capabilities that are validated next through impact.
         </p>
       </section>
-
-      <ArcBridge current="skills" />
     </div>
   )
 }

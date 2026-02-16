@@ -1,9 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 
-import { ArcBridge } from '../components/ArcBridge'
-import { ArcNarrative } from '../components/ArcNarrative'
-import { ArcThread } from '../components/ArcThread'
+import { ArcSpine } from '../components/ArcSpine'
 import { fetchMetricsApi, fetchPublicationsApi } from '../lib/api'
 import { formatNumber } from '../lib/formatters'
 import { useResource } from '../lib/useResource'
@@ -133,17 +130,12 @@ export function PublicationsPage() {
         <p className="eyebrow">Research</p>
         <h1>I ground implementation choices in durable research evidence.</h1>
         <p className="hero-copy">
-          This layer answers what has been proven, and why earlier implementation choices hold up.
+          Research appears here as depth: it explains why earlier systems and outcomes are rigorous,
+          not incidental.
         </p>
-        <div className="action-row">
-          <Link className="action-link action-link-primary" to="/experience">
-            Continue to Experience
-          </Link>
-        </div>
       </section>
 
-      <ArcThread current="research" />
-      <ArcNarrative current="research" />
+      <ArcSpine current="research" />
 
       <section className="metric-grid">
         <article className="metric-card">
@@ -218,8 +210,6 @@ export function PublicationsPage() {
           Evidence source: {describePublicationSource(publications.source)}
         </p>
       </section>
-
-      <ArcBridge current="research" />
     </div>
   )
 }

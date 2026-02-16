@@ -1,9 +1,6 @@
 import { useCallback, useMemo } from 'react'
-import { Link } from 'react-router-dom'
 
-import { ArcBridge } from '../components/ArcBridge'
-import { ArcNarrative } from '../components/ArcNarrative'
-import { ArcThread } from '../components/ArcThread'
+import { ArcSpine } from '../components/ArcSpine'
 import {
   fetchProfileApi,
   fetchProjectsApi,
@@ -91,17 +88,12 @@ export function ExperiencePage() {
         <p className="eyebrow">Experience</p>
         <h1>I bring work from inquiry to operational delivery.</h1>
         <p className="hero-copy">
-          This layer answers where I have applied the work, and how execution scope has increased.
+          Experience closes the arc by showing how motivation, skills, impact, and research were
+          carried into real execution contexts.
         </p>
-        <div className="action-row">
-          <Link className="action-link action-link-primary" to="/">
-            Return to Motivation
-          </Link>
-        </div>
       </section>
 
-      <ArcThread current="experience" />
-      <ArcNarrative current="experience" />
+      <ArcSpine current="experience" />
 
       <section className="panel">
         <header className="panel-header">
@@ -193,7 +185,11 @@ export function ExperiencePage() {
         </div>
       </section>
 
-      <ArcBridge current="experience" />
+      <section className="panel panel-note">
+        <p className="meta-line">
+          This progression reflects increasing scope, from inquiry to end-to-end delivery.
+        </p>
+      </section>
     </div>
   )
 }

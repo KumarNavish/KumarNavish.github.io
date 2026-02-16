@@ -11,7 +11,7 @@ import { WorkPage } from './pages/WorkPage'
 function Navigation() {
   return (
     <nav className="site-nav" aria-label="Primary">
-      {ARC_STEPS.map((item) => (
+      {ARC_STEPS.map((item, index) => (
         <NavLink
           key={item.id}
           to={item.route}
@@ -20,7 +20,8 @@ function Navigation() {
           }
           end={item.route === '/'}
         >
-          {item.label}
+          <span className="nav-link-index">{index + 1}</span>
+          <span>{item.label}</span>
         </NavLink>
       ))}
     </nav>
@@ -32,7 +33,7 @@ function SiteHeader() {
     <header className="site-header">
       <div className="header-inner">
         <p className="header-title">Navish Kumar</p>
-        <p className="header-subtitle">Applied research for reliable operational decisions</p>
+        <p className="header-subtitle">Motivation → Skills → Impact → Research → Experience</p>
       </div>
       <Navigation />
     </header>

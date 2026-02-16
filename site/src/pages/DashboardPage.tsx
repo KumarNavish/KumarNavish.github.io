@@ -1,8 +1,6 @@
 import { useCallback } from 'react'
 
-import { ArcBridge } from '../components/ArcBridge'
-import { ArcNarrative } from '../components/ArcNarrative'
-import { ArcThread } from '../components/ArcThread'
+import { ArcSpine } from '../components/ArcSpine'
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks'
 import { fetchMetricsApi, fetchProfileApi } from '../lib/api'
 import { formatNumber } from '../lib/formatters'
@@ -46,8 +44,8 @@ export function DashboardPage() {
         <p className="eyebrow">Motivation</p>
         <h1>I build decision systems that stay reliable as conditions change.</h1>
         <p className="hero-copy">
-          I start from decision pressure, then move through methods, operational outcomes, evidence,
-          and delivery history as one continuous narrative.
+          My work starts from one practical constraint: decisions should remain dependable even when
+          data, objectives, and operating conditions shift.
         </p>
 
         <div className="overview-fact-row" aria-label="Motivation context">
@@ -66,42 +64,37 @@ export function DashboardPage() {
         </div>
       </section>
 
-      <ArcThread current="motivation" />
-      <ArcNarrative current="motivation" />
+      <ArcSpine current="motivation" />
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Motivation Principles</h2>
+          <h2>What This Motivation Requires</h2>
         </header>
         <div className="direction-grid">
           <article className="direction-card">
-            <h3>Clarity before complexity</h3>
+            <h3>Reliability under drift</h3>
             <p>
-              Start from the decision that matters, then choose the smallest artifact that proves
-              it.
+              Methods must stay stable when environments change, not only on static benchmarks.
             </p>
           </article>
           <article className="direction-card">
-            <h3>Artifacts over assertions</h3>
+            <h3>Operational constraints first</h3>
             <p>
-              Every important claim should be inspectable in code, interaction, or measurable output.
+              Modeling must respect service, cost, and deployment constraints from the beginning.
             </p>
           </article>
           <article className="direction-card">
-            <h3>Continuity across layers</h3>
+            <h3>Evidence tied to decisions</h3>
             <p>
-              Motivation, skills, impact, research, and experience should read as one connected
-              system.
+              Each claim should be inspectable in systems, measurable outcomes, and research backing.
             </p>
           </article>
         </div>
 
         <p className="meta-line">
-          These principles define the methods validated in the skills layer.
+          These requirements determine the skills developed in the next layer.
         </p>
       </section>
-
-      <ArcBridge current="motivation" />
     </div>
   )
 }
