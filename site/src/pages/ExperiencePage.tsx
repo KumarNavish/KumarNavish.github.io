@@ -90,7 +90,7 @@ export function ExperiencePage() {
         <p className="eyebrow">Experience</p>
         <h1>I bring work from inquiry to operational delivery.</h1>
         <p className="hero-copy">
-          This final layer closes the arc with trajectory, artifacts, and execution continuity.
+          This layer answers where I have applied the work, and how execution scope has increased.
         </p>
         <div className="action-row">
           <Link className="action-link" to="/publications">
@@ -107,7 +107,7 @@ export function ExperiencePage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Delivery Trajectory</h2>
+          <h2>Where the Work Has Been Applied</h2>
         </header>
         <div className="sequence-grid">
           <article className="sequence-step">
@@ -158,7 +158,7 @@ export function ExperiencePage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Experience Artifacts</h2>
+          <h2>Applied Execution Surface</h2>
         </header>
         <div className="card-grid">
           <article className="item-card">

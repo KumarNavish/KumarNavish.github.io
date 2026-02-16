@@ -132,7 +132,7 @@ export function PublicationsPage() {
         <p className="eyebrow">Research</p>
         <h1>I ground implementation choices in durable research evidence.</h1>
         <p className="hero-copy">
-          This layer provides the evidence backbone for the skills and impact layers.
+          This layer answers what has been proven, and why earlier implementation choices hold up.
         </p>
         <div className="action-row">
           <Link className="action-link" to="/work">
@@ -149,11 +149,11 @@ export function PublicationsPage() {
 
       <section className="metric-grid">
         <article className="metric-card">
-          <p className="metric-label">Papers</p>
+          <p className="metric-label">Validated works</p>
           <p className="metric-value">{formatNumber(metrics.works_count)}</p>
         </article>
         <article className="metric-card">
-          <p className="metric-label">Citations</p>
+          <p className="metric-label">Citation evidence</p>
           <p className="metric-value">{formatNumber(metrics.citations_total)}</p>
         </article>
         <article className="metric-card">
@@ -219,6 +219,11 @@ export function PublicationsPage() {
         <p className="meta-line">
           Evidence source: {describePublicationSource(publications.source)}
         </p>
+        <div className="action-row">
+          <Link className="action-link action-link-primary" to="/experience">
+            Continue to Experience
+          </Link>
+        </div>
       </section>
     </div>
   )
