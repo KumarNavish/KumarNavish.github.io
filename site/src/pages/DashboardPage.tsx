@@ -43,10 +43,10 @@ export function DashboardPage() {
     <div className="page builder-page overview-flow">
       <section className="hero hero-primary builder-hero overview-hero">
         <p className="eyebrow">Motivation</p>
-        <h1>I design ML systems that keep high-stakes decisions reliable.</h1>
+        <h1>I build decision systems that stay reliable when conditions change.</h1>
         <p className="hero-copy">
-          The core problem I work on is stability under change: shifting data, changing objectives,
-          and operational constraints that do not wait for perfect conditions.
+          My focus is practical: keep high-stakes decisions stable under drift, shifting objectives,
+          and hard operating constraints.
         </p>
 
         <div className="overview-fact-row" aria-label="Motivation context">
@@ -55,11 +55,11 @@ export function DashboardPage() {
             <p>{formatNumber(profile.counts.projects)}</p>
           </article>
           <article className="overview-fact">
-            <p className="matrix-label">Research outputs</p>
+            <p className="matrix-label">Papers</p>
             <p>{formatNumber(metrics.works_count)}</p>
           </article>
           <article className="overview-fact">
-            <p className="matrix-label">Total citations</p>
+            <p className="matrix-label">Citations</p>
             <p>{formatNumber(metrics.citations_total)}</p>
           </article>
         </div>
@@ -68,44 +68,42 @@ export function DashboardPage() {
       <ArcSpine current="motivation" />
 
       <PageCompass
-        title="How To Read Motivation"
+        title="Read In 20 Seconds"
         steps={[
-          'Start with the opening constraint and scope.',
-          'Use the fact row to calibrate breadth and research depth.',
-          'Read the three design principles as requirements for later layers.',
+          'Start with the core pressure.',
+          'Use the three signals for scope.',
+          'Carry these principles into Skills.',
         ]}
-        outcome="A clear understanding of why this portfolio is organized around decision reliability under change."
+        outcome="This section defines why the rest of the portfolio is structured the way it is."
       />
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Design Principles Derived From This Motivation</h2>
+          <h2>Principles That Guide Every Build</h2>
         </header>
         <div className="direction-grid">
           <article className="direction-card">
-            <h3>Robustness before peak metrics</h3>
+            <h3>Reliability before peak score</h3>
             <p>
-              A method is useful only if it remains dependable under drift, not just at a static
-              optimum.
+              A method matters only if it stays dependable under drift, not only at a static peak.
             </p>
           </article>
           <article className="direction-card">
-            <h3>Operations in the loop</h3>
+            <h3>Operations shape modeling early</h3>
             <p>
-              Service reliability, cost, and deployment feasibility shape modeling decisions early.
+              Service reliability, cost, and deployment feasibility are design constraints, not afterthoughts.
             </p>
           </article>
           <article className="direction-card">
-            <h3>Claims tied to evidence</h3>
+            <h3>Claims must be inspectable</h3>
             <p>
-              Every claim should be inspectable in code, measurable in outcomes, and grounded in
-              research.
+              Every claim should be visible in code, measurable in outcomes, and grounded in evidence.
             </p>
           </article>
         </div>
 
         <p className="meta-line">
-          These principles directly determine the technical skills shown next.
+          These principles directly shape the methods shown next.
         </p>
       </section>
     </div>

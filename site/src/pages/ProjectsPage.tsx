@@ -160,29 +160,28 @@ export function ProjectsPage() {
     <div className="page builder-page overview-flow">
       <section className="hero hero-primary">
         <p className="eyebrow">Skills</p>
-        <h1>I turn reliability requirements into inspectable technical methods.</h1>
+        <h1>I design methods that keep model behavior stable under drift.</h1>
         <p className="hero-copy">
-          This layer shows the technical toolkit used to satisfy the motivation layer under realistic
-          drift and stress.
+          Use the proof below to stress update policies and see their trade-offs immediately.
         </p>
       </section>
 
       <ArcSpine current="skills" />
 
       <PageCompass
-        title="How To Read Skills"
+        title="Read In 20 Seconds"
         steps={[
-          'Switch proof modes to stress the methods.',
-          'Compare return, drawdown, and stress share before concluding.',
-          'Inspect linked repositories to verify implementation depth.',
+          'Switch scenario intensity.',
+          'Compare gain, dip, and stress exposure.',
+          'Open implementations for code depth.',
         ]}
-        outcome="Confidence in the technical methods used to satisfy the motivation layer under drift and stress."
+        outcome="The goal is simple: show methods that are both rigorous and deployable."
       />
 
       <section className="panel proof-focus-panel" aria-label="Skill proof">
         <header className="proof-focus-header">
-          <p className="matrix-label">Interactive proof · Continual reliability</p>
-          <h2>How update policies behave under drift and stress</h2>
+          <p className="matrix-label">Interactive Proof</p>
+          <h2>Update policy performance under changing conditions</h2>
         </header>
 
         <div className="clplo-toolbar" role="group" aria-label="CL-PLO modes">
@@ -194,7 +193,7 @@ export function ProjectsPage() {
               setProofRunVersion((value) => value + 1)
             }}
           >
-            Quick
+            Baseline
           </button>
           <button
             type="button"
@@ -204,7 +203,7 @@ export function ProjectsPage() {
               setProofRunVersion((value) => value + 1)
             }}
           >
-            Default
+            Balanced
           </button>
           <button
             type="button"
@@ -214,7 +213,7 @@ export function ProjectsPage() {
               setProofRunVersion((value) => value + 1)
             }}
           >
-            Stress+
+            Extreme
           </button>
         </div>
 
@@ -244,19 +243,19 @@ export function ProjectsPage() {
 
         <div className="proof-stat-grid" aria-label="CL-PLO outcomes">
           <article className="proof-stat-card">
-            <p className="matrix-label">Winner</p>
+            <p className="matrix-label">Best strategy</p>
             <p className="proof-stat-main">{proofResult.winner.label}</p>
           </article>
           <article className="proof-stat-card">
-            <p className="matrix-label">Return</p>
+            <p className="matrix-label">Total gain</p>
             <p className="proof-stat-main">{formatPercent(proofResult.winner.metrics.total_return)}</p>
           </article>
           <article className="proof-stat-card">
-            <p className="matrix-label">Max drawdown</p>
+            <p className="matrix-label">Worst dip</p>
             <p className="proof-stat-main">{formatPercent(proofResult.winner.metrics.max_drawdown)}</p>
           </article>
           <article className="proof-stat-card">
-            <p className="matrix-label">Stress share</p>
+            <p className="matrix-label">Stress exposure</p>
             <p className="proof-stat-main">{formatPercent(stressShare)}</p>
           </article>
         </div>
@@ -269,9 +268,11 @@ export function ProjectsPage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Where These Methods Are Implemented</h2>
+          <h2>Selected Implementations</h2>
         </header>
-        {themeSummary.length > 0 ? <p className="tag-cloud">{themeSummary.join(' · ')}</p> : null}
+        {themeSummary.length > 0 ? (
+          <p className="tag-cloud">Focus areas: {themeSummary.join(' · ')}</p>
+        ) : null}
         <div className="card-grid">
           {featured.map((project) => (
             <article key={project.name} className="item-card">

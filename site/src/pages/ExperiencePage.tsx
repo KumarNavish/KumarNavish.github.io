@@ -87,23 +87,22 @@ export function ExperiencePage() {
     <div className="page">
       <section className="hero">
         <p className="eyebrow">Experience</p>
-        <h1>I carry work from inquiry to end-to-end delivery.</h1>
+        <h1>I carry work from inquiry to production delivery.</h1>
         <p className="hero-copy">
-          This final layer shows progression: how the arc translated into sustained, applied
-          execution.
+          This final layer shows progression over time: how the arc translated into sustained execution.
         </p>
       </section>
 
       <ArcSpine current="experience" />
 
       <PageCompass
-        title="How To Read Experience"
+        title="Read In 20 Seconds"
         steps={[
-          'Read the trajectory phases as progression, not isolated milestones.',
-          'Use the metric row to gauge breadth and continuity.',
-          'Inspect execution artifacts for direct evidence of delivery practice.',
+          'Read the three phases as one progression.',
+          'Use metrics for scope and continuity.',
+          'Open artifacts for direct proof.',
         ]}
-        outcome="A coherent progression from inquiry to production-oriented execution at increasing scope."
+        outcome="This section closes the arc with a clear execution trajectory."
       />
 
       <section className="panel">
@@ -116,15 +115,14 @@ export function ExperiencePage() {
             <h3>Research foundation</h3>
             <p>
               Publication record established{trajectory.firstResearchYear ? ` in ${trajectory.firstResearchYear}` : ''},
-              with focus on mathematically grounded modeling and analysis.
+              with focus on rigorous modeling and analysis.
             </p>
           </article>
           <article className="sequence-step">
             <p className="sequence-index">Phase 2</p>
             <h3>Applied ML systems</h3>
             <p>
-              Transition to deployable ML artifacts with constrained optimization, reliability
-              checks, and decision-facing outputs.
+              Transition to deployable ML systems with constrained optimization and reliability checks.
             </p>
           </article>
           <article className="sequence-step">
@@ -132,7 +130,7 @@ export function ExperiencePage() {
             <h3>End-to-end delivery</h3>
             <p>
               Systems maintained through {trajectory.latestBuildYear ?? 'current'} with automated
-              data generation, testing, and static deployment.
+              data generation, testing, and continuous deployment.
             </p>
           </article>
         </div>
@@ -164,7 +162,7 @@ export function ExperiencePage() {
         <div className="card-grid">
           <article className="item-card">
             <h3>Generated resume</h3>
-            <p>Pipeline-generated artifact summarizing role history and execution scope.</p>
+            <p>Role and delivery summary generated from structured source data.</p>
             <p className="meta-line">
               <a href="/artifacts/resume.pdf" target="_blank" rel="noreferrer">
                 Open resume PDF
@@ -173,7 +171,7 @@ export function ExperiencePage() {
           </article>
           <article className="item-card">
             <h3>GitHub profile</h3>
-            <p>Source of truth for repository activity and implementation traceability.</p>
+            <p>Primary record of repository activity and implementation history.</p>
             <p className="meta-line">
               <a href={profile.links.github} target="_blank" rel="noreferrer">
                 Open GitHub
@@ -182,7 +180,7 @@ export function ExperiencePage() {
           </article>
           <article className="item-card">
             <h3>Portfolio system repository</h3>
-            <p>Automation pipeline, generated APIs, frontend integration, and CI/CD delivery.</p>
+            <p>End-to-end source for data pipeline, APIs, frontend, and deployment workflow.</p>
             <p className="meta-line">
               <a
                 href="https://github.com/KumarNavish/KumarNavish.github.io"

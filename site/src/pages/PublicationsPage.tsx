@@ -57,16 +57,6 @@ function summarizeAuthors(authors: string[]): string {
   return `${authors.slice(0, 3).join(', ')}, et al.`
 }
 
-function describePublicationSource(source: string): string {
-  if (source === 'semantic_scholar') {
-    return 'Semantic Scholar synchronized records'
-  }
-  if (source === 'overrides') {
-    return 'Curated publication records with pipeline normalization'
-  }
-  return 'Synchronized and curated publication records'
-}
-
 export function PublicationsPage() {
   const loadPublications = useCallback(
     () =>
@@ -122,30 +112,29 @@ export function PublicationsPage() {
     )
   }
 
-  const { publications, metrics } = state.data
+  const { metrics } = state.data
   const topicsTracked = metrics.topics.length
 
   return (
     <div className="page">
       <section className="hero">
         <p className="eyebrow">Research</p>
-        <h1>I use research to make implementation choices rigorous.</h1>
+        <h1>Research gives the systems depth, not decoration.</h1>
         <p className="hero-copy">
-          This layer adds depth to the impact layer by showing what is principled, validated, and
-          transferable.
+          This layer shows the evidence behind design choices and why those choices transfer across settings.
         </p>
       </section>
 
       <ArcSpine current="research" />
 
       <PageCompass
-        title="How To Read Research"
+        title="Read In 20 Seconds"
         steps={[
-          'Start with aggregate metrics for breadth and influence.',
-          'Use the citation trajectory to see continuity over time.',
-          'Filter the evidence record by topic or venue and inspect sources.',
+          'Scan scale and influence first.',
+          'Use citation trend for continuity.',
+          'Search topics, then open source papers.',
         ]}
-        outcome="A precise view of why implementation choices are grounded in durable, inspectable evidence."
+        outcome="The goal is to show that implementation choices are grounded in durable evidence."
       />
 
       <section className="metric-grid">
@@ -174,7 +163,7 @@ export function PublicationsPage() {
 
       <section className="controls-panel controls-panel-compact">
         <label>
-          Filter publications
+          Search research
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -214,12 +203,6 @@ export function PublicationsPage() {
             </article>
           ))}
         </div>
-      </section>
-
-      <section className="panel panel-note">
-        <p className="meta-line">
-          Evidence source: {describePublicationSource(publications.source)}
-        </p>
       </section>
     </div>
   )
