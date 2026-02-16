@@ -1,16 +1,16 @@
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
 
 :root {
-  --bg: #f8f7f3;
-  --bg-elevated: #fdfcf8;
-  --fg: #1a1b19;
-  --muted: #5c5f58;
-  --line: #ddd8ca;
+  --bg: #f7f6f1;
+  --bg-elevated: #fcfbf7;
+  --fg: #161714;
+  --muted: #555951;
+  --line: #d9d4c5;
   --accent: #1d4a43;
-  --accent-soft: #edf3ef;
+  --accent-soft: #ecf2ef;
   --error: #a02727;
-  --radius: 10px;
-  --max-width: 1024px;
+  --radius: 14px;
+  --max-width: 1100px;
 }
 
 * {
@@ -21,10 +21,10 @@ body {
   margin: 0;
   color: var(--fg);
   font-family: 'IBM Plex Sans', 'Avenir Next', 'Segoe UI', sans-serif;
-  line-height: 1.55;
+  line-height: 1.6;
   background:
-    radial-gradient(700px 300px at 0% 0%, #ede9de 0%, transparent 60%),
-    radial-gradient(820px 340px at 100% 0%, #eff0ea 0%, transparent 62%),
+    radial-gradient(720px 280px at 0% 0%, #efeade 0%, transparent 62%),
+    radial-gradient(920px 360px at 100% 0%, #edf0e9 0%, transparent 64%),
     var(--bg);
 }
 
@@ -47,15 +47,15 @@ a:hover {
   position: sticky;
   top: 0;
   z-index: 20;
-  backdrop-filter: blur(10px);
-  background: color-mix(in srgb, var(--bg) 92%, white 8%);
+  backdrop-filter: blur(12px);
+  background: color-mix(in srgb, var(--bg) 94%, white 6%);
   border-bottom: 1px solid var(--line);
 }
 
 .header-inner {
   width: min(var(--max-width), 92vw);
   margin: 0 auto;
-  padding: 0.9rem 0 0.25rem;
+  padding: 1rem 0 0.2rem;
 }
 
 .header-title {
@@ -66,30 +66,30 @@ a:hover {
 }
 
 .header-subtitle {
-  margin: 0.25rem 0 0;
+  margin: 0.22rem 0 0;
   color: var(--muted);
-  font-size: 0.87rem;
+  font-size: 0.86rem;
 }
 
 .site-nav {
   width: min(var(--max-width), 92vw);
   margin: 0 auto;
-  padding: 0.2rem 0 0.65rem;
+  padding: 0.28rem 0 0.76rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 1.1rem;
+  gap: 0.9rem;
 }
 
 .nav-link {
   display: inline-flex;
   align-items: center;
-  gap: 0.42rem;
-  padding: 0.12rem 0;
+  gap: 0.36rem;
+  padding: 0.2rem 0.52rem;
   color: var(--muted);
-  font-size: 0.86rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  border-bottom: 1px solid transparent;
+  font-size: 0.79rem;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+  border-radius: 999px;
   font-family: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Monaco, Consolas,
     'Liberation Mono', monospace;
 }
@@ -107,36 +107,37 @@ a:hover {
 
 .nav-link-active {
   color: var(--fg);
-  border-bottom-color: color-mix(in srgb, var(--accent) 65%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 52%, #fbfaf6);
 }
 
 .content-shell {
   width: min(var(--max-width), 92vw);
-  margin: 2.4rem auto 4.1rem;
+  margin: 2.1rem auto 4.6rem;
 }
 
 .page {
   display: grid;
-  gap: 1.35rem;
+  gap: 1.6rem;
 }
 
 .builder-page {
-  gap: 1.45rem;
+  gap: 1.7rem;
 }
 
 .hero {
-  padding: 1.95rem;
+  padding: 2.25rem 2.2rem;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: var(--bg-elevated);
+  background: color-mix(in srgb, var(--bg-elevated) 92%, white 8%);
 }
 
 .hero-primary {
-  padding: 2.25rem;
+  padding: 2.45rem 2.4rem;
 }
 
 .builder-hero {
-  padding: 2.5rem;
+  padding: 2.65rem 2.5rem;
 }
 
 .builder-stat-row {
@@ -179,19 +180,19 @@ a:hover {
 }
 
 .hero h1 {
-  margin: 0.6rem 0 0;
+  margin: 0.72rem 0 0;
   font-family: 'Fraunces', Georgia, serif;
-  font-size: clamp(2rem, 3.35vw, 3.05rem);
-  line-height: 1.1;
-  letter-spacing: -0.016em;
+  font-size: clamp(2.05rem, 3.4vw, 3.15rem);
+  line-height: 1.08;
+  letter-spacing: -0.015em;
 }
 
 .hero-copy {
-  margin: 0.92rem 0 0;
+  margin: 1.02rem 0 0;
   color: var(--muted);
-  max-width: 60ch;
-  line-height: 1.62;
-  font-size: 1rem;
+  max-width: 62ch;
+  line-height: 1.68;
+  font-size: 1.02rem;
 }
 
 .pill-row {
@@ -252,8 +253,8 @@ a:hover {
 .panel {
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: var(--bg-elevated);
-  padding: 1.28rem 1.36rem;
+  background: color-mix(in srgb, var(--bg-elevated) 94%, white 6%);
+  padding: 1.52rem 1.56rem;
 }
 
 .panel-note {
@@ -264,27 +265,27 @@ a:hover {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  gap: 0.7rem;
-  margin-bottom: 0.86rem;
+  gap: 0.8rem;
+  margin-bottom: 1rem;
 }
 
 .panel-header h2 {
   margin: 0;
   font-family: 'Fraunces', Georgia, serif;
-  font-size: 1.12rem;
+  font-size: 1.18rem;
   font-weight: 600;
 }
 
 .metric-grid {
   display: grid;
-  gap: 0.78rem;
+  gap: 0.9rem;
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .metric-card {
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 1rem 1.05rem;
+  padding: 1.08rem 1.12rem;
   background: #fefdf9;
 }
 
@@ -297,22 +298,22 @@ a:hover {
 }
 
 .metric-value {
-  margin: 0.48rem 0 0;
-  font-size: 1.5rem;
+  margin: 0.52rem 0 0;
+  font-size: 1.56rem;
   line-height: 1.2;
   font-family: 'Fraunces', Georgia, serif;
 }
 
 .direction-grid {
   display: grid;
-  gap: 0.78rem;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
 .direction-card {
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 0.95rem 1rem;
+  padding: 1.02rem 1.06rem;
   background: #fefdf9;
 }
 
@@ -322,7 +323,8 @@ a:hover {
 }
 
 .direction-card p {
-  margin: 0.48rem 0 0;
+  margin: 0.54rem 0 0;
+  line-height: 1.6;
 }
 
 .controls-panel {
@@ -710,14 +712,14 @@ a:hover {
 
 .card-grid {
   display: grid;
-  gap: 0.74rem;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.92rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
 .item-card {
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 0.84rem 0.9rem;
+  padding: 1rem 1.04rem;
   background: #fdfcf8;
 }
 
@@ -728,18 +730,19 @@ a:hover {
 }
 
 .item-card p {
-  margin: 0.47rem 0 0;
+  margin: 0.56rem 0 0;
+  line-height: 1.58;
 }
 
 .stack-list {
   display: grid;
-  gap: 0.72rem;
+  gap: 0.92rem;
 }
 
 .stack-item {
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 0.9rem 0.95rem;
+  padding: 1.05rem 1.1rem;
   background: #fcfbf7;
 }
 
@@ -751,7 +754,8 @@ a:hover {
 }
 
 .stack-item p {
-  margin: 0.44rem 0 0;
+  margin: 0.56rem 0 0;
+  line-height: 1.58;
 }
 
 .case-study-card {
@@ -770,18 +774,22 @@ a:hover {
 }
 
 .case-rows {
-  margin-top: 0.78rem;
+  margin-top: 0.92rem;
   display: grid;
-  gap: 0.66rem;
+  gap: 0.74rem;
 }
 
 .case-row {
+  display: grid;
+  grid-template-columns: minmax(130px, 160px) minmax(0, 1fr);
+  gap: 0.78rem;
+  align-items: start;
   border-top: 1px solid var(--line);
-  padding-top: 0.58rem;
+  padding-top: 0.64rem;
 }
 
 .case-row p {
-  margin: 0.36rem 0 0;
+  margin: 0;
 }
 
 .case-demo-shell {
@@ -868,8 +876,8 @@ a:hover {
 .matrix-label {
   margin: 0;
   color: var(--muted);
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
+  font-size: 0.71rem;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   font-family: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Monaco, Consolas,
     'Liberation Mono', monospace;
@@ -878,8 +886,8 @@ a:hover {
 .meta-line {
   margin: 0.34rem 0 0;
   color: var(--muted);
-  font-size: 0.86rem;
-  line-height: 1.5;
+  font-size: 0.9rem;
+  line-height: 1.58;
 }
 
 .tag-cloud {
@@ -1006,6 +1014,11 @@ a:hover {
     grid-template-columns: 1fr;
   }
 
+  .case-row {
+    grid-template-columns: 1fr;
+    gap: 0.42rem;
+  }
+
   .controls-panel,
   .direction-grid,
   .sequence-grid,
@@ -1024,7 +1037,7 @@ a:hover {
   .hero,
   .panel,
   .controls-panel {
-    padding: 1rem;
+    padding: 1.05rem;
   }
 
   .builder-hero {
@@ -1136,7 +1149,9 @@ a:hover {
 
 .arc-spine-panel {
   display: grid;
-  gap: 0.88rem;
+  gap: 1rem;
+  background: color-mix(in srgb, var(--accent-soft) 26%, #fcfbf7);
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--line));
 }
 
 .arc-spine-track {
@@ -1144,7 +1159,7 @@ a:hover {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 0.56rem;
+  gap: 0.6rem;
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
@@ -1165,9 +1180,9 @@ a:hover {
   align-items: center;
   justify-content: center;
   gap: 0.44rem;
-  padding: 0.48rem 0.7rem;
+  padding: 0.52rem 0.74rem;
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   text-decoration: none;
 }
 
@@ -1192,20 +1207,30 @@ a:hover {
 
 .arc-spine-grid {
   display: grid;
-  gap: 0.72rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.84rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .arc-spine-card {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: #fefdf9;
-  padding: 0.84rem 0.9rem;
+  padding: 0.96rem 1rem;
 }
 
 .arc-spine-card p {
-  margin: 0.36rem 0 0;
+  margin: 0.4rem 0 0;
   line-height: 1.5;
+}
+
+.arc-spine-card h3 {
+  margin: 0.46rem 0 0;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.arc-spine-card .action-link {
+  margin-top: 0.78rem;
 }
 
 .scenario-claim {

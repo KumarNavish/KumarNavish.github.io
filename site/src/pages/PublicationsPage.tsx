@@ -128,10 +128,10 @@ export function PublicationsPage() {
     <div className="page">
       <section className="hero">
         <p className="eyebrow">Research</p>
-        <h1>I ground implementation choices in durable research evidence.</h1>
+        <h1>I use research to make implementation choices rigorous.</h1>
         <p className="hero-copy">
-          Research appears here as depth: it explains why earlier systems and outcomes are rigorous,
-          not incidental.
+          This layer adds depth to the impact layer by showing what is principled, validated, and
+          transferable.
         </p>
       </section>
 
@@ -139,11 +139,11 @@ export function PublicationsPage() {
 
       <section className="metric-grid">
         <article className="metric-card">
-          <p className="metric-label">Validated works</p>
+          <p className="metric-label">Publications</p>
           <p className="metric-value">{formatNumber(metrics.works_count)}</p>
         </article>
         <article className="metric-card">
-          <p className="metric-label">Citation evidence</p>
+          <p className="metric-label">Citations</p>
           <p className="metric-value">{formatNumber(metrics.citations_total)}</p>
         </article>
         <article className="metric-card">
@@ -174,7 +174,7 @@ export function PublicationsPage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Research Record ({filtered.length})</h2>
+          <h2>Evidence Record ({filtered.length})</h2>
         </header>
         <div className="stack-list">
           {filtered.map((publication) => (
@@ -208,6 +208,9 @@ export function PublicationsPage() {
       <section className="panel panel-note">
         <p className="meta-line">
           Evidence source: {describePublicationSource(publications.source)}
+        </p>
+        <p className="meta-line">
+          The next layer shows where this research depth was applied in real delivery contexts.
         </p>
       </section>
     </div>

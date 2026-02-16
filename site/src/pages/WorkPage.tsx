@@ -182,10 +182,10 @@ export function WorkPage() {
     <div className="page">
       <section className="hero">
         <p className="eyebrow">Impact</p>
-        <h1>I measure impact where models change real operational decisions.</h1>
+        <h1>I focus on systems that change real operational decisions.</h1>
         <p className="hero-copy">
-          This layer proves the skills section through concrete systems that shifted practical
-          decisions.
+          This layer shows concrete outcomes: what was built, where it applied, and what changed in
+          practice.
         </p>
       </section>
 
@@ -193,22 +193,22 @@ export function WorkPage() {
 
       <section className="metric-grid">
         <article className="metric-card">
-          <p className="metric-label">Impact cases</p>
+          <p className="metric-label">Case studies</p>
           <p className="metric-value">{formatNumber(evidenceCoverage.cases)}</p>
         </article>
         <article className="metric-card">
-          <p className="metric-label">Cases with implementations</p>
+          <p className="metric-label">With implementations</p>
           <p className="metric-value">{formatNumber(evidenceCoverage.implementations)}</p>
         </article>
         <article className="metric-card">
-          <p className="metric-label">Cases with publications</p>
+          <p className="metric-label">With publication evidence</p>
           <p className="metric-value">{formatNumber(evidenceCoverage.publications)}</p>
         </article>
       </section>
 
       <section id="cases" className="panel">
         <header className="panel-header">
-          <h2>Built Systems in Context</h2>
+          <h2>Operational Case Evidence</h2>
         </header>
         <div className="stack-list">
           {caseStudies.map((caseStudy) => (
@@ -222,12 +222,12 @@ export function WorkPage() {
 
               <div className="case-rows">
                 <div className="case-row">
-                  <p className="matrix-label">Claim</p>
+                  <p className="matrix-label">Decision</p>
                   <p>{caseStudy.decision}</p>
                 </div>
 
                 <div className="case-row">
-                  <p className="matrix-label">Artifact</p>
+                  <p className="matrix-label">Implementation</p>
                   <p>
                     {caseStudy.project ? (
                       <>
@@ -275,7 +275,7 @@ export function WorkPage() {
                 </div>
 
                 <div className="case-row">
-                  <p className="matrix-label">Operational signal</p>
+                  <p className="matrix-label">Operational change</p>
                   <p>{buildOutcomeSignal(caseStudy.project, caseStudy.publication)}</p>
                 </div>
               </div>
@@ -286,8 +286,8 @@ export function WorkPage() {
                     <p className="matrix-label">In-context demonstration</p>
                     <h4>Last-mile transition planner</h4>
                     <p className="meta-line">
-                      Tune operating conditions, keep service targets explicit, and inspect
-                      deployment implications immediately.
+                      Adjust operating conditions and immediately inspect reliability, cost, and
+                      rollout implications.
                     </p>
                   </header>
 
@@ -378,8 +378,7 @@ export function WorkPage() {
 
       <section className="panel panel-note">
         <p className="meta-line">
-          Impact is shown through case-level claim, implementation, evidence, and operational signal
-          before moving to research depth.
+          Research in the next layer explains why these outcomes are principled and repeatable.
         </p>
       </section>
     </div>

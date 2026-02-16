@@ -4,11 +4,14 @@ import { ARC_STEPS, getArcNeighbors, type ArcStepId } from '../lib/arc'
 
 export function ArcSpine({ current }: { current: ArcStepId }) {
   const { previous, current: currentStep, next } = getArcNeighbors(current)
+  const context = previous
+    ? `Built on ${previous.label.toLowerCase()}: ${previous.purpose}`
+    : 'Starting point: define the practical decision pressure first.'
 
   return (
     <section className="panel arc-spine-panel" aria-label="Narrative spine">
       <header className="panel-header">
-        <h2>Narrative Spine</h2>
+        <h2>Where This Page Sits In The Arc</h2>
       </header>
 
       <ol className="arc-spine-track">
@@ -27,26 +30,18 @@ export function ArcSpine({ current }: { current: ArcStepId }) {
 
       <div className="arc-spine-grid">
         <article className="arc-spine-card">
-          <p className="matrix-label">Context from previous layer</p>
-          <p>
-            {previous
-              ? `${previous.label}: ${previous.purpose}`
-              : 'Starting point: define why reliable decisions matter before choosing methods.'}
-          </p>
-        </article>
-
-        <article className="arc-spine-card">
-          <p className="matrix-label">Question answered here</p>
-          <p>{currentStep.readerQuestion}</p>
+          <p className="matrix-label">This page answers</p>
+          <h3>{currentStep.readerQuestion}</h3>
           <p className="meta-line">{currentStep.purpose}</p>
           <p className="meta-line">{currentStep.evidence}</p>
+          <p className="meta-line">{context}</p>
         </article>
 
         <article className="arc-spine-card">
-          <p className="matrix-label">Question raised next</p>
-          <p>{next ? next.readerQuestion : 'How does the full arc read as one system?'}</p>
+          <p className="matrix-label">Next question</p>
+          <h3>{next ? next.readerQuestion : 'How does the full arc read as one system?'}</h3>
           <p className="meta-line">{currentStep.handoff}</p>
-          <Link className="builder-inline-link" to={next ? next.route : '/'}>
+          <Link className="action-link action-link-primary" to={next ? next.route : '/'}>
             {next ? `Continue to ${next.label}` : 'Return to Motivation'}
           </Link>
         </article>

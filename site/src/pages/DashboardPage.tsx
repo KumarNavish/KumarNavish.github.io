@@ -42,23 +42,23 @@ export function DashboardPage() {
     <div className="page builder-page overview-flow">
       <section className="hero hero-primary builder-hero overview-hero">
         <p className="eyebrow">Motivation</p>
-        <h1>I build decision systems that stay reliable as conditions change.</h1>
+        <h1>I design ML systems that keep high-stakes decisions reliable.</h1>
         <p className="hero-copy">
-          My work starts from one practical constraint: decisions should remain dependable even when
-          data, objectives, and operating conditions shift.
+          The core problem I work on is stability under change: shifting data, changing objectives,
+          and operational constraints that do not wait for perfect conditions.
         </p>
 
         <div className="overview-fact-row" aria-label="Motivation context">
           <article className="overview-fact">
-            <p className="matrix-label">Problems worked</p>
+            <p className="matrix-label">Systems built</p>
             <p>{formatNumber(profile.counts.projects)}</p>
           </article>
           <article className="overview-fact">
-            <p className="matrix-label">Research works</p>
+            <p className="matrix-label">Research outputs</p>
             <p>{formatNumber(metrics.works_count)}</p>
           </article>
           <article className="overview-fact">
-            <p className="matrix-label">Citations</p>
+            <p className="matrix-label">Total citations</p>
             <p>{formatNumber(metrics.citations_total)}</p>
           </article>
         </div>
@@ -68,31 +68,33 @@ export function DashboardPage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>What This Motivation Requires</h2>
+          <h2>Design Principles Derived From This Motivation</h2>
         </header>
         <div className="direction-grid">
           <article className="direction-card">
-            <h3>Reliability under drift</h3>
+            <h3>Robustness before peak metrics</h3>
             <p>
-              Methods must stay stable when environments change, not only on static benchmarks.
+              A method is useful only if it remains dependable under drift, not just at a static
+              optimum.
             </p>
           </article>
           <article className="direction-card">
-            <h3>Operational constraints first</h3>
+            <h3>Operations in the loop</h3>
             <p>
-              Modeling must respect service, cost, and deployment constraints from the beginning.
+              Service reliability, cost, and deployment feasibility shape modeling decisions early.
             </p>
           </article>
           <article className="direction-card">
-            <h3>Evidence tied to decisions</h3>
+            <h3>Claims tied to evidence</h3>
             <p>
-              Each claim should be inspectable in systems, measurable outcomes, and research backing.
+              Every claim should be inspectable in code, measurable in outcomes, and grounded in
+              research.
             </p>
           </article>
         </div>
 
         <p className="meta-line">
-          These requirements determine the skills developed in the next layer.
+          These principles directly determine the technical skills shown next.
         </p>
       </section>
     </div>
