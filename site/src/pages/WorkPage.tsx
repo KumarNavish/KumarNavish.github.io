@@ -31,7 +31,7 @@ interface CaseStudyDefinition {
 const CASE_STUDIES: CaseStudyDefinition[] = [
   {
     id: 'continual-learning-policy',
-    track: 'Model Reliability',
+    track: 'Reliability',
     title: 'Continual-learning update policy',
     decision: 'Which update strategy stays stable as data and objectives shift over time?',
     implementation: 'CL-PLO sandbox for side-by-side strategy comparison under continual updates.',
@@ -41,7 +41,7 @@ const CASE_STUDIES: CaseStudyDefinition[] = [
   },
   {
     id: 'moderation-intervention',
-    track: 'Safety Analytics',
+    track: 'Safety',
     title: 'Hate and counterspeech intervention analysis',
     decision: 'Which behavior patterns should trigger intervention before harmful escalation?',
     implementation:
@@ -52,7 +52,7 @@ const CASE_STUDIES: CaseStudyDefinition[] = [
   },
   {
     id: 'urban-transition-planning',
-    track: 'Operational Planning',
+    track: 'Operations',
     title: 'Cargo-bike transition prioritization',
     decision: 'Which urban micro-regions are best candidates for delivery-fleet transition first?',
     implementation:
@@ -183,42 +183,42 @@ export function WorkPage() {
     <div className="page">
       <section className="hero">
         <p className="eyebrow">Impact</p>
-        <h1>I focus on systems that change real operational decisions.</h1>
+        <h1>I turn methods into operational decisions.</h1>
         <p className="hero-copy">
-          Each case links one decision, one implementation, and one measurable operational outcome.
+          Each case connects one decision, one system, and one observable outcome.
         </p>
       </section>
 
       <ArcSpine current="impact" />
 
       <PageCompass
-        title="Read In 20 Seconds"
+        title="Quick Scan"
         steps={[
           'Scan coverage metrics first.',
           'Read each case from decision to outcome.',
           'Use the planner to test implications.',
         ]}
-        outcome="The intent is to show shipped work that changes decisions, not only model metrics."
+        outcome="Look for decisions changed in practice, with implementation and evidence attached."
       />
 
       <section className="metric-grid">
         <article className="metric-card">
-          <p className="metric-label">Case studies</p>
+          <p className="metric-label">Cases</p>
           <p className="metric-value">{formatNumber(evidenceCoverage.cases)}</p>
         </article>
         <article className="metric-card">
-          <p className="metric-label">Implemented</p>
+          <p className="metric-label">Implemented cases</p>
           <p className="metric-value">{formatNumber(evidenceCoverage.implementations)}</p>
         </article>
         <article className="metric-card">
-          <p className="metric-label">Research-backed</p>
+          <p className="metric-label">Research-supported</p>
           <p className="metric-value">{formatNumber(evidenceCoverage.publications)}</p>
         </article>
       </section>
 
       <section id="cases" className="panel">
         <header className="panel-header">
-          <h2>Operational Cases</h2>
+          <h2>Case Evidence In Practice</h2>
         </header>
         <div className="stack-list">
           {caseStudies.map((caseStudy) => (
@@ -255,7 +255,7 @@ export function WorkPage() {
                         </a>
                       </>
                     ) : (
-                      `${caseStudy.implementation} Evidence remains visible through linked research and documented results.`
+                      `${caseStudy.implementation} Supporting evidence remains visible through linked research and documented results.`
                     )}
                   </p>
                 </div>
@@ -279,7 +279,7 @@ export function WorkPage() {
                         ) : null}
                       </>
                     ) : (
-                      'Publication evidence is being curated for this case.'
+                      'Publication evidence link is being finalized for this case.'
                     )}
                   </p>
                 </div>
@@ -296,7 +296,7 @@ export function WorkPage() {
                     <p className="matrix-label">In-Context Demo</p>
                     <h4>Last-mile transition planner</h4>
                     <p className="meta-line">
-                      Adjust conditions and immediately inspect reliability, cost, and rollout plan.
+                      Adjust conditions and immediately inspect reliability, cost, and rollout implications.
                     </p>
                   </header>
 
@@ -336,7 +336,7 @@ export function WorkPage() {
                         }
                         onClick={() => setServiceLevelTarget(target)}
                       >
-                        Target {formatPercent(target)}
+                        SLA {formatPercent(target)}
                       </button>
                     ))}
                   </div>
@@ -370,7 +370,7 @@ export function WorkPage() {
                   </div>
 
                   <div className="case-demo-plan">
-                    <p className="matrix-label">Suggested first wave</p>
+                    <p className="matrix-label">First rollout wave</p>
                     <ol className="case-demo-list">
                       {logisticsSimulation.first_wave.map((region) => (
                         <li key={region}>{region}</li>

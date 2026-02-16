@@ -57,6 +57,13 @@ function summarizeAuthors(authors: string[]): string {
   return `${authors.slice(0, 3).join(', ')}, et al.`
 }
 
+function compactText(value: string, limit = 180): string {
+  if (value.length <= limit) {
+    return value
+  }
+  return `${value.slice(0, limit - 1).trimEnd()}…`
+}
+
 export function PublicationsPage() {
   const loadPublications = useCallback(
     () =>
@@ -119,7 +126,7 @@ export function PublicationsPage() {
     <div className="page">
       <section className="hero">
         <p className="eyebrow">Research</p>
-        <h1>Research gives the systems depth, not decoration.</h1>
+        <h1>Research gives each implementation choice rigor.</h1>
         <p className="hero-copy">
           This layer shows the evidence behind design choices and why those choices transfer across settings.
         </p>
@@ -128,13 +135,13 @@ export function PublicationsPage() {
       <ArcSpine current="research" />
 
       <PageCompass
-        title="Read In 20 Seconds"
+        title="Quick Scan"
         steps={[
           'Scan scale and influence first.',
           'Use citation trend for continuity.',
-          'Search topics, then open source papers.',
+          'Filter by topic, then open source papers.',
         ]}
-        outcome="The goal is to show that implementation choices are grounded in durable evidence."
+        outcome="The point is to show implementation choices grounded in durable evidence."
       />
 
       <section className="metric-grid">
@@ -147,7 +154,7 @@ export function PublicationsPage() {
           <p className="metric-value">{formatNumber(metrics.citations_total)}</p>
         </article>
         <article className="metric-card">
-          <p className="metric-label">Topics tracked</p>
+          <p className="metric-label">Active themes</p>
           <p className="metric-value">{formatNumber(topicsTracked)}</p>
         </article>
       </section>
@@ -155,7 +162,7 @@ export function PublicationsPage() {
       {metrics.citations_by_year.length > 0 ? (
         <section className="panel">
           <header className="panel-header">
-            <h2>Citation Trajectory</h2>
+            <h2>Citation Trend</h2>
           </header>
           <CitationsChart points={metrics.citations_by_year} />
         </section>
@@ -174,7 +181,7 @@ export function PublicationsPage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Evidence Record ({filtered.length})</h2>
+          <h2>Publication Record ({filtered.length})</h2>
         </header>
         <div className="stack-list">
           {filtered.map((publication) => (
@@ -184,12 +191,12 @@ export function PublicationsPage() {
                 {(publication.venue ?? 'Venue unavailable') +
                   (publication.year ? ` · ${publication.year}` : '')}
               </p>
-              {publication.summary ? <p className="meta-line">{publication.summary}</p> : null}
+              {publication.summary ? <p className="meta-line">{compactText(publication.summary)}</p> : null}
               <p className="meta-line">
                 {formatNumber(publication.citation_count)} citations · {summarizeAuthors(publication.authors)}
               </p>
               <p className="meta-line">
-                {publication.keywords.slice(0, 4).join(' · ')}
+                {publication.keywords.slice(0, 3).join(' · ')}
                 {publication.url ? (
                   <>
                     {' '}

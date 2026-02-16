@@ -43,10 +43,10 @@ export function DashboardPage() {
     <div className="page builder-page overview-flow">
       <section className="hero hero-primary builder-hero overview-hero">
         <p className="eyebrow">Motivation</p>
-        <h1>I build decision systems that stay reliable when conditions change.</h1>
+        <h1>I build ML decision systems that stay dependable under change.</h1>
         <p className="hero-copy">
-          My focus is practical: keep high-stakes decisions stable under drift, shifting objectives,
-          and hard operating constraints.
+          One practical objective drives the portfolio: keep critical decisions stable as data,
+          objectives, and constraints shift.
         </p>
 
         <div className="overview-fact-row" aria-label="Motivation context">
@@ -68,43 +68,41 @@ export function DashboardPage() {
       <ArcSpine current="motivation" />
 
       <PageCompass
-        title="Read In 20 Seconds"
+        title="Quick Scan"
         steps={[
-          'Start with the core pressure.',
-          'Use the three signals for scope.',
+          'Define the pressure.',
+          'Use the three signals for scale.',
           'Carry these principles into Skills.',
         ]}
-        outcome="This section defines why the rest of the portfolio is structured the way it is."
+        outcome="Everything that follows is a response to this operating constraint."
       />
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Principles That Guide Every Build</h2>
+          <h2>Three Build Principles</h2>
         </header>
         <div className="direction-grid">
           <article className="direction-card">
-            <h3>Reliability before peak score</h3>
+            <h3>Dependability over peak score</h3>
             <p>
-              A method matters only if it stays dependable under drift, not only at a static peak.
+              A method is useful only if it remains stable under drift, not only at a static optimum.
             </p>
           </article>
           <article className="direction-card">
-            <h3>Operations shape modeling early</h3>
+            <h3>Operations-first modeling</h3>
             <p>
-              Service reliability, cost, and deployment feasibility are design constraints, not afterthoughts.
+              Reliability, cost, and deployability are design inputs from the start.
             </p>
           </article>
           <article className="direction-card">
-            <h3>Claims must be inspectable</h3>
+            <h3>Evidence before assertion</h3>
             <p>
-              Every claim should be visible in code, measurable in outcomes, and grounded in evidence.
+              Claims must be visible in code and measurable in outcomes.
             </p>
           </article>
         </div>
 
-        <p className="meta-line">
-          These principles directly shape the methods shown next.
-        </p>
+        <p className="meta-line">These principles filter every method in the next layer.</p>
       </section>
     </div>
   )

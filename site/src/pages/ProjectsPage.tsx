@@ -160,28 +160,28 @@ export function ProjectsPage() {
     <div className="page builder-page overview-flow">
       <section className="hero hero-primary">
         <p className="eyebrow">Skills</p>
-        <h1>I design methods that keep model behavior stable under drift.</h1>
+        <h1>I design robust methods for learning under drift.</h1>
         <p className="hero-copy">
-          Use the proof below to stress update policies and see their trade-offs immediately.
+          Start with the interactive proof, then inspect selected implementations.
         </p>
       </section>
 
       <ArcSpine current="skills" />
 
       <PageCompass
-        title="Read In 20 Seconds"
+        title="Quick Scan"
         steps={[
           'Switch scenario intensity.',
-          'Compare gain, dip, and stress exposure.',
-          'Open implementations for code depth.',
+          'Compare return, drawdown, and stress exposure.',
+          'Open implementations to inspect depth.',
         ]}
-        outcome="The goal is simple: show methods that are both rigorous and deployable."
+        outcome="This layer demonstrates methods that are both rigorous and build-ready."
       />
 
       <section className="panel proof-focus-panel" aria-label="Skill proof">
         <header className="proof-focus-header">
           <p className="matrix-label">Interactive Proof</p>
-          <h2>Update policy performance under changing conditions</h2>
+          <h2>CL-PLO performance under changing regimes</h2>
         </header>
 
         <div className="clplo-toolbar" role="group" aria-label="CL-PLO modes">
@@ -247,15 +247,15 @@ export function ProjectsPage() {
             <p className="proof-stat-main">{proofResult.winner.label}</p>
           </article>
           <article className="proof-stat-card">
-            <p className="matrix-label">Total gain</p>
+            <p className="matrix-label">Return</p>
             <p className="proof-stat-main">{formatPercent(proofResult.winner.metrics.total_return)}</p>
           </article>
           <article className="proof-stat-card">
-            <p className="matrix-label">Worst dip</p>
+            <p className="matrix-label">Drawdown</p>
             <p className="proof-stat-main">{formatPercent(proofResult.winner.metrics.max_drawdown)}</p>
           </article>
           <article className="proof-stat-card">
-            <p className="matrix-label">Stress exposure</p>
+            <p className="matrix-label">Stress share</p>
             <p className="proof-stat-main">{formatPercent(stressShare)}</p>
           </article>
         </div>
@@ -268,16 +268,16 @@ export function ProjectsPage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Selected Implementations</h2>
+          <h2>Where These Methods Are Implemented</h2>
         </header>
         {themeSummary.length > 0 ? (
-          <p className="tag-cloud">Focus areas: {themeSummary.join(' · ')}</p>
+          <p className="tag-cloud">Domains: {themeSummary.join(' · ')}</p>
         ) : null}
         <div className="card-grid">
           {featured.map((project) => (
             <article key={project.name} className="item-card">
               <h3>{project.name}</h3>
-              <p>{summarizeProject(project) ?? 'Repository artifact with reproducible code.'}</p>
+              <p>{summarizeProject(project) ?? 'Reproducible repository artifact.'}</p>
               <p className="meta-line">Updated {formatDate(project.last_push)}</p>
               <p className="meta-line">
                 <a href={project.html_url} target="_blank" rel="noreferrer">

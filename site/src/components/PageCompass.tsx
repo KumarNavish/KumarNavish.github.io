@@ -16,7 +16,7 @@ export function PageCompass({ title, steps, outcome }: PageCompassProps) {
           </li>
         ))}
       </ol>
-      <p className="meta-line">{outcome}</p>
+      <p className="meta-line page-compass-outcome">{outcome}</p>
     </section>
   )
 }
