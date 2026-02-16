@@ -5,6 +5,7 @@ import { ArcNarrative } from '../components/ArcNarrative'
 import { ArcThread } from '../components/ArcThread'
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks'
 import { fetchMetricsApi, fetchProfileApi } from '../lib/api'
+import { ARC_STEPS } from '../lib/arc'
 import { formatDateTime, formatNumber } from '../lib/formatters'
 import { useResource } from '../lib/useResource'
 
@@ -12,44 +13,6 @@ interface MotivationData {
   profile: Awaited<ReturnType<typeof fetchProfileApi>>
   metrics: Awaited<ReturnType<typeof fetchMetricsApi>>
 }
-
-const ARC_STEPS = [
-  {
-    title: 'Motivation',
-    summary:
-      'I define decision pressure before choosing methods or tools.',
-    route: '/',
-    cta: 'Current layer',
-  },
-  {
-    title: 'Skills',
-    summary:
-      'I validate methods through live artifacts under explicit constraints.',
-    route: '/projects',
-    cta: 'Continue to Skills',
-  },
-  {
-    title: 'Impact',
-    summary:
-      'I show measurable decision change in operational settings.',
-    route: '/work',
-    cta: 'Continue to Impact',
-  },
-  {
-    title: 'Research',
-    summary:
-      'I ground implementation choices in published evidence.',
-    route: '/publications',
-    cta: 'Continue to Research',
-  },
-  {
-    title: 'Experience',
-    summary:
-      'I close the loop with delivery history and artifacts.',
-    route: '/experience',
-    cta: 'Continue to Experience',
-  },
-] as const
 
 export function DashboardPage() {
   const loadMotivation = useCallback(
@@ -84,8 +47,8 @@ export function DashboardPage() {
         <p className="eyebrow">Motivation</p>
         <h1>I build decision systems that stay reliable as conditions change.</h1>
         <p className="hero-copy">
-          This portfolio follows one arc: why the problem matters, how I build, what changes in
-          practice, and the evidence behind it.
+          I start from decision pressure, then move through methods, operational outcomes, evidence,
+          and delivery history as one continuous narrative.
         </p>
 
         <div className="overview-fact-row" aria-label="Motivation context">
@@ -109,17 +72,18 @@ export function DashboardPage() {
 
       <section className="panel narrative-path-panel">
         <header className="panel-header">
-          <h2>Arc Overview</h2>
+          <h2>Arc Backbone</h2>
         </header>
         <div className="sequence-grid arc-sequence-grid">
           {ARC_STEPS.map((step, index) => (
-            <article key={step.title} className="sequence-step">
+            <article key={step.id} className="sequence-step">
               <p className="sequence-index">Step {index + 1}</p>
-              <h3>{step.title}</h3>
-              <p>{step.summary}</p>
+              <h3>{step.label}</h3>
+              <p>{step.readerQuestion}</p>
+              <p>{step.purpose}</p>
               <p className="meta-line">
                 <Link className="builder-inline-link" to={step.route}>
-                  {step.cta}
+                  {step.id === 'motivation' ? 'Current layer' : `Continue to ${step.label}`}
                 </Link>
               </p>
             </article>
@@ -129,7 +93,7 @@ export function DashboardPage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Guiding Principles</h2>
+          <h2>Motivation Principles</h2>
         </header>
         <div className="direction-grid">
           <article className="direction-card">
@@ -157,9 +121,6 @@ export function DashboardPage() {
         <div className="action-row">
           <Link className="action-link action-link-primary" to="/projects">
             Continue to Skills
-          </Link>
-          <Link className="action-link" to="/work">
-            Jump to Impact
           </Link>
         </div>
       </section>

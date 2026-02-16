@@ -195,6 +195,14 @@ export function WorkPage() {
       }))
   }, [state.data])
 
+  const evidenceCoverage = useMemo(() => {
+    return {
+      cases: caseStudies.length,
+      implementations: caseStudies.filter((caseStudy) => caseStudy.project !== null).length,
+      publications: caseStudies.filter((caseStudy) => caseStudy.publication !== null).length,
+    }
+  }, [caseStudies])
+
   if (state.loading) {
     return <LoadingBlock label="Loading impact." />
   }
@@ -214,7 +222,8 @@ export function WorkPage() {
         <p className="eyebrow">Impact</p>
         <h1>I measure impact where models change real operational decisions.</h1>
         <p className="hero-copy">
-          Each case follows one sequence: claim, artifact, evidence, then measurable signal.
+          This layer answers what I have built by linking claim, artifact, evidence, and operational
+          signal in one view.
         </p>
         <div className="action-row">
           <Link className="action-link" to="/projects">
@@ -229,9 +238,24 @@ export function WorkPage() {
       <ArcThread current="impact" />
       <ArcNarrative current="impact" />
 
+      <section className="metric-grid">
+        <article className="metric-card">
+          <p className="metric-label">Impact cases</p>
+          <p className="metric-value">{formatNumber(evidenceCoverage.cases)}</p>
+        </article>
+        <article className="metric-card">
+          <p className="metric-label">Cases with implementations</p>
+          <p className="metric-value">{formatNumber(evidenceCoverage.implementations)}</p>
+        </article>
+        <article className="metric-card">
+          <p className="metric-label">Cases with publications</p>
+          <p className="metric-value">{formatNumber(evidenceCoverage.publications)}</p>
+        </article>
+      </section>
+
       <section id="cases" className="panel">
         <header className="panel-header">
-          <h2>Impact Cases</h2>
+          <h2>Built Systems in Context</h2>
         </header>
         <div className="stack-list">
           {caseStudies.map((caseStudy) => (
@@ -401,7 +425,7 @@ export function WorkPage() {
 
       <section id="systems" className="panel">
         <header className="panel-header">
-          <h2>Supporting Implementations</h2>
+          <h2>Supporting Build Surface</h2>
         </header>
         <div className="card-grid">
           {featuredProjects.map((project) => (
@@ -428,18 +452,7 @@ export function WorkPage() {
         </div>
       </section>
 
-      <section id="archives" className="panel">
-        <header className="panel-header">
-          <h2>Continue the Narrative</h2>
-        </header>
-        <div className="action-row">
-          <Link className="action-link" to="/projects">
-            Return to Skills
-          </Link>
-          <Link className="action-link action-link-primary" to="/publications">
-            Continue to Research
-          </Link>
-        </div>
+      <section className="panel panel-note">
         <p className="meta-line">
           Last refresh {formatDateTime(state.data.profile.last_sync.last_run_timestamp)}
         </p>

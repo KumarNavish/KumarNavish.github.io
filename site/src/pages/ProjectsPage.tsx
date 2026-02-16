@@ -92,8 +92,6 @@ function linePath(values: number[], width: number, height: number, min: number, 
 
 export function ProjectsPage() {
   const state = useResource(fetchProjectsApi)
-  const [showArchive, setShowArchive] = useState(false)
-  const [query, setQuery] = useState('')
   const [proofPreset, setProofPreset] = useState<ProofPresetId>('default')
   const [proofRunVersion, setProofRunVersion] = useState(0)
 
@@ -110,32 +108,6 @@ export function ProjectsPage() {
           left.name.localeCompare(right.name),
       )
   }, [state.data])
-
-  const archive = useMemo(() => {
-    if (!state.data) {
-      return []
-    }
-    const normalizedQuery = query.trim().toLowerCase()
-    return state.data.items
-      .filter((project) => !project.featured && !project.pinned)
-      .filter((project) => summarizeProject(project) !== null)
-      .filter((project) => {
-        if (!normalizedQuery) {
-          return true
-        }
-        const summary = summarizeProject(project) ?? ''
-        return (
-          project.name.toLowerCase().includes(normalizedQuery) ||
-          summary.toLowerCase().includes(normalizedQuery)
-        )
-      })
-      .sort(
-        (left, right) =>
-          new Date(right.last_push ?? 0).getTime() -
-            new Date(left.last_push ?? 0).getTime() ||
-          left.name.localeCompare(right.name),
-      )
-  }, [query, state.data])
 
   const themeSummary = useMemo(
     () => buildThemeSummary(featured.flatMap((project) => project.tags)),
@@ -191,8 +163,8 @@ export function ProjectsPage() {
         <p className="eyebrow">Skills</p>
         <h1>I demonstrate skills through systems you can inspect, test, and stress.</h1>
         <p className="hero-copy">
-          This layer focuses on reliability under drift through modeling, optimization, and
-          implementation discipline.
+          This layer answers one question directly: what I can build when reliability is under
+          pressure.
         </p>
         <div className="action-row">
           <Link className="action-link" to="/">
@@ -297,7 +269,7 @@ export function ProjectsPage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Inspectable Build Surface</h2>
+          <h2>Systems Carrying These Methods</h2>
         </header>
         {themeSummary.length > 0 ? <p className="tag-cloud">{themeSummary.join(' · ')}</p> : null}
         <div className="card-grid">
@@ -325,47 +297,15 @@ export function ProjectsPage() {
         </div>
       </section>
 
-      <section className="panel">
-        <header className="panel-header">
-          <h2>Extended Build Archive</h2>
-          <button
-            type="button"
-            className="action-link"
-            onClick={() => setShowArchive((value) => !value)}
-          >
-            {showArchive ? 'Hide full archive' : 'Show full archive'}
-          </button>
-        </header>
-        {showArchive ? (
-          <>
-            <div className="controls-panel controls-panel-compact">
-              <label>
-                Search archive
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="name or summary"
-                />
-              </label>
-            </div>
-            <div className="card-grid">
-              {archive.map((project) => (
-                <article key={project.name} className="item-card">
-                  <h3>{project.name}</h3>
-                  <p>{summarizeProject(project)}</p>
-                  <p className="meta-line">Updated {formatDate(project.last_push)}</p>
-                  <p className="meta-line">
-                    <a href={project.html_url} target="_blank" rel="noreferrer">
-                      Repository
-                    </a>
-                  </p>
-                </article>
-              ))}
-            </div>
-          </>
-        ) : (
-          <p className="meta-line">Hidden by default to keep this layer focused.</p>
-        )}
+      <section className="panel panel-note">
+        <p className="meta-line">
+          Skills are validated here, then traced to operational outcomes in the impact layer.
+        </p>
+        <div className="action-row">
+          <Link className="action-link action-link-primary" to="/work">
+            Continue to Impact
+          </Link>
+        </div>
       </section>
     </div>
   )

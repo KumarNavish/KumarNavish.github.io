@@ -1121,7 +1121,7 @@ a:hover {
 }
 
 .arc-thread-panel {
-  padding: 0.9rem 1rem;
+  padding: 1rem 1.08rem;
 }
 
 .arc-thread-list {
@@ -1129,30 +1129,30 @@ a:hover {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 0.56rem;
+  gap: 0.62rem;
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .arc-thread-item {
   border: 1px solid var(--line);
-  border-radius: 999px;
-  background: #fbfaf6;
+  border-radius: 12px;
+  background: #fefdf9;
 }
 
 .arc-thread-item-active {
   border-color: color-mix(in srgb, var(--accent) 44%, var(--line));
-  background: var(--accent-soft);
+  background: color-mix(in srgb, var(--accent-soft) 56%, #fefdf9);
 }
 
 .arc-thread-link {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   width: 100%;
-  align-items: center;
-  justify-content: center;
-  gap: 0.42rem;
-  padding: 0.5rem 0.7rem;
+  align-items: start;
+  gap: 0.58rem;
+  padding: 0.62rem 0.68rem;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.79rem;
   text-decoration: none;
 }
 
@@ -1169,14 +1169,35 @@ a:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.2rem;
-  height: 1.2rem;
+  width: 1.26rem;
+  height: 1.26rem;
   border-radius: 999px;
   border: 1px solid var(--line);
   font-family: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Monaco, Consolas,
     'Liberation Mono', monospace;
   font-size: 0.68rem;
   background: #f8f6ef;
+  margin-top: 0.06rem;
+}
+
+.arc-thread-copy {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.arc-thread-step {
+  color: var(--fg);
+  font-family: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Monaco, Consolas,
+    'Liberation Mono', monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.arc-thread-question {
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.36;
 }
 
 .arc-context-panel {
@@ -1186,19 +1207,20 @@ a:hover {
 
 .arc-context-grid {
   display: grid;
-  gap: 0.72rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.74rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .arc-context-card {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: #fefdf9;
-  padding: 0.78rem 0.84rem;
+  padding: 0.82rem 0.88rem;
 }
 
 .arc-context-card p {
   margin: 0.36rem 0 0;
+  line-height: 1.48;
 }
 
 .scenario-claim {
@@ -1340,10 +1362,12 @@ a:hover {
   .proof-stat-grid,
   .implication-grid,
   .outcome-grid,
-  .case-demo-target-row,
-  .arc-context-grid,
-  .arc-thread-list {
+  .case-demo-target-row {
     grid-template-columns: 1fr;
+  }
+
+  .arc-thread-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -1369,5 +1393,9 @@ a:hover {
   .proof-module-tight,
   .outcome-panel .builder-block {
     padding: 0.9rem;
+  }
+
+  .arc-thread-list {
+    grid-template-columns: 1fr;
   }
 }
