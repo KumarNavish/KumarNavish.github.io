@@ -1120,6 +1120,87 @@ a:hover {
   gap: 0.8rem;
 }
 
+.arc-thread-panel {
+  padding: 0.9rem 1rem;
+}
+
+.arc-thread-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.56rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.arc-thread-item {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fbfaf6;
+}
+
+.arc-thread-item-active {
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--line));
+  background: var(--accent-soft);
+}
+
+.arc-thread-link {
+  display: inline-flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.42rem;
+  padding: 0.5rem 0.7rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+
+.arc-thread-link:hover {
+  text-decoration: none;
+  color: var(--accent);
+}
+
+.arc-thread-item-active .arc-thread-link {
+  color: var(--accent);
+}
+
+.arc-thread-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.2rem;
+  height: 1.2rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-family: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Monaco, Consolas,
+    'Liberation Mono', monospace;
+  font-size: 0.68rem;
+  background: #f8f6ef;
+}
+
+.arc-context-panel {
+  display: grid;
+  gap: 0.74rem;
+}
+
+.arc-context-grid {
+  display: grid;
+  gap: 0.72rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.arc-context-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fefdf9;
+  padding: 0.78rem 0.84rem;
+}
+
+.arc-context-card p {
+  margin: 0.36rem 0 0;
+}
+
 .scenario-claim {
   margin: 0;
   max-width: 64ch;
@@ -1259,7 +1340,9 @@ a:hover {
   .proof-stat-grid,
   .implication-grid,
   .outcome-grid,
-  .case-demo-target-row {
+  .case-demo-target-row,
+  .arc-context-grid,
+  .arc-thread-list {
     grid-template-columns: 1fr;
   }
 }

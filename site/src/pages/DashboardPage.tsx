@@ -1,6 +1,8 @@
 import { useCallback } from 'react'
 import { Link } from 'react-router-dom'
 
+import { ArcNarrative } from '../components/ArcNarrative'
+import { ArcThread } from '../components/ArcThread'
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks'
 import { fetchMetricsApi, fetchProfileApi } from '../lib/api'
 import { formatDateTime, formatNumber } from '../lib/formatters'
@@ -101,6 +103,9 @@ export function DashboardPage() {
           </article>
         </div>
       </section>
+
+      <ArcThread current="motivation" />
+      <ArcNarrative current="motivation" />
 
       <section className="panel narrative-path-panel">
         <header className="panel-header">

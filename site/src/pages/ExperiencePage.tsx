@@ -1,6 +1,8 @@
 import { useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 
+import { ArcNarrative } from '../components/ArcNarrative'
+import { ArcThread } from '../components/ArcThread'
 import {
   fetchProfileApi,
   fetchProjectsApi,
@@ -100,6 +102,9 @@ export function ExperiencePage() {
           </Link>
         </div>
       </section>
+
+      <ArcThread current="experience" />
+      <ArcNarrative current="experience" />
 
       <section className="panel">
         <header className="panel-header">

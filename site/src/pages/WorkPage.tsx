@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { ArcNarrative } from '../components/ArcNarrative'
+import { ArcThread } from '../components/ArcThread'
 import {
   fetchProfileApi,
   fetchProjectsApi,
@@ -224,6 +226,9 @@ export function WorkPage() {
           </Link>
         </div>
       </section>
+
+      <ArcThread current="impact" />
+      <ArcNarrative current="impact" />
 
       <section id="cases" className="panel">
         <header className="panel-header">
