@@ -755,6 +755,21 @@ a:hover {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.case-rows {
+  margin-top: 0.78rem;
+  display: grid;
+  gap: 0.66rem;
+}
+
+.case-row {
+  border-top: 1px solid var(--line);
+  padding-top: 0.58rem;
+}
+
+.case-row p {
+  margin: 0.36rem 0 0;
+}
+
 .case-demo-shell {
   margin-top: 0.86rem;
   border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
@@ -779,7 +794,7 @@ a:hover {
 .case-demo-grid {
   display: grid;
   gap: 0.56rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .case-demo-slider {
@@ -793,6 +808,12 @@ a:hover {
 
 .case-demo-slider input[type='range'] {
   width: 100%;
+}
+
+.case-demo-target-row {
+  display: grid;
+  gap: 0.48rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .case-demo-outcomes {
@@ -1089,6 +1110,11 @@ a:hover {
   gap: 0.85rem;
 }
 
+.narrative-path-panel {
+  display: grid;
+  gap: 0.8rem;
+}
+
 .scenario-claim {
   margin: 0;
   max-width: 64ch;
@@ -1227,7 +1253,8 @@ a:hover {
   .overview-fact-row,
   .proof-stat-grid,
   .implication-grid,
-  .outcome-grid {
+  .outcome-grid,
+  .case-demo-target-row {
     grid-template-columns: 1fr;
   }
 }

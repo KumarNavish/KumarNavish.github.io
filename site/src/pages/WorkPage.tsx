@@ -70,6 +70,8 @@ const CASE_STUDIES: CaseStudyDefinition[] = [
   },
 ]
 
+const SERVICE_TARGET_PRESETS = [0.93, 0.95, 0.97] as const
+
 function findMatchedProject(
   projects: ProjectItem[],
   matcher?: (project: ProjectItem) => boolean,
@@ -126,7 +128,7 @@ function formatSignedPercent(value: number): string {
 export function WorkPage() {
   const [demandVolatility, setDemandVolatility] = useState(0.38)
   const [bikeLaneCoverage, setBikeLaneCoverage] = useState(0.57)
-  const [serviceLevelTarget, setServiceLevelTarget] = useState(0.95)
+  const [serviceLevelTarget, setServiceLevelTarget] = useState<number>(0.95)
 
   const loadWork = useCallback(
     () =>
@@ -208,16 +210,15 @@ export function WorkPage() {
     <div className="page">
       <section className="hero">
         <p className="eyebrow">Case Studies</p>
-        <h1>Applied decisions, backed by working artifacts.</h1>
+        <h1>Capability, shown through decisions that execute.</h1>
         <p className="hero-copy">
-          Each case connects one decision to implementation, evidence, and practical outcome. The
-          operational planning case includes a live in-context simulator.
+          Each case follows the same structure: claim, artifact, evidence, and operational signal.
         </p>
       </section>
 
       <section id="cases" className="panel">
         <header className="panel-header">
-          <h2>Decision Cases</h2>
+          <h2>Case Evidence Map</h2>
         </header>
         <div className="stack-list">
           {caseStudies.map((caseStudy) => (
@@ -228,13 +229,15 @@ export function WorkPage() {
             >
               <p className="eyebrow">{caseStudy.track}</p>
               <h3>{caseStudy.title}</h3>
-              <div className="case-matrix case-matrix-4">
-                <div>
-                  <p className="matrix-label">Decision</p>
+
+              <div className="case-rows">
+                <div className="case-row">
+                  <p className="matrix-label">Claim</p>
                   <p>{caseStudy.decision}</p>
                 </div>
-                <div>
-                  <p className="matrix-label">Built</p>
+
+                <div className="case-row">
+                  <p className="matrix-label">Artifact</p>
                   <p>
                     {caseStudy.project ? (
                       <>
@@ -256,7 +259,8 @@ export function WorkPage() {
                     )}
                   </p>
                 </div>
-                <div>
+
+                <div className="case-row">
                   <p className="matrix-label">Evidence</p>
                   <p>
                     {caseStudy.publication ? (
@@ -268,11 +272,7 @@ export function WorkPage() {
                           <>
                             {' '}
                             ·{' '}
-                            <a
-                              href={caseStudy.publication.url}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
+                            <a href={caseStudy.publication.url} target="_blank" rel="noreferrer">
                               Read
                             </a>
                           </>
@@ -283,22 +283,21 @@ export function WorkPage() {
                     )}
                   </p>
                 </div>
-                <div>
-                  <p className="matrix-label">Practical outcome</p>
-                  <p>{caseStudy.outcome}</p>
-                  <p className="meta-line">
-                    <strong>Outcome signal:</strong>{' '}
-                    {buildOutcomeSignal(caseStudy.project, caseStudy.publication)}
-                  </p>
+
+                <div className="case-row">
+                  <p className="matrix-label">Operational signal</p>
+                  <p>{buildOutcomeSignal(caseStudy.project, caseStudy.publication)}</p>
                 </div>
               </div>
+
               {caseStudy.id === 'urban-transition-planning' ? (
                 <section className="case-demo-shell" aria-label="Last-mile logistics simulator">
                   <header className="case-demo-head">
-                    <p className="matrix-label">In-context simulation</p>
+                    <p className="matrix-label">In-context demonstration</p>
                     <h4>Last-mile transition planner</h4>
                     <p className="meta-line">
-                      Adjust three constraints and inspect a rollout plan immediately.
+                      Tune two operational conditions. Service target stays explicit as a deployment
+                      choice.
                     </p>
                   </header>
 
@@ -326,18 +325,21 @@ export function WorkPage() {
                         onChange={(event) => setBikeLaneCoverage(Number(event.target.value))}
                       />
                     </label>
+                  </div>
 
-                    <label className="case-demo-slider">
-                      Service-level target ({formatPercent(serviceLevelTarget)})
-                      <input
-                        type="range"
-                        min="0.9"
-                        max="0.99"
-                        step="0.005"
-                        value={serviceLevelTarget}
-                        onChange={(event) => setServiceLevelTarget(Number(event.target.value))}
-                      />
-                    </label>
+                  <div className="case-demo-target-row" role="group" aria-label="Service-level target">
+                    {SERVICE_TARGET_PRESETS.map((target) => (
+                      <button
+                        key={target}
+                        type="button"
+                        className={
+                          target === serviceLevelTarget ? 'track-chip track-chip-active' : 'track-chip'
+                        }
+                        onClick={() => setServiceLevelTarget(target)}
+                      >
+                        Service target {formatPercent(target)}
+                      </button>
+                    ))}
                   </div>
 
                   <div className="case-demo-outcomes">

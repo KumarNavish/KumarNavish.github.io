@@ -318,7 +318,6 @@ export function DashboardPage() {
     setActiveScenarioId(preset.id)
     setProofPreset(preset.proof_preset)
     setProofRunVersion((value) => value + 1)
-
     setCopyStatus('')
   }
 
@@ -354,8 +353,7 @@ export function DashboardPage() {
         <p className="eyebrow">Overview</p>
         <h1>I build decision systems that stay useful under change.</h1>
         <p className="hero-copy">
-          Pick a scenario. The page runs one core proof and translates it into concrete operating
-          implications.
+          Choose a live scenario, run one core proof, then inspect the operational implications.
         </p>
 
         <div className="overview-fact-row" aria-label="Portfolio context">
@@ -370,6 +368,31 @@ export function DashboardPage() {
           <article className="overview-fact">
             <p className="matrix-label">Live mode</p>
             <p>Interactive proof + actionable memo</p>
+          </article>
+        </div>
+      </section>
+
+      <section className="panel narrative-path-panel">
+        <header className="panel-header">
+          <h2>Interaction Path</h2>
+        </header>
+        <div className="sequence-grid">
+          <article className="sequence-step">
+            <p className="sequence-index">Step 1</p>
+            <h3>Frame the operating pressure</h3>
+            <p>Use scenario presets to anchor the problem in real constraints.</p>
+          </article>
+          <article className="sequence-step">
+            <p className="sequence-index">Step 2</p>
+            <h3>Validate with one core proof</h3>
+            <p>Run CL-PLO under drift and stress to compare decision policy behavior.</p>
+          </article>
+          <article className="sequence-step">
+            <p className="sequence-index">Step 3</p>
+            <h3>Move to deployment context</h3>
+            <p>
+              Carry implications into the case layer, including the in-context logistics simulator.
+            </p>
           </article>
         </div>
       </section>
