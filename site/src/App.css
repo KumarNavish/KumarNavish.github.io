@@ -880,6 +880,10 @@ a:hover {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.arc-sequence-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .sequence-step {
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -991,6 +995,7 @@ a:hover {
   .controls-panel,
   .direction-grid,
   .sequence-grid,
+  .arc-sequence-grid,
   .track-row {
     grid-template-columns: 1fr;
   }

@@ -109,13 +109,13 @@ export function PublicationsPage() {
   }, [query, state.data])
 
   if (state.loading) {
-    return <LoadingBlock label="Loading publication archive." />
+    return <LoadingBlock label="Loading research." />
   }
 
   if (!state.data || state.error) {
     return (
       <ErrorBlock
-        label="Unable to load publications."
+        label="Unable to load research view."
         details={state.error ?? 'unknown publications error'}
       />
     )
@@ -127,17 +127,17 @@ export function PublicationsPage() {
   return (
     <div className="page">
       <section className="hero">
-        <p className="eyebrow">Publications Archive</p>
-        <h1>Publication evidence, structured for quick interpretation.</h1>
+        <p className="eyebrow">Research</p>
+        <h1>Research grounds decisions in durable evidence.</h1>
         <p className="hero-copy">
-          Filter by topic or venue, then inspect impact through citation and trend context.
+          This layer shows the research backbone behind implementation and operational choices.
         </p>
         <div className="action-row">
           <Link className="action-link" to="/work">
-            Back to case studies
+            Back to Impact
           </Link>
-          <Link className="action-link action-link-primary" to="/">
-            Overview
+          <Link className="action-link action-link-primary" to="/experience">
+            Continue to Experience
           </Link>
         </div>
       </section>
