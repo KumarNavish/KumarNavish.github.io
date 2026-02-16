@@ -1,6 +1,8 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { ArcNarrative } from '../components/ArcNarrative'
+import { ArcThread } from '../components/ArcThread'
 import { fetchMetricsApi, fetchPublicationsApi } from '../lib/api'
 import { formatNumber } from '../lib/formatters'
 import { useResource } from '../lib/useResource'
@@ -141,6 +143,9 @@ export function PublicationsPage() {
           </Link>
         </div>
       </section>
+
+      <ArcThread current="research" />
+      <ArcNarrative current="research" />
 
       <section className="metric-grid">
         <article className="metric-card">

@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { ArcNarrative } from '../components/ArcNarrative'
+import { ArcThread } from '../components/ArcThread'
 import { fetchProjectsApi, type ProjectItem } from '../lib/api'
 import { runClPloProof, type ClPloProofConfig, type ProofStrategyId } from '../lib/clploProof'
 import { formatDate } from '../lib/formatters'
@@ -200,6 +202,9 @@ export function ProjectsPage() {
           </Link>
         </div>
       </section>
+
+      <ArcThread current="skills" />
+      <ArcNarrative current="skills" />
 
       <section className="panel proof-focus-panel" aria-label="Skill proof">
         <header className="proof-focus-header">

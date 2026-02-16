@@ -1,31 +1,24 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 
 import './App.css'
+import { ARC_STEPS } from './lib/arc'
 import { DashboardPage } from './pages/DashboardPage'
 import { ExperiencePage } from './pages/ExperiencePage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { PublicationsPage } from './pages/PublicationsPage'
 import { WorkPage } from './pages/WorkPage'
 
-const NAVIGATION = [
-  { href: '/', label: 'Motivation' },
-  { href: '/projects', label: 'Skills' },
-  { href: '/work', label: 'Impact' },
-  { href: '/publications', label: 'Research' },
-  { href: '/experience', label: 'Experience' },
-]
-
 function Navigation() {
   return (
     <nav className="site-nav" aria-label="Primary">
-      {NAVIGATION.map((item) => (
+      {ARC_STEPS.map((item) => (
         <NavLink
-          key={item.href}
-          to={item.href}
+          key={item.id}
+          to={item.route}
           className={({ isActive }) =>
             isActive ? 'nav-link nav-link-active' : 'nav-link'
           }
-          end={item.href === '/'}
+          end={item.route === '/'}
         >
           {item.label}
         </NavLink>
