@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 
 import { ArcSpine } from '../components/ArcSpine'
+import { PageCompass } from '../components/PageCompass'
 import {
   fetchProjectsApi,
   fetchPublicationsApi,
@@ -191,6 +192,16 @@ export function WorkPage() {
 
       <ArcSpine current="impact" />
 
+      <PageCompass
+        title="How To Read Impact"
+        steps={[
+          'Use the metric row to assess evidence coverage quickly.',
+          'Read each case top-down: decision, implementation, evidence, operational change.',
+          'Interact with the last-mile simulator to test decision implications live.',
+        ]}
+        outcome="Clear evidence that the methods are not theoretical: they alter practical decisions."
+      />
+
       <section className="metric-grid">
         <article className="metric-card">
           <p className="metric-label">Case studies</p>
@@ -376,11 +387,6 @@ export function WorkPage() {
         </div>
       </section>
 
-      <section className="panel panel-note">
-        <p className="meta-line">
-          Research in the next layer explains why these outcomes are principled and repeatable.
-        </p>
-      </section>
     </div>
   )
 }

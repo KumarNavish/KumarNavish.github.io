@@ -1233,6 +1233,39 @@ a:hover {
   margin-top: 0.78rem;
 }
 
+.page-compass-panel {
+  background: color-mix(in srgb, #f8f6ef 90%, var(--accent-soft) 10%);
+}
+
+.page-compass-grid {
+  display: grid;
+  gap: 0.84rem;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+}
+
+.page-compass-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fefdf9;
+  padding: 0.94rem 1rem;
+}
+
+.page-compass-list {
+  margin: 0.5rem 0 0;
+  padding-left: 1rem;
+  color: var(--muted);
+  line-height: 1.58;
+}
+
+.page-compass-list li + li {
+  margin-top: 0.3rem;
+}
+
+.page-compass-card p {
+  margin: 0.42rem 0 0;
+  line-height: 1.58;
+}
+
 .scenario-claim {
   margin: 0;
   max-width: 64ch;
@@ -1372,7 +1405,8 @@ a:hover {
   .proof-stat-grid,
   .implication-grid,
   .outcome-grid,
-  .case-demo-target-row {
+  .case-demo-target-row,
+  .page-compass-grid {
     grid-template-columns: 1fr;
   }
 

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 
 import { ArcSpine } from '../components/ArcSpine'
+import { PageCompass } from '../components/PageCompass'
 import { fetchMetricsApi, fetchPublicationsApi } from '../lib/api'
 import { formatNumber } from '../lib/formatters'
 import { useResource } from '../lib/useResource'
@@ -137,6 +138,16 @@ export function PublicationsPage() {
 
       <ArcSpine current="research" />
 
+      <PageCompass
+        title="How To Read Research"
+        steps={[
+          'Start with aggregate metrics for breadth and influence.',
+          'Use the citation trajectory to see continuity over time.',
+          'Filter the evidence record by topic or venue and inspect sources.',
+        ]}
+        outcome="A precise view of why implementation choices are grounded in durable, inspectable evidence."
+      />
+
       <section className="metric-grid">
         <article className="metric-card">
           <p className="metric-label">Publications</p>
@@ -208,9 +219,6 @@ export function PublicationsPage() {
       <section className="panel panel-note">
         <p className="meta-line">
           Evidence source: {describePublicationSource(publications.source)}
-        </p>
-        <p className="meta-line">
-          The next layer shows where this research depth was applied in real delivery contexts.
         </p>
       </section>
     </div>

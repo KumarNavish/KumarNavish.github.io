@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react'
 
 import { ArcSpine } from '../components/ArcSpine'
+import { PageCompass } from '../components/PageCompass'
 import {
   fetchProfileApi,
   fetchProjectsApi,
@@ -95,6 +96,16 @@ export function ExperiencePage() {
 
       <ArcSpine current="experience" />
 
+      <PageCompass
+        title="How To Read Experience"
+        steps={[
+          'Read the trajectory phases as progression, not isolated milestones.',
+          'Use the metric row to gauge breadth and continuity.',
+          'Inspect execution artifacts for direct evidence of delivery practice.',
+        ]}
+        outcome="A coherent progression from inquiry to production-oriented execution at increasing scope."
+      />
+
       <section className="panel">
         <header className="panel-header">
           <h2>Execution Progression</h2>
@@ -185,12 +196,6 @@ export function ExperiencePage() {
         </div>
       </section>
 
-      <section className="panel panel-note">
-        <p className="meta-line">
-          The arc closes here: motivation, skills, impact, and research converging in production
-          execution.
-        </p>
-      </section>
     </div>
   )
 }
