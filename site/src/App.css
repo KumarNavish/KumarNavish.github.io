@@ -1223,6 +1223,21 @@ a:hover {
   line-height: 1.48;
 }
 
+.arc-bridge-panel {
+  background: color-mix(in srgb, var(--accent-soft) 36%, #fefdf9);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+}
+
+.arc-bridge-lead {
+  margin: 0;
+  max-width: 64ch;
+  line-height: 1.55;
+}
+
+.arc-bridge-panel .action-row {
+  margin-top: 0.9rem;
+}
+
 .scenario-claim {
   margin: 0;
   max-width: 64ch;
