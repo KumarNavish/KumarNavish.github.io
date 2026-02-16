@@ -189,9 +189,10 @@ export function ProjectsPage() {
     <div className="page builder-page overview-flow">
       <section className="hero hero-primary">
         <p className="eyebrow">Skills</p>
-        <h1>Skills are shown through inspectable systems, not listed as keywords.</h1>
+        <h1>I demonstrate skills through systems you can inspect, test, and stress.</h1>
         <p className="hero-copy">
-          This layer demonstrates modeling, optimization, and systems implementation under stress.
+          This layer focuses on reliability under drift through modeling, optimization, and
+          implementation discipline.
         </p>
         <div className="action-row">
           <Link className="action-link" to="/">
@@ -209,7 +210,7 @@ export function ProjectsPage() {
       <section className="panel proof-focus-panel" aria-label="Skill proof">
         <header className="proof-focus-header">
           <p className="matrix-label">Skill proof · Continual reliability</p>
-          <h2>Policy comparison under drift and stress</h2>
+          <h2>Policy stability under drift and stress</h2>
         </header>
 
         <div className="clplo-toolbar" role="group" aria-label="CL-PLO modes">
@@ -326,7 +327,7 @@ export function ProjectsPage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Extended Archive</h2>
+          <h2>Extended Build Archive</h2>
           <button
             type="button"
             className="action-link"

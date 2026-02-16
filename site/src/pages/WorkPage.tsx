@@ -212,10 +212,9 @@ export function WorkPage() {
     <div className="page">
       <section className="hero">
         <p className="eyebrow">Impact</p>
-        <h1>Impact is demonstrated where models alter operational decisions.</h1>
+        <h1>I measure impact where models change real operational decisions.</h1>
         <p className="hero-copy">
-          Each case follows one sequence: claim, artifact, evidence, and measurable operational
-          signal.
+          Each case follows one sequence: claim, artifact, evidence, then measurable signal.
         </p>
         <div className="action-row">
           <Link className="action-link" to="/projects">
@@ -232,7 +231,7 @@ export function WorkPage() {
 
       <section id="cases" className="panel">
         <header className="panel-header">
-          <h2>Case Evidence Map</h2>
+          <h2>Impact Cases</h2>
         </header>
         <div className="stack-list">
           {caseStudies.map((caseStudy) => (
@@ -310,8 +309,8 @@ export function WorkPage() {
                     <p className="matrix-label">In-context demonstration</p>
                     <h4>Last-mile transition planner</h4>
                     <p className="meta-line">
-                      Tune two operating conditions. Service target stays explicit as a deployment
-                      choice.
+                      Tune operating conditions, keep service targets explicit, and inspect
+                      deployment implications immediately.
                     </p>
                   </header>
 
@@ -402,7 +401,7 @@ export function WorkPage() {
 
       <section id="systems" className="panel">
         <header className="panel-header">
-          <h2>Supporting Repositories</h2>
+          <h2>Supporting Implementations</h2>
         </header>
         <div className="card-grid">
           {featuredProjects.map((project) => (
@@ -431,14 +430,14 @@ export function WorkPage() {
 
       <section id="archives" className="panel">
         <header className="panel-header">
-          <h2>Continue the Arc</h2>
+          <h2>Continue the Narrative</h2>
         </header>
         <div className="action-row">
           <Link className="action-link" to="/projects">
-            Skills layer
+            Return to Skills
           </Link>
           <Link className="action-link action-link-primary" to="/publications">
-            Research layer
+            Continue to Research
           </Link>
         </div>
         <p className="meta-line">

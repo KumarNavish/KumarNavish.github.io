@@ -130,9 +130,9 @@ export function PublicationsPage() {
     <div className="page">
       <section className="hero">
         <p className="eyebrow">Research</p>
-        <h1>Research grounds decisions in durable evidence.</h1>
+        <h1>I ground implementation choices in durable research evidence.</h1>
         <p className="hero-copy">
-          This layer shows the research backbone behind implementation and operational choices.
+          This layer provides the evidence backbone for the skills and impact layers.
         </p>
         <div className="action-row">
           <Link className="action-link" to="/work">
@@ -165,7 +165,7 @@ export function PublicationsPage() {
       {metrics.citations_by_year.length > 0 ? (
         <section className="panel">
           <header className="panel-header">
-            <h2>Citation Trend</h2>
+            <h2>Citation Trajectory</h2>
           </header>
           <CitationsChart points={metrics.citations_by_year} />
         </section>
@@ -184,7 +184,7 @@ export function PublicationsPage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Publication List ({filtered.length})</h2>
+          <h2>Research Record ({filtered.length})</h2>
         </header>
         <div className="stack-list">
           {filtered.map((publication) => (
@@ -217,7 +217,7 @@ export function PublicationsPage() {
 
       <section className="panel panel-note">
         <p className="meta-line">
-          Data source: {describePublicationSource(publications.source)}
+          Evidence source: {describePublicationSource(publications.source)}
         </p>
       </section>
     </div>

@@ -88,10 +88,9 @@ export function ExperiencePage() {
     <div className="page">
       <section className="hero">
         <p className="eyebrow">Experience</p>
-        <h1>Trajectory from research inquiry to operational system delivery.</h1>
+        <h1>I bring work from inquiry to operational delivery.</h1>
         <p className="hero-copy">
-          This final layer summarizes continuity: what was studied, what was built, and what can be
-          reviewed directly.
+          This final layer closes the arc with trajectory, artifacts, and execution continuity.
         </p>
         <div className="action-row">
           <Link className="action-link" to="/publications">
@@ -108,7 +107,7 @@ export function ExperiencePage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Operating Trajectory</h2>
+          <h2>Delivery Trajectory</h2>
         </header>
         <div className="sequence-grid">
           <article className="sequence-step">
@@ -116,7 +115,7 @@ export function ExperiencePage() {
             <h3>Research foundation</h3>
             <p>
               Publication record established{trajectory.firstResearchYear ? ` in ${trajectory.firstResearchYear}` : ''},
-              focusing on mathematically grounded modeling and analysis.
+              with focus on mathematically grounded modeling and analysis.
             </p>
           </article>
           <article className="sequence-step">
@@ -164,7 +163,7 @@ export function ExperiencePage() {
         <div className="card-grid">
           <article className="item-card">
             <h3>Generated resume</h3>
-            <p>Pipeline-produced artifact for concise role and execution history.</p>
+            <p>Pipeline-generated artifact summarizing role history and execution scope.</p>
             <p className="meta-line">
               <a href="/artifacts/resume.pdf" target="_blank" rel="noreferrer">
                 Open resume PDF
@@ -173,7 +172,7 @@ export function ExperiencePage() {
           </article>
           <article className="item-card">
             <h3>GitHub profile</h3>
-            <p>Source-of-truth for repository activity and implementation traceability.</p>
+            <p>Source of truth for repository activity and implementation traceability.</p>
             <p className="meta-line">
               <a href={profile.links.github} target="_blank" rel="noreferrer">
                 Open GitHub
@@ -182,7 +181,7 @@ export function ExperiencePage() {
           </article>
           <article className="item-card">
             <h3>Portfolio system repository</h3>
-            <p>Automation pipeline, generated APIs, frontend integration, and CI/CD setup.</p>
+            <p>Automation pipeline, generated APIs, frontend integration, and CI/CD delivery.</p>
             <p className="meta-line">
               <a
                 href="https://github.com/KumarNavish/KumarNavish.github.io"
