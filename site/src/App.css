@@ -81,6 +81,9 @@ a:hover {
 }
 
 .nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
   padding: 0.12rem 0;
   color: var(--muted);
   font-size: 0.86rem;
@@ -89,6 +92,17 @@ a:hover {
   border-bottom: 1px solid transparent;
   font-family: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Monaco, Consolas,
     'Liberation Mono', monospace;
+}
+
+.nav-link-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.63rem;
 }
 
 .nav-link-active {
@@ -1120,122 +1134,78 @@ a:hover {
   gap: 0.8rem;
 }
 
-.arc-thread-panel {
-  padding: 1rem 1.08rem;
+.arc-spine-panel {
+  display: grid;
+  gap: 0.88rem;
 }
 
-.arc-thread-list {
+.arc-spine-track {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 0.62rem;
+  gap: 0.56rem;
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
-.arc-thread-item {
+.arc-spine-item {
   border: 1px solid var(--line);
-  border-radius: 12px;
-  background: #fefdf9;
+  border-radius: 999px;
+  background: #fbfaf6;
 }
 
-.arc-thread-item-active {
+.arc-spine-item-active {
   border-color: color-mix(in srgb, var(--accent) 44%, var(--line));
-  background: color-mix(in srgb, var(--accent-soft) 56%, #fefdf9);
+  background: var(--accent-soft);
 }
 
-.arc-thread-link {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+.arc-spine-link {
+  display: inline-flex;
   width: 100%;
-  align-items: start;
-  gap: 0.58rem;
-  padding: 0.62rem 0.68rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.44rem;
+  padding: 0.48rem 0.7rem;
   color: var(--muted);
-  font-size: 0.79rem;
+  font-size: 0.78rem;
   text-decoration: none;
 }
 
-.arc-thread-link:hover {
+.arc-spine-link:hover {
+  color: var(--accent);
   text-decoration: none;
-  color: var(--accent);
 }
 
-.arc-thread-item-active .arc-thread-link {
-  color: var(--accent);
-}
-
-.arc-thread-index {
+.arc-spine-index {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.26rem;
-  height: 1.26rem;
+  width: 1.18rem;
+  height: 1.18rem;
   border-radius: 999px;
   border: 1px solid var(--line);
   font-family: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Monaco, Consolas,
     'Liberation Mono', monospace;
-  font-size: 0.68rem;
+  font-size: 0.66rem;
   background: #f8f6ef;
-  margin-top: 0.06rem;
 }
 
-.arc-thread-copy {
+.arc-spine-grid {
   display: grid;
-  gap: 0.22rem;
+  gap: 0.72rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.arc-thread-step {
-  color: var(--fg);
-  font-family: 'IBM Plex Mono', 'SFMono-Regular', Menlo, Monaco, Consolas,
-    'Liberation Mono', monospace;
-  font-size: 0.68rem;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-.arc-thread-question {
-  color: var(--muted);
-  font-size: 0.76rem;
-  line-height: 1.36;
-}
-
-.arc-context-panel {
-  display: grid;
-  gap: 0.74rem;
-}
-
-.arc-context-grid {
-  display: grid;
-  gap: 0.74rem;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-}
-
-.arc-context-card {
+.arc-spine-card {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: #fefdf9;
-  padding: 0.82rem 0.88rem;
+  padding: 0.84rem 0.9rem;
 }
 
-.arc-context-card p {
+.arc-spine-card p {
   margin: 0.36rem 0 0;
-  line-height: 1.48;
-}
-
-.arc-bridge-panel {
-  background: color-mix(in srgb, var(--accent-soft) 36%, #fefdf9);
-  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
-}
-
-.arc-bridge-lead {
-  margin: 0;
-  max-width: 64ch;
-  line-height: 1.55;
-}
-
-.arc-bridge-panel .action-row {
-  margin-top: 0.9rem;
+  line-height: 1.5;
 }
 
 .scenario-claim {
@@ -1381,7 +1351,8 @@ a:hover {
     grid-template-columns: 1fr;
   }
 
-  .arc-thread-list {
+  .arc-spine-track,
+  .arc-spine-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -1410,7 +1381,8 @@ a:hover {
     padding: 0.9rem;
   }
 
-  .arc-thread-list {
+  .arc-spine-track,
+  .arc-spine-grid {
     grid-template-columns: 1fr;
   }
 }

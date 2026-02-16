@@ -1,11 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 
-import { ArcBridge } from '../components/ArcBridge'
-import { ArcNarrative } from '../components/ArcNarrative'
-import { ArcThread } from '../components/ArcThread'
+import { ArcSpine } from '../components/ArcSpine'
 import {
-  fetchProfileApi,
   fetchProjectsApi,
   fetchPublicationsApi,
   type ProjectItem,
@@ -17,7 +13,6 @@ import { useResource } from '../lib/useResource'
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks'
 
 interface WorkData {
-  profile: Awaited<ReturnType<typeof fetchProfileApi>>
   projects: Awaited<ReturnType<typeof fetchProjectsApi>>
   publications: Awaited<ReturnType<typeof fetchPublicationsApi>>
 }
@@ -28,7 +23,6 @@ interface CaseStudyDefinition {
   title: string
   decision: string
   implementation: string
-  outcome: string
   projectMatcher?: (project: ProjectItem) => boolean
   publicationMatcher: (publication: PublicationItem) => boolean
 }
@@ -40,8 +34,6 @@ const CASE_STUDIES: CaseStudyDefinition[] = [
     title: 'Continual-learning update policy',
     decision: 'Which update strategy stays stable as data and objectives shift over time?',
     implementation: 'CL-PLO sandbox for side-by-side strategy comparison under continual updates.',
-    outcome:
-      'Supports safer update-policy selection for long-lived learning systems where regressions are costly.',
     projectMatcher: (project) => project.name.toLowerCase().includes('cl-plo'),
     publicationMatcher: (publication) =>
       publication.title.toLowerCase().includes('square-root natural-gradient'),
@@ -53,8 +45,6 @@ const CASE_STUDIES: CaseStudyDefinition[] = [
     decision: 'Which behavior patterns should trigger intervention before harmful escalation?',
     implementation:
       'Dataset-backed interaction analysis between hate and counter users with reproducible code context.',
-    outcome:
-      'Supports moderation triage and policy evaluation with observed interaction signatures rather than guesswork.',
     projectMatcher: (project) => `${project.name} ${project.description}`.toLowerCase().includes('twitter'),
     publicationMatcher: (publication) =>
       publication.title.toLowerCase().includes('interaction dynamics between hate'),
@@ -66,8 +56,6 @@ const CASE_STUDIES: CaseStudyDefinition[] = [
     decision: 'Which urban micro-regions are best candidates for delivery-fleet transition first?',
     implementation:
       'Micro-region performance modeling from observed delivery behavior to compare transition scenarios.',
-    outcome:
-      'Supports rollout prioritization decisions before field pilots, reducing planning by assumption.',
     publicationMatcher: (publication) =>
       publication.title.toLowerCase().includes('delivery vehicles across urban micro-regions'),
   },
@@ -135,9 +123,8 @@ export function WorkPage() {
 
   const loadWork = useCallback(
     () =>
-      Promise.all([fetchProfileApi(), fetchProjectsApi(), fetchPublicationsApi()]).then(
-        ([profile, projects, publications]) => ({
-          profile,
+      Promise.all([fetchProjectsApi(), fetchPublicationsApi()]).then(
+        ([projects, publications]) => ({
           projects,
           publications,
         }),
@@ -170,32 +157,6 @@ export function WorkPage() {
     [bikeLaneCoverage, demandVolatility, serviceLevelTarget],
   )
 
-  const featuredProjects = useMemo(() => {
-    const data = state.data
-    if (!data) {
-      return []
-    }
-
-    const profileFeatured = data.profile.featured.projects.map((project) => ({
-      ...project,
-      last_push: null as string | null,
-    }))
-    if (profileFeatured.length > 0) {
-      return profileFeatured
-    }
-
-    return data.projects.items
-      .filter((project) => project.featured || project.pinned)
-      .slice(0, 4)
-      .map((project) => ({
-        name: project.name,
-        one_line: project.one_line,
-        html_url: project.html_url,
-        demo_url: project.demo_url,
-        last_push: project.last_push,
-      }))
-  }, [state.data])
-
   const evidenceCoverage = useMemo(() => {
     return {
       cases: caseStudies.length,
@@ -223,18 +184,12 @@ export function WorkPage() {
         <p className="eyebrow">Impact</p>
         <h1>I measure impact where models change real operational decisions.</h1>
         <p className="hero-copy">
-          This layer answers what I have built by linking claim, artifact, evidence, and operational
-          signal in one view.
+          This layer proves the skills section through concrete systems that shifted practical
+          decisions.
         </p>
-        <div className="action-row">
-          <Link className="action-link action-link-primary" to="/publications">
-            Continue to Research
-          </Link>
-        </div>
       </section>
 
-      <ArcThread current="impact" />
-      <ArcNarrative current="impact" />
+      <ArcSpine current="impact" />
 
       <section className="metric-grid">
         <article className="metric-card">
@@ -421,36 +376,12 @@ export function WorkPage() {
         </div>
       </section>
 
-      <section id="systems" className="panel">
-        <header className="panel-header">
-          <h2>Supporting Build Surface</h2>
-        </header>
-        <div className="card-grid">
-          {featuredProjects.map((project) => (
-            <article key={project.name} className="item-card">
-              <h3>{project.name}</h3>
-              <p>{project.one_line ?? 'Research implementation with reproducible setup.'}</p>
-              <p className="meta-line">
-                {project.last_push ? `Updated ${new Date(project.last_push).getFullYear()} · ` : ''}
-                <a href={project.html_url ?? '/projects'} target="_blank" rel="noreferrer">
-                  Repository
-                </a>
-                {project.demo_url ? (
-                  <>
-                    {' '}
-                    ·{' '}
-                    <a href={project.demo_url} target="_blank" rel="noreferrer">
-                      Demo
-                    </a>
-                  </>
-                ) : null}
-              </p>
-            </article>
-          ))}
-        </div>
+      <section className="panel panel-note">
+        <p className="meta-line">
+          Impact is shown through case-level claim, implementation, evidence, and operational signal
+          before moving to research depth.
+        </p>
       </section>
-
-      <ArcBridge current="impact" />
     </div>
   )
 }
