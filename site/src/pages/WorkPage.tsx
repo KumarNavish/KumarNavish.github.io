@@ -210,7 +210,8 @@ export function WorkPage() {
         <p className="eyebrow">Case Studies</p>
         <h1>Applied decisions, backed by working artifacts.</h1>
         <p className="hero-copy">
-          Each case connects one decision to implementation, evidence, and practical outcome.
+          Each case connects one decision to implementation, evidence, and practical outcome. The
+          operational planning case includes a live in-context simulator.
         </p>
       </section>
 
@@ -220,7 +221,11 @@ export function WorkPage() {
         </header>
         <div className="stack-list">
           {caseStudies.map((caseStudy) => (
-            <article key={caseStudy.id} className="stack-item case-study-card">
+            <article
+              key={caseStudy.id}
+              id={`case-${caseStudy.id}`}
+              className="stack-item case-study-card"
+            >
               <p className="eyebrow">{caseStudy.track}</p>
               <h3>{caseStudy.title}</h3>
               <div className="case-matrix case-matrix-4">
@@ -247,7 +252,7 @@ export function WorkPage() {
                         </a>
                       </>
                     ) : (
-                      `${caseStudy.implementation} No standalone repository is required for this track.`
+                      `${caseStudy.implementation} This case is evidenced through publication and operational outputs.`
                     )}
                   </p>
                 </div>
