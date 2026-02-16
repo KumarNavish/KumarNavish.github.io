@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 
 import { ArcSpine } from '../components/ArcSpine'
+import { PageCompass } from '../components/PageCompass'
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks'
 import { fetchMetricsApi, fetchProfileApi } from '../lib/api'
 import { formatNumber } from '../lib/formatters'
@@ -65,6 +66,16 @@ export function DashboardPage() {
       </section>
 
       <ArcSpine current="motivation" />
+
+      <PageCompass
+        title="How To Read Motivation"
+        steps={[
+          'Start with the opening constraint and scope.',
+          'Use the fact row to calibrate breadth and research depth.',
+          'Read the three design principles as requirements for later layers.',
+        ]}
+        outcome="A clear understanding of why this portfolio is organized around decision reliability under change."
+      />
 
       <section className="panel">
         <header className="panel-header">

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 
 import { ArcSpine } from '../components/ArcSpine'
+import { PageCompass } from '../components/PageCompass'
 import { fetchProjectsApi, type ProjectItem } from '../lib/api'
 import { runClPloProof, type ClPloProofConfig, type ProofStrategyId } from '../lib/clploProof'
 import { formatDate } from '../lib/formatters'
@@ -168,6 +169,16 @@ export function ProjectsPage() {
 
       <ArcSpine current="skills" />
 
+      <PageCompass
+        title="How To Read Skills"
+        steps={[
+          'Switch proof modes to stress the methods.',
+          'Compare return, drawdown, and stress share before concluding.',
+          'Inspect linked repositories to verify implementation depth.',
+        ]}
+        outcome="Confidence in the technical methods used to satisfy the motivation layer under drift and stress."
+      />
+
       <section className="panel proof-focus-panel" aria-label="Skill proof">
         <header className="proof-focus-header">
           <p className="matrix-label">Interactive proof · Continual reliability</p>
@@ -286,11 +297,6 @@ export function ProjectsPage() {
         </div>
       </section>
 
-      <section className="panel panel-note">
-        <p className="meta-line">
-          The next layer tests whether these methods produce real operational change.
-        </p>
-      </section>
     </div>
   )
 }
