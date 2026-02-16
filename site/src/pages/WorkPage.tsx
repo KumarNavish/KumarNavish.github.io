@@ -185,21 +185,20 @@ export function WorkPage() {
         <p className="eyebrow">Impact</p>
         <h1>I focus on systems that change real operational decisions.</h1>
         <p className="hero-copy">
-          This layer shows concrete outcomes: what was built, where it applied, and what changed in
-          practice.
+          Each case links one decision, one implementation, and one measurable operational outcome.
         </p>
       </section>
 
       <ArcSpine current="impact" />
 
       <PageCompass
-        title="How To Read Impact"
+        title="Read In 20 Seconds"
         steps={[
-          'Use the metric row to assess evidence coverage quickly.',
-          'Read each case top-down: decision, implementation, evidence, operational change.',
-          'Interact with the last-mile simulator to test decision implications live.',
+          'Scan coverage metrics first.',
+          'Read each case from decision to outcome.',
+          'Use the planner to test implications.',
         ]}
-        outcome="Clear evidence that the methods are not theoretical: they alter practical decisions."
+        outcome="The intent is to show shipped work that changes decisions, not only model metrics."
       />
 
       <section className="metric-grid">
@@ -208,18 +207,18 @@ export function WorkPage() {
           <p className="metric-value">{formatNumber(evidenceCoverage.cases)}</p>
         </article>
         <article className="metric-card">
-          <p className="metric-label">With implementations</p>
+          <p className="metric-label">Implemented</p>
           <p className="metric-value">{formatNumber(evidenceCoverage.implementations)}</p>
         </article>
         <article className="metric-card">
-          <p className="metric-label">With publication evidence</p>
+          <p className="metric-label">Research-backed</p>
           <p className="metric-value">{formatNumber(evidenceCoverage.publications)}</p>
         </article>
       </section>
 
       <section id="cases" className="panel">
         <header className="panel-header">
-          <h2>Operational Case Evidence</h2>
+          <h2>Operational Cases</h2>
         </header>
         <div className="stack-list">
           {caseStudies.map((caseStudy) => (
@@ -256,7 +255,7 @@ export function WorkPage() {
                         </a>
                       </>
                     ) : (
-                      `${caseStudy.implementation} This case is evidenced through publication and operational outputs.`
+                      `${caseStudy.implementation} Evidence remains visible through linked research and documented results.`
                     )}
                   </p>
                 </div>
@@ -294,11 +293,10 @@ export function WorkPage() {
               {caseStudy.id === 'urban-transition-planning' ? (
                 <section className="case-demo-shell" aria-label="Last-mile logistics simulator">
                   <header className="case-demo-head">
-                    <p className="matrix-label">In-context demonstration</p>
+                    <p className="matrix-label">In-Context Demo</p>
                     <h4>Last-mile transition planner</h4>
                     <p className="meta-line">
-                      Adjust operating conditions and immediately inspect reliability, cost, and
-                      rollout implications.
+                      Adjust conditions and immediately inspect reliability, cost, and rollout plan.
                     </p>
                   </header>
 
@@ -338,14 +336,14 @@ export function WorkPage() {
                         }
                         onClick={() => setServiceLevelTarget(target)}
                       >
-                        Service target {formatPercent(target)}
+                        Target {formatPercent(target)}
                       </button>
                     ))}
                   </div>
 
                   <div className="case-demo-outcomes">
                     <article className="case-demo-card">
-                      <p className="matrix-label">Fleet split</p>
+                      <p className="matrix-label">Fleet mix</p>
                       <p className="case-demo-value">
                         {formatPercent(logisticsSimulation.bike_share)} bikes ·{' '}
                         {formatPercent(logisticsSimulation.van_share)} vans
@@ -358,13 +356,13 @@ export function WorkPage() {
                       </p>
                     </article>
                     <article className="case-demo-card">
-                      <p className="matrix-label">Cost delta vs van baseline</p>
+                      <p className="matrix-label">Cost vs van baseline</p>
                       <p className="case-demo-value">
                         {formatSignedPercent(logisticsSimulation.cost_delta_vs_van_baseline)}
                       </p>
                     </article>
                     <article className="case-demo-card">
-                      <p className="matrix-label">Emissions reduction</p>
+                      <p className="matrix-label">CO2 reduction</p>
                       <p className="case-demo-value">
                         {formatPercent(logisticsSimulation.emissions_reduction)}
                       </p>
