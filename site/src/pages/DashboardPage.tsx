@@ -17,37 +17,37 @@ const ARC_STEPS = [
   {
     title: 'Motivation',
     summary:
-      'Define the operational problem clearly before selecting models, data, or tooling.',
+      'I define decision pressure before choosing methods or tools.',
     route: '/',
-    cta: 'You are here',
+    cta: 'Current layer',
   },
   {
     title: 'Skills',
     summary:
-      'Validate technical skill through live, inspectable artifacts with explicit constraints.',
+      'I validate methods through live artifacts under explicit constraints.',
     route: '/projects',
-    cta: 'Open skills',
+    cta: 'Continue to Skills',
   },
   {
     title: 'Impact',
     summary:
-      'Show how artifacts change real decisions through measurable operational outcomes.',
+      'I show measurable decision change in operational settings.',
     route: '/work',
-    cta: 'Open impact',
+    cta: 'Continue to Impact',
   },
   {
     title: 'Research',
     summary:
-      'Ground implementation choices in published evidence and long-term inquiry.',
+      'I ground implementation choices in published evidence.',
     route: '/publications',
-    cta: 'Open research',
+    cta: 'Continue to Research',
   },
   {
     title: 'Experience',
     summary:
-      'Close with trajectory, execution history, and delivery signals that indicate readiness.',
+      'I close the loop with delivery history and artifacts.',
     route: '/experience',
-    cta: 'Open experience',
+    cta: 'Continue to Experience',
   },
 ] as const
 
@@ -82,10 +82,10 @@ export function DashboardPage() {
     <div className="page builder-page overview-flow">
       <section className="hero hero-primary builder-hero overview-hero">
         <p className="eyebrow">Motivation</p>
-        <h1>I build systems that keep decisions reliable under changing conditions.</h1>
+        <h1>I build decision systems that stay reliable as conditions change.</h1>
         <p className="hero-copy">
-          This portfolio is structured as a single arc. Each step exists to show not just output,
-          but decision quality under real operational pressure.
+          This portfolio follows one arc: why the problem matters, how I build, what changes in
+          practice, and the evidence behind it.
         </p>
 
         <div className="overview-fact-row" aria-label="Motivation context">
@@ -109,7 +109,7 @@ export function DashboardPage() {
 
       <section className="panel narrative-path-panel">
         <header className="panel-header">
-          <h2>Narrative Arc</h2>
+          <h2>Arc Overview</h2>
         </header>
         <div className="sequence-grid arc-sequence-grid">
           {ARC_STEPS.map((step, index) => (
@@ -129,27 +129,27 @@ export function DashboardPage() {
 
       <section className="panel">
         <header className="panel-header">
-          <h2>Guiding Intent</h2>
+          <h2>Guiding Principles</h2>
         </header>
         <div className="direction-grid">
           <article className="direction-card">
             <h3>Clarity before complexity</h3>
             <p>
-              Start from the decision that matters, then choose the smallest artifact that can
-              validate it.
+              Start from the decision that matters, then choose the smallest artifact that proves
+              it.
             </p>
           </article>
           <article className="direction-card">
             <h3>Artifacts over assertions</h3>
             <p>
-              Every important claim should be inspectable in code, interaction, or measurable
-              output.
+              Every important claim should be inspectable in code, interaction, or measurable output.
             </p>
           </article>
           <article className="direction-card">
             <h3>Continuity across layers</h3>
             <p>
-              Motivation, implementation, impact, and research should read as one connected system.
+              Motivation, skills, impact, research, and experience should read as one connected
+              system.
             </p>
           </article>
         </div>
@@ -159,7 +159,7 @@ export function DashboardPage() {
             Continue to Skills
           </Link>
           <Link className="action-link" to="/work">
-            Skip to Impact
+            Jump to Impact
           </Link>
         </div>
       </section>

@@ -32,7 +32,7 @@ function SiteHeader() {
     <header className="site-header">
       <div className="header-inner">
         <p className="header-title">Navish Kumar</p>
-        <p className="header-subtitle">Applied research translated into operational systems</p>
+        <p className="header-subtitle">Applied research for reliable operational decisions</p>
       </div>
       <Navigation />
     </header>

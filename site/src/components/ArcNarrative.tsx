@@ -8,33 +8,33 @@ export function ArcNarrative({ current }: { current: ArcStepId }) {
   return (
     <section className="panel arc-context-panel" aria-label="Arc context">
       <header className="panel-header">
-        <h2>How This Connects</h2>
+        <h2>Narrative Continuity</h2>
       </header>
 
       <div className="arc-context-grid">
         <article className="arc-context-card">
-          <p className="matrix-label">From previous layer</p>
+          <p className="matrix-label">Context carried forward</p>
           <p>
             {previous
               ? previous.handoff
-              : 'This is the entry point of the portfolio arc.'}
+              : 'This page opens the portfolio arc.'}
           </p>
         </article>
 
         <article className="arc-context-card">
-          <p className="matrix-label">This layer answers</p>
+          <p className="matrix-label">Question answered here</p>
           <p>{currentStep.question}</p>
           <p className="meta-line">{currentStep.evidence}</p>
         </article>
 
         <article className="arc-context-card">
-          <p className="matrix-label">Next transition</p>
+          <p className="matrix-label">Next move</p>
           <p>
             {next ? (
               <>
                 {currentStep.handoff}{' '}
                 <Link to={next.route} className="builder-inline-link">
-                  Open {next.label}
+                  Continue to {next.label}
                 </Link>
                 .
               </>
