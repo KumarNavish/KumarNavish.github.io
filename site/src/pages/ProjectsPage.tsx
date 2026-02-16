@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { ArcBridge } from '../components/ArcBridge'
 import { ArcNarrative } from '../components/ArcNarrative'
 import { ArcThread } from '../components/ArcThread'
 import { fetchProjectsApi, type ProjectItem } from '../lib/api'
@@ -167,9 +168,6 @@ export function ProjectsPage() {
           pressure.
         </p>
         <div className="action-row">
-          <Link className="action-link" to="/">
-            Back to Motivation
-          </Link>
           <Link className="action-link action-link-primary" to="/work">
             Continue to Impact
           </Link>
@@ -301,12 +299,9 @@ export function ProjectsPage() {
         <p className="meta-line">
           Skills are validated here, then traced to operational outcomes in the impact layer.
         </p>
-        <div className="action-row">
-          <Link className="action-link action-link-primary" to="/work">
-            Continue to Impact
-          </Link>
-        </div>
       </section>
+
+      <ArcBridge current="skills" />
     </div>
   )
 }

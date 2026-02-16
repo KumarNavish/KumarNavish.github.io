@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { ArcBridge } from '../components/ArcBridge'
 import { ArcNarrative } from '../components/ArcNarrative'
 import { ArcThread } from '../components/ArcThread'
 import { fetchMetricsApi, fetchPublicationsApi } from '../lib/api'
@@ -135,9 +136,6 @@ export function PublicationsPage() {
           This layer answers what has been proven, and why earlier implementation choices hold up.
         </p>
         <div className="action-row">
-          <Link className="action-link" to="/work">
-            Back to Impact
-          </Link>
           <Link className="action-link action-link-primary" to="/experience">
             Continue to Experience
           </Link>
@@ -219,12 +217,9 @@ export function PublicationsPage() {
         <p className="meta-line">
           Evidence source: {describePublicationSource(publications.source)}
         </p>
-        <div className="action-row">
-          <Link className="action-link action-link-primary" to="/experience">
-            Continue to Experience
-          </Link>
-        </div>
       </section>
+
+      <ArcBridge current="research" />
     </div>
   )
 }

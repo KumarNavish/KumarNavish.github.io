@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 
+import { ArcBridge } from '../components/ArcBridge'
 import { ArcNarrative } from '../components/ArcNarrative'
 import { ArcThread } from '../components/ArcThread'
 import {
@@ -8,7 +9,7 @@ import {
   fetchProjectsApi,
   fetchPublicationsApi,
 } from '../lib/api'
-import { formatDateTime, formatNumber } from '../lib/formatters'
+import { formatNumber } from '../lib/formatters'
 import { useResource } from '../lib/useResource'
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks'
 
@@ -93,9 +94,6 @@ export function ExperiencePage() {
           This layer answers where I have applied the work, and how execution scope has increased.
         </p>
         <div className="action-row">
-          <Link className="action-link" to="/publications">
-            Back to Research
-          </Link>
           <Link className="action-link action-link-primary" to="/">
             Return to Motivation
           </Link>
@@ -195,9 +193,7 @@ export function ExperiencePage() {
         </div>
       </section>
 
-      <section className="panel panel-note">
-        <p className="meta-line">Updated {formatDateTime(profile.last_sync.last_run_timestamp)}</p>
-      </section>
+      <ArcBridge current="experience" />
     </div>
   )
 }

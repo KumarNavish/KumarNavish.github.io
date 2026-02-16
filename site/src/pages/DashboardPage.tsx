@@ -1,12 +1,11 @@
 import { useCallback } from 'react'
-import { Link } from 'react-router-dom'
 
+import { ArcBridge } from '../components/ArcBridge'
 import { ArcNarrative } from '../components/ArcNarrative'
 import { ArcThread } from '../components/ArcThread'
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks'
 import { fetchMetricsApi, fetchProfileApi } from '../lib/api'
-import { ARC_STEPS } from '../lib/arc'
-import { formatDateTime, formatNumber } from '../lib/formatters'
+import { formatNumber } from '../lib/formatters'
 import { useResource } from '../lib/useResource'
 
 interface MotivationData {
@@ -70,27 +69,6 @@ export function DashboardPage() {
       <ArcThread current="motivation" />
       <ArcNarrative current="motivation" />
 
-      <section className="panel narrative-path-panel">
-        <header className="panel-header">
-          <h2>Arc Backbone</h2>
-        </header>
-        <div className="sequence-grid arc-sequence-grid">
-          {ARC_STEPS.map((step, index) => (
-            <article key={step.id} className="sequence-step">
-              <p className="sequence-index">Step {index + 1}</p>
-              <h3>{step.label}</h3>
-              <p>{step.readerQuestion}</p>
-              <p>{step.purpose}</p>
-              <p className="meta-line">
-                <Link className="builder-inline-link" to={step.route}>
-                  {step.id === 'motivation' ? 'Current layer' : `Continue to ${step.label}`}
-                </Link>
-              </p>
-            </article>
-          ))}
-        </div>
-      </section>
-
       <section className="panel">
         <header className="panel-header">
           <h2>Motivation Principles</h2>
@@ -118,16 +96,12 @@ export function DashboardPage() {
           </article>
         </div>
 
-        <div className="action-row">
-          <Link className="action-link action-link-primary" to="/projects">
-            Continue to Skills
-          </Link>
-        </div>
+        <p className="meta-line">
+          These principles define the methods validated in the skills layer.
+        </p>
       </section>
 
-      <section className="panel panel-note">
-        <p className="meta-line">Updated {formatDateTime(profile.last_sync.last_run_timestamp)}</p>
-      </section>
+      <ArcBridge current="motivation" />
     </div>
   )
 }

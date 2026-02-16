@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { ArcBridge } from '../components/ArcBridge'
 import { ArcNarrative } from '../components/ArcNarrative'
 import { ArcThread } from '../components/ArcThread'
 import {
@@ -10,7 +11,7 @@ import {
   type ProjectItem,
   type PublicationItem,
 } from '../lib/api'
-import { formatDateTime, formatNumber } from '../lib/formatters'
+import { formatNumber } from '../lib/formatters'
 import { simulateLastMilePlan } from '../lib/lastMileSimulator'
 import { useResource } from '../lib/useResource'
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks'
@@ -226,9 +227,6 @@ export function WorkPage() {
           signal in one view.
         </p>
         <div className="action-row">
-          <Link className="action-link" to="/projects">
-            Back to Skills
-          </Link>
           <Link className="action-link action-link-primary" to="/publications">
             Continue to Research
           </Link>
@@ -452,11 +450,7 @@ export function WorkPage() {
         </div>
       </section>
 
-      <section className="panel panel-note">
-        <p className="meta-line">
-          Last refresh {formatDateTime(state.data.profile.last_sync.last_run_timestamp)}
-        </p>
-      </section>
+      <ArcBridge current="impact" />
     </div>
   )
 }
