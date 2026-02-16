@@ -211,15 +211,6 @@ export function DashboardPage() {
   const [proofRunVersion, setProofRunVersion] = useState(0)
   const [copyStatus, setCopyStatus] = useState('')
 
-  const [safetyThreshold, setSafetyThreshold] = useState(INITIAL_SCENARIO.safety.threshold)
-  const [safetyBudget, setSafetyBudget] = useState(INITIAL_SCENARIO.safety.budget)
-
-  const [rolloutReadinessWeight, setRolloutReadinessWeight] = useState(
-    INITIAL_SCENARIO.rollout.readiness_weight,
-  )
-  const [rolloutCostWeight, setRolloutCostWeight] = useState(INITIAL_SCENARIO.rollout.cost_weight)
-  const [rolloutRiskWeight, setRolloutRiskWeight] = useState(INITIAL_SCENARIO.rollout.risk_weight)
-
   const activeScenario = useMemo(() => getScenarioById(activeScenarioId), [activeScenarioId])
 
   const loadDashboard = useCallback(
@@ -289,20 +280,20 @@ export function DashboardPage() {
   const safetyProof = useMemo(
     () =>
       runSafetyProof({
-        threshold: safetyThreshold,
-        intervention_budget: safetyBudget,
+        threshold: activeScenario.safety.threshold,
+        intervention_budget: activeScenario.safety.budget,
       }),
-    [safetyBudget, safetyThreshold],
+    [activeScenario],
   )
 
   const rolloutProof = useMemo(
     () =>
       runRolloutProof({
-        readiness_weight: rolloutReadinessWeight,
-        cost_weight: rolloutCostWeight,
-        risk_weight: rolloutRiskWeight,
+        readiness_weight: activeScenario.rollout.readiness_weight,
+        cost_weight: activeScenario.rollout.cost_weight,
+        risk_weight: activeScenario.rollout.risk_weight,
       }),
-    [rolloutCostWeight, rolloutReadinessWeight, rolloutRiskWeight],
+    [activeScenario],
   )
 
   const decisionMemo = useMemo(() => {
@@ -327,13 +318,6 @@ export function DashboardPage() {
     setActiveScenarioId(preset.id)
     setProofPreset(preset.proof_preset)
     setProofRunVersion((value) => value + 1)
-
-    setSafetyThreshold(preset.safety.threshold)
-    setSafetyBudget(preset.safety.budget)
-
-    setRolloutReadinessWeight(preset.rollout.readiness_weight)
-    setRolloutCostWeight(preset.rollout.cost_weight)
-    setRolloutRiskWeight(preset.rollout.risk_weight)
 
     setCopyStatus('')
   }
@@ -370,8 +354,8 @@ export function DashboardPage() {
         <p className="eyebrow">Overview</p>
         <h1>I build decision systems that stay useful under change.</h1>
         <p className="hero-copy">
-          Pick a scenario. The page runs in-context proofs, updates policy tradeoffs, and outputs a
-          concrete next move.
+          Pick a scenario. The page runs one core proof and translates it into concrete operating
+          implications.
         </p>
 
         <div className="overview-fact-row" aria-label="Portfolio context">
@@ -385,7 +369,7 @@ export function DashboardPage() {
           </article>
           <article className="overview-fact">
             <p className="matrix-label">Live mode</p>
-            <p>Interactive proof + decision memo</p>
+            <p>Interactive proof + actionable memo</p>
           </article>
         </div>
       </section>
@@ -501,36 +485,10 @@ export function DashboardPage() {
         </a>
       </section>
 
-      <section className="compact-proof-grid" aria-label="Secondary proofs">
-        <article className="proof-module proof-module-tight">
-          <p className="matrix-label">Safety proof</p>
-          <h2>Intervention threshold tuning</h2>
-
-          <div className="proof-control-stack">
-            <label>
-              Threshold ({formatPercent(safetyThreshold)})
-              <input
-                type="range"
-                min="0.35"
-                max="0.88"
-                step="0.01"
-                value={safetyThreshold}
-                onChange={(event) => setSafetyThreshold(Number(event.target.value))}
-              />
-            </label>
-            <label>
-              Intervention budget ({formatPercent(safetyBudget)})
-              <input
-                type="range"
-                min="0.08"
-                max="0.5"
-                step="0.01"
-                value={safetyBudget}
-                onChange={(event) => setSafetyBudget(Number(event.target.value))}
-              />
-            </label>
-          </div>
-
+      <section className="implication-grid" aria-label="Scenario implications">
+        <article className="proof-module proof-module-tight implication-card">
+          <p className="matrix-label">Implication 1 · Safety posture</p>
+          <h2>Intervention profile for this scenario</h2>
           <div className="proof-metric-grid">
             <article className="proof-metric-card">
               <p className="matrix-label">Precision</p>
@@ -541,63 +499,31 @@ export function DashboardPage() {
               <p className="proof-metric-main">{formatPercent(safetyProof.recall)}</p>
             </article>
             <article className="proof-metric-card">
-              <p className="matrix-label">Escalations prevented</p>
+              <p className="matrix-label">Intercepted escalations</p>
               <p className="proof-metric-main">{formatNumber(safetyProof.prevented_harmful)}</p>
             </article>
           </div>
-
           <p className="proof-claim-line">{safetyProof.recommendation}</p>
         </article>
 
-        <article className="proof-module proof-module-tight">
-          <p className="matrix-label">Rollout proof</p>
-          <h2>Region sequencing under constraints</h2>
-
-          <div className="proof-control-stack">
-            <label>
-              Readiness weight ({rolloutReadinessWeight.toFixed(2)})
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={rolloutReadinessWeight}
-                onChange={(event) => setRolloutReadinessWeight(Number(event.target.value))}
-              />
-            </label>
-            <label>
-              Cost weight ({rolloutCostWeight.toFixed(2)})
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={rolloutCostWeight}
-                onChange={(event) => setRolloutCostWeight(Number(event.target.value))}
-              />
-            </label>
-            <label>
-              Risk weight ({rolloutRiskWeight.toFixed(2)})
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={rolloutRiskWeight}
-                onChange={(event) => setRolloutRiskWeight(Number(event.target.value))}
-              />
-            </label>
-          </div>
-
+        <article className="proof-module proof-module-tight implication-card">
+          <p className="matrix-label">Implication 2 · Rollout sequence</p>
+          <h2>First-wave order under current constraints</h2>
           <ol className="proof-rank-list">
             {rolloutProof.top_sequence.map((regionName) => (
               <li key={regionName}>{regionName}</li>
             ))}
           </ol>
-
           <p className="proof-claim-line">
             Stability score {formatPercent(rolloutProof.stability_score)} with expected cost pressure{' '}
             {formatPercent(rolloutProof.expected_cost_pressure)}.
+          </p>
+          <p className="meta-line">
+            Need deeper operational planning?{' '}
+            <Link to="/work#case-urban-transition-planning" className="builder-inline-link">
+              Open the in-context logistics simulator
+            </Link>
+            .
           </p>
         </article>
       </section>
