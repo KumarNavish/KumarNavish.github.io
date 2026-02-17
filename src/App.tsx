@@ -38,25 +38,12 @@ interface Preset {
   memoryStrategyId: MemoryStrategyId;
 }
 
+type RunStage = "idle" | "analyzing" | "training" | "ready" | "failed";
+
 const PRESETS: Preset[] = [
-  {
-    id: "balanced",
-    label: "Balanced",
-    clMode: "rehearsal",
-    memoryStrategyId: "reservoir",
-  },
-  {
-    id: "fast",
-    label: "Fast Adaptation",
-    clMode: "naive",
-    memoryStrategyId: "fifo",
-  },
-  {
-    id: "retention",
-    label: "Retention-first",
-    clMode: "ewc",
-    memoryStrategyId: "risk-aware",
-  },
+  { id: "balanced", label: "Balanced", clMode: "rehearsal", memoryStrategyId: "reservoir" },
+  { id: "fast", label: "Fast Adaptation", clMode: "naive", memoryStrategyId: "fifo" },
+  { id: "retention", label: "Retention-first", clMode: "ewc", memoryStrategyId: "risk-aware" },
 ];
 
 const DEFAULT_WORKFLOW = BIS_WORKFLOWS[0];
@@ -129,8 +116,32 @@ function presetById(id: Preset["id"]): Preset {
   return PRESETS.find((preset) => preset.id === id) ?? PRESETS[0];
 }
 
-function selectedModeKey(mode: RouterMode): RouterMode {
+function modeKey(mode: RouterMode): RouterMode {
   return mode === "naive" ? "naive" : mode === "rehearsal" ? "rehearsal" : "ewc";
+}
+
+function stageOrder(stage: RunStage): number {
+  switch (stage) {
+    case "idle":
+      return 0;
+    case "analyzing":
+      return 1;
+    case "training":
+      return 2;
+    case "ready":
+    case "failed":
+      return 3;
+  }
+}
+
+function fieldLabel(key: string): string {
+  return key.replace(/_/g, " ");
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
 }
 
 function App() {
@@ -144,13 +155,12 @@ function App() {
   const [retrievalK, setRetrievalK] = useState(3);
   const [memoryBudget, setMemoryBudget] = useState(32);
   const [driftEnabled, setDriftEnabled] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
 
-  const [inboxStatus, setInboxStatus] = useState("Ready");
+  const [runStage, setRunStage] = useState<RunStage>("idle");
   const [inboxError, setInboxError] = useState("");
+  const [copyStatus, setCopyStatus] = useState("");
   const [inboxResult, setInboxResult] = useState<PipelineResult | null>(null);
   const [comparisonResult, setComparisonResult] = useState<ContinualComparisonResult | null>(null);
-  const [copyStatus, setCopyStatus] = useState("");
 
   const [seenProcesses, setSeenProcesses] = useState<ProcessId[]>([]);
   const [trainStream, setTrainStream] = useState<Example[]>([]);
@@ -167,6 +177,7 @@ function App() {
     const load = async () => {
       setLoadingData(true);
       setLoadError("");
+
       try {
         const processPayload = await loadJson<{
           version: string;
@@ -205,13 +216,6 @@ function App() {
         const sortedSteps = [...streamPayload.steps].sort((a, b) => a.step - b.step);
         const { firstProcess, initialExamples } = bootstrapSeed(sortedSteps, trainSets);
 
-        const normalizedData: AppData = {
-          processDefinitions,
-          trainSets,
-          testSets,
-          streamSchedule: sortedSteps,
-        };
-
         routerRef.current = makeRouter(31);
         ewcStateRef.current = null;
         trainIntentRouter(routerRef.current, initialExamples.map(toIntentExample), {
@@ -221,17 +225,21 @@ function App() {
           seed: 111,
         });
 
-        setAppData(normalizedData);
-        setSeenProcesses([firstProcess]);
-        setTrainStream(initialExamples);
+        setAppData({
+          processDefinitions,
+          trainSets,
+          testSets,
+          streamSchedule: sortedSteps,
+        });
         setSelectedWorkflowId(firstProcess);
         setInboxRequest(BIS_WORKFLOW_BY_PROCESS[firstProcess]?.sampleRequest ?? DEFAULT_REQUEST);
-        setInboxStatus("Ready");
+        setSeenProcesses([firstProcess]);
+        setTrainStream(initialExamples);
       } catch (error) {
         if (!active) {
           return;
         }
-        setLoadError(error instanceof Error ? error.message : "Failed to load datasets.");
+        setLoadError(error instanceof Error ? error.message : "Failed to load demo data.");
       } finally {
         if (active) {
           setLoadingData(false);
@@ -269,13 +277,11 @@ function App() {
     return appData.streamSchedule.find((step) => !seenProcesses.includes(step.process_id)) ?? null;
   }, [appData, seenProcesses]);
 
-  const activeWorkflow = useMemo(() => {
-    const predicted = inboxResult?.predictedIntent;
-    if (predicted && BIS_WORKFLOW_BY_PROCESS[predicted]) {
-      return BIS_WORKFLOW_BY_PROCESS[predicted];
-    }
-    return BIS_WORKFLOW_BY_PROCESS[selectedWorkflowId] ?? DEFAULT_WORKFLOW;
-  }, [selectedWorkflowId, inboxResult]);
+  const selectedWorkflow = BIS_WORKFLOW_BY_PROCESS[selectedWorkflowId] ?? DEFAULT_WORKFLOW;
+  const predictedWorkflow =
+    inboxResult && BIS_WORKFLOW_BY_PROCESS[inboxResult.predictedIntent]
+      ? BIS_WORKFLOW_BY_PROCESS[inboxResult.predictedIntent]
+      : selectedWorkflow;
 
   const performTeachUpdate = (): ProcessId | null => {
     if (!appData || !nextTeachStep) {
@@ -338,6 +344,7 @@ function App() {
     if (!appData || processes.length === 0) {
       return null;
     }
+
     const result = runContinualComparison(
       processes,
       appData.trainSets,
@@ -354,11 +361,13 @@ function App() {
       return;
     }
 
-    setInboxStatus("Running automation...");
+    setRunStage("analyzing");
     setInboxError("");
     setCopyStatus("");
 
     try {
+      await sleep(140);
+
       const finalRequest = driftEnabled
         ? applyTextDrift(inboxRequest, { seed: 401, intensity: 0.45 })
         : inboxRequest;
@@ -374,6 +383,9 @@ function App() {
       });
 
       setInboxResult(result);
+      setRunStage("training");
+
+      await sleep(140);
 
       const taughtProcess = performTeachUpdate();
       const evaluationProcesses =
@@ -382,11 +394,17 @@ function App() {
           : seenProcesses;
       runSafetyCheck(evaluationProcesses);
 
-      setInboxStatus("Automation packet ready.");
+      setRunStage("ready");
     } catch (error) {
-      setInboxStatus("Automation failed.");
-      setInboxError(error instanceof Error ? error.message : "Unknown automation error.");
+      setRunStage("failed");
+      setInboxError(error instanceof Error ? error.message : "Automation failed.");
     }
+  };
+
+  const handleWorkflowChange = (processId: ProcessId) => {
+    setSelectedWorkflowId(processId);
+    const workflow = BIS_WORKFLOW_BY_PROCESS[processId] ?? DEFAULT_WORKFLOW;
+    setInboxRequest(workflow.sampleRequest);
   };
 
   const handleReset = () => {
@@ -409,16 +427,11 @@ function App() {
     setInboxRequest(BIS_WORKFLOW_BY_PROCESS[firstProcess]?.sampleRequest ?? DEFAULT_REQUEST);
     setSeenProcesses([firstProcess]);
     setTrainStream(initialExamples);
-    setInboxStatus("Ready");
-    setInboxError("");
     setInboxResult(null);
     setComparisonResult(null);
     setCopyStatus("");
-  };
-
-  const handleWorkflowChange = (processId: ProcessId) => {
-    setSelectedWorkflowId(processId);
-    setInboxRequest(BIS_WORKFLOW_BY_PROCESS[processId]?.sampleRequest ?? DEFAULT_REQUEST);
+    setInboxError("");
+    setRunStage("idle");
   };
 
   const handleCopy = async (label: string, payload: unknown) => {
@@ -430,101 +443,105 @@ function App() {
     }
   };
 
-  const modeKey = selectedModeKey(activePreset.clMode);
-  const forgettingReduction = comparisonResult
-    ? Math.max(0, comparisonResult.modes.naive.meanForgetting - comparisonResult.modes[modeKey].meanForgetting)
-    : 0;
-
   const plan = inboxResult?.plan ?? null;
-  const manualMinutes = activeWorkflow.manualCycleMinutes;
-  const automatedMinutes = activeWorkflow.automatedCycleMinutes;
+  const manualMinutes = predictedWorkflow.manualCycleMinutes;
+  const automatedMinutes = predictedWorkflow.automatedCycleMinutes;
   const savedMinutes = Math.max(0, manualMinutes - automatedMinutes);
   const savedPercent = manualMinutes > 0 ? Math.round((savedMinutes / manualMinutes) * 100) : 0;
-  const requiredFieldsFilled = plan ? Object.keys(plan.required_fields).length : 0;
-  const approvalCount = plan?.approvals.length ?? 0;
+  const requiredFields = plan ? Object.entries(plan.required_fields) : [];
 
-  const charter = plan
-    ? {
-        title: plan.title,
-        process_id: plan.process_id,
-        problem_statement: activeWorkflow.manualPain,
-        goal: `Reduce intake-to-plan turnaround from ${manualMinutes}m to ${automatedMinutes}m.`,
-        owner: plan.owner_role,
-        baseline_metric_minutes: manualMinutes,
-        target_metric_minutes: automatedMinutes,
-        risk_tag: plan.risk_tag,
-      }
-    : null;
+  const retentionGain = comparisonResult
+    ? Math.max(0, comparisonResult.modes.naive.meanForgetting - comparisonResult.modes[modeKey(activePreset.clMode)].meanForgetting)
+    : 0;
 
-  const blueprint = plan
-    ? {
-        triggers: [`${activeWorkflow.workflowName} request intake`],
-        connectors: activeWorkflow.systemTargets,
-        steps: [
-          "Classify request",
-          "Extract required fields",
-          "Validate policy constraints",
-          "Assign approvals and SLA",
-          "Create handoff payloads",
-        ],
-        controls: plan.controls,
-        monitoring: [
-          `SLA threshold: ${plan.sla_hours} hours`,
-          "Missing field alerts",
-          "Approval timeout alert",
-        ],
-      }
-    : null;
-
-  const exportsPayload = plan
-    ? {
-        jira: {
-          project: "BIS",
-          issuetype: "Task",
-          summary: `[Process Optimisation] ${plan.title}`,
-          description: plan.next_actions.join(" | "),
-          priority: plan.risk_tag === "high" ? "High" : "Medium",
-          labels: [plan.process_id, "automation-packet"],
-          fields: plan.required_fields,
-        },
-        serviceNow: {
-          category: "process_automation",
-          short_description: plan.title,
-          assignment_group: plan.owner_role,
-          impact: plan.risk_tag,
-          sla_hours: plan.sla_hours,
-          approvals: plan.approvals,
-          required_fields: plan.required_fields,
-        },
-        tracker: {
-          workflow: activeWorkflow.workflowName,
-          process_id: plan.process_id,
+  const charterOutput =
+    plan !== null
+      ? {
+          title: plan.title,
+          process: predictedWorkflow.workflowName,
           owner: plan.owner_role,
-          target_sla_hours: plan.sla_hours,
-          controls: plan.controls.length,
-          status: "ready_for_execution",
-        },
-      }
-    : null;
+          baseline_minutes: manualMinutes,
+          target_minutes: automatedMinutes,
+          problem_statement: predictedWorkflow.manualPain,
+          risk_level: plan.risk_tag,
+        }
+      : null;
 
-  const beforeSteps = [
-    "Request arrives in ticket or email",
-    "Manual triage and clarification",
-    "Approval chase across teams",
+  const blueprintOutput =
+    plan !== null
+      ? {
+          triggers: [`${predictedWorkflow.workflowName} request intake`],
+          connectors: predictedWorkflow.systemTargets,
+          steps: [
+            "Classify request",
+            "Extract required fields",
+            "Apply policy rules",
+            "Route approvals",
+            "Emit handoff payload",
+          ],
+          controls: plan.controls,
+          monitoring: [`SLA ${plan.sla_hours}h`, "Approval timeout", "Missing field alert"],
+        }
+      : null;
+
+  const exportOutput =
+    plan !== null
+      ? {
+          jira: {
+            project: "BIS",
+            issueType: "Task",
+            summary: `[Process Optimisation] ${plan.title}`,
+            labels: [plan.process_id, "automation-packet"],
+            fields: plan.required_fields,
+          },
+          serviceNow: {
+            category: "process_automation",
+            short_description: plan.title,
+            assignment_group: plan.owner_role,
+            sla_hours: plan.sla_hours,
+            approvals: plan.approvals,
+          },
+          tracker: {
+            workflow: predictedWorkflow.workflowName,
+            process_id: plan.process_id,
+            owner: plan.owner_role,
+            status: "ready_for_execution",
+          },
+        }
+      : null;
+
+  const beforeFlow = [
+    "Unstructured intake",
+    "Manual clarification loops",
+    "Approval chase",
     "Manual tracker update",
   ];
 
-  const afterSteps = [
-    `Auto-classify as ${activeWorkflow.workflowName}`,
-    "Extract and validate required fields",
-    "Attach approvals and SLA ownership",
-    "Generate export payloads",
-  ];
+  const afterFlow =
+    plan !== null
+      ? [
+          `Auto-classify: ${predictedWorkflow.workflowName}`,
+          `${requiredFields.length} required fields captured`,
+          `${plan.approvals.length} approvals attached`,
+          "Export payloads generated",
+        ]
+      : ["Awaiting run", "Awaiting run", "Awaiting run", "Awaiting run"];
+
+  const stageText =
+    runStage === "idle"
+      ? "Ready"
+      : runStage === "analyzing"
+        ? "Reading request"
+        : runStage === "training"
+          ? "Assembling packet"
+          : runStage === "ready"
+            ? "Packet ready"
+            : "Run failed";
 
   if (loadingData) {
     return (
       <main className="app-shell">
-        <section className="frame loading-frame">
+        <section className="app-frame loading-frame">
           <h1>Loading BIS demo...</h1>
         </section>
       </main>
@@ -534,7 +551,7 @@ function App() {
   if (loadError || !appData) {
     return (
       <main className="app-shell">
-        <section className="frame loading-frame">
+        <section className="app-frame loading-frame">
           <h1>Unable to load demo</h1>
           <p className="warning">{loadError || "Unknown initialization error."}</p>
         </section>
@@ -544,33 +561,31 @@ function App() {
 
   return (
     <main className="app-shell">
-      <section className="frame">
-        <header className="hero">
+      <section className="app-frame">
+        <header className="hero-card">
           <p className="kicker">BIS Process Optimisation</p>
-          <h1>Automate one intake request end-to-end.</h1>
-          <p className="subtitle">Input a messy request. Get a ready packet in one click.</p>
+          <h1>From messy request to ready automation packet.</h1>
 
-          <div className="top-controls">
-            <label className="field">
-              Workflow
-              <select
-                value={selectedWorkflowId}
-                onChange={(event) => handleWorkflowChange(event.target.value as ProcessId)}
+          <div className="workflow-row" role="tablist" aria-label="Workflows">
+            {BIS_WORKFLOWS.map((workflow) => (
+              <button
+                key={workflow.processId}
+                type="button"
+                className={selectedWorkflowId === workflow.processId ? "chip active" : "chip"}
+                onClick={() => handleWorkflowChange(workflow.processId)}
               >
-                {BIS_WORKFLOWS.map((workflow) => (
-                  <option key={workflow.processId} value={workflow.processId}>
-                    {workflow.workflowName}
-                  </option>
-                ))}
-              </select>
-            </label>
+                {workflow.workflowName}
+              </button>
+            ))}
+          </div>
 
-            <div className="preset-group" role="radiogroup" aria-label="Learning preset">
+          <div className="control-row">
+            <div className="preset-row" role="radiogroup" aria-label="Preset">
               {PRESETS.map((preset) => (
                 <button
                   key={preset.id}
                   type="button"
-                  className={presetId === preset.id ? "preset-btn active" : "preset-btn"}
+                  className={presetId === preset.id ? "preset active" : "preset"}
                   onClick={() => setPresetId(preset.id)}
                 >
                   {preset.label}
@@ -578,128 +593,130 @@ function App() {
               ))}
             </div>
 
-            <button type="button" className="primary-btn" onClick={() => void handleStartDemo()}>
+            <button type="button" className="primary" onClick={() => void handleStartDemo()}>
               Start demo
             </button>
-            <button type="button" className="ghost-btn" onClick={handleReset}>
+            <button type="button" className="secondary" onClick={handleReset}>
               Reset
             </button>
           </div>
 
-          <label className="field request-field">
+          <label className="input-label">
             Request
-            <textarea
-              value={inboxRequest}
-              onChange={(event) => setInboxRequest(event.target.value)}
-              rows={3}
-            />
+            <textarea value={inboxRequest} rows={3} onChange={(event) => setInboxRequest(event.target.value)} />
           </label>
 
           <div className="status-row">
-            <p className="status-pill">{inboxStatus}</p>
+            <p className="status-pill">{stageText}</p>
             {copyStatus ? <p className="status-pill">{copyStatus}</p> : null}
             {inboxError ? <p className="warning">{inboxError}</p> : null}
           </div>
+
+          <div className="run-rail" aria-label="Automation steps">
+            <span className={stageOrder(runStage) >= 1 ? "rail-step active" : "rail-step"}>1. Intake</span>
+            <span className={stageOrder(runStage) >= 2 ? "rail-step active" : "rail-step"}>2. Packet build</span>
+            <span className={stageOrder(runStage) >= 3 ? "rail-step active" : "rail-step"}>3. Safety check</span>
+          </div>
         </header>
 
-        <section className="moment-grid">
-          <article className="moment-card before">
-            <h2>Before (manual)</h2>
-            <p className="metric">{manualMinutes} min</p>
-            <p className="micro">Typical cycle time</p>
-            <p className="plain">{activeWorkflow.manualPain}</p>
+        <section className={plan ? "moment-card ready" : "moment-card"}>
+          <article className="moment before">
+            <h2>Before</h2>
+            <p className="big-number">{manualMinutes}m</p>
+            <p className="small-label">manual cycle time</p>
+            <p className="muted">{predictedWorkflow.manualPain}</p>
           </article>
 
-          <article className="moment-card after">
-            <h2>After (automated)</h2>
+          <div className="arrow" aria-hidden="true">
+            →
+          </div>
+
+          <article className="moment after">
+            <h2>After</h2>
             {plan ? (
               <>
-                <p className="metric">{automatedMinutes} min</p>
-                <p className="micro">Ready packet turnaround</p>
-                <div className="signal-grid">
-                  <div>
-                    <p className="signal-value">-{savedPercent}%</p>
-                    <p className="signal-label">Cycle time</p>
-                  </div>
-                  <div>
-                    <p className="signal-value">{requiredFieldsFilled}</p>
-                    <p className="signal-label">Fields captured</p>
-                  </div>
-                  <div>
-                    <p className="signal-value">{approvalCount}</p>
-                    <p className="signal-label">Approvals routed</p>
-                  </div>
+                <p className="big-number">{automatedMinutes}m</p>
+                <p className="small-label">packet ready</p>
+                <div className="signal-row">
+                  <p>
+                    <strong>-{savedPercent}%</strong> time
+                  </p>
+                  <p>
+                    <strong>{requiredFields.length}</strong> fields
+                  </p>
+                  <p>
+                    <strong>{plan.approvals.length}</strong> approvals
+                  </p>
                 </div>
               </>
             ) : (
-              <p className="plain">Run the demo to generate the automation packet.</p>
+              <p className="muted">Click Start demo.</p>
             )}
           </article>
         </section>
 
-        <section className="outputs-panel">
+        <section className="outputs-card">
           <h2>Your outputs</h2>
-          {plan && charter && blueprint && exportsPayload ? (
-            <div className="outputs-grid">
-              <article className="output-card">
-                <h3>Triage result</h3>
-                <p>
-                  <strong>{activeWorkflow.workflowName}</strong>
-                </p>
-                <p>Risk: {plan.risk_tag}</p>
-                <p>Owner: {plan.owner_role}</p>
-                <p>SLA: {plan.sla_hours}h</p>
-              </article>
 
-              <article className="output-card">
-                <h3>Charter snapshot</h3>
-                <p>{charter.problem_statement}</p>
+          {plan && charterOutput && blueprintOutput && exportOutput ? (
+            <div className="outputs-grid">
+              <article className="tile">
+                <h3>Charter</h3>
+                <p>{charterOutput.problem_statement}</p>
                 <p>
-                  Target: {charter.baseline_metric_minutes}m {"->"} {charter.target_metric_minutes}m
+                  Target: {charterOutput.baseline_minutes}m {"->"} {charterOutput.target_minutes}m
                 </p>
-                <button type="button" className="mini-btn" onClick={() => void handleCopy("Charter JSON", charter)}>
+                <button type="button" className="mini" onClick={() => void handleCopy("Charter JSON", charterOutput)}>
                   Copy charter JSON
                 </button>
               </article>
 
-              <article className="output-card">
+              <article className="tile">
                 <h3>Automation blueprint</h3>
                 <ul>
-                  {blueprint.steps.slice(0, 4).map((step) => (
+                  {blueprintOutput.steps.map((step) => (
                     <li key={step}>{step}</li>
                   ))}
                 </ul>
                 <button
                   type="button"
-                  className="mini-btn"
-                  onClick={() => void handleCopy("Blueprint JSON", blueprint)}
+                  className="mini"
+                  onClick={() => void handleCopy("Blueprint JSON", blueprintOutput)}
                 >
                   Copy blueprint JSON
                 </button>
               </article>
 
-              <article className="output-card">
+              <article className="tile">
+                <h3>Required fields</h3>
+                <div className="field-grid">
+                  {requiredFields.map(([key, value]) => (
+                    <p key={key}>
+                      <span>{fieldLabel(key)}</span>
+                      <strong>{value}</strong>
+                    </p>
+                  ))}
+                </div>
+              </article>
+
+              <article className="tile">
                 <h3>Export payloads</h3>
-                <p>Jira + ServiceNow + tracker row ready.</p>
+                <p>Jira + ServiceNow + tracker row are ready.</p>
                 <div className="copy-row">
-                  <button
-                    type="button"
-                    className="mini-btn"
-                    onClick={() => void handleCopy("Jira JSON", exportsPayload.jira)}
-                  >
+                  <button type="button" className="mini" onClick={() => void handleCopy("Jira JSON", exportOutput.jira)}>
                     Copy Jira
                   </button>
                   <button
                     type="button"
-                    className="mini-btn"
-                    onClick={() => void handleCopy("ServiceNow JSON", exportsPayload.serviceNow)}
+                    className="mini"
+                    onClick={() => void handleCopy("ServiceNow JSON", exportOutput.serviceNow)}
                   >
                     Copy ServiceNow
                   </button>
                   <button
                     type="button"
-                    className="mini-btn"
-                    onClick={() => void handleCopy("Tracker JSON", exportsPayload.tracker)}
+                    className="mini"
+                    onClick={() => void handleCopy("Tracker JSON", exportOutput.tracker)}
                   >
                     Copy tracker
                   </button>
@@ -707,19 +724,19 @@ function App() {
               </article>
             </div>
           ) : (
-            <div className="empty-state">Click "Start demo" to generate outputs.</div>
+            <div className="empty">Run the demo to generate the output packet.</div>
           )}
         </section>
 
-        <details className="details-panel" open={showAdvanced} onToggle={(event) => setShowAdvanced(event.currentTarget.open)}>
-          <summary>{showAdvanced ? "Hide details" : "Open full packet details"}</summary>
+        <details className="details-card">
+          <summary>Open full packet details</summary>
 
-          <div className="details-content">
-            <section className="flow-panel">
+          <div className="details-grid">
+            <section className="flow-grid">
               <article>
                 <h3>Before flow</h3>
                 <ol>
-                  {beforeSteps.map((step) => (
+                  {beforeFlow.map((step) => (
                     <li key={step}>{step}</li>
                   ))}
                 </ol>
@@ -727,7 +744,7 @@ function App() {
               <article>
                 <h3>After flow</h3>
                 <ol>
-                  {afterSteps.map((step) => (
+                  {afterFlow.map((step) => (
                     <li key={step}>{step}</li>
                   ))}
                 </ol>
@@ -735,8 +752,8 @@ function App() {
             </section>
 
             <section className="advanced-controls">
-              <label className="field compact">
-                Retrieval k
+              <label>
+                Retrieval k: {retrievalK}
                 <input
                   type="range"
                   min={1}
@@ -746,8 +763,8 @@ function App() {
                   onChange={(event) => setRetrievalK(Number(event.target.value))}
                 />
               </label>
-              <label className="field compact">
-                Memory budget
+              <label>
+                Memory budget: {memoryBudget}
                 <input
                   type="range"
                   min={8}
@@ -757,7 +774,7 @@ function App() {
                   onChange={(event) => setMemoryBudget(Number(event.target.value))}
                 />
               </label>
-              <label className="check-field">
+              <label className="check">
                 <input
                   type="checkbox"
                   checked={driftEnabled}
@@ -768,29 +785,23 @@ function App() {
             </section>
 
             {comparisonResult ? (
-              <section className="safety-panel">
+              <section className="safety-card">
                 <h3>Regression safety</h3>
-                <p>
-                  Preset: <strong>{activePreset.label}</strong>
-                </p>
-                <p>
-                  Retention gain vs naive: <strong>{(forgettingReduction * 100).toFixed(2)}%</strong>
-                </p>
+                <p>Preset: {activePreset.label}</p>
+                <p>Retention gain vs naive: {(retentionGain * 100).toFixed(2)}%</p>
               </section>
             ) : null}
 
-            {plan ? (
+            {plan && exportOutput ? (
               <section className="json-grid">
                 <article>
                   <h3>Plan JSON</h3>
                   <pre>{JSON.stringify(plan, null, 2)}</pre>
                 </article>
-                {exportsPayload ? (
-                  <article>
-                    <h3>Export JSON</h3>
-                    <pre>{JSON.stringify(exportsPayload, null, 2)}</pre>
-                  </article>
-                ) : null}
+                <article>
+                  <h3>Export JSON</h3>
+                  <pre>{JSON.stringify(exportOutput, null, 2)}</pre>
+                </article>
               </section>
             ) : null}
           </div>
