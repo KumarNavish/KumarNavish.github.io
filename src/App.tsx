@@ -3,7 +3,6 @@ import "./App.css";
 import { runAutomationPipeline, keywordEmbedText, type PipelineResult } from "./agent/pipeline";
 import {
   FifoMemoryStrategy,
-  KCenterMemoryStrategy,
   ReservoirMemoryStrategy,
   RiskAwareMemoryStrategy,
   type MemoryInput,
@@ -24,17 +23,6 @@ import { BIS_WORKFLOW_BY_PROCESS, BIS_WORKFLOWS } from "./domain/bis_workflows";
 import { PROCESS_IDS, type Example, type ProcessDefinition, type ProcessId, type StreamStep } from "./domain/types";
 import { runContinualComparison, type ContinualComparisonResult, type MemoryStrategyId } from "./eval/continual_comparison";
 import { VectorStore } from "./retrieval/vector_store";
-import {
-  clearDemoState,
-  loadDemoState,
-  saveDemoState,
-  type AuditEntryState,
-  type DemoTabId,
-  type EvalSnapshotState,
-} from "./state/persistence";
-
-type TabId = DemoTabId;
-type ExperienceMode = "novice" | "expert";
 
 interface AppData {
   processDefinitions: Record<ProcessId, ProcessDefinition>;
@@ -43,46 +31,48 @@ interface AppData {
   streamSchedule: StreamStep[];
 }
 
-type AuditEntry = AuditEntryState;
-type EvalSnapshot = EvalSnapshotState;
-
-interface SampleRequestOption {
+interface Preset {
+  id: "balanced" | "fast" | "retention";
   label: string;
-  text: string;
+  clMode: RouterMode;
+  memoryStrategyId: MemoryStrategyId;
 }
 
-const TABS: Array<{ id: TabId; label: string }> = [
-  { id: "inbox", label: "Intake" },
-  { id: "teach", label: "Teach Policy" },
-  { id: "evaluate", label: "Impact" },
-  { id: "memory", label: "Memory" },
-  { id: "audit", label: "Audit" },
+const PRESETS: Preset[] = [
+  {
+    id: "balanced",
+    label: "Balanced",
+    clMode: "rehearsal",
+    memoryStrategyId: "reservoir",
+  },
+  {
+    id: "fast",
+    label: "Fast Adaptation",
+    clMode: "naive",
+    memoryStrategyId: "fifo",
+  },
+  {
+    id: "retention",
+    label: "Retention-first",
+    clMode: "ewc",
+    memoryStrategyId: "risk-aware",
+  },
 ];
 
-const DEFAULT_INBOX_REQUEST = BIS_WORKFLOWS[0].sampleRequest;
-const DEFAULT_MEMORY_QUERY = "market data outage sev1 incident";
+const DEFAULT_WORKFLOW = BIS_WORKFLOWS[0];
+const DEFAULT_REQUEST = DEFAULT_WORKFLOW.sampleRequest;
 
 function makeRouter(seed = 13): LinearSoftmaxClassifier {
   return new LinearSoftmaxClassifier(4, 4, { seed, initScale: 0.01 });
 }
 
-function createMemoryStrategy(
-  strategyId: MemoryStrategyId,
-  capacity: number,
-  seed: number,
-): MemoryStrategy {
-  switch (strategyId) {
-    case "fifo":
-      return new FifoMemoryStrategy(capacity);
-    case "reservoir":
-      return new ReservoirMemoryStrategy(capacity, { seed });
-    case "kcenter":
-      return new KCenterMemoryStrategy(capacity, { seed });
-    case "risk-aware":
-      return new RiskAwareMemoryStrategy(capacity, { seed });
-    default:
-      return new ReservoirMemoryStrategy(capacity, { seed });
-  }
+function loadJson<T>(path: string): Promise<T> {
+  return fetch(`${import.meta.env.BASE_URL}${path}`).then(async (response) => {
+    if (!response.ok) {
+      throw new Error(`Failed to load ${path} (${response.status})`);
+    }
+    return (await response.json()) as T;
+  });
 }
 
 function toIntentExample(example: Example): IntentExample {
@@ -111,92 +101,6 @@ function memoryItemToExample(item: MemoryItem): Example | null {
   return raw as Example;
 }
 
-function loadJson<T>(path: string): Promise<T> {
-  return fetch(`${import.meta.env.BASE_URL}${path}`).then(async (response) => {
-    if (!response.ok) {
-      throw new Error(`Failed to load ${path} (${response.status})`);
-    }
-    return (await response.json()) as T;
-  });
-}
-
-function countByRisk(memoryItems: MemoryItem[]): Record<string, number> {
-  return memoryItems.reduce(
-    (acc, item) => {
-      acc[item.risk_tag] += 1;
-      return acc;
-    },
-    { low: 0, medium: 0, high: 0 },
-  );
-}
-
-function formatTimestamp(date = new Date()): string {
-  return date.toISOString().replace("T", " ").replace("Z", " UTC");
-}
-
-function forgettingChartPoints(
-  result: ContinualComparisonResult | null,
-  mode: RouterMode,
-  width: number,
-  height: number,
-): string {
-  if (!result) {
-    return "";
-  }
-  const values = result.modes[mode].forgettingCurve;
-  if (values.length === 0) {
-    return "";
-  }
-  const padding = 20;
-  const xSpan = Math.max(1, values.length - 1);
-  const maxY = Math.max(0.01, ...values);
-
-  return values
-    .map((value, index) => {
-      const x = padding + (index / xSpan) * (width - padding * 2);
-      const y = height - padding - (value / maxY) * (height - padding * 2);
-      return `${x},${y}`;
-    })
-    .join(" ");
-}
-
-function strategyLabel(mode: RouterMode): string {
-  if (mode === "rehearsal") {
-    return "Replay";
-  }
-  if (mode === "ewc") {
-    return "EWC";
-  }
-  return "Naive";
-}
-
-function resolvePlanValue(plan: PipelineResult["plan"] | null, path: string): string {
-  if (!plan) {
-    return "pending run";
-  }
-
-  if (path.startsWith("required_fields.")) {
-    const key = path.replace("required_fields.", "");
-    return plan.required_fields[key] ?? "missing";
-  }
-
-  if (path === "approvals") {
-    return plan.approvals.join(", ");
-  }
-
-  const raw = (plan as unknown as Record<string, unknown>)[path];
-  if (typeof raw === "string") {
-    return raw;
-  }
-  if (typeof raw === "number") {
-    return String(raw);
-  }
-  if (Array.isArray(raw)) {
-    return raw.map((value) => String(value)).join(", ");
-  }
-  return "n/a";
-}
-
 function bootstrapSeed(
   streamSchedule: StreamStep[],
   trainSets: Partial<Record<ProcessId, Example[]>>,
@@ -206,59 +110,56 @@ function bootstrapSeed(
   return { firstProcess, initialExamples };
 }
 
-function nextAuditId(entries: AuditEntry[]): number {
-  const max = entries.reduce((best, entry) => (entry.id > best ? entry.id : best), 0);
-  return max + 1;
+function createMemoryStrategy(
+  strategyId: MemoryStrategyId,
+  capacity: number,
+  seed: number,
+): MemoryStrategy {
+  switch (strategyId) {
+    case "fifo":
+      return new FifoMemoryStrategy(capacity);
+    case "risk-aware":
+      return new RiskAwareMemoryStrategy(capacity, { seed });
+    default:
+      return new ReservoirMemoryStrategy(capacity, { seed });
+  }
+}
+
+function presetById(id: Preset["id"]): Preset {
+  return PRESETS.find((preset) => preset.id === id) ?? PRESETS[0];
+}
+
+function selectedModeKey(mode: RouterMode): RouterMode {
+  return mode === "naive" ? "naive" : mode === "rehearsal" ? "rehearsal" : "ewc";
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState<TabId>("inbox");
   const [loadingData, setLoadingData] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [experienceMode, setExperienceMode] = useState<ExperienceMode>("novice");
-
-  const [memoryStrategyId, setMemoryStrategyId] = useState<MemoryStrategyId>("reservoir");
-  const [memoryBudget, setMemoryBudget] = useState(32);
-  const [retrievalK, setRetrievalK] = useState(3);
-  const [clMode, setClMode] = useState<RouterMode>("rehearsal");
-  const [driftEnabled, setDriftEnabled] = useState(false);
-
   const [appData, setAppData] = useState<AppData | null>(null);
+
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<ProcessId>(DEFAULT_WORKFLOW.processId);
+  const [inboxRequest, setInboxRequest] = useState(DEFAULT_REQUEST);
+  const [presetId, setPresetId] = useState<Preset["id"]>("balanced");
+  const [retrievalK, setRetrievalK] = useState(3);
+  const [memoryBudget, setMemoryBudget] = useState(32);
+  const [driftEnabled, setDriftEnabled] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const [inboxStatus, setInboxStatus] = useState("Ready");
+  const [inboxError, setInboxError] = useState("");
+  const [inboxResult, setInboxResult] = useState<PipelineResult | null>(null);
+  const [comparisonResult, setComparisonResult] = useState<ContinualComparisonResult | null>(null);
+  const [copyStatus, setCopyStatus] = useState("");
+
   const [seenProcesses, setSeenProcesses] = useState<ProcessId[]>([]);
   const [trainStream, setTrainStream] = useState<Example[]>([]);
   const [memoryItems, setMemoryItems] = useState<MemoryItem[]>([]);
-  const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
-  const [evalSnapshots, setEvalSnapshots] = useState<EvalSnapshot[]>([]);
-  const [teachStatus, setTeachStatus] = useState("Idle");
 
-  const [inboxRequest, setInboxRequest] = useState(DEFAULT_INBOX_REQUEST);
-  const [selectedWorkflowId, setSelectedWorkflowId] = useState<ProcessId>(BIS_WORKFLOWS[0].processId);
-  const [inboxStatus, setInboxStatus] = useState("Idle");
-  const [inboxResult, setInboxResult] = useState<PipelineResult | null>(null);
-  const [inboxError, setInboxError] = useState("");
-
-  const [memoryQuery, setMemoryQuery] = useState(DEFAULT_MEMORY_QUERY);
-  const [memoryHits, setMemoryHits] = useState<Array<{ id: string; score: number; example: Example }>>([]);
-
-  const [evalStatus, setEvalStatus] = useState("Idle");
-  const [comparisonResult, setComparisonResult] = useState<ContinualComparisonResult | null>(null);
-  const [stateReady, setStateReady] = useState(false);
-  const [novicePhase, setNovicePhase] = useState<"idle" | "run" | "teach" | "evaluate" | "done">("idle");
-
-  const routerRef = useRef<LinearSoftmaxClassifier>(makeRouter());
+  const routerRef = useRef<LinearSoftmaxClassifier>(makeRouter(31));
   const ewcStateRef = useRef<EwcState | null>(null);
-  const auditIdRef = useRef(1);
-  const skipNextMemoryRebuildRef = useRef(false);
 
-  const addAudit = (action: string, detail: string) => {
-    const entry: AuditEntry = {
-      id: auditIdRef.current++,
-      timestamp: formatTimestamp(),
-      action,
-      detail,
-    };
-    setAuditLog((prev) => [...prev, entry]);
-  };
+  const activePreset = presetById(presetId);
 
   useEffect(() => {
     let active = true;
@@ -310,60 +211,6 @@ function App() {
           testSets,
           streamSchedule: sortedSteps,
         };
-        setAppData(normalizedData);
-
-        const persisted = loadDemoState();
-        if (persisted) {
-          try {
-            const restoredSeen = persisted.seenProcesses.filter((processId) => PROCESS_IDS.includes(processId));
-            const restoredTrain = persisted.trainStream.filter((example) => PROCESS_IDS.includes(example.process_id));
-
-            routerRef.current = makeRouter(31);
-            routerRef.current.setParams(persisted.routerParams);
-            ewcStateRef.current = persisted.ewcState;
-
-            setActiveTab(persisted.activeTab);
-            setMemoryStrategyId(persisted.controls.memoryStrategyId);
-            setMemoryBudget(persisted.controls.memoryBudget);
-            setRetrievalK(persisted.controls.retrievalK);
-            setClMode(persisted.controls.clMode);
-            setDriftEnabled(persisted.controls.driftEnabled);
-            setExperienceMode(
-              persisted.seenProcesses.length > 1 || persisted.evalSnapshots.length > 0 ? "expert" : "novice",
-            );
-
-            setSeenProcesses(restoredSeen.length > 0 ? restoredSeen : [firstProcess]);
-            setTrainStream(restoredTrain.length > 0 ? restoredTrain : initialExamples);
-
-            if (persisted.memoryItems.length > 0) {
-              skipNextMemoryRebuildRef.current = true;
-              setMemoryItems(persisted.memoryItems);
-            }
-
-            setAuditLog(persisted.auditLog);
-            setEvalSnapshots(persisted.evalSnapshots);
-            setComparisonResult(persisted.comparisonResult);
-            setInboxRequest(persisted.inboxRequest);
-            const persistedWorkflow = BIS_WORKFLOWS.find(
-              (workflow) => workflow.sampleRequest === persisted.inboxRequest,
-            );
-            setSelectedWorkflowId(persistedWorkflow?.processId ?? BIS_WORKFLOWS[0].processId);
-            setInboxResult(null);
-            setInboxError("");
-            setInboxStatus("Restored previous browser session.");
-            setTeachStatus("Restored from browser storage.");
-            setMemoryHits([]);
-            setMemoryQuery(DEFAULT_MEMORY_QUERY);
-            setEvalStatus("Idle");
-            setNovicePhase("idle");
-
-            auditIdRef.current = nextAuditId(persisted.auditLog);
-            setStateReady(true);
-            return;
-          } catch {
-            clearDemoState();
-          }
-        }
 
         routerRef.current = makeRouter(31);
         ewcStateRef.current = null;
@@ -374,32 +221,12 @@ function App() {
           seed: 111,
         });
 
-        setActiveTab("inbox");
-        setMemoryStrategyId("reservoir");
-        setMemoryBudget(32);
-        setRetrievalK(3);
-        setClMode("rehearsal");
-        setDriftEnabled(false);
-        setExperienceMode("novice");
+        setAppData(normalizedData);
         setSeenProcesses([firstProcess]);
         setTrainStream(initialExamples);
-        setMemoryItems([]);
-        setComparisonResult(null);
-        setEvalSnapshots([]);
-        setInboxRequest(DEFAULT_INBOX_REQUEST);
-        setSelectedWorkflowId(BIS_WORKFLOWS[0].processId);
-        setInboxResult(null);
-        setInboxError("");
-        setInboxStatus("Idle");
-        setMemoryQuery(DEFAULT_MEMORY_QUERY);
-        setMemoryHits([]);
-        setEvalStatus("Idle");
-        setTeachStatus("Idle");
-        setAuditLog([]);
-        setNovicePhase("idle");
-        auditIdRef.current = 1;
-        addAudit("bootstrap", `Initialized with first process: ${firstProcess}`);
-        setStateReady(true);
+        setSelectedWorkflowId(firstProcess);
+        setInboxRequest(BIS_WORKFLOW_BY_PROCESS[firstProcess]?.sampleRequest ?? DEFAULT_REQUEST);
+        setInboxStatus("Ready");
       } catch (error) {
         if (!active) {
           return;
@@ -419,63 +246,10 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (skipNextMemoryRebuildRef.current) {
-      skipNextMemoryRebuildRef.current = false;
-      return;
-    }
-    const strategy = createMemoryStrategy(memoryStrategyId, memoryBudget, 79);
+    const strategy = createMemoryStrategy(activePreset.memoryStrategyId, memoryBudget, 79);
     strategy.addExamples(trainStream.map(toMemoryInput));
     setMemoryItems(strategy.getMemory());
-  }, [trainStream, memoryStrategyId, memoryBudget]);
-
-  useEffect(() => {
-    if (!stateReady || !appData) {
-      return;
-    }
-
-    saveDemoState({
-      activeTab,
-      controls: {
-        memoryStrategyId,
-        memoryBudget,
-        retrievalK,
-        clMode,
-        driftEnabled,
-      },
-      seenProcesses,
-      trainStream,
-      memoryItems,
-      routerParams: routerRef.current.getParams(),
-      ewcState: ewcStateRef.current,
-      auditLog,
-      evalSnapshots,
-      comparisonResult,
-      inboxRequest,
-    });
-  }, [
-    stateReady,
-    appData,
-    activeTab,
-    memoryStrategyId,
-    memoryBudget,
-    retrievalK,
-    clMode,
-    driftEnabled,
-    seenProcesses,
-    trainStream,
-    memoryItems,
-    auditLog,
-    evalSnapshots,
-    comparisonResult,
-    inboxRequest,
-  ]);
-
-  useEffect(() => {
-    const matched = BIS_WORKFLOWS.find((workflow) => workflow.sampleRequest === inboxRequest);
-    if (matched && matched.processId !== selectedWorkflowId) {
-      setSelectedWorkflowId(matched.processId);
-    }
-  }, [inboxRequest, selectedWorkflowId]);
+  }, [activePreset.memoryStrategyId, memoryBudget, trainStream]);
 
   const memoryStore = useMemo(() => {
     const store = new VectorStore<Example>();
@@ -488,25 +262,6 @@ function App() {
     return store;
   }, [memoryItems]);
 
-  const sampleRequests = useMemo(() => {
-    if (!appData) {
-      return [] as SampleRequestOption[];
-    }
-    const options: SampleRequestOption[] = [];
-    for (const processId of seenProcesses) {
-      const sampleText = appData.testSets[processId]?.[0]?.request_text;
-      if (sampleText) {
-        options.push({ label: processId, text: sampleText });
-      }
-    }
-    return options;
-  }, [appData, seenProcesses]);
-
-  const sampleRequestOptions = useMemo<SampleRequestOption[]>(
-    () => [...sampleRequests, { label: "custom", text: inboxRequest }],
-    [sampleRequests, inboxRequest],
-  );
-
   const nextTeachStep = useMemo(() => {
     if (!appData) {
       return null;
@@ -514,9 +269,16 @@ function App() {
     return appData.streamSchedule.find((step) => !seenProcesses.includes(step.process_id)) ?? null;
   }, [appData, seenProcesses]);
 
-  const performTeachUpdate = (modeOverride?: RouterMode): ProcessId | null => {
+  const activeWorkflow = useMemo(() => {
+    const predicted = inboxResult?.predictedIntent;
+    if (predicted && BIS_WORKFLOW_BY_PROCESS[predicted]) {
+      return BIS_WORKFLOW_BY_PROCESS[predicted];
+    }
+    return BIS_WORKFLOW_BY_PROCESS[selectedWorkflowId] ?? DEFAULT_WORKFLOW;
+  }, [selectedWorkflowId, inboxResult]);
+
+  const performTeachUpdate = (): ProcessId | null => {
     if (!appData || !nextTeachStep) {
-      setTeachStatus("No remaining processes to teach.");
       return null;
     }
 
@@ -527,9 +289,8 @@ function App() {
       .filter((example): example is Example => example !== null)
       .map(toIntentExample);
 
-    const mode: RouterMode = modeOverride ?? clMode;
     let trainOptions: TrainOptions;
-    if (mode === "ewc" && ewcStateRef.current) {
+    if (activePreset.clMode === "ewc" && ewcStateRef.current) {
       trainOptions = {
         mode: "ewc",
         epochs: 36,
@@ -537,7 +298,7 @@ function App() {
         ewcState: ewcStateRef.current,
         seed: 700 + seenProcesses.length * 17,
       };
-    } else if (mode === "rehearsal") {
+    } else if (activePreset.clMode === "rehearsal") {
       trainOptions = {
         mode: "rehearsal",
         epochs: 36,
@@ -555,16 +316,9 @@ function App() {
       };
     }
 
-    trainIntentRouter(
-      routerRef.current,
-      currentExamples.map(toIntentExample),
-      trainOptions,
-    );
+    trainIntentRouter(routerRef.current, currentExamples.map(toIntentExample), trainOptions);
 
-    const fisherData = [
-      ...replayData,
-      ...currentExamples.map(toIntentExample),
-    ];
+    const fisherData = [...replayData, ...currentExamples.map(toIntentExample)];
     const fisher = estimateFisherDiagonal(routerRef.current, fisherData);
     const params = routerRef.current.getParams();
     ewcStateRef.current = {
@@ -577,22 +331,33 @@ function App() {
 
     setSeenProcesses((prev) => [...prev, nextProcess]);
     setTrainStream((prev) => [...prev, ...currentExamples]);
-    setTeachStatus(`Updated with ${nextProcess} using ${strategyLabel(mode)} strategy.`);
-    addAudit("teach_update", `Added ${nextProcess} with CL mode ${mode}.`);
     return nextProcess;
   };
 
-  const handleTeachUpdate = () => {
-    void performTeachUpdate();
+  const runSafetyCheck = (processes: ProcessId[]) => {
+    if (!appData || processes.length === 0) {
+      return null;
+    }
+    const result = runContinualComparison(
+      processes,
+      appData.trainSets,
+      appData.testSets,
+      activePreset.memoryStrategyId,
+      memoryBudget,
+    );
+    setComparisonResult(result);
+    return result;
   };
 
-  const handleRunInbox = async () => {
+  const handleStartDemo = async () => {
     if (!appData) {
       return;
     }
-    setInboxStatus("Running automation pipeline...");
+
+    setInboxStatus("Running automation...");
     setInboxError("");
-    setInboxResult(null);
+    setCopyStatus("");
+
     try {
       const finalRequest = driftEnabled
         ? applyTextDrift(inboxRequest, { seed: 401, intensity: 0.45 })
@@ -607,77 +372,28 @@ function App() {
         memoryStore,
         embed: async (texts) => texts.map((text) => keywordEmbedText(text)),
       });
+
       setInboxResult(result);
-      setInboxStatus("Pipeline succeeded.");
-      addAudit(
-        "inbox_run",
-        `Request routed to ${result.predictedIntent} (${result.modeUsed}), repaired=${result.validation.repaired}.`,
-      );
+
+      const taughtProcess = performTeachUpdate();
+      const evaluationProcesses =
+        taughtProcess && !seenProcesses.includes(taughtProcess)
+          ? [...seenProcesses, taughtProcess]
+          : seenProcesses;
+      runSafetyCheck(evaluationProcesses);
+
+      setInboxStatus("Automation packet ready.");
     } catch (error) {
-      setInboxStatus("Pipeline failed.");
-      setInboxError(error instanceof Error ? error.message : "Unknown pipeline error.");
-      addAudit("inbox_error", error instanceof Error ? error.message : "Unknown inbox pipeline error.");
+      setInboxStatus("Automation failed.");
+      setInboxError(error instanceof Error ? error.message : "Unknown automation error.");
     }
   };
 
-  const handleMemoryQuery = () => {
-    const queryEmbedding = keywordEmbedText(memoryQuery);
-    const hits = memoryStore.topK(queryEmbedding, retrievalK).map((hit) => ({
-      id: hit.id,
-      score: hit.score,
-      example: hit.payload,
-    }));
-    setMemoryHits(hits);
-  };
-
-  const runEvaluation = (processesToEvaluate: ProcessId[]) => {
-    if (!appData || processesToEvaluate.length === 0) {
-      return null;
-    }
-    setEvalStatus("Running continual comparison (naive/rehearsal/ewc)...");
-    const previous = comparisonResult;
-    const result = runContinualComparison(
-      processesToEvaluate,
-      appData.trainSets,
-      appData.testSets,
-      memoryStrategyId,
-      memoryBudget,
-    );
-    setComparisonResult(result);
-    setEvalStatus("Evaluation complete.");
-
-    const naiveForget = result.modes.naive.meanForgetting;
-    const rehForget = result.modes.rehearsal.meanForgetting;
-    const ewcForget = result.modes.ewc.meanForgetting;
-    const priorNaive = previous?.modes.naive.meanForgetting ?? 0;
-    const delta = naiveForget - priorNaive;
-    addAudit(
-      "evaluate",
-      `Naive forgetting=${naiveForget.toFixed(3)} (delta ${delta >= 0 ? "+" : ""}${delta.toFixed(
-        3,
-      )}), rehearsal=${rehForget.toFixed(3)}, ewc=${ewcForget.toFixed(3)}.`,
-    );
-    setEvalSnapshots((prev) => [
-      ...prev,
-      {
-        id: prev.length + 1,
-        timestamp: formatTimestamp(),
-        seenProcesses: [...processesToEvaluate],
-        result,
-      },
-    ]);
-    return result;
-  };
-
-  const handleEvaluate = () => {
-    void runEvaluation(seenProcesses);
-  };
-
-  const handleResetDemoState = () => {
+  const handleReset = () => {
     if (!appData) {
       return;
     }
-    clearDemoState();
+
     const { firstProcess, initialExamples } = bootstrapSeed(appData.streamSchedule, appData.trainSets);
 
     routerRef.current = makeRouter(31);
@@ -689,100 +405,127 @@ function App() {
       seed: 111,
     });
 
-    setActiveTab("inbox");
-    setMemoryStrategyId("reservoir");
-    setMemoryBudget(32);
-    setRetrievalK(3);
-    setClMode("rehearsal");
-    setDriftEnabled(false);
-    setExperienceMode("novice");
+    setSelectedWorkflowId(firstProcess);
+    setInboxRequest(BIS_WORKFLOW_BY_PROCESS[firstProcess]?.sampleRequest ?? DEFAULT_REQUEST);
     setSeenProcesses([firstProcess]);
     setTrainStream(initialExamples);
-    setMemoryItems([]);
-    setAuditLog([]);
-    setEvalSnapshots([]);
-    setComparisonResult(null);
-    setTeachStatus("Demo reset to initial state.");
-    setInboxRequest(DEFAULT_INBOX_REQUEST);
-    setSelectedWorkflowId(BIS_WORKFLOWS[0].processId);
-    setInboxStatus("Idle");
-    setInboxResult(null);
+    setInboxStatus("Ready");
     setInboxError("");
-    setMemoryQuery(DEFAULT_MEMORY_QUERY);
-    setMemoryHits([]);
-    setEvalStatus("Idle");
-    setNovicePhase("idle");
-    auditIdRef.current = 1;
-    addAudit("reset", `State cleared and reinitialized with ${firstProcess}.`);
+    setInboxResult(null);
+    setComparisonResult(null);
+    setCopyStatus("");
   };
 
-  const riskCounts = countByRisk(memoryItems);
-  const hasRunPipeline = inboxResult !== null;
-  const hasTaughtAdditionalProcess = seenProcesses.length > 1;
-  const hasEvaluation = comparisonResult !== null;
+  const handleWorkflowChange = (processId: ProcessId) => {
+    setSelectedWorkflowId(processId);
+    setInboxRequest(BIS_WORKFLOW_BY_PROCESS[processId]?.sampleRequest ?? DEFAULT_REQUEST);
+  };
 
-  const rehearsalBeatsNaive = comparisonResult
-    ? comparisonResult.modes.rehearsal.meanForgetting < comparisonResult.modes.naive.meanForgetting
-    : false;
-  const ewcBeatsNaive = comparisonResult
-    ? comparisonResult.modes.ewc.meanForgetting < comparisonResult.modes.naive.meanForgetting
-    : false;
-  const selectedMode = clMode === "naive" ? "naive" : clMode === "rehearsal" ? "rehearsal" : "ewc";
-  const selectedForgetting = comparisonResult ? comparisonResult.modes[selectedMode].meanForgetting : 0;
+  const handleCopy = async (label: string, payload: unknown) => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+      setCopyStatus(`${label} copied.`);
+    } catch {
+      setCopyStatus("Clipboard blocked in this browser.");
+    }
+  };
+
+  const modeKey = selectedModeKey(activePreset.clMode);
   const forgettingReduction = comparisonResult
-    ? Math.max(0, comparisonResult.modes.naive.meanForgetting - selectedForgetting)
+    ? Math.max(0, comparisonResult.modes.naive.meanForgetting - comparisonResult.modes[modeKey].meanForgetting)
     : 0;
-  const runStepStatus = hasRunPipeline ? "done" : novicePhase === "run" ? "active" : "pending";
-  const teachStepStatus = hasTaughtAdditionalProcess
-    ? "done"
-    : novicePhase === "teach"
-      ? "active"
-      : "pending";
-  const evalStepStatus = hasEvaluation ? "done" : novicePhase === "evaluate" ? "active" : "pending";
-  const allNoviceStepsDone = hasRunPipeline && hasTaughtAdditionalProcess && hasEvaluation;
-  const selectedWorkflow = BIS_WORKFLOW_BY_PROCESS[selectedWorkflowId] ?? BIS_WORKFLOWS[0];
-  const inferredProcess = (inboxResult?.predictedIntent ?? selectedWorkflow.processId) as ProcessId;
-  const processProfile = BIS_WORKFLOW_BY_PROCESS[inferredProcess];
-  const handoffPreview = inboxResult
+
+  const plan = inboxResult?.plan ?? null;
+  const manualMinutes = activeWorkflow.manualCycleMinutes;
+  const automatedMinutes = activeWorkflow.automatedCycleMinutes;
+  const savedMinutes = Math.max(0, manualMinutes - automatedMinutes);
+  const savedPercent = manualMinutes > 0 ? Math.round((savedMinutes / manualMinutes) * 100) : 0;
+  const requiredFieldsFilled = plan ? Object.keys(plan.required_fields).length : 0;
+  const approvalCount = plan?.approvals.length ?? 0;
+
+  const charter = plan
     ? {
-        workflow_type: processProfile.workflowName,
-        process_id: inboxResult.plan.process_id,
-        owner_role: inboxResult.plan.owner_role,
-        sla_hours: inboxResult.plan.sla_hours,
-        approvals: inboxResult.plan.approvals,
-        required_fields: inboxResult.plan.required_fields,
+        title: plan.title,
+        process_id: plan.process_id,
+        problem_statement: activeWorkflow.manualPain,
+        goal: `Reduce intake-to-plan turnaround from ${manualMinutes}m to ${automatedMinutes}m.`,
+        owner: plan.owner_role,
+        baseline_metric_minutes: manualMinutes,
+        target_metric_minutes: automatedMinutes,
+        risk_tag: plan.risk_tag,
       }
     : null;
 
-  const handleRunEndToEnd = async () => {
-    if (!appData) {
-      return;
-    }
+  const blueprint = plan
+    ? {
+        triggers: [`${activeWorkflow.workflowName} request intake`],
+        connectors: activeWorkflow.systemTargets,
+        steps: [
+          "Classify request",
+          "Extract required fields",
+          "Validate policy constraints",
+          "Assign approvals and SLA",
+          "Create handoff payloads",
+        ],
+        controls: plan.controls,
+        monitoring: [
+          `SLA threshold: ${plan.sla_hours} hours`,
+          "Missing field alerts",
+          "Approval timeout alert",
+        ],
+      }
+    : null;
 
-    const noviceClMode: RouterMode = "rehearsal";
-    setClMode(noviceClMode);
-    setActiveTab("inbox");
-    setNovicePhase("run");
-    await handleRunInbox();
+  const exportsPayload = plan
+    ? {
+        jira: {
+          project: "BIS",
+          issuetype: "Task",
+          summary: `[Process Optimisation] ${plan.title}`,
+          description: plan.next_actions.join(" | "),
+          priority: plan.risk_tag === "high" ? "High" : "Medium",
+          labels: [plan.process_id, "automation-packet"],
+          fields: plan.required_fields,
+        },
+        serviceNow: {
+          category: "process_automation",
+          short_description: plan.title,
+          assignment_group: plan.owner_role,
+          impact: plan.risk_tag,
+          sla_hours: plan.sla_hours,
+          approvals: plan.approvals,
+          required_fields: plan.required_fields,
+        },
+        tracker: {
+          workflow: activeWorkflow.workflowName,
+          process_id: plan.process_id,
+          owner: plan.owner_role,
+          target_sla_hours: plan.sla_hours,
+          controls: plan.controls.length,
+          status: "ready_for_execution",
+        },
+      }
+    : null;
 
-    setNovicePhase("teach");
-    const taughtProcess = performTeachUpdate(noviceClMode);
-    const evaluationProcesses =
-      taughtProcess && !seenProcesses.includes(taughtProcess)
-        ? [...seenProcesses, taughtProcess]
-        : seenProcesses;
+  const beforeSteps = [
+    "Request arrives in ticket or email",
+    "Manual triage and clarification",
+    "Approval chase across teams",
+    "Manual tracker update",
+  ];
 
-    setNovicePhase("evaluate");
-    void runEvaluation(evaluationProcesses);
-    setNovicePhase("done");
-  };
+  const afterSteps = [
+    `Auto-classify as ${activeWorkflow.workflowName}`,
+    "Extract and validate required fields",
+    "Attach approvals and SLA ownership",
+    "Generate export payloads",
+  ];
 
   if (loadingData) {
     return (
       <main className="app-shell">
-        <section className="hero">
-          <h1>Continual Process Automation Copilot</h1>
-          <p>Loading synthetic datasets and initializing demo state...</p>
+        <section className="frame loading-frame">
+          <h1>Loading BIS demo...</h1>
         </section>
       </main>
     );
@@ -791,9 +534,9 @@ function App() {
   if (loadError || !appData) {
     return (
       <main className="app-shell">
-        <section className="hero">
-          <h1>Continual Process Automation Copilot</h1>
-          <p className="warning">{loadError || "Unable to initialize app data."}</p>
+        <section className="frame loading-frame">
+          <h1>Unable to load demo</h1>
+          <p className="warning">{loadError || "Unknown initialization error."}</p>
         </section>
       </main>
     );
@@ -801,265 +544,199 @@ function App() {
 
   return (
     <main className="app-shell">
-      <section className="hero full-width">
-        <p className="label">BIS Operations Demo</p>
-        <h1>Continual Process Automation Copilot</h1>
-        <p>
-          Turn unstructured BIS internal requests into governed workflow plans with approvals, SLA ownership, and
-          audit-ready JSON handoff.
-        </p>
+      <section className="frame">
+        <header className="hero">
+          <p className="kicker">BIS Process Optimisation</p>
+          <h1>Automate one intake request end-to-end.</h1>
+          <p className="subtitle">Input a messy request. Get a ready packet in one click.</p>
 
-        <div className="row wrap mode-row">
-          <button
-            type="button"
-            className={experienceMode === "novice" ? "tab-btn active" : "tab-btn"}
-            onClick={() => setExperienceMode("novice")}
-          >
-            Novice Mode
-          </button>
-          <button
-            type="button"
-            className={experienceMode === "expert" ? "tab-btn active" : "tab-btn"}
-            onClick={() => setExperienceMode("expert")}
-          >
-            Expert Mode
-          </button>
-          <button type="button" className="secondary-btn" onClick={handleResetDemoState}>
-            Reset demo state
-          </button>
-        </div>
-
-        {experienceMode === "novice" ? (
-          <>
-            <section className="panel purpose-strip">
-              <h2>What This Demo Does For BIS In Seconds</h2>
-              <p>
-                Takes a real-style BIS operational request, applies policy routing logic, and outputs a structured
-                handoff payload your internal systems can execute.
-              </p>
-              <div className="purpose-grid">
-                <article>
-                  <h3>Input</h3>
-                  <p>Unstructured request from staff email or service intake channel.</p>
-                </article>
-                <article>
-                  <h3>Transformation</h3>
-                  <p>Detect workflow, enforce required policy fields, and route approvals with SLA ownership.</p>
-                </article>
-                <article>
-                  <h3>Output</h3>
-                  <p>Audit-ready JSON packet for workflow systems (no manual copy/paste triage).</p>
-                </article>
-              </div>
-            </section>
-
-            <section className="panel workflow-selector">
-              <h2>Choose The BIS Workflow To Automate</h2>
-              <div className="workflow-grid">
+          <div className="top-controls">
+            <label className="field">
+              Workflow
+              <select
+                value={selectedWorkflowId}
+                onChange={(event) => handleWorkflowChange(event.target.value as ProcessId)}
+              >
                 {BIS_WORKFLOWS.map((workflow) => (
-                  <button
-                    key={workflow.processId}
-                    type="button"
-                    className={selectedWorkflowId === workflow.processId ? "workflow-card active" : "workflow-card"}
-                    onClick={() => {
-                      setSelectedWorkflowId(workflow.processId);
-                      setInboxRequest(workflow.sampleRequest);
-                    }}
-                  >
-                    <p className="workflow-card-kicker">{workflow.workflowName}</p>
-                    <p>{workflow.dayToDayContext}</p>
-                    <p>
-                      <strong>Teams:</strong> {workflow.primaryTeams.join(", ")}
-                    </p>
-                    <p>
-                      <strong>Why this matters:</strong> {workflow.businessImpact}
-                    </p>
-                  </button>
+                  <option key={workflow.processId} value={workflow.processId}>
+                    {workflow.workflowName}
+                  </option>
                 ))}
-              </div>
-            </section>
+              </select>
+            </label>
 
-            <section className="panel novice-panel">
-              <h2>Run The End-To-End BIS Flow</h2>
-              <p className="legend">{selectedWorkflow.headline}</p>
-              <div className="request-preview">
-                <p className="label">Representative Incoming Request</p>
-                <pre className="summary summary-block">{inboxRequest}</pre>
-              </div>
-              <div className="novice-controls">
+            <div className="preset-group" role="radiogroup" aria-label="Learning preset">
+              {PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className={presetId === preset.id ? "preset-btn active" : "preset-btn"}
+                  onClick={() => setPresetId(preset.id)}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+
+            <button type="button" className="primary-btn" onClick={() => void handleStartDemo()}>
+              Start demo
+            </button>
+            <button type="button" className="ghost-btn" onClick={handleReset}>
+              Reset
+            </button>
+          </div>
+
+          <label className="field request-field">
+            Request
+            <textarea
+              value={inboxRequest}
+              onChange={(event) => setInboxRequest(event.target.value)}
+              rows={3}
+            />
+          </label>
+
+          <div className="status-row">
+            <p className="status-pill">{inboxStatus}</p>
+            {copyStatus ? <p className="status-pill">{copyStatus}</p> : null}
+            {inboxError ? <p className="warning">{inboxError}</p> : null}
+          </div>
+        </header>
+
+        <section className="moment-grid">
+          <article className="moment-card before">
+            <h2>Before (manual)</h2>
+            <p className="metric">{manualMinutes} min</p>
+            <p className="micro">Typical cycle time</p>
+            <p className="plain">{activeWorkflow.manualPain}</p>
+          </article>
+
+          <article className="moment-card after">
+            <h2>After (automated)</h2>
+            {plan ? (
+              <>
+                <p className="metric">{automatedMinutes} min</p>
+                <p className="micro">Ready packet turnaround</p>
+                <div className="signal-grid">
+                  <div>
+                    <p className="signal-value">-{savedPercent}%</p>
+                    <p className="signal-label">Cycle time</p>
+                  </div>
+                  <div>
+                    <p className="signal-value">{requiredFieldsFilled}</p>
+                    <p className="signal-label">Fields captured</p>
+                  </div>
+                  <div>
+                    <p className="signal-value">{approvalCount}</p>
+                    <p className="signal-label">Approvals routed</p>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <p className="plain">Run the demo to generate the automation packet.</p>
+            )}
+          </article>
+        </section>
+
+        <section className="outputs-panel">
+          <h2>Your outputs</h2>
+          {plan && charter && blueprint && exportsPayload ? (
+            <div className="outputs-grid">
+              <article className="output-card">
+                <h3>Triage result</h3>
+                <p>
+                  <strong>{activeWorkflow.workflowName}</strong>
+                </p>
+                <p>Risk: {plan.risk_tag}</p>
+                <p>Owner: {plan.owner_role}</p>
+                <p>SLA: {plan.sla_hours}h</p>
+              </article>
+
+              <article className="output-card">
+                <h3>Charter snapshot</h3>
+                <p>{charter.problem_statement}</p>
+                <p>
+                  Target: {charter.baseline_metric_minutes}m {"->"} {charter.target_metric_minutes}m
+                </p>
+                <button type="button" className="mini-btn" onClick={() => void handleCopy("Charter JSON", charter)}>
+                  Copy charter JSON
+                </button>
+              </article>
+
+              <article className="output-card">
+                <h3>Automation blueprint</h3>
+                <ul>
+                  {blueprint.steps.slice(0, 4).map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ul>
                 <button
                   type="button"
-                  className="primary-btn"
-                  onClick={() => void handleRunEndToEnd()}
-                  disabled={novicePhase === "run" || novicePhase === "teach" || novicePhase === "evaluate"}
+                  className="mini-btn"
+                  onClick={() => void handleCopy("Blueprint JSON", blueprint)}
                 >
-                  {novicePhase === "run" || novicePhase === "teach" || novicePhase === "evaluate"
-                    ? "Running..."
-                    : allNoviceStepsDone
-                      ? "Run Again"
-                      : "Run End-to-End Demo"}
+                  Copy blueprint JSON
                 </button>
-              </div>
-              <p className="legend">
-                Expected result: <strong>{selectedWorkflow.expectedOutcome}</strong>
-              </p>
-              <p className="legend">
-                Baseline triage time: <strong>{selectedWorkflow.manualCycleMinutes} min</strong> to automated plan
-                prep: <strong>{selectedWorkflow.automatedCycleMinutes} min</strong>.
-              </p>
+              </article>
+
+              <article className="output-card">
+                <h3>Export payloads</h3>
+                <p>Jira + ServiceNow + tracker row ready.</p>
+                <div className="copy-row">
+                  <button
+                    type="button"
+                    className="mini-btn"
+                    onClick={() => void handleCopy("Jira JSON", exportsPayload.jira)}
+                  >
+                    Copy Jira
+                  </button>
+                  <button
+                    type="button"
+                    className="mini-btn"
+                    onClick={() => void handleCopy("ServiceNow JSON", exportsPayload.serviceNow)}
+                  >
+                    Copy ServiceNow
+                  </button>
+                  <button
+                    type="button"
+                    className="mini-btn"
+                    onClick={() => void handleCopy("Tracker JSON", exportsPayload.tracker)}
+                  >
+                    Copy tracker
+                  </button>
+                </div>
+              </article>
+            </div>
+          ) : (
+            <div className="empty-state">Click "Start demo" to generate outputs.</div>
+          )}
+        </section>
+
+        <details className="details-panel" open={showAdvanced} onToggle={(event) => setShowAdvanced(event.currentTarget.open)}>
+          <summary>{showAdvanced ? "Hide details" : "Open full packet details"}</summary>
+
+          <div className="details-content">
+            <section className="flow-panel">
+              <article>
+                <h3>Before flow</h3>
+                <ol>
+                  {beforeSteps.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+              </article>
+              <article>
+                <h3>After flow</h3>
+                <ol>
+                  {afterSteps.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+              </article>
             </section>
 
-            <section className="stepper">
-              <article className={`step-pill ${runStepStatus}`}>
-                <h3>1. Interpret Intake</h3>
-                <p>
-                  {runStepStatus === "done"
-                    ? "Completed"
-                    : "Map request text to the right BIS workflow and populate required fields."}
-                </p>
-              </article>
-              <article className={`step-pill ${teachStepStatus}`}>
-                <h3>2. Learn New Variants</h3>
-                <p>
-                  {teachStepStatus === "done"
-                    ? "Completed"
-                    : "Update the router with new process examples without forgetting earlier workflows."}
-                </p>
-              </article>
-              <article className={`step-pill ${evalStepStatus}`}>
-                <h3>3. Prove Reliability</h3>
-                <p>
-                  {evalStepStatus === "done"
-                    ? "Completed"
-                    : "Show retention against naive updates so quality remains stable over time."}
-                </p>
-              </article>
-            </section>
-
-            <section className="impact-card">
-              <h3>Operational Proof For BIS</h3>
-              <div className="impact-grid">
-                <article>
-                  <h4>Current Bottleneck</h4>
-                  <p>{processProfile.manualPain}</p>
-                </article>
-                <article>
-                  <h4>Automation Transformation</h4>
-                  <p>{processProfile.transformationSummary}</p>
-                </article>
-                <article>
-                  <h4>Systems It Can Drive</h4>
-                  <p>{processProfile.systemTargets.join(", ")}</p>
-                </article>
-              </div>
-
-              <div className="metric-grid">
-                <p>
-                  Workflow selected: <strong>{processProfile.workflowName}</strong>
-                </p>
-                <p>
-                  Policy checks applied: <strong>{processProfile.policyChecks.length}</strong>
-                </p>
-                <p>
-                  Forgetting reduction vs naive: <strong>{(forgettingReduction * 100).toFixed(2)}%</strong>
-                </p>
-              </div>
-
-              {comparisonResult ? (
-                <>
-                  <p className="legend">
-                    Continual strategy used: <strong>{strategyLabel(selectedMode)}</strong>. Retention improvement
-                    over naive: {(forgettingReduction * 100).toFixed(2)} percentage points.
-                  </p>
-                  <div className="policy-check-grid">
-                    {processProfile.policyChecks.map((policyCheck) => (
-                      <p key={policyCheck} className="policy-check-pill">
-                        {policyCheck}
-                      </p>
-                    ))}
-                  </div>
-                  <h4>System Handoff Mapping</h4>
-                  <table className="handoff-table">
-                    <thead>
-                      <tr>
-                        <th>Output Field</th>
-                        <th>Current Value</th>
-                        <th>Destination</th>
-                        <th>Operational Purpose</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {processProfile.handoffMappings.map((mapping) => (
-                        <tr key={`${processProfile.processId}-${mapping.field}-${mapping.destination}`}>
-                          <td>{mapping.field}</td>
-                          <td>{resolvePlanValue(inboxResult?.plan ?? null, mapping.field)}</td>
-                          <td>{mapping.destination}</td>
-                          <td>{mapping.purpose}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {handoffPreview ? (
-                    <pre className="summary summary-block">{JSON.stringify(handoffPreview, null, 2)}</pre>
-                  ) : null}
-                </>
-              ) : (
-                <p className="legend">
-                  Run the workflow once to see live field extraction, policy checks, and system-handoff mapping.
-                </p>
-              )}
-            </section>
-
-            <details className="advanced-settings">
-              <summary>View technical details</summary>
-              <div className="metric-grid">
-                <p className="status">{inboxStatus}</p>
-                <p className="status">{teachStatus}</p>
-                <p className="status">{evalStatus}</p>
-              </div>
-              {inboxError ? <p className="warning">{inboxError}</p> : null}
-              {inboxResult ? (
-                <pre className="summary summary-block">{JSON.stringify(inboxResult.plan, null, 2)}</pre>
-              ) : null}
-              <p className="legend">For memory, audit, and full tuning controls, switch to Expert Mode.</p>
-            </details>
-          </>
-        ) : (
-          <>
-            <div className="control-grid">
-              <label>
-                Learning strategy
-                <select value={clMode} onChange={(event) => setClMode(event.target.value as RouterMode)}>
-                  <option value="naive">Naive</option>
-                  <option value="rehearsal">Replay</option>
-                  <option value="ewc">EWC</option>
-                </select>
-              </label>
-              <label>
-                Memory strategy
-                <select
-                  value={memoryStrategyId}
-                  onChange={(event) => setMemoryStrategyId(event.target.value as MemoryStrategyId)}
-                >
-                  <option value="fifo">FIFO</option>
-                  <option value="reservoir">Reservoir</option>
-                  <option value="kcenter">k-center</option>
-                  <option value="risk-aware">Risk-aware</option>
-                </select>
-              </label>
-              <label>
-                Memory budget: {memoryBudget}
-                <input
-                  type="range"
-                  min={8}
-                  max={80}
-                  step={2}
-                  value={memoryBudget}
-                  onChange={(event) => setMemoryBudget(Number(event.target.value))}
-                />
-              </label>
-              <label>
-                Retrieval k: {retrievalK}
+            <section className="advanced-controls">
+              <label className="field compact">
+                Retrieval k
                 <input
                   type="range"
                   min={1}
@@ -1069,213 +746,55 @@ function App() {
                   onChange={(event) => setRetrievalK(Number(event.target.value))}
                 />
               </label>
-              <label className="inline-toggle">
+              <label className="field compact">
+                Memory budget
+                <input
+                  type="range"
+                  min={8}
+                  max={80}
+                  step={2}
+                  value={memoryBudget}
+                  onChange={(event) => setMemoryBudget(Number(event.target.value))}
+                />
+              </label>
+              <label className="check-field">
                 <input
                   type="checkbox"
                   checked={driftEnabled}
                   onChange={(event) => setDriftEnabled(event.target.checked)}
                 />
-                Drift toggle
+                Simulate wording drift
               </label>
-            </div>
+            </section>
 
-            <div className="tab-row">
-              {TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  className={activeTab === tab.id ? "tab-btn active" : "tab-btn"}
-                  onClick={() => setActiveTab(tab.id)}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            {activeTab === "inbox" ? (
-              <div className="panel">
-                <h3>Intake</h3>
-                <div className="row wrap">
-                  <label>
-                    Sample request
-                    <select onChange={(event) => setInboxRequest(event.target.value)} value={inboxRequest}>
-                      {sampleRequestOptions.map((sample) => (
-                        <option key={`${sample.label}-${sample.text.slice(0, 16)}`} value={sample.text}>
-                          {sample.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <textarea
-                  className="pipeline-input"
-                  value={inboxRequest}
-                  onChange={(event) => setInboxRequest(event.target.value)}
-                />
-                <button type="button" onClick={() => void handleRunInbox()}>
-                  Run request
-                </button>
-                <p className="status">{inboxStatus}</p>
-                {inboxError ? <p className="warning">{inboxError}</p> : null}
-                {inboxResult ? <pre className="summary summary-block">{JSON.stringify(inboxResult.plan, null, 2)}</pre> : null}
-              </div>
-            ) : null}
-
-            {activeTab === "teach" ? (
-              <div className="panel">
-                <h3>Teach Policy</h3>
-                <p className="status">Seen processes: {seenProcesses.join(", ")}</p>
-                {nextTeachStep ? (
-                  <>
-                    <p>
-                      Next process from stream: <strong>{nextTeachStep.process_id}</strong>{" "}
-                      {nextTeachStep.drift ? "(drift-enabled step)" : ""}
-                    </p>
-                    <ul className="example-list">
-                      {(appData.trainSets[nextTeachStep.process_id] ?? [])
-                        .slice(0, 3)
-                        .map((example) => (
-                          <li key={example.id}>{example.request_text}</li>
-                        ))}
-                    </ul>
-                    <button type="button" onClick={handleTeachUpdate}>
-                      Update with next process
-                    </button>
-                  </>
-                ) : (
-                  <p>All scheduled processes already taught.</p>
-                )}
-                <p className="status">{teachStatus}</p>
-              </div>
-            ) : null}
-
-            {activeTab === "evaluate" ? (
-              <div className="panel">
-                <h3>Impact</h3>
-                <button type="button" onClick={handleEvaluate}>
-                  Run regression + forgetting comparison
-                </button>
-                <p className="status">{evalStatus}</p>
-                {comparisonResult ? (
-                  <>
-                    <table className="eval-table">
-                      <thead>
-                        <tr>
-                          <th>Mode</th>
-                          <th>Mean Accuracy</th>
-                          <th>Mean Forgetting</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(Object.keys(comparisonResult.modes) as RouterMode[]).map((mode) => (
-                          <tr key={mode}>
-                            <td>{strategyLabel(mode)}</td>
-                            <td>{(comparisonResult.modes[mode].meanAccuracy * 100).toFixed(1)}%</td>
-                            <td>{(comparisonResult.modes[mode].meanForgetting * 100).toFixed(2)}%</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <p className="status">
-                      Retention check: rehearsal {rehearsalBeatsNaive ? "improves" : "does not improve"} vs
-                      naive, EWC {ewcBeatsNaive ? "improves" : "does not improve"} vs naive.
-                    </p>
-                    <svg width="460" height="190" viewBox="0 0 460 190" role="img" aria-label="Forgetting comparison curve">
-                      <line x1="20" y1="170" x2="440" y2="170" stroke="#94a3b8" />
-                      <line x1="20" y1="20" x2="20" y2="170" stroke="#94a3b8" />
-                      <polyline
-                        fill="none"
-                        stroke="#8b1f1f"
-                        strokeWidth="2"
-                        points={forgettingChartPoints(comparisonResult, "naive", 460, 190)}
-                      />
-                      <polyline
-                        fill="none"
-                        stroke="#1e3a8a"
-                        strokeWidth="2"
-                        points={forgettingChartPoints(comparisonResult, "rehearsal", 460, 190)}
-                      />
-                      <polyline
-                        fill="none"
-                        stroke="#0f766e"
-                        strokeWidth="2"
-                        points={forgettingChartPoints(comparisonResult, "ewc", 460, 190)}
-                      />
-                    </svg>
-                    <p className="legend">naive (red), replay (blue), ewc (teal)</p>
-                    <p className="legend">Saved evaluation snapshots: {evalSnapshots.length}</p>
-                  </>
-                ) : null}
-              </div>
-            ) : null}
-
-            {activeTab === "memory" ? (
-              <div className="panel">
-                <h3>Memory</h3>
-                <p className="status">
-                  Items retained: {memoryItems.length} | high={riskCounts.high}, medium={riskCounts.medium},
-                  low={riskCounts.low}
+            {comparisonResult ? (
+              <section className="safety-panel">
+                <h3>Regression safety</h3>
+                <p>
+                  Preset: <strong>{activePreset.label}</strong>
                 </p>
-                <div className="row wrap">
-                  <input
-                    value={memoryQuery}
-                    onChange={(event) => setMemoryQuery(event.target.value)}
-                    placeholder="Query for retrieval"
-                  />
-                  <button type="button" onClick={handleMemoryQuery}>
-                    Retrieve top-k
-                  </button>
-                </div>
-                {memoryHits.length > 0 ? (
-                  <ul className="example-list">
-                    {memoryHits.map((hit) => (
-                      <li key={hit.id}>
-                        [{hit.score.toFixed(3)}] {hit.example.process_id}: {hit.example.request_text}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-                <details>
-                  <summary>Show retained exemplars</summary>
-                  <ul className="example-list">
-                    {memoryItems.slice(0, 20).map((item) => {
-                      const example = memoryItemToExample(item);
-                      return (
-                        <li key={item.id}>
-                          {item.id} ({item.risk_tag}) - {example?.request_text ?? "missing payload"}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </details>
-              </div>
+                <p>
+                  Retention gain vs naive: <strong>{(forgettingReduction * 100).toFixed(2)}%</strong>
+                </p>
+              </section>
             ) : null}
 
-            {activeTab === "audit" ? (
-              <div className="panel">
-                <h3>Audit</h3>
-                <ul className="example-list">
-                  {auditLog.map((entry) => (
-                    <li key={entry.id}>
-                      [{entry.timestamp}] <strong>{entry.action}</strong>: {entry.detail}
-                    </li>
-                  ))}
-                </ul>
-                <details>
-                  <summary>Evaluation snapshots ({evalSnapshots.length})</summary>
-                  <ul className="example-list">
-                    {evalSnapshots.map((snapshot) => (
-                      <li key={snapshot.id}>
-                        [{snapshot.timestamp}] seen={snapshot.seenProcesses.join(", ")} | naive forgetting=
-                        {(snapshot.result.modes.naive.meanForgetting * 100).toFixed(2)}%
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              </div>
+            {plan ? (
+              <section className="json-grid">
+                <article>
+                  <h3>Plan JSON</h3>
+                  <pre>{JSON.stringify(plan, null, 2)}</pre>
+                </article>
+                {exportsPayload ? (
+                  <article>
+                    <h3>Export JSON</h3>
+                    <pre>{JSON.stringify(exportsPayload, null, 2)}</pre>
+                  </article>
+                ) : null}
+              </section>
             ) : null}
-          </>
-        )}
+          </div>
+        </details>
       </section>
     </main>
   );
