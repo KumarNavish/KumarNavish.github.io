@@ -10,12 +10,13 @@ type PresetId = 'balanced' | 'fast' | 'retention'
 interface Preset {
   id: PresetId
   label: string
+  note: string
 }
 
 const PRESETS: Preset[] = [
-  { id: 'balanced', label: 'Balanced' },
-  { id: 'fast', label: 'Fast Adaptation' },
-  { id: 'retention', label: 'Retention-first' },
+  { id: 'balanced', label: 'Balanced', note: 'Balanced adaptation and retention.' },
+  { id: 'fast', label: 'Fast Adaptation', note: 'Adapt quickly to new request variants.' },
+  { id: 'retention', label: 'Retention-first', note: 'Preserve previous workflow quality first.' },
 ]
 
 function sleep(milliseconds: number): Promise<void> {
@@ -66,7 +67,7 @@ function stageLabel(stage: RunStage): string {
     return 'Building packet'
   }
   if (stage === 'checking') {
-    return 'Running safety check'
+    return 'Checking non-regression'
   }
   if (stage === 'ready') {
     return 'Packet ready'
@@ -143,6 +144,11 @@ function App() {
     [samples, selectedId],
   )
 
+  const activePreset = useMemo(
+    () => PRESETS.find((preset) => preset.id === presetId) ?? PRESETS[0],
+    [presetId],
+  )
+
   const baselineDays = useMemo(() => {
     if (result) {
       return toNumber(result.charter.baseline_metrics.cycle_time_days)
@@ -168,7 +174,35 @@ function App() {
   }, [baselineDays, targetDays])
 
   const beforeTouches = result?.extracted.manual_step_count ?? 4
-  const afterTouches = toNumber(result?.charter.target_metrics.manual_handoffs_target) ?? Math.max(1, beforeTouches - 2)
+  const afterTouches =
+    toNumber(result?.charter.target_metrics.manual_handoffs_target) ?? Math.max(1, beforeTouches - 2)
+
+  const kickoffBrief = useMemo(() => {
+    if (!selectedSample || !result) {
+      return null
+    }
+
+    return {
+      request_title: selectedSample.title,
+      category: result.triage.category,
+      priority: result.triage.priority,
+      risk_level: result.triage.risk_level,
+      next_action: result.triage.next_action,
+      outcome: {
+        lead_time_before_days: baselineDays,
+        lead_time_after_days: targetDays,
+        lead_time_reduction_pct: leadTimeReduction,
+        monthly_hours_saved: result.triage.est_savings_hours_per_month,
+      },
+      owner: 'BIS Process Optimisation CoE',
+      preset: activePreset.label,
+      handoff: {
+        jira: result.exports.jira_issue_create,
+        serviceNow: result.exports.servicenow_record_create,
+        tracker: result.exports.process_tracker_row,
+      },
+    }
+  }, [selectedSample, result, baselineDays, targetDays, leadTimeReduction, activePreset.label])
 
   const beforeFlow = useMemo(() => {
     if (!selectedSample) {
@@ -176,10 +210,10 @@ function App() {
     }
 
     return [
-      `Request enters via ${selectedSample.channel}.`,
-      'Analyst manually classifies and routes.',
-      'Missing details are chased across teams.',
-      'Approvals and updates are tracked by hand.',
+      `Request enters through ${selectedSample.channel}.`,
+      'Analyst triages manually.',
+      'Missing info is chased over email/chat.',
+      'Approvals and updates are logged manually.',
     ]
   }, [selectedSample])
 
@@ -189,31 +223,12 @@ function App() {
     }
 
     return [
-      `Auto-classify into ${pretty(result.triage.category)}.`,
-      `${result.blueprint.steps.length} automation steps orchestrated.`,
-      `${result.triage.priority} priority and risk controls attached.`,
-      'Jira + ServiceNow + tracker payloads generated.',
+      `Auto-classify as ${pretty(result.triage.category)}.`,
+      'Generate charter and baseline metrics.',
+      'Attach controls and monitoring steps.',
+      'Generate export payloads for execution systems.',
     ]
   }, [result])
-
-  const kickoffBrief = useMemo(() => {
-    if (!result || !selectedSample) {
-      return null
-    }
-
-    return {
-      request_title: selectedSample.title,
-      category: result.triage.category,
-      priority: result.triage.priority,
-      immediate_action: result.triage.next_action,
-      outcome_summary: `${formatDays(baselineDays)} -> ${formatDays(targetDays)} lead time, ${leadTimeReduction}% faster, ${result.triage.est_savings_hours_per_month}h/month saved.`,
-      owner: 'BIS Process Optimisation CoE',
-      handoff: {
-        jira: result.exports.jira_issue_create,
-        serviceNow: result.exports.servicenow_record_create,
-      },
-    }
-  }, [result, selectedSample, baselineDays, targetDays, leadTimeReduction])
 
   async function handleRun(): Promise<void> {
     if (!selectedSample || !catalog) {
@@ -225,7 +240,7 @@ function App() {
     setStage('analyzing')
 
     try {
-      await sleep(120)
+      await sleep(110)
 
       const normalizedText = requestText.trim().length > 0 ? requestText : selectedSample.text
       const pipelineInput: IntakeSample = {
@@ -234,13 +249,13 @@ function App() {
       }
 
       setStage('building')
-      await sleep(120)
+      await sleep(110)
 
       const pipelineResult = runIntakePipeline(pipelineInput, catalog)
       setResult(pipelineResult)
 
       setStage('checking')
-      await sleep(120)
+      await sleep(110)
 
       setStage('ready')
     } catch (runError) {
@@ -304,14 +319,14 @@ function App() {
   return (
     <main className="demo-shell">
       <section className="layout">
-        <header className="title-band">
+        <header className="top-band">
           <p className="kicker">BIS Process Optimisation</p>
-          <h1>Show one process, fully automated end-to-end.</h1>
+          <h1>One request in. One execution packet out.</h1>
         </header>
 
-        <section className="workspace-grid">
+        <section className="workspace">
           <article className="intake-card">
-            <h2>1. Intake</h2>
+            <h2>1. Choose and run</h2>
 
             <label>
               Workflow
@@ -336,6 +351,7 @@ function App() {
                   type="button"
                   className={presetId === preset.id ? 'chip active' : 'chip'}
                   onClick={() => setPresetId(preset.id)}
+                  title={preset.note}
                 >
                   {preset.label}
                 </button>
@@ -373,14 +389,15 @@ function App() {
             </div>
           </article>
 
-          <article className={result ? 'moment-card ready' : 'moment-card'}>
-            <p className="moment-tag">2. Automation moment</p>
+          <article className={result ? 'outcome-card ready' : 'outcome-card'}>
+            <p className="outcome-tag">2. Automation outcome</p>
             {result ? (
               <>
-                <h2>{pretty(result.triage.category)} packet is ready.</h2>
-                <ul className="moment-list">
+                <h2>{pretty(result.triage.category)} packet generated.</h2>
+
+                <ul className="outcome-list">
                   <li>
-                    <span>Problem</span>
+                    <span>Problem solved</span>
                     <strong>{result.charter.problem_statement}</strong>
                   </li>
                   <li>
@@ -388,54 +405,44 @@ function App() {
                     <strong>{result.triage.next_action}</strong>
                   </li>
                   <li>
-                    <span>Outcome</span>
+                    <span>Business result</span>
                     <strong>
-                      {formatDays(baselineDays)} {'->'} {formatDays(targetDays)} lead time, {leadTimeReduction}% faster,
-                      {` ${result.triage.est_savings_hours_per_month}h/month saved`}
+                      {formatDays(baselineDays)} {'->'} {formatDays(targetDays)} lead time ({leadTimeReduction}% faster)
                     </strong>
                   </li>
                 </ul>
 
-                <div className="moment-metrics">
+                <div className="result-metrics">
                   <p>
-                    <span>Manual touchpoints</span>
+                    <span>Touchpoints</span>
                     <strong>
                       {beforeTouches} {'->'} {afterTouches}
                     </strong>
                   </p>
                   <p>
+                    <span>Monthly capacity</span>
+                    <strong>{result.triage.est_savings_hours_per_month}h saved</strong>
+                  </p>
+                  <p>
                     <span>Priority</span>
                     <strong>{result.triage.priority}</strong>
                   </p>
-                  <p>
-                    <span>Risk</span>
-                    <strong>{pretty(result.triage.risk_level)}</strong>
-                  </p>
                 </div>
-
-                {kickoffBrief ? (
-                  <button
-                    type="button"
-                    className="secondary-btn mini"
-                    onClick={() => void handleCopy('Kickoff brief', kickoffBrief)}
-                  >
-                    Copy kickoff brief
-                  </button>
-                ) : null}
               </>
             ) : (
               <>
-                <h2>No outcome yet.</h2>
-                <p className="placeholder">Click Start demo to reveal the automated result.</p>
+                <h2>No output yet.</h2>
+                <p className="placeholder">Run the demo to reveal the automation result.</p>
               </>
             )}
           </article>
         </section>
 
-        <section className="outputs-card">
-          <h2>3. Ready deliverables</h2>
+        <section className="deliverables-card">
+          <h2>3. Ready to hand off</h2>
+
           {result ? (
-            <div className="outputs-grid">
+            <div className="deliverables-grid">
               <article className="tile">
                 <h3>Charter</h3>
                 <p>{result.charter.problem_statement}</p>
@@ -458,7 +465,7 @@ function App() {
 
               <article className="tile">
                 <h3>Jira payload</h3>
-                <p>Issue payload ready for intake handoff.</p>
+                <p>Issue object ready for intake handoff.</p>
                 <button
                   type="button"
                   className="secondary-btn mini"
@@ -470,7 +477,7 @@ function App() {
 
               <article className="tile">
                 <h3>ServiceNow + tracker</h3>
-                <p>Execution records ready for operational tracking.</p>
+                <p>Execution records ready for operations.</p>
                 <div className="copy-row">
                   <button
                     type="button"
@@ -490,8 +497,18 @@ function App() {
               </article>
             </div>
           ) : (
-            <p className="empty">Run the demo to generate the deliverables.</p>
+            <p className="empty">Run the demo to generate handoff artifacts.</p>
           )}
+
+          {kickoffBrief ? (
+            <button
+              type="button"
+              className="secondary-btn"
+              onClick={() => void handleCopy('Kickoff brief', kickoffBrief)}
+            >
+              Copy kickoff brief
+            </button>
+          ) : null}
         </section>
 
         <details className="details-card">
@@ -506,6 +523,7 @@ function App() {
                   ))}
                 </ol>
               </article>
+
               <article>
                 <h3>After flow</h3>
                 <ol>
