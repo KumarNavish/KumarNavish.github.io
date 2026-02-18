@@ -4,71 +4,20 @@ import { loadCategoryCatalog, loadIntakeSamples } from './domain/loadData'
 import { runIntakePipeline, type PipelineResult } from './domain/pipeline'
 import type { CategoryCatalog, IntakeSample } from './domain/types'
 
-interface ImpactSnapshot {
-  baselineDays: number | null
-  targetDays: number | null
-  monthlyHoursSaved: number
-  leadTimeReductionPct: number | null
+type RunStage = 'idle' | 'analyzing' | 'building' | 'checking' | 'ready' | 'failed'
+type PresetId = 'balanced' | 'fast' | 'retention'
+
+interface Preset {
+  id: PresetId
+  label: string
+  note: string
 }
 
-interface SigmaSnapshot {
-  opportunitiesPerMonth: number
-  baselineDPMO: number
-  targetDPMO: number
-  baselineSigma: number
-  targetSigma: number
-  firstPassCurrentPct: number
-  firstPassTargetPct: number
-  copqHoursCurrent: number
-  copqHoursTarget: number
-}
-
-interface RootCauseItem {
-  cause: string
-  effect: string
-  evidence: string
-  priority: 'H' | 'M'
-}
-
-interface ImproveActionItem {
-  id: string
-  step: string
-  owner: string
-  expectedEffect: string
-  dueWeek: number
-}
-
-interface ControlPlanItem {
-  metric: string
-  owner: string
-  frequency: string
-  trigger: string
-}
-
-interface FlowComparisonRow {
-  stage: string
-  before: string
-  after: string
-  gain: string
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value))
-}
-
-function metricToText(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) {
-    return 'Not provided'
-  }
-  return String(value)
-}
-
-function prettyCategory(value: string): string {
-  return value
-    .split('_')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ')
-}
+const PRESETS: Preset[] = [
+  { id: 'balanced', label: 'Balanced', note: 'Default update and safety checks.' },
+  { id: 'fast', label: 'Fast Adaptation', note: 'Prioritize speed of change.' },
+  { id: 'retention', label: 'Retention-first', note: 'Prioritize non-regression.' },
+]
 
 function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => {
@@ -76,7 +25,7 @@ function sleep(milliseconds: number): Promise<void> {
   })
 }
 
-function toNumber(value: string | number | null | undefined): number | null {
+function toNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value
   }
@@ -89,286 +38,86 @@ function toNumber(value: string | number | null | undefined): number | null {
   return null
 }
 
+function pretty(value: string): string {
+  return value
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
 function formatDays(value: number | null): string {
-  if (value === null) {
-    return 'n/a'
-  }
-  return `${value}d`
+  return value === null ? 'n/a' : `${value}d`
 }
 
-function excerpt(text: string, maxLength = 280): string {
-  const normalized = text.replace(/\s+/g, ' ').trim()
-  if (normalized.length <= maxLength) {
-    return normalized
-  }
-  return `${normalized.slice(0, maxLength - 3)}...`
+function simulateDrift(text: string): string {
+  return text
+    .replace(/approval/gi, 'sign-off')
+    .replace(/manual/gi, 'human')
+    .replace(/ticket/gi, 'case')
 }
 
-function estimateManualSteps(text: string): number {
-  const normalized = text.toLowerCase()
-  const signalCount = (normalized.match(/\b(approve|review|handoff|email|manually|rework|follow up)\b/g) ?? [])
-    .length
-  return clamp(3 + signalCount, 3, 10)
+function fieldLabel(key: string): string {
+  return key.replace(/_/g, ' ')
 }
 
-function buildImpactSnapshot(result: PipelineResult): ImpactSnapshot {
-  const baselineDays = toNumber(result.charter.baseline_metrics.cycle_time_days)
-  const targetDays = toNumber(result.charter.target_metrics.cycle_time_days_target)
-
-  const leadTimeReductionPct =
-    baselineDays !== null && targetDays !== null && baselineDays > 0
-      ? Math.max(0, Math.round(((baselineDays - targetDays) / baselineDays) * 100))
-      : null
-
-  return {
-    baselineDays,
-    targetDays,
-    monthlyHoursSaved: result.triage.est_savings_hours_per_month,
-    leadTimeReductionPct,
+function stageLabel(stage: RunStage): string {
+  if (stage === 'idle') {
+    return 'Ready'
   }
+  if (stage === 'analyzing') {
+    return 'Reading request'
+  }
+  if (stage === 'building') {
+    return 'Building packet'
+  }
+  if (stage === 'checking') {
+    return 'Running safety check'
+  }
+  if (stage === 'ready') {
+    return 'Packet ready'
+  }
+  return 'Run failed'
 }
 
-function dpmoToSigma(dpmo: number): number {
-  const points = [
-    { sigma: 6, dpmo: 3.4 },
-    { sigma: 5, dpmo: 233 },
-    { sigma: 4, dpmo: 6210 },
-    { sigma: 3, dpmo: 66807 },
-    { sigma: 2, dpmo: 308537 },
-    { sigma: 1, dpmo: 690000 },
-  ]
-
-  if (dpmo <= points[0].dpmo) {
-    return points[0].sigma
+function stageRank(stage: RunStage): number {
+  if (stage === 'idle') {
+    return 0
   }
-
-  if (dpmo >= points[points.length - 1].dpmo) {
-    return points[points.length - 1].sigma
+  if (stage === 'analyzing') {
+    return 1
   }
-
-  for (let i = 0; i < points.length - 1; i += 1) {
-    const high = points[i]
-    const low = points[i + 1]
-
-    if (dpmo >= high.dpmo && dpmo <= low.dpmo) {
-      const highLog = Math.log10(high.dpmo)
-      const lowLog = Math.log10(low.dpmo)
-      const currentLog = Math.log10(dpmo)
-      const ratio = (currentLog - highLog) / (lowLog - highLog)
-      const interpolated = high.sigma - ratio * (high.sigma - low.sigma)
-      return Number(interpolated.toFixed(1))
-    }
+  if (stage === 'building') {
+    return 2
   }
-
-  return 1
+  if (stage === 'checking') {
+    return 3
+  }
+  return 4
 }
 
-function buildSigmaSnapshot(result: PipelineResult): SigmaSnapshot {
-  const volume =
-    result.extracted.volume_per_month ?? result.sample.ground_truth.volume_per_month ?? 40
-  const manualSteps = Math.max(1, result.extracted.manual_step_count)
-  const opportunitiesPerMonth = Math.max(1, volume * manualSteps)
-
-  const riskBaseRate: Record<'low' | 'medium' | 'high', number> = {
-    low: 0.06,
-    medium: 0.09,
-    high: 0.13,
+async function copyJson(label: string, payload: unknown): Promise<string> {
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
+    return `${label} copied.`
+  } catch {
+    return 'Clipboard blocked in this browser.'
   }
-
-  const baselineRate = clamp(
-    riskBaseRate[result.triage.risk_level] + Math.min(0.06, Math.max(0, (manualSteps - 2) * 0.01)),
-    0.03,
-    0.25,
-  )
-
-  const automationLift = clamp(result.triage.automation_score / 160, 0.2, 0.7)
-  const targetRate = clamp(baselineRate * (1 - automationLift), 0.008, 0.16)
-
-  const baselineDPMO = Math.round(baselineRate * 1_000_000)
-  const targetDPMO = Math.round(targetRate * 1_000_000)
-
-  const copqHoursCurrent = Math.round(opportunitiesPerMonth * baselineRate * 0.5)
-  const copqHoursTarget = Math.round(opportunitiesPerMonth * targetRate * 0.5)
-
-  return {
-    opportunitiesPerMonth,
-    baselineDPMO,
-    targetDPMO,
-    baselineSigma: dpmoToSigma(baselineDPMO),
-    targetSigma: dpmoToSigma(targetDPMO),
-    firstPassCurrentPct: Math.round((1 - baselineRate) * 100),
-    firstPassTargetPct: Math.round((1 - targetRate) * 100),
-    copqHoursCurrent,
-    copqHoursTarget,
-  }
-}
-
-function buildRootCauses(result: PipelineResult): RootCauseItem[] {
-  const catalog: Record<string, { cause: string; effect: string; evidence: string }> = {
-    delay: {
-      cause: 'Approval queue variability',
-      effect: 'Lead-time spikes and SLA misses',
-      evidence: 'Delay language detected in request.',
-    },
-    back_and_forth: {
-      cause: 'Clarification loops across teams',
-      effect: 'Rework and ownership drift',
-      evidence: 'Back-and-forth communication pattern detected.',
-    },
-    manual_work: {
-      cause: 'Manual routing and updates',
-      effect: 'Inconsistent handling and long cycle time',
-      evidence: 'Manual handling references detected.',
-    },
-    rekeying: {
-      cause: 'Repeated data re-entry',
-      effect: 'Higher defect opportunity and latency',
-      evidence: 'Copy/paste and spreadsheet behaviors detected.',
-    },
-    missing_fields: {
-      cause: 'Incomplete intake fields',
-      effect: 'Downstream approval rejections',
-      evidence: 'Missing/incomplete field risk detected.',
-    },
-    escalation: {
-      cause: 'Late risk surfacing',
-      effect: 'Emergency escalation workload',
-      evidence: 'Escalation terms detected in request.',
-    },
-    ownership_confusion: {
-      cause: 'Unclear process ownership',
-      effect: 'Stalled handoffs and poor accountability',
-      evidence: 'Ownership confusion terms detected.',
-    },
-  }
-
-  const mapped = result.extracted.pain_keywords
-    .map((keyword) => catalog[keyword])
-    .filter((item): item is { cause: string; effect: string; evidence: string } => Boolean(item))
-
-  if (mapped.length === 0) {
-    return [
-      {
-        cause: 'Manual handoff complexity',
-        effect: 'Cycle-time variance and rework',
-        evidence: `${result.extracted.manual_step_count} manual touchpoints detected.`,
-        priority: 'H',
-      },
-      {
-        cause: 'Cross-system fragmentation',
-        effect: 'Delayed status synchronization',
-        evidence:
-          result.extracted.key_systems.length > 0
-            ? `Systems involved: ${result.extracted.key_systems.join(', ')}.`
-            : 'Multiple workflow systems implied by request context.',
-        priority: 'M',
-      },
-    ]
-  }
-
-  return mapped.slice(0, 3).map((item, index) => ({
-    ...item,
-    priority: index === 0 ? 'H' : 'M',
-  }))
-}
-
-function buildImprovePlan(result: PipelineResult): ImproveActionItem[] {
-  const effectMap: Record<string, string> = {
-    validation: 'Increase first-pass yield and reduce missing-field defects.',
-    approval: 'Reduce approval wait-time variance.',
-    routing: 'Shorten handoff latency through deterministic routing.',
-    notification: 'Improve SLA adherence through timely nudges.',
-    update: 'Close execution loop with synchronized status updates.',
-  }
-
-  const fallbackOwners = ['Process Lead', 'Ops Manager', 'Control Owner', 'System Owner']
-
-  return result.blueprint.steps.slice(0, 4).map((step, index) => ({
-    id: step.id,
-    step: step.name,
-    owner: result.extracted.approval_roles[index] ?? fallbackOwners[index] ?? 'Operations Team',
-    expectedEffect: effectMap[step.type] ?? 'Reduce variation and improve flow.',
-    dueWeek: index + 1,
-  }))
-}
-
-function buildControlPlan(result: PipelineResult): ControlPlanItem[] {
-  const fallbackOwners = ['Process Owner', 'Quality Lead', 'Operations Manager']
-
-  return result.blueprint.monitoring.slice(0, 3).map((item, index) => ({
-    metric: item.metric,
-    owner: fallbackOwners[index] ?? 'Process Team',
-    frequency: index === 0 ? 'Daily' : 'Weekly',
-    trigger: item.alert_condition,
-  }))
-}
-
-function buildManualFlowSteps(result: PipelineResult): string[] {
-  return [
-    `Request arrives through ${result.sample.channel}.`,
-    'Analyst performs manual triage and ownership assignment.',
-    `Team chases missing data across tools (${result.extracted.manual_step_count} manual touchpoints).`,
-    `Approval handoffs route through ${result.extracted.approval_roles.join(', ') || 'approver chain'}.`,
-    'Status updates are posted manually across systems.',
-  ]
-}
-
-function buildAutomatedFlowSteps(result: PipelineResult): string[] {
-  const automationSteps = result.blueprint.steps.slice(0, 3).map((step) => step.name)
-  return [
-    `Unified intake with required data checks for ${prettyCategory(result.triage.category)}.`,
-    ...automationSteps,
-    'SLA monitoring, escalations, and audit trail update automatically.',
-  ]
-}
-
-function buildFlowComparison(result: PipelineResult): FlowComparisonRow[] {
-  const approverChain = result.extracted.approval_roles.join(', ') || 'multiple approvers'
-
-  return [
-    {
-      stage: 'Intake',
-      before: `Request arrives via ${result.sample.channel} with variable quality.`,
-      after: 'Unified intake with required fields and policy checks.',
-      gain: 'Fewer back-and-forth loops.',
-    },
-    {
-      stage: 'Triage',
-      before: `Manual routing based on analyst judgment (${result.triage.category}).`,
-      after: `Automatic classification into ${prettyCategory(result.triage.category)} workflow.`,
-      gain: 'Consistent routing in seconds.',
-    },
-    {
-      stage: 'Data prep',
-      before: `Data chase across tools (${result.extracted.manual_step_count} touchpoints).`,
-      after: 'Checklist and completeness validation before approvals.',
-      gain: 'Rework removed.',
-    },
-    {
-      stage: 'Approvals',
-      before: `Sequential handoffs through ${approverChain}.`,
-      after: 'Policy-driven approval orchestration with SLA timers.',
-      gain: 'Faster approvals with escalation safety.',
-    },
-    {
-      stage: 'Closure',
-      before: 'Manual status updates and weak audit visibility.',
-      after: 'Closed-loop updates to tracker plus audit trail.',
-      gain: 'Execution visibility by default.',
-    },
-  ]
 }
 
 function App() {
   const [samples, setSamples] = useState<IntakeSample[]>([])
   const [catalog, setCatalog] = useState<CategoryCatalog | null>(null)
-  const [selectedSampleId, setSelectedSampleId] = useState('')
+  const [selectedId, setSelectedId] = useState('')
   const [requestText, setRequestText] = useState('')
 
+  const [presetId, setPresetId] = useState<PresetId>('balanced')
+  const [driftEnabled, setDriftEnabled] = useState(false)
+
   const [result, setResult] = useState<PipelineResult | null>(null)
-  const [isRunning, setIsRunning] = useState(false)
-  const [copyStatus, setCopyStatus] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [stage, setStage] = useState<RunStage>('idle')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [copyStatus, setCopyStatus] = useState('')
 
   useEffect(() => {
     Promise.all([loadIntakeSamples(), loadCategoryCatalog()])
@@ -376,602 +125,401 @@ function App() {
         setSamples(loadedSamples)
         setCatalog(loadedCatalog)
 
-        const firstSample = loadedSamples[0]
-        setSelectedSampleId(firstSample?.id ?? '')
-        setRequestText(firstSample?.text ?? '')
+        const first = loadedSamples[0]
+        if (first) {
+          setSelectedId(first.id)
+          setRequestText(first.text)
+        }
       })
-      .catch((unknownError) => {
-        if (unknownError instanceof Error) {
-          setError(unknownError.message)
+      .catch((loadError) => {
+        if (loadError instanceof Error) {
+          setError(loadError.message)
           return
         }
         setError('Unknown data loading error')
       })
+      .finally(() => {
+        setLoading(false)
+      })
   }, [])
 
   const selectedSample = useMemo(
-    () => samples.find((sample) => sample.id === selectedSampleId) ?? samples[0] ?? null,
-    [samples, selectedSampleId],
+    () => samples.find((sample) => sample.id === selectedId) ?? samples[0] ?? null,
+    [samples, selectedId],
   )
 
-  const impactSnapshot = useMemo(() => (result ? buildImpactSnapshot(result) : null), [result])
-  const sigmaSnapshot = useMemo(() => (result ? buildSigmaSnapshot(result) : null), [result])
-  const rootCauses = useMemo(() => (result ? buildRootCauses(result) : []), [result])
-  const improvePlan = useMemo(() => (result ? buildImprovePlan(result) : []), [result])
-  const controlPlan = useMemo(() => (result ? buildControlPlan(result) : []), [result])
+  const activePreset = useMemo(
+    () => PRESETS.find((preset) => preset.id === presetId) ?? PRESETS[0],
+    [presetId],
+  )
 
-  const previewBaselineDays = selectedSample?.ground_truth.baseline_cycle_time_days ?? null
-  const previewVolume = selectedSample?.ground_truth.volume_per_month ?? null
-  const previewRisk = selectedSample?.ground_truth.risk_level ?? null
-
-  const inferredTargetDays =
-    previewBaselineDays !== null ? Math.max(1, Math.round(previewBaselineDays * 0.65)) : null
-
-  const beforeCycleTime = impactSnapshot?.baselineDays ?? previewBaselineDays
-  const afterCycleTime = impactSnapshot?.targetDays ?? inferredTargetDays
-
-  const requestPreview = excerpt(requestText || selectedSample?.text || '', 460)
-  const previewManualSteps = estimateManualSteps(requestText || selectedSample?.text || '')
-  const beforeManualSteps = result?.extracted.manual_step_count ?? previewManualSteps
-  const afterManualSteps = result ? Math.max(2, Math.min(beforeManualSteps, result.blueprint.steps.length)) : null
-  const leadTimeReduction = impactSnapshot?.leadTimeReductionPct ?? null
-  const outcomeHeadline = result
-    ? `${impactSnapshot?.monthlyHoursSaved ?? 0} hours/month saved, ${
-        leadTimeReduction ?? 0
-      }% faster cycle`
-    : null
-  const valueSentence = result
-    ? `Cycle time ${formatDays(beforeCycleTime)} to ${formatDays(afterCycleTime)} | ${beforeManualSteps} to ${
-        afterManualSteps ?? 0
-      } touchpoints | ${impactSnapshot?.monthlyHoursSaved ?? 0}h capacity recovered each month.`
-    : null
-
-  const jiraFields =
-    result && typeof result.exports.jira_issue_create.fields === 'object'
-      ? (result.exports.jira_issue_create.fields as Record<string, unknown>)
-      : null
-
-  const servicenowBody =
-    result &&
-    typeof result.exports.servicenow_record_create === 'object' &&
-    typeof (result.exports.servicenow_record_create as Record<string, unknown>).payload === 'object'
-      ? ((result.exports.servicenow_record_create as Record<string, unknown>).payload as Record<
-          string,
-          unknown
-        >)
-      : null
-
-  const trackerPayload =
-    result && typeof result.exports.process_tracker_row === 'object'
-      ? (result.exports.process_tracker_row as Record<string, unknown>)
-      : null
-
-  const hintText = useMemo(() => {
-    if (error) {
-      return 'Could not load data. Please refresh.'
+  const baselineDays = useMemo(() => {
+    if (result) {
+      return toNumber(result.charter.baseline_metrics.cycle_time_days)
     }
-    if (isRunning) {
-      return 'Running automation pipeline...'
+    return selectedSample?.ground_truth.baseline_cycle_time_days ?? null
+  }, [result, selectedSample])
+
+  const targetDays = useMemo(() => {
+    if (result) {
+      return toNumber(result.charter.target_metrics.cycle_time_days_target)
     }
+    if (baselineDays === null) {
+      return null
+    }
+    return Math.max(1, Math.round(baselineDays * 0.6))
+  }, [result, baselineDays])
+
+  const leadTimeReduction = useMemo(() => {
+    if (baselineDays === null || targetDays === null || baselineDays <= 0) {
+      return null
+    }
+    return Math.max(0, Math.round(((baselineDays - targetDays) / baselineDays) * 100))
+  }, [baselineDays, targetDays])
+
+  const beforeTouches = result?.extracted.manual_step_count ?? 4
+  const afterTouches = toNumber(result?.charter.target_metrics.manual_handoffs_target) ?? Math.max(1, beforeTouches - 2)
+
+  const beforeFlow = useMemo(() => {
+    if (!selectedSample) {
+      return []
+    }
+    return [
+      `Request enters via ${selectedSample.channel}.`,
+      'Analyst manually triages and classifies.',
+      'Missing details are chased across teams.',
+      'Approvals and status are updated manually.',
+    ]
+  }, [selectedSample])
+
+  const afterFlow = useMemo(() => {
     if (!result) {
-      return 'Pick a workflow, then run automation.'
+      return ['Awaiting run', 'Awaiting run', 'Awaiting run', 'Awaiting run']
     }
-    return 'Automation packet ready to export.'
-  }, [error, isRunning, result])
 
-  function handleSampleChange(sampleId: string) {
-    setSelectedSampleId(sampleId)
-    const nextSample = samples.find((sample) => sample.id === sampleId)
-    if (nextSample) {
-      setRequestText(nextSample.text)
-      setResult(null)
-      setCopyStatus(null)
-    }
-  }
+    return [
+      `Auto-classify into ${pretty(result.triage.category)}.`,
+      `${Object.keys(result.charter.baseline_metrics).length} baseline signals captured.`,
+      `${result.blueprint.steps.length} orchestrated automation steps.`,
+      'Export payloads generated for execution tools.',
+    ]
+  }, [result])
 
-  async function runPipeline() {
+  async function handleRun(): Promise<void> {
     if (!selectedSample || !catalog) {
       return
     }
 
-    const normalizedText = requestText.trim() || selectedSample.text
-    const sampleForRun: IntakeSample = {
-      ...selectedSample,
-      text: normalizedText,
-    }
+    setCopyStatus('')
+    setError('')
+    setStage('analyzing')
 
-    setResult(null)
-    setCopyStatus(null)
-    setIsRunning(true)
-
-    await sleep(260)
-
-    const nextResult = runIntakePipeline(sampleForRun, catalog)
-    setResult(nextResult)
-    setIsRunning(false)
-  }
-
-  async function copyJson(label: string, payload: unknown) {
     try {
-      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
-      setCopyStatus(`${label} copied`)
-    } catch {
-      setCopyStatus(`Could not copy ${label}`)
+      await sleep(120)
+
+      const normalizedText = requestText.trim().length > 0 ? requestText : selectedSample.text
+      const pipelineInput: IntakeSample = {
+        ...selectedSample,
+        text: driftEnabled ? simulateDrift(normalizedText) : normalizedText,
+      }
+
+      setStage('building')
+      await sleep(120)
+
+      const pipelineResult = runIntakePipeline(pipelineInput, catalog)
+      setResult(pipelineResult)
+
+      setStage('checking')
+      await sleep(120)
+
+      setStage('ready')
+    } catch (runError) {
+      setStage('failed')
+      if (runError instanceof Error) {
+        setError(runError.message)
+        return
+      }
+      setError('Pipeline run failed')
     }
   }
 
-  async function copyFullPack() {
-    if (!result) {
-      return
+  function handleSampleChange(nextId: string): void {
+    setSelectedId(nextId)
+    const nextSample = samples.find((sample) => sample.id === nextId)
+    if (nextSample) {
+      setRequestText(nextSample.text)
+      setResult(null)
+      setStage('idle')
+      setCopyStatus('')
+      setError('')
     }
-
-    const packagePayload = {
-      workflow: result.sample.title,
-      triage: result.triage,
-      charter: result.charter,
-      six_sigma: {
-        impact: impactSnapshot,
-        sigma: sigmaSnapshot,
-        root_causes: rootCauses,
-        improve_plan: improvePlan,
-        control_plan: controlPlan,
-      },
-      process_map: {
-        as_is_mermaid: result.asIsMermaid,
-        to_be_mermaid: result.toBeMermaid,
-      },
-      automation_blueprint: result.blueprint,
-      exports: result.exports,
-    }
-
-    await copyJson('DMAIC work packet', packagePayload)
   }
 
-  function exportTicketBundle() {
-    if (!result) {
+  function handleReset(): void {
+    if (!selectedSample) {
       return
     }
-
-    const exportBundle = {
-      jira: result.exports.jira_issue_create,
-      servicenow: result.exports.servicenow_record_create,
-      process_tracker: result.exports.process_tracker_row,
-    }
-
-    const blob = new Blob([JSON.stringify(exportBundle, null, 2)], { type: 'application/json' })
-    const objectUrl = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = objectUrl
-    anchor.download = 'bis-automation-exports.json'
-    anchor.click()
-    URL.revokeObjectURL(objectUrl)
-    setCopyStatus('Export bundle downloaded')
+    setRequestText(selectedSample.text)
+    setResult(null)
+    setStage('idle')
+    setCopyStatus('')
+    setError('')
   }
 
-  const categoryDefinition = result
-    ? catalog?.categories.find((item) => item.id === result.triage.category) ?? null
-    : null
-  const manualFlowSteps = result ? buildManualFlowSteps(result) : []
-  const automatedFlowSteps = result ? buildAutomatedFlowSteps(result) : []
-  const flowComparisonRows = result ? buildFlowComparison(result) : []
-  const removedTouchpoints = result ? Math.max(0, beforeManualSteps - (afterManualSteps ?? beforeManualSteps)) : 0
+  async function handleCopy(label: string, payload: unknown): Promise<void> {
+    setCopyStatus(await copyJson(label, payload))
+  }
 
-  async function copyKickoffBrief() {
-    if (!result) {
-      return
-    }
+  if (loading) {
+    return (
+      <main className="demo-shell">
+        <section className="loading-card">
+          <h1>Loading BIS demo...</h1>
+        </section>
+      </main>
+    )
+  }
 
-    const kickoffBrief = {
-      workflow: result.sample.title,
-      value_summary: valueSentence,
-      immediate_action: result.triage.next_action,
-      first_week_plan: improvePlan.slice(0, 3),
-      controls: controlPlan,
-      handoff: {
-        jira: result.exports.jira_issue_create,
-        servicenow: result.exports.servicenow_record_create,
-      },
-    }
-
-    await copyJson('Kickoff brief', kickoffBrief)
+  if (error && !selectedSample) {
+    return (
+      <main className="demo-shell">
+        <section className="loading-card">
+          <h1>Unable to load demo</h1>
+          <p className="warning">{error}</p>
+        </section>
+      </main>
+    )
   }
 
   return (
-    <main className="page-shell">
-      <header className="hero">
-        <p className="eyebrow">BIS Process Optimisation Copilot</p>
-        <h1>Turn one manual workflow into an execution-ready automation handoff.</h1>
-        <p className="hero-subtitle">
-          Choose a real BIS request. In one run, get a charter, a redesigned workflow, and payloads ready for Jira and
-          ServiceNow.
-        </p>
-      </header>
+    <main className="demo-shell">
+      <section className="layout">
+        <header className="hero-card">
+          <p className="kicker">BIS Process Optimisation</p>
+          <h1>From messy request to ready automation packet.</h1>
 
-      <section className="flow-surface">
-        <aside className="intake-panel">
-          <h2>Choose workflow</h2>
-
-          <section className="example-picker">
-            <label htmlFor="example-select">Use case</label>
-            <div className="select-shell">
-              <select
-                id="example-select"
-                className="example-select"
-                value={selectedSampleId}
-                onChange={(event) => handleSampleChange(event.target.value)}
-              >
+          <div className="controls-grid">
+            <label>
+              Workflow
+              <select value={selectedSample?.id ?? ''} onChange={(event) => handleSampleChange(event.target.value)}>
                 {samples.map((sample) => (
                   <option key={sample.id} value={sample.id}>
                     {sample.title}
                   </option>
                 ))}
               </select>
-              <span className="select-caret" aria-hidden="true">
-                ▾
-              </span>
+            </label>
+
+            <div className="preset-row" role="radiogroup" aria-label="Preset">
+              {PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className={presetId === preset.id ? 'chip active' : 'chip'}
+                  onClick={() => setPresetId(preset.id)}
+                  title={preset.note}
+                >
+                  {preset.label}
+                </button>
+              ))}
             </div>
-          </section>
 
-          <details className="advanced-block inline-advanced">
-            <summary>Edit request text</summary>
-            <textarea
-              value={requestText}
-              onChange={(event) => setRequestText(event.target.value)}
-              rows={6}
-            />
-          </details>
-
-          <button className="primary-btn" onClick={() => void runPipeline()} disabled={!selectedSample || isRunning}>
-            {isRunning ? 'Running...' : 'Start demo'}
-          </button>
-
-          {result ? (
-            <button className="secondary-btn export-btn" onClick={() => exportTicketBundle()}>
-              Download export bundle
+            <button type="button" className="primary-btn" onClick={() => void handleRun()}>
+              Start demo
             </button>
-          ) : null}
+            <button type="button" className="secondary-btn" onClick={handleReset}>
+              Reset
+            </button>
+          </div>
 
-          <p className="hint-text">{hintText}</p>
-          {error ? <p className="error-text">{error}</p> : null}
-          {copyStatus ? <p className="status-text success-text">{copyStatus}</p> : null}
-        </aside>
+          <label>
+            Request
+            <textarea value={requestText} rows={3} onChange={(event) => setRequestText(event.target.value)} />
+          </label>
 
-        <section className="outcome-panel" aria-live="polite">
-          <section className={`magic-card ${result ? 'ready' : ''}`}>
-            <article className="magic-column before-column">
-              <p className="panel-label">Before</p>
-              <h3>Manual intake request</h3>
-              <p className="magic-text">{requestPreview}</p>
-              <ul className="metric-list">
-                <li>
-                  <span>Cycle time</span>
-                  <strong>{formatDays(previewBaselineDays)}</strong>
-                </li>
-                <li>
-                  <span>Monthly volume</span>
-                  <strong>{previewVolume ?? 'n/a'}</strong>
-                </li>
-                <li>
-                  <span>Risk level</span>
-                  <strong>{previewRisk ? prettyCategory(previewRisk) : 'n/a'}</strong>
-                </li>
-                <li>
-                  <span>Manual touchpoints</span>
-                  <strong>{beforeManualSteps}</strong>
-                </li>
-              </ul>
-            </article>
+          <div className="status-row">
+            <p className="status-pill">{stageLabel(stage)}</p>
+            {copyStatus ? <p className="status-pill">{copyStatus}</p> : null}
+            {error ? <p className="warning">{error}</p> : null}
+          </div>
 
-            <div className="magic-divider" aria-hidden="true">
-              <span>→</span>
-            </div>
+          <div className="run-rail" aria-label="Run stages">
+            <span className={stageRank(stage) >= 1 ? 'rail active' : 'rail'}>1. Intake</span>
+            <span className={stageRank(stage) >= 2 ? 'rail active' : 'rail'}>2. Packet</span>
+            <span className={stageRank(stage) >= 3 ? 'rail active' : 'rail'}>3. Safety</span>
+          </div>
+        </header>
 
-            <article className="magic-column after-column">
-              <p className="panel-label">After</p>
-              <h3>Automation packet produced</h3>
-              {result ? (
-                <>
-                  <p className="impact-headline">{outcomeHeadline}</p>
-                  <div className="impact-grid">
-                    <article className="impact-card">
-                      <span>Cycle time</span>
-                      <strong>
-                        {formatDays(beforeCycleTime)} to {formatDays(afterCycleTime)}
-                      </strong>
-                    </article>
-                    <article className="impact-card">
-                      <span>Recovered capacity</span>
-                      <strong>{impactSnapshot?.monthlyHoursSaved ?? 0}h per month</strong>
-                    </article>
-                    <article className="impact-card">
-                      <span>Manual touchpoints</span>
-                      <strong>
-                        {beforeManualSteps} to {afterManualSteps ?? 0}
-                      </strong>
-                    </article>
-                  </div>
-                  <ul className="artifact-list">
-                    <li>Project charter</li>
-                    <li>Future-state process map</li>
-                    <li>Automation blueprint with controls</li>
-                    <li>Jira and ServiceNow payloads</li>
-                  </ul>
-                </>
-              ) : (
-                <p className="waiting-note">
-                  Press <strong>Start demo</strong> to generate the full automation packet.
+        <section className={result ? 'moment-card ready' : 'moment-card'}>
+          <article className="moment before">
+            <h2>Before</h2>
+            <p className="metric">{formatDays(baselineDays)}</p>
+            <p className="meta">Lead time</p>
+            <p className="meta">{beforeTouches} manual touchpoints</p>
+          </article>
+
+          <p className="arrow" aria-hidden="true">
+            →
+          </p>
+
+          <article className="moment after">
+            <h2>After</h2>
+            {result ? (
+              <>
+                <p className="metric">{formatDays(targetDays)}</p>
+                <p className="meta">Lead time</p>
+                <div className="signals">
+                  <span>{leadTimeReduction ?? 0}% faster</span>
+                  <span>{afterTouches} touchpoints</span>
+                  <span>{result.triage.est_savings_hours_per_month}h saved/month</span>
+                </div>
+              </>
+            ) : (
+              <p className="meta">Click Start demo.</p>
+            )}
+          </article>
+        </section>
+
+        <section className="outputs-card">
+          <h2>Your outputs</h2>
+          {result ? (
+            <div className="outputs-grid">
+              <article className="tile">
+                <h3>Triage</h3>
+                <p>{pretty(result.triage.category)}</p>
+                <p>Priority: {result.triage.priority}</p>
+                <p>Risk: {pretty(result.triage.risk_level)}</p>
+                <p>Automation score: {result.triage.automation_score}</p>
+              </article>
+
+              <article className="tile">
+                <h3>Charter</h3>
+                <p>{result.charter.problem_statement}</p>
+                <p>
+                  Target: {formatDays(baselineDays)} {'->'} {formatDays(targetDays)}
                 </p>
-              )}
-            </article>
-          </section>
+                <button type="button" className="secondary-btn mini" onClick={() => void handleCopy('Charter JSON', result.charter)}>
+                  Copy charter JSON
+                </button>
+              </article>
 
-          {result ? (
-            <section className="handoff-card">
-              <p className="card-kicker">Ready to send</p>
-              <h2>Execution handoff payloads</h2>
-              <p className="handoff-subtitle">
-                Use these directly in your delivery workflow or copy the full packet for project kickoff.
-              </p>
-              <div className="handoff-grid">
-                <article className="handoff-item">
-                  <span>Jira summary</span>
-                  <strong>{metricToText(jiraFields?.summary)}</strong>
-                </article>
-                <article className="handoff-item">
-                  <span>ServiceNow short description</span>
-                  <strong>{metricToText(servicenowBody?.short_description)}</strong>
-                </article>
-                <article className="handoff-item">
-                  <span>Tracker owner</span>
-                  <strong>{metricToText(trackerPayload?.owner)}</strong>
-                </article>
-              </div>
-              <div className="actions-row">
-                <button className="primary-btn" onClick={() => exportTicketBundle()}>
-                  Download export bundle
+              <article className="tile">
+                <h3>Automation blueprint</h3>
+                <ul>
+                  {result.blueprint.steps.slice(0, 4).map((step) => (
+                    <li key={step.id}>{step.name}</li>
+                  ))}
+                </ul>
+                <button type="button" className="secondary-btn mini" onClick={() => void handleCopy('Blueprint JSON', result.blueprint)}>
+                  Copy blueprint JSON
                 </button>
-                <button className="secondary-btn" onClick={() => void copyFullPack()}>
-                  Copy full packet
-                </button>
-              </div>
-              {categoryDefinition ? <p className="integration-note">{categoryDefinition.description}</p> : null}
-            </section>
+              </article>
+
+              <article className="tile">
+                <h3>Export payloads</h3>
+                <div className="copy-row">
+                  <button
+                    type="button"
+                    className="secondary-btn mini"
+                    onClick={() => void handleCopy('Jira JSON', result.exports.jira_issue_create)}
+                  >
+                    Copy Jira
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-btn mini"
+                    onClick={() => void handleCopy('ServiceNow JSON', result.exports.servicenow_record_create)}
+                  >
+                    Copy ServiceNow
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-btn mini"
+                    onClick={() => void handleCopy('Tracker JSON', result.exports.process_tracker_row)}
+                  >
+                    Copy tracker
+                  </button>
+                </div>
+              </article>
+            </div>
           ) : (
-            <section className="handoff-card placeholder-card">
-              <p className="card-kicker">What you will get</p>
-              <h2>Four deliverables, instantly</h2>
-              <ul className="artifact-list">
-                <li>Clear charter with baseline and target</li>
-                <li>Before/after workflow redesign</li>
-                <li>Blueprint with controls and monitoring</li>
-                <li>Execution payloads for internal tools</li>
-              </ul>
-            </section>
+            <p className="empty">Run the demo to generate the packet.</p>
           )}
+        </section>
 
-          {result ? (
-            <details className="packet-details">
-              <summary>
-                <span>Open full packet details</span>
-                <small>Diagnose, redesign, control, and handoff artifacts</small>
-              </summary>
-              <section className="details-value">
-                <article className="value-banner">
-                  <p className="detail-step">At a glance</p>
-                  <h3>This packet is ready for execution</h3>
-                  <p>{valueSentence}</p>
+        <details className="details-card">
+          <summary>Open full packet details</summary>
+          <div className="details-grid">
+            <section className="flow-grid">
+              <article>
+                <h3>Before flow</h3>
+                <ol>
+                  {beforeFlow.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+              </article>
+              <article>
+                <h3>After flow</h3>
+                <ol>
+                  {afterFlow.map((step) => (
+                    <li key={step}>{step}</li>
+                  ))}
+                </ol>
+              </article>
+            </section>
+
+            <section className="advanced-row">
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={driftEnabled}
+                  onChange={(event) => setDriftEnabled(event.target.checked)}
+                />
+                Simulate wording drift
+              </label>
+              <p className="preset-note">Preset: {activePreset.label} - {activePreset.note}</p>
+            </section>
+
+            {result ? (
+              <section className="json-grid">
+                <article>
+                  <h3>Plan packet JSON</h3>
+                  <pre>
+                    {JSON.stringify(
+                      {
+                        category: result.triage.category,
+                        risk_level: result.triage.risk_level,
+                        charter: result.charter,
+                        blueprint: result.blueprint,
+                      },
+                      null,
+                      2,
+                    )}
+                  </pre>
                 </article>
-                <div className="quick-start-grid">
-                  <article className="quick-start-card">
-                    <p className="detail-step">Do this now</p>
-                    <h3>Immediate next actions</h3>
-                    <ol className="quick-list">
-                      <li>{result.triage.next_action}</li>
-                      {improvePlan.slice(0, 2).map((item) => (
-                        <li key={item.id}>
-                          {item.step} ({item.owner})
-                        </li>
-                      ))}
-                    </ol>
-                  </article>
-                  <article className="quick-start-card">
-                    <p className="detail-step">Send this</p>
-                    <h3>Handoff ready</h3>
-                    <div className="quick-chips">
-                      <span>Jira payload ready</span>
-                      <span>ServiceNow payload ready</span>
-                      <span>Tracker row ready</span>
-                    </div>
-                    <div className="actions-row compact-actions">
-                      <button className="secondary-btn" onClick={() => copyKickoffBrief()}>
-                        Copy kickoff brief
-                      </button>
-                      <button className="secondary-btn" onClick={() => exportTicketBundle()}>
-                        Download exports
-                      </button>
-                    </div>
-                  </article>
-                  <article className="quick-start-card">
-                    <p className="detail-step">Watch this</p>
-                    <h3>Control priorities</h3>
-                    <ul className="quick-list">
-                      {controlPlan.slice(0, 3).map((item) => (
-                        <li key={item.metric}>
-                          {item.metric} ({item.frequency})
-                        </li>
-                      ))}
-                    </ul>
-                  </article>
+                <article>
+                  <h3>Export JSON</h3>
+                  <pre>{JSON.stringify(result.exports, null, 2)}</pre>
+                </article>
+              </section>
+            ) : null}
+
+            {result ? (
+              <section className="required-fields-card">
+                <h3>Primary fields captured</h3>
+                <div className="fields-grid">
+                  {Object.entries(result.exports.process_tracker_row).map(([key, value]) => (
+                    <p key={key}>
+                      <span>{fieldLabel(key)}</span>
+                      <strong>{String(value)}</strong>
+                    </p>
+                  ))}
                 </div>
               </section>
-              <section className="details-grid">
-                <article className="detail-card">
-                  <p className="detail-step">1. Diagnose and scope</p>
-                  <h3>Charter summary</h3>
-                  <ul className="detail-list">
-                    <li>
-                      <strong>Problem</strong>
-                      <span>{result.charter.problem_statement}</span>
-                    </li>
-                    <li>
-                      <strong>Scope in</strong>
-                      <span>{result.charter.scope_in.join(' | ')}</span>
-                    </li>
-                    <li>
-                      <strong>Stakeholders</strong>
-                      <span>{result.charter.stakeholders.join(', ')}</span>
-                    </li>
-                    <li>
-                      <strong>Baseline cycle</strong>
-                      <span>{metricToText(result.charter.baseline_metrics.cycle_time_days)}</span>
-                    </li>
-                    <li>
-                      <strong>Target cycle</strong>
-                      <span>{metricToText(result.charter.target_metrics.cycle_time_days_target)}</span>
-                    </li>
-                  </ul>
-                  <button className="secondary-btn" onClick={() => copyJson('Charter', result.charter)}>
-                    Copy charter JSON
-                  </button>
-                </article>
-
-                <article className="detail-card">
-                  <p className="detail-step">2. Redesign and implementation</p>
-                  <h3>Improvement actions</h3>
-                  <ul className="detail-list">
-                    {improvePlan.map((item) => (
-                      <li key={item.id}>
-                        <strong>{item.step}</strong>
-                        <span>
-                          {item.expectedEffect} | Owner: {item.owner}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                  <button className="secondary-btn" onClick={() => copyJson('Automation blueprint', result.blueprint)}>
-                    Copy blueprint JSON
-                  </button>
-                </article>
-
-                <article className="detail-card">
-                  <p className="detail-step">3. Risk controls</p>
-                  <h3>Root causes and monitoring</h3>
-                  <ul className="detail-list">
-                    {rootCauses.map((cause) => (
-                      <li key={cause.cause}>
-                        <strong>{cause.cause}</strong>
-                        <span>{cause.effect}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <ul className="detail-list">
-                    {controlPlan.map((item) => (
-                      <li key={item.metric}>
-                        <strong>{item.metric}</strong>
-                        <span>
-                          {item.frequency} | {item.trigger}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </article>
-
-                <article className="detail-card span-2 process-delta">
-                  <p className="detail-step">4. Process transformation</p>
-                  <h3>Before vs after workflow</h3>
-                  <p className="integration-note">
-                    This is the operational redesign your team can execute immediately.
-                  </p>
-                  <div className="delta-grid">
-                    <section className="delta-column">
-                      <p className="delta-label">Before (manual)</p>
-                      <ol className="delta-steps">
-                        {manualFlowSteps.map((step) => (
-                          <li key={step}>{step}</li>
-                        ))}
-                      </ol>
-                    </section>
-                    <section className="delta-column">
-                      <p className="delta-label">After (automated)</p>
-                      <ol className="delta-steps">
-                        {automatedFlowSteps.map((step) => (
-                          <li key={step}>{step}</li>
-                        ))}
-                      </ol>
-                    </section>
-                  </div>
-                  <div className="delta-highlights">
-                    <span>{removedTouchpoints} manual touchpoints removed</span>
-                    <span>{leadTimeReduction ?? 0}% faster cycle</span>
-                    <span>{impactSnapshot?.monthlyHoursSaved ?? 0}h capacity recovered each month</span>
-                  </div>
-                  <div className="delta-table" role="table" aria-label="Workflow transformation table">
-                    <div className="delta-table-header" role="row">
-                      <span>Stage</span>
-                      <span>Before</span>
-                      <span>After</span>
-                      <span>Business gain</span>
-                    </div>
-                    {flowComparisonRows.map((row) => (
-                      <div key={row.stage} className="delta-table-row" role="row">
-                        <span>{row.stage}</span>
-                        <span>{row.before}</span>
-                        <span>{row.after}</span>
-                        <span>{row.gain}</span>
-                      </div>
-                    ))}
-                  </div>
-                </article>
-
-                <article className="detail-card span-2">
-                  <p className="detail-step">5. External handoff</p>
-                  <h3>Export payload preview</h3>
-                  <ul className="detail-list compact">
-                    <li>
-                      <strong>Jira summary</strong>
-                      <span>{metricToText(jiraFields?.summary)}</span>
-                    </li>
-                    <li>
-                      <strong>ServiceNow short description</strong>
-                      <span>{metricToText(servicenowBody?.short_description)}</span>
-                    </li>
-                    <li>
-                      <strong>Tracker owner</strong>
-                      <span>{metricToText(trackerPayload?.owner)}</span>
-                    </li>
-                    <li>
-                      <strong>Target SLA</strong>
-                      <span>{metricToText(trackerPayload?.target_sla_days)}</span>
-                    </li>
-                  </ul>
-                  <div className="actions-row copy-group">
-                    <button
-                      className="secondary-btn"
-                      onClick={() => copyJson('Jira payload', result.exports.jira_issue_create)}
-                    >
-                      Copy Jira JSON
-                    </button>
-                    <button
-                      className="secondary-btn"
-                      onClick={() => copyJson('ServiceNow payload', result.exports.servicenow_record_create)}
-                    >
-                      Copy ServiceNow JSON
-                    </button>
-                    <button
-                      className="secondary-btn"
-                      onClick={() => copyJson('Tracker payload', result.exports.process_tracker_row)}
-                    >
-                      Copy tracker JSON
-                    </button>
-                  </div>
-                  <p className="integration-note">
-                    Use these payloads as starter objects for your issue tracker and process registry.
-                  </p>
-                </article>
-              </section>
-            </details>
-          ) : null}
-        </section>
+            ) : null}
+          </div>
+        </details>
       </section>
     </main>
   )
