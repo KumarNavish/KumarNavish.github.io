@@ -10,13 +10,12 @@ type PresetId = 'balanced' | 'fast' | 'retention'
 interface Preset {
   id: PresetId
   label: string
-  note: string
 }
 
 const PRESETS: Preset[] = [
-  { id: 'balanced', label: 'Balanced', note: 'Default update and safety checks.' },
-  { id: 'fast', label: 'Fast Adaptation', note: 'Prioritize speed of change.' },
-  { id: 'retention', label: 'Retention-first', note: 'Prioritize non-regression.' },
+  { id: 'balanced', label: 'Balanced' },
+  { id: 'fast', label: 'Fast Adaptation' },
+  { id: 'retention', label: 'Retention-first' },
 ]
 
 function sleep(milliseconds: number): Promise<void> {
@@ -54,10 +53,6 @@ function simulateDrift(text: string): string {
     .replace(/approval/gi, 'sign-off')
     .replace(/manual/gi, 'human')
     .replace(/ticket/gi, 'case')
-}
-
-function fieldLabel(key: string): string {
-  return key.replace(/_/g, ' ')
 }
 
 function stageLabel(stage: RunStage): string {
@@ -148,11 +143,6 @@ function App() {
     [samples, selectedId],
   )
 
-  const activePreset = useMemo(
-    () => PRESETS.find((preset) => preset.id === presetId) ?? PRESETS[0],
-    [presetId],
-  )
-
   const baselineDays = useMemo(() => {
     if (result) {
       return toNumber(result.charter.baseline_metrics.cycle_time_days)
@@ -172,7 +162,7 @@ function App() {
 
   const leadTimeReduction = useMemo(() => {
     if (baselineDays === null || targetDays === null || baselineDays <= 0) {
-      return null
+      return 0
     }
     return Math.max(0, Math.round(((baselineDays - targetDays) / baselineDays) * 100))
   }, [baselineDays, targetDays])
@@ -184,11 +174,12 @@ function App() {
     if (!selectedSample) {
       return []
     }
+
     return [
       `Request enters via ${selectedSample.channel}.`,
-      'Analyst manually triages and classifies.',
+      'Analyst manually classifies and routes.',
       'Missing details are chased across teams.',
-      'Approvals and status are updated manually.',
+      'Approvals and updates are tracked by hand.',
     ]
   }, [selectedSample])
 
@@ -199,11 +190,30 @@ function App() {
 
     return [
       `Auto-classify into ${pretty(result.triage.category)}.`,
-      `${Object.keys(result.charter.baseline_metrics).length} baseline signals captured.`,
-      `${result.blueprint.steps.length} orchestrated automation steps.`,
-      'Export payloads generated for execution tools.',
+      `${result.blueprint.steps.length} automation steps orchestrated.`,
+      `${result.triage.priority} priority and risk controls attached.`,
+      'Jira + ServiceNow + tracker payloads generated.',
     ]
   }, [result])
+
+  const kickoffBrief = useMemo(() => {
+    if (!result || !selectedSample) {
+      return null
+    }
+
+    return {
+      request_title: selectedSample.title,
+      category: result.triage.category,
+      priority: result.triage.priority,
+      immediate_action: result.triage.next_action,
+      outcome_summary: `${formatDays(baselineDays)} -> ${formatDays(targetDays)} lead time, ${leadTimeReduction}% faster, ${result.triage.est_savings_hours_per_month}h/month saved.`,
+      owner: 'BIS Process Optimisation CoE',
+      handoff: {
+        jira: result.exports.jira_issue_create,
+        serviceNow: result.exports.servicenow_record_create,
+      },
+    }
+  }, [result, selectedSample, baselineDays, targetDays, leadTimeReduction])
 
   async function handleRun(): Promise<void> {
     if (!selectedSample || !catalog) {
@@ -294,11 +304,15 @@ function App() {
   return (
     <main className="demo-shell">
       <section className="layout">
-        <header className="hero-card">
+        <header className="title-band">
           <p className="kicker">BIS Process Optimisation</p>
-          <h1>From messy request to ready automation packet.</h1>
+          <h1>Show one process, fully automated end-to-end.</h1>
+        </header>
 
-          <div className="controls-grid">
+        <section className="workspace-grid">
+          <article className="intake-card">
+            <h2>1. Intake</h2>
+
             <label>
               Workflow
               <select value={selectedSample?.id ?? ''} onChange={(event) => handleSampleChange(event.target.value)}>
@@ -310,6 +324,11 @@ function App() {
               </select>
             </label>
 
+            <label>
+              Request
+              <textarea value={requestText} rows={4} onChange={(event) => setRequestText(event.target.value)} />
+            </label>
+
             <div className="preset-row" role="radiogroup" aria-label="Preset">
               {PRESETS.map((preset) => (
                 <button
@@ -317,94 +336,116 @@ function App() {
                   type="button"
                   className={presetId === preset.id ? 'chip active' : 'chip'}
                   onClick={() => setPresetId(preset.id)}
-                  title={preset.note}
                 >
                   {preset.label}
                 </button>
               ))}
             </div>
 
-            <button type="button" className="primary-btn" onClick={() => void handleRun()}>
-              Start demo
-            </button>
-            <button type="button" className="secondary-btn" onClick={handleReset}>
-              Reset
-            </button>
-          </div>
+            <div className="action-row">
+              <button type="button" className="primary-btn" onClick={() => void handleRun()}>
+                Start demo
+              </button>
+              <button type="button" className="secondary-btn" onClick={handleReset}>
+                Reset
+              </button>
+            </div>
 
-          <label>
-            Request
-            <textarea value={requestText} rows={3} onChange={(event) => setRequestText(event.target.value)} />
-          </label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={driftEnabled}
+                onChange={(event) => setDriftEnabled(event.target.checked)}
+              />
+              Simulate wording drift
+            </label>
 
-          <div className="status-row">
-            <p className="status-pill">{stageLabel(stage)}</p>
-            {copyStatus ? <p className="status-pill">{copyStatus}</p> : null}
-            {error ? <p className="warning">{error}</p> : null}
-          </div>
+            <div className="status-row">
+              <p className="status-pill">{stageLabel(stage)}</p>
+              {copyStatus ? <p className="status-pill">{copyStatus}</p> : null}
+              {error ? <p className="warning">{error}</p> : null}
+            </div>
 
-          <div className="run-rail" aria-label="Run stages">
-            <span className={stageRank(stage) >= 1 ? 'rail active' : 'rail'}>1. Intake</span>
-            <span className={stageRank(stage) >= 2 ? 'rail active' : 'rail'}>2. Packet</span>
-            <span className={stageRank(stage) >= 3 ? 'rail active' : 'rail'}>3. Safety</span>
-          </div>
-        </header>
-
-        <section className={result ? 'moment-card ready' : 'moment-card'}>
-          <article className="moment before">
-            <h2>Before</h2>
-            <p className="metric">{formatDays(baselineDays)}</p>
-            <p className="meta">Lead time</p>
-            <p className="meta">{beforeTouches} manual touchpoints</p>
+            <div className="run-rail" aria-label="Run stages">
+              <span className={stageRank(stage) >= 1 ? 'rail active' : 'rail'}>1. Intake</span>
+              <span className={stageRank(stage) >= 2 ? 'rail active' : 'rail'}>2. Packet</span>
+              <span className={stageRank(stage) >= 3 ? 'rail active' : 'rail'}>3. Safety</span>
+            </div>
           </article>
 
-          <p className="arrow" aria-hidden="true">
-            →
-          </p>
-
-          <article className="moment after">
-            <h2>After</h2>
+          <article className={result ? 'moment-card ready' : 'moment-card'}>
+            <p className="moment-tag">2. Automation moment</p>
             {result ? (
               <>
-                <p className="metric">{formatDays(targetDays)}</p>
-                <p className="meta">Lead time</p>
-                <div className="signals">
-                  <span>{leadTimeReduction ?? 0}% faster</span>
-                  <span>{afterTouches} touchpoints</span>
-                  <span>{result.triage.est_savings_hours_per_month}h saved/month</span>
+                <h2>{pretty(result.triage.category)} packet is ready.</h2>
+                <ul className="moment-list">
+                  <li>
+                    <span>Problem</span>
+                    <strong>{result.charter.problem_statement}</strong>
+                  </li>
+                  <li>
+                    <span>What changed</span>
+                    <strong>{result.triage.next_action}</strong>
+                  </li>
+                  <li>
+                    <span>Outcome</span>
+                    <strong>
+                      {formatDays(baselineDays)} {'->'} {formatDays(targetDays)} lead time, {leadTimeReduction}% faster,
+                      {` ${result.triage.est_savings_hours_per_month}h/month saved`}
+                    </strong>
+                  </li>
+                </ul>
+
+                <div className="moment-metrics">
+                  <p>
+                    <span>Manual touchpoints</span>
+                    <strong>
+                      {beforeTouches} {'->'} {afterTouches}
+                    </strong>
+                  </p>
+                  <p>
+                    <span>Priority</span>
+                    <strong>{result.triage.priority}</strong>
+                  </p>
+                  <p>
+                    <span>Risk</span>
+                    <strong>{pretty(result.triage.risk_level)}</strong>
+                  </p>
                 </div>
+
+                {kickoffBrief ? (
+                  <button
+                    type="button"
+                    className="secondary-btn mini"
+                    onClick={() => void handleCopy('Kickoff brief', kickoffBrief)}
+                  >
+                    Copy kickoff brief
+                  </button>
+                ) : null}
               </>
             ) : (
-              <p className="meta">Click Start demo.</p>
+              <>
+                <h2>No outcome yet.</h2>
+                <p className="placeholder">Click Start demo to reveal the automated result.</p>
+              </>
             )}
           </article>
         </section>
 
         <section className="outputs-card">
-          <h2>Your outputs</h2>
+          <h2>3. Ready deliverables</h2>
           {result ? (
             <div className="outputs-grid">
               <article className="tile">
-                <h3>Triage</h3>
-                <p>{pretty(result.triage.category)}</p>
-                <p>Priority: {result.triage.priority}</p>
-                <p>Risk: {pretty(result.triage.risk_level)}</p>
-                <p>Automation score: {result.triage.automation_score}</p>
-              </article>
-
-              <article className="tile">
                 <h3>Charter</h3>
                 <p>{result.charter.problem_statement}</p>
-                <p>
-                  Target: {formatDays(baselineDays)} {'->'} {formatDays(targetDays)}
-                </p>
                 <button type="button" className="secondary-btn mini" onClick={() => void handleCopy('Charter JSON', result.charter)}>
                   Copy charter JSON
                 </button>
               </article>
 
               <article className="tile">
-                <h3>Automation blueprint</h3>
+                <h3>Blueprint</h3>
                 <ul>
                   {result.blueprint.steps.slice(0, 4).map((step) => (
                     <li key={step.id}>{step.name}</li>
@@ -416,15 +457,21 @@ function App() {
               </article>
 
               <article className="tile">
-                <h3>Export payloads</h3>
+                <h3>Jira payload</h3>
+                <p>Issue payload ready for intake handoff.</p>
+                <button
+                  type="button"
+                  className="secondary-btn mini"
+                  onClick={() => void handleCopy('Jira JSON', result.exports.jira_issue_create)}
+                >
+                  Copy Jira JSON
+                </button>
+              </article>
+
+              <article className="tile">
+                <h3>ServiceNow + tracker</h3>
+                <p>Execution records ready for operational tracking.</p>
                 <div className="copy-row">
-                  <button
-                    type="button"
-                    className="secondary-btn mini"
-                    onClick={() => void handleCopy('Jira JSON', result.exports.jira_issue_create)}
-                  >
-                    Copy Jira
-                  </button>
                   <button
                     type="button"
                     className="secondary-btn mini"
@@ -443,7 +490,7 @@ function App() {
               </article>
             </div>
           ) : (
-            <p className="empty">Run the demo to generate the packet.</p>
+            <p className="empty">Run the demo to generate the deliverables.</p>
           )}
         </section>
 
@@ -469,53 +516,16 @@ function App() {
               </article>
             </section>
 
-            <section className="advanced-row">
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={driftEnabled}
-                  onChange={(event) => setDriftEnabled(event.target.checked)}
-                />
-                Simulate wording drift
-              </label>
-              <p className="preset-note">Preset: {activePreset.label} - {activePreset.note}</p>
-            </section>
-
             {result ? (
               <section className="json-grid">
                 <article>
                   <h3>Plan packet JSON</h3>
-                  <pre>
-                    {JSON.stringify(
-                      {
-                        category: result.triage.category,
-                        risk_level: result.triage.risk_level,
-                        charter: result.charter,
-                        blueprint: result.blueprint,
-                      },
-                      null,
-                      2,
-                    )}
-                  </pre>
+                  <pre>{JSON.stringify({ triage: result.triage, charter: result.charter, blueprint: result.blueprint }, null, 2)}</pre>
                 </article>
                 <article>
                   <h3>Export JSON</h3>
                   <pre>{JSON.stringify(result.exports, null, 2)}</pre>
                 </article>
-              </section>
-            ) : null}
-
-            {result ? (
-              <section className="required-fields-card">
-                <h3>Primary fields captured</h3>
-                <div className="fields-grid">
-                  {Object.entries(result.exports.process_tracker_row).map(([key, value]) => (
-                    <p key={key}>
-                      <span>{fieldLabel(key)}</span>
-                      <strong>{String(value)}</strong>
-                    </p>
-                  ))}
-                </div>
               </section>
             ) : null}
           </div>
