@@ -10,13 +10,12 @@ type PresetId = 'balanced' | 'fast' | 'retention'
 interface Preset {
   id: PresetId
   label: string
-  note: string
 }
 
 const PRESETS: Preset[] = [
-  { id: 'balanced', label: 'Balanced', note: 'Balanced adaptation and retention.' },
-  { id: 'fast', label: 'Fast Adaptation', note: 'Adapt quickly to new request variants.' },
-  { id: 'retention', label: 'Retention-first', note: 'Preserve previous workflow quality first.' },
+  { id: 'balanced', label: 'Balanced' },
+  { id: 'fast', label: 'Fast Adaptation' },
+  { id: 'retention', label: 'Retention-first' },
 ]
 
 function sleep(milliseconds: number): Promise<void> {
@@ -46,7 +45,26 @@ function pretty(value: string): string {
 }
 
 function formatDays(value: number | null): string {
-  return value === null ? 'n/a' : `${value}d`
+  return value === null ? 'n/a' : `${value} days`
+}
+
+function stageLabel(stage: RunStage): string {
+  if (stage === 'idle') {
+    return 'Ready to run'
+  }
+  if (stage === 'analyzing') {
+    return 'Reading request...'
+  }
+  if (stage === 'building') {
+    return 'Building execution packet...'
+  }
+  if (stage === 'checking') {
+    return 'Running safety checks...'
+  }
+  if (stage === 'ready') {
+    return 'Done'
+  }
+  return 'Run failed'
 }
 
 function simulateDrift(text: string): string {
@@ -56,47 +74,23 @@ function simulateDrift(text: string): string {
     .replace(/ticket/gi, 'case')
 }
 
-function stageLabel(stage: RunStage): string {
-  if (stage === 'idle') {
-    return 'Ready'
+function parseFlowSteps(mermaid: string): string[] {
+  const labels: string[] = []
+  const quoted = /"([^"]+)"/g
+  let match = quoted.exec(mermaid)
+  while (match) {
+    labels.push(match[1].replace(/\\n/g, ' ').replace(/\s+/g, ' ').trim())
+    match = quoted.exec(mermaid)
   }
-  if (stage === 'analyzing') {
-    return 'Reading request'
-  }
-  if (stage === 'building') {
-    return 'Building packet'
-  }
-  if (stage === 'checking') {
-    return 'Checking non-regression'
-  }
-  if (stage === 'ready') {
-    return 'Packet ready'
-  }
-  return 'Run failed'
-}
-
-function stageRank(stage: RunStage): number {
-  if (stage === 'idle') {
-    return 0
-  }
-  if (stage === 'analyzing') {
-    return 1
-  }
-  if (stage === 'building') {
-    return 2
-  }
-  if (stage === 'checking') {
-    return 3
-  }
-  return 4
+  return Array.from(new Set(labels)).slice(0, 6)
 }
 
 async function copyJson(label: string, payload: unknown): Promise<string> {
   try {
     await navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
-    return `${label} copied.`
+    return `${label} copied`
   } catch {
-    return 'Clipboard blocked in this browser.'
+    return 'Clipboard blocked in this browser'
   }
 }
 
@@ -120,7 +114,6 @@ function App() {
       .then(([loadedSamples, loadedCatalog]) => {
         setSamples(loadedSamples)
         setCatalog(loadedCatalog)
-
         const first = loadedSamples[0]
         if (first) {
           setSelectedId(first.id)
@@ -177,58 +170,67 @@ function App() {
   const afterTouches =
     toNumber(result?.charter.target_metrics.manual_handoffs_target) ?? Math.max(1, beforeTouches - 2)
 
-  const kickoffBrief = useMemo(() => {
-    if (!selectedSample || !result) {
-      return null
-    }
-
-    return {
-      request_title: selectedSample.title,
-      category: result.triage.category,
-      priority: result.triage.priority,
-      risk_level: result.triage.risk_level,
-      next_action: result.triage.next_action,
-      outcome: {
-        lead_time_before_days: baselineDays,
-        lead_time_after_days: targetDays,
-        lead_time_reduction_pct: leadTimeReduction,
-        monthly_hours_saved: result.triage.est_savings_hours_per_month,
-      },
-      owner: 'BIS Process Optimisation CoE',
-      preset: activePreset.label,
-      handoff: {
-        jira: result.exports.jira_issue_create,
-        serviceNow: result.exports.servicenow_record_create,
-        tracker: result.exports.process_tracker_row,
-      },
-    }
-  }, [selectedSample, result, baselineDays, targetDays, leadTimeReduction, activePreset.label])
-
-  const beforeFlow = useMemo(() => {
-    if (!selectedSample) {
-      return []
-    }
-
-    return [
-      `Request enters through ${selectedSample.channel}.`,
-      'Analyst triages manually.',
-      'Missing info is chased over email/chat.',
-      'Approvals and updates are logged manually.',
-    ]
-  }, [selectedSample])
-
-  const afterFlow = useMemo(() => {
+  const manualFlow = useMemo(() => {
     if (!result) {
-      return ['Awaiting run', 'Awaiting run', 'Awaiting run', 'Awaiting run']
+      return ['Intake arrives in mixed format', 'Manual triage', 'Manual approval chain', 'Status follow-up by email']
+    }
+    return parseFlowSteps(result.asIsMermaid)
+  }, [result])
+
+  const automatedFlow = useMemo(() => {
+    if (!result) {
+      return ['Unified intake', 'Auto categorization', 'Policy checks', 'Automated routing', 'SLA tracking and audit log']
+    }
+    return parseFlowSteps(result.toBeMermaid)
+  }, [result])
+
+  const beforePain = useMemo(() => {
+    if (!result) {
+      return [
+        'Requests arrive with missing data.',
+        'Teams chase approvals manually.',
+        'Status is spread across email and trackers.',
+      ]
+    }
+
+    const points: string[] = []
+    if (result.extracted.pain_keywords.includes('missing_fields')) {
+      points.push('Missing fields trigger avoidable rework.')
+    }
+    if (result.extracted.pain_keywords.includes('manual_work') || result.extracted.manual_step_count > 2) {
+      points.push('Manual handoffs create queue delays.')
+    }
+    if (result.extracted.pain_keywords.includes('ownership_confusion')) {
+      points.push('Unclear ownership causes follow-up loops.')
+    }
+    if (result.extracted.pain_keywords.includes('delay')) {
+      points.push('SLA risk grows as approvals stall.')
+    }
+    if (points.length === 0) {
+      points.push('Manual routing increases lead time.')
+      points.push('Approvals depend on repeated follow-ups.')
+      points.push('No consistent audit trail per request.')
+    }
+    return points.slice(0, 3)
+  }, [result])
+
+  const afterOutcome = useMemo(() => {
+    if (!result) {
+      return [
+        'One-click packet is generated for execution.',
+        'Approvals, controls, and routing are predefined.',
+        'Handoff payloads are ready for issue trackers.',
+      ]
     }
 
     return [
-      `Auto-classify as ${pretty(result.triage.category)}.`,
-      'Generate charter and baseline metrics.',
-      'Attach controls and monitoring steps.',
-      'Generate export payloads for execution systems.',
+      `Case is auto-triaged as ${pretty(result.triage.category)} with ${result.triage.priority} priority.`,
+      `Blueprint applies ${result.blueprint.steps[2]?.description.toLowerCase() ?? 'rule-based routing'}.`,
+      `Export payloads are ready for Jira, ServiceNow, and process tracker handoff.`,
     ]
   }, [result])
+
+  const runInProgress = stage === 'analyzing' || stage === 'building' || stage === 'checking'
 
   async function handleRun(): Promise<void> {
     if (!selectedSample || !catalog) {
@@ -240,7 +242,7 @@ function App() {
     setStage('analyzing')
 
     try {
-      await sleep(110)
+      await sleep(140)
 
       const normalizedText = requestText.trim().length > 0 ? requestText : selectedSample.text
       const pipelineInput: IntakeSample = {
@@ -249,13 +251,13 @@ function App() {
       }
 
       setStage('building')
-      await sleep(110)
+      await sleep(140)
 
       const pipelineResult = runIntakePipeline(pipelineInput, catalog)
       setResult(pipelineResult)
 
       setStage('checking')
-      await sleep(110)
+      await sleep(140)
 
       setStage('ready')
     } catch (runError) {
@@ -319,17 +321,16 @@ function App() {
   return (
     <main className="demo-shell">
       <section className="layout">
-        <header className="top-band">
-          <p className="kicker">BIS Process Optimisation</p>
-          <h1>One request in. One execution packet out.</h1>
-        </header>
+        <header className="hero-card">
+          <p className="kicker">BIS Process Optimisation Copilot</p>
+          <h1>Turn one messy request into a ready execution packet.</h1>
+          <p className="subhead">
+            Start once. Get a charter, process flow, automation blueprint, and copy-ready handoff JSON.
+          </p>
 
-        <section className="workspace">
-          <article className="intake-card">
-            <h2>1. Choose and run</h2>
-
-            <label>
-              Workflow
+          <div className="input-grid">
+            <label className="field">
+              <span>Choose request</span>
               <select value={selectedSample?.id ?? ''} onChange={(event) => handleSampleChange(event.target.value)}>
                 {samples.map((sample) => (
                   <option key={sample.id} value={sample.id}>
@@ -339,214 +340,262 @@ function App() {
               </select>
             </label>
 
-            <label>
-              Request
+            <label className="field field-wide">
+              <span>Messy input</span>
               <textarea value={requestText} rows={4} onChange={(event) => setRequestText(event.target.value)} />
             </label>
+          </div>
 
-            <div className="preset-row" role="radiogroup" aria-label="Preset">
-              {PRESETS.map((preset) => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  className={presetId === preset.id ? 'chip active' : 'chip'}
-                  onClick={() => setPresetId(preset.id)}
-                  title={preset.note}
-                >
-                  {preset.label}
-                </button>
-              ))}
+          <div className="hero-actions">
+            <button type="button" className="primary-btn" onClick={() => void handleRun()} disabled={runInProgress}>
+              {runInProgress ? 'Running...' : 'Start demo'}
+            </button>
+            <button type="button" className="secondary-btn" onClick={handleReset}>
+              Reset
+            </button>
+            <p className="status-line">
+              {stageLabel(stage)}
+              {copyStatus ? ` • ${copyStatus}` : ''}
+            </p>
+          </div>
+
+          <details className="advanced">
+            <summary>Advanced settings</summary>
+            <div className="advanced-content">
+              <div className="preset-row" role="radiogroup" aria-label="Preset">
+                {PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    className={presetId === preset.id ? 'chip active' : 'chip'}
+                    onClick={() => setPresetId(preset.id)}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={driftEnabled}
+                  onChange={(event) => setDriftEnabled(event.target.checked)}
+                />
+                Simulate wording drift
+              </label>
+              <p className="advanced-note">Active preset: {activePreset.label}</p>
             </div>
+          </details>
 
-            <div className="action-row">
-              <button type="button" className="primary-btn" onClick={() => void handleRun()}>
-                Start demo
-              </button>
-              <button type="button" className="secondary-btn" onClick={handleReset}>
-                Reset
-              </button>
-            </div>
+          {error ? <p className="warning">{error}</p> : null}
+        </header>
 
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={driftEnabled}
-                onChange={(event) => setDriftEnabled(event.target.checked)}
-              />
-              Simulate wording drift
-            </label>
+        <section className={result ? 'moment-card ready' : 'moment-card'}>
+          <div className="moment-head">
+            <p className="moment-kicker">Automation moment</p>
+            <h2>{selectedSample?.title ?? 'Select a request and start'}</h2>
+          </div>
 
-            <div className="status-row">
-              <p className="status-pill">{stageLabel(stage)}</p>
-              {copyStatus ? <p className="status-pill">{copyStatus}</p> : null}
-              {error ? <p className="warning">{error}</p> : null}
-            </div>
+          <div className="impact-strip">
+            <article>
+              <span>Lead time</span>
+              <strong>
+                {formatDays(baselineDays)} {'->'} {formatDays(targetDays)}
+              </strong>
+            </article>
+            <article>
+              <span>Manual handoffs</span>
+              <strong>
+                {beforeTouches} {'->'} {afterTouches}
+              </strong>
+            </article>
+            <article>
+              <span>Capacity returned</span>
+              <strong>{result ? `${result.triage.est_savings_hours_per_month}h/month` : 'Pending run'}</strong>
+            </article>
+            <article>
+              <span>Lead-time gain</span>
+              <strong>{leadTimeReduction}% faster</strong>
+            </article>
+          </div>
 
-            <div className="run-rail" aria-label="Run stages">
-              <span className={stageRank(stage) >= 1 ? 'rail active' : 'rail'}>1. Intake</span>
-              <span className={stageRank(stage) >= 2 ? 'rail active' : 'rail'}>2. Packet</span>
-              <span className={stageRank(stage) >= 3 ? 'rail active' : 'rail'}>3. Safety</span>
-            </div>
-          </article>
+          <div className="before-after-grid">
+            <article className="before-card">
+              <h3>Before (manual)</h3>
+              <ul>
+                {beforePain.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </article>
+            <article className="after-card">
+              <h3>After (automated)</h3>
+              <ul>
+                {afterOutcome.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </article>
+          </div>
+        </section>
 
-          <article className={result ? 'outcome-card ready' : 'outcome-card'}>
-            <p className="outcome-tag">2. Automation outcome</p>
-            {result ? (
-              <>
-                <h2>{pretty(result.triage.category)} packet generated.</h2>
+        <section className="outputs-card">
+          <div className="outputs-head">
+            <h2>Your outputs</h2>
+            <p>Everything below is copy-ready for execution handoff.</p>
+          </div>
 
-                <ul className="outcome-list">
-                  <li>
-                    <span>Problem solved</span>
-                    <strong>{result.charter.problem_statement}</strong>
-                  </li>
-                  <li>
-                    <span>What changed</span>
-                    <strong>{result.triage.next_action}</strong>
-                  </li>
-                  <li>
-                    <span>Business result</span>
-                    <strong>
-                      {formatDays(baselineDays)} {'->'} {formatDays(targetDays)} lead time ({leadTimeReduction}% faster)
-                    </strong>
-                  </li>
-                </ul>
-
-                <div className="result-metrics">
+          {result ? (
+            <div className="outputs-grid">
+              <article className="output-tile">
+                <h3>Project charter</h3>
+                <p className="tile-main">{result.charter.problem_statement}</p>
+                <div className="tile-stats">
                   <p>
-                    <span>Touchpoints</span>
-                    <strong>
-                      {beforeTouches} {'->'} {afterTouches}
-                    </strong>
-                  </p>
-                  <p>
-                    <span>Monthly capacity</span>
-                    <strong>{result.triage.est_savings_hours_per_month}h saved</strong>
+                    <span>Category</span>
+                    <strong>{pretty(result.triage.category)}</strong>
                   </p>
                   <p>
                     <span>Priority</span>
                     <strong>{result.triage.priority}</strong>
                   </p>
+                  <p>
+                    <span>Risk</span>
+                    <strong>{pretty(result.triage.risk_level)}</strong>
+                  </p>
                 </div>
-              </>
-            ) : (
-              <>
-                <h2>No output yet.</h2>
-                <p className="placeholder">Run the demo to reveal the automation result.</p>
-              </>
-            )}
-          </article>
-        </section>
-
-        <section className="deliverables-card">
-          <h2>3. Ready to hand off</h2>
-
-          {result ? (
-            <div className="deliverables-grid">
-              <article className="tile">
-                <h3>Charter</h3>
-                <p>{result.charter.problem_statement}</p>
-                <button type="button" className="secondary-btn mini" onClick={() => void handleCopy('Charter JSON', result.charter)}>
+                <button
+                  type="button"
+                  className="secondary-btn mini"
+                  onClick={() =>
+                    void handleCopy('Charter JSON', {
+                      triage: result.triage,
+                      charter: result.charter,
+                    })
+                  }
+                >
                   Copy charter JSON
                 </button>
               </article>
 
-              <article className="tile">
-                <h3>Blueprint</h3>
-                <ul>
-                  {result.blueprint.steps.slice(0, 4).map((step) => (
-                    <li key={step.id}>{step.name}</li>
-                  ))}
-                </ul>
-                <button type="button" className="secondary-btn mini" onClick={() => void handleCopy('Blueprint JSON', result.blueprint)}>
+              <article className="output-tile">
+                <h3>Process flow</h3>
+                <div className="flow-grid">
+                  <div>
+                    <p className="flow-label">As-is</p>
+                    <ol>
+                      {manualFlow.map((step) => (
+                        <li key={`manual-${step}`}>{step}</li>
+                      ))}
+                    </ol>
+                  </div>
+                  <div>
+                    <p className="flow-label">To-be</p>
+                    <ol>
+                      {automatedFlow.map((step) => (
+                        <li key={`auto-${step}`}>{step}</li>
+                      ))}
+                    </ol>
+                  </div>
+                </div>
+              </article>
+
+              <article className="output-tile">
+                <h3>Automation blueprint</h3>
+                <div className="tile-list">
+                  <p>
+                    <span>Connectors</span>
+                    <strong>{result.blueprint.connectors.map((item) => item.system).join(', ') || 'n/a'}</strong>
+                  </p>
+                  <p>
+                    <span>Main control</span>
+                    <strong>{result.blueprint.controls[0]?.control ?? 'Audit log'}</strong>
+                  </p>
+                  <p>
+                    <span>Monitoring</span>
+                    <strong>{result.blueprint.monitoring[0]?.metric ?? 'approval_cycle_time_days'}</strong>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="secondary-btn mini"
+                  onClick={() => void handleCopy('Blueprint JSON', result.blueprint)}
+                >
                   Copy blueprint JSON
                 </button>
               </article>
 
-              <article className="tile">
-                <h3>Jira payload</h3>
-                <p>Issue object ready for intake handoff.</p>
-                <button
-                  type="button"
-                  className="secondary-btn mini"
-                  onClick={() => void handleCopy('Jira JSON', result.exports.jira_issue_create)}
-                >
-                  Copy Jira JSON
-                </button>
-              </article>
-
-              <article className="tile">
-                <h3>ServiceNow + tracker</h3>
-                <p>Execution records ready for operations.</p>
-                <div className="copy-row">
+              <article className="output-tile">
+                <h3>External handoff</h3>
+                <div className="tile-list">
+                  <p>
+                    <span>Jira summary</span>
+                    <strong>{String(result.exports.jira_issue_create.summary)}</strong>
+                  </p>
+                  <p>
+                    <span>ServiceNow short description</span>
+                    <strong>{String(result.exports.servicenow_record_create.short_description)}</strong>
+                  </p>
+                </div>
+                <div className="button-stack">
+                  <button
+                    type="button"
+                    className="secondary-btn mini"
+                    onClick={() => void handleCopy('Jira JSON', result.exports.jira_issue_create)}
+                  >
+                    Copy Jira JSON
+                  </button>
                   <button
                     type="button"
                     className="secondary-btn mini"
                     onClick={() => void handleCopy('ServiceNow JSON', result.exports.servicenow_record_create)}
                   >
-                    Copy ServiceNow
+                    Copy ServiceNow JSON
                   </button>
                   <button
                     type="button"
                     className="secondary-btn mini"
                     onClick={() => void handleCopy('Tracker JSON', result.exports.process_tracker_row)}
                   >
-                    Copy tracker
+                    Copy tracker JSON
                   </button>
                 </div>
               </article>
             </div>
           ) : (
-            <p className="empty">Run the demo to generate handoff artifacts.</p>
+            <article className="empty-outputs">
+              <p>Click Start demo to generate your packet instantly.</p>
+            </article>
           )}
-
-          {kickoffBrief ? (
-            <button
-              type="button"
-              className="secondary-btn"
-              onClick={() => void handleCopy('Kickoff brief', kickoffBrief)}
-            >
-              Copy kickoff brief
-            </button>
-          ) : null}
         </section>
 
         <details className="details-card">
           <summary>Open full packet details</summary>
-          <div className="details-grid">
-            <section className="flow-grid">
+          {result ? (
+            <div className="json-grid">
               <article>
-                <h3>Before flow</h3>
-                <ol>
-                  {beforeFlow.map((step) => (
-                    <li key={step}>{step}</li>
-                  ))}
-                </ol>
+                <h3>Packet JSON</h3>
+                <pre>
+                  {JSON.stringify(
+                    {
+                      triage: result.triage,
+                      charter: result.charter,
+                      blueprint: result.blueprint,
+                      as_is_flow: manualFlow,
+                      to_be_flow: automatedFlow,
+                    },
+                    null,
+                    2,
+                  )}
+                </pre>
               </article>
-
               <article>
-                <h3>After flow</h3>
-                <ol>
-                  {afterFlow.map((step) => (
-                    <li key={step}>{step}</li>
-                  ))}
-                </ol>
+                <h3>Export payload JSON</h3>
+                <pre>{JSON.stringify(result.exports, null, 2)}</pre>
               </article>
-            </section>
-
-            {result ? (
-              <section className="json-grid">
-                <article>
-                  <h3>Plan packet JSON</h3>
-                  <pre>{JSON.stringify({ triage: result.triage, charter: result.charter, blueprint: result.blueprint }, null, 2)}</pre>
-                </article>
-                <article>
-                  <h3>Export JSON</h3>
-                  <pre>{JSON.stringify(result.exports, null, 2)}</pre>
-                </article>
-              </section>
-            ) : null}
-          </div>
+            </div>
+          ) : (
+            <p className="empty-outputs">Run the demo to open packet details.</p>
+          )}
         </details>
       </section>
     </main>
