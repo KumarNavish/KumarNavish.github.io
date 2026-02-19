@@ -43,11 +43,26 @@ export function DashboardPage() {
     <div className="page builder-page overview-flow">
       <section className="hero hero-primary builder-hero overview-hero">
         <p className="eyebrow">Motivation</p>
-        <h1>I build ML decision systems that stay dependable under change.</h1>
+        <h1>I am an applied ML systems engineer focused on reliable decisions.</h1>
         <p className="hero-copy">
-          One practical objective drives the portfolio: keep critical decisions stable as data,
-          objectives, and constraints shift.
+          I build decision systems that stay stable as data, objectives, and operating constraints
+          change.
         </p>
+
+        <div className="identity-snapshot" aria-label="Identity at a glance">
+          <article className="identity-card">
+            <p className="matrix-label">Who I am</p>
+            <p>Research-grounded builder who ships applied ML systems.</p>
+          </article>
+          <article className="identity-card">
+            <p className="matrix-label">What I build</p>
+            <p>Reliability-focused models, tools, and decision workflows.</p>
+          </article>
+          <article className="identity-card">
+            <p className="matrix-label">Why it matters</p>
+            <p>Operations get systems they can trust under real change.</p>
+          </article>
+        </div>
 
         <div className="overview-fact-row" aria-label="Motivation context">
           <article className="overview-fact">
@@ -70,9 +85,9 @@ export function DashboardPage() {
       <PageCompass
         title="Quick Scan"
         steps={[
-          'Define the pressure.',
-          'Use the three signals for scale.',
-          'Carry these principles into Skills.',
+          'Start with identity and objective.',
+          'Use the signals for scale.',
+          'Follow the arc into Skills.',
         ]}
         outcome="Everything that follows is a response to this operating constraint."
       />
