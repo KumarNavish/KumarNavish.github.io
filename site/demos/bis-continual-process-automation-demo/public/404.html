@@ -6,21 +6,12 @@
     <title>Redirecting to PromoPilot</title>
     <link rel="canonical" href="https://kumarnavish.github.io/promopilot/" />
     <meta name="robots" content="noindex, follow" />
-    <meta http-equiv="cache-control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="pragma" content="no-cache" />
-    <meta http-equiv="expires" content="0" />
     <meta http-equiv="refresh" content="0; url=https://kumarnavish.github.io/promopilot/" />
     <script>
       ;(() => {
-        const current = new URL(window.location.href)
-        if (current.pathname.startsWith('/promopilot/')) {
-          return
-        }
-
         const destination = new URL('https://kumarnavish.github.io/promopilot/')
-        destination.search = current.search
-        destination.hash = current.hash
-
+        destination.search = window.location.search
+        destination.hash = window.location.hash
         window.location.replace(destination.toString())
       })()
     </script>
