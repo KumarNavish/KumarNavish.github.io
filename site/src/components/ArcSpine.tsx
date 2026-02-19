@@ -3,10 +3,7 @@ import { Link } from 'react-router-dom'
 import { ARC_STEPS, getArcNeighbors, type ArcStepId } from '../lib/arc'
 
 export function ArcSpine({ current }: { current: ArcStepId }) {
-  const { previous, current: currentStep, next } = getArcNeighbors(current)
-  const context = previous
-    ? `${previous.label} establishes the premise for ${currentStep.label.toLowerCase()}.`
-    : 'This is the opening anchor for the arc.'
+  const { current: currentStep, next } = getArcNeighbors(current)
 
   return (
     <section className="panel arc-spine-panel" aria-label="Narrative spine">
@@ -26,10 +23,7 @@ export function ArcSpine({ current }: { current: ArcStepId }) {
       </ol>
 
       <p className="arc-spine-summary">
-        <strong>{currentStep.readerQuestion}</strong> {currentStep.question}
-      </p>
-      <p className="arc-spine-summary arc-spine-summary-subtle">
-        {currentStep.purpose} {context} {currentStep.handoff}
+        <strong>{currentStep.label}</strong> · {currentStep.purpose}
       </p>
       <Link className="action-link action-link-primary arc-spine-next-link" to={next ? next.route : '/'}>
         {next ? `Continue to ${next.label}` : 'Return to Motivation'}

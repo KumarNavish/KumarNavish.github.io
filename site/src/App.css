@@ -1130,8 +1130,30 @@ a:hover {
   max-width: 50ch;
 }
 
+.identity-snapshot {
+  margin-top: 1.02rem;
+  display: grid;
+  gap: 0.56rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  max-width: 780px;
+}
+
+.identity-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fefdf9;
+  padding: 0.62rem 0.68rem;
+}
+
+.identity-card p {
+  margin: 0.26rem 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.44;
+}
+
 .overview-fact-row {
-  margin-top: 1.16rem;
+  margin-top: 0.92rem;
   display: grid;
   gap: 0.72rem;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1222,15 +1244,6 @@ a:hover {
   color: var(--muted);
   line-height: 1.48;
   font-size: 0.89rem;
-}
-
-.arc-spine-summary-subtle {
-  font-size: 0.84rem;
-  color: color-mix(in srgb, var(--muted) 90%, #4a4d46);
-}
-
-.arc-spine-summary + .arc-spine-summary {
-  margin-top: -0.14rem;
 }
 
 .arc-spine-next-link {
@@ -1425,6 +1438,7 @@ a:hover {
 }
 
 @media (max-width: 980px) {
+  .identity-snapshot,
   .overview-fact-row,
   .proof-stat-grid,
   .implication-grid,
