@@ -23,6 +23,7 @@ site/.vite/
 site/public/api/
 site/public/ops/
 site/public/artifacts/
+site/public/safepatch/
 
 # OS/editor
 .DS_Store

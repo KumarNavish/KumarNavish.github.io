@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SafePatch Geometry</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Constrained update certifier</p>
+          <h1>SafePatch Geometry</h1>
+          <p class="story">
+            Red shows the unconstrained update. Blue shows the projected, ship-safe update under active guardrails.
+          </p>
+        </div>
+        <button id="replay-button" class="ghost-button" type="button">Replay projection</button>
+      </header>
+
+      <section class="canvas-panel">
+        <div class="status-row">
+          <span id="ship-indicator" class="ship-indicator hold">HOLD</span>
+          <span id="hold-reason" class="hold-reason">Waiting for projection...</span>
+        </div>
+        <canvas id="scene-canvas" class="scene-canvas"></canvas>
+      </section>
+
+      <section class="controls-grid">
+        <article class="card">
+          <h2>Controls</h2>
+          <label class="control">
+            <span>Step size η</span>
+            <span id="eta-value" class="value-chip">0.55</span>
+            <input id="eta-slider" type="range" min="0.1" max="1.2" step="0.01" value="0.55" />
+          </label>
+
+          <label class="toggle-row" for="guardrail-toggle">
+            <span>Enable extra guardrail</span>
+            <input id="guardrail-toggle" type="checkbox" checked />
+          </label>
+
+          <div class="budget-grid">
+            <label class="control">
+              <span>ε1</span>
+              <span id="eps-g1-value" class="value-chip">0.94</span>
+              <input id="eps-g1" type="range" min="0.45" max="1.4" step="0.01" value="0.94" />
+            </label>
+
+            <label class="control">
+              <span>ε2</span>
+              <span id="eps-g2-value" class="value-chip">0.88</span>
+              <input id="eps-g2" type="range" min="0.45" max="1.4" step="0.01" value="0.88" />
+            </label>
+
+            <label class="control">
+              <span>ε3</span>
+              <span id="eps-g3-value" class="value-chip">0.90</span>
+              <input id="eps-g3" type="range" min="0.45" max="1.4" step="0.01" value="0.90" />
+            </label>
+
+            <label class="control">
+              <span>ε4</span>
+              <span id="eps-g4-value" class="value-chip">0.76</span>
+              <input id="eps-g4" type="range" min="0.35" max="1.4" step="0.01" value="0.76" />
+            </label>
+          </div>
+        </article>
+
+        <article class="card">
+          <h2>Dual weights λk</h2>
+          <div id="lambda-dials" class="dial-grid" aria-live="polite"></div>
+
+          <dl class="stats">
+            <div>
+              <dt>Objective shift</dt>
+              <dd id="objective-delta" class="good">0.0000 (improved)</dd>
+            </div>
+            <div>
+              <dt>Active constraints</dt>
+              <dd id="active-set">none</dd>
+            </div>
+          </dl>
+        </article>
+      </section>
+    </main>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

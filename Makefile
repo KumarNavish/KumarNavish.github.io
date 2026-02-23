@@ -14,6 +14,7 @@ site-build: site-install
 
 demo-build: site-install
 	cd site && $(NPM) run bis-demo:build
+	cd site && $(NPM) run safepatch:build
 
 site-test: site-install
 	cd site && $(NPM) run test
