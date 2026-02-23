@@ -5,26 +5,18 @@ import {
   Halfspace,
   Polygon,
   Vec2,
-  add,
-  dot,
-  intersectHalfspaces,
   lerp,
-  norm,
   normalize,
-  scale,
   vec,
   worldBoundsFromHalfspaces,
+  intersectHalfspaces,
 } from './geometry'
 import { ProjectionResult, computeProjectedStep } from './qp'
-import { CorrectionVisual, SceneRenderer, paletteForConstraints } from './render'
+import { SceneRenderer, paletteForConstraints } from './render'
 import { UIController } from './ui'
 
 const GRADIENT_NEW: Vec2 = vec(1.45, -1.12)
-
-const TOTAL_ANIMATION_MS = 2000
-const RAW_END = 0.26
-const SCAN_END = 0.5
-const CORRECTION_END = 0.86
+const TRANSITION_MS = 920
 
 const baseHalfspaces: Halfspace[] = [
   {
@@ -57,27 +49,33 @@ const baseHalfspaces: Halfspace[] = [
   },
 ]
 
-const MATH_FORMULAS = {
+const MATH = {
   primal: String.raw`\begin{aligned}
-\Delta_0 &= -\eta\,g_{\text{new}} \\
-\Delta^* &= \operatorname*{arg\,min}_{\Delta}\;\langle g_{\text{new}}, \Delta \rangle + \frac{1}{2\eta}\lVert \Delta \rVert^2 \\
-\text{s.t.}\;&\langle g_k,\Delta\rangle \le \varepsilon_k,\;\forall k
+\Delta_0 &= -\eta\,g_{\mathrm{new}} \\
+\Delta^* &= \operatorname*{arg\,min}_{\Delta}\;\langle g_{\mathrm{new}},\Delta\rangle + \frac{1}{2\eta}\lVert\Delta\rVert^2 \\
+\text{s.t.}\;&\langle g_k,\Delta\rangle \le \varepsilon_k\;\forall k
 \end{aligned}`,
-  dual: String.raw`\Delta^*=\Delta_0-\eta\sum_k \lambda_k g_k,\qquad \lambda_k \ge 0`,
+  dual: String.raw`\Delta^*=\Delta_0-\eta\sum_k\lambda_k g_k,\qquad \lambda_k\ge0`,
+  eta: String.raw`\Delta_0=-\eta g_{\mathrm{new}}`,
+  g1: String.raw`-\Delta_x\le\varepsilon_1`,
+  g2: String.raw`\Delta_y\le\varepsilon_2`,
+  g3: String.raw`\langle g_3,\Delta\rangle\le\varepsilon_3`,
+  g4: String.raw`\langle g_4,\Delta\rangle\le\varepsilon_4`,
 }
 
-interface AnimatedCorrection extends CorrectionVisual {
-  lambda: number
-}
-
-interface VisualSnapshot {
+interface Snapshot {
+  halfspaces: Halfspace[]
   zone: Polygon
-  step0: Vec2
-  projectedStep: Vec2
+  rawStep: Vec2
+  safeStep: Vec2
+  lambdas: Record<string, number>
 }
 
 function copyHalfspaces(halfspaces: Halfspace[]): Halfspace[] {
-  return halfspaces.map((halfspace) => ({ ...halfspace, normal: { ...halfspace.normal } }))
+  return halfspaces.map((halfspace) => ({
+    ...halfspace,
+    normal: { ...halfspace.normal },
+  }))
 }
 
 function copyPolygon(polygon: Polygon): Polygon {
@@ -99,99 +97,11 @@ function easeInOutCubic(value: number): number {
   return 1 - ((-2 * t + 2) ** 3) / 2
 }
 
-function phaseFromProgress(progress: number): number {
-  if (progress < RAW_END) {
-    return 0
-  }
-  if (progress < SCAN_END) {
-    return 1
-  }
-  if (progress < CORRECTION_END) {
-    return 2
-  }
-  return 3
+function safeStepOf(projection: ProjectionResult): Vec2 {
+  return projection.ship ? projection.projectedStep : projection.step0
 }
 
-function phaseCaption(phase: number, ship: boolean): string {
-  if (!ship) {
-    if (phase === 0) {
-      return 'Raw step is computed.'
-    }
-    if (phase === 1) {
-      return 'Guardrail check finds violations.'
-    }
-    if (phase === 2) {
-      return 'Projection fails with current budgets.'
-    }
-    return 'HOLD: relax budgets or disable a guardrail.'
-  }
-
-  if (phase === 0) {
-    return 'Raw unconstrained update.'
-  }
-  if (phase === 1) {
-    return 'Violations are measured against each guardrail.'
-  }
-  if (phase === 2) {
-    return 'Dual forces sequentially bend the step back.'
-  }
-  return 'Certified projected step is ready to ship.'
-}
-
-function correctionProgress(globalProgress: number, index: number, total: number): number {
-  if (total <= 0) {
-    return 0
-  }
-  const local = globalProgress * total - index
-  return easeInOutCubic(clamp(local))
-}
-
-function buildTargetCorrections(
-  projection: ProjectionResult,
-  halfspaces: Halfspace[],
-  colorById: Record<string, string>,
-): AnimatedCorrection[] {
-  return halfspaces
-    .filter((halfspace) => halfspace.active)
-    .map((halfspace) => ({
-      id: halfspace.id,
-      vector: projection.correctionById[halfspace.id] ?? vec(0, 0),
-      color: colorById[halfspace.id],
-      progress: 0,
-      lambda: projection.lambdaById[halfspace.id] ?? 0,
-    }))
-    .filter((correction) => norm(correction.vector) > 1e-8)
-    .sort((a, b) => b.lambda - a.lambda)
-}
-
-function applyAnimatedCorrections(step0: Vec2, corrections: AnimatedCorrection[]): Vec2 {
-  let totalCorrection = vec(0, 0)
-  for (const correction of corrections) {
-    totalCorrection = add(totalCorrection, scale(correction.vector, correction.progress))
-  }
-  return add(step0, totalCorrection)
-}
-
-function violationsForStep(step: Vec2, halfspaces: Halfspace[]): Record<string, number> {
-  const violations: Record<string, number> = {}
-  for (const halfspace of halfspaces) {
-    violations[halfspace.id] = halfspace.active ? dot(halfspace.normal, step) - halfspace.bound : 0
-  }
-  return violations
-}
-
-function maxViolation(violationById: Record<string, number>, halfspaces: Halfspace[]): number {
-  let max = -Infinity
-  for (const halfspace of halfspaces) {
-    if (!halfspace.active) {
-      continue
-    }
-    max = Math.max(max, violationById[halfspace.id] ?? 0)
-  }
-  return Number.isFinite(max) ? max : 0
-}
-
-function renderMathBlock(elementId: string, expression: string): void {
+function renderMathBlock(elementId: string, expression: string, displayMode = true): void {
   const node = document.getElementById(elementId)
   if (!node) {
     return
@@ -200,7 +110,7 @@ function renderMathBlock(elementId: string, expression: string): void {
   try {
     katex.render(expression, node, {
       throwOnError: true,
-      displayMode: true,
+      displayMode,
       strict: 'warn',
     })
   } catch {
@@ -208,9 +118,36 @@ function renderMathBlock(elementId: string, expression: string): void {
   }
 }
 
+function blendLambdas(
+  previous: Record<string, number>,
+  next: Record<string, number>,
+  ids: string[],
+  blend: number,
+): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const id of ids) {
+    const from = previous[id] ?? 0
+    const to = next[id] ?? 0
+    out[id] = from + (to - from) * blend
+  }
+  return out
+}
+
+function storyLine(transitionProgress: number): string {
+  if (transitionProgress < 0.98) {
+    return 'Gray traces show the previous policy. Blue/red vectors are morphing to the new setting from your knob change.'
+  }
+  return 'Adjust η or any εk. Red shows what the model wants to do; blue shows what is safe to ship.'
+}
+
 function start(): void {
-  renderMathBlock('math-primal', MATH_FORMULAS.primal)
-  renderMathBlock('math-dual', MATH_FORMULAS.dual)
+  renderMathBlock('math-primal', MATH.primal, true)
+  renderMathBlock('math-dual', MATH.dual, true)
+  renderMathBlock('knob-eta-math', MATH.eta, false)
+  renderMathBlock('knob-g1-math', MATH.g1, false)
+  renderMathBlock('knob-g2-math', MATH.g2, false)
+  renderMathBlock('knob-g3-math', MATH.g3, false)
+  renderMathBlock('knob-g4-math', MATH.g4, false)
 
   const canvas = document.getElementById('scene-canvas') as HTMLCanvasElement | null
   if (!canvas) {
@@ -223,26 +160,30 @@ function start(): void {
   const ui = new UIController(halfspaces)
 
   let eta = 0.72
-  let zone: Polygon = { vertices: [], isEmpty: true }
-  let projection: ProjectionResult = computeProjectedStep({
+  let zone = intersectHalfspaces(halfspaces, worldBoundsFromHalfspaces(halfspaces))
+  let projection = computeProjectedStep({
     gradient: GRADIENT_NEW,
     eta,
     halfspaces,
   })
 
-  let targetCorrections: AnimatedCorrection[] = []
-  let previousSnapshot: VisualSnapshot | null = null
-  let animationStart = performance.now()
-  let changeStart = performance.now()
+  let previous: Snapshot | null = null
+  let transitionStart = performance.now()
   let initialized = false
 
-  function applyControls(restartAnimation = true, capturePrevious = true): void {
+  function currentSnapshot(): Snapshot {
+    return {
+      halfspaces: copyHalfspaces(halfspaces),
+      zone: copyPolygon(zone),
+      rawStep: { ...projection.step0 },
+      safeStep: { ...safeStepOf(projection) },
+      lambdas: { ...projection.lambdaById },
+    }
+  }
+
+  function applyControls(capturePrevious = true): void {
     if (capturePrevious && initialized) {
-      previousSnapshot = {
-        zone: copyPolygon(zone),
-        step0: { ...projection.step0 },
-        projectedStep: projection.ship ? { ...projection.projectedStep } : { ...projection.step0 },
-      }
+      previous = currentSnapshot()
     }
 
     const controls = ui.readControlValues()
@@ -260,99 +201,60 @@ function start(): void {
       halfspaces,
     })
 
-    targetCorrections = projection.ship ? buildTargetCorrections(projection, halfspaces, colorById) : []
-
-    if (restartAnimation) {
-      animationStart = performance.now()
-    }
-
-    changeStart = performance.now()
+    transitionStart = performance.now()
     initialized = true
   }
 
   function frame(now: number): void {
-    const elapsed = now - animationStart
-    const progress = clamp(elapsed / TOTAL_ANIMATION_MS)
-    const changeBlend = clamp((now - changeStart) / 780)
-    const phase = phaseFromProgress(progress)
+    const progress = clamp((now - transitionStart) / TRANSITION_MS)
+    const blend = easeInOutCubic(progress)
 
-    const step0 = projection.step0
-    const stepTarget = projection.ship ? projection.projectedStep : projection.step0
+    const targetRaw = projection.step0
+    const targetSafe = safeStepOf(projection)
 
-    let stepCurrent = step0
-    let animatedCorrections: AnimatedCorrection[] = targetCorrections.map((correction) => ({ ...correction }))
+    const previousRaw = previous?.rawStep ?? targetRaw
+    const previousSafe = previous?.safeStep ?? targetSafe
 
-    if (progress < RAW_END) {
-      const t = easeInOutCubic(progress / RAW_END)
-      stepCurrent = scale(step0, t)
-      animatedCorrections = animatedCorrections.map((correction) => ({ ...correction, progress: 0 }))
-    } else if (progress < SCAN_END || !projection.ship) {
-      stepCurrent = step0
-      animatedCorrections = animatedCorrections.map((correction) => ({ ...correction, progress: 0 }))
-    } else {
-      const correctionGlobal = clamp((progress - SCAN_END) / (CORRECTION_END - SCAN_END))
-      animatedCorrections = animatedCorrections.map((correction, index) => {
-        const fraction = correctionProgress(correctionGlobal, index, animatedCorrections.length)
-        return {
-          ...correction,
-          progress: fraction,
-        }
-      })
+    const rawDisplay = lerp(previousRaw, targetRaw, blend)
+    const safeDisplay = lerp(previousSafe, targetSafe, blend)
 
-      stepCurrent = applyAnimatedCorrections(step0, animatedCorrections)
+    const ids = halfspaces.map((halfspace) => halfspace.id)
+    const lambdasDisplay = blendLambdas(previous?.lambdas ?? {}, projection.lambdaById, ids, blend)
 
-      if (progress >= CORRECTION_END) {
-        const settle = easeInOutCubic((progress - CORRECTION_END) / (1 - CORRECTION_END))
-        stepCurrent = lerp(stepCurrent, stepTarget, settle)
-      }
-    }
-
-    const lambdasCurrent: Record<string, number> = {}
-    for (const halfspace of halfspaces) {
-      lambdasCurrent[halfspace.id] = 0
-    }
-    for (const correction of animatedCorrections) {
-      const targetLambda = projection.lambdaById[correction.id] ?? 0
-      lambdasCurrent[correction.id] = targetLambda * correction.progress
-    }
-
-    const violationCurrentById = violationsForStep(stepCurrent, halfspaces)
-    const maxViolationCurrent = maxViolation(violationCurrentById, halfspaces)
-    const activeSetCurrent = Object.entries(lambdasCurrent)
-      .filter(([, lambda]) => lambda > 1e-4)
-      .map(([id]) => id)
-
-    const reason = projection.ship
-      ? 'Blue endpoint is feasible for all active guardrails.'
-      : projection.reason ?? 'No feasible projected step under current budgets.'
+    const shipReason = projection.ship
+      ? 'Projected step is inside all active guardrails.'
+      : projection.reason ?? 'No feasible projected step under current limits.'
 
     renderer.render({
       halfspaces,
-      diagnostics: projection.diagnostics,
       zone,
-      step0,
-      stepCurrent,
-      stepTarget,
-      corrections: animatedCorrections,
-      violationById: violationCurrentById,
-      phaseLabel: phaseCaption(phase, projection.ship),
-      ship: projection.ship,
-      phaseIndex: phase,
-      previous: previousSnapshot,
-      changeBlend,
+      rawStep: rawDisplay,
+      safeStep: safeDisplay,
+      rawTarget: targetRaw,
+      safeTarget: targetSafe,
+      violationRaw: projection.maxViolationStep0,
+      violationSafe: projection.maxViolationProjected,
+      previous: previous
+        ? {
+            halfspaces: previous.halfspaces,
+            zone: previous.zone,
+            rawStep: previous.rawStep,
+            safeStep: previous.safeStep,
+          }
+        : null,
+      changeProgress: progress,
     })
 
     ui.renderFrame({
-      phaseIndex: phase,
-      phaseCaption: phaseCaption(phase, projection.ship),
       ship: projection.ship,
-      reason,
-      step0,
-      stepCurrent,
-      lambdas: lambdasCurrent,
-      maxViolationStep0: projection.maxViolationStep0,
-      maxViolationCurrent,
-      activeSetIds: activeSetCurrent,
+      reason: shipReason,
+      story: storyLine(progress),
+      rawStep: targetRaw,
+      safeStep: targetSafe,
+      lambdas: lambdasDisplay,
+      maxViolationRaw: projection.maxViolationStep0,
+      maxViolationSafe: projection.maxViolationProjected,
+      descentRetainedRatio: projection.descentRetainedRatio,
       colorById,
     })
 
@@ -360,11 +262,13 @@ function start(): void {
   }
 
   ui.onControlsChange(() => {
-    applyControls(true, true)
+    applyControls(true)
   })
 
   ui.onReplay(() => {
-    applyControls(true, false)
+    if (previous) {
+      transitionStart = performance.now()
+    }
   })
 
   window.addEventListener('resize', () => {
@@ -372,7 +276,7 @@ function start(): void {
   })
 
   renderer.resize()
-  applyControls(true, false)
+  applyControls(false)
   requestAnimationFrame(frame)
 }
 

@@ -8,16 +8,15 @@ export interface ControlValues {
 }
 
 export interface ProofFrameUi {
-  phaseIndex: number
-  phaseCaption: string
   ship: boolean
   reason: string | null
-  step0: Vec2
-  stepCurrent: Vec2
+  story: string
+  rawStep: Vec2
+  safeStep: Vec2
   lambdas: Record<string, number>
-  maxViolationStep0: number
-  maxViolationCurrent: number
-  activeSetIds: string[]
+  maxViolationRaw: number
+  maxViolationSafe: number
+  descentRetainedRatio: number
   colorById: Record<string, string>
 }
 
@@ -38,9 +37,16 @@ function angleBetweenDegrees(a: Vec2, b: Vec2): number {
   if (na <= 1e-8 || nb <= 1e-8) {
     return 0
   }
-
   const cosine = clamp(dot(a, b) / (na * nb), -1, 1)
   return (Math.acos(cosine) * 180) / Math.PI
+}
+
+function positivePart(value: number): number {
+  return Math.max(0, value)
+}
+
+function formatPercent(value: number): string {
+  return `${(value * 100).toFixed(1)}%`
 }
 
 export class UIController {
@@ -51,12 +57,12 @@ export class UIController {
   private readonly shipIndicator: HTMLElement
   private readonly shipReason: HTMLElement
   private readonly phaseCaption: HTMLElement
-  private readonly phaseItems: HTMLLIElement[]
   private readonly kktNumeric: HTMLElement
   private readonly liveEquation: HTMLElement
+  private readonly metricRawViolation: HTMLElement
+  private readonly metricSafeViolation: HTMLElement
+  private readonly metricRetained: HTMLElement
   private readonly metricAngle: HTMLElement
-  private readonly metricViolation: HTMLElement
-  private readonly metricActiveSet: HTMLElement
   private readonly budgetInputs: Map<string, HTMLInputElement>
   private readonly budgetValues: Map<string, HTMLElement>
   private readonly lambdaRows: Map<string, LambdaRow>
@@ -68,18 +74,21 @@ export class UIController {
     this.etaSlider = this.getElement<HTMLInputElement>('eta-slider')
     this.etaValue = this.getElement('eta-value')
     this.guardrailToggle = this.getElement<HTMLInputElement>('guardrail-toggle')
+
     this.shipIndicator = this.getElement('ship-indicator')
     this.shipReason = this.getElement('ship-reason')
     this.phaseCaption = this.getElement('phase-caption')
-    this.phaseItems = Array.from(document.querySelectorAll<HTMLLIElement>('#phase-track li'))
     this.kktNumeric = this.getElement('kkt-numeric')
     this.liveEquation = this.getElement('live-equation')
+
+    this.metricRawViolation = this.getElement('metric-raw-violation')
+    this.metricSafeViolation = this.getElement('metric-safe-violation')
+    this.metricRetained = this.getElement('metric-retained')
     this.metricAngle = this.getElement('metric-angle')
-    this.metricViolation = this.getElement('metric-violation')
-    this.metricActiveSet = this.getElement('metric-active-set')
 
     this.budgetInputs = new Map<string, HTMLInputElement>()
     this.budgetValues = new Map<string, HTMLElement>()
+
     for (const halfspace of halfspaces) {
       this.budgetInputs.set(halfspace.id, this.getElement<HTMLInputElement>(`eps-${halfspace.id}`))
       this.budgetValues.set(halfspace.id, this.getElement(`eps-${halfspace.id}-value`))
@@ -113,6 +122,7 @@ export class UIController {
 
   readControlValues(): ControlValues {
     const epsById: Record<string, number> = {}
+
     for (const halfspace of this.halfspaces) {
       const input = this.budgetInputs.get(halfspace.id)
       if (!input) {
@@ -129,69 +139,71 @@ export class UIController {
   }
 
   renderFrame(frame: ProofFrameUi): void {
-    this.phaseCaption.textContent = frame.phaseCaption
-    this.updatePhaseTrack(frame.phaseIndex)
-
     this.shipIndicator.textContent = frame.ship ? 'SHIP' : 'HOLD'
     this.shipIndicator.classList.toggle('ship', frame.ship)
     this.shipIndicator.classList.toggle('hold', !frame.ship)
-    this.shipReason.textContent = frame.ship
-      ? frame.reason ?? 'Projected step remains inside all active guardrails.'
-      : frame.reason ?? 'No feasible projected step under current budgets.'
 
-    const angle = angleBetweenDegrees(frame.step0, frame.stepCurrent)
+    this.shipReason.textContent = frame.reason ?? 'No feasible projected update.'
+    this.phaseCaption.textContent = frame.story
+
+    this.metricRawViolation.textContent = `+${positivePart(frame.maxViolationRaw).toFixed(3)}`
+    this.metricRawViolation.classList.add('bad')
+
+    this.metricSafeViolation.textContent = `+${positivePart(frame.maxViolationSafe).toFixed(3)}`
+    this.metricSafeViolation.classList.toggle('good', positivePart(frame.maxViolationSafe) <= 1e-6)
+    this.metricSafeViolation.classList.toggle('bad', positivePart(frame.maxViolationSafe) > 1e-6)
+
+    this.metricRetained.textContent = formatPercent(frame.descentRetainedRatio)
+    this.metricRetained.classList.toggle('good', frame.descentRetainedRatio >= 0.55)
+    this.metricRetained.classList.toggle('bad', frame.descentRetainedRatio < 0.55)
+
+    const angle = angleBetweenDegrees(frame.rawStep, frame.safeStep)
     this.metricAngle.textContent = `${angle.toFixed(1)}°`
 
-    const removedViolation = Math.max(0, frame.maxViolationStep0) - Math.max(0, frame.maxViolationCurrent)
-    this.metricViolation.textContent = `${removedViolation >= 0 ? '+' : ''}${removedViolation.toFixed(3)}`
-    this.metricViolation.classList.toggle('good', removedViolation >= -1e-6)
-    this.metricViolation.classList.toggle('bad', removedViolation < -1e-6)
+    this.kktNumeric.textContent = `Raw Δ0 = (${frame.rawStep.x.toFixed(3)}, ${frame.rawStep.y.toFixed(3)}) · Safe Δ* = (${frame.safeStep.x.toFixed(3)}, ${frame.safeStep.y.toFixed(3)})`
 
-    this.metricActiveSet.textContent = frame.activeSetIds.length > 0 ? frame.activeSetIds.join(', ') : 'none'
-
-    this.kktNumeric.textContent = `Δ(t) = (${frame.stepCurrent.x.toFixed(3)}, ${frame.stepCurrent.y.toFixed(3)}) | max v(t) = ${frame.maxViolationCurrent.toFixed(4)}`
     this.renderLiveEquation(frame)
-
     this.renderLambdas(frame)
   }
 
-  private liveDecomposition(frame: ProofFrameUi): string {
-    const terms = this.halfspaces
-      .filter((halfspace) => halfspace.active)
-      .map((halfspace) => ({
-        id: halfspace.id,
-        lambda: frame.lambdas[halfspace.id] ?? 0,
-      }))
-      .filter((entry) => entry.lambda > 1e-4)
-      .sort((a, b) => b.lambda - a.lambda)
-      .map((entry) => {
-        const index = entry.id.replace('g', '')
-        return `${entry.lambda.toFixed(2)}\\,g_{${index}}`
-      })
-
-    if (terms.length === 0) {
-      return String.raw`\Delta(t) = \Delta_0`
-    }
-
-    return String.raw`\Delta(t)=\Delta_0-\eta\left(${terms.join(' + ')}\right)`
-  }
-
   private renderLiveEquation(frame: ProofFrameUi): void {
-    const equation = this.liveDecomposition(frame)
-    if (equation === this.lastLiveEquation) {
+    const expression = this.liveDecomposition(frame.lambdas)
+    if (expression === this.lastLiveEquation) {
       return
     }
 
-    this.lastLiveEquation = equation
+    this.lastLiveEquation = expression
+
     try {
-      katex.render(equation, this.liveEquation, {
+      katex.render(expression, this.liveEquation, {
         throwOnError: true,
         displayMode: true,
         strict: 'warn',
       })
     } catch {
-      this.liveEquation.textContent = equation
+      this.liveEquation.textContent = expression
     }
+  }
+
+  private liveDecomposition(lambdas: Record<string, number>): string {
+    const activeTerms = this.halfspaces
+      .filter((halfspace) => halfspace.active)
+      .map((halfspace) => ({
+        id: halfspace.id,
+        lambda: lambdas[halfspace.id] ?? 0,
+      }))
+      .filter((entry) => entry.lambda > 1e-4)
+      .sort((a, b) => b.lambda - a.lambda)
+      .map((entry) => {
+        const index = entry.id.replace('g', '')
+        return `${entry.lambda.toFixed(2)}\\cdot g_{${index}}`
+      })
+
+    if (activeTerms.length === 0) {
+      return String.raw`\Delta^*=\Delta_0`
+    }
+
+    return String.raw`\Delta^*=\Delta_0-\eta\left(${activeTerms.join(' + ')}\right)`
   }
 
   private renderLambdas(frame: ProofFrameUi): void {
@@ -213,13 +225,6 @@ export class UIController {
       row.fill.style.setProperty('--bar-color', frame.colorById[halfspace.id] ?? '#2563eb')
       row.fill.style.width = enabled ? `${Math.min(100, (value / maxLambda) * 100)}%` : '0%'
     }
-  }
-
-  private updatePhaseTrack(activePhase: number): void {
-    this.phaseItems.forEach((item, index) => {
-      item.classList.toggle('active', index === activePhase)
-      item.classList.toggle('done', index < activePhase)
-    })
   }
 
   private syncDisplayedControlValues(): void {
