@@ -9,27 +9,97 @@
   <body>
     <main class="app-shell">
       <header class="hero">
-        <div>
-          <p class="eyebrow">Constrained update certifier</p>
+        <div class="hero-copy">
+          <p class="eyebrow">Constrained optimization in motion</p>
           <h1>SafePatch Geometry</h1>
           <p class="story">
-            Red shows the unconstrained update. Blue shows the projected, ship-safe update under active guardrails.
+            Watch the patch update move from unconstrained descent to a KKT-certified ship step, with dual weights providing the exact corrective force.
           </p>
         </div>
-        <button id="replay-button" class="ghost-button" type="button">Replay projection</button>
+        <button id="replay-button" class="ghost-button" type="button">Replay proof</button>
       </header>
 
-      <section class="canvas-panel">
-        <div class="status-row">
-          <span id="ship-indicator" class="ship-indicator hold">HOLD</span>
-          <span id="hold-reason" class="hold-reason">Waiting for projection...</span>
-        </div>
-        <canvas id="scene-canvas" class="scene-canvas"></canvas>
+      <section class="proof-grid">
+        <article class="stage-card">
+          <div class="status-strip">
+            <span id="ship-indicator" class="ship-indicator hold">HOLD</span>
+            <span id="ship-reason" class="ship-reason">Waiting for projection...</span>
+          </div>
+
+          <canvas id="scene-canvas" class="scene-canvas"></canvas>
+
+          <ol id="phase-track" class="phase-track">
+            <li>Unconstrained step</li>
+            <li>Violation scan</li>
+            <li>Dual correction</li>
+            <li>Certified ship step</li>
+          </ol>
+
+          <p id="phase-caption" class="phase-caption">Initializing phase trace...</p>
+        </article>
+
+        <aside class="math-card">
+          <h2>Optimization Certificate</h2>
+
+          <section class="equation-block">
+            <p class="eq-title">Primal program</p>
+            <pre class="eq-main">min over Δ:  ⟨g_new, Δ⟩ + (1 / (2η))‖Δ‖²
+s.t.         ⟨g_k, Δ⟩ ≤ ε_k</pre>
+          </section>
+
+          <section class="equation-block">
+            <p class="eq-title">KKT decomposition</p>
+            <pre class="eq-main">Δ(t) = Δ0 - η Σ λ_k(t) g_k,    λ_k(t) ≥ 0</pre>
+            <p id="kkt-numeric" class="eq-numeric">Δ(t)=(0,0) = Δ0 + c(t)</p>
+          </section>
+
+          <section class="metric-grid">
+            <article>
+              <h3>max feasibility residual</h3>
+              <p id="metric-feasibility" class="metric good">0.0000</p>
+            </article>
+            <article>
+              <h3>descent retained</h3>
+              <p id="metric-descent" class="metric good">100%</p>
+            </article>
+            <article>
+              <h3>stationarity residual</h3>
+              <p id="metric-stationarity" class="metric good">0.00e+0</p>
+            </article>
+            <article>
+              <h3>violation removed</h3>
+              <p id="metric-practical" class="metric good">0.0000</p>
+            </article>
+          </section>
+
+          <p class="active-set">Active dual set: <span id="metric-active-set">none</span></p>
+
+          <section class="ledger-block">
+            <p class="eq-title">Constraint ledger</p>
+            <table class="ledger-table">
+              <thead>
+                <tr>
+                  <th scope="col">k</th>
+                  <th scope="col">⟨g_k,Δ0⟩−ε_k</th>
+                  <th scope="col">λ_k(t)</th>
+                  <th scope="col">⟨g_k,Δ(t)⟩−ε_k</th>
+                </tr>
+              </thead>
+              <tbody id="constraint-ledger"></tbody>
+            </table>
+          </section>
+
+          <section>
+            <p class="eq-title">Dual dials</p>
+            <div id="lambda-dials" class="dial-grid" aria-live="polite"></div>
+          </section>
+        </aside>
       </section>
 
-      <section class="controls-grid">
-        <article class="card">
-          <h2>Controls</h2>
+      <section class="control-card">
+        <article class="controls-column">
+          <h2>Control Surface</h2>
+
           <label class="control">
             <span>Step size η</span>
             <span id="eta-value" class="value-chip">0.55</span>
@@ -37,9 +107,13 @@
           </label>
 
           <label class="toggle-row" for="guardrail-toggle">
-            <span>Enable extra guardrail</span>
+            <span>Enable fourth guardrail</span>
             <input id="guardrail-toggle" type="checkbox" checked />
           </label>
+        </article>
+
+        <article class="controls-column budget-panel">
+          <h2>Constraint budgets εk</h2>
 
           <div class="budget-grid">
             <label class="control">
@@ -66,22 +140,6 @@
               <input id="eps-g4" type="range" min="0.35" max="1.4" step="0.01" value="0.76" />
             </label>
           </div>
-        </article>
-
-        <article class="card">
-          <h2>Dual weights λk</h2>
-          <div id="lambda-dials" class="dial-grid" aria-live="polite"></div>
-
-          <dl class="stats">
-            <div>
-              <dt>Objective shift</dt>
-              <dd id="objective-delta" class="good">0.0000 (improved)</dd>
-            </div>
-            <div>
-              <dt>Active constraints</dt>
-              <dd id="active-set">none</dd>
-            </div>
-          </dl>
         </article>
       </section>
     </main>
