@@ -36,9 +36,9 @@ body {
 }
 
 .hero,
-.math-card,
 .stage-card,
-.control-card {
+.controls-panel,
+.math-panel {
   border: 1px solid var(--line);
   border-radius: 18px;
   background: var(--panel);
@@ -49,8 +49,8 @@ body {
   padding: 20px 22px;
   display: flex;
   justify-content: space-between;
-  gap: 20px;
   align-items: flex-start;
+  gap: 20px;
 }
 
 .eyebrow {
@@ -77,35 +77,6 @@ h1 {
   line-height: 1.48;
 }
 
-.problem-row {
-  margin-top: 12px;
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.problem-card {
-  border: 1px solid #d8e4f3;
-  border-radius: 12px;
-  background: #f9fcff;
-  padding: 10px 11px;
-}
-
-.problem-card h3 {
-  margin: 0;
-  font-size: 0.74rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #4f6f90;
-}
-
-.problem-card p {
-  margin: 5px 0 0;
-  color: #2f557a;
-  font-size: 0.84rem;
-  line-height: 1.35;
-}
-
 .replay {
   border: 1px solid #bad0ec;
   border-radius: 999px;
@@ -119,55 +90,6 @@ h1 {
 
 .replay:hover {
   background: #eaf3ff;
-}
-
-.math-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.math-card {
-  padding: 15px 17px;
-  display: grid;
-  gap: 10px;
-}
-
-.math-label {
-  margin: 0;
-  color: #4f6f90;
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: 800;
-}
-
-.math-surface {
-  min-height: 86px;
-  border: 1px solid #d8e5f5;
-  border-radius: 12px;
-  background: linear-gradient(180deg, #f9fcff 0%, #f4f9ff 100%);
-  padding: 12px 14px;
-  display: grid;
-  align-items: center;
-  overflow-x: auto;
-}
-
-.katex,
-.katex-display {
-  color: #163f66;
-  font-size: 1.12rem;
-}
-
-.katex-display {
-  margin: 0;
-}
-
-.main-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(340px, 0.7fr);
-  gap: 16px;
-  align-items: start;
 }
 
 .stage-card {
@@ -212,9 +134,46 @@ h1 {
 
 .scene {
   width: 100%;
-  height: clamp(470px, 64vh, 680px);
+  height: clamp(480px, 64vh, 690px);
   border-radius: 14px;
   display: block;
+}
+
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.kpi-row article {
+  border: 1px solid #d8e4f3;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 8px 9px;
+}
+
+.kpi-row h3 {
+  margin: 0;
+  color: #577697;
+  font-size: 0.69rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.metric {
+  margin: 4px 0 0;
+  font-family: 'Manrope', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #173f64;
+}
+
+.metric.good {
+  color: var(--ship);
+}
+
+.metric.bad {
+  color: var(--hold);
 }
 
 .phase-caption,
@@ -233,28 +192,24 @@ h1 {
   font-family: 'STIX Two Text', 'Cambria Math', serif;
 }
 
-.control-card {
-  padding: 16px;
+.interaction-grid {
   display: grid;
-  gap: 14px;
+  grid-template-columns: minmax(0, 1.05fr) minmax(360px, 0.95fr);
+  gap: 16px;
+  align-items: start;
 }
 
-.control-card h2 {
+.controls-panel,
+.math-panel {
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.controls-panel h2 {
   margin: 0;
   font-family: 'Manrope', sans-serif;
   font-size: 1.03rem;
-}
-
-.control-block,
-.equation-block,
-.metrics-block,
-.lambda-block {
-  border: 1px solid #d8e4f4;
-  border-radius: 13px;
-  background: #fcfdff;
-  padding: 12px;
-  display: grid;
-  gap: 10px;
 }
 
 .control {
@@ -330,41 +285,44 @@ input[type='range'] {
   gap: 8px;
 }
 
-.metrics-block .metric-grid {
+.math-block,
+.lambda-block {
+  border: 1px solid #d8e4f4;
+  border-radius: 13px;
+  background: #fcfdff;
+  padding: 11px;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
-.metric-grid article {
-  border: 1px solid #d8e4f3;
-  border-radius: 10px;
-  background: #ffffff;
-  padding: 8px 9px;
-}
-
-.metric-grid h3 {
+.math-label {
   margin: 0;
-  color: #577697;
-  font-size: 0.69rem;
+  color: #4f6f90;
+  font-size: 0.72rem;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
+  font-weight: 800;
 }
 
-.metric {
-  margin: 4px 0 0;
-  font-family: 'Manrope', sans-serif;
-  font-size: 1rem;
-  font-weight: 700;
-  color: #173f64;
+.math-surface {
+  min-height: 70px;
+  border: 1px solid #d8e5f5;
+  border-radius: 11px;
+  background: linear-gradient(180deg, #f9fcff 0%, #f4f9ff 100%);
+  padding: 10px 12px;
+  display: grid;
+  align-items: center;
+  overflow-x: auto;
 }
 
-.metric.good {
-  color: var(--ship);
+.katex,
+.katex-display {
+  color: #163f66;
+  font-size: 1.1rem;
 }
 
-.metric.bad {
-  color: var(--hold);
+.katex-display {
+  margin: 0;
 }
 
 .lambda-bars {
@@ -410,24 +368,28 @@ input[type='range'] {
 }
 
 @media (max-width: 1180px) {
-  .math-row,
-  .main-grid {
+  .interaction-grid {
     grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 860px) {
   .hero {
     flex-direction: column;
   }
 
-  .problem-row,
-  .metrics-block .metric-grid {
-    grid-template-columns: 1fr;
+  .kpi-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .scene {
     height: min(58vh, 520px);
+  }
+}
+
+@media (max-width: 580px) {
+  .kpi-row {
+    grid-template-columns: 1fr;
   }
 }
 

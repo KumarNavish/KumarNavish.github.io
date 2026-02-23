@@ -10,146 +10,125 @@
     <main class="shell">
       <header class="hero">
         <div class="hero-copy">
-          <p class="eyebrow">Constrained Update Optimizer</p>
+          <p class="eyebrow">SafePatch</p>
           <h1>Raw model updates can violate guardrails. SafePatch projects them into shippable updates.</h1>
           <p class="story">
-            Left panel shows the unconstrained gradient step. Right panel shows the projected step that stays inside
-            policy limits while preserving useful learning progress.
+            Left view shows the unsafe unconstrained step. Right view shows the projected step that satisfies all active
+            policy constraints while retaining optimization signal.
           </p>
-
-          <div class="problem-row" aria-label="problem mechanism outcome">
-            <article class="problem-card">
-              <h3>Problem</h3>
-              <p>Raw update exits the allowed action zone.</p>
-            </article>
-            <article class="problem-card">
-              <h3>Mechanism</h3>
-              <p>Project to the nearest feasible step under linear guardrails.</p>
-            </article>
-            <article class="problem-card">
-              <h3>Practical Effect</h3>
-              <p>Ship-safe update with retained descent signal.</p>
-            </article>
-          </div>
         </div>
-
         <button id="replay-button" class="replay" type="button">Replay transition</button>
       </header>
 
-      <section class="math-row" aria-label="optimization equations">
-        <article class="math-card">
-          <p class="math-label">Constrained objective</p>
-          <div id="math-primal" class="math-surface"></div>
-        </article>
+      <section class="stage-card">
+        <div class="status-row">
+          <span id="ship-indicator" class="indicator hold">HOLD</span>
+          <p id="ship-reason" class="ship-reason">Computing feasible projection...</p>
+        </div>
 
-        <article class="math-card">
-          <p class="math-label">Projection identity</p>
-          <div id="math-dual" class="math-surface"></div>
-        </article>
+        <canvas id="scene-canvas" class="scene"></canvas>
+
+        <div class="kpi-row" aria-label="outcome metrics">
+          <article>
+            <h3>Raw violation</h3>
+            <p id="metric-raw-violation" class="metric">+0.000</p>
+          </article>
+          <article>
+            <h3>Safe violation</h3>
+            <p id="metric-safe-violation" class="metric">+0.000</p>
+          </article>
+          <article>
+            <h3>Descent retained</h3>
+            <p id="metric-retained" class="metric">100.0%</p>
+          </article>
+          <article>
+            <h3>Direction correction</h3>
+            <p id="metric-angle" class="metric">0.0°</p>
+          </article>
+        </div>
+
+        <p id="phase-caption" class="phase-caption">Move a knob: previous policy (gray) morphs into the new policy.</p>
+        <p id="kkt-numeric" class="kkt-readout">Initializing...</p>
       </section>
 
-      <section class="main-grid">
-        <article class="stage-card">
-          <div class="status-row">
-            <span id="ship-indicator" class="indicator hold">HOLD</span>
-            <p id="ship-reason" class="ship-reason">Computing feasible projection...</p>
+      <section class="interaction-grid">
+        <article class="controls-panel">
+          <h2>What You Control</h2>
+
+          <label class="control">
+            <div class="control-head">
+              <span>Step size η</span>
+              <span id="eta-value" class="value">0.72</span>
+            </div>
+            <div id="knob-eta-math" class="knob-math"></div>
+            <input id="eta-slider" type="range" min="0.1" max="1.9" step="0.01" value="0.72" />
+          </label>
+
+          <div class="toggle-row">
+            <label for="guardrail-toggle">Enable guardrail g4</label>
+            <input id="guardrail-toggle" type="checkbox" checked />
           </div>
 
-          <canvas id="scene-canvas" class="scene"></canvas>
-
-          <p id="phase-caption" class="phase-caption">Move any knob: gray previous policy morphs into the new policy.</p>
-          <p id="kkt-numeric" class="kkt-readout">Initializing...</p>
-        </article>
-
-        <aside class="control-card">
-          <section class="control-block">
-            <h2>Interactive Controls</h2>
-
-            <label class="control">
+          <div class="budget-grid">
+            <label class="control compact">
               <div class="control-head">
-                <span>Step size η</span>
-                <span id="eta-value" class="value">0.72</span>
+                <span>ε1 · Leftward limit</span>
+                <span id="eps-g1-value" class="value">0.05</span>
               </div>
-              <div id="knob-eta-math" class="knob-math"></div>
-              <input id="eta-slider" type="range" min="0.1" max="1.9" step="0.01" value="0.72" />
+              <div id="knob-g1-math" class="knob-math"></div>
+              <input id="eps-g1" type="range" min="0.00" max="0.90" step="0.01" value="0.05" />
             </label>
 
-            <div class="toggle-row">
-              <label for="guardrail-toggle">Enable guardrail g4</label>
-              <input id="guardrail-toggle" type="checkbox" checked />
-            </div>
+            <label class="control compact">
+              <div class="control-head">
+                <span>ε2 · Upward cap</span>
+                <span id="eps-g2-value" class="value">0.24</span>
+              </div>
+              <div id="knob-g2-math" class="knob-math"></div>
+              <input id="eps-g2" type="range" min="0.05" max="0.90" step="0.01" value="0.24" />
+            </label>
 
-            <div class="budget-grid">
-              <label class="control compact">
-                <div class="control-head">
-                  <span>ε1 · Leftward limit</span>
-                  <span id="eps-g1-value" class="value">0.05</span>
-                </div>
-                <div id="knob-g1-math" class="knob-math"></div>
-                <input id="eps-g1" type="range" min="0.00" max="0.90" step="0.01" value="0.05" />
-              </label>
+            <label class="control compact">
+              <div class="control-head">
+                <span>ε3 · Diagonal cap</span>
+                <span id="eps-g3-value" class="value">1.05</span>
+              </div>
+              <div id="knob-g3-math" class="knob-math"></div>
+              <input id="eps-g3" type="range" min="0.50" max="1.40" step="0.01" value="1.05" />
+            </label>
 
-              <label class="control compact">
-                <div class="control-head">
-                  <span>ε2 · Upward cap</span>
-                  <span id="eps-g2-value" class="value">0.24</span>
-                </div>
-                <div id="knob-g2-math" class="knob-math"></div>
-                <input id="eps-g2" type="range" min="0.05" max="0.90" step="0.01" value="0.24" />
-              </label>
+            <label class="control compact">
+              <div class="control-head">
+                <span>ε4 · Stability cap</span>
+                <span id="eps-g4-value" class="value">0.82</span>
+              </div>
+              <div id="knob-g4-math" class="knob-math"></div>
+              <input id="eps-g4" type="range" min="0.40" max="1.30" step="0.01" value="0.82" />
+            </label>
+          </div>
+        </article>
 
-              <label class="control compact">
-                <div class="control-head">
-                  <span>ε3 · Diagonal cap</span>
-                  <span id="eps-g3-value" class="value">1.05</span>
-                </div>
-                <div id="knob-g3-math" class="knob-math"></div>
-                <input id="eps-g3" type="range" min="0.50" max="1.40" step="0.01" value="1.05" />
-              </label>
-
-              <label class="control compact">
-                <div class="control-head">
-                  <span>ε4 · Stability cap</span>
-                  <span id="eps-g4-value" class="value">0.82</span>
-                </div>
-                <div id="knob-g4-math" class="knob-math"></div>
-                <input id="eps-g4" type="range" min="0.40" max="1.30" step="0.01" value="0.82" />
-              </label>
-            </div>
+        <article class="math-panel">
+          <section class="math-block">
+            <p class="math-label">Optimization objective</p>
+            <div id="math-primal" class="math-surface"></div>
           </section>
 
-          <section class="equation-block">
-            <p class="math-label">Live correction decomposition</p>
+          <section class="math-block">
+            <p class="math-label">Projection identity</p>
+            <div id="math-dual" class="math-surface"></div>
+          </section>
+
+          <section class="math-block">
+            <p class="math-label">Live correction</p>
             <div id="live-equation" class="math-surface"></div>
           </section>
 
-          <section class="metrics-block">
-            <h2>Why It Matters</h2>
-            <div class="metric-grid">
-              <article>
-                <h3>Raw violation</h3>
-                <p id="metric-raw-violation" class="metric">+0.000</p>
-              </article>
-              <article>
-                <h3>Safe violation</h3>
-                <p id="metric-safe-violation" class="metric">+0.000</p>
-              </article>
-              <article>
-                <h3>Descent retained</h3>
-                <p id="metric-retained" class="metric">100.0%</p>
-              </article>
-              <article>
-                <h3>Direction correction</h3>
-                <p id="metric-angle" class="metric">0.0°</p>
-              </article>
-            </div>
-          </section>
-
           <section class="lambda-block">
-            <h2>Dual forces λk</h2>
+            <p class="math-label">Dual forces λk</p>
             <div id="lambda-bars" class="lambda-bars" aria-live="polite"></div>
           </section>
-        </aside>
+        </article>
       </section>
     </main>
 
