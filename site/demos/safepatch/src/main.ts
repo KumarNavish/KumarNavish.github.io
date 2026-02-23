@@ -7,6 +7,7 @@ import {
   Vec2,
   lerp,
   normalize,
+  scale,
   vec,
   worldBoundsFromHalfspaces,
   intersectHalfspaces,
@@ -15,61 +16,55 @@ import { ProjectionResult, computeProjectedStep } from './qp'
 import { SceneRenderer, paletteForConstraints } from './render'
 import { UIController } from './ui'
 
-const GRADIENT_NEW: Vec2 = vec(1.45, -1.12)
-const TRANSITION_MS = 920
+const GRADIENT_NEW: Vec2 = vec(0.24, -1.62)
+const TRANSITION_MS = 1160
+const RAW_PHASE_CUT = 0.42
 
 const baseHalfspaces: Halfspace[] = [
   {
     id: 'g1',
-    label: 'λ1',
-    normal: normalize(vec(-1.0, 0.03)),
-    bound: 0.05,
+    label: 'lambda1',
+    normal: normalize(vec(1, 0)),
+    bound: 0.34,
     active: true,
   },
   {
     id: 'g2',
-    label: 'λ2',
-    normal: normalize(vec(0.02, 1.0)),
-    bound: 0.24,
+    label: 'lambda2',
+    normal: normalize(vec(0, 1)),
+    bound: 0.37,
     active: true,
   },
   {
     id: 'g3',
-    label: 'λ3',
-    normal: normalize(vec(0.86, 0.51)),
-    bound: 1.05,
+    label: 'lambda3',
+    normal: normalize(vec(-1, 0)),
+    bound: 0.32,
     active: true,
   },
   {
     id: 'g4',
-    label: 'λ4',
-    normal: normalize(vec(0.56, -0.83)),
-    bound: 0.82,
+    label: 'lambda4',
+    normal: normalize(vec(0, -1)),
+    bound: 0.44,
+    active: true,
+  },
+  {
+    id: 'g5',
+    label: 'lambda5',
+    normal: normalize(vec(-0.72, 1)),
+    bound: 0.18,
     active: true,
   },
 ]
 
-const MATH = {
-  primal: String.raw`\begin{aligned}
-\Delta_0 &= -\eta\,g_{\mathrm{new}} \\
-\Delta^* &= \operatorname*{arg\,min}_{\Delta}\;\langle g_{\mathrm{new}},\Delta\rangle + \frac{1}{2\eta}\lVert\Delta\rVert^2 \\
-\text{s.t.}\;&\langle g_k,\Delta\rangle \le \varepsilon_k\;\forall k
-\end{aligned}`,
-  dual: String.raw`\Delta^*=\Delta_0-\eta\sum_k\lambda_k g_k,\qquad \lambda_k\ge0`,
-  eta: String.raw`\Delta_0=-\eta g_{\mathrm{new}}`,
-  g1: String.raw`-\Delta_x\le\varepsilon_1`,
-  g2: String.raw`\Delta_y\le\varepsilon_2`,
-  g3: String.raw`\langle g_3,\Delta\rangle\le\varepsilon_3`,
-  g4: String.raw`\langle g_4,\Delta\rangle\le\varepsilon_4`,
-}
+const AUTOPLAY_STEPS = [
+  { eta: 1.24, strictness: 0.83 },
+  { eta: 0.82, strictness: 1.19 },
+  { eta: 0.95, strictness: 1.0 },
+]
 
-interface Snapshot {
-  halfspaces: Halfspace[]
-  zone: Polygon
-  rawStep: Vec2
-  safeStep: Vec2
-  lambdas: Record<string, number>
-}
+const CORE_MATH = String.raw`\Delta^* = \Pi_{\mathcal S}\!\left(-\eta\,g_{\mathrm{new}}\right),\quad \mathcal S=\{\Delta:\langle g_k,\Delta\rangle\le\varepsilon_k\}`
 
 function copyHalfspaces(halfspaces: Halfspace[]): Halfspace[] {
   return halfspaces.map((halfspace) => ({
@@ -97,8 +92,30 @@ function easeInOutCubic(value: number): number {
   return 1 - ((-2 * t + 2) ** 3) / 2
 }
 
+function easeOutCubic(value: number): number {
+  const t = clamp(value)
+  return 1 - (1 - t) ** 3
+}
+
 function safeStepOf(projection: ProjectionResult): Vec2 {
   return projection.ship ? projection.projectedStep : projection.step0
+}
+
+function scaleForStrictness(id: string, strictness: number): number {
+  if (id === 'g5') {
+    return 0.05 + 0.95 * strictness
+  }
+  return 0.2 + 0.8 * strictness
+}
+
+function phaseStory(progress: number, ship: boolean): string {
+  if (progress < RAW_PHASE_CUT) {
+    return '1/2 Raw optimizer proposes delta0 (red).'
+  }
+  if (progress < 0.98) {
+    return '2/2 SafePatch projects to delta* (blue) inside guardrails.'
+  }
+  return ship ? 'Ship this blue step: feasible and closest to optimizer intent.' : 'Hold: current limits make a safe projection unavailable.'
 }
 
 function renderMathBlock(elementId: string, expression: string, displayMode = true): void {
@@ -118,80 +135,62 @@ function renderMathBlock(elementId: string, expression: string, displayMode = tr
   }
 }
 
-function blendLambdas(
-  previous: Record<string, number>,
-  next: Record<string, number>,
-  ids: string[],
-  blend: number,
-): Record<string, number> {
-  const out: Record<string, number> = {}
-  for (const id of ids) {
-    const from = previous[id] ?? 0
-    const to = next[id] ?? 0
-    out[id] = from + (to - from) * blend
-  }
-  return out
-}
-
-function storyLine(transitionProgress: number): string {
-  if (transitionProgress < 0.98) {
-    return 'Gray traces show the previous policy. Blue/red vectors are morphing to the new setting from your knob change.'
-  }
-  return 'Adjust η or any εk. Red shows what the model wants to do; blue shows what is safe to ship.'
-}
-
 function start(): void {
-  renderMathBlock('math-primal', MATH.primal, true)
-  renderMathBlock('math-dual', MATH.dual, true)
-  renderMathBlock('knob-eta-math', MATH.eta, false)
-  renderMathBlock('knob-g1-math', MATH.g1, false)
-  renderMathBlock('knob-g2-math', MATH.g2, false)
-  renderMathBlock('knob-g3-math', MATH.g3, false)
-  renderMathBlock('knob-g4-math', MATH.g4, false)
+  renderMathBlock('math-core', CORE_MATH, true)
 
   const canvas = document.getElementById('scene-canvas') as HTMLCanvasElement | null
   if (!canvas) {
     throw new Error('Missing canvas #scene-canvas')
   }
 
-  const renderer = new SceneRenderer(canvas)
   const halfspaces = copyHalfspaces(baseHalfspaces)
+  const baseBoundById = new Map<string, number>(halfspaces.map((halfspace) => [halfspace.id, halfspace.bound]))
+
   const colorById = paletteForConstraints(halfspaces)
+  const renderer = new SceneRenderer(canvas)
   const ui = new UIController(halfspaces)
 
-  let eta = 0.72
+  let eta = 0.95
+  let strictness = 1.0
+
   let zone = intersectHalfspaces(halfspaces, worldBoundsFromHalfspaces(halfspaces))
+  let previousZone: Polygon | null = null
+
   let projection = computeProjectedStep({
     gradient: GRADIENT_NEW,
     eta,
     halfspaces,
   })
 
-  let previous: Snapshot | null = null
   let transitionStart = performance.now()
-  let initialized = false
+  let autoplayEnabled = true
+  const autoplayTimers: number[] = []
 
-  function currentSnapshot(): Snapshot {
-    return {
-      halfspaces: copyHalfspaces(halfspaces),
-      zone: copyPolygon(zone),
-      rawStep: { ...projection.step0 },
-      safeStep: { ...safeStepOf(projection) },
-      lambdas: { ...projection.lambdaById },
+  function clearAutoplay(): void {
+    while (autoplayTimers.length > 0) {
+      const timer = autoplayTimers.pop()
+      if (timer !== undefined) {
+        window.clearTimeout(timer)
+      }
     }
   }
 
-  function applyControls(capturePrevious = true): void {
-    if (capturePrevious && initialized) {
-      previous = currentSnapshot()
+  function applyControls(capturePrevious: boolean): void {
+    if (capturePrevious) {
+      previousZone = copyPolygon(zone)
     }
 
     const controls = ui.readControlValues()
     eta = controls.eta
+    strictness = controls.strictness
 
     for (const halfspace of halfspaces) {
-      halfspace.bound = controls.epsById[halfspace.id]
-      halfspace.active = halfspace.id === 'g4' ? controls.guardrailEnabled : true
+      const baseBound = baseBoundById.get(halfspace.id)
+      if (baseBound === undefined) {
+        continue
+      }
+      halfspace.bound = baseBound * scaleForStrictness(halfspace.id, strictness)
+      halfspace.active = true
     }
 
     zone = intersectHalfspaces(halfspaces, worldBoundsFromHalfspaces(halfspaces))
@@ -202,73 +201,91 @@ function start(): void {
     })
 
     transitionStart = performance.now()
-    initialized = true
+  }
+
+  function blendLambdas(progress: number): Record<string, number> {
+    const output: Record<string, number> = {}
+
+    for (const halfspace of halfspaces) {
+      output[halfspace.id] = (projection.lambdaById[halfspace.id] ?? 0) * progress
+    }
+
+    return output
+  }
+
+  function scheduleAutoplay(): void {
+    clearAutoplay()
+
+    AUTOPLAY_STEPS.forEach((step, index) => {
+      const timer = window.setTimeout(() => {
+        if (!autoplayEnabled) {
+          return
+        }
+        ui.setControlValues(step)
+        applyControls(true)
+      }, 420 + index * 2050)
+
+      autoplayTimers.push(timer)
+    })
   }
 
   function frame(now: number): void {
     const progress = clamp((now - transitionStart) / TRANSITION_MS)
-    const blend = easeInOutCubic(progress)
+    const rawReveal = easeOutCubic(progress / RAW_PHASE_CUT)
+    const correctionProgress = easeInOutCubic((progress - RAW_PHASE_CUT) / (1 - RAW_PHASE_CUT))
 
-    const targetRaw = projection.step0
-    const targetSafe = safeStepOf(projection)
+    const rawTarget = projection.step0
+    const safeTarget = safeStepOf(projection)
 
-    const previousRaw = previous?.rawStep ?? targetRaw
-    const previousSafe = previous?.safeStep ?? targetSafe
-
-    const rawDisplay = lerp(previousRaw, targetRaw, blend)
-    const safeDisplay = lerp(previousSafe, targetSafe, blend)
-
-    const ids = halfspaces.map((halfspace) => halfspace.id)
-    const lambdasDisplay = blendLambdas(previous?.lambdas ?? {}, projection.lambdaById, ids, blend)
-
-    const shipReason = projection.ship
-      ? 'Projected step is inside all active guardrails.'
-      : projection.reason ?? 'No feasible projected step under current limits.'
+    const rawStep = scale(rawTarget, rawReveal)
+    const safeStep = correctionProgress > 0 ? lerp(rawTarget, safeTarget, correctionProgress) : vec(0, 0)
 
     renderer.render({
       halfspaces,
       zone,
-      rawStep: rawDisplay,
-      safeStep: safeDisplay,
-      rawTarget: targetRaw,
-      safeTarget: targetSafe,
+      previousZone,
+      rawStep,
+      safeStep,
+      rawTarget,
+      safeTarget,
+      colorById,
+      activeSetIds: projection.activeSetIds,
       violationRaw: projection.maxViolationStep0,
       violationSafe: projection.maxViolationProjected,
-      previous: previous
-        ? {
-            halfspaces: previous.halfspaces,
-            zone: previous.zone,
-            rawStep: previous.rawStep,
-            safeStep: previous.safeStep,
-          }
-        : null,
-      changeProgress: progress,
+      correctionProgress,
+      transitionProgress: progress,
     })
 
     ui.renderFrame({
       ship: projection.ship,
-      reason: shipReason,
-      story: storyLine(progress),
-      rawStep: targetRaw,
-      safeStep: targetSafe,
-      lambdas: lambdasDisplay,
+      reason: projection.ship ? 'Projected update is inside all guardrails.' : projection.reason,
+      phaseText: phaseStory(progress, projection.ship),
+      rawStep: rawTarget,
+      safeStep: safeTarget,
+      lambdas: blendLambdas(correctionProgress),
       maxViolationRaw: projection.maxViolationStep0,
       maxViolationSafe: projection.maxViolationProjected,
       descentRetainedRatio: projection.descentRetainedRatio,
       colorById,
     })
 
+    if (progress > 0.995 && previousZone) {
+      previousZone = null
+    }
+
     requestAnimationFrame(frame)
   }
 
   ui.onControlsChange(() => {
+    autoplayEnabled = false
+    clearAutoplay()
     applyControls(true)
   })
 
   ui.onReplay(() => {
-    if (previous) {
-      transitionStart = performance.now()
-    }
+    autoplayEnabled = false
+    clearAutoplay()
+    transitionStart = performance.now()
   })
 
   window.addEventListener('resize', () => {
@@ -276,7 +293,9 @@ function start(): void {
   })
 
   renderer.resize()
+  ui.setControlValues({ eta, strictness })
   applyControls(false)
+  scheduleAutoplay()
   requestAnimationFrame(frame)
 }
 
