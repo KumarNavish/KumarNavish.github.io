@@ -5,9 +5,12 @@ import {
   Halfspace,
   Polygon,
   Vec2,
+  add,
   lerp,
+  norm,
   normalize,
   scale,
+  sub,
   vec,
   worldBoundsFromHalfspaces,
   intersectHalfspaces,
@@ -16,59 +19,58 @@ import { computeProjectedStep } from './qp'
 import { SceneRenderer, paletteForConstraints } from './render'
 import { UIController } from './ui'
 
-const GRADIENT_NEW: Vec2 = vec(-1.58, 0.38)
-const TRANSITION_MS = 1240
-const RAW_PHASE_CUT = 0.38
+const GRADIENT_NEW: Vec2 = vec(-1.08, 0.31)
+const TRANSITION_MS = 1320
 
 const baseHalfspaces: Halfspace[] = [
   {
     id: 'g1',
     label: 'g1',
     normal: normalize(vec(1, 0)),
-    bound: 0.74,
+    bound: 0.78,
     active: true,
   },
   {
     id: 'g2',
     label: 'g2',
     normal: normalize(vec(0, 1)),
-    bound: 0.68,
+    bound: 0.64,
     active: true,
   },
   {
     id: 'g3',
     label: 'g3',
     normal: normalize(vec(-1, 0)),
-    bound: 0.46,
+    bound: 0.5,
     active: true,
   },
   {
     id: 'g4',
     label: 'g4',
     normal: normalize(vec(0, -1)),
-    bound: 0.30,
+    bound: 0.34,
     active: true,
   },
   {
     id: 'g5',
     label: 'g5',
-    normal: normalize(vec(0.82, -0.57)),
-    bound: 0.46,
+    normal: normalize(vec(0.78, -0.62)),
+    bound: 0.72,
     active: true,
   },
 ]
 
 const STRICTNESS_SENSITIVITY: Record<string, number> = {
-  g1: 0.7,
-  g2: 0.55,
+  g1: 0.68,
+  g2: 0.52,
   g3: 0.5,
-  g4: 0.8,
-  g5: 1.35,
+  g4: 0.72,
+  g5: 1.55,
 }
 
 const AUTOPLAY_STEPS = [
-  { eta: 1.35, strictness: 0.8 },
-  { eta: 1.35, strictness: 1.25 },
+  { eta: 1.22, strictness: 0.84 },
+  { eta: 1.22, strictness: 1.23 },
   { eta: 0.95, strictness: 1.0 },
 ]
 
@@ -89,6 +91,13 @@ function easeInOutCubic(value: number): number {
 function easeOutCubic(value: number): number {
   const t = clamp(value)
   return 1 - (1 - t) ** 3
+}
+
+function easeOutBack(value: number): number {
+  const t = clamp(value)
+  const c1 = 1.70158
+  const c3 = c1 + 1
+  return 1 + c3 * (t - 1) ** 3 + c1 * (t - 1) ** 2
 }
 
 function copyHalfspaces(halfspaces: Halfspace[]): Halfspace[] {
@@ -123,18 +132,21 @@ function renderMathInline(elementId: string, expression: string): void {
 }
 
 function boundScaleForStrictness(id: string, strictness: number): number {
-  const sensitivity = STRICTNESS_SENSITIVITY[id] ?? 0.7
-  return clamp(1 + sensitivity * (strictness - 1), 0.52, 1.62)
+  const sensitivity = STRICTNESS_SENSITIVITY[id] ?? 0.65
+  return clamp(1 + sensitivity * (strictness - 1), 0.5, 1.7)
 }
 
 function phaseStory(progress: number, ship: boolean): string {
-  if (progress < RAW_PHASE_CUT) {
-    return 'Raw step grows first (red).'
+  if (progress < 0.2) {
+    return '1/3 Build ship zone from active guardrails.'
+  }
+  if (progress < 0.53) {
+    return '2/3 Raw optimizer update shoots out (red).'
   }
   if (progress < 0.98) {
-    return 'Projection snaps into the ship zone (blue).'
+    return '3/3 Projection pulls to nearest feasible step (blue).'
   }
-  return ship ? 'Blue is the shippable update.' : 'No feasible safe update under current limits.'
+  return ship ? 'Ship the blue step: policy-safe and closest to optimizer intent.' : 'Hold: no feasible projection under current limits.'
 }
 
 function start(): void {
@@ -152,8 +164,8 @@ function start(): void {
   const renderer = new SceneRenderer(canvas)
   const ui = new UIController()
 
-  let eta = 1.0
-  let strictness = 1.0
+  let eta = 1.22
+  let strictness = 0.84
 
   let zone = intersectHalfspaces(halfspaces, worldBoundsFromHalfspaces(halfspaces))
   let previousZone: Polygon | null = null
@@ -217,7 +229,7 @@ function start(): void {
 
         ui.setControlValues(step)
         applyControls(true)
-      }, 500 + index * 2150)
+      }, 420 + index * 2250)
 
       autoplayTimers.push(timer)
     })
@@ -225,14 +237,31 @@ function start(): void {
 
   function frame(now: number): void {
     const progress = clamp((now - transitionStart) / TRANSITION_MS)
-    const rawReveal = easeOutCubic(progress / RAW_PHASE_CUT)
-    const correctionProgress = easeInOutCubic((progress - RAW_PHASE_CUT) / (1 - RAW_PHASE_CUT))
+
+    const zoneReveal = easeOutCubic(progress / 0.22)
+    const rawReveal = easeOutBack((progress - 0.14) / 0.39)
+    const safeReveal = projection.ship ? easeOutBack((progress - 0.53) / 0.47) : 0
 
     const rawTarget = projection.step0
     const safeTarget = projection.ship ? projection.projectedStep : projection.step0
 
-    const rawStep = scale(rawTarget, rawReveal)
-    const safeStep = projection.ship && correctionProgress > 0 ? lerp(rawTarget, safeTarget, correctionProgress) : vec(0, 0)
+    const rawScale = clamp(rawReveal, 0, 1.05)
+    const rawStep = scale(rawTarget, rawScale)
+
+    const safeBlend = clamp(safeReveal, 0, 1.08)
+    const safeLinear = clamp(safeBlend, 0, 1)
+
+    let safeStep = vec(0, 0)
+    if (projection.ship && safeReveal > 0.01) {
+      safeStep = lerp(rawTarget, safeTarget, safeLinear)
+      if (safeBlend > 1) {
+        const overshoot = safeBlend - 1
+        const direction = sub(safeTarget, rawTarget)
+        safeStep = add(safeStep, scale(direction, overshoot * 0.1))
+      }
+    }
+
+    const correctionProgress = easeInOutCubic((progress - 0.53) / 0.47)
 
     const lambdaMax = Math.max(1e-8, ...halfspaces.map((halfspace) => projection.lambdaById[halfspace.id] ?? 0))
     const constraintForceById: Record<string, number> = {}
@@ -253,6 +282,9 @@ function start(): void {
       colorById,
       constraintForceById,
       violationRaw: projection.maxViolationStep0,
+      zoneReveal,
+      rawReveal: rawScale,
+      safeReveal: safeLinear,
       correctionProgress,
       transitionProgress: progress,
     })
@@ -263,7 +295,7 @@ function start(): void {
       phaseText: phaseStory(progress, projection.ship),
       maxViolationRaw: projection.maxViolationStep0,
       maxViolationSafe: projection.maxViolationProjected,
-      descentRetainedRatio: projection.descentRetainedRatio,
+      correctionSize: norm(sub(rawTarget, safeTarget)),
     })
 
     if (progress > 0.995 && previousZone) {

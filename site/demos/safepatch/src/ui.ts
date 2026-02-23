@@ -9,15 +9,11 @@ export interface ProofFrameUi {
   phaseText: string
   maxViolationRaw: number
   maxViolationSafe: number
-  descentRetainedRatio: number
+  correctionSize: number
 }
 
 function positivePart(value: number): number {
   return Math.max(0, value)
-}
-
-function formatPercent(value: number): string {
-  return `${(value * 100).toFixed(1)}%`
 }
 
 function strictnessDescriptor(value: number): string {
@@ -42,7 +38,7 @@ export class UIController {
 
   private readonly metricRawViolation: HTMLElement
   private readonly metricSafeViolation: HTMLElement
-  private readonly metricRetained: HTMLElement
+  private readonly metricCorrection: HTMLElement
 
   constructor() {
     this.etaSlider = this.getElement<HTMLInputElement>('eta-slider')
@@ -57,7 +53,7 @@ export class UIController {
 
     this.metricRawViolation = this.getElement('metric-raw-violation')
     this.metricSafeViolation = this.getElement('metric-safe-violation')
-    this.metricRetained = this.getElement('metric-retained')
+    this.metricCorrection = this.getElement('metric-correction')
 
     this.syncDisplayedControlValues()
   }
@@ -109,9 +105,9 @@ export class UIController {
     this.metricSafeViolation.classList.toggle('good', positivePart(frame.maxViolationSafe) <= 1e-6)
     this.metricSafeViolation.classList.toggle('bad', positivePart(frame.maxViolationSafe) > 1e-6)
 
-    this.metricRetained.textContent = formatPercent(frame.descentRetainedRatio)
-    this.metricRetained.classList.toggle('good', frame.descentRetainedRatio >= 0.6)
-    this.metricRetained.classList.toggle('bad', frame.descentRetainedRatio < 0.6)
+    this.metricCorrection.textContent = frame.correctionSize.toFixed(3)
+    this.metricCorrection.classList.toggle('good', frame.correctionSize > 1e-6)
+    this.metricCorrection.classList.toggle('bad', frame.correctionSize <= 1e-6)
   }
 
   private syncDisplayedControlValues(): void {

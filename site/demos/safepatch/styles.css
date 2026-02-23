@@ -1,18 +1,18 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
 
 :root {
   color-scheme: light;
   --bg: #edf3fb;
   --panel: #ffffff;
-  --line: #d4dfee;
-  --ink: #10203b;
-  --muted: #446686;
-  --accent: #1e4ed8;
+  --line: #d5e0ef;
+  --ink: #0f203a;
+  --muted: #4b6b8d;
+  --accent: #1f4ed8;
   --ship: #0f766e;
   --hold: #b42318;
   --raw: #dc2626;
   --safe: #1d4ed8;
-  --shadow: 0 24px 58px rgba(16, 32, 59, 0.1);
+  --shadow: 0 26px 64px rgba(15, 32, 58, 0.1);
 }
 
 * {
@@ -22,17 +22,17 @@
 body {
   margin: 0;
   min-height: 100vh;
-  font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-family: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
   color: var(--ink);
   background:
-    radial-gradient(120% 100% at 100% 0%, #dce9ff 0%, transparent 64%),
-    radial-gradient(120% 100% at -8% -20%, #f5f9ff 0%, transparent 66%),
+    radial-gradient(125% 105% at 100% 0%, #dce8ff 0%, transparent 65%),
+    radial-gradient(115% 95% at -8% -20%, #f6faff 0%, transparent 67%),
     var(--bg);
 }
 
 .shell {
-  width: min(1120px, 94vw);
-  margin: 26px auto 34px;
+  width: min(1080px, 94vw);
+  margin: 28px auto 36px;
   display: grid;
   gap: 14px;
 }
@@ -41,45 +41,45 @@ body {
 .plot-card,
 .control-rail {
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 20px;
   background: var(--panel);
   box-shadow: var(--shadow);
 }
 
 .hero {
-  padding: 22px 24px;
+  padding: 24px 26px;
   display: grid;
-  gap: 8px;
+  gap: 9px;
 }
 
 .eyebrow {
   margin: 0;
-  font-size: 0.72rem;
+  font-size: 0.71rem;
   letter-spacing: 0.11em;
   text-transform: uppercase;
   font-weight: 800;
-  color: #5e7c9d;
+  color: #5d7c9d;
 }
 
 h1 {
   margin: 0;
   font-family: 'Manrope', 'Avenir Next', sans-serif;
-  font-size: clamp(1.52rem, 2.5vw, 2.16rem);
-  line-height: 1.16;
-  max-width: 28ch;
+  font-size: clamp(1.55rem, 2.6vw, 2.24rem);
+  line-height: 1.14;
+  max-width: 31ch;
 }
 
 .hero-sub {
   margin: 0;
   color: var(--muted);
-  font-size: 0.99rem;
-  line-height: 1.45;
+  font-size: 0.98rem;
+  line-height: 1.44;
 }
 
 .plot-card {
-  padding: 14px;
+  padding: 15px;
   display: grid;
-  gap: 10px;
+  gap: 11px;
 }
 
 .plot-top {
@@ -94,7 +94,7 @@ h1 {
 .meta-group {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   flex-wrap: wrap;
 }
 
@@ -107,28 +107,28 @@ h1 {
 }
 
 .indicator.ship {
-  border: 1px solid #99e1cc;
+  border: 1px solid #9ce2ce;
   color: var(--ship);
-  background: #e8fbf5;
+  background: #e9fbf6;
 }
 
 .indicator.hold {
-  border: 1px solid #f0bcb7;
+  border: 1px solid #f2beb7;
   color: var(--hold);
-  background: #fff3f2;
+  background: #fff3f1;
 }
 
 .ship-reason {
   margin: 0;
-  font-size: 0.89rem;
+  font-size: 0.88rem;
   font-weight: 600;
-  color: #2f567a;
+  color: #33597c;
 }
 
 .equation-chip {
-  border: 1px solid #cad9ee;
+  border: 1px solid #ccdbef;
   border-radius: 999px;
-  background: #f5f9ff;
+  background: #f4f8ff;
   color: #1f4f82;
   padding: 4px 11px;
   font-size: 0.76rem;
@@ -144,35 +144,35 @@ h1 {
 }
 
 .replay {
-  border: 1px solid #bfd4ee;
+  border: 1px solid #c3d6ef;
   border-radius: 999px;
   background: #f2f8ff;
-  color: #214f7e;
-  font-size: 0.82rem;
+  color: #234f7e;
+  font-size: 0.81rem;
   font-weight: 700;
   padding: 9px 14px;
   cursor: pointer;
 }
 
 .replay:hover {
-  background: #e9f3ff;
+  background: #e9f2ff;
 }
 
 .scene {
   width: 100%;
-  height: clamp(470px, 66vh, 710px);
+  height: clamp(500px, 68vh, 740px);
   border-radius: 14px;
   display: block;
 }
 
 .phase-caption {
   margin: 0;
-  border: 1px solid #d8e5f5;
+  border: 1px solid #d9e5f4;
   border-radius: 12px;
   background: #f8fbff;
   color: #2f567a;
   padding: 10px 12px;
-  font-size: 0.86rem;
+  font-size: 0.84rem;
   line-height: 1.4;
 }
 
@@ -183,24 +183,25 @@ h1 {
 }
 
 .kpi-row article {
-  border: 1px solid #d8e4f3;
-  border-radius: 11px;
-  background: #ffffff;
-  padding: 9px 10px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  border: 1px solid #d8e4f2;
+  padding: 10px 11px;
 }
 
 .kpi-row h3 {
   margin: 0;
-  color: #577697;
-  font-size: 0.7rem;
+  color: #597899;
+  font-size: 0.67rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  font-weight: 800;
 }
 
 .metric {
-  margin: 4px 0 0;
+  margin: 5px 0 0;
   font-family: 'Manrope', sans-serif;
-  font-size: 1.05rem;
+  font-size: 1.08rem;
   font-weight: 700;
   color: #173f64;
 }
@@ -214,17 +215,17 @@ h1 {
 }
 
 .control-rail {
-  padding: 14px;
+  padding: 12px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
 .control {
-  border: 1px solid #d8e4f3;
-  border-radius: 13px;
+  border: 1px solid #d8e3f2;
+  border-radius: 14px;
   background: #fbfdff;
-  padding: 10px 12px;
+  padding: 11px 12px;
   display: grid;
   gap: 8px;
 }
@@ -238,12 +239,12 @@ h1 {
 
 .control-head span:first-child {
   color: #1f466f;
-  font-size: 0.88rem;
+  font-size: 0.87rem;
   font-weight: 700;
 }
 
 .value {
-  border: 1px solid #c3d6ee;
+  border: 1px solid #c4d7ee;
   border-radius: 999px;
   background: #f1f7ff;
   padding: 2px 8px;
@@ -260,8 +261,8 @@ input[type='range'] {
 .control-scale {
   display: flex;
   justify-content: space-between;
-  color: #6884a1;
-  font-size: 0.73rem;
+  color: #6984a1;
+  font-size: 0.72rem;
   font-weight: 600;
 }
 
@@ -271,7 +272,7 @@ input[type='range'] {
   }
 
   .scene {
-    height: min(58vh, 560px);
+    height: min(60vh, 580px);
   }
 }
 
@@ -281,7 +282,7 @@ input[type='range'] {
   }
 
   .scene {
-    height: min(56vh, 500px);
+    height: min(56vh, 510px);
   }
 }
 
