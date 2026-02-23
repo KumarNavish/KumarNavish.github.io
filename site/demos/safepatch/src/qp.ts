@@ -1,11 +1,15 @@
 import {
   Halfspace,
   Vec2,
+  add,
   dot,
   intersectHalfspaces,
   isStepFeasible,
+  norm,
   scale,
   squaredNorm,
+  sub,
+  vec,
   worldBoundsFromHalfspaces,
 } from './geometry'
 
@@ -16,13 +20,33 @@ export interface ProjectionInput {
   tolerance?: number
 }
 
+export interface ConstraintDiagnostic {
+  id: string
+  label: string
+  normal: Vec2
+  bound: number
+  active: boolean
+  violationStep0: number
+  violationProjected: number
+  lambda: number
+  isBinding: boolean
+}
+
 export interface ProjectionResult {
   step0: Vec2
   projectedStep: Vec2
   lambdaById: Record<string, number>
+  correctionById: Record<string, Vec2>
+  diagnostics: ConstraintDiagnostic[]
   activeSetIds: string[]
   objective0: number
   objectiveProjected: number
+  stationarityResidual: number
+  maxViolationStep0: number
+  maxViolationProjected: number
+  descentLinear0: number
+  descentLinearProjected: number
+  descentRetainedRatio: number
   ship: boolean
   reason: string | null
 }
@@ -31,7 +55,6 @@ interface Candidate {
   step: Vec2
   lambdas: number[]
   objective: number
-  activeSet: number[]
 }
 
 function objective(gradient: Vec2, eta: number, step: Vec2): number {
@@ -111,59 +134,202 @@ function enumerateSubsets(n: number): number[][] {
   return subsets
 }
 
+function buildLambdaTemplate(halfspaces: Halfspace[]): Record<string, number> {
+  const lambdaById: Record<string, number> = {}
+  for (const halfspace of halfspaces) {
+    lambdaById[halfspace.id] = 0
+  }
+  return lambdaById
+}
+
+function buildCorrectionById(
+  halfspaces: Halfspace[],
+  lambdaById: Record<string, number>,
+  eta: number,
+): Record<string, Vec2> {
+  const correctionById: Record<string, Vec2> = {}
+  for (const halfspace of halfspaces) {
+    const lambda = halfspace.active ? lambdaById[halfspace.id] ?? 0 : 0
+    correctionById[halfspace.id] = scale(halfspace.normal, -eta * lambda)
+  }
+  return correctionById
+}
+
+function buildDiagnostics(
+  halfspaces: Halfspace[],
+  step0: Vec2,
+  projectedStep: Vec2,
+  lambdaById: Record<string, number>,
+  tolerance: number,
+): ConstraintDiagnostic[] {
+  return halfspaces.map((halfspace) => {
+    const violationStep0 = halfspace.active ? dot(halfspace.normal, step0) - halfspace.bound : 0
+    const violationProjected = halfspace.active ? dot(halfspace.normal, projectedStep) - halfspace.bound : 0
+    const lambda = halfspace.active ? lambdaById[halfspace.id] ?? 0 : 0
+
+    return {
+      id: halfspace.id,
+      label: halfspace.label,
+      normal: { ...halfspace.normal },
+      bound: halfspace.bound,
+      active: halfspace.active,
+      violationStep0,
+      violationProjected,
+      lambda,
+      isBinding: halfspace.active && Math.abs(violationProjected) <= tolerance * 8 && lambda > tolerance,
+    }
+  })
+}
+
+function stationarityResidual(
+  step: Vec2,
+  gradient: Vec2,
+  eta: number,
+  halfspaces: Halfspace[],
+  lambdaById: Record<string, number>,
+): number {
+  let residual = add(scale(step, 1 / eta), gradient)
+
+  for (const halfspace of halfspaces) {
+    if (!halfspace.active) {
+      continue
+    }
+    const lambda = lambdaById[halfspace.id] ?? 0
+    residual = add(residual, scale(halfspace.normal, lambda))
+  }
+
+  return norm(residual)
+}
+
+function maxViolation(step: Vec2, halfspaces: Halfspace[]): number {
+  const active = halfspaces.filter((halfspace) => halfspace.active)
+  if (active.length === 0) {
+    return 0
+  }
+
+  return active.reduce((worst, halfspace) => {
+    const violation = dot(halfspace.normal, step) - halfspace.bound
+    return Math.max(worst, violation)
+  }, -Infinity)
+}
+
+function buildResult(params: {
+  step0: Vec2
+  projectedStep: Vec2
+  gradient: Vec2
+  eta: number
+  halfspaces: Halfspace[]
+  lambdaById: Record<string, number>
+  activeSetIds: string[]
+  objective0: number
+  objectiveProjected: number
+  ship: boolean
+  reason: string | null
+  tolerance: number
+}): ProjectionResult {
+  const {
+    step0,
+    projectedStep,
+    gradient,
+    eta,
+    halfspaces,
+    lambdaById,
+    activeSetIds,
+    objective0,
+    objectiveProjected,
+    ship,
+    reason,
+    tolerance,
+  } = params
+
+  const correctionById = buildCorrectionById(halfspaces, lambdaById, eta)
+  const diagnostics = buildDiagnostics(halfspaces, step0, projectedStep, lambdaById, tolerance)
+
+  const descentLinear0 = -dot(gradient, step0)
+  const descentLinearProjected = -dot(gradient, projectedStep)
+  const descentRetainedRatio = descentLinear0 > tolerance ? descentLinearProjected / descentLinear0 : 1
+
+  return {
+    step0,
+    projectedStep,
+    lambdaById,
+    correctionById,
+    diagnostics,
+    activeSetIds,
+    objective0,
+    objectiveProjected,
+    stationarityResidual: stationarityResidual(projectedStep, gradient, eta, halfspaces, lambdaById),
+    maxViolationStep0: maxViolation(step0, halfspaces),
+    maxViolationProjected: maxViolation(projectedStep, halfspaces),
+    descentLinear0,
+    descentLinearProjected,
+    descentRetainedRatio,
+    ship,
+    reason,
+  }
+}
+
 export function computeProjectedStep(input: ProjectionInput): ProjectionResult {
   const { gradient, halfspaces } = input
   const eta = input.eta
   const tolerance = input.tolerance ?? 1e-7
   const step0 = scale(gradient, -eta)
 
-  const lambdaById: Record<string, number> = {}
-  for (const halfspace of halfspaces) {
-    lambdaById[halfspace.id] = 0
-  }
-
+  const lambdaById = buildLambdaTemplate(halfspaces)
   const objective0 = objective(gradient, eta, step0)
 
   if (!Number.isFinite(eta) || eta <= tolerance) {
-    return {
+    return buildResult({
       step0,
       projectedStep: step0,
+      gradient,
+      eta,
+      halfspaces,
       lambdaById,
       activeSetIds: [],
       objective0,
       objectiveProjected: objective0,
       ship: false,
       reason: 'Step size eta must be positive.',
-    }
+      tolerance,
+    })
   }
 
   const activeHalfspaces = halfspaces.filter((halfspace) => halfspace.active)
   if (activeHalfspaces.length === 0) {
-    return {
+    return buildResult({
       step0,
       projectedStep: step0,
+      gradient,
+      eta,
+      halfspaces,
       lambdaById,
       activeSetIds: [],
       objective0,
       objectiveProjected: objective0,
       ship: true,
       reason: null,
-    }
+      tolerance,
+    })
   }
 
   const worldRadius = worldBoundsFromHalfspaces(activeHalfspaces)
   const zone = intersectHalfspaces(activeHalfspaces, worldRadius)
   if (zone.isEmpty) {
-    return {
+    return buildResult({
       step0,
       projectedStep: step0,
+      gradient,
+      eta,
+      halfspaces,
       lambdaById,
       activeSetIds: [],
       objective0,
       objectiveProjected: objective0,
       ship: false,
       reason: 'Guardrail set is infeasible: the ship zone is empty.',
-    }
+      tolerance,
+    })
   }
 
   const candidates: Candidate[] = []
@@ -179,7 +345,6 @@ export function computeProjectedStep(input: ProjectionInput): ProjectionResult {
         step: step0,
         lambdas: new Array<number>(activeHalfspaces.length).fill(0),
         objective: objective0,
-        activeSet: [],
       })
       continue
     }
@@ -212,7 +377,7 @@ export function computeProjectedStep(input: ProjectionInput): ProjectionResult {
       continue
     }
 
-    const step = { x: solution[0], y: solution[1] }
+    const step = vec(solution[0], solution[1])
 
     const multipliers = new Array<number>(activeHalfspaces.length).fill(0)
     let multipliersValid = true
@@ -238,7 +403,6 @@ export function computeProjectedStep(input: ProjectionInput): ProjectionResult {
       step,
       lambdas: multipliers,
       objective: objective(gradient, eta, step),
-      activeSet: subset,
     })
   }
 
@@ -248,38 +412,56 @@ export function computeProjectedStep(input: ProjectionInput): ProjectionResult {
         ? 'Numerical instability in QP solve. Try smaller eta or looser budgets.'
         : 'No feasible projected step for current guardrails and budgets.'
 
-    return {
+    return buildResult({
       step0,
       projectedStep: step0,
+      gradient,
+      eta,
+      halfspaces,
       lambdaById,
       activeSetIds: [],
       objective0,
       objectiveProjected: objective0,
       ship: false,
       reason,
-    }
+      tolerance,
+    })
   }
 
   candidates.sort((a, b) => a.objective - b.objective)
   const best = candidates[0]
 
+  const bestLambdaById = buildLambdaTemplate(halfspaces)
   const activeSetIds: string[] = []
   for (let i = 0; i < activeHalfspaces.length; i += 1) {
-    const value = best.lambdas[i]
-    lambdaById[activeHalfspaces[i].id] = value
-    if (value > tolerance) {
-      activeSetIds.push(activeHalfspaces[i].id)
+    const lambda = best.lambdas[i]
+    const id = activeHalfspaces[i].id
+    bestLambdaById[id] = lambda
+    if (lambda > tolerance) {
+      activeSetIds.push(id)
     }
   }
 
-  return {
+  return buildResult({
     step0,
     projectedStep: best.step,
-    lambdaById,
+    gradient,
+    eta,
+    halfspaces,
+    lambdaById: bestLambdaById,
     activeSetIds,
     objective0,
     objectiveProjected: best.objective,
     ship: true,
     reason: null,
-  }
+    tolerance,
+  })
+}
+
+export function correctionConsistencyError(result: ProjectionResult): number {
+  const correctionSum = Object.values(result.correctionById).reduce(
+    (sum, correction) => add(sum, correction),
+    vec(0, 0),
+  )
+  return norm(sub(add(result.step0, correctionSum), result.projectedStep))
 }
