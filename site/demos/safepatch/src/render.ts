@@ -161,8 +161,8 @@ export class SceneRenderer {
 
     this.drawWorstViolation(toScreen, input.stepCurrent, input.halfspaces, input.violationById)
     this.drawOrigin(toScreen)
-    this.drawLegend(width, input.previous !== null && input.changeBlend < 0.999)
-    this.drawPhaseLabel(input.phaseLabel, input.ship)
+    this.drawLegend(width, height, input.previous !== null && input.changeBlend < 0.999)
+    this.drawPhaseLabel(width, input.phaseLabel, input.ship)
   }
 
   private drawGrid(toScreen: (point: Vec2) => ScreenPoint, worldRadius: number): void {
@@ -391,14 +391,14 @@ export class SceneRenderer {
     ctx.fillText('θ', origin.x + 8, origin.y - 8)
   }
 
-  private drawLegend(width: number, showPrevious: boolean): void {
+  private drawLegend(width: number, height: number, showPrevious: boolean): void {
     const ctx = this.ctx
     const x = 14
-    const y = 14
     const rowHeight = 18
     const rows = showPrevious ? 4 : 3
     const legendWidth = showPrevious ? 172 : 148
     const legendHeight = 12 + rowHeight * rows
+    const y = height - legendHeight - 14
 
     ctx.fillStyle = 'rgba(255, 255, 255, 0.88)'
     ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)'
@@ -425,11 +425,28 @@ export class SceneRenderer {
     }
   }
 
-  private drawPhaseLabel(label: string, ship: boolean): void {
+  private drawPhaseLabel(width: number, label: string, ship: boolean): void {
     const ctx = this.ctx
+    const text = label
     ctx.font = '700 12px "IBM Plex Sans", sans-serif'
+    const textWidth = ctx.measureText(text).width
+    const padX = 10
+    const padY = 7
+    const boxWidth = textWidth + padX * 2
+    const boxHeight = 26
+    const x = width - boxWidth - 16
+    const y = 14
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'
+    ctx.strokeStyle = ship ? 'rgba(15, 118, 110, 0.35)' : 'rgba(180, 35, 24, 0.35)'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.roundRect(x, y, boxWidth, boxHeight, 10)
+    ctx.fill()
+    ctx.stroke()
+
     ctx.fillStyle = ship ? '#0f766e' : '#b42318'
-    ctx.fillText(label, 16, 38)
+    ctx.fillText(text, x + padX, y + boxHeight - padY)
   }
 
   private drawVector(

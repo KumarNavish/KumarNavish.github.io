@@ -11,11 +11,15 @@
       <header class="hero">
         <div>
           <p class="eyebrow">SafePatch Geometry</p>
-          <h1>Ship a model update without crossing guardrails.</h1>
+          <h1>A raw model update can break guardrails. SafePatch makes it shippable.</h1>
           <p class="story">
-            Red is the raw gradient update. Blue is the mathematically projected update that stays inside every active
-            constraint while preserving useful descent.
+            Red is the unconstrained step. Blue is the nearest feasible step from constrained optimization, so the
+            update keeps learning progress without violating safety limits.
           </p>
+          <div class="hero-pills" aria-label="problem solution summary">
+            <span class="hero-pill">Problem: raw update exits ship zone</span>
+            <span class="hero-pill">Solution: project to feasible nearest step</span>
+          </div>
         </div>
         <button id="replay-button" class="replay" type="button">Replay animation</button>
       </header>
@@ -60,10 +64,10 @@
             <label class="control">
               <div class="control-head">
                 <span>Step size η</span>
-                <span id="eta-value" class="value">0.55</span>
+                <span id="eta-value" class="value">0.72</span>
               </div>
-              <p>How far the unconstrained update tries to move.</p>
-              <input id="eta-slider" type="range" min="0.1" max="1.8" step="0.01" value="0.55" />
+              <p>Scales the raw step: Δ0 = -η gnew.</p>
+              <input id="eta-slider" type="range" min="0.1" max="1.9" step="0.01" value="0.72" />
             </label>
 
             <div class="toggle-row">
@@ -74,34 +78,38 @@
             <div class="budget-grid">
               <label class="control compact">
                 <div class="control-head">
-                  <span>ε1</span>
-                  <span id="eps-g1-value" class="value">0.82</span>
+                  <span>ε1 · leftward limit</span>
+                  <span id="eps-g1-value" class="value">0.05</span>
                 </div>
-                <input id="eps-g1" type="range" min="0.2" max="1.4" step="0.01" value="0.82" />
+                <span class="subeq">-Δx ≤ ε1</span>
+                <input id="eps-g1" type="range" min="0.00" max="0.90" step="0.01" value="0.05" />
               </label>
 
               <label class="control compact">
                 <div class="control-head">
-                  <span>ε2</span>
-                  <span id="eps-g2-value" class="value">0.70</span>
+                  <span>ε2 · upward cap</span>
+                  <span id="eps-g2-value" class="value">0.24</span>
                 </div>
-                <input id="eps-g2" type="range" min="0.2" max="1.35" step="0.01" value="0.70" />
+                <span class="subeq">Δy ≤ ε2</span>
+                <input id="eps-g2" type="range" min="0.05" max="0.90" step="0.01" value="0.24" />
               </label>
 
               <label class="control compact">
                 <div class="control-head">
-                  <span>ε3</span>
-                  <span id="eps-g3-value" class="value">0.88</span>
+                  <span>ε3 · diagonal cap</span>
+                  <span id="eps-g3-value" class="value">1.05</span>
                 </div>
-                <input id="eps-g3" type="range" min="0.2" max="1.4" step="0.01" value="0.88" />
+                <span class="subeq">⟨g3,Δ⟩ ≤ ε3</span>
+                <input id="eps-g3" type="range" min="0.50" max="1.40" step="0.01" value="1.05" />
               </label>
 
               <label class="control compact">
                 <div class="control-head">
-                  <span>ε4</span>
-                  <span id="eps-g4-value" class="value">0.68</span>
+                  <span>ε4 · stability cap</span>
+                  <span id="eps-g4-value" class="value">0.82</span>
                 </div>
-                <input id="eps-g4" type="range" min="0.2" max="1.3" step="0.01" value="0.68" />
+                <span class="subeq">⟨g4,Δ⟩ ≤ ε4</span>
+                <input id="eps-g4" type="range" min="0.40" max="1.30" step="0.01" value="0.82" />
               </label>
             </div>
           </section>
