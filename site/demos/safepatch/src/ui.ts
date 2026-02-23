@@ -1,3 +1,4 @@
+import katex from 'katex'
 import { Halfspace, Vec2, dot, norm } from './geometry'
 
 export interface ControlValues {
@@ -59,6 +60,7 @@ export class UIController {
   private readonly budgetInputs: Map<string, HTMLInputElement>
   private readonly budgetValues: Map<string, HTMLElement>
   private readonly lambdaRows: Map<string, LambdaRow>
+  private lastLiveEquation = ''
 
   constructor(halfspaces: Halfspace[]) {
     this.halfspaces = halfspaces
@@ -148,7 +150,7 @@ export class UIController {
     this.metricActiveSet.textContent = frame.activeSetIds.length > 0 ? frame.activeSetIds.join(', ') : 'none'
 
     this.kktNumeric.textContent = `Δ(t) = (${frame.stepCurrent.x.toFixed(3)}, ${frame.stepCurrent.y.toFixed(3)}) | max v(t) = ${frame.maxViolationCurrent.toFixed(4)}`
-    this.liveEquation.textContent = this.liveDecomposition(frame)
+    this.renderLiveEquation(frame)
 
     this.renderLambdas(frame)
   }
@@ -162,13 +164,34 @@ export class UIController {
       }))
       .filter((entry) => entry.lambda > 1e-4)
       .sort((a, b) => b.lambda - a.lambda)
-      .map((entry) => `${entry.lambda.toFixed(3)}·${entry.id}`)
+      .map((entry) => {
+        const index = entry.id.replace('g', '')
+        return `${entry.lambda.toFixed(2)}\\,g_{${index}}`
+      })
 
     if (terms.length === 0) {
-      return 'No active correction: Δ(t) = Δ0.'
+      return String.raw`\Delta(t) = \Delta_0`
     }
 
-    return `Live correction: Δ(t) = Δ0 − η(${terms.join(' + ')})`
+    return String.raw`\Delta(t)=\Delta_0-\eta\left(${terms.join(' + ')}\right)`
+  }
+
+  private renderLiveEquation(frame: ProofFrameUi): void {
+    const equation = this.liveDecomposition(frame)
+    if (equation === this.lastLiveEquation) {
+      return
+    }
+
+    this.lastLiveEquation = equation
+    try {
+      katex.render(equation, this.liveEquation, {
+        throwOnError: true,
+        displayMode: true,
+        strict: 'warn',
+      })
+    } catch {
+      this.liveEquation.textContent = equation
+    }
   }
 
   private renderLambdas(frame: ProofFrameUi): void {
