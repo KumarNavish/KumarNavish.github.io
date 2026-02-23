@@ -19,7 +19,7 @@ import { ProjectionResult, computeProjectedStep } from './qp'
 import { CorrectionVisual, SceneRenderer, paletteForConstraints } from './render'
 import { UIController } from './ui'
 
-const GRADIENT_NEW: Vec2 = vec(1.32, -0.95)
+const GRADIENT_NEW: Vec2 = vec(1.4, -1.06)
 
 const TOTAL_ANIMATION_MS = 2000
 const RAW_END = 0.26
@@ -30,32 +30,41 @@ const baseHalfspaces: Halfspace[] = [
   {
     id: 'g1',
     label: 'λ1',
-    normal: normalize(vec(1.0, 0.22)),
-    bound: 0.86,
+    normal: normalize(vec(1.0, 0.18)),
+    bound: 0.82,
     active: true,
   },
   {
     id: 'g2',
     label: 'λ2',
-    normal: normalize(vec(-0.78, 0.66)),
-    bound: 0.62,
+    normal: normalize(vec(-0.68, 0.86)),
+    bound: 0.7,
     active: true,
   },
   {
     id: 'g3',
     label: 'λ3',
-    normal: normalize(vec(-0.52, -0.88)),
-    bound: 0.84,
+    normal: normalize(vec(-0.58, -0.81)),
+    bound: 0.9,
     active: true,
   },
   {
     id: 'g4',
     label: 'λ4',
-    normal: normalize(vec(0.42, -0.91)),
-    bound: 0.58,
+    normal: normalize(vec(0.36, -0.93)),
+    bound: 0.68,
     active: true,
   },
 ]
+
+const MATH_FORMULAS = {
+  primal: String.raw`\begin{aligned}
+\Delta_0 &= -\eta\,g_{\text{new}} \\
+\Delta^* &= \operatorname*{arg\,min}_{\Delta}\;\langle g_{\text{new}}, \Delta \rangle + \frac{1}{2\eta}\lVert \Delta \rVert^2 \\
+\text{s.t.}\;&\langle g_k,\Delta\rangle \le \varepsilon_k,\;\forall k
+\end{aligned}`,
+  dual: String.raw`\Delta^*=\Delta_0-\eta\sum_k \lambda_k g_k,\qquad \lambda_k \ge 0`,
+}
 
 interface AnimatedCorrection extends CorrectionVisual {
   lambda: number
@@ -169,24 +178,26 @@ function maxViolation(violationById: Record<string, number>, halfspaces: Halfspa
   return Number.isFinite(max) ? max : 0
 }
 
-function renderMath(): void {
-  const nodes = document.querySelectorAll<HTMLElement>('[data-katex]')
-  nodes.forEach((node) => {
-    const expression = node.dataset.katex
-    if (!expression) {
-      return
-    }
+function renderMathBlock(elementId: string, expression: string): void {
+  const node = document.getElementById(elementId)
+  if (!node) {
+    return
+  }
 
+  try {
     katex.render(expression, node, {
-      throwOnError: false,
-      displayMode: node.dataset.display === 'block',
-      strict: 'ignore',
+      throwOnError: true,
+      displayMode: true,
+      strict: 'warn',
     })
-  })
+  } catch {
+    node.textContent = expression
+  }
 }
 
 function start(): void {
-  renderMath()
+  renderMathBlock('math-primal', MATH_FORMULAS.primal)
+  renderMathBlock('math-dual', MATH_FORMULAS.dual)
 
   const canvas = document.getElementById('scene-canvas') as HTMLCanvasElement | null
   if (!canvas) {

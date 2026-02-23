@@ -52,6 +52,7 @@ export class UIController {
   private readonly phaseCaption: HTMLElement
   private readonly phaseItems: HTMLLIElement[]
   private readonly kktNumeric: HTMLElement
+  private readonly liveEquation: HTMLElement
   private readonly metricAngle: HTMLElement
   private readonly metricViolation: HTMLElement
   private readonly metricActiveSet: HTMLElement
@@ -70,6 +71,7 @@ export class UIController {
     this.phaseCaption = this.getElement('phase-caption')
     this.phaseItems = Array.from(document.querySelectorAll<HTMLLIElement>('#phase-track li'))
     this.kktNumeric = this.getElement('kkt-numeric')
+    this.liveEquation = this.getElement('live-equation')
     this.metricAngle = this.getElement('metric-angle')
     this.metricViolation = this.getElement('metric-violation')
     this.metricActiveSet = this.getElement('metric-active-set')
@@ -146,8 +148,27 @@ export class UIController {
     this.metricActiveSet.textContent = frame.activeSetIds.length > 0 ? frame.activeSetIds.join(', ') : 'none'
 
     this.kktNumeric.textContent = `Δ(t) = (${frame.stepCurrent.x.toFixed(3)}, ${frame.stepCurrent.y.toFixed(3)}) | max v(t) = ${frame.maxViolationCurrent.toFixed(4)}`
+    this.liveEquation.textContent = this.liveDecomposition(frame)
 
     this.renderLambdas(frame)
+  }
+
+  private liveDecomposition(frame: ProofFrameUi): string {
+    const terms = this.halfspaces
+      .filter((halfspace) => halfspace.active)
+      .map((halfspace) => ({
+        id: halfspace.id,
+        lambda: frame.lambdas[halfspace.id] ?? 0,
+      }))
+      .filter((entry) => entry.lambda > 1e-4)
+      .sort((a, b) => b.lambda - a.lambda)
+      .map((entry) => `${entry.lambda.toFixed(3)}·${entry.id}`)
+
+    if (terms.length === 0) {
+      return 'No active correction: Δ(t) = Δ0.'
+    }
+
+    return `Live correction: Δ(t) = Δ0 − η(${terms.join(' + ')})`
   }
 
   private renderLambdas(frame: ProofFrameUi): void {
