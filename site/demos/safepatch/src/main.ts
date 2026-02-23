@@ -1,3 +1,6 @@
+import katex from 'katex'
+import 'katex/dist/katex.min.css'
+
 import {
   Halfspace,
   Polygon,
@@ -16,43 +19,47 @@ import { ProjectionResult, computeProjectedStep } from './qp'
 import { CorrectionVisual, SceneRenderer, paletteForConstraints } from './render'
 import { UIController } from './ui'
 
-const GRADIENT_NEW: Vec2 = vec(1.18, -0.76)
+const GRADIENT_NEW: Vec2 = vec(1.32, -0.95)
 
-const TOTAL_ANIMATION_MS = 2200
-const SEGMENT_UNCONSTRAINED_END = 0.24
-const SEGMENT_VIOLATION_END = 0.5
-const SEGMENT_DUAL_END = 0.74
+const TOTAL_ANIMATION_MS = 2000
+const RAW_END = 0.26
+const SCAN_END = 0.5
+const CORRECTION_END = 0.86
 
 const baseHalfspaces: Halfspace[] = [
   {
     id: 'g1',
     label: 'λ1',
-    normal: normalize(vec(1.0, 0.16)),
-    bound: 0.94,
+    normal: normalize(vec(1.0, 0.22)),
+    bound: 0.86,
     active: true,
   },
   {
     id: 'g2',
     label: 'λ2',
-    normal: normalize(vec(-0.72, 0.74)),
-    bound: 0.88,
+    normal: normalize(vec(-0.78, 0.66)),
+    bound: 0.62,
     active: true,
   },
   {
     id: 'g3',
     label: 'λ3',
-    normal: normalize(vec(-0.62, -0.81)),
-    bound: 0.9,
+    normal: normalize(vec(-0.52, -0.88)),
+    bound: 0.84,
     active: true,
   },
   {
     id: 'g4',
     label: 'λ4',
-    normal: normalize(vec(0.18, -1.0)),
-    bound: 0.76,
+    normal: normalize(vec(0.42, -0.91)),
+    bound: 0.58,
     active: true,
   },
 ]
+
+interface AnimatedCorrection extends CorrectionVisual {
+  lambda: number
+}
 
 function copyHalfspaces(halfspaces: Halfspace[]): Halfspace[] {
   return halfspaces.map((halfspace) => ({ ...halfspace, normal: { ...halfspace.normal } }))
@@ -70,106 +77,77 @@ function easeInOutCubic(value: number): number {
   return 1 - ((-2 * t + 2) ** 3) / 2
 }
 
-function blendLambdas(target: Record<string, number>, scaleFactor: number): Record<string, number> {
-  const values: Record<string, number> = {}
-  for (const [id, lambda] of Object.entries(target)) {
-    values[id] = lambda * scaleFactor
-  }
-  return values
-}
-
 function phaseFromProgress(progress: number): number {
-  if (progress < SEGMENT_UNCONSTRAINED_END) {
+  if (progress < RAW_END) {
     return 0
   }
-  if (progress < SEGMENT_VIOLATION_END) {
+  if (progress < SCAN_END) {
     return 1
   }
-  if (progress < SEGMENT_DUAL_END) {
+  if (progress < CORRECTION_END) {
     return 2
   }
   return 3
 }
 
-function localPhaseProgress(progress: number): number {
-  const phase = phaseFromProgress(progress)
+function phaseCaption(phase: number, ship: boolean): string {
+  if (!ship) {
+    if (phase === 0) {
+      return 'Raw step is computed.'
+    }
+    if (phase === 1) {
+      return 'Guardrail check finds violations.'
+    }
+    if (phase === 2) {
+      return 'Projection fails with current budgets.'
+    }
+    return 'HOLD: relax budgets or disable a guardrail.'
+  }
+
   if (phase === 0) {
-    return clamp(progress / SEGMENT_UNCONSTRAINED_END)
+    return 'Raw unconstrained update.'
   }
   if (phase === 1) {
-    return clamp((progress - SEGMENT_UNCONSTRAINED_END) / (SEGMENT_VIOLATION_END - SEGMENT_UNCONSTRAINED_END))
+    return 'Violations are measured against each guardrail.'
   }
   if (phase === 2) {
-    return clamp((progress - SEGMENT_VIOLATION_END) / (SEGMENT_DUAL_END - SEGMENT_VIOLATION_END))
+    return 'Dual forces sequentially bend the step back.'
   }
-  return clamp((progress - SEGMENT_DUAL_END) / (1 - SEGMENT_DUAL_END))
+  return 'Certified projected step is ready to ship.'
 }
 
-function correctionScale(progress: number): number {
-  if (progress < SEGMENT_VIOLATION_END) {
+function correctionProgress(globalProgress: number, index: number, total: number): number {
+  if (total <= 0) {
     return 0
   }
-  if (progress >= SEGMENT_DUAL_END) {
-    return 1
-  }
-  const t = (progress - SEGMENT_VIOLATION_END) / (SEGMENT_DUAL_END - SEGMENT_VIOLATION_END)
-  return easeInOutCubic(t)
+  const local = globalProgress * total - index
+  return easeInOutCubic(clamp(local))
 }
 
-function unconstrainedGrowth(progress: number): number {
-  if (progress >= SEGMENT_UNCONSTRAINED_END) {
-    return 1
-  }
-  return easeInOutCubic(progress / SEGMENT_UNCONSTRAINED_END)
+function buildTargetCorrections(
+  projection: ProjectionResult,
+  halfspaces: Halfspace[],
+  colorById: Record<string, string>,
+): AnimatedCorrection[] {
+  return halfspaces
+    .filter((halfspace) => halfspace.active)
+    .map((halfspace) => ({
+      id: halfspace.id,
+      vector: projection.correctionById[halfspace.id] ?? vec(0, 0),
+      color: colorById[halfspace.id],
+      progress: 0,
+      lambda: projection.lambdaById[halfspace.id] ?? 0,
+    }))
+    .filter((correction) => norm(correction.vector) > 1e-8)
+    .sort((a, b) => b.lambda - a.lambda)
 }
 
-function violationEmphasis(progress: number): number {
-  if (progress < SEGMENT_UNCONSTRAINED_END) {
-    return 0
+function applyAnimatedCorrections(step0: Vec2, corrections: AnimatedCorrection[]): Vec2 {
+  let totalCorrection = vec(0, 0)
+  for (const correction of corrections) {
+    totalCorrection = add(totalCorrection, scale(correction.vector, correction.progress))
   }
-  if (progress < SEGMENT_VIOLATION_END) {
-    return easeInOutCubic((progress - SEGMENT_UNCONSTRAINED_END) / (SEGMENT_VIOLATION_END - SEGMENT_UNCONSTRAINED_END))
-  }
-  if (progress < SEGMENT_DUAL_END) {
-    return 1
-  }
-
-  const t = clamp((progress - SEGMENT_DUAL_END) / (1 - SEGMENT_DUAL_END))
-  return 1 - easeInOutCubic(t)
-}
-
-function dualEmphasis(progress: number): number {
-  if (progress < SEGMENT_VIOLATION_END) {
-    return 0
-  }
-  if (progress >= SEGMENT_DUAL_END) {
-    return 1
-  }
-  const t = (progress - SEGMENT_VIOLATION_END) / (SEGMENT_DUAL_END - SEGMENT_VIOLATION_END)
-  return easeInOutCubic(t)
-}
-
-function certifyEmphasis(progress: number): number {
-  if (progress < SEGMENT_DUAL_END) {
-    return 0
-  }
-  return easeInOutCubic((progress - SEGMENT_DUAL_END) / (1 - SEGMENT_DUAL_END))
-}
-
-function objectiveValue(gradient: Vec2, eta: number, step: Vec2): number {
-  return dot(gradient, step) + dot(step, step) / (2 * eta)
-}
-
-function stationarityResidual(step: Vec2, eta: number, gradient: Vec2, halfspaces: Halfspace[], lambdas: Record<string, number>): number {
-  let residual = add(scale(step, 1 / eta), gradient)
-  for (const halfspace of halfspaces) {
-    if (!halfspace.active) {
-      continue
-    }
-    const lambda = lambdas[halfspace.id] ?? 0
-    residual = add(residual, scale(halfspace.normal, lambda))
-  }
-  return norm(residual)
+  return add(step0, totalCorrection)
 }
 
 function violationsForStep(step: Vec2, halfspaces: Halfspace[]): Record<string, number> {
@@ -188,37 +166,28 @@ function maxViolation(violationById: Record<string, number>, halfspaces: Halfspa
     }
     max = Math.max(max, violationById[halfspace.id] ?? 0)
   }
-
   return Number.isFinite(max) ? max : 0
 }
 
-function phaseCaption(phase: number, ship: boolean): string {
-  if (!ship) {
-    if (phase === 0) {
-      return 'Phase 1 · Compute the unconstrained patch Δ0 = -η g_new.'
+function renderMath(): void {
+  const nodes = document.querySelectorAll<HTMLElement>('[data-katex]')
+  nodes.forEach((node) => {
+    const expression = node.dataset.katex
+    if (!expression) {
+      return
     }
-    if (phase === 1) {
-      return 'Phase 2 · Guardrails detect infeasibility via positive violations.'
-    }
-    if (phase === 2) {
-      return 'Phase 3 · Dual solver attempts correction but cannot certify a feasible point.'
-    }
-    return 'Phase 4 · HOLD: adjust budgets/guardrails before shipping this patch.'
-  }
 
-  if (phase === 0) {
-    return 'Phase 1 · Unconstrained gradient step.'
-  }
-  if (phase === 1) {
-    return 'Phase 2 · Violation scan: v_k = <g_k, Δ0> - ε_k.'
-  }
-  if (phase === 2) {
-    return 'Phase 3 · Dual correction: Δ = Δ0 - η Σ λ_k g_k.'
-  }
-  return 'Phase 4 · Certified patch: feasibility, stationarity, and complementarity align.'
+    katex.render(expression, node, {
+      throwOnError: false,
+      displayMode: node.dataset.display === 'block',
+      strict: 'ignore',
+    })
+  })
 }
 
 function start(): void {
+  renderMath()
+
   const canvas = document.getElementById('scene-canvas') as HTMLCanvasElement | null
   if (!canvas) {
     throw new Error('Missing canvas #scene-canvas')
@@ -237,6 +206,7 @@ function start(): void {
     halfspaces,
   })
 
+  let targetCorrections: AnimatedCorrection[] = []
   let animationStart = performance.now()
 
   function applyControls(restartAnimation = true): void {
@@ -255,6 +225,8 @@ function start(): void {
       halfspaces,
     })
 
+    targetCorrections = projection.ship ? buildTargetCorrections(projection, halfspaces, colorById) : []
+
     if (restartAnimation) {
       animationStart = performance.now()
     }
@@ -264,45 +236,56 @@ function start(): void {
     const elapsed = now - animationStart
     const progress = clamp(elapsed / TOTAL_ANIMATION_MS)
     const phase = phaseFromProgress(progress)
-    const phaseProgress = localPhaseProgress(progress)
-
-    const growth = unconstrainedGrowth(progress)
-    const correctionProgress = projection.ship ? correctionScale(progress) : 0
 
     const step0 = projection.step0
     const stepTarget = projection.ship ? projection.projectedStep : projection.step0
 
-    let stepCurrent: Vec2
-    if (progress < SEGMENT_UNCONSTRAINED_END) {
-      stepCurrent = scale(step0, growth)
-    } else if (progress < SEGMENT_VIOLATION_END) {
+    let stepCurrent = step0
+    let animatedCorrections: AnimatedCorrection[] = targetCorrections.map((correction) => ({ ...correction }))
+
+    if (progress < RAW_END) {
+      const t = easeInOutCubic(progress / RAW_END)
+      stepCurrent = scale(step0, t)
+      animatedCorrections = animatedCorrections.map((correction) => ({ ...correction, progress: 0 }))
+    } else if (progress < SCAN_END || !projection.ship) {
       stepCurrent = step0
+      animatedCorrections = animatedCorrections.map((correction) => ({ ...correction, progress: 0 }))
     } else {
-      stepCurrent = lerp(step0, stepTarget, correctionProgress)
+      const correctionGlobal = clamp((progress - SCAN_END) / (CORRECTION_END - SCAN_END))
+      animatedCorrections = animatedCorrections.map((correction, index) => {
+        const fraction = correctionProgress(correctionGlobal, index, animatedCorrections.length)
+        return {
+          ...correction,
+          progress: fraction,
+        }
+      })
+
+      stepCurrent = applyAnimatedCorrections(step0, animatedCorrections)
+
+      if (progress >= CORRECTION_END) {
+        const settle = easeInOutCubic((progress - CORRECTION_END) / (1 - CORRECTION_END))
+        stepCurrent = lerp(stepCurrent, stepTarget, settle)
+      }
     }
 
-    const lambdasCurrent = blendLambdas(projection.lambdaById, correctionProgress)
-
-    const correctionChain: CorrectionVisual[] = halfspaces
-      .filter((halfspace) => halfspace.active)
-      .map((halfspace) => ({
-        id: halfspace.id,
-        vector: scale(halfspace.normal, -eta * (lambdasCurrent[halfspace.id] ?? 0)),
-        color: colorById[halfspace.id],
-      }))
-      .filter((entry) => norm(entry.vector) > 1e-7)
+    const lambdasCurrent: Record<string, number> = {}
+    for (const halfspace of halfspaces) {
+      lambdasCurrent[halfspace.id] = 0
+    }
+    for (const correction of animatedCorrections) {
+      const targetLambda = projection.lambdaById[correction.id] ?? 0
+      lambdasCurrent[correction.id] = targetLambda * correction.progress
+    }
 
     const violationCurrentById = violationsForStep(stepCurrent, halfspaces)
     const maxViolationCurrent = maxViolation(violationCurrentById, halfspaces)
-
-    const stationarityCurrent = stationarityResidual(stepCurrent, eta, GRADIENT_NEW, halfspaces, lambdasCurrent)
-    const descentLinearCurrent = -dot(GRADIENT_NEW, stepCurrent)
-    const descentRetainedRatio = projection.descentLinear0 > 1e-8 ? descentLinearCurrent / projection.descentLinear0 : 1
-
-    const objectiveCurrent = objectiveValue(GRADIENT_NEW, eta, stepCurrent)
     const activeSetCurrent = Object.entries(lambdasCurrent)
       .filter(([, lambda]) => lambda > 1e-4)
       .map(([id]) => id)
+
+    const reason = projection.ship
+      ? 'Blue endpoint is feasible for all active guardrails.'
+      : projection.reason ?? 'No feasible projected step under current budgets.'
 
     renderer.render({
       halfspaces,
@@ -311,31 +294,24 @@ function start(): void {
       step0,
       stepCurrent,
       stepTarget,
-      correctionChain,
+      corrections: animatedCorrections,
       violationById: violationCurrentById,
       phaseLabel: phaseCaption(phase, projection.ship),
       ship: projection.ship,
-      violationEmphasis: violationEmphasis(progress),
-      dualEmphasis: dualEmphasis(progress),
-      certifyEmphasis: certifyEmphasis(progress),
+      phaseIndex: phase,
     })
 
     ui.renderFrame({
       phaseIndex: phase,
-      phaseCaption: `${phaseCaption(phase, projection.ship)} (${Math.round(phaseProgress * 100)}%)`,
+      phaseCaption: phaseCaption(phase, projection.ship),
       ship: projection.ship,
-      reason: projection.reason,
+      reason,
       step0,
       stepCurrent,
       lambdas: lambdasCurrent,
-      diagnostics: projection.diagnostics,
-      violationCurrentById,
-      stationarityResidual: stationarityCurrent,
-      descentRetainedRatio,
-      objectiveDeltaCurrent: objectiveCurrent - projection.objective0,
-      activeSetIds: activeSetCurrent,
       maxViolationStep0: projection.maxViolationStep0,
       maxViolationCurrent,
+      activeSetIds: activeSetCurrent,
       colorById,
     })
 

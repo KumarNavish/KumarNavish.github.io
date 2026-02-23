@@ -1,6 +1,4 @@
-import { Halfspace, Vec2, sub } from './geometry'
-import { ConstraintDiagnostic } from './qp'
-import { drawLambdaDial } from './render'
+import { Halfspace, Vec2, dot, norm } from './geometry'
 
 export interface ControlValues {
   eta: number
@@ -16,48 +14,32 @@ export interface ProofFrameUi {
   step0: Vec2
   stepCurrent: Vec2
   lambdas: Record<string, number>
-  diagnostics: ConstraintDiagnostic[]
-  violationCurrentById: Record<string, number>
-  stationarityResidual: number
-  descentRetainedRatio: number
-  objectiveDeltaCurrent: number
-  activeSetIds: string[]
   maxViolationStep0: number
   maxViolationCurrent: number
+  activeSetIds: string[]
   colorById: Record<string, string>
 }
 
-interface DialElements {
-  wrapper: HTMLDivElement
-  canvas: HTMLCanvasElement
+interface LambdaRow {
+  row: HTMLDivElement
+  label: HTMLSpanElement
   value: HTMLSpanElement
-  id: string
+  fill: HTMLDivElement
 }
 
-interface ConstraintRowElements {
-  row: HTMLTableRowElement
-  violation0: HTMLTableCellElement
-  lambda: HTMLTableCellElement
-  violationCurrent: HTMLTableCellElement
+function clamp(value: number, min = 0, max = 1): number {
+  return Math.min(Math.max(value, min), max)
 }
 
-function formatSigned(value: number, digits = 3): string {
-  const prefix = value > 0 ? '+' : ''
-  return `${prefix}${value.toFixed(digits)}`
-}
-
-function formatScientific(value: number): string {
-  if (!Number.isFinite(value)) {
-    return 'n/a'
+function angleBetweenDegrees(a: Vec2, b: Vec2): number {
+  const na = norm(a)
+  const nb = norm(b)
+  if (na <= 1e-8 || nb <= 1e-8) {
+    return 0
   }
-  if (Math.abs(value) < 1e-4) {
-    return value.toExponential(2)
-  }
-  return value.toFixed(5)
-}
 
-function formatPercent(value: number): string {
-  return `${(value * 100).toFixed(1)}%`
+  const cosine = clamp(dot(a, b) / (na * nb), -1, 1)
+  return (Math.acos(cosine) * 180) / Math.PI
 }
 
 export class UIController {
@@ -70,15 +52,12 @@ export class UIController {
   private readonly phaseCaption: HTMLElement
   private readonly phaseItems: HTMLLIElement[]
   private readonly kktNumeric: HTMLElement
-  private readonly metricFeasibility: HTMLElement
-  private readonly metricDescent: HTMLElement
-  private readonly metricStationarity: HTMLElement
-  private readonly metricPractical: HTMLElement
+  private readonly metricAngle: HTMLElement
+  private readonly metricViolation: HTMLElement
   private readonly metricActiveSet: HTMLElement
   private readonly budgetInputs: Map<string, HTMLInputElement>
   private readonly budgetValues: Map<string, HTMLElement>
-  private readonly dialElements: Map<string, DialElements>
-  private readonly rowElements: Map<string, ConstraintRowElements>
+  private readonly lambdaRows: Map<string, LambdaRow>
 
   constructor(halfspaces: Halfspace[]) {
     this.halfspaces = halfspaces
@@ -91,10 +70,8 @@ export class UIController {
     this.phaseCaption = this.getElement('phase-caption')
     this.phaseItems = Array.from(document.querySelectorAll<HTMLLIElement>('#phase-track li'))
     this.kktNumeric = this.getElement('kkt-numeric')
-    this.metricFeasibility = this.getElement('metric-feasibility')
-    this.metricDescent = this.getElement('metric-descent')
-    this.metricStationarity = this.getElement('metric-stationarity')
-    this.metricPractical = this.getElement('metric-practical')
+    this.metricAngle = this.getElement('metric-angle')
+    this.metricViolation = this.getElement('metric-violation')
     this.metricActiveSet = this.getElement('metric-active-set')
 
     this.budgetInputs = new Map<string, HTMLInputElement>()
@@ -104,8 +81,7 @@ export class UIController {
       this.budgetValues.set(halfspace.id, this.getElement(`eps-${halfspace.id}-value`))
     }
 
-    this.dialElements = this.createLambdaDials(halfspaces)
-    this.rowElements = this.createConstraintRows(halfspaces)
+    this.lambdaRows = this.createLambdaRows(halfspaces)
 
     this.syncDisplayedControlValues()
     this.syncGuardrailInteractivity()
@@ -156,97 +132,42 @@ export class UIController {
     this.shipIndicator.classList.toggle('ship', frame.ship)
     this.shipIndicator.classList.toggle('hold', !frame.ship)
     this.shipReason.textContent = frame.ship
-      ? frame.reason ?? 'Projected step satisfies all active budgets.'
-      : frame.reason ?? 'Projected step could not be certified.'
+      ? frame.reason ?? 'Projected step remains inside all active guardrails.'
+      : frame.reason ?? 'No feasible projected step under current budgets.'
 
-    const correction = sub(frame.stepCurrent, frame.step0)
-    this.kktNumeric.textContent = `Δ(t)=(${frame.stepCurrent.x.toFixed(3)}, ${frame.stepCurrent.y.toFixed(3)}) = Δ0 + c(t), c(t)=(${correction.x.toFixed(3)}, ${correction.y.toFixed(3)})`
-
-    this.metricFeasibility.textContent = formatSigned(frame.maxViolationCurrent, 4)
-    this.metricFeasibility.classList.toggle('good', frame.maxViolationCurrent <= 1e-6)
-    this.metricFeasibility.classList.toggle('bad', frame.maxViolationCurrent > 1e-6)
-
-    this.metricDescent.textContent = formatPercent(frame.descentRetainedRatio)
-    this.metricDescent.classList.toggle('good', frame.descentRetainedRatio >= 0.6)
-    this.metricDescent.classList.toggle('bad', frame.descentRetainedRatio < 0.6)
-
-    this.metricStationarity.textContent = formatScientific(frame.stationarityResidual)
-    this.metricStationarity.classList.toggle('good', frame.stationarityResidual <= 1e-5)
-    this.metricStationarity.classList.toggle('bad', frame.stationarityResidual > 1e-5)
+    const angle = angleBetweenDegrees(frame.step0, frame.stepCurrent)
+    this.metricAngle.textContent = `${angle.toFixed(1)}°`
 
     const removedViolation = Math.max(0, frame.maxViolationStep0) - Math.max(0, frame.maxViolationCurrent)
-    this.metricPractical.textContent = `${removedViolation >= 0 ? '+' : ''}${removedViolation.toFixed(4)}`
-    this.metricPractical.classList.toggle('good', removedViolation >= -1e-6)
-    this.metricPractical.classList.toggle('bad', removedViolation < -1e-6)
+    this.metricViolation.textContent = `${removedViolation >= 0 ? '+' : ''}${removedViolation.toFixed(3)}`
+    this.metricViolation.classList.toggle('good', removedViolation >= -1e-6)
+    this.metricViolation.classList.toggle('bad', removedViolation < -1e-6)
 
-    const activeLabels = frame.activeSetIds
-      .map((id) => this.halfspaces.find((halfspace) => halfspace.id === id)?.label ?? id)
-      .join(', ')
-    this.metricActiveSet.textContent = activeLabels.length > 0 ? activeLabels : 'none'
+    this.metricActiveSet.textContent = frame.activeSetIds.length > 0 ? frame.activeSetIds.join(', ') : 'none'
 
-    this.renderConstraintLedger(frame)
+    this.kktNumeric.textContent = `Δ(t) = (${frame.stepCurrent.x.toFixed(3)}, ${frame.stepCurrent.y.toFixed(3)}) | max v(t) = ${frame.maxViolationCurrent.toFixed(4)}`
+
     this.renderLambdas(frame)
   }
 
-  private renderConstraintLedger(frame: ProofFrameUi): void {
-    for (const diagnostic of frame.diagnostics) {
-      const row = this.rowElements.get(diagnostic.id)
-      if (!row) {
-        continue
-      }
-
-      const color = frame.colorById[diagnostic.id] ?? '#64748b'
-      row.row.style.setProperty('--constraint-color', color)
-
-      if (!diagnostic.active) {
-        row.row.classList.add('inactive')
-        row.violation0.textContent = '—'
-        row.lambda.textContent = '—'
-        row.violationCurrent.textContent = '—'
-        continue
-      }
-
-      row.row.classList.remove('inactive')
-
-      const lambdaValue = frame.lambdas[diagnostic.id] ?? 0
-      const violation0 = diagnostic.violationStep0
-      const violationCurrent = frame.violationCurrentById[diagnostic.id] ?? 0
-
-      row.violation0.textContent = formatSigned(violation0, 3)
-      row.lambda.textContent = lambdaValue.toFixed(3)
-      row.violationCurrent.textContent = formatSigned(violationCurrent, 3)
-
-      row.row.classList.toggle('violated', violationCurrent > 1e-4)
-      row.row.classList.toggle('binding', Math.abs(violationCurrent) <= 2e-3 && lambdaValue > 1e-4)
-    }
-  }
-
   private renderLambdas(frame: ProofFrameUi): void {
-    const activeValues = this.halfspaces
-      .filter((halfspace) => halfspace.active)
-      .map((halfspace) => frame.lambdas[halfspace.id] ?? 0)
-    const maxValue = Math.max(...activeValues, 0.05)
+    const activeHalfspaces = this.halfspaces.filter((halfspace) => halfspace.active)
+    const maxLambda = Math.max(0.05, ...activeHalfspaces.map((halfspace) => frame.lambdas[halfspace.id] ?? 0))
 
     for (const halfspace of this.halfspaces) {
-      const dial = this.dialElements.get(halfspace.id)
-      if (!dial) {
+      const row = this.lambdaRows.get(halfspace.id)
+      if (!row) {
         continue
       }
 
       const enabled = halfspace.active
       const value = enabled ? frame.lambdas[halfspace.id] ?? 0 : 0
 
-      dial.value.textContent = value.toFixed(3)
-      dial.wrapper.classList.toggle('inactive', !enabled)
-
-      drawLambdaDial(
-        dial.canvas,
-        value,
-        maxValue,
-        halfspace.label,
-        enabled,
-        frame.colorById[halfspace.id] ?? '#1476d8',
-      )
+      row.row.classList.toggle('inactive', !enabled)
+      row.label.textContent = halfspace.id
+      row.value.textContent = enabled ? value.toFixed(3) : '—'
+      row.fill.style.setProperty('--bar-color', frame.colorById[halfspace.id] ?? '#2563eb')
+      row.fill.style.width = enabled ? `${Math.min(100, (value / maxLambda) * 100)}%` : '0%'
     }
   }
 
@@ -282,67 +203,46 @@ export class UIController {
     guardrailValue.classList.toggle('disabled', !enabled)
   }
 
-  private createLambdaDials(halfspaces: Halfspace[]): Map<string, DialElements> {
-    const container = this.getElement<HTMLDivElement>('lambda-dials')
-    const map = new Map<string, DialElements>()
+  private createLambdaRows(halfspaces: Halfspace[]): Map<string, LambdaRow> {
+    const container = this.getElement<HTMLDivElement>('lambda-bars')
+    const rows = new Map<string, LambdaRow>()
 
     for (const halfspace of halfspaces) {
-      const wrapper = document.createElement('div')
-      wrapper.className = 'dial-card'
+      const row = document.createElement('div')
+      row.className = 'lambda-row'
 
-      const canvas = document.createElement('canvas')
-      canvas.className = 'dial-canvas'
+      const head = document.createElement('div')
+      head.className = 'lambda-head'
+
+      const label = document.createElement('span')
+      label.textContent = halfspace.id
 
       const value = document.createElement('span')
-      value.className = 'dial-value'
       value.textContent = '0.000'
 
-      wrapper.appendChild(canvas)
-      wrapper.appendChild(value)
-      container.appendChild(wrapper)
+      head.appendChild(label)
+      head.appendChild(value)
 
-      map.set(halfspace.id, {
-        wrapper,
-        canvas,
-        value,
-        id: halfspace.id,
-      })
-    }
+      const track = document.createElement('div')
+      track.className = 'lambda-track'
 
-    return map
-  }
+      const fill = document.createElement('div')
+      fill.className = 'lambda-fill'
+      track.appendChild(fill)
 
-  private createConstraintRows(halfspaces: Halfspace[]): Map<string, ConstraintRowElements> {
-    const body = this.getElement<HTMLTableSectionElement>('constraint-ledger')
-    const map = new Map<string, ConstraintRowElements>()
+      row.appendChild(head)
+      row.appendChild(track)
+      container.appendChild(row)
 
-    for (const halfspace of halfspaces) {
-      const row = document.createElement('tr')
-
-      const idCell = document.createElement('th')
-      idCell.scope = 'row'
-      idCell.textContent = halfspace.id
-
-      const violation0 = document.createElement('td')
-      const lambda = document.createElement('td')
-      const violationCurrent = document.createElement('td')
-
-      row.appendChild(idCell)
-      row.appendChild(violation0)
-      row.appendChild(lambda)
-      row.appendChild(violationCurrent)
-
-      body.appendChild(row)
-
-      map.set(halfspace.id, {
+      rows.set(halfspace.id, {
         row,
-        violation0,
-        lambda,
-        violationCurrent,
+        label,
+        value,
+        fill,
       })
     }
 
-    return map
+    return rows
   }
 
   private getElement<T extends HTMLElement>(id: string): T {
