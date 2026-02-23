@@ -4,6 +4,8 @@ import {
   Vec2,
   add,
   dot,
+  lerp,
+  norm,
   normalize,
   scale,
   sub,
@@ -18,6 +20,12 @@ export interface CorrectionVisual {
   progress: number
 }
 
+interface PreviousScene {
+  zone: Polygon
+  step0: Vec2
+  projectedStep: Vec2
+}
+
 export interface SceneRenderInput {
   halfspaces: Halfspace[]
   diagnostics: ConstraintDiagnostic[]
@@ -30,6 +38,8 @@ export interface SceneRenderInput {
   phaseLabel: string
   ship: boolean
   phaseIndex: number
+  previous: PreviousScene | null
+  changeBlend: number
 }
 
 interface ScreenPoint {
@@ -37,26 +47,28 @@ interface ScreenPoint {
   y: number
 }
 
-const GRID_COLOR = 'rgba(57, 86, 120, 0.11)'
-const AXIS_COLOR = 'rgba(44, 74, 107, 0.22)'
-const ZONE_FILL = 'rgba(20, 131, 109, 0.12)'
-const ZONE_STROKE = 'rgba(20, 124, 104, 0.65)'
 const RAW_COLOR = '#dc2626'
-const SAFE_COLOR = '#1668d6'
+const SAFE_COLOR = '#1d4ed8'
+const CORRECTION_COLOR = '#7c3aed'
+const PREVIOUS_COLOR = '#64748b'
+const GRID_COLOR = 'rgba(71, 101, 133, 0.1)'
+const AXIS_COLOR = 'rgba(57, 85, 115, 0.2)'
+const ZONE_FILL = 'rgba(20, 131, 109, 0.12)'
+const ZONE_STROKE = 'rgba(20, 124, 104, 0.64)'
 
 const CONSTRAINT_COLORS = ['#2563eb', '#d97706', '#0f766e', '#be123c']
 
-function withAlpha(hex: string, alpha: number): string {
-  const clean = hex.replace('#', '')
-  const parsed = Number.parseInt(clean, 16)
-  const r = (parsed >> 16) & 255
-  const g = (parsed >> 8) & 255
-  const b = parsed & 255
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`
-}
-
 function constraintColor(index: number): string {
   return CONSTRAINT_COLORS[index % CONSTRAINT_COLORS.length]
+}
+
+function withAlpha(hex: string, alpha: number): string {
+  const clean = hex.replace('#', '')
+  const value = Number.parseInt(clean, 16)
+  const r = (value >> 16) & 255
+  const g = (value >> 8) & 255
+  const b = value & 255
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
 export class SceneRenderer {
@@ -92,18 +104,16 @@ export class SceneRenderer {
 
     const background = ctx.createLinearGradient(0, 0, 0, height)
     background.addColorStop(0, '#f9fcff')
-    background.addColorStop(1, '#f3f8ff')
+    background.addColorStop(1, '#f1f7ff')
     ctx.fillStyle = background
     ctx.fillRect(0, 0, width, height)
 
-    // Keep the viewport scale stable so slider changes appear as true geometric motion,
-    // not re-normalized by an auto-zooming frame.
     const zoneRadius = worldBoundsFromHalfspaces(input.halfspaces)
-    const worldRadius = Math.max(zoneRadius * 1.85, 2.6)
+    const worldRadius = Math.max(zoneRadius * 1.95, 2.8)
 
     const toScreen = (point: Vec2): ScreenPoint => {
-      const padX = 56
-      const padY = 52
+      const padX = 60
+      const padY = 54
       const innerWidth = Math.max(1, width - padX * 2)
       const innerHeight = Math.max(1, height - padY * 2)
 
@@ -114,36 +124,45 @@ export class SceneRenderer {
     }
 
     this.drawGrid(toScreen, worldRadius)
-    this.drawObjectiveContours(toScreen, input.step0, worldRadius)
+
+    if (input.previous && input.changeBlend < 0.999) {
+      const alpha = Math.max(0, 1 - input.changeBlend) * 0.84
+      this.drawPreviousSnapshot(toScreen, input.previous, alpha)
+      this.drawChangeBridge(toScreen, input.previous.projectedStep, input.stepTarget, input.changeBlend)
+    }
+
     this.drawZone(toScreen, input.zone)
     this.drawConstraints(toScreen, input.halfspaces, input.diagnostics, worldRadius, input.violationById)
 
     this.drawVector(toScreen, { x: 0, y: 0 }, input.stepTarget, {
-      color: withAlpha(SAFE_COLOR, 0.28),
-      width: 3,
+      color: withAlpha(SAFE_COLOR, 0.24),
+      width: 2.8,
       dashed: true,
     })
 
     this.drawVector(toScreen, { x: 0, y: 0 }, input.step0, {
       color: RAW_COLOR,
-      width: 3,
-      label: 'Δ0',
+      width: 3.4,
     })
 
-    this.drawCorrectionChain(toScreen, input.step0, input.corrections)
+    const correction = sub(input.stepCurrent, input.step0)
+    if (input.phaseIndex >= 2 && norm(correction) > 1e-5) {
+      this.drawVector(toScreen, input.step0, input.stepCurrent, {
+        color: CORRECTION_COLOR,
+        width: 3.2,
+      })
+    }
 
     this.drawVector(toScreen, { x: 0, y: 0 }, input.stepCurrent, {
       color: input.ship ? SAFE_COLOR : '#475569',
-      width: 4,
-      label: 'Δ(t)',
+      width: 4.4,
       glow: input.ship,
     })
 
-    this.drawViolationLinks(toScreen, input.halfspaces, input.stepCurrent, input.violationById)
-
+    this.drawWorstViolation(toScreen, input.stepCurrent, input.halfspaces, input.violationById)
     this.drawOrigin(toScreen)
-    this.drawStatusLabel(input.phaseLabel, input.ship)
-    this.drawLegend(width, height)
+    this.drawLegend(width, input.previous !== null && input.changeBlend < 0.999)
+    this.drawPhaseLabel(input.phaseLabel, input.ship)
   }
 
   private drawGrid(toScreen: (point: Vec2) => ScreenPoint, worldRadius: number): void {
@@ -155,24 +174,23 @@ export class SceneRenderer {
 
     for (let i = -3; i <= 3; i += 1) {
       const coordinate = i * tick
-
-      const verticalStart = toScreen({ x: coordinate, y: -worldRadius })
-      const verticalEnd = toScreen({ x: coordinate, y: worldRadius })
+      const vStart = toScreen({ x: coordinate, y: -worldRadius })
+      const vEnd = toScreen({ x: coordinate, y: worldRadius })
       ctx.beginPath()
-      ctx.moveTo(verticalStart.x, verticalStart.y)
-      ctx.lineTo(verticalEnd.x, verticalEnd.y)
+      ctx.moveTo(vStart.x, vStart.y)
+      ctx.lineTo(vEnd.x, vEnd.y)
       ctx.stroke()
 
-      const horizontalStart = toScreen({ x: -worldRadius, y: coordinate })
-      const horizontalEnd = toScreen({ x: worldRadius, y: coordinate })
+      const hStart = toScreen({ x: -worldRadius, y: coordinate })
+      const hEnd = toScreen({ x: worldRadius, y: coordinate })
       ctx.beginPath()
-      ctx.moveTo(horizontalStart.x, horizontalStart.y)
-      ctx.lineTo(horizontalEnd.x, horizontalEnd.y)
+      ctx.moveTo(hStart.x, hStart.y)
+      ctx.lineTo(hEnd.x, hEnd.y)
       ctx.stroke()
     }
 
     ctx.strokeStyle = AXIS_COLOR
-    ctx.lineWidth = 1.6
+    ctx.lineWidth = 1.5
 
     const xStart = toScreen({ x: -worldRadius, y: 0 })
     const xEnd = toScreen({ x: worldRadius, y: 0 })
@@ -189,24 +207,65 @@ export class SceneRenderer {
     ctx.stroke()
   }
 
-  private drawObjectiveContours(toScreen: (point: Vec2) => ScreenPoint, center: Vec2, worldRadius: number): void {
-    const ctx = this.ctx
-    const screenCenter = toScreen(center)
-    const unit = toScreen({ x: center.x + worldRadius * 0.15, y: center.y })
-    const baseRadius = Math.max(20, Math.abs(unit.x - screenCenter.x) * 0.38)
-    const radii = [baseRadius, baseRadius * 1.6, baseRadius * 2.3]
-
-    for (const [index, radius] of radii.entries()) {
+  private drawPreviousSnapshot(toScreen: (point: Vec2) => ScreenPoint, previous: PreviousScene, alpha: number): void {
+    if (previous.zone.vertices.length >= 3) {
+      const ctx = this.ctx
       ctx.beginPath()
-      ctx.arc(screenCenter.x, screenCenter.y, radius, 0, Math.PI * 2)
-      ctx.strokeStyle = withAlpha('#475569', 0.1 + index * 0.05)
-      ctx.lineWidth = 1.3
+      previous.zone.vertices.forEach((vertex, index) => {
+        const p = toScreen(vertex)
+        if (index === 0) {
+          ctx.moveTo(p.x, p.y)
+        } else {
+          ctx.lineTo(p.x, p.y)
+        }
+      })
+      ctx.closePath()
+      ctx.strokeStyle = withAlpha(PREVIOUS_COLOR, alpha * 0.56)
+      ctx.lineWidth = 1.8
+      ctx.setLineDash([8, 7])
       ctx.stroke()
+      ctx.setLineDash([])
     }
 
-    ctx.font = '600 11px "IBM Plex Sans", sans-serif'
-    ctx.fillStyle = 'rgba(54, 83, 114, 0.65)'
-    ctx.fillText('unconstrained optimum', screenCenter.x + 12, screenCenter.y - 10)
+    this.drawVector(toScreen, { x: 0, y: 0 }, previous.projectedStep, {
+      color: withAlpha(PREVIOUS_COLOR, alpha * 0.9),
+      width: 2.4,
+      dashed: true,
+    })
+  }
+
+  private drawChangeBridge(
+    toScreen: (point: Vec2) => ScreenPoint,
+    from: Vec2,
+    to: Vec2,
+    blend: number,
+  ): void {
+    if (norm(sub(to, from)) <= 1e-5) {
+      return
+    }
+
+    const ctx = this.ctx
+    const a = toScreen(from)
+    const b = toScreen(to)
+
+    const gradient = ctx.createLinearGradient(a.x, a.y, b.x, b.y)
+    gradient.addColorStop(0, withAlpha('#64748b', 0.58))
+    gradient.addColorStop(1, withAlpha('#7c3aed', 0.74))
+
+    ctx.beginPath()
+    ctx.moveTo(a.x, a.y)
+    ctx.lineTo(b.x, b.y)
+    ctx.strokeStyle = gradient
+    ctx.lineWidth = 2.2
+    ctx.setLineDash([4, 6])
+    ctx.stroke()
+    ctx.setLineDash([])
+
+    const marker = toScreen(lerp(from, to, blend))
+    ctx.beginPath()
+    ctx.arc(marker.x, marker.y, 4.6, 0, Math.PI * 2)
+    ctx.fillStyle = withAlpha('#7c3aed', 0.78)
+    ctx.fill()
   }
 
   private drawZone(toScreen: (point: Vec2) => ScreenPoint, zone: Polygon): void {
@@ -216,7 +275,6 @@ export class SceneRenderer {
 
     const ctx = this.ctx
     ctx.beginPath()
-
     zone.vertices.forEach((vertex, index) => {
       const p = toScreen(vertex)
       if (index === 0) {
@@ -225,12 +283,12 @@ export class SceneRenderer {
         ctx.lineTo(p.x, p.y)
       }
     })
-
     ctx.closePath()
+
     ctx.fillStyle = ZONE_FILL
     ctx.fill()
     ctx.strokeStyle = ZONE_STROKE
-    ctx.lineWidth = 2.2
+    ctx.lineWidth = 2.1
     ctx.stroke()
   }
 
@@ -249,9 +307,8 @@ export class SceneRenderer {
         continue
       }
 
-      const color = constraintColor(index)
       const diagnostic = diagnosticsById.get(halfspace.id)
-      const violation = Math.max(0, violationById[halfspace.id] ?? 0)
+      const color = constraintColor(index)
 
       const n = halfspace.normal
       const normSq = Math.max(dot(n, n), 1e-8)
@@ -262,104 +319,62 @@ export class SceneRenderer {
       const start = toScreen(add(center, scale(tangent, -extent)))
       const end = toScreen(add(center, scale(tangent, extent)))
 
-      const baseAlpha = diagnostic?.isBinding ? 0.85 : 0.52
-      this.strokeScreenLine(start, end, {
-        color: withAlpha(color, baseAlpha),
-        width: diagnostic?.isBinding ? 2.6 : 1.7,
-        dashed: !diagnostic?.isBinding,
+      this.strokeLine(start, end, {
+        color: withAlpha(color, 0.31),
+        width: diagnostic?.isBinding ? 2.2 : 1.4,
+        dashed: true,
       })
 
+      const violation = Math.max(0, violationById[halfspace.id] ?? 0)
       if (violation > 1e-6) {
-        this.strokeScreenLine(start, end, {
-          color: withAlpha('#dc2626', Math.min(0.8, 0.28 + violation * 0.9)),
-          width: 3.1,
+        this.strokeLine(start, end, {
+          color: withAlpha('#dc2626', Math.min(0.75, 0.25 + violation * 0.9)),
+          width: 2.7,
         })
       }
-
-      const normalTip = toScreen(add(center, scale(n, worldRadius * 0.14)))
-      const normalRoot = toScreen(add(center, scale(n, -worldRadius * 0.01)))
-      this.drawArrow(normalRoot, normalTip, {
-        color: withAlpha(color, 0.72),
-        width: 1.5,
-        headSize: 7,
-      })
-
-      const labelPosition = toScreen(add(center, scale(tangent, worldRadius * 0.08)))
-      const ctx = this.ctx
-      ctx.font = '700 11px "IBM Plex Sans", sans-serif'
-      ctx.fillStyle = withAlpha(color, 0.85)
-      ctx.fillText(halfspace.id, labelPosition.x + 4, labelPosition.y - 4)
     }
   }
 
-  private drawCorrectionChain(
+  private drawWorstViolation(
     toScreen: (point: Vec2) => ScreenPoint,
-    start: Vec2,
-    corrections: CorrectionVisual[],
-  ): void {
-    let cursor = { ...start }
-
-    for (const correction of corrections) {
-      if (correction.progress <= 0) {
-        continue
-      }
-
-      const applied = scale(correction.vector, correction.progress)
-      const next = add(cursor, applied)
-      const isPartial = correction.progress < 0.999
-
-      this.drawVector(toScreen, cursor, next, {
-        color: withAlpha(correction.color, 0.28 + correction.progress * 0.58),
-        width: 2.4,
-        dashed: isPartial,
-      })
-
-      if (isPartial) {
-        const p = toScreen(next)
-        const ctx = this.ctx
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, 4.1, 0, Math.PI * 2)
-        ctx.fillStyle = withAlpha(correction.color, 0.72)
-        ctx.fill()
-      }
-
-      cursor = next
-    }
-  }
-
-  private drawViolationLinks(
-    toScreen: (point: Vec2) => ScreenPoint,
-    halfspaces: Halfspace[],
     stepCurrent: Vec2,
+    halfspaces: Halfspace[],
     violationById: Record<string, number>,
   ): void {
-    const ctx = this.ctx
+    let worst: Halfspace | null = null
+    let worstValue = 0
 
     for (const halfspace of halfspaces) {
       if (!halfspace.active) {
         continue
       }
-
-      const violation = violationById[halfspace.id] ?? 0
-      if (violation <= 1e-6) {
-        continue
+      const value = violationById[halfspace.id] ?? 0
+      if (value > worstValue) {
+        worstValue = value
+        worst = halfspace
       }
-
-      const normalSq = Math.max(dot(halfspace.normal, halfspace.normal), 1e-8)
-      const boundaryPoint = sub(stepCurrent, scale(halfspace.normal, violation / normalSq))
-
-      const a = toScreen(boundaryPoint)
-      const b = toScreen(stepCurrent)
-      this.strokeScreenLine(a, b, {
-        color: withAlpha('#dc2626', 0.55),
-        width: 2.7,
-      })
-
-      ctx.beginPath()
-      ctx.arc(b.x, b.y, 4.3, 0, Math.PI * 2)
-      ctx.fillStyle = withAlpha('#dc2626', 0.66)
-      ctx.fill()
     }
+
+    if (!worst || worstValue <= 1e-6) {
+      return
+    }
+
+    const normalSq = Math.max(dot(worst.normal, worst.normal), 1e-8)
+    const boundaryPoint = sub(stepCurrent, scale(worst.normal, worstValue / normalSq))
+
+    const ctx = this.ctx
+    const a = toScreen(boundaryPoint)
+    const b = toScreen(stepCurrent)
+
+    this.strokeLine(a, b, {
+      color: withAlpha('#dc2626', 0.62),
+      width: 2.9,
+    })
+
+    ctx.beginPath()
+    ctx.arc(b.x, b.y, 4.6, 0, Math.PI * 2)
+    ctx.fillStyle = withAlpha('#dc2626', 0.72)
+    ctx.fill()
   }
 
   private drawOrigin(toScreen: (point: Vec2) => ScreenPoint): void {
@@ -367,7 +382,7 @@ export class SceneRenderer {
     const ctx = this.ctx
 
     ctx.beginPath()
-    ctx.arc(origin.x, origin.y, 4.4, 0, Math.PI * 2)
+    ctx.arc(origin.x, origin.y, 4.3, 0, Math.PI * 2)
     ctx.fillStyle = '#0f172a'
     ctx.fill()
 
@@ -376,40 +391,52 @@ export class SceneRenderer {
     ctx.fillText('θ', origin.x + 8, origin.y - 8)
   }
 
-  private drawStatusLabel(label: string, ship: boolean): void {
+  private drawLegend(width: number, showPrevious: boolean): void {
+    const ctx = this.ctx
+    const x = 14
+    const y = 14
+    const rowHeight = 18
+    const rows = showPrevious ? 4 : 3
+    const legendWidth = showPrevious ? 172 : 148
+    const legendHeight = 12 + rowHeight * rows
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.88)'
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.roundRect(x, y, legendWidth, legendHeight, 9)
+    ctx.fill()
+    ctx.stroke()
+
+    const drawItem = (index: number, color: string, label: string): void => {
+      const itemY = y + 14 + index * rowHeight
+      ctx.fillStyle = color
+      ctx.fillRect(x + 10, itemY - 3, 12, 2.5)
+      ctx.fillStyle = '#365876'
+      ctx.font = '600 11px "IBM Plex Sans", sans-serif'
+      ctx.fillText(label, x + 28, itemY)
+    }
+
+    drawItem(0, RAW_COLOR, 'raw step')
+    drawItem(1, CORRECTION_COLOR, 'correction')
+    drawItem(2, SAFE_COLOR, 'safe step')
+    if (showPrevious) {
+      drawItem(3, PREVIOUS_COLOR, 'previous step')
+    }
+  }
+
+  private drawPhaseLabel(label: string, ship: boolean): void {
     const ctx = this.ctx
     ctx.font = '700 12px "IBM Plex Sans", sans-serif'
     ctx.fillStyle = ship ? '#0f766e' : '#b42318'
-    ctx.fillText(label, 16, 24)
-  }
-
-  private drawLegend(width: number, height: number): void {
-    const ctx = this.ctx
-    const y = height - 18
-
-    ctx.font = '600 11px "IBM Plex Sans", sans-serif'
-
-    ctx.fillStyle = RAW_COLOR
-    ctx.fillRect(14, y - 8, 12, 2)
-    ctx.fillStyle = '#365876'
-    ctx.fillText('raw update', 32, y)
-
-    ctx.fillStyle = SAFE_COLOR
-    ctx.fillRect(118, y - 8, 12, 2)
-    ctx.fillStyle = '#365876'
-    ctx.fillText('safe projected update', 136, y)
-
-    ctx.fillStyle = withAlpha('#dc2626', 0.58)
-    ctx.fillRect(294, y - 8, 12, 2)
-    ctx.fillStyle = '#365876'
-    ctx.fillText('constraint violation distance', 312, y)
+    ctx.fillText(label, 16, 38)
   }
 
   private drawVector(
     toScreen: (point: Vec2) => ScreenPoint,
     from: Vec2,
     to: Vec2,
-    options: { color: string; width: number; dashed?: boolean; glow?: boolean; label?: string },
+    options: { color: string; width: number; dashed?: boolean; glow?: boolean },
   ): void {
     const start = toScreen(from)
     const end = toScreen(to)
@@ -425,13 +452,6 @@ export class SceneRenderer {
       glow: options.glow,
       headSize: 9,
     })
-
-    if (options.label) {
-      const ctx = this.ctx
-      ctx.font = '700 12px "IBM Plex Sans", sans-serif'
-      ctx.fillStyle = options.color
-      ctx.fillText(options.label, end.x + 8, end.y - 7)
-    }
   }
 
   private drawArrow(
@@ -449,8 +469,9 @@ export class SceneRenderer {
     const normal = { x: -dir.y, y: dir.x }
 
     const ctx = this.ctx
+
     if (options.glow) {
-      ctx.shadowColor = 'rgba(22, 104, 214, 0.36)'
+      ctx.shadowColor = 'rgba(29, 78, 216, 0.35)'
       ctx.shadowBlur = 12
     }
 
@@ -484,11 +505,7 @@ export class SceneRenderer {
     ctx.fill()
   }
 
-  private strokeScreenLine(
-    a: ScreenPoint,
-    b: ScreenPoint,
-    options: { color: string; width: number; dashed?: boolean },
-  ): void {
+  private strokeLine(a: ScreenPoint, b: ScreenPoint, options: { color: string; width: number; dashed?: boolean }): void {
     const ctx = this.ctx
     ctx.beginPath()
     ctx.moveTo(a.x, a.y)

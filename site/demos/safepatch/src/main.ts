@@ -70,8 +70,21 @@ interface AnimatedCorrection extends CorrectionVisual {
   lambda: number
 }
 
+interface VisualSnapshot {
+  zone: Polygon
+  step0: Vec2
+  projectedStep: Vec2
+}
+
 function copyHalfspaces(halfspaces: Halfspace[]): Halfspace[] {
   return halfspaces.map((halfspace) => ({ ...halfspace, normal: { ...halfspace.normal } }))
+}
+
+function copyPolygon(polygon: Polygon): Polygon {
+  return {
+    isEmpty: polygon.isEmpty,
+    vertices: polygon.vertices.map((vertex) => ({ ...vertex })),
+  }
 }
 
 function clamp(value: number, min = 0, max = 1): number {
@@ -218,9 +231,20 @@ function start(): void {
   })
 
   let targetCorrections: AnimatedCorrection[] = []
+  let previousSnapshot: VisualSnapshot | null = null
   let animationStart = performance.now()
+  let changeStart = performance.now()
+  let initialized = false
 
-  function applyControls(restartAnimation = true): void {
+  function applyControls(restartAnimation = true, capturePrevious = true): void {
+    if (capturePrevious && initialized) {
+      previousSnapshot = {
+        zone: copyPolygon(zone),
+        step0: { ...projection.step0 },
+        projectedStep: projection.ship ? { ...projection.projectedStep } : { ...projection.step0 },
+      }
+    }
+
     const controls = ui.readControlValues()
     eta = controls.eta
 
@@ -241,11 +265,15 @@ function start(): void {
     if (restartAnimation) {
       animationStart = performance.now()
     }
+
+    changeStart = performance.now()
+    initialized = true
   }
 
   function frame(now: number): void {
     const elapsed = now - animationStart
     const progress = clamp(elapsed / TOTAL_ANIMATION_MS)
+    const changeBlend = clamp((now - changeStart) / 780)
     const phase = phaseFromProgress(progress)
 
     const step0 = projection.step0
@@ -310,6 +338,8 @@ function start(): void {
       phaseLabel: phaseCaption(phase, projection.ship),
       ship: projection.ship,
       phaseIndex: phase,
+      previous: previousSnapshot,
+      changeBlend,
     })
 
     ui.renderFrame({
@@ -330,11 +360,11 @@ function start(): void {
   }
 
   ui.onControlsChange(() => {
-    applyControls(true)
+    applyControls(true, true)
   })
 
   ui.onReplay(() => {
-    applyControls(true)
+    applyControls(true, false)
   })
 
   window.addEventListener('resize', () => {
@@ -342,7 +372,7 @@ function start(): void {
   })
 
   renderer.resize()
-  applyControls(true)
+  applyControls(true, false)
   requestAnimationFrame(frame)
 }
 

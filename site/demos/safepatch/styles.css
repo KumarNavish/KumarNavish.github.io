@@ -33,7 +33,7 @@ body {
   width: min(1240px, 95vw);
   margin: 26px auto 32px;
   display: grid;
-  gap: 16px;
+  gap: 18px;
 }
 
 .hero,
@@ -47,11 +47,11 @@ body {
 }
 
 .hero {
-  padding: 18px 20px;
+  padding: 20px 22px;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: 18px;
 }
 
 .eyebrow {
@@ -72,10 +72,10 @@ h1 {
 
 .story {
   margin: 10px 0 0;
-  max-width: 74ch;
+  max-width: 70ch;
   color: #294f73;
-  font-size: 0.98rem;
-  line-height: 1.42;
+  font-size: 0.99rem;
+  line-height: 1.46;
 }
 
 .replay {
@@ -97,13 +97,13 @@ h1 {
 .math-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 14px;
 }
 
 .math-card {
-  padding: 15px 16px;
+  padding: 16px 18px;
   display: grid;
-  gap: 9px;
+  gap: 10px;
 }
 
 .math-label {
@@ -116,28 +116,33 @@ h1 {
 }
 
 .math-block {
-  min-height: 92px;
+  min-height: 108px;
   border: 1px solid #d8e5f5;
   border-radius: 12px;
   background: linear-gradient(180deg, #f9fcff 0%, #f4f9ff 100%);
-  padding: 12px 14px;
+  padding: 13px 14px;
   display: grid;
   align-items: center;
   overflow-x: auto;
 }
 
-.math-note {
+.math-live {
   margin: 0;
   color: #31597f;
-  font-size: 0.85rem;
-  line-height: 1.35;
-  font-family: 'STIX Two Text', 'Cambria Math', serif;
+  min-height: 64px;
+  border: 1px solid #d8e5f5;
+  border-radius: 12px;
+  background: #f8fbff;
+  padding: 10px 12px;
+  display: grid;
+  align-items: center;
+  overflow-x: auto;
 }
 
 .katex,
 .katex-display {
   color: #133f67;
-  font-size: 1.14rem;
+  font-size: 1.16rem;
 }
 
 .katex-display {
@@ -146,15 +151,15 @@ h1 {
 
 .experience {
   display: grid;
-  grid-template-columns: minmax(0, 1.24fr) minmax(320px, 0.76fr);
-  gap: 14px;
+  grid-template-columns: minmax(0, 1.28fr) minmax(340px, 0.72fr);
+  gap: 16px;
   align-items: start;
 }
 
 .stage-card {
-  padding: 14px;
+  padding: 16px;
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .stage-header {
@@ -193,7 +198,7 @@ h1 {
 
 .scene {
   width: 100%;
-  height: clamp(420px, 60vh, 620px);
+  height: clamp(440px, 62vh, 640px);
   border-radius: 14px;
   display: block;
 }
@@ -204,7 +209,7 @@ h1 {
   list-style: none;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: 9px;
 }
 
 .phase-track li {
@@ -239,8 +244,9 @@ h1 {
   border-radius: 11px;
   background: #f8fbff;
   color: #2f577d;
-  padding: 8px 10px;
-  font-size: 0.82rem;
+  padding: 9px 11px;
+  font-size: 0.84rem;
+  line-height: 1.38;
 }
 
 .kkt-readout {
@@ -249,9 +255,9 @@ h1 {
 }
 
 .side-card {
-  padding: 14px;
+  padding: 16px;
   display: grid;
-  gap: 14px;
+  gap: 16px;
   grid-template-columns: 1fr;
 }
 
@@ -267,9 +273,9 @@ h1 {
   border: 1px solid #d8e4f4;
   border-radius: 13px;
   background: #fcfdff;
-  padding: 12px;
+  padding: 13px;
   display: grid;
-  gap: 10px;
+  gap: 11px;
 }
 
 .control {
@@ -344,7 +350,7 @@ input[type='range'] {
 
 .metric-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: 8px;
 }
 
@@ -358,7 +364,7 @@ input[type='range'] {
 .metric-grid h3 {
   margin: 0;
   color: #577697;
-  font-size: 0.68rem;
+  font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -366,7 +372,7 @@ input[type='range'] {
 .metric {
   margin: 4px 0 0;
   font-family: 'Manrope', sans-serif;
-  font-size: 0.96rem;
+  font-size: 1rem;
   font-weight: 700;
   color: #173f64;
 }
@@ -446,6 +452,11 @@ input[type='range'] {
   .budget-grid,
   .metric-grid {
     grid-template-columns: 1fr;
+  }
+
+  .math-block,
+  .math-live {
+    min-height: 88px;
   }
 }
 
