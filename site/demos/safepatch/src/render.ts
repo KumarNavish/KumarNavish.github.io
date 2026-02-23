@@ -4,7 +4,6 @@ import {
   Vec2,
   add,
   dot,
-  norm,
   normalize,
   scale,
   sub,
@@ -97,10 +96,10 @@ export class SceneRenderer {
     ctx.fillStyle = background
     ctx.fillRect(0, 0, width, height)
 
+    // Keep the viewport scale stable so slider changes appear as true geometric motion,
+    // not re-normalized by an auto-zooming frame.
     const zoneRadius = worldBoundsFromHalfspaces(input.halfspaces)
-    const correctionMagnitude = input.corrections.reduce((sum, correction) => sum + norm(correction.vector), 0)
-    const stepRadius = Math.max(norm(input.step0), norm(input.stepTarget), norm(input.stepCurrent), correctionMagnitude, 0.9)
-    const worldRadius = Math.max(zoneRadius, stepRadius * 1.75)
+    const worldRadius = Math.max(zoneRadius * 1.85, 2.6)
 
     const toScreen = (point: Vec2): ScreenPoint => {
       const padX = 56
@@ -286,11 +285,10 @@ export class SceneRenderer {
       })
 
       const labelPosition = toScreen(add(center, scale(tangent, worldRadius * 0.08)))
-      const label = halfspace.id.replace('g', 'g')
       const ctx = this.ctx
       ctx.font = '700 11px "IBM Plex Sans", sans-serif'
       ctx.fillStyle = withAlpha(color, 0.85)
-      ctx.fillText(label, labelPosition.x + 4, labelPosition.y - 4)
+      ctx.fillText(halfspace.id, labelPosition.x + 4, labelPosition.y - 4)
     }
   }
 

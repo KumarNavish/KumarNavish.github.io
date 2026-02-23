@@ -23,17 +23,13 @@
       <section class="math-row" aria-label="optimization equations">
         <article class="math-card">
           <p class="math-label">Constrained objective</p>
-          <div class="math-block" data-display="block" data-katex="\\begin{aligned}
-\\Delta_0 &= -\\eta g_{new} \\\\
-\\Delta^* &= \\arg\\min_{\\Delta} \\; \\langle g_{new},\\Delta\\rangle + \\frac{1}{2\\eta}\\lVert\\Delta\\rVert^2 \\\\
-\\text{s.t. } &\\langle g_k,\\Delta\\rangle \\le \\varepsilon_k
-\\end{aligned}"></div>
+          <div id="math-primal" class="math-block" aria-live="polite"></div>
         </article>
 
         <article class="math-card">
           <p class="math-label">Dual correction form</p>
-          <div class="math-block" data-display="block" data-katex="\\Delta^*=\\Delta_0-\\eta\\sum_k \\lambda_k g_k,\\;\\lambda_k\\ge0"></div>
-          <p class="math-note">Only violated guardrails receive non-zero dual force λk.</p>
+          <div id="math-dual" class="math-block" aria-live="polite"></div>
+          <p id="live-equation" class="math-note">Loading dual decomposition...</p>
         </article>
       </section>
 
@@ -67,7 +63,7 @@
                 <span id="eta-value" class="value">0.55</span>
               </div>
               <p>How far the unconstrained update tries to move.</p>
-              <input id="eta-slider" type="range" min="0.1" max="1.3" step="0.01" value="0.55" />
+              <input id="eta-slider" type="range" min="0.1" max="1.8" step="0.01" value="0.55" />
             </label>
 
             <div class="toggle-row">
@@ -81,7 +77,7 @@
                   <span>ε1</span>
                   <span id="eps-g1-value" class="value">0.82</span>
                 </div>
-                <input id="eps-g1" type="range" min="0.35" max="1.35" step="0.01" value="0.82" />
+                <input id="eps-g1" type="range" min="0.2" max="1.4" step="0.01" value="0.82" />
               </label>
 
               <label class="control compact">
@@ -89,7 +85,7 @@
                   <span>ε2</span>
                   <span id="eps-g2-value" class="value">0.70</span>
                 </div>
-                <input id="eps-g2" type="range" min="0.30" max="1.25" step="0.01" value="0.70" />
+                <input id="eps-g2" type="range" min="0.2" max="1.35" step="0.01" value="0.70" />
               </label>
 
               <label class="control compact">
@@ -97,7 +93,7 @@
                   <span>ε3</span>
                   <span id="eps-g3-value" class="value">0.88</span>
                 </div>
-                <input id="eps-g3" type="range" min="0.35" max="1.35" step="0.01" value="0.88" />
+                <input id="eps-g3" type="range" min="0.2" max="1.4" step="0.01" value="0.88" />
               </label>
 
               <label class="control compact">
@@ -105,7 +101,7 @@
                   <span>ε4</span>
                   <span id="eps-g4-value" class="value">0.68</span>
                 </div>
-                <input id="eps-g4" type="range" min="0.30" max="1.20" step="0.01" value="0.68" />
+                <input id="eps-g4" type="range" min="0.2" max="1.3" step="0.01" value="0.68" />
               </label>
             </div>
           </section>

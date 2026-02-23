@@ -101,9 +101,9 @@ h1 {
 }
 
 .math-card {
-  padding: 14px 16px;
+  padding: 15px 16px;
   display: grid;
-  gap: 8px;
+  gap: 9px;
 }
 
 .math-label {
@@ -116,25 +116,32 @@ h1 {
 }
 
 .math-block {
-  min-height: 62px;
+  min-height: 92px;
   border: 1px solid #d8e5f5;
   border-radius: 12px;
-  background: #f8fbff;
-  padding: 10px 12px;
+  background: linear-gradient(180deg, #f9fcff 0%, #f4f9ff 100%);
+  padding: 12px 14px;
   display: grid;
   align-items: center;
+  overflow-x: auto;
 }
 
 .math-note {
   margin: 0;
-  color: #2f567c;
-  font-size: 0.83rem;
+  color: #31597f;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  font-family: 'STIX Two Text', 'Cambria Math', serif;
 }
 
 .katex,
 .katex-display {
-  color: #153f66;
-  font-size: 1.03rem;
+  color: #133f67;
+  font-size: 1.14rem;
+}
+
+.katex-display {
+  margin: 0;
 }
 
 .experience {
@@ -245,6 +252,7 @@ h1 {
   padding: 14px;
   display: grid;
   gap: 14px;
+  grid-template-columns: 1fr;
 }
 
 .side-card h2 {
@@ -336,7 +344,7 @@ input[type='range'] {
 
 .metric-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -418,19 +426,6 @@ input[type='range'] {
   .experience {
     grid-template-columns: 1fr;
   }
-
-  .side-card {
-    grid-template-columns: 1fr 1fr;
-    align-items: start;
-  }
-
-  .control-block {
-    grid-column: 1 / -1;
-  }
-
-  .metric-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
 }
 
 @media (max-width: 760px) {
@@ -449,8 +444,7 @@ input[type='range'] {
 
   .phase-track,
   .budget-grid,
-  .metric-grid,
-  .side-card {
+  .metric-grid {
     grid-template-columns: 1fr;
   }
 }
