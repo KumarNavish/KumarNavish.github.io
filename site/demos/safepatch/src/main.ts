@@ -12,73 +12,67 @@ import {
   worldBoundsFromHalfspaces,
   intersectHalfspaces,
 } from './geometry'
-import { ProjectionResult, computeProjectedStep } from './qp'
+import { computeProjectedStep } from './qp'
 import { SceneRenderer, paletteForConstraints } from './render'
 import { UIController } from './ui'
 
-const GRADIENT_NEW: Vec2 = vec(0.24, -1.62)
-const TRANSITION_MS = 1160
-const RAW_PHASE_CUT = 0.42
+const GRADIENT_NEW: Vec2 = vec(-1.58, 0.38)
+const TRANSITION_MS = 1240
+const RAW_PHASE_CUT = 0.38
 
 const baseHalfspaces: Halfspace[] = [
   {
     id: 'g1',
-    label: 'lambda1',
+    label: 'g1',
     normal: normalize(vec(1, 0)),
-    bound: 0.34,
+    bound: 0.74,
     active: true,
   },
   {
     id: 'g2',
-    label: 'lambda2',
+    label: 'g2',
     normal: normalize(vec(0, 1)),
-    bound: 0.37,
+    bound: 0.68,
     active: true,
   },
   {
     id: 'g3',
-    label: 'lambda3',
+    label: 'g3',
     normal: normalize(vec(-1, 0)),
-    bound: 0.32,
+    bound: 0.46,
     active: true,
   },
   {
     id: 'g4',
-    label: 'lambda4',
+    label: 'g4',
     normal: normalize(vec(0, -1)),
-    bound: 0.44,
+    bound: 0.30,
     active: true,
   },
   {
     id: 'g5',
-    label: 'lambda5',
-    normal: normalize(vec(-0.72, 1)),
-    bound: 0.18,
+    label: 'g5',
+    normal: normalize(vec(0.82, -0.57)),
+    bound: 0.46,
     active: true,
   },
 ]
 
+const STRICTNESS_SENSITIVITY: Record<string, number> = {
+  g1: 0.7,
+  g2: 0.55,
+  g3: 0.5,
+  g4: 0.8,
+  g5: 1.35,
+}
+
 const AUTOPLAY_STEPS = [
-  { eta: 1.24, strictness: 0.83 },
-  { eta: 0.82, strictness: 1.19 },
+  { eta: 1.35, strictness: 0.8 },
+  { eta: 1.35, strictness: 1.25 },
   { eta: 0.95, strictness: 1.0 },
 ]
 
-const CORE_MATH = String.raw`\Delta^* = \Pi_{\mathcal S}\!\left(-\eta\,g_{\mathrm{new}}\right),\quad \mathcal S=\{\Delta:\langle g_k,\Delta\rangle\le\varepsilon_k\}`
-
-function copyHalfspaces(halfspaces: Halfspace[]): Halfspace[] {
-  return halfspaces.map((halfspace) => ({
-    ...halfspace,
-    normal: { ...halfspace.normal },
-  }))
-}
-
-function copyPolygon(polygon: Polygon): Polygon {
-  return {
-    isEmpty: polygon.isEmpty,
-    vertices: polygon.vertices.map((vertex) => ({ ...vertex })),
-  }
-}
+const CORE_EQUATION = String.raw`\Delta^* = \Pi_{\mathcal S}(\Delta_0)`
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(Math.max(value, min), max)
@@ -97,28 +91,21 @@ function easeOutCubic(value: number): number {
   return 1 - (1 - t) ** 3
 }
 
-function safeStepOf(projection: ProjectionResult): Vec2 {
-  return projection.ship ? projection.projectedStep : projection.step0
+function copyHalfspaces(halfspaces: Halfspace[]): Halfspace[] {
+  return halfspaces.map((halfspace) => ({
+    ...halfspace,
+    normal: { ...halfspace.normal },
+  }))
 }
 
-function scaleForStrictness(id: string, strictness: number): number {
-  if (id === 'g5') {
-    return 0.05 + 0.95 * strictness
+function copyPolygon(polygon: Polygon): Polygon {
+  return {
+    isEmpty: polygon.isEmpty,
+    vertices: polygon.vertices.map((vertex) => ({ ...vertex })),
   }
-  return 0.2 + 0.8 * strictness
 }
 
-function phaseStory(progress: number, ship: boolean): string {
-  if (progress < RAW_PHASE_CUT) {
-    return '1/2 Raw optimizer proposes delta0 (red).'
-  }
-  if (progress < 0.98) {
-    return '2/2 SafePatch projects to delta* (blue) inside guardrails.'
-  }
-  return ship ? 'Ship this blue step: feasible and closest to optimizer intent.' : 'Hold: current limits make a safe projection unavailable.'
-}
-
-function renderMathBlock(elementId: string, expression: string, displayMode = true): void {
+function renderMathInline(elementId: string, expression: string): void {
   const node = document.getElementById(elementId)
   if (!node) {
     return
@@ -127,7 +114,7 @@ function renderMathBlock(elementId: string, expression: string, displayMode = tr
   try {
     katex.render(expression, node, {
       throwOnError: true,
-      displayMode,
+      displayMode: false,
       strict: 'warn',
     })
   } catch {
@@ -135,8 +122,23 @@ function renderMathBlock(elementId: string, expression: string, displayMode = tr
   }
 }
 
+function boundScaleForStrictness(id: string, strictness: number): number {
+  const sensitivity = STRICTNESS_SENSITIVITY[id] ?? 0.7
+  return clamp(1 + sensitivity * (strictness - 1), 0.52, 1.62)
+}
+
+function phaseStory(progress: number, ship: boolean): string {
+  if (progress < RAW_PHASE_CUT) {
+    return 'Raw step grows first (red).'
+  }
+  if (progress < 0.98) {
+    return 'Projection snaps into the ship zone (blue).'
+  }
+  return ship ? 'Blue is the shippable update.' : 'No feasible safe update under current limits.'
+}
+
 function start(): void {
-  renderMathBlock('math-core', CORE_MATH, true)
+  renderMathInline('equation-chip', CORE_EQUATION)
 
   const canvas = document.getElementById('scene-canvas') as HTMLCanvasElement | null
   if (!canvas) {
@@ -144,13 +146,13 @@ function start(): void {
   }
 
   const halfspaces = copyHalfspaces(baseHalfspaces)
-  const baseBoundById = new Map<string, number>(halfspaces.map((halfspace) => [halfspace.id, halfspace.bound]))
+  const baseBounds = new Map<string, number>(halfspaces.map((halfspace) => [halfspace.id, halfspace.bound]))
 
   const colorById = paletteForConstraints(halfspaces)
   const renderer = new SceneRenderer(canvas)
-  const ui = new UIController(halfspaces)
+  const ui = new UIController()
 
-  let eta = 0.95
+  let eta = 1.0
   let strictness = 1.0
 
   let zone = intersectHalfspaces(halfspaces, worldBoundsFromHalfspaces(halfspaces))
@@ -185,11 +187,12 @@ function start(): void {
     strictness = controls.strictness
 
     for (const halfspace of halfspaces) {
-      const baseBound = baseBoundById.get(halfspace.id)
+      const baseBound = baseBounds.get(halfspace.id)
       if (baseBound === undefined) {
         continue
       }
-      halfspace.bound = baseBound * scaleForStrictness(halfspace.id, strictness)
+
+      halfspace.bound = baseBound * boundScaleForStrictness(halfspace.id, strictness)
       halfspace.active = true
     }
 
@@ -203,16 +206,6 @@ function start(): void {
     transitionStart = performance.now()
   }
 
-  function blendLambdas(progress: number): Record<string, number> {
-    const output: Record<string, number> = {}
-
-    for (const halfspace of halfspaces) {
-      output[halfspace.id] = (projection.lambdaById[halfspace.id] ?? 0) * progress
-    }
-
-    return output
-  }
-
   function scheduleAutoplay(): void {
     clearAutoplay()
 
@@ -221,9 +214,10 @@ function start(): void {
         if (!autoplayEnabled) {
           return
         }
+
         ui.setControlValues(step)
         applyControls(true)
-      }, 420 + index * 2050)
+      }, 500 + index * 2150)
 
       autoplayTimers.push(timer)
     })
@@ -235,10 +229,18 @@ function start(): void {
     const correctionProgress = easeInOutCubic((progress - RAW_PHASE_CUT) / (1 - RAW_PHASE_CUT))
 
     const rawTarget = projection.step0
-    const safeTarget = safeStepOf(projection)
+    const safeTarget = projection.ship ? projection.projectedStep : projection.step0
 
     const rawStep = scale(rawTarget, rawReveal)
-    const safeStep = correctionProgress > 0 ? lerp(rawTarget, safeTarget, correctionProgress) : vec(0, 0)
+    const safeStep = projection.ship && correctionProgress > 0 ? lerp(rawTarget, safeTarget, correctionProgress) : vec(0, 0)
+
+    const lambdaMax = Math.max(1e-8, ...halfspaces.map((halfspace) => projection.lambdaById[halfspace.id] ?? 0))
+    const constraintForceById: Record<string, number> = {}
+
+    for (const halfspace of halfspaces) {
+      const lambda = projection.lambdaById[halfspace.id] ?? 0
+      constraintForceById[halfspace.id] = projection.ship ? (lambda / lambdaMax) * correctionProgress : 0
+    }
 
     renderer.render({
       halfspaces,
@@ -249,9 +251,8 @@ function start(): void {
       rawTarget,
       safeTarget,
       colorById,
-      activeSetIds: projection.activeSetIds,
+      constraintForceById,
       violationRaw: projection.maxViolationStep0,
-      violationSafe: projection.maxViolationProjected,
       correctionProgress,
       transitionProgress: progress,
     })
@@ -260,13 +261,9 @@ function start(): void {
       ship: projection.ship,
       reason: projection.ship ? 'Projected update is inside all guardrails.' : projection.reason,
       phaseText: phaseStory(progress, projection.ship),
-      rawStep: rawTarget,
-      safeStep: safeTarget,
-      lambdas: blendLambdas(correctionProgress),
       maxViolationRaw: projection.maxViolationStep0,
       maxViolationSafe: projection.maxViolationProjected,
       descentRetainedRatio: projection.descentRetainedRatio,
-      colorById,
     })
 
     if (progress > 0.995 && previousZone) {

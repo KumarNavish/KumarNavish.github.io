@@ -1,18 +1,18 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&family=STIX+Two+Text:wght@500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap');
 
 :root {
   color-scheme: light;
-  --bg: #eef4fb;
+  --bg: #edf3fb;
   --panel: #ffffff;
-  --line: #d3deec;
-  --ink: #111f38;
-  --muted: #426383;
-  --accent: #1f4ed8;
+  --line: #d4dfee;
+  --ink: #10203b;
+  --muted: #446686;
+  --accent: #1e4ed8;
   --ship: #0f766e;
   --hold: #b42318;
   --raw: #dc2626;
   --safe: #1d4ed8;
-  --shadow: 0 24px 52px rgba(17, 31, 56, 0.1);
+  --shadow: 0 24px 58px rgba(16, 32, 59, 0.1);
 }
 
 * {
@@ -25,21 +25,21 @@ body {
   font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
   color: var(--ink);
   background:
-    radial-gradient(120% 90% at 100% 0%, #dce9ff 0%, transparent 62%),
-    radial-gradient(110% 90% at -10% -20%, #f5f9ff 0%, transparent 66%),
+    radial-gradient(120% 100% at 100% 0%, #dce9ff 0%, transparent 64%),
+    radial-gradient(120% 100% at -8% -20%, #f5f9ff 0%, transparent 66%),
     var(--bg);
 }
 
 .shell {
-  width: min(1160px, 94vw);
-  margin: 28px auto 34px;
+  width: min(1120px, 94vw);
+  margin: 26px auto 34px;
   display: grid;
-  gap: 16px;
+  gap: 14px;
 }
 
 .hero,
 .plot-card,
-.controls-card {
+.control-rail {
   border: 1px solid var(--line);
   border-radius: 18px;
   background: var(--panel);
@@ -54,25 +54,25 @@ body {
 
 .eyebrow {
   margin: 0;
-  font-size: 0.73rem;
+  font-size: 0.72rem;
   letter-spacing: 0.11em;
   text-transform: uppercase;
   font-weight: 800;
-  color: #5d7c9d;
+  color: #5e7c9d;
 }
 
 h1 {
   margin: 0;
   font-family: 'Manrope', 'Avenir Next', sans-serif;
-  font-size: clamp(1.52rem, 2.5vw, 2.18rem);
+  font-size: clamp(1.52rem, 2.5vw, 2.16rem);
   line-height: 1.16;
-  max-width: 26ch;
+  max-width: 28ch;
 }
 
 .hero-sub {
   margin: 0;
   color: var(--muted);
-  font-size: 1rem;
+  font-size: 0.99rem;
   line-height: 1.45;
 }
 
@@ -86,11 +86,12 @@ h1 {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
-.status-group {
+.status-group,
+.meta-group {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -106,13 +107,13 @@ h1 {
 }
 
 .indicator.ship {
-  border: 1px solid #98e0cb;
+  border: 1px solid #99e1cc;
   color: var(--ship);
-  background: #e9fbf5;
+  background: #e8fbf5;
 }
 
 .indicator.hold {
-  border: 1px solid #f0bdb7;
+  border: 1px solid #f0bcb7;
   color: var(--hold);
   background: #fff3f2;
 }
@@ -121,14 +122,32 @@ h1 {
   margin: 0;
   font-size: 0.89rem;
   font-weight: 600;
-  color: #2f557a;
+  color: #2f567a;
+}
+
+.equation-chip {
+  border: 1px solid #cad9ee;
+  border-radius: 999px;
+  background: #f5f9ff;
+  color: #1f4f82;
+  padding: 4px 11px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+}
+
+.equation-chip .katex {
+  font-size: 0.9rem;
 }
 
 .replay {
   border: 1px solid #bfd4ee;
   border-radius: 999px;
   background: #f2f8ff;
-  color: #224f7e;
+  color: #214f7e;
   font-size: 0.82rem;
   font-weight: 700;
   padding: 9px 14px;
@@ -141,7 +160,7 @@ h1 {
 
 .scene {
   width: 100%;
-  height: clamp(460px, 64vh, 700px);
+  height: clamp(470px, 66vh, 710px);
   border-radius: 14px;
   display: block;
 }
@@ -151,7 +170,7 @@ h1 {
   border: 1px solid #d8e5f5;
   border-radius: 12px;
   background: #f8fbff;
-  color: #2f557a;
+  color: #2f567a;
   padding: 10px 12px;
   font-size: 0.86rem;
   line-height: 1.4;
@@ -194,21 +213,18 @@ h1 {
   color: var(--hold);
 }
 
-.controls-card {
-  padding: 16px;
+.control-rail {
+  padding: 14px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  align-items: start;
+  gap: 10px;
 }
 
-.control,
-.formula-card,
-.lambda-card {
+.control {
   border: 1px solid #d8e4f3;
   border-radius: 13px;
-  background: #fcfdff;
-  padding: 12px;
+  background: #fbfdff;
+  padding: 10px 12px;
   display: grid;
   gap: 8px;
 }
@@ -221,9 +237,9 @@ h1 {
 }
 
 .control-head span:first-child {
-  font-size: 0.92rem;
-  font-weight: 700;
   color: #1f466f;
+  font-size: 0.88rem;
+  font-weight: 700;
 }
 
 .value {
@@ -232,15 +248,8 @@ h1 {
   background: #f1f7ff;
   padding: 2px 8px;
   color: #1f4f82;
-  font-size: 0.74rem;
+  font-size: 0.73rem;
   font-weight: 800;
-}
-
-.control-note {
-  margin: 0;
-  color: #567696;
-  font-size: 0.82rem;
-  line-height: 1.35;
 }
 
 input[type='range'] {
@@ -248,80 +257,16 @@ input[type='range'] {
   accent-color: var(--accent);
 }
 
-.formula-label {
-  margin: 0;
-  color: #4f6f90;
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: 800;
-}
-
-.math-core {
-  min-height: 92px;
-  border: 1px solid #d8e5f5;
-  border-radius: 11px;
-  background: linear-gradient(180deg, #f9fcff 0%, #f4f9ff 100%);
-  display: grid;
-  align-items: center;
-  padding: 10px 12px;
-  overflow-x: auto;
-}
-
-.katex,
-.katex-display {
-  color: #163f66;
-  font-size: 1.08rem;
-}
-
-.katex-display {
-  margin: 0;
-}
-
-.lambda-bars {
-  display: grid;
-  gap: 8px;
-}
-
-.lambda-row {
-  border: 1px solid #dae6f4;
-  border-radius: 10px;
-  background: #ffffff;
-  padding: 7px 9px;
-  display: grid;
-  gap: 6px;
-}
-
-.lambda-row.inactive {
-  opacity: 0.44;
-}
-
-.lambda-head {
+.control-scale {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  color: #2d547a;
-  font-size: 0.78rem;
-  font-weight: 700;
+  color: #6884a1;
+  font-size: 0.73rem;
+  font-weight: 600;
 }
 
-.lambda-track {
-  height: 7px;
-  border-radius: 999px;
-  background: #e9f1fb;
-  overflow: hidden;
-}
-
-.lambda-fill {
-  height: 100%;
-  width: 0;
-  border-radius: 999px;
-  background: var(--bar-color, #2563eb);
-  transition: width 180ms linear;
-}
-
-@media (max-width: 960px) {
-  .controls-card {
+@media (max-width: 940px) {
+  .control-rail {
     grid-template-columns: 1fr;
   }
 
@@ -331,10 +276,6 @@ input[type='range'] {
 }
 
 @media (max-width: 720px) {
-  .shell {
-    width: min(1160px, 95vw);
-  }
-
   .kpi-row {
     grid-template-columns: 1fr;
   }

@@ -21,9 +21,8 @@ export interface SceneRenderInput {
   rawTarget: Vec2
   safeTarget: Vec2
   colorById: Record<string, string>
-  activeSetIds: string[]
+  constraintForceById: Record<string, number>
   violationRaw: number
-  violationSafe: number
   correctionProgress: number
   transitionProgress: number
 }
@@ -33,7 +32,7 @@ const SAFE_COLOR = '#1d4ed8'
 const GRID_COLOR = 'rgba(67, 95, 124, 0.1)'
 const AXIS_COLOR = 'rgba(59, 86, 115, 0.24)'
 const ZONE_FILL = 'rgba(20, 131, 109, 0.15)'
-const ZONE_STROKE = 'rgba(20, 124, 104, 0.68)'
+const ZONE_STROKE = 'rgba(20, 124, 104, 0.7)'
 
 function withAlpha(hex: string, alpha: number): string {
   const clean = hex.replace('#', '')
@@ -42,6 +41,40 @@ function withAlpha(hex: string, alpha: number): string {
   const g = (value >> 8) & 255
   const b = value & 255
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+function clamp(value: number, min = 0, max = 1): number {
+  return Math.min(Math.max(value, min), max)
+}
+
+function polygonCentroid(polygon: Polygon): Vec2 | null {
+  if (polygon.vertices.length < 3) {
+    return null
+  }
+
+  let areaAccumulator = 0
+  let cxAccumulator = 0
+  let cyAccumulator = 0
+
+  for (let i = 0; i < polygon.vertices.length; i += 1) {
+    const a = polygon.vertices[i]
+    const b = polygon.vertices[(i + 1) % polygon.vertices.length]
+    const cross = a.x * b.y - b.x * a.y
+
+    areaAccumulator += cross
+    cxAccumulator += (a.x + b.x) * cross
+    cyAccumulator += (a.y + b.y) * cross
+  }
+
+  const area = areaAccumulator / 2
+  if (Math.abs(area) <= 1e-8) {
+    return null
+  }
+
+  return {
+    x: cxAccumulator / (6 * area),
+    y: cyAccumulator / (6 * area),
+  }
 }
 
 export class SceneRenderer {
@@ -101,8 +134,8 @@ export class SceneRenderer {
     }
 
     const boundRadius = worldBoundsFromHalfspaces(input.halfspaces)
-    const stepRadius = Math.max(norm(input.rawTarget), norm(input.safeTarget), norm(input.rawStep), norm(input.safeStep), 0.75)
-    const worldRadius = Math.max(boundRadius * 1.9, stepRadius * 1.55, 1.35)
+    const stepRadius = Math.max(norm(input.rawTarget), norm(input.safeTarget), norm(input.rawStep), norm(input.safeStep), 0.8)
+    const worldRadius = Math.max(boundRadius * 1.9, stepRadius * 1.45, 1.3)
 
     const toScreen = (point: Vec2): ScreenPoint => ({
       x: ((point.x + worldRadius) / (2 * worldRadius)) * content.width + content.x,
@@ -118,8 +151,8 @@ export class SceneRenderer {
 
     if (input.previousZone && input.previousZone.vertices.length >= 3 && input.transitionProgress < 0.995) {
       this.drawZone(toScreen, input.previousZone, {
-        fill: withAlpha('#64748b', 0.02),
-        stroke: withAlpha('#64748b', (1 - input.transitionProgress) * 0.5),
+        fill: withAlpha('#64748b', 0.03),
+        stroke: withAlpha('#64748b', (1 - input.transitionProgress) * 0.44),
         dashed: true,
       })
     }
@@ -130,15 +163,21 @@ export class SceneRenderer {
       dashed: false,
     })
 
-    for (const id of input.activeSetIds) {
-      const halfspace = input.halfspaces.find((entry) => entry.id === id)
-      if (!halfspace) {
+    for (const halfspace of input.halfspaces) {
+      if (!halfspace.active) {
         continue
       }
-      this.drawConstraintLine(toScreen, worldRadius, halfspace, input.colorById[id] ?? SAFE_COLOR, input.correctionProgress)
+      const emphasis = input.constraintForceById[halfspace.id] ?? 0
+      this.drawConstraintLine(
+        toScreen,
+        worldRadius,
+        halfspace,
+        input.colorById[halfspace.id] ?? SAFE_COLOR,
+        clamp(emphasis),
+      )
     }
 
-    if (input.correctionProgress > 0.01) {
+    if (input.correctionProgress > 0.02) {
       this.drawConnector(toScreen, input.rawTarget, input.safeTarget, input.correctionProgress)
     }
 
@@ -148,7 +187,7 @@ export class SceneRenderer {
       glow: true,
     })
 
-    if (input.correctionProgress > 0.01) {
+    if (input.correctionProgress > 0.04) {
       this.drawArrow(toScreen, { x: 0, y: 0 }, input.safeStep, {
         color: SAFE_COLOR,
         width: 4,
@@ -158,23 +197,27 @@ export class SceneRenderer {
 
     const origin = toScreen({ x: 0, y: 0 })
     ctx.beginPath()
-    ctx.arc(origin.x, origin.y, 4.2, 0, Math.PI * 2)
+    ctx.arc(origin.x, origin.y, 4.1, 0, Math.PI * 2)
     ctx.fillStyle = '#0f172a'
     ctx.fill()
 
-    ctx.font = '700 12px "IBM Plex Sans", sans-serif'
-    ctx.fillStyle = '#324f71'
-    ctx.fillText('theta', origin.x + 8, origin.y - 8)
+    this.drawTipLabel(content, origin, 'theta', '#0f172a', { dx: 10, dy: -14 })
 
-    if (input.violationRaw > 1e-6 && norm(input.rawStep) > 0.12) {
+    if (input.violationRaw > 1e-6 && norm(input.rawStep) > 0.08) {
       this.drawViolationPulse(toScreen(input.rawStep), 9.5)
     }
 
-    if (norm(input.rawStep) > 0.11) {
-      this.drawTipLabel(toScreen(input.rawStep), 'delta0', RAW_COLOR)
+    if (norm(input.rawStep) > 0.08) {
+      this.drawTipLabel(content, toScreen(input.rawStep), 'delta0', RAW_COLOR, { dx: 10, dy: -14 })
     }
-    if (input.correctionProgress > 0.05 && norm(input.safeStep) > 0.11) {
-      this.drawTipLabel(toScreen(input.safeStep), 'delta*', SAFE_COLOR)
+
+    if (input.correctionProgress > 0.06 && norm(input.safeStep) > 0.08) {
+      this.drawTipLabel(content, toScreen(input.safeStep), 'delta*', SAFE_COLOR, { dx: 10, dy: 18 })
+    }
+
+    const centroid = polygonCentroid(input.zone)
+    if (centroid) {
+      this.drawTipLabel(content, toScreen(centroid), 'ship zone', '#0f766e', { dx: 8, dy: -16 })
     }
 
     ctx.restore()
@@ -257,7 +300,7 @@ export class SceneRenderer {
     }
 
     ctx.strokeStyle = AXIS_COLOR
-    ctx.lineWidth = 1.6
+    ctx.lineWidth = 1.55
 
     const xStart = toScreen({ x: -worldRadius, y: 0 })
     const xEnd = toScreen({ x: worldRadius, y: 0 })
@@ -303,7 +346,7 @@ export class SceneRenderer {
     ctx.fill()
 
     ctx.strokeStyle = style.stroke
-    ctx.lineWidth = 2.2
+    ctx.lineWidth = 2.1
     ctx.setLineDash(style.dashed ? [7, 7] : [])
     ctx.stroke()
     ctx.setLineDash([])
@@ -314,7 +357,7 @@ export class SceneRenderer {
     worldRadius: number,
     halfspace: Halfspace,
     color: string,
-    intensity: number,
+    emphasis: number,
   ): void {
     const ctx = this.ctx
     const normal = halfspace.normal
@@ -336,8 +379,8 @@ export class SceneRenderer {
     ctx.beginPath()
     ctx.moveTo(a.x, a.y)
     ctx.lineTo(b.x, b.y)
-    ctx.strokeStyle = withAlpha(color, 0.12 + intensity * 0.48)
-    ctx.lineWidth = 2
+    ctx.strokeStyle = withAlpha(color, 0.12 + emphasis * 0.56)
+    ctx.lineWidth = 1.4 + emphasis * 2.2
     ctx.setLineDash([5, 5])
     ctx.stroke()
     ctx.setLineDash([])
@@ -351,7 +394,7 @@ export class SceneRenderer {
     ctx.beginPath()
     ctx.moveTo(a.x, a.y)
     ctx.lineTo(b.x, b.y)
-    ctx.strokeStyle = 'rgba(124, 58, 237, 0.55)'
+    ctx.strokeStyle = 'rgba(124, 58, 237, 0.52)'
     ctx.lineWidth = 2
     ctx.setLineDash([4, 5])
     ctx.stroke()
@@ -369,24 +412,34 @@ export class SceneRenderer {
 
     ctx.beginPath()
     ctx.arc(point.x, point.y, radius, 0, Math.PI * 2)
-    ctx.strokeStyle = 'rgba(220, 38, 38, 0.45)'
+    ctx.strokeStyle = 'rgba(220, 38, 38, 0.46)'
     ctx.lineWidth = 2
     ctx.stroke()
 
     ctx.beginPath()
     ctx.arc(point.x, point.y, radius + 5, 0, Math.PI * 2)
     ctx.strokeStyle = 'rgba(220, 38, 38, 0.2)'
-    ctx.lineWidth = 1.5
+    ctx.lineWidth = 1.4
     ctx.stroke()
   }
 
-  private drawTipLabel(point: ScreenPoint, text: string, color: string): void {
+  private drawTipLabel(
+    bounds: Viewport,
+    anchor: ScreenPoint,
+    text: string,
+    color: string,
+    offset: { dx: number; dy: number },
+  ): void {
     const ctx = this.ctx
     ctx.font = '700 11px "IBM Plex Sans", sans-serif'
     const paddingX = 8
     const width = ctx.measureText(text).width + paddingX * 2
-    const x = point.x + 10
-    const y = point.y - 14
+
+    const rawX = anchor.x + offset.dx
+    const rawY = anchor.y + offset.dy
+
+    const x = clamp(rawX, bounds.x + 4, bounds.x + bounds.width - width - 4)
+    const y = clamp(rawY, bounds.y + 16, bounds.y + bounds.height - 6)
 
     ctx.fillStyle = withAlpha(color, 0.12)
     ctx.strokeStyle = withAlpha(color, 0.38)
@@ -419,7 +472,7 @@ export class SceneRenderer {
 
     const ctx = this.ctx
     if (options.glow) {
-      ctx.shadowColor = withAlpha(options.color, 0.38)
+      ctx.shadowColor = withAlpha(options.color, 0.34)
       ctx.shadowBlur = 10
     }
 
@@ -455,7 +508,7 @@ export class SceneRenderer {
 
 export function paletteForConstraints(halfspaces: Halfspace[]): Record<string, string> {
   const palette: Record<string, string> = {}
-  const colors = ['#1d4ed8', '#d97706', '#0f766e', '#be123c', '#7c3aed']
+  const colors = ['#1d4ed8', '#d97706', '#0f766e', '#be123c', '#7c3aed', '#0e7490']
   halfspaces.forEach((halfspace, index) => {
     palette[halfspace.id] = colors[index % colors.length]
   })
