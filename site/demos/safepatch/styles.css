@@ -78,6 +78,23 @@ h1 {
   line-height: 1.46;
 }
 
+.hero-pills {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hero-pill {
+  border: 1px solid #c9dbee;
+  border-radius: 999px;
+  background: #f6faff;
+  color: #2f577d;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 5px 10px;
+}
+
 .replay {
   align-self: center;
   border: 1px solid #b4cdef;
@@ -292,6 +309,12 @@ h1 {
 
 .control.compact p {
   display: none;
+}
+
+.subeq {
+  color: #567696;
+  font-size: 0.72rem;
+  font-family: 'STIX Two Text', 'Cambria Math', serif;
 }
 
 .control-head {

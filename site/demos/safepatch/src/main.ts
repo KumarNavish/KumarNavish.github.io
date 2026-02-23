@@ -19,7 +19,7 @@ import { ProjectionResult, computeProjectedStep } from './qp'
 import { CorrectionVisual, SceneRenderer, paletteForConstraints } from './render'
 import { UIController } from './ui'
 
-const GRADIENT_NEW: Vec2 = vec(1.4, -1.06)
+const GRADIENT_NEW: Vec2 = vec(1.45, -1.12)
 
 const TOTAL_ANIMATION_MS = 2000
 const RAW_END = 0.26
@@ -30,29 +30,29 @@ const baseHalfspaces: Halfspace[] = [
   {
     id: 'g1',
     label: 'λ1',
-    normal: normalize(vec(1.0, 0.18)),
-    bound: 0.82,
+    normal: normalize(vec(-1.0, 0.03)),
+    bound: 0.05,
     active: true,
   },
   {
     id: 'g2',
     label: 'λ2',
-    normal: normalize(vec(-0.68, 0.86)),
-    bound: 0.7,
+    normal: normalize(vec(0.02, 1.0)),
+    bound: 0.24,
     active: true,
   },
   {
     id: 'g3',
     label: 'λ3',
-    normal: normalize(vec(-0.58, -0.81)),
-    bound: 0.9,
+    normal: normalize(vec(0.86, 0.51)),
+    bound: 1.05,
     active: true,
   },
   {
     id: 'g4',
     label: 'λ4',
-    normal: normalize(vec(0.36, -0.93)),
-    bound: 0.68,
+    normal: normalize(vec(0.56, -0.83)),
+    bound: 0.82,
     active: true,
   },
 ]
@@ -222,7 +222,7 @@ function start(): void {
   const colorById = paletteForConstraints(halfspaces)
   const ui = new UIController(halfspaces)
 
-  let eta = 0.55
+  let eta = 0.72
   let zone: Polygon = { vertices: [], isEmpty: true }
   let projection: ProjectionResult = computeProjectedStep({
     gradient: GRADIENT_NEW,
