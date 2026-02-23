@@ -19,59 +19,59 @@ import { computeProjectedStep } from './qp'
 import { SceneRenderer, paletteForConstraints } from './render'
 import { UIController } from './ui'
 
-const GRADIENT_NEW: Vec2 = vec(-1.08, 0.31)
-const TRANSITION_MS = 1320
+const GRADIENT_NEW: Vec2 = vec(-1.42, -0.96)
+const TRANSITION_MS = 1400
 
 const baseHalfspaces: Halfspace[] = [
   {
     id: 'g1',
     label: 'g1',
     normal: normalize(vec(1, 0)),
-    bound: 0.78,
+    bound: 0.45,
     active: true,
   },
   {
     id: 'g2',
     label: 'g2',
     normal: normalize(vec(0, 1)),
-    bound: 0.64,
+    bound: 0.36,
     active: true,
   },
   {
     id: 'g3',
     label: 'g3',
     normal: normalize(vec(-1, 0)),
-    bound: 0.5,
+    bound: 0.58,
     active: true,
   },
   {
     id: 'g4',
     label: 'g4',
     normal: normalize(vec(0, -1)),
-    bound: 0.34,
+    bound: 0.32,
     active: true,
   },
   {
     id: 'g5',
     label: 'g5',
-    normal: normalize(vec(0.78, -0.62)),
-    bound: 0.72,
+    normal: normalize(vec(0.88, 0.62)),
+    bound: 0.46,
     active: true,
   },
 ]
 
 const STRICTNESS_SENSITIVITY: Record<string, number> = {
-  g1: 0.68,
-  g2: 0.52,
-  g3: 0.5,
-  g4: 0.72,
-  g5: 1.55,
+  g1: 0.78,
+  g2: 0.74,
+  g3: 0.62,
+  g4: 0.58,
+  g5: 1.95,
 }
 
 const AUTOPLAY_STEPS = [
-  { eta: 1.22, strictness: 0.84 },
-  { eta: 1.22, strictness: 1.23 },
-  { eta: 0.95, strictness: 1.0 },
+  { eta: 1.38, strictness: 0.78 },
+  { eta: 1.38, strictness: 1.27 },
+  { eta: 1.0, strictness: 1.0 },
 ]
 
 const CORE_EQUATION = String.raw`\Delta^* = \Pi_{\mathcal S}(\Delta_0)`
@@ -132,19 +132,19 @@ function renderMathInline(elementId: string, expression: string): void {
 }
 
 function boundScaleForStrictness(id: string, strictness: number): number {
-  const sensitivity = STRICTNESS_SENSITIVITY[id] ?? 0.65
-  return clamp(1 + sensitivity * (strictness - 1), 0.5, 1.7)
+  const sensitivity = STRICTNESS_SENSITIVITY[id] ?? 0.7
+  return clamp(1 + sensitivity * (strictness - 1), 0.42, 1.86)
 }
 
 function phaseStory(progress: number, ship: boolean): string {
   if (progress < 0.2) {
-    return '1/3 Build ship zone from active guardrails.'
+    return '1/3 Guardrail geometry builds the ship zone.'
   }
   if (progress < 0.53) {
-    return '2/3 Raw optimizer update shoots out (red).'
+    return '2/3 Raw optimizer update launches (red).'
   }
   if (progress < 0.98) {
-    return '3/3 Projection pulls to nearest feasible step (blue).'
+    return '3/3 Projection snaps to nearest feasible step (blue).'
   }
   return ship ? 'Ship the blue step: policy-safe and closest to optimizer intent.' : 'Hold: no feasible projection under current limits.'
 }
@@ -164,8 +164,8 @@ function start(): void {
   const renderer = new SceneRenderer(canvas)
   const ui = new UIController()
 
-  let eta = 1.22
-  let strictness = 0.84
+  let eta = 1.38
+  let strictness = 0.78
 
   let zone = intersectHalfspaces(halfspaces, worldBoundsFromHalfspaces(halfspaces))
   let previousZone: Polygon | null = null
@@ -229,7 +229,7 @@ function start(): void {
 
         ui.setControlValues(step)
         applyControls(true)
-      }, 420 + index * 2250)
+      }, 360 + index * 2280)
 
       autoplayTimers.push(timer)
     })
@@ -238,9 +238,9 @@ function start(): void {
   function frame(now: number): void {
     const progress = clamp((now - transitionStart) / TRANSITION_MS)
 
-    const zoneReveal = easeOutCubic(progress / 0.22)
-    const rawReveal = easeOutBack((progress - 0.14) / 0.39)
-    const safeReveal = projection.ship ? easeOutBack((progress - 0.53) / 0.47) : 0
+    const zoneReveal = easeOutCubic(progress / 0.2)
+    const rawReveal = easeOutBack((progress - 0.12) / 0.37)
+    const safeReveal = projection.ship ? easeOutBack((progress - 0.5) / 0.5) : 0
 
     const rawTarget = projection.step0
     const safeTarget = projection.ship ? projection.projectedStep : projection.step0
@@ -261,7 +261,7 @@ function start(): void {
       }
     }
 
-    const correctionProgress = easeInOutCubic((progress - 0.53) / 0.47)
+    const correctionProgress = easeInOutCubic((progress - 0.5) / 0.5)
 
     const lambdaMax = Math.max(1e-8, ...halfspaces.map((halfspace) => projection.lambdaById[halfspace.id] ?? 0))
     const constraintForceById: Record<string, number> = {}
