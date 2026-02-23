@@ -7,64 +7,54 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <main class="shell">
-      <header class="hero">
-        <p class="eyebrow">SafePatch Geometry</p>
-        <h1>In one motion: red exits guardrails, blue snaps to the nearest shippable update.</h1>
-        <p class="hero-sub">Drag two controls to change conflict strength and watch the geometry respond instantly.</p>
-      </header>
+    <main class="app">
+      <section class="stage">
+        <header class="title-block">
+          <p class="eyebrow">SafePatch Geometry</p>
+          <h1>Red update breaks guardrails. Blue update is the nearest shippable move.</h1>
+        </header>
 
-      <section class="plot-card">
-        <div class="plot-top">
-          <div class="status-group">
+        <div class="scene-shell">
+          <canvas id="scene-canvas" class="scene" aria-label="SafePatch projection scene"></canvas>
+
+          <div class="hud hud-left">
             <span id="ship-indicator" class="indicator hold">HOLD</span>
-            <p id="ship-reason" class="ship-reason">Computing projection...</p>
+            <span id="ship-reason" class="ship-reason">Computing projection...</span>
           </div>
 
-          <div class="meta-group">
+          <div class="hud hud-right">
             <span id="equation-chip" class="equation-chip"></span>
             <button id="replay-button" class="replay" type="button">Replay</button>
           </div>
+
+          <div class="hud hud-bottom-metrics">
+            <span class="metric-chip">Raw breach <strong id="metric-raw-violation">+0.000</strong></span>
+            <span class="metric-chip">Safe breach <strong id="metric-safe-violation">+0.000</strong></span>
+            <span class="metric-chip">Correction <strong id="metric-correction">0.000</strong></span>
+          </div>
+
+          <p id="phase-caption" class="phase-caption">Initializing animation...</p>
         </div>
 
-        <canvas id="scene-canvas" class="scene" aria-label="SafePatch projection scene"></canvas>
+        <section class="control-dock">
+          <label class="control">
+            <div class="control-head">
+              <span>Patch intensity</span>
+              <span id="eta-value" class="value">1.20</span>
+            </div>
+            <input id="eta-slider" type="range" min="0.45" max="1.8" step="0.01" value="1.20" />
+            <div class="control-scale"><span>gentle</span><span>aggressive</span></div>
+          </label>
 
-        <p id="phase-caption" class="phase-caption">Initializing animation...</p>
-
-        <div class="kpi-row" aria-label="summary metrics">
-          <article>
-            <h3>Raw breach</h3>
-            <p id="metric-raw-violation" class="metric">+0.000</p>
-          </article>
-          <article>
-            <h3>Safe breach</h3>
-            <p id="metric-safe-violation" class="metric">+0.000</p>
-          </article>
-          <article>
-            <h3>Correction size</h3>
-            <p id="metric-correction" class="metric">0.000</p>
-          </article>
-        </div>
-      </section>
-
-      <section class="control-rail">
-        <label class="control">
-          <div class="control-head">
-            <span>Patch intensity</span>
-            <span id="eta-value" class="value">1.00</span>
-          </div>
-          <input id="eta-slider" type="range" min="0.55" max="1.45" step="0.01" value="1.00" />
-          <div class="control-scale"><span>small step</span><span>aggressive step</span></div>
-        </label>
-
-        <label class="control">
-          <div class="control-head">
-            <span>Guardrail strictness</span>
-            <span id="strictness-value" class="value">Balanced · 1.00x</span>
-          </div>
-          <input id="strictness-slider" type="range" min="0.75" max="1.30" step="0.01" value="1.00" />
-          <div class="control-scale"><span>tight zone</span><span>loose zone</span></div>
-        </label>
+          <label class="control">
+            <div class="control-head">
+              <span>Guardrail strictness</span>
+              <span id="strictness-value" class="value">Balanced · 1.00x</span>
+            </div>
+            <input id="strictness-slider" type="range" min="0.65" max="1.35" step="0.01" value="1.00" />
+            <div class="control-scale"><span>tight zone</span><span>wide zone</span></div>
+          </label>
+        </section>
       </section>
     </main>
 
