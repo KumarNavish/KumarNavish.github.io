@@ -11,7 +11,7 @@
       <section class="stage">
         <header class="title-block">
           <p class="eyebrow">SafePatch Geometry</p>
-          <h1>Red update breaks guardrails. Blue update is the nearest shippable move.</h1>
+          <h1>Unsafe gradient step -> nearest safe shippable step.</h1>
         </header>
 
         <div class="scene-shell">
@@ -28,8 +28,8 @@
           </div>
 
           <div class="hud hud-bottom-metrics">
-            <span class="metric-chip">Raw breach <strong id="metric-raw-violation">+0.000</strong></span>
-            <span class="metric-chip">Safe breach <strong id="metric-safe-violation">+0.000</strong></span>
+            <span class="metric-chip">Raw <strong id="metric-raw-violation">+0.000</strong></span>
+            <span class="metric-chip">Safe <strong id="metric-safe-violation">+0.000</strong></span>
             <span class="metric-chip">Correction <strong id="metric-correction">0.000</strong></span>
           </div>
 
@@ -52,7 +52,7 @@
               <span id="strictness-value" class="value">Balanced · 1.00x</span>
             </div>
             <input id="strictness-slider" type="range" min="0.65" max="1.35" step="0.01" value="1.00" />
-            <div class="control-scale"><span>tight zone</span><span>wide zone</span></div>
+            <div class="control-scale"><span>tight</span><span>wide</span></div>
           </label>
         </section>
       </section>

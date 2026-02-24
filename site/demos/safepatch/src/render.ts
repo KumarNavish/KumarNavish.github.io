@@ -30,8 +30,8 @@ export interface SceneRenderInput {
   transitionProgress: number
 }
 
-const RAW_COLOR = '#dc2626'
-const SAFE_COLOR = '#1d4ed8'
+const RAW_COLOR = '#ff5e70'
+const SAFE_COLOR = '#59a5ff'
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(Math.max(value, min), max)
@@ -137,8 +137,8 @@ export class SceneRenderer {
     ctx.clearRect(0, 0, width, height)
 
     const bg = ctx.createLinearGradient(0, 0, 0, height)
-    bg.addColorStop(0, '#f8fcff')
-    bg.addColorStop(1, '#ebf4ff')
+    bg.addColorStop(0, '#0d1d3b')
+    bg.addColorStop(1, '#081327')
     ctx.fillStyle = bg
     ctx.fillRect(0, 0, width, height)
 
@@ -175,15 +175,15 @@ export class SceneRenderer {
     this.drawGrid(toScreen, content, worldRadius)
 
     if (input.previousZone && input.previousZone.vertices.length >= 3 && input.transitionProgress < 0.996) {
-      this.drawZone(toScreen, input.previousZone, withAlpha('#6b7f97', 0.18), withAlpha('#6b7f97', 0.25), true)
+      this.drawZone(toScreen, input.previousZone, withAlpha('#8ca8c9', 0.12), withAlpha('#8ca8c9', 0.2), true)
     }
 
     const displayedZone = morphPolygon(input.zone, 0.2 + input.zoneReveal * 0.8)
     this.drawZone(
       toScreen,
       displayedZone,
-      withAlpha('#0f766e', 0.12 + input.zoneReveal * 0.14),
-      withAlpha('#0f766e', 0.34 + input.zoneReveal * 0.56),
+      withAlpha('#39e0c7', 0.1 + input.zoneReveal * 0.14),
+      withAlpha('#39e0c7', 0.32 + input.zoneReveal * 0.56),
       false,
     )
 
@@ -217,10 +217,10 @@ export class SceneRenderer {
 
     ctx.beginPath()
     ctx.arc(origin.x, origin.y, 4.1, 0, Math.PI * 2)
-    ctx.fillStyle = '#0f172a'
+    ctx.fillStyle = '#dbe8ff'
     ctx.fill()
 
-    this.drawLabel(content, origin, 'theta', '#0f172a', 10, -14)
+    this.drawLabel(content, origin, 'theta', '#dbe8ff', 10, -14)
 
     if (input.violationRaw > 1e-6 && input.rawReveal > 0.1 && norm(input.rawStep) > 0.08) {
       this.drawViolationPulse(toScreen(input.rawStep))
@@ -236,7 +236,7 @@ export class SceneRenderer {
 
     const centroid = polygonCentroid(input.zone)
     if (centroid) {
-      this.drawLabel(content, toScreen(centroid), 'ship zone', '#0f766e', 8, -16)
+      this.drawLabel(content, toScreen(centroid), 'ship zone', '#39e0c7', 8, -16)
     }
 
     ctx.restore()
@@ -254,8 +254,8 @@ export class SceneRenderer {
       content.width * 0.68,
     )
 
-    glow.addColorStop(0, 'rgba(255,255,255,0.84)')
-    glow.addColorStop(1, 'rgba(206,223,245,0.18)')
+    glow.addColorStop(0, 'rgba(143,188,255,0.16)')
+    glow.addColorStop(1, 'rgba(22,43,82,0)')
 
     ctx.fillStyle = glow
     ctx.fillRect(content.x, content.y, content.width, content.height)
@@ -265,7 +265,7 @@ export class SceneRenderer {
     const ctx = this.ctx
     const step = worldRadius / 4
 
-    ctx.strokeStyle = 'rgba(66, 94, 122, 0.09)'
+    ctx.strokeStyle = 'rgba(138, 170, 218, 0.11)'
     ctx.lineWidth = 1
 
     for (let i = -3; i <= 3; i += 1) {
@@ -286,7 +286,7 @@ export class SceneRenderer {
       ctx.stroke()
     }
 
-    ctx.strokeStyle = 'rgba(57, 83, 110, 0.23)'
+    ctx.strokeStyle = 'rgba(171, 198, 238, 0.28)'
     ctx.lineWidth = 1.5
 
     const xStart = toScreen({ x: -worldRadius, y: 0 })
@@ -303,7 +303,7 @@ export class SceneRenderer {
     ctx.lineTo(yEnd.x, yEnd.y)
     ctx.stroke()
 
-    ctx.strokeStyle = 'rgba(197, 213, 232, 0.55)'
+    ctx.strokeStyle = 'rgba(126, 157, 203, 0.42)'
     ctx.strokeRect(content.x, content.y, content.width, content.height)
   }
 
@@ -416,7 +416,7 @@ export class SceneRenderer {
     ctx.beginPath()
     ctx.moveTo(p0.x, p0.y)
     ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y)
-    ctx.strokeStyle = 'rgba(124, 58, 237, 0.56)'
+    ctx.strokeStyle = 'rgba(153, 119, 255, 0.65)'
     ctx.lineWidth = 2
     ctx.setLineDash([4, 5])
     ctx.stroke()
@@ -427,7 +427,7 @@ export class SceneRenderer {
 
     ctx.beginPath()
     ctx.arc(marker.x, marker.y, 4.2, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(124, 58, 237, 0.88)'
+    ctx.fillStyle = 'rgba(177, 146, 255, 0.95)'
     ctx.fill()
   }
 
@@ -437,7 +437,7 @@ export class SceneRenderer {
 
     ctx.beginPath()
     ctx.arc(point.x, point.y, 8 + pulse, 0, Math.PI * 2)
-    ctx.strokeStyle = `rgba(29, 78, 216, ${0.34 * (1 - clamp(reveal))})`
+    ctx.strokeStyle = `rgba(89, 165, 255, ${0.42 * (1 - clamp(reveal))})`
     ctx.lineWidth = 1.6
     ctx.stroke()
   }
@@ -447,13 +447,13 @@ export class SceneRenderer {
 
     ctx.beginPath()
     ctx.arc(point.x, point.y, 10, 0, Math.PI * 2)
-    ctx.strokeStyle = 'rgba(220, 38, 38, 0.48)'
+    ctx.strokeStyle = 'rgba(255, 94, 112, 0.56)'
     ctx.lineWidth = 2
     ctx.stroke()
 
     ctx.beginPath()
     ctx.arc(point.x, point.y, 15, 0, Math.PI * 2)
-    ctx.strokeStyle = 'rgba(220, 38, 38, 0.2)'
+    ctx.strokeStyle = 'rgba(255, 94, 112, 0.24)'
     ctx.lineWidth = 1.3
     ctx.stroke()
   }
@@ -482,7 +482,7 @@ export class SceneRenderer {
     ctx.fill()
     ctx.stroke()
 
-    ctx.fillStyle = '#143a61'
+    ctx.fillStyle = '#dbe8ff'
     ctx.fillText(text, x + pad, y)
   }
 
@@ -509,7 +509,7 @@ export class SceneRenderer {
     const ctx = this.ctx
     const color = withAlpha(colorHex, clamp(opacity, 0, 1))
 
-    ctx.shadowColor = withAlpha(colorHex, 0.3)
+    ctx.shadowColor = withAlpha(colorHex, 0.46)
     ctx.shadowBlur = 10
 
     ctx.beginPath()
@@ -544,7 +544,7 @@ export class SceneRenderer {
 
 export function paletteForConstraints(halfspaces: Halfspace[]): Record<string, string> {
   const palette: Record<string, string> = {}
-  const colors = ['#1d4ed8', '#d97706', '#0f766e', '#be123c', '#7c3aed', '#0e7490']
+  const colors = ['#59a5ff', '#f59e0b', '#39e0c7', '#ff5e70', '#a78bfa', '#22d3ee']
   halfspaces.forEach((halfspace, index) => {
     palette[halfspace.id] = colors[index % colors.length]
   })
