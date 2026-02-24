@@ -67,7 +67,7 @@ const STRICTNESS_SENSITIVITY: Record<string, number> = {
   g5: 1.95,
 }
 
-const AUTOPLAY_STEPS = [{ pressure: 0.14 }, { pressure: 0.92 }, { pressure: 0.48 }]
+const AUTOPLAY_STEPS = [{ pressure: 0.1 }, { pressure: 0.92 }, { pressure: 0.56 }]
 
 const CORE_EQUATION = String.raw`\Delta^*=\operatorname{Proj}_{\mathcal S}(\Delta_0),\qquad \Delta_0=-\eta g_{new}`
 
@@ -115,10 +115,10 @@ function degreesToRadians(value: number): number {
 
 function scenarioFromPressure(pressure: number): { eta: number; strictness: number; gradient: Vec2 } {
   const t = clamp(pressure)
-  const eta = 0.55 + t * 1.55
-  const strictness = 1.32 - t * 0.72
-  const angle = degreesToRadians(-210 + t * 190)
-  const gradientMagnitude = 0.8 + t * 1.28
+  const eta = 0.42 + t * 1.9
+  const strictness = 1.4 - t * 0.86
+  const angle = degreesToRadians(-220 + t * 220)
+  const gradientMagnitude = 0.62 + t * 1.7
   const gradient = scale(normalize(vec(Math.cos(angle), Math.sin(angle))), gradientMagnitude)
 
   return { eta, strictness, gradient }
@@ -165,13 +165,13 @@ function boundScaleForStrictness(id: string, strictness: number): number {
 
 function phaseStory(progress: number, ship: boolean): string {
   if (progress < 0.22) {
-    return '1/3 Feasible ship region appears.'
+    return '1/3 Feasible region appears.'
   }
   if (progress < 0.54) {
-    return '2/3 Raw step leaves the region.'
+    return '2/3 Raw step breaches it.'
   }
   if (progress < 0.98) {
-    return '3/3 Projection returns closest safe step.'
+    return '3/3 Projection returns nearest safe step.'
   }
   return ship ? 'SHIP: minimal correction, fully feasible.' : 'HOLD: no feasible step under current limits.'
 }
