@@ -38,7 +38,7 @@ const RAW_COLOR = '#db4d62'
 const SAFE_COLOR = '#1e70e6'
 const ZONE_COLOR = '#26a87c'
 const CORRECTION_COLOR = '#e49b3f'
-const GRID_STROKE = 'rgba(82, 116, 152, 0.15)'
+const GRID_STROKE = 'rgba(82, 116, 152, 0.12)'
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(Math.max(value, min), max)
@@ -116,7 +116,8 @@ export class SceneRenderer {
     const safeSeriesTarget = input.queueSafeSeries.slice(0, queueLength)
     const safeSeriesAnimated = rawSeries.map((value, index) => value + (safeSeriesTarget[index] - value) * blend)
 
-    this.drawSectionDivider(geometryPanel, queuePanel)
+    this.drawPanelCard(geometryPanel, 'Constraint Projection', 'raw update vs corrected update')
+    this.drawPanelCard(queuePanel, 'Queue Replay', 'raw queue (red) vs SafePatch queue (blue)')
     this.drawGeometryPanel(geometryPanel, input.halfspaces, input.step0, projectedAnimated, input.gradient)
     this.drawQueuePanel(queuePanel, rawSeries, safeSeriesAnimated, input.overloadThreshold, blend)
   }
@@ -131,20 +132,22 @@ export class SceneRenderer {
     ctx.fillRect(0, 0, width, height)
   }
 
-  private drawSectionDivider(geometryPanel: Rect, queuePanel: Rect): void {
+  private drawPanelCard(panel: Rect, title: string, subtitle: string): void {
     const ctx = this.ctx
-    const dividerY = queuePanel.y - 10
-    ctx.beginPath()
-    ctx.moveTo(geometryPanel.x, dividerY)
-    ctx.lineTo(geometryPanel.x + geometryPanel.width, dividerY)
-    ctx.strokeStyle = 'rgba(126, 153, 186, 0.38)'
+    this.drawRoundedRect(panel.x, panel.y, panel.width, panel.height, 12)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.72)'
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(128, 156, 189, 0.3)'
     ctx.lineWidth = 1
     ctx.stroke()
 
-    ctx.font = '700 10px "Space Grotesk", sans-serif'
-    ctx.fillStyle = '#3c5f84'
-    ctx.fillText('Constraint Projection', geometryPanel.x + 2, geometryPanel.y - 4)
-    ctx.fillText('Queue Replay', queuePanel.x + 2, queuePanel.y - 4)
+    ctx.font = '700 10px "IBM Plex Mono", monospace'
+    ctx.fillStyle = '#3f6288'
+    ctx.fillText(title, panel.x + 12, panel.y + 16)
+
+    ctx.font = '600 10px "Manrope", sans-serif'
+    ctx.fillStyle = 'rgba(77, 103, 133, 0.86)'
+    ctx.fillText(subtitle, panel.x + 12, panel.y + 30)
   }
 
   private drawGeometryPanel(
@@ -156,10 +159,10 @@ export class SceneRenderer {
   ): void {
     const ctx = this.ctx
     const chart: Rect = {
-      x: panel.x + 6,
-      y: panel.y + 6,
-      width: panel.width - 12,
-      height: panel.height - 12,
+      x: panel.x + 10,
+      y: panel.y + 40,
+      width: panel.width - 20,
+      height: panel.height - 50,
     }
 
     this.drawGeometryGrid(chart)
@@ -337,10 +340,10 @@ export class SceneRenderer {
     blend: number,
   ): void {
     const chart: Rect = {
-      x: panel.x + 6,
-      y: panel.y + 6,
-      width: panel.width - 12,
-      height: panel.height - 12,
+      x: panel.x + 10,
+      y: panel.y + 40,
+      width: panel.width - 20,
+      height: panel.height - 50,
     }
 
     if (rawSeries.length === 0 || safeSeries.length === 0) {
@@ -361,7 +364,6 @@ export class SceneRenderer {
     this.drawGlowSweep(chart, blend)
     this.drawSeriesMarker(rawSeries, mapX, mapY, RAW_COLOR)
     this.drawSeriesMarker(safeSeries, mapX, mapY, SAFE_COLOR)
-    this.drawQueueLabel(chart)
   }
 
   private drawQueueGrid(chart: Rect): void {
@@ -390,8 +392,8 @@ export class SceneRenderer {
     ctx.restore()
 
     ctx.fillStyle = '#8b3d4c'
-    ctx.font = '600 10px "Space Grotesk", sans-serif'
-    ctx.fillText('threshold', chart.x + chart.width - 56, thresholdY - 6)
+    ctx.font = '600 10px "IBM Plex Mono", monospace'
+    ctx.fillText('threshold', chart.x + chart.width - 64, thresholdY - 6)
   }
 
   private drawDeltaArea(
@@ -487,11 +489,15 @@ export class SceneRenderer {
     ctx.stroke()
   }
 
-  private drawQueueLabel(chart: Rect): void {
+  private drawRoundedRect(x: number, y: number, width: number, height: number, radius: number): void {
     const ctx = this.ctx
-    const y = chart.y + 12
-    ctx.font = '600 10px "Space Grotesk", sans-serif'
-    ctx.fillStyle = '#3e6287'
-    ctx.fillText('raw queue (red) vs SafePatch queue (blue)', chart.x + 2, y)
+    const r = Math.min(radius, width / 2, height / 2)
+    ctx.beginPath()
+    ctx.moveTo(x + r, y)
+    ctx.arcTo(x + width, y, x + width, y + height, r)
+    ctx.arcTo(x + width, y + height, x, y + height, r)
+    ctx.arcTo(x, y + height, x, y, r)
+    ctx.arcTo(x, y, x + width, y, r)
+    ctx.closePath()
   }
 }

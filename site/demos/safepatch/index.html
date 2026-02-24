@@ -11,7 +11,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css" />
@@ -19,14 +19,25 @@
   <body>
     <main class="app">
       <header class="hero">
-        <p class="eyebrow">SafePatch Deployment Gate</p>
-        <h1>Prevent high-risk LLM hotfixes from becoming production incidents.</h1>
-        <p class="hero-copy">
-          Raw updates can break safety guardrails. SafePatch projects each update into the nearest certified-safe step before deployment.
-        </p>
+        <div class="hero-copy-block">
+          <p class="eyebrow">SafePatch deployment gate</p>
+          <h1>Correct risky LLM hotfixes before they touch production traffic.</h1>
+          <p class="hero-copy">
+            Raw updates can increase quality while violating safety constraints. SafePatch computes the
+            nearest safe update and proves the operational impact before you ship.
+          </p>
+        </div>
+        <div class="hero-meta" aria-label="How to use this demo">
+          <p class="build-tag">UI rev 2026-02-24-03</p>
+          <ol class="flow-list">
+            <li><span>1</span>Choose traffic pressure</li>
+            <li><span>2</span>Set urgency and strictness</li>
+            <li><span>3</span>Read ship or hold decision</li>
+          </ol>
+        </div>
       </header>
 
-      <section id="decision-panel" class="panel status-bar ship">
+      <section id="decision-panel" class="decision-banner ship">
         <div class="status-copy">
           <p id="decision-pill" class="decision-pill ship">SHIP WITH SAFEPATCH</p>
           <h2 id="decision-title">Certified for deployment</h2>
@@ -35,9 +46,10 @@
         <button id="export-button" class="export" type="button">Export decision JSON</button>
       </section>
 
-      <section class="layout">
-        <aside class="panel control-panel">
-          <p class="panel-title">Scenario controls</p>
+      <section class="workspace">
+        <aside class="control-panel">
+          <p class="panel-label">Controls</p>
+          <h3>Define the deployment context</h3>
 
           <div class="scenario-block">
             <p class="control-label">Traffic scenario</p>
@@ -46,6 +58,7 @@
               <button class="scenario-btn active" data-pressure="0.56" type="button">Peak</button>
               <button class="scenario-btn" data-pressure="0.9" type="button">Incident</button>
             </div>
+            <p id="scenario-note" class="control-note">Peak traffic: moderate pressure with non-trivial queue risk.</p>
           </div>
 
           <div class="slider-stack">
@@ -72,30 +85,16 @@
           </div>
 
           <details class="math-details">
-            <summary>Show optimization math</summary>
+            <summary>Optimization details</summary>
             <section class="math-panel" aria-label="SafePatch optimization">
+              <p class="math-intro">SafePatch solves one constrained correction step:</p>
               <div id="equation-raw" class="equation"></div>
               <div id="equation-qp" class="equation"></div>
             </section>
           </details>
         </aside>
 
-        <section class="panel visual-panel">
-          <div class="story-lines" aria-label="Replay explanation">
-            <p class="story-line">
-              <span class="story-label">Problem</span>
-              <span id="problem-statement" class="story-text">Replay loading.</span>
-            </p>
-            <p class="story-line">
-              <span class="story-label">Mechanism</span>
-              <span id="mechanism-statement" class="story-text">SafePatch mechanism loading.</span>
-            </p>
-            <p class="story-line">
-              <span class="story-label">Impact</span>
-              <span id="impact-statement" class="story-text">Impact replay loading.</span>
-            </p>
-          </div>
-
+        <section class="replay-panel">
           <div class="canvas-shell">
             <canvas id="scene-canvas" class="scene" aria-label="SafePatch mechanism and queue replay"></canvas>
           </div>
@@ -112,6 +111,21 @@
             <article class="kpi-card">
               <p>Escalations</p>
               <strong id="kpi-escalations-value">--</strong>
+            </article>
+          </div>
+
+          <div class="story-strip" aria-label="What changes and why it matters">
+            <article class="story-card">
+              <p class="story-kicker">Problem</p>
+              <p id="problem-statement" class="story-text">Replay loading.</p>
+            </article>
+            <article class="story-card">
+              <p class="story-kicker">Mechanism</p>
+              <p id="mechanism-statement" class="story-text">SafePatch mechanism loading.</p>
+            </article>
+            <article class="story-card">
+              <p class="story-kicker">Impact</p>
+              <p id="impact-statement" class="story-text">Impact replay loading.</p>
             </article>
           </div>
         </section>

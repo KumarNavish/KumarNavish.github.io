@@ -235,15 +235,15 @@ function toFrameUi(
   const breachDrop = replay.rawBreachMinutes - replay.safeBreachMinutes
   const retainedPercent = Math.round(clamp(retainedValueRatio, 0, 1.4) * 100)
 
-  const problemText = `${scenario}: raw patch breaks ${violatedRaw} guardrails and causes ${replay.rawBreachMinutes} breach minutes.`
-  const mechanismText = `SafePatch solves one constrained projection: ${violatedRaw} -> ${violatedSafe} violations, active set ${activeSetSize}, residual ${Math.max(0, maxViolationProjected).toFixed(3)}.`
+  const problemText = `Problem: ${scenario} turns the raw hotfix into ${violatedRaw} guardrail violations and ${replay.rawBreachMinutes} SLA breach minutes.`
+  const mechanismText = `Mechanism: SafePatch applies one constrained projection (${violatedRaw} -> ${violatedSafe} violations, active constraints ${activeSetSize}, residual ${Math.max(0, maxViolationProjected).toFixed(3)}).`
 
-  let impactText = `Peak queue ${replay.peakRaw} -> ${replay.peakSafe}; escalations ${replay.rawEscalations} -> ${replay.safeEscalations}.`
+  let impactText = `Impact: queue peak ${replay.peakRaw} -> ${replay.peakSafe} and escalations ${replay.rawEscalations} -> ${replay.safeEscalations}.`
   if (breachDrop > 0) {
-    impactText += ` Breach minutes reduce by ${breachDrop}.`
+    impactText += ` Breach minutes drop by ${breachDrop}.`
   }
   if (!decision.ship) {
-    impactText = `Deployment held: ${decision.reason}`
+    impactText = `Impact: deployment held because ${decision.reason.toLowerCase()}`
   }
 
   return {
