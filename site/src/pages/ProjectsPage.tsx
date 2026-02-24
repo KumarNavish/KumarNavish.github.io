@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 
-import { ArcSpine } from '../components/ArcSpine'
 import { fetchProjectsApi, type ProjectItem } from '../lib/api'
 import { runClPloProof, type ClPloProofConfig, type ProofStrategyId } from '../lib/clploProof'
 import { formatDate } from '../lib/formatters'
@@ -158,14 +157,12 @@ export function ProjectsPage() {
   return (
     <div className="page builder-page overview-flow">
       <section className="hero hero-primary">
-        <p className="eyebrow">Skills</p>
-        <h1>I design robust methods for learning under drift.</h1>
+        <p className="eyebrow">Methods</p>
+        <h1>Test whether the method stays stable when market conditions shift.</h1>
         <p className="hero-copy">
-          Start with the interactive proof, then inspect selected implementations.
+          Use the proof controls below, then inspect repositories that implement the same ideas.
         </p>
       </section>
-
-      <ArcSpine current="skills" />
 
       <section className="panel proof-focus-panel" aria-label="Skill proof">
         <header className="proof-focus-header">

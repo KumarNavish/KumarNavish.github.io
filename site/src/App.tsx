@@ -33,7 +33,7 @@ function SiteHeader() {
     <header className="site-header">
       <div className="header-inner">
         <p className="header-title">Navish Kumar</p>
-        <p className="header-subtitle">Applied ML systems for reliable decisions under change</p>
+        <p className="header-subtitle">Choose Methods, Case Studies, or Evidence based on what you need to verify.</p>
       </div>
       <Navigation />
     </header>
