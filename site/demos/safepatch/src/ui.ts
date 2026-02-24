@@ -8,7 +8,6 @@ export interface ProofFrameUi {
   ship: boolean
   reason: string | null
   phaseText: string
-  phaseIndex: number
   maxViolationRaw: number
   maxViolationSafe: number
   correctionSize: number
@@ -26,11 +25,10 @@ export class UIController {
   private readonly shipIndicator: HTMLElement
   private readonly shipReason: HTMLElement
   private readonly phaseCaption: HTMLElement
-  private readonly storySteps: HTMLElement[]
 
-  private readonly metricRawViolation: HTMLElement | null
-  private readonly metricSafeViolation: HTMLElement | null
-  private readonly metricCorrection: HTMLElement | null
+  private readonly metricRawViolation: HTMLElement
+  private readonly metricSafeViolation: HTMLElement
+  private readonly metricCorrection: HTMLElement
 
   constructor() {
     this.etaSlider = this.getElement<HTMLInputElement>('eta-slider')
@@ -40,11 +38,10 @@ export class UIController {
     this.shipIndicator = this.getElement('ship-indicator')
     this.shipReason = this.getElement('ship-reason')
     this.phaseCaption = this.getElement('phase-caption')
-    this.storySteps = Array.from(document.querySelectorAll<HTMLElement>('[data-story-step]'))
 
-    this.metricRawViolation = document.getElementById('metric-raw-violation')
-    this.metricSafeViolation = document.getElementById('metric-safe-violation')
-    this.metricCorrection = document.getElementById('metric-correction')
+    this.metricRawViolation = this.getElement('metric-raw-violation')
+    this.metricSafeViolation = this.getElement('metric-safe-violation')
+    this.metricCorrection = this.getElement('metric-correction')
 
     this.syncDisplayedControlValues()
   }
@@ -84,28 +81,16 @@ export class UIController {
     this.shipReason.textContent = frame.reason ?? 'No feasible projected step under current guardrails.'
     this.phaseCaption.textContent = frame.phaseText
 
-    for (const step of this.storySteps) {
-      const index = Number.parseInt(step.dataset.storyStep ?? '0', 10)
-      step.classList.toggle('active', index === frame.phaseIndex)
-      step.classList.toggle('done', index < frame.phaseIndex)
-    }
+    this.metricRawViolation.textContent = `+${positivePart(frame.maxViolationRaw).toFixed(3)}`
+    this.metricRawViolation.classList.add('bad')
 
-    if (this.metricRawViolation) {
-      this.metricRawViolation.textContent = `+${positivePart(frame.maxViolationRaw).toFixed(3)}`
-      this.metricRawViolation.classList.add('bad')
-    }
+    this.metricSafeViolation.textContent = `+${positivePart(frame.maxViolationSafe).toFixed(3)}`
+    this.metricSafeViolation.classList.toggle('good', positivePart(frame.maxViolationSafe) <= 1e-6)
+    this.metricSafeViolation.classList.toggle('bad', positivePart(frame.maxViolationSafe) > 1e-6)
 
-    if (this.metricSafeViolation) {
-      this.metricSafeViolation.textContent = `+${positivePart(frame.maxViolationSafe).toFixed(3)}`
-      this.metricSafeViolation.classList.toggle('good', positivePart(frame.maxViolationSafe) <= 1e-6)
-      this.metricSafeViolation.classList.toggle('bad', positivePart(frame.maxViolationSafe) > 1e-6)
-    }
-
-    if (this.metricCorrection) {
-      this.metricCorrection.textContent = frame.correctionSize.toFixed(3)
-      this.metricCorrection.classList.toggle('good', frame.correctionSize > 1e-6)
-      this.metricCorrection.classList.toggle('bad', frame.correctionSize <= 1e-6)
-    }
+    this.metricCorrection.textContent = frame.correctionSize.toFixed(3)
+    this.metricCorrection.classList.toggle('good', frame.correctionSize > 1e-6)
+    this.metricCorrection.classList.toggle('bad', frame.correctionSize <= 1e-6)
   }
 
   renderPressureModel(eta: number, strictness: number): void {

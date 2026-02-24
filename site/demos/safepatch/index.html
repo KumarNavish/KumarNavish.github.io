@@ -9,31 +9,39 @@
   <body>
     <main class="app">
       <header class="title-block">
-        <p class="eyebrow">SafePatch Geometry</p>
-        <h1>How to keep an optimizer aggressive without shipping unsafe moves.</h1>
+        <p class="eyebrow">SafePatch Geometry For LLM Updates</p>
+        <h1>Fast model patches can break safety. Projection keeps adaptation while enforcing guardrails.</h1>
       </header>
 
+      <section class="context-row" aria-label="Problem and solution context">
+        <article class="context-card">
+          <h2>Problem</h2>
+          <p>Unconstrained patch vector improves new behavior but can violate safety budgets.</p>
+        </article>
+        <article class="context-card">
+          <h2>Method</h2>
+          <p>Project patch to nearest feasible point before shipping.</p>
+        </article>
+        <article class="context-card">
+          <h2>LLM Utility</h2>
+          <p>Faster updates with bounded toxicity, hallucination, and privacy risk.</p>
+        </article>
+      </section>
+
       <section class="stage">
-        <canvas id="scene-canvas" class="scene" aria-label="SafePatch projection scene"></canvas>
-
-        <div class="overlay overlay-top">
-          <div class="story-rail" aria-label="Projection story">
-            <span class="story-step" data-story-step="1">Propose</span>
-            <span class="story-step" data-story-step="2">Breach</span>
-            <span class="story-step" data-story-step="3">Project</span>
-            <span class="story-step" data-story-step="4">Ship</span>
-          </div>
-
-          <div class="status-row">
-            <span id="ship-indicator" class="indicator hold">HOLD</span>
-            <span id="ship-reason" class="ship-reason">Computing projection...</span>
-            <span id="equation-main" class="equation-line"></span>
-          </div>
-
-          <p id="phase-caption" class="phase-caption">Initializing animation...</p>
+        <div class="stage-head">
+          <span id="ship-indicator" class="indicator hold">HOLD</span>
+          <span id="ship-reason" class="ship-reason">Computing projection...</span>
+          <span id="equation-main" class="equation-line"></span>
         </div>
 
-        <div class="overlay overlay-bottom">
+        <p id="phase-caption" class="phase-caption">Initializing animation...</p>
+
+        <div class="canvas-shell">
+          <canvas id="scene-canvas" class="scene" aria-label="SafePatch projection scene"></canvas>
+        </div>
+
+        <div class="stage-foot">
           <label class="control-block">
             <div class="control-head">
               <span>Incident pressure</span>
@@ -43,6 +51,12 @@
             <div class="control-scale"><span>calm</span><span>surge</span></div>
             <p id="pressure-detail" class="pressure-detail">eta = 1.30 | epsilon = 0.95x</p>
           </label>
+
+          <div class="metric-row">
+            <span class="metric-chip">unsafe breach <strong id="metric-raw-violation">+0.000</strong></span>
+            <span class="metric-chip">safe breach <strong id="metric-safe-violation">+0.000</strong></span>
+            <span class="metric-chip">correction <strong id="metric-correction">0.000</strong></span>
+          </div>
 
           <button id="replay-button" class="replay" type="button">Replay</button>
         </div>
