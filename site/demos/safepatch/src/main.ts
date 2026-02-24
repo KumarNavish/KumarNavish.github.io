@@ -235,8 +235,8 @@ function toFrameUi(
   const breachDrop = replay.rawBreachMinutes - replay.safeBreachMinutes
   const retainedPercent = Math.round(clamp(retainedValueRatio, 0, 1.4) * 100)
 
-  const problemText = `${scenario}: raw patch violates ${violatedRaw} guardrails and creates ${replay.rawBreachMinutes} SLA-breach minutes.`
-  const mechanismText = `SafePatch projects into the feasible zone (${violatedRaw} -> ${violatedSafe} violations), with active set ${activeSetSize} and residual ${Math.max(0, maxViolationProjected).toFixed(3)}.`
+  const problemText = `${scenario}: raw patch breaks ${violatedRaw} guardrails and causes ${replay.rawBreachMinutes} breach minutes.`
+  const mechanismText = `SafePatch solves one constrained projection: ${violatedRaw} -> ${violatedSafe} violations, active set ${activeSetSize}, residual ${Math.max(0, maxViolationProjected).toFixed(3)}.`
 
   let impactText = `Peak queue ${replay.peakRaw} -> ${replay.peakSafe}; escalations ${replay.rawEscalations} -> ${replay.safeEscalations}.`
   if (breachDrop > 0) {

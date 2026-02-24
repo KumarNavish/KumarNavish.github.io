@@ -20,9 +20,9 @@
     <main class="app">
       <header class="hero">
         <p class="eyebrow">SafePatch Deployment Gate</p>
-        <h1>Certify risky LLM hotfixes before they hit production traffic.</h1>
+        <h1>Prevent high-risk LLM hotfixes from becoming production incidents.</h1>
         <p class="hero-copy">
-          Adjust urgency and guardrails, then watch the unsafe step become a ship-safe patch.
+          Raw updates can break safety guardrails. SafePatch projects each update into the nearest certified-safe step before deployment.
         </p>
       </header>
 
@@ -32,47 +32,47 @@
           <h2 id="decision-title">Certified for deployment</h2>
           <p id="decision-detail" class="status-detail">Waiting for first replay.</p>
         </div>
-        <button id="export-button" class="export" type="button">Export policy JSON</button>
+        <button id="export-button" class="export" type="button">Export decision JSON</button>
       </section>
 
       <section class="layout">
         <aside class="panel control-panel">
-          <p class="panel-title">Tune the incident profile</p>
+          <p class="panel-title">Scenario controls</p>
 
           <div class="scenario-block">
             <p class="control-label">Traffic scenario</p>
             <div class="scenario-buttons" role="group" aria-label="Traffic scenario">
-              <button class="scenario-btn" data-pressure="0.22" type="button">Routine load</button>
-              <button class="scenario-btn active" data-pressure="0.56" type="button">Peak shift</button>
-              <button class="scenario-btn" data-pressure="0.9" type="button">Incident surge</button>
+              <button class="scenario-btn" data-pressure="0.22" type="button">Routine</button>
+              <button class="scenario-btn active" data-pressure="0.56" type="button">Peak</button>
+              <button class="scenario-btn" data-pressure="0.9" type="button">Incident</button>
             </div>
           </div>
 
-          <div class="slider-block">
-            <div class="slider-row">
-              <label for="urgency-slider">Hotfix urgency</label>
-              <span id="urgency-value" class="slider-value">58%</span>
+          <div class="slider-stack">
+            <div class="slider-block">
+              <div class="slider-row">
+                <label for="urgency-slider">Hotfix urgency</label>
+                <span id="urgency-value" class="slider-value">58%</span>
+              </div>
+              <input id="urgency-slider" type="range" min="0" max="100" value="58" />
             </div>
-            <input id="urgency-slider" type="range" min="0" max="100" value="58" />
-            <p class="control-help">Higher urgency pushes a larger raw update step.</p>
-          </div>
 
-          <div class="slider-block">
-            <div class="slider-row">
-              <label for="strictness-slider">Guardrail strictness</label>
-              <span id="strictness-value" class="slider-value">62%</span>
+            <div class="slider-block">
+              <div class="slider-row">
+                <label for="strictness-slider">Guardrail strictness</label>
+                <span id="strictness-value" class="slider-value">62%</span>
+              </div>
+              <input id="strictness-slider" type="range" min="0" max="100" value="62" />
             </div>
-            <input id="strictness-slider" type="range" min="0" max="100" value="62" />
-            <p class="control-help">Higher strictness narrows the certified feasible region.</p>
           </div>
 
           <div class="micro-inline" aria-label="Mechanism diagnostics">
-            <p>Guardrails corrected: <strong id="guardrail-value">--</strong></p>
-            <p>Useful gain retained: <strong id="retained-value">--</strong></p>
+            <p><span>Guardrails corrected</span><strong id="guardrail-value">--</strong></p>
+            <p><span>Useful gain retained</span><strong id="retained-value">--</strong></p>
           </div>
 
           <details class="math-details">
-            <summary>Math (optional)</summary>
+            <summary>Show optimization math</summary>
             <section class="math-panel" aria-label="SafePatch optimization">
               <div id="equation-raw" class="equation"></div>
               <div id="equation-qp" class="equation"></div>
@@ -81,10 +81,6 @@
         </aside>
 
         <section class="panel visual-panel">
-          <div class="canvas-shell">
-            <canvas id="scene-canvas" class="scene" aria-label="SafePatch mechanism and queue replay"></canvas>
-          </div>
-
           <div class="story-lines" aria-label="Replay explanation">
             <p class="story-line">
               <span class="story-label">Problem</span>
@@ -95,15 +91,28 @@
               <span id="mechanism-statement" class="story-text">SafePatch mechanism loading.</span>
             </p>
             <p class="story-line">
-              <span class="story-label">Outcome</span>
+              <span class="story-label">Impact</span>
               <span id="impact-statement" class="story-text">Impact replay loading.</span>
             </p>
           </div>
 
-          <div class="kpi-inline" aria-label="Operational impact">
-            <p>Peak queue <strong id="kpi-peak-value">--</strong></p>
-            <p>Breach minutes <strong id="kpi-breach-value">--</strong></p>
-            <p>Escalations <strong id="kpi-escalations-value">--</strong></p>
+          <div class="canvas-shell">
+            <canvas id="scene-canvas" class="scene" aria-label="SafePatch mechanism and queue replay"></canvas>
+          </div>
+
+          <div class="kpi-row" aria-label="Operational impact">
+            <article class="kpi-card">
+              <p>Peak queue</p>
+              <strong id="kpi-peak-value">--</strong>
+            </article>
+            <article class="kpi-card">
+              <p>Breach minutes</p>
+              <strong id="kpi-breach-value">--</strong>
+            </article>
+            <article class="kpi-card">
+              <p>Escalations</p>
+              <strong id="kpi-escalations-value">--</strong>
+            </article>
           </div>
         </section>
       </section>
