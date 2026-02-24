@@ -33,10 +33,34 @@ function SiteHeader() {
     <header className="site-header">
       <div className="header-inner">
         <p className="header-title">Navish Kumar</p>
-        <p className="header-subtitle">Applied ML systems engineer · reliable decision systems</p>
+        <p className="header-subtitle">Applied ML systems for reliable decisions under change</p>
       </div>
       <Navigation />
     </header>
+  )
+}
+
+function SiteFooter() {
+  return (
+    <footer className="site-footer">
+      <div className="footer-inner">
+        <p className="footer-copy">Research to deployment, designed as one continuous system.</p>
+        <div className="footer-links" aria-label="Primary links">
+          <a href="/safepatch/">SafePatch demo</a>
+          <a href="/bis-continual-process-automation-demo/">BIS demo</a>
+          <a href="https://github.com/KumarNavish" target="_blank" rel="noreferrer">
+            GitHub
+          </a>
+          <a
+            href="https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Google Scholar
+          </a>
+        </div>
+      </div>
+    </footer>
   )
 }
 
@@ -54,6 +78,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
+      <SiteFooter />
     </div>
   )
 }
