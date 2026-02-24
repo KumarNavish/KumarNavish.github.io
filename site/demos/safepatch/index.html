@@ -10,29 +10,27 @@
     <main class="app">
       <header class="title-block">
         <p class="eyebrow">SafePatch Geometry</p>
-        <h1>Red step exits the safe set. Blue step is the nearest feasible projection.</h1>
+        <h1>How to keep an optimizer aggressive without shipping unsafe moves.</h1>
       </header>
 
       <section class="stage">
         <canvas id="scene-canvas" class="scene" aria-label="SafePatch projection scene"></canvas>
 
         <div class="overlay overlay-top">
-          <div class="status-stack">
-            <div class="status-row">
-              <span id="ship-indicator" class="indicator hold">HOLD</span>
-              <span id="ship-reason" class="ship-reason">Computing projection...</span>
-            </div>
-            <p id="phase-caption" class="phase-caption">Initializing animation...</p>
+          <div class="story-rail" aria-label="Projection story">
+            <span class="story-step" data-story-step="1">Propose</span>
+            <span class="story-step" data-story-step="2">Breach</span>
+            <span class="story-step" data-story-step="3">Project</span>
+            <span class="story-step" data-story-step="4">Ship</span>
           </div>
 
-          <div class="math-card">
-            <div class="legend-row">
-              <span class="legend-item"><i class="legend-dot raw"></i><span id="legend-raw" class="legend-math"></span></span>
-              <span class="legend-item"><i class="legend-dot safe"></i><span id="legend-safe" class="legend-math"></span></span>
-            </div>
+          <div class="status-row">
+            <span id="ship-indicator" class="indicator hold">HOLD</span>
+            <span id="ship-reason" class="ship-reason">Computing projection...</span>
             <span id="equation-main" class="equation-line"></span>
-            <span id="equation-secondary" class="equation-line dim"></span>
           </div>
+
+          <p id="phase-caption" class="phase-caption">Initializing animation...</p>
         </div>
 
         <div class="overlay overlay-bottom">

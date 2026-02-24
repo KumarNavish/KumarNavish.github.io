@@ -69,7 +69,7 @@ const STRICTNESS_SENSITIVITY: Record<string, number> = {
 
 const AUTOPLAY_STEPS = [{ pressure: 0.1 }, { pressure: 0.92 }, { pressure: 0.56 }]
 
-const CORE_EQUATION = String.raw`\Delta^*=\operatorname{Proj}_{\mathcal S}(\Delta_0),\qquad \Delta_0=-\eta g_{new}`
+const CORE_EQUATION = String.raw`\Delta^*=\operatorname{Proj}_{\mathcal S}(\Delta_0)`
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(Math.max(value, min), max)
@@ -141,45 +141,28 @@ function renderMathInline(elementId: string, expression: string): void {
   }
 }
 
-function renderMathDisplay(elementId: string, expression: string): void {
-  const node = document.getElementById(elementId)
-  if (!node) {
-    return
-  }
-
-  try {
-    katex.render(expression, node, {
-      throwOnError: true,
-      displayMode: true,
-      strict: 'warn',
-    })
-  } catch {
-    node.textContent = expression
-  }
-}
-
 function boundScaleForStrictness(id: string, strictness: number): number {
   const sensitivity = STRICTNESS_SENSITIVITY[id] ?? 0.7
   return clamp(1 + sensitivity * (strictness - 1), 0.42, 1.86)
 }
 
-function phaseStory(progress: number, ship: boolean): string {
+function phaseState(progress: number, ship: boolean): { index: number; text: string } {
   if (progress < 0.22) {
-    return '1/3 Feasible region appears.'
+    return { index: 1, text: 'Optimizer proposes a candidate step.' }
   }
-  if (progress < 0.54) {
-    return '2/3 Raw step breaches it.'
+  if (progress < 0.52) {
+    return { index: 2, text: 'Candidate exits the safe region.' }
   }
-  if (progress < 0.98) {
-    return '3/3 Projection returns nearest safe step.'
+  if (progress < 0.86) {
+    return { index: 3, text: 'Projection finds nearest feasible point.' }
   }
-  return ship ? 'SHIP: minimal correction, fully feasible.' : 'HOLD: no feasible step under current limits.'
+  return ship
+    ? { index: 4, text: 'Projected step is feasible. Ship.' }
+    : { index: 4, text: 'No feasible correction. Hold.' }
 }
 
 function start(): void {
-  renderMathInline('legend-raw', String.raw`\Delta_0`)
-  renderMathInline('legend-safe', String.raw`\Delta^*`)
-  renderMathDisplay('equation-main', CORE_EQUATION)
+  renderMathInline('equation-main', CORE_EQUATION)
 
   const canvas = document.getElementById('scene-canvas') as HTMLCanvasElement | null
   if (!canvas) {
@@ -250,18 +233,6 @@ function start(): void {
       eta,
       halfspaces,
     })
-
-    if (!projection.ship) {
-      renderMathInline('equation-secondary', String.raw`\mathcal{S}=\varnothing\ \Rightarrow\ \text{HOLD}`)
-    } else if (projection.activeSetIds.length === 0) {
-      renderMathInline('equation-secondary', String.raw`\Delta^*=\Delta_0\quad(\text{already feasible})`)
-    } else {
-      const distance = norm(sub(projection.projectedStep, projection.step0))
-      renderMathInline(
-        'equation-secondary',
-        String.raw`\|\Delta^*-\Delta_0\|_2=${distance.toFixed(3)}\quad\text{(minimum correction)}`,
-      )
-    }
 
     transitionStart = performance.now()
   }
@@ -337,14 +308,17 @@ function start(): void {
       transitionProgress: progress,
     })
 
+    const phase = phaseState(progress, projection.ship)
+
     ui.renderFrame({
       ship: projection.ship,
       reason: projection.ship
-        ? 'Projected step satisfies every guardrail.'
+        ? 'Safe projection found.'
         : projection.reason?.toLowerCase().includes('empty')
-          ? 'Guardrails conflict. No shippable step.'
-          : 'Raw step breaches guardrails.',
-      phaseText: phaseStory(progress, projection.ship),
+          ? 'Guardrails conflict. Hold.'
+          : 'Unsafe proposal detected.',
+      phaseText: phase.text,
+      phaseIndex: phase.index,
       maxViolationRaw: projection.maxViolationStep0,
       maxViolationSafe: projection.maxViolationProjected,
       correctionSize: norm(sub(rawTarget, safeTarget)),
