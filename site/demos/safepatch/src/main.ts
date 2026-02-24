@@ -69,7 +69,7 @@ const STRICTNESS_SENSITIVITY: Record<string, number> = {
 
 const AUTOPLAY_STEPS = [{ pressure: 0.14 }, { pressure: 0.92 }, { pressure: 0.48 }]
 
-const CORE_EQUATION = String.raw`\Delta^*=\arg\min_{\Delta\in\mathcal S}\|\Delta-\Delta_0\|_2,\qquad \Delta_0=-\eta g_{new}`
+const CORE_EQUATION = String.raw`\Delta^*=\operatorname{Proj}_{\mathcal S}(\Delta_0),\qquad \Delta_0=-\eta g_{new}`
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(Math.max(value, min), max)
@@ -158,14 +158,6 @@ function renderMathDisplay(elementId: string, expression: string): void {
   }
 }
 
-function latexConstraintId(id: string): string {
-  const match = id.match(/^([a-zA-Z]+)(\d+)$/)
-  if (!match) {
-    return id
-  }
-  return `${match[1]}_{${match[2]}}`
-}
-
 function boundScaleForStrictness(id: string, strictness: number): number {
   const sensitivity = STRICTNESS_SENSITIVITY[id] ?? 0.7
   return clamp(1 + sensitivity * (strictness - 1), 0.42, 1.86)
@@ -173,13 +165,13 @@ function boundScaleForStrictness(id: string, strictness: number): number {
 
 function phaseStory(progress: number, ship: boolean): string {
   if (progress < 0.22) {
-    return '1/3 Guardrails form the feasible zone.'
+    return '1/3 Feasible ship region appears.'
   }
   if (progress < 0.54) {
-    return '2/3 Raw update exits the zone.'
+    return '2/3 Raw step leaves the region.'
   }
   if (progress < 0.98) {
-    return '3/3 Projection finds the nearest safe action.'
+    return '3/3 Projection returns closest safe step.'
   }
   return ship ? 'SHIP: minimal correction, fully feasible.' : 'HOLD: no feasible step under current limits.'
 }
@@ -262,13 +254,12 @@ function start(): void {
     if (!projection.ship) {
       renderMathInline('equation-secondary', String.raw`\mathcal{S}=\varnothing\ \Rightarrow\ \text{HOLD}`)
     } else if (projection.activeSetIds.length === 0) {
-      renderMathInline('equation-secondary', String.raw`\mathcal{A}=\varnothing,\ \Delta^*=\Delta_0`)
+      renderMathInline('equation-secondary', String.raw`\Delta^*=\Delta_0\quad(\text{already feasible})`)
     } else {
-      const activeSet = projection.activeSetIds.map((id) => latexConstraintId(id)).join(',')
       const distance = norm(sub(projection.projectedStep, projection.step0))
       renderMathInline(
         'equation-secondary',
-        String.raw`\mathcal{A}=\{${activeSet}\},\ \|\Delta^*-\Delta_0\|_2=${distance.toFixed(3)}`,
+        String.raw`\|\Delta^*-\Delta_0\|_2=${distance.toFixed(3)}\quad\text{(minimum correction)}`,
       )
     }
 

@@ -10,57 +10,53 @@
     <main class="app">
       <header class="title-block">
         <p class="eyebrow">SafePatch Geometry</p>
-        <h1>Red step breaches. Blue step is the nearest shippable projection.</h1>
+        <h1>Red step exits the safe region. Blue step is the nearest shippable projection.</h1>
       </header>
 
       <section class="stage">
-        <div class="scene-shell">
-          <canvas id="scene-canvas" class="scene" aria-label="SafePatch projection scene"></canvas>
+        <canvas id="scene-canvas" class="scene" aria-label="SafePatch projection scene"></canvas>
 
-          <div class="overlay overlay-top">
-            <div class="status-row">
-              <span id="ship-indicator" class="indicator hold">HOLD</span>
-              <span id="ship-reason" class="ship-reason">Computing projection...</span>
-            </div>
-
-            <div class="equation-wrap">
-              <div class="legend-row">
-                <span class="legend-item">
-                  <i class="legend-dot raw"></i>
-                  <span id="legend-raw" class="legend-math"></span>
-                </span>
-                <span class="legend-item">
-                  <i class="legend-dot safe"></i>
-                  <span id="legend-safe" class="legend-math"></span>
-                </span>
-              </div>
-              <span id="equation-main" class="equation-line"></span>
-              <span id="equation-secondary" class="equation-line dim"></span>
-            </div>
+        <div class="overlay overlay-top">
+          <div class="status-card">
+            <span id="ship-indicator" class="indicator hold">HOLD</span>
+            <span id="ship-reason" class="ship-reason">Computing projection...</span>
+            <p id="phase-caption" class="phase-caption">Initializing animation...</p>
           </div>
 
-          <div class="overlay overlay-bottom">
-            <label class="control">
-              <div class="control-head">
-                <span>Incident pressure</span>
-                <span id="eta-value" class="value">58%</span>
-              </div>
-              <input id="eta-slider" type="range" min="0" max="1" step="0.001" value="0.58" />
-              <div class="control-scale"><span>calm</span><span>surge</span></div>
-              <p id="pressure-detail" class="pressure-detail">eta = 1.30 · epsilon = 0.95x</p>
-            </label>
-
-            <div class="metrics">
-              <span class="metric-chip">raw breach <strong id="metric-raw-violation">+0.000</strong></span>
-              <span class="metric-chip">safe breach <strong id="metric-safe-violation">+0.000</strong></span>
-              <span class="metric-chip">projection shift <strong id="metric-correction">0.000</strong></span>
+          <div class="math-card">
+            <div class="legend-row">
+              <span class="legend-item">
+                <i class="legend-dot raw"></i>
+                <span id="legend-raw" class="legend-math"></span>
+              </span>
+              <span class="legend-item">
+                <i class="legend-dot safe"></i>
+                <span id="legend-safe" class="legend-math"></span>
+              </span>
             </div>
-
-            <div class="bottom-row">
-              <p id="phase-caption" class="phase-caption">Initializing animation...</p>
-              <button id="replay-button" class="replay" type="button">Replay</button>
-            </div>
+            <span id="equation-main" class="equation-line"></span>
+            <span id="equation-secondary" class="equation-line dim"></span>
           </div>
+        </div>
+
+        <div class="overlay overlay-bottom">
+          <div class="control-block">
+            <div class="control-head">
+              <span>Incident pressure</span>
+              <span id="eta-value" class="value">58%</span>
+            </div>
+            <input id="eta-slider" type="range" min="0" max="1" step="0.001" value="0.58" />
+            <div class="control-scale"><span>calm</span><span>surge</span></div>
+            <p id="pressure-detail" class="pressure-detail">eta = 1.30 | epsilon = 0.95x</p>
+          </div>
+
+          <div class="metrics">
+            <span class="metric-chip">raw breach <strong id="metric-raw-violation">+0.000</strong></span>
+            <span class="metric-chip">safe breach <strong id="metric-safe-violation">+0.000</strong></span>
+            <span class="metric-chip">projection shift <strong id="metric-correction">0.000</strong></span>
+          </div>
+
+          <button id="replay-button" class="replay" type="button">Replay</button>
         </div>
       </section>
     </main>
