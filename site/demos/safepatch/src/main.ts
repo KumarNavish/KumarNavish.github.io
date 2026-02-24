@@ -24,52 +24,52 @@ const TRANSITION_MS = 1320
 const baseHalfspaces: Halfspace[] = [
   {
     id: 'g1',
-    label: 'toxicity',
-    normal: normalize(vec(1, 0)),
-    bound: 0.45,
+    label: 'toxicity ceiling',
+    normal: normalize(vec(0.94, 0.34)),
+    bound: 0.4,
     active: true,
   },
   {
     id: 'g2',
-    label: 'hallucination',
-    normal: normalize(vec(0, 1)),
-    bound: 0.36,
+    label: 'hallucination ceiling',
+    normal: normalize(vec(0.24, 1)),
+    bound: 0.35,
     active: true,
   },
   {
     id: 'g3',
-    label: 'privacy',
-    normal: normalize(vec(-1, 0)),
-    bound: 0.58,
+    label: 'privacy wall',
+    normal: normalize(vec(-0.92, 0.38)),
+    bound: 0.5,
     active: true,
   },
   {
     id: 'g4',
-    label: 'factuality',
-    normal: normalize(vec(0, -1)),
-    bound: 0.32,
+    label: 'copyright wall',
+    normal: normalize(vec(-0.56, -0.83)),
+    bound: 0.54,
     active: true,
   },
   {
     id: 'g5',
-    label: 'style drift',
-    normal: normalize(vec(0.88, 0.62)),
-    bound: 0.46,
+    label: 'style drift wall',
+    normal: normalize(vec(0.76, -0.65)),
+    bound: 0.37,
     active: true,
   },
 ]
 
 const STRICTNESS_SENSITIVITY: Record<string, number> = {
-  g1: 0.78,
-  g2: 0.74,
-  g3: 0.62,
+  g1: 0.7,
+  g2: 0.95,
+  g3: 0.64,
   g4: 0.58,
-  g5: 1.95,
+  g5: 1.48,
 }
 
-const AUTOPLAY_STEPS = [{ pressure: 0.1 }, { pressure: 0.92 }, { pressure: 0.56 }]
+const AUTOPLAY_STEPS = [{ pressure: 0.14 }, { pressure: 0.9 }, { pressure: 0.52 }]
 
-const CORE_EQUATION = String.raw`\Delta^*=\arg\min_{\Delta\in\mathcal S}\|\Delta-\Delta_0\|_2,\ \Delta_0=-\eta g_{\text{new}}`
+const CORE_EQUATION = String.raw`\Delta_0=-\eta g_{\mathrm{new}}\ \Longrightarrow\ \Delta^*=\Pi_{\mathcal S}(\Delta_0)`
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(Math.max(value, min), max)
@@ -115,10 +115,10 @@ function degreesToRadians(value: number): number {
 
 function scenarioFromPressure(pressure: number): { eta: number; strictness: number; gradient: Vec2 } {
   const t = clamp(pressure)
-  const eta = 0.42 + t * 1.9
-  const strictness = 1.4 - t * 0.86
-  const angle = degreesToRadians(-220 + t * 220)
-  const gradientMagnitude = 0.62 + t * 1.7
+  const eta = 0.54 + t * 2.08
+  const strictness = 1.34 - t * 0.86
+  const angle = degreesToRadians(208 + t * 88)
+  const gradientMagnitude = 0.68 + t * 1.46
   const gradient = scale(normalize(vec(Math.cos(angle), Math.sin(angle))), gradientMagnitude)
 
   return { eta, strictness, gradient }
@@ -148,17 +148,17 @@ function boundScaleForStrictness(id: string, strictness: number): number {
 
 function phaseState(progress: number, ship: boolean): string {
   if (progress < 0.22) {
-    return 'Raw LLM patch is proposed for new behavior.'
+    return 'A fast patch is generated from new training signals.'
   }
   if (progress < 0.52) {
-    return 'Patch crosses safety guardrails.'
+    return 'The raw patch crosses safety guardrails.'
   }
   if (progress < 0.86) {
-    return 'Projection computes nearest safe patch.'
+    return 'SafePatch computes the nearest shippable correction.'
   }
   return ship
-    ? 'Safe patch is shippable with minimal change.'
-    : 'No feasible correction. Hold deployment.'
+    ? 'Corrected patch stays safe while preserving adaptation.'
+    : 'No feasible correction under current guardrails.'
 }
 
 function start(): void {
@@ -176,7 +176,7 @@ function start(): void {
   const renderer = new SceneRenderer(canvas)
   const ui = new UIController()
 
-  let pressure = 0.48
+  let pressure = 0.52
   let eta = scenarioFromPressure(pressure).eta
   let strictness = scenarioFromPressure(pressure).strictness
   let gradientNew = scenarioFromPressure(pressure).gradient
@@ -313,14 +313,22 @@ function start(): void {
     ui.renderFrame({
       ship: projection.ship,
       reason: projection.ship
-        ? 'Safe projection found.'
+        ? 'Projection succeeded. Guardrails remain satisfied.'
         : projection.reason?.toLowerCase().includes('empty')
-          ? 'Guardrails conflict. Hold.'
-          : 'Unsafe patch blocked.',
+          ? 'Guardrails conflict: no feasible ship zone.'
+          : 'Unsafe patch blocked before deployment.',
       phaseText,
-      maxViolationRaw: projection.maxViolationStep0,
-      maxViolationSafe: projection.maxViolationProjected,
-      correctionSize: norm(sub(rawTarget, safeTarget)),
+      rawOvershootRatio:
+        Math.max(0, projection.maxViolationStep0) /
+        Math.max(0.08, norm(rawTarget)),
+      safetyRecoveredRatio: projection.ship
+        ? 1 -
+          Math.max(0, projection.maxViolationProjected) /
+            Math.max(0.08, Math.max(0, projection.maxViolationStep0))
+        : 0,
+      correctionRatio:
+        norm(sub(rawTarget, safeTarget)) /
+        Math.max(0.08, norm(rawTarget)),
     })
 
     if (progress > 0.995 && previousZone) {

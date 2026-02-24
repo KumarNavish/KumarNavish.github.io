@@ -10,23 +10,15 @@
     <main class="app">
       <header class="title-block">
         <p class="eyebrow">SafePatch Geometry For LLM Updates</p>
-        <h1>Fast model patches can break safety. Projection keeps adaptation while enforcing guardrails.</h1>
+        <h1>When a fast patch overshoots safety, SafePatch bends it back into the ship zone automatically.</h1>
+        <div class="story-strip" aria-label="Visual legend for update vectors">
+          <span class="story-dot raw" aria-hidden="true"></span>
+          <span>Raw update</span>
+          <span class="story-arrow" aria-hidden="true">→</span>
+          <span class="story-dot safe" aria-hidden="true"></span>
+          <span>SafePatch correction</span>
+        </div>
       </header>
-
-      <section class="context-row" aria-label="Problem and solution context">
-        <article class="context-card">
-          <h2>Problem</h2>
-          <p>Unconstrained patch vector improves new behavior but can violate safety budgets.</p>
-        </article>
-        <article class="context-card">
-          <h2>Method</h2>
-          <p>Project patch to nearest feasible point before shipping.</p>
-        </article>
-        <article class="context-card">
-          <h2>LLM Utility</h2>
-          <p>Faster updates with bounded toxicity, hallucination, and privacy risk.</p>
-        </article>
-      </section>
 
       <section class="stage">
         <div class="stage-head">
@@ -44,21 +36,33 @@
         <div class="stage-foot">
           <label class="control-block">
             <div class="control-head">
-              <span>Incident pressure</span>
+              <span>How aggressive should this patch be?</span>
               <span id="eta-value" class="value">58%</span>
             </div>
             <input id="eta-slider" type="range" min="0" max="1" step="0.001" value="0.58" />
-            <div class="control-scale"><span>calm</span><span>surge</span></div>
-            <p id="pressure-detail" class="pressure-detail">eta = 1.30 | epsilon = 0.95x</p>
+            <div class="control-scale"><span>conservative</span><span>aggressive</span></div>
+            <p id="pressure-detail" class="pressure-detail">Balanced pressure: moderate push, moderate correction.</p>
           </label>
 
-          <div class="metric-row">
-            <span class="metric-chip">unsafe breach <strong id="metric-raw-violation">+0.000</strong></span>
-            <span class="metric-chip">safe breach <strong id="metric-safe-violation">+0.000</strong></span>
-            <span class="metric-chip">correction <strong id="metric-correction">0.000</strong></span>
+          <div class="metric-row" aria-label="Patch impact summary">
+            <article class="metric-card danger">
+              <p class="metric-title">Raw update outside safe zone</p>
+              <div class="metric-track"><span id="metric-raw-bar" class="metric-fill"></span></div>
+              <p class="metric-readout"><strong id="metric-raw-violation">0%</strong> overshoot</p>
+            </article>
+            <article class="metric-card neutral">
+              <p class="metric-title">Patch adjusted by SafePatch</p>
+              <div class="metric-track"><span id="metric-correction-bar" class="metric-fill"></span></div>
+              <p class="metric-readout"><strong id="metric-correction">0%</strong> redirected</p>
+            </article>
+            <article class="metric-card success">
+              <p class="metric-title">Safety recovered after correction</p>
+              <div class="metric-track"><span id="metric-safe-bar" class="metric-fill"></span></div>
+              <p class="metric-readout"><strong id="metric-safe-violation">0%</strong> inside bounds</p>
+            </article>
           </div>
 
-          <button id="replay-button" class="replay" type="button">Replay</button>
+          <button id="replay-button" class="replay" type="button">Replay motion</button>
         </div>
       </section>
     </main>
