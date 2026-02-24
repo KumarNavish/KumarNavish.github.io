@@ -125,7 +125,7 @@ h1 {
   border-radius: 12px;
   background: #fbfdff;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 12px;
   padding: 9px 12px;
@@ -163,16 +163,6 @@ h1 {
   line-height: 1.28;
 }
 
-.equation-line {
-  color: #1f52a1;
-  overflow: auto hidden;
-  max-width: min(48vw, 470px);
-}
-
-.equation-line .katex {
-  font-size: 0.93rem;
-}
-
 .phase-caption {
   margin: 0;
   border: 1px solid var(--line);
@@ -204,10 +194,16 @@ h1 {
   border-radius: 12px;
   background: #ffffff;
   display: grid;
-  grid-template-columns: minmax(270px, 320px) minmax(0, 1fr) auto;
-  align-items: center;
+  grid-template-columns: 1fr;
   gap: 10px;
   padding: 10px;
+}
+
+.controls-row {
+  display: grid;
+  grid-template-columns: minmax(270px, 420px) auto;
+  align-items: center;
+  gap: 10px;
 }
 
 .control-block {
@@ -261,74 +257,52 @@ input[type='range'] {
   line-height: 1.3;
 }
 
-.metric-row {
+.decision-line {
+  margin: 0;
+  border: 1px solid #c6d6ea;
+  border-left: 4px solid #0e5acf;
+  border-radius: 10px;
+  background: linear-gradient(90deg, #f3f8ff 0%, #ffffff 75%);
+  padding: 10px 12px;
+  font-size: 0.83rem;
+  line-height: 1.3;
+  color: #223b5c;
+  font-weight: 700;
+}
+
+.kpi-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
-.metric-card {
+.kpi-card {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-  padding: 8px 9px;
+  padding: 8px 10px;
   display: grid;
-  gap: 6px;
+  gap: 4px;
 }
 
-.metric-title {
+.kpi-card p {
   margin: 0;
   font-size: 0.69rem;
-  line-height: 1.22;
   color: #4d627e;
   font-weight: 700;
 }
 
-.metric-track {
-  height: 9px;
-  border-radius: 999px;
-  background: #e7eef7;
-  overflow: hidden;
-}
-
-.metric-fill {
-  display: block;
-  width: 0%;
-  height: 100%;
-  border-radius: inherit;
-  transition: width 360ms cubic-bezier(0.2, 0.75, 0.22, 1);
-}
-
-.metric-card.danger .metric-fill {
-  background: linear-gradient(90deg, #e86a7d 0%, #d92d41 100%);
-}
-
-.metric-card.neutral .metric-fill {
-  background: linear-gradient(90deg, #7ab1ff 0%, #1e67dd 100%);
-}
-
-.metric-card.success .metric-fill {
-  background: linear-gradient(90deg, #7fdeb2 0%, #0a946a 100%);
-}
-
-.metric-readout {
-  margin: 0;
-  font-size: 0.68rem;
-  color: #5c718d;
-}
-
-.metric-readout strong {
-  margin-right: 3px;
-  font-family: 'Manrope', sans-serif;
-  font-size: 0.95rem;
+.kpi-card strong {
+  font-size: 1.08rem;
   color: #1b3758;
+  font-family: 'Manrope', sans-serif;
 }
 
-.metric-card.danger .metric-readout strong {
-  color: #a41d31;
+.kpi-card.risk strong {
+  color: #a9253c;
 }
 
-.metric-card.success .metric-readout strong {
+.kpi-card.success strong {
   color: #0a7f5b;
 }
 
@@ -349,16 +323,11 @@ input[type='range'] {
 }
 
 @media (max-width: 1120px) {
-  .stage-head {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .equation-line {
-    grid-column: 1 / -1;
-    max-width: 100%;
-  }
-
   .stage-foot {
+    grid-template-columns: 1fr;
+  }
+
+  .controls-row {
     grid-template-columns: 1fr;
   }
 
@@ -386,7 +355,7 @@ input[type='range'] {
     height: min(62vh, 580px);
   }
 
-  .metric-row {
+  .kpi-row {
     grid-template-columns: 1fr;
   }
 }

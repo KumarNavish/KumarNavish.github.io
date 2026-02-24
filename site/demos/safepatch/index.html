@@ -29,7 +29,6 @@
         <div class="stage-head">
           <span id="ship-indicator" class="indicator hold">HOLD</span>
           <span id="ship-reason" class="ship-reason">Computing projection...</span>
-          <span id="equation-main" class="equation-line"></span>
         </div>
 
         <p id="phase-caption" class="phase-caption">Initializing animation...</p>
@@ -39,35 +38,37 @@
         </div>
 
         <div class="stage-foot">
-          <label class="control-block">
-            <div class="control-head">
-              <span>Hotfix urgency</span>
-              <span id="eta-value" class="value">58%</span>
-            </div>
-            <input id="eta-slider" type="range" min="0" max="1" step="0.001" value="0.58" />
-            <div class="control-scale"><span>small patch</span><span>large patch</span></div>
-            <p id="pressure-detail" class="pressure-detail">Balanced pressure: moderate push, moderate correction.</p>
-          </label>
-
-          <div class="metric-row" aria-label="Patch impact summary">
-            <article class="metric-card danger">
-              <p class="metric-title">Unsafe risk in raw patch</p>
-              <div class="metric-track"><span id="metric-raw-risk-bar" class="metric-fill"></span></div>
-              <p class="metric-readout"><strong id="metric-raw-risk">0%</strong> over safety budget</p>
-            </article>
-            <article class="metric-card neutral">
-              <p class="metric-title">Patch value retained</p>
-              <div class="metric-track"><span id="metric-value-bar" class="metric-fill"></span></div>
-              <p class="metric-readout"><strong id="metric-value">0%</strong> of improvement kept</p>
-            </article>
-            <article class="metric-card success">
-              <p class="metric-title">Risk removed by SafePatch</p>
-              <div class="metric-track"><span id="metric-removed-bar" class="metric-fill"></span></div>
-              <p class="metric-readout"><strong id="metric-removed">0%</strong> of raw risk eliminated</p>
-            </article>
+          <div class="controls-row">
+            <label class="control-block">
+              <div class="control-head">
+                <span>Hotfix urgency</span>
+                <span id="eta-value" class="value">58%</span>
+              </div>
+              <input id="eta-slider" type="range" min="0" max="1" step="0.001" value="0.58" />
+              <div class="control-scale"><span>small patch</span><span>large patch</span></div>
+              <p id="pressure-detail" class="pressure-detail">Balanced pressure: moderate push, moderate correction.</p>
+            </label>
+            <button id="replay-button" class="replay" type="button">Replay motion</button>
           </div>
 
-          <button id="replay-button" class="replay" type="button">Replay motion</button>
+          <p id="decision-line" class="decision-line">
+            Ship safe patch: keep behavior gain while removing unsafe risk.
+          </p>
+
+          <div class="kpi-row" aria-label="Hotfix impact summary">
+            <article class="kpi-card">
+              <p>Value kept</p>
+              <strong id="kpi-value-kept">0%</strong>
+            </article>
+            <article class="kpi-card risk">
+              <p>Raw unsafe risk</p>
+              <strong id="kpi-raw-risk">0%</strong>
+            </article>
+            <article class="kpi-card success">
+              <p>Risk removed</p>
+              <strong id="kpi-risk-removed">0%</strong>
+            </article>
+          </div>
         </div>
       </section>
     </main>
