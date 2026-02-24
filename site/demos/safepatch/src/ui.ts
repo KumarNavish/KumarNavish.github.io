@@ -1,3 +1,5 @@
+import katex from 'katex'
+
 export interface ControlValues {
   pressure: number
 }
@@ -92,7 +94,11 @@ export class UIController {
   }
 
   renderPressureModel(eta: number, strictness: number): void {
-    this.pressureDetail.textContent = `eta ${eta.toFixed(2)} | epsilon ${strictness.toFixed(2)}x`
+    katex.render(String.raw`\eta=${eta.toFixed(2)},\ \epsilon=${strictness.toFixed(2)}`, this.pressureDetail, {
+      throwOnError: false,
+      displayMode: false,
+      strict: 'warn',
+    })
   }
 
   private syncDisplayedControlValues(): void {
