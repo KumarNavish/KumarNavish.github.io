@@ -154,20 +154,11 @@ export class SceneRenderer {
     projectedStep: Vec2,
     gradient: Vec2,
   ): void {
-    const ctx = this.ctx
-
-    ctx.font = '700 12px "IBM Plex Mono", monospace'
-    ctx.fillStyle = '#8bd8ff'
-    ctx.fillText('MECHANISM VIEW', panel.x + 14, panel.y + 20)
-    ctx.font = '600 14px "Sora", sans-serif'
-    ctx.fillStyle = '#ecf8ff'
-    ctx.fillText('Project risky step into the certified ship zone', panel.x + 14, panel.y + 42)
-
     const chart: Rect = {
-      x: panel.x + 14,
-      y: panel.y + 54,
-      width: panel.width - 28,
-      height: panel.height - 68,
+      x: panel.x + 10,
+      y: panel.y + 10,
+      width: panel.width - 20,
+      height: panel.height - 20,
     }
 
     this.drawGeometryGrid(chart)
@@ -199,8 +190,8 @@ export class SceneRenderer {
     const rawEnd = mapper.worldToCanvas(step0)
     const projectedEnd = mapper.worldToCanvas(projectedStep)
 
-    this.drawArrow(origin, rawEnd, RAW_COLOR, 3, 'raw step')
-    this.drawArrow(origin, projectedEnd, SAFE_COLOR, 3.4, 'SafePatch step')
+    this.drawArrow(origin, rawEnd, RAW_COLOR, 2.8)
+    this.drawArrow(origin, projectedEnd, SAFE_COLOR, 3.2)
 
     this.ctx.save()
     this.ctx.setLineDash([5, 4])
@@ -217,18 +208,13 @@ export class SceneRenderer {
     ctx.fillStyle = '#e8f5ff'
     ctx.fill()
 
-    ctx.fillStyle = '#c7e7fa'
-    ctx.font = '600 11px "Space Grotesk", sans-serif'
-    const correctionNorm = Math.hypot(projectedStep.x - step0.x, projectedStep.y - step0.y)
-    const rawNorm = Math.hypot(step0.x, step0.y)
-    ctx.fillText(`raw norm ${rawNorm.toFixed(2)} | correction ${correctionNorm.toFixed(2)}`, chart.x + 8, chart.y + 14)
-    ctx.fillText('green polygon = feasible ship zone', chart.x + 8, chart.y + chart.height - 8)
+    this.drawGeometryLegend(chart)
   }
 
   private drawGeometryGrid(rect: Rect): void {
     const ctx = this.ctx
-    const verticalLines = 8
-    const horizontalLines = 6
+    const verticalLines = 6
+    const horizontalLines = 4
 
     for (let i = 0; i <= verticalLines; i += 1) {
       const x = rect.x + (i / verticalLines) * rect.width
@@ -311,10 +297,7 @@ export class SceneRenderer {
     const direction = scale(normalize(gradient), mapper.worldRadius * 0.65)
     const origin = mapper.worldToCanvas(vec(0, 0))
     const target = mapper.worldToCanvas(scale(direction, -1))
-    this.drawArrow(origin, target, withAlpha('#ffd6a4', 0.95), 1.5, 'descent direction', true)
-    this.ctx.fillStyle = '#d9ecfb'
-    this.ctx.font = '600 10px "Space Grotesk", sans-serif'
-    this.ctx.fillText('descent target', rect.x + rect.width - 110, rect.y + 12)
+    this.drawArrow(origin, target, withAlpha('#ffd6a4', 0.9), 1.4, true)
   }
 
   private drawArrow(
@@ -322,7 +305,6 @@ export class SceneRenderer {
     to: Vec2,
     color: string,
     width: number,
-    label: string,
     subtle = false,
   ): void {
     const ctx = this.ctx
@@ -346,10 +328,29 @@ export class SceneRenderer {
     ctx.closePath()
     ctx.fillStyle = color
     ctx.fill()
+  }
 
-    ctx.fillStyle = '#e4f6ff'
+  private drawGeometryLegend(chart: Rect): void {
+    const ctx = this.ctx
+    const y = chart.y + chart.height - 10
     ctx.font = '600 10px "Space Grotesk", sans-serif'
-    ctx.fillText(label, to.x + 6, to.y - 7)
+
+    ctx.beginPath()
+    ctx.moveTo(chart.x + 4, y)
+    ctx.lineTo(chart.x + 20, y)
+    ctx.strokeStyle = RAW_COLOR
+    ctx.lineWidth = 2.6
+    ctx.stroke()
+    ctx.fillStyle = '#d6ecfa'
+    ctx.fillText('raw step', chart.x + 24, y + 3)
+
+    ctx.beginPath()
+    ctx.moveTo(chart.x + 90, y)
+    ctx.lineTo(chart.x + 106, y)
+    ctx.strokeStyle = SAFE_COLOR
+    ctx.lineWidth = 2.8
+    ctx.stroke()
+    ctx.fillText('projected step', chart.x + 110, y + 3)
   }
 
   private drawQueuePanel(
@@ -359,19 +360,11 @@ export class SceneRenderer {
     threshold: number,
     blend: number,
   ): void {
-    const ctx = this.ctx
-    ctx.font = '700 12px "IBM Plex Mono", monospace'
-    ctx.fillStyle = '#8bd8ff'
-    ctx.fillText('IMPACT VIEW', panel.x + 14, panel.y + 20)
-    ctx.font = '600 14px "Sora", sans-serif'
-    ctx.fillStyle = '#ecf8ff'
-    ctx.fillText('Queue trajectory if shipped raw vs with SafePatch', panel.x + 14, panel.y + 42)
-
     const chart: Rect = {
-      x: panel.x + 14,
-      y: panel.y + 56,
-      width: panel.width - 28,
-      height: panel.height - 72,
+      x: panel.x + 10,
+      y: panel.y + 10,
+      width: panel.width - 20,
+      height: panel.height - 20,
     }
 
     if (rawSeries.length === 0 || safeSeries.length === 0) {
@@ -392,7 +385,7 @@ export class SceneRenderer {
     this.drawGlowSweep(chart, blend)
     this.drawSeriesMarker(rawSeries, mapX, mapY, RAW_COLOR)
     this.drawSeriesMarker(safeSeries, mapX, mapY, SAFE_COLOR)
-    this.drawQueueLegend(chart, rawSeries.length)
+    this.drawQueueLegend(chart)
   }
 
   private drawQueueGrid(chart: Rect): void {
@@ -531,10 +524,10 @@ export class SceneRenderer {
     ctx.stroke()
   }
 
-  private drawQueueLegend(chart: Rect, seriesLength: number): void {
+  private drawQueueLegend(chart: Rect): void {
     const ctx = this.ctx
-    const y = chart.y + chart.height + 18
-    ctx.font = '600 11px "Space Grotesk", sans-serif'
+    const y = chart.y + 14
+    ctx.font = '600 10px "Space Grotesk", sans-serif'
 
     ctx.beginPath()
     ctx.moveTo(chart.x, y - 3)
@@ -552,8 +545,5 @@ export class SceneRenderer {
     ctx.lineWidth = 3.2
     ctx.stroke()
     ctx.fillText('SafePatch deploy', chart.x + 134, y)
-
-    ctx.fillStyle = '#bddcf3'
-    ctx.fillText(`minute 0 -> minute ${Math.max(0, seriesLength - 1)}`, chart.x + chart.width - 148, y)
   }
 }
