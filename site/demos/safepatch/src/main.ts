@@ -191,14 +191,14 @@ function deploymentDecision(
   if (!projectedShipPossible) {
     return {
       ship: false,
-      reason: projectedReason ?? 'No feasible certified correction exists for current guardrails.',
+      reason: projectedReason ?? 'No feasible certified correction under current guardrails.',
     }
   }
 
   if (retainedValueRatio < 0.42) {
     return {
       ship: false,
-      reason: `Projection retains only ${Math.round(retainedValueRatio * 100)}% of useful gain. Redesign patch intent first.`,
+      reason: `Only ${Math.round(retainedValueRatio * 100)}% of useful gain is retained.`,
     }
   }
 
@@ -208,13 +208,13 @@ function deploymentDecision(
   ) {
     return {
       ship: false,
-      reason: 'Projected patch does not improve incident risk enough to justify deployment.',
+      reason: 'Projected patch does not improve risk enough to ship.',
     }
   }
 
   return {
     ship: true,
-    reason: 'SafePatch lowers queue pressure while keeping all active guardrails certified.',
+    reason: 'Safer update with lower incident pressure.',
   }
 }
 
@@ -237,12 +237,12 @@ function toFrameUi(
   const escalationDrop = replay.rawEscalations - replay.safeEscalations
   const retainedPercent = Math.round(clamp(retainedValueRatio, 0, 1.4) * 100)
 
-  const problemText = `${scenario}: raw patch violates ${violatedRaw} guardrails and yields ${replay.rawBreachMinutes} queue-breach minutes.`
-  const mechanismText = `SafePatch clips the update onto the feasible zone. Active constraints: ${activeSetSize}. Residual violation: ${Math.max(0, maxViolationProjected).toFixed(3)}.`
+  const problemText = `${scenario}: raw patch breaches ${violatedRaw} guardrails and drives ${replay.rawBreachMinutes} breach minutes.`
+  const mechanismText = `Projected onto feasible zone | active constraints: ${activeSetSize} | residual violation: ${Math.max(0, maxViolationProjected).toFixed(3)}.`
 
-  let impactText = `Effect: peak queue ${peakDrop >= 0 ? 'drops' : 'rises'} by ${Math.abs(peakDrop)} and escalations ${escalationDrop >= 0 ? 'drop' : 'rise'} by ${Math.abs(escalationDrop)}.`
+  let impactText = `Peak ${peakDrop >= 0 ? 'down' : 'up'} ${Math.abs(peakDrop)} | escalations ${escalationDrop >= 0 ? 'down' : 'up'} ${Math.abs(escalationDrop)}.`
   if (breachDrop > 0) {
-    impactText += ` Breach minutes reduced by ${breachDrop}.`
+    impactText += ` Breach minutes improved by ${breachDrop}.`
   }
   if (!decision.ship) {
     impactText = `Hold reason: ${decision.reason}`
