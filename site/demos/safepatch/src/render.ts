@@ -38,7 +38,7 @@ const RAW_COLOR = '#ff728d'
 const SAFE_COLOR = '#32bcff'
 const ZONE_COLOR = '#50e6c0'
 const CORRECTION_COLOR = '#ffc37d'
-const GRID_STROKE = 'rgba(169, 210, 240, 0.16)'
+const GRID_STROKE = 'rgba(169, 210, 240, 0.1)'
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(Math.max(value, min), max)
@@ -90,9 +90,9 @@ export class SceneRenderer {
     ctx.clearRect(0, 0, width, height)
     this.paintBackdrop(width, height)
 
-    const margin = 18
-    const gap = 14
-    const topHeight = Math.max(190, Math.round(height * 0.43))
+    const margin = 20
+    const gap = 20
+    const topHeight = Math.max(210, Math.round(height * 0.5))
 
     const geometryPanel: Rect = {
       x: margin,
@@ -116,8 +116,7 @@ export class SceneRenderer {
     const safeSeriesTarget = input.queueSafeSeries.slice(0, queueLength)
     const safeSeriesAnimated = rawSeries.map((value, index) => value + (safeSeriesTarget[index] - value) * blend)
 
-    this.drawPanelFrame(geometryPanel)
-    this.drawPanelFrame(queuePanel)
+    this.drawSectionDivider(geometryPanel, queuePanel)
     this.drawGeometryPanel(geometryPanel, input.halfspaces, input.step0, projectedAnimated, input.gradient)
     this.drawQueuePanel(queuePanel, rawSeries, safeSeriesAnimated, input.overloadThreshold, blend)
   }
@@ -132,19 +131,20 @@ export class SceneRenderer {
     ctx.fillRect(0, 0, width, height)
   }
 
-  private drawPanelFrame(rect: Rect): void {
+  private drawSectionDivider(geometryPanel: Rect, queuePanel: Rect): void {
     const ctx = this.ctx
-    const gradient = ctx.createLinearGradient(rect.x, rect.y, rect.x + rect.width, rect.y + rect.height)
-    gradient.addColorStop(0, 'rgba(8, 40, 64, 0.88)')
-    gradient.addColorStop(1, 'rgba(7, 31, 52, 0.92)')
-
+    const dividerY = queuePanel.y - 10
     ctx.beginPath()
-    ctx.roundRect(rect.x, rect.y, rect.width, rect.height, 14)
-    ctx.fillStyle = gradient
-    ctx.fill()
-    ctx.strokeStyle = 'rgba(140, 186, 223, 0.34)'
+    ctx.moveTo(geometryPanel.x, dividerY)
+    ctx.lineTo(geometryPanel.x + geometryPanel.width, dividerY)
+    ctx.strokeStyle = 'rgba(144, 193, 230, 0.3)'
     ctx.lineWidth = 1
     ctx.stroke()
+
+    ctx.font = '700 10px "Space Grotesk", sans-serif'
+    ctx.fillStyle = '#cde8fb'
+    ctx.fillText('Constraint Projection', geometryPanel.x + 2, geometryPanel.y - 4)
+    ctx.fillText('Queue Replay', queuePanel.x + 2, queuePanel.y - 4)
   }
 
   private drawGeometryPanel(
@@ -154,11 +154,12 @@ export class SceneRenderer {
     projectedStep: Vec2,
     gradient: Vec2,
   ): void {
+    const ctx = this.ctx
     const chart: Rect = {
-      x: panel.x + 10,
-      y: panel.y + 10,
-      width: panel.width - 20,
-      height: panel.height - 20,
+      x: panel.x + 6,
+      y: panel.y + 6,
+      width: panel.width - 12,
+      height: panel.height - 12,
     }
 
     this.drawGeometryGrid(chart)
@@ -184,37 +185,35 @@ export class SceneRenderer {
     }
 
     this.drawConstraintBoundaries(chart, mapper, halfspaces)
-    this.drawDirectionHint(chart, mapper, gradient)
+    this.drawDirectionHint(mapper, gradient)
 
     const origin = mapper.worldToCanvas(vec(0, 0))
     const rawEnd = mapper.worldToCanvas(step0)
     const projectedEnd = mapper.worldToCanvas(projectedStep)
 
-    this.drawArrow(origin, rawEnd, RAW_COLOR, 2.8)
-    this.drawArrow(origin, projectedEnd, SAFE_COLOR, 3.2)
+    this.drawArrow(origin, rawEnd, RAW_COLOR, 2.2)
+    this.drawArrow(origin, projectedEnd, SAFE_COLOR, 2.8)
 
     this.ctx.save()
-    this.ctx.setLineDash([5, 4])
+    this.ctx.setLineDash([4, 4])
     this.ctx.beginPath()
     this.ctx.moveTo(rawEnd.x, rawEnd.y)
     this.ctx.lineTo(projectedEnd.x, projectedEnd.y)
-    this.ctx.strokeStyle = withAlpha(CORRECTION_COLOR, 0.9)
-    this.ctx.lineWidth = 1.4
+    this.ctx.strokeStyle = withAlpha(CORRECTION_COLOR, 0.72)
+    this.ctx.lineWidth = 1.2
     this.ctx.stroke()
     this.ctx.restore()
 
     ctx.beginPath()
-    ctx.arc(origin.x, origin.y, 4, 0, Math.PI * 2)
+    ctx.arc(origin.x, origin.y, 3.5, 0, Math.PI * 2)
     ctx.fillStyle = '#e8f5ff'
     ctx.fill()
-
-    this.drawGeometryLegend(chart)
   }
 
   private drawGeometryGrid(rect: Rect): void {
     const ctx = this.ctx
-    const verticalLines = 6
-    const horizontalLines = 4
+    const verticalLines = 4
+    const horizontalLines = 3
 
     for (let i = 0; i <= verticalLines; i += 1) {
       const x = rect.x + (i / verticalLines) * rect.width
@@ -272,8 +271,8 @@ export class SceneRenderer {
       ctx.beginPath()
       ctx.moveTo(p0.x, p0.y)
       ctx.lineTo(p1.x, p1.y)
-      ctx.strokeStyle = withAlpha(index % 2 === 0 ? '#7fdbff' : '#77efcd', 0.6)
-      ctx.lineWidth = 1.1
+      ctx.strokeStyle = withAlpha(index % 2 === 0 ? '#7fdbff' : '#77efcd', 0.45)
+      ctx.lineWidth = 0.9
       ctx.stroke()
     })
 
@@ -281,23 +280,23 @@ export class SceneRenderer {
     ctx.beginPath()
     ctx.moveTo(rect.x, center.y)
     ctx.lineTo(rect.x + rect.width, center.y)
-    ctx.strokeStyle = withAlpha('#9fd3f9', 0.5)
-    ctx.lineWidth = 1
+    ctx.strokeStyle = withAlpha('#9fd3f9', 0.34)
+    ctx.lineWidth = 0.9
     ctx.stroke()
 
     ctx.beginPath()
     ctx.moveTo(center.x, rect.y)
     ctx.lineTo(center.x, rect.y + rect.height)
-    ctx.strokeStyle = withAlpha('#9fd3f9', 0.5)
-    ctx.lineWidth = 1
+    ctx.strokeStyle = withAlpha('#9fd3f9', 0.34)
+    ctx.lineWidth = 0.9
     ctx.stroke()
   }
 
-  private drawDirectionHint(rect: Rect, mapper: Mapper, gradient: Vec2): void {
+  private drawDirectionHint(mapper: Mapper, gradient: Vec2): void {
     const direction = scale(normalize(gradient), mapper.worldRadius * 0.65)
     const origin = mapper.worldToCanvas(vec(0, 0))
     const target = mapper.worldToCanvas(scale(direction, -1))
-    this.drawArrow(origin, target, withAlpha('#ffd6a4', 0.9), 1.4, true)
+    this.drawArrow(origin, target, withAlpha('#ffd6a4', 0.68), 1.1, true)
   }
 
   private drawArrow(
@@ -330,29 +329,6 @@ export class SceneRenderer {
     ctx.fill()
   }
 
-  private drawGeometryLegend(chart: Rect): void {
-    const ctx = this.ctx
-    const y = chart.y + chart.height - 10
-    ctx.font = '600 10px "Space Grotesk", sans-serif'
-
-    ctx.beginPath()
-    ctx.moveTo(chart.x + 4, y)
-    ctx.lineTo(chart.x + 20, y)
-    ctx.strokeStyle = RAW_COLOR
-    ctx.lineWidth = 2.6
-    ctx.stroke()
-    ctx.fillStyle = '#d6ecfa'
-    ctx.fillText('raw step', chart.x + 24, y + 3)
-
-    ctx.beginPath()
-    ctx.moveTo(chart.x + 90, y)
-    ctx.lineTo(chart.x + 106, y)
-    ctx.strokeStyle = SAFE_COLOR
-    ctx.lineWidth = 2.8
-    ctx.stroke()
-    ctx.fillText('projected step', chart.x + 110, y + 3)
-  }
-
   private drawQueuePanel(
     panel: Rect,
     rawSeries: number[],
@@ -361,10 +337,10 @@ export class SceneRenderer {
     blend: number,
   ): void {
     const chart: Rect = {
-      x: panel.x + 10,
-      y: panel.y + 10,
-      width: panel.width - 20,
-      height: panel.height - 20,
+      x: panel.x + 6,
+      y: panel.y + 6,
+      width: panel.width - 12,
+      height: panel.height - 12,
     }
 
     if (rawSeries.length === 0 || safeSeries.length === 0) {
@@ -380,18 +356,18 @@ export class SceneRenderer {
     this.drawQueueGrid(chart)
     this.drawThresholdBand(chart, mapY(threshold))
     this.drawDeltaArea(rawSeries, safeSeries, mapX, mapY)
-    this.drawSmoothSeries(rawSeries, mapX, mapY, RAW_COLOR, 2.6)
-    this.drawSmoothSeries(safeSeries, mapX, mapY, SAFE_COLOR, 3.2)
+    this.drawSmoothSeries(rawSeries, mapX, mapY, RAW_COLOR, 2.2)
+    this.drawSmoothSeries(safeSeries, mapX, mapY, SAFE_COLOR, 2.8)
     this.drawGlowSweep(chart, blend)
     this.drawSeriesMarker(rawSeries, mapX, mapY, RAW_COLOR)
     this.drawSeriesMarker(safeSeries, mapX, mapY, SAFE_COLOR)
-    this.drawQueueLegend(chart)
+    this.drawQueueLabel(chart)
   }
 
   private drawQueueGrid(chart: Rect): void {
     const ctx = this.ctx
-    for (let i = 0; i <= 5; i += 1) {
-      const y = chart.y + (i / 5) * chart.height
+    for (let i = 0; i <= 3; i += 1) {
+      const y = chart.y + (i / 3) * chart.height
       ctx.beginPath()
       ctx.moveTo(chart.x, y)
       ctx.lineTo(chart.x + chart.width, y)
@@ -399,36 +375,23 @@ export class SceneRenderer {
       ctx.lineWidth = 1
       ctx.stroke()
     }
-
-    for (let i = 0; i <= 8; i += 1) {
-      const x = chart.x + (i / 8) * chart.width
-      ctx.beginPath()
-      ctx.moveTo(x, chart.y)
-      ctx.lineTo(x, chart.y + chart.height)
-      ctx.strokeStyle = withAlpha('#9dd2f9', 0.1)
-      ctx.lineWidth = 1
-      ctx.stroke()
-    }
   }
 
   private drawThresholdBand(chart: Rect, thresholdY: number): void {
     const ctx = this.ctx
-    ctx.fillStyle = withAlpha(RAW_COLOR, 0.11)
-    ctx.fillRect(chart.x, chart.y, chart.width, Math.max(0, thresholdY - chart.y))
-
     ctx.save()
-    ctx.setLineDash([8, 6])
+    ctx.setLineDash([6, 5])
     ctx.beginPath()
     ctx.moveTo(chart.x, thresholdY)
     ctx.lineTo(chart.x + chart.width, thresholdY)
-    ctx.strokeStyle = withAlpha(RAW_COLOR, 0.9)
-    ctx.lineWidth = 1.5
+    ctx.strokeStyle = withAlpha(RAW_COLOR, 0.78)
+    ctx.lineWidth = 1.2
     ctx.stroke()
     ctx.restore()
 
     ctx.fillStyle = '#ffd8e1'
-    ctx.font = '600 11px "Space Grotesk", sans-serif'
-    ctx.fillText('SLA breach threshold', chart.x + 8, thresholdY - 8)
+    ctx.font = '600 10px "Space Grotesk", sans-serif'
+    ctx.fillText('threshold', chart.x + chart.width - 56, thresholdY - 6)
   }
 
   private drawDeltaArea(
@@ -452,7 +415,7 @@ export class SceneRenderer {
       ctx.lineTo(mapX(i, safeSeries.length), mapY(safeSeries[i]))
     }
     ctx.closePath()
-    ctx.fillStyle = withAlpha(SAFE_COLOR, 0.15)
+    ctx.fillStyle = withAlpha(SAFE_COLOR, 0.12)
     ctx.fill()
   }
 
@@ -491,12 +454,12 @@ export class SceneRenderer {
   private drawGlowSweep(chart: Rect, blend: number): void {
     const ctx = this.ctx
     const sweepX = chart.x + chart.width * blend
-    const gradient = ctx.createLinearGradient(sweepX - 28, chart.y, sweepX + 28, chart.y)
+    const gradient = ctx.createLinearGradient(sweepX - 20, chart.y, sweepX + 20, chart.y)
     gradient.addColorStop(0, 'rgba(49, 188, 255, 0)')
-    gradient.addColorStop(0.5, 'rgba(49, 188, 255, 0.18)')
+    gradient.addColorStop(0.5, 'rgba(49, 188, 255, 0.11)')
     gradient.addColorStop(1, 'rgba(49, 188, 255, 0)')
     ctx.fillStyle = gradient
-    ctx.fillRect(sweepX - 28, chart.y, 56, chart.height)
+    ctx.fillRect(sweepX - 20, chart.y, 40, chart.height)
   }
 
   private drawSeriesMarker(
@@ -513,37 +476,22 @@ export class SceneRenderer {
     const y = mapY(series[series.length - 1])
 
     ctx.beginPath()
-    ctx.arc(x, y, 4.8, 0, Math.PI * 2)
+    ctx.arc(x, y, 4, 0, Math.PI * 2)
     ctx.fillStyle = color
     ctx.fill()
 
     ctx.beginPath()
-    ctx.arc(x, y, 10, 0, Math.PI * 2)
+    ctx.arc(x, y, 8, 0, Math.PI * 2)
     ctx.strokeStyle = withAlpha(color, 0.46)
-    ctx.lineWidth = 1.4
+    ctx.lineWidth = 1.1
     ctx.stroke()
   }
 
-  private drawQueueLegend(chart: Rect): void {
+  private drawQueueLabel(chart: Rect): void {
     const ctx = this.ctx
-    const y = chart.y + 14
+    const y = chart.y + 12
     ctx.font = '600 10px "Space Grotesk", sans-serif'
-
-    ctx.beginPath()
-    ctx.moveTo(chart.x, y - 3)
-    ctx.lineTo(chart.x + 18, y - 3)
-    ctx.strokeStyle = RAW_COLOR
-    ctx.lineWidth = 2.8
-    ctx.stroke()
     ctx.fillStyle = '#d7edff'
-    ctx.fillText('raw deploy', chart.x + 24, y)
-
-    ctx.beginPath()
-    ctx.moveTo(chart.x + 110, y - 3)
-    ctx.lineTo(chart.x + 128, y - 3)
-    ctx.strokeStyle = SAFE_COLOR
-    ctx.lineWidth = 3.2
-    ctx.stroke()
-    ctx.fillText('SafePatch deploy', chart.x + 134, y)
+    ctx.fillText('raw queue (red) vs SafePatch queue (blue)', chart.x + 2, y)
   }
 }
