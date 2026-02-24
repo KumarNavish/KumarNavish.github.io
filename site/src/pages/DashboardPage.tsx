@@ -1,7 +1,6 @@
 import { useCallback } from 'react'
 
 import { ArcSpine } from '../components/ArcSpine'
-import { PageCompass } from '../components/PageCompass'
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks'
 import { fetchMetricsApi, fetchProfileApi } from '../lib/api'
 import { formatNumber } from '../lib/formatters'
@@ -81,16 +80,6 @@ export function DashboardPage() {
       </section>
 
       <ArcSpine current="motivation" />
-
-      <PageCompass
-        title="Quick Scan"
-        steps={[
-          'Start with identity and objective.',
-          'Use the signals for scale.',
-          'Follow the arc into Skills.',
-        ]}
-        outcome="Everything that follows is a response to this operating constraint."
-      />
 
       <section className="panel">
         <header className="panel-header">

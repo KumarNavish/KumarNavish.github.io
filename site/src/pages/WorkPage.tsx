@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 
 import { ArcSpine } from '../components/ArcSpine'
-import { PageCompass } from '../components/PageCompass'
 import {
   fetchProjectsApi,
   fetchPublicationsApi,
@@ -190,16 +189,6 @@ export function WorkPage() {
       </section>
 
       <ArcSpine current="impact" />
-
-      <PageCompass
-        title="Quick Scan"
-        steps={[
-          'Scan coverage metrics first.',
-          'Read each case from decision to outcome.',
-          'Use the planner to test implications.',
-        ]}
-        outcome="Look for decisions changed in practice, with implementation and evidence attached."
-      />
 
       <section className="metric-grid">
         <article className="metric-card">
