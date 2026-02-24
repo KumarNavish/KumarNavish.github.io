@@ -20,9 +20,13 @@ export interface SceneRenderInput {
   safeStep: Vec2
   rawTarget: Vec2
   safeTarget: Vec2
+  breachPoint: Vec2 | null
   colorById: Record<string, string>
   constraintForceById: Record<string, number>
   violationRaw: number
+  rawRiskRatio: number
+  safeRiskRatio: number
+  retainedValueRatio: number
   zoneReveal: number
   rawReveal: number
   safeReveal: number
@@ -178,6 +182,7 @@ export class SceneRenderer {
 
     this.drawGrid(toScreen, content, worldRadius)
     this.drawLegend(content)
+    this.drawOutcomePanel(content, input.rawRiskRatio, input.safeRiskRatio, input.retainedValueRatio, input.safeReveal)
 
     if (input.previousZone && input.previousZone.vertices.length >= 3 && input.transitionProgress < 0.96) {
       this.drawZone(toScreen, input.previousZone, withAlpha('#8f9caf', 0.06), withAlpha('#8290a4', 0.22), true)
@@ -216,6 +221,7 @@ export class SceneRenderer {
     if (input.rawReveal > 0.02) {
       this.drawArrow(toScreen, { x: 0, y: 0 }, input.rawStep, RAW_COLOR, 4.15, 0.96)
       this.drawVectorGhost(toScreen, input.rawStep, input.rawTarget, RAW_COLOR, 0.3)
+      this.drawPoint(toScreen(scale(input.rawTarget, clamp(input.rawReveal))), RAW_COLOR, 3.7)
       this.drawPoint(toScreen(input.rawStep), RAW_COLOR, 4.6)
     }
 
@@ -233,6 +239,11 @@ export class SceneRenderer {
 
     if (input.violationRaw > 1e-6 && input.rawReveal > 0.08 && norm(input.rawStep) > 0.09) {
       this.drawViolationPulse(toScreen(input.rawStep), clamp(input.rawReveal))
+    }
+
+    if (input.breachPoint && input.rawReveal > 0.12) {
+      const intensity = clamp((0.18 + input.violationRaw * 2.4) * input.rawReveal)
+      this.drawBreachPulse(toScreen(input.breachPoint), intensity)
     }
   }
 
@@ -320,6 +331,68 @@ export class SceneRenderer {
     ctx.stroke()
 
     ctx.fillText('SafePatch', x + 142, y + 31)
+  }
+
+  private drawOutcomePanel(
+    content: Viewport,
+    rawRiskRatio: number,
+    safeRiskRatio: number,
+    retainedValueRatio: number,
+    safeReveal: number,
+  ): void {
+    const ctx = this.ctx
+    const width = 236
+    const height = 110
+    const x = content.x + content.width - width - 10
+    const y = content.y + 10
+
+    ctx.beginPath()
+    ctx.roundRect(x, y, width, height, 10)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.88)'
+    ctx.strokeStyle = 'rgba(150, 167, 190, 0.42)'
+    ctx.lineWidth = 1
+    ctx.fill()
+    ctx.stroke()
+
+    ctx.font = '700 11px "Space Grotesk", sans-serif'
+    ctx.fillStyle = LEGEND_TEXT
+    ctx.fillText('SIMULATED HOTFIX OUTCOME', x + 10, y + 16)
+
+    const lineY1 = y + 34
+    const lineY2 = y + 60
+    const lineY3 = y + 86
+    const barX = x + 118
+    const barWidth = 104
+
+    const rawRisk = clamp(rawRiskRatio)
+    const safeRisk = clamp(safeRiskRatio)
+    const kept = clamp(retainedValueRatio)
+    const animatedSafe = safeRisk * (0.15 + 0.85 * clamp(safeReveal))
+
+    ctx.fillStyle = '#476283'
+    ctx.fillText('raw unsafe risk', x + 10, lineY1 + 3)
+    this.drawMeter(barX, lineY1 - 7, barWidth, rawRisk, '#d92d41')
+
+    ctx.fillText('safe unsafe risk', x + 10, lineY2 + 3)
+    this.drawMeter(barX, lineY2 - 7, barWidth, animatedSafe, '#0a946a')
+
+    ctx.fillText('behavior gain kept', x + 10, lineY3 + 3)
+    this.drawMeter(barX, lineY3 - 7, barWidth, kept, '#1b5fd0')
+  }
+
+  private drawMeter(x: number, y: number, width: number, ratio: number, color: string): void {
+    const ctx = this.ctx
+    const w = width * clamp(ratio)
+
+    ctx.beginPath()
+    ctx.roundRect(x, y, width, 10, 999)
+    ctx.fillStyle = 'rgba(226, 235, 246, 0.85)'
+    ctx.fill()
+
+    ctx.beginPath()
+    ctx.roundRect(x, y, w, 10, 999)
+    ctx.fillStyle = withAlpha(color, 0.9)
+    ctx.fill()
   }
 
   private drawZone(
@@ -544,6 +617,22 @@ export class SceneRenderer {
     ctx.arc(marker.x, marker.y, 4.2, 0, Math.PI * 2)
     ctx.fillStyle = 'rgba(42, 63, 93, 0.94)'
     ctx.fill()
+  }
+
+  private drawBreachPulse(point: ScreenPoint, intensity: number): void {
+    const ctx = this.ctx
+    const alpha = clamp(intensity, 0, 1)
+
+    ctx.beginPath()
+    ctx.arc(point.x, point.y, 11 + alpha * 14, 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(217, 45, 65, ${0.09 + alpha * 0.16})`
+    ctx.fill()
+
+    ctx.beginPath()
+    ctx.arc(point.x, point.y, 8 + alpha * 18, 0, Math.PI * 2)
+    ctx.strokeStyle = `rgba(217, 45, 65, ${0.25 + alpha * 0.3})`
+    ctx.lineWidth = 1.4 + alpha * 1.3
+    ctx.stroke()
   }
 
   private drawViolationPulse(point: ScreenPoint, intensity: number): void {

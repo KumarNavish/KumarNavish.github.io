@@ -9,6 +9,7 @@ export interface ProofFrameUi {
   rawRiskRatio: number
   retainedValueRatio: number
   riskRemovedRatio: number
+  safeRiskRatio: number
 }
 
 function clamp(value: number, min = 0, max = 1): number {
@@ -23,13 +24,11 @@ export class UIController {
   private readonly shipIndicator: HTMLElement
   private readonly shipReason: HTMLElement
   private readonly phaseCaption: HTMLElement
+  private readonly decisionLine: HTMLElement
 
-  private readonly metricRawRisk: HTMLElement
-  private readonly metricValue: HTMLElement
-  private readonly metricRemoved: HTMLElement
-  private readonly metricRawRiskBar: HTMLElement
-  private readonly metricValueBar: HTMLElement
-  private readonly metricRemovedBar: HTMLElement
+  private readonly kpiValueKept: HTMLElement
+  private readonly kpiRawRisk: HTMLElement
+  private readonly kpiRiskRemoved: HTMLElement
 
   constructor() {
     this.etaSlider = this.getElement<HTMLInputElement>('eta-slider')
@@ -39,13 +38,11 @@ export class UIController {
     this.shipIndicator = this.getElement('ship-indicator')
     this.shipReason = this.getElement('ship-reason')
     this.phaseCaption = this.getElement('phase-caption')
+    this.decisionLine = this.getElement('decision-line')
 
-    this.metricRawRisk = this.getElement('metric-raw-risk')
-    this.metricValue = this.getElement('metric-value')
-    this.metricRemoved = this.getElement('metric-removed')
-    this.metricRawRiskBar = this.getElement('metric-raw-risk-bar')
-    this.metricValueBar = this.getElement('metric-value-bar')
-    this.metricRemovedBar = this.getElement('metric-removed-bar')
+    this.kpiValueKept = this.getElement('kpi-value-kept')
+    this.kpiRawRisk = this.getElement('kpi-raw-risk')
+    this.kpiRiskRemoved = this.getElement('kpi-risk-removed')
 
     this.syncDisplayedControlValues()
   }
@@ -88,21 +85,21 @@ export class UIController {
     const rawRiskPct = Math.round(clamp(frame.rawRiskRatio) * 100)
     const retainedValuePct = Math.round(clamp(frame.retainedValueRatio) * 100)
     const removedRiskPct = Math.round(clamp(frame.riskRemovedRatio) * 100)
+    const safeRiskPct = Math.round(clamp(frame.safeRiskRatio) * 100)
 
-    this.metricRawRisk.textContent = `${rawRiskPct}%`
-    this.metricRawRiskBar.style.width = `${rawRiskPct}%`
+    this.kpiValueKept.textContent = `${retainedValuePct}%`
+    this.kpiRawRisk.textContent = `${rawRiskPct}%`
+    this.kpiRiskRemoved.textContent = `${removedRiskPct}%`
 
-    this.metricValue.textContent = `${retainedValuePct}%`
-    this.metricValueBar.style.width = `${retainedValuePct}%`
-
-    this.metricRemoved.textContent = `${removedRiskPct}%`
-    this.metricRemovedBar.style.width = `${removedRiskPct}%`
+    this.decisionLine.textContent = frame.ship
+      ? `Ship safe patch: keeps ${retainedValuePct}% behavior gain, reduces unsafe risk from ${rawRiskPct}% to ${safeRiskPct}%.`
+      : `Hold patch: unsafe risk remains ${safeRiskPct}%. tighten or revise guardrails.`
   }
 
   renderPressureModel(eta: number, strictness: number): void {
     const pressureLabel = eta < 0.95 ? 'Low pressure' : eta < 1.6 ? 'Balanced pressure' : 'High pressure'
     const guardrailLabel = strictness < 0.78 ? 'tight guardrails' : strictness < 1.08 ? 'standard guardrails' : 'wide guardrails'
-    this.pressureDetail.textContent = `${pressureLabel}: larger patches move farther; ${guardrailLabel} control how strongly SafePatch must bend the update.`
+    this.pressureDetail.textContent = `${pressureLabel}: larger patches move farther; ${guardrailLabel} determine how much correction is required before ship.`
   }
 
   private syncDisplayedControlValues(): void {

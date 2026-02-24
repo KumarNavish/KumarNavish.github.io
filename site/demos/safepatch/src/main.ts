@@ -1,11 +1,9 @@
-import katex from 'katex'
-import 'katex/dist/katex.min.css'
-
 import {
   Halfspace,
   Polygon,
   Vec2,
   add,
+  dot,
   lerp,
   normalize,
   scale,
@@ -68,8 +66,6 @@ const STRICTNESS_SENSITIVITY: Record<string, number> = {
 
 const AUTOPLAY_STEPS = [{ pressure: 0.08 }, { pressure: 0.95 }, { pressure: 0.5 }]
 
-const CORE_EQUATION = String.raw`\text{Raw patch } \Delta_0 \ \xrightarrow{\text{SafePatch projection}}\ \Delta^*\in\mathcal S`
-
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(Math.max(value, min), max)
 }
@@ -123,26 +119,34 @@ function scenarioFromPressure(pressure: number): { eta: number; strictness: numb
   return { eta, strictness, gradient }
 }
 
-function renderMathInline(elementId: string, expression: string): void {
-  const node = document.getElementById(elementId)
-  if (!node) {
-    return
-  }
-
-  try {
-    katex.render(expression, node, {
-      throwOnError: true,
-      displayMode: false,
-      strict: 'warn',
-    })
-  } catch {
-    node.textContent = expression
-  }
-}
-
 function boundScaleForStrictness(id: string, strictness: number): number {
   const sensitivity = STRICTNESS_SENSITIVITY[id] ?? 0.7
   return clamp(1 + sensitivity * (strictness - 1), 0.34, 1.86)
+}
+
+function firstBreachPoint(step: Vec2, halfspaces: Halfspace[]): Vec2 | null {
+  let tMin = Number.POSITIVE_INFINITY
+
+  for (const halfspace of halfspaces) {
+    if (!halfspace.active) {
+      continue
+    }
+    const projected = dot(halfspace.normal, step)
+    if (projected <= halfspace.bound + 1e-8) {
+      continue
+    }
+
+    const t = halfspace.bound / Math.max(1e-8, projected)
+    if (t >= 0 && t < tMin) {
+      tMin = t
+    }
+  }
+
+  if (!Number.isFinite(tMin) || tMin >= 1) {
+    return null
+  }
+
+  return scale(step, Math.max(0, tMin))
 }
 
 function phaseState(progress: number, ship: boolean): string {
@@ -161,8 +165,6 @@ function phaseState(progress: number, ship: boolean): string {
 }
 
 function start(): void {
-  renderMathInline('equation-main', CORE_EQUATION)
-
   const canvas = document.getElementById('scene-canvas') as HTMLCanvasElement | null
   if (!canvas) {
     throw new Error('Missing canvas #scene-canvas')
@@ -289,6 +291,11 @@ function start(): void {
       constraintForceById[halfspace.id] = projection.ship ? (lambda / lambdaMax) * correctionProgress : 0
     }
 
+    const largestBudget = Math.max(0.15, ...halfspaces.map((halfspace) => halfspace.bound))
+    const rawRiskRatio = Math.max(0, projection.maxViolationStep0) / largestBudget
+    const safeRiskRatio = Math.max(0, projection.maxViolationProjected) / largestBudget
+    const riskRemovedRatio = rawRiskRatio > 1e-6 ? (rawRiskRatio - safeRiskRatio) / rawRiskRatio : projection.ship ? 1 : 0
+
     renderer.render({
       halfspaces,
       zone,
@@ -297,9 +304,13 @@ function start(): void {
       safeStep,
       rawTarget,
       safeTarget,
+      breachPoint: firstBreachPoint(rawTarget, halfspaces),
       colorById,
       constraintForceById,
       violationRaw: projection.maxViolationStep0,
+      rawRiskRatio,
+      safeRiskRatio,
+      retainedValueRatio: projection.descentRetainedRatio,
       zoneReveal,
       rawReveal: rawScale,
       safeReveal: safeLinear,
@@ -308,22 +319,19 @@ function start(): void {
     })
 
     const phaseText = phaseState(progress, projection.ship)
-    const largestBudget = Math.max(0.15, ...halfspaces.map((halfspace) => halfspace.bound))
-    const rawRiskRatio = Math.max(0, projection.maxViolationStep0) / largestBudget
-    const safeRiskRatio = Math.max(0, projection.maxViolationProjected) / largestBudget
-    const riskRemovedRatio = rawRiskRatio > 1e-6 ? (rawRiskRatio - safeRiskRatio) / rawRiskRatio : projection.ship ? 1 : 0
 
     ui.renderFrame({
       ship: projection.ship,
       reason: projection.ship
-        ? 'Ready to ship: patch gain preserved under safety limits.'
+        ? 'Deployment recommendation ready.'
         : projection.reason?.toLowerCase().includes('empty')
-          ? 'Guardrails conflict: no feasible ship zone.'
-          : 'Unsafe patch blocked before deployment.',
+          ? 'No feasible ship zone under current guardrails.'
+          : 'Unsafe patch blocked.',
       phaseText,
       rawRiskRatio,
       retainedValueRatio: projection.descentRetainedRatio,
       riskRemovedRatio,
+      safeRiskRatio,
     })
 
     if (progress > 0.995 && previousZone) {
