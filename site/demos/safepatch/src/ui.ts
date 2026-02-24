@@ -6,47 +6,78 @@ export interface ProofFrameUi {
   ship: boolean
   statusText: string
   decisionText: string
-  peakRawQueue: number
-  peakSafeQueue: number
+  rawOutcomeText: string
+  safeOutcomeText: string
+  peakQueueReduction: number
+  breachMinutesAvoided: number
   avoidedEscalations: number
 }
 
+function scenarioLabel(pressure: number): string {
+  if (pressure < 0.38) {
+    return 'Low traffic'
+  }
+  if (pressure < 0.75) {
+    return 'Peak hour'
+  }
+  return 'Incident surge'
+}
+
 export class UIController {
-  private readonly etaSlider: HTMLInputElement
-  private readonly etaValue: HTMLElement
   private readonly pressureDetail: HTMLElement
 
   private readonly shipIndicator: HTMLElement
   private readonly shipReason: HTMLElement
   private readonly decisionLine: HTMLElement
 
-  private readonly kpiPeakRaw: HTMLElement
-  private readonly kpiPeakSafe: HTMLElement
-  private readonly kpiAvoidedEscalations: HTMLElement
+  private readonly rawOutcome: HTMLElement
+  private readonly safeOutcome: HTMLElement
+
+  private readonly kpiPeakReduction: HTMLElement
+  private readonly kpiBreachMinutes: HTMLElement
+  private readonly kpiEscalations: HTMLElement
+
+  private readonly scenarioButtons: HTMLButtonElement[]
+  private selectedPressure = 0.55
 
   constructor() {
-    this.etaSlider = this.getElement<HTMLInputElement>('eta-slider')
-    this.etaValue = this.getElement('eta-value')
     this.pressureDetail = this.getElement('pressure-detail')
 
     this.shipIndicator = this.getElement('ship-indicator')
     this.shipReason = this.getElement('ship-reason')
     this.decisionLine = this.getElement('decision-line')
 
-    this.kpiPeakRaw = this.getElement('kpi-peak-raw')
-    this.kpiPeakSafe = this.getElement('kpi-peak-safe')
-    this.kpiAvoidedEscalations = this.getElement('kpi-overload-avoided')
+    this.rawOutcome = this.getElement('raw-outcome')
+    this.safeOutcome = this.getElement('safe-outcome')
 
-    this.syncDisplayedControlValues()
+    this.kpiPeakReduction = this.getElement('kpi-peak-reduction')
+    this.kpiBreachMinutes = this.getElement('kpi-breach-minutes')
+    this.kpiEscalations = this.getElement('kpi-escalations')
+
+    this.scenarioButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.scenario-btn'))
+
+    if (this.scenarioButtons.length === 0) {
+      throw new Error('Missing .scenario-btn controls')
+    }
+
+    const activeButton = this.scenarioButtons.find((button) => button.classList.contains('active')) ?? this.scenarioButtons[0]
+    this.selectedPressure = Number.parseFloat(activeButton.dataset.pressure ?? '0.55')
+    this.syncScenarioButtonState()
   }
 
   onControlsChange(callback: () => void): void {
-    const listener = () => {
-      this.syncDisplayedControlValues()
-      callback()
-    }
+    for (const button of this.scenarioButtons) {
+      button.addEventListener('click', () => {
+        const pressure = Number.parseFloat(button.dataset.pressure ?? '0.55')
+        if (Number.isNaN(pressure)) {
+          return
+        }
 
-    this.etaSlider.addEventListener('input', listener)
+        this.selectedPressure = pressure
+        this.syncScenarioButtonState()
+        callback()
+      })
+    }
   }
 
   onReplay(callback: () => void): void {
@@ -54,16 +85,21 @@ export class UIController {
     replayButton.addEventListener('click', callback)
   }
 
+  onExport(callback: () => void): void {
+    const exportButton = this.getElement<HTMLButtonElement>('export-button')
+    exportButton.addEventListener('click', callback)
+  }
+
   setControlValues(values: Partial<ControlValues>): void {
-    if (typeof values.pressure === 'number') {
-      this.etaSlider.value = values.pressure.toFixed(3)
+    if (typeof values.pressure === 'number' && Number.isFinite(values.pressure)) {
+      this.selectedPressure = values.pressure
+      this.syncScenarioButtonState()
     }
-    this.syncDisplayedControlValues()
   }
 
   readControlValues(): ControlValues {
     return {
-      pressure: Number.parseFloat(this.etaSlider.value),
+      pressure: this.selectedPressure,
     }
   }
 
@@ -75,20 +111,40 @@ export class UIController {
     this.shipReason.textContent = frame.statusText
     this.decisionLine.textContent = frame.decisionText
 
-    this.kpiPeakRaw.textContent = frame.peakRawQueue.toLocaleString()
-    this.kpiPeakSafe.textContent = frame.peakSafeQueue.toLocaleString()
-    this.kpiAvoidedEscalations.textContent = frame.avoidedEscalations.toLocaleString()
+    this.rawOutcome.textContent = frame.rawOutcomeText
+    this.safeOutcome.textContent = frame.safeOutcomeText
+
+    this.kpiPeakReduction.textContent = frame.peakQueueReduction.toLocaleString()
+    this.kpiBreachMinutes.textContent = frame.breachMinutesAvoided.toLocaleString()
+    this.kpiEscalations.textContent = frame.avoidedEscalations.toLocaleString()
   }
 
-  renderPressureModel(eta: number, strictness: number): void {
-    const patchLabel = eta < 0.95 ? 'Low' : eta < 1.6 ? 'Balanced' : 'High'
+  renderPressureModel(pressure: number, eta: number, strictness: number): void {
+    const profile = scenarioLabel(pressure)
+    const patchLabel = eta < 0.95 ? 'small patch' : eta < 1.6 ? 'medium patch' : 'large patch'
     const guardrailLabel = strictness < 0.78 ? 'tight guardrails' : strictness < 1.08 ? 'standard guardrails' : 'wide guardrails'
-    this.pressureDetail.textContent = `${patchLabel} patch size. ${guardrailLabel} determine correction strength before ship.`
+    this.pressureDetail.textContent = `${profile}: ${patchLabel} under ${guardrailLabel}.`
   }
 
-  private syncDisplayedControlValues(): void {
-    const pressure = Number.parseFloat(this.etaSlider.value)
-    this.etaValue.textContent = `${Math.round(pressure * 100)}%`
+  private syncScenarioButtonState(): void {
+    let closestIndex = 0
+    let closestDistance = Number.POSITIVE_INFINITY
+
+    for (let i = 0; i < this.scenarioButtons.length; i += 1) {
+      const pressure = Number.parseFloat(this.scenarioButtons[i].dataset.pressure ?? '0')
+      const distance = Math.abs(pressure - this.selectedPressure)
+      if (distance < closestDistance) {
+        closestDistance = distance
+        closestIndex = i
+      }
+    }
+
+    this.scenarioButtons.forEach((button, index) => {
+      button.classList.toggle('active', index === closestIndex)
+    })
+
+    const snappedPressure = Number.parseFloat(this.scenarioButtons[closestIndex].dataset.pressure ?? '0.55')
+    this.selectedPressure = snappedPressure
   }
 
   private getElement<T extends HTMLElement>(id: string): T {

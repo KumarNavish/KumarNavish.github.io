@@ -10,56 +10,59 @@
     <main class="app">
       <header class="title-block">
         <p class="eyebrow">Production LLM Hotfix Gate</p>
-        <h1>Before deployment, SafePatch simulates tonight's support queue and auto-corrects risky model patches.</h1>
-        <div class="story-strip" aria-label="Legend">
-          <span class="story-dot raw" aria-hidden="true"></span>
-          <span>Raw deploy</span>
-          <span class="story-arrow" aria-hidden="true">→</span>
-          <span class="story-dot safe" aria-hidden="true"></span>
-          <span>SafePatch deploy</span>
-        </div>
+        <h1>Raw hotfix can page on-call. SafePatch tests and corrects it before deployment.</h1>
       </header>
 
       <section class="stage">
         <div class="stage-head">
           <span id="ship-indicator" class="indicator hold">HOLD</span>
-          <span id="ship-reason" class="ship-reason">Running incident replay...</span>
+          <span id="ship-reason" class="ship-reason">Running replay...</span>
+        </div>
+
+        <p id="decision-line" class="decision-line">Ship SafePatch: queue remains stable with guardrails satisfied.</p>
+
+        <div class="outcome-row" aria-label="Deployment outcomes">
+          <article class="outcome-card raw">
+            <p>If deployed raw</p>
+            <strong id="raw-outcome">On-call page: unknown</strong>
+          </article>
+          <article class="outcome-card safe">
+            <p>If deployed with SafePatch</p>
+            <strong id="safe-outcome">Outcome: computing</strong>
+          </article>
         </div>
 
         <div class="canvas-shell">
-          <canvas id="scene-canvas" class="scene" aria-label="Queue replay timeline"></canvas>
+          <canvas id="scene-canvas" class="scene" aria-label="Minute-by-minute queue replay"></canvas>
         </div>
 
         <div class="stage-foot">
           <div class="controls-row">
-            <label class="control-block">
-              <div class="control-head">
-                <span>Tonight's patch size</span>
-                <span id="eta-value" class="value">58%</span>
+            <div class="scenario-block" role="group" aria-label="Traffic context">
+              <p class="scenario-label">Traffic context tonight</p>
+              <div class="scenario-buttons">
+                <button class="scenario-btn" data-pressure="0.25" type="button">Low traffic</button>
+                <button class="scenario-btn active" data-pressure="0.55" type="button">Peak hour</button>
+                <button class="scenario-btn" data-pressure="0.9" type="button">Incident surge</button>
               </div>
-              <input id="eta-slider" type="range" min="0" max="1" step="0.001" value="0.58" />
-              <div class="control-scale"><span>small patch</span><span>large patch</span></div>
-              <p id="pressure-detail" class="pressure-detail">Balanced patch size with moderate correction.</p>
-            </label>
+              <p id="pressure-detail" class="pressure-detail">Peak hour selected.</p>
+            </div>
             <button id="replay-button" class="replay" type="button">Replay</button>
+            <button id="export-button" class="export" type="button">Export decision JSON</button>
           </div>
 
-          <p id="decision-line" class="decision-line">
-            Ship SafePatch: queue remains stable while preserving patch gain.
-          </p>
-
           <div class="kpi-row" aria-label="Operational impact">
-            <article class="kpi-card risk">
-              <p>Peak queue (raw)</p>
-              <strong id="kpi-peak-raw">0</strong>
+            <article class="kpi-card">
+              <p>Peak queue reduction</p>
+              <strong id="kpi-peak-reduction">0</strong>
             </article>
-            <article class="kpi-card success">
-              <p>Peak queue (SafePatch)</p>
-              <strong id="kpi-peak-safe">0</strong>
+            <article class="kpi-card">
+              <p>SLA breach minutes avoided</p>
+              <strong id="kpi-breach-minutes">0</strong>
             </article>
             <article class="kpi-card">
               <p>Critical escalations avoided</p>
-              <strong id="kpi-overload-avoided">0</strong>
+              <strong id="kpi-escalations">0</strong>
             </article>
           </div>
         </div>
