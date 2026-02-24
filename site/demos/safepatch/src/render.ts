@@ -160,10 +160,13 @@ export class SceneRenderer {
     const boundRadius = worldBoundsFromHalfspaces(input.halfspaces)
     const stepRadius = Math.max(norm(input.rawTarget), norm(input.safeTarget), norm(input.rawStep), norm(input.safeStep), 0.9)
     const worldRadius = Math.max(boundRadius * 2, stepRadius * 1.72, 1.6)
+    const scalePx = Math.min(content.width, content.height) / (2 * worldRadius)
+    const centerX = content.x + content.width / 2
+    const centerY = content.y + content.height / 2
 
     const toScreen = (point: Vec2): ScreenPoint => ({
-      x: ((point.x + worldRadius) / (2 * worldRadius)) * content.width + content.x,
-      y: ((worldRadius - point.y) / (2 * worldRadius)) * content.height + content.y,
+      x: centerX + point.x * scalePx,
+      y: centerY - point.y * scalePx,
     })
 
     this.drawGrid(toScreen, content, worldRadius)
@@ -203,8 +206,7 @@ export class SceneRenderer {
     if (input.safeReveal > 0.01 && correctionNorm > 1e-5) {
       this.drawProjectionWitness(
         toScreen,
-        content,
-        worldRadius,
+        scalePx,
         input.rawTarget,
         input.safeTarget,
         input.correctionProgress,
@@ -419,8 +421,7 @@ export class SceneRenderer {
 
   private drawProjectionWitness(
     toScreen: (point: Vec2) => ScreenPoint,
-    content: Viewport,
-    worldRadius: number,
+    scalePx: number,
     rawTarget: Vec2,
     safeTarget: Vec2,
     progress: number,
@@ -433,15 +434,11 @@ export class SceneRenderer {
 
     const t = clamp(progress)
     const center = toScreen(rawTarget)
-
-    const scaleX = content.width / (2 * worldRadius)
-    const scaleY = content.height / (2 * worldRadius)
-    const radiusX = distance * scaleX * t
-    const radiusY = distance * scaleY * t
+    const radius = distance * scalePx * t
 
     const ctx = this.ctx
     ctx.beginPath()
-    ctx.ellipse(center.x, center.y, radiusX, radiusY, 0, 0, Math.PI * 2)
+    ctx.arc(center.x, center.y, radius, 0, Math.PI * 2)
     ctx.strokeStyle = `rgba(220, 234, 255, ${0.18 + 0.26 * t})`
     ctx.lineWidth = 1.4
     ctx.setLineDash([6, 7])
