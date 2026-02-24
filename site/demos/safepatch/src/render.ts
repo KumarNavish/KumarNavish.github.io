@@ -201,6 +201,14 @@ export class SceneRenderer {
         input.colorById[entry.halfspace.id] ?? '#6c86ab',
         entry.emphasis,
       )
+
+      if (entry.emphasis > 0.4) {
+        const center = {
+          x: entry.halfspace.normal.x * entry.halfspace.bound,
+          y: entry.halfspace.normal.y * entry.halfspace.bound,
+        }
+        this.drawGuardrailTag(content, toScreen(center), entry.halfspace.label)
+      }
     }
 
     this.drawOriginPulse(toScreen({ x: 0, y: 0 }), 1 - clamp(input.transitionProgress))
@@ -552,6 +560,28 @@ export class SceneRenderer {
     ctx.roundRect(x, y, width, height, 10)
     ctx.fillStyle = 'rgba(255, 255, 255, 0.88)'
     ctx.strokeStyle = 'rgba(134, 150, 172, 0.55)'
+    ctx.lineWidth = 1
+    ctx.fill()
+    ctx.stroke()
+
+    ctx.fillStyle = '#22334b'
+    ctx.fillText(text, x + pad, y + 13.5)
+  }
+
+  private drawGuardrailTag(bounds: Viewport, point: ScreenPoint, text: string): void {
+    const ctx = this.ctx
+    ctx.font = '700 11px "Space Grotesk", sans-serif'
+    const pad = 8
+    const width = ctx.measureText(text).width + pad * 2
+    const height = 20
+
+    const x = clamp(point.x - width / 2, bounds.x + 6, bounds.x + bounds.width - width - 6)
+    const y = clamp(point.y - 26, bounds.y + 6, bounds.y + bounds.height - height - 6)
+
+    ctx.beginPath()
+    ctx.roundRect(x, y, width, height, 10)
+    ctx.fillStyle = 'rgba(233, 241, 252, 0.92)'
+    ctx.strokeStyle = 'rgba(92, 112, 137, 0.55)'
     ctx.lineWidth = 1
     ctx.fill()
     ctx.stroke()

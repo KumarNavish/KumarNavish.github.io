@@ -24,35 +24,35 @@ const TRANSITION_MS = 1320
 const baseHalfspaces: Halfspace[] = [
   {
     id: 'g1',
-    label: 'g1',
+    label: 'toxicity',
     normal: normalize(vec(1, 0)),
     bound: 0.45,
     active: true,
   },
   {
     id: 'g2',
-    label: 'g2',
+    label: 'hallucination',
     normal: normalize(vec(0, 1)),
     bound: 0.36,
     active: true,
   },
   {
     id: 'g3',
-    label: 'g3',
+    label: 'privacy',
     normal: normalize(vec(-1, 0)),
     bound: 0.58,
     active: true,
   },
   {
     id: 'g4',
-    label: 'g4',
+    label: 'factuality',
     normal: normalize(vec(0, -1)),
     bound: 0.32,
     active: true,
   },
   {
     id: 'g5',
-    label: 'g5',
+    label: 'style drift',
     normal: normalize(vec(0.88, 0.62)),
     bound: 0.46,
     active: true,
@@ -69,7 +69,7 @@ const STRICTNESS_SENSITIVITY: Record<string, number> = {
 
 const AUTOPLAY_STEPS = [{ pressure: 0.1 }, { pressure: 0.92 }, { pressure: 0.56 }]
 
-const CORE_EQUATION = String.raw`\Delta^*=\operatorname{Proj}_{\mathcal S}(\Delta_0)`
+const CORE_EQUATION = String.raw`\Delta^*=\arg\min_{\Delta\in\mathcal S}\|\Delta-\Delta_0\|_2,\ \Delta_0=-\eta g_{\text{new}}`
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(Math.max(value, min), max)
@@ -146,19 +146,19 @@ function boundScaleForStrictness(id: string, strictness: number): number {
   return clamp(1 + sensitivity * (strictness - 1), 0.42, 1.86)
 }
 
-function phaseState(progress: number, ship: boolean): { index: number; text: string } {
+function phaseState(progress: number, ship: boolean): string {
   if (progress < 0.22) {
-    return { index: 1, text: 'Optimizer proposes a candidate step.' }
+    return 'Raw LLM patch is proposed for new behavior.'
   }
   if (progress < 0.52) {
-    return { index: 2, text: 'Candidate exits the safe region.' }
+    return 'Patch crosses safety guardrails.'
   }
   if (progress < 0.86) {
-    return { index: 3, text: 'Projection finds nearest feasible point.' }
+    return 'Projection computes nearest safe patch.'
   }
   return ship
-    ? { index: 4, text: 'Projected step is feasible. Ship.' }
-    : { index: 4, text: 'No feasible correction. Hold.' }
+    ? 'Safe patch is shippable with minimal change.'
+    : 'No feasible correction. Hold deployment.'
 }
 
 function start(): void {
@@ -308,7 +308,7 @@ function start(): void {
       transitionProgress: progress,
     })
 
-    const phase = phaseState(progress, projection.ship)
+    const phaseText = phaseState(progress, projection.ship)
 
     ui.renderFrame({
       ship: projection.ship,
@@ -316,9 +316,8 @@ function start(): void {
         ? 'Safe projection found.'
         : projection.reason?.toLowerCase().includes('empty')
           ? 'Guardrails conflict. Hold.'
-          : 'Unsafe proposal detected.',
-      phaseText: phase.text,
-      phaseIndex: phase.index,
+          : 'Unsafe patch blocked.',
+      phaseText,
       maxViolationRaw: projection.maxViolationStep0,
       maxViolationSafe: projection.maxViolationProjected,
       correctionSize: norm(sub(rawTarget, safeTarget)),
