@@ -1,52 +1,49 @@
-import {
-  Halfspace,
-  Vec2,
-  normalize,
-  scale,
-  vec,
-} from './geometry'
+import 'katex/dist/katex.min.css'
+
+import { Halfspace, Vec2, normalize, scale, vec } from './geometry'
 import { computeProjectedStep } from './qp'
 import { SceneRenderer } from './render'
 import { ProofFrameUi, UIController } from './ui'
 
-const TRANSITION_MS = 980
+const TRANSITION_MS = 1120
+const PROJECTION_TOLERANCE = 1e-6
 
 const baseHalfspaces: Halfspace[] = [
   {
     id: 'g1',
-    label: 'toxicity ceiling',
+    label: 'toxicity budget',
     normal: normalize(vec(0.94, 0.34)),
-    bound: 0.4,
+    bound: 0.44,
     active: true,
   },
   {
     id: 'g2',
-    label: 'hallucination ceiling',
+    label: 'hallucination budget',
     normal: normalize(vec(0.24, 1)),
-    bound: 0.35,
+    bound: 0.39,
     active: true,
   },
   {
     id: 'g3',
-    label: 'privacy wall',
+    label: 'privacy guardrail',
     normal: normalize(vec(-0.92, 0.38)),
-    bound: 0.5,
+    bound: 0.54,
     active: true,
   },
   {
     id: 'g4',
-    label: 'style drift wall',
+    label: 'style drift guardrail',
     normal: normalize(vec(0.76, -0.65)),
-    bound: 0.37,
+    bound: 0.42,
     active: true,
   },
 ]
 
 const STRICTNESS_SENSITIVITY: Record<string, number> = {
-  g1: 0.7,
-  g2: 0.9,
-  g3: 0.62,
-  g4: 1.45,
+  g1: 0.9,
+  g2: 1.1,
+  g3: 0.75,
+  g4: 1.4,
 }
 
 interface QueueReplay {
@@ -59,6 +56,23 @@ interface QueueReplay {
   safeBreachMinutes: number
   rawEscalations: number
   safeEscalations: number
+}
+
+interface ControlSnapshot {
+  pressure: number
+  urgency: number
+  strictness: number
+}
+
+interface ScenarioSignals {
+  eta: number
+  gradient: Vec2
+  strictnessScale: number
+}
+
+interface DeploymentDecision {
+  ship: boolean
+  reason: string
 }
 
 function clamp(value: number, min = 0, max = 1): number {
@@ -76,56 +90,62 @@ function degreesToRadians(value: number): number {
   return (value * Math.PI) / 180
 }
 
-function scenarioFromPressure(pressure: number): { eta: number; strictness: number; gradient: Vec2 } {
-  const t = clamp(pressure)
-  const eta = 0.72 + 2.15 * t
-  const strictness = 1.24 - 0.78 * t
-  const angle = degreesToRadians(230 + t * 124)
-  const gradientMagnitude = 0.9 + t * 2
-  const gradient = scale(normalize(vec(Math.cos(angle), Math.sin(angle))), gradientMagnitude)
-  return { eta, strictness, gradient }
+function scenarioFromControls(controls: ControlSnapshot): ScenarioSignals {
+  const pressure = clamp(controls.pressure)
+  const urgency = clamp(controls.urgency)
+  const strictness = clamp(controls.strictness)
+
+  const eta = 0.45 + 2.35 * urgency + 0.78 * pressure
+  const strictnessScale = 1.42 - 1.08 * strictness
+  const angle = degreesToRadians(206 + pressure * 122 + urgency * 30 - strictness * 20)
+  const magnitude = 0.84 + pressure * 1.65 + urgency * 1.12
+  const gradient = scale(normalize(vec(Math.cos(angle), Math.sin(angle))), magnitude)
+
+  return { eta, strictnessScale, gradient }
 }
 
-function boundScaleForStrictness(id: string, strictness: number): number {
+function boundScaleForStrictness(id: string, strictnessScale: number): number {
   const sensitivity = STRICTNESS_SENSITIVITY[id] ?? 0.7
-  return clamp(1 + sensitivity * (strictness - 1), 0.36, 1.85)
+  return clamp(1 + sensitivity * (strictnessScale - 1), 0.24, 1.95)
 }
 
 function scenarioName(pressure: number): string {
   if (pressure < 0.38) {
-    return 'Low traffic'
+    return 'Routine load'
   }
   if (pressure < 0.75) {
-    return 'Peak hour'
+    return 'Peak shift'
   }
   return 'Incident surge'
 }
 
 function buildQueueReplay(
-  pressure: number,
+  controls: ControlSnapshot,
   rawRiskRatio: number,
   safeRiskRatio: number,
   retainedValueRatio: number,
 ): QueueReplay {
-  const minutes = 16
+  const minutes = 18
   const overloadThreshold = 520
-  const initialQueue = Math.round(205 + pressure * 118)
+  const pressure = clamp(controls.pressure)
+  const urgency = clamp(controls.urgency)
+  const initialQueue = Math.round(185 + pressure * 132 + urgency * 42)
 
   const rawSeries: number[] = [initialQueue]
   const safeSeries: number[] = [initialQueue]
 
   for (let minute = 1; minute < minutes; minute += 1) {
-    const pulse = 22 * Math.exp(-((minute - 7) ** 2) / 8)
-    const arrivals = 338 + pressure * 122 + pulse
+    const pulse = 34 * Math.exp(-((minute - 8) ** 2) / 9)
+    const arrivals = 318 + pressure * 176 + urgency * 58 + pulse
 
-    const rawCapacity = 364 + retainedValueRatio * 84 - rawRiskRatio * 185
-    const safeCapacity = 364 + retainedValueRatio * 76 - safeRiskRatio * 82
+    const rawCapacity = 392 + retainedValueRatio * 86 - rawRiskRatio * 238 - pressure * 21
+    const safeCapacity = 392 + retainedValueRatio * 73 - safeRiskRatio * 88 - pressure * 14
 
     const rawPrev = rawSeries[minute - 1]
     const safePrev = safeSeries[minute - 1]
 
-    rawSeries.push(Math.max(70, rawPrev + arrivals - rawCapacity))
-    safeSeries.push(Math.max(62, safePrev + arrivals - safeCapacity))
+    rawSeries.push(Math.max(66, rawPrev + arrivals - rawCapacity))
+    safeSeries.push(Math.max(58, safePrev + arrivals - safeCapacity))
   }
 
   const peakRaw = Math.round(Math.max(...rawSeries))
@@ -144,8 +164,8 @@ function buildQueueReplay(
     peakSafe,
     rawBreachMinutes,
     safeBreachMinutes,
-    rawEscalations: Math.round(rawBreachMinutes * 18 + rawOverflow / 44),
-    safeEscalations: Math.round(safeBreachMinutes * 18 + safeOverflow / 44),
+    rawEscalations: Math.round(rawBreachMinutes * 16 + rawOverflow / 34),
+    safeEscalations: Math.round(safeBreachMinutes * 16 + safeOverflow / 34),
   }
 }
 
@@ -162,31 +182,84 @@ function exportDecision(payload: Record<string, unknown>): void {
   URL.revokeObjectURL(url)
 }
 
+function deploymentDecision(
+  projectedShipPossible: boolean,
+  projectedReason: string | null,
+  queueReplay: QueueReplay,
+  retainedValueRatio: number,
+): DeploymentDecision {
+  if (!projectedShipPossible) {
+    return {
+      ship: false,
+      reason: projectedReason ?? 'No feasible certified correction exists for current guardrails.',
+    }
+  }
+
+  if (retainedValueRatio < 0.42) {
+    return {
+      ship: false,
+      reason: `Projection retains only ${Math.round(retainedValueRatio * 100)}% of useful gain. Redesign patch intent first.`,
+    }
+  }
+
+  if (
+    queueReplay.safeBreachMinutes >= queueReplay.rawBreachMinutes &&
+    queueReplay.safeEscalations >= queueReplay.rawEscalations
+  ) {
+    return {
+      ship: false,
+      reason: 'Projected patch does not improve incident risk enough to justify deployment.',
+    }
+  }
+
+  return {
+    ship: true,
+    reason: 'SafePatch lowers queue pressure while keeping all active guardrails certified.',
+  }
+}
+
 function toFrameUi(
   scenario: string,
-  ship: boolean,
+  decision: DeploymentDecision,
+  maxViolationProjected: number,
+  activeSetSize: number,
+  violatedRaw: number,
+  violatedSafe: number,
+  retainedValueRatio: number,
   replay: QueueReplay,
 ): ProofFrameUi {
   const peakValueText = `${replay.peakRaw.toLocaleString()} -> ${replay.peakSafe.toLocaleString()}`
   const breachValueText = `${replay.rawBreachMinutes.toLocaleString()} -> ${replay.safeBreachMinutes.toLocaleString()}`
   const escalationValueText = `${replay.rawEscalations.toLocaleString()} -> ${replay.safeEscalations.toLocaleString()}`
 
-  let recommendationText = `${scenario}: `
-  if (!ship) {
-    recommendationText += 'Hold deployment. No feasible safe correction exists under current guardrails.'
-  } else if (replay.rawBreachMinutes > replay.safeBreachMinutes) {
-    recommendationText += `Ship SafePatch. SLA-breach minutes drop from ${replay.rawBreachMinutes} to ${replay.safeBreachMinutes}.`
-  } else if (replay.peakRaw > replay.peakSafe) {
-    recommendationText += `Ship SafePatch. Peak queue drops by ${(replay.peakRaw - replay.peakSafe).toLocaleString()} without extra breaches.`
-  } else {
-    recommendationText += 'Ship SafePatch. Stability remains equivalent while respecting guardrails.'
+  const peakDrop = replay.peakRaw - replay.peakSafe
+  const breachDrop = replay.rawBreachMinutes - replay.safeBreachMinutes
+  const escalationDrop = replay.rawEscalations - replay.safeEscalations
+  const retainedPercent = Math.round(clamp(retainedValueRatio, 0, 1.4) * 100)
+
+  const problemText = `${scenario}: raw patch violates ${violatedRaw} guardrails and yields ${replay.rawBreachMinutes} queue-breach minutes.`
+  const mechanismText = `SafePatch clips the update onto the feasible zone. Active constraints: ${activeSetSize}. Residual violation: ${Math.max(0, maxViolationProjected).toFixed(3)}.`
+
+  let impactText = `Effect: peak queue ${peakDrop >= 0 ? 'drops' : 'rises'} by ${Math.abs(peakDrop)} and escalations ${escalationDrop >= 0 ? 'drop' : 'rise'} by ${Math.abs(escalationDrop)}.`
+  if (breachDrop > 0) {
+    impactText += ` Breach minutes reduced by ${breachDrop}.`
+  }
+  if (!decision.ship) {
+    impactText = `Hold reason: ${decision.reason}`
   }
 
   return {
-    recommendationText,
+    decisionTone: decision.ship ? 'ship' : 'hold',
+    decisionTitle: decision.ship ? 'Certified for deployment' : 'Hold and redesign before rollout',
+    decisionDetail: decision.reason,
+    problemText,
+    mechanismText,
+    impactText,
     peakValueText,
     breachValueText,
     escalationValueText,
+    guardrailValueText: `${violatedRaw} -> ${violatedSafe}`,
+    retainedValueText: `${retainedPercent}%`,
   }
 }
 
@@ -202,45 +275,79 @@ function start(): void {
   const renderer = new SceneRenderer(canvas)
   const ui = new UIController()
 
-  let pressure = 0.55
-  let queueReplay = buildQueueReplay(pressure, 0, 0, 1)
+  let controls = ui.readControlValues()
+  let scenarioSignals = scenarioFromControls(controls)
+  let queueReplay = buildQueueReplay(controls, 0, 0, 1)
+  let projectedStep = computeProjectedStep({
+    gradient: scenarioSignals.gradient,
+    eta: scenarioSignals.eta,
+    halfspaces,
+    tolerance: PROJECTION_TOLERANCE,
+  })
+  let deployment = deploymentDecision(projectedStep.ship, projectedStep.reason, queueReplay, 1)
   let transitionStart = performance.now()
   let latestDecision: Record<string, unknown> = {}
 
   function applyControls(): void {
-    pressure = ui.readControlValues().pressure
-
-    const scenario = scenarioFromPressure(pressure)
-    const scenarioLabel = scenarioName(pressure)
+    controls = ui.readControlValues()
+    scenarioSignals = scenarioFromControls(controls)
+    const scenarioLabel = scenarioName(controls.pressure)
 
     for (const halfspace of halfspaces) {
       const baseBound = baseBounds.get(halfspace.id)
       if (baseBound === undefined) {
         continue
       }
-      halfspace.bound = baseBound * boundScaleForStrictness(halfspace.id, scenario.strictness)
+      const scaledBound = baseBound * boundScaleForStrictness(halfspace.id, scenarioSignals.strictnessScale)
+      const pressurePenalty = controls.pressure * controls.strictness * (halfspace.id === 'g2' ? 0.24 : 0.2)
+      halfspace.bound = scaledBound - pressurePenalty
       halfspace.active = true
     }
 
-    const projection = computeProjectedStep({
-      gradient: scenario.gradient,
-      eta: scenario.eta,
+    projectedStep = computeProjectedStep({
+      gradient: scenarioSignals.gradient,
+      eta: scenarioSignals.eta,
       halfspaces,
+      tolerance: PROJECTION_TOLERANCE,
     })
 
-    const largestBudget = Math.max(0.15, ...halfspaces.map((halfspace) => halfspace.bound))
-    const rawRiskRatio = Math.max(0, projection.maxViolationStep0) / largestBudget
-    const safeRiskRatio = Math.max(0, projection.maxViolationProjected) / largestBudget
-    const retainedValueRatio = clamp(projection.descentRetainedRatio)
+    const largestBudget = Math.max(0.1, ...halfspaces.map((halfspace) => Math.abs(halfspace.bound)))
+    const rawRiskRatio = Math.max(0, projectedStep.maxViolationStep0) / largestBudget
+    const safeRiskRatio = Math.max(0, projectedStep.maxViolationProjected) / largestBudget
+    const retainedValueRatio = clamp(projectedStep.descentRetainedRatio, 0, 1.5)
 
-    queueReplay = buildQueueReplay(pressure, rawRiskRatio, safeRiskRatio, retainedValueRatio)
+    queueReplay = buildQueueReplay(controls, rawRiskRatio, safeRiskRatio, retainedValueRatio)
+    deployment = deploymentDecision(projectedStep.ship, projectedStep.reason, queueReplay, retainedValueRatio)
 
-    const frameUi = toFrameUi(scenarioLabel, projection.ship, queueReplay)
+    const violatedRaw = projectedStep.diagnostics.filter(
+      (diagnostic) => diagnostic.active && diagnostic.violationStep0 > PROJECTION_TOLERANCE,
+    ).length
+    const violatedSafe = projectedStep.diagnostics.filter(
+      (diagnostic) => diagnostic.active && diagnostic.violationProjected > PROJECTION_TOLERANCE,
+    ).length
+
+    const frameUi = toFrameUi(
+      scenarioLabel,
+      deployment,
+      projectedStep.maxViolationProjected,
+      projectedStep.activeSetIds.length,
+      violatedRaw,
+      violatedSafe,
+      retainedValueRatio,
+      queueReplay,
+    )
     ui.renderFrame(frameUi)
 
     latestDecision = {
+      generated_at: new Date().toISOString(),
       scenario: scenarioLabel,
-      decision: projection.ship ? 'ship' : 'hold',
+      controls: {
+        pressure: Number(controls.pressure.toFixed(4)),
+        urgency: Number(controls.urgency.toFixed(4)),
+        strictness: Number(controls.strictness.toFixed(4)),
+      },
+      decision: deployment.ship ? 'ship' : 'hold',
+      reason: deployment.reason,
       replay: {
         threshold: queueReplay.overloadThreshold,
         peak_queue: { raw: queueReplay.peakRaw, safe: queueReplay.peakSafe },
@@ -248,11 +355,14 @@ function start(): void {
         escalations: { raw: queueReplay.rawEscalations, safe: queueReplay.safeEscalations },
       },
       method_signals: {
-        eta: Number(scenario.eta.toFixed(4)),
-        strictness: Number(scenario.strictness.toFixed(4)),
+        eta: Number(scenarioSignals.eta.toFixed(4)),
+        strictness_scale: Number(scenarioSignals.strictnessScale.toFixed(4)),
         raw_risk_ratio: Number(rawRiskRatio.toFixed(4)),
         safe_risk_ratio: Number(safeRiskRatio.toFixed(4)),
         retained_gain_ratio: Number(retainedValueRatio.toFixed(4)),
+        active_constraints: projectedStep.activeSetIds,
+        max_violation_raw: Number(projectedStep.maxViolationStep0.toFixed(4)),
+        max_violation_projected: Number(projectedStep.maxViolationProjected.toFixed(4)),
       },
     }
 
@@ -263,6 +373,10 @@ function start(): void {
     const progress = clamp((now - transitionStart) / TRANSITION_MS)
 
     renderer.render({
+      halfspaces: copyHalfspaces(halfspaces),
+      step0: projectedStep.step0,
+      projectedStep: projectedStep.projectedStep,
+      gradient: scenarioSignals.gradient,
       queueRawSeries: queueReplay.rawSeries,
       queueSafeSeries: queueReplay.safeSeries,
       overloadThreshold: queueReplay.overloadThreshold,
@@ -285,7 +399,7 @@ function start(): void {
   })
 
   renderer.resize()
-  ui.setControlValues({ pressure })
+  ui.setControlValues(controls)
   applyControls()
   requestAnimationFrame(frame)
 }

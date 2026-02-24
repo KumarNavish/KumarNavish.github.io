@@ -3,48 +3,127 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SafePatch</title>
+    <meta
+      name="description"
+      content="SafePatch certifies LLM hotfixes by projecting risky updates back into a guardrail-safe ship zone."
+    />
+    <title>SafePatch | Deployment Certification Demo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Sora:wght@500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <main class="app">
-      <header class="hero">
+      <header class="hero panel">
         <p class="eyebrow">SafePatch Deployment Gate</p>
-        <h1>AI corrects risky LLM hotfixes before they trigger queue incidents.</h1>
+        <h1>Prevent risky LLM hotfixes from turning into live queue incidents.</h1>
+        <p class="hero-copy">
+          SafePatch does not trust the raw update. It projects it into a certified ship zone, then shows the real
+          operational impact before deployment.
+        </p>
       </header>
 
-      <section class="stage">
-        <div class="top-row">
-          <div class="scenario-buttons" role="group" aria-label="Traffic scenario">
-            <button class="scenario-btn" data-pressure="0.25" type="button">Low traffic</button>
-            <button class="scenario-btn active" data-pressure="0.55" type="button">Peak hour</button>
-            <button class="scenario-btn" data-pressure="0.9" type="button">Incident surge</button>
+      <section class="summary-grid">
+        <article class="panel problem-panel">
+          <p class="panel-kicker">1. Problem</p>
+          <h2>Raw hotfixes chase immediate gain, then breach safety budgets under load.</h2>
+          <p id="problem-statement" class="story-line">
+            SafePatch replay running.
+          </p>
+        </article>
+        <article id="decision-panel" class="panel decision-panel ship">
+          <p class="panel-kicker">4. Deployment verdict</p>
+          <p id="decision-pill" class="decision-pill ship">SHIP WITH SAFEPATCH</p>
+          <h2 id="decision-title">Certified for deployment</h2>
+          <p id="decision-detail" class="story-line">
+            Waiting for first replay.
+          </p>
+          <button id="export-button" class="export" type="button">Export policy JSON</button>
+        </article>
+      </section>
+
+      <section class="workbench">
+        <aside class="panel control-panel">
+          <p class="panel-kicker">2. Tune context</p>
+          <h2>Control what the patch is fighting against.</h2>
+
+          <div class="scenario-block">
+            <p class="control-label">Traffic scenario</p>
+            <div class="scenario-buttons" role="group" aria-label="Traffic scenario">
+              <button class="scenario-btn" data-pressure="0.22" type="button">Routine load</button>
+              <button class="scenario-btn active" data-pressure="0.56" type="button">Peak shift</button>
+              <button class="scenario-btn" data-pressure="0.9" type="button">Incident surge</button>
+            </div>
           </div>
-          <button id="export-button" class="export" type="button">Apply policy (export JSON)</button>
-        </div>
 
-        <div class="canvas-shell">
-          <canvas id="scene-canvas" class="scene" aria-label="Queue stabilization replay"></canvas>
-        </div>
+          <div class="slider-block">
+            <div class="slider-row">
+              <label for="urgency-slider">Hotfix urgency</label>
+              <span id="urgency-value" class="slider-value">58%</span>
+            </div>
+            <input id="urgency-slider" type="range" min="0" max="100" value="58" />
+            <p class="control-help">Higher urgency increases unconstrained step length eta.</p>
+          </div>
 
-        <p id="recommendation-line" class="recommendation-line">
-          SafePatch replay running.
-        </p>
+          <div class="slider-block">
+            <div class="slider-row">
+              <label for="strictness-slider">Guardrail strictness</label>
+              <span id="strictness-value" class="slider-value">62%</span>
+            </div>
+            <input id="strictness-slider" type="range" min="0" max="100" value="62" />
+            <p class="control-help">Higher strictness shrinks allowable safety budgets epsilon_k.</p>
+          </div>
 
-        <div class="kpi-row" aria-label="Operational impact">
-          <article class="kpi-card">
-            <p>Peak queue (raw -> SafePatch)</p>
-            <strong id="kpi-peak-value">--</strong>
-          </article>
-          <article class="kpi-card">
-            <p>Breach minutes (raw -> SafePatch)</p>
-            <strong id="kpi-breach-value">--</strong>
-          </article>
-          <article class="kpi-card">
-            <p>Escalations (raw -> SafePatch)</p>
-            <strong id="kpi-escalations-value">--</strong>
-          </article>
-        </div>
+          <section class="math-panel" aria-label="SafePatch optimization">
+            <p class="math-kicker">SafePatch mechanism</p>
+            <div id="equation-raw" class="equation"></div>
+            <div id="equation-qp" class="equation"></div>
+          </section>
+
+          <p id="mechanism-statement" class="mechanism-line">
+            SafePatch mechanism loading.
+          </p>
+
+          <div class="micro-metrics" aria-label="Mechanism diagnostics">
+            <article class="micro-card">
+              <p>Guardrails violated (raw -> projected)</p>
+              <strong id="guardrail-value">--</strong>
+            </article>
+            <article class="micro-card">
+              <p>Useful gain retained after projection</p>
+              <strong id="retained-value">--</strong>
+            </article>
+          </div>
+        </aside>
+
+        <section class="panel visual-panel">
+          <p class="panel-kicker">3. Cause and effect</p>
+          <h2>Top panel shows projection geometry, bottom panel shows queue impact.</h2>
+          <div class="canvas-shell">
+            <canvas id="scene-canvas" class="scene" aria-label="SafePatch mechanism and queue replay"></canvas>
+          </div>
+          <p id="impact-statement" class="impact-line">
+            Impact replay loading.
+          </p>
+          <div class="kpi-row" aria-label="Operational impact">
+            <article class="kpi-card">
+              <p>Peak queue (raw -> SafePatch)</p>
+              <strong id="kpi-peak-value">--</strong>
+            </article>
+            <article class="kpi-card">
+              <p>Breach minutes (raw -> SafePatch)</p>
+              <strong id="kpi-breach-value">--</strong>
+            </article>
+            <article class="kpi-card">
+              <p>Escalations (raw -> SafePatch)</p>
+              <strong id="kpi-escalations-value">--</strong>
+            </article>
+          </div>
+        </section>
       </section>
     </main>
 
