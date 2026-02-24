@@ -34,11 +34,11 @@ export interface SceneRenderInput {
   transitionProgress: number
 }
 
-const RAW_COLOR = '#ff728d'
-const SAFE_COLOR = '#32bcff'
-const ZONE_COLOR = '#50e6c0'
-const CORRECTION_COLOR = '#ffc37d'
-const GRID_STROKE = 'rgba(169, 210, 240, 0.1)'
+const RAW_COLOR = '#db4d62'
+const SAFE_COLOR = '#1e70e6'
+const ZONE_COLOR = '#26a87c'
+const CORRECTION_COLOR = '#e49b3f'
+const GRID_STROKE = 'rgba(82, 116, 152, 0.15)'
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(Math.max(value, min), max)
@@ -124,9 +124,9 @@ export class SceneRenderer {
   private paintBackdrop(width: number, height: number): void {
     const ctx = this.ctx
     const gradient = ctx.createLinearGradient(0, 0, width, height)
-    gradient.addColorStop(0, '#0a2a42')
-    gradient.addColorStop(0.65, '#082137')
-    gradient.addColorStop(1, '#081b2e')
+    gradient.addColorStop(0, '#f7fbff')
+    gradient.addColorStop(0.6, '#eff5ff')
+    gradient.addColorStop(1, '#e9f1ff')
     ctx.fillStyle = gradient
     ctx.fillRect(0, 0, width, height)
   }
@@ -137,12 +137,12 @@ export class SceneRenderer {
     ctx.beginPath()
     ctx.moveTo(geometryPanel.x, dividerY)
     ctx.lineTo(geometryPanel.x + geometryPanel.width, dividerY)
-    ctx.strokeStyle = 'rgba(144, 193, 230, 0.3)'
+    ctx.strokeStyle = 'rgba(126, 153, 186, 0.38)'
     ctx.lineWidth = 1
     ctx.stroke()
 
     ctx.font = '700 10px "Space Grotesk", sans-serif'
-    ctx.fillStyle = '#cde8fb'
+    ctx.fillStyle = '#3c5f84'
     ctx.fillText('Constraint Projection', geometryPanel.x + 2, geometryPanel.y - 4)
     ctx.fillText('Queue Replay', queuePanel.x + 2, queuePanel.y - 4)
   }
@@ -177,9 +177,9 @@ export class SceneRenderer {
         }
       })
       ctx.closePath()
-      ctx.fillStyle = withAlpha(ZONE_COLOR, 0.12)
+      ctx.fillStyle = withAlpha(ZONE_COLOR, 0.1)
       ctx.fill()
-      ctx.strokeStyle = withAlpha(ZONE_COLOR, 0.82)
+      ctx.strokeStyle = withAlpha(ZONE_COLOR, 0.7)
       ctx.lineWidth = 1.2
       ctx.stroke()
     }
@@ -206,7 +206,7 @@ export class SceneRenderer {
 
     ctx.beginPath()
     ctx.arc(origin.x, origin.y, 3.5, 0, Math.PI * 2)
-    ctx.fillStyle = '#e8f5ff'
+    ctx.fillStyle = '#36587d'
     ctx.fill()
   }
 
@@ -271,7 +271,7 @@ export class SceneRenderer {
       ctx.beginPath()
       ctx.moveTo(p0.x, p0.y)
       ctx.lineTo(p1.x, p1.y)
-      ctx.strokeStyle = withAlpha(index % 2 === 0 ? '#7fdbff' : '#77efcd', 0.45)
+      ctx.strokeStyle = withAlpha(index % 2 === 0 ? '#63a8df' : '#60b796', 0.5)
       ctx.lineWidth = 0.9
       ctx.stroke()
     })
@@ -280,14 +280,14 @@ export class SceneRenderer {
     ctx.beginPath()
     ctx.moveTo(rect.x, center.y)
     ctx.lineTo(rect.x + rect.width, center.y)
-    ctx.strokeStyle = withAlpha('#9fd3f9', 0.34)
+    ctx.strokeStyle = withAlpha('#638bb5', 0.35)
     ctx.lineWidth = 0.9
     ctx.stroke()
 
     ctx.beginPath()
     ctx.moveTo(center.x, rect.y)
     ctx.lineTo(center.x, rect.y + rect.height)
-    ctx.strokeStyle = withAlpha('#9fd3f9', 0.34)
+    ctx.strokeStyle = withAlpha('#638bb5', 0.35)
     ctx.lineWidth = 0.9
     ctx.stroke()
   }
@@ -296,7 +296,7 @@ export class SceneRenderer {
     const direction = scale(normalize(gradient), mapper.worldRadius * 0.65)
     const origin = mapper.worldToCanvas(vec(0, 0))
     const target = mapper.worldToCanvas(scale(direction, -1))
-    this.drawArrow(origin, target, withAlpha('#ffd6a4', 0.68), 1.1, true)
+    this.drawArrow(origin, target, withAlpha('#ca8531', 0.58), 1.1, true)
   }
 
   private drawArrow(
@@ -389,7 +389,7 @@ export class SceneRenderer {
     ctx.stroke()
     ctx.restore()
 
-    ctx.fillStyle = '#ffd8e1'
+    ctx.fillStyle = '#8b3d4c'
     ctx.font = '600 10px "Space Grotesk", sans-serif'
     ctx.fillText('threshold', chart.x + chart.width - 56, thresholdY - 6)
   }
@@ -456,7 +456,7 @@ export class SceneRenderer {
     const sweepX = chart.x + chart.width * blend
     const gradient = ctx.createLinearGradient(sweepX - 20, chart.y, sweepX + 20, chart.y)
     gradient.addColorStop(0, 'rgba(49, 188, 255, 0)')
-    gradient.addColorStop(0.5, 'rgba(49, 188, 255, 0.11)')
+    gradient.addColorStop(0.5, 'rgba(30, 112, 230, 0.08)')
     gradient.addColorStop(1, 'rgba(49, 188, 255, 0)')
     ctx.fillStyle = gradient
     ctx.fillRect(sweepX - 20, chart.y, 40, chart.height)
@@ -491,7 +491,7 @@ export class SceneRenderer {
     const ctx = this.ctx
     const y = chart.y + 12
     ctx.font = '600 10px "Space Grotesk", sans-serif'
-    ctx.fillStyle = '#d7edff'
+    ctx.fillStyle = '#3e6287'
     ctx.fillText('raw queue (red) vs SafePatch queue (blue)', chart.x + 2, y)
   }
 }
