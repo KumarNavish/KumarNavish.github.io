@@ -9,8 +9,13 @@
   <body>
     <main class="app">
       <header class="title-block">
-        <p class="eyebrow">SafePatch Geometry For LLM Updates</p>
-        <h1>When a fast patch overshoots safety, SafePatch bends it back into the ship zone automatically.</h1>
+        <p class="eyebrow">Production LLM Hotfix Simulator</p>
+        <h1>A customer-support model patch can improve refund handling but trigger unsafe replies. SafePatch auto-corrects it before ship.</h1>
+        <div class="scenario-strip" aria-label="Practical scenario framing">
+          <span class="scenario-chip">Use case: Support assistant hotfix</span>
+          <span class="scenario-chip">Objective: keep new behavior gain</span>
+          <span class="scenario-chip">Constraint: stay inside safety budgets</span>
+        </div>
         <div class="story-strip" aria-label="Visual legend for update vectors">
           <span class="story-dot raw" aria-hidden="true"></span>
           <span>Raw update</span>
@@ -36,29 +41,29 @@
         <div class="stage-foot">
           <label class="control-block">
             <div class="control-head">
-              <span>How aggressive should this patch be?</span>
+              <span>Hotfix urgency</span>
               <span id="eta-value" class="value">58%</span>
             </div>
             <input id="eta-slider" type="range" min="0" max="1" step="0.001" value="0.58" />
-            <div class="control-scale"><span>conservative</span><span>aggressive</span></div>
+            <div class="control-scale"><span>small patch</span><span>large patch</span></div>
             <p id="pressure-detail" class="pressure-detail">Balanced pressure: moderate push, moderate correction.</p>
           </label>
 
           <div class="metric-row" aria-label="Patch impact summary">
             <article class="metric-card danger">
-              <p class="metric-title">Raw update outside safe zone</p>
-              <div class="metric-track"><span id="metric-raw-bar" class="metric-fill"></span></div>
-              <p class="metric-readout"><strong id="metric-raw-violation">0%</strong> overshoot</p>
+              <p class="metric-title">Unsafe risk in raw patch</p>
+              <div class="metric-track"><span id="metric-raw-risk-bar" class="metric-fill"></span></div>
+              <p class="metric-readout"><strong id="metric-raw-risk">0%</strong> over safety budget</p>
             </article>
             <article class="metric-card neutral">
-              <p class="metric-title">Patch adjusted by SafePatch</p>
-              <div class="metric-track"><span id="metric-correction-bar" class="metric-fill"></span></div>
-              <p class="metric-readout"><strong id="metric-correction">0%</strong> redirected</p>
+              <p class="metric-title">Patch value retained</p>
+              <div class="metric-track"><span id="metric-value-bar" class="metric-fill"></span></div>
+              <p class="metric-readout"><strong id="metric-value">0%</strong> of improvement kept</p>
             </article>
             <article class="metric-card success">
-              <p class="metric-title">Safety recovered after correction</p>
-              <div class="metric-track"><span id="metric-safe-bar" class="metric-fill"></span></div>
-              <p class="metric-readout"><strong id="metric-safe-violation">0%</strong> inside bounds</p>
+              <p class="metric-title">Risk removed by SafePatch</p>
+              <div class="metric-track"><span id="metric-removed-bar" class="metric-fill"></span></div>
+              <p class="metric-readout"><strong id="metric-removed">0%</strong> of raw risk eliminated</p>
             </article>
           </div>
 
