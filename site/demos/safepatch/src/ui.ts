@@ -6,9 +6,9 @@ export interface ProofFrameUi {
   ship: boolean
   reason: string | null
   phaseText: string
-  rawOvershootRatio: number
-  safetyRecoveredRatio: number
-  correctionRatio: number
+  rawRiskRatio: number
+  retainedValueRatio: number
+  riskRemovedRatio: number
 }
 
 function clamp(value: number, min = 0, max = 1): number {
@@ -24,12 +24,12 @@ export class UIController {
   private readonly shipReason: HTMLElement
   private readonly phaseCaption: HTMLElement
 
-  private readonly metricRawViolation: HTMLElement
-  private readonly metricSafeViolation: HTMLElement
-  private readonly metricCorrection: HTMLElement
-  private readonly metricRawBar: HTMLElement
-  private readonly metricSafeBar: HTMLElement
-  private readonly metricCorrectionBar: HTMLElement
+  private readonly metricRawRisk: HTMLElement
+  private readonly metricValue: HTMLElement
+  private readonly metricRemoved: HTMLElement
+  private readonly metricRawRiskBar: HTMLElement
+  private readonly metricValueBar: HTMLElement
+  private readonly metricRemovedBar: HTMLElement
 
   constructor() {
     this.etaSlider = this.getElement<HTMLInputElement>('eta-slider')
@@ -40,12 +40,12 @@ export class UIController {
     this.shipReason = this.getElement('ship-reason')
     this.phaseCaption = this.getElement('phase-caption')
 
-    this.metricRawViolation = this.getElement('metric-raw-violation')
-    this.metricSafeViolation = this.getElement('metric-safe-violation')
-    this.metricCorrection = this.getElement('metric-correction')
-    this.metricRawBar = this.getElement('metric-raw-bar')
-    this.metricSafeBar = this.getElement('metric-safe-bar')
-    this.metricCorrectionBar = this.getElement('metric-correction-bar')
+    this.metricRawRisk = this.getElement('metric-raw-risk')
+    this.metricValue = this.getElement('metric-value')
+    this.metricRemoved = this.getElement('metric-removed')
+    this.metricRawRiskBar = this.getElement('metric-raw-risk-bar')
+    this.metricValueBar = this.getElement('metric-value-bar')
+    this.metricRemovedBar = this.getElement('metric-removed-bar')
 
     this.syncDisplayedControlValues()
   }
@@ -85,24 +85,24 @@ export class UIController {
     this.shipReason.textContent = frame.reason ?? 'No feasible projected step under current guardrails.'
     this.phaseCaption.textContent = frame.phaseText
 
-    const rawOvershootPct = Math.round(clamp(frame.rawOvershootRatio) * 100)
-    const safeRecoveredPct = Math.round(clamp(frame.safetyRecoveredRatio) * 100)
-    const correctionPct = Math.round(clamp(frame.correctionRatio) * 100)
+    const rawRiskPct = Math.round(clamp(frame.rawRiskRatio) * 100)
+    const retainedValuePct = Math.round(clamp(frame.retainedValueRatio) * 100)
+    const removedRiskPct = Math.round(clamp(frame.riskRemovedRatio) * 100)
 
-    this.metricRawViolation.textContent = `${rawOvershootPct}%`
-    this.metricRawBar.style.width = `${rawOvershootPct}%`
+    this.metricRawRisk.textContent = `${rawRiskPct}%`
+    this.metricRawRiskBar.style.width = `${rawRiskPct}%`
 
-    this.metricCorrection.textContent = `${correctionPct}%`
-    this.metricCorrectionBar.style.width = `${correctionPct}%`
+    this.metricValue.textContent = `${retainedValuePct}%`
+    this.metricValueBar.style.width = `${retainedValuePct}%`
 
-    this.metricSafeViolation.textContent = `${safeRecoveredPct}%`
-    this.metricSafeBar.style.width = `${safeRecoveredPct}%`
+    this.metricRemoved.textContent = `${removedRiskPct}%`
+    this.metricRemovedBar.style.width = `${removedRiskPct}%`
   }
 
   renderPressureModel(eta: number, strictness: number): void {
     const pressureLabel = eta < 0.95 ? 'Low pressure' : eta < 1.6 ? 'Balanced pressure' : 'High pressure'
     const guardrailLabel = strictness < 0.78 ? 'tight guardrails' : strictness < 1.08 ? 'standard guardrails' : 'wide guardrails'
-    this.pressureDetail.textContent = `${pressureLabel}: larger pushes move farther; ${guardrailLabel} set how much correction is needed.`
+    this.pressureDetail.textContent = `${pressureLabel}: larger patches move farther; ${guardrailLabel} control how strongly SafePatch must bend the update.`
   }
 
   private syncDisplayedControlValues(): void {

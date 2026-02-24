@@ -74,6 +74,22 @@ h1 {
   font-weight: 600;
 }
 
+.scenario-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.scenario-chip {
+  border: 1px solid #cdd9e8;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
+  padding: 4px 10px;
+  font-size: 0.7rem;
+  color: #44607f;
+  font-weight: 600;
+}
+
 .story-dot {
   width: 9px;
   height: 9px;
@@ -171,7 +187,10 @@ h1 {
   border: 1px solid var(--line-strong);
   border-radius: 14px;
   overflow: hidden;
-  background: #f9fcff;
+  background:
+    radial-gradient(120% 85% at 0% 0%, rgba(15, 97, 216, 0.05), transparent 62%),
+    radial-gradient(110% 85% at 100% 100%, rgba(10, 148, 106, 0.06), transparent 60%),
+    #f9fcff;
 }
 
 .scene {
@@ -251,7 +270,7 @@ input[type='range'] {
 .metric-card {
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: #fcfdff;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
   padding: 8px 9px;
   display: grid;
   gap: 6px;
@@ -305,6 +324,14 @@ input[type='range'] {
   color: #1b3758;
 }
 
+.metric-card.danger .metric-readout strong {
+  color: #a41d31;
+}
+
+.metric-card.success .metric-readout strong {
+  color: #0a7f5b;
+}
+
 .replay {
   border: 1px solid #9eb8de;
   border-radius: 999px;
@@ -337,6 +364,10 @@ input[type='range'] {
 
   .replay {
     width: fit-content;
+  }
+
+  .story-strip {
+    flex-wrap: wrap;
   }
 }
 

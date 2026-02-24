@@ -7,7 +7,6 @@ import {
   Vec2,
   add,
   lerp,
-  norm,
   normalize,
   scale,
   sub,
@@ -64,12 +63,12 @@ const STRICTNESS_SENSITIVITY: Record<string, number> = {
   g2: 0.95,
   g3: 0.64,
   g4: 0.58,
-  g5: 1.48,
+  g5: 1.62,
 }
 
-const AUTOPLAY_STEPS = [{ pressure: 0.14 }, { pressure: 0.9 }, { pressure: 0.52 }]
+const AUTOPLAY_STEPS = [{ pressure: 0.08 }, { pressure: 0.95 }, { pressure: 0.5 }]
 
-const CORE_EQUATION = String.raw`\Delta_0=-\eta g_{\mathrm{new}}\ \Longrightarrow\ \Delta^*=\Pi_{\mathcal S}(\Delta_0)`
+const CORE_EQUATION = String.raw`\text{Raw patch } \Delta_0 \ \xrightarrow{\text{SafePatch projection}}\ \Delta^*\in\mathcal S`
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(Math.max(value, min), max)
@@ -115,10 +114,10 @@ function degreesToRadians(value: number): number {
 
 function scenarioFromPressure(pressure: number): { eta: number; strictness: number; gradient: Vec2 } {
   const t = clamp(pressure)
-  const eta = 0.54 + t * 2.08
-  const strictness = 1.34 - t * 0.86
-  const angle = degreesToRadians(208 + t * 88)
-  const gradientMagnitude = 0.68 + t * 1.46
+  const eta = 0.46 + t * 2.3
+  const strictness = 1.36 - t * 0.92
+  const angle = degreesToRadians(176 + t * 158)
+  const gradientMagnitude = 0.66 + t * 1.82
   const gradient = scale(normalize(vec(Math.cos(angle), Math.sin(angle))), gradientMagnitude)
 
   return { eta, strictness, gradient }
@@ -143,21 +142,21 @@ function renderMathInline(elementId: string, expression: string): void {
 
 function boundScaleForStrictness(id: string, strictness: number): number {
   const sensitivity = STRICTNESS_SENSITIVITY[id] ?? 0.7
-  return clamp(1 + sensitivity * (strictness - 1), 0.42, 1.86)
+  return clamp(1 + sensitivity * (strictness - 1), 0.34, 1.86)
 }
 
 function phaseState(progress: number, ship: boolean): string {
   if (progress < 0.22) {
-    return 'A fast patch is generated from new training signals.'
+    return 'New support-ticket data proposes a raw model patch.'
   }
   if (progress < 0.52) {
-    return 'The raw patch crosses safety guardrails.'
+    return 'Raw patch overshoots safety budgets.'
   }
   if (progress < 0.86) {
-    return 'SafePatch computes the nearest shippable correction.'
+    return 'SafePatch projects to the nearest shippable patch.'
   }
   return ship
-    ? 'Corrected patch stays safe while preserving adaptation.'
+    ? 'Patch ships with behavior gain and guardrails intact.'
     : 'No feasible correction under current guardrails.'
 }
 
@@ -176,7 +175,7 @@ function start(): void {
   const renderer = new SceneRenderer(canvas)
   const ui = new UIController()
 
-  let pressure = 0.52
+  let pressure = 0.5
   let eta = scenarioFromPressure(pressure).eta
   let strictness = scenarioFromPressure(pressure).strictness
   let gradientNew = scenarioFromPressure(pressure).gradient
@@ -309,26 +308,22 @@ function start(): void {
     })
 
     const phaseText = phaseState(progress, projection.ship)
+    const largestBudget = Math.max(0.15, ...halfspaces.map((halfspace) => halfspace.bound))
+    const rawRiskRatio = Math.max(0, projection.maxViolationStep0) / largestBudget
+    const safeRiskRatio = Math.max(0, projection.maxViolationProjected) / largestBudget
+    const riskRemovedRatio = rawRiskRatio > 1e-6 ? (rawRiskRatio - safeRiskRatio) / rawRiskRatio : projection.ship ? 1 : 0
 
     ui.renderFrame({
       ship: projection.ship,
       reason: projection.ship
-        ? 'Projection succeeded. Guardrails remain satisfied.'
+        ? 'Ready to ship: patch gain preserved under safety limits.'
         : projection.reason?.toLowerCase().includes('empty')
           ? 'Guardrails conflict: no feasible ship zone.'
           : 'Unsafe patch blocked before deployment.',
       phaseText,
-      rawOvershootRatio:
-        Math.max(0, projection.maxViolationStep0) /
-        Math.max(0.08, norm(rawTarget)),
-      safetyRecoveredRatio: projection.ship
-        ? 1 -
-          Math.max(0, projection.maxViolationProjected) /
-            Math.max(0.08, Math.max(0, projection.maxViolationStep0))
-        : 0,
-      correctionRatio:
-        norm(sub(rawTarget, safeTarget)) /
-        Math.max(0.08, norm(rawTarget)),
+      rawRiskRatio,
+      retainedValueRatio: projection.descentRetainedRatio,
+      riskRemovedRatio,
     })
 
     if (progress > 0.995 && previousZone) {
