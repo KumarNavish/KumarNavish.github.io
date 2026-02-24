@@ -19,7 +19,7 @@ import { computeProjectedStep } from './qp'
 import { SceneRenderer, paletteForConstraints } from './render'
 import { UIController } from './ui'
 
-const TRANSITION_MS = 1400
+const TRANSITION_MS = 1320
 
 const baseHalfspaces: Halfspace[] = [
   {
@@ -67,9 +67,9 @@ const STRICTNESS_SENSITIVITY: Record<string, number> = {
   g5: 1.95,
 }
 
-const AUTOPLAY_STEPS = [{ pressure: 0.2 }, { pressure: 0.88 }, { pressure: 0.58 }]
+const AUTOPLAY_STEPS = [{ pressure: 0.14 }, { pressure: 0.92 }, { pressure: 0.48 }]
 
-const CORE_EQUATION = String.raw`\Delta_0 = -\eta g_{new}\;,\;\Delta^* = \Pi_{\mathcal S}(\Delta_0)`
+const CORE_EQUATION = String.raw`\Delta_0=-\eta g_{new},\quad \Delta^*=\arg\min_{\Delta\in\mathcal S}\|\Delta-\Delta_0\|_2`
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(Math.max(value, min), max)
@@ -115,10 +115,10 @@ function degreesToRadians(value: number): number {
 
 function scenarioFromPressure(pressure: number): { eta: number; strictness: number; gradient: Vec2 } {
   const t = clamp(pressure)
-  const eta = 0.72 + t * 1.2
-  const strictness = 1.24 - t * 0.54
-  const angle = degreesToRadians(-175 + t * 82)
-  const gradientMagnitude = 0.84 + t * 0.96
+  const eta = 0.55 + t * 1.55
+  const strictness = 1.32 - t * 0.72
+  const angle = degreesToRadians(-210 + t * 190)
+  const gradientMagnitude = 0.8 + t * 1.28
   const gradient = scale(normalize(vec(Math.cos(angle), Math.sin(angle))), gradientMagnitude)
 
   return { eta, strictness, gradient }
@@ -147,16 +147,16 @@ function boundScaleForStrictness(id: string, strictness: number): number {
 }
 
 function phaseStory(progress: number, ship: boolean): string {
-  if (progress < 0.2) {
-    return '1/3 Build feasible ship zone.'
+  if (progress < 0.22) {
+    return '1/3 Guardrails form the feasible zone.'
   }
-  if (progress < 0.53) {
-    return '2/3 Raw step launches and breaches.'
+  if (progress < 0.54) {
+    return '2/3 Raw update exits the zone.'
   }
   if (progress < 0.98) {
-    return '3/3 Projection lands on closest feasible step.'
+    return '3/3 Projection finds the nearest safe action.'
   }
-  return ship ? 'SHIP: blue step keeps intent while satisfying guardrails.' : 'HOLD: guardrails leave no feasible projected step.'
+  return ship ? 'SHIP: minimal correction, fully feasible.' : 'HOLD: no feasible step under current limits.'
 }
 
 function start(): void {
@@ -174,7 +174,7 @@ function start(): void {
   const renderer = new SceneRenderer(canvas)
   const ui = new UIController()
 
-  let pressure = 0.58
+  let pressure = 0.48
   let eta = scenarioFromPressure(pressure).eta
   let strictness = scenarioFromPressure(pressure).strictness
   let gradientNew = scenarioFromPressure(pressure).gradient
@@ -308,7 +308,11 @@ function start(): void {
 
     ui.renderFrame({
       ship: projection.ship,
-      reason: projection.ship ? 'Projected update is inside all guardrails.' : projection.reason,
+      reason: projection.ship
+        ? 'Projected step satisfies every guardrail.'
+        : projection.reason?.toLowerCase().includes('empty')
+          ? 'Guardrails conflict. No shippable step.'
+          : 'Raw step breaches guardrails.',
       phaseText: phaseStory(progress, projection.ship),
       maxViolationRaw: projection.maxViolationStep0,
       maxViolationSafe: projection.maxViolationProjected,

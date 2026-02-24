@@ -10,44 +10,47 @@
     <main class="app">
       <header class="title-block">
         <p class="eyebrow">SafePatch Geometry</p>
-        <h1>When an optimizer step breaks guardrails, project to the closest shippable step.</h1>
+        <h1>Unsafe optimizer move becomes the nearest safe move.</h1>
       </header>
 
       <section class="stage">
         <div class="scene-shell">
           <canvas id="scene-canvas" class="scene" aria-label="SafePatch projection scene"></canvas>
-        </div>
 
-        <aside class="control-dock">
-          <div class="status-row">
-            <span id="ship-indicator" class="indicator hold">HOLD</span>
-            <span id="ship-reason" class="ship-reason">Computing projection...</span>
-          </div>
-
-          <p id="phase-caption" class="phase-caption">Initializing animation...</p>
-
-          <div class="equation-wrap">
-            <span id="equation-chip" class="equation-chip"></span>
-          </div>
-
-          <label class="control">
-            <div class="control-head">
-              <span>Incident pressure</span>
-              <span id="eta-value" class="value">58%</span>
+          <div class="overlay overlay-top">
+            <div class="status-row">
+              <span id="ship-indicator" class="indicator hold">HOLD</span>
+              <span id="ship-reason" class="ship-reason">Computing projection...</span>
             </div>
-            <input id="eta-slider" type="range" min="0" max="1" step="0.001" value="0.58" />
-            <div class="control-scale"><span>calm</span><span>surge</span></div>
-            <p id="pressure-detail" class="pressure-detail">η = 1.30 · ε = 0.95x</p>
-          </label>
 
-          <div class="metrics">
-            <span class="metric-chip">raw breach <strong id="metric-raw-violation">+0.000</strong></span>
-            <span class="metric-chip">safe breach <strong id="metric-safe-violation">+0.000</strong></span>
-            <span class="metric-chip">projection shift <strong id="metric-correction">0.000</strong></span>
+            <div class="equation-wrap">
+              <span id="equation-chip" class="equation-chip"></span>
+            </div>
           </div>
 
-          <button id="replay-button" class="replay" type="button">Replay sequence</button>
-        </aside>
+          <div class="overlay overlay-bottom">
+            <label class="control">
+              <div class="control-head">
+                <span>Incident pressure</span>
+                <span id="eta-value" class="value">58%</span>
+              </div>
+              <input id="eta-slider" type="range" min="0" max="1" step="0.001" value="0.58" />
+              <div class="control-scale"><span>calm</span><span>surge</span></div>
+              <p id="pressure-detail" class="pressure-detail">eta = 1.30 · epsilon = 0.95x</p>
+            </label>
+
+            <div class="metrics">
+              <span class="metric-chip">raw breach <strong id="metric-raw-violation">+0.000</strong></span>
+              <span class="metric-chip">safe breach <strong id="metric-safe-violation">+0.000</strong></span>
+              <span class="metric-chip">projection shift <strong id="metric-correction">0.000</strong></span>
+            </div>
+
+            <div class="bottom-row">
+              <p id="phase-caption" class="phase-caption">Initializing animation...</p>
+              <button id="replay-button" class="replay" type="button">Replay</button>
+            </div>
+          </div>
+        </div>
       </section>
     </main>
 
