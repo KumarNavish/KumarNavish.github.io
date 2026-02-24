@@ -1,11 +1,9 @@
-import { Halfspace, Polygon, Vec2, add, norm, scale, sub, worldBoundsFromHalfspaces } from './geometry'
-
 interface ScreenPoint {
   x: number
   y: number
 }
 
-interface Viewport {
+interface Rect {
   x: number
   y: number
   width: number
@@ -13,34 +11,19 @@ interface Viewport {
 }
 
 export interface SceneRenderInput {
-  halfspaces: Halfspace[]
-  zone: Polygon
-  previousZone: Polygon | null
-  rawStep: Vec2
-  safeStep: Vec2
-  rawTarget: Vec2
-  safeTarget: Vec2
-  breachPoint: Vec2 | null
-  colorById: Record<string, string>
-  constraintForceById: Record<string, number>
-  violationRaw: number
-  rawRiskRatio: number
-  safeRiskRatio: number
-  retainedValueRatio: number
   queueRawSeries: number[]
   queueSafeSeries: number[]
   queueOverloadThreshold: number
-  zoneReveal: number
-  rawReveal: number
-  safeReveal: number
-  correctionProgress: number
+  rawRiskRatio: number
+  safeRiskRatio: number
+  retainedValueRatio: number
+  correctionRatio: number
   transitionProgress: number
 }
 
 const RAW_COLOR = '#d92d41'
 const SAFE_COLOR = '#0e5acf'
-const ZONE_STROKE = '#009b78'
-const LEGEND_TEXT = '#2a3f5c'
+const TEXT_COLOR = '#1e3655'
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(Math.max(value, min), max)
@@ -55,63 +38,18 @@ function withAlpha(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
-function polygonCentroid(polygon: Polygon): Vec2 | null {
-  if (polygon.vertices.length < 3) {
-    return null
-  }
-
-  let areaAccumulator = 0
-  let cxAccumulator = 0
-  let cyAccumulator = 0
-
-  for (let i = 0; i < polygon.vertices.length; i += 1) {
-    const a = polygon.vertices[i]
-    const b = polygon.vertices[(i + 1) % polygon.vertices.length]
-    const cross = a.x * b.y - b.x * a.y
-
-    areaAccumulator += cross
-    cxAccumulator += (a.x + b.x) * cross
-    cyAccumulator += (a.y + b.y) * cross
-  }
-
-  const area = areaAccumulator / 2
-  if (Math.abs(area) <= 1e-8) {
-    return null
-  }
-
-  return {
-    x: cxAccumulator / (6 * area),
-    y: cyAccumulator / (6 * area),
-  }
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t
 }
 
-function morphPolygon(zone: Polygon, reveal: number): Polygon {
-  const centroid = polygonCentroid(zone)
-  if (!centroid || zone.vertices.length < 3) {
-    return zone
+function interpolateSeries(series: number[], indexFloat: number): number {
+  if (series.length === 0) {
+    return 0
   }
-
-  const t = clamp(reveal)
-  return {
-    isEmpty: zone.isEmpty,
-    vertices: zone.vertices.map((vertex) => ({
-      x: centroid.x + (vertex.x - centroid.x) * t,
-      y: centroid.y + (vertex.y - centroid.y) * t,
-    })),
-  }
-}
-
-function cubicBezierPoint(a: Vec2, c1: Vec2, c2: Vec2, b: Vec2, t: number): Vec2 {
-  const u = 1 - t
-  const tt = t * t
-  const uu = u * u
-  const uuu = uu * u
-  const ttt = tt * t
-
-  return {
-    x: uuu * a.x + 3 * uu * t * c1.x + 3 * u * tt * c2.x + ttt * b.x,
-    y: uuu * a.y + 3 * uu * t * c1.y + 3 * u * tt * c2.y + ttt * b.y,
-  }
+  const i0 = Math.floor(indexFloat)
+  const i1 = Math.min(series.length - 1, i0 + 1)
+  const t = indexFloat - i0
+  return lerp(series[i0], series[i1], t)
 }
 
 export class SceneRenderer {
@@ -146,602 +84,280 @@ export class SceneRenderer {
     ctx.clearRect(0, 0, width, height)
 
     const background = ctx.createLinearGradient(0, 0, 0, height)
-    background.addColorStop(0, '#fbfdff')
-    background.addColorStop(1, '#edf3f8')
+    background.addColorStop(0, '#fcfdff')
+    background.addColorStop(1, '#eef4fb')
     ctx.fillStyle = background
     ctx.fillRect(0, 0, width, height)
 
-    const ambient = ctx.createRadialGradient(width * 0.16, height * 0.16, 0, width * 0.2, height * 0.22, width * 0.72)
-    ambient.addColorStop(0, 'rgba(15, 97, 216, 0.06)')
-    ambient.addColorStop(1, 'rgba(15, 97, 216, 0)')
-    ctx.fillStyle = ambient
-    ctx.fillRect(0, 0, width, height)
-
-    const frame: Viewport = {
+    const panel: Rect = {
       x: 18,
       y: 18,
       width: width - 36,
       height: height - 36,
     }
 
-    const content: Viewport = {
-      x: frame.x + 10,
-      y: frame.y + 10,
-      width: frame.width - 20,
-      height: frame.height - 20,
+    ctx.beginPath()
+    ctx.roundRect(panel.x, panel.y, panel.width, panel.height, 14)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.74)'
+    ctx.strokeStyle = 'rgba(133, 153, 179, 0.4)'
+    ctx.lineWidth = 1
+    ctx.fill()
+    ctx.stroke()
+
+    this.drawChip(
+      panel.x + 14,
+      panel.y + 12,
+      'raw unsafe risk',
+      `${Math.round(clamp(input.rawRiskRatio) * 100)}%`,
+      RAW_COLOR,
+    )
+    this.drawChip(
+      panel.x + 152,
+      panel.y + 12,
+      'SafePatch risk',
+      `${Math.round(clamp(input.safeRiskRatio) * 100)}%`,
+      '#0a8b64',
+    )
+    this.drawChip(
+      panel.x + 282,
+      panel.y + 12,
+      'patch gain kept',
+      `${Math.round(clamp(input.retainedValueRatio) * 100)}%`,
+      SAFE_COLOR,
+    )
+
+    const chart: Rect = {
+      x: panel.x + 28,
+      y: panel.y + 66,
+      width: panel.width - 56,
+      height: panel.height - 110,
     }
 
-    const boundRadius = worldBoundsFromHalfspaces(input.halfspaces)
-    const stepRadius = Math.max(norm(input.rawTarget), norm(input.safeTarget), norm(input.rawStep), norm(input.safeStep), 0.9)
-    const worldRadius = Math.max(boundRadius * 2, stepRadius * 1.72, 1.6)
-    const scalePx = Math.min(content.width, content.height) / (2 * worldRadius)
-    const centerX = content.x + content.width / 2
-    const centerY = content.y + content.height / 2
-
-    const toScreen = (point: Vec2): ScreenPoint => ({
-      x: centerX + point.x * scalePx,
-      y: centerY - point.y * scalePx,
-    })
-
-    this.drawGrid(toScreen, content, worldRadius)
-    this.drawLegend(content)
-    this.drawQueueReplayPanel(
-      content,
-      input.queueRawSeries,
-      input.queueSafeSeries,
+    const maxValue = Math.max(
       input.queueOverloadThreshold,
-      input.transitionProgress,
+      ...input.queueRawSeries,
+      ...input.queueSafeSeries,
+      1,
     )
 
-    if (input.previousZone && input.previousZone.vertices.length >= 3 && input.transitionProgress < 0.96) {
-      this.drawZone(toScreen, input.previousZone, withAlpha('#8f9caf', 0.06), withAlpha('#8290a4', 0.22), true)
-    }
-
-    const displayedZone = morphPolygon(input.zone, 0.12 + input.zoneReveal * 0.88)
-    this.drawZone(
-      toScreen,
-      displayedZone,
-      withAlpha('#0bbf98', 0.15 + input.zoneReveal * 0.07),
-      withAlpha(ZONE_STROKE, 0.45 + input.zoneReveal * 0.45),
-      false,
-    )
-
-    const activeBoundaries = input.halfspaces
-      .map((halfspace) => ({
-        halfspace,
-        emphasis: clamp(input.constraintForceById[halfspace.id] ?? 0),
-      }))
-      .filter((entry) => entry.halfspace.active && entry.emphasis > 0.05)
-      .sort((a, b) => b.emphasis - a.emphasis)
-      .slice(0, 1)
-
-    for (const entry of activeBoundaries) {
-      this.drawActiveBoundary(
-        toScreen,
-        worldRadius,
-        entry.halfspace,
-        input.colorById[entry.halfspace.id] ?? '#6c86ab',
-        entry.emphasis,
-      )
-    }
-
-    this.drawOriginPulse(toScreen({ x: 0, y: 0 }), 1 - clamp(input.transitionProgress))
-
-    if (input.rawReveal > 0.02) {
-      this.drawArrow(toScreen, { x: 0, y: 0 }, input.rawStep, RAW_COLOR, 4.15, 0.96)
-      this.drawVectorGhost(toScreen, input.rawStep, input.rawTarget, RAW_COLOR, 0.3)
-      this.drawPoint(toScreen(scale(input.rawTarget, clamp(input.rawReveal))), RAW_COLOR, 3.7)
-      this.drawPoint(toScreen(input.rawStep), RAW_COLOR, 4.6)
-    }
-
-    const correctionNorm = norm(sub(input.safeTarget, input.rawTarget))
-    if (input.safeReveal > 0.01 && correctionNorm > 1e-5) {
-      this.drawCorrectionCurve(toScreen, input.rawTarget, input.safeTarget, input.correctionProgress)
-    }
-
-    if (input.safeReveal > 0.02) {
-      this.drawArrow(toScreen, { x: 0, y: 0 }, input.safeStep, SAFE_COLOR, 4.35, 0.98)
-      this.drawVectorGhost(toScreen, input.safeStep, input.safeTarget, SAFE_COLOR, 0.24)
-      this.drawPoint(toScreen(input.safeStep), SAFE_COLOR, 5)
-      this.drawSafeHalo(toScreen(input.safeStep), input.safeReveal)
-    }
-
-    if (input.violationRaw > 1e-6 && input.rawReveal > 0.08 && norm(input.rawStep) > 0.09) {
-      this.drawViolationPulse(toScreen(input.rawStep), clamp(input.rawReveal))
-    }
-
-    if (input.breachPoint && input.rawReveal > 0.12) {
-      const intensity = clamp((0.18 + input.violationRaw * 2.4) * input.rawReveal)
-      this.drawBreachPulse(toScreen(input.breachPoint), intensity)
-    }
-  }
-
-  private drawGrid(toScreen: (point: Vec2) => ScreenPoint, content: Viewport, worldRadius: number): void {
-    const ctx = this.ctx
-    const step = worldRadius / 4
-
-    ctx.strokeStyle = 'rgba(54, 73, 98, 0.11)'
-    ctx.lineWidth = 1
-
-    for (let i = -3; i <= 3; i += 1) {
-      const coordinate = i * step
-
-      const verticalStart = toScreen({ x: coordinate, y: -worldRadius })
-      const verticalEnd = toScreen({ x: coordinate, y: worldRadius })
-      ctx.beginPath()
-      ctx.moveTo(verticalStart.x, verticalStart.y)
-      ctx.lineTo(verticalEnd.x, verticalEnd.y)
-      ctx.stroke()
-
-      const horizontalStart = toScreen({ x: -worldRadius, y: coordinate })
-      const horizontalEnd = toScreen({ x: worldRadius, y: coordinate })
-      ctx.beginPath()
-      ctx.moveTo(horizontalStart.x, horizontalStart.y)
-      ctx.lineTo(horizontalEnd.x, horizontalEnd.y)
-      ctx.stroke()
-    }
-
-    ctx.strokeStyle = 'rgba(45, 63, 86, 0.24)'
-    ctx.lineWidth = 1.45
-
-    const xStart = toScreen({ x: -worldRadius, y: 0 })
-    const xEnd = toScreen({ x: worldRadius, y: 0 })
-    ctx.beginPath()
-    ctx.moveTo(xStart.x, xStart.y)
-    ctx.lineTo(xEnd.x, xEnd.y)
-    ctx.stroke()
-
-    const yStart = toScreen({ x: 0, y: -worldRadius })
-    const yEnd = toScreen({ x: 0, y: worldRadius })
-    ctx.beginPath()
-    ctx.moveTo(yStart.x, yStart.y)
-    ctx.lineTo(yEnd.x, yEnd.y)
-    ctx.stroke()
-
-    ctx.strokeStyle = 'rgba(88, 105, 130, 0.2)'
-    ctx.lineWidth = 1
-    ctx.strokeRect(content.x, content.y, content.width, content.height)
-  }
-
-  private drawLegend(content: Viewport): void {
-    const ctx = this.ctx
-    const x = content.x + 10
-    const y = content.y + 10
-    const width = 236
-    const height = 48
-
-    ctx.beginPath()
-    ctx.roundRect(x, y, width, height, 10)
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.84)'
-    ctx.strokeStyle = 'rgba(150, 167, 190, 0.45)'
-    ctx.lineWidth = 1
-    ctx.fill()
-    ctx.stroke()
-
-    ctx.font = '700 11px "Space Grotesk", sans-serif'
-    ctx.fillStyle = LEGEND_TEXT
-    ctx.fillText('SHIP ZONE', x + 10, y + 15)
-
-    ctx.beginPath()
-    ctx.moveTo(x + 11, y + 28)
-    ctx.lineTo(x + 31, y + 28)
-    ctx.strokeStyle = withAlpha(RAW_COLOR, 0.9)
-    ctx.lineWidth = 2.3
-    ctx.stroke()
-
-    ctx.fillStyle = LEGEND_TEXT
-    ctx.fillText('raw patch', x + 36, y + 31)
-
-    ctx.beginPath()
-    ctx.moveTo(x + 117, y + 28)
-    ctx.lineTo(x + 137, y + 28)
-    ctx.strokeStyle = withAlpha(SAFE_COLOR, 0.92)
-    ctx.lineWidth = 2.4
-    ctx.stroke()
-
-    ctx.fillText('SafePatch', x + 142, y + 31)
-  }
-
-  private drawQueueReplayPanel(
-    content: Viewport,
-    rawSeries: number[],
-    safeSeries: number[],
-    overloadThreshold: number,
-    progress: number,
-  ): void {
-    const ctx = this.ctx
-    const width = 260
-    const height = 148
-    const x = content.x + content.width - width - 10
-    const y = content.y + content.height - height - 12
-
-    ctx.beginPath()
-    ctx.roundRect(x, y, width, height, 10)
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.88)'
-    ctx.strokeStyle = 'rgba(150, 167, 190, 0.42)'
-    ctx.lineWidth = 1
-    ctx.fill()
-    ctx.stroke()
-
-    ctx.font = '700 10px "Space Grotesk", sans-serif'
-    ctx.fillStyle = LEGEND_TEXT
-    ctx.fillText('INCIDENT QUEUE REPLAY (MINUTE-BY-MINUTE)', x + 10, y + 16)
-
-    const chartX = x + 10
-    const chartY = y + 24
-    const chartW = width - 20
-    const chartH = height - 32
-
-    const maxValue = Math.max(1, overloadThreshold, ...rawSeries, ...safeSeries)
-    const t = clamp((progress - 0.08) / 0.92)
-
-    const mapX = (index: number, length: number): number =>
-      chartX + (index / Math.max(1, length - 1)) * chartW
+    const mapX = (indexFloat: number, length: number): number =>
+      chart.x + (indexFloat / Math.max(1, length - 1)) * chart.width
 
     const mapY = (value: number): number =>
-      chartY + chartH - (value / maxValue) * chartH
+      chart.y + chart.height - (value / (maxValue * 1.08)) * chart.height
+
+    const thresholdY = mapY(input.queueOverloadThreshold)
 
     ctx.save()
     ctx.beginPath()
-    ctx.rect(chartX, chartY, chartW, chartH)
+    ctx.rect(chart.x, chart.y, chart.width, chart.height)
     ctx.clip()
 
-    ctx.beginPath()
-    ctx.moveTo(chartX, mapY(overloadThreshold))
-    ctx.lineTo(chartX + chartW, mapY(overloadThreshold))
-    ctx.strokeStyle = 'rgba(217, 45, 65, 0.45)'
-    ctx.lineWidth = 1.2
-    ctx.setLineDash([4, 4])
-    ctx.stroke()
-    ctx.setLineDash([])
+    ctx.fillStyle = 'rgba(217, 45, 65, 0.08)'
+    ctx.fillRect(chart.x, chart.y, chart.width, Math.max(0, thresholdY - chart.y))
 
-    this.drawSeries(chartX, chartW, rawSeries, mapX, mapY, t, '#d92d41', 2.2)
-    this.drawSeries(chartX, chartW, safeSeries, mapX, mapY, t, '#0e5acf', 2.3)
-
-    ctx.restore()
-
-    ctx.font = '600 10px "Space Grotesk", sans-serif'
-    ctx.fillStyle = '#516a88'
-    ctx.fillText('overload threshold', chartX + 4, mapY(overloadThreshold) - 5)
-    ctx.fillText('raw', chartX + 6, chartY + 11)
-    ctx.fillStyle = '#d92d41'
-    ctx.fillRect(chartX + 33, chartY + 6, 14, 2)
-
-    ctx.fillStyle = '#516a88'
-    ctx.fillText('SafePatch', chartX + 58, chartY + 11)
-    ctx.fillStyle = '#0e5acf'
-    ctx.fillRect(chartX + 112, chartY + 6, 18, 2)
-  }
-
-  private drawSeries(
-    chartX: number,
-    chartW: number,
-    series: number[],
-    mapX: (index: number, length: number) => number,
-    mapY: (value: number) => number,
-    progress: number,
-    color: string,
-    width: number,
-  ): void {
-    const ctx = this.ctx
-    const length = series.length
-    if (length < 2) {
-      return
-    }
-
-    const scaledIndex = progress * (length - 1)
-    const fullSteps = Math.floor(scaledIndex)
-    const fraction = scaledIndex - fullSteps
-
-    ctx.beginPath()
-    ctx.moveTo(mapX(0, length), mapY(series[0]))
-
-    for (let i = 1; i <= fullSteps; i += 1) {
-      ctx.lineTo(mapX(i, length), mapY(series[i]))
-    }
-
-    if (fullSteps < length - 1) {
-      const x0 = mapX(fullSteps, length)
-      const y0 = mapY(series[fullSteps])
-      const x1 = mapX(fullSteps + 1, length)
-      const y1 = mapY(series[fullSteps + 1])
-      ctx.lineTo(x0 + (x1 - x0) * fraction, y0 + (y1 - y0) * fraction)
-    }
-
-    ctx.strokeStyle = withAlpha(color, 0.9)
-    ctx.lineWidth = width
-    ctx.stroke()
-
-    const markerX = chartX + chartW * progress
-    const markerValue =
-      fullSteps < length - 1
-        ? series[fullSteps] + (series[fullSteps + 1] - series[fullSteps]) * fraction
-        : series[length - 1]
-
-    ctx.beginPath()
-    ctx.arc(markerX, mapY(markerValue), 3.7, 0, Math.PI * 2)
-    ctx.fillStyle = withAlpha(color, 0.95)
-    ctx.fill()
-  }
-
-  private drawZone(
-    toScreen: (point: Vec2) => ScreenPoint,
-    zone: Polygon,
-    fill: string,
-    stroke: string,
-    dashed: boolean,
-  ): void {
-    if (zone.vertices.length < 3) {
-      return
-    }
-
-    const ctx = this.ctx
-    ctx.beginPath()
-
-    zone.vertices.forEach((vertex, index) => {
-      const p = toScreen(vertex)
-      if (index === 0) {
-        ctx.moveTo(p.x, p.y)
-      } else {
-        ctx.lineTo(p.x, p.y)
-      }
-    })
-
-    ctx.closePath()
-    ctx.fillStyle = fill
-    ctx.fill()
-
-    ctx.strokeStyle = stroke
-    ctx.lineWidth = 2.2
-    ctx.setLineDash(dashed ? [7, 7] : [])
-    ctx.stroke()
-    ctx.setLineDash([])
-  }
-
-  private drawActiveBoundary(
-    toScreen: (point: Vec2) => ScreenPoint,
-    worldRadius: number,
-    halfspace: Halfspace,
-    color: string,
-    emphasis: number,
-  ): void {
-    const normal = halfspace.normal
-    const direction = { x: -normal.y, y: normal.x }
-    const center = { x: normal.x * halfspace.bound, y: normal.y * halfspace.bound }
-
-    const start = {
-      x: center.x - direction.x * worldRadius * 1.8,
-      y: center.y - direction.y * worldRadius * 1.8,
-    }
-    const end = {
-      x: center.x + direction.x * worldRadius * 1.8,
-      y: center.y + direction.y * worldRadius * 1.8,
-    }
-
-    const a = toScreen(start)
-    const b = toScreen(end)
-
-    const ctx = this.ctx
-    ctx.beginPath()
-    ctx.moveTo(a.x, a.y)
-    ctx.lineTo(b.x, b.y)
-    ctx.strokeStyle = withAlpha(color, 0.22 + emphasis * 0.52)
-    ctx.lineWidth = 1.2 + emphasis * 2.4
-    ctx.stroke()
-  }
-
-  private drawOriginPulse(point: ScreenPoint, intensity: number): void {
-    const ctx = this.ctx
-    const pulse = 14 * clamp(intensity)
-
-    if (pulse > 0.2) {
+    for (let i = 0; i <= 4; i += 1) {
+      const y = chart.y + (i / 4) * chart.height
       ctx.beginPath()
-      ctx.arc(point.x, point.y, 8 + pulse, 0, Math.PI * 2)
-      ctx.strokeStyle = `rgba(68, 95, 127, ${0.22 * clamp(intensity)})`
-      ctx.lineWidth = 1.4
+      ctx.moveTo(chart.x, y)
+      ctx.lineTo(chart.x + chart.width, y)
+      ctx.strokeStyle = 'rgba(72, 97, 127, 0.14)'
+      ctx.lineWidth = 1
       ctx.stroke()
     }
 
     ctx.beginPath()
-    ctx.arc(point.x, point.y, 4.2, 0, Math.PI * 2)
-    ctx.fillStyle = '#1c2d40'
+    ctx.moveTo(chart.x, thresholdY)
+    ctx.lineTo(chart.x + chart.width, thresholdY)
+    ctx.strokeStyle = 'rgba(217, 45, 65, 0.75)'
+    ctx.lineWidth = 1.3
+    ctx.setLineDash([5, 5])
+    ctx.stroke()
+    ctx.setLineDash([])
+
+    this.drawSeriesGhost(mapX, mapY, input.queueRawSeries, RAW_COLOR)
+    this.drawSeriesGhost(mapX, mapY, input.queueSafeSeries, SAFE_COLOR)
+
+    const rawReveal = clamp(input.transitionProgress / 0.56)
+    const safeReveal = clamp((input.transitionProgress - 0.42) / 0.58)
+
+    this.drawAvoidedArea(mapX, mapY, input.queueRawSeries, input.queueSafeSeries, Math.min(rawReveal, safeReveal))
+
+    const rawPoint = this.drawSeries(mapX, mapY, input.queueRawSeries, rawReveal, RAW_COLOR, 2.5)
+    const safePoint = this.drawSeries(mapX, mapY, input.queueSafeSeries, safeReveal, SAFE_COLOR, 2.6)
+
+    const markerProgress = Math.max(rawReveal, safeReveal)
+    const markerX = mapX(markerProgress * (input.queueRawSeries.length - 1), input.queueRawSeries.length)
+    ctx.beginPath()
+    ctx.moveTo(markerX, chart.y)
+    ctx.lineTo(markerX, chart.y + chart.height)
+    ctx.strokeStyle = 'rgba(60, 82, 111, 0.36)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+
+    if (rawPoint) {
+      this.drawGlow(rawPoint, RAW_COLOR, 11)
+    }
+    if (safePoint) {
+      this.drawGlow(safePoint, SAFE_COLOR, 11)
+    }
+
+    ctx.restore()
+
+    ctx.font = '600 11px "Space Grotesk", sans-serif'
+    ctx.fillStyle = '#4f6685'
+    ctx.fillText('SLA overload threshold', chart.x + 8, thresholdY - 6)
+    ctx.fillText('minute 0', chart.x, chart.y + chart.height + 18)
+    ctx.fillText(`minute ${input.queueRawSeries.length - 1}`, chart.x + chart.width - 58, chart.y + chart.height + 18)
+
+    const avoidedLoad = Math.max(0, Math.round((input.correctionRatio * 1000 + (input.rawRiskRatio - input.safeRiskRatio) * 550)))
+    ctx.fillStyle = TEXT_COLOR
+    ctx.font = '700 12px "Space Grotesk", sans-serif'
+    ctx.fillText(`avoided overload load: ${avoidedLoad.toLocaleString()} tickets`, chart.x, panel.y + panel.height - 16)
+  }
+
+  private drawChip(x: number, y: number, label: string, value: string, color: string): void {
+    const ctx = this.ctx
+    const width = 124
+    const height = 38
+
+    ctx.beginPath()
+    ctx.roundRect(x, y, width, height, 10)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.92)'
+    ctx.strokeStyle = 'rgba(147, 164, 187, 0.45)'
+    ctx.lineWidth = 1
+    ctx.fill()
+    ctx.stroke()
+
+    ctx.font = '600 10px "Space Grotesk", sans-serif'
+    ctx.fillStyle = '#4b6382'
+    ctx.fillText(label, x + 8, y + 14)
+
+    ctx.font = '700 13px "Manrope", sans-serif'
+    ctx.fillStyle = color
+    ctx.fillText(value, x + 8, y + 30)
+  }
+
+  private drawSeriesGhost(
+    mapX: (indexFloat: number, length: number) => number,
+    mapY: (value: number) => number,
+    series: number[],
+    color: string,
+  ): void {
+    const ctx = this.ctx
+    if (series.length < 2) {
+      return
+    }
+
+    ctx.beginPath()
+    ctx.moveTo(mapX(0, series.length), mapY(series[0]))
+    for (let i = 1; i < series.length; i += 1) {
+      ctx.lineTo(mapX(i, series.length), mapY(series[i]))
+    }
+
+    ctx.strokeStyle = withAlpha(color, 0.18)
+    ctx.lineWidth = 1.1
+    ctx.stroke()
+  }
+
+  private drawSeries(
+    mapX: (indexFloat: number, length: number) => number,
+    mapY: (value: number) => number,
+    series: number[],
+    reveal: number,
+    color: string,
+    width: number,
+  ): ScreenPoint | null {
+    if (series.length < 2) {
+      return null
+    }
+
+    const ctx = this.ctx
+    const progress = clamp(reveal)
+    const maxIndexFloat = progress * (series.length - 1)
+    const fullIndex = Math.floor(maxIndexFloat)
+    const frac = maxIndexFloat - fullIndex
+
+    ctx.beginPath()
+    ctx.moveTo(mapX(0, series.length), mapY(series[0]))
+
+    for (let i = 1; i <= fullIndex; i += 1) {
+      ctx.lineTo(mapX(i, series.length), mapY(series[i]))
+    }
+
+    if (fullIndex < series.length - 1) {
+      const x0 = mapX(fullIndex, series.length)
+      const y0 = mapY(series[fullIndex])
+      const x1 = mapX(fullIndex + 1, series.length)
+      const y1 = mapY(series[fullIndex + 1])
+      ctx.lineTo(lerp(x0, x1, frac), lerp(y0, y1, frac))
+    }
+
+    ctx.strokeStyle = withAlpha(color, 0.95)
+    ctx.lineWidth = width
+    ctx.stroke()
+
+    const markerValue = interpolateSeries(series, maxIndexFloat)
+    const marker: ScreenPoint = {
+      x: mapX(maxIndexFloat, series.length),
+      y: mapY(markerValue),
+    }
+
+    ctx.beginPath()
+    ctx.arc(marker.x, marker.y, 4, 0, Math.PI * 2)
+    ctx.fillStyle = withAlpha(color, 0.98)
+    ctx.fill()
+
+    return marker
+  }
+
+  private drawAvoidedArea(
+    mapX: (indexFloat: number, length: number) => number,
+    mapY: (value: number) => number,
+    rawSeries: number[],
+    safeSeries: number[],
+    reveal: number,
+  ): void {
+    const progress = clamp(reveal)
+    if (rawSeries.length < 2 || safeSeries.length < 2 || progress < 0.08) {
+      return
+    }
+
+    const ctx = this.ctx
+    const samples = 40
+    const maxIndexFloat = progress * (rawSeries.length - 1)
+
+    const rawPts: ScreenPoint[] = []
+    const safePts: ScreenPoint[] = []
+
+    for (let i = 0; i <= samples; i += 1) {
+      const idxFloat = (i / samples) * maxIndexFloat
+      const rawValue = interpolateSeries(rawSeries, idxFloat)
+      const safeValue = interpolateSeries(safeSeries, idxFloat)
+
+      rawPts.push({ x: mapX(idxFloat, rawSeries.length), y: mapY(rawValue) })
+      safePts.push({ x: mapX(idxFloat, safeSeries.length), y: mapY(safeValue) })
+    }
+
+    ctx.beginPath()
+    ctx.moveTo(rawPts[0].x, rawPts[0].y)
+    for (const point of rawPts) {
+      ctx.lineTo(point.x, point.y)
+    }
+    for (let i = safePts.length - 1; i >= 0; i -= 1) {
+      ctx.lineTo(safePts[i].x, safePts[i].y)
+    }
+    ctx.closePath()
+
+    ctx.fillStyle = 'rgba(14, 90, 207, 0.09)'
     ctx.fill()
   }
 
-  private drawPoint(point: ScreenPoint, color: string, radius: number): void {
+  private drawGlow(point: ScreenPoint, color: string, radius: number): void {
     const ctx = this.ctx
-    ctx.shadowColor = withAlpha(color, 0.35)
-    ctx.shadowBlur = 10
     ctx.beginPath()
     ctx.arc(point.x, point.y, radius, 0, Math.PI * 2)
-    ctx.fillStyle = withAlpha(color, 0.96)
-    ctx.fill()
-    ctx.shadowBlur = 0
-  }
-
-  private drawArrow(
-    toScreen: (point: Vec2) => ScreenPoint,
-    from: Vec2,
-    to: Vec2,
-    colorHex: string,
-    width: number,
-    opacity: number,
-    dash: number[] = [],
-  ): void {
-    const start = toScreen(from)
-    const end = toScreen(to)
-
-    const delta = { x: end.x - start.x, y: end.y - start.y }
-    const length = Math.hypot(delta.x, delta.y)
-    if (length < 1e-6) {
-      return
-    }
-
-    const dir = { x: delta.x / length, y: delta.y / length }
-    const normal = { x: -dir.y, y: dir.x }
-
-    const ctx = this.ctx
-    const clampedOpacity = clamp(opacity, 0, 1)
-    const color = withAlpha(colorHex, clampedOpacity)
-    const gradient = ctx.createLinearGradient(start.x, start.y, end.x, end.y)
-    gradient.addColorStop(0, withAlpha(colorHex, clampedOpacity * 0.42))
-    gradient.addColorStop(1, withAlpha(colorHex, clampedOpacity))
-
-    ctx.beginPath()
-    ctx.moveTo(start.x, start.y)
-    ctx.lineTo(end.x, end.y)
-    ctx.strokeStyle = gradient
-    ctx.lineWidth = width
-    ctx.lineCap = 'round'
-    ctx.shadowColor = withAlpha(colorHex, clampedOpacity * 0.42)
-    ctx.shadowBlur = 14
-    ctx.setLineDash(dash)
-    ctx.stroke()
-    ctx.setLineDash([])
-    ctx.shadowBlur = 0
-
-    const head = Math.max(9, width * 2.25)
-    const left = {
-      x: end.x - dir.x * head + normal.x * (head * 0.6),
-      y: end.y - dir.y * head + normal.y * (head * 0.6),
-    }
-    const right = {
-      x: end.x - dir.x * head - normal.x * (head * 0.6),
-      y: end.y - dir.y * head - normal.y * (head * 0.6),
-    }
-
-    ctx.beginPath()
-    ctx.moveTo(end.x, end.y)
-    ctx.lineTo(left.x, left.y)
-    ctx.lineTo(right.x, right.y)
-    ctx.closePath()
-    ctx.fillStyle = color
+    ctx.fillStyle = withAlpha(color, 0.16)
     ctx.fill()
   }
-
-  private drawVectorGhost(
-    toScreen: (point: Vec2) => ScreenPoint,
-    current: Vec2,
-    target: Vec2,
-    color: string,
-    opacity: number,
-  ): void {
-    const delta = sub(target, current)
-    if (norm(delta) < 1e-4) {
-      return
-    }
-
-    const ctx = this.ctx
-    const start = toScreen(current)
-    const end = toScreen(target)
-    ctx.beginPath()
-    ctx.moveTo(start.x, start.y)
-    ctx.lineTo(end.x, end.y)
-    ctx.strokeStyle = withAlpha(color, opacity)
-    ctx.lineWidth = 1.4
-    ctx.setLineDash([4, 6])
-    ctx.stroke()
-    ctx.setLineDash([])
-  }
-
-  private drawCorrectionCurve(
-    toScreen: (point: Vec2) => ScreenPoint,
-    rawTarget: Vec2,
-    safeTarget: Vec2,
-    progress: number,
-  ): void {
-    const delta = sub(safeTarget, rawTarget)
-    const distance = norm(delta)
-    if (distance <= 1e-6) {
-      return
-    }
-
-    const direction = scale(delta, 1 / distance)
-    const normal = { x: -direction.y, y: direction.x }
-
-    const c1 = add(rawTarget, add(scale(direction, distance * 0.24), scale(normal, distance * 0.34)))
-    const c2 = add(rawTarget, add(scale(direction, distance * 0.72), scale(normal, distance * 0.16)))
-
-    const ctx = this.ctx
-    const p0 = toScreen(rawTarget)
-    const p1 = toScreen(c1)
-    const p2 = toScreen(c2)
-    const p3 = toScreen(safeTarget)
-
-    ctx.beginPath()
-    ctx.moveTo(p0.x, p0.y)
-    ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y)
-    ctx.strokeStyle = 'rgba(77, 101, 133, 0.74)'
-    ctx.lineWidth = 1.9
-    ctx.setLineDash([5, 5])
-    ctx.lineDashOffset = -clamp(progress) * 24
-    ctx.stroke()
-    ctx.setLineDash([])
-    ctx.lineDashOffset = 0
-
-    const markerWorld = cubicBezierPoint(rawTarget, c1, c2, safeTarget, clamp(progress))
-    const marker = toScreen(markerWorld)
-
-    ctx.beginPath()
-    ctx.arc(marker.x, marker.y, 4.2, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(42, 63, 93, 0.94)'
-    ctx.fill()
-  }
-
-  private drawBreachPulse(point: ScreenPoint, intensity: number): void {
-    const ctx = this.ctx
-    const alpha = clamp(intensity, 0, 1)
-
-    ctx.beginPath()
-    ctx.arc(point.x, point.y, 11 + alpha * 14, 0, Math.PI * 2)
-    ctx.fillStyle = `rgba(217, 45, 65, ${0.09 + alpha * 0.16})`
-    ctx.fill()
-
-    ctx.beginPath()
-    ctx.arc(point.x, point.y, 8 + alpha * 18, 0, Math.PI * 2)
-    ctx.strokeStyle = `rgba(217, 45, 65, ${0.25 + alpha * 0.3})`
-    ctx.lineWidth = 1.4 + alpha * 1.3
-    ctx.stroke()
-  }
-
-  private drawViolationPulse(point: ScreenPoint, intensity: number): void {
-    const ctx = this.ctx
-    const alpha = 0.25 + 0.32 * clamp(intensity)
-
-    ctx.beginPath()
-    ctx.arc(point.x, point.y, 11, 0, Math.PI * 2)
-    ctx.strokeStyle = `rgba(217, 45, 65, ${alpha})`
-    ctx.lineWidth = 2
-    ctx.stroke()
-
-    ctx.beginPath()
-    ctx.arc(point.x, point.y, 17, 0, Math.PI * 2)
-    ctx.strokeStyle = `rgba(217, 45, 65, ${alpha * 0.44})`
-    ctx.lineWidth = 1.2
-    ctx.stroke()
-  }
-
-  private drawSafeHalo(point: ScreenPoint, reveal: number): void {
-    const ctx = this.ctx
-    const ring = (1 - clamp(reveal)) * 13
-    if (ring <= 0.2) {
-      return
-    }
-
-    ctx.beginPath()
-    ctx.arc(point.x, point.y, 9.5 + ring, 0, Math.PI * 2)
-    ctx.strokeStyle = `rgba(14, 90, 207, ${0.3 * (1 - clamp(reveal))})`
-    ctx.lineWidth = 1.6
-    ctx.stroke()
-  }
-
-}
-
-export function paletteForConstraints(halfspaces: Halfspace[]): Record<string, string> {
-  const palette: Record<string, string> = {}
-  const colors = ['#0e5acf', '#009b78', '#9f7100', '#d92d41', '#6f52d9', '#0a5d88']
-  halfspaces.forEach((halfspace, index) => {
-    palette[halfspace.id] = colors[index % colors.length]
-  })
-  return palette
 }
