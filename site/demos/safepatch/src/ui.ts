@@ -1,6 +1,5 @@
 export interface ControlValues {
-  eta: number
-  strictness: number
+  pressure: number
 }
 
 export interface ProofFrameUi {
@@ -16,21 +15,10 @@ function positivePart(value: number): number {
   return Math.max(0, value)
 }
 
-function strictnessDescriptor(value: number): string {
-  if (value < 0.9) {
-    return 'Tight'
-  }
-  if (value > 1.13) {
-    return 'Loose'
-  }
-  return 'Balanced'
-}
-
 export class UIController {
   private readonly etaSlider: HTMLInputElement
   private readonly etaValue: HTMLElement
-  private readonly strictnessSlider: HTMLInputElement
-  private readonly strictnessValue: HTMLElement
+  private readonly pressureDetail: HTMLElement
 
   private readonly shipIndicator: HTMLElement
   private readonly shipReason: HTMLElement
@@ -43,9 +31,7 @@ export class UIController {
   constructor() {
     this.etaSlider = this.getElement<HTMLInputElement>('eta-slider')
     this.etaValue = this.getElement('eta-value')
-
-    this.strictnessSlider = this.getElement<HTMLInputElement>('strictness-slider')
-    this.strictnessValue = this.getElement('strictness-value')
+    this.pressureDetail = this.getElement('pressure-detail')
 
     this.shipIndicator = this.getElement('ship-indicator')
     this.shipReason = this.getElement('ship-reason')
@@ -65,7 +51,6 @@ export class UIController {
     }
 
     this.etaSlider.addEventListener('input', listener)
-    this.strictnessSlider.addEventListener('input', listener)
   }
 
   onReplay(callback: () => void): void {
@@ -74,19 +59,15 @@ export class UIController {
   }
 
   setControlValues(values: Partial<ControlValues>): void {
-    if (typeof values.eta === 'number') {
-      this.etaSlider.value = values.eta.toFixed(2)
-    }
-    if (typeof values.strictness === 'number') {
-      this.strictnessSlider.value = values.strictness.toFixed(2)
+    if (typeof values.pressure === 'number') {
+      this.etaSlider.value = values.pressure.toFixed(3)
     }
     this.syncDisplayedControlValues()
   }
 
   readControlValues(): ControlValues {
     return {
-      eta: Number.parseFloat(this.etaSlider.value),
-      strictness: Number.parseFloat(this.strictnessSlider.value),
+      pressure: Number.parseFloat(this.etaSlider.value),
     }
   }
 
@@ -110,12 +91,13 @@ export class UIController {
     this.metricCorrection.classList.toggle('bad', frame.correctionSize <= 1e-6)
   }
 
-  private syncDisplayedControlValues(): void {
-    const eta = Number.parseFloat(this.etaSlider.value)
-    this.etaValue.textContent = eta.toFixed(2)
+  renderPressureModel(eta: number, strictness: number): void {
+    this.pressureDetail.textContent = `eta = ${eta.toFixed(2)} · epsilon = ${strictness.toFixed(2)}x`
+  }
 
-    const strictness = Number.parseFloat(this.strictnessSlider.value)
-    this.strictnessValue.textContent = `${strictnessDescriptor(strictness)} · ${strictness.toFixed(2)}x`
+  private syncDisplayedControlValues(): void {
+    const pressure = Number.parseFloat(this.etaSlider.value)
+    this.etaValue.textContent = `${Math.round(pressure * 100)}%`
   }
 
   private getElement<T extends HTMLElement>(id: string): T {
