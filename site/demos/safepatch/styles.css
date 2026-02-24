@@ -74,22 +74,6 @@ h1 {
   font-weight: 600;
 }
 
-.scenario-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.scenario-chip {
-  border: 1px solid #cdd9e8;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.85);
-  padding: 4px 10px;
-  font-size: 0.7rem;
-  color: #44607f;
-  font-weight: 600;
-}
-
 .story-dot {
   width: 9px;
   height: 9px;

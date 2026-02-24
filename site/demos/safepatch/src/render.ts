@@ -27,6 +27,9 @@ export interface SceneRenderInput {
   rawRiskRatio: number
   safeRiskRatio: number
   retainedValueRatio: number
+  queueRawSeries: number[]
+  queueSafeSeries: number[]
+  queueOverloadThreshold: number
   zoneReveal: number
   rawReveal: number
   safeReveal: number
@@ -182,7 +185,13 @@ export class SceneRenderer {
 
     this.drawGrid(toScreen, content, worldRadius)
     this.drawLegend(content)
-    this.drawOutcomePanel(content, input.rawRiskRatio, input.safeRiskRatio, input.retainedValueRatio, input.safeReveal)
+    this.drawQueueReplayPanel(
+      content,
+      input.queueRawSeries,
+      input.queueSafeSeries,
+      input.queueOverloadThreshold,
+      input.transitionProgress,
+    )
 
     if (input.previousZone && input.previousZone.vertices.length >= 3 && input.transitionProgress < 0.96) {
       this.drawZone(toScreen, input.previousZone, withAlpha('#8f9caf', 0.06), withAlpha('#8290a4', 0.22), true)
@@ -333,18 +342,18 @@ export class SceneRenderer {
     ctx.fillText('SafePatch', x + 142, y + 31)
   }
 
-  private drawOutcomePanel(
+  private drawQueueReplayPanel(
     content: Viewport,
-    rawRiskRatio: number,
-    safeRiskRatio: number,
-    retainedValueRatio: number,
-    safeReveal: number,
+    rawSeries: number[],
+    safeSeries: number[],
+    overloadThreshold: number,
+    progress: number,
   ): void {
     const ctx = this.ctx
-    const width = 236
-    const height = 110
+    const width = 260
+    const height = 148
     const x = content.x + content.width - width - 10
-    const y = content.y + 10
+    const y = content.y + content.height - height - 12
 
     ctx.beginPath()
     ctx.roundRect(x, y, width, height, 10)
@@ -354,44 +363,104 @@ export class SceneRenderer {
     ctx.fill()
     ctx.stroke()
 
-    ctx.font = '700 11px "Space Grotesk", sans-serif'
+    ctx.font = '700 10px "Space Grotesk", sans-serif'
     ctx.fillStyle = LEGEND_TEXT
-    ctx.fillText('SIMULATED HOTFIX OUTCOME', x + 10, y + 16)
+    ctx.fillText('INCIDENT QUEUE REPLAY (MINUTE-BY-MINUTE)', x + 10, y + 16)
 
-    const lineY1 = y + 34
-    const lineY2 = y + 60
-    const lineY3 = y + 86
-    const barX = x + 118
-    const barWidth = 104
+    const chartX = x + 10
+    const chartY = y + 24
+    const chartW = width - 20
+    const chartH = height - 32
 
-    const rawRisk = clamp(rawRiskRatio)
-    const safeRisk = clamp(safeRiskRatio)
-    const kept = clamp(retainedValueRatio)
-    const animatedSafe = safeRisk * (0.15 + 0.85 * clamp(safeReveal))
+    const maxValue = Math.max(1, overloadThreshold, ...rawSeries, ...safeSeries)
+    const t = clamp((progress - 0.08) / 0.92)
 
-    ctx.fillStyle = '#476283'
-    ctx.fillText('raw unsafe risk', x + 10, lineY1 + 3)
-    this.drawMeter(barX, lineY1 - 7, barWidth, rawRisk, '#d92d41')
+    const mapX = (index: number, length: number): number =>
+      chartX + (index / Math.max(1, length - 1)) * chartW
 
-    ctx.fillText('safe unsafe risk', x + 10, lineY2 + 3)
-    this.drawMeter(barX, lineY2 - 7, barWidth, animatedSafe, '#0a946a')
+    const mapY = (value: number): number =>
+      chartY + chartH - (value / maxValue) * chartH
 
-    ctx.fillText('behavior gain kept', x + 10, lineY3 + 3)
-    this.drawMeter(barX, lineY3 - 7, barWidth, kept, '#1b5fd0')
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(chartX, chartY, chartW, chartH)
+    ctx.clip()
+
+    ctx.beginPath()
+    ctx.moveTo(chartX, mapY(overloadThreshold))
+    ctx.lineTo(chartX + chartW, mapY(overloadThreshold))
+    ctx.strokeStyle = 'rgba(217, 45, 65, 0.45)'
+    ctx.lineWidth = 1.2
+    ctx.setLineDash([4, 4])
+    ctx.stroke()
+    ctx.setLineDash([])
+
+    this.drawSeries(chartX, chartW, rawSeries, mapX, mapY, t, '#d92d41', 2.2)
+    this.drawSeries(chartX, chartW, safeSeries, mapX, mapY, t, '#0e5acf', 2.3)
+
+    ctx.restore()
+
+    ctx.font = '600 10px "Space Grotesk", sans-serif'
+    ctx.fillStyle = '#516a88'
+    ctx.fillText('overload threshold', chartX + 4, mapY(overloadThreshold) - 5)
+    ctx.fillText('raw', chartX + 6, chartY + 11)
+    ctx.fillStyle = '#d92d41'
+    ctx.fillRect(chartX + 33, chartY + 6, 14, 2)
+
+    ctx.fillStyle = '#516a88'
+    ctx.fillText('SafePatch', chartX + 58, chartY + 11)
+    ctx.fillStyle = '#0e5acf'
+    ctx.fillRect(chartX + 112, chartY + 6, 18, 2)
   }
 
-  private drawMeter(x: number, y: number, width: number, ratio: number, color: string): void {
+  private drawSeries(
+    chartX: number,
+    chartW: number,
+    series: number[],
+    mapX: (index: number, length: number) => number,
+    mapY: (value: number) => number,
+    progress: number,
+    color: string,
+    width: number,
+  ): void {
     const ctx = this.ctx
-    const w = width * clamp(ratio)
+    const length = series.length
+    if (length < 2) {
+      return
+    }
+
+    const scaledIndex = progress * (length - 1)
+    const fullSteps = Math.floor(scaledIndex)
+    const fraction = scaledIndex - fullSteps
 
     ctx.beginPath()
-    ctx.roundRect(x, y, width, 10, 999)
-    ctx.fillStyle = 'rgba(226, 235, 246, 0.85)'
-    ctx.fill()
+    ctx.moveTo(mapX(0, length), mapY(series[0]))
+
+    for (let i = 1; i <= fullSteps; i += 1) {
+      ctx.lineTo(mapX(i, length), mapY(series[i]))
+    }
+
+    if (fullSteps < length - 1) {
+      const x0 = mapX(fullSteps, length)
+      const y0 = mapY(series[fullSteps])
+      const x1 = mapX(fullSteps + 1, length)
+      const y1 = mapY(series[fullSteps + 1])
+      ctx.lineTo(x0 + (x1 - x0) * fraction, y0 + (y1 - y0) * fraction)
+    }
+
+    ctx.strokeStyle = withAlpha(color, 0.9)
+    ctx.lineWidth = width
+    ctx.stroke()
+
+    const markerX = chartX + chartW * progress
+    const markerValue =
+      fullSteps < length - 1
+        ? series[fullSteps] + (series[fullSteps + 1] - series[fullSteps]) * fraction
+        : series[length - 1]
 
     ctx.beginPath()
-    ctx.roundRect(x, y, w, 10, 999)
-    ctx.fillStyle = withAlpha(color, 0.9)
+    ctx.arc(markerX, mapY(markerValue), 3.7, 0, Math.PI * 2)
+    ctx.fillStyle = withAlpha(color, 0.95)
     ctx.fill()
   }
 

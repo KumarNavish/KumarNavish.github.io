@@ -7,9 +7,11 @@ export interface ProofFrameUi {
   reason: string | null
   phaseText: string
   rawRiskRatio: number
-  retainedValueRatio: number
-  riskRemovedRatio: number
   safeRiskRatio: number
+  retainedValueRatio: number
+  rawPeakQueue: number
+  safePeakQueue: number
+  overloadAvoidedRatio: number
 }
 
 function clamp(value: number, min = 0, max = 1): number {
@@ -26,9 +28,9 @@ export class UIController {
   private readonly phaseCaption: HTMLElement
   private readonly decisionLine: HTMLElement
 
-  private readonly kpiValueKept: HTMLElement
-  private readonly kpiRawRisk: HTMLElement
-  private readonly kpiRiskRemoved: HTMLElement
+  private readonly kpiPeakRaw: HTMLElement
+  private readonly kpiPeakSafe: HTMLElement
+  private readonly kpiOverloadAvoided: HTMLElement
 
   constructor() {
     this.etaSlider = this.getElement<HTMLInputElement>('eta-slider')
@@ -40,9 +42,9 @@ export class UIController {
     this.phaseCaption = this.getElement('phase-caption')
     this.decisionLine = this.getElement('decision-line')
 
-    this.kpiValueKept = this.getElement('kpi-value-kept')
-    this.kpiRawRisk = this.getElement('kpi-raw-risk')
-    this.kpiRiskRemoved = this.getElement('kpi-risk-removed')
+    this.kpiPeakRaw = this.getElement('kpi-peak-raw')
+    this.kpiPeakSafe = this.getElement('kpi-peak-safe')
+    this.kpiOverloadAvoided = this.getElement('kpi-overload-avoided')
 
     this.syncDisplayedControlValues()
   }
@@ -84,16 +86,16 @@ export class UIController {
 
     const rawRiskPct = Math.round(clamp(frame.rawRiskRatio) * 100)
     const retainedValuePct = Math.round(clamp(frame.retainedValueRatio) * 100)
-    const removedRiskPct = Math.round(clamp(frame.riskRemovedRatio) * 100)
     const safeRiskPct = Math.round(clamp(frame.safeRiskRatio) * 100)
+    const overloadAvoidedPct = Math.round(clamp(frame.overloadAvoidedRatio) * 100)
 
-    this.kpiValueKept.textContent = `${retainedValuePct}%`
-    this.kpiRawRisk.textContent = `${rawRiskPct}%`
-    this.kpiRiskRemoved.textContent = `${removedRiskPct}%`
+    this.kpiPeakRaw.textContent = frame.rawPeakQueue.toLocaleString()
+    this.kpiPeakSafe.textContent = frame.safePeakQueue.toLocaleString()
+    this.kpiOverloadAvoided.textContent = `${overloadAvoidedPct}%`
 
     this.decisionLine.textContent = frame.ship
-      ? `Ship safe patch: keeps ${retainedValuePct}% behavior gain, reduces unsafe risk from ${rawRiskPct}% to ${safeRiskPct}%.`
-      : `Hold patch: unsafe risk remains ${safeRiskPct}%. tighten or revise guardrails.`
+      ? `Ship SafePatch: keeps ${retainedValuePct}% patch gain and cuts unsafe risk from ${rawRiskPct}% to ${safeRiskPct}%, reducing peak queue from ${frame.rawPeakQueue.toLocaleString()} to ${frame.safePeakQueue.toLocaleString()}.`
+      : `Hold patch: corrected variant still leaves ${safeRiskPct}% unsafe risk.`
   }
 
   renderPressureModel(eta: number, strictness: number): void {
