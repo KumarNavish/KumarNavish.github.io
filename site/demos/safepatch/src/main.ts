@@ -232,25 +232,23 @@ function toFrameUi(
   const breachValueText = `${replay.rawBreachMinutes.toLocaleString()} -> ${replay.safeBreachMinutes.toLocaleString()}`
   const escalationValueText = `${replay.rawEscalations.toLocaleString()} -> ${replay.safeEscalations.toLocaleString()}`
 
-  const peakDrop = replay.peakRaw - replay.peakSafe
   const breachDrop = replay.rawBreachMinutes - replay.safeBreachMinutes
-  const escalationDrop = replay.rawEscalations - replay.safeEscalations
   const retainedPercent = Math.round(clamp(retainedValueRatio, 0, 1.4) * 100)
 
-  const problemText = `${scenario}: raw patch breaches ${violatedRaw} guardrails and drives ${replay.rawBreachMinutes} breach minutes.`
-  const mechanismText = `Projected onto feasible zone | active constraints: ${activeSetSize} | residual violation: ${Math.max(0, maxViolationProjected).toFixed(3)}.`
+  const problemText = `${scenario}: raw patch violates ${violatedRaw} guardrails and creates ${replay.rawBreachMinutes} SLA-breach minutes.`
+  const mechanismText = `SafePatch projects into the feasible zone (${violatedRaw} -> ${violatedSafe} violations), with active set ${activeSetSize} and residual ${Math.max(0, maxViolationProjected).toFixed(3)}.`
 
-  let impactText = `Peak ${peakDrop >= 0 ? 'down' : 'up'} ${Math.abs(peakDrop)} | escalations ${escalationDrop >= 0 ? 'down' : 'up'} ${Math.abs(escalationDrop)}.`
+  let impactText = `Peak queue ${replay.peakRaw} -> ${replay.peakSafe}; escalations ${replay.rawEscalations} -> ${replay.safeEscalations}.`
   if (breachDrop > 0) {
-    impactText += ` Breach minutes improved by ${breachDrop}.`
+    impactText += ` Breach minutes reduce by ${breachDrop}.`
   }
   if (!decision.ship) {
-    impactText = `Hold reason: ${decision.reason}`
+    impactText = `Deployment held: ${decision.reason}`
   }
 
   return {
     decisionTone: decision.ship ? 'ship' : 'hold',
-    decisionTitle: decision.ship ? 'Certified for deployment' : 'Hold and redesign before rollout',
+    decisionTitle: decision.ship ? 'Certified for deployment' : 'Do not ship yet',
     decisionDetail: decision.reason,
     problemText,
     mechanismText,
