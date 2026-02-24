@@ -24,6 +24,7 @@ export interface ProofFrameUi {
 
 export class UIController {
   private readonly scenarioButtons: HTMLButtonElement[]
+  private readonly scenarioNote: HTMLElement | null
   private readonly urgencySlider: HTMLInputElement
   private readonly strictnessSlider: HTMLInputElement
 
@@ -60,6 +61,7 @@ export class UIController {
     this.kpiEscalationsValue = this.getElement('kpi-escalations-value')
     this.guardrailValue = this.getElement('guardrail-value')
     this.retainedValue = this.getElement('retained-value')
+    this.scenarioNote = document.getElementById('scenario-note')
 
     this.urgencySlider = this.getElement<HTMLInputElement>('urgency-slider')
     this.strictnessSlider = this.getElement<HTMLInputElement>('strictness-slider')
@@ -156,7 +158,7 @@ export class UIController {
     const equationRaw = this.getElement('equation-raw')
     const equationQp = this.getElement('equation-qp')
 
-    equationRaw.innerHTML = katex.renderToString(String.raw`\Delta_{0} = -\eta g_{\mathrm{new}}`, {
+    equationRaw.innerHTML = katex.renderToString(String.raw`\text{Raw step: }\Delta_0 = -\eta g_{\mathrm{new}}`, {
       displayMode: true,
       throwOnError: false,
       output: 'html',
@@ -190,9 +192,13 @@ export class UIController {
 
     this.scenarioButtons.forEach((button, index) => {
       button.classList.toggle('active', index === closestIndex)
+      button.setAttribute('aria-pressed', index === closestIndex ? 'true' : 'false')
     })
 
     this.selectedPressure = Number.parseFloat(this.scenarioButtons[closestIndex].dataset.pressure ?? '0.56')
+    if (this.scenarioNote) {
+      this.scenarioNote.textContent = this.describeScenario(this.selectedPressure)
+    }
   }
 
   private syncSliderValues(): void {
@@ -216,6 +222,16 @@ export class UIController {
 
   private clamp01(value: number): number {
     return Math.min(Math.max(value, 0), 1)
+  }
+
+  private describeScenario(pressure: number): string {
+    if (pressure < 0.38) {
+      return 'Routine traffic: low queue pressure with minor guardrail risk.'
+    }
+    if (pressure < 0.75) {
+      return 'Peak traffic: moderate pressure with non-trivial queue risk.'
+    }
+    return 'Incident traffic: severe pressure where unsafe patches trigger escalations fast.'
   }
 
   private getElement<T extends HTMLElement>(id: string): T {
