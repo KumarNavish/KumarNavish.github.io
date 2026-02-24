@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 
 import { ArcSpine } from '../components/ArcSpine'
-import { PageCompass } from '../components/PageCompass'
 import { fetchProjectsApi, type ProjectItem } from '../lib/api'
 import { runClPloProof, type ClPloProofConfig, type ProofStrategyId } from '../lib/clploProof'
 import { formatDate } from '../lib/formatters'
@@ -167,16 +166,6 @@ export function ProjectsPage() {
       </section>
 
       <ArcSpine current="skills" />
-
-      <PageCompass
-        title="Quick Scan"
-        steps={[
-          'Switch scenario intensity.',
-          'Compare return, drawdown, and stress exposure.',
-          'Open implementations to inspect depth.',
-        ]}
-        outcome="This layer demonstrates methods that are both rigorous and build-ready."
-      />
 
       <section className="panel proof-focus-panel" aria-label="Skill proof">
         <header className="proof-focus-header">

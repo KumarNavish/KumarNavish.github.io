@@ -1,7 +1,6 @@
 import { useCallback, useMemo } from 'react'
 
 import { ArcSpine } from '../components/ArcSpine'
-import { PageCompass } from '../components/PageCompass'
 import {
   fetchProfileApi,
   fetchProjectsApi,
@@ -94,16 +93,6 @@ export function ExperiencePage() {
       </section>
 
       <ArcSpine current="experience" />
-
-      <PageCompass
-        title="Quick Scan"
-        steps={[
-          'Read the three phases as one progression.',
-          'Use metrics for scope and continuity.',
-          'Open artifacts for direct proof.',
-        ]}
-        outcome="This section closes the arc with direct evidence of sustained execution."
-      />
 
       <section className="panel">
         <header className="panel-header">

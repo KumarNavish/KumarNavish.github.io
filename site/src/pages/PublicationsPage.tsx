@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 
 import { ArcSpine } from '../components/ArcSpine'
-import { PageCompass } from '../components/PageCompass'
 import { fetchMetricsApi, fetchPublicationsApi } from '../lib/api'
 import { formatNumber } from '../lib/formatters'
 import { useResource } from '../lib/useResource'
@@ -133,16 +132,6 @@ export function PublicationsPage() {
       </section>
 
       <ArcSpine current="research" />
-
-      <PageCompass
-        title="Quick Scan"
-        steps={[
-          'Scan scale and influence first.',
-          'Use citation trend for continuity.',
-          'Filter by topic, then open source papers.',
-        ]}
-        outcome="The point is to show implementation choices grounded in durable evidence."
-      />
 
       <section className="metric-grid">
         <article className="metric-card">
