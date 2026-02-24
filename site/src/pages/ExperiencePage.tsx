@@ -1,6 +1,5 @@
 import { useCallback, useMemo } from 'react'
 
-import { ArcSpine } from '../components/ArcSpine'
 import {
   fetchProfileApi,
   fetchProjectsApi,
@@ -85,14 +84,12 @@ export function ExperiencePage() {
   return (
     <div className="page">
       <section className="hero">
-        <p className="eyebrow">Experience</p>
-        <h1>I carry work from research framing to production delivery.</h1>
+        <p className="eyebrow">Delivery</p>
+        <h1>Review the delivery track record across research and production.</h1>
         <p className="hero-copy">
-          This final layer shows progression: the same arc executed at increasing scope.
+          This page shows execution continuity over time, with direct links to artifacts.
         </p>
       </section>
-
-      <ArcSpine current="experience" />
 
       <section className="panel">
         <header className="panel-header">

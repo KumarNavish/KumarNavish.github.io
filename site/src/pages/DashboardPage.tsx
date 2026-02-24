@@ -1,6 +1,5 @@
 import { useCallback } from 'react'
 
-import { ArcSpine } from '../components/ArcSpine'
 import { ErrorBlock, LoadingBlock } from '../components/StateBlocks'
 import { fetchMetricsApi, fetchProfileApi } from '../lib/api'
 import { formatNumber } from '../lib/formatters'
@@ -41,11 +40,11 @@ export function DashboardPage() {
   return (
     <div className="page builder-page overview-flow">
       <section className="hero hero-primary builder-hero overview-hero">
-        <p className="eyebrow">Motivation</p>
-        <h1>I am an applied ML systems engineer focused on reliable decisions.</h1>
+        <p className="eyebrow">Overview</p>
+        <h1>Use this site to judge whether these ML methods are practical to deploy.</h1>
         <p className="hero-copy">
-          I build decision systems that stay stable as data, objectives, and operating constraints
-          change.
+          Every section is built to answer one question: does this approach hold up under real
+          operational change?
         </p>
 
         <div className="identity-snapshot" aria-label="Identity at a glance">
@@ -79,7 +78,39 @@ export function DashboardPage() {
         </div>
       </section>
 
-      <ArcSpine current="motivation" />
+      <section className="panel utility-panel">
+        <header className="panel-header">
+          <h2>Start Here In 2 Minutes</h2>
+        </header>
+        <div className="utility-list">
+          <article className="utility-step">
+            <p className="matrix-label">1</p>
+            <h3>Test methods under stress</h3>
+            <p>Open Methods to compare strategy behavior as regimes change.</p>
+          </article>
+          <article className="utility-step">
+            <p className="matrix-label">2</p>
+            <h3>Check real decision impact</h3>
+            <p>Open Case Studies to see decisions, implementation links, and live simulation.</p>
+          </article>
+          <article className="utility-step">
+            <p className="matrix-label">3</p>
+            <h3>Verify evidence quality</h3>
+            <p>Open Evidence to inspect publication grounding and citation trajectory.</p>
+          </article>
+        </div>
+        <div className="action-row">
+          <a className="action-link action-link-primary" href="/projects">
+            Open Methods
+          </a>
+          <a className="action-link" href="/work">
+            Open Case Studies
+          </a>
+          <a className="action-link" href="/publications">
+            Open Evidence
+          </a>
+        </div>
+      </section>
 
       <section className="panel">
         <header className="panel-header">

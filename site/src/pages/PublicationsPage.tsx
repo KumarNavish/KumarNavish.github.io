@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
 
-import { ArcSpine } from '../components/ArcSpine'
 import { fetchMetricsApi, fetchPublicationsApi } from '../lib/api'
 import { formatNumber } from '../lib/formatters'
 import { useResource } from '../lib/useResource'
@@ -124,14 +123,12 @@ export function PublicationsPage() {
   return (
     <div className="page">
       <section className="hero">
-        <p className="eyebrow">Research</p>
-        <h1>Research gives each implementation choice rigor.</h1>
+        <p className="eyebrow">Evidence</p>
+        <h1>Inspect the research evidence behind implementation decisions.</h1>
         <p className="hero-copy">
-          This layer shows the evidence behind design choices and why those choices transfer across settings.
+          Use this page to verify whether methods are backed by sustained publication and citation history.
         </p>
       </section>
-
-      <ArcSpine current="research" />
 
       <section className="metric-grid">
         <article className="metric-card">

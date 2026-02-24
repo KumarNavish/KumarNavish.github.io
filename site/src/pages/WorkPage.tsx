@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
 
-import { ArcSpine } from '../components/ArcSpine'
 import {
   fetchProjectsApi,
   fetchPublicationsApi,
@@ -181,14 +180,12 @@ export function WorkPage() {
   return (
     <div className="page">
       <section className="hero">
-        <p className="eyebrow">Impact</p>
-        <h1>I turn methods into operational decisions.</h1>
+        <p className="eyebrow">Case Studies</p>
+        <h1>See what decisions changed in practice, not just in theory.</h1>
         <p className="hero-copy">
-          Each case connects one decision, one system, and one observable outcome.
+          Each case ties together a decision, implementation artifact, and measurable operating signal.
         </p>
       </section>
-
-      <ArcSpine current="impact" />
 
       <section className="metric-grid">
         <article className="metric-card">
