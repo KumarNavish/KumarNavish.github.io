@@ -184,12 +184,23 @@ export class SceneRenderer {
       false,
     )
 
-    for (const halfspace of input.halfspaces) {
-      const emphasis = clamp(input.constraintForceById[halfspace.id] ?? 0)
-      if (!halfspace.active || emphasis <= 0.05) {
-        continue
-      }
-      this.drawActiveBoundary(toScreen, worldRadius, halfspace, input.colorById[halfspace.id] ?? '#6c86ab', emphasis)
+    const activeBoundaries = input.halfspaces
+      .map((halfspace) => ({
+        halfspace,
+        emphasis: clamp(input.constraintForceById[halfspace.id] ?? 0),
+      }))
+      .filter((entry) => entry.halfspace.active && entry.emphasis > 0.05)
+      .sort((a, b) => b.emphasis - a.emphasis)
+      .slice(0, 2)
+
+    for (const entry of activeBoundaries) {
+      this.drawActiveBoundary(
+        toScreen,
+        worldRadius,
+        entry.halfspace,
+        input.colorById[entry.halfspace.id] ?? '#6c86ab',
+        entry.emphasis,
+      )
     }
 
     this.drawOriginPulse(toScreen({ x: 0, y: 0 }), 1 - clamp(input.transitionProgress))
@@ -200,6 +211,9 @@ export class SceneRenderer {
         this.drawArrow(toScreen, input.rawStep, input.rawTarget, RAW_COLOR, 1.1, 0.34, [4, 6])
       }
       this.drawPoint(toScreen(input.rawStep), RAW_COLOR, 4.6)
+      if (input.rawReveal > 0.18) {
+        this.drawTag(content, toScreen(input.rawStep), 'unsafe')
+      }
     }
 
     const correctionNorm = norm(sub(input.safeTarget, input.rawTarget))
@@ -212,6 +226,9 @@ export class SceneRenderer {
       this.drawArrow(toScreen, { x: 0, y: 0 }, input.safeStep, SAFE_COLOR, 4.35, 0.98)
       this.drawPoint(toScreen(input.safeStep), SAFE_COLOR, 5)
       this.drawSafeHalo(toScreen(input.safeStep), input.safeReveal)
+      if (input.safeReveal > 0.24) {
+        this.drawTag(content, toScreen(input.safeStep), 'safe')
+      }
     }
 
     if (input.violationRaw > 1e-6 && input.rawReveal > 0.08 && norm(input.rawStep) > 0.09) {
@@ -519,6 +536,28 @@ export class SceneRenderer {
     ctx.strokeStyle = `rgba(14, 90, 207, ${0.3 * (1 - clamp(reveal))})`
     ctx.lineWidth = 1.6
     ctx.stroke()
+  }
+
+  private drawTag(bounds: Viewport, point: ScreenPoint, text: string): void {
+    const ctx = this.ctx
+    ctx.font = '700 11px "Space Grotesk", sans-serif'
+    const pad = 8
+    const width = ctx.measureText(text).width + pad * 2
+    const height = 20
+
+    const x = clamp(point.x + 10, bounds.x + 6, bounds.x + bounds.width - width - 6)
+    const y = clamp(point.y - 28, bounds.y + 6, bounds.y + bounds.height - height - 6)
+
+    ctx.beginPath()
+    ctx.roundRect(x, y, width, height, 10)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.88)'
+    ctx.strokeStyle = 'rgba(134, 150, 172, 0.55)'
+    ctx.lineWidth = 1
+    ctx.fill()
+    ctx.stroke()
+
+    ctx.fillStyle = '#22334b'
+    ctx.fillText(text, x + pad, y + 13.5)
   }
 }
 

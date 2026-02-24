@@ -8,6 +8,7 @@ export interface ProofFrameUi {
   ship: boolean
   reason: string | null
   phaseText: string
+  phaseIndex: number
   maxViolationRaw: number
   maxViolationSafe: number
   correctionSize: number
@@ -25,6 +26,7 @@ export class UIController {
   private readonly shipIndicator: HTMLElement
   private readonly shipReason: HTMLElement
   private readonly phaseCaption: HTMLElement
+  private readonly storySteps: HTMLElement[]
 
   private readonly metricRawViolation: HTMLElement | null
   private readonly metricSafeViolation: HTMLElement | null
@@ -38,6 +40,7 @@ export class UIController {
     this.shipIndicator = this.getElement('ship-indicator')
     this.shipReason = this.getElement('ship-reason')
     this.phaseCaption = this.getElement('phase-caption')
+    this.storySteps = Array.from(document.querySelectorAll<HTMLElement>('[data-story-step]'))
 
     this.metricRawViolation = document.getElementById('metric-raw-violation')
     this.metricSafeViolation = document.getElementById('metric-safe-violation')
@@ -80,6 +83,12 @@ export class UIController {
 
     this.shipReason.textContent = frame.reason ?? 'No feasible projected step under current guardrails.'
     this.phaseCaption.textContent = frame.phaseText
+
+    for (const step of this.storySteps) {
+      const index = Number.parseInt(step.dataset.storyStep ?? '0', 10)
+      step.classList.toggle('active', index === frame.phaseIndex)
+      step.classList.toggle('done', index < frame.phaseIndex)
+    }
 
     if (this.metricRawViolation) {
       this.metricRawViolation.textContent = `+${positivePart(frame.maxViolationRaw).toFixed(3)}`
