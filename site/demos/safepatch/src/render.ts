@@ -9,16 +9,21 @@ export interface SceneRenderInput {
   queueRawSeries: number[]
   queueSafeSeries: number[]
   overloadThreshold: number
-  rawOverloadMinute: number | null
-  safeOverloadMinute: number | null
   transitionProgress: number
 }
 
-const RAW_COLOR = '#d92d41'
-const SAFE_COLOR = '#0e5acf'
+const RAW_COLOR = '#d13a52'
+const SAFE_COLOR = '#1c5ed8'
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(Math.max(value, min), max)
+}
+
+function easeInOutCubic(value: number): number {
+  const t = clamp(value)
+  return t < 0.5
+    ? 4 * t * t * t
+    : 1 - ((-2 * t + 2) ** 3) / 2
 }
 
 function withAlpha(hex: string, alpha: number): string {
@@ -30,15 +35,9 @@ function withAlpha(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
-function interpolateSeries(series: number[], indexFloat: number): number {
-  if (series.length === 0) {
-    return 0
-  }
-
-  const i0 = Math.floor(indexFloat)
-  const i1 = Math.min(series.length - 1, i0 + 1)
-  const t = indexFloat - i0
-  return series[i0] + (series[i1] - series[i0]) * t
+function firstBreachMinute(series: number[], threshold: number): number | null {
+  const index = series.findIndex((value) => value > threshold)
+  return index >= 0 ? index : null
 }
 
 export class SceneRenderer {
@@ -72,64 +71,62 @@ export class SceneRenderer {
     const ctx = this.ctx
     ctx.clearRect(0, 0, width, height)
 
-    const background = ctx.createLinearGradient(0, 0, 0, height)
-    background.addColorStop(0, '#fbfdff')
-    background.addColorStop(1, '#edf4fb')
-    ctx.fillStyle = background
-    ctx.fillRect(0, 0, width, height)
-
     const chart: Rect = {
-      x: 48,
-      y: 40,
-      width: width - 96,
-      height: height - 92,
+      x: 56,
+      y: 30,
+      width: width - 90,
+      height: height - 74,
     }
 
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, width, height)
+
     ctx.beginPath()
-    ctx.roundRect(chart.x - 16, chart.y - 16, chart.width + 32, chart.height + 28, 12)
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.78)'
-    ctx.strokeStyle = 'rgba(136, 154, 180, 0.4)'
+    ctx.roundRect(chart.x - 16, chart.y - 12, chart.width + 24, chart.height + 22, 12)
+    ctx.fillStyle = '#f8fbff'
+    ctx.strokeStyle = 'rgba(125, 149, 180, 0.4)'
     ctx.lineWidth = 1
     ctx.fill()
     ctx.stroke()
 
     const maxValue = Math.max(input.overloadThreshold, ...input.queueRawSeries, ...input.queueSafeSeries, 1)
+    const upper = maxValue * 1.08
 
-    const mapX = (indexFloat: number, length: number): number =>
-      chart.x + (indexFloat / Math.max(1, length - 1)) * chart.width
+    const mapX = (index: number, length: number): number =>
+      chart.x + (index / Math.max(1, length - 1)) * chart.width
 
-    const mapY = (value: number): number =>
-      chart.y + chart.height - (value / (maxValue * 1.08)) * chart.height
+    const mapY = (value: number): number => chart.y + chart.height - (value / upper) * chart.height
 
     this.drawGrid(chart)
 
     const thresholdY = mapY(input.overloadThreshold)
-    this.drawThreshold(chart, thresholdY)
+    this.drawThresholdBand(chart, thresholdY)
 
-    const rawReveal = clamp(input.transitionProgress / 0.58)
-    const safeReveal = clamp((input.transitionProgress - 0.34) / 0.66)
+    const length = Math.min(input.queueRawSeries.length, input.queueSafeSeries.length)
+    const rawSeries = input.queueRawSeries.slice(0, length)
+    const safeSeries = input.queueSafeSeries.slice(0, length)
 
-    this.drawSeriesGhost(mapX, mapY, input.queueRawSeries, RAW_COLOR)
-    this.drawSeriesGhost(mapX, mapY, input.queueSafeSeries, SAFE_COLOR)
+    const blend = easeInOutCubic(input.transitionProgress)
+    const animatedSafeSeries = rawSeries.map((value, index) => value + (safeSeries[index] - value) * blend)
 
-    this.drawSeries(mapX, mapY, input.queueRawSeries, rawReveal, RAW_COLOR, 2.5)
-    this.drawSeries(mapX, mapY, input.queueSafeSeries, safeReveal, SAFE_COLOR, 2.6)
+    this.drawDeltaArea(mapX, mapY, rawSeries, animatedSafeSeries)
+    this.drawSeries(mapX, mapY, rawSeries, RAW_COLOR, 2.4, 0.9)
+    this.drawSeries(mapX, mapY, animatedSafeSeries, SAFE_COLOR, 3.1, 0.96)
 
-    this.drawCurrentMinuteMarker(chart, input.queueRawSeries.length, Math.max(rawReveal, safeReveal))
+    this.drawMarkerAtEnd(mapX, mapY, rawSeries, RAW_COLOR)
+    this.drawMarkerAtEnd(mapX, mapY, animatedSafeSeries, SAFE_COLOR)
 
-    if (input.rawOverloadMinute !== null) {
-      this.drawOverloadMarker(mapX(input.rawOverloadMinute, input.queueRawSeries.length), thresholdY, RAW_COLOR, 'raw page')
+    const rawBreach = firstBreachMinute(rawSeries, input.overloadThreshold)
+    const safeBreach = firstBreachMinute(animatedSafeSeries, input.overloadThreshold)
+    if (rawBreach !== null) {
+      this.drawBreachMarker(mapX(rawBreach, rawSeries.length), thresholdY, RAW_COLOR)
     }
-    if (input.safeOverloadMinute !== null) {
-      this.drawOverloadMarker(mapX(input.safeOverloadMinute, input.queueSafeSeries.length), thresholdY, SAFE_COLOR, 'safe page')
+    if (safeBreach !== null) {
+      this.drawBreachMarker(mapX(safeBreach, animatedSafeSeries.length), thresholdY, SAFE_COLOR)
     }
 
     this.drawLegend(chart)
-
-    ctx.font = '600 11px "Space Grotesk", sans-serif'
-    ctx.fillStyle = '#4d6585'
-    ctx.fillText('minute 0', chart.x, chart.y + chart.height + 20)
-    ctx.fillText(`minute ${input.queueRawSeries.length - 1}`, chart.x + chart.width - 60, chart.y + chart.height + 20)
+    this.drawAxisLabels(chart, rawSeries.length)
   }
 
   private drawGrid(chart: Rect): void {
@@ -140,7 +137,7 @@ export class SceneRenderer {
       ctx.beginPath()
       ctx.moveTo(chart.x, y)
       ctx.lineTo(chart.x + chart.width, y)
-      ctx.strokeStyle = 'rgba(74, 97, 126, 0.14)'
+      ctx.strokeStyle = 'rgba(74, 97, 126, 0.12)'
       ctx.lineWidth = 1
       ctx.stroke()
     }
@@ -150,168 +147,158 @@ export class SceneRenderer {
       ctx.beginPath()
       ctx.moveTo(x, chart.y)
       ctx.lineTo(x, chart.y + chart.height)
-      ctx.strokeStyle = 'rgba(74, 97, 126, 0.1)'
+      ctx.strokeStyle = 'rgba(74, 97, 126, 0.08)'
       ctx.lineWidth = 1
       ctx.stroke()
     }
   }
 
-  private drawThreshold(chart: Rect, y: number): void {
+  private drawThresholdBand(chart: Rect, thresholdY: number): void {
     const ctx = this.ctx
 
+    ctx.fillStyle = withAlpha(RAW_COLOR, 0.08)
+    ctx.fillRect(chart.x, chart.y, chart.width, Math.max(0, thresholdY - chart.y))
+
     ctx.beginPath()
-    ctx.moveTo(chart.x, y)
-    ctx.lineTo(chart.x + chart.width, y)
-    ctx.strokeStyle = withAlpha(RAW_COLOR, 0.7)
-    ctx.lineWidth = 1.35
-    ctx.setLineDash([6, 5])
+    ctx.moveTo(chart.x, thresholdY)
+    ctx.lineTo(chart.x + chart.width, thresholdY)
+    ctx.strokeStyle = withAlpha(RAW_COLOR, 0.82)
+    ctx.lineWidth = 1.4
+    ctx.setLineDash([7, 5])
     ctx.stroke()
     ctx.setLineDash([])
 
-    ctx.font = '600 11px "Space Grotesk", sans-serif'
-    ctx.fillStyle = '#b22a41'
-    ctx.fillText('SLA overload threshold', chart.x + 8, y - 7)
+    ctx.font = '700 11px "Space Grotesk", sans-serif'
+    ctx.fillStyle = '#a32d42'
+    ctx.fillText('SLA breach line', chart.x + 8, thresholdY - 8)
   }
 
-  private drawSeriesGhost(
-    mapX: (indexFloat: number, length: number) => number,
+  private drawSeries(
+    mapX: (index: number, length: number) => number,
     mapY: (value: number) => number,
     series: number[],
     color: string,
+    width: number,
+    alpha: number,
   ): void {
-    const ctx = this.ctx
     if (series.length < 2) {
       return
     }
 
+    const ctx = this.ctx
     ctx.beginPath()
     ctx.moveTo(mapX(0, series.length), mapY(series[0]))
+
     for (let i = 1; i < series.length; i += 1) {
       ctx.lineTo(mapX(i, series.length), mapY(series[i]))
     }
 
-    ctx.strokeStyle = withAlpha(color, 0.18)
-    ctx.lineWidth = 1.1
+    ctx.strokeStyle = withAlpha(color, alpha)
+    ctx.lineWidth = width
+    ctx.lineJoin = 'round'
+    ctx.lineCap = 'round'
     ctx.stroke()
   }
 
-  private drawSeries(
-    mapX: (indexFloat: number, length: number) => number,
+  private drawDeltaArea(
+    mapX: (index: number, length: number) => number,
     mapY: (value: number) => number,
-    series: number[],
-    reveal: number,
-    color: string,
-    width: number,
+    rawSeries: number[],
+    safeSeries: number[],
   ): void {
-    if (series.length < 2) {
+    if (rawSeries.length < 2 || safeSeries.length < 2) {
       return
     }
 
     const ctx = this.ctx
-    const progress = clamp(reveal)
-    const maxIndexFloat = progress * (series.length - 1)
-    const fullIndex = Math.floor(maxIndexFloat)
-    const fraction = maxIndexFloat - fullIndex
 
     ctx.beginPath()
-    ctx.moveTo(mapX(0, series.length), mapY(series[0]))
+    ctx.moveTo(mapX(0, rawSeries.length), mapY(rawSeries[0]))
 
-    for (let i = 1; i <= fullIndex; i += 1) {
-      ctx.lineTo(mapX(i, series.length), mapY(series[i]))
+    for (let i = 1; i < rawSeries.length; i += 1) {
+      ctx.lineTo(mapX(i, rawSeries.length), mapY(rawSeries[i]))
     }
 
-    if (fullIndex < series.length - 1) {
-      const x0 = mapX(fullIndex, series.length)
-      const y0 = mapY(series[fullIndex])
-      const x1 = mapX(fullIndex + 1, series.length)
-      const y1 = mapY(series[fullIndex + 1])
-      ctx.lineTo(x0 + (x1 - x0) * fraction, y0 + (y1 - y0) * fraction)
+    for (let i = safeSeries.length - 1; i >= 0; i -= 1) {
+      ctx.lineTo(mapX(i, safeSeries.length), mapY(safeSeries[i]))
     }
 
-    ctx.strokeStyle = withAlpha(color, 0.94)
-    ctx.lineWidth = width
-    ctx.stroke()
+    ctx.closePath()
+    ctx.fillStyle = withAlpha(SAFE_COLOR, 0.12)
+    ctx.fill()
+  }
 
-    const markerValue = interpolateSeries(series, maxIndexFloat)
-    const markerX = mapX(maxIndexFloat, series.length)
-    const markerY = mapY(markerValue)
+  private drawMarkerAtEnd(
+    mapX: (index: number, length: number) => number,
+    mapY: (value: number) => number,
+    series: number[],
+    color: string,
+  ): void {
+    if (series.length === 0) {
+      return
+    }
+
+    const ctx = this.ctx
+    const x = mapX(series.length - 1, series.length)
+    const y = mapY(series[series.length - 1])
 
     ctx.beginPath()
-    ctx.arc(markerX, markerY, 4, 0, Math.PI * 2)
+    ctx.arc(x, y, 4.8, 0, Math.PI * 2)
     ctx.fillStyle = color
     ctx.fill()
 
     ctx.beginPath()
-    ctx.arc(markerX, markerY, 10, 0, Math.PI * 2)
-    ctx.fillStyle = withAlpha(color, 0.13)
+    ctx.arc(x, y, 11, 0, Math.PI * 2)
+    ctx.fillStyle = withAlpha(color, 0.14)
     ctx.fill()
   }
 
-  private drawCurrentMinuteMarker(chart: Rect, seriesLength: number, progress: number): void {
+  private drawBreachMarker(x: number, y: number, color: string): void {
     const ctx = this.ctx
-    const x = chart.x + clamp(progress) * chart.width
 
     ctx.beginPath()
-    ctx.moveTo(x, chart.y)
-    ctx.lineTo(x, chart.y + chart.height)
-    ctx.strokeStyle = 'rgba(54, 79, 109, 0.34)'
-    ctx.lineWidth = 1
-    ctx.stroke()
-
-    const minute = Math.round(clamp(progress) * (seriesLength - 1))
-    ctx.font = '600 11px "Space Grotesk", sans-serif'
-    ctx.fillStyle = '#4f6684'
-    ctx.fillText(`minute ${minute}`, x + 6, chart.y + 16)
-  }
-
-  private drawOverloadMarker(x: number, y: number, color: string, label: string): void {
-    const ctx = this.ctx
-    ctx.beginPath()
-    ctx.arc(x, y, 5, 0, Math.PI * 2)
+    ctx.arc(x, y, 3.8, 0, Math.PI * 2)
     ctx.fillStyle = color
     ctx.fill()
 
     ctx.beginPath()
-    ctx.arc(x, y, 13, 0, Math.PI * 2)
-    ctx.strokeStyle = withAlpha(color, 0.34)
-    ctx.lineWidth = 1.4
+    ctx.arc(x, y, 9, 0, Math.PI * 2)
+    ctx.strokeStyle = withAlpha(color, 0.36)
+    ctx.lineWidth = 1.2
     ctx.stroke()
-
-    ctx.font = '600 10px "Space Grotesk", sans-serif'
-    ctx.fillStyle = withAlpha(color, 0.95)
-    ctx.fillText(label, x + 8, y - 8)
   }
 
   private drawLegend(chart: Rect): void {
     const ctx = this.ctx
-    const x = chart.x + 4
-    const y = chart.y + 8
+    const originX = chart.x + 6
+    const originY = chart.y + 8
+
+    ctx.font = '700 11px "Space Grotesk", sans-serif'
 
     ctx.beginPath()
-    ctx.roundRect(x, y, 170, 40, 10)
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.88)'
-    ctx.strokeStyle = 'rgba(140, 160, 185, 0.4)'
-    ctx.lineWidth = 1
-    ctx.fill()
-    ctx.stroke()
-
-    ctx.font = '600 10px "Space Grotesk", sans-serif'
-    ctx.fillStyle = '#45607f'
-
-    ctx.beginPath()
-    ctx.moveTo(x + 10, y + 14)
-    ctx.lineTo(x + 30, y + 14)
+    ctx.moveTo(originX, originY)
+    ctx.lineTo(originX + 18, originY)
     ctx.strokeStyle = RAW_COLOR
-    ctx.lineWidth = 2.2
+    ctx.lineWidth = 2.5
     ctx.stroke()
-    ctx.fillText('raw deploy', x + 35, y + 17)
+    ctx.fillStyle = '#5a6e8b'
+    ctx.fillText('raw deploy', originX + 24, originY + 3)
 
     ctx.beginPath()
-    ctx.moveTo(x + 10, y + 29)
-    ctx.lineTo(x + 30, y + 29)
+    ctx.moveTo(originX + 94, originY)
+    ctx.lineTo(originX + 112, originY)
     ctx.strokeStyle = SAFE_COLOR
-    ctx.lineWidth = 2.2
+    ctx.lineWidth = 3
     ctx.stroke()
-    ctx.fillText('SafePatch deploy', x + 35, y + 32)
+    ctx.fillText('SafePatch deploy', originX + 118, originY + 3)
+  }
+
+  private drawAxisLabels(chart: Rect, seriesLength: number): void {
+    const ctx = this.ctx
+    ctx.font = '700 11px "Space Grotesk", sans-serif'
+    ctx.fillStyle = '#4f6684'
+    ctx.fillText('minute 0', chart.x, chart.y + chart.height + 18)
+    ctx.fillText(`minute ${Math.max(0, seriesLength - 1)}`, chart.x + chart.width - 64, chart.y + chart.height + 18)
+    ctx.fillText('queue size', chart.x + 6, chart.y + 16)
   }
 }

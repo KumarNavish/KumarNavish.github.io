@@ -3,68 +3,47 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SafePatch Geometry</title>
+    <title>SafePatch</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <main class="app">
-      <header class="title-block">
-        <p class="eyebrow">Production LLM Hotfix Gate</p>
-        <h1>Raw hotfix can page on-call. SafePatch tests and corrects it before deployment.</h1>
+      <header class="hero">
+        <p class="eyebrow">SafePatch Deployment Gate</p>
+        <h1>AI corrects risky LLM hotfixes before they trigger queue incidents.</h1>
       </header>
 
       <section class="stage">
-        <div class="stage-head">
-          <span id="ship-indicator" class="indicator hold">HOLD</span>
-          <span id="ship-reason" class="ship-reason">Running replay...</span>
-        </div>
-
-        <p id="decision-line" class="decision-line">Ship SafePatch: queue remains stable with guardrails satisfied.</p>
-
-        <div class="outcome-row" aria-label="Deployment outcomes">
-          <article class="outcome-card raw">
-            <p>If deployed raw</p>
-            <strong id="raw-outcome">On-call page: unknown</strong>
-          </article>
-          <article class="outcome-card safe">
-            <p>If deployed with SafePatch</p>
-            <strong id="safe-outcome">Outcome: computing</strong>
-          </article>
+        <div class="top-row">
+          <div class="scenario-buttons" role="group" aria-label="Traffic scenario">
+            <button class="scenario-btn" data-pressure="0.25" type="button">Low traffic</button>
+            <button class="scenario-btn active" data-pressure="0.55" type="button">Peak hour</button>
+            <button class="scenario-btn" data-pressure="0.9" type="button">Incident surge</button>
+          </div>
+          <button id="export-button" class="export" type="button">Apply policy (export JSON)</button>
         </div>
 
         <div class="canvas-shell">
-          <canvas id="scene-canvas" class="scene" aria-label="Minute-by-minute queue replay"></canvas>
+          <canvas id="scene-canvas" class="scene" aria-label="Queue stabilization replay"></canvas>
         </div>
 
-        <div class="stage-foot">
-          <div class="controls-row">
-            <div class="scenario-block" role="group" aria-label="Traffic context">
-              <p class="scenario-label">Traffic context tonight</p>
-              <div class="scenario-buttons">
-                <button class="scenario-btn" data-pressure="0.25" type="button">Low traffic</button>
-                <button class="scenario-btn active" data-pressure="0.55" type="button">Peak hour</button>
-                <button class="scenario-btn" data-pressure="0.9" type="button">Incident surge</button>
-              </div>
-              <p id="pressure-detail" class="pressure-detail">Peak hour selected.</p>
-            </div>
-            <button id="replay-button" class="replay" type="button">Replay</button>
-            <button id="export-button" class="export" type="button">Export decision JSON</button>
-          </div>
+        <p id="recommendation-line" class="recommendation-line">
+          SafePatch replay running.
+        </p>
 
-          <div class="kpi-row" aria-label="Operational impact">
-            <article class="kpi-card">
-              <p>Peak queue reduction</p>
-              <strong id="kpi-peak-reduction">0</strong>
-            </article>
-            <article class="kpi-card">
-              <p>SLA breach minutes avoided</p>
-              <strong id="kpi-breach-minutes">0</strong>
-            </article>
-            <article class="kpi-card">
-              <p>Critical escalations avoided</p>
-              <strong id="kpi-escalations">0</strong>
-            </article>
-          </div>
+        <div class="kpi-row" aria-label="Operational impact">
+          <article class="kpi-card">
+            <p>Peak queue (raw -> SafePatch)</p>
+            <strong id="kpi-peak-value">--</strong>
+          </article>
+          <article class="kpi-card">
+            <p>Breach minutes (raw -> SafePatch)</p>
+            <strong id="kpi-breach-value">--</strong>
+          </article>
+          <article class="kpi-card">
+            <p>Escalations (raw -> SafePatch)</p>
+            <strong id="kpi-escalations-value">--</strong>
+          </article>
         </div>
       </section>
     </main>
