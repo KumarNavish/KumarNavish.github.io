@@ -1,17 +1,16 @@
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 
 :root {
-  --bg: #eef1f4;
-  --paper: #ffffff;
-  --ink: #101828;
-  --muted: #526070;
-  --line: #d3dae2;
-  --line-strong: #bcc7d3;
-  --chip: #f7f9fc;
-  --ship: #0f766e;
-  --hold: #b42318;
-  --raw: #cc3f53;
-  --safe: #1f5fae;
+  --bg-0: #070d16;
+  --bg-1: #101a29;
+  --ink: #eaf2ff;
+  --muted: #a5b3c7;
+  --panel: rgba(12, 20, 34, 0.72);
+  --panel-strong: rgba(12, 20, 34, 0.9);
+  --line: rgba(133, 164, 204, 0.34);
+  --line-strong: rgba(133, 164, 204, 0.6);
+  --ship: #3dd6b6;
+  --hold: #ff7a8f;
 }
 
 * {
@@ -24,58 +23,56 @@ body {
   font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
   color: var(--ink);
   background:
-    radial-gradient(110% 130% at 100% 0%, rgba(58, 103, 167, 0.09) 0%, transparent 62%),
-    radial-gradient(90% 90% at 0% 100%, rgba(15, 118, 110, 0.07) 0%, transparent 58%),
-    var(--bg);
+    radial-gradient(130% 120% at 88% 0%, rgba(37, 102, 191, 0.28) 0%, transparent 58%),
+    radial-gradient(92% 90% at 0% 100%, rgba(10, 156, 132, 0.24) 0%, transparent 56%),
+    linear-gradient(160deg, var(--bg-0), var(--bg-1));
 }
 
 .app {
-  width: min(1220px, 94vw);
-  margin: 26px auto 34px;
+  width: min(1260px, 95vw);
+  margin: 22px auto 30px;
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 
 .title-block {
   display: grid;
-  gap: 7px;
+  gap: 6px;
   padding: 0 2px;
 }
 
 .eyebrow {
   margin: 0;
-  font-size: 0.67rem;
-  letter-spacing: 0.13em;
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   font-weight: 800;
-  color: #5b6774;
+  color: #9db0cb;
 }
 
 h1 {
   margin: 0;
   font-family: 'Manrope', sans-serif;
-  font-size: clamp(1.35rem, 2.15vw, 1.9rem);
-  line-height: 1.14;
-  max-width: 34ch;
+  font-size: clamp(1.3rem, 2.2vw, 2.02rem);
+  line-height: 1.12;
+  max-width: 30ch;
 }
 
 .stage {
   border: 1px solid var(--line);
   border-radius: 20px;
-  background: color-mix(in srgb, var(--paper) 92%, #f1f5f9 8%);
-  padding: 14px;
-  display: grid;
-  grid-template-columns: minmax(0, 1.58fr) minmax(310px, 0.82fr);
-  gap: 12px;
-  align-items: stretch;
+  padding: 10px;
+  background: rgba(6, 12, 22, 0.55);
+  backdrop-filter: blur(12px);
 }
 
 .scene-shell {
+  position: relative;
+  overflow: hidden;
   border: 1px solid var(--line-strong);
   border-radius: 14px;
-  overflow: hidden;
-  background: #ffffff;
-  min-height: clamp(530px, 70vh, 760px);
+  background: linear-gradient(170deg, rgba(9, 16, 28, 0.96), rgba(7, 12, 22, 0.96));
+  min-height: clamp(560px, 76vh, 840px);
 }
 
 .scene {
@@ -85,92 +82,100 @@ h1 {
   display: block;
 }
 
-.control-dock {
+.overlay {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  z-index: 4;
+}
+
+.overlay-top {
+  top: 14px;
   display: grid;
-  align-content: start;
+  grid-template-columns: minmax(280px, auto) minmax(0, 1fr);
   gap: 10px;
+  align-items: start;
+}
+
+.overlay-bottom {
+  bottom: 14px;
+  display: grid;
+  gap: 8px;
 }
 
 .status-row,
 .equation-wrap,
 .control,
 .metrics,
-.replay,
-.phase-caption {
+.bottom-row {
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: var(--paper);
+  background: var(--panel);
+  backdrop-filter: blur(8px);
 }
 
 .status-row {
+  padding: 8px 10px;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
 }
 
 .indicator {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-width: 62px;
   border-radius: 999px;
-  border: 1px solid transparent;
   font-size: 0.66rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   padding: 4px 10px;
-  min-width: 60px;
+  border: 1px solid transparent;
 }
 
 .indicator.ship {
-  color: var(--ship);
-  background: rgba(15, 118, 110, 0.08);
-  border-color: rgba(15, 118, 110, 0.32);
+  color: #06291f;
+  background: var(--ship);
+  border-color: rgba(61, 214, 182, 0.8);
 }
 
 .indicator.hold {
-  color: var(--hold);
-  background: rgba(180, 35, 24, 0.08);
-  border-color: rgba(180, 35, 24, 0.28);
+  color: #321018;
+  background: var(--hold);
+  border-color: rgba(255, 122, 143, 0.76);
 }
 
 .ship-reason {
   min-width: 0;
-  color: #304254;
   font-size: 0.79rem;
   line-height: 1.3;
-}
-
-.phase-caption {
-  margin: 0;
-  padding: 8px 10px;
-  color: #415263;
-  font-size: 0.77rem;
-  line-height: 1.35;
+  color: #d4deeb;
 }
 
 .equation-wrap {
-  padding: 10px 12px;
-  background:
-    linear-gradient(135deg, rgba(31, 95, 174, 0.05), rgba(15, 118, 110, 0.04));
+  padding: 9px 11px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  background: rgba(11, 20, 33, 0.84);
 }
 
 .equation-chip {
-  display: block;
-  color: #1b2a3a;
+  color: #e6eeff;
   overflow: auto hidden;
 }
 
 .equation-chip .katex {
-  font-size: 0.96rem;
+  font-size: 0.95rem;
 }
 
 .control {
-  padding: 10px 11px;
+  padding: 9px 11px;
   display: grid;
-  gap: 9px;
-  background: var(--chip);
+  gap: 8px;
+  background: var(--panel-strong);
 }
 
 .control-head {
@@ -181,121 +186,150 @@ h1 {
 }
 
 .control-head span:first-child {
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   font-weight: 700;
-  color: #2f4358;
+  color: #d0ddef;
 }
 
 .value {
-  font-size: 0.73rem;
-  font-weight: 700;
-  color: #2b4a66;
   border-radius: 999px;
-  border: 1px solid #c5d6ea;
+  border: 1px solid #6388b8;
+  background: rgba(37, 102, 191, 0.25);
+  color: #dceaff;
   padding: 2px 9px;
-  background: #edf4fb;
+  font-size: 0.72rem;
+  font-weight: 700;
 }
 
 input[type='range'] {
   width: 100%;
-  accent-color: #2b67b0;
+  accent-color: #4c8de2;
 }
 
 .control-scale {
   display: flex;
   justify-content: space-between;
-  color: #697a8b;
-  font-size: 0.68rem;
+  font-size: 0.67rem;
+  color: #95a9c4;
 }
 
 .pressure-detail {
   margin: 0;
-  font-size: 0.73rem;
-  color: #41576e;
+  font-size: 0.72rem;
+  color: #bad0ec;
   font-family: 'Manrope', sans-serif;
 }
 
 .metrics {
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
-  padding: 10px;
+  padding: 8px;
 }
 
 .metric-chip {
-  border: 1px solid var(--line);
-  background: #fbfcfe;
-  border-radius: 10px;
-  padding: 7px 10px;
-  font-size: 0.74rem;
-  color: #516173;
+  border: 1px solid rgba(112, 142, 178, 0.4);
+  border-radius: 9px;
+  background: rgba(12, 22, 36, 0.9);
+  padding: 7px 9px;
   display: flex;
-  justify-content: space-between;
   align-items: baseline;
+  justify-content: space-between;
   gap: 8px;
+  font-size: 0.71rem;
+  color: #99aec8;
 }
 
 .metric-chip strong {
   font-family: 'Manrope', sans-serif;
-  font-size: 0.93rem;
-  color: #273546;
+  font-size: 0.9rem;
+  color: #e3edfb;
 }
 
 .metric-chip strong.good {
-  color: #0f766e;
+  color: #5ce2c7;
 }
 
 .metric-chip strong.bad {
-  color: #bd2131;
+  color: #ff8ea1;
+}
+
+.bottom-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 8px;
+}
+
+.phase-caption {
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.3;
+  color: #c0cee1;
+  padding-inline: 2px;
 }
 
 .replay {
-  padding: 10px 12px;
-  border-radius: 12px;
-  font-size: 0.8rem;
+  border: 1px solid rgba(134, 165, 206, 0.55);
+  border-radius: 999px;
+  background: rgba(18, 33, 53, 0.96);
+  color: #d6e6fd;
+  padding: 7px 13px;
+  font-size: 0.75rem;
   font-weight: 700;
-  color: #1f3e5d;
-  background: #f0f5fb;
-  border-color: #c7d8ea;
   cursor: pointer;
 }
 
 .replay:hover {
-  background: #e8f1fa;
+  background: rgba(30, 56, 88, 0.98);
 }
 
-@media (max-width: 1040px) {
-  .stage {
+@media (max-width: 980px) {
+  .scene-shell {
+    min-height: min(72vh, 700px);
+  }
+
+  .overlay-top {
     grid-template-columns: 1fr;
   }
 
-  .scene-shell {
-    min-height: min(64vh, 640px);
+  .equation-wrap {
+    justify-content: flex-start;
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 760px) {
   .app {
-    width: min(96vw, 680px);
-    margin: 16px auto 22px;
+    width: min(96vw, 720px);
+    margin: 14px auto 20px;
+    gap: 8px;
   }
 
   .stage {
-    padding: 10px;
-    gap: 10px;
+    padding: 8px;
     border-radius: 14px;
   }
 
   .scene-shell {
-    min-height: min(60vh, 520px);
+    min-height: min(66vh, 560px);
   }
 
-  .status-row {
+  .overlay {
+    left: 10px;
+    right: 10px;
+  }
+
+  .metrics {
     grid-template-columns: 1fr;
-    align-items: start;
   }
 
-  .ship-reason {
-    font-size: 0.76rem;
+  .bottom-row {
+    grid-template-columns: 1fr;
+  }
+
+  .replay {
+    width: 100%;
   }
 
   .equation-chip .katex {

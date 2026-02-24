@@ -92,7 +92,7 @@ export class UIController {
   }
 
   renderPressureModel(eta: number, strictness: number): void {
-    this.pressureDetail.textContent = `eta = ${eta.toFixed(2)} · epsilon = ${strictness.toFixed(2)}x`
+    this.pressureDetail.textContent = `eta ${eta.toFixed(2)} | epsilon ${strictness.toFixed(2)}x`
   }
 
   private syncDisplayedControlValues(): void {
