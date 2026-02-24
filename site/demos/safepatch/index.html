@@ -10,7 +10,7 @@
     <main class="app">
       <header class="title-block">
         <p class="eyebrow">SafePatch Geometry</p>
-        <h1>Unsafe optimizer move becomes the nearest safe move.</h1>
+        <h1>Red step breaches. Blue step is the nearest shippable projection.</h1>
       </header>
 
       <section class="stage">
@@ -24,7 +24,18 @@
             </div>
 
             <div class="equation-wrap">
-              <span id="equation-chip" class="equation-chip"></span>
+              <div class="legend-row">
+                <span class="legend-item">
+                  <i class="legend-dot raw"></i>
+                  <span id="legend-raw" class="legend-math"></span>
+                </span>
+                <span class="legend-item">
+                  <i class="legend-dot safe"></i>
+                  <span id="legend-safe" class="legend-math"></span>
+                </span>
+              </div>
+              <span id="equation-main" class="equation-line"></span>
+              <span id="equation-secondary" class="equation-line dim"></span>
             </div>
           </div>
 

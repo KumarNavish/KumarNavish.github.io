@@ -139,7 +139,7 @@ export class SceneRenderer {
 
     const background = ctx.createLinearGradient(0, 0, 0, height)
     background.addColorStop(0, '#0f1a2a')
-    background.addColorStop(1, '#0a1321')
+    background.addColorStop(1, '#091321')
     ctx.fillStyle = background
     ctx.fillRect(0, 0, width, height)
 
@@ -159,7 +159,7 @@ export class SceneRenderer {
 
     const boundRadius = worldBoundsFromHalfspaces(input.halfspaces)
     const stepRadius = Math.max(norm(input.rawTarget), norm(input.safeTarget), norm(input.rawStep), norm(input.safeStep), 0.9)
-    const worldRadius = Math.max(boundRadius * 2, stepRadius * 1.7, 1.5)
+    const worldRadius = Math.max(boundRadius * 2, stepRadius * 1.72, 1.6)
 
     const toScreen = (point: Vec2): ScreenPoint => ({
       x: ((point.x + worldRadius) / (2 * worldRadius)) * content.width + content.x,
@@ -168,49 +168,58 @@ export class SceneRenderer {
 
     this.drawGrid(toScreen, content, worldRadius)
 
-    if (input.previousZone && input.previousZone.vertices.length >= 3 && input.transitionProgress < 0.97) {
-      this.drawZone(toScreen, input.previousZone, withAlpha('#a0afc5', 0.04), withAlpha('#90a3bf', 0.3), true)
+    if (input.previousZone && input.previousZone.vertices.length >= 3 && input.transitionProgress < 0.96) {
+      this.drawZone(toScreen, input.previousZone, withAlpha('#9fadc1', 0.035), withAlpha('#9ab1ce', 0.26), true)
     }
 
     const displayedZone = morphPolygon(input.zone, 0.12 + input.zoneReveal * 0.88)
     this.drawZone(
       toScreen,
       displayedZone,
-      withAlpha('#2dd3b2', 0.16 + input.zoneReveal * 0.08),
-      withAlpha(ZONE_STROKE, 0.48 + input.zoneReveal * 0.42),
+      withAlpha('#2dd3b2', 0.14 + input.zoneReveal * 0.08),
+      withAlpha(ZONE_STROKE, 0.46 + input.zoneReveal * 0.44),
       false,
     )
+
+    for (const halfspace of input.halfspaces) {
+      const emphasis = clamp(input.constraintForceById[halfspace.id] ?? 0)
+      if (!halfspace.active || emphasis <= 0.05) {
+        continue
+      }
+      this.drawActiveBoundary(toScreen, worldRadius, halfspace, input.colorById[halfspace.id] ?? '#9ec0ea', emphasis)
+    }
 
     this.drawOriginPulse(toScreen({ x: 0, y: 0 }), 1 - clamp(input.transitionProgress))
 
     if (input.rawReveal > 0.02) {
-      this.drawArrow(toScreen, { x: 0, y: 0 }, input.rawStep, RAW_COLOR, 3.9, 0.95)
+      this.drawArrow(toScreen, { x: 0, y: 0 }, input.rawStep, RAW_COLOR, 4, 0.95)
       if (norm(input.rawTarget) > 0.08) {
-        this.drawArrow(toScreen, input.rawStep, input.rawTarget, RAW_COLOR, 1.2, 0.32, [4, 6])
+        this.drawArrow(toScreen, input.rawStep, input.rawTarget, RAW_COLOR, 1.2, 0.34, [4, 6])
       }
-      this.drawPoint(toScreen(input.rawStep), RAW_COLOR, 4.4)
+      this.drawPoint(toScreen(input.rawStep), RAW_COLOR, 4.5)
     }
 
-    if (input.safeReveal > 0.01 && norm(sub(input.safeTarget, input.rawTarget)) > 1e-5) {
+    const correctionNorm = norm(sub(input.safeTarget, input.rawTarget))
+    if (input.safeReveal > 0.01 && correctionNorm > 1e-5) {
+      this.drawProjectionWitness(
+        toScreen,
+        content,
+        worldRadius,
+        input.rawTarget,
+        input.safeTarget,
+        input.correctionProgress,
+      )
       this.drawCorrectionCurve(toScreen, input.rawTarget, input.safeTarget, input.correctionProgress)
     }
 
     if (input.safeReveal > 0.02) {
-      this.drawArrow(toScreen, { x: 0, y: 0 }, input.safeStep, SAFE_COLOR, 4.2, 0.97)
-      this.drawPoint(toScreen(input.safeStep), SAFE_COLOR, 4.8)
+      this.drawArrow(toScreen, { x: 0, y: 0 }, input.safeStep, SAFE_COLOR, 4.35, 0.98)
+      this.drawPoint(toScreen(input.safeStep), SAFE_COLOR, 5)
       this.drawSafeHalo(toScreen(input.safeStep), input.safeReveal)
     }
 
     if (input.violationRaw > 1e-6 && input.rawReveal > 0.08 && norm(input.rawStep) > 0.09) {
       this.drawViolationPulse(toScreen(input.rawStep), clamp(input.rawReveal))
-    }
-
-    if (input.rawReveal > 0.06 && norm(input.rawStep) > 0.1) {
-      this.drawVectorTag(content, toScreen(input.rawStep), input.rawStep, 'raw', RAW_COLOR)
-    }
-
-    if (input.safeReveal > 0.08 && norm(input.safeStep) > 0.1) {
-      this.drawVectorTag(content, toScreen(input.safeStep), input.safeStep, 'safe', SAFE_COLOR)
     }
   }
 
@@ -239,7 +248,7 @@ export class SceneRenderer {
       ctx.stroke()
     }
 
-    ctx.strokeStyle = 'rgba(192, 209, 233, 0.26)'
+    ctx.strokeStyle = 'rgba(192, 209, 233, 0.28)'
     ctx.lineWidth = 1.4
 
     const xStart = toScreen({ x: -worldRadius, y: 0 })
@@ -295,6 +304,40 @@ export class SceneRenderer {
     ctx.setLineDash([])
   }
 
+  private drawActiveBoundary(
+    toScreen: (point: Vec2) => ScreenPoint,
+    worldRadius: number,
+    halfspace: Halfspace,
+    color: string,
+    emphasis: number,
+  ): void {
+    const normal = halfspace.normal
+    const direction = { x: -normal.y, y: normal.x }
+    const center = { x: normal.x * halfspace.bound, y: normal.y * halfspace.bound }
+
+    const start = {
+      x: center.x - direction.x * worldRadius * 1.8,
+      y: center.y - direction.y * worldRadius * 1.8,
+    }
+    const end = {
+      x: center.x + direction.x * worldRadius * 1.8,
+      y: center.y + direction.y * worldRadius * 1.8,
+    }
+
+    const a = toScreen(start)
+    const b = toScreen(end)
+
+    const ctx = this.ctx
+    ctx.beginPath()
+    ctx.moveTo(a.x, a.y)
+    ctx.lineTo(b.x, b.y)
+    ctx.strokeStyle = withAlpha(color, 0.26 + emphasis * 0.5)
+    ctx.lineWidth = 1.2 + emphasis * 2.6
+    ctx.setLineDash([7, 5])
+    ctx.stroke()
+    ctx.setLineDash([])
+  }
+
   private drawOriginPulse(point: ScreenPoint, intensity: number): void {
     const ctx = this.ctx
     const pulse = 14 * clamp(intensity)
@@ -302,7 +345,7 @@ export class SceneRenderer {
     if (pulse > 0.2) {
       ctx.beginPath()
       ctx.arc(point.x, point.y, 8 + pulse, 0, Math.PI * 2)
-      ctx.strokeStyle = `rgba(124, 171, 235, ${0.22 * clamp(intensity)})`
+      ctx.strokeStyle = `rgba(124, 171, 235, ${0.24 * clamp(intensity)})`
       ctx.lineWidth = 1.5
       ctx.stroke()
     }
@@ -317,7 +360,7 @@ export class SceneRenderer {
     const ctx = this.ctx
     ctx.beginPath()
     ctx.arc(point.x, point.y, radius, 0, Math.PI * 2)
-    ctx.fillStyle = withAlpha(color, 0.94)
+    ctx.fillStyle = withAlpha(color, 0.96)
     ctx.fill()
   }
 
@@ -355,7 +398,7 @@ export class SceneRenderer {
     ctx.stroke()
     ctx.setLineDash([])
 
-    const head = Math.max(8, width * 2.35)
+    const head = Math.max(8, width * 2.3)
     const left = {
       x: end.x - dir.x * head + normal.x * (head * 0.6),
       y: end.y - dir.y * head + normal.y * (head * 0.6),
@@ -372,6 +415,46 @@ export class SceneRenderer {
     ctx.closePath()
     ctx.fillStyle = color
     ctx.fill()
+  }
+
+  private drawProjectionWitness(
+    toScreen: (point: Vec2) => ScreenPoint,
+    content: Viewport,
+    worldRadius: number,
+    rawTarget: Vec2,
+    safeTarget: Vec2,
+    progress: number,
+  ): void {
+    const correction = sub(safeTarget, rawTarget)
+    const distance = norm(correction)
+    if (distance <= 1e-6) {
+      return
+    }
+
+    const t = clamp(progress)
+    const center = toScreen(rawTarget)
+
+    const scaleX = content.width / (2 * worldRadius)
+    const scaleY = content.height / (2 * worldRadius)
+    const radiusX = distance * scaleX * t
+    const radiusY = distance * scaleY * t
+
+    const ctx = this.ctx
+    ctx.beginPath()
+    ctx.ellipse(center.x, center.y, radiusX, radiusY, 0, 0, Math.PI * 2)
+    ctx.strokeStyle = `rgba(220, 234, 255, ${0.18 + 0.26 * t})`
+    ctx.lineWidth = 1.4
+    ctx.setLineDash([6, 7])
+    ctx.stroke()
+    ctx.setLineDash([])
+
+    const witness = toScreen(safeTarget)
+    ctx.beginPath()
+    ctx.moveTo(center.x, center.y)
+    ctx.lineTo(witness.x, witness.y)
+    ctx.strokeStyle = `rgba(207, 226, 252, ${0.1 + 0.34 * t})`
+    ctx.lineWidth = 1.2
+    ctx.stroke()
   }
 
   private drawCorrectionCurve(
@@ -401,8 +484,8 @@ export class SceneRenderer {
     ctx.beginPath()
     ctx.moveTo(p0.x, p0.y)
     ctx.bezierCurveTo(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y)
-    ctx.strokeStyle = 'rgba(197, 215, 241, 0.68)'
-    ctx.lineWidth = 1.8
+    ctx.strokeStyle = 'rgba(203, 220, 246, 0.75)'
+    ctx.lineWidth = 1.85
     ctx.setLineDash([4, 6])
     ctx.stroke()
     ctx.setLineDash([])
@@ -411,8 +494,8 @@ export class SceneRenderer {
     const marker = toScreen(markerWorld)
 
     ctx.beginPath()
-    ctx.arc(marker.x, marker.y, 4, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(225, 238, 255, 0.95)'
+    ctx.arc(marker.x, marker.y, 4.1, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(227, 239, 255, 0.96)'
     ctx.fill()
   }
 
@@ -435,47 +518,16 @@ export class SceneRenderer {
 
   private drawSafeHalo(point: ScreenPoint, reveal: number): void {
     const ctx = this.ctx
-    const ring = (1 - clamp(reveal)) * 12
+    const ring = (1 - clamp(reveal)) * 13
     if (ring <= 0.2) {
       return
     }
 
     ctx.beginPath()
-    ctx.arc(point.x, point.y, 9 + ring, 0, Math.PI * 2)
-    ctx.strokeStyle = `rgba(103, 183, 255, ${0.28 * (1 - clamp(reveal))})`
-    ctx.lineWidth = 1.5
+    ctx.arc(point.x, point.y, 9.5 + ring, 0, Math.PI * 2)
+    ctx.strokeStyle = `rgba(103, 183, 255, ${0.3 * (1 - clamp(reveal))})`
+    ctx.lineWidth = 1.6
     ctx.stroke()
-  }
-
-  private drawVectorTag(bounds: Viewport, point: ScreenPoint, direction: Vec2, text: string, color: string): void {
-    const directionNorm = Math.max(1e-8, norm(direction))
-    const unit = { x: direction.x / directionNorm, y: direction.y / directionNorm }
-    const normal = { x: -unit.y, y: unit.x }
-
-    const anchor = {
-      x: point.x + normal.x * 16 + unit.x * 10,
-      y: point.y + normal.y * 16 + unit.y * 10,
-    }
-
-    const ctx = this.ctx
-    ctx.font = '700 11px "IBM Plex Sans", sans-serif'
-
-    const pad = 7
-    const width = ctx.measureText(text).width + pad * 2
-    const height = 20
-
-    const x = clamp(anchor.x - width / 2, bounds.x + 6, bounds.x + bounds.width - width - 6)
-    const y = clamp(anchor.y - height / 2, bounds.y + 6, bounds.y + bounds.height - height - 6)
-
-    ctx.fillStyle = withAlpha(color, 0.2)
-    ctx.strokeStyle = withAlpha(color, 0.62)
-    ctx.beginPath()
-    ctx.roundRect(x, y, width, height, 10)
-    ctx.fill()
-    ctx.stroke()
-
-    ctx.fillStyle = '#e6f0ff'
-    ctx.fillText(text, x + pad, y + 13.4)
   }
 }
 
