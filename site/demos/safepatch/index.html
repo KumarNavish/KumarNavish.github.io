@@ -10,12 +10,7 @@
     <main class="app">
       <header class="title-block">
         <p class="eyebrow">Production LLM Hotfix Simulator</p>
-        <h1>A customer-support model patch can improve refund handling but trigger unsafe replies. SafePatch auto-corrects it before ship.</h1>
-        <div class="scenario-strip" aria-label="Practical scenario framing">
-          <span class="scenario-chip">Use case: Support assistant hotfix</span>
-          <span class="scenario-chip">Objective: keep new behavior gain</span>
-          <span class="scenario-chip">Constraint: stay inside safety budgets</span>
-        </div>
+        <h1>Tonight&apos;s support-model hotfix can reduce ticket backlog or trigger unsafe escalations. SafePatch chooses the shippable variant.</h1>
         <div class="story-strip" aria-label="Visual legend for update vectors">
           <span class="story-dot raw" aria-hidden="true"></span>
           <span>Raw update</span>
@@ -41,12 +36,12 @@
           <div class="controls-row">
             <label class="control-block">
               <div class="control-head">
-                <span>Hotfix urgency</span>
+                <span>Tonight&apos;s patch size</span>
                 <span id="eta-value" class="value">58%</span>
               </div>
               <input id="eta-slider" type="range" min="0" max="1" step="0.001" value="0.58" />
               <div class="control-scale"><span>small patch</span><span>large patch</span></div>
-              <p id="pressure-detail" class="pressure-detail">Balanced pressure: moderate push, moderate correction.</p>
+              <p id="pressure-detail" class="pressure-detail">Balanced pressure: moderate patch with manageable correction.</p>
             </label>
             <button id="replay-button" class="replay" type="button">Replay motion</button>
           </div>
@@ -56,17 +51,17 @@
           </p>
 
           <div class="kpi-row" aria-label="Hotfix impact summary">
-            <article class="kpi-card">
-              <p>Value kept</p>
-              <strong id="kpi-value-kept">0%</strong>
-            </article>
             <article class="kpi-card risk">
-              <p>Raw unsafe risk</p>
-              <strong id="kpi-raw-risk">0%</strong>
+              <p>Peak queue if raw deploy</p>
+              <strong id="kpi-peak-raw">0</strong>
             </article>
             <article class="kpi-card success">
-              <p>Risk removed</p>
-              <strong id="kpi-risk-removed">0%</strong>
+              <p>Peak queue with SafePatch</p>
+              <strong id="kpi-peak-safe">0</strong>
+            </article>
+            <article class="kpi-card">
+              <p>Queue overload avoided</p>
+              <strong id="kpi-overload-avoided">0%</strong>
             </article>
           </div>
         </div>

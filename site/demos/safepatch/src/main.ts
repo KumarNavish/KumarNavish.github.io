@@ -66,6 +66,15 @@ const STRICTNESS_SENSITIVITY: Record<string, number> = {
 
 const AUTOPLAY_STEPS = [{ pressure: 0.08 }, { pressure: 0.95 }, { pressure: 0.5 }]
 
+interface QueueReplay {
+  rawSeries: number[]
+  safeSeries: number[]
+  overloadThreshold: number
+  peakRaw: number
+  peakSafe: number
+  overloadAvoidedRatio: number
+}
+
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(Math.max(value, min), max)
 }
@@ -149,18 +158,64 @@ function firstBreachPoint(step: Vec2, halfspaces: Halfspace[]): Vec2 | null {
   return scale(step, Math.max(0, tMin))
 }
 
+function buildQueueReplay(
+  pressure: number,
+  rawRiskRatio: number,
+  safeRiskRatio: number,
+  retainedValueRatio: number,
+): QueueReplay {
+  const minutes = 14
+  const overloadThreshold = 520
+  const initialQueue = 180 + Math.round(pressure * 90)
+
+  const baseArrival = 360 + pressure * 70
+  const baseService = 370
+  const serviceGain = 42 * retainedValueRatio
+  const rawPenalty = 140 * rawRiskRatio
+  const safePenalty = 140 * safeRiskRatio
+
+  const rawSeries: number[] = [initialQueue]
+  const safeSeries: number[] = [initialQueue]
+
+  for (let minute = 1; minute < minutes; minute += 1) {
+    const demandWave = 20 * Math.sin((minute / (minutes - 1)) * Math.PI)
+    const rawPrev = rawSeries[minute - 1]
+    const safePrev = safeSeries[minute - 1]
+
+    const rawNext = Math.max(0, rawPrev + baseArrival + rawPenalty + demandWave - (baseService + serviceGain))
+    const safeNext = Math.max(0, safePrev + baseArrival + safePenalty + demandWave - (baseService + serviceGain))
+
+    rawSeries.push(rawNext)
+    safeSeries.push(safeNext)
+  }
+
+  const peakRaw = Math.round(Math.max(...rawSeries))
+  const peakSafe = Math.round(Math.max(...safeSeries))
+  const overloadRaw = Math.max(0, peakRaw - overloadThreshold)
+  const overloadSafe = Math.max(0, peakSafe - overloadThreshold)
+
+  return {
+    rawSeries,
+    safeSeries,
+    overloadThreshold,
+    peakRaw,
+    peakSafe,
+    overloadAvoidedRatio: overloadRaw > 1 ? (overloadRaw - overloadSafe) / overloadRaw : 1,
+  }
+}
+
 function phaseState(progress: number, ship: boolean): string {
   if (progress < 0.22) {
-    return 'New support-ticket data proposes a raw model patch.'
+    return 'A hotfix patch is generated from new support failures.'
   }
   if (progress < 0.52) {
-    return 'Raw patch overshoots safety budgets.'
+    return 'Raw deploy breaches safety and starts queue pressure.'
   }
   if (progress < 0.86) {
-    return 'SafePatch projects to the nearest shippable patch.'
+    return 'SafePatch computes the nearest shippable correction.'
   }
   return ship
-    ? 'Patch ships with behavior gain and guardrails intact.'
+    ? 'Corrected deploy stabilizes queue minute-by-minute.'
     : 'No feasible correction under current guardrails.'
 }
 
@@ -294,7 +349,7 @@ function start(): void {
     const largestBudget = Math.max(0.15, ...halfspaces.map((halfspace) => halfspace.bound))
     const rawRiskRatio = Math.max(0, projection.maxViolationStep0) / largestBudget
     const safeRiskRatio = Math.max(0, projection.maxViolationProjected) / largestBudget
-    const riskRemovedRatio = rawRiskRatio > 1e-6 ? (rawRiskRatio - safeRiskRatio) / rawRiskRatio : projection.ship ? 1 : 0
+    const queueReplay = buildQueueReplay(pressure, rawRiskRatio, safeRiskRatio, projection.descentRetainedRatio)
 
     renderer.render({
       halfspaces,
@@ -311,6 +366,9 @@ function start(): void {
       rawRiskRatio,
       safeRiskRatio,
       retainedValueRatio: projection.descentRetainedRatio,
+      queueRawSeries: queueReplay.rawSeries,
+      queueSafeSeries: queueReplay.safeSeries,
+      queueOverloadThreshold: queueReplay.overloadThreshold,
       zoneReveal,
       rawReveal: rawScale,
       safeReveal: safeLinear,
@@ -330,8 +388,10 @@ function start(): void {
       phaseText,
       rawRiskRatio,
       retainedValueRatio: projection.descentRetainedRatio,
-      riskRemovedRatio,
       safeRiskRatio,
+      rawPeakQueue: queueReplay.peakRaw,
+      safePeakQueue: queueReplay.peakSafe,
+      overloadAvoidedRatio: queueReplay.overloadAvoidedRatio,
     })
 
     if (progress > 0.995 && previousZone) {
