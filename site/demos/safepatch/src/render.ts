@@ -1,8 +1,3 @@
-interface ScreenPoint {
-  x: number
-  y: number
-}
-
 interface Rect {
   x: number
   y: number
@@ -13,17 +8,14 @@ interface Rect {
 export interface SceneRenderInput {
   queueRawSeries: number[]
   queueSafeSeries: number[]
-  queueOverloadThreshold: number
-  rawRiskRatio: number
-  safeRiskRatio: number
-  retainedValueRatio: number
-  correctionRatio: number
+  overloadThreshold: number
+  rawOverloadMinute: number | null
+  safeOverloadMinute: number | null
   transitionProgress: number
 }
 
 const RAW_COLOR = '#d92d41'
 const SAFE_COLOR = '#0e5acf'
-const TEXT_COLOR = '#1e3655'
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(Math.max(value, min), max)
@@ -38,18 +30,15 @@ function withAlpha(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t
-}
-
 function interpolateSeries(series: number[], indexFloat: number): number {
   if (series.length === 0) {
     return 0
   }
+
   const i0 = Math.floor(indexFloat)
   const i1 = Math.min(series.length - 1, i0 + 1)
   const t = indexFloat - i0
-  return lerp(series[i0], series[i1], t)
+  return series[i0] + (series[i1] - series[i0]) * t
 }
 
 export class SceneRenderer {
@@ -84,61 +73,27 @@ export class SceneRenderer {
     ctx.clearRect(0, 0, width, height)
 
     const background = ctx.createLinearGradient(0, 0, 0, height)
-    background.addColorStop(0, '#fcfdff')
-    background.addColorStop(1, '#eef4fb')
+    background.addColorStop(0, '#fbfdff')
+    background.addColorStop(1, '#edf4fb')
     ctx.fillStyle = background
     ctx.fillRect(0, 0, width, height)
 
-    const panel: Rect = {
-      x: 18,
-      y: 18,
-      width: width - 36,
-      height: height - 36,
+    const chart: Rect = {
+      x: 48,
+      y: 40,
+      width: width - 96,
+      height: height - 92,
     }
 
     ctx.beginPath()
-    ctx.roundRect(panel.x, panel.y, panel.width, panel.height, 14)
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.74)'
-    ctx.strokeStyle = 'rgba(133, 153, 179, 0.4)'
+    ctx.roundRect(chart.x - 16, chart.y - 16, chart.width + 32, chart.height + 28, 12)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.78)'
+    ctx.strokeStyle = 'rgba(136, 154, 180, 0.4)'
     ctx.lineWidth = 1
     ctx.fill()
     ctx.stroke()
 
-    this.drawChip(
-      panel.x + 14,
-      panel.y + 12,
-      'raw unsafe risk',
-      `${Math.round(clamp(input.rawRiskRatio) * 100)}%`,
-      RAW_COLOR,
-    )
-    this.drawChip(
-      panel.x + 152,
-      panel.y + 12,
-      'SafePatch risk',
-      `${Math.round(clamp(input.safeRiskRatio) * 100)}%`,
-      '#0a8b64',
-    )
-    this.drawChip(
-      panel.x + 282,
-      panel.y + 12,
-      'patch gain kept',
-      `${Math.round(clamp(input.retainedValueRatio) * 100)}%`,
-      SAFE_COLOR,
-    )
-
-    const chart: Rect = {
-      x: panel.x + 28,
-      y: panel.y + 66,
-      width: panel.width - 56,
-      height: panel.height - 110,
-    }
-
-    const maxValue = Math.max(
-      input.queueOverloadThreshold,
-      ...input.queueRawSeries,
-      ...input.queueSafeSeries,
-      1,
-    )
+    const maxValue = Math.max(input.overloadThreshold, ...input.queueRawSeries, ...input.queueSafeSeries, 1)
 
     const mapX = (indexFloat: number, length: number): number =>
       chart.x + (indexFloat / Math.max(1, length - 1)) * chart.width
@@ -146,96 +101,76 @@ export class SceneRenderer {
     const mapY = (value: number): number =>
       chart.y + chart.height - (value / (maxValue * 1.08)) * chart.height
 
-    const thresholdY = mapY(input.queueOverloadThreshold)
+    this.drawGrid(chart)
 
-    ctx.save()
-    ctx.beginPath()
-    ctx.rect(chart.x, chart.y, chart.width, chart.height)
-    ctx.clip()
+    const thresholdY = mapY(input.overloadThreshold)
+    this.drawThreshold(chart, thresholdY)
 
-    ctx.fillStyle = 'rgba(217, 45, 65, 0.08)'
-    ctx.fillRect(chart.x, chart.y, chart.width, Math.max(0, thresholdY - chart.y))
+    const rawReveal = clamp(input.transitionProgress / 0.58)
+    const safeReveal = clamp((input.transitionProgress - 0.34) / 0.66)
+
+    this.drawSeriesGhost(mapX, mapY, input.queueRawSeries, RAW_COLOR)
+    this.drawSeriesGhost(mapX, mapY, input.queueSafeSeries, SAFE_COLOR)
+
+    this.drawSeries(mapX, mapY, input.queueRawSeries, rawReveal, RAW_COLOR, 2.5)
+    this.drawSeries(mapX, mapY, input.queueSafeSeries, safeReveal, SAFE_COLOR, 2.6)
+
+    this.drawCurrentMinuteMarker(chart, input.queueRawSeries.length, Math.max(rawReveal, safeReveal))
+
+    if (input.rawOverloadMinute !== null) {
+      this.drawOverloadMarker(mapX(input.rawOverloadMinute, input.queueRawSeries.length), thresholdY, RAW_COLOR, 'raw page')
+    }
+    if (input.safeOverloadMinute !== null) {
+      this.drawOverloadMarker(mapX(input.safeOverloadMinute, input.queueSafeSeries.length), thresholdY, SAFE_COLOR, 'safe page')
+    }
+
+    this.drawLegend(chart)
+
+    ctx.font = '600 11px "Space Grotesk", sans-serif'
+    ctx.fillStyle = '#4d6585'
+    ctx.fillText('minute 0', chart.x, chart.y + chart.height + 20)
+    ctx.fillText(`minute ${input.queueRawSeries.length - 1}`, chart.x + chart.width - 60, chart.y + chart.height + 20)
+  }
+
+  private drawGrid(chart: Rect): void {
+    const ctx = this.ctx
 
     for (let i = 0; i <= 4; i += 1) {
       const y = chart.y + (i / 4) * chart.height
       ctx.beginPath()
       ctx.moveTo(chart.x, y)
       ctx.lineTo(chart.x + chart.width, y)
-      ctx.strokeStyle = 'rgba(72, 97, 127, 0.14)'
+      ctx.strokeStyle = 'rgba(74, 97, 126, 0.14)'
       ctx.lineWidth = 1
       ctx.stroke()
     }
 
+    for (let i = 0; i <= 6; i += 1) {
+      const x = chart.x + (i / 6) * chart.width
+      ctx.beginPath()
+      ctx.moveTo(x, chart.y)
+      ctx.lineTo(x, chart.y + chart.height)
+      ctx.strokeStyle = 'rgba(74, 97, 126, 0.1)'
+      ctx.lineWidth = 1
+      ctx.stroke()
+    }
+  }
+
+  private drawThreshold(chart: Rect, y: number): void {
+    const ctx = this.ctx
+
     ctx.beginPath()
-    ctx.moveTo(chart.x, thresholdY)
-    ctx.lineTo(chart.x + chart.width, thresholdY)
-    ctx.strokeStyle = 'rgba(217, 45, 65, 0.75)'
-    ctx.lineWidth = 1.3
-    ctx.setLineDash([5, 5])
+    ctx.moveTo(chart.x, y)
+    ctx.lineTo(chart.x + chart.width, y)
+    ctx.strokeStyle = withAlpha(RAW_COLOR, 0.7)
+    ctx.lineWidth = 1.35
+    ctx.setLineDash([6, 5])
     ctx.stroke()
     ctx.setLineDash([])
 
-    this.drawSeriesGhost(mapX, mapY, input.queueRawSeries, RAW_COLOR)
-    this.drawSeriesGhost(mapX, mapY, input.queueSafeSeries, SAFE_COLOR)
-
-    const rawReveal = clamp(input.transitionProgress / 0.56)
-    const safeReveal = clamp((input.transitionProgress - 0.42) / 0.58)
-
-    this.drawAvoidedArea(mapX, mapY, input.queueRawSeries, input.queueSafeSeries, Math.min(rawReveal, safeReveal))
-
-    const rawPoint = this.drawSeries(mapX, mapY, input.queueRawSeries, rawReveal, RAW_COLOR, 2.5)
-    const safePoint = this.drawSeries(mapX, mapY, input.queueSafeSeries, safeReveal, SAFE_COLOR, 2.6)
-
-    const markerProgress = Math.max(rawReveal, safeReveal)
-    const markerX = mapX(markerProgress * (input.queueRawSeries.length - 1), input.queueRawSeries.length)
-    ctx.beginPath()
-    ctx.moveTo(markerX, chart.y)
-    ctx.lineTo(markerX, chart.y + chart.height)
-    ctx.strokeStyle = 'rgba(60, 82, 111, 0.36)'
-    ctx.lineWidth = 1
-    ctx.stroke()
-
-    if (rawPoint) {
-      this.drawGlow(rawPoint, RAW_COLOR, 11)
-    }
-    if (safePoint) {
-      this.drawGlow(safePoint, SAFE_COLOR, 11)
-    }
-
-    ctx.restore()
-
     ctx.font = '600 11px "Space Grotesk", sans-serif'
-    ctx.fillStyle = '#4f6685'
-    ctx.fillText('SLA overload threshold', chart.x + 8, thresholdY - 6)
-    ctx.fillText('minute 0', chart.x, chart.y + chart.height + 18)
-    ctx.fillText(`minute ${input.queueRawSeries.length - 1}`, chart.x + chart.width - 58, chart.y + chart.height + 18)
-
-    const avoidedLoad = Math.max(0, Math.round((input.correctionRatio * 1000 + (input.rawRiskRatio - input.safeRiskRatio) * 550)))
-    ctx.fillStyle = TEXT_COLOR
-    ctx.font = '700 12px "Space Grotesk", sans-serif'
-    ctx.fillText(`avoided overload load: ${avoidedLoad.toLocaleString()} tickets`, chart.x, panel.y + panel.height - 16)
-  }
-
-  private drawChip(x: number, y: number, label: string, value: string, color: string): void {
-    const ctx = this.ctx
-    const width = 124
-    const height = 38
-
-    ctx.beginPath()
-    ctx.roundRect(x, y, width, height, 10)
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.92)'
-    ctx.strokeStyle = 'rgba(147, 164, 187, 0.45)'
-    ctx.lineWidth = 1
-    ctx.fill()
-    ctx.stroke()
-
-    ctx.font = '600 10px "Space Grotesk", sans-serif'
-    ctx.fillStyle = '#4b6382'
-    ctx.fillText(label, x + 8, y + 14)
-
-    ctx.font = '700 13px "Manrope", sans-serif'
-    ctx.fillStyle = color
-    ctx.fillText(value, x + 8, y + 30)
+    ctx.fillStyle = '#b22a41'
+    ctx.fillText('SLA overload threshold', chart.x + 8, y - 7)
   }
 
   private drawSeriesGhost(
@@ -267,16 +202,16 @@ export class SceneRenderer {
     reveal: number,
     color: string,
     width: number,
-  ): ScreenPoint | null {
+  ): void {
     if (series.length < 2) {
-      return null
+      return
     }
 
     const ctx = this.ctx
     const progress = clamp(reveal)
     const maxIndexFloat = progress * (series.length - 1)
     const fullIndex = Math.floor(maxIndexFloat)
-    const frac = maxIndexFloat - fullIndex
+    const fraction = maxIndexFloat - fullIndex
 
     ctx.beginPath()
     ctx.moveTo(mapX(0, series.length), mapY(series[0]))
@@ -290,74 +225,93 @@ export class SceneRenderer {
       const y0 = mapY(series[fullIndex])
       const x1 = mapX(fullIndex + 1, series.length)
       const y1 = mapY(series[fullIndex + 1])
-      ctx.lineTo(lerp(x0, x1, frac), lerp(y0, y1, frac))
+      ctx.lineTo(x0 + (x1 - x0) * fraction, y0 + (y1 - y0) * fraction)
     }
 
-    ctx.strokeStyle = withAlpha(color, 0.95)
+    ctx.strokeStyle = withAlpha(color, 0.94)
     ctx.lineWidth = width
     ctx.stroke()
 
     const markerValue = interpolateSeries(series, maxIndexFloat)
-    const marker: ScreenPoint = {
-      x: mapX(maxIndexFloat, series.length),
-      y: mapY(markerValue),
-    }
+    const markerX = mapX(maxIndexFloat, series.length)
+    const markerY = mapY(markerValue)
 
     ctx.beginPath()
-    ctx.arc(marker.x, marker.y, 4, 0, Math.PI * 2)
-    ctx.fillStyle = withAlpha(color, 0.98)
+    ctx.arc(markerX, markerY, 4, 0, Math.PI * 2)
+    ctx.fillStyle = color
     ctx.fill()
 
-    return marker
-  }
-
-  private drawAvoidedArea(
-    mapX: (indexFloat: number, length: number) => number,
-    mapY: (value: number) => number,
-    rawSeries: number[],
-    safeSeries: number[],
-    reveal: number,
-  ): void {
-    const progress = clamp(reveal)
-    if (rawSeries.length < 2 || safeSeries.length < 2 || progress < 0.08) {
-      return
-    }
-
-    const ctx = this.ctx
-    const samples = 40
-    const maxIndexFloat = progress * (rawSeries.length - 1)
-
-    const rawPts: ScreenPoint[] = []
-    const safePts: ScreenPoint[] = []
-
-    for (let i = 0; i <= samples; i += 1) {
-      const idxFloat = (i / samples) * maxIndexFloat
-      const rawValue = interpolateSeries(rawSeries, idxFloat)
-      const safeValue = interpolateSeries(safeSeries, idxFloat)
-
-      rawPts.push({ x: mapX(idxFloat, rawSeries.length), y: mapY(rawValue) })
-      safePts.push({ x: mapX(idxFloat, safeSeries.length), y: mapY(safeValue) })
-    }
-
     ctx.beginPath()
-    ctx.moveTo(rawPts[0].x, rawPts[0].y)
-    for (const point of rawPts) {
-      ctx.lineTo(point.x, point.y)
-    }
-    for (let i = safePts.length - 1; i >= 0; i -= 1) {
-      ctx.lineTo(safePts[i].x, safePts[i].y)
-    }
-    ctx.closePath()
-
-    ctx.fillStyle = 'rgba(14, 90, 207, 0.09)'
+    ctx.arc(markerX, markerY, 10, 0, Math.PI * 2)
+    ctx.fillStyle = withAlpha(color, 0.13)
     ctx.fill()
   }
 
-  private drawGlow(point: ScreenPoint, color: string, radius: number): void {
+  private drawCurrentMinuteMarker(chart: Rect, seriesLength: number, progress: number): void {
+    const ctx = this.ctx
+    const x = chart.x + clamp(progress) * chart.width
+
+    ctx.beginPath()
+    ctx.moveTo(x, chart.y)
+    ctx.lineTo(x, chart.y + chart.height)
+    ctx.strokeStyle = 'rgba(54, 79, 109, 0.34)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+
+    const minute = Math.round(clamp(progress) * (seriesLength - 1))
+    ctx.font = '600 11px "Space Grotesk", sans-serif'
+    ctx.fillStyle = '#4f6684'
+    ctx.fillText(`minute ${minute}`, x + 6, chart.y + 16)
+  }
+
+  private drawOverloadMarker(x: number, y: number, color: string, label: string): void {
     const ctx = this.ctx
     ctx.beginPath()
-    ctx.arc(point.x, point.y, radius, 0, Math.PI * 2)
-    ctx.fillStyle = withAlpha(color, 0.16)
+    ctx.arc(x, y, 5, 0, Math.PI * 2)
+    ctx.fillStyle = color
     ctx.fill()
+
+    ctx.beginPath()
+    ctx.arc(x, y, 13, 0, Math.PI * 2)
+    ctx.strokeStyle = withAlpha(color, 0.34)
+    ctx.lineWidth = 1.4
+    ctx.stroke()
+
+    ctx.font = '600 10px "Space Grotesk", sans-serif'
+    ctx.fillStyle = withAlpha(color, 0.95)
+    ctx.fillText(label, x + 8, y - 8)
+  }
+
+  private drawLegend(chart: Rect): void {
+    const ctx = this.ctx
+    const x = chart.x + 4
+    const y = chart.y + 8
+
+    ctx.beginPath()
+    ctx.roundRect(x, y, 170, 40, 10)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.88)'
+    ctx.strokeStyle = 'rgba(140, 160, 185, 0.4)'
+    ctx.lineWidth = 1
+    ctx.fill()
+    ctx.stroke()
+
+    ctx.font = '600 10px "Space Grotesk", sans-serif'
+    ctx.fillStyle = '#45607f'
+
+    ctx.beginPath()
+    ctx.moveTo(x + 10, y + 14)
+    ctx.lineTo(x + 30, y + 14)
+    ctx.strokeStyle = RAW_COLOR
+    ctx.lineWidth = 2.2
+    ctx.stroke()
+    ctx.fillText('raw deploy', x + 35, y + 17)
+
+    ctx.beginPath()
+    ctx.moveTo(x + 10, y + 29)
+    ctx.lineTo(x + 30, y + 29)
+    ctx.strokeStyle = SAFE_COLOR
+    ctx.lineWidth = 2.2
+    ctx.stroke()
+    ctx.fillText('SafePatch deploy', x + 35, y + 32)
   }
 }
