@@ -19,7 +19,6 @@ import { computeProjectedStep } from './qp'
 import { SceneRenderer, paletteForConstraints } from './render'
 import { UIController } from './ui'
 
-const GRADIENT_NEW: Vec2 = vec(-1.42, -0.96)
 const TRANSITION_MS = 1400
 
 const baseHalfspaces: Halfspace[] = [
@@ -68,13 +67,9 @@ const STRICTNESS_SENSITIVITY: Record<string, number> = {
   g5: 1.95,
 }
 
-const AUTOPLAY_STEPS = [
-  { eta: 1.38, strictness: 0.78 },
-  { eta: 1.38, strictness: 1.27 },
-  { eta: 1.0, strictness: 1.0 },
-]
+const AUTOPLAY_STEPS = [{ pressure: 0.2 }, { pressure: 0.88 }, { pressure: 0.58 }]
 
-const CORE_EQUATION = String.raw`\Delta^* = \Pi_{\mathcal S}(\Delta_0)`
+const CORE_EQUATION = String.raw`\Delta_0 = -\eta g_{new}\;,\;\Delta^* = \Pi_{\mathcal S}(\Delta_0)`
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(Math.max(value, min), max)
@@ -114,6 +109,21 @@ function copyPolygon(polygon: Polygon): Polygon {
   }
 }
 
+function degreesToRadians(value: number): number {
+  return (value * Math.PI) / 180
+}
+
+function scenarioFromPressure(pressure: number): { eta: number; strictness: number; gradient: Vec2 } {
+  const t = clamp(pressure)
+  const eta = 0.72 + t * 1.2
+  const strictness = 1.24 - t * 0.54
+  const angle = degreesToRadians(-175 + t * 82)
+  const gradientMagnitude = 0.84 + t * 0.96
+  const gradient = scale(normalize(vec(Math.cos(angle), Math.sin(angle))), gradientMagnitude)
+
+  return { eta, strictness, gradient }
+}
+
 function renderMathInline(elementId: string, expression: string): void {
   const node = document.getElementById(elementId)
   if (!node) {
@@ -138,15 +148,15 @@ function boundScaleForStrictness(id: string, strictness: number): number {
 
 function phaseStory(progress: number, ship: boolean): string {
   if (progress < 0.2) {
-    return '1/3 Guardrail geometry builds the ship zone.'
+    return '1/3 Build feasible ship zone.'
   }
   if (progress < 0.53) {
-    return '2/3 Raw optimizer update launches (red).'
+    return '2/3 Raw step launches and breaches.'
   }
   if (progress < 0.98) {
-    return '3/3 Projection snaps to nearest feasible step (blue).'
+    return '3/3 Projection lands on closest feasible step.'
   }
-  return ship ? 'Ship the blue step: policy-safe and closest to optimizer intent.' : 'Hold: no feasible projection under current limits.'
+  return ship ? 'SHIP: blue step keeps intent while satisfying guardrails.' : 'HOLD: guardrails leave no feasible projected step.'
 }
 
 function start(): void {
@@ -164,14 +174,16 @@ function start(): void {
   const renderer = new SceneRenderer(canvas)
   const ui = new UIController()
 
-  let eta = 1.38
-  let strictness = 0.78
+  let pressure = 0.58
+  let eta = scenarioFromPressure(pressure).eta
+  let strictness = scenarioFromPressure(pressure).strictness
+  let gradientNew = scenarioFromPressure(pressure).gradient
 
   let zone = intersectHalfspaces(halfspaces, worldBoundsFromHalfspaces(halfspaces))
   let previousZone: Polygon | null = null
 
   let projection = computeProjectedStep({
-    gradient: GRADIENT_NEW,
+    gradient: gradientNew,
     eta,
     halfspaces,
   })
@@ -195,8 +207,13 @@ function start(): void {
     }
 
     const controls = ui.readControlValues()
-    eta = controls.eta
-    strictness = controls.strictness
+    pressure = controls.pressure
+    const scenario = scenarioFromPressure(pressure)
+
+    eta = scenario.eta
+    strictness = scenario.strictness
+    gradientNew = scenario.gradient
+    ui.renderPressureModel(eta, strictness)
 
     for (const halfspace of halfspaces) {
       const baseBound = baseBounds.get(halfspace.id)
@@ -210,7 +227,7 @@ function start(): void {
 
     zone = intersectHalfspaces(halfspaces, worldBoundsFromHalfspaces(halfspaces))
     projection = computeProjectedStep({
-      gradient: GRADIENT_NEW,
+      gradient: gradientNew,
       eta,
       halfspaces,
     })
@@ -227,7 +244,7 @@ function start(): void {
           return
         }
 
-        ui.setControlValues(step)
+        ui.setControlValues({ pressure: step.pressure })
         applyControls(true)
       }, 360 + index * 2280)
 
@@ -322,7 +339,7 @@ function start(): void {
   })
 
   renderer.resize()
-  ui.setControlValues({ eta, strictness })
+  ui.setControlValues({ pressure })
   applyControls(false)
   scheduleAutoplay()
   requestAnimationFrame(frame)
