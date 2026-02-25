@@ -25,6 +25,8 @@ export interface ProofFrameUi {
 export class UIController {
   private readonly scenarioButtons: HTMLButtonElement[]
   private readonly scenarioNote: HTMLElement | null
+  private readonly urgencyNote: HTMLElement | null
+  private readonly strictnessNote: HTMLElement | null
   private readonly urgencySlider: HTMLInputElement
   private readonly strictnessSlider: HTMLInputElement
 
@@ -47,6 +49,7 @@ export class UIController {
   private selectedPressure = 0.56
   private selectedUrgency = 0.58
   private selectedStrictness = 0.62
+  private lastDecisionTone: 'ship' | 'hold' | null = null
 
   constructor() {
     this.decisionPanel = this.getElement('decision-panel')
@@ -62,6 +65,8 @@ export class UIController {
     this.guardrailValue = this.getElement('guardrail-value')
     this.retainedValue = this.getElement('retained-value')
     this.scenarioNote = document.getElementById('scenario-note')
+    this.urgencyNote = document.getElementById('urgency-note')
+    this.strictnessNote = document.getElementById('strictness-note')
 
     this.urgencySlider = this.getElement<HTMLInputElement>('urgency-slider')
     this.strictnessSlider = this.getElement<HTMLInputElement>('strictness-slider')
@@ -136,11 +141,13 @@ export class UIController {
   }
 
   renderFrame(frame: ProofFrameUi): void {
+    const toneChanged = this.lastDecisionTone !== frame.decisionTone
+
     this.decisionPanel.classList.toggle('ship', frame.decisionTone === 'ship')
     this.decisionPanel.classList.toggle('hold', frame.decisionTone === 'hold')
     this.decisionPill.classList.toggle('ship', frame.decisionTone === 'ship')
     this.decisionPill.classList.toggle('hold', frame.decisionTone === 'hold')
-    this.decisionPill.textContent = frame.decisionTone === 'ship' ? 'SHIP WITH SAFEPATCH' : 'HOLD DEPLOYMENT'
+    this.decisionPill.textContent = frame.decisionTone === 'ship' ? 'READY TO SHIP' : 'HOLD DEPLOYMENT'
 
     this.decisionTitle.textContent = frame.decisionTitle
     this.decisionDetail.textContent = frame.decisionDetail
@@ -152,6 +159,11 @@ export class UIController {
     this.kpiEscalationsValue.textContent = frame.escalationValueText
     this.guardrailValue.textContent = frame.guardrailValueText
     this.retainedValue.textContent = frame.retainedValueText
+
+    if (toneChanged) {
+      this.flash(this.decisionPanel)
+    }
+    this.lastDecisionTone = frame.decisionTone
   }
 
   private renderMathBlocks(): void {
@@ -210,6 +222,13 @@ export class UIController {
 
     this.urgencyValue.textContent = `${Math.round(this.selectedUrgency * 100)}%`
     this.strictnessValue.textContent = `${Math.round(this.selectedStrictness * 100)}%`
+
+    if (this.urgencyNote) {
+      this.urgencyNote.textContent = this.describeUrgency(this.selectedUrgency)
+    }
+    if (this.strictnessNote) {
+      this.strictnessNote.textContent = this.describeStrictness(this.selectedStrictness)
+    }
   }
 
   private parseSliderValue(raw: string, fallback: number): number {
@@ -226,12 +245,39 @@ export class UIController {
 
   private describeScenario(pressure: number): string {
     if (pressure < 0.38) {
-      return 'Routine traffic: low queue pressure with minor guardrail risk.'
+      return 'Normal day: low queue pressure and small safety risk.'
     }
     if (pressure < 0.75) {
-      return 'Peak traffic: moderate pressure with non-trivial queue risk.'
+      return 'Traffic spike: queue pressure is meaningful but still manageable.'
     }
-    return 'Incident traffic: severe pressure where unsafe patches trigger escalations fast.'
+    return 'Incident hour: severe pressure where unsafe patches trigger escalations quickly.'
+  }
+
+  private describeUrgency(urgency: number): string {
+    if (urgency < 0.34) {
+      return 'Low urgency: there is enough room to enforce stronger correction.'
+    }
+    if (urgency < 0.67) {
+      return 'Balanced urgency: correction still has room to improve safety.'
+    }
+    return 'Critical urgency: raw update pushes aggressively and needs tighter correction.'
+  }
+
+  private describeStrictness(strictness: number): string {
+    if (strictness < 0.34) {
+      return 'Relaxed policy: easier to keep quality, but less conservative on risk.'
+    }
+    if (strictness < 0.67) {
+      return 'Moderate strictness: core guardrails stay active without over-constraining quality.'
+    }
+    return 'High strictness: policy limits are tight, so some gain can be sacrificed for safety.'
+  }
+
+  private flash(element: HTMLElement): void {
+    element.classList.remove('flash')
+    // Force restart so the same animation can play on repeated state changes.
+    void element.offsetWidth
+    element.classList.add('flash')
   }
 
   private getElement<T extends HTMLElement>(id: string): T {
