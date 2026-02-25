@@ -50,6 +50,18 @@ function easeInOutCubic(value: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - ((-2 * t + 2) ** 3) / 2
 }
 
+function easeOutCubic(value: number): number {
+  const t = clamp(value)
+  return 1 - (1 - t) ** 3
+}
+
+function phaseWindow(progress: number, start: number, end: number): number {
+  if (end <= start) {
+    return progress >= end ? 1 : 0
+  }
+  return clamp((progress - start) / (end - start))
+}
+
 function withAlpha(hex: string, alpha: number): string {
   const clean = hex.replace('#', '')
   const value = Number.parseInt(clean, 16)
@@ -89,7 +101,14 @@ export class SceneRenderer {
 
     const ctx = this.ctx
     ctx.clearRect(0, 0, width, height)
-    this.paintBackdrop(width, height)
+
+    const timeline = clamp(input.transitionProgress)
+    const phaseRisk = easeOutCubic(phaseWindow(timeline, 0, 0.38))
+    const phaseProjection = easeInOutCubic(phaseWindow(timeline, 0.24, 0.7))
+    const phaseQueue = easeInOutCubic(phaseWindow(timeline, 0.58, 1))
+    const pulse = 0.5 + 0.5 * Math.sin(input.clockMs * 0.0022)
+
+    this.paintBackdrop(width, height, input.clockMs, phaseQueue)
 
     const margin = 16
     const gap = 12
@@ -128,23 +147,39 @@ export class SceneRenderer {
       }
     }
 
-    const blend = easeInOutCubic(input.transitionProgress)
-    const pulse = 0.5 + 0.5 * Math.sin(input.clockMs * 0.0022)
-    const projectedAnimated = lerp(input.step0, input.projectedStep, blend)
-
     const queueLength = Math.min(input.queueRawSeries.length, input.queueSafeSeries.length)
     const rawSeries = input.queueRawSeries.slice(0, queueLength)
     const safeTarget = input.queueSafeSeries.slice(0, queueLength)
-    const safeAnimated = rawSeries.map((value, index) => value + (safeTarget[index] - value) * blend)
+    const safeAnimated = rawSeries.map((value, index) => value + (safeTarget[index] - value) * phaseQueue)
 
-    this.drawPanelShell(geometryPanel, 'PATCH SPACE', 'raw vector to safe vector')
-    this.drawPanelShell(queuePanel, 'QUEUE REPLAY', 'same load, different deployment policy')
+    this.drawStoryRail(width, margin, phaseRisk, phaseProjection, phaseQueue)
 
-    this.drawGeometryPanel(geometryPanel, input.halfspaces, input.step0, projectedAnimated, input.gradient, blend, pulse)
-    this.drawQueuePanel(queuePanel, rawSeries, safeAnimated, input.overloadThreshold, blend, pulse)
+    const geometrySubtitle =
+      phaseProjection < 0.1 ? '1/3 detect raw risk direction' : '2/3 project to nearest safe vector'
+    const queueSubtitle = phaseQueue < 0.1 ? '3/3 replay pending' : '3/3 replaying queue impact'
+
+    this.drawPanelShell(geometryPanel, 'PATCH SPACE', geometrySubtitle, phaseProjection)
+    this.drawPanelShell(queuePanel, 'QUEUE REPLAY', queueSubtitle, phaseQueue)
+
+    this.drawPanelConnector(geometryPanel, queuePanel, stacked, phaseProjection, phaseQueue, pulse)
+
+    this.drawGeometryPanel(
+      geometryPanel,
+      input.halfspaces,
+      input.step0,
+      input.projectedStep,
+      input.gradient,
+      phaseRisk,
+      phaseProjection,
+      phaseQueue,
+      pulse,
+      input.clockMs,
+    )
+
+    this.drawQueuePanel(queuePanel, rawSeries, safeAnimated, input.overloadThreshold, phaseQueue, pulse, input.clockMs)
   }
 
-  private paintBackdrop(width: number, height: number): void {
+  private paintBackdrop(width: number, height: number, clockMs: number, phaseQueue: number): void {
     const ctx = this.ctx
     const gradient = ctx.createLinearGradient(0, 0, width, height)
     gradient.addColorStop(0, '#111a2b')
@@ -153,14 +188,66 @@ export class SceneRenderer {
     ctx.fillStyle = gradient
     ctx.fillRect(0, 0, width, height)
 
-    const glow = ctx.createRadialGradient(width * 0.25, height * 0.08, 20, width * 0.25, height * 0.08, width * 0.6)
-    glow.addColorStop(0, 'rgba(80, 145, 235, 0.2)')
+    const drift = 0.2 + 0.8 * phaseQueue
+    const glowX = width * (0.22 + drift * 0.1) + Math.sin(clockMs * 0.00055) * 26
+    const glowY = height * 0.09 + Math.cos(clockMs * 0.0006) * 10
+
+    const glow = ctx.createRadialGradient(glowX, glowY, 24, glowX, glowY, width * 0.62)
+    glow.addColorStop(0, 'rgba(80, 145, 235, 0.24)')
     glow.addColorStop(1, 'rgba(80, 145, 235, 0)')
     ctx.fillStyle = glow
     ctx.fillRect(0, 0, width, height)
+
+    const lowerGlow = ctx.createRadialGradient(width * 0.85, height * 0.88, 12, width * 0.85, height * 0.88, width * 0.46)
+    lowerGlow.addColorStop(0, `rgba(87, 212, 255, ${0.1 + phaseQueue * 0.12})`)
+    lowerGlow.addColorStop(1, 'rgba(87, 212, 255, 0)')
+    ctx.fillStyle = lowerGlow
+    ctx.fillRect(0, 0, width, height)
   }
 
-  private drawPanelShell(panel: Rect, title: string, subtitle: string): void {
+  private drawStoryRail(
+    canvasWidth: number,
+    topOffset: number,
+    phaseRisk: number,
+    phaseProjection: number,
+    phaseQueue: number,
+  ): void {
+    const ctx = this.ctx
+    const y = topOffset - 7
+    const railWidth = Math.min(340, canvasWidth - 66)
+    const x = (canvasWidth - railWidth) / 2
+
+    ctx.beginPath()
+    ctx.moveTo(x, y)
+    ctx.lineTo(x + railWidth, y)
+    ctx.strokeStyle = 'rgba(104, 136, 176, 0.35)'
+    ctx.lineWidth = 1.4
+    ctx.stroke()
+
+    const checkpoints = [
+      { label: 'RAW', progress: phaseRisk },
+      { label: 'PROJECT', progress: phaseProjection },
+      { label: 'REPLAY', progress: phaseQueue },
+    ]
+
+    checkpoints.forEach((checkpoint, index) => {
+      const px = x + (index / (checkpoints.length - 1)) * railWidth
+      const active = checkpoint.progress > 0.08
+      const fill = active ? `rgba(87, 212, 255, ${0.52 + checkpoint.progress * 0.32})` : 'rgba(104, 136, 176, 0.42)'
+
+      ctx.beginPath()
+      ctx.arc(px, y, 4.2, 0, Math.PI * 2)
+      ctx.fillStyle = fill
+      ctx.fill()
+
+      ctx.font = '700 8px "IBM Plex Mono", monospace'
+      ctx.fillStyle = active ? '#8cd8ff' : '#6f8cb2'
+      const width = ctx.measureText(checkpoint.label).width
+      ctx.fillText(checkpoint.label, px - width / 2, y - 8)
+    })
+  }
+
+  private drawPanelShell(panel: Rect, title: string, subtitle: string, accentProgress: number): void {
     const ctx = this.ctx
 
     this.drawRoundedRect(panel.x, panel.y, panel.width, panel.height, 12)
@@ -170,11 +257,11 @@ export class SceneRenderer {
     ctx.lineWidth = 1
     ctx.stroke()
 
-    const accent = ctx.createLinearGradient(panel.x, panel.y, panel.x + panel.width * 0.7, panel.y)
-    accent.addColorStop(0, 'rgba(86, 153, 246, 0.42)')
+    const accent = ctx.createLinearGradient(panel.x, panel.y, panel.x + panel.width * 0.72, panel.y)
+    accent.addColorStop(0, `rgba(86, 153, 246, ${0.3 + accentProgress * 0.35})`)
     accent.addColorStop(1, 'rgba(86, 153, 246, 0)')
     ctx.fillStyle = accent
-    ctx.fillRect(panel.x + 12, panel.y + 10, Math.max(80, panel.width * 0.36), 2)
+    ctx.fillRect(panel.x + 12, panel.y + 10, Math.max(84, panel.width * 0.4), 2)
 
     ctx.font = '700 10px "IBM Plex Mono", monospace'
     ctx.fillStyle = '#8eb1e0'
@@ -185,14 +272,80 @@ export class SceneRenderer {
     ctx.fillText(subtitle, panel.x + 12, panel.y + 38)
   }
 
+  private drawPanelConnector(
+    geometryPanel: Rect,
+    queuePanel: Rect,
+    stacked: boolean,
+    phaseProjection: number,
+    phaseQueue: number,
+    pulse: number,
+  ): void {
+    const ctx = this.ctx
+    const connectorProgress = clamp((phaseProjection + phaseQueue * 1.2) / 2)
+
+    if (stacked) {
+      const x = geometryPanel.x + geometryPanel.width - 24
+      const fromY = geometryPanel.y + geometryPanel.height + 2
+      const toY = queuePanel.y - 2
+
+      ctx.save()
+      ctx.setLineDash([5, 5])
+      ctx.beginPath()
+      ctx.moveTo(x, fromY)
+      ctx.lineTo(x, toY)
+      ctx.strokeStyle = 'rgba(127, 166, 212, 0.44)'
+      ctx.lineWidth = 1
+      ctx.stroke()
+      ctx.restore()
+
+      const y = fromY + (toY - fromY) * connectorProgress
+      this.drawConnectorPulse(vec(x, y), pulse)
+      return
+    }
+
+    const from = vec(geometryPanel.x + geometryPanel.width + 6, geometryPanel.y + geometryPanel.height * 0.52)
+    const to = vec(queuePanel.x - 6, queuePanel.y + queuePanel.height * 0.52)
+
+    ctx.save()
+    ctx.setLineDash([5, 5])
+    ctx.beginPath()
+    ctx.moveTo(from.x, from.y)
+    ctx.lineTo(to.x, to.y)
+    ctx.strokeStyle = 'rgba(127, 166, 212, 0.44)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.restore()
+
+    const node = vec(from.x + (to.x - from.x) * connectorProgress, from.y + (to.y - from.y) * connectorProgress)
+    this.drawConnectorPulse(node, pulse)
+  }
+
+  private drawConnectorPulse(point: Vec2, pulse: number): void {
+    const ctx = this.ctx
+
+    ctx.beginPath()
+    ctx.arc(point.x, point.y, 3.2, 0, Math.PI * 2)
+    ctx.fillStyle = withAlpha(SAFE_COLOR, 0.92)
+    ctx.fill()
+
+    ctx.beginPath()
+    ctx.arc(point.x, point.y, 6 + pulse * 2.5, 0, Math.PI * 2)
+    ctx.strokeStyle = withAlpha(SAFE_COLOR, 0.24 + pulse * 0.16)
+    ctx.lineWidth = 1
+    ctx.stroke()
+  }
+
   private drawGeometryPanel(
     panel: Rect,
     halfspaces: Halfspace[],
     step0: Vec2,
     projectedStep: Vec2,
     gradient: Vec2,
-    blend: number,
+    phaseRisk: number,
+    phaseProjection: number,
+    phaseQueue: number,
     pulse: number,
+    clockMs: number,
   ): void {
     const ctx = this.ctx
     const chart: Rect = {
@@ -202,7 +355,7 @@ export class SceneRenderer {
       height: panel.height - 58,
     }
 
-    this.drawGeometryGrid(chart)
+    this.drawGeometryGrid(chart, clockMs)
 
     const active = halfspaces.filter((halfspace) => halfspace.active)
     const mapper = this.createMapper(chart, active)
@@ -221,12 +374,12 @@ export class SceneRenderer {
       ctx.closePath()
 
       const fill = ctx.createLinearGradient(chart.x, chart.y, chart.x + chart.width, chart.y + chart.height)
-      fill.addColorStop(0, withAlpha(ZONE_COLOR, 0.2 + pulse * 0.1))
+      fill.addColorStop(0, withAlpha(ZONE_COLOR, 0.14 + pulse * 0.08))
       fill.addColorStop(1, withAlpha(ZONE_COLOR, 0.04))
       ctx.fillStyle = fill
       ctx.fill()
 
-      ctx.strokeStyle = withAlpha(ZONE_COLOR, 0.78)
+      ctx.strokeStyle = withAlpha(ZONE_COLOR, 0.72)
       ctx.lineWidth = 1.2
       ctx.stroke()
     }
@@ -234,32 +387,54 @@ export class SceneRenderer {
     this.drawConstraintBoundaries(chart, mapper, active)
 
     const origin = mapper.worldToCanvas(vec(0, 0))
-    const rawEnd = mapper.worldToCanvas(step0)
-    const safeEnd = mapper.worldToCanvas(projectedStep)
+    const rawTarget = mapper.worldToCanvas(step0)
+    const safeTarget = mapper.worldToCanvas(projectedStep)
 
-    this.drawArrow(origin, rawEnd, RAW_COLOR, 2.1, true)
-    this.drawArrow(origin, safeEnd, SAFE_COLOR, 2.8, false)
+    const rawVisible = mapper.worldToCanvas(scale(step0, clamp(phaseRisk, 0.02, 1)))
+    const safeVisible = mapper.worldToCanvas(lerp(step0, projectedStep, phaseProjection))
+
+    this.drawArrow(origin, rawVisible, withAlpha(RAW_COLOR, 0.86), 2.1, true)
+
+    if (phaseProjection > 0.03) {
+      this.drawArrow(origin, safeVisible, withAlpha(SAFE_COLOR, 0.78 + phaseProjection * 0.2), 2.8, false)
+      this.drawCorrectionArc(rawTarget, safeTarget, phaseProjection)
+      this.drawTravelSpark(rawTarget, safeTarget, phaseProjection, pulse)
+    }
+
     this.drawDirectionHint(mapper, gradient)
+    this.drawRiskHalo(rawTarget, phaseRisk, pulse)
+    this.drawSafeHalo(safeTarget, phaseProjection, phaseQueue, pulse)
 
-    this.drawCorrectionArc(rawEnd, safeEnd)
-    this.drawPulse(rawEnd, safeEnd, blend, pulse)
-
-    this.drawTag(rawEnd, 'raw', RAW_COLOR)
-    this.drawTag(safeEnd, 'safe', SAFE_COLOR)
+    if (phaseRisk > 0.16) {
+      this.drawTag(rawTarget, 'raw', RAW_COLOR)
+    }
+    if (phaseProjection > 0.18) {
+      this.drawTag(safeVisible, 'safe', SAFE_COLOR)
+    }
 
     ctx.beginPath()
     ctx.arc(origin.x, origin.y, 3.8, 0, Math.PI * 2)
     ctx.fillStyle = '#7ca2d4'
     ctx.fill()
+
+    const caption =
+      phaseProjection < 0.12
+        ? 'Raw patch enters unsafe region.'
+        : phaseProjection < 0.92
+          ? 'SafePatch projects to nearest feasible point.'
+          : 'Projected patch is now guardrail-safe.'
+    this.drawPanelCaption(chart, caption)
   }
 
-  private drawGeometryGrid(rect: Rect): void {
+  private drawGeometryGrid(rect: Rect, clockMs: number): void {
     const ctx = this.ctx
     const vertical = 4
     const horizontal = 4
+    const driftX = Math.sin(clockMs * 0.00034) * 5
+    const driftY = Math.cos(clockMs * 0.00031) * 4
 
     for (let i = 0; i <= vertical; i += 1) {
-      const x = rect.x + (i / vertical) * rect.width
+      const x = rect.x + (i / vertical) * rect.width + driftX
       ctx.beginPath()
       ctx.moveTo(x, rect.y)
       ctx.lineTo(x, rect.y + rect.height)
@@ -269,7 +444,7 @@ export class SceneRenderer {
     }
 
     for (let i = 0; i <= horizontal; i += 1) {
-      const y = rect.y + (i / horizontal) * rect.height
+      const y = rect.y + (i / horizontal) * rect.height + driftY
       ctx.beginPath()
       ctx.moveTo(rect.x, y)
       ctx.lineTo(rect.x + rect.width, y)
@@ -290,11 +465,7 @@ export class SceneRenderer {
     return {
       worldRadius: radius,
       center,
-      worldToCanvas: (point: Vec2) =>
-        vec(
-          center.x + point.x * scaleFactor,
-          center.y - point.y * scaleFactor,
-        ),
+      worldToCanvas: (point: Vec2) => vec(center.x + point.x * scaleFactor, center.y - point.y * scaleFactor),
     }
   }
 
@@ -312,7 +483,7 @@ export class SceneRenderer {
       ctx.beginPath()
       ctx.moveTo(p0.x, p0.y)
       ctx.lineTo(p1.x, p1.y)
-      ctx.strokeStyle = withAlpha(index % 2 === 0 ? '#7db5eb' : '#66c5a0', 0.5)
+      ctx.strokeStyle = withAlpha(index % 2 === 0 ? '#7db5eb' : '#66c5a0', 0.47)
       ctx.lineWidth = 0.95
       ctx.stroke()
     })
@@ -321,14 +492,14 @@ export class SceneRenderer {
     ctx.beginPath()
     ctx.moveTo(rect.x, center.y)
     ctx.lineTo(rect.x + rect.width, center.y)
-    ctx.strokeStyle = withAlpha('#7fa3cf', 0.45)
+    ctx.strokeStyle = withAlpha('#7fa3cf', 0.38)
     ctx.lineWidth = 0.9
     ctx.stroke()
 
     ctx.beginPath()
     ctx.moveTo(center.x, rect.y)
     ctx.lineTo(center.x, rect.y + rect.height)
-    ctx.strokeStyle = withAlpha('#7fa3cf', 0.45)
+    ctx.strokeStyle = withAlpha('#7fa3cf', 0.38)
     ctx.lineWidth = 0.9
     ctx.stroke()
   }
@@ -364,43 +535,97 @@ export class SceneRenderer {
     const direction = scale(normalize(gradient), mapper.worldRadius * 0.62)
     const origin = mapper.worldToCanvas(vec(0, 0))
     const target = mapper.worldToCanvas(scale(direction, -1))
-    this.drawArrow(origin, target, withAlpha('#f5bc62', 0.64), 1.2, true)
+    this.drawArrow(origin, target, withAlpha('#f5bc62', 0.58), 1.1, true)
   }
 
-  private drawCorrectionArc(rawEnd: Vec2, safeEnd: Vec2): void {
+  private drawCorrectionArc(rawEnd: Vec2, safeEnd: Vec2, phaseProjection: number): void {
     const ctx = this.ctx
     const midX = (rawEnd.x + safeEnd.x) / 2
     const midY = (rawEnd.y + safeEnd.y) / 2 - 16
 
+    const segments = 32
+    const visible = Math.max(2, Math.floor(segments * clamp(phaseProjection)))
+
     ctx.save()
     ctx.setLineDash([4, 4])
     ctx.beginPath()
-    ctx.moveTo(rawEnd.x, rawEnd.y)
-    ctx.quadraticCurveTo(midX, midY, safeEnd.x, safeEnd.y)
-    ctx.strokeStyle = withAlpha(CORRECTION_COLOR, 0.8)
+    for (let i = 0; i <= visible; i += 1) {
+      const t = i / segments
+      const point = this.quadraticPoint(rawEnd, vec(midX, midY), safeEnd, t)
+      if (i === 0) {
+        ctx.moveTo(point.x, point.y)
+      } else {
+        ctx.lineTo(point.x, point.y)
+      }
+    }
+    ctx.strokeStyle = withAlpha(CORRECTION_COLOR, 0.74)
     ctx.lineWidth = 1.2
     ctx.stroke()
     ctx.restore()
   }
 
-  private drawPulse(rawEnd: Vec2, safeEnd: Vec2, blend: number, pulse: number): void {
+  private drawTravelSpark(rawEnd: Vec2, safeEnd: Vec2, phaseProjection: number, pulse: number): void {
     const ctx = this.ctx
     const midX = (rawEnd.x + safeEnd.x) / 2
     const midY = (rawEnd.y + safeEnd.y) / 2 - 16
-
-    const t = clamp(blend)
-    const x = (1 - t) * (1 - t) * rawEnd.x + 2 * (1 - t) * t * midX + t * t * safeEnd.x
-    const y = (1 - t) * (1 - t) * rawEnd.y + 2 * (1 - t) * t * midY + t * t * safeEnd.y
+    const point = this.quadraticPoint(rawEnd, vec(midX, midY), safeEnd, clamp(phaseProjection))
 
     ctx.beginPath()
-    ctx.arc(x, y, 3.6 + pulse * 2, 0, Math.PI * 2)
-    ctx.fillStyle = withAlpha(CORRECTION_COLOR, 0.92)
+    ctx.arc(point.x, point.y, 3.4 + pulse * 1.8, 0, Math.PI * 2)
+    ctx.fillStyle = withAlpha(CORRECTION_COLOR, 0.94)
     ctx.fill()
 
     ctx.beginPath()
-    ctx.arc(x, y, 9 + pulse * 2.6, 0, Math.PI * 2)
-    ctx.strokeStyle = withAlpha(CORRECTION_COLOR, 0.24 + pulse * 0.18)
+    ctx.arc(point.x, point.y, 8 + pulse * 2.2, 0, Math.PI * 2)
+    ctx.strokeStyle = withAlpha(CORRECTION_COLOR, 0.26 + pulse * 0.16)
     ctx.lineWidth = 1.1
+    ctx.stroke()
+  }
+
+  private quadraticPoint(p0: Vec2, p1: Vec2, p2: Vec2, t: number): Vec2 {
+    const clamped = clamp(t)
+    const oneMinus = 1 - clamped
+    return vec(
+      oneMinus * oneMinus * p0.x + 2 * oneMinus * clamped * p1.x + clamped * clamped * p2.x,
+      oneMinus * oneMinus * p0.y + 2 * oneMinus * clamped * p1.y + clamped * clamped * p2.y,
+    )
+  }
+
+  private drawRiskHalo(rawEnd: Vec2, phaseRisk: number, pulse: number): void {
+    const ctx = this.ctx
+    const alpha = 0.08 + phaseRisk * 0.18
+
+    ctx.beginPath()
+    ctx.arc(rawEnd.x, rawEnd.y, 9 + pulse * 4, 0, Math.PI * 2)
+    ctx.strokeStyle = withAlpha(RAW_COLOR, alpha)
+    ctx.lineWidth = 1
+    ctx.stroke()
+
+    ctx.beginPath()
+    ctx.arc(rawEnd.x, rawEnd.y, 15 + pulse * 5, 0, Math.PI * 2)
+    ctx.strokeStyle = withAlpha(RAW_COLOR, alpha * 0.66)
+    ctx.lineWidth = 1
+    ctx.stroke()
+  }
+
+  private drawSafeHalo(safeEnd: Vec2, phaseProjection: number, phaseQueue: number, pulse: number): void {
+    if (phaseProjection < 0.12) {
+      return
+    }
+
+    const ctx = this.ctx
+    const intensity = 0.12 + phaseProjection * 0.2 + phaseQueue * 0.16
+
+    ctx.beginPath()
+    ctx.arc(safeEnd.x, safeEnd.y, 8 + pulse * 3.6, 0, Math.PI * 2)
+    ctx.strokeStyle = withAlpha(SAFE_COLOR, intensity)
+    ctx.lineWidth = 1.2
+    ctx.stroke()
+
+    ctx.beginPath()
+    ctx.arc(safeEnd.x, safeEnd.y, 14 + pulse * 4, 0, Math.PI * 2)
+    ctx.strokeStyle = withAlpha(SAFE_COLOR, intensity * 0.62)
+    ctx.lineWidth = 1
     ctx.stroke()
   }
 
@@ -425,13 +650,24 @@ export class SceneRenderer {
     ctx.fillText(text, x + 6, y + 11)
   }
 
+  private drawPanelCaption(chart: Rect, text: string): void {
+    const ctx = this.ctx
+    const x = chart.x + 8
+    const y = chart.y + chart.height - 22
+
+    ctx.font = '600 10px "Plus Jakarta Sans", sans-serif'
+    ctx.fillStyle = '#90b3de'
+    ctx.fillText(text, x, y)
+  }
+
   private drawQueuePanel(
     panel: Rect,
     rawSeries: number[],
     safeSeries: number[],
     threshold: number,
-    blend: number,
+    phaseQueue: number,
     pulse: number,
+    clockMs: number,
   ): void {
     const chart: Rect = {
       x: panel.x + 12,
@@ -450,15 +686,15 @@ export class SceneRenderer {
     const mapX = (index: number, length: number): number => chart.x + (index / Math.max(1, length - 1)) * chart.width
     const mapY = (value: number): number => chart.y + chart.height - (value / upper) * chart.height
 
-    const reveal = clamp(0.08 + blend * 1.02, 0, 1)
+    const reveal = clamp(phaseQueue * 1.05)
     const thresholdY = mapY(threshold)
 
-    this.drawQueueGrid(chart)
+    this.drawQueueGrid(chart, clockMs)
     this.drawThresholdZone(chart, thresholdY)
 
     this.drawClipped(chart, reveal, () => {
       this.drawSeriesFill(rawSeries, mapX, mapY, withAlpha(RAW_COLOR, 0.08))
-      this.drawSeriesFill(safeSeries, mapX, mapY, withAlpha(SAFE_COLOR, 0.1))
+      this.drawSeriesFill(safeSeries, mapX, mapY, withAlpha(SAFE_COLOR, 0.12))
       this.drawDeltaArea(rawSeries, safeSeries, mapX, mapY)
       this.drawSmoothSeries(rawSeries, mapX, mapY, RAW_COLOR, 2.2)
       this.drawSmoothSeries(safeSeries, mapX, mapY, SAFE_COLOR, 2.9)
@@ -472,16 +708,29 @@ export class SceneRenderer {
     this.drawCursor(xCursor, mapY(rawCursor), RAW_COLOR)
     this.drawCursor(xCursor, mapY(safeCursor), SAFE_COLOR)
 
+    this.drawSeriesRunner(rawSeries, mapX, mapY, clockMs * 0.00024, reveal, RAW_COLOR)
+    this.drawSeriesRunner(safeSeries, mapX, mapY, clockMs * 0.00026 + 0.2, reveal, SAFE_COLOR)
+
     this.drawQueueLegend(chart)
 
-    const saved = Math.max(0, Math.round(rawSeries[rawSeries.length - 1] - safeSeries[safeSeries.length - 1]))
-    this.drawPill(chart.x + 8, chart.y + 8, `CAPACITY SAVED ${saved}`)
+    const savedTarget = Math.max(0, Math.round(rawSeries[rawSeries.length - 1] - safeSeries[safeSeries.length - 1]))
+    const savedAnimated = Math.round(savedTarget * reveal)
+    const pillText = reveal < 0.18 ? 'REPLAYING IMPACT...' : `CAPACITY SAVED ${savedAnimated}`
+    this.drawPill(chart.x + 8, chart.y + 8, pillText)
+
+    const caption =
+      reveal < 0.2
+        ? 'Queue replay initializing.'
+        : 'Safe projection lowers queue risk under same traffic pulse.'
+    this.drawPanelCaption(chart, caption)
   }
 
-  private drawQueueGrid(chart: Rect): void {
+  private drawQueueGrid(chart: Rect, clockMs: number): void {
     const ctx = this.ctx
+    const shimmer = Math.sin(clockMs * 0.0011) * 2.2
+
     for (let i = 0; i <= 4; i += 1) {
-      const y = chart.y + (i / 4) * chart.height
+      const y = chart.y + (i / 4) * chart.height + shimmer
       ctx.beginPath()
       ctx.moveTo(chart.x, y)
       ctx.lineTo(chart.x + chart.width, y)
@@ -502,7 +751,7 @@ export class SceneRenderer {
     ctx.beginPath()
     ctx.moveTo(chart.x, thresholdY)
     ctx.lineTo(chart.x + chart.width, thresholdY)
-    ctx.strokeStyle = withAlpha(RAW_COLOR, 0.8)
+    ctx.strokeStyle = withAlpha(RAW_COLOR, 0.82)
     ctx.lineWidth = 1.2
     ctx.stroke()
     ctx.restore()
@@ -607,12 +856,12 @@ export class SceneRenderer {
   private drawSweep(chart: Rect, reveal: number, pulse: number): void {
     const ctx = this.ctx
     const x = chart.x + chart.width * reveal
-    const gradient = ctx.createLinearGradient(x - 22, chart.y, x + 22, chart.y)
+    const gradient = ctx.createLinearGradient(x - 26, chart.y, x + 26, chart.y)
     gradient.addColorStop(0, 'rgba(87, 212, 255, 0)')
-    gradient.addColorStop(0.5, `rgba(87, 212, 255, ${0.08 + pulse * 0.08})`)
+    gradient.addColorStop(0.5, `rgba(87, 212, 255, ${0.08 + pulse * 0.09})`)
     gradient.addColorStop(1, 'rgba(87, 212, 255, 0)')
     ctx.fillStyle = gradient
-    ctx.fillRect(x - 22, chart.y, 44, chart.height)
+    ctx.fillRect(x - 26, chart.y, 52, chart.height)
   }
 
   private drawCursor(x: number, y: number, color: string): void {
@@ -626,6 +875,37 @@ export class SceneRenderer {
     ctx.arc(x, y, 8.8, 0, Math.PI * 2)
     ctx.strokeStyle = withAlpha(color, 0.42)
     ctx.lineWidth = 1.1
+    ctx.stroke()
+  }
+
+  private drawSeriesRunner(
+    series: number[],
+    mapX: (index: number, length: number) => number,
+    mapY: (value: number) => number,
+    phaseClock: number,
+    reveal: number,
+    color: string,
+  ): void {
+    if (series.length < 2 || reveal <= 0.05) {
+      return
+    }
+
+    const ctx = this.ctx
+    const progress = clamp((phaseClock % 1) * reveal)
+    const position = progress * (series.length - 1)
+    const value = this.valueAtProgress(series, progress)
+    const x = mapX(position, series.length)
+    const y = mapY(value)
+
+    ctx.beginPath()
+    ctx.arc(x, y, 3, 0, Math.PI * 2)
+    ctx.fillStyle = withAlpha(color, 0.9)
+    ctx.fill()
+
+    ctx.beginPath()
+    ctx.arc(x, y, 6.2, 0, Math.PI * 2)
+    ctx.strokeStyle = withAlpha(color, 0.26)
+    ctx.lineWidth = 1
     ctx.stroke()
   }
 

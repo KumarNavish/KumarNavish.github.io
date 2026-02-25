@@ -652,6 +652,10 @@ function start(): void {
     applyControls()
   })
 
+  ui.onReplay(() => {
+    transitionStart = performance.now()
+  })
+
   ui.onCopyMemo((memoText) => copyToClipboard(memoText))
 
   ui.onExport(() => {

@@ -59,6 +59,7 @@ export class UIController {
 
   private readonly autoTuneButton: HTMLButtonElement
   private readonly resetButton: HTMLButtonElement
+  private readonly replayButton: HTMLButtonElement
   private readonly copyMemoButton: HTMLButtonElement
 
   private selectedPressure = 0.56
@@ -95,6 +96,7 @@ export class UIController {
 
     this.autoTuneButton = this.getElement<HTMLButtonElement>('autotune-button')
     this.resetButton = this.getElement<HTMLButtonElement>('reset-button')
+    this.replayButton = this.getElement<HTMLButtonElement>('replay-button')
     this.copyMemoButton = this.getElement<HTMLButtonElement>('copy-memo-button')
 
     this.scenarioButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.scenario-btn'))
@@ -143,6 +145,10 @@ export class UIController {
 
   onReset(callback: () => void): void {
     this.resetButton.addEventListener('click', callback)
+  }
+
+  onReplay(callback: () => void): void {
+    this.replayButton.addEventListener('click', callback)
   }
 
   onCopyMemo(callback: (memoText: string) => Promise<boolean> | boolean): void {
