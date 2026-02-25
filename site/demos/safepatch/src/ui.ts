@@ -245,7 +245,7 @@ export class UIController {
 
   private describeScenario(pressure: number): string {
     if (pressure < 0.38) {
-      return 'Normal day: low queue pressure and small safety risk.'
+      return 'Normal day: low queue pressure and low immediate safety risk.'
     }
     if (pressure < 0.75) {
       return 'Traffic spike: queue pressure is meaningful but still manageable.'
@@ -255,12 +255,12 @@ export class UIController {
 
   private describeUrgency(urgency: number): string {
     if (urgency < 0.34) {
-      return 'Low urgency: there is enough room to enforce stronger correction.'
+      return 'Low urgency: we can apply a stronger correction for safety.'
     }
     if (urgency < 0.67) {
-      return 'Balanced urgency: correction still has room to improve safety.'
+      return 'Balanced urgency: we can keep quality and still correct risk.'
     }
-    return 'Critical urgency: raw update pushes aggressively and needs tighter correction.'
+    return 'Critical urgency: raw update pushes hard, so correction becomes essential.'
   }
 
   private describeStrictness(strictness: number): string {
@@ -270,7 +270,7 @@ export class UIController {
     if (strictness < 0.67) {
       return 'Moderate strictness: core guardrails stay active without over-constraining quality.'
     }
-    return 'High strictness: policy limits are tight, so some gain can be sacrificed for safety.'
+    return 'High strictness: limits are tight, so some gain may be traded for safety.'
   }
 
   private flash(element: HTMLElement): void {

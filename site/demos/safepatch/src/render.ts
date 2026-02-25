@@ -32,6 +32,7 @@ export interface SceneRenderInput {
   queueSafeSeries: number[]
   overloadThreshold: number
   transitionProgress: number
+  clockMs: number
 }
 
 const RAW_COLOR = '#e15a69'
@@ -109,6 +110,7 @@ export class SceneRenderer {
     }
 
     const blend = easeInOutCubic(input.transitionProgress)
+    const shimmer = 0.72 + ((Math.sin(input.clockMs * 0.0024) + 1) * 0.28) / 2
     const projectedAnimated = lerp(input.step0, input.projectedStep, blend)
 
     const queueLength = Math.min(input.queueRawSeries.length, input.queueSafeSeries.length)
@@ -118,8 +120,16 @@ export class SceneRenderer {
 
     this.drawPanelCard(geometryPanel, 'PATCH GEOMETRY', 'raw update vector vs SafePatch correction')
     this.drawPanelCard(queuePanel, 'QUEUE REPLAY', 'risk over time under the same traffic window')
-    this.drawGeometryPanel(geometryPanel, input.halfspaces, input.step0, projectedAnimated, input.gradient, blend)
-    this.drawQueuePanel(queuePanel, rawSeries, safeAnimated, input.overloadThreshold, blend)
+    this.drawGeometryPanel(
+      geometryPanel,
+      input.halfspaces,
+      input.step0,
+      projectedAnimated,
+      input.gradient,
+      blend,
+      shimmer,
+    )
+    this.drawQueuePanel(queuePanel, rawSeries, safeAnimated, input.overloadThreshold, blend, input.clockMs)
   }
 
   private paintBackdrop(width: number, height: number): void {
@@ -170,6 +180,7 @@ export class SceneRenderer {
     projectedStep: Vec2,
     gradient: Vec2,
     blend: number,
+    shimmer: number,
   ): void {
     const ctx = this.ctx
     const chart: Rect = {
@@ -196,7 +207,7 @@ export class SceneRenderer {
       ctx.closePath()
 
       const fill = ctx.createLinearGradient(chart.x, chart.y, chart.x + chart.width, chart.y + chart.height)
-      fill.addColorStop(0, withAlpha(ZONE_COLOR, 0.16))
+      fill.addColorStop(0, withAlpha(ZONE_COLOR, 0.14 * shimmer))
       fill.addColorStop(1, withAlpha(ZONE_COLOR, 0.04))
       ctx.fillStyle = fill
       ctx.fill()
@@ -226,7 +237,7 @@ export class SceneRenderer {
     ctx.stroke()
     ctx.restore()
 
-    this.drawProjectionPulse(rawEnd, projectedEnd, blend)
+    this.drawProjectionPulse(rawEnd, projectedEnd, blend, shimmer)
     this.drawArrowLabel('raw step', rawEnd, RAW_COLOR)
     this.drawArrowLabel('safe step', projectedEnd, SAFE_COLOR)
 
@@ -356,19 +367,19 @@ export class SceneRenderer {
     ctx.restore()
   }
 
-  private drawProjectionPulse(from: Vec2, to: Vec2, blend: number): void {
+  private drawProjectionPulse(from: Vec2, to: Vec2, blend: number, shimmer: number): void {
     const ctx = this.ctx
     const x = from.x + (to.x - from.x) * blend
     const y = from.y + (to.y - from.y) * blend
 
     ctx.beginPath()
-    ctx.arc(x, y, 4.6, 0, Math.PI * 2)
+    ctx.arc(x, y, 3.8 + shimmer, 0, Math.PI * 2)
     ctx.fillStyle = withAlpha(CORRECTION_COLOR, 0.92)
     ctx.fill()
 
     ctx.beginPath()
-    ctx.arc(x, y, 10, 0, Math.PI * 2)
-    ctx.strokeStyle = withAlpha(CORRECTION_COLOR, 0.38)
+    ctx.arc(x, y, 9 + shimmer * 2.4, 0, Math.PI * 2)
+    ctx.strokeStyle = withAlpha(CORRECTION_COLOR, 0.26 + shimmer * 0.16)
     ctx.lineWidth = 1.1
     ctx.stroke()
   }
@@ -399,6 +410,7 @@ export class SceneRenderer {
     safeSeries: number[],
     threshold: number,
     blend: number,
+    clockMs: number,
   ): void {
     const chart: Rect = {
       x: panel.x + 12,
@@ -426,7 +438,7 @@ export class SceneRenderer {
     this.drawDeltaArea(rawSeries, safeSeries, mapX, mapY)
     this.drawSmoothSeries(rawSeries, mapX, mapY, RAW_COLOR, 2.2)
     this.drawSmoothSeries(safeSeries, mapX, mapY, SAFE_COLOR, 2.8)
-    this.drawGlowSweep(chart, blend)
+    this.drawGlowSweep(chart, blend, clockMs)
     this.drawSeriesMarker(rawSeries, mapX, mapY, RAW_COLOR)
     this.drawSeriesMarker(safeSeries, mapX, mapY, SAFE_COLOR)
     this.drawQueueLegend(chart)
@@ -549,9 +561,10 @@ export class SceneRenderer {
     ctx.stroke()
   }
 
-  private drawGlowSweep(chart: Rect, blend: number): void {
+  private drawGlowSweep(chart: Rect, blend: number, clockMs: number): void {
     const ctx = this.ctx
-    const sweepX = chart.x + chart.width * blend
+    const hoverWave = (Math.sin(clockMs * 0.0017) + 1) * 0.04
+    const sweepX = chart.x + chart.width * clamp(blend * 0.9 + hoverWave, 0, 1)
     const gradient = ctx.createLinearGradient(sweepX - 24, chart.y, sweepX + 24, chart.y)
     gradient.addColorStop(0, 'rgba(38, 151, 255, 0)')
     gradient.addColorStop(0.5, 'rgba(31, 117, 255, 0.1)')
