@@ -3,29 +3,50 @@ import katex from 'katex'
 const sliderMax = 100
 const copyResetDelayMs = 1400
 
+type StrategyId = 'raw' | 'safe' | 'hold'
+
 export interface ControlValues {
   pressure: number
   urgency: number
   strictness: number
 }
 
+export interface StrategyRowUi {
+  id: StrategyId
+  guardrailsText: string
+  peakText: string
+  breachText: string
+  escalationsText: string
+  scoreText: string
+  statusText: string
+  recommended: boolean
+}
+
 export interface ProofFrameUi {
   decisionTone: 'ship' | 'hold'
   decisionTitle: string
   decisionDetail: string
-  problemText: string
-  mechanismText: string
-  impactText: string
-  peakValueText: string
-  breachValueText: string
-  escalationValueText: string
-  guardrailValueText: string
-  retainedValueText: string
   readinessScoreText: string
   readinessNote: string
   recommendedControlsText: string
+  guardrailValueText: string
+  retainedValueText: string
+  strategyCaption: string
+  strategyRows: StrategyRowUi[]
+  whyItems: string[]
+  gateItems: string[]
   actionItems: string[]
   memoText: string
+}
+
+interface StrategyRowElements {
+  row: HTMLTableRowElement
+  guardrails: HTMLElement
+  peak: HTMLElement
+  breach: HTMLElement
+  escalations: HTMLElement
+  score: HTMLElement
+  status: HTMLElement
 }
 
 export class UIController {
@@ -45,12 +66,11 @@ export class UIController {
   private readonly decisionDetail: HTMLElement
   private readonly readinessScore: HTMLElement
   private readonly readinessNote: HTMLElement
-  private readonly problemLine: HTMLElement
-  private readonly mechanismLine: HTMLElement
-  private readonly impactLine: HTMLElement
-  private readonly kpiPeakValue: HTMLElement
-  private readonly kpiBreachValue: HTMLElement
-  private readonly kpiEscalationsValue: HTMLElement
+
+  private readonly strategyCaption: HTMLElement
+  private readonly whyList: HTMLUListElement
+  private readonly gateList: HTMLUListElement
+
   private readonly guardrailValue: HTMLElement
   private readonly retainedValue: HTMLElement
   private readonly recommendedControls: HTMLElement
@@ -61,6 +81,8 @@ export class UIController {
   private readonly resetButton: HTMLButtonElement
   private readonly replayButton: HTMLButtonElement
   private readonly copyMemoButton: HTMLButtonElement
+
+  private readonly strategyRows: Record<StrategyId, StrategyRowElements>
 
   private selectedPressure = 0.56
   private selectedUrgency = 0.58
@@ -74,17 +96,17 @@ export class UIController {
     this.decisionDetail = this.getElement('decision-detail')
     this.readinessScore = this.getElement('readiness-score')
     this.readinessNote = this.getElement('readiness-note')
-    this.problemLine = this.getElement('problem-statement')
-    this.mechanismLine = this.getElement('mechanism-statement')
-    this.impactLine = this.getElement('impact-statement')
-    this.kpiPeakValue = this.getElement('kpi-peak-value')
-    this.kpiBreachValue = this.getElement('kpi-breach-value')
-    this.kpiEscalationsValue = this.getElement('kpi-escalations-value')
+
+    this.strategyCaption = this.getElement('strategy-caption')
+    this.whyList = this.getElement<HTMLUListElement>('why-list')
+    this.gateList = this.getElement<HTMLUListElement>('gate-list')
+
     this.guardrailValue = this.getElement('guardrail-value')
     this.retainedValue = this.getElement('retained-value')
     this.recommendedControls = this.getElement('recommended-controls')
     this.actionList = this.getElement<HTMLUListElement>('action-list')
     this.memoText = this.getElement('memo-text')
+
     this.scenarioNote = document.getElementById('scenario-note')
     this.urgencyNote = document.getElementById('urgency-note')
     this.strictnessNote = document.getElementById('strictness-note')
@@ -98,6 +120,12 @@ export class UIController {
     this.resetButton = this.getElement<HTMLButtonElement>('reset-button')
     this.replayButton = this.getElement<HTMLButtonElement>('replay-button')
     this.copyMemoButton = this.getElement<HTMLButtonElement>('copy-memo-button')
+
+    this.strategyRows = {
+      raw: this.getStrategyRowElements('raw'),
+      safe: this.getStrategyRowElements('safe'),
+      hold: this.getStrategyRowElements('hold'),
+    }
 
     this.scenarioButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.scenario-btn'))
     if (this.scenarioButtons.length === 0) {
@@ -202,18 +230,17 @@ export class UIController {
     this.decisionDetail.textContent = frame.decisionDetail
     this.readinessScore.textContent = frame.readinessScoreText
     this.readinessNote.textContent = frame.readinessNote
-    this.problemLine.textContent = frame.problemText
-    this.mechanismLine.textContent = frame.mechanismText
-    this.impactLine.textContent = frame.impactText
-    this.kpiPeakValue.textContent = frame.peakValueText
-    this.kpiBreachValue.textContent = frame.breachValueText
-    this.kpiEscalationsValue.textContent = frame.escalationValueText
+
+    this.strategyCaption.textContent = frame.strategyCaption
+    this.recommendedControls.textContent = frame.recommendedControlsText
     this.guardrailValue.textContent = frame.guardrailValueText
     this.retainedValue.textContent = frame.retainedValueText
-    this.recommendedControls.textContent = frame.recommendedControlsText
     this.memoText.textContent = frame.memoText
 
-    this.renderActionItems(frame.actionItems)
+    this.renderStrategyRows(frame.strategyRows)
+    this.renderList(this.whyList, frame.whyItems, 'Recommendation rationale is loading.')
+    this.renderList(this.gateList, frame.gateItems, 'Rollout plan is loading.')
+    this.renderList(this.actionList, frame.actionItems, 'No execution actions available for this state.')
 
     if (toneChanged) {
       this.flash(this.decisionPanel)
@@ -221,17 +248,27 @@ export class UIController {
     this.lastDecisionTone = frame.decisionTone
   }
 
-  private renderActionItems(actionItems: string[]): void {
-    const fallback = ['No execution actions available for this state.']
-    const finalItems = actionItems.length > 0 ? actionItems.slice(0, 4) : fallback
+  private renderStrategyRows(rows: StrategyRowUi[]): void {
+    for (const row of rows) {
+      const elements = this.strategyRows[row.id]
+      elements.row.classList.toggle('recommended', row.recommended)
+      elements.guardrails.textContent = row.guardrailsText
+      elements.peak.textContent = row.peakText
+      elements.breach.textContent = row.breachText
+      elements.escalations.textContent = row.escalationsText
+      elements.score.textContent = row.scoreText
+      elements.status.textContent = row.statusText
+    }
+  }
 
-    const nodes = finalItems.map((item) => {
+  private renderList(target: HTMLUListElement, items: string[], fallback: string): void {
+    const lines = items.length > 0 ? items.slice(0, 4) : [fallback]
+    const nodes = lines.map((item) => {
       const line = document.createElement('li')
       line.textContent = item
       return line
     })
-
-    this.actionList.replaceChildren(...nodes)
+    target.replaceChildren(...nodes)
   }
 
   private renderMathBlocks(): void {
@@ -296,6 +333,18 @@ export class UIController {
     }
   }
 
+  private getStrategyRowElements(id: StrategyId): StrategyRowElements {
+    return {
+      row: this.getElement<HTMLTableRowElement>(`strategy-row-${id}`),
+      guardrails: this.getElement(`${id}-guardrails`),
+      peak: this.getElement(`${id}-peak`),
+      breach: this.getElement(`${id}-breach`),
+      escalations: this.getElement(`${id}-escalations`),
+      score: this.getElement(`${id}-score`),
+      status: this.getElement(`${id}-status`),
+    }
+  }
+
   private parseSliderValue(raw: string, fallback: number): number {
     const parsed = Number.parseFloat(raw)
     if (!Number.isFinite(parsed)) {
@@ -340,7 +389,6 @@ export class UIController {
 
   private flash(element: HTMLElement): void {
     element.classList.remove('flash')
-    // Force restart so the same animation can play on repeated state changes.
     void element.offsetWidth
     element.classList.add('flash')
   }

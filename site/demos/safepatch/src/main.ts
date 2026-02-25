@@ -3,10 +3,14 @@ import 'katex/dist/katex.min.css'
 import { Halfspace, Vec2, normalize, scale, vec } from './geometry'
 import { computeProjectedStep } from './qp'
 import { SceneRenderer } from './render'
-import { ProofFrameUi, UIController } from './ui'
+import { ProofFrameUi, StrategyRowUi, UIController } from './ui'
 
 const TRANSITION_MS = 1120
 const PROJECTION_TOLERANCE = 1e-6
+const OVERLOAD_THRESHOLD = 520
+
+type StrategyId = 'raw' | 'safe' | 'hold'
+type QueueMode = 'raw' | 'safe'
 
 const DEFAULT_CONTROLS: ControlSnapshot = {
   pressure: 0.56,
@@ -54,16 +58,11 @@ const STRICTNESS_SENSITIVITY: Record<string, number> = {
   g4: 1.4,
 }
 
-interface QueueReplay {
-  rawSeries: number[]
-  safeSeries: number[]
-  overloadThreshold: number
-  peakRaw: number
-  peakSafe: number
-  rawBreachMinutes: number
-  safeBreachMinutes: number
-  rawEscalations: number
-  safeEscalations: number
+interface QueueOutcome {
+  series: number[]
+  peak: number
+  breachMinutes: number
+  escalations: number
 }
 
 interface ControlSnapshot {
@@ -89,13 +88,38 @@ interface ScenarioEvaluation {
   halfspaces: Halfspace[]
   scenarioSignals: ScenarioSignals
   projectedStep: ReturnType<typeof computeProjectedStep>
-  queueReplay: QueueReplay
+  rawQueue: QueueOutcome
+  safeQueue: QueueOutcome
   deployment: DeploymentDecision
   violatedRaw: number
   violatedSafe: number
   retainedValueRatio: number
   rawRiskRatio: number
   safeRiskRatio: number
+  safeReadiness: number
+}
+
+interface StrategyAssessment {
+  id: StrategyId
+  label: string
+  guardrailViolations: number
+  queue: QueueOutcome
+  retainedGainPct: number
+  shippable: boolean
+  status: string
+  reason: string
+  score: number
+}
+
+interface StrategyPack {
+  strategies: StrategyAssessment[]
+  recommendedId: StrategyId
+  caption: string
+  whyItems: string[]
+  gateItems: string[]
+  decisionTone: 'ship' | 'hold'
+  decisionTitle: string
+  decisionDetail: string
   readinessScore: number
   readinessNote: string
 }
@@ -106,7 +130,11 @@ interface GuidanceBundle {
   memoText: string
 }
 
-function clamp(value: number, min = 0, max = 1): number {
+function clamp01(value: number): number {
+  return Math.min(Math.max(value, 0), 1)
+}
+
+function clampRange(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
 }
 
@@ -122,13 +150,13 @@ function degreesToRadians(value: number): number {
 }
 
 function percent(value: number): string {
-  return `${Math.round(clamp(value) * 100)}%`
+  return `${Math.round(clamp01(value) * 100)}%`
 }
 
 function scenarioFromControls(controls: ControlSnapshot): ScenarioSignals {
-  const pressure = clamp(controls.pressure)
-  const urgency = clamp(controls.urgency)
-  const strictness = clamp(controls.strictness)
+  const pressure = clamp01(controls.pressure)
+  const urgency = clamp01(controls.urgency)
+  const strictness = clamp01(controls.strictness)
 
   const eta = 0.45 + 2.35 * urgency + 0.78 * pressure
   const strictnessScale = 1.42 - 1.08 * strictness
@@ -141,7 +169,7 @@ function scenarioFromControls(controls: ControlSnapshot): ScenarioSignals {
 
 function boundScaleForStrictness(id: string, strictnessScale: number): number {
   const sensitivity = STRICTNESS_SENSITIVITY[id] ?? 0.7
-  return clamp(1 + sensitivity * (strictnessScale - 1), 0.24, 1.95)
+  return clampRange(1 + sensitivity * (strictnessScale - 1), 0.24, 1.95)
 }
 
 function scenarioName(pressure: number): string {
@@ -154,53 +182,40 @@ function scenarioName(pressure: number): string {
   return 'incident traffic'
 }
 
-function buildQueueReplay(
+function simulateQueueOutcome(
   controls: ControlSnapshot,
-  rawRiskRatio: number,
-  safeRiskRatio: number,
+  riskRatio: number,
   retainedValueRatio: number,
-): QueueReplay {
+  mode: QueueMode,
+): QueueOutcome {
   const minutes = 18
-  const overloadThreshold = 520
-  const pressure = clamp(controls.pressure)
-  const urgency = clamp(controls.urgency)
+  const pressure = clamp01(controls.pressure)
+  const urgency = clamp01(controls.urgency)
   const initialQueue = Math.round(185 + pressure * 132 + urgency * 42)
-
-  const rawSeries: number[] = [initialQueue]
-  const safeSeries: number[] = [initialQueue]
+  const series: number[] = [initialQueue]
 
   for (let minute = 1; minute < minutes; minute += 1) {
     const pulse = 34 * Math.exp(-((minute - 8) ** 2) / 9)
     const arrivals = 318 + pressure * 176 + urgency * 58 + pulse
 
-    const rawCapacity = 392 + retainedValueRatio * 86 - rawRiskRatio * 238 - pressure * 21
-    const safeCapacity = 392 + retainedValueRatio * 73 - safeRiskRatio * 88 - pressure * 14
+    const capacity =
+      mode === 'raw'
+        ? 392 + retainedValueRatio * 86 - riskRatio * 238 - pressure * 21
+        : 392 + retainedValueRatio * 73 - riskRatio * 88 - pressure * 14
 
-    const rawPrev = rawSeries[minute - 1]
-    const safePrev = safeSeries[minute - 1]
-
-    rawSeries.push(Math.max(66, rawPrev + arrivals - rawCapacity))
-    safeSeries.push(Math.max(58, safePrev + arrivals - safeCapacity))
+    const previous = series[minute - 1]
+    series.push(Math.max(mode === 'raw' ? 66 : 58, previous + arrivals - capacity))
   }
 
-  const peakRaw = Math.round(Math.max(...rawSeries))
-  const peakSafe = Math.round(Math.max(...safeSeries))
-  const rawBreachMinutes = rawSeries.filter((value) => value > overloadThreshold).length
-  const safeBreachMinutes = safeSeries.filter((value) => value > overloadThreshold).length
-
-  const rawOverflow = rawSeries.reduce((sum, value) => sum + Math.max(0, value - overloadThreshold), 0)
-  const safeOverflow = safeSeries.reduce((sum, value) => sum + Math.max(0, value - overloadThreshold), 0)
+  const peak = Math.round(Math.max(...series))
+  const breachMinutes = series.filter((value) => value > OVERLOAD_THRESHOLD).length
+  const overflow = series.reduce((sum, value) => sum + Math.max(0, value - OVERLOAD_THRESHOLD), 0)
 
   return {
-    rawSeries,
-    safeSeries,
-    overloadThreshold,
-    peakRaw,
-    peakSafe,
-    rawBreachMinutes,
-    safeBreachMinutes,
-    rawEscalations: Math.round(rawBreachMinutes * 16 + rawOverflow / 34),
-    safeEscalations: Math.round(safeBreachMinutes * 16 + safeOverflow / 34),
+    series,
+    peak,
+    breachMinutes,
+    escalations: Math.round(breachMinutes * 16 + overflow / 34),
   }
 }
 
@@ -220,7 +235,8 @@ function exportDecision(payload: Record<string, unknown>): void {
 function deploymentDecision(
   projectedShipPossible: boolean,
   projectedReason: string | null,
-  queueReplay: QueueReplay,
+  rawQueue: QueueOutcome,
+  safeQueue: QueueOutcome,
   retainedValueRatio: number,
 ): DeploymentDecision {
   if (!projectedShipPossible) {
@@ -237,10 +253,7 @@ function deploymentDecision(
     }
   }
 
-  if (
-    queueReplay.safeBreachMinutes >= queueReplay.rawBreachMinutes &&
-    queueReplay.safeEscalations >= queueReplay.rawEscalations
-  ) {
+  if (safeQueue.breachMinutes >= rawQueue.breachMinutes && safeQueue.escalations >= rawQueue.escalations) {
     return {
       ship: false,
       reason: 'Correction is safe but does not lower production risk enough.',
@@ -253,28 +266,27 @@ function deploymentDecision(
   }
 }
 
-function scoreReadiness(
+function scoreSafeReadiness(
   deployment: DeploymentDecision,
-  replay: QueueReplay,
+  rawQueue: QueueOutcome,
+  safeQueue: QueueOutcome,
   safeRiskRatio: number,
   retainedValueRatio: number,
   violatedSafe: number,
 ): number {
-  const escalationDropRatio =
-    (replay.rawEscalations - replay.safeEscalations) / Math.max(replay.rawEscalations, 1)
-  const breachDropRatio =
-    (replay.rawBreachMinutes - replay.safeBreachMinutes) / Math.max(replay.rawBreachMinutes, 1)
-  const peakDropRatio = (replay.peakRaw - replay.peakSafe) / Math.max(replay.peakRaw, 1)
+  const escalationDropRatio = (rawQueue.escalations - safeQueue.escalations) / Math.max(rawQueue.escalations, 1)
+  const breachDropRatio = (rawQueue.breachMinutes - safeQueue.breachMinutes) / Math.max(rawQueue.breachMinutes, 1)
+  const peakDropRatio = (rawQueue.peak - safeQueue.peak) / Math.max(rawQueue.peak, 1)
 
-  const riskClearance = clamp(1 - safeRiskRatio * 2.2)
-  const retentionScore = clamp(retainedValueRatio)
+  const riskClearance = clamp01(1 - safeRiskRatio * 2.2)
+  const retentionScore = clamp01(retainedValueRatio)
 
   let score =
     100 *
     (0.34 * riskClearance +
-      0.24 * clamp(escalationDropRatio, 0, 1) +
-      0.14 * clamp(breachDropRatio, 0, 1) +
-      0.08 * clamp(peakDropRatio, 0, 1) +
+      0.24 * clampRange(escalationDropRatio, 0, 1) +
+      0.14 * clampRange(breachDropRatio, 0, 1) +
+      0.08 * clampRange(peakDropRatio, 0, 1) +
       0.2 * retentionScore)
 
   if (!deployment.ship) {
@@ -285,39 +297,14 @@ function scoreReadiness(
     score = Math.min(score, 44)
   }
 
-  return Math.round(clamp(score, 0, 100))
-}
-
-function describeReadiness(
-  score: number,
-  deployment: DeploymentDecision,
-  violatedSafe: number,
-  replay: QueueReplay,
-): string {
-  if (violatedSafe > 0) {
-    return 'Not ready: projected patch still crosses at least one guardrail.'
-  }
-
-  if (!deployment.ship) {
-    return 'Not ready: keep deployment on hold and revise operating point.'
-  }
-
-  if (score >= 82) {
-    return `High confidence: replay shows ${replay.rawEscalations - replay.safeEscalations} fewer escalations.`
-  }
-
-  if (score >= 66) {
-    return 'Conditional ship: rollout via canary and monitor queue alarms.'
-  }
-
-  return 'Borderline ship: proceed only with strict rollback triggers.'
+  return Math.round(clampRange(score, 0, 100))
 }
 
 function evaluateScenario(controls: ControlSnapshot): ScenarioEvaluation {
   const normalizedControls: ControlSnapshot = {
-    pressure: clamp(controls.pressure),
-    urgency: clamp(controls.urgency),
-    strictness: clamp(controls.strictness),
+    pressure: clamp01(controls.pressure),
+    urgency: clamp01(controls.urgency),
+    strictness: clamp01(controls.strictness),
   }
 
   const scenarioSignals = scenarioFromControls(normalizedControls)
@@ -328,9 +315,11 @@ function evaluateScenario(controls: ControlSnapshot): ScenarioEvaluation {
     if (baseBound === undefined) {
       continue
     }
+
     const scaledBound = baseBound * boundScaleForStrictness(halfspace.id, scenarioSignals.strictnessScale)
     const pressurePenalty =
       normalizedControls.pressure * normalizedControls.strictness * (halfspace.id === 'g2' ? 0.24 : 0.2)
+
     halfspace.bound = scaledBound - pressurePenalty
     halfspace.active = true
   }
@@ -345,10 +334,12 @@ function evaluateScenario(controls: ControlSnapshot): ScenarioEvaluation {
   const largestBudget = Math.max(0.1, ...halfspaces.map((halfspace) => Math.abs(halfspace.bound)))
   const rawRiskRatio = Math.max(0, projectedStep.maxViolationStep0) / largestBudget
   const safeRiskRatio = Math.max(0, projectedStep.maxViolationProjected) / largestBudget
-  const retainedValueRatio = clamp(projectedStep.descentRetainedRatio, 0, 1.5)
+  const retainedValueRatio = clampRange(projectedStep.descentRetainedRatio, 0, 1.5)
 
-  const queueReplay = buildQueueReplay(normalizedControls, rawRiskRatio, safeRiskRatio, retainedValueRatio)
-  const deployment = deploymentDecision(projectedStep.ship, projectedStep.reason, queueReplay, retainedValueRatio)
+  const rawQueue = simulateQueueOutcome(normalizedControls, rawRiskRatio, 1, 'raw')
+  const safeQueue = simulateQueueOutcome(normalizedControls, safeRiskRatio, retainedValueRatio, 'safe')
+
+  const deployment = deploymentDecision(projectedStep.ship, projectedStep.reason, rawQueue, safeQueue, retainedValueRatio)
 
   const violatedRaw = projectedStep.diagnostics.filter(
     (diagnostic) => diagnostic.active && diagnostic.violationStep0 > PROJECTION_TOLERANCE,
@@ -357,8 +348,14 @@ function evaluateScenario(controls: ControlSnapshot): ScenarioEvaluation {
     (diagnostic) => diagnostic.active && diagnostic.violationProjected > PROJECTION_TOLERANCE,
   ).length
 
-  const readinessScore = scoreReadiness(deployment, queueReplay, safeRiskRatio, retainedValueRatio, violatedSafe)
-  const readinessNote = describeReadiness(readinessScore, deployment, violatedSafe, queueReplay)
+  const safeReadiness = scoreSafeReadiness(
+    deployment,
+    rawQueue,
+    safeQueue,
+    safeRiskRatio,
+    retainedValueRatio,
+    violatedSafe,
+  )
 
   return {
     controls: normalizedControls,
@@ -366,31 +363,31 @@ function evaluateScenario(controls: ControlSnapshot): ScenarioEvaluation {
     halfspaces,
     scenarioSignals,
     projectedStep,
-    queueReplay,
+    rawQueue,
+    safeQueue,
     deployment,
     violatedRaw,
     violatedSafe,
     retainedValueRatio,
     rawRiskRatio,
     safeRiskRatio,
-    readinessScore,
-    readinessNote,
+    safeReadiness,
   }
 }
 
 function optimizationObjective(evaluation: ScenarioEvaluation): number {
-  const escalationsSaved = evaluation.queueReplay.rawEscalations - evaluation.queueReplay.safeEscalations
-  const breachSaved = evaluation.queueReplay.rawBreachMinutes - evaluation.queueReplay.safeBreachMinutes
-  const peakSaved = evaluation.queueReplay.peakRaw - evaluation.queueReplay.peakSafe
+  const escalationsSaved = evaluation.rawQueue.escalations - evaluation.safeQueue.escalations
+  const breachSaved = evaluation.rawQueue.breachMinutes - evaluation.safeQueue.breachMinutes
+  const peakSaved = evaluation.rawQueue.peak - evaluation.safeQueue.peak
 
-  const shipBonus = evaluation.deployment.ship ? 18 : 0
-  const violationPenalty = evaluation.violatedSafe > 0 ? 36 : 0
-  const retentionPenalty = Math.max(0, 0.55 - evaluation.retainedValueRatio) * 48
+  const shipBonus = evaluation.deployment.ship ? 16 : 0
+  const violationPenalty = evaluation.violatedSafe > 0 ? 34 : 0
+  const retentionPenalty = Math.max(0, 0.55 - evaluation.retainedValueRatio) * 45
 
   return (
-    evaluation.readinessScore +
+    evaluation.safeReadiness +
     shipBonus +
-    escalationsSaved * 0.11 +
+    escalationsSaved * 0.12 +
     breachSaved * 1.4 +
     peakSaved * 0.03 -
     violationPenalty -
@@ -401,7 +398,7 @@ function optimizationObjective(evaluation: ScenarioEvaluation): number {
 function findBestControls(pressure: number, current: ControlSnapshot): ScenarioEvaluation {
   let best = evaluateScenario(current)
   let bestScore = optimizationObjective(best)
-  let bestDistance = 0
+  let bestDistance = Number.POSITIVE_INFINITY
 
   for (let urgencyStep = 24; urgencyStep <= 96; urgencyStep += 4) {
     for (let strictnessStep = 24; strictnessStep <= 96; strictnessStep += 4) {
@@ -431,83 +428,267 @@ function findBestControls(pressure: number, current: ControlSnapshot): ScenarioE
   return best
 }
 
-function buildGuidance(current: ScenarioEvaluation, recommended: ScenarioEvaluation): GuidanceBundle {
-  const nearRecommendation =
-    Math.abs(current.controls.urgency - recommended.controls.urgency) < 0.02 &&
-    Math.abs(current.controls.strictness - recommended.controls.strictness) < 0.02
+function scoreStrategy(base: Omit<StrategyAssessment, 'score'>, controls: ControlSnapshot): number {
+  let score = 100
 
-  const recommendationText = nearRecommendation
-    ? `Current settings are already close to the best operating point for ${current.scenarioLabel}.`
-    : `Recommended for ${current.scenarioLabel}: urgency ${percent(recommended.controls.urgency)}, strictness ${percent(recommended.controls.strictness)} (readiness ${recommended.readinessScore}/100).`
+  score -= base.guardrailViolations * 28
+  score -= base.queue.breachMinutes * 2.15
+  score -= base.queue.escalations * 0.09
+  score += base.retainedGainPct * 0.18
+
+  if (base.id === 'hold') {
+    score -= controls.urgency * 24
+  }
+
+  if (base.id === 'raw' && base.guardrailViolations > 0) {
+    score -= 42
+  }
+
+  if (base.id === 'safe' && !base.shippable) {
+    score -= 20
+  }
+
+  return Math.round(clampRange(score, 0, 100))
+}
+
+function getStrategy(strategies: StrategyAssessment[], id: StrategyId): StrategyAssessment {
+  const strategy = strategies.find((item) => item.id === id)
+  if (!strategy) {
+    throw new Error(`Missing strategy ${id}`)
+  }
+  return strategy
+}
+
+function selectRecommendedStrategy(strategies: StrategyAssessment[]): StrategyId {
+  const raw = getStrategy(strategies, 'raw')
+  const safe = getStrategy(strategies, 'safe')
+  const hold = getStrategy(strategies, 'hold')
+
+  let recommended = safe.shippable ? safe : hold
+
+  if (hold.score >= recommended.score + 3) {
+    recommended = hold
+  }
+
+  if (raw.shippable && raw.score >= Math.max(safe.score, hold.score) + 7) {
+    recommended = raw
+  }
+
+  return recommended.id
+}
+
+function buildStrategyPack(evaluation: ScenarioEvaluation): StrategyPack {
+  const holdQueue = simulateQueueOutcome(evaluation.controls, 0, 0, 'safe')
+
+  const baseStrategies: Array<Omit<StrategyAssessment, 'score'>> = [
+    {
+      id: 'raw',
+      label: 'Raw patch',
+      guardrailViolations: evaluation.violatedRaw,
+      queue: evaluation.rawQueue,
+      retainedGainPct: 100,
+      shippable: evaluation.violatedRaw === 0,
+      status: evaluation.violatedRaw === 0 ? 'Shippable' : 'Unsafe',
+      reason:
+        evaluation.violatedRaw === 0
+          ? 'Raw patch already stays inside policy limits.'
+          : `Raw patch violates ${evaluation.violatedRaw} guardrail(s).`,
+    },
+    {
+      id: 'safe',
+      label: 'SafePatch projection',
+      guardrailViolations: evaluation.violatedSafe,
+      queue: evaluation.safeQueue,
+      retainedGainPct: Math.round(clampRange(evaluation.retainedValueRatio, 0, 1.4) * 100),
+      shippable: evaluation.deployment.ship && evaluation.violatedSafe === 0,
+      status: evaluation.deployment.ship ? 'Preferred' : 'Needs tuning',
+      reason: evaluation.deployment.reason,
+    },
+    {
+      id: 'hold',
+      label: 'Hold deployment',
+      guardrailViolations: 0,
+      queue: holdQueue,
+      retainedGainPct: 0,
+      shippable: false,
+      status: 'No rollout',
+      reason: 'No model change reaches production users.',
+    },
+  ]
+
+  const strategies = baseStrategies.map((base) => ({
+    ...base,
+    score: scoreStrategy(base, evaluation.controls),
+  }))
+
+  const recommendedId = selectRecommendedStrategy(strategies)
+  const recommended = getStrategy(strategies, recommendedId)
+  const raw = getStrategy(strategies, 'raw')
+  const safe = getStrategy(strategies, 'safe')
+
+  const escalationDelta = raw.queue.escalations - recommended.queue.escalations
+  const breachDelta = raw.queue.breachMinutes - recommended.queue.breachMinutes
+
+  const caption = `Recommended: ${recommended.label}. Predicted escalations ${raw.queue.escalations} -> ${recommended.queue.escalations}.`
+
+  const whyItems: string[] = []
+  if (recommendedId === 'safe') {
+    whyItems.push(`Guardrail violations drop ${evaluation.violatedRaw} -> ${evaluation.violatedSafe} with SafePatch.`)
+    whyItems.push(`Expected escalations improve ${raw.queue.escalations} -> ${safe.queue.escalations} under identical traffic.`)
+    whyItems.push(`Projected patch retains ${Math.round(evaluation.retainedValueRatio * 100)}% of intended fix value.`)
+  } else if (recommendedId === 'hold') {
+    whyItems.push(`Safe deployment is not yet defensible: ${safe.reason.toLowerCase()}`)
+    whyItems.push(`Holding avoids shipping ${evaluation.violatedRaw} raw guardrail violation(s) under ${evaluation.scenarioLabel}.`)
+    whyItems.push('Use Auto-tune to search a safer operating point before the next release window.')
+  } else {
+    whyItems.push('Raw patch already satisfies all active guardrails in this operating point.')
+    whyItems.push(`Raw rollout has stronger queue improvement than projection for current settings.`)
+    whyItems.push('SafePatch still provides an auditable fallback if traffic pressure increases.')
+  }
+
+  const gateItems: string[] = []
+  if (recommendedId === 'hold') {
+    gateItems.push('Gate 0: Do not deploy this patch. Keep current production model.')
+    gateItems.push(
+      `Gate 1: Re-evaluate only after predicted breach minutes drop below ${Math.max(2, safe.queue.breachMinutes - 2)}.`,
+    )
+    gateItems.push(
+      `Gate 2: Require SafePatch readiness >= ${Math.max(70, safe.score)} and zero projected guardrail violations.`,
+    )
+  } else {
+    const firstGate = recommendedId === 'raw' ? 15 : 10
+    const secondGate = recommendedId === 'raw' ? 45 : 35
+    gateItems.push(
+      `Gate 1: ${firstGate}% canary for 3 minutes. Abort if queue exceeds ${OVERLOAD_THRESHOLD} for 2 consecutive minutes.`,
+    )
+    gateItems.push(`Gate 2: Raise to ${secondGate}% for 5 minutes if no guardrail alarms fire.`)
+    gateItems.push('Gate 3: 100% rollout with on-call watch and rollback hook armed for 15 minutes.')
+  }
+
+  let decisionTone: 'ship' | 'hold' = 'ship'
+  let decisionTitle = 'Ship recommended strategy'
+  let decisionDetail = `Recommendation: ${recommended.label}.`
+
+  if (recommendedId === 'hold') {
+    decisionTone = 'hold'
+    decisionTitle = 'Hold deployment'
+    decisionDetail = `Do not ship now. ${safe.reason}`
+  } else if (recommendedId === 'safe') {
+    decisionTitle = 'Ship SafePatch projection'
+    decisionDetail =
+      escalationDelta > 0 || breachDelta > 0
+        ? `Safe projection reduces incident pressure (${Math.max(escalationDelta, 0)} fewer escalations).`
+        : safe.reason
+  } else {
+    decisionTitle = 'Ship raw patch (already safe)'
+    decisionDetail = 'Raw patch is guardrail-safe in this operating point. Keep SafePatch as fallback.'
+  }
+
+  let readinessNote = 'Operational readiness is moderate.'
+  if (recommendedId === 'hold') {
+    readinessNote = 'Hold: current options do not clear risk and value thresholds simultaneously.'
+  } else if (recommended.score >= 84) {
+    readinessNote = 'High confidence: rollout can proceed through staged canary gates.'
+  } else if (recommended.score >= 68) {
+    readinessNote = 'Conditional ship: proceed with strict queue and policy monitoring.'
+  } else {
+    readinessNote = 'Borderline ship: proceed only if rollback triggers are fully staffed.'
+  }
+
+  return {
+    strategies,
+    recommendedId,
+    caption,
+    whyItems,
+    gateItems,
+    decisionTone,
+    decisionTitle,
+    decisionDetail,
+    readinessScore: recommended.score,
+    readinessNote,
+  }
+}
+
+function buildGuidance(
+  current: ScenarioEvaluation,
+  recommendedControls: ScenarioEvaluation,
+  strategyPack: StrategyPack,
+): GuidanceBundle {
+  const nearRecommendation =
+    Math.abs(current.controls.urgency - recommendedControls.controls.urgency) < 0.02 &&
+    Math.abs(current.controls.strictness - recommendedControls.controls.strictness) < 0.02
+
+  const recommendedControlsText = nearRecommendation
+    ? `Current settings are close to optimal for ${current.scenarioLabel}.`
+    : `Suggested controls for ${current.scenarioLabel}: urgency ${percent(recommendedControls.controls.urgency)}, strictness ${percent(recommendedControls.controls.strictness)}.`
+
+  const recommendedStrategy = getStrategy(strategyPack.strategies, strategyPack.recommendedId)
 
   const actionItems: string[] = []
-
-  if (!current.deployment.ship && recommended.deployment.ship) {
+  if (strategyPack.recommendedId === 'hold') {
+    actionItems.push('Do not deploy this patch in the current incident window.')
     actionItems.push(
-      `Click Auto-tune, then run urgency ${percent(recommended.controls.urgency)} and strictness ${percent(recommended.controls.strictness)} to move this patch to ship-ready.`,
+      `Apply suggested controls (urgency ${percent(recommendedControls.controls.urgency)}, strictness ${percent(recommendedControls.controls.strictness)}) and re-evaluate.`,
     )
-  } else if (!current.deployment.ship) {
-    actionItems.push('Do not ship in this traffic profile. Keep hold, then reduce load or revise the patch objective.')
+    actionItems.push('Escalate to release manager with exported decision and hold rationale.')
   } else {
-    actionItems.push(
-      `Ship projected patch through a 20% canary. Replay predicts escalations ${current.queueReplay.rawEscalations} -> ${current.queueReplay.safeEscalations}.`,
-    )
+    actionItems.push(`Deploy ${recommendedStrategy.label.toLowerCase()} using staged canary gates.`)
+    actionItems.push(`Primary rollback trigger: queue > ${OVERLOAD_THRESHOLD} for 2 consecutive minutes.`)
+    actionItems.push('Post release memo and JSON decision artifact in the release ticket.')
   }
 
-  if (current.queueReplay.safeBreachMinutes > 0) {
-    actionItems.push(
-      `Set rollback trigger: queue above ${current.queueReplay.overloadThreshold} for 2 consecutive minutes during canary.`,
+  const rowsText = strategyPack.strategies
+    .map(
+      (strategy) =>
+        `${strategy.label}: guardrails ${strategy.guardrailViolations}, peak ${strategy.queue.peak}, breach ${strategy.queue.breachMinutes}, escalations ${strategy.queue.escalations}, readiness ${strategy.score}/100.`,
     )
-  } else {
-    actionItems.push(`Keep queue alarm at ${current.queueReplay.overloadThreshold}. Safe replay shows zero breach minutes.`)
-  }
-
-  actionItems.push(
-    `Attach decision export to release ticket (guardrail violations ${current.violatedRaw} -> ${current.violatedSafe}, retained gain ${Math.round(current.retainedValueRatio * 100)}%).`,
-  )
+    .join(' ')
 
   const memoText = [
-    `SafePatch ${current.deployment.ship ? 'SHIP' : 'HOLD'} recommendation for ${current.scenarioLabel}.`,
-    `Current controls: urgency ${percent(current.controls.urgency)}, strictness ${percent(current.controls.strictness)}.`,
-    `Projection clears guardrails ${current.violatedRaw} -> ${current.violatedSafe} and retains ${Math.round(current.retainedValueRatio * 100)}% of intended gain.`,
-    `Queue replay: peak ${current.queueReplay.peakRaw} -> ${current.queueReplay.peakSafe}, breach minutes ${current.queueReplay.rawBreachMinutes} -> ${current.queueReplay.safeBreachMinutes}, escalations ${current.queueReplay.rawEscalations} -> ${current.queueReplay.safeEscalations}.`,
-    `Reason: ${current.deployment.reason}`,
-    `Recommended point: urgency ${percent(recommended.controls.urgency)}, strictness ${percent(recommended.controls.strictness)} (readiness ${recommended.readinessScore}/100).`,
+    `SafePatch recommendation: ${strategyPack.decisionTone === 'ship' ? 'SHIP' : 'HOLD'}.`,
+    `Chosen strategy: ${recommendedStrategy.label}.`,
+    `Scenario: ${current.scenarioLabel}. Controls: urgency ${percent(current.controls.urgency)}, strictness ${percent(current.controls.strictness)}.`,
+    rowsText,
+    `Decision rationale: ${strategyPack.decisionDetail}`,
   ].join(' ')
 
   return {
-    recommendedControlsText: recommendationText,
+    recommendedControlsText,
     actionItems,
     memoText,
   }
 }
 
-function toFrameUi(evaluation: ScenarioEvaluation, guidance: GuidanceBundle): ProofFrameUi {
-  const replay = evaluation.queueReplay
-  const retainedPercent = Math.round(clamp(evaluation.retainedValueRatio, 0, 1.4) * 100)
-
-  const problemText = `Problem: under ${evaluation.scenarioLabel}, the raw patch creates ${evaluation.violatedRaw} guardrail violations and ${replay.rawBreachMinutes} queue breach minutes.`
-  const mechanismText = `Method: SafePatch projects the raw patch to the nearest safe point (${evaluation.violatedRaw} -> ${evaluation.violatedSafe} violations) while retaining ${retainedPercent}% of intended gain.`
-
-  const impactText = evaluation.deployment.ship
-    ? `Impact: replay predicts peak queue ${replay.peakRaw} -> ${replay.peakSafe} and escalations ${replay.rawEscalations} -> ${replay.safeEscalations}.`
-    : `Impact: hold deployment. ${evaluation.deployment.reason}`
+function toStrategyRowUi(strategy: StrategyAssessment, recommendedId: StrategyId): StrategyRowUi {
+  const recommended = strategy.id === recommendedId
+  const statusText = recommended ? `Recommended · ${strategy.status}` : strategy.status
 
   return {
-    decisionTone: evaluation.deployment.ship ? 'ship' : 'hold',
-    decisionTitle: evaluation.deployment.ship ? 'Ship projected patch' : 'Hold this patch',
-    decisionDetail: `${evaluation.deployment.reason} Readiness ${evaluation.readinessScore}/100.`,
-    problemText,
-    mechanismText,
-    impactText,
-    peakValueText: `${replay.peakRaw.toLocaleString()} -> ${replay.peakSafe.toLocaleString()}`,
-    breachValueText: `${replay.rawBreachMinutes.toLocaleString()} -> ${replay.safeBreachMinutes.toLocaleString()}`,
-    escalationValueText: `${replay.rawEscalations.toLocaleString()} -> ${replay.safeEscalations.toLocaleString()}`,
-    guardrailValueText: `${evaluation.violatedRaw} -> ${evaluation.violatedSafe}`,
-    retainedValueText: `${retainedPercent}%`,
-    readinessScoreText: `${evaluation.readinessScore}`,
-    readinessNote: evaluation.readinessNote,
+    id: strategy.id,
+    guardrailsText: strategy.guardrailViolations.toString(),
+    peakText: strategy.queue.peak.toLocaleString(),
+    breachText: strategy.queue.breachMinutes.toLocaleString(),
+    escalationsText: strategy.queue.escalations.toLocaleString(),
+    scoreText: `${strategy.score}/100`,
+    statusText,
+    recommended,
+  }
+}
+
+function toFrameUi(current: ScenarioEvaluation, strategyPack: StrategyPack, guidance: GuidanceBundle): ProofFrameUi {
+  return {
+    decisionTone: strategyPack.decisionTone,
+    decisionTitle: strategyPack.decisionTitle,
+    decisionDetail: strategyPack.decisionDetail,
+    readinessScoreText: strategyPack.readinessScore.toString(),
+    readinessNote: strategyPack.readinessNote,
     recommendedControlsText: guidance.recommendedControlsText,
+    guardrailValueText: `${current.violatedRaw} -> ${current.violatedSafe}`,
+    retainedValueText: `${Math.round(clampRange(current.retainedValueRatio, 0, 1.4) * 100)}%`,
+    strategyCaption: strategyPack.caption,
+    strategyRows: strategyPack.strategies.map((strategy) => toStrategyRowUi(strategy, strategyPack.recommendedId)),
+    whyItems: strategyPack.whyItems,
+    gateItems: strategyPack.gateItems,
     actionItems: guidance.actionItems,
     memoText: guidance.memoText,
   }
@@ -559,7 +740,8 @@ function start(): void {
 
   let currentEvaluation = evaluateScenario(DEFAULT_CONTROLS)
   let recommendedEvaluation = findBestControls(currentEvaluation.controls.pressure, currentEvaluation.controls)
-  let guidance = buildGuidance(currentEvaluation, recommendedEvaluation)
+  let strategyPack = buildStrategyPack(currentEvaluation)
+  let guidance = buildGuidance(currentEvaluation, recommendedEvaluation, strategyPack)
   let transitionStart = performance.now()
   let latestDecision: Record<string, unknown> = {}
 
@@ -567,9 +749,26 @@ function start(): void {
     const controls = ui.readControlValues()
     currentEvaluation = evaluateScenario(controls)
     recommendedEvaluation = findBestControls(currentEvaluation.controls.pressure, currentEvaluation.controls)
-    guidance = buildGuidance(currentEvaluation, recommendedEvaluation)
+    strategyPack = buildStrategyPack(currentEvaluation)
+    guidance = buildGuidance(currentEvaluation, recommendedEvaluation, strategyPack)
 
-    ui.renderFrame(toFrameUi(currentEvaluation, guidance))
+    ui.renderFrame(toFrameUi(currentEvaluation, strategyPack, guidance))
+
+    const strategyMatrix = Object.fromEntries(
+      strategyPack.strategies.map((strategy) => [
+        strategy.id,
+        {
+          label: strategy.label,
+          guardrail_violations: strategy.guardrailViolations,
+          peak_queue: strategy.queue.peak,
+          breach_minutes: strategy.queue.breachMinutes,
+          escalations: strategy.queue.escalations,
+          retained_gain_pct: strategy.retainedGainPct,
+          readiness_score: strategy.score,
+          status: strategy.status,
+        },
+      ]),
+    )
 
     latestDecision = {
       generated_at: new Date().toISOString(),
@@ -579,30 +778,20 @@ function start(): void {
         urgency: Number(currentEvaluation.controls.urgency.toFixed(4)),
         strictness: Number(currentEvaluation.controls.strictness.toFixed(4)),
       },
-      decision: currentEvaluation.deployment.ship ? 'ship' : 'hold',
-      reason: currentEvaluation.deployment.reason,
-      readiness: {
-        score: currentEvaluation.readinessScore,
-        note: currentEvaluation.readinessNote,
-      },
       recommendation: {
+        decision: strategyPack.decisionTone === 'ship' ? 'ship' : 'hold',
+        strategy_id: strategyPack.recommendedId,
+        title: strategyPack.decisionTitle,
+        detail: strategyPack.decisionDetail,
+        readiness_score: strategyPack.readinessScore,
+      },
+      strategy_matrix: strategyMatrix,
+      why_recommended: strategyPack.whyItems,
+      rollout_playbook: strategyPack.gateItems,
+      actions: guidance.actionItems,
+      suggested_controls: {
         urgency: Number(recommendedEvaluation.controls.urgency.toFixed(4)),
         strictness: Number(recommendedEvaluation.controls.strictness.toFixed(4)),
-        decision: recommendedEvaluation.deployment.ship ? 'ship' : 'hold',
-        readiness_score: recommendedEvaluation.readinessScore,
-      },
-      actions: guidance.actionItems,
-      replay: {
-        threshold: currentEvaluation.queueReplay.overloadThreshold,
-        peak_queue: { raw: currentEvaluation.queueReplay.peakRaw, safe: currentEvaluation.queueReplay.peakSafe },
-        breach_minutes: {
-          raw: currentEvaluation.queueReplay.rawBreachMinutes,
-          safe: currentEvaluation.queueReplay.safeBreachMinutes,
-        },
-        escalations: {
-          raw: currentEvaluation.queueReplay.rawEscalations,
-          safe: currentEvaluation.queueReplay.safeEscalations,
-        },
       },
       method_signals: {
         eta: Number(currentEvaluation.scenarioSignals.eta.toFixed(4)),
@@ -620,16 +809,19 @@ function start(): void {
   }
 
   function frame(now: number): void {
-    const progress = clamp((now - transitionStart) / TRANSITION_MS)
+    const progress = clamp01((now - transitionStart) / TRANSITION_MS)
+
+    const rawStrategy = getStrategy(strategyPack.strategies, 'raw')
+    const targetStrategy = getStrategy(strategyPack.strategies, strategyPack.recommendedId)
 
     renderer.render({
       halfspaces: copyHalfspaces(currentEvaluation.halfspaces),
       step0: currentEvaluation.projectedStep.step0,
       projectedStep: currentEvaluation.projectedStep.projectedStep,
       gradient: currentEvaluation.scenarioSignals.gradient,
-      queueRawSeries: currentEvaluation.queueReplay.rawSeries,
-      queueSafeSeries: currentEvaluation.queueReplay.safeSeries,
-      overloadThreshold: currentEvaluation.queueReplay.overloadThreshold,
+      queueRawSeries: rawStrategy.queue.series,
+      queueSafeSeries: targetStrategy.queue.series,
+      overloadThreshold: OVERLOAD_THRESHOLD,
       transitionProgress: progress,
       clockMs: now,
     })
