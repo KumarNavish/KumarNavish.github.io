@@ -33,7 +33,7 @@
           <p><span>3</span>Ship using generated actions and memo.</p>
         </div>
 
-        <p class="build-tag">UI rev 2026-02-25-08</p>
+        <p class="build-tag">UI rev 2026-02-25-09</p>
       </header>
 
       <section class="workspace">
@@ -56,26 +56,71 @@
             <canvas id="scene-canvas" class="scene" aria-label="SafePatch mechanism and queue replay"></canvas>
           </div>
 
-          <section class="evidence-row" aria-label="Operational evidence">
-            <article class="kpi-card">
-              <p>Peak queue</p>
-              <strong id="kpi-peak-value">--</strong>
-            </article>
-            <article class="kpi-card">
-              <p>Breach minutes</p>
-              <strong id="kpi-breach-value">--</strong>
-            </article>
-            <article class="kpi-card">
-              <p>Escalations</p>
-              <strong id="kpi-escalations-value">--</strong>
-            </article>
+          <section class="strategy-board" aria-label="Strategy comparison board">
+            <div class="section-head">
+              <h3>Strategy comparison</h3>
+              <p id="strategy-caption" class="section-note">Comparison is loading.</p>
+            </div>
+
+            <div class="table-wrap">
+              <table class="strategy-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Strategy</th>
+                    <th scope="col">Guardrails</th>
+                    <th scope="col">Peak queue</th>
+                    <th scope="col">Breach min</th>
+                    <th scope="col">Escalations</th>
+                    <th scope="col">Readiness</th>
+                    <th scope="col">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr id="strategy-row-raw">
+                    <th scope="row">Raw patch</th>
+                    <td id="raw-guardrails">--</td>
+                    <td id="raw-peak">--</td>
+                    <td id="raw-breach">--</td>
+                    <td id="raw-escalations">--</td>
+                    <td id="raw-score">--</td>
+                    <td id="raw-status">--</td>
+                  </tr>
+                  <tr id="strategy-row-safe">
+                    <th scope="row">SafePatch</th>
+                    <td id="safe-guardrails">--</td>
+                    <td id="safe-peak">--</td>
+                    <td id="safe-breach">--</td>
+                    <td id="safe-escalations">--</td>
+                    <td id="safe-score">--</td>
+                    <td id="safe-status">--</td>
+                  </tr>
+                  <tr id="strategy-row-hold">
+                    <th scope="row">Hold deploy</th>
+                    <td id="hold-guardrails">--</td>
+                    <td id="hold-peak">--</td>
+                    <td id="hold-breach">--</td>
+                    <td id="hold-escalations">--</td>
+                    <td id="hold-score">--</td>
+                    <td id="hold-status">--</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </section>
 
-          <section class="narrative" aria-label="Release brief">
-            <h3>Release brief</h3>
-            <p id="problem-statement" class="story-line">Replay loading.</p>
-            <p id="mechanism-statement" class="story-line">SafePatch mechanism loading.</p>
-            <p id="impact-statement" class="story-line">Impact replay loading.</p>
+          <section class="ops-brief" aria-label="Operational playbook">
+            <article class="ops-card">
+              <h3>Why this recommendation</h3>
+              <ul id="why-list" class="ops-list">
+                <li>Evaluation loading.</li>
+              </ul>
+            </article>
+            <article class="ops-card">
+              <h3>Rollout playbook</h3>
+              <ul id="gate-list" class="ops-list">
+                <li>Rollout plan loading.</li>
+              </ul>
+            </article>
           </section>
         </section>
 
