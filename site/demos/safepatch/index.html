@@ -19,31 +19,21 @@
   <body>
     <main class="product">
       <header class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">SafePatch release decision studio</p>
-          <h1>Should this urgent LLM patch ship today?</h1>
-          <p class="hero-text">
-            Raw patches can improve one metric and silently break policy. SafePatch computes the nearest safe update,
-            then replay-checks queue risk so the ship decision is operationally defensible.
-          </p>
+        <p class="eyebrow">SafePatch release decision studio</p>
+        <h1>Decide in minutes if an urgent LLM patch can ship safely.</h1>
+        <p class="hero-text">
+          Raw hotfixes can improve quality while silently violating guardrails. SafePatch projects each risky update to
+          the nearest safe point, then replays queue pressure so the release decision is practical, auditable, and
+          deployment-ready.
+        </p>
+
+        <div class="hero-steps" aria-label="How to use this prototype">
+          <p><span>1</span>Set traffic and urgency.</p>
+          <p><span>2</span>SafePatch computes the nearest safe patch.</p>
+          <p><span>3</span>Ship using generated actions and memo.</p>
         </div>
 
-        <div class="value-grid" aria-label="Problem method value">
-          <article class="value-card">
-            <p class="value-kicker">Problem</p>
-            <p>Raw patch may violate guardrails under real production load.</p>
-          </article>
-          <article class="value-card">
-            <p class="value-kicker">Method</p>
-            <p>One constrained projection moves the patch to the nearest safe point.</p>
-          </article>
-          <article class="value-card">
-            <p class="value-kicker">Value</p>
-            <p>Decision is based on queue, breach minutes, and escalations.</p>
-          </article>
-        </div>
-
-        <p class="build-tag">UI rev 2026-02-25-06</p>
+        <p class="build-tag">UI rev 2026-02-25-07</p>
       </header>
 
       <section class="workspace">
@@ -54,7 +44,12 @@
               <h2 id="decision-title">Ship this patch</h2>
               <p id="decision-detail" class="status-detail">Waiting for first replay.</p>
             </div>
-            <button id="export-button" class="export" type="button">Export decision JSON</button>
+
+            <div class="status-side" aria-label="Readiness score">
+              <p class="status-label">Readiness</p>
+              <strong id="readiness-score" class="readiness-score">--</strong>
+              <p id="readiness-note" class="status-note">Waiting for first evaluation.</p>
+            </div>
           </section>
 
           <div class="proof-canvas">
@@ -76,8 +71,8 @@
             </article>
           </section>
 
-          <section class="narrative" aria-label="Run narrative">
-            <h3>Run narrative</h3>
+          <section class="narrative" aria-label="Release brief">
+            <h3>Release brief</h3>
             <p id="problem-statement" class="story-line">Replay loading.</p>
             <p id="mechanism-statement" class="story-line">SafePatch mechanism loading.</p>
             <p id="impact-statement" class="story-line">Impact replay loading.</p>
@@ -85,8 +80,8 @@
         </section>
 
         <aside class="controls">
-          <p class="controls-kicker">Step 1: Configure pressure</p>
-          <h2>Release context</h2>
+          <p class="controls-kicker">Step 1</p>
+          <h2>Set release context</h2>
 
           <div class="field-card">
             <p class="field-title">Traffic scenario</p>
@@ -116,17 +111,59 @@
             <p id="strictness-note" class="field-note">Moderate strictness keeps core guardrails active.</p>
           </div>
 
-          <div class="micro-inline" aria-label="Mechanism diagnostics">
-            <p><span>Guardrails fixed</span><strong id="guardrail-value">--</strong></p>
-            <p><span>Useful gain kept</span><strong id="retained-value">--</strong></p>
-          </div>
+          <section class="action-center" aria-label="Auto-tune controls">
+            <p class="controls-kicker">Step 2</p>
+            <h3>Auto-tune a safe ship plan</h3>
+
+            <div class="action-buttons">
+              <button id="autotune-button" class="primary-btn" type="button">Auto-tune for readiness</button>
+              <button id="reset-button" class="secondary-btn" type="button">Reset baseline</button>
+            </div>
+
+            <p id="recommended-controls" class="recommended-controls">Recommended settings will appear after first evaluation.</p>
+
+            <div class="quick-proof" aria-label="Mechanism diagnostics">
+              <p><span>Guardrail violations</span><strong id="guardrail-value">--</strong></p>
+              <p><span>Useful gain retained</span><strong id="retained-value">--</strong></p>
+            </div>
+          </section>
+
+          <section class="next-actions" aria-label="Execution checklist">
+            <p class="controls-kicker">Step 3</p>
+            <h3>Execute</h3>
+
+            <ul id="action-list" class="action-list">
+              <li>Adjust controls or run auto-tune to generate an execution plan.</li>
+            </ul>
+
+            <div class="memo-card">
+              <div class="memo-head">
+                <p class="field-title">Release memo</p>
+                <button id="copy-memo-button" class="copy-memo" type="button">Copy memo</button>
+              </div>
+              <p id="memo-text" class="memo-text">Release memo will appear after first replay.</p>
+            </div>
+
+            <button id="export-button" class="export wide" type="button">Export decision JSON</button>
+          </section>
 
           <details class="math-details">
-            <summary>Optimization details</summary>
+            <summary>Why SafePatch works</summary>
             <section class="math-panel" aria-label="SafePatch optimization">
-              <p class="math-intro">Raw step is unconstrained. SafePatch finds the nearest safe correction.</p>
-              <div id="equation-raw" class="equation"></div>
-              <div id="equation-qp" class="equation"></div>
+              <p class="math-intro">
+                Raw step follows quality gradient only. SafePatch keeps it as close as possible while staying inside all
+                active guardrails.
+              </p>
+              <div class="equation-stack">
+                <article class="equation-block">
+                  <p class="equation-title">Raw update</p>
+                  <div id="equation-raw" class="equation"></div>
+                </article>
+                <article class="equation-block">
+                  <p class="equation-title">SafePatch projection</p>
+                  <div id="equation-qp" class="equation"></div>
+                </article>
+              </div>
             </section>
           </details>
         </aside>
