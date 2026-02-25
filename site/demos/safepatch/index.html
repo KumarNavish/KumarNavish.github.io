@@ -7,7 +7,7 @@
       name="description"
       content="SafePatch certifies LLM hotfixes by projecting risky updates back into a guardrail-safe ship zone."
     />
-    <title>SafePatch | Release Gate Studio</title>
+    <title>SafePatch | Release Command Center</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -18,31 +18,53 @@
   </head>
   <body>
     <main class="shell">
-      <header class="hero-grid">
+      <header class="hero-row">
         <div class="hero-copy">
-          <p class="eyebrow">SafePatch release gate</p>
-          <h1>Do not ship an emergency patch until you can prove it is safe under real load.</h1>
+          <p class="eyebrow">SafePatch release command center</p>
+          <h1>Prove the hotfix is safe before it reaches production traffic.</h1>
           <p class="hero-text">
-            SafePatch takes a risky hotfix, computes the nearest policy-safe correction, and then simulates incident
-            behavior so the final decision is based on measurable operational impact.
+            This demo makes one release decision explicit: if the raw patch violates guardrails, SafePatch projects it
+            to the nearest safe update and validates the operational impact before you ship.
           </p>
         </div>
 
-        <aside class="hero-card" aria-label="What this demo answers">
-          <p class="hero-card-title">This demo answers</p>
+        <aside class="hero-panel" aria-label="What this product does">
+          <p class="panel-kicker">What this product does</p>
           <ul>
-            <li><strong>What fails now?</strong> Raw patch policy violations.</li>
-            <li><strong>What changes?</strong> One constrained correction step.</li>
-            <li><strong>Why it matters?</strong> Lower breach time and fewer escalations.</li>
+            <li><strong>Detects risk:</strong> raw patch policy violations.</li>
+            <li><strong>Corrects safely:</strong> one constrained projection.</li>
+            <li><strong>Quantifies value:</strong> queue, breach, escalation deltas.</li>
           </ul>
-          <p class="rev-chip">UI rev 2026-02-25-04</p>
+          <p class="rev-chip">UI rev 2026-02-25-05</p>
         </aside>
       </header>
 
-      <section class="studio-grid">
+      <section class="layout-grid">
+        <section class="proof-column">
+          <section id="decision-panel" class="decision-banner ship">
+            <div class="status-copy">
+              <p id="decision-pill" class="decision-pill ship">READY TO SHIP</p>
+              <h2 id="decision-title">Ship this patch</h2>
+              <p id="decision-detail" class="status-detail">Waiting for first replay.</p>
+            </div>
+            <button id="export-button" class="export" type="button">Export decision JSON</button>
+          </section>
+
+          <div class="canvas-frame">
+            <canvas id="scene-canvas" class="scene" aria-label="SafePatch mechanism and queue replay"></canvas>
+          </div>
+
+          <section class="narrative-card" aria-label="Run narrative">
+            <h3>Run narrative</h3>
+            <p id="problem-statement" class="story-line">Replay loading.</p>
+            <p id="mechanism-statement" class="story-line">SafePatch mechanism loading.</p>
+            <p id="impact-statement" class="story-line">Impact replay loading.</p>
+          </section>
+        </section>
+
         <aside class="control-column">
-          <p class="column-kicker">Step 1</p>
-          <h2>Set release conditions</h2>
+          <p class="column-kicker">Step 1: Configure release pressure</p>
+          <h2>Context controls</h2>
 
           <div class="field-card">
             <p class="field-title">Traffic scenario</p>
@@ -77,31 +99,7 @@
             <p><span>Useful gain kept</span><strong id="retained-value">--</strong></p>
           </div>
 
-          <details class="math-details">
-            <summary>Optimization details</summary>
-            <section class="math-panel" aria-label="SafePatch optimization">
-              <p class="math-intro">Raw step is unconstrained. SafePatch finds the closest safe correction.</p>
-              <div id="equation-raw" class="equation"></div>
-              <div id="equation-qp" class="equation"></div>
-            </section>
-          </details>
-        </aside>
-
-        <section class="stage-column">
-          <section id="decision-panel" class="decision-banner ship">
-            <div class="status-copy">
-              <p id="decision-pill" class="decision-pill ship">READY TO SHIP</p>
-              <h2 id="decision-title">Ship this patch</h2>
-              <p id="decision-detail" class="status-detail">Waiting for first replay.</p>
-            </div>
-            <button id="export-button" class="export" type="button">Export decision JSON</button>
-          </section>
-
-          <div class="viewport-card">
-            <canvas id="scene-canvas" class="scene" aria-label="SafePatch mechanism and queue replay"></canvas>
-          </div>
-
-          <section class="evidence-row" aria-label="Operational evidence">
+          <div class="kpi-strip" aria-label="Operational evidence">
             <article class="kpi-card">
               <p>Peak queue</p>
               <strong id="kpi-peak-value">--</strong>
@@ -114,15 +112,17 @@
               <p>Escalations</p>
               <strong id="kpi-escalations-value">--</strong>
             </article>
-          </section>
+          </div>
 
-          <section class="narrative-card" aria-label="Run narrative">
-            <h3>Run narrative</h3>
-            <p id="problem-statement" class="story-line">Replay loading.</p>
-            <p id="mechanism-statement" class="story-line">SafePatch mechanism loading.</p>
-            <p id="impact-statement" class="story-line">Impact replay loading.</p>
-          </section>
-        </section>
+          <details class="math-details">
+            <summary>Optimization details</summary>
+            <section class="math-panel" aria-label="SafePatch optimization">
+              <p class="math-intro">Raw step is unconstrained. SafePatch finds the nearest safe correction.</p>
+              <div id="equation-raw" class="equation"></div>
+              <div id="equation-qp" class="equation"></div>
+            </section>
+          </details>
+        </aside>
       </section>
     </main>
 
