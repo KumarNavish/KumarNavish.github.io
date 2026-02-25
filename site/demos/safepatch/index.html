@@ -11,7 +11,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@500;600&family=Manrope:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css" />
@@ -19,115 +19,108 @@
   <body>
     <main class="app">
       <header class="hero">
-        <div class="hero-copy-block">
-          <p class="eyebrow">SafePatch deployment gate</p>
-          <h1>Correct risky LLM hotfixes before they touch production traffic.</h1>
-          <p class="hero-copy">
-            Raw updates can increase quality while violating safety constraints. SafePatch computes the
-            nearest safe update and proves the operational impact before you ship.
+        <div class="hero-copy">
+          <p class="eyebrow">SafePatch policy-safe deployment</p>
+          <h1>Ship urgent LLM fixes without breaking safety guardrails.</h1>
+          <p class="lede">
+            Most hotfixes improve one metric and silently violate policy. SafePatch computes the nearest safe
+            version of the patch, then shows whether that correction actually reduces operational risk.
           </p>
         </div>
-        <div class="hero-meta" aria-label="How to use this demo">
-          <p class="build-tag">UI rev 2026-02-24-03</p>
-          <ol class="flow-list">
-            <li><span>1</span>Choose traffic pressure</li>
-            <li><span>2</span>Set urgency and strictness</li>
-            <li><span>3</span>Read ship or hold decision</li>
-          </ol>
+
+        <div class="hero-meta">
+          <p class="build-tag">UI rev 2026-02-25-01</p>
+          <ul class="promise-list" aria-label="What this demo proves">
+            <li><span>Problem</span>Unsafe raw patch under production pressure</li>
+            <li><span>Method</span>One constrained projection to a safe update</li>
+            <li><span>Value</span>Lower breach time and fewer escalations</li>
+          </ul>
         </div>
       </header>
 
-      <section id="decision-panel" class="decision-banner ship">
-        <div class="status-copy">
-          <p id="decision-pill" class="decision-pill ship">SHIP WITH SAFEPATCH</p>
-          <h2 id="decision-title">Certified for deployment</h2>
-          <p id="decision-detail" class="status-detail">Waiting for first replay.</p>
-        </div>
-        <button id="export-button" class="export" type="button">Export decision JSON</button>
-      </section>
+      <section class="main-grid">
+        <aside class="control-rail">
+          <p class="section-label">Step 1</p>
+          <h2>Define your deployment context</h2>
 
-      <section class="workspace">
-        <aside class="control-panel">
-          <p class="panel-label">Controls</p>
-          <h3>Define the deployment context</h3>
-
-          <div class="scenario-block">
-            <p class="control-label">Traffic scenario</p>
+          <div class="field-block">
+            <p class="field-title">Traffic profile</p>
             <div class="scenario-buttons" role="group" aria-label="Traffic scenario">
-              <button class="scenario-btn" data-pressure="0.22" type="button">Routine</button>
-              <button class="scenario-btn active" data-pressure="0.56" type="button">Peak</button>
-              <button class="scenario-btn" data-pressure="0.9" type="button">Incident</button>
+              <button class="scenario-btn" data-pressure="0.22" type="button">Normal day</button>
+              <button class="scenario-btn active" data-pressure="0.56" type="button">Traffic spike</button>
+              <button class="scenario-btn" data-pressure="0.9" type="button">Incident hour</button>
             </div>
-            <p id="scenario-note" class="control-note">Peak traffic: moderate pressure with non-trivial queue risk.</p>
+            <p id="scenario-note" class="field-note">Traffic spike: queue pressure is meaningful but still manageable.</p>
           </div>
 
-          <div class="slider-stack">
-            <div class="slider-block">
-              <div class="slider-row">
-                <label for="urgency-slider">Hotfix urgency</label>
-                <span id="urgency-value" class="slider-value">58%</span>
-              </div>
-              <input id="urgency-slider" type="range" min="0" max="100" value="58" />
+          <div class="field-block">
+            <div class="slider-row">
+              <label for="urgency-slider">How urgent is this hotfix?</label>
+              <span id="urgency-value" class="slider-value">58%</span>
             </div>
+            <input id="urgency-slider" type="range" min="0" max="100" value="58" />
+            <p id="urgency-note" class="field-note">Balanced urgency: correction still has room to improve safety.</p>
+          </div>
 
-            <div class="slider-block">
-              <div class="slider-row">
-                <label for="strictness-slider">Guardrail strictness</label>
-                <span id="strictness-value" class="slider-value">62%</span>
-              </div>
-              <input id="strictness-slider" type="range" min="0" max="100" value="62" />
+          <div class="field-block">
+            <div class="slider-row">
+              <label for="strictness-slider">How strict are policy limits?</label>
+              <span id="strictness-value" class="slider-value">62%</span>
             </div>
+            <input id="strictness-slider" type="range" min="0" max="100" value="62" />
+            <p id="strictness-note" class="field-note">Moderate strictness: core guardrails stay active without over-constraining quality.</p>
           </div>
 
           <div class="micro-inline" aria-label="Mechanism diagnostics">
-            <p><span>Guardrails corrected</span><strong id="guardrail-value">--</strong></p>
-            <p><span>Useful gain retained</span><strong id="retained-value">--</strong></p>
+            <p><span>Guardrails fixed</span><strong id="guardrail-value">--</strong></p>
+            <p><span>Useful gain kept</span><strong id="retained-value">--</strong></p>
           </div>
 
           <details class="math-details">
-            <summary>Optimization details</summary>
+            <summary>Why the optimization works</summary>
             <section class="math-panel" aria-label="SafePatch optimization">
-              <p class="math-intro">SafePatch solves one constrained correction step:</p>
+              <p class="math-intro">Raw step can violate constraints. SafePatch solves the closest feasible correction.</p>
               <div id="equation-raw" class="equation"></div>
               <div id="equation-qp" class="equation"></div>
             </section>
           </details>
         </aside>
 
-        <section class="replay-panel">
+        <section class="proof-rail">
+          <section id="decision-panel" class="decision-banner ship">
+            <div class="status-copy">
+              <p id="decision-pill" class="decision-pill ship">SHIP WITH SAFEPATCH</p>
+              <h2 id="decision-title">Certified for deployment</h2>
+              <p id="decision-detail" class="status-detail">Waiting for first replay.</p>
+            </div>
+            <button id="export-button" class="export" type="button">Export decision JSON</button>
+          </section>
+
           <div class="canvas-shell">
             <canvas id="scene-canvas" class="scene" aria-label="SafePatch mechanism and queue replay"></canvas>
           </div>
 
           <div class="kpi-row" aria-label="Operational impact">
             <article class="kpi-card">
-              <p>Peak queue</p>
+              <p>Peak queue (raw -> safe)</p>
               <strong id="kpi-peak-value">--</strong>
             </article>
             <article class="kpi-card">
-              <p>Breach minutes</p>
+              <p>Breach minutes (raw -> safe)</p>
               <strong id="kpi-breach-value">--</strong>
             </article>
             <article class="kpi-card">
-              <p>Escalations</p>
+              <p>Escalations (raw -> safe)</p>
               <strong id="kpi-escalations-value">--</strong>
             </article>
           </div>
 
-          <div class="story-strip" aria-label="What changes and why it matters">
-            <article class="story-card">
-              <p class="story-kicker">Problem</p>
-              <p id="problem-statement" class="story-text">Replay loading.</p>
-            </article>
-            <article class="story-card">
-              <p class="story-kicker">Mechanism</p>
-              <p id="mechanism-statement" class="story-text">SafePatch mechanism loading.</p>
-            </article>
-            <article class="story-card">
-              <p class="story-kicker">Impact</p>
-              <p id="impact-statement" class="story-text">Impact replay loading.</p>
-            </article>
-          </div>
+          <section class="explain-card" aria-label="What this run proves">
+            <h3>What this run proves</h3>
+            <p id="problem-statement" class="story-line">Replay loading.</p>
+            <p id="mechanism-statement" class="story-line">SafePatch mechanism loading.</p>
+            <p id="impact-statement" class="story-line">Impact replay loading.</p>
+          </section>
         </section>
       </section>
     </main>

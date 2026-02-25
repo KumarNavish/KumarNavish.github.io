@@ -111,12 +111,12 @@ function boundScaleForStrictness(id: string, strictnessScale: number): number {
 
 function scenarioName(pressure: number): string {
   if (pressure < 0.38) {
-    return 'Routine load'
+    return 'normal day'
   }
   if (pressure < 0.75) {
-    return 'Peak shift'
+    return 'traffic spike'
   }
-  return 'Incident surge'
+  return 'incident hour'
 }
 
 function buildQueueReplay(
@@ -191,14 +191,14 @@ function deploymentDecision(
   if (!projectedShipPossible) {
     return {
       ship: false,
-      reason: projectedReason ?? 'No feasible certified correction under current guardrails.',
+      reason: projectedReason ?? 'No safe correction exists under the current policy limits.',
     }
   }
 
   if (retainedValueRatio < 0.42) {
     return {
       ship: false,
-      reason: `Only ${Math.round(retainedValueRatio * 100)}% of useful gain is retained.`,
+      reason: `Correction keeps only ${Math.round(retainedValueRatio * 100)}% of the intended gain.`,
     }
   }
 
@@ -208,13 +208,13 @@ function deploymentDecision(
   ) {
     return {
       ship: false,
-      reason: 'Projected patch does not improve risk enough to ship.',
+      reason: 'Corrected patch does not reduce queue risk enough to justify shipping.',
     }
   }
 
   return {
     ship: true,
-    reason: 'Safer update with lower incident pressure.',
+    reason: 'Safe correction reduces incident pressure while keeping useful improvement.',
   }
 }
 
@@ -235,20 +235,20 @@ function toFrameUi(
   const breachDrop = replay.rawBreachMinutes - replay.safeBreachMinutes
   const retainedPercent = Math.round(clamp(retainedValueRatio, 0, 1.4) * 100)
 
-  const problemText = `Problem: ${scenario} turns the raw hotfix into ${violatedRaw} guardrail violations and ${replay.rawBreachMinutes} SLA breach minutes.`
-  const mechanismText = `Mechanism: SafePatch applies one constrained projection (${violatedRaw} -> ${violatedSafe} violations, active constraints ${activeSetSize}, residual ${Math.max(0, maxViolationProjected).toFixed(3)}).`
+  const problemText = `Problem: on a ${scenario}, the raw patch creates ${violatedRaw} guardrail violations and ${replay.rawBreachMinutes} breach minutes.`
+  const mechanismText = `Method: SafePatch projects the patch to the nearest safe point (${violatedRaw} -> ${violatedSafe} violations, ${retainedPercent}% gain retained, active constraints ${activeSetSize}).`
 
-  let impactText = `Impact: queue peak ${replay.peakRaw} -> ${replay.peakSafe} and escalations ${replay.rawEscalations} -> ${replay.safeEscalations}.`
+  let impactText = `Value: queue peak drops ${replay.peakRaw} -> ${replay.peakSafe} and escalations drop ${replay.rawEscalations} -> ${replay.safeEscalations}.`
   if (breachDrop > 0) {
-    impactText += ` Breach minutes drop by ${breachDrop}.`
+    impactText += ` Breach minutes fall by ${breachDrop}.`
   }
   if (!decision.ship) {
-    impactText = `Impact: deployment held because ${decision.reason.toLowerCase()}`
+    impactText = `Value: deployment is held because ${decision.reason.toLowerCase()}`
   }
 
   return {
     decisionTone: decision.ship ? 'ship' : 'hold',
-    decisionTitle: decision.ship ? 'Certified for deployment' : 'Do not ship yet',
+    decisionTitle: decision.ship ? 'Ship with SafePatch' : 'Hold this patch',
     decisionDetail: decision.reason,
     problemText,
     mechanismText,
