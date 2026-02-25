@@ -1,6 +1,7 @@
 import katex from 'katex'
 
 const sliderMax = 100
+const copyResetDelayMs = 1400
 
 export interface ControlValues {
   pressure: number
@@ -20,6 +21,11 @@ export interface ProofFrameUi {
   escalationValueText: string
   guardrailValueText: string
   retainedValueText: string
+  readinessScoreText: string
+  readinessNote: string
+  recommendedControlsText: string
+  actionItems: string[]
+  memoText: string
 }
 
 export class UIController {
@@ -37,6 +43,8 @@ export class UIController {
   private readonly decisionPill: HTMLElement
   private readonly decisionTitle: HTMLElement
   private readonly decisionDetail: HTMLElement
+  private readonly readinessScore: HTMLElement
+  private readonly readinessNote: HTMLElement
   private readonly problemLine: HTMLElement
   private readonly mechanismLine: HTMLElement
   private readonly impactLine: HTMLElement
@@ -45,6 +53,13 @@ export class UIController {
   private readonly kpiEscalationsValue: HTMLElement
   private readonly guardrailValue: HTMLElement
   private readonly retainedValue: HTMLElement
+  private readonly recommendedControls: HTMLElement
+  private readonly actionList: HTMLUListElement
+  private readonly memoText: HTMLElement
+
+  private readonly autoTuneButton: HTMLButtonElement
+  private readonly resetButton: HTMLButtonElement
+  private readonly copyMemoButton: HTMLButtonElement
 
   private selectedPressure = 0.56
   private selectedUrgency = 0.58
@@ -56,6 +71,8 @@ export class UIController {
     this.decisionPill = this.getElement('decision-pill')
     this.decisionTitle = this.getElement('decision-title')
     this.decisionDetail = this.getElement('decision-detail')
+    this.readinessScore = this.getElement('readiness-score')
+    this.readinessNote = this.getElement('readiness-note')
     this.problemLine = this.getElement('problem-statement')
     this.mechanismLine = this.getElement('mechanism-statement')
     this.impactLine = this.getElement('impact-statement')
@@ -64,6 +81,9 @@ export class UIController {
     this.kpiEscalationsValue = this.getElement('kpi-escalations-value')
     this.guardrailValue = this.getElement('guardrail-value')
     this.retainedValue = this.getElement('retained-value')
+    this.recommendedControls = this.getElement('recommended-controls')
+    this.actionList = this.getElement<HTMLUListElement>('action-list')
+    this.memoText = this.getElement('memo-text')
     this.scenarioNote = document.getElementById('scenario-note')
     this.urgencyNote = document.getElementById('urgency-note')
     this.strictnessNote = document.getElementById('strictness-note')
@@ -72,6 +92,10 @@ export class UIController {
     this.strictnessSlider = this.getElement<HTMLInputElement>('strictness-slider')
     this.urgencyValue = this.getElement('urgency-value')
     this.strictnessValue = this.getElement('strictness-value')
+
+    this.autoTuneButton = this.getElement<HTMLButtonElement>('autotune-button')
+    this.resetButton = this.getElement<HTMLButtonElement>('reset-button')
+    this.copyMemoButton = this.getElement<HTMLButtonElement>('copy-memo-button')
 
     this.scenarioButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.scenario-btn'))
     if (this.scenarioButtons.length === 0) {
@@ -113,6 +137,25 @@ export class UIController {
     this.strictnessSlider.addEventListener('input', onSliderInput)
   }
 
+  onAutoTune(callback: () => void): void {
+    this.autoTuneButton.addEventListener('click', callback)
+  }
+
+  onReset(callback: () => void): void {
+    this.resetButton.addEventListener('click', callback)
+  }
+
+  onCopyMemo(callback: (memoText: string) => Promise<boolean> | boolean): void {
+    this.copyMemoButton.addEventListener('click', async () => {
+      const memo = this.memoText.textContent ?? ''
+      const copied = await callback(memo)
+      this.copyMemoButton.textContent = copied ? 'Copied' : 'Copy failed'
+      window.setTimeout(() => {
+        this.copyMemoButton.textContent = 'Copy memo'
+      }, copyResetDelayMs)
+    })
+  }
+
   onExport(callback: () => void): void {
     const exportButton = this.getElement<HTMLButtonElement>('export-button')
     exportButton.addEventListener('click', callback)
@@ -151,6 +194,8 @@ export class UIController {
 
     this.decisionTitle.textContent = frame.decisionTitle
     this.decisionDetail.textContent = frame.decisionDetail
+    this.readinessScore.textContent = frame.readinessScoreText
+    this.readinessNote.textContent = frame.readinessNote
     this.problemLine.textContent = frame.problemText
     this.mechanismLine.textContent = frame.mechanismText
     this.impactLine.textContent = frame.impactText
@@ -159,6 +204,10 @@ export class UIController {
     this.kpiEscalationsValue.textContent = frame.escalationValueText
     this.guardrailValue.textContent = frame.guardrailValueText
     this.retainedValue.textContent = frame.retainedValueText
+    this.recommendedControls.textContent = frame.recommendedControlsText
+    this.memoText.textContent = frame.memoText
+
+    this.renderActionItems(frame.actionItems)
 
     if (toneChanged) {
       this.flash(this.decisionPanel)
@@ -166,21 +215,31 @@ export class UIController {
     this.lastDecisionTone = frame.decisionTone
   }
 
+  private renderActionItems(actionItems: string[]): void {
+    const fallback = ['No execution actions available for this state.']
+    const finalItems = actionItems.length > 0 ? actionItems.slice(0, 4) : fallback
+
+    const nodes = finalItems.map((item) => {
+      const line = document.createElement('li')
+      line.textContent = item
+      return line
+    })
+
+    this.actionList.replaceChildren(...nodes)
+  }
+
   private renderMathBlocks(): void {
     const equationRaw = this.getElement('equation-raw')
     const equationQp = this.getElement('equation-qp')
 
-    equationRaw.innerHTML = katex.renderToString(String.raw`\text{Raw step: }\Delta_0 = -\eta g_{\mathrm{new}}`, {
+    equationRaw.innerHTML = katex.renderToString(String.raw`\Delta_0 = -\eta\,g_{\text{new}}`, {
       displayMode: true,
       throwOnError: false,
       output: 'html',
     })
 
     equationQp.innerHTML = katex.renderToString(
-      String.raw`\begin{aligned}
-\Delta^\star &= \arg\min_{\Delta}\ \langle g_{\mathrm{new}}, \Delta \rangle + \frac{\lVert \Delta \rVert_2^2}{2\eta}\\
-\text{s.t.}\ &\langle n_k, \Delta \rangle \le \varepsilon_k
-\end{aligned}`,
+      String.raw`\Delta^\star = \operatorname{proj}_{\mathcal{C}}(\Delta_0),\quad \mathcal{C}=\{\Delta\mid n_k^\top\Delta\le\varepsilon_k\}`,
       {
         displayMode: true,
         throwOnError: false,
@@ -255,20 +314,20 @@ export class UIController {
 
   private describeUrgency(urgency: number): string {
     if (urgency < 0.34) {
-      return 'Low urgency: we can apply a stronger correction for safety.'
+      return 'Low urgency: stronger correction can be applied for safety.'
     }
     if (urgency < 0.67) {
-      return 'Balanced urgency: we can keep quality and still correct risk.'
+      return 'Balanced urgency: keep quality while correcting risk.'
     }
-    return 'Critical urgency: raw update pushes hard, so careful correction is essential.'
+    return 'Critical urgency: correction must prevent risky over-shoot.'
   }
 
   private describeStrictness(strictness: number): string {
     if (strictness < 0.34) {
-      return 'Relaxed policy: easier to keep quality, but less conservative on risk.'
+      return 'Relaxed policy: easier to keep quality, less conservative on risk.'
     }
     if (strictness < 0.67) {
-      return 'Moderate strictness: core guardrails stay active without over-constraining quality.'
+      return 'Moderate strictness: core guardrails remain active.'
     }
     return 'High strictness: limits are tight, so some gain may be traded for safety.'
   }
