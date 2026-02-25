@@ -111,12 +111,12 @@ function boundScaleForStrictness(id: string, strictnessScale: number): number {
 
 function scenarioName(pressure: number): string {
   if (pressure < 0.38) {
-    return 'normal day'
+    return 'normal traffic'
   }
   if (pressure < 0.75) {
-    return 'traffic spike'
+    return 'spike traffic'
   }
-  return 'incident hour'
+  return 'incident traffic'
 }
 
 function buildQueueReplay(
@@ -198,7 +198,7 @@ function deploymentDecision(
   if (retainedValueRatio < 0.42) {
     return {
       ship: false,
-      reason: `Correction keeps only ${Math.round(retainedValueRatio * 100)}% of the intended gain.`,
+      reason: `Correction keeps only ${Math.round(retainedValueRatio * 100)}% of the intended gain, so value is too low.`,
     }
   }
 
@@ -208,13 +208,13 @@ function deploymentDecision(
   ) {
     return {
       ship: false,
-      reason: 'Correction is safe but does not reduce production risk enough.',
+      reason: 'Correction is safe but does not lower production risk enough.',
     }
   }
 
   return {
     ship: true,
-    reason: 'Safe correction keeps useful gain and cuts expected incident pressure.',
+    reason: 'Safe correction keeps most value and lowers expected incident pressure.',
   }
 }
 
@@ -236,10 +236,10 @@ function toFrameUi(
   const escalationDrop = replay.rawEscalations - replay.safeEscalations
   const retainedPercent = Math.round(clamp(retainedValueRatio, 0, 1.4) * 100)
 
-  const problemText = `Problem: under ${scenario} traffic, shipping the raw patch would trigger ${violatedRaw} guardrail violations and ${replay.rawBreachMinutes} breach minutes.`
-  const mechanismText = `Method: SafePatch nudges the patch to the nearest safe update (${violatedRaw} -> ${violatedSafe} violations, ${activeSetSize} active constraints) while keeping ${retainedPercent}% of the intended gain.`
+  const problemText = `Problem: with ${scenario}, the raw patch creates ${violatedRaw} guardrail violations and ${replay.rawBreachMinutes} breach minutes.`
+  const mechanismText = `Method: SafePatch projects the raw patch to the nearest safe point (${violatedRaw} -> ${violatedSafe} violations, ${activeSetSize} active constraints) while keeping ${retainedPercent}% of the gain.`
 
-  let impactText = `Value: peak queue drops ${replay.peakRaw} -> ${replay.peakSafe}, with ${Math.max(escalationDrop, 0)} fewer escalations in this replay.`
+  let impactText = `Value: peak queue improves ${replay.peakRaw} -> ${replay.peakSafe}, with ${Math.max(escalationDrop, 0)} fewer escalations in this replay.`
   if (breachDrop > 0) {
     impactText += ` Breach minutes fall by ${breachDrop}.`
   }
@@ -249,7 +249,7 @@ function toFrameUi(
 
   return {
     decisionTone: decision.ship ? 'ship' : 'hold',
-    decisionTitle: decision.ship ? 'Ship with SafePatch' : 'Hold this patch',
+    decisionTitle: decision.ship ? 'Ship this patch' : 'Hold this patch',
     decisionDetail: decision.reason,
     problemText,
     mechanismText,

@@ -245,12 +245,12 @@ export class UIController {
 
   private describeScenario(pressure: number): string {
     if (pressure < 0.38) {
-      return 'Normal day: low queue pressure and low immediate safety risk.'
+      return 'Normal traffic: low queue pressure and lower immediate safety risk.'
     }
     if (pressure < 0.75) {
       return 'Traffic spike: queue pressure is meaningful but still manageable.'
     }
-    return 'Incident hour: severe pressure where unsafe patches trigger escalations quickly.'
+    return 'Incident traffic: severe pressure where unsafe patches trigger escalations quickly.'
   }
 
   private describeUrgency(urgency: number): string {
@@ -260,7 +260,7 @@ export class UIController {
     if (urgency < 0.67) {
       return 'Balanced urgency: we can keep quality and still correct risk.'
     }
-    return 'Critical urgency: raw update pushes hard, so correction becomes essential.'
+    return 'Critical urgency: raw update pushes hard, so careful correction is essential.'
   }
 
   private describeStrictness(strictness: number): string {
