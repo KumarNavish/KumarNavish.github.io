@@ -208,13 +208,13 @@ function deploymentDecision(
   ) {
     return {
       ship: false,
-      reason: 'Corrected patch does not reduce queue risk enough to justify shipping.',
+      reason: 'Correction is safe but does not reduce production risk enough.',
     }
   }
 
   return {
     ship: true,
-    reason: 'Safe correction reduces incident pressure while keeping useful improvement.',
+    reason: 'Safe correction keeps useful gain and cuts expected incident pressure.',
   }
 }
 
@@ -233,12 +233,13 @@ function toFrameUi(
   const escalationValueText = `${replay.rawEscalations.toLocaleString()} -> ${replay.safeEscalations.toLocaleString()}`
 
   const breachDrop = replay.rawBreachMinutes - replay.safeBreachMinutes
+  const escalationDrop = replay.rawEscalations - replay.safeEscalations
   const retainedPercent = Math.round(clamp(retainedValueRatio, 0, 1.4) * 100)
 
-  const problemText = `Problem: on a ${scenario}, the raw patch creates ${violatedRaw} guardrail violations and ${replay.rawBreachMinutes} breach minutes.`
-  const mechanismText = `Method: SafePatch projects the patch to the nearest safe point (${violatedRaw} -> ${violatedSafe} violations, ${retainedPercent}% gain retained, active constraints ${activeSetSize}).`
+  const problemText = `Problem: under ${scenario} traffic, shipping the raw patch would trigger ${violatedRaw} guardrail violations and ${replay.rawBreachMinutes} breach minutes.`
+  const mechanismText = `Method: SafePatch nudges the patch to the nearest safe update (${violatedRaw} -> ${violatedSafe} violations, ${activeSetSize} active constraints) while keeping ${retainedPercent}% of the intended gain.`
 
-  let impactText = `Value: queue peak drops ${replay.peakRaw} -> ${replay.peakSafe} and escalations drop ${replay.rawEscalations} -> ${replay.safeEscalations}.`
+  let impactText = `Value: peak queue drops ${replay.peakRaw} -> ${replay.peakSafe}, with ${Math.max(escalationDrop, 0)} fewer escalations in this replay.`
   if (breachDrop > 0) {
     impactText += ` Breach minutes fall by ${breachDrop}.`
   }
@@ -379,6 +380,7 @@ function start(): void {
       queueSafeSeries: queueReplay.safeSeries,
       overloadThreshold: queueReplay.overloadThreshold,
       transitionProgress: progress,
+      clockMs: now,
     })
 
     requestAnimationFrame(frame)
