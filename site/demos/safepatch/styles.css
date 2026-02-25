@@ -479,7 +479,7 @@ input[type='range']::-moz-range-thumb {
 
 .action-buttons {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 7px;
 }
 
@@ -488,9 +488,9 @@ input[type='range']::-moz-range-thumb {
 .copy-memo,
 .export {
   border-radius: 11px;
-  font-size: 0.72rem;
+  font-size: 0.69rem;
   font-weight: 700;
-  padding: 9px 10px;
+  padding: 8px 9px;
   cursor: pointer;
   transition: transform 170ms ease, border-color 170ms ease, background-color 170ms ease;
 }
