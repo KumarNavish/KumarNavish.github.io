@@ -3,7 +3,7 @@ import 'katex/dist/katex.min.css'
 import { Halfspace, Vec2, normalize, scale, vec } from './geometry'
 import { computeProjectedStep } from './qp'
 import { SceneRenderer } from './render'
-import { ProofFrameUi, StrategyRowUi, UIController } from './ui'
+import { ProofFrameUi, UIController } from './ui'
 
 const TRANSITION_MS = 1120
 const PROJECTION_TOLERANCE = 1e-6
@@ -659,34 +659,29 @@ function buildGuidance(
   }
 }
 
-function toStrategyRowUi(strategy: StrategyAssessment, recommendedId: StrategyId): StrategyRowUi {
-  const recommended = strategy.id === recommendedId
-  const statusText = recommended ? `Recommended · ${strategy.status}` : strategy.status
-
-  return {
-    id: strategy.id,
-    guardrailsText: strategy.guardrailViolations.toString(),
-    peakText: strategy.queue.peak.toLocaleString(),
-    breachText: strategy.queue.breachMinutes.toLocaleString(),
-    escalationsText: strategy.queue.escalations.toLocaleString(),
-    scoreText: `${strategy.score}/100`,
-    statusText,
-    recommended,
-  }
-}
-
 function toFrameUi(current: ScenarioEvaluation, strategyPack: StrategyPack, guidance: GuidanceBundle): ProofFrameUi {
+  const activeChecks = current.halfspaces.filter((halfspace) => halfspace.active).length
+  const rawPassed = Math.max(0, activeChecks - current.violatedRaw)
+  const safePassed = Math.max(0, activeChecks - current.violatedSafe)
+  const rawStrategy = getStrategy(strategyPack.strategies, 'raw')
+  const chosenStrategy = getStrategy(strategyPack.strategies, strategyPack.recommendedId)
+
+  const stageCaptionText =
+    current.violatedRaw > 0
+      ? `Raw patch fails ${current.violatedRaw} check(s). SafePatch projects to ${safePassed}/${activeChecks} checks passed.`
+      : `Raw patch is already feasible. SafePatch confirms ${safePassed}/${activeChecks} checks passed.`
+
   return {
     decisionTone: strategyPack.decisionTone,
     decisionTitle: strategyPack.decisionTitle,
     decisionDetail: strategyPack.decisionDetail,
     readinessScoreText: strategyPack.readinessScore.toString(),
     readinessNote: strategyPack.readinessNote,
+    checksPassedText: `${rawPassed}/${activeChecks} -> ${safePassed}/${activeChecks}`,
+    queuePeakText: `${rawStrategy.queue.peak.toLocaleString()} -> ${chosenStrategy.queue.peak.toLocaleString()}`,
     recommendedControlsText: guidance.recommendedControlsText,
-    guardrailValueText: `${current.violatedRaw} -> ${current.violatedSafe}`,
     retainedValueText: `${Math.round(clampRange(current.retainedValueRatio, 0, 1.4) * 100)}%`,
-    strategyCaption: strategyPack.caption,
-    strategyRows: strategyPack.strategies.map((strategy) => toStrategyRowUi(strategy, strategyPack.recommendedId)),
+    stageCaptionText,
     whyItems: strategyPack.whyItems,
     gateItems: strategyPack.gateItems,
     actionItems: guidance.actionItems,
@@ -744,6 +739,7 @@ function start(): void {
   let guidance = buildGuidance(currentEvaluation, recommendedEvaluation, strategyPack)
   let transitionStart = performance.now()
   let latestDecision: Record<string, unknown> = {}
+  let controlsPending = false
 
   function applyControls(): void {
     const controls = ui.readControlValues()
@@ -806,6 +802,13 @@ function start(): void {
     }
 
     transitionStart = performance.now()
+    controlsPending = false
+    ui.setRunPending(false)
+  }
+
+  function markControlsPending(): void {
+    controlsPending = true
+    ui.setRunPending(true)
   }
 
   function frame(now: number): void {
@@ -824,24 +827,34 @@ function start(): void {
       overloadThreshold: OVERLOAD_THRESHOLD,
       transitionProgress: progress,
       clockMs: now,
+      constraintDiagnostics: currentEvaluation.projectedStep.diagnostics,
+      activeSetIds: currentEvaluation.projectedStep.activeSetIds,
     })
 
     requestAnimationFrame(frame)
   }
 
   ui.onControlsChange(() => {
+    markControlsPending()
+  })
+
+  ui.onRunCheck(() => {
+    if (!controlsPending) {
+      transitionStart = performance.now()
+      return
+    }
     applyControls()
   })
 
   ui.onAutoTune(() => {
     const tuned = findBestControls(currentEvaluation.controls.pressure, currentEvaluation.controls)
     ui.setControlValues({ urgency: tuned.controls.urgency, strictness: tuned.controls.strictness })
-    applyControls()
+    markControlsPending()
   })
 
   ui.onReset(() => {
     ui.setControlValues(DEFAULT_CONTROLS)
-    applyControls()
+    markControlsPending()
   })
 
   ui.onReplay(() => {

@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="SafePatch certifies urgent LLM hotfixes by projecting risky updates back into a guardrail-safe ship zone and replaying queue impact."
+      content="SafePatch turns a risky LLM hotfix into a guardrail-safe patch and returns a ship or hold decision with impact estimates."
     />
-    <title>SafePatch | Release Decision Prototype</title>
+    <title>SafePatch | Release Check</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -18,205 +18,126 @@
   </head>
   <body>
     <main class="product">
-      <header class="hero-shell">
-        <section class="hero-copy">
-          <p class="eyebrow">SafePatch release decision prototype</p>
-          <h1>Know in minutes if an urgent patch is safe to ship.</h1>
-          <p class="hero-text">
-            The problem is simple: raw hotfixes can improve one metric while breaking policy limits and increasing incident
-            pressure. SafePatch projects the raw patch to the closest safe patch, then replays queue impact to produce a
-            practical ship or hold decision.
-          </p>
-
-          <div class="hero-metrics" aria-label="Problem method value">
-            <article class="metric-card">
-              <p class="metric-kicker">Problem</p>
-              <p class="metric-body">Raw patches can violate guardrails even when they look good offline.</p>
-            </article>
-            <article class="metric-card">
-              <p class="metric-kicker">Method</p>
-              <p class="metric-body">Project each risky patch to the nearest feasible point under active constraints.</p>
-            </article>
-            <article class="metric-card">
-              <p class="metric-kicker">Value</p>
-              <p class="metric-body">Get a defensible rollout plan with predicted incident load before deployment.</p>
-            </article>
-          </div>
-        </section>
-
-        <aside class="hero-proof" aria-label="How to use this demo">
-          <h2>How to use this</h2>
-          <ol class="hero-list">
-            <li><span>1</span>Set traffic, urgency, and policy strictness.</li>
-            <li><span>2</span>Watch raw patch become a safe projected patch.</li>
-            <li><span>3</span>Use the recommended rollout and memo to execute.</li>
-          </ol>
-          <p class="build-tag">UI rev 2026-02-25-11</p>
-        </aside>
+      <header class="intro">
+        <p class="eyebrow">SafePatch release check</p>
+        <h1>From risky hotfix to a defensible ship or hold decision.</h1>
+        <p class="intro-text">
+          Raw patches can fix one issue while violating safety checks. SafePatch projects the raw update to the nearest
+          feasible update, then replays expected queue load so you can decide with evidence.
+        </p>
       </header>
 
       <section class="workspace">
-        <section class="stage">
-          <section class="problem-strip" aria-label="What this solves">
-            <article class="strip-card">
-              <p class="strip-kicker">What exact problem?</p>
-              <p class="strip-text">Shipping a raw patch can create policy breaches and queue incidents at runtime.</p>
-            </article>
-            <article class="strip-card">
-              <p class="strip-kicker">What changes?</p>
-              <p class="strip-text">SafePatch changes only the unsafe part of the update and keeps as much useful gain as possible.</p>
-            </article>
-            <article class="strip-card">
-              <p class="strip-kicker">Why care?</p>
-              <p class="strip-text">You avoid avoidable escalations and still ship faster with an auditable decision trail.</p>
-            </article>
-          </section>
+        <section class="stage" aria-label="SafePatch simulation stage">
+          <div class="stage-head">
+            <p class="stage-kicker">Mechanism proof</p>
+            <p id="stage-caption" class="stage-caption">Run release check to simulate raw patch, projection, and queue impact.</p>
+          </div>
 
-          <section id="decision-panel" class="decision-banner ship">
+          <div class="proof-canvas">
+            <canvas id="scene-canvas" class="scene" aria-label="Raw patch and projected safe patch simulation"></canvas>
+          </div>
+
+          <section id="decision-panel" class="decision-banner hold">
             <div class="status-copy">
-              <p id="decision-pill" class="decision-pill ship">READY TO SHIP</p>
-              <h2 id="decision-title">Ship this patch</h2>
-              <p id="decision-detail" class="status-detail">Running first evaluation.</p>
+              <p id="decision-pill" class="decision-pill hold">HOLD</p>
+              <h2 id="decision-title">Run release check</h2>
+              <p id="decision-detail" class="status-detail">Use presets and run the simulation to get a decision and rationale.</p>
             </div>
 
             <div class="status-side" aria-label="Readiness score">
               <p class="status-label">Readiness</p>
               <strong id="readiness-score" class="readiness-score">--</strong>
-              <p id="readiness-note" class="status-note">Waiting for first evaluation.</p>
+              <p id="readiness-note" class="status-note">Awaiting simulation.</p>
             </div>
           </section>
 
-          <div class="proof-canvas">
-            <canvas id="scene-canvas" class="scene" aria-label="SafePatch mechanism and queue replay"></canvas>
-          </div>
-
-          <section class="strategy-board" aria-label="Strategy comparison board">
-            <div class="section-head">
-              <h3>Strategy comparison</h3>
-              <p id="strategy-caption" class="section-note">Comparison is loading.</p>
-            </div>
-
-            <div class="table-wrap">
-              <table class="strategy-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Strategy</th>
-                    <th scope="col">Guardrails</th>
-                    <th scope="col">Peak queue</th>
-                    <th scope="col">Breach min</th>
-                    <th scope="col">Escalations</th>
-                    <th scope="col">Readiness</th>
-                    <th scope="col">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr id="strategy-row-raw">
-                    <th scope="row">Raw patch</th>
-                    <td id="raw-guardrails">--</td>
-                    <td id="raw-peak">--</td>
-                    <td id="raw-breach">--</td>
-                    <td id="raw-escalations">--</td>
-                    <td id="raw-score">--</td>
-                    <td id="raw-status">--</td>
-                  </tr>
-                  <tr id="strategy-row-safe">
-                    <th scope="row">SafePatch</th>
-                    <td id="safe-guardrails">--</td>
-                    <td id="safe-peak">--</td>
-                    <td id="safe-breach">--</td>
-                    <td id="safe-escalations">--</td>
-                    <td id="safe-score">--</td>
-                    <td id="safe-status">--</td>
-                  </tr>
-                  <tr id="strategy-row-hold">
-                    <th scope="row">Hold deploy</th>
-                    <td id="hold-guardrails">--</td>
-                    <td id="hold-peak">--</td>
-                    <td id="hold-breach">--</td>
-                    <td id="hold-escalations">--</td>
-                    <td id="hold-score">--</td>
-                    <td id="hold-status">--</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <section class="ops-brief" aria-label="Operational playbook">
-            <article class="ops-card">
-              <h3>Why this recommendation</h3>
-              <ul id="why-list" class="ops-list">
-                <li>Evaluation loading.</li>
-              </ul>
+          <section class="scoreboard" aria-label="Decision metrics">
+            <article class="score-card">
+              <p class="score-label">Checks passed</p>
+              <strong id="checks-passed" class="score-value">--</strong>
             </article>
-            <article class="ops-card">
-              <h3>Rollout playbook</h3>
-              <ul id="gate-list" class="ops-list">
-                <li>Rollout plan loading.</li>
-              </ul>
+            <article class="score-card">
+              <p class="score-label">Expected peak queue</p>
+              <strong id="queue-peak" class="score-value">--</strong>
+            </article>
+            <article class="score-card">
+              <p class="score-label">Useful gain kept</p>
+              <strong id="retained-value" class="score-value">--</strong>
             </article>
           </section>
         </section>
 
         <aside class="controls">
-          <section class="controls-head">
-            <p class="controls-kicker">Step 1</p>
-            <h2>Set release context</h2>
-            <p class="controls-intro">Choose operating conditions before deciding to ship.</p>
-          </section>
+          <p class="controls-kicker">Scenario</p>
+          <h2>Run release check</h2>
+          <p class="controls-intro">Choose a preset, adjust advanced knobs if needed, then run.</p>
 
           <div class="field-card">
-            <p class="field-title">Traffic scenario</p>
-            <div class="scenario-buttons" role="group" aria-label="Traffic scenario">
+            <p class="field-title">Traffic preset</p>
+            <div class="scenario-buttons" role="group" aria-label="Traffic preset">
               <button class="scenario-btn" data-pressure="0.22" type="button">Normal</button>
               <button class="scenario-btn active" data-pressure="0.56" type="button">Spike</button>
               <button class="scenario-btn" data-pressure="0.9" type="button">Incident</button>
             </div>
-            <p id="scenario-note" class="field-note">Traffic spike: queue pressure is meaningful but still manageable.</p>
+            <p id="scenario-note" class="field-note">Traffic spike: meaningful pressure, still recoverable.</p>
           </div>
 
-          <div class="field-card">
-            <div class="slider-row">
-              <label for="urgency-slider">Hotfix urgency</label>
-              <span id="urgency-value" class="slider-value">58%</span>
+          <button id="run-button" class="primary-btn" type="button">Run release check</button>
+
+          <details class="advanced-panel">
+            <summary>Advanced controls</summary>
+
+            <div class="field-card">
+              <div class="slider-row">
+                <label for="urgency-slider">Hotfix urgency</label>
+                <span id="urgency-value" class="slider-value">58%</span>
+              </div>
+              <input id="urgency-slider" type="range" min="0" max="100" value="58" />
+              <p id="urgency-note" class="field-note">Balanced urgency: enough room to trade risk for reliability.</p>
             </div>
-            <input id="urgency-slider" type="range" min="0" max="100" value="58" />
-            <p id="urgency-note" class="field-note">Balanced urgency: correction still has room to improve safety.</p>
-          </div>
 
-          <div class="field-card">
-            <div class="slider-row">
-              <label for="strictness-slider">Policy strictness</label>
-              <span id="strictness-value" class="slider-value">62%</span>
+            <div class="field-card">
+              <div class="slider-row">
+                <label for="strictness-slider">Policy strictness</label>
+                <span id="strictness-value" class="slider-value">62%</span>
+              </div>
+              <input id="strictness-slider" type="range" min="0" max="100" value="62" />
+              <p id="strictness-note" class="field-note">Moderate strictness keeps core checks active.</p>
             </div>
-            <input id="strictness-slider" type="range" min="0" max="100" value="62" />
-            <p id="strictness-note" class="field-note">Moderate strictness keeps core guardrails active.</p>
-          </div>
-
-          <section class="action-center" aria-label="Auto-tune controls">
-            <p class="controls-kicker">Step 2</p>
-            <h3>Compute a safer rollout</h3>
 
             <div class="action-buttons">
-              <button id="autotune-button" class="primary-btn" type="button">Auto-tune</button>
-              <button id="reset-button" class="secondary-btn" type="button">Reset</button>
-              <button id="replay-button" class="secondary-btn" type="button">Replay</button>
+              <button id="autotune-button" class="secondary-btn" type="button">Auto-set safest knobs</button>
+              <button id="reset-button" class="secondary-btn" type="button">Reset controls</button>
+              <button id="replay-button" class="secondary-btn" type="button">Replay animation</button>
             </div>
 
-            <p id="recommended-controls" class="recommended-controls">Recommended settings will appear after first evaluation.</p>
+            <p id="recommended-controls" class="recommended-controls">
+              Recommended settings appear after each simulation.
+            </p>
+          </details>
 
-            <div class="quick-proof" aria-label="Mechanism diagnostics">
-              <p><span>Guardrail violations</span><strong id="guardrail-value">--</strong></p>
-              <p><span>Useful gain retained</span><strong id="retained-value">--</strong></p>
+          <details class="explain-panel" open>
+            <summary>Decision breakdown</summary>
+
+            <div class="ops-grid">
+              <article class="ops-card">
+                <h3>Why this decision</h3>
+                <ul id="why-list" class="ops-list">
+                  <li>Run the simulation to generate rationale.</li>
+                </ul>
+              </article>
+              <article class="ops-card">
+                <h3>Rollout checks</h3>
+                <ul id="gate-list" class="ops-list">
+                  <li>Run the simulation to generate rollout gates.</li>
+                </ul>
+              </article>
             </div>
-          </section>
 
-          <section class="next-actions" aria-label="Execution checklist">
-            <p class="controls-kicker">Step 3</p>
-            <h3>Execute</h3>
-
+            <h3 class="mini-title">Execution steps</h3>
             <ul id="action-list" class="action-list">
-              <li>Adjust controls or run auto-tune to generate an execution plan.</li>
+              <li>Choose scenario and click Run release check.</li>
             </ul>
 
             <div class="memo-card">
@@ -224,26 +145,23 @@
                 <p class="field-title">Release memo</p>
                 <button id="copy-memo-button" class="copy-memo" type="button">Copy memo</button>
               </div>
-              <p id="memo-text" class="memo-text">Release memo will appear after first replay.</p>
+              <p id="memo-text" class="memo-text">Memo appears after simulation.</p>
             </div>
 
             <button id="export-button" class="export wide" type="button">Export decision JSON</button>
-          </section>
+          </details>
 
           <details class="math-details">
-            <summary>Why SafePatch works</summary>
-            <section class="math-panel" aria-label="SafePatch optimization">
-              <p class="math-intro">
-                Raw step follows quality gradient only. SafePatch keeps it as close as possible while staying inside all
-                active guardrails.
-              </p>
+            <summary>Projection math</summary>
+            <section class="math-panel" aria-label="SafePatch optimization equations">
+              <p class="math-intro">SafePatch keeps the update as close as possible to the raw step while satisfying all active checks.</p>
               <div class="equation-stack">
                 <article class="equation-block">
                   <p class="equation-title">Raw update</p>
                   <div id="equation-raw" class="equation"></div>
                 </article>
                 <article class="equation-block">
-                  <p class="equation-title">SafePatch projection</p>
+                  <p class="equation-title">Safe projection</p>
                   <div id="equation-qp" class="equation"></div>
                 </article>
               </div>

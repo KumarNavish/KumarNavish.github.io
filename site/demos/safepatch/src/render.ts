@@ -9,6 +9,7 @@ import {
   vec,
   worldBoundsFromHalfspaces,
 } from './geometry'
+import type { ConstraintDiagnostic } from './qp'
 
 interface Rect {
   x: number
@@ -33,12 +34,15 @@ export interface SceneRenderInput {
   overloadThreshold: number
   transitionProgress: number
   clockMs: number
+  constraintDiagnostics: ConstraintDiagnostic[]
+  activeSetIds: string[]
 }
 
 const RAW_COLOR = '#ff6b88'
 const SAFE_COLOR = '#59d4ff'
-const ZONE_COLOR = '#44d3a2'
+const ZONE_COLOR = '#43d2a0'
 const BRIDGE_COLOR = '#ffd27a'
+const VIOLATION_COLOR = '#ff8ea4'
 const GRID_STROKE = 'rgba(134, 168, 208, 0.2)'
 
 function clamp(value: number, min = 0, max = 1): number {
@@ -71,6 +75,11 @@ function withAlpha(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
+function shortLabel(text: string): string {
+  const head = text.trim().split(' ')[0] ?? ''
+  return head.length > 8 ? `${head.slice(0, 7)}.` : head
+}
+
 export class SceneRenderer {
   private readonly canvas: HTMLCanvasElement
   private readonly ctx: CanvasRenderingContext2D
@@ -100,9 +109,10 @@ export class SceneRenderer {
     }
 
     const timeline = clamp(input.transitionProgress)
-    const phaseRaw = easeOutCubic(phaseWindow(timeline, 0, 0.34))
-    const phaseProject = easeInOutCubic(phaseWindow(timeline, 0.22, 0.74))
-    const phaseQueue = easeInOutCubic(phaseWindow(timeline, 0.52, 1))
+    const phaseRaw = easeOutCubic(phaseWindow(timeline, 0, 0.26))
+    const phaseViolation = easeOutCubic(phaseWindow(timeline, 0.2, 0.44))
+    const phaseProject = easeInOutCubic(phaseWindow(timeline, 0.36, 0.72))
+    const phaseQueue = easeInOutCubic(phaseWindow(timeline, 0.66, 1))
     const pulse = 0.5 + 0.5 * Math.sin(input.clockMs * 0.002)
 
     this.ctx.clearRect(0, 0, width, height)
@@ -150,11 +160,17 @@ export class SceneRenderer {
     const safeTarget = input.queueSafeSeries.slice(0, queueLength)
     const safeAnimated = rawSeries.map((value, index) => value + (safeTarget[index] - value) * phaseQueue)
 
-    const geometrySubtitle = phaseProject < 0.14 ? 'raw patch compared to active guardrails' : 'projecting to nearest safe patch'
-    const queueSubtitle = phaseQueue < 0.14 ? 'replay pending' : 'replaying expected queue impact'
+    const geometrySubtitle =
+      phaseProject < 0.1
+        ? '1) raw step'
+        : phaseProject < 0.95
+          ? '2) projection to nearest feasible step'
+          : '3) safe step'
+
+    const queueSubtitle = phaseQueue < 0.12 ? 'queue replay queued' : 'queue replay under identical traffic'
 
     this.drawPanelChrome(geometryPanel, 'PATCH SPACE', geometrySubtitle, phaseProject)
-    this.drawPanelChrome(queuePanel, 'QUEUE REPLAY', queueSubtitle, phaseQueue)
+    this.drawPanelChrome(queuePanel, 'QUEUE IMPACT', queueSubtitle, phaseQueue)
 
     this.drawGeometryPanel(
       geometryPanel,
@@ -162,7 +178,10 @@ export class SceneRenderer {
       input.step0,
       input.projectedStep,
       input.gradient,
+      input.constraintDiagnostics,
+      input.activeSetIds,
       phaseRaw,
+      phaseViolation,
       phaseProject,
       pulse,
     )
@@ -179,16 +198,16 @@ export class SceneRenderer {
     ctx.fillStyle = base
     ctx.fillRect(0, 0, width, height)
 
-    const topGlowX = width * 0.2 + Math.sin(clockMs * 0.00035) * 24
-    const topGlowY = height * 0.1 + Math.cos(clockMs * 0.00028) * 12
+    const topGlowX = width * 0.2 + Math.sin(clockMs * 0.00035) * 22
+    const topGlowY = height * 0.1 + Math.cos(clockMs * 0.00028) * 10
     const topGlow = ctx.createRadialGradient(topGlowX, topGlowY, 18, topGlowX, topGlowY, width * 0.62)
     topGlow.addColorStop(0, 'rgba(86, 148, 233, 0.24)')
     topGlow.addColorStop(1, 'rgba(86, 148, 233, 0)')
     ctx.fillStyle = topGlow
     ctx.fillRect(0, 0, width, height)
 
-    const lowerGlow = ctx.createRadialGradient(width * 0.84, height * 0.86, 16, width * 0.84, height * 0.86, width * 0.52)
-    lowerGlow.addColorStop(0, `rgba(89, 212, 255, ${0.12 + phaseQueue * 0.1})`)
+    const lowerGlow = ctx.createRadialGradient(width * 0.84, height * 0.86, 18, width * 0.84, height * 0.86, width * 0.52)
+    lowerGlow.addColorStop(0, `rgba(89, 212, 255, ${0.12 + phaseQueue * 0.12})`)
     lowerGlow.addColorStop(1, 'rgba(89, 212, 255, 0)')
     ctx.fillStyle = lowerGlow
     ctx.fillRect(0, 0, width, height)
@@ -205,7 +224,7 @@ export class SceneRenderer {
     ctx.stroke()
 
     const accent = ctx.createLinearGradient(panel.x + 12, panel.y, panel.x + panel.width * 0.74, panel.y)
-    accent.addColorStop(0, `rgba(89, 156, 247, ${0.32 + accentProgress * 0.32})`)
+    accent.addColorStop(0, `rgba(89, 156, 247, ${0.34 + accentProgress * 0.3})`)
     accent.addColorStop(1, 'rgba(89, 156, 247, 0)')
     ctx.fillStyle = accent
     ctx.fillRect(panel.x + 12, panel.y + 10, Math.max(120, panel.width * 0.48), 2)
@@ -225,7 +244,10 @@ export class SceneRenderer {
     step0: Vec2,
     projectedStep: Vec2,
     gradient: Vec2,
+    diagnostics: ConstraintDiagnostic[],
+    activeSetIds: string[],
     phaseRaw: number,
+    phaseViolation: number,
     phaseProject: number,
     pulse: number,
   ): void {
@@ -256,7 +278,7 @@ export class SceneRenderer {
       ctx.closePath()
 
       const zoneFill = ctx.createLinearGradient(chart.x, chart.y, chart.x + chart.width, chart.y + chart.height)
-      zoneFill.addColorStop(0, withAlpha(ZONE_COLOR, 0.14 + pulse * 0.06))
+      zoneFill.addColorStop(0, withAlpha(ZONE_COLOR, 0.14 + pulse * 0.05))
       zoneFill.addColorStop(1, withAlpha(ZONE_COLOR, 0.05))
       ctx.fillStyle = zoneFill
       ctx.fill()
@@ -265,33 +287,43 @@ export class SceneRenderer {
       ctx.stroke()
     }
 
-    this.drawConstraintBoundaries(mapper, active)
+    const diagnosticsById = new Map(diagnostics.map((item) => [item.id, item]))
+    this.drawConstraintBoundaries(mapper, active, diagnosticsById, phaseViolation, pulse)
 
     const origin = mapper.worldToCanvas(vec(0, 0))
+    const rawTarget = mapper.worldToCanvas(step0)
     const rawVisible = mapper.worldToCanvas(scale(step0, clamp(phaseRaw, 0.02, 1)))
+    const safeTarget = mapper.worldToCanvas(projectedStep)
     const safeVisible = mapper.worldToCanvas(lerp(step0, projectedStep, phaseProject))
 
-    this.drawArrow(origin, rawVisible, withAlpha(RAW_COLOR, 0.9), 2.2, true)
+    this.drawArrow(origin, rawVisible, withAlpha(RAW_COLOR, 0.9), 2.2, false)
+
+    if (phaseViolation > 0.05) {
+      this.drawViolationMarkers(mapper, diagnostics, phaseViolation, pulse)
+    }
 
     if (phaseProject > 0.03) {
-      this.drawArrow(origin, safeVisible, withAlpha(SAFE_COLOR, 0.8 + phaseProject * 0.18), 2.8, false)
-      this.drawProjectionBridge(rawVisible, safeVisible, phaseProject, pulse)
+      this.drawArrow(origin, safeVisible, withAlpha(SAFE_COLOR, 0.82 + phaseProject * 0.16), 2.8, false)
+      this.drawPushbackVector(rawVisible, safeVisible, phaseProject)
+      this.drawProjectionBridge(rawTarget, safeTarget, phaseProject, pulse)
     }
 
     this.drawDirectionHint(mapper, gradient)
 
     this.drawNode(origin, '#87abd9', 3.8, 0)
-    this.drawNode(rawVisible, RAW_COLOR, 3.4, 7.6)
-    if (phaseProject > 0.04) {
+    this.drawNode(rawVisible, RAW_COLOR, 3.5, 7.8)
+    if (phaseProject > 0.03) {
       this.drawNode(safeVisible, SAFE_COLOR, 3.8, 8)
     }
 
+    this.drawConstraintBars(chart, diagnostics, activeSetIds, phaseProject)
+
     const caption =
-      phaseProject < 0.16
-        ? 'Raw patch points outside safe region.'
-        : phaseProject < 0.92
-          ? 'SafePatch moves to the nearest guardrail-safe patch.'
-          : 'Projected patch is now safe to evaluate for rollout.'
+      phaseProject < 0.08
+        ? 'Raw step is applied first.'
+        : phaseProject < 0.95
+          ? 'Projection removes only the unsafe component.'
+          : 'Safe step is feasible under active checks.'
 
     this.drawPanelCaption(chart, caption)
   }
@@ -345,12 +377,12 @@ export class SceneRenderer {
 
     const finalDelta = Math.max(0, Math.round(rawSeries[rawSeries.length - 1] - safeSeries[safeSeries.length - 1]))
     const deltaAtReveal = Math.round(finalDelta * reveal)
-    this.drawQueueBadge(chart, reveal < 0.2 ? 'REPLAYING' : `${deltaAtReveal} fewer queued requests`)
+    this.drawQueueBadge(chart, reveal < 0.2 ? 'REPLAYING' : `${deltaAtReveal} lower queue at horizon`)
 
     const caption =
       reveal < 0.2
         ? 'Queue replay is starting.'
-        : 'Projected patch lowers queue load under the same incoming traffic.'
+        : 'Safe step reduces expected queue pressure under the same traffic pulse.'
     this.drawPanelCaption(chart, caption)
   }
 
@@ -393,7 +425,13 @@ export class SceneRenderer {
     }
   }
 
-  private drawConstraintBoundaries(mapper: Mapper, halfspaces: Halfspace[]): void {
+  private drawConstraintBoundaries(
+    mapper: Mapper,
+    halfspaces: Halfspace[],
+    diagnosticsById: Map<string, ConstraintDiagnostic>,
+    phaseViolation: number,
+    pulse: number,
+  ): void {
     const ctx = this.ctx
     const span = mapper.worldRadius * 1.7
 
@@ -404,12 +442,118 @@ export class SceneRenderer {
       const p0 = mapper.worldToCanvas(sub(anchor, scale(tangent, span)))
       const p1 = mapper.worldToCanvas(sub(anchor, scale(tangent, -span)))
 
+      const diagnostic = diagnosticsById.get(halfspace.id)
+      const violated = (diagnostic?.violationStep0 ?? 0) > 1e-6
+
       ctx.beginPath()
       ctx.moveTo(p0.x, p0.y)
       ctx.lineTo(p1.x, p1.y)
-      ctx.strokeStyle = withAlpha(index % 2 === 0 ? '#7eb6eb' : '#6fc9a8', 0.45)
-      ctx.lineWidth = 0.95
+      ctx.strokeStyle = withAlpha(index % 2 === 0 ? '#7eb6eb' : '#6fc9a8', violated ? 0.35 + phaseViolation * 0.2 : 0.4)
+      ctx.lineWidth = violated ? 1 + phaseViolation * 0.6 : 0.95
       ctx.stroke()
+
+      if (violated && phaseViolation > 0.02) {
+        ctx.beginPath()
+        ctx.moveTo(p0.x, p0.y)
+        ctx.lineTo(p1.x, p1.y)
+        ctx.strokeStyle = withAlpha(VIOLATION_COLOR, 0.24 + phaseViolation * 0.28 + pulse * 0.08)
+        ctx.lineWidth = 1.2 + phaseViolation * 0.7
+        ctx.stroke()
+      }
+    })
+  }
+
+  private drawViolationMarkers(mapper: Mapper, diagnostics: ConstraintDiagnostic[], phaseViolation: number, pulse: number): void {
+    for (const diagnostic of diagnostics) {
+      if (!diagnostic.active || diagnostic.violationStep0 <= 1e-6) {
+        continue
+      }
+
+      const normal = normalize(diagnostic.normal)
+      const anchor = scale(normal, diagnostic.bound)
+      const marker = mapper.worldToCanvas(anchor)
+      const radius = 6 + phaseViolation * 4 + pulse * 1.4
+
+      this.ctx.beginPath()
+      this.ctx.arc(marker.x, marker.y, radius, 0, Math.PI * 2)
+      this.ctx.strokeStyle = withAlpha(VIOLATION_COLOR, 0.26 + phaseViolation * 0.34)
+      this.ctx.lineWidth = 1.1
+      this.ctx.stroke()
+    }
+  }
+
+  private drawConstraintBars(
+    chart: Rect,
+    diagnostics: ConstraintDiagnostic[],
+    activeSetIds: string[],
+    phaseProject: number,
+  ): void {
+    if (diagnostics.length === 0) {
+      return
+    }
+
+    const ctx = this.ctx
+    const activeSet = new Set(activeSetIds)
+
+    const items = diagnostics
+      .filter((item) => item.active)
+      .sort((a, b) => {
+        const activeA = activeSet.has(a.id) ? 1 : 0
+        const activeB = activeSet.has(b.id) ? 1 : 0
+        if (activeA !== activeB) {
+          return activeB - activeA
+        }
+        return b.lambda - a.lambda
+      })
+      .slice(0, 4)
+
+    if (items.length === 0) {
+      return
+    }
+
+    const panelWidth = Math.min(142, chart.width * 0.38)
+    const panelHeight = 14 + items.length * 16
+    const panelX = chart.x + chart.width - panelWidth - 8
+    const panelY = chart.y + 8
+
+    this.drawRoundedRect(panelX, panelY, panelWidth, panelHeight, 8)
+    ctx.fillStyle = 'rgba(11, 21, 35, 0.84)'
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(105, 144, 196, 0.45)'
+    ctx.lineWidth = 1
+    ctx.stroke()
+
+    ctx.font = '700 8px "IBM Plex Mono", monospace'
+    ctx.fillStyle = '#90b7e7'
+    ctx.fillText('ACTIVE CHECK PRESSURE', panelX + 8, panelY + 10)
+
+    const maxLoad = Math.max(
+      0.001,
+      ...items.map((item) => (activeSet.has(item.id) ? Math.max(item.lambda, item.violationStep0) : item.violationStep0 * 0.25)),
+    )
+
+    items.forEach((item, index) => {
+      const y = panelY + 14 + index * 16
+      const active = activeSet.has(item.id)
+      const load = active ? Math.max(item.lambda, item.violationStep0) : item.violationStep0 * 0.25
+      const normalized = clamp(load / maxLoad)
+      const fill = (active ? 0.2 + normalized * 0.8 : normalized * 0.12) * clamp(phaseProject * 1.1)
+
+      ctx.font = '600 8px "Sora", sans-serif'
+      ctx.fillStyle = active ? '#b9e6ff' : '#7f98bb'
+      ctx.fillText(shortLabel(item.label), panelX + 8, y + 7)
+
+      const barX = panelX + 54
+      const barY = y + 1
+      const barWidth = panelWidth - 62
+
+      this.drawRoundedRect(barX, barY, barWidth, 6, 3)
+      ctx.fillStyle = 'rgba(118, 151, 194, 0.18)'
+      ctx.fill()
+
+      this.drawRoundedRect(barX, barY, barWidth * fill, 6, 3)
+      ctx.fillStyle = active ? withAlpha(SAFE_COLOR, 0.82) : withAlpha('#89a5c9', 0.34)
+      ctx.fill()
     })
   }
 
@@ -447,21 +591,26 @@ export class SceneRenderer {
     ctx.fill()
   }
 
+  private drawPushbackVector(rawPoint: Vec2, safePoint: Vec2, phaseProject: number): void {
+    const end = lerp(rawPoint, safePoint, clamp(phaseProject * 0.95))
+    this.drawArrow(rawPoint, end, withAlpha(BRIDGE_COLOR, 0.78), 1.4, true)
+  }
+
   private drawProjectionBridge(rawPoint: Vec2, safePoint: Vec2, phaseProject: number, pulse: number): void {
     const ctx = this.ctx
-    const end = vec(rawPoint.x + (safePoint.x - rawPoint.x) * phaseProject, rawPoint.y + (safePoint.y - rawPoint.y) * phaseProject)
+    const end = lerp(rawPoint, safePoint, clamp(phaseProject))
 
     ctx.save()
     ctx.setLineDash([4, 4])
     ctx.beginPath()
     ctx.moveTo(rawPoint.x, rawPoint.y)
     ctx.lineTo(end.x, end.y)
-    ctx.strokeStyle = withAlpha(BRIDGE_COLOR, 0.76)
+    ctx.strokeStyle = withAlpha(BRIDGE_COLOR, 0.74)
     ctx.lineWidth = 1.2
     ctx.stroke()
     ctx.restore()
 
-    this.drawNode(end, BRIDGE_COLOR, 2.9 + pulse * 0.9, 5.8 + pulse * 1.2)
+    this.drawNode(end, BRIDGE_COLOR, 2.9 + pulse * 0.8, 5.8 + pulse * 1.1)
   }
 
   private drawNode(point: Vec2, color: string, innerRadius: number, outerRadius: number): void {
