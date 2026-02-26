@@ -3,23 +3,10 @@ import katex from 'katex'
 const sliderMax = 100
 const copyResetDelayMs = 1400
 
-type StrategyId = 'raw' | 'safe' | 'hold'
-
 export interface ControlValues {
   pressure: number
   urgency: number
   strictness: number
-}
-
-export interface StrategyRowUi {
-  id: StrategyId
-  guardrailsText: string
-  peakText: string
-  breachText: string
-  escalationsText: string
-  scoreText: string
-  statusText: string
-  recommended: boolean
 }
 
 export interface ProofFrameUi {
@@ -28,25 +15,15 @@ export interface ProofFrameUi {
   decisionDetail: string
   readinessScoreText: string
   readinessNote: string
-  recommendedControlsText: string
-  guardrailValueText: string
+  checksPassedText: string
+  queuePeakText: string
   retainedValueText: string
-  strategyCaption: string
-  strategyRows: StrategyRowUi[]
+  stageCaptionText: string
+  recommendedControlsText: string
   whyItems: string[]
   gateItems: string[]
   actionItems: string[]
   memoText: string
-}
-
-interface StrategyRowElements {
-  row: HTMLTableRowElement
-  guardrails: HTMLElement
-  peak: HTMLElement
-  breach: HTMLElement
-  escalations: HTMLElement
-  score: HTMLElement
-  status: HTMLElement
 }
 
 export class UIController {
@@ -54,11 +31,17 @@ export class UIController {
   private readonly scenarioNote: HTMLElement | null
   private readonly urgencyNote: HTMLElement | null
   private readonly strictnessNote: HTMLElement | null
+
   private readonly urgencySlider: HTMLInputElement
   private readonly strictnessSlider: HTMLInputElement
-
   private readonly urgencyValue: HTMLElement
   private readonly strictnessValue: HTMLElement
+
+  private readonly runButton: HTMLButtonElement
+  private readonly autoTuneButton: HTMLButtonElement
+  private readonly resetButton: HTMLButtonElement
+  private readonly replayButton: HTMLButtonElement
+  private readonly copyMemoButton: HTMLButtonElement
 
   private readonly decisionPanel: HTMLElement
   private readonly decisionPill: HTMLElement
@@ -67,22 +50,16 @@ export class UIController {
   private readonly readinessScore: HTMLElement
   private readonly readinessNote: HTMLElement
 
-  private readonly strategyCaption: HTMLElement
+  private readonly checksPassed: HTMLElement
+  private readonly queuePeak: HTMLElement
+  private readonly retainedValue: HTMLElement
+  private readonly stageCaption: HTMLElement
+
+  private readonly recommendedControls: HTMLElement
   private readonly whyList: HTMLUListElement
   private readonly gateList: HTMLUListElement
-
-  private readonly guardrailValue: HTMLElement
-  private readonly retainedValue: HTMLElement
-  private readonly recommendedControls: HTMLElement
   private readonly actionList: HTMLUListElement
   private readonly memoText: HTMLElement
-
-  private readonly autoTuneButton: HTMLButtonElement
-  private readonly resetButton: HTMLButtonElement
-  private readonly replayButton: HTMLButtonElement
-  private readonly copyMemoButton: HTMLButtonElement
-
-  private readonly strategyRows: Record<StrategyId, StrategyRowElements>
 
   private selectedPressure = 0.56
   private selectedUrgency = 0.58
@@ -90,22 +67,10 @@ export class UIController {
   private lastDecisionTone: 'ship' | 'hold' | null = null
 
   constructor() {
-    this.decisionPanel = this.getElement('decision-panel')
-    this.decisionPill = this.getElement('decision-pill')
-    this.decisionTitle = this.getElement('decision-title')
-    this.decisionDetail = this.getElement('decision-detail')
-    this.readinessScore = this.getElement('readiness-score')
-    this.readinessNote = this.getElement('readiness-note')
-
-    this.strategyCaption = this.getElement('strategy-caption')
-    this.whyList = this.getElement<HTMLUListElement>('why-list')
-    this.gateList = this.getElement<HTMLUListElement>('gate-list')
-
-    this.guardrailValue = this.getElement('guardrail-value')
-    this.retainedValue = this.getElement('retained-value')
-    this.recommendedControls = this.getElement('recommended-controls')
-    this.actionList = this.getElement<HTMLUListElement>('action-list')
-    this.memoText = this.getElement('memo-text')
+    this.scenarioButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.scenario-btn'))
+    if (this.scenarioButtons.length === 0) {
+      throw new Error('Missing .scenario-btn controls')
+    }
 
     this.scenarioNote = document.getElementById('scenario-note')
     this.urgencyNote = document.getElementById('urgency-note')
@@ -116,24 +81,33 @@ export class UIController {
     this.urgencyValue = this.getElement('urgency-value')
     this.strictnessValue = this.getElement('strictness-value')
 
+    this.runButton = this.getElement<HTMLButtonElement>('run-button')
     this.autoTuneButton = this.getElement<HTMLButtonElement>('autotune-button')
     this.resetButton = this.getElement<HTMLButtonElement>('reset-button')
     this.replayButton = this.getElement<HTMLButtonElement>('replay-button')
     this.copyMemoButton = this.getElement<HTMLButtonElement>('copy-memo-button')
 
-    this.strategyRows = {
-      raw: this.getStrategyRowElements('raw'),
-      safe: this.getStrategyRowElements('safe'),
-      hold: this.getStrategyRowElements('hold'),
-    }
+    this.decisionPanel = this.getElement('decision-panel')
+    this.decisionPill = this.getElement('decision-pill')
+    this.decisionTitle = this.getElement('decision-title')
+    this.decisionDetail = this.getElement('decision-detail')
+    this.readinessScore = this.getElement('readiness-score')
+    this.readinessNote = this.getElement('readiness-note')
 
-    this.scenarioButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('.scenario-btn'))
-    if (this.scenarioButtons.length === 0) {
-      throw new Error('Missing .scenario-btn controls')
-    }
+    this.checksPassed = this.getElement('checks-passed')
+    this.queuePeak = this.getElement('queue-peak')
+    this.retainedValue = this.getElement('retained-value')
+    this.stageCaption = this.getElement('stage-caption')
+
+    this.recommendedControls = this.getElement('recommended-controls')
+    this.whyList = this.getElement<HTMLUListElement>('why-list')
+    this.gateList = this.getElement<HTMLUListElement>('gate-list')
+    this.actionList = this.getElement<HTMLUListElement>('action-list')
+    this.memoText = this.getElement('memo-text')
 
     const activeButton =
       this.scenarioButtons.find((button) => button.classList.contains('active')) ?? this.scenarioButtons[0]
+
     this.selectedPressure = Number.parseFloat(activeButton.dataset.pressure ?? '0.56')
     this.selectedUrgency = this.parseSliderValue(this.urgencySlider.value, 0.58)
     this.selectedStrictness = this.parseSliderValue(this.strictnessSlider.value, 0.62)
@@ -141,6 +115,7 @@ export class UIController {
     this.renderMathBlocks()
     this.syncScenarioButtonState()
     this.syncSliderValues()
+    this.setRunPending(false)
   }
 
   onControlsChange(callback: () => void): void {
@@ -150,6 +125,7 @@ export class UIController {
         if (!Number.isFinite(pressure)) {
           return
         }
+
         this.selectedPressure = pressure
         this.syncScenarioButtonState()
         callback()
@@ -165,6 +141,10 @@ export class UIController {
 
     this.urgencySlider.addEventListener('input', onSliderInput)
     this.strictnessSlider.addEventListener('input', onSliderInput)
+  }
+
+  onRunCheck(callback: () => void): void {
+    this.runButton.addEventListener('click', callback)
   }
 
   onAutoTune(callback: () => void): void {
@@ -195,20 +175,6 @@ export class UIController {
     exportButton.addEventListener('click', callback)
   }
 
-  setControlValues(values: Partial<ControlValues>): void {
-    if (typeof values.pressure === 'number' && Number.isFinite(values.pressure)) {
-      this.selectedPressure = values.pressure
-      this.syncScenarioButtonState()
-    }
-    if (typeof values.urgency === 'number' && Number.isFinite(values.urgency)) {
-      this.selectedUrgency = values.urgency
-    }
-    if (typeof values.strictness === 'number' && Number.isFinite(values.strictness)) {
-      this.selectedStrictness = values.strictness
-    }
-    this.syncSliderValues()
-  }
-
   readControlValues(): ControlValues {
     return {
       pressure: this.selectedPressure,
@@ -217,48 +183,58 @@ export class UIController {
     }
   }
 
+  setControlValues(values: Partial<ControlValues>): void {
+    if (typeof values.pressure === 'number' && Number.isFinite(values.pressure)) {
+      this.selectedPressure = values.pressure
+      this.syncScenarioButtonState()
+    }
+
+    if (typeof values.urgency === 'number' && Number.isFinite(values.urgency)) {
+      this.selectedUrgency = values.urgency
+    }
+
+    if (typeof values.strictness === 'number' && Number.isFinite(values.strictness)) {
+      this.selectedStrictness = values.strictness
+    }
+
+    this.syncSliderValues()
+  }
+
+  setRunPending(pending: boolean): void {
+    this.runButton.classList.toggle('pending', pending)
+    this.runButton.textContent = pending ? 'Run release check (pending changes)' : 'Run release check'
+  }
+
   renderFrame(frame: ProofFrameUi): void {
     const toneChanged = this.lastDecisionTone !== frame.decisionTone
 
     this.decisionPanel.classList.toggle('ship', frame.decisionTone === 'ship')
     this.decisionPanel.classList.toggle('hold', frame.decisionTone === 'hold')
+
     this.decisionPill.classList.toggle('ship', frame.decisionTone === 'ship')
     this.decisionPill.classList.toggle('hold', frame.decisionTone === 'hold')
-    this.decisionPill.textContent = frame.decisionTone === 'ship' ? 'READY TO SHIP' : 'HOLD DEPLOYMENT'
+    this.decisionPill.textContent = frame.decisionTone === 'ship' ? 'SHIP' : 'HOLD'
 
     this.decisionTitle.textContent = frame.decisionTitle
     this.decisionDetail.textContent = frame.decisionDetail
     this.readinessScore.textContent = frame.readinessScoreText
     this.readinessNote.textContent = frame.readinessNote
 
-    this.strategyCaption.textContent = frame.strategyCaption
-    this.recommendedControls.textContent = frame.recommendedControlsText
-    this.guardrailValue.textContent = frame.guardrailValueText
+    this.checksPassed.textContent = frame.checksPassedText
+    this.queuePeak.textContent = frame.queuePeakText
     this.retainedValue.textContent = frame.retainedValueText
+    this.stageCaption.textContent = frame.stageCaptionText
+    this.recommendedControls.textContent = frame.recommendedControlsText
     this.memoText.textContent = frame.memoText
 
-    this.renderStrategyRows(frame.strategyRows)
-    this.renderList(this.whyList, frame.whyItems, 'Recommendation rationale is loading.')
-    this.renderList(this.gateList, frame.gateItems, 'Rollout plan is loading.')
-    this.renderList(this.actionList, frame.actionItems, 'No execution actions available for this state.')
+    this.renderList(this.whyList, frame.whyItems, 'Rationale unavailable.')
+    this.renderList(this.gateList, frame.gateItems, 'Rollout gates unavailable.')
+    this.renderList(this.actionList, frame.actionItems, 'No actions generated.')
 
     if (toneChanged) {
       this.flash(this.decisionPanel)
     }
     this.lastDecisionTone = frame.decisionTone
-  }
-
-  private renderStrategyRows(rows: StrategyRowUi[]): void {
-    for (const row of rows) {
-      const elements = this.strategyRows[row.id]
-      elements.row.classList.toggle('recommended', row.recommended)
-      elements.guardrails.textContent = row.guardrailsText
-      elements.peak.textContent = row.peakText
-      elements.breach.textContent = row.breachText
-      elements.escalations.textContent = row.escalationsText
-      elements.score.textContent = row.scoreText
-      elements.status.textContent = row.statusText
-    }
   }
 
   private renderList(target: HTMLUListElement, items: string[], fallback: string): void {
@@ -295,21 +271,23 @@ export class UIController {
     let closestIndex = 0
     let closestDistance = Number.POSITIVE_INFINITY
 
-    for (let i = 0; i < this.scenarioButtons.length; i += 1) {
-      const pressure = Number.parseFloat(this.scenarioButtons[i].dataset.pressure ?? '0')
+    for (let index = 0; index < this.scenarioButtons.length; index += 1) {
+      const pressure = Number.parseFloat(this.scenarioButtons[index].dataset.pressure ?? '0')
       const distance = Math.abs(pressure - this.selectedPressure)
       if (distance < closestDistance) {
         closestDistance = distance
-        closestIndex = i
+        closestIndex = index
       }
     }
 
     this.scenarioButtons.forEach((button, index) => {
-      button.classList.toggle('active', index === closestIndex)
-      button.setAttribute('aria-pressed', index === closestIndex ? 'true' : 'false')
+      const active = index === closestIndex
+      button.classList.toggle('active', active)
+      button.setAttribute('aria-pressed', active ? 'true' : 'false')
     })
 
     this.selectedPressure = Number.parseFloat(this.scenarioButtons[closestIndex].dataset.pressure ?? '0.56')
+
     if (this.scenarioNote) {
       this.scenarioNote.textContent = this.describeScenario(this.selectedPressure)
     }
@@ -328,20 +306,9 @@ export class UIController {
     if (this.urgencyNote) {
       this.urgencyNote.textContent = this.describeUrgency(this.selectedUrgency)
     }
+
     if (this.strictnessNote) {
       this.strictnessNote.textContent = this.describeStrictness(this.selectedStrictness)
-    }
-  }
-
-  private getStrategyRowElements(id: StrategyId): StrategyRowElements {
-    return {
-      row: this.getElement<HTMLTableRowElement>(`strategy-row-${id}`),
-      guardrails: this.getElement(`${id}-guardrails`),
-      peak: this.getElement(`${id}-peak`),
-      breach: this.getElement(`${id}-breach`),
-      escalations: this.getElement(`${id}-escalations`),
-      score: this.getElement(`${id}-score`),
-      status: this.getElement(`${id}-status`),
     }
   }
 
@@ -359,32 +326,32 @@ export class UIController {
 
   private describeScenario(pressure: number): string {
     if (pressure < 0.38) {
-      return 'Normal traffic: low queue pressure and lower immediate safety risk.'
+      return 'Normal traffic: lower queue pressure and lower immediate risk.'
     }
     if (pressure < 0.75) {
-      return 'Traffic spike: queue pressure is meaningful but still manageable.'
+      return 'Spike traffic: meaningful queue pressure, still manageable with correct projection.'
     }
-    return 'Incident traffic: severe pressure where unsafe patches trigger escalations quickly.'
+    return 'Incident traffic: severe pressure where unsafe raw patches escalate quickly.'
   }
 
   private describeUrgency(urgency: number): string {
     if (urgency < 0.34) {
-      return 'Low urgency: stronger correction can be applied for safety.'
+      return 'Low urgency: projection can prioritize safety conservatively.'
     }
     if (urgency < 0.67) {
-      return 'Balanced urgency: keep quality while correcting risk.'
+      return 'Balanced urgency: keep value while correcting unsafe components.'
     }
-    return 'Critical urgency: correction must prevent risky over-shoot.'
+    return 'Critical urgency: projection must keep as much useful gain as possible.'
   }
 
   private describeStrictness(strictness: number): string {
     if (strictness < 0.34) {
-      return 'Relaxed policy: easier to keep quality, less conservative on risk.'
+      return 'Relaxed checks: easier to retain gain, lower safety margin.'
     }
     if (strictness < 0.67) {
-      return 'Moderate strictness: core guardrails remain active.'
+      return 'Moderate checks: typical production guardrail envelope.'
     }
-    return 'High strictness: limits are tight, so some gain may be traded for safety.'
+    return 'Tight checks: conservative release posture with stricter boundaries.'
   }
 
   private flash(element: HTMLElement): void {
