@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="{{ site.lang | default: 'en' }}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>{% if page.title %}{{ page.title }} | {% endif %}{{ site.first_name }} {{ site.last_name }}</title>
+    <meta name="description" content="{{ page.description | default: site.description | strip }}">
+    <meta name="keywords" content="{{ site.keywords }}">
+    <meta name="author" content="{{ site.first_name }} {{ site.last_name }}">
+    <link rel="canonical" href="{{ page.url | replace:'index.html','' | absolute_url }}">
+    {% if site.icon.size <= 4 %}
+    <link rel="shortcut icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>{{ site.icon }}</text></svg>">
+    {% elsif site.icon != blank %}
+    <link rel="shortcut icon" href="{{ site.icon | prepend: '/assets/img/' | relative_url }}"/>
+    {% endif %}
+    <link rel="stylesheet" href="{{ '/assets/css/intentional.css' | relative_url }}">
+    {% if page.custom_css %}
+      {% for stylesheet in page.custom_css %}
+        <link rel="stylesheet" href="{{ stylesheet | relative_url }}">
+      {% endfor %}
+    {% endif %}
+  </head>
+  <body class="intentional-body {% if page.page_class %}{{ page.page_class }}{% endif %}">
+    <a class="intentional-skip" href="#main-content">Skip to content</a>
+
+    <header class="intentional-header" role="banner">
+      <div class="intentional-header-inner">
+        <a class="intentional-brand" href="{{ '/' | relative_url }}">{{ site.first_name }} {{ site.last_name }}</a>
+        <nav class="intentional-nav" aria-label="Primary">
+          <a href="{{ '/' | relative_url }}"{% if page.permalink == '/' %} aria-current="page"{% endif %}>Overview</a>
+          <a href="{{ '/publications/' | relative_url }}"{% if page.permalink == '/publications/' %} aria-current="page"{% endif %}>Archive</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main-content" class="intentional-main" role="main">
+      {{ content }}
+    </main>
+
+    <footer class="intentional-footer" role="contentinfo">
+      <p>
+        {{ site.footer_text }}
+        <span>Updated {{ "now" | date: "%B %Y" }}.</span>
+      </p>
+    </footer>
+
+    {% if page.custom_js %}
+      {% for script in page.custom_js %}
+        <script defer src="{{ script | relative_url }}"></script>
+      {% endfor %}
+    {% endif %}
+  </body>
+</html>

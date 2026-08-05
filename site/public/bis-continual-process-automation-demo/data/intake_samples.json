@@ -1,0 +1,170 @@
+[
+  {
+    "id": "intake-001",
+    "title": "Procurement approvals keep stalling above 10k",
+    "channel": "ticket",
+    "text": "We keep missing target turnaround for software purchases above 10k. Request starts in email, then people copy details into ticket comments. Finance says budget code is missing, compliance asks for vendor risk docs later, and the cycle restarts. Can we stop the back-and-forth and track who is holding the request?",
+    "ground_truth": {
+      "category": "procurement_approvals",
+      "risk_level": "medium",
+      "baseline_cycle_time_days": 14,
+      "volume_per_month": 42,
+      "key_systems": ["Jira", "SAP", "Outlook"],
+      "suggested_kpis": ["approval_cycle_time_days", "first_pass_complete_rate", "escalation_rate"]
+    }
+  },
+  {
+    "id": "intake-002",
+    "title": "Capex request approvals not visible across teams",
+    "channel": "email",
+    "text": "Capex approval chain is confusing. Team submits spreadsheet, PMO copies into procurement queue, finance reviews later, and requestor has no visibility. We need one intake and automatic reminders when approvers sit too long.",
+    "ground_truth": {
+      "category": "procurement_approvals",
+      "risk_level": "low",
+      "baseline_cycle_time_days": 11,
+      "volume_per_month": 27,
+      "key_systems": ["SharePoint", "ServiceNow", "Teams"],
+      "suggested_kpis": ["queue_age_days", "approval_sla_breach_count", "request_visibility_score"]
+    }
+  },
+  {
+    "id": "intake-003",
+    "title": "Vendor onboarding delayed by compliance packet gaps",
+    "channel": "workshop_note",
+    "text": "New vendor onboarding takes forever because compliance docs arrive in fragments. Procurement starts record, legal asks for contract version, info security asks questionnaires, and risk team asks for sanctions declaration after a week. We need a standard onboarding packet and stage-gate checks.",
+    "ground_truth": {
+      "category": "vendor_onboarding_compliance",
+      "risk_level": "high",
+      "baseline_cycle_time_days": 24,
+      "volume_per_month": 18,
+      "key_systems": ["ServiceNow", "DocuSign", "Ariba"],
+      "suggested_kpis": ["onboarding_cycle_time_days", "document_complete_at_intake_rate", "high_risk_vendor_lead_time"]
+    }
+  },
+  {
+    "id": "intake-004",
+    "title": "Supplier setup blocked by repeated KYC requests",
+    "channel": "ticket",
+    "text": "Supplier master creation gets blocked whenever KYC data is incomplete. AP team chases by email, then escalates manually to sourcing. Could we auto-check required docs and route high-risk suppliers immediately?",
+    "ground_truth": {
+      "category": "vendor_onboarding_compliance",
+      "risk_level": "high",
+      "baseline_cycle_time_days": 19,
+      "volume_per_month": 22,
+      "key_systems": ["SAP", "Coupa", "Outlook"],
+      "suggested_kpis": ["kyc_rework_rate", "supplier_activation_time_days", "compliance_exception_count"]
+    }
+  },
+  {
+    "id": "intake-005",
+    "title": "Access provisioning approvals are too slow",
+    "channel": "ticket",
+    "text": "Access requests for finance apps are waiting 4 to 6 days because approvers are unclear. Manager approves in email, app owner signs in ticket, IAM team manually updates status. We need automatic approval path and better audit trail.",
+    "ground_truth": {
+      "category": "access_provisioning",
+      "risk_level": "high",
+      "baseline_cycle_time_days": 6,
+      "volume_per_month": 130,
+      "key_systems": ["Okta", "ServiceNow", "Outlook"],
+      "suggested_kpis": ["access_grant_time_hours", "approval_handoff_count", "audit_trace_completeness"]
+    }
+  },
+  {
+    "id": "intake-006",
+    "title": "New joiner access setup misses deadline",
+    "channel": "email",
+    "text": "For onboarding week we still miss day-one access. HR sends spreadsheet, IT splits tickets manually, and approvals happen in separate threads. Please standardize intake and auto-route by role bundle.",
+    "ground_truth": {
+      "category": "access_provisioning",
+      "risk_level": "medium",
+      "baseline_cycle_time_days": 4,
+      "volume_per_month": 85,
+      "key_systems": ["Workday", "Jira Service Management", "Azure AD"],
+      "suggested_kpis": ["day_one_access_success_rate", "role_bundle_match_rate", "manual_touchpoints_per_request"]
+    }
+  },
+  {
+    "id": "intake-007",
+    "title": "Monthly KPI reporting is mostly copy-paste",
+    "channel": "workshop_note",
+    "text": "Operations reporting takes two analysts four days each month. They export data from ERP, CRM, and service desk, reconcile in spreadsheets, and chase missing values with emails. Need a repeatable monthly pipeline with validation.",
+    "ground_truth": {
+      "category": "monthly_reporting",
+      "risk_level": "medium",
+      "baseline_cycle_time_days": 5,
+      "volume_per_month": 1,
+      "key_systems": ["SAP", "Salesforce", "ServiceNow", "Excel"],
+      "suggested_kpis": ["report_preparation_hours", "data_reconciliation_error_rate", "on_time_publish_rate"]
+    }
+  },
+  {
+    "id": "intake-008",
+    "title": "Board pack compilation lacks consistent controls",
+    "channel": "email",
+    "text": "Board reporting pack is assembled manually from multiple source files and approval emails. We need clear ownership, automatic status checks, and a final publish checklist so numbers do not change at the last minute.",
+    "ground_truth": {
+      "category": "monthly_reporting",
+      "risk_level": "high",
+      "baseline_cycle_time_days": 7,
+      "volume_per_month": 1,
+      "key_systems": ["Power BI", "SharePoint", "Outlook"],
+      "suggested_kpis": ["final_pack_rework_count", "approval_completion_time_hours", "version_consistency_rate"]
+    }
+  },
+  {
+    "id": "intake-009",
+    "title": "Incident escalation path is unclear after handoff",
+    "channel": "ticket",
+    "text": "During incidents, L1 to L2 handoff is inconsistent. Severity changes in chat but ticket stays stale, and on-call team is paged late. Need a standard escalation workflow with SLA timers and timeline log.",
+    "ground_truth": {
+      "category": "incident_escalation",
+      "risk_level": "high",
+      "baseline_cycle_time_days": null,
+      "volume_per_month": 16,
+      "key_systems": ["PagerDuty", "ServiceNow", "Teams"],
+      "suggested_kpis": ["mean_time_to_escalate_minutes", "sla_breach_incidents", "handoff_accuracy_rate"]
+    }
+  },
+  {
+    "id": "intake-010",
+    "title": "Major incident communication is ad hoc",
+    "channel": "workshop_note",
+    "text": "For major incidents we duplicate updates across email and chat manually. Stakeholders complain because status messages are inconsistent. Can we automate role-based notifications and enforce incident command checkpoints?",
+    "ground_truth": {
+      "category": "incident_escalation",
+      "risk_level": "medium",
+      "baseline_cycle_time_days": null,
+      "volume_per_month": 9,
+      "key_systems": ["Teams", "Jira", "Opsgenie"],
+      "suggested_kpis": ["status_update_latency_minutes", "stakeholder_notification_coverage", "incident_comms_consistency"]
+    }
+  },
+  {
+    "id": "intake-011",
+    "title": "Travel pre-approval takes too many reminders",
+    "channel": "email",
+    "text": "Travel requests are submitted without complete policy fields. Finance sends reminders for cost center and purpose, manager approval is delayed, and reimbursement starts late. Need policy checks and automated nudges.",
+    "ground_truth": {
+      "category": "travel_expense_approvals",
+      "risk_level": "low",
+      "baseline_cycle_time_days": 8,
+      "volume_per_month": 55,
+      "key_systems": ["Concur", "Outlook", "SAP"],
+      "suggested_kpis": ["first_submission_completeness", "travel_approval_time_days", "reimbursement_delay_rate"]
+    }
+  },
+  {
+    "id": "intake-012",
+    "title": "Expense exceptions are reviewed manually each week",
+    "channel": "ticket",
+    "text": "Policy exception queue for expenses is reviewed in a weekly batch. There is no scoring by risk and no automatic routing to policy owner. We need triage logic and transparent audit notes.",
+    "ground_truth": {
+      "category": "travel_expense_approvals",
+      "risk_level": "medium",
+      "baseline_cycle_time_days": 10,
+      "volume_per_month": 73,
+      "key_systems": ["Concur", "ServiceNow", "Power Automate"],
+      "suggested_kpis": ["exception_resolution_time_days", "high_risk_exception_rate", "audit_note_completeness"]
+    }
+  }
+]
