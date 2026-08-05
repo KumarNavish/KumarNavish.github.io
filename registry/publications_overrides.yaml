@@ -1,0 +1,93 @@
+publications:
+  - id: "08ZZubdj9fEC"
+    title: "Optimization Guarantees for Square-Root Natural-Gradient Variational Inference"
+    year: 2025
+    venue: "arXiv preprint arXiv:2507.07853"
+    citation_count: 1
+    authors:
+      - "N Kumar"
+      - "T Moellenhoff"
+      - "ME Khan"
+      - "A Lucchi"
+    keywords:
+      - variational inference
+      - natural gradients
+      - optimization guarantees
+    url: "https://arxiv.org/abs/2507.07853"
+    pdf_url: "https://arxiv.org/pdf/2507.07853"
+    summary: "Establishes convergence guarantees for natural-gradient variational Gaussian inference via square-root covariance parameterization."
+    source: override
+
+  - id: "738O_yMBCRsC"
+    title: "Modelling the performance of delivery vehicles across urban micro-regions to accelerate the transition to cargo-bike logistics"
+    year: 2023
+    venue: "arXiv preprint arXiv:2301.12887"
+    citation_count: 0
+    authors:
+      - "M Schrader"
+      - "N Kumar"
+      - "N Collignon"
+      - "E Sorig"
+    keywords:
+      - urban AI
+      - sustainable logistics
+      - spatial modeling
+    url: "https://arxiv.org/abs/2301.12887"
+    pdf_url: "https://arxiv.org/pdf/2301.12887"
+    summary: "Uses city micro-region features to model delivery service-time behavior for cargo-bike transition decisions."
+    source: override
+
+  - id: "WbkHhVStYXYC"
+    title: "Bounds for the extremal eigenvalues of gain Laplacian matrices"
+    year: 2021
+    venue: "Linear Algebra and its Applications"
+    citation_count: 3
+    authors:
+      - "MR Kannan"
+      - "N Kumar"
+      - "S Pragada"
+    keywords:
+      - spectral graph theory
+      - gain Laplacians
+      - eigenvalue bounds
+    url: "https://www.sciencedirect.com/science/article/pii/S0024379521002111"
+    pdf_url: null
+    summary: "Derives lower and upper bounds for extremal eigenvalues and links frustration measures to gain-Laplacian spectra."
+    source: override
+
+  - id: "OU6Ihb5iCvQC"
+    title: "Normalized laplacians for gain graphs"
+    year: 2020
+    venue: "arXiv preprint arXiv:2009.13788"
+    citation_count: 4
+    authors:
+      - "MR Kannan"
+      - "N Kumar"
+      - "S Pragada"
+    keywords:
+      - normalized Laplacian
+      - gain graphs
+      - spectral foundations
+    url: "https://arxiv.org/abs/2009.13788"
+    pdf_url: "https://arxiv.org/pdf/2009.13788"
+    summary: "Defines normalized gain-graph Laplacians and studies balance, bipartiteness, and spectral properties."
+    source: override
+
+  - id: "SP6oXDckpogC"
+    title: "Interaction dynamics between hate and counter users on Twitter"
+    year: 2020
+    venue: "Proceedings of the 7th ACM IKDD CoDS and 25th COMAD"
+    citation_count: 130
+    authors:
+      - "B Mathew"
+      - "N Kumar"
+      - "P Goyal"
+      - "A Mukherjee"
+    keywords:
+      - social computing
+      - hate speech
+      - counterspeech
+    url: "https://dl.acm.org/doi/abs/10.1145/3371158.3371172"
+    pdf_url: "https://dl.acm.org/doi/pdf/10.1145/3371158.3371172"
+    summary: "Analyzes linguistic and behavioral asymmetries between hate and counter users using a released paired-account dataset."
+    source: override
