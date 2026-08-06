@@ -109,7 +109,7 @@ jobs:
           await page.locator('[data-action="inspect-all"]').click();
           await page.getByText('Complete run receipt', { exact: true }).waitFor();
           await page.screenshot({ path: 'live-qa/desktop-trace-inspector.png', fullPage: true });
-          await page.locator('[data-action="close-drawer"]').click();
+          await page.getByRole('button', { name: 'Close inspector' }).click();
 
           await page.locator('[data-view="compare"]').first().click();
           await page.getByRole('heading', { name: 'Pipeline comparison' }).waitFor();
@@ -137,7 +137,7 @@ jobs:
             url,
             status: response.status(),
             title: await page.title(),
-            claims: await claimCards.count().catch(() => 8),
+            claims: await page.locator('[data-claim]').count(),
             processVisible: true,
             checklistVisible: true,
             traceInspector: true,
