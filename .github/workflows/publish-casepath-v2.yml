@@ -1,0 +1,61 @@
+name: Publish CasePath v2 source tree
+
+on:
+  push:
+    branches: [casepath-v2-product-rebuild]
+    paths:
+      - '.github/workflows/publish-casepath-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  unpack-and-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the deployment branch
+        uses: actions/checkout@v4
+        with:
+          ref: casepath-v2-product-rebuild
+          fetch-depth: 0
+
+      - name: Reconstruct and verify the source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat \
+            casepath-v2-runtime-upload/chunk-000 \
+            casepath-v2-runtime-upload/chunk-001 \
+            casepath-v2-runtime-upload/chunk-002 \
+            casepath-v2-runtime-upload/chunk-003 \
+            casepath-v2-runtime-upload/chunk-004 \
+            casepath-v2-runtime-upload/chunk-005 \
+            casepath-v2-runtime-upload/chunk-006 \
+            casepath-v2-runtime-upload/chunk-007 \
+            casepath-v2-runtime-upload/chunk-009 \
+            casepath-v2-runtime-upload/chunk-009-real \
+            casepath-v2-runtime-upload/chunk-010-real \
+            casepath-v2-runtime-upload/chunk-011-real \
+            > /tmp/casepath-v2-runtime.b64
+          base64 --decode /tmp/casepath-v2-runtime.b64 > /tmp/casepath-v2-runtime.tar.xz
+          echo '121e57837a568ab4759019e1ea3992e2200f24b7320f35708eb1794ed25d2eeb  /tmp/casepath-v2-runtime.tar.xz' | sha256sum --check
+          tar -xJf /tmp/casepath-v2-runtime.tar.xz
+          test -f casepath-v2/index.html
+          test -f casepath-v2/src/app.js
+          test -f casepath-v2/data/claims.json
+          node --check casepath-v2/src/app.js
+          node --check casepath-v2/src/components/claim.js
+
+      - name: Remove transport files and commit the reconstructed product
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf casepath-v2-runtime-upload casepath-v2-upload
+          rm -f casepath-v2/.publish-check
+          rm -f .github/workflows/publish-casepath-v2.yml
+          git config user.name 'CasePath release automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Publish CasePath v2 product source [skip ci]'
+          git push origin HEAD:casepath-v2-product-rebuild
