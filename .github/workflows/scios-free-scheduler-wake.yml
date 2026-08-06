@@ -1,0 +1,76 @@
+name: Swiss Career Intelligence free scheduler wake
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/scios-free-scheduler-wake.yml'
+  workflow_dispatch:
+  schedule:
+    # Duplicate UTC windows cover CET and CEST. The application stores its
+    # schedules in Europe/Zurich and executes only records that are actually due.
+    - cron: '30 4,5 * * 1-5'
+    - cron: '30 14,15 * * 1-5'
+    - cron: '0 5,6 * * *'
+    - cron: '0 16,17 * * 0'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: scios-free-scheduler-wake
+  cancel-in-progress: false
+
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - name: Wake the free service and execute only due schedules
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            --retry 5 --retry-all-errors --retry-delay 12 \
+            --connect-timeout 30 --max-time 300 \
+            https://swiss-career-intelligence-os.onrender.com/ops/wake \
+            | tee /tmp/scios-wake.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path('/tmp/scios-wake.json').read_text())
+          assert payload.get('external_actions_executed') is False
+          assert payload.get('openai_api_used') is False
+          assert payload.get('api_cost_chf') == 0
+          print(json.dumps(payload, indent=2))
+          PY
+      - name: Persist the one-time deployment proof
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          mkdir -p ops
+          python - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          wake = json.loads(Path('/tmp/scios-wake.json').read_text())
+          report = {
+              'workflow_commit': os.environ['GITHUB_SHA'],
+              'validated_at_utc': datetime.now(timezone.utc).isoformat(),
+              'endpoint': 'https://swiss-career-intelligence-os.onrender.com/ops/wake',
+              'result': wake,
+              'openai_api_requests': 0,
+              'api_cost_chf': 0,
+              'external_actions_executed': False,
+          }
+          Path('ops/scios-free-scheduler-wake-validation.json').write_text(json.dumps(report, indent=2) + '\n')
+          PY
+          git config user.name 'Swiss Career Intelligence Scheduler QA'
+          git config user.email 'actions@users.noreply.github.com'
+          git pull --rebase origin master
+          git add ops/scios-free-scheduler-wake-validation.json
+          git commit -m 'Record Swiss Career scheduler wake validation' || exit 0
+          git push origin HEAD:master
