@@ -1,0 +1,170 @@
+name: CasePath live deployment verification
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - '.github/workflows/casepath-live-verification.yml'
+      - 'casepath/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-live-product:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CASEPATH_URL: https://casepath-swiss-claim-lab.onrender.com
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify HTTP entry point and referenced assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p live-qa
+          curl --retry 12 --retry-all-errors --retry-delay 5 --connect-timeout 20 --max-time 180 \
+            --fail --location "$CASEPATH_URL/" -o live-qa/index.html
+          grep -F '<title>CasePath Swiss Claim Lab</title>' live-qa/index.html
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from urllib.parse import urljoin
+          from urllib.request import Request, urlopen
+          import json, os
+
+          base = os.environ['CASEPATH_URL'].rstrip('/') + '/'
+          html = Path('live-qa/index.html').read_text(encoding='utf-8')
+
+          class Assets(HTMLParser):
+              def __init__(self):
+                  super().__init__(); self.urls=[]
+              def handle_starttag(self, tag, attrs):
+                  data=dict(attrs)
+                  if tag=='script' and data.get('src'): self.urls.append(data['src'])
+                  if tag=='link' and data.get('href') and data.get('rel') and 'stylesheet' in data.get('rel',''): self.urls.append(data['href'])
+          parser=Assets(); parser.feed(html)
+          failures=[]; checked=[]
+          for raw in parser.urls:
+              url=urljoin(base, raw)
+              try:
+                  req=Request(url, headers={'User-Agent':'CasePath-Live-QA/1.0'})
+                  with urlopen(req, timeout=60) as response:
+                      status=response.status
+                      body=response.read(256)
+                  checked.append({'url':url,'status':status,'prefix_bytes':len(body)})
+                  if status != 200: failures.append({'url':url,'status':status})
+              except Exception as exc:
+                  failures.append({'url':url,'error':repr(exc)})
+          Path('live-qa/http-assets.json').write_text(json.dumps({'base':base,'checked':checked,'failures':failures},indent=2),encoding='utf-8')
+          if failures: raise SystemExit(f'Asset failures: {failures}')
+          if len(checked) < 10: raise SystemExit(f'Unexpectedly few referenced assets: {len(checked)}')
+          print(f'Checked {len(checked)} live assets')
+          PY
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install browser verifier
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install --no-save playwright@1.54.2
+          npx playwright install --with-deps chromium
+
+      - name: Exercise the deployed claim journey
+        shell: bash
+        run: |
+          mkdir -p live-qa
+          cat > live-qa/verify.mjs <<'JS'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+
+          const url = process.env.CASEPATH_URL;
+          const browser = await chromium.launch({ headless: true });
+          const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+          const page = await context.newPage();
+          const errors = [];
+          page.on('pageerror', error => errors.push(`pageerror: ${error.message}`));
+          page.on('console', message => {
+            if (message.type() === 'error') errors.push(`console: ${message.text()}`);
+          });
+
+          const response = await page.goto(url, { waitUntil: 'networkidle', timeout: 120000 });
+          if (!response || response.status() !== 200) throw new Error(`Entry status ${response?.status()}`);
+          if ((await page.title()) !== 'CasePath Swiss Claim Lab') throw new Error(`Unexpected title: ${await page.title()}`);
+
+          await page.getByText('Claim library', { exact: true }).waitFor({ timeout: 30000 });
+          await page.getByText('Claim-specific process', { exact: true }).waitFor();
+          await page.getByText('Process-derived checklist', { exact: true }).waitFor();
+          const claimCards = page.locator('[data-claim]');
+          if (await claimCards.count() < 8) throw new Error(`Expected at least 8 claim cards, found ${await claimCards.count()}`);
+
+          await page.screenshot({ path: 'live-qa/desktop-claim-journey.png', fullPage: true });
+
+          await page.locator('[data-action="inspect-all"]').click();
+          await page.getByText('Complete run receipt', { exact: true }).waitFor();
+          await page.screenshot({ path: 'live-qa/desktop-trace-inspector.png', fullPage: true });
+          await page.getByRole('button', { name: 'Close inspector' }).click();
+
+          await page.locator('[data-view="compare"]').first().click();
+          await page.getByRole('heading', { name: 'Pipeline comparison' }).waitFor();
+          await page.screenshot({ path: 'live-qa/desktop-comparison.png', fullPage: true });
+
+          await page.locator('[data-view="knowledge"]').first().click();
+          await page.getByRole('heading', { name: 'Claim-handling knowledge base' }).waitFor();
+
+          await page.locator('[data-view="pipeline"]').first().click();
+          await page.getByRole('heading', { name: 'Pipeline configuration' }).waitFor();
+          if (await page.locator('[data-module]').count() < 9) throw new Error('Expected nine visible module swap points');
+
+          await page.locator('[data-view="review"]').first().click();
+          await page.getByRole('heading', { name: /Review DEF-/ }).waitFor();
+          await page.screenshot({ path: 'live-qa/desktop-expert-review.png', fullPage: true });
+
+          await page.setViewportSize({ width: 390, height: 844 });
+          await page.goto(url, { waitUntil: 'networkidle', timeout: 120000 });
+          await page.locator('#app .app-shell').waitFor({ state: 'attached', timeout: 30000 });
+          if (await page.getByText('Claim library', { exact: true }).count() < 1) throw new Error('Mobile claim library is missing from the DOM');
+          if (await page.locator('[data-claim]').count() < 8) throw new Error('Mobile claim cards are missing from the DOM');
+          const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+          if (overflow > 1) throw new Error(`Mobile horizontal overflow: ${overflow}px`);
+          await page.screenshot({ path: 'live-qa/mobile-claim-journey.png', fullPage: true });
+
+          const report = {
+            url,
+            status: response.status(),
+            title: await page.title(),
+            claims: await page.locator('[data-claim]').count(),
+            processVisible: true,
+            checklistVisible: true,
+            traceInspector: true,
+            comparison: true,
+            knowledgeExplorer: true,
+            pipelineSwapPoints: true,
+            expertReview: true,
+            mobileOverflowPx: overflow,
+            errors,
+            verifiedAt: new Date().toISOString()
+          };
+          fs.writeFileSync('live-qa/live-browser-report.json', JSON.stringify(report, null, 2));
+          await browser.close();
+          if (errors.length) throw new Error(`Browser errors: ${errors.join(' | ')}`);
+          console.log(JSON.stringify(report, null, 2));
+          JS
+          node live-qa/verify.mjs
+
+      - name: Upload live QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: casepath-live-qa
+          path: live-qa/
+          if-no-files-found: error
+          retention-days: 30
+
+# Rerun after clean Render deployment dep-d9q3sv142hec739o97vg.
