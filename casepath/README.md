@@ -1,6 +1,6 @@
 # CasePath Swiss Claim Lab
 
-Public URL: **https://kumarnavish.github.io/casepath/**
+Public URL: **https://casepath-swiss-claim-lab.onrender.com/**
 
 CasePath is an inspectable public product demonstration of process-grounded Swiss tenant-law claim handling on generated claims.
 
@@ -17,12 +17,16 @@ A visitor can select a claim, inspect the message and generated attachment previ
 
 ## Architecture
 
-The public release is deliberately static and requires no server-side secret. Generated claims and cached reference outputs are shipped with the site. Optional live inference uses a visitor-controlled OpenRouter key stored in session storage. Public expert feedback remains local and cannot alter released knowledge.
+The public release is a static site deployed from `master/casepath` to a dedicated Render static-site service. It requires no server-side secret. Generated claims and cached reference outputs ship with the site. Optional live inference uses a visitor-controlled OpenRouter key stored in session storage. Public expert feedback remains local and cannot alter released knowledge.
+
+## Deployment verification
+
+The public Render endpoint is tested from a GitHub-hosted runner rather than only from localhost. The live verification checks the entry page, all referenced assets, eight generated claims, the process graph, process-derived checklist, trace inspector, profile comparison, knowledge explorer, module swap points, expert review, browser errors and mobile overflow. Evidence is uploaded by the `CasePath live deployment verification` workflow.
 
 ## Evidence boundary
 
-All included claims, process paths, document mappings, benchmark scores and friction metrics are generated or simulated. The product is not approved for real claim processing, customer contact, legal advice, deadline calculation, coverage decisions, autonomous escalation or production deployment.
+All included claims, process paths, document mappings, benchmark scores and friction metrics are generated or simulated. The product is not approved for real claim processing, customer contact, legal advice, deadline calculation, coverage decisions, autonomous escalation or production insurer deployment.
 
 ## Source and reproducibility
 
-The modular product source and full validation package are distributed in the release ZIP returned with this deployment. The rendered site is split into inspectable HTML, CSS, JavaScript and canonical-data files under this directory.
+The rendered site is split into inspectable HTML, CSS, JavaScript and canonical-data files under this directory. The working deployment uses the `casepath/` directory as its static publish root.
