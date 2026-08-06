@@ -1,0 +1,10 @@
+{
+  "contract": "casepath.canonical-deployment/4.0",
+  "status": "source_promoted",
+  "canonicalUrl": "https://casepath-swiss-claim-lab.onrender.com/",
+  "sourceBranch": "casepath-product-v4-20260806",
+  "sourcePath": "casepath-final",
+  "release": "4.0.0",
+  "promotedAt": "2026-08-06T14:34:02.206768+00:00",
+  "generatedDataOnly": true
+}
