@@ -1,0 +1,49 @@
+name: Promote verified CasePath v4 release
+
+on:
+  push:
+    branches: [casepath-product-v4-20260806]
+    paths:
+      - 'casepath-final/reports/live/browser-qa.json'
+      - 'casepath-final/reports/live/asset-audit.json'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: casepath-product-v4-20260806
+          fetch-depth: 0
+      - name: Enforce live release gates
+        run: |
+          python - <<'PY'
+          import json
+          qa=json.load(open('casepath-final/reports/live/browser-qa.json'))
+          assets=json.load(open('casepath-final/reports/live/asset-audit.json'))
+          assert qa['failed']==0, qa
+          assert qa['browserErrors']==[], qa
+          assert qa['mobileOverflowPx']==0, qa
+          assert qa['passed']>=18, qa
+          assert assets['passed'] is True, assets
+          assert all(a['status']==200 for a in assets['assets']), assets
+          PY
+      - name: Open and merge the verified release PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch origin master
+          existing=$(gh pr list --head casepath-product-v4-20260806 --base master --state open --json number --jq '.[0].number // empty')
+          if [ -z "$existing" ]; then
+            gh pr create --base master --head casepath-product-v4-20260806 \
+              --title 'Release verified CasePath claim workspace v4' \
+              --body 'Publishes the independently verified CasePath v4 claim-handling product. The branch includes live browser QA, public asset checks, mobile overflow checks, expert-review and knowledge-governance tests.'
+            existing=$(gh pr list --head casepath-product-v4-20260806 --base master --state open --json number --jq '.[0].number')
+          fi
+          gh pr merge "$existing" --merge --delete-branch=false
