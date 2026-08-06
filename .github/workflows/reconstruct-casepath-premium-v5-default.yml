@@ -1,0 +1,57 @@
+name: Reconstruct CasePath premium v5 branch
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/reconstruct-casepath-premium-v5-default.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  reconstruct:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: casepath-premium-v5
+          fetch-depth: 0
+      - name: Verify payload and reconstruct exact frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/chunks.sha256 <<'EOF'
+          fcd8ca49986aa7b284862b051eb753a77330125f6b36da8f02854545b3167612  .casepath-premium/chunk-000
+          2c25119f9eac793b8bab0a7686efc9b94b7540bc3b33d4d58aa9dbde1cc0a19d  .casepath-premium/chunk-001
+          7af53d7d36738a88d47a0f7891b81a76a0e3f23df29c3873b07664ff846cc014  .casepath-premium/chunk-002
+          07bab78d91fe4ca86a7241923a5e46c7562a973126b654bbf8d3779fb14463a3  .casepath-premium/chunk-003
+          82307b2fcc15870362c4fc350495ef7a5e6a50d470eacde26cd55d82cae54104  .casepath-premium/chunk-004
+          EOF
+          sha256sum --check /tmp/chunks.sha256
+          cat .casepath-premium/chunk-* > /tmp/casepath-premium-v5.b64
+          test "$(wc -c < /tmp/casepath-premium-v5.b64)" -eq 44184
+          base64 --decode /tmp/casepath-premium-v5.b64 > /tmp/casepath-premium-v5.tar.xz
+          echo 'b62b576e91db2ad4e327d227b2bc840c2f57a41fbe174f6714ddf7e791579034  /tmp/casepath-premium-v5.tar.xz' | sha256sum --check
+          rm -rf casepath
+          tar -xJf /tmp/casepath-premium-v5.tar.xz
+          test "$(find casepath -type f | wc -l)" -eq 9
+          node --check casepath/assets/app.js
+          python -m json.tool casepath/data/claims.json >/dev/null
+          python -m json.tool casepath/data/manifest.json >/dev/null
+          python -m json.tool casepath/health.json >/dev/null
+          grep -q 'premium-minimal-claim-workspace' casepath/health.json
+          grep -q 'View audit trail' casepath/assets/app.js
+          ! grep -q 'Public mode' casepath/index.html
+      - name: Commit reconstructed product and remove transport
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .casepath-premium
+          rm -f .github/workflows/reconstruct-casepath-premium-v5.yml
+          git config user.name 'CasePath release automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Rebuild CasePath as a premium minimal claim workspace [skip ci]'
+          git push origin HEAD:casepath-premium-v5
