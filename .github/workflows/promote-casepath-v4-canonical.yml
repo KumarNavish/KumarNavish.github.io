@@ -1,0 +1,80 @@
+name: Promote CasePath v4 to the canonical public URL
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/promote-casepath-v4-canonical.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: casepath-v4-canonical-promotion
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Fetch the verified self-contained product from the release branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch_base='https://raw.githubusercontent.com/KumarNavish/KumarNavish.github.io/casepath-product-v4-20260806/casepath-final'
+          mkdir -p casepath
+          curl -L --fail --silent --show-error "$branch_base/index.html" -o casepath/index.html
+          curl -L --fail --silent --show-error "$branch_base/health.json" -o casepath/health.json
+          curl -L --fail --silent --show-error "$branch_base/README.md" -o casepath/README-v4.md
+          grep -q 'CasePath Swiss Claim Lab' casepath/index.html
+          grep -q '"release": "4.0.0"' casepath/health.json
+          python - <<'PY'
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+          payload={
+            'contract':'casepath.canonical-deployment/4.0',
+            'status':'source_promoted',
+            'canonicalUrl':'https://casepath-swiss-claim-lab.onrender.com/',
+            'sourceBranch':'casepath-product-v4-20260806',
+            'sourcePath':'casepath-final',
+            'release':'4.0.0',
+            'promotedAt':datetime.now(timezone.utc).isoformat(),
+            'generatedDataOnly':True,
+          }
+          Path('casepath/canonical-deployment.json').write_text(json.dumps(payload,indent=2)+'\n')
+          PY
+
+      - name: Commit the canonical product
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'CasePath release automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add casepath/index.html casepath/health.json casepath/README-v4.md casepath/canonical-deployment.json
+          git commit -m 'Promote CasePath v4 to the canonical Render site [skip ci]'
+          git push origin HEAD:master
+
+      - name: Verify the auto-deployed canonical Render endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          url='https://casepath-swiss-claim-lab.onrender.com'
+          code=000
+          for attempt in $(seq 1 60); do
+            code=$(curl -L --silent --show-error --max-time 45 -o /tmp/health.json -w '%{http_code}' "$url/health.json" || true)
+            if [ "$code" = '200' ] && grep -q '"release": "4.0.0"' /tmp/health.json; then break; fi
+            sleep 10
+          done
+          test "$code" = '200'
+          grep -q '"release": "4.0.0"' /tmp/health.json
+          page_code=$(curl -L --silent --show-error --max-time 45 -o /tmp/index.html -w '%{http_code}' "$url/" || true)
+          test "$page_code" = '200'
+          grep -q 'From first message to the next safe action' /tmp/index.html
