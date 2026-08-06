@@ -58,9 +58,10 @@ jobs:
           python -m json.tool casepath/data/new-claim.json >/dev/null
           python -m json.tool casepath/data/new-claim-expected.json >/dev/null
           python -m json.tool casepath/health.json >/dev/null
+          grep -q 'Handle a new claim' casepath/index.html
+          grep -q '6.0.0-north-star' casepath/health.json
 
-      - name: Commit the reconstructed product
-        if: github.event_name != 'pull_request'
+      - name: Commit reconstructed source to release branch
         shell: bash
         run: |
           set -euo pipefail
@@ -71,11 +72,3 @@ jobs:
           git add -A
           git commit -m 'Rebuild CasePath around a completely new claim [skip ci]'
           git push origin HEAD:casepath-north-star-v6
-
-      - name: Validate pull-request reconstruction
-        if: github.event_name == 'pull_request'
-        shell: bash
-        run: |
-          test -f casepath/index.html
-          grep -q 'Handle a new claim' casepath/index.html
-          grep -q '6.0.0-north-star' casepath/health.json
