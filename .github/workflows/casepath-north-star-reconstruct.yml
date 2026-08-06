@@ -4,12 +4,9 @@ on:
   push:
     branches: [master]
     paths:
-      - '.github/workflows/casepath-north-star-reconstruct.yml'
-  pull_request:
-    branches: [master]
-    paths:
       - 'casepath-v6-upload/**'
       - '.github/workflows/publish-casepath-v6.yml'
+      - '.github/workflows/casepath-north-star-reconstruct.yml'
   workflow_dispatch:
 
 permissions:
@@ -19,10 +16,10 @@ jobs:
   reconstruct-and-publish:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out release branch
+      - name: Check out master
         uses: actions/checkout@v4
         with:
-          ref: casepath-north-star-v6
+          ref: master
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -62,14 +59,15 @@ jobs:
           grep -q 'Handle a new claim' casepath/index.html
           grep -q '6.0.0-north-star' casepath/health.json
 
-      - name: Commit reconstructed source to release branch
+      - name: Commit final source to master
         shell: bash
         run: |
           set -euo pipefail
           rm -rf casepath-v6-upload
           rm -f .github/workflows/publish-casepath-v6.yml
+          rm -f .github/workflows/casepath-north-star-reconstruct.yml
           git config user.name 'CasePath release automation'
           git config user.email 'actions@users.noreply.github.com'
           git add -A
           git commit -m 'Rebuild CasePath around a completely new claim [skip ci]'
-          git push origin HEAD:casepath-north-star-v6
+          git push origin HEAD:master
