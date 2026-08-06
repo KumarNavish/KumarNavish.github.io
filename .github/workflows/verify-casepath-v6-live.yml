@@ -1,0 +1,117 @@
+name: Verify CasePath North Star v6 live
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/verify-casepath-v6-live.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Wait for the canonical Render deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            if curl -fsSL https://casepath-swiss-claim-lab.onrender.com/health.json | grep -q '"release": "6.0.0"'; then
+              echo "CasePath v6 is live"
+              exit 0
+            fi
+            echo "Waiting for Render deployment ($attempt/30)"
+            sleep 10
+          done
+          echo "CasePath v6 did not become live in time" >&2
+          exit 1
+
+      - name: Install Playwright
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+
+      - name: Exercise the complete public workflow
+        shell: bash
+        run: |
+          mkdir -p casepath/reports/v6-live
+          cat > /tmp/verify-casepath-v6.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+          const url='https://casepath-swiss-claim-lab.onrender.com/#/new';
+          const browser=await chromium.launch({headless:true});
+          const page=await browser.newPage({viewport:{width:1440,height:900}});
+          const errors=[];
+          page.on('console',m=>{if(m.type()==='error')errors.push(`console:${m.text()}`)});
+          page.on('pageerror',e=>errors.push(`pageerror:${e.message}`));
+          const checks=[];
+          const check=(name,value,detail='')=>{checks.push({name,passed:Boolean(value),detail});if(!value)throw new Error(`${name}: ${detail}`)};
+          const response=await page.goto(url,{waitUntil:'networkidle',timeout:120000});
+          check('HTTP 200',response?.status()===200,String(response?.status()));
+          await page.waitForSelector('[data-form="northstar-intake"]',{timeout:20000});
+          check('New claim form',await page.locator('[data-form="northstar-intake"]').count()===1);
+          check('North Star heading',(await page.locator('h1').first().textContent()).includes('completely new claim'));
+          await page.screenshot({path:'casepath/reports/v6-live/01-new-claim.png',fullPage:false});
+          await page.click('[data-form="northstar-intake"] button[type="submit"]');
+          await page.waitForSelector('[data-northstar-complete="true"]',{timeout:30000});
+          check('Independent evaluation',(await page.locator('.evaluation-score strong').textContent()).trim()==='100%');
+          check('Current blocker',(await page.locator('.new-process-step.current strong').textContent()).includes('independent assessment'));
+          check('Issues detected',await page.locator('.issue-row').count()>=5);
+          check('Process-derived documents',await page.locator('.northstar-doc').count()>=8);
+          check('Similar cases',await page.locator('.similar-case').count()===3);
+          await page.screenshot({path:'casepath/reports/v6-live/02-result-top.png',fullPage:false});
+          await page.locator('.independent-check').scrollIntoViewIfNeeded();
+          await page.screenshot({path:'casepath/reports/v6-live/03-independent-check.png',fullPage:false});
+          await page.click('[data-northstar-action="open-audit"]');
+          check('Audit trail',await page.locator('.northstar-audit').count()===1);
+          await page.screenshot({path:'casepath/reports/v6-live/04-audit.png',fullPage:false});
+          await page.click('.northstar-audit [data-northstar-action="close-overlay"]');
+          await page.click('[data-northstar-action="open-draft"]');
+          check('Generated draft',await page.locator('.northstar-draft').count()===1);
+          await page.click('.northstar-draft [data-northstar-action="close-overlay"]');
+          await page.click('[data-northstar-action="open-review"]');
+          await page.fill('[data-form="northstar-review"] textarea[name="note"]','Independent assessment is required before responsibility is assigned.');
+          await page.click('[data-form="northstar-review"] button[type="submit"]');
+          check('Expert correction saved',(await page.locator('.toast').textContent()).includes('Shared knowledge was not changed'));
+          await page.setViewportSize({width:390,height:844});
+          check('390px no overflow',await page.evaluate(()=>document.documentElement.scrollWidth===document.documentElement.clientWidth));
+          await page.screenshot({path:'casepath/reports/v6-live/05-mobile-390.png',fullPage:false});
+          await page.setViewportSize({width:320,height:700});
+          check('320px no overflow',await page.evaluate(()=>document.documentElement.scrollWidth===document.documentElement.clientWidth));
+          check('No browser errors',errors.length===0,errors.join('; '));
+          const report={url,release:'6.0.0',verifiedAt:new Date().toISOString(),passed:checks.filter(x=>x.passed).length,failed:checks.filter(x=>!x.passed).length,checks,errors};
+          fs.writeFileSync('casepath/reports/v6-live/browser-qa.json',JSON.stringify(report,null,2));
+          await browser.close();
+          EOF
+          node /tmp/verify-casepath-v6.mjs
+
+      - name: Verify public assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for asset in / /health.json /release.json /data/north-star-claim.json /data/north-star-expected.json /src/pipeline.js /src/northstar-ui.js /assets/styles.css; do
+            code=$(curl -LsS -o /dev/null -w '%{http_code}' "https://casepath-swiss-claim-lab.onrender.com${asset}")
+            test "$code" = 200
+          done
+          printf '{"status":"passed","verifiedAt":"%s","release":"6.0.0"}\n' "$(date -u +%FT%TZ)" > casepath/reports/v6-live/http-assets.json
+
+      - name: Commit live verification evidence
+        shell: bash
+        run: |
+          git config user.name 'CasePath release verification'
+          git config user.email 'actions@users.noreply.github.com'
+          git add casepath/reports/v6-live
+          git commit -m 'Add live CasePath v6 verification evidence [skip ci]'
+          git push origin HEAD:master
