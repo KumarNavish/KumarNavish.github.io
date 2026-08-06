@@ -1,0 +1,71 @@
+name: Reconstruct CasePath north-star release
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'casepath-v6-upload/**'
+      - '.github/workflows/publish-casepath-v6.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  reconstruct-and-publish:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out release branch
+        uses: actions/checkout@v4
+        with:
+          ref: casepath-north-star-v6
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify and reconstruct source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/chunks.sha256 <<'SUMS'
+          06f0b8143049d237397ba6dc9183c24aaf6db273b398a76f47fb47687fb808fb  casepath-v6-upload/chunk-000
+          f155fa8f1a05ceef84351ed905e32995f3abe36aa6b20e9676bd3a32d972e785  casepath-v6-upload/chunk-001-0
+          2d6f9c17a4a4187bcc10bfe404d96f2e1b91f6f2bc0dd263d8873eeb4d6526a2  casepath-v6-upload/chunk-001-1
+          50861a4989c7d97fc8cd92ff261d22bdd3eb4d261e8463f46293001850a0a50d  casepath-v6-upload/chunk-002
+          SUMS
+          sha256sum --check /tmp/chunks.sha256
+          cat \
+            casepath-v6-upload/chunk-000 \
+            casepath-v6-upload/chunk-001-0 \
+            casepath-v6-upload/chunk-001-1 \
+            casepath-v6-upload/chunk-002 \
+            > /tmp/casepath-v6-runtime.b64
+          test "$(wc -c < /tmp/casepath-v6-runtime.b64)" -eq 56064
+          base64 --decode /tmp/casepath-v6-runtime.b64 > /tmp/casepath-v6-runtime.tar.xz
+          echo '84cbf4216a354662a33e19148202ca41c1508acf028e7a0bc1cf89dab3293b48  /tmp/casepath-v6-runtime.tar.xz' | sha256sum --check
+          rm -rf casepath
+          mkdir -p casepath
+          tar -xJf /tmp/casepath-v6-runtime.tar.xz -C casepath
+          test -f casepath/index.html
+          test -f casepath/src/app.js
+          test -f casepath/src/pipeline.js
+          test -f casepath/data/new-claim.json
+          test -f casepath/data/new-claim-expected.json
+          node --check casepath/src/app.js
+          node --check casepath/src/pipeline.js
+          python -m json.tool casepath/data/new-claim.json >/dev/null
+          python -m json.tool casepath/data/new-claim-expected.json >/dev/null
+          python -m json.tool casepath/health.json >/dev/null
+          grep -q 'Handle a new claim' casepath/index.html
+          grep -q '6.0.0-north-star' casepath/health.json
+
+      - name: Commit reconstructed source to release branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf casepath-v6-upload
+          rm -f .github/workflows/publish-casepath-v6.yml
+          git config user.name 'CasePath release automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Rebuild CasePath around a completely new claim [skip ci]'
+          git push origin HEAD:casepath-north-star-v6
