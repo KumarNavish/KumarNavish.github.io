@@ -5,10 +5,15 @@ on:
     branches: [master]
     paths:
       - '.github/workflows/reconstruct-casepath-premium-v5-default.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - '.casepath-premium/**'
   workflow_dispatch:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   reconstruct:
@@ -22,6 +27,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [ ! -f .casepath-premium/chunk-000 ]; then
+            echo 'CasePath premium payload already reconstructed.'
+            exit 0
+          fi
           cat > /tmp/chunks.sha256 <<'EOF'
           fcd8ca49986aa7b284862b051eb753a77330125f6b36da8f02854545b3167612  .casepath-premium/chunk-000
           2c25119f9eac793b8bab0a7686efc9b94b7540bc3b33d4d58aa9dbde1cc0a19d  .casepath-premium/chunk-001
@@ -48,10 +57,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [ ! -d .casepath-premium ]; then
+            echo 'No transport directory remains.'
+            exit 0
+          fi
           rm -rf .casepath-premium
           rm -f .github/workflows/reconstruct-casepath-premium-v5.yml
           git config user.name 'CasePath release automation'
           git config user.email 'actions@users.noreply.github.com'
           git add -A
+          git diff --cached --quiet && exit 0
           git commit -m 'Rebuild CasePath as a premium minimal claim workspace [skip ci]'
           git push origin HEAD:casepath-premium-v5
