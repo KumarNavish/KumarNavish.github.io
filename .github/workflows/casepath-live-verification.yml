@@ -128,7 +128,9 @@ jobs:
 
           await page.setViewportSize({ width: 390, height: 844 });
           await page.goto(url, { waitUntil: 'networkidle', timeout: 120000 });
-          await page.getByText('Claim library', { exact: true }).waitFor();
+          await page.locator('#app .app-shell').waitFor({ state: 'attached', timeout: 30000 });
+          if (await page.getByText('Claim library', { exact: true }).count() < 1) throw new Error('Mobile claim library is missing from the DOM');
+          if (await page.locator('[data-claim]').count() < 8) throw new Error('Mobile claim cards are missing from the DOM');
           const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
           if (overflow > 1) throw new Error(`Mobile horizontal overflow: ${overflow}px`);
           await page.screenshot({ path: 'live-qa/mobile-claim-journey.png', fullPage: true });
