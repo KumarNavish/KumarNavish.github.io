@@ -1,18 +1,22 @@
 name: Reconstruct CasePath north-star release
 
 on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/casepath-north-star-reconstruct.yml'
   pull_request:
     branches: [master]
     paths:
       - 'casepath-v6-upload/**'
       - '.github/workflows/publish-casepath-v6.yml'
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   reconstruct-and-publish:
-    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - name: Check out release branch
