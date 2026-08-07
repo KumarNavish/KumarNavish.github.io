@@ -36,3 +36,5 @@ jobs:
           git add casepath/reports/v7-live
           git commit -m 'Add CasePath v7 live browser QA [skip ci]' || true
           git push origin HEAD:master
+
+# Triggered after the workflow existed on master.
