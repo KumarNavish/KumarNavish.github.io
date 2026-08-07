@@ -30,7 +30,7 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in $(seq 1 40); do
-            if curl --retry 2 --retry-all-errors --connect-timeout 20 --max-time 90 -fsSL "$CASEPATH_URL/health.json" | grep -q '"release": "7.0.0"'; then
+            if curl --retry 2 --retry-all-errors --connect-timeout 20 --max-time 90 -fsSL "$CASEPATH_URL/health.json?release=7.0.0" | grep -q '"release": "7.0.0"'; then
               echo "CasePath v7 is live"
               exit 0
             fi
@@ -46,10 +46,10 @@ jobs:
           set -euo pipefail
           mkdir -p casepath/reports/v7-live
           for asset in / /health.json /release.json /data/manifest.json; do
-            code=$(curl --retry 4 --retry-all-errors --connect-timeout 20 --max-time 120 -LsS -o /tmp/casepath-asset -w '%{http_code}' "$CASEPATH_URL$asset")
+            code=$(curl --retry 4 --retry-all-errors --connect-timeout 20 --max-time 120 -LsS -o /tmp/casepath-asset -w '%{http_code}' "$CASEPATH_URL$asset?v=7.0.0")
             test "$code" = 200
           done
-          curl -fsSL "$CASEPATH_URL/" -o /tmp/live-index.html
+          curl -fsSL "$CASEPATH_URL/?v=7.0.0" -o /tmp/live-index.html
           grep -F '<title>CasePath — Claim workspace</title>' /tmp/live-index.html
           grep -F 'Where it is blocked' /tmp/live-index.html
           echo '231c7ecbde9d2f635d7aa59c51df04878504e3c75772860601e240584f3c1cd8  /tmp/live-index.html' | sha256sum --check
@@ -78,7 +78,7 @@ jobs:
           page.on('console',m=>{if(m.type()==='error')errors.push(`console:${m.text()}`)});
           page.on('pageerror',e=>errors.push(`pageerror:${e.message}`));
           const check=(name,value,detail='')=>{checks.push({name,passed:Boolean(value),detail});if(!value)throw new Error(`${name}: ${detail}`)};
-          const go=async hash=>{const r=await page.goto(`${root}/${hash||''}`,{waitUntil:'networkidle',timeout:120000});check(`HTTP 200 ${hash||'/'}`,r?.status()===200,String(r?.status()));};
+          const go=async hash=>{const r=await page.goto(`${root}/?v=7.0.0${hash||''}`,{waitUntil:'networkidle',timeout:120000});check(`HTTP 200 ${hash||'/'}`,r?.status()===200,String(r?.status()));};
 
           await go('#/new');
           check('Minimal navigation',(await page.locator('.global-nav button').count())===3);
@@ -152,6 +152,7 @@ jobs:
         run: |
           git config user.name 'CasePath live verification'
           git config user.email 'actions@users.noreply.github.com'
+          git pull --rebase origin master
           git add casepath/reports/v7-live
           git commit -m 'Add CasePath v7 live QA evidence [skip ci]'
           git push origin HEAD:master
