@@ -38,3 +38,4 @@ jobs:
           git push origin HEAD:master
 
 # Triggered after the workflow existed on master.
+# Rerun after correcting navigation waits and hash-route checks.
