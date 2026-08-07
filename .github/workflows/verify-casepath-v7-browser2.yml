@@ -5,6 +5,7 @@ on:
     branches: [master]
     paths:
       - '.github/workflows/verify-casepath-v7-browser2.yml'
+      - 'casepath/tools/v7-live-browser-qa.mjs'
   workflow_dispatch:
 
 permissions:
@@ -38,4 +39,4 @@ jobs:
           git push origin HEAD:master
 
 # Triggered after the workflow existed on master.
-# Rerun after correcting navigation waits and hash-route checks.
+# Final rerun after correcting navigation waits and same-document routes.
