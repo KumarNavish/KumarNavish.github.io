@@ -1,0 +1,121 @@
+{
+  "release": "10.0.0",
+  "generated_artifacts": "created at build by casepath-api/generate_artifacts.py",
+  "file_count": 19,
+  "files": [
+    {
+      "path": "casepath/README.md",
+      "size_bytes": 279,
+      "sha256": "b563ee2491542842a0add42554f94e85519c0c8fd9c1c62eea6c0a1b94a14276",
+      "executable": false
+    },
+    {
+      "path": "casepath/_headers",
+      "size_bytes": 157,
+      "sha256": "6e53bbc8fc566e855ea77a92ba20f78a885bece8cc1c3b2b1f6e6f432f5a9cd0",
+      "executable": false
+    },
+    {
+      "path": "casepath/assets/app.js",
+      "size_bytes": 30075,
+      "sha256": "cd37a257706a60448fe1b42bbed14f48067bef549c30ceb1bfbb502a6d32a101",
+      "executable": false
+    },
+    {
+      "path": "casepath/assets/styles.css",
+      "size_bytes": 25661,
+      "sha256": "c0b99a741af5d5c84fc7aaea2fa32b8ca8aad392eab5115fbc96402b39661258",
+      "executable": false
+    },
+    {
+      "path": "casepath/index.html",
+      "size_bytes": 10935,
+      "sha256": "7ee000b032c78267fcf0479f4773024a0b46e25215b1e95c3b936b2513eee0c6",
+      "executable": false
+    },
+    {
+      "path": "casepath/release.json",
+      "size_bytes": 253,
+      "sha256": "e3bd7a92b3cf30f1e7dab80809cb93691a6716bebfe85f4dbb6315d215cb6980",
+      "executable": false
+    },
+    {
+      "path": "casepath/source-manifest.json",
+      "size_bytes": 8647,
+      "sha256": "f83dfba215f7e80106041148cb040b36f5dceb2e363d1342f80fbd31f4379a1b",
+      "executable": false
+    },
+    {
+      "path": "casepath/tools/browser_qa.py",
+      "size_bytes": 9405,
+      "sha256": "ee0d546fdf234d66aa066ddf6cd63678a61f46d0ffadae2835613c89218704e3",
+      "executable": false
+    },
+    {
+      "path": "casepath-api/README.md",
+      "size_bytes": 875,
+      "sha256": "c4c35b787ab1344d176d8059ed35f768f00ed6398c17727b13f17dd5a1845d44",
+      "executable": false
+    },
+    {
+      "path": "casepath-api/casepath_api/__init__.py",
+      "size_bytes": 23,
+      "sha256": "75e5d191c344a5bdf61c1ee3e720661cb2d0c38e8d3bfb90b587b8107303c92e",
+      "executable": false
+    },
+    {
+      "path": "casepath-api/casepath_api/app.py",
+      "size_bytes": 4520,
+      "sha256": "e5cfcd03037a1cff5acc88af24ad448a77d9aaa2ca6afec33c286008957cf3ff",
+      "executable": false
+    },
+    {
+      "path": "casepath-api/casepath_api/data.py",
+      "size_bytes": 10983,
+      "sha256": "612662e1b5c43d0926ccd74dffe3c392a93737c4f23378eddf6bbd7253e569ca",
+      "executable": false
+    },
+    {
+      "path": "casepath-api/casepath_api/pipeline.py",
+      "size_bytes": 31368,
+      "sha256": "87bdaa1ec925ea5bf6d9f91eed41141bac91de6c0b7ae511cddc7663bfbad911",
+      "executable": false
+    },
+    {
+      "path": "casepath-api/casepath_api/storage.py",
+      "size_bytes": 7160,
+      "sha256": "a419cd45fe3ddf64195072ca164e8d8d44d0b4bba692c6cd0197fe3cbafa2184",
+      "executable": false
+    },
+    {
+      "path": "casepath-api/generate_artifacts.py",
+      "size_bytes": 19332,
+      "sha256": "b59e7571e7886a4209e12d3934035b0d106038e35fd65b08a5c51c4a1419c6a3",
+      "executable": false
+    },
+    {
+      "path": "casepath-api/render-build.sh",
+      "size_bytes": 171,
+      "sha256": "04d762b05b671c78c59f7dc41703bd8daeff8e5dcb63d7f08e0a6cdf611e8ca0",
+      "executable": true
+    },
+    {
+      "path": "casepath-api/requirements.txt",
+      "size_bytes": 165,
+      "sha256": "15ddee8c6fcc95cb3ce37bc2522ab886a52787878383f087b06d2717e16ef466",
+      "executable": false
+    },
+    {
+      "path": "casepath-api/start.sh",
+      "size_bytes": 110,
+      "sha256": "17a5fce00f7529f797f1169f72b396a3ad117c3e424ad2ccbfb6eb4bd22b13fc",
+      "executable": true
+    },
+    {
+      "path": "casepath-api/tests/test_pipeline.py",
+      "size_bytes": 5124,
+      "sha256": "b3502dc51b582368a77f1a7eec96a4f6a224c715a3a695e3908fdef114ec7dee",
+      "executable": false
+    }
+  ]
+}
