@@ -1,15 +1,5 @@
-# CasePath Swiss Claim Lab — v7
+# CasePath frontend
 
-Public URL: **https://casepath-swiss-claim-lab.onrender.com/**
+Static frontend for the focused CasePath v10 demonstration. The browser reads original generated source artifacts from the API and keeps the source file separate from the agent extraction.
 
-CasePath turns a new, imperfect claim submission into a clear handling process, the evidence still needed, prepared documents, similar precedents, and the next safe action.
-
-## Product structure
-
-- **Claims** — new-claim intake, calm inbox, and the complete claim workspace
-- **Knowledge** — process questions, evidence needs, reviewed cases, and proposed improvements
-- **System** — replaceable module contracts and release details
-
-## Safety boundary
-
-This is a generated-data research demonstration. It is not approved for real claim processing, customer communication, legal advice, coverage decisions, or autonomous shared-knowledge changes.
+Production API default: `https://casepath-agentic-api.onrender.com`
