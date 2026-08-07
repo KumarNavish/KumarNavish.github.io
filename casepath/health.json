@@ -1,12 +1,11 @@
 {
   "status": "ok",
   "product": "CasePath Swiss Claim Lab",
-  "release": "4.0.0",
-  "benchmark": "1.2.0-generated",
+  "release": "7.0.0",
+  "experience": "process-first-new-claim-workspace",
   "generatedDataOnly": true,
   "realClaimsApproved": false,
   "customerContactApproved": false,
   "legalAdviceApproved": false,
-  "liveProfile": "visitor-controlled OpenRouter key",
-  "referenceModel": "nvidia/nemotron-3-super-120b-a12b:free"
+  "deployedFrom": "master/casepath"
 }
