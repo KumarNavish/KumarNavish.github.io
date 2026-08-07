@@ -1,0 +1,77 @@
+name: Publish CasePath v10 useful demo
+
+on:
+  push:
+    branches: [casepath-useful-demo-v10]
+    paths:
+      - '.github/workflows/publish-casepath-v10.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-casepath-v10
+  cancel-in-progress: false
+
+jobs:
+  reconstruct-test-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: casepath-useful-demo-v10
+          fetch-depth: 0
+
+      - name: Reconstruct the exact tested source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > /tmp/parts.sha256 <<'EOF'
+          f40a6a4d180ad5dd0289bbc34495743c9af123b9b381574fb2e2ed98e0b98cce  casepath-v10-archive/part-00
+          19c2fef7bdfee9daf705618a2a08f821fc679b9e8215cfac94fd93d541d835c6  casepath-v10-archive/part-01
+          3ab09cddd818638e3336a83ed80adb363188a879f2bee86e6d94517ee23da22e  casepath-v10-archive/part-02
+          280798a6359b42174090aeffa9811e5b666e033db52ab85f09514d121a61bc85  casepath-v10-archive/part-03
+          f30c5ec2b68de04f31354e4a23d0ef0c00bb3053ffd30774b31c4540687b9767  casepath-v10-archive/part-04
+          1cfb7012233139fa4c4fa3652ebb10f80c5865bd63ee8348fcbb284d78a97666  casepath-v10-archive/part-05
+          3e76314afedcaf180210f3444522b5effe41f34fbb7a86b6ebe1e477f12ebf25  casepath-v10-archive/part-06
+          EOF
+          sha256sum --check /tmp/parts.sha256
+          cat casepath-v10-archive/part-* > /tmp/casepath-v10.b64
+          test "$(wc -c < /tmp/casepath-v10.b64)" -eq 51920
+          base64 --decode /tmp/casepath-v10.b64 > /tmp/casepath-v10.tar.xz
+          echo '668fc69918b5cda15214f66476c91ee1afb6a5c3842bdf9ce7829c8fa0024d11  /tmp/casepath-v10.tar.xz' | sha256sum --check
+          rm -rf casepath casepath-api
+          tar -xJf /tmp/casepath-v10.tar.xz
+          printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail' 'exec uvicorn casepath_api.app:app --app-dir casepath-api --host 0.0.0.0 --port "${PORT:-8000}"' > casepath-api/start.sh
+          chmod +x casepath-api/start.sh casepath-api/render-build.sh
+          test -f casepath/index.html
+          test -f casepath/assets/app.js
+          test -f casepath-api/casepath_api/app.py
+          ! grep -R '/mnt/data/' casepath casepath-api
+
+      - name: Install and verify the release candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install -r casepath-api/requirements.txt pytest
+          python casepath-api/generate_artifacts.py
+          PYTHONPATH=casepath-api pytest -q casepath-api/tests/test_pipeline.py
+          node --check casepath/assets/app.js
+          python -m compileall -q casepath-api/casepath_api
+          test "$(find casepath-api/artifacts -type f | wc -l)" -ge 20
+
+      - name: Commit the clean deployable source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf casepath-api/artifacts casepath-v10-archive casepath-v10-upload
+          rm -f casepath-v10-upload-diagnostic.txt
+          rm -f .github/workflows/publish-casepath-v10.yml
+          git config user.name 'CasePath release automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Publish CasePath v10 focused useful demo [skip ci]'
+          git push origin HEAD:casepath-useful-demo-v10
