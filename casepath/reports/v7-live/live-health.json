@@ -1,0 +1,11 @@
+{
+  "status": "ok",
+  "product": "CasePath Swiss Claim Lab",
+  "release": "7.0.0",
+  "experience": "process-first-new-claim-workspace",
+  "generatedDataOnly": true,
+  "realClaimsApproved": false,
+  "customerContactApproved": false,
+  "legalAdviceApproved": false,
+  "deployedFrom": "master/casepath"
+}
