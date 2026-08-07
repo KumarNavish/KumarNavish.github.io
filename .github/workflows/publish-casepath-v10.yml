@@ -5,6 +5,8 @@ on:
     branches: [casepath-useful-demo-v10]
     paths:
       - '.github/workflows/publish-casepath-v10.yml'
+  pull_request:
+    branches: [master]
   workflow_dispatch:
 
 permissions:
@@ -64,6 +66,7 @@ jobs:
           test "$(find casepath-api/artifacts -type f | wc -l)" -ge 20
 
       - name: Commit the clean deployable source
+        if: github.event_name != 'pull_request'
         shell: bash
         run: |
           set -euo pipefail
