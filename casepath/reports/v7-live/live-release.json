@@ -1,7 +1,0 @@
-{
-  "release": "7.0.0",
-  "productModel": "CasePath turns a new claim submission into a clear handling process, targeted evidence needs, prepared documents, and the next safe action.",
-  "navigation": ["Claims", "Knowledge", "System"],
-  "primaryJourney": "new claim -> analysis -> process -> evidence -> documents -> precedents -> expert review",
-  "sourceSha256": "231c7ecbde9d2f635d7aa59c51df04878504e3c75772860601e240584f3c1cd8"
-}
