@@ -1,1 +1,0 @@
-window.__CASEPATH_DATA__={claims:{contract:'casepath.public-demo-claims/1.0.0',claims:window.__CP_CLAIMS},knowledge:window.__CP_KNOWLEDGE,profiles:window.__CP_DATA.profiles,metrics:window.__CP_DATA.metrics,manifest:window.__CP_DATA.manifest};
