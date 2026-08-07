@@ -1,5 +1,0 @@
-  .checklist-card .checklist { grid-template-columns: 1fr; }
-}
-
-.check-item { grid-template-columns: 26px minmax(0, 1fr); }
-.check-item > .pill { grid-column: 2; justify-self: start; max-width: none; }
