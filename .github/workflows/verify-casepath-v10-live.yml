@@ -1,0 +1,61 @@
+name: Verify CasePath v10 live journey
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/verify-casepath-v10-live.yml'
+      - 'casepath/tools/v10-live-qa.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: verify-casepath-v10-live
+  cancel-in-progress: false
+
+jobs:
+  live-browser-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CASEPATH_FRONTEND: https://casepath-swiss-claim-lab.onrender.com
+      CASEPATH_API: https://casepath-agentic-api.onrender.com
+      CASEPATH_QA_OUT: casepath/reports/v10-live
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Chromium QA runtime
+        run: |
+          npm install playwright@1.55.0 --no-save
+          npx playwright install --with-deps chromium
+
+      - name: Exercise the deployed claim journey
+        run: node casepath/tools/v10-live-qa.mjs
+
+      - name: Persist deployed evidence
+        if: always()
+        run: |
+          git config user.name 'CasePath live verification'
+          git config user.email 'actions@users.noreply.github.com'
+          git add casepath/reports/v10-live || true
+          if ! git diff --cached --quiet; then
+            git commit -m 'Add CasePath v10 live journey evidence [skip ci]'
+            git push origin HEAD:master
+          fi
+
+      - name: Enforce acceptance result
+        if: always()
+        run: |
+          test -f casepath/reports/v10-live/live-browser-qa.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path('casepath/reports/v10-live/live-browser-qa.json').read_text())
+          assert report['success'] is True, report
+          assert report['failed'] == 0, report
+          assert report['browser_errors'] == [], report
+          PY
