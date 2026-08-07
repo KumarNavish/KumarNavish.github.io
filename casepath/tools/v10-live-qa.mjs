@@ -56,9 +56,12 @@ const url = `${FRONTEND}/?qa=${Date.now()}`;
 const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });
 add('Frontend returns HTTP 200', response?.status() === 200, `status=${response?.status()}`);
 await page.getByRole('heading', { name: /Recurring mould/i }).waitFor({ timeout: 120000 });
-add('Demo claim loads', await page.getByText('DEF-027-E0-DEMO', { exact: false }).isVisible(), 'DEF-027-E0-DEMO visible');
-add('Original customer message is visible', await page.getByText(/moisture and black spots have returned/i).isVisible(), 'message visible');
-add('Six source attachments are listed', await page.locator('.attachment-row').count() === 6, `count=${await page.locator('.attachment-row').count()}`);
+await page.locator('#claimMeta').getByText('DEF-027-E0-DEMO', { exact: false }).waitFor({ timeout: 120000 });
+await page.getByText(/moisture and black spots have returned/i).waitFor({ state: 'visible', timeout: 120000 });
+await page.waitForFunction(() => document.querySelectorAll('.attachment-row').length === 6, null, { timeout: 120000 });
+add('Demo claim loads', true, 'DEF-027-E0-DEMO visible');
+add('Original customer message is visible', true, 'message visible');
+add('Six source attachments are listed', true, 'count=6');
 await page.screenshot({ path: path.join(OUT, '01-submission.png'), fullPage: true });
 
 await page.getByRole('button', { name: /Residential lease agreement/i }).click();
