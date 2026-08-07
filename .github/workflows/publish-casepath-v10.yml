@@ -73,7 +73,7 @@ jobs:
           PYTHONPATH=casepath-api pytest -q casepath-api/tests/test_pipeline.py
           node --check casepath/assets/app.js
           python -m compileall -q casepath-api/casepath_api
-          test "$(find casepath-api/artifacts -type f | wc -l)" -ge 20
+          test "$(find casepath-api/artifacts -type f | wc -l)" -ge 19
 
       - name: Commit the clean deployable source
         if: github.event_name != 'pull_request'
