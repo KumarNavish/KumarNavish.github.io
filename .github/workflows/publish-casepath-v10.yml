@@ -31,7 +31,8 @@ jobs:
         run: |
           set -euo pipefail
           cat > /tmp/parts.sha256 <<'EOF'
-          f40a6a4d180ad5dd0289bbc34495743c9af123b9b381574fb2e2ed98e0b98cce  casepath-v10-archive/part-00
+          4045bb1c1d30a8d8665f63e1f3d4831fa598c4fccda45fde9950c7d947f2ab9d  casepath-v10-archive/part-00a
+          d4c62836e4e470019422d2001cc397812ea686ac3d7d6d1c026aac9fa42ea88b  casepath-v10-archive/part-00b
           19c2fef7bdfee9daf705618a2a08f821fc679b9e8215cfac94fd93d541d835c6  casepath-v10-archive/part-01
           3ab09cddd818638e3336a83ed80adb363188a879f2bee86e6d94517ee23da22e  casepath-v10-archive/part-02
           280798a6359b42174090aeffa9811e5b666e033db52ab85f09514d121a61bc85  casepath-v10-archive/part-03
@@ -40,7 +41,16 @@ jobs:
           3e76314afedcaf180210f3444522b5effe41f34fbb7a86b6ebe1e477f12ebf25  casepath-v10-archive/part-06
           EOF
           sha256sum --check /tmp/parts.sha256
-          cat casepath-v10-archive/part-* > /tmp/casepath-v10.b64
+          cat \
+            casepath-v10-archive/part-00a \
+            casepath-v10-archive/part-00b \
+            casepath-v10-archive/part-01 \
+            casepath-v10-archive/part-02 \
+            casepath-v10-archive/part-03 \
+            casepath-v10-archive/part-04 \
+            casepath-v10-archive/part-05 \
+            casepath-v10-archive/part-06 \
+            > /tmp/casepath-v10.b64
           test "$(wc -c < /tmp/casepath-v10.b64)" -eq 51920
           base64 --decode /tmp/casepath-v10.b64 > /tmp/casepath-v10.tar.xz
           echo '668fc69918b5cda15214f66476c91ee1afb6a5c3842bdf9ce7829c8fa0024d11  /tmp/casepath-v10.tar.xz' | sha256sum --check
