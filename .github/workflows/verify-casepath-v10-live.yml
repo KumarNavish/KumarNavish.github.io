@@ -74,3 +74,5 @@ jobs:
           assert report['failed'] == 0, report
           assert report['browser_errors'] == [], report
           PY
+
+# Pull-request run used to retain downloadable acceptance evidence.
