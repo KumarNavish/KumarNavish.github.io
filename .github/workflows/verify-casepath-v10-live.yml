@@ -59,3 +59,5 @@ jobs:
           assert report['failed'] == 0, report
           assert report['browser_errors'] == [], report
           PY
+
+# Explicit trigger after both the workflow and test script existed on master.
