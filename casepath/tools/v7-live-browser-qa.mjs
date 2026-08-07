@@ -16,7 +16,9 @@ try {
   page.on('pageerror', e => errors.push(`pageerror:${e.message}`));
   const go = async hash => {
     const response = await page.goto(`${root}/?v=7.0.0${hash || ''}`, { waitUntil: 'networkidle', timeout: 120000 });
-    record(`HTTP 200 ${hash || '/'}`, response?.status() === 200, String(response?.status()));
+    const sameDocument = response === null;
+    record(`Route available ${hash || '/'}`, sameDocument || response?.status() === 200, sameDocument ? 'same-document hash navigation' : String(response?.status()));
+    await page.waitForTimeout(120);
   };
 
   await go('#/new');
@@ -52,23 +54,29 @@ try {
   record('Review remains case-local', (await page.getByText('Review saved for this claim. Shared knowledge has not changed.').count()) === 1);
 
   await page.locator('[data-route="claims"]').first().click();
+  await page.getByRole('heading', { name: 'Claims', exact: true }).waitFor();
   record('Calm inbox', (await page.locator('.claim-row:not(.header)').count()) === 8);
   await page.screenshot({ path: `${outDir}/04-claims-inbox.png` });
   await page.locator('#claimSearch').fill('heating');
   record('Inbox search', (await page.locator('.claim-row:not(.header)').count()) === 1);
 
   await page.locator('[data-route="knowledge"]').first().click();
+  await page.getByRole('heading', { name: 'Ask the claim knowledge.' }).waitFor();
   record('Knowledge surface', (await page.locator('.knowledge-section').count()) === 3);
   await page.locator('[data-route="system"]').first().click();
+  await page.getByRole('heading', { name: 'System', exact: true }).waitFor();
   record('System contracts', (await page.locator('.module-row').count()) === 7);
 
   await go('#/state/offline');
+  await page.getByRole('heading', { name: 'You are offline' }).waitFor();
   record('Offline state', (await page.getByRole('heading', { name: 'You are offline' }).count()) === 1);
   await go('#/state/quota');
+  await page.getByRole('heading', { name: 'Today’s live-analysis limit is reached' }).waitFor();
   record('Quota state', (await page.getByRole('heading', { name: 'Today’s live-analysis limit is reached' }).count()) === 1);
 
   await page.setViewportSize({ width: 390, height: 844 });
   await go('#/claim/NEW-BS-2026-001');
+  await page.getByRole('heading', { name: 'Recurring mould after renovation' }).waitFor();
   const overflow390 = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   record('390px no overflow', overflow390 <= 1, String(overflow390));
   record('Mobile navigation', await page.locator('.mobile-bottom').isVisible());
@@ -76,6 +84,7 @@ try {
 
   await page.setViewportSize({ width: 320, height: 700 });
   await go('#/claim/NEW-BS-2026-001');
+  await page.getByRole('heading', { name: 'Recurring mould after renovation' }).waitFor();
   const overflow320 = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   record('320px no overflow', overflow320 <= 1, String(overflow320));
   await page.screenshot({ path: `${outDir}/06-workspace-320x700.png` });
