@@ -1,0 +1,38 @@
+name: Verify CasePath v7 browser release
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/verify-casepath-v7-browser2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  live-browser-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v1.55.0-noble
+      options: --user 0
+    env:
+      CASEPATH_URL: https://casepath-swiss-claim-lab.onrender.com
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: npm init -y >/dev/null 2>&1 && npm install --no-save playwright@1.55.0 >/dev/null
+      - run: node casepath/tools/v7-live-browser-qa.mjs
+      - name: Commit evidence
+        if: always()
+        shell: bash
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config user.name 'CasePath live browser QA'
+          git config user.email 'actions@users.noreply.github.com'
+          git pull --rebase origin master
+          git add casepath/reports/v7-live
+          git commit -m 'Add CasePath v7 live browser QA [skip ci]' || true
+          git push origin HEAD:master
