@@ -1,7 +1,7 @@
 {
-  "release": "10.0.0",
-  "product": "CasePath useful demo",
+  "release": "11.0.0",
+  "product": "CasePath deep process workspace",
   "demo_claim": "DEF-027-E0-DEMO",
-  "journey": "source artifacts -> visible pipeline -> process and evidence -> expert review -> case memory -> later claim",
+  "journey": "source artifacts -> visible pipeline -> claim-specific decision tree -> process-linked evidence -> expert review -> case memory -> later claim",
   "generated_data_only": true
 }
