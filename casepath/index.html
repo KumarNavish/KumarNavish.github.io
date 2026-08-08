@@ -3,196 +3,62 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="description" content="CasePath reads a realistic generated claim, builds the handling process, explains the evidence still needed, and turns expert review into reusable case memory.">
   <meta name="theme-color" content="#ffffff">
-  <title>CasePath — See one claim handled from start to finish</title>
-  <link rel="stylesheet" href="assets/styles.css">
-  <link rel="stylesheet" href="assets/process-v11.css">
+  <meta name="description" content="CasePath v12.0.1 — realistic source evidence, claim-specific process reasoning, process-bound evidence and expert-reviewed learning.">
+  <title>CasePath — Loading the v12 flagship claim</title>
+  <style>
+    :root{color-scheme:light;font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f8f9fb;color:#142033}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;background:#f8f9fb;display:grid;place-items:center;padding:28px}
+    main{width:min(680px,100%);background:#fff;border:1px solid #e4e8ef;border-radius:16px;padding:38px 40px;box-shadow:0 24px 68px rgba(22,38,65,.10)}
+    .brand{display:flex;align-items:center;gap:10px;font-weight:780}.mark{width:32px;height:32px;border-radius:9px;background:#c8102e;color:#fff;display:grid;place-items:center;font-size:11px;font-weight:850}
+    h1{font-size:clamp(30px,5vw,46px);letter-spacing:-.045em;line-height:1.05;margin:34px 0 12px}p{color:#667085;line-height:1.6;margin:0}.status{display:flex;gap:12px;align-items:center;margin-top:26px;padding-top:20px;border-top:1px solid #e4e8ef;font-size:13px}.pulse{width:10px;height:10px;border-radius:50%;background:#c8102e;animation:pulse 1.15s ease-in-out infinite}.detail{font-size:11px;margin-top:10px;color:#98a2b3}
+    button{margin-top:22px;border:0;border-radius:9px;background:#c8102e;color:#fff;padding:12px 16px;font:inherit;font-weight:730;cursor:pointer}button[hidden]{display:none}
+    @keyframes pulse{50%{opacity:.32;transform:scale(.72)}}@media(prefers-reduced-motion:reduce){.pulse{animation:none}}@media(max-width:520px){main{padding:28px 24px;border-radius:12px}}
+  </style>
 </head>
 <body>
-  <a class="skip-link" href="#main">Skip to the claim</a>
-  <header class="topbar">
-    <div class="topbar-inner">
-      <a class="brand" href="#submission" aria-label="CasePath demo home"><span class="brand-mark">CP</span><span>CasePath</span></a>
-      <div class="topbar-copy">One claim. One visible handling journey.</div>
-      <div class="topbar-actions">
-        <button class="text-button" id="browseClaimsBtn" type="button">Claims</button>
-        <button class="text-button" id="openAuditTop" type="button">Audit trail</button>
-      </div>
-    </div>
-  </header>
-
-  <main id="main">
-    <section class="intro" id="submission">
-      <div class="intro-copy">
-        <p class="context-label">Generated Swiss tenant-law claim</p>
-        <h1>Recurring mould. The landlord blames ventilation.</h1>
-        <p class="intro-lede">See exactly what arrived, watch CasePath work through it, review the process and evidence, then see the approved experience help with the next claim.</p>
-        <div class="claim-meta" id="claimMeta"></div>
-      </div>
-      <button class="primary-action" id="analyseBtn" type="button">
-        <span>Analyse claim</span>
-        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-      </button>
-    </section>
-
-    <section class="source-section" aria-labelledby="sourceTitle">
-      <div class="section-heading">
-        <p class="section-number">01</p>
-        <div><h2 id="sourceTitle">What the customer sent</h2><p>The original message and files stay visible throughout the analysis.</p></div>
-      </div>
-      <div class="message-and-files">
-        <article class="customer-message" id="customerMessage"></article>
-        <div class="source-files">
-          <div class="source-files-head"><h3>Attachments</h3><span id="attachmentCount"></span></div>
-          <div class="attachment-list" id="attachmentList"></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="analysis-section" id="analysis" hidden aria-labelledby="analysisTitle">
-      <div class="section-heading">
-        <p class="section-number">02</p>
-        <div><h2 id="analysisTitle">CasePath is working through the claim</h2><p>Each line below is emitted by the running pipeline.</p></div>
-      </div>
-      <div class="analysis-layout">
-        <ol class="stage-list" id="stageList"></ol>
-        <div class="analysis-live" id="analysisLive" aria-live="polite">
-          <div class="live-mark"><span></span></div>
-          <div><strong>Preparing the claim</strong><p>The pipeline will begin when you select Analyse claim.</p></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="result-section" id="result" hidden aria-labelledby="resultTitle">
-      <div class="section-heading result-heading">
-        <p class="section-number">03</p>
-        <div><h2 id="resultTitle">The claim is blocked at one question</h2><p>The process, evidence and next action now follow from the same accepted claim state.</p></div>
-        <button class="secondary-action" id="openAuditResult" type="button">View audit trail</button>
-      </div>
-
-      <div class="decision-summary" id="decisionSummary"></div>
-
-      <div class="process-layout">
-        <div class="process-column">
-          <div class="subheading"><h3>Handling process</h3><p>What has been established, what is being decided, and what depends on it.</p></div>
-          <div class="process-path" id="processPath"></div>
-        </div>
-        <div class="evidence-column" id="evidenceColumn"></div>
-      </div>
-
-      <div class="facts-block">
-        <div class="subheading"><h3>What the system found</h3><p>Select any conclusion to inspect its source.</p></div>
-        <div class="facts-list" id="factsList"></div>
-      </div>
-
-      <div class="legal-block">
-        <div class="subheading"><h3>Legal questions and sources</h3><p>The retrieved sources shape the handling questions; they do not decide technical causation.</p></div>
-        <div class="law-list" id="lawList"></div>
-      </div>
-
-      <div class="precedents-block">
-        <div class="subheading"><h3>Previous claims that help</h3><p>Ranked by the same handling question, branch and evidence gap.</p></div>
-        <div class="precedent-list" id="precedentList"></div>
-      </div>
-    </section>
-
-    <section class="review-section" id="review" hidden aria-labelledby="reviewTitle">
-      <div class="section-heading">
-        <p class="section-number">04</p>
-        <div><h2 id="reviewTitle">Review the one decision that changes the work</h2><p>Correct the evidence sequence in context. CasePath will recompute the checklist immediately.</p></div>
-      </div>
-      <div class="review-layout">
-        <div class="review-decision">
-          <p class="context-label">Current process question</p>
-          <h3>What caused the recurring mould?</h3>
-          <p>The agent requests an independent inspection and a building-envelope assessment at the same time.</p>
-          <label class="review-choice">
-            <input type="radio" name="envelopeMode" value="conditional" checked>
-            <span><strong>Make the building-envelope assessment conditional</strong><small>Start with one neutral inspection. Request the more invasive assessment only if the first inspection is inconclusive.</small></span>
-          </label>
-          <label class="review-choice">
-            <input type="radio" name="envelopeMode" value="required_now">
-            <span><strong>Keep both requests immediate</strong><small>Use when the available facts justify both technical steps now.</small></span>
-          </label>
-        </div>
-        <form class="review-form" id="reviewForm">
-          <label for="reviewReason">Why?</label>
-          <textarea id="reviewReason" rows="5">Start with one neutral technical inspection. Keep broader building-envelope testing conditional on an inconclusive first assessment.</textarea>
-          <label for="reviewConfidence">Confidence</label>
-          <input id="reviewConfidence" type="range" min="0" max="100" value="92">
-          <div class="range-value"><span>Low</span><output id="confidenceOutput">92%</output><span>High</span></div>
-          <button class="primary-action full" type="submit">Approve reviewed claim</button>
-        </form>
-      </div>
-    </section>
-
-    <section class="learning-section" id="learning" hidden aria-labelledby="learningTitle">
-      <div class="section-heading">
-        <p class="section-number">05</p>
-        <div><h2 id="learningTitle">What CasePath learned</h2><p>The reviewed case is useful immediately. A shared rule remains quarantined.</p></div>
-      </div>
-      <div class="learning-now" id="learningNow"></div>
-      <button class="primary-action" id="tryLearningBtn" type="button">
-        <span>Try what CasePath learned</span>
-        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-      </button>
-    </section>
-
-    <section class="later-section" id="laterClaim" hidden aria-labelledby="laterTitle">
-      <div class="section-heading">
-        <p class="section-number">06</p>
-        <div><h2 id="laterTitle">The next claim benefits</h2><p>An unseen claim now retrieves the reviewed precedent and changes its evidence sequence.</p></div>
-      </div>
-      <div class="later-source" id="laterSource"></div>
-      <div class="before-after" id="beforeAfter"></div>
-    </section>
+  <main>
+    <div class="brand"><span class="mark">CP</span><span>CasePath</span></div>
+    <h1>Opening the flagship claim</h1>
+    <p>The v12.0.1 workspace is loading the original claim package, photographic evidence and claim-specific decision path.</p>
+    <div class="status"><span class="pulse" aria-hidden="true"></span><strong id="status">Starting the CasePath service…</strong></div>
+    <p class="detail" id="detail">Free hosting may need a short cold start. This page will continue automatically.</p>
+    <button id="retry" type="button" hidden>Retry now</button>
   </main>
-
-  <dialog class="viewer" id="artifactViewer" aria-labelledby="viewerTitle">
-    <div class="viewer-shell">
-      <header class="viewer-head">
-        <div><p class="context-label" id="viewerKind">Source document</p><h2 id="viewerTitle">Attachment</h2><p id="viewerMeta"></p></div>
-        <div class="viewer-actions">
-          <a class="icon-button" id="downloadArtifact" target="_blank" rel="noopener" aria-label="Open source file in a new tab"><svg viewBox="0 0 24 24"><path d="M14 5h5v5M13 11l6-6M19 13v6H5V5h6"/></svg></a>
-          <button class="icon-button" id="closeViewer" type="button" aria-label="Close attachment viewer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-        </div>
-      </header>
-      <div class="viewer-tabs" role="tablist" aria-label="Attachment view">
-        <button type="button" role="tab" aria-selected="true" data-viewer-tab="original">Original file</button>
-        <button type="button" role="tab" aria-selected="false" data-viewer-tab="extraction">Agent extraction</button>
-      </div>
-      <div class="viewer-body">
-        <div class="original-view" id="originalView"></div>
-        <div class="extraction-view" id="extractionView" hidden></div>
-        <aside class="source-facts" id="sourceFacts"></aside>
-      </div>
-    </div>
-  </dialog>
-
-  <dialog class="audit-drawer" id="auditDrawer" aria-labelledby="auditTitle">
-    <div class="audit-shell">
-      <header><div><p class="context-label">Complete run record</p><h2 id="auditTitle">Audit trail</h2><p>Human-readable stages above; exact agents, inputs and validators here.</p></div><button class="icon-button" id="closeAudit" type="button" aria-label="Close audit trail"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
-      <div id="auditContent" class="audit-content"></div>
-    </div>
-  </dialog>
-
-  <dialog class="claim-drawer" id="claimsDrawer" aria-labelledby="claimsTitle">
-    <div class="claim-drawer-shell">
-      <header><div><p class="context-label">Generated claim set</p><h2 id="claimsTitle">Claims in this focused demo</h2></div><button class="icon-button" id="closeClaims" type="button" aria-label="Close claims"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
-      <div id="claimDrawerList"></div>
-    </div>
-  </dialog>
-
-  <dialog class="precedent-dialog" id="precedentDialog" aria-labelledby="precedentTitle">
-    <div class="precedent-shell">
-      <header><div><p class="context-label">Reviewed organizational memory</p><h2 id="precedentTitle">Historical claim</h2></div><button class="icon-button" id="closePrecedent" type="button" aria-label="Close historical claim"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
-      <div id="precedentContent"></div>
-    </div>
-  </dialog>
-
-  <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/app.js"></script>
-  <script src="assets/process-v11.js"></script>
+  <script>
+    (()=>{
+      const API='https://casepath-agentic-api.onrender.com';
+      const SOURCE=API+'/frontend/index.html';
+      const status=document.getElementById('status');
+      const detail=document.getElementById('detail');
+      const retry=document.getElementById('retry');
+      let attempts=0;
+      const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+      async function load(){
+        retry.hidden=true;
+        for(let i=0;i<40;i+=1){
+          attempts+=1;
+          status.textContent=attempts===1?'Starting the CasePath service…':'Waiting for the v12.0.1 workspace…';
+          try{
+            const response=await fetch(SOURCE+'?release=12.0.1&attempt='+attempts,{cache:'no-store'});
+            if(!response.ok) throw new Error('HTTP '+response.status);
+            let html=await response.text();
+            if(!html.includes('flagship-v12')) throw new Error('The API has not finished deploying v12.0.1');
+            html=html.replace('<head>','<head><base href="'+API+'/frontend/">');
+            document.open();document.write(html);document.close();
+            return;
+          }catch(error){
+            detail.textContent='Attempt '+attempts+': '+error.message;
+            await wait(Math.min(3000+attempts*750,10000));
+          }
+        }
+        status.textContent='The v12.0.1 workspace did not become ready.';
+        detail.textContent='The earlier v11 page is not being shown. Retry when the API deployment is healthy.';
+        retry.hidden=false;
+      }
+      retry.addEventListener('click',load);
+      load();
+    })();
+  </script>
 </body>
 </html>
