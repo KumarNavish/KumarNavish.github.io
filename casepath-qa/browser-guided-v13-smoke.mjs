@@ -15,7 +15,7 @@ function record(name,passed,detail=''){
   if(!item.passed) throw new Error(`${name}: ${detail||'failed'}`);
 }
 async function visible(selector,timeout=120000){await page.locator(selector).waitFor({state:'visible',timeout});}
-async function screenshot(name){await page.screenshot({path:path.join(OUT,name),fullPage:false});}
+async function screenshot(name,fullPage=false){await page.screenshot({path:path.join(OUT,name),fullPage});}
 async function stageText(){return (await page.locator('#guideStage').innerText()).trim();}
 async function nextStep(expectedNumber){await page.locator('#guideNext').click();await page.waitForFunction(n=>document.querySelector('#guideStepNumber')?.textContent?.trim()===String(n),expectedNumber,{timeout:30000});}
 
@@ -53,6 +53,8 @@ async function main(){
   record('Real analysis stages are visible',await page.locator('#stageList .stage-item').count()===6);
   await screenshot('02-analysis.png');
   await page.waitForFunction(()=>{const g=document.querySelector('#guide');return g&&!g.hidden&&document.querySelector('#guideStepNumber')?.textContent?.trim()==='1';},null,{timeout:150000});
+  await page.waitForFunction(()=>document.querySelector('#analysisLive')?.innerText.includes('Process graph and evidence model ready'),null,{timeout:30000});
+  record('Analysis completion names the process graph and evidence model',/decision nodes validated|evidence items linked/i.test(await page.locator('#analysisLive').innerText()));
 
   let text=await stageText();
   record('Step 1 explains what arrived',/customer.*send|original files|original message/i.test(text),text.slice(0,220));
@@ -65,23 +67,38 @@ async function main(){
   record('Facts remain source-linked',await page.locator('.fact-summary-row').count()>=3);
 
   await nextStep(3); text=await stageText();
+  await visible('#guideStage .mvp-process-graph');
   record('Step 3 makes the current question dominant',/what.*cause|current question|process question/i.test(text),text.slice(0,220));
-  record('Current path appears before full tree',await page.locator('.path-preview .path-step').count()>=1&&await page.locator('#guideStage .branch-preview').count()===0);
+  record('How the graph was obtained is visible',await page.locator('#guideStage .mvp-origin-step').count()===4);
+  record('The actual process graph is first-class',await page.locator('#guideStage .mvp-graph-step').count()>=5,`nodes=${await page.locator('#guideStage .mvp-graph-step').count()}`);
+  record('The current process node is visually explicit',await page.locator('#guideStage .mvp-graph-step.current').count()===1);
+  record('Future remedy remains visibly blocked',await page.locator('#guideStage .mvp-graph-step.blocked').count()>=1);
+  record('Alternative branches remain collapsed initially',await page.locator('#guideStage .mvp-branch-grid[hidden]').count()===1);
+  await screenshot('04-process-graph.png',true);
   await page.locator('#guideDetail').click();
   await visible('#detailDialog[open]');
-  record('Full process is available on demand',await page.locator('#detailContent .detail-path-node').count()>=4);
-  record('Alternative branches stay collapsed',await page.locator('#detailContent details:not([open])').count()>=1);
+  record('Full process graph is available on demand',await page.locator('#detailContent .mvp-graph-step').count()>=5);
+  record('Node facts and evidence are inspectable',await page.locator('#detailContent .mvp-node-context').count()===1);
+  record('Graph and checklist validators are visible in depth',await page.locator('#detailContent .mvp-validation-grid article').count()===4);
   await page.locator('#closeDetail').click();
-  await screenshot('04-current-question.png');
 
   await nextStep(4); text=await stageText();
   record('Step 4 states the blocker',/block|unresolved|responsibility|cause/i.test(text),text.slice(0,220));
   record('Only relevant competing explanations are exposed',await page.locator('.branch-option').count()>=2);
 
   await nextStep(5); text=await stageText();
+  await visible('#guideStage .mvp-checklist-derivation');
   record('Step 5 leads with evidence that resolves the blocker',/assessment|evidence|inspection/i.test(text),text.slice(0,220));
-  record('Question to fact to evidence chain is explicit',await page.locator('.reason-chain .chain-step').count()===3);
-  await screenshot('05-evidence.png');
+  record('Process to fact to evidence to checklist is explicit',await page.locator('#guideStage .mvp-derivation-step').count()===4);
+  record('Checklist items remain linked to the current process node',await page.locator('#guideStage .mvp-checklist-row').count()>=2);
+  record('Checklist distinguishes present, needed, and conditional evidence',await page.locator('#guideStage .mvp-checklist-row.provided, #guideStage .mvp-checklist-row.needed, #guideStage .mvp-checklist-row.conditional').count()>=2);
+  record('Every visible checklist item explains why it exists',await page.locator('#guideStage .mvp-checklist-row p').count()===await page.locator('#guideStage .mvp-checklist-row').count());
+  await screenshot('05-process-derived-checklist.png',true);
+  await page.locator('#guideDetail').click();
+  await visible('#detailDialog[open]');
+  record('Aggregated checklist preserves process origin',await page.locator('#detailContent .mvp-node-checklist').count()>=1);
+  record('Checklist validation boundary remains inspectable',await page.locator('#detailContent .mvp-validation').count()===1);
+  await page.locator('#closeDetail').click();
 
   await nextStep(6); text=await stageText();
   record('Step 6 shows three useful previous cases',await page.locator('.precedent-guide-row').count()===3,`cases=${await page.locator('.precedent-guide-row').count()}`);
@@ -117,7 +134,7 @@ async function main(){
     const overflow=await page.evaluate(()=>Math.max(document.documentElement.scrollWidth,document.body.scrollWidth)-window.innerWidth);
     record(`${viewport.name}px has no page-level overflow`,overflow<=1,`overflow=${overflow}`);
     record(`${viewport.name}px keeps guided content readable`,await page.locator('#guide').isVisible()&&await page.locator('.stage-answer').isVisible());
-    await screenshot(`10-mobile-${viewport.name}.png`);
+    await screenshot(`10-mobile-${viewport.name}.png`,true);
   }
 
   record('No console errors',errors.console.length===0,JSON.stringify(errors.console));
@@ -128,8 +145,8 @@ async function main(){
   await browser.close();browser=null;
   const report={status:'passed',checkedAt:new Date().toISOString(),baseUrl:BASE_URL,apiUrl:API_URL,passed:checks.filter(x=>x.passed).length,failed:checks.filter(x=>!x.passed).length,checks,errors};
   await fs.writeFile(path.join(OUT,'report.json'),`${JSON.stringify(report,null,2)}\n`);
-  const images=['01-submission.png','02-analysis.png','03-step-1.png','04-current-question.png','05-evidence.png','06-precedents.png','07-review.png','08-learning.png','09-proof.png','10-mobile-390.png','10-mobile-320.png'];
-  await fs.writeFile(path.join(OUT,'index.html'),`<!doctype html><meta charset="utf-8"><title>CasePath guided smoke QA</title><style>body{font:16px system-ui;max-width:1080px;margin:40px auto;padding:0 20px;color:#15171a}li{margin:7px 0;color:#18744f}img{max-width:100%;border:1px solid #ddd;margin:8px 0 28px}</style><h1>CasePath guided QA: passed</h1><p><strong>${report.passed}</strong> checks passed.</p><ul>${checks.map(x=>`<li>✓ ${x.name}</li>`).join('')}</ul>${images.map(x=>`<h2>${x}</h2><img src="${x}" alt="${x}">`).join('')}`);
+  const images=['01-submission.png','02-analysis.png','03-step-1.png','04-process-graph.png','05-process-derived-checklist.png','06-precedents.png','07-review.png','08-learning.png','09-proof.png','10-mobile-390.png','10-mobile-320.png'];
+  await fs.writeFile(path.join(OUT,'index.html'),`<!doctype html><meta charset="utf-8"><title>CasePath process MVP QA</title><style>body{font:16px system-ui;max-width:1080px;margin:40px auto;padding:0 20px;color:#15171a}li{margin:7px 0;color:#18744f}img{max-width:100%;border:1px solid #ddd;margin:8px 0 28px}</style><h1>CasePath process MVP QA: passed</h1><p><strong>${report.passed}</strong> checks passed.</p><ul>${checks.map(x=>`<li>✓ ${x.name}</li>`).join('')}</ul>${images.map(x=>`<h2>${x}</h2><img src="${x}" alt="${x}">`).join('')}`);
   console.log(JSON.stringify(report,null,2));
 }
 
