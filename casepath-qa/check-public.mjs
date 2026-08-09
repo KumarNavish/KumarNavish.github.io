@@ -1,10 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { gunzipSync } from 'node:zlib';
 
 const BASE_URL = (process.env.BASE_URL || 'https://casepath-v1203-preview.onrender.com').replace(/\/$/, '');
 const API_URL = (process.env.API_URL || 'https://casepath-agentic-api.onrender.com').replace(/\/$/, '');
-const EXPECTED_LOADER_RELEASE = process.env.EXPECTED_LOADER_RELEASE || '12.0.4';
 const TIMEOUT_MS = Number(process.env.TIMEOUT_MS || 30000);
 const OUT = path.resolve('qa-out');
 
@@ -26,7 +24,7 @@ async function request(url, options = {}) {
       ...options,
       signal: controller.signal,
       headers: {
-        'user-agent': 'CasePath-public-release-gate/12.0.4',
+        'user-agent': 'CasePath-public-release-gate/direct-static',
         ...(options.headers || {}),
       },
     });
@@ -35,10 +33,11 @@ async function request(url, options = {}) {
   }
 }
 
-async function getText(url) {
+async function getText(url, recordCheck = true) {
   const response = await request(url);
   const text = await response.text();
-  record(`HTTP 200 ${url}`, response.status === 200, `status=${response.status}`);
+  if (recordCheck) record(`HTTP 200 ${url}`, response.status === 200, `status=${response.status}`);
+  else if (response.status !== 200) throw new Error(`${url} returned HTTP ${response.status}`);
   return { response, text };
 }
 
@@ -54,27 +53,13 @@ async function getJson(url, options = {}, recordCheck = true) {
   }
 }
 
-function decodeRelease(parts) {
-  const encoded = parts.join('').replace(/[^A-Za-z0-9+/]/g, '');
-  if (!encoded) throw new Error('Release payload is empty');
-  if (encoded.length % 4 === 1) throw new Error(`Impossible base64 length: ${encoded.length}`);
-  const compressed = Buffer.from(encoded, 'base64');
-  record('Release payload has gzip signature', compressed[0] === 0x1f && compressed[1] === 0x8b, `bytes=${compressed.length}`);
-  const html = gunzipSync(compressed).toString('utf8');
-  record('Decoded document is HTML', /^\s*<!doctype html>/i.test(html), html.slice(0, 80));
-  record('Decoded document contains CasePath', html.includes('CasePath'));
-  record('Decoded document contains flagship bootstrap', html.includes('flagship-v12-bootstrap'));
-  record('Decoded document is not another loader', !html.includes('casepath-payload') && !html.includes("Failed to execute 'atob'"));
-  return { encoded, compressed, html };
-}
-
 async function waitForRun(runId) {
   const deadline = Date.now() + 90000;
   let last;
   while (Date.now() < deadline) {
     last = await getJson(`${API_URL}/api/runs/${runId}`, {}, false);
     if (last.status === 'complete' || last.status === 'failed') return last;
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 700));
   }
   throw new Error(`Run ${runId} did not finish; last=${JSON.stringify(last).slice(0, 500)}`);
 }
@@ -84,32 +69,28 @@ async function main() {
   await fs.mkdir(OUT, { recursive: true });
 
   const rootUrl = `${BASE_URL}/?qa=${Date.now()}`;
-  const { text: loader } = await getText(rootUrl);
-  record('Loader identifies the repaired release', loader.includes(`data-casepath-loader-release="${EXPECTED_LOADER_RELEASE}"`));
-  record('Loader requests exactly five bundle files', loader.includes('const PARTS = [0,1,2,3,4]'));
-  record('Loader does not call atob', !loader.includes('atob('));
-  record('Loader includes manual base64 validation', loader.includes('function decodeBase64'));
+  const { response: rootResponse, text: html } = await getText(rootUrl);
+  details.finalUrl = rootResponse.url;
+  record('Canonical document does not redirect away', rootResponse.url.startsWith(`${BASE_URL}/`), rootResponse.url);
+  record('Direct CasePath document is served', /^\s*<!doctype html>/i.test(html) && html.includes('<title>CasePath'));
+  record('Flagship claim is visible in source HTML', html.includes('Recurring mould. The landlord blames ventilation.'));
+  record('Customer submission section is present', html.includes('What the customer sent'));
+  record('Analysis section is present', html.includes('CasePath is working through the claim'));
+  record('Process and evidence section is present', html.includes('Handling process') && html.includes('evidence-column'));
+  record('Expert review section is present', html.includes('Review the one decision that changes the work'));
+  record('Learning proof section is present', html.includes('The next claim benefits'));
+  record('Broken bootstrap loader is absent', !html.includes('casepath-payload') && !html.includes("Failed to execute 'atob'") && !html.includes('bundle-v12-000.txt'));
+  record('No external unified-service redirect exists', !html.includes('casepath-v12-unified.onrender.com'));
 
-  const partPaths = [0, 1, 2, 3, 4].map(index => `assets/bundle-v12-${String(index).padStart(3, '0')}.txt`);
-  const parts = [];
-  for (const partPath of partPaths) {
-    const { text } = await getText(`${BASE_URL}/${partPath}?qa=${Date.now()}`);
-    record(`${partPath} is non-empty`, text.trim().length > 1000, `chars=${text.trim().length}`);
-    parts.push(text);
-  }
-  const decoded = decodeRelease(parts);
-  details.encodedCharacters = decoded.encoded.length;
-  details.compressedBytes = decoded.compressed.length;
-  details.decodedBytes = Buffer.byteLength(decoded.html);
-
-  const linked = [...decoded.html.matchAll(/(?:src|href)=["']([^"']+)["']/g)].map(match => match[1]);
+  const linked = [...html.matchAll(/(?:src|href)=["']([^"']+)["']/g)].map(match => match[1]);
   const localAssets = [...new Set(linked.filter(value => !/^(?:https?:|data:|#|mailto:)/.test(value)))];
   details.localAssets = localAssets;
+  record('Direct document links runtime assets', localAssets.length >= 4, JSON.stringify(localAssets));
   for (const asset of localAssets) {
     const clean = asset.split(/[?#]/, 1)[0].replace(/^\//, '');
     if (!clean) continue;
     const response = await request(`${BASE_URL}/${clean}?qa=${Date.now()}`);
-    record(`Asset ${clean}`, response.status === 200, `status=${response.status}`);
+    record(`Asset ${clean}`, response.status === 200, `status=${response.status}; type=${response.headers.get('content-type')}`);
   }
 
   const health = await getJson(`${API_URL}/healthz`);
@@ -120,12 +101,11 @@ async function main() {
   record('Demo claim is available', Boolean(demo.demo_claim_id && demo.claim), JSON.stringify(demo).slice(0, 240));
   record('Demo claim contains attachments', Array.isArray(demo.claim.attachments) && demo.claim.attachments.length > 0, `attachments=${demo.claim.attachments?.length}`);
 
-  const attachment = demo.claim.attachments[0];
-  if (attachment?.artifact_id) {
+  for (const attachment of demo.claim.attachments.slice(0, 3)) {
     const artifactResponse = await request(`${API_URL}/api/artifacts/${attachment.artifact_id}`);
-    record('First source attachment opens', artifactResponse.status === 200, `status=${artifactResponse.status}; type=${artifactResponse.headers.get('content-type')}`);
+    record(`Source attachment ${attachment.artifact_id} opens`, artifactResponse.status === 200, `status=${artifactResponse.status}; type=${artifactResponse.headers.get('content-type')}`);
     const extraction = await getJson(`${API_URL}/api/artifacts/${attachment.artifact_id}/extraction`);
-    record('Machine extraction is separately available', extraction.artifact_id === attachment.artifact_id || extraction.id === attachment.artifact_id, JSON.stringify(extraction).slice(0, 200));
+    record(`Extraction ${attachment.artifact_id} is separate`, extraction.artifact_id === attachment.artifact_id || extraction.id === attachment.artifact_id, JSON.stringify(extraction).slice(0, 180));
   }
 
   await getJson(`${API_URL}/api/demo/reset`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
@@ -137,9 +117,9 @@ async function main() {
   record('Analysis run was created', Boolean(created.run_id), JSON.stringify(created));
   const run = await waitForRun(created.run_id);
   record('Analysis run completed', run.status === 'complete', JSON.stringify(run).slice(0, 400));
-  record('Analysis produced pipeline events', Array.isArray(run.events) && run.events.length >= 4, `events=${run.events?.length}`);
-  record('Analysis produced a process', Boolean(run.result?.process || run.result?.process_graph || run.result?.current_blocker), JSON.stringify(run.result).slice(0, 320));
-  record('Analysis produced evidence requirements', Boolean(run.result?.checklist || run.result?.evidence || run.result?.documents), JSON.stringify(run.result).slice(0, 320));
+  record('Analysis emitted pipeline events', Array.isArray(run.events) && run.events.length >= 6, `events=${run.events?.length}`);
+  record('Analysis produced process reasoning', Boolean(run.result?.process || run.result?.current_blocker), JSON.stringify(run.result).slice(0, 320));
+  record('Analysis produced evidence requirements', Boolean(run.result?.checklist || run.result?.documents), JSON.stringify(run.result).slice(0, 320));
   record('Analysis returned three precedents', Array.isArray(run.result?.precedents) && run.result.precedents.length === 3, `precedents=${run.result?.precedents?.length}`);
 
   const review = await getJson(`${API_URL}/api/runs/${created.run_id}/review`, {
@@ -163,7 +143,6 @@ async function main() {
     checkedAt: new Date().toISOString(),
     baseUrl: BASE_URL,
     apiUrl: API_URL,
-    expectedLoaderRelease: EXPECTED_LOADER_RELEASE,
     passed: checks.filter(check => check.passed).length,
     failed: checks.filter(check => !check.passed).length,
     checks,
@@ -183,7 +162,6 @@ main().catch(async error => {
     checkedAt: new Date().toISOString(),
     baseUrl: BASE_URL,
     apiUrl: API_URL,
-    expectedLoaderRelease: EXPECTED_LOADER_RELEASE,
     passed: checks.filter(check => check.passed).length,
     failed: checks.filter(check => !check.passed).length + 1,
     checks,
