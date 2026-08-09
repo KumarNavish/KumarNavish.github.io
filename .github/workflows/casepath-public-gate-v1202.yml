@@ -1,0 +1,70 @@
+name: CasePath v12.0.2 stable public release gate
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/casepath-public-gate-v1202.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: casepath-public-gate-v1202
+  cancel-in-progress: false
+
+jobs:
+  public-release-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm init -y >/dev/null 2>&1
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Run the public release gate
+        id: gate
+        shell: bash
+        run: |
+          set +e
+          node .github/scripts/casepath-public-gate-v1202.mjs
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Commit the gate result
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f casepath/reports/public-v12.0.2/release-gate.json
+          git config user.name 'CasePath public release gate'
+          git config user.email 'actions@users.noreply.github.com'
+          git add casepath/reports/public-v12.0.2
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record CasePath v12.0.2 stable public gate [skip ci] [skip render]'
+            git pull --rebase origin master
+            git push origin HEAD:master
+          fi
+      - name: Upload public evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: casepath-v12.0.2-stable-public-gate
+          path: casepath/reports/public-v12.0.2
+          if-no-files-found: error
+          retention-days: 30
+      - name: Enforce release acceptance
+        if: always()
+        shell: bash
+        run: test "${{ steps.gate.outputs.exit_code }}" = "0"
