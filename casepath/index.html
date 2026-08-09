@@ -17,19 +17,20 @@
     button{margin-top:18px;border:0;border-radius:9px;background:#c8102e;color:#fff;padding:11px 16px;font:inherit;font-weight:750;cursor:pointer}
   </style>
 </head>
-<body>
+<body data-casepath-loader-release="12.0.4">
   <main>
     <div class="brand"><span class="mark">CP</span><span>CasePath</span></div>
     <h1>Opening the flagship claim</h1>
     <p>The complete workspace is being assembled from the verified release files.</p>
-    <div class="status"><span class="dot" aria-hidden="true"></span><div><strong id="status">Loading the application…</strong><span class="detail" id="detail">Preparing release 12.0.3</span></div></div>
+    <div class="status"><span class="dot" aria-hidden="true"></span><div><strong id="status">Loading the application…</strong><span class="detail" id="detail">Preparing release 12.0.4</span></div></div>
     <div id="error" class="error" hidden></div>
     <button id="retry" type="button" hidden>Retry</button>
   </main>
   <script>
     (() => {
       'use strict';
-      const PARTS = [0,1,2,3,4].map(index => `assets/bundle-v12-${String(index).padStart(3,'0')}.txt`);
+      const RELEASE = '12.0.4';
+      const PARTS = [0,1,2].map(index => `assets/bundle-v12-${String(index).padStart(3,'0')}.txt`);
       const status = document.getElementById('status');
       const detail = document.getElementById('detail');
       const errorBox = document.getElementById('error');
@@ -40,40 +41,84 @@
         detail.textContent = message;
       }
 
+      function decodeBase64(encoded) {
+        const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+        const clean = encoded.replace(/[^A-Za-z0-9+/]/g, '');
+        if (!clean) throw new Error('The release payload is empty.');
+        if (clean.length % 4 === 1) throw new Error('The release payload has an impossible base64 length.');
+        const outputLength = Math.floor(clean.length * 3 / 4);
+        const output = new Uint8Array(outputLength);
+        let out = 0;
+        for (let index = 0; index < clean.length; index += 4) {
+          const a = alphabet.indexOf(clean[index]);
+          const b = alphabet.indexOf(clean[index + 1]);
+          const c = index + 2 < clean.length ? alphabet.indexOf(clean[index + 2]) : -1;
+          const d = index + 3 < clean.length ? alphabet.indexOf(clean[index + 3]) : -1;
+          if (a < 0 || b < 0 || (c < 0 && index + 2 < clean.length) || (d < 0 && index + 3 < clean.length)) {
+            throw new Error(`The release payload contains invalid base64 data near character ${index}.`);
+          }
+          const value = (a << 18) | (b << 12) | ((c < 0 ? 0 : c) << 6) | (d < 0 ? 0 : d);
+          output[out++] = (value >> 16) & 255;
+          if (c >= 0) output[out++] = (value >> 8) & 255;
+          if (d >= 0) output[out++] = value & 255;
+        }
+        return output.slice(0, out);
+      }
+
+      async function fetchPart(path, index) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 20000);
+        try {
+          const response = await fetch(`${path}?release=${RELEASE}`, { cache:'no-store', signal:controller.signal });
+          if (!response.ok) throw new Error(`${path} returned HTTP ${response.status}`);
+          const text = await response.text();
+          if (!text.trim()) throw new Error(`${path} was empty`);
+          setState('Loading the application…', `Release file ${index + 1} of ${PARTS.length} loaded`);
+          return text;
+        } finally {
+          clearTimeout(timeout);
+        }
+      }
+
       async function load() {
         retry.hidden = true;
         errorBox.hidden = true;
         try {
-          if (!('DecompressionStream' in window)) throw new Error('This browser does not support the secure release decompressor. Please use a current Chrome, Edge, Firefox or Safari release.');
-          setState('Loading the application…', 'Reading 5 verified release segments');
-          const responses = await Promise.all(PARTS.map(path => fetch(`${path}?release=12.0.3`, { cache:'no-store' })));
-          for (let index = 0; index < responses.length; index += 1) {
-            if (!responses[index].ok) throw new Error(`${PARTS[index]} returned HTTP ${responses[index].status}`);
+          if (!('DecompressionStream' in window)) {
+            throw new Error('This browser cannot open the verified release package. Use a current Chrome, Edge, Firefox or Safari release.');
           }
-          const parts = await Promise.all(responses.map(response => response.text()));
-          let encoded = parts.join('').replace(/[^A-Za-z0-9+/=]/g, '');
-          if (!encoded) throw new Error('The release payload is empty.');
-          const remainder = encoded.length % 4;
-          if (remainder) encoded += '='.repeat(4 - remainder);
-          setState('Verifying the workspace…', `${encoded.length.toLocaleString()} encoded characters loaded`);
-          let binary;
-          try { binary = atob(encoded); }
-          catch (error) { throw new Error(`The release payload is not valid base64 (${error.message}).`); }
-          const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+          setState('Loading the application…', `Reading ${PARTS.length} verified release files`);
+          const parts = [];
+          for (let index = 0; index < PARTS.length; index += 1) parts.push(await fetchPart(PARTS[index], index));
+          const encoded = parts.join('');
+          setState('Verifying the workspace…', `${encoded.replace(/\s/g,'').length.toLocaleString()} encoded characters loaded`);
+          const bytes = decodeBase64(encoded);
+          if (bytes.length < 4 || bytes[0] !== 0x1f || bytes[1] !== 0x8b) {
+            throw new Error('The verified release package did not contain a valid gzip stream.');
+          }
           const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
           const html = await new Response(stream).text();
-          if (!html.includes('<!doctype html>') || !html.includes('CasePath')) throw new Error('The decoded release did not contain the CasePath application.');
+          if (!/^\s*<!doctype html>/i.test(html) || !html.includes('CasePath') || !html.includes('flagship-v12-bootstrap')) {
+            throw new Error('The decoded release did not contain the expected CasePath application.');
+          }
+          if (html.includes('casepath-payload') || html.includes("Failed to execute 'atob'")) {
+            throw new Error('The decoded release unexpectedly contained another bootstrap payload.');
+          }
           setState('Opening the claim…', 'The verified workspace is ready');
           document.open();
           document.write(html);
           document.close();
         } catch (error) {
-          setState('CasePath could not open', 'The public release failed before the claim workspace loaded');
-          errorBox.textContent = error instanceof Error ? error.message : String(error);
+          const message = error && error.name === 'AbortError'
+            ? 'A release file took too long to load. Please retry.'
+            : (error instanceof Error ? error.message : String(error));
+          setState('CasePath could not open', 'The release stopped safely before the claim workspace loaded');
+          errorBox.textContent = message;
           errorBox.hidden = false;
           retry.hidden = false;
         }
       }
+
       retry.addEventListener('click', load);
       load();
     })();
