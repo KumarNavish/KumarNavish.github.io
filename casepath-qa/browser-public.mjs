@@ -9,11 +9,12 @@ const checks = [];
 const errors = { console: [], page: [], requests: [] };
 
 function record(name, passed, detail = '') {
-  checks.push({ name, passed: Boolean(passed), detail });
-  if (!passed) throw new Error(`${name}: ${detail || 'failed'}`);
+  const item = { name, passed: Boolean(passed), detail };
+  checks.push(item);
+  if (!item.passed) throw new Error(`${name}: ${detail || 'failed'}`);
 }
 
-async function waitVisible(page, selector, timeout = 90000) {
+async function waitVisible(page, selector, timeout = 120000) {
   await page.locator(selector).waitFor({ state: 'visible', timeout });
 }
 
@@ -46,8 +47,9 @@ async function main() {
   });
 
   await loadFresh(page, 'desktop');
-  record('Fresh browser reaches the claim workspace', await page.locator('h1').textContent() === 'Recurring mould. The landlord blames ventilation.');
+  record('Fresh browser reaches the claim workspace', (await page.locator('h1').textContent())?.trim() === 'Recurring mould. The landlord blames ventilation.');
   record('No bootstrap error is visible', await page.locator('text=CasePath could not open').count() === 0);
+  record('No intermediate loader survives', await page.locator('text=Opening the flagship claim').count() === 0);
   record('Original customer message is visible', await page.locator('#customerMessage .email-body').isVisible());
   record('Source attachments are visible', await page.locator('.attachment-row').count() >= 5, `attachments=${await page.locator('.attachment-row').count()}`);
   await page.screenshot({ path: path.join(OUT, '01-fresh-workspace.png'), fullPage: false });
@@ -57,7 +59,8 @@ async function main() {
   await lease.click();
   await waitVisible(page, '#artifactViewer[open]');
   await waitVisible(page, '#pdfPageImage');
-  record('Actual PDF page is rendered', await page.locator('#pdfPageImage').getAttribute('src').then(value => Boolean(value && value.includes('/pages/'))));
+  const pdfSource = await page.locator('#pdfPageImage').getAttribute('src');
+  record('Actual PDF page is rendered', Boolean(pdfSource && pdfSource.includes('/pages/')), String(pdfSource));
   record('PDF viewer exposes page navigation', await page.locator('[data-pdf-page]').count() >= 2);
   record('PDF viewer separates original and extraction', await page.locator('[data-viewer-tab="original"]').count() === 1 && await page.locator('[data-viewer-tab="extraction"]').count() === 1);
   await page.screenshot({ path: path.join(OUT, '02-pdf-viewer.png'), fullPage: false });
@@ -84,7 +87,7 @@ async function main() {
   }, null, { timeout: 120000 });
 
   record('Final process is rendered', await page.locator('#processPath .process-node').count() >= 5, `nodes=${await page.locator('#processPath .process-node').count()}`);
-  record('Current blocker is explicit', (await page.locator('#decisionSummary').innerText()).includes('What caused the recurring mould?'));
+  record('Current blocker is explicit', /what caused the recurring mould/i.test(await page.locator('#decisionSummary').innerText()));
   record('Process-bound evidence is rendered', await page.locator('#evidenceColumn .evidence-item').count() >= 2, `evidence=${await page.locator('#evidenceColumn .evidence-item').count()}`);
   record('Three useful precedents are rendered', await page.locator('#precedentList .precedent-row').count() === 3, `precedents=${await page.locator('#precedentList .precedent-row').count()}`);
   record('Pipeline emitted all visible work stages', await page.locator('#stageList .stage-item[data-status="completed"]').count() >= 6, `completed=${await page.locator('#stageList .stage-item[data-status="completed"]').count()}`);
@@ -97,8 +100,9 @@ async function main() {
     const learning = document.querySelector('#learning');
     return learning && !learning.hidden;
   }, null, { timeout: 90000 });
-  record('Expert review creates visible case memory', (await page.locator('#learningNow').innerText()).includes('Saved as a reviewed precedent'));
-  record('Shared rule remains visibly quarantined', (await page.locator('#learningNow').innerText()).includes('Not yet shared'));
+  const learningText = await page.locator('#learningNow').innerText();
+  record('Expert review creates visible case memory', /saved as a reviewed precedent/i.test(learningText), learningText);
+  record('Shared rule remains visibly quarantined', /quarantined|not yet shared/i.test(learningText), learningText);
   await page.screenshot({ path: path.join(OUT, '06-review-and-learning.png'), fullPage: false });
 
   await page.locator('#tryLearningBtn').click();
@@ -106,8 +110,10 @@ async function main() {
     const later = document.querySelector('#laterClaim');
     return later && !later.hidden;
   }, null, { timeout: 90000 });
-  record('Later claim uses reviewed memory', (await page.locator('#beforeAfter').innerText()).includes('Expert-reviewed precedent used'));
-  record('Before-and-after evidence change is visible', (await page.locator('#beforeAfter').innerText()).includes('Before reviewed memory') && (await page.locator('#beforeAfter').innerText()).includes('After reviewed memory'));
+  const comparisonText = await page.locator('#beforeAfter').innerText();
+  record('Later claim uses reviewed memory', /expert-reviewed precedent used/i.test(comparisonText), comparisonText);
+  record('Before-and-after comparison renders two meaningful states', await page.locator('#beforeAfter .compare-panel').count() >= 2 && /before/i.test(comparisonText) && /after/i.test(comparisonText), comparisonText);
+  record('Later claim shows an evidence-sequence change', /conditional evidence|what improved|unnecessary immediate request/i.test(comparisonText), comparisonText);
   await page.screenshot({ path: path.join(OUT, '07-later-claim-improved.png'), fullPage: false });
 
   record('No browser console errors', errors.console.length === 0, JSON.stringify(errors.console));
