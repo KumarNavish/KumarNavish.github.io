@@ -20,7 +20,7 @@ async function request(url, options = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const response = await fetch(url, {
+    return await fetch(url, {
       redirect: 'follow',
       cache: 'no-store',
       ...options,
@@ -30,7 +30,6 @@ async function request(url, options = {}) {
         ...(options.headers || {}),
       },
     });
-    return response;
   } finally {
     clearTimeout(timer);
   }
@@ -43,10 +42,11 @@ async function getText(url) {
   return { response, text };
 }
 
-async function getJson(url, options = {}) {
+async function getJson(url, options = {}, recordCheck = true) {
   const response = await request(url, options);
   const text = await response.text();
-  record(`${options.method || 'GET'} ${url}`, response.ok, `status=${response.status}; body=${text.slice(0, 240)}`);
+  if (recordCheck) record(`${options.method || 'GET'} ${url}`, response.ok, `status=${response.status}; body=${text.slice(0, 240)}`);
+  else if (!response.ok) throw new Error(`${options.method || 'GET'} ${url} returned ${response.status}: ${text.slice(0, 240)}`);
   try {
     return JSON.parse(text);
   } catch (error) {
@@ -72,7 +72,7 @@ async function waitForRun(runId) {
   const deadline = Date.now() + 90000;
   let last;
   while (Date.now() < deadline) {
-    last = await getJson(`${API_URL}/api/runs/${runId}`);
+    last = await getJson(`${API_URL}/api/runs/${runId}`, {}, false);
     if (last.status === 'complete' || last.status === 'failed') return last;
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
@@ -86,11 +86,11 @@ async function main() {
   const rootUrl = `${BASE_URL}/?qa=${Date.now()}`;
   const { text: loader } = await getText(rootUrl);
   record('Loader identifies the repaired release', loader.includes(`data-casepath-loader-release="${EXPECTED_LOADER_RELEASE}"`));
-  record('Loader requests exactly three bundle files', loader.includes('const PARTS = [0,1,2]'));
+  record('Loader requests exactly five bundle files', loader.includes('const PARTS = [0,1,2,3,4]'));
   record('Loader does not call atob', !loader.includes('atob('));
   record('Loader includes manual base64 validation', loader.includes('function decodeBase64'));
 
-  const partPaths = [0, 1, 2].map(index => `assets/bundle-v12-${String(index).padStart(3, '0')}.txt`);
+  const partPaths = [0, 1, 2, 3, 4].map(index => `assets/bundle-v12-${String(index).padStart(3, '0')}.txt`);
   const parts = [];
   for (const partPath of partPaths) {
     const { text } = await getText(`${BASE_URL}/${partPath}?qa=${Date.now()}`);
