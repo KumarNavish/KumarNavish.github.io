@@ -2,63 +2,26 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#ffffff">
-  <meta name="description" content="CasePath v12.0.1 — realistic source evidence, claim-specific process reasoning, process-bound evidence and expert-reviewed learning.">
-  <title>CasePath — Loading the v12 flagship claim</title>
+  <meta name="robots" content="noindex">
+  <meta http-equiv="refresh" content="0;url=https://casepath-v12-unified.onrender.com/frontend/?from=canonical">
+  <title>CasePath — Opening the claim workspace</title>
   <style>
-    :root{color-scheme:light;font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f8f9fb;color:#142033}
-    *{box-sizing:border-box}body{margin:0;min-height:100vh;background:#f8f9fb;display:grid;place-items:center;padding:28px}
-    main{width:min(680px,100%);background:#fff;border:1px solid #e4e8ef;border-radius:16px;padding:38px 40px;box-shadow:0 24px 68px rgba(22,38,65,.10)}
-    .brand{display:flex;align-items:center;gap:10px;font-weight:780}.mark{width:32px;height:32px;border-radius:9px;background:#c8102e;color:#fff;display:grid;place-items:center;font-size:11px;font-weight:850}
-    h1{font-size:clamp(30px,5vw,46px);letter-spacing:-.045em;line-height:1.05;margin:34px 0 12px}p{color:#667085;line-height:1.6;margin:0}.status{display:flex;gap:12px;align-items:center;margin-top:26px;padding-top:20px;border-top:1px solid #e4e8ef;font-size:13px}.pulse{width:10px;height:10px;border-radius:50%;background:#c8102e;animation:pulse 1.15s ease-in-out infinite}.detail{font-size:11px;margin-top:10px;color:#98a2b3}
-    button{margin-top:22px;border:0;border-radius:9px;background:#c8102e;color:#fff;padding:12px 16px;font:inherit;font-weight:730;cursor:pointer}button[hidden]{display:none}
-    @keyframes pulse{50%{opacity:.32;transform:scale(.72)}}@media(prefers-reduced-motion:reduce){.pulse{animation:none}}@media(max-width:520px){main{padding:28px 24px;border-radius:12px}}
+    :root{font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#142033;background:#f8f9fb}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f8f9fb;padding:24px}
+    main{width:min(520px,100%);padding:28px;background:#fff;border:1px solid #e4e8ef;border-radius:14px;box-shadow:0 22px 60px rgba(20,32,51,.08)}
+    .brand{display:flex;align-items:center;gap:9px;font-weight:780}.mark{width:30px;height:30px;border-radius:8px;background:#c8102e;color:#fff;display:grid;place-items:center;font-size:10px}
+    h1{font-size:28px;letter-spacing:-.035em;margin:28px 0 10px}p{margin:0;color:#667085;line-height:1.55}a{display:inline-flex;margin-top:20px;padding:11px 14px;border-radius:8px;background:#c8102e;color:#fff;text-decoration:none;font-weight:720}
   </style>
+  <script>location.replace('https://casepath-v12-unified.onrender.com/frontend/?from=canonical&release=12.0.2');</script>
 </head>
 <body>
   <main>
     <div class="brand"><span class="mark">CP</span><span>CasePath</span></div>
-    <h1>Opening the flagship claim</h1>
-    <p>The v12.0.1 workspace is loading the original claim package, photographic evidence and claim-specific decision path.</p>
-    <div class="status"><span class="pulse" aria-hidden="true"></span><strong id="status">Starting the CasePath service…</strong></div>
-    <p class="detail" id="detail">Free hosting may need a short cold start. This page will continue automatically.</p>
-    <button id="retry" type="button" hidden>Retry now</button>
+    <h1>Opening the claim workspace</h1>
+    <p>The application is moving to the verified unified release. This page does not retry missing routes or conceal deployment errors.</p>
+    <a href="https://casepath-v12-unified.onrender.com/frontend/?from=canonical&release=12.0.2">Open CasePath</a>
   </main>
-  <script>
-    (()=>{
-      const API='https://casepath-agentic-api.onrender.com';
-      const SOURCE=API+'/frontend/index.html';
-      const status=document.getElementById('status');
-      const detail=document.getElementById('detail');
-      const retry=document.getElementById('retry');
-      let attempts=0;
-      const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-      async function load(){
-        retry.hidden=true;
-        for(let i=0;i<40;i+=1){
-          attempts+=1;
-          status.textContent=attempts===1?'Starting the CasePath service…':'Waiting for the v12.0.1 workspace…';
-          try{
-            const response=await fetch(SOURCE+'?release=12.0.1&attempt='+attempts,{cache:'no-store'});
-            if(!response.ok) throw new Error('HTTP '+response.status);
-            let html=await response.text();
-            if(!html.includes('flagship-v12')) throw new Error('The API has not finished deploying v12.0.1');
-            html=html.replace('<head>','<head><base href="'+API+'/frontend/">');
-            document.open();document.write(html);document.close();
-            return;
-          }catch(error){
-            detail.textContent='Attempt '+attempts+': '+error.message;
-            await wait(Math.min(3000+attempts*750,10000));
-          }
-        }
-        status.textContent='The v12.0.1 workspace did not become ready.';
-        detail.textContent='The earlier v11 page is not being shown. Retry when the API deployment is healthy.';
-        retry.hidden=false;
-      }
-      retry.addEventListener('click',load);
-      load();
-    })();
-  </script>
 </body>
 </html>
