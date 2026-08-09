@@ -1,0 +1,366 @@
+name: Promote CasePath v12.0.2 direct public release
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/promote-casepath-v12-direct.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: casepath-v12-direct-public-release
+  cancel-in-progress: false
+
+env:
+  UNIFIED_URL: https://casepath-v12-unified.onrender.com
+  PUBLIC_URL: https://casepath-swiss-claim-lab.onrender.com
+  RELEASE: 12.0.2
+
+jobs:
+  verify-promote-and-reverify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Wait for the checksum-bound unified service
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 90); do
+            code=$(curl -L -sS -o /tmp/deployment-health.json -w '%{http_code}' "$UNIFIED_URL/deployment-health?attempt=$attempt" || true)
+            if [ "$code" = 200 ] && python - <<'PY'
+          import json
+          payload=json.load(open('/tmp/deployment-health.json'))
+          assert payload['release']=='12.0.2', payload
+          assert payload['frontend_release']=='12.0.2', payload
+          assert payload['api_release']=='12.0.2', payload
+          assert payload['flagship_claim']=='BS-DEF-2026-041', payload
+          PY
+            then
+              cat /tmp/deployment-health.json
+              exit 0
+            fi
+            echo "Unified service not ready (attempt $attempt, HTTP $code)"
+            sleep 10
+          done
+          echo 'Unified service never became release 12.0.2' >&2
+          exit 1
+
+      - name: Reconstruct and prepare the direct static application
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/casepath-source /tmp/casepath-transport /tmp/casepath-public
+          mkdir -p /tmp/casepath-source /tmp/casepath-transport /tmp/casepath-public
+          for part in 00 01 02 03 04 05 06; do
+            curl --fail --location --retry 5 --retry-delay 2 \
+              "https://raw.githubusercontent.com/KumarNavish/KumarNavish.github.io/casepath-flagship-v12/casepath-v12-upload/chunk-$part" \
+              --output "/tmp/casepath-transport/chunk-$part"
+          done
+          cat > /tmp/casepath-transport/checksums <<'EOF'
+          03c329fa226cd5276f7c0491ddf0b090b216d38caf60b765e221ba39c7f4a947  /tmp/casepath-transport/chunk-00
+          760fe5ccceca0e78f9a68c149d7bf1e5e799196dcf11b81f951dbbd5b749e288  /tmp/casepath-transport/chunk-01
+          10da6f46705d5b6833bf46d4de5b3c78f2a39018dd6aa6adf1882f1d4ddc9bb2  /tmp/casepath-transport/chunk-02
+          2d61e04e864a06b1704e423580e81f5c9d1a5ee67847b598e75d1125c6c1248d  /tmp/casepath-transport/chunk-03
+          b5f7031db11d207f413aeb7165766a9e668b50e67dfad9bde1be477bff7535b3  /tmp/casepath-transport/chunk-04
+          f40cb8904c62325141fc50159ab1de363086852610dc47b5770d3508f589640c  /tmp/casepath-transport/chunk-05
+          bdf5021da77302a3b52c704f29aec02f8bab89e7b84920f4d31f52f4f30ffb0  /tmp/casepath-transport/chunk-06
+          EOF
+          sha256sum --check /tmp/casepath-transport/checksums
+          cat /tmp/casepath-transport/chunk-* > /tmp/casepath-transport/archive.b64
+          test "$(wc -c < /tmp/casepath-transport/archive.b64)" -eq 371400
+          echo 'bc1cbb5ad383197da737c639981abda4c80bdb1924614514144670c3a1193a15  /tmp/casepath-transport/archive.b64' | sha256sum --check
+          base64 --decode /tmp/casepath-transport/archive.b64 > /tmp/casepath-transport/archive.tar.xz
+          echo 'b1f1253589588557b9aeb6d81302220d833154d5d0f0ad44668acc46e11f4b4d  /tmp/casepath-transport/archive.tar.xz' | sha256sum --check
+          xz --test /tmp/casepath-transport/archive.tar.xz
+          tar -xJf /tmp/casepath-transport/archive.tar.xz -C /tmp/casepath-source
+          cp -a /tmp/casepath-source/casepath/. /tmp/casepath-public/
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('/tmp/casepath-public')
+          old='https://casepath-agentic-api.onrender.com'
+          new='https://casepath-v12-unified.onrender.com'
+          for path in list(root.rglob('*.js'))+list(root.rglob('*.html')):
+              text=path.read_text(encoding='utf-8')
+              text=text.replace(old,new)
+              path.write_text(text,encoding='utf-8')
+          release_path=root/'release.json'
+          release=json.loads(release_path.read_text(encoding='utf-8'))
+          release.update({
+              'release':'12.0.2',
+              'frontend_delivery':'direct static application',
+              'api':new,
+              'deployment_contract':'direct static frontend and unified API report 12.0.2',
+          })
+          release_path.write_text(json.dumps(release,indent=2)+'\n',encoding='utf-8')
+          index=(root/'index.html').read_text(encoding='utf-8')
+          assert 'flagship-v12-bootstrap' in index
+          assert 'Opening the flagship claim' not in index
+          assert old not in '\n'.join(p.read_text(encoding='utf-8') for p in root.rglob('*.js'))
+          PY
+          test -f /tmp/casepath-public/assets/flagship-v12-bootstrap.js
+          test -f /tmp/casepath-public/assets/flagship-v12-core.js
+          test -f /tmp/casepath-public/assets/flagship-v12.js
+
+      - name: Install browser test runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/casepath-qa
+          cd /tmp/casepath-qa
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null
+          npx playwright install --with-deps chromium
+
+      - name: Run API lifecycle acceptance against the unified service
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,time,urllib.request
+          BASE='https://casepath-v12-unified.onrender.com'
+          def request(path,method='GET',payload=None):
+              data=None if payload is None else json.dumps(payload).encode()
+              req=urllib.request.Request(BASE+path,data=data,method=method,headers={'Content-Type':'application/json'})
+              with urllib.request.urlopen(req,timeout=60) as response:
+                  return response.status,json.loads(response.read().decode())
+          status,health=request('/deployment-health')
+          assert status==200 and health['release']=='12.0.2' and health['flagship_claim']=='BS-DEF-2026-041',health
+          status,ready=request('/readyz')
+          assert status==200 and ready['claims']==4 and ready['artifacts']>=10,ready
+          request('/api/demo/reset',method='POST')
+          _,demo=request('/api/demo')
+          assert demo['demo_claim_id']=='BS-DEF-2026-041',demo
+          claim=demo['claim']
+          attachments=claim.get('attachments',[])
+          assert len(attachments)>=9,len(attachments)
+          opened=[]
+          for artifact in attachments:
+              aid=artifact.get('artifact_id') or artifact.get('id')
+              assert aid,artifact
+              req=urllib.request.Request(f'{BASE}/api/artifacts/{aid}')
+              with urllib.request.urlopen(req,timeout=60) as response:
+                  assert response.status==200
+                  assert int(response.headers.get('Content-Length','1'))>0
+              if artifact.get('media_type')=='application/pdf' and artifact.get('page_count',0):
+                  with urllib.request.urlopen(f'{BASE}/api/artifacts/{aid}/pages/1',timeout=60) as response:
+                      assert response.status==200 and response.headers.get_content_type()=='image/png'
+              opened.append(aid)
+          assert len(opened)==len(attachments)
+          _,queued=request('/api/runs',method='POST',payload={'claim_id':'BS-DEF-2026-041'})
+          run_id=queued['run_id']
+          deadline=time.time()+120
+          while time.time()<deadline:
+              _,run=request('/api/runs/'+run_id)
+              if run['status']=='complete': break
+              if run['status']=='failed': raise AssertionError(run)
+              time.sleep(.5)
+          else: raise AssertionError('analysis did not complete')
+          result=run['result']
+          events=run.get('events',[])
+          assert len(events)>=6,events
+          assert events[-1].get('stage')=='complete',events[-1] if events else None
+          process=result.get('process',{})
+          nodes=process.get('nodes',process if isinstance(process,list) else [])
+          assert len(nodes)>=7,len(nodes)
+          checklist=result.get('checklist',[])
+          if isinstance(checklist,dict): checklist=checklist.get('items',[])
+          assert len(checklist)>=5,len(checklist)
+          precedents=result.get('precedents') or result.get('historical_claims') or []
+          assert len(precedents)==3,len(precedents)
+          _,review=request('/api/runs/'+run_id+'/review',method='POST',payload={
+              'decision':'approve_with_edit',
+              'building_envelope_mode':'conditional',
+              'confidence':.92,
+              'justification':'Use one neutral inspection first; broader envelope testing only if the first assessment remains inconclusive.'
+          })
+          assert review,review
+          _,knowledge=request('/api/knowledge')
+          text=json.dumps(knowledge)
+          assert 'BS-DEF-2026-041' in text,text[:1000]
+          _,proof=request('/api/learning-proof')
+          proof_text=json.dumps(proof)
+          assert 'BS-DEF-2026-041' in proof_text,proof_text[:1200]
+          assert 'BS-DEF-2026-057' in proof_text,proof_text[:1200]
+          report={
+              'release':health['release'],'attachments_opened':len(opened),'events':len(events),
+              'process_nodes':len(nodes),'checklist_items':len(checklist),'precedents':len(precedents),
+              'review_saved':True,'memory_retrieved_by_later_claim':True,
+          }
+          open('/tmp/casepath-api-acceptance.json','w').write(json.dumps(report,indent=2))
+          print(json.dumps(report,indent=2))
+          PY
+
+      - name: Test the direct frontend locally against the live unified API
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m http.server 4173 --bind 127.0.0.1 --directory /tmp/casepath-public >/tmp/casepath-http.log 2>&1 &
+          echo $! >/tmp/casepath-http.pid
+          cat > /tmp/casepath-qa/qa.mjs <<'JS'
+          import { chromium } from 'playwright';
+          import fs from 'node:fs';
+          const target=process.env.TARGET;
+          const out=process.env.OUT;
+          const browser=await chromium.launch({headless:true});
+          const results=[];
+          const errors=[];
+          async function check(name,fn){try{await fn();results.push({name,pass:true});}catch(error){results.push({name,pass:false,error:String(error)});throw error;}}
+          async function runDesktop(){
+            const context=await browser.newContext({viewport:{width:1440,height:900}});
+            const page=await context.newPage();
+            page.on('console',msg=>{if(msg.type()==='error')errors.push('console: '+msg.text())});
+            page.on('pageerror',error=>errors.push('page: '+String(error)));
+            await check('page identity',async()=>{await page.goto(target,{waitUntil:'networkidle',timeout:120000});if(!/CasePath/i.test(await page.title()))throw new Error(await page.title())});
+            await check('direct app, not loader',async()=>{const text=await page.locator('body').innerText();if(/Opening the flagship claim|Attempt \d+: HTTP 404/i.test(text))throw new Error(text.slice(0,300))});
+            await check('flagship source package visible',async()=>{await page.getByText('BS-DEF-2026-041',{exact:false}).first().waitFor({timeout:45000});await page.getByText(/Recurring mould/i).first().waitFor()});
+            await page.screenshot({path:out+'/01-source-package.png',fullPage:false});
+            await check('attachment opens',async()=>{
+              const candidate=page.getByText(/lease|Mietvertrag/i).first();
+              await candidate.click();
+              await page.getByText(/Original attachment|Original source|Page 1/i).first().waitFor({timeout:30000});
+            });
+            await page.screenshot({path:out+'/02-pdf-open.png',fullPage:false});
+            await page.keyboard.press('Escape');
+            await check('analysis starts',async()=>{await page.getByRole('button',{name:/Analyse claim|Analyze claim/i}).click();await page.getByText(/CasePath is working|Read submission|Understand claim/i).first().waitFor({timeout:30000})});
+            await page.screenshot({path:out+'/03-processing.png',fullPage:false});
+            await check('process and evidence render',async()=>{await page.getByText(/What caused the recurring moisture condition|claim is blocked at one question/i).first().waitFor({timeout:120000});await page.getByText(/Handling process/i).first().waitFor();await page.getByText(/Evidence|still need to establish/i).first().waitFor()});
+            await check('three precedents render',async()=>{await page.getByText(/Previous claims that help|relevant previous claims/i).first().scrollIntoViewIfNeeded();const body=await page.locator('body').innerText();const ids=(body.match(/HIST-MOULD-/g)||[]);if(new Set(ids).size<3)throw new Error('precedents='+new Set(ids).size)});
+            await page.screenshot({path:out+'/04-process-evidence.png',fullPage:true});
+            await check('expert review saves',async()=>{
+              const review=page.getByText(/Review the one decision|Expert review/i).first();
+              await review.scrollIntoViewIfNeeded();
+              const textarea=page.locator('textarea').first();
+              await textarea.fill('Use one neutral inspection first; broader envelope testing only if the first assessment is inconclusive.');
+              const submit=page.getByRole('button',{name:/Save review|Approve|Apply correction/i}).last();
+              await submit.click();
+              await page.getByText(/case memory|Available immediately|shared knowledge has not changed/i).first().waitFor({timeout:30000});
+            });
+            await page.screenshot({path:out+'/05-review-memory.png',fullPage:false});
+            await check('later claim uses memory',async()=>{
+              const later=page.getByRole('button',{name:/See this knowledge used|later claim/i}).first();
+              await later.click();
+              await page.getByText('BS-DEF-2026-057',{exact:false}).first().waitFor({timeout:30000});
+              const text=await page.locator('body').innerText();
+              if(!/BS-DEF-2026-041/.test(text))throw new Error('reviewed memory not visible in later claim');
+            });
+            await page.screenshot({path:out+'/06-later-claim.png',fullPage:false});
+            await context.close();
+          }
+          async function runMobile(width,height,label){
+            const context=await browser.newContext({viewport:{width,height}});
+            const page=await context.newPage();
+            page.on('console',msg=>{if(msg.type()==='error')errors.push(label+' console: '+msg.text())});
+            page.on('pageerror',error=>errors.push(label+' page: '+String(error)));
+            await page.goto(target,{waitUntil:'networkidle',timeout:120000});
+            await page.getByText('BS-DEF-2026-041',{exact:false}).first().waitFor({timeout:45000});
+            const overflow=await page.evaluate(()=>Math.max(document.documentElement.scrollWidth,document.body.scrollWidth)-innerWidth);
+            if(overflow>1)throw new Error(label+' horizontal overflow '+overflow);
+            await page.screenshot({path:out+'/'+label+'.png',fullPage:false});
+            results.push({name:label+' containment',pass:true,overflow});
+            await context.close();
+          }
+          try{await runDesktop();await runMobile(390,844,'07-mobile-390');await runMobile(320,700,'08-mobile-320');if(errors.length)throw new Error(errors.join('\n'));}
+          catch(error){errors.push('fatal: '+String(error));}
+          await browser.close();
+          const report={target,results,errors,passed:results.filter(x=>x.pass).length,failed:results.filter(x=>!x.pass).length+(errors.length?1:0),verified_at:new Date().toISOString()};
+          fs.writeFileSync(out+'/browser-qa.json',JSON.stringify(report,null,2));
+          console.log(JSON.stringify(report,null,2));
+          if(report.failed)process.exit(1);
+          JS
+          mkdir -p /tmp/casepath-local-qa
+          cd /tmp/casepath-qa
+          TARGET=http://127.0.0.1:4173/ OUT=/tmp/casepath-local-qa node qa.mjs
+
+      - name: Publish the direct application to master
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf casepath
+          cp -a /tmp/casepath-public ./casepath
+          mkdir -p casepath/verification
+          cp /tmp/casepath-api-acceptance.json casepath/verification/api-acceptance.json
+          cp /tmp/casepath-local-qa/browser-qa.json casepath/verification/local-browser-qa.json
+          git config user.name 'CasePath release automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add casepath
+          git commit -m 'Publish direct CasePath v12.0.2 application [skip ci]'
+          git fetch origin master
+          git rebase origin/master
+          git push origin HEAD:master
+
+      - name: Wait for the canonical Render static deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 90); do
+            release=$(curl -L -sS "$PUBLIC_URL/release.json?attempt=$attempt" || true)
+            index=$(curl -L -sS "$PUBLIC_URL/?attempt=$attempt" || true)
+            if echo "$release" | grep -q '"release": "12.0.2"' && echo "$index" | grep -q 'flagship-v12-bootstrap' && ! echo "$index" | grep -q 'Opening the flagship claim'; then
+              echo "$release"
+              exit 0
+            fi
+            echo "Canonical static deployment not ready (attempt $attempt)"
+            sleep 10
+          done
+          exit 1
+
+      - name: Run the complete browser journey against the canonical public URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/casepath-public-qa
+          cd /tmp/casepath-qa
+          TARGET="$PUBLIC_URL/?release=12.0.2&fresh=1" OUT=/tmp/casepath-public-qa node qa.mjs
+
+      - name: Record post-deployment acceptance evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin master
+          git reset --hard origin/master
+          mkdir -p casepath/verification
+          cp /tmp/casepath-public-qa/browser-qa.json casepath/verification/public-browser-qa.json
+          python - <<'PY'
+          import hashlib,json,urllib.request
+          public='https://casepath-swiss-claim-lab.onrender.com'
+          unified='https://casepath-v12-unified.onrender.com'
+          def get(url):
+              with urllib.request.urlopen(url,timeout=60) as response:
+                  return response.status,response.read(),dict(response.headers)
+          checks={}
+          for name,url in {
+              'public_index':public+'/?final=1',
+              'public_release':public+'/release.json?final=1',
+              'api_health':unified+'/deployment-health?final=1',
+              'api_ready':unified+'/readyz?final=1',
+          }.items():
+              status,body,headers=get(url)
+              checks[name]={'url':url,'status':status,'bytes':len(body),'sha256':hashlib.sha256(body).hexdigest(),'content_type':headers.get('Content-Type')}
+          report={'release':'12.0.2','canonical_url':public,'api_url':unified,'checks':checks}
+          open('casepath/verification/deployment-verification.json','w').write(json.dumps(report,indent=2))
+          PY
+          git config user.name 'CasePath release automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add casepath/verification
+          git commit -m 'Record CasePath v12.0.2 public acceptance [skip ci]'
+          git push origin HEAD:master
+
+      - name: Upload acceptance screenshots and reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: casepath-v12.0.2-public-acceptance
+          path: |
+            /tmp/casepath-api-acceptance.json
+            /tmp/casepath-local-qa
+            /tmp/casepath-public-qa
+          retention-days: 30
