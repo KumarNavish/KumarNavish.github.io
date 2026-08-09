@@ -17,7 +17,18 @@ storage=Storage()
 pipeline=ClaimPipeline(storage)
 
 app=FastAPI(title="CasePath useful demo API",version=__version__,description="Generated-data research demonstration only.")
-app.add_middleware(CORSMiddleware,allow_origins=["https://casepath-swiss-claim-lab.onrender.com","http://localhost:4173","http://127.0.0.1:4173"],allow_methods=["GET","POST","OPTIONS"],allow_headers=["Content-Type"],allow_credentials=False)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://casepath-swiss-claim-lab.onrender.com",
+        "https://casepath-guided-v13-preview.onrender.com",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
+    ],
+    allow_methods=["GET","POST","OPTIONS"],
+    allow_headers=["Content-Type"],
+    allow_credentials=False,
+)
 
 class RunRequest(BaseModel):
     model_config=ConfigDict(extra="forbid")
