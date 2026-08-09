@@ -16,9 +16,6 @@ for part in 00 01 02 03 04 05 06; do
   test -s "$TRANSPORT_ROOT/chunk-$part"
 done
 
-# The former checksum table belonged to an earlier transport payload and rejected
-# the valid seven-part archive. Verify the payload we actually deploy by decoding
-# it, checking the XZ stream, and checking the required source tree before build.
 cat \
   "$TRANSPORT_ROOT/chunk-00" \
   "$TRANSPORT_ROOT/chunk-01" \
@@ -52,10 +49,13 @@ cp casepath-api/requirements.txt "$RUNTIME_ROOT/casepath-api/requirements.txt"
 python -m pip install --upgrade pip
 python -m pip install --no-cache-dir -r "$RUNTIME_ROOT/casepath-api/requirements.txt"
 python casepath-api/prepare_runtime_v12.py "$RUNTIME_ROOT"
+python casepath-api/replace_photographic_evidence.py "$RUNTIME_ROOT"
 
 python -m compileall -q "$RUNTIME_ROOT/casepath-api/casepath_api"
 test "$(cat "$RUNTIME_ROOT/casepath-api/artifacts/.flagship-v12")" = "12.0.2"
 grep -q '"release": "12.0.2"' "$RUNTIME_ROOT/casepath/release.json"
+grep -q 'Wikimedia Commons' "$RUNTIME_ROOT/casepath-api/artifacts/IMAGE_ATTRIBUTION.md"
+echo '6a3f2cbeb270c21628f0d814d852895dbcff5e0cc8cf04502ca7d5cd7dfba732  '"$RUNTIME_ROOT"'/casepath-api/artifacts/bedroom-mould-2026-07-27.jpg' | sha256sum --check
 
 PYTHONPATH="$RUNTIME_ROOT/casepath-api" CASEPATH_DB_PATH="/tmp/casepath-build-smoke.db" python - <<'PY'
 from casepath_api.app import app, deployment_health, readyz
