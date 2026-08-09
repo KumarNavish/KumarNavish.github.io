@@ -117,13 +117,18 @@ async function main() {
   record('API is ready', ready.status === 'ready', JSON.stringify(ready));
   const demo = await getJson(`${API_URL}/api/demo`);
   record('Demo claim is available', Boolean(demo.demo_claim_id && demo.claim), JSON.stringify(demo).slice(0, 240));
-  record('Demo claim contains attachments', Array.isArray(demo.claim.attachments) && demo.claim.attachments.length > 0, `attachments=${demo.claim.attachments?.length}`);
+  const sourceFiles = Array.isArray(demo.claim.artifacts)
+    ? demo.claim.artifacts
+    : (Array.isArray(demo.claim.attachments) ? demo.claim.attachments : []);
+  record('Demo claim contains source attachments', sourceFiles.length > 0, `source_files=${sourceFiles.length}`);
 
-  for (const attachment of demo.claim.attachments.slice(0, 3)) {
-    const artifactResponse = await request(`${API_URL}/api/artifacts/${attachment.artifact_id}`);
-    record(`Source attachment ${attachment.artifact_id} opens`, artifactResponse.status === 200, `status=${artifactResponse.status}; type=${artifactResponse.headers.get('content-type')}`);
-    const extraction = await getJson(`${API_URL}/api/artifacts/${attachment.artifact_id}/extraction`);
-    record(`Extraction ${attachment.artifact_id} is separate`, extraction.artifact_id === attachment.artifact_id || extraction.id === attachment.artifact_id, JSON.stringify(extraction).slice(0, 180));
+  for (const attachment of sourceFiles.slice(0, 3)) {
+    const artifactId = attachment.artifact_id || attachment.id;
+    record('Source attachment has an artifact id', Boolean(artifactId), JSON.stringify(attachment));
+    const artifactResponse = await request(`${API_URL}/api/artifacts/${artifactId}`);
+    record(`Source attachment ${artifactId} opens`, artifactResponse.status === 200, `status=${artifactResponse.status}; type=${artifactResponse.headers.get('content-type')}`);
+    const extraction = await getJson(`${API_URL}/api/artifacts/${artifactId}/extraction`);
+    record(`Extraction ${artifactId} is separate`, extraction.artifact_id === artifactId || extraction.id === artifactId, JSON.stringify(extraction).slice(0, 180));
   }
 
   await getJson(`${API_URL}/api/demo/reset`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
