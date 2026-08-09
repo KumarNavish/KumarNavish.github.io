@@ -21,7 +21,7 @@ LATER_URLS = [
 def download(url: str) -> bytes:
     request = urllib.request.Request(
         url,
-        headers={"User-Agent": "CasePath/12.0.2 photographic-evidence release builder"},
+        headers={"User-Agent": "CasePath photographic-evidence release builder"},
     )
     with urllib.request.urlopen(request, timeout=60) as response:
         payload = response.read()
@@ -45,7 +45,7 @@ def download_first(urls: list[str]) -> tuple[bytes, Image.Image, str]:
         try:
             payload = download(url)
             return payload, valid_photo(payload), url
-        except Exception as exc:  # build log retains every failed source
+        except Exception as exc:
             failures.append(f"{url}: {exc}")
     raise RuntimeError("No approved photographic source could be downloaded. " + " | ".join(failures))
 
@@ -67,7 +67,7 @@ def cover_crop(image: Image.Image, target: tuple[int, int]) -> Image.Image:
 
 def main() -> None:
     if len(sys.argv) != 2:
-        raise SystemExit("usage: replace_photographic_evidence.py <runtime-root>")
+        raise SystemExit("usage: replace_photographic_evidence.py <repository-or-runtime-root>")
 
     runtime = Path(sys.argv[1]).resolve()
     artifacts = runtime / "casepath-api" / "artifacts"
@@ -92,7 +92,8 @@ def main() -> None:
     later_path = artifacts / "later-window-condensation-2026-08-12.jpg"
     later.save(later_path, format="JPEG", quality=91, optimize=True, subsampling=0)
 
-    if hashlib.sha256(later_path.read_bytes()).hexdigest() == primary_hash:
+    later_hash = hashlib.sha256(later_path.read_bytes()).hexdigest()
+    if later_hash == primary_hash:
         raise RuntimeError("The two deployed evidence photographs are byte-identical")
 
     attribution = f"""# Evidence image attribution
@@ -112,11 +113,18 @@ CasePath uses licensed source photographs inside fictional research claim packag
 """
     (artifacts / "IMAGE_ATTRIBUTION.md").write_text(attribution, encoding="utf-8")
 
-    data_file = package / "data_v12.py"
+    data_candidates = [package / "data_v12.py", package / "data.py"]
+    data_file = next((candidate for candidate in data_candidates if candidate.exists()), None)
+    if data_file is None:
+        raise RuntimeError(f"No CasePath data module was found under {package}")
     data = data_file.read_text(encoding="utf-8")
-    data = data.replace("Generated source photograph", "Customer-supplied photograph")
-    data = data.replace("Generated photograph", "Customer-supplied photograph")
-    data = data.replace("generated source photograph", "customer-supplied photograph")
+    for old, new in [
+        ("Generated source photograph", "Customer-supplied photograph"),
+        ("Generated photograph", "Customer-supplied photograph"),
+        ("generated source photograph", "customer-supplied photograph"),
+        ("Generated source photograph of condensation", "Customer-supplied photograph of visible spotting"),
+    ]:
+        data = data.replace(old, new)
     data_file.write_text(data, encoding="utf-8")
 
     print(
@@ -125,8 +133,9 @@ CasePath uses licensed source photographs inside fictional research claim packag
             "primary_size": primary_image.size,
             "primary_sha256": primary_hash,
             "later_size": later.size,
-            "later_sha256": hashlib.sha256(later_path.read_bytes()).hexdigest(),
+            "later_sha256": later_hash,
             "later_source": later_url,
+            "data_module": data_file.name,
         },
     )
 
