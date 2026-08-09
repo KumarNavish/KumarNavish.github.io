@@ -3,7 +3,7 @@ import path from 'node:path';
 
 const BASE_URL = (process.env.BASE_URL || 'https://casepath-v1203-preview.onrender.com').replace(/\/$/, '');
 const API_URL = (process.env.API_URL || 'https://casepath-agentic-api.onrender.com').replace(/\/$/, '');
-const TIMEOUT_MS = Number(process.env.TIMEOUT_MS || 30000);
+const TIMEOUT_MS = Number(process.env.TIMEOUT_MS || 90000);
 const OUT = path.resolve('qa-out');
 
 const checks = [];
@@ -53,8 +53,23 @@ async function getJson(url, options = {}, recordCheck = true) {
   }
 }
 
+async function warm(url) {
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await request(`${url}${url.includes('?') ? '&' : '?'}warm=${Date.now()}-${attempt}`);
+      if (response.ok) return response;
+      lastError = new Error(`${url} returned HTTP ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise(resolve => setTimeout(resolve, 2500));
+  }
+  throw lastError;
+}
+
 async function waitForRun(runId) {
-  const deadline = Date.now() + 90000;
+  const deadline = Date.now() + 120000;
   let last;
   while (Date.now() < deadline) {
     last = await getJson(`${API_URL}/api/runs/${runId}`, {}, false);
@@ -67,6 +82,9 @@ async function waitForRun(runId) {
 async function main() {
   await fs.rm(OUT, { recursive: true, force: true });
   await fs.mkdir(OUT, { recursive: true });
+
+  await warm(`${BASE_URL}/`);
+  await warm(`${API_URL}/healthz`);
 
   const rootUrl = `${BASE_URL}/?qa=${Date.now()}`;
   const { response: rootResponse, text: html } = await getText(rootUrl);
