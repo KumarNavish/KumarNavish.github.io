@@ -1,0 +1,130 @@
+name: Materialize CasePath v12.0.3 frontend
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/materialize-casepath-v1203.yml'
+      - 'casepath/assets/bundle-v12-000.txt'
+      - 'casepath/assets/bundle-v12-001.txt'
+      - 'casepath/assets/bundle-v12-002.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: materialize-casepath-v1203
+  cancel-in-progress: false
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Decode and validate the direct application
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64
+          import gzip
+          import hashlib
+          import json
+          import re
+          from pathlib import Path
+
+          root = Path('casepath')
+          part_paths = [root / 'assets' / f'bundle-v12-{index:03d}.txt' for index in range(3)]
+          missing = [str(path) for path in part_paths if not path.exists()]
+          if missing:
+              raise SystemExit(f'Missing release segment(s): {missing}')
+
+          raw = ''.join(path.read_text(encoding='utf-8') for path in part_paths)
+          clean = re.sub(r'[^A-Za-z0-9+/=]', '', raw)
+          clean = clean.rstrip('=')
+          clean += '=' * ((4 - len(clean) % 4) % 4)
+          compressed = base64.b64decode(clean, validate=True)
+          html_bytes = gzip.decompress(compressed)
+          html = html_bytes.decode('utf-8')
+
+          required = [
+              '<!doctype html',
+              '<title>CasePath',
+              'flagship-v12-bootstrap',
+              'casepath-agentic-api.onrender.com',
+          ]
+          absent = [marker for marker in required if marker.lower() not in html.lower()]
+          if absent:
+              raise SystemExit(f'Decoded application is missing required marker(s): {absent}')
+
+          forbidden = [
+              "Failed to execute 'atob'",
+              'casepath-payload',
+              'bundle-v12-000.txt',
+              'Opening the flagship claim',
+          ]
+          present = [marker for marker in forbidden if marker in html]
+          if present:
+              raise SystemExit(f'Decoded application still contains loader marker(s): {present}')
+
+          linked_assets = sorted(set(re.findall(r'(?:src|href)=[\"\']([^\"\']+)[\"\']', html)))
+          local_assets = [asset for asset in linked_assets if not re.match(r'^(?:https?:|data:|#|mailto:)', asset)]
+          unresolved = []
+          for asset in local_assets:
+              asset_path = asset.split('?', 1)[0].split('#', 1)[0]
+              if not asset_path:
+                  continue
+              candidate = root / asset_path.lstrip('/')
+              if not candidate.exists():
+                  unresolved.append(asset)
+          if unresolved:
+              raise SystemExit(f'Decoded application references missing local asset(s): {unresolved}')
+
+          index = root / 'index.html'
+          index.write_text(html, encoding='utf-8')
+          report = {
+              'release': '12.0.3',
+              'delivery': 'direct-static-html',
+              'decoded_bytes': len(html_bytes),
+              'decoded_sha256': hashlib.sha256(html_bytes).hexdigest(),
+              'compressed_bytes': len(compressed),
+              'compressed_sha256': hashlib.sha256(compressed).hexdigest(),
+              'segment_count': len(part_paths),
+              'linked_assets': linked_assets,
+              'local_assets_verified': local_assets,
+              'loader_markers_absent': forbidden,
+          }
+          (root / 'materialization-report.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps(report, indent=2))
+          PY
+
+      - name: Static acceptance checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -qi '<!doctype html' casepath/index.html
+          grep -q 'flagship-v12-bootstrap' casepath/index.html
+          ! grep -q 'casepath-payload' casepath/index.html
+          ! grep -q "Failed to execute 'atob'" casepath/index.html
+          test -s casepath/materialization-report.json
+
+      - name: Commit the direct application
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'CasePath release automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add casepath/index.html casepath/materialization-report.json
+          if git diff --cached --quiet; then
+            echo 'The direct application is already materialized.'
+            exit 0
+          fi
+          git commit -m 'Materialize CasePath v12.0.3 as direct static HTML [skip ci]'
+          git push origin HEAD:master
