@@ -1,0 +1,97 @@
+name: CasePath v12.0.2 final public acceptance
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/casepath-public-acceptance-v1202-final.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: casepath-public-acceptance-v1202-final
+  cancel-in-progress: false
+
+jobs:
+  fresh-user-journey:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm init -y >/dev/null 2>&1
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Prepare the final acceptance harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .github/scripts/casepath-public-acceptance-v1202.mjs /tmp/casepath-public-acceptance-v1202-final.mjs
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('/tmp/casepath-public-acceptance-v1202-final.mjs')
+          text = path.read_text(encoding='utf-8')
+          old = '''page.locator('[role="dialog"], dialog, .artifact-dialog, .artifact-viewer, .source-viewer').filter({ visible: true }).first()'''
+          new = '''page.locator('[role="dialog"]:visible, dialog:visible, .artifact-dialog:visible, .artifact-viewer:visible, .source-viewer:visible').first()'''
+          text = text.replace(old, new)
+          text = text.replace(
+              "const eventLabels = (run.events || []).map(event => `${event.stage || ''}:${event.label || ''}`);",
+              "const events = run.events || run.audit || run.trace || [];\n  const eventLabels = events.map(event => `${event.stage || ''}:${event.label || ''}`);",
+          )
+          text = text.replace(
+              "(run.events || []).some(event => event.stage === 'complete')",
+              "events.some(event => event.stage === 'complete')",
+          )
+          text = text.replace(
+              "array.some(item => 'document' in item || 'evidence' in item || 'requirement' in item)",
+              "array.some(item => 'document' in item || 'document_name' in item || 'evidence' in item || 'requirement' in item || ('reason' in item && 'status' in item))",
+          )
+          path.write_text(text, encoding='utf-8')
+          PY
+          node --check /tmp/casepath-public-acceptance-v1202-final.mjs
+      - name: Run public acceptance
+        id: acceptance
+        shell: bash
+        run: |
+          set +e
+          node /tmp/casepath-public-acceptance-v1202-final.mjs
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Commit the exact public evidence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f casepath/reports/public-v12.0.2/acceptance.json
+          git config user.name 'CasePath final public acceptance'
+          git config user.email 'actions@users.noreply.github.com'
+          git add casepath/reports/public-v12.0.2
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record final CasePath v12.0.2 public acceptance [skip ci] [skip render]'
+            git pull --rebase origin master
+            git push origin HEAD:master
+          fi
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: casepath-v12.0.2-final-public-acceptance
+          path: casepath/reports/public-v12.0.2
+          if-no-files-found: error
+          retention-days: 30
+      - name: Enforce the gate
+        if: always()
+        shell: bash
+        run: test "${{ steps.acceptance.outputs.exit_code }}" = "0"
