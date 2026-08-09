@@ -1,10 +1,15 @@
 {
-  "release": "12.0.1",
-  "product": "CasePath flagship claim reasoning workspace",
+  "release": "12.0.2",
+  "product": "CasePath source-grounded flagship claim workspace",
   "flagship_claim": "BS-DEF-2026-041",
-  "additional_flagship_claims": ["BS-RENT-2026-073", "BS-TERM-2026-088"],
+  "additional_flagship_claims": [
+    "BS-RENT-2026-073",
+    "BS-TERM-2026-088"
+  ],
   "journey": "original submission -> source-grounded facts -> law-shaped process -> question-bound evidence -> expert reasoning correction -> reviewed case memory -> later claim",
-  "evidence_images": "photographic source files; no procedural illustration in the live claim set",
-  "frontend_source": "https://casepath-agentic-api.onrender.com/frontend/",
-  "fictional_research_packages": true
+  "fictional_research_packages": true,
+  "scale_policy": "one outstanding mould claim first; rent increase and termination internally complete; broad scaling deferred",
+  "frontend_delivery": "direct static application",
+  "api": "https://casepath-agentic-api.onrender.com",
+  "deployment_contract": "frontend and API must report the same release before acceptance"
 }
