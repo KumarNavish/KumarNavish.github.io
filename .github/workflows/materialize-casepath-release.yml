@@ -1,0 +1,97 @@
+name: Materialize CasePath public release
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/materialize-casepath-release.yml'
+      - 'casepath/assets/bundle-v12-*.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: materialize-casepath-public-release
+  cancel-in-progress: false
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Decode and validate the public application
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from __future__ import annotations
+          import base64
+          import gzip
+          import hashlib
+          import json
+          import re
+          from pathlib import Path
+
+          root = Path('casepath')
+          parts = sorted((root / 'assets').glob('bundle-v12-*.txt'))
+          if len(parts) != 5:
+              raise SystemExit(f'Expected 5 release segments, found {len(parts)}')
+
+          encoded = ''.join(path.read_text(encoding='utf-8') for path in parts)
+          encoded = re.sub(r'[^A-Za-z0-9+/=]', '', encoded)
+          encoded += '=' * ((4 - len(encoded) % 4) % 4)
+          compressed = base64.b64decode(encoded, validate=True)
+          html = gzip.decompress(compressed)
+          text = html.decode('utf-8')
+
+          required = [
+              '<!doctype html>',
+              'CasePath',
+              'BS-DEF-2026-041',
+              'What the customer sent',
+              'Analyse claim',
+              'Handling process',
+              'Previous claims that help',
+              'What CasePath learned',
+          ]
+          missing = [value for value in required if value not in text]
+          if missing:
+              raise SystemExit(f'Decoded application is missing: {missing}')
+          if "Failed to execute 'atob'" in text:
+              raise SystemExit('Decoded application contains the former atob failure page')
+
+          (root / 'index.html').write_bytes(html)
+          manifest = {
+              'release': '12.0.3',
+              'delivery': 'direct materialized HTML',
+              'segment_count': len(parts),
+              'encoded_length': len(encoded),
+              'encoded_sha256': hashlib.sha256(encoded.encode()).hexdigest(),
+              'compressed_size': len(compressed),
+              'compressed_sha256': hashlib.sha256(compressed).hexdigest(),
+              'html_size': len(html),
+              'html_sha256': hashlib.sha256(html).hexdigest(),
+          }
+          (root / 'materialized-release.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps(manifest, indent=2))
+          PY
+
+      - name: Commit the direct application
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'CasePath release automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add casepath/index.html casepath/materialized-release.json
+          if git diff --cached --quiet; then
+            echo 'Direct application already materialized.'
+            exit 0
+          fi
+          git commit -m 'Materialize CasePath v12.0.3 public application [skip ci]'
+          git push origin HEAD:master
