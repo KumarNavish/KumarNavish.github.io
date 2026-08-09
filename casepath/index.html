@@ -2,126 +2,197 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="CasePath reads a realistic generated claim, builds the handling process, explains the evidence still needed, and turns expert review into reusable case memory.">
   <meta name="theme-color" content="#ffffff">
-  <meta name="robots" content="noindex">
-  <title>CasePath — Opening the claim workspace</title>
-  <style>
-    :root{font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#142033;background:#f7f8fa}
-    *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:#f7f8fa}
-    main{width:min(560px,100%);padding:34px;background:#fff;border:1px solid #e1e6ee;border-radius:16px;box-shadow:0 24px 70px rgba(20,32,51,.08)}
-    .brand{display:flex;align-items:center;gap:10px;font-weight:780;font-size:18px}.mark{width:34px;height:34px;border-radius:9px;background:#c8102e;color:#fff;display:grid;place-items:center;font-size:11px}
-    h1{margin:30px 0 10px;font-size:clamp(28px,5vw,42px);line-height:1.04;letter-spacing:-.045em}p{margin:0;color:#667085;line-height:1.55}
-    .status{display:flex;gap:12px;align-items:flex-start;margin-top:28px;padding-top:22px;border-top:1px solid #e7eaf0}.dot{width:10px;height:10px;margin-top:6px;border-radius:999px;background:#c8102e;box-shadow:0 0 0 5px #fde9ed;flex:0 0 auto}
-    .status strong{display:block;margin-bottom:4px}.detail{font-size:13px;color:#8a94a6}.error{margin-top:22px;padding:14px 16px;border-radius:10px;background:#fff4f5;color:#8b1024;white-space:pre-wrap;word-break:break-word}
-    button{margin-top:18px;border:0;border-radius:9px;background:#c8102e;color:#fff;padding:11px 16px;font:inherit;font-weight:750;cursor:pointer}
-  </style>
+  <title>CasePath — See one claim handled from start to finish</title>
+  <link rel="stylesheet" href="assets/styles.css">
+  <link rel="stylesheet" href="assets/process-v11.css">
 </head>
-<body data-casepath-loader-release="12.0.4">
-  <main>
-    <div class="brand"><span class="mark">CP</span><span>CasePath</span></div>
-    <h1>Opening the flagship claim</h1>
-    <p>The complete workspace is being assembled from the verified release files.</p>
-    <div class="status"><span class="dot" aria-hidden="true"></span><div><strong id="status">Loading the application…</strong><span class="detail" id="detail">Preparing release 12.0.4</span></div></div>
-    <div id="error" class="error" hidden></div>
-    <button id="retry" type="button" hidden>Retry</button>
+<body>
+  <a class="skip-link" href="#main">Skip to the claim</a>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#submission" aria-label="CasePath demo home"><span class="brand-mark">CP</span><span>CasePath</span></a>
+      <div class="topbar-copy">One claim. One visible handling journey.</div>
+      <div class="topbar-actions">
+        <button class="text-button" id="browseClaimsBtn" type="button">Claims</button>
+        <button class="text-button" id="openAuditTop" type="button">Audit trail</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="intro" id="submission">
+      <div class="intro-copy">
+        <p class="context-label">Generated Swiss tenant-law claim</p>
+        <h1>Recurring mould. The landlord blames ventilation.</h1>
+        <p class="intro-lede">See exactly what arrived, watch CasePath work through it, review the process and evidence, then see the approved experience help with the next claim.</p>
+        <div class="claim-meta" id="claimMeta"></div>
+      </div>
+      <button class="primary-action" id="analyseBtn" type="button">
+        <span>Analyse claim</span>
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
+    </section>
+
+    <section class="source-section" aria-labelledby="sourceTitle">
+      <div class="section-heading">
+        <p class="section-number">01</p>
+        <div><h2 id="sourceTitle">What the customer sent</h2><p>The original message and files stay visible throughout the analysis.</p></div>
+      </div>
+      <div class="message-and-files">
+        <article class="customer-message" id="customerMessage"></article>
+        <div class="source-files">
+          <div class="source-files-head"><h3>Attachments</h3><span id="attachmentCount"></span></div>
+          <div class="attachment-list" id="attachmentList"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="analysis-section" id="analysis" hidden aria-labelledby="analysisTitle">
+      <div class="section-heading">
+        <p class="section-number">02</p>
+        <div><h2 id="analysisTitle">CasePath is working through the claim</h2><p>Each line below is emitted by the running pipeline.</p></div>
+      </div>
+      <div class="analysis-layout">
+        <ol class="stage-list" id="stageList"></ol>
+        <div class="analysis-live" id="analysisLive" aria-live="polite">
+          <div class="live-mark"><span></span></div>
+          <div><strong>Preparing the claim</strong><p>The pipeline will begin when you select Analyse claim.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="result-section" id="result" hidden aria-labelledby="resultTitle">
+      <div class="section-heading result-heading">
+        <p class="section-number">03</p>
+        <div><h2 id="resultTitle">The claim is blocked at one question</h2><p>The process, evidence and next action now follow from the same accepted claim state.</p></div>
+        <button class="secondary-action" id="openAuditResult" type="button">View audit trail</button>
+      </div>
+
+      <div class="decision-summary" id="decisionSummary"></div>
+
+      <div class="process-layout">
+        <div class="process-column">
+          <div class="subheading"><h3>Handling process</h3><p>What has been established, what is being decided, and what depends on it.</p></div>
+          <div class="process-path" id="processPath"></div>
+        </div>
+        <div class="evidence-column" id="evidenceColumn"></div>
+      </div>
+
+      <div class="facts-block">
+        <div class="subheading"><h3>What the system found</h3><p>Select any conclusion to inspect its source.</p></div>
+        <div class="facts-list" id="factsList"></div>
+      </div>
+
+      <div class="legal-block">
+        <div class="subheading"><h3>Legal questions and sources</h3><p>The retrieved sources shape the handling questions; they do not decide technical causation.</p></div>
+        <div class="law-list" id="lawList"></div>
+      </div>
+
+      <div class="precedents-block">
+        <div class="subheading"><h3>Previous claims that help</h3><p>Ranked by the same handling question, branch and evidence gap.</p></div>
+        <div class="precedent-list" id="precedentList"></div>
+      </div>
+    </section>
+
+    <section class="review-section" id="review" hidden aria-labelledby="reviewTitle">
+      <div class="section-heading">
+        <p class="section-number">04</p>
+        <div><h2 id="reviewTitle">Review the one decision that changes the work</h2><p>Correct the evidence sequence in context. CasePath will recompute the checklist immediately.</p></div>
+      </div>
+      <div class="review-layout">
+        <div class="review-decision">
+          <p class="context-label">Current process question</p>
+          <h3>What caused the recurring mould?</h3>
+          <p>The agent requests an independent inspection and a building-envelope assessment at the same time.</p>
+          <label class="review-choice">
+            <input type="radio" name="envelopeMode" value="conditional" checked>
+            <span><strong>Make the building-envelope assessment conditional</strong><small>Start with one neutral inspection. Request the more invasive assessment only if the first inspection is inconclusive.</small></span>
+          </label>
+          <label class="review-choice">
+            <input type="radio" name="envelopeMode" value="required_now">
+            <span><strong>Keep both requests immediate</strong><small>Use when the available facts justify both technical steps now.</small></span>
+          </label>
+        </div>
+        <form class="review-form" id="reviewForm">
+          <label for="reviewReason">Why?</label>
+          <textarea id="reviewReason" rows="5">Start with one neutral technical inspection. Keep broader building-envelope testing conditional on an inconclusive first assessment.</textarea>
+          <label for="reviewConfidence">Confidence</label>
+          <input id="reviewConfidence" type="range" min="0" max="100" value="92">
+          <div class="range-value"><span>Low</span><output id="confidenceOutput">92%</output><span>High</span></div>
+          <button class="primary-action full" type="submit">Approve reviewed claim</button>
+        </form>
+      </div>
+    </section>
+
+    <section class="learning-section" id="learning" hidden aria-labelledby="learningTitle">
+      <div class="section-heading">
+        <p class="section-number">05</p>
+        <div><h2 id="learningTitle">What CasePath learned</h2><p>The reviewed case is useful immediately. A shared rule remains quarantined.</p></div>
+      </div>
+      <div class="learning-now" id="learningNow"></div>
+      <button class="primary-action" id="tryLearningBtn" type="button">
+        <span>Try what CasePath learned</span>
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
+    </section>
+
+    <section class="later-section" id="laterClaim" hidden aria-labelledby="laterTitle">
+      <div class="section-heading">
+        <p class="section-number">06</p>
+        <div><h2 id="laterTitle">The next claim benefits</h2><p>An unseen claim now retrieves the reviewed precedent and changes its evidence sequence.</p></div>
+      </div>
+      <div class="later-source" id="laterSource"></div>
+      <div class="before-after" id="beforeAfter"></div>
+    </section>
   </main>
-  <script>
-    (() => {
-      'use strict';
-      const RELEASE = '12.0.4';
-      const PARTS = [0,1,2,3,4].map(index => `assets/bundle-v12-${String(index).padStart(3,'0')}.txt`);
-      const status = document.getElementById('status');
-      const detail = document.getElementById('detail');
-      const errorBox = document.getElementById('error');
-      const retry = document.getElementById('retry');
 
-      function setState(title, message) {
-        status.textContent = title;
-        detail.textContent = message;
-      }
+  <dialog class="viewer" id="artifactViewer" aria-labelledby="viewerTitle">
+    <div class="viewer-shell">
+      <header class="viewer-head">
+        <div><p class="context-label" id="viewerKind">Source document</p><h2 id="viewerTitle">Attachment</h2><p id="viewerMeta"></p></div>
+        <div class="viewer-actions">
+          <a class="icon-button" id="downloadArtifact" target="_blank" rel="noopener" aria-label="Open source file in a new tab"><svg viewBox="0 0 24 24"><path d="M14 5h5v5M13 11l6-6M19 13v6H5V5h6"/></svg></a>
+          <button class="icon-button" id="closeViewer" type="button" aria-label="Close attachment viewer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        </div>
+      </header>
+      <div class="viewer-tabs" role="tablist" aria-label="Attachment view">
+        <button type="button" role="tab" aria-selected="true" data-viewer-tab="original">Original file</button>
+        <button type="button" role="tab" aria-selected="false" data-viewer-tab="extraction">Agent extraction</button>
+      </div>
+      <div class="viewer-body">
+        <div class="original-view" id="originalView"></div>
+        <div class="extraction-view" id="extractionView" hidden></div>
+        <aside class="source-facts" id="sourceFacts"></aside>
+      </div>
+    </div>
+  </dialog>
 
-      function decodeBase64(encoded) {
-        const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-        const clean = encoded.replace(/[^A-Za-z0-9+/]/g, '');
-        if (!clean) throw new Error('The release payload is empty.');
-        if (clean.length % 4 === 1) throw new Error('The release payload has an impossible base64 length.');
-        const outputLength = Math.floor(clean.length * 3 / 4);
-        const output = new Uint8Array(outputLength);
-        let out = 0;
-        for (let index = 0; index < clean.length; index += 4) {
-          const a = alphabet.indexOf(clean[index]);
-          const b = alphabet.indexOf(clean[index + 1]);
-          const c = index + 2 < clean.length ? alphabet.indexOf(clean[index + 2]) : -1;
-          const d = index + 3 < clean.length ? alphabet.indexOf(clean[index + 3]) : -1;
-          if (a < 0 || b < 0 || (c < 0 && index + 2 < clean.length) || (d < 0 && index + 3 < clean.length)) {
-            throw new Error(`The release payload contains invalid base64 data near character ${index}.`);
-          }
-          const value = (a << 18) | (b << 12) | ((c < 0 ? 0 : c) << 6) | (d < 0 ? 0 : d);
-          output[out++] = (value >> 16) & 255;
-          if (c >= 0) output[out++] = (value >> 8) & 255;
-          if (d >= 0) output[out++] = value & 255;
-        }
-        return output.slice(0, out);
-      }
+  <dialog class="audit-drawer" id="auditDrawer" aria-labelledby="auditTitle">
+    <div class="audit-shell">
+      <header><div><p class="context-label">Complete run record</p><h2 id="auditTitle">Audit trail</h2><p>Human-readable stages above; exact agents, inputs and validators here.</p></div><button class="icon-button" id="closeAudit" type="button" aria-label="Close audit trail"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+      <div id="auditContent" class="audit-content"></div>
+    </div>
+  </dialog>
 
-      async function fetchPart(path, index) {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 20000);
-        try {
-          const response = await fetch(`${path}?release=${RELEASE}`, { cache:'no-store', signal:controller.signal });
-          if (!response.ok) throw new Error(`${path} returned HTTP ${response.status}`);
-          const text = await response.text();
-          if (!text.trim()) throw new Error(`${path} was empty`);
-          setState('Loading the application…', `Release file ${index + 1} of ${PARTS.length} loaded`);
-          return text;
-        } finally {
-          clearTimeout(timeout);
-        }
-      }
+  <dialog class="claim-drawer" id="claimsDrawer" aria-labelledby="claimsTitle">
+    <div class="claim-drawer-shell">
+      <header><div><p class="context-label">Generated claim set</p><h2 id="claimsTitle">Claims in this focused demo</h2></div><button class="icon-button" id="closeClaims" type="button" aria-label="Close claims"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+      <div id="claimDrawerList"></div>
+    </div>
+  </dialog>
 
-      async function load() {
-        retry.hidden = true;
-        errorBox.hidden = true;
-        try {
-          if (!('DecompressionStream' in window)) {
-            throw new Error('This browser cannot open the verified release package. Use a current Chrome, Edge, Firefox or Safari release.');
-          }
-          setState('Loading the application…', `Reading ${PARTS.length} verified release files`);
-          const parts = [];
-          for (let index = 0; index < PARTS.length; index += 1) parts.push(await fetchPart(PARTS[index], index));
-          const encoded = parts.join('');
-          setState('Verifying the workspace…', `${encoded.replace(/\s/g,'').length.toLocaleString()} encoded characters loaded`);
-          const bytes = decodeBase64(encoded);
-          if (bytes.length < 4 || bytes[0] !== 0x1f || bytes[1] !== 0x8b) {
-            throw new Error('The verified release package did not contain a valid gzip stream.');
-          }
-          const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
-          const html = await new Response(stream).text();
-          if (!/^\s*<!doctype html>/i.test(html) || !html.includes('CasePath') || !html.includes('flagship-v12-bootstrap')) {
-            throw new Error('The decoded release did not contain the expected CasePath application.');
-          }
-          if (html.includes('casepath-payload') || html.includes("Failed to execute 'atob'")) {
-            throw new Error('The decoded release unexpectedly contained another bootstrap payload.');
-          }
-          setState('Opening the claim…', 'The verified workspace is ready');
-          document.open();
-          document.write(html);
-          document.close();
-        } catch (error) {
-          const message = error && error.name === 'AbortError'
-            ? 'A release file took too long to load. Please retry.'
-            : (error instanceof Error ? error.message : String(error));
-          setState('CasePath could not open', 'The release stopped safely before the claim workspace loaded');
-          errorBox.textContent = message;
-          errorBox.hidden = false;
-          retry.hidden = false;
-        }
-      }
+  <dialog class="precedent-dialog" id="precedentDialog" aria-labelledby="precedentTitle">
+    <div class="precedent-shell">
+      <header><div><p class="context-label">Reviewed organizational memory</p><h2 id="precedentTitle">Historical claim</h2></div><button class="icon-button" id="closePrecedent" type="button" aria-label="Close historical claim"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+      <div id="precedentContent"></div>
+    </div>
+  </dialog>
 
-      retry.addEventListener('click', load);
-      load();
-    })();
-  </script>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="assets/app.js"></script>
+  <script src="assets/process-v11.js"></script>
 </body>
 </html>
