@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="description" content="CasePath reads a realistic claim package, identifies the question blocking progress, explains the evidence needed, and turns expert review into reusable organizational knowledge.">
+  <meta name="description" content="CasePath coordinates specialist agents to reconstruct a complete claim-handling process, derive its evidence model, capture expert corrections and improve the organizational playbook.">
   <meta name="theme-color" content="#ffffff">
-  <title>CasePath — Guided claim handling</title>
+  <title>CasePath — Full claim-handling playbooks</title>
   <link rel="stylesheet" href="assets/guided-v13.css">
-  <link rel="stylesheet" href="assets/guided-v14-process.css">
+  <link rel="stylesheet" href="assets/guided-v15-lifecycle.css">
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to the claim</a>
@@ -15,7 +15,7 @@
   <header class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="#submission" aria-label="CasePath demo home"><span class="brand-mark">CP</span><span>CasePath</span></a>
-      <p class="topbar-copy">One claim, guided one decision at a time.</p>
+      <p class="topbar-copy">Agents reconstruct the process, evidence model and organizational playbook.</p>
       <div class="topbar-actions">
         <button class="quiet-button" id="browseClaimsBtn" type="button">Claims</button>
         <button class="quiet-button" id="openAuditTop" type="button">Audit trail</button>
@@ -28,14 +28,14 @@
       <div class="intro-copy">
         <p class="eyebrow">Swiss tenant-law claim</p>
         <h1>Recurring mould. The landlord blames ventilation.</h1>
-        <p class="intro-lede">Read the original submission, then follow the one question that determines what the handler should do next.</p>
+        <p class="intro-lede">Open the original submission, then watch a coordinated team of specialists reconstruct the complete handling process, derive its evidence requirements and turn expert review into reusable knowledge.</p>
         <div class="claim-meta" id="claimMeta"></div>
       </div>
       <button class="primary-action" id="analyseBtn" type="button"><span>Analyse claim</span><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
     </section>
 
     <section class="source-section" id="source" aria-labelledby="sourceTitle">
-      <div class="section-heading"><div><p class="section-kicker">Before analysis</p><h2 id="sourceTitle">What the customer sent</h2></div><p>The original message and files remain available throughout the case.</p></div>
+      <div class="section-heading"><div><p class="section-kicker">Before analysis</p><h2 id="sourceTitle">What the customer sent</h2></div><p>The original message and files remain available throughout the complete process.</p></div>
       <div class="message-and-files">
         <article class="customer-message" id="customerMessage"></article>
         <div class="source-files"><div class="source-files-head"><h3>Attachments</h3><span id="attachmentCount"></span></div><div class="attachment-list" id="attachmentList"></div></div>
@@ -43,13 +43,13 @@
     </section>
 
     <section class="analysis-section" id="analysis" hidden aria-labelledby="analysisTitle">
-      <div class="section-heading compact"><div><p class="section-kicker">Live analysis</p><h2 id="analysisTitle">CasePath is working through the claim</h2></div><p>Each update comes from the running claim pipeline.</p></div>
-      <div class="analysis-layout"><ol class="stage-list" id="stageList"></ol><div class="analysis-live" id="analysisLive" aria-live="polite"><span class="live-mark" aria-hidden="true"><i></i></span><div><strong>Preparing the claim</strong><p>The analysis begins when you select Analyse claim.</p></div></div></div>
+      <div class="section-heading compact"><div><p class="section-kicker">Live specialist work</p><h2 id="analysisTitle">A team of agents is building the claim-handling playbook</h2></div><p>Each update is an execution event from the shared claim context.</p></div>
+      <div class="analysis-layout"><ol class="stage-list" id="stageList"></ol><div class="analysis-live" id="analysisLive" aria-live="polite"><span class="live-mark" aria-hidden="true"><i></i></span><div><strong>Preparing the shared claim context</strong><p>The orchestrator starts when you select Analyse claim.</p></div></div></div>
     </section>
 
     <section class="guide-section" id="guide" hidden aria-labelledby="guideQuestion">
       <div class="guide-shell">
-        <header class="guide-header"><div><p class="guide-counter"><span id="guideStepNumber">1</span> of <span id="guideStepTotal">8</span></p><div class="guide-dots" id="guideDots" aria-label="Guided claim review progress"></div></div><button class="quiet-button" id="openAuditGuide" type="button">Audit trail</button></header>
+        <header class="guide-header"><div><p class="guide-counter"><span id="guideStepNumber">1</span> of <span id="guideStepTotal">8</span></p><div class="guide-dots" id="guideDots" aria-label="Guided claim lifecycle progress"></div></div><button class="quiet-button" id="openAuditGuide" type="button">Audit trail</button></header>
         <div class="guide-stage" id="guideStage" aria-live="polite"></div>
         <footer class="guide-footer"><button class="back-button" id="guideBack" type="button">Back</button><div class="guide-footer-actions"><button class="detail-button" id="guideDetail" type="button">See supporting detail</button><button class="primary-action" id="guideNext" type="button"><span>Continue</span><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div></footer>
       </div>
@@ -66,14 +66,14 @@
 
   <dialog class="detail-dialog" id="detailDialog" aria-labelledby="detailTitle"><div class="detail-shell"><header class="detail-head"><div><p class="eyebrow" id="detailKind">Supporting detail</p><h2 id="detailTitle">Details</h2><p id="detailIntro"></p></div><button class="icon-button" id="closeDetail" type="button" aria-label="Close detail view"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header><div id="detailContent" class="detail-content"></div></div></dialog>
 
-  <dialog class="audit-drawer" id="auditDrawer" aria-labelledby="auditTitle"><div class="audit-shell"><header><div><p class="eyebrow">Complete run record</p><h2 id="auditTitle">Audit trail</h2><p>The exact specialists, inputs, outputs, prompts, and validators used for this run.</p></div><button class="icon-button" id="closeAudit" type="button" aria-label="Close audit trail"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header><div id="auditContent" class="audit-content"></div></div></dialog>
+  <dialog class="audit-drawer" id="auditDrawer" aria-labelledby="auditTitle"><div class="audit-shell"><header><div><p class="eyebrow">Complete run record</p><h2 id="auditTitle">Audit trail</h2><p>The exact specialists, shared inputs, produced artifacts, prompts and validators used for this run.</p></div><button class="icon-button" id="closeAudit" type="button" aria-label="Close audit trail"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header><div id="auditContent" class="audit-content"></div></div></dialog>
 
-  <dialog class="claim-drawer" id="claimsDrawer" aria-labelledby="claimsTitle"><div class="claim-drawer-shell"><header><div><p class="eyebrow">Focused demo</p><h2 id="claimsTitle">Claims</h2><p>The later claim becomes available after this claim is reviewed.</p></div><button class="icon-button" id="closeClaims" type="button" aria-label="Close claims"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header><div id="claimDrawerList"></div></div></dialog>
+  <dialog class="claim-drawer" id="claimsDrawer" aria-labelledby="claimsTitle"><div class="claim-drawer-shell"><header><div><p class="eyebrow">Focused lifecycle demo</p><h2 id="claimsTitle">Claims</h2><p>The unseen related claim becomes available after the flagship playbook is reviewed.</p></div><button class="icon-button" id="closeClaims" type="button" aria-label="Close claims"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header><div id="claimDrawerList"></div></div></dialog>
 
   <dialog class="precedent-dialog" id="precedentDialog" aria-labelledby="precedentTitle"><div class="precedent-shell"><header><div><p class="eyebrow">Previous reviewed case</p><h2 id="precedentTitle">Historical claim</h2></div><button class="icon-button" id="closePrecedent" type="button" aria-label="Close historical claim"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header><div id="precedentContent"></div></div></dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/guided-v14-process.js"></script>
+  <script src="assets/guided-v15-lifecycle.js"></script>
   <script src="assets/guided-v13.js"></script>
 </body>
 </html>
