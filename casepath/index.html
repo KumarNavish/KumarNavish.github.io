@@ -3,79 +3,131 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="description" content="CasePath coordinates specialist agents to reconstruct a complete claim-handling process, derive its evidence model, capture expert corrections and improve the organizational playbook.">
+  <meta name="description" content="Watch CasePath turn a real claim submission into a complete handling process, process-grounded evidence model, reviewed playbook, and reusable organizational knowledge.">
   <meta name="theme-color" content="#ffffff">
-  <title>CasePath — Full claim-handling playbooks</title>
-  <link rel="stylesheet" href="assets/guided-v13.css">
-  <link rel="stylesheet" href="assets/guided-v15-lifecycle.css">
-  <link rel="stylesheet" href="assets/guided-v15-stability.css">
+  <title>CasePath — Watch the claim-handling playbook emerge</title>
+  <link rel="stylesheet" href="assets/live-v16.css">
 </head>
 <body>
-  <a class="skip-link" href="#main">Skip to the claim</a>
+  <a class="skip-link" href="#casepathWork">Skip to CasePath</a>
 
-  <header class="topbar">
-    <div class="topbar-inner">
-      <a class="brand" href="#submission" aria-label="CasePath demo home"><span class="brand-mark">CP</span><span>CasePath</span></a>
-      <p class="topbar-copy">Agents reconstruct the process, evidence model and organizational playbook.</p>
-      <div class="topbar-actions">
-        <button class="quiet-button" id="browseClaimsBtn" type="button">Claims</button>
-        <button class="quiet-button" id="openAuditTop" type="button">Audit trail</button>
-      </div>
+  <header class="appbar">
+    <a class="brand" href="#" aria-label="CasePath demo home">
+      <span class="brand-mark" aria-hidden="true">CP</span>
+      <span>CasePath</span>
+    </a>
+    <div class="appbar-context">
+      <strong id="headerClaimTitle">Recurring mould</strong>
+      <span id="headerClaimId">Loading claim…</span>
     </div>
+    <button class="text-button" id="openAudit" type="button" disabled>Audit trail</button>
   </header>
 
-  <main id="main">
-    <section class="intro" id="submission">
-      <div class="intro-copy">
-        <p class="eyebrow">Swiss tenant-law claim</p>
-        <h1>Recurring mould. The landlord blames ventilation.</h1>
-        <p class="intro-lede">Open the original submission, then watch a coordinated team of specialists reconstruct the complete handling process, derive its evidence requirements and turn expert review into reusable knowledge.</p>
-        <div class="claim-meta" id="claimMeta"></div>
+  <main class="claim-workspace" id="casepathWork">
+    <aside class="submission-pane" aria-labelledby="submissionHeading">
+      <header class="submission-head">
+        <div>
+          <span class="quiet-label">Customer submission</span>
+          <h1 id="submissionHeading">What arrived</h1>
+        </div>
+        <button class="icon-button mobile-source-toggle" id="toggleSource" type="button" aria-expanded="true" aria-label="Show or hide customer submission">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+      </header>
+      <div class="submission-scroll" id="submissionContent">
+        <article class="customer-email" id="customerEmail" aria-label="Customer email"></article>
+        <section class="attachments-block" aria-labelledby="attachmentsHeading">
+          <header><h2 id="attachmentsHeading">Attachments</h2><span id="attachmentCount"></span></header>
+          <div class="attachment-list" id="attachmentList"></div>
+        </section>
       </div>
-      <button class="primary-action" id="analyseBtn" type="button"><span>Analyse claim</span><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
-    </section>
+    </aside>
 
-    <section class="source-section" id="source" aria-labelledby="sourceTitle">
-      <div class="section-heading"><div><p class="section-kicker">Before analysis</p><h2 id="sourceTitle">What the customer sent</h2></div><p>The original message and files remain available throughout the complete process.</p></div>
-      <div class="message-and-files">
-        <article class="customer-message" id="customerMessage"></article>
-        <div class="source-files"><div class="source-files-head"><h3>Attachments</h3><span id="attachmentCount"></span></div><div class="attachment-list" id="attachmentList"></div></div>
-      </div>
-    </section>
+    <section class="work-pane" aria-live="polite">
+      <section class="start-state" id="startState">
+        <div class="start-copy">
+          <span class="quiet-label">One complete claim journey</span>
+          <h2>Watch CasePath handle this claim</h2>
+          <p>CasePath will read the original evidence, research the legal questions, build the handling process, connect evidence to each decision, find useful previous cases, and prepare the result for expert review.</p>
+        </div>
+        <div class="start-flow" aria-label="CasePath claim journey">
+          <span>Read</span><i></i><span>Understand</span><i></i><span>Research</span><i></i><span>Build process</span><i></i><span>Map evidence</span><i></i><span>Review</span><i></i><span>Learn</span>
+        </div>
+        <button class="primary-button" id="runCasePath" type="button">
+          <span>Watch CasePath handle this claim</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+        <p class="research-boundary">Fictional research claim. No legal decision or customer contact is made.</p>
+      </section>
 
-    <section class="analysis-section" id="analysis" hidden aria-labelledby="analysisTitle">
-      <div class="section-heading compact"><div><p class="section-kicker">Live specialist work</p><h2 id="analysisTitle">A team of agents is building the claim-handling playbook</h2></div><p>Each update is an execution event from the shared claim context.</p></div>
-      <div class="analysis-layout"><ol class="stage-list" id="stageList"></ol><div class="analysis-live" id="analysisLive" aria-live="polite"><span class="live-mark" aria-hidden="true"><i></i></span><div><strong>Preparing the shared claim context</strong><p>The orchestrator starts when you select Analyse claim.</p></div></div></div>
-    </section>
+      <section class="live-workspace" id="liveWorkspace" hidden>
+        <header class="orchestrator-bar" id="orchestratorBar">
+          <div class="orchestrator-mark" aria-hidden="true"><span></span><i></i></div>
+          <div>
+            <span class="quiet-label">CasePath orchestrator</span>
+            <strong id="orchestratorStatus">Opening one shared claim context</strong>
+          </div>
+          <span class="live-chip" id="liveChip">Live</span>
+        </header>
 
-    <section class="guide-section" id="guide" hidden aria-labelledby="guideQuestion">
-      <div class="guide-shell">
-        <header class="guide-header"><div><p class="guide-counter"><span id="guideStepNumber">1</span> of <span id="guideStepTotal">8</span></p><div class="guide-dots" id="guideDots" aria-label="Guided claim lifecycle progress"></div></div><button class="quiet-button" id="openAuditGuide" type="button">Audit trail</button></header>
-        <div class="guide-stage" id="guideStage" aria-live="polite"></div>
-        <footer class="guide-footer"><button class="back-button" id="guideBack" type="button">Back</button><div class="guide-footer-actions"><button class="detail-button" id="guideDetail" type="button">See supporting detail</button><button class="primary-action" id="guideNext" type="button"><span>Continue</span><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div></footer>
-      </div>
+        <nav class="agent-progress" id="agentProgress" aria-label="CasePath work stages"></nav>
+
+        <div class="stage-canvas" id="stageCanvas"></div>
+
+        <footer class="journey-actions" id="journeyActions" hidden>
+          <button class="secondary-button" id="journeyBack" type="button">Back</button>
+          <button class="primary-button" id="journeyNext" type="button"><span>Continue</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+        </footer>
+      </section>
     </section>
   </main>
 
-  <dialog class="viewer" id="artifactViewer" aria-labelledby="viewerTitle">
-    <div class="viewer-shell">
-      <header class="viewer-head"><div><p class="eyebrow" id="viewerKind">Original source</p><h2 id="viewerTitle">Attachment</h2><p id="viewerMeta"></p></div><div class="viewer-actions"><a class="icon-button" id="downloadArtifact" target="_blank" rel="noopener" aria-label="Open source file in a new tab"><svg viewBox="0 0 24 24"><path d="M14 5h5v5M13 11l6-6M19 13v6H5V5h6"/></svg></a><button class="icon-button" id="closeViewer" type="button" aria-label="Close attachment viewer"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div></header>
-      <div class="viewer-tabs" role="tablist" aria-label="Attachment view"><button type="button" role="tab" aria-selected="true" data-viewer-tab="original">Original file</button><button type="button" role="tab" aria-selected="false" data-viewer-tab="extraction">What CasePath extracted</button></div>
-      <div class="viewer-body"><div class="original-view" id="originalView"></div><div class="extraction-view" id="extractionView" hidden></div><aside class="source-facts" id="sourceFacts"></aside></div>
+  <dialog class="source-viewer" id="sourceViewer" aria-labelledby="sourceViewerTitle">
+    <div class="source-viewer-shell">
+      <header class="source-viewer-head">
+        <div>
+          <span class="quiet-label" id="sourceViewerKind">Original attachment</span>
+          <h2 id="sourceViewerTitle">Attachment</h2>
+          <p id="sourceViewerMeta"></p>
+        </div>
+        <div class="viewer-actions">
+          <button class="icon-button" id="zoomOut" type="button" aria-label="Zoom out">−</button>
+          <span id="zoomValue">100%</span>
+          <button class="icon-button" id="zoomIn" type="button" aria-label="Zoom in">+</button>
+          <a class="icon-button" id="openOriginal" href="#" target="_blank" rel="noopener" aria-label="Open original file in a new tab"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5M13 11l6-6M19 13v6H5V5h6"/></svg></a>
+          <button class="icon-button" id="closeSourceViewer" type="button" aria-label="Close source viewer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        </div>
+      </header>
+      <div class="source-viewer-tabs" role="tablist" aria-label="Attachment representation">
+        <button type="button" role="tab" aria-selected="true" data-source-tab="original">Original attachment</button>
+        <button type="button" role="tab" aria-selected="false" data-source-tab="extraction">What CasePath extracted</button>
+      </div>
+      <div class="source-viewer-body">
+        <aside class="page-thumbnails" id="pageThumbnails" aria-label="Document pages"></aside>
+        <div class="source-stage" id="sourceStage"></div>
+        <aside class="source-evidence" id="sourceEvidence"></aside>
+      </div>
     </div>
   </dialog>
 
-  <dialog class="detail-dialog" id="detailDialog" aria-labelledby="detailTitle"><div class="detail-shell"><header class="detail-head"><div><p class="eyebrow" id="detailKind">Supporting detail</p><h2 id="detailTitle">Details</h2><p id="detailIntro"></p></div><button class="icon-button" id="closeDetail" type="button" aria-label="Close detail view"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header><div id="detailContent" class="detail-content"></div></div></dialog>
+  <dialog class="audit-drawer" id="auditDrawer" aria-labelledby="auditTitle">
+    <div class="audit-shell">
+      <header>
+        <div><span class="quiet-label">Research detail</span><h2 id="auditTitle">Audit trail</h2><p>Every specialist handoff, source, model identity, prompt, validator, and accepted artifact from this run.</p></div>
+        <button class="icon-button" id="closeAudit" type="button" aria-label="Close audit trail"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </header>
+      <div class="audit-content" id="auditContent"></div>
+    </div>
+  </dialog>
 
-  <dialog class="audit-drawer" id="auditDrawer" aria-labelledby="auditTitle"><div class="audit-shell"><header><div><p class="eyebrow">Complete run record</p><h2 id="auditTitle">Audit trail</h2><p>The exact specialists, shared inputs, produced artifacts, prompts and validators used for this run.</p></div><button class="icon-button" id="closeAudit" type="button" aria-label="Close audit trail"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header><div id="auditContent" class="audit-content"></div></div></dialog>
-
-  <dialog class="claim-drawer" id="claimsDrawer" aria-labelledby="claimsTitle"><div class="claim-drawer-shell"><header><div><p class="eyebrow">Focused lifecycle demo</p><h2 id="claimsTitle">Claims</h2><p>The unseen related claim becomes available after the flagship playbook is reviewed.</p></div><button class="icon-button" id="closeClaims" type="button" aria-label="Close claims"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header><div id="claimDrawerList"></div></div></dialog>
-
-  <dialog class="precedent-dialog" id="precedentDialog" aria-labelledby="precedentTitle"><div class="precedent-shell"><header><div><p class="eyebrow">Previous reviewed case</p><h2 id="precedentTitle">Historical claim</h2></div><button class="icon-button" id="closePrecedent" type="button" aria-label="Close historical claim"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header><div id="precedentContent"></div></div></dialog>
+  <dialog class="precedent-viewer" id="precedentViewer" aria-labelledby="precedentTitle">
+    <div class="precedent-shell">
+      <header><div><span class="quiet-label">Reviewed organizational experience</span><h2 id="precedentTitle">Previous claim</h2></div><button class="icon-button" id="closePrecedent" type="button" aria-label="Close previous claim"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+      <div id="precedentContent"></div>
+    </div>
+  </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/guided-v15-lifecycle.js"></script>
-  <script src="assets/guided-v13.js"></script>
-  <script src="assets/guided-v15-audit-sync.js"></script>
+  <script src="assets/live-v16.js"></script>
 </body>
 </html>
