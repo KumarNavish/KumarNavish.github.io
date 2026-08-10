@@ -97,11 +97,12 @@
     const content = document.querySelector('#auditContent');
     if (!drawer || !content) return;
 
-    const ids = discoveredRunIds();
-    content.innerHTML = '<p style="padding:18px 0;color:#626a75">Loading the complete claim journey…</p>';
-    if (!drawer.open) drawer.showModal();
+    trigger.disabled = true;
+    const originalLabel = trigger.textContent;
+    trigger.textContent = 'Loading audit…';
 
     try {
+      const ids = discoveredRunIds();
       const runs = await Promise.all(ids.map(async runId => {
         const response = await fetch(`${apiBase}/api/runs/${encodeURIComponent(runId)}`);
         if (!response.ok) throw new Error(`Run ${runId} could not be read.`);
@@ -118,8 +119,13 @@
           ${(run.events || []).map(auditEvent).join('')}
         </section>`;
       }).join('') || '<p style="padding:18px 0;color:#626a75">No completed run is available yet.</p>';
+      if (!drawer.open) drawer.showModal();
     } catch (error) {
       content.innerHTML = `<p style="padding:18px 0;color:#626a75">${escapeHtml(error.message)}</p>`;
+      if (!drawer.open) drawer.showModal();
+    } finally {
+      trigger.disabled = false;
+      trigger.textContent = originalLabel;
     }
   }
 
