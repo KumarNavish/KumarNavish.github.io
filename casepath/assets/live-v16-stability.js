@@ -12,10 +12,7 @@
   const stage = document.querySelector('#sourceStage');
   if (!viewer || !stage) return;
 
-  function keepActiveRepresentationVisible({ reopen = false } = {}) {
-    if (!viewer.open && reopen) {
-      try { viewer.showModal(); } catch (_) {}
-    }
+  function keepActiveRepresentationVisible() {
     if (!viewer.open) return;
     stage.hidden = false;
     stage.removeAttribute('aria-hidden');
@@ -31,7 +28,7 @@
     }
   }
 
-  new MutationObserver(() => keepActiveRepresentationVisible()).observe(stage, {
+  new MutationObserver(keepActiveRepresentationVisible).observe(stage, {
     childList: true,
     subtree: true,
     attributes: true,
@@ -40,8 +37,14 @@
 
   document.addEventListener('click', event => {
     if (!event.target.closest?.('[data-source-tab]')) return;
-    requestAnimationFrame(() => keepActiveRepresentationVisible({ reopen: true }));
-    setTimeout(() => keepActiveRepresentationVisible({ reopen: true }), 100);
-    setTimeout(() => keepActiveRepresentationVisible({ reopen: true }), 600);
+    requestAnimationFrame(keepActiveRepresentationVisible);
+    setTimeout(keepActiveRepresentationVisible, 100);
+    setTimeout(keepActiveRepresentationVisible, 600);
+  });
+
+  viewer.addEventListener('close', () => {
+    stage.style.removeProperty('display');
+    stage.style.removeProperty('visibility');
+    stage.style.removeProperty('opacity');
   });
 })();
