@@ -9,6 +9,42 @@
     return retained;
   }
 
+  function normalizeChecklist(canvas) {
+    const checklists = [...canvas.querySelectorAll('.v17-derived-checklist')];
+    const checklist = keepOne(checklists, checklists.find(item => item.querySelectorAll('.v17-checklist-group').length === 4) || checklists[0] || null);
+    if (!checklist) return;
+
+    for (const group of checklist.querySelectorAll('.v17-checklist-group')) {
+      const uniqueItems = [];
+      const seen = new Set();
+      for (const item of group.querySelectorAll('.v17-checklist-item')) {
+        const key = (item.textContent || '').replace(/\s+/g, ' ').trim();
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          uniqueItems.push(item);
+        }
+      }
+      if (!uniqueItems.length) continue;
+
+      for (const item of group.querySelectorAll('.v17-checklist-item')) item.remove();
+      for (const details of group.querySelectorAll(':scope > details')) details.remove();
+
+      const first = uniqueItems.shift();
+      group.append(first);
+      if (uniqueItems.length) {
+        const details = document.createElement('details');
+        details.className = 'v18-checklist-details';
+        details.innerHTML = `<summary>Show ${uniqueItems.length} more</summary>`;
+        for (const item of uniqueItems) details.append(item);
+        details.removeAttribute('open');
+        group.append(details);
+      }
+      group.dataset.v18Normalized = 'true';
+    }
+    checklist.dataset.v18Condensed = 'true';
+    checklist.dataset.v18Normalized = 'true';
+  }
+
   function normalize() {
     const canvas = document.querySelector('#stageCanvas');
     if (!canvas) return;
@@ -30,6 +66,8 @@
     const readyArtifacts = [...canvas.querySelectorAll('.v18-ready-artifacts')];
     const retainedReady = keepOne(readyArtifacts);
     if (retainedReady) retainedReady.dataset.v18Normalized = 'true';
+
+    normalizeChecklist(canvas);
 
     const memoryBoundaries = [...canvas.querySelectorAll('.v18-memory-boundary')];
     const retainedMemory = keepOne(memoryBoundaries);
