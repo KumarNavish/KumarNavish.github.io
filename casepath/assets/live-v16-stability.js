@@ -55,6 +55,22 @@
   const query = new URLSearchParams(location.search);
   const apiBase = (query.get('api') || window.CASEPATH_API || 'https://casepath-agentic-api.onrender.com').replace(/\/$/, '');
 
+  const auditHeader = document.querySelector('#auditDrawer .audit-shell > header');
+  const auditClose = document.querySelector('#closeAudit');
+  if (auditHeader && auditClose && !document.querySelector('#browserEvidenceLink')) {
+    const evidenceLink = document.createElement('a');
+    evidenceLink.id = 'browserEvidenceLink';
+    evidenceLink.className = 'text-button';
+    evidenceLink.target = '_blank';
+    evidenceLink.rel = 'noopener';
+    evidenceLink.textContent = 'Browser evidence';
+    evidenceLink.href = location.hostname.includes('preview')
+      ? 'https://casepath-guided-v13-smoke.onrender.com/'
+      : 'https://casepath-guided-canonical-qa.onrender.com/';
+    evidenceLink.style.marginLeft = 'auto';
+    auditHeader.insertBefore(evidenceLink, auditClose);
+  }
+
   function discoveredRunIds() {
     const ids = [];
     for (const entry of performance.getEntriesByType('resource')) {
