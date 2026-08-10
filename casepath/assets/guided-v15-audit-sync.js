@@ -37,7 +37,17 @@
   }
 
   document.addEventListener('click', event => {
-    if (event.target.closest?.('#openAuditGuide, #openAuditTop')) setTimeout(syncReviewEvents, 0);
+    const opener = event.target.closest?.('#openAuditGuide, #openAuditTop');
+    if (!opener) return;
+    const lifecycle = window.__CASEPATH_LIFECYCLE_V15__;
+    if (!lifecycle?.review) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    (async () => {
+      await syncReviewEvents();
+      const audit = document.querySelector('#auditDrawer');
+      if (audit && !audit.open) audit.showModal();
+    })();
   }, true);
 
   const audit = document.querySelector('#auditDrawer');
