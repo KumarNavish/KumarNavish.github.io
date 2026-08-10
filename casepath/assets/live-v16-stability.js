@@ -70,12 +70,14 @@
   function auditEvent(event) {
     const inputs = (event.input_artifacts || []).join(', ') || event.input_hash || '';
     const output = event.output_artifact || event.output_hash || '';
+    const specialist = event.agent || event.label || event.stage || 'Run event';
+    const eventLabel = [event.label, event.headline].filter(Boolean).join(' · ');
     return `<details class="audit-event">
-      <summary><span></span><div><strong>${escapeHtml(event.label || event.stage || 'Run event')}</strong><span>${escapeHtml(event.headline || '')}</span></div><span>${escapeHtml(event.status || '')}</span></summary>
+      <summary><span></span><div><strong>${escapeHtml(specialist)}</strong><span>${escapeHtml(eventLabel)}</span></div><span>${escapeHtml(event.status || '')}</span></summary>
       <div class="audit-event-body">
         ${event.detail ? `<p>${escapeHtml(event.detail)}</p>` : ''}
         <dl class="audit-grid">
-          <dt>Specialist</dt><dd>${escapeHtml(event.agent || '')}</dd>
+          <dt>Specialist</dt><dd>${escapeHtml(specialist)}</dd>
           <dt>Implementation</dt><dd>${escapeHtml(event.implementation || '')}</dd>
           <dt>Model</dt><dd>${escapeHtml(event.model || 'None — deterministic or human')}</dd>
           <dt>Prompt</dt><dd>${escapeHtml(event.prompt_version || 'None')}</dd>
