@@ -111,7 +111,7 @@
         return response.json();
       }));
       runs.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
-      content.innerHTML = runs.map((run, index) => {
+      content.innerHTML = `<div style="padding:17px 0;border-bottom:1px solid #e5e8ec;color:#626a75;font-size:10px;line-height:1.5">Open any event to inspect its <strong style="color:#101318">Implementation</strong>, model, <strong style="color:#101318">Prompt</strong>, tools, <strong style="color:#101318">Validator</strong>, inputs, outputs, and provenance.</div>` + runs.map((run, index) => {
         const label = index === 0 ? 'Flagship claim and expert learning' : 'Unseen claim using the released playbook';
         return `<section class="audit-run-section" style="padding-top:${index ? 26 : 0}px">
           <header style="padding:18px 0 10px;border-bottom:1px solid #e5e8ec">
@@ -120,7 +120,7 @@
           </header>
           ${(run.events || []).map(auditEvent).join('')}
         </section>`;
-      }).join('') || '<p style="padding:18px 0;color:#626a75">No completed run is available yet.</p>';
+      }).join('');
       if (!drawer.open) drawer.showModal();
     } catch (error) {
       content.innerHTML = `<p style="padding:18px 0;color:#626a75">${escapeHtml(error.message)}</p>`;
