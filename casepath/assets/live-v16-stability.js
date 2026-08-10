@@ -1,6 +1,13 @@
 (() => {
   'use strict';
 
+  if (!document.querySelector('link[href$="live-v16-viewer-fix.css"]')) {
+    const stylesheet = document.createElement('link');
+    stylesheet.rel = 'stylesheet';
+    stylesheet.href = 'assets/live-v16-viewer-fix.css';
+    document.head.append(stylesheet);
+  }
+
   const viewer = document.querySelector('#sourceViewer');
   const stage = document.querySelector('#sourceStage');
   if (!viewer || !stage) return;
