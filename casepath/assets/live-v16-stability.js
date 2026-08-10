@@ -5,23 +5,26 @@
   const stage = document.querySelector('#sourceStage');
   if (!viewer || !stage) return;
 
-  function keepActiveRepresentationVisible() {
+  function keepActiveRepresentationVisible({ reopen = false } = {}) {
+    if (!viewer.open && reopen) {
+      try { viewer.showModal(); } catch (_) {}
+    }
     if (!viewer.open) return;
     stage.hidden = false;
     stage.removeAttribute('aria-hidden');
-    stage.style.removeProperty('display');
-    stage.style.removeProperty('visibility');
-    stage.style.removeProperty('opacity');
+    stage.style.display = 'flex';
+    stage.style.visibility = 'visible';
+    stage.style.opacity = '1';
     for (const child of stage.children) {
       child.hidden = false;
       child.removeAttribute('aria-hidden');
-      child.style.removeProperty('display');
-      child.style.removeProperty('visibility');
-      child.style.removeProperty('opacity');
+      child.style.visibility = 'visible';
+      child.style.opacity = '1';
+      if (child.classList.contains('extraction-pages')) child.style.display = 'block';
     }
   }
 
-  new MutationObserver(keepActiveRepresentationVisible).observe(stage, {
+  new MutationObserver(() => keepActiveRepresentationVisible()).observe(stage, {
     childList: true,
     subtree: true,
     attributes: true,
@@ -30,8 +33,8 @@
 
   document.addEventListener('click', event => {
     if (!event.target.closest?.('[data-source-tab]')) return;
-    requestAnimationFrame(keepActiveRepresentationVisible);
-    setTimeout(keepActiveRepresentationVisible, 100);
-    setTimeout(keepActiveRepresentationVisible, 600);
+    requestAnimationFrame(() => keepActiveRepresentationVisible({ reopen: true }));
+    setTimeout(() => keepActiveRepresentationVisible({ reopen: true }), 100);
+    setTimeout(() => keepActiveRepresentationVisible({ reopen: true }), 600);
   });
 })();
