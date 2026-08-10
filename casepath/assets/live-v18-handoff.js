@@ -1,6 +1,13 @@
 (() => {
   'use strict';
 
+  if (!document.querySelector('script[src$="live-v18-law-normalize.js"]')) {
+    const script = document.createElement('script');
+    script.src = 'assets/live-v18-law-normalize.js';
+    script.async = false;
+    document.head.append(script);
+  }
+
   const stages = [
     { id: 'read', selector: '.event-list', agent: 'Attachment Parsing Agent', output: 'source package', next: 'Claim Understanding Agent' },
     { id: 'understand', selector: '.fact-stream', agent: 'Claim Understanding Agent', output: 'claim state', next: 'Legal Research Agent' },
