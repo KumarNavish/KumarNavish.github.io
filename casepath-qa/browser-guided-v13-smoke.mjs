@@ -18,7 +18,7 @@ function check(name,condition,detail=''){
 function h(value=''){return String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 async function getJson(url,options={}){const r=await fetch(url,options);if(!r.ok)throw new Error(`${options.method||'GET'} ${url}: ${r.status}`);return r.json();}
 async function shot(name,full=false){await page.screenshot({path:path.join(OUT,name),fullPage:full});}
-async function show(selector,timeout=180000){await page.locator(selector).waitFor({state:'visible',timeout});}
+async function show(selector,timeout=180000){await page.locator(selector).first().waitFor({state:'visible',timeout});}
 async function text(selector,pattern,timeout=180000){await page.waitForFunction(({selector,source,flags})=>{const n=document.querySelector(selector);return n&&new RegExp(source,flags).test(n.textContent||'');},{selector,source:pattern.source,flags:pattern.flags},{timeout});}
 async function overflow(){return page.evaluate(()=>Math.max(document.documentElement.scrollWidth,document.body.scrollWidth)-innerWidth);}
 async function run(runId){const end=Date.now()+180000;while(Date.now()<end){const value=await getJson(`${API}/api/runs/${runId}`);if(value.status==='complete')return value;if(value.status==='failed')throw new Error(value.error||'run failed');await new Promise(r=>setTimeout(r,250));}throw new Error('run timeout');}
