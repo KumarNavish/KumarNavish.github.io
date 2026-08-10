@@ -4,7 +4,13 @@
   const uniqueClasses = [
     'v17-law-map',
     'v17-law-details',
+    'v17-build-state',
+    'v17-evidence-chain',
+    'v17-experience-note',
+    'v17-reuse-thread',
     'v18-ready-artifacts',
+    'v18-review-propagation',
+    'v18-review-applied',
     'v18-memory-boundary',
     'v18-reuse-proof',
   ];
@@ -21,5 +27,5 @@
     return originalInsertBefore.call(this, newNode, referenceNode);
   };
 
-  window.CASEPATH_INSERTION_GUARD = '18.0.0';
+  window.CASEPATH_INSERTION_GUARD = '18.0.1';
 })();
