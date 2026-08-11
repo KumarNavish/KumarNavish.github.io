@@ -54,22 +54,22 @@ def scene_process(frame,t):
     d=ImageDraw.Draw(frame)
     stage_header(d,'The handling process takes shape','The graph is the map of the claim—not a report hidden after the run.')
     draw_email_panel(frame,34,150,245,345,selected=None)
-    x=320; y=154
+    x=320; y=148; step=39; node_h=31
     nodes=[('Claim intake','done'),('Tenant-law scope','done'),('Dispute exists','done'),('Urgency','done'),('Landlord notified','done'),('What caused the mould?','current'),('Responsibility','blocked'),('Remedy','blocked')]
     visible=max(1,int(lerp(1,len(nodes),ease(t))))
     boxes=[]
     for i,(label,state) in enumerate(nodes[:visible]):
-        yy=y+i*45
-        if i>0: line_arrow(d,(425,yy-4),(425,yy+1),fill=LINE,width=2,head=5)
-        boxes.append(process_node(d,x,yy,label,state,w=220,h=36))
+        yy=y+i*step
+        if i>0: line_arrow(d,(425,yy-8),(425,yy-2),fill=LINE,width=2,head=5)
+        boxes.append(process_node(d,x,yy,label,state,w=220,h=node_h))
     if visible>=6:
-        bx=570; by=y+5*45-6
+        by=y+5*step-4
         labels=['Building defect','Use-related','Mixed cause','Insufficient evidence']
         reveal=max(1,int(lerp(1,4,ease((t-.55)/.45))))
-        d.line((540,by+18,558,by+18),fill=RED,width=2)
+        d.line((540,by+15,558,by+15),fill=RED,width=2)
         for j,label in enumerate(labels[:reveal]):
-            yy=by+(j-1)*38
-            line_arrow(d,(558,by+18),(575,yy+18),fill=LINE,width=1,head=4)
-            rounded(d,(575,yy,900,yy+32),9,fill=RED_SOFT if j==3 else BG,outline=RED if j==3 else LINE)
-            text(d,(590,yy+9),label,ImageFont.truetype(BOLD,10),fill=INK)
-    text(d,(610,480),'Current claim: causation unresolved',F['bold_sm'],fill=RED,anchor='mm')
+            yy=by+(j-1)*34
+            line_arrow(d,(558,by+15),(575,yy+15),fill=LINE,width=1,head=4)
+            rounded(d,(575,yy,900,yy+29),9,fill=RED_SOFT if j==3 else BG,outline=RED if j==3 else LINE)
+            text(d,(590,yy+8),label,ImageFont.truetype(BOLD,10),fill=INK)
+    text(d,(738,474),'Current claim: causation unresolved',F['bold_sm'],fill=RED,anchor='mm')
