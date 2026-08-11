@@ -47,7 +47,7 @@ from .langchain_runtime import (
 )
 
 
-MULTI_AGENT_VERSION = "1.0.4"
+MULTI_AGENT_VERSION = "1.0.5"
 MULTI_AGENT_SCHEMA_VERSION = "casepath.nemotron-agent-dag/1.0.0"
 MULTI_AGENT_AUTHORITY_MODE = "multi_agent_hybrid_guarded"
 MULTI_AGENT_IMPLEMENTATION = "langgraph_stategraph_langchain_openrouter"
@@ -94,7 +94,7 @@ EVIDENCE_STATUS_CANDIDATES = [
 ]
 
 ROLE_OUTPUT_TOKENS = {
-    "orchestrator_plan": 400,
+    "orchestrator_plan": 800,
     "document_source_integrity": 900,
     "process_decision_mapping": 900,
     "evidence_checklist": 2_000,

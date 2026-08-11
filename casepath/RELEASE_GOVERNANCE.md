@@ -109,7 +109,7 @@ bound identically across the run audit and sanitized ledger. A paid provider
 response, a cache replay, or a weak/unbound role
 record does not satisfy that gate.
 
-Nine authorized model attempts failed closed:
+Ten authorized model attempts failed closed:
 
 - Attempt 1 reached DeepInfra through OpenRouter and returned the provider's
   dated canonical model ID. It charged USD 0.00756 for 3,629 prompt and 2,625
@@ -187,6 +187,19 @@ Nine authorized model attempts failed closed:
   `provider_response_envelope` after 28,858.701 ms and retained only a USD
   0.027645 estimated reservation. No canonical contribution or downstream
   model call was accepted.
+- Attempt 10 ran from QA deploy `dep-d9tq5bmgekts73978kdg` against source commit
+  `0c73193688db85be2e84a8a83b73e311581e3874`. The deploy was created at
+  2026-08-11T22:31:10.431539Z, emitted its terminal QA error at
+  2026-08-11T22:33:15.916134259Z, and finished `build_failed` at
+  2026-08-11T22:33:20.129521Z. QA run `run_d2c28f11f5a4b30e` bound two
+  DeepInfra calls to orchestration `orch_4306b740e7a14b00`. Canonical-facts
+  call `modelcall_1079d5361af8d6b8` completed with guarded fallback, retained
+  17 accepted and one rejected fact contribution, and charged USD 0.0198785.
+  Orchestrator-plan call `modelcall_0be219e96b14ec27` then returned `length` at
+  exactly 400 completion tokens and charged USD 0.0108714. CasePath rejected
+  that truncated plan under `AgentBoundaryError` / `provider_finish_reason`;
+  no later model role or deterministic gate ran. The two-call ledger is cost
+  complete at USD 0.0307499 for 43,197 prompt and 4,183 completion tokens.
 
 The current source pins OpenRouter to the exact `deepinfra/fp4` endpoint tag,
 sets `allow_fallbacks: false`, keeps `require_parameters: true`, and denies
@@ -212,15 +225,15 @@ same-generation metadata availability boundary. Current acceptance still
 requires a new same-commit cold production journey with all six bound calls and
 three passed deterministic gates.
 
-Known aggregate provider charges for attempts 1, 2, 4, 5, 6, and 8 are USD
-0.0707403; attempts 3, 7, and 9 are unknown and excluded rather than treated as
+Known aggregate provider charges for attempts 1, 2, 4, 5, 6, 8, and 10 are USD
+0.1014902; attempts 3, 7, and 9 are unknown and excluded rather than treated as
 zero. Attempts 7 and 9 each retain a USD 0.027645 estimated reservation, neither
 of which is included as an actual charge. The attempts remain failed-attempt
 history, not successful application evidence. No raw
 prompt, raw output, credential, or private reference is retained, and no
 attempt is accepted model-backed release evidence.
 
-The nine records above are listed under `historical_model_validation` with
+The ten records above are listed under `historical_model_validation` with
 `scope: failed_closed_history_only`; they can never establish current runtime
 acceptance. No passing dynamic QA artifact pair has been verified as part of
 this source edit, so current production model acceptance remains unestablished.
