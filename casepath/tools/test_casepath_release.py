@@ -107,7 +107,7 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
             release_tool.REPOSITORY
             / f"casepath/releases/model-validation-attempt-20260811-{number:02d}.json"
         )
-        for number in range(1, 10)
+        for number in range(1, 11)
     }
     (
         attempt_1,
@@ -119,8 +119,9 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         attempt_7,
         attempt_8,
         attempt_9,
+        attempt_10,
     ) = (
-        attempts[number] for number in range(1, 10)
+        attempts[number] for number in range(1, 11)
     )
     for evidence in attempts.values():
         assert evidence["status"] == "failed_closed"
@@ -423,11 +424,101 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         "accepted_generation_recovered": False,
         "contribution_diagnostics_retained": False,
     }
+    assert attempt_10["execution_observation"] == {
+        "source_commit": "0c73193688db85be2e84a8a83b73e311581e3874",
+        "qa_deploy_id": "dep-d9tq5bmgekts73978kdg",
+        "qa_deploy_outcome": "build_failed",
+        "qa_deploy_created_at": "2026-08-11T22:31:10.431539Z",
+        "qa_deploy_started_at": "2026-08-11T22:31:10.393462Z",
+        "qa_error_at": "2026-08-11T22:33:15.916134259Z",
+        "qa_deploy_finished_at": "2026-08-11T22:33:20.129521Z",
+        "qa_run_id": "run_d2c28f11f5a4b30e",
+        "ledger_created_at": "2026-08-11T22:31:31.379439+00:00",
+        "ledger_updated_at": "2026-08-11T22:33:13.302269+00:00",
+        "orchestration_id": "orch_4306b740e7a14b00",
+        "failed_agent_id": "orchestrator_plan",
+        "network_call_count": 2,
+        "completed_model_calls": 1,
+        "failed_model_calls": 1,
+        "downstream_model_calls_after_failure": 0,
+        "deterministic_gate_receipts": 0,
+    }
+    assert attempt_10["provider_observation"] == {
+        "provider": "openrouter",
+        "provider_outcome": "partial_success_then_length_rejected",
+        "requested_model": "nvidia/nemotron-3-ultra-550b-a55b",
+        "upstream_provider": "DeepInfra",
+        "network_call_count": 2,
+        "actual_cost_usd": 0.0307499,
+        "actual_cost_complete": True,
+        "unknown_cost_call_count": 0,
+        "prompt_tokens": 43197,
+        "completion_tokens": 4183,
+        "total_tokens": 47380,
+        "calls": [
+            {
+                "call_id": "modelcall_1079d5361af8d6b8",
+                "agent_id": "canonical_facts",
+                "outcome": "succeeded_with_guarded_fallback",
+                "response_id": "gen-1786487495-uThNkWVHk7bkiuVb8vaP",
+                "response_model": "nvidia/nemotron-3-ultra-550b-a55b",
+                "upstream_provider": "DeepInfra",
+                "finish_reason": "stop",
+                "actual_cost_usd": 0.0198785,
+                "prompt_tokens": 23163,
+                "completion_tokens": 3783,
+                "total_tokens": 26946,
+                "latency_ms": 85972.266,
+                "created_at": "2026-08-11T22:31:31.379439+00:00",
+                "updated_at": "2026-08-11T22:32:57.367156+00:00",
+                "deterministic_fallback_applied": True,
+                "accepted_fact_count": 17,
+                "rejected_fact_count": 1,
+                "source_reference_projection_count": 10,
+            },
+            {
+                "call_id": "modelcall_0be219e96b14ec27",
+                "agent_id": "orchestrator_plan",
+                "outcome": "failed",
+                "response_id": "gen-1786487581-HBwGLlRWSJnrBZXAU3Y9",
+                "response_model": "nvidia/nemotron-3-ultra-550b-a55b",
+                "upstream_provider": "DeepInfra",
+                "finish_reason": "length",
+                "actual_cost_usd": 0.0108714,
+                "prompt_tokens": 20034,
+                "completion_tokens": 400,
+                "total_tokens": 20434,
+                "latency_ms": 12309.811,
+                "created_at": "2026-08-11T22:33:00.980714+00:00",
+                "updated_at": "2026-08-11T22:33:13.302269+00:00",
+                "error_type": "AgentBoundaryError",
+                "error_invariant": "provider_finish_reason",
+            },
+        ],
+    }
+    assert attempt_10["application_result"] == {
+        "outcome": "rejected",
+        "failure_type": "orchestrator_plan_truncated_at_output_limit",
+        "error_type": "AgentBoundaryError",
+        "error_invariant": "provider_finish_reason",
+        "successful_ledger_call_bound": False,
+        "ledger_call_id": "modelcall_0be219e96b14ec27",
+        "ledger_outcome": "failed",
+        "canonical_stage_completed": True,
+        "canonical_stage_outcome": "succeeded_with_guarded_fallback",
+        "canonical_stage_call_id": "modelcall_1079d5361af8d6b8",
+        "canonical_guarded_fallback_applied": True,
+        "canonical_contribution_diagnostics_retained": True,
+        "orchestrator_plan_accepted": False,
+        "full_orchestration_accepted": False,
+        "runtime_acceptance_established": False,
+        "downstream_execution_started": False,
+    }
     assert sum(
         attempt["provider_observation"]["actual_cost_usd"]
         for attempt in attempts.values()
         if "actual_cost_usd" in attempt["provider_observation"]
-    ) == pytest.approx(0.0707403)
+    ) == pytest.approx(0.1014902)
     assert "actual_cost_usd" not in attempt_3["provider_observation"]
     assert "prompt_tokens" not in attempt_3["provider_observation"]
     assert attempt_3["provider_observation"]["charge_status"] == "unknown_unconfirmed"
@@ -481,6 +572,12 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
     )
     privacy_mutations.append(claim_prose_value)
 
+    nested_provider_message = deepcopy(attempt_10)
+    nested_provider_message["provider_observation"]["calls"][1][
+        "provider_message"
+    ] = "RAW provider output for a private claim"
+    privacy_mutations.append(nested_provider_message)
+
     for unsafe_attempt in privacy_mutations:
         with pytest.raises(
             release_tool.VerificationError,
@@ -513,12 +610,29 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
     ] = True
     numeric_type_aliases.append(boolean_rejected_count)
 
+    boolean_unknown_cost_count = deepcopy(attempt_10)
+    boolean_unknown_cost_count["provider_observation"][
+        "unknown_cost_call_count"
+    ] = False
+    numeric_type_aliases.append(boolean_unknown_cost_count)
+
     for aliased_attempt in numeric_type_aliases:
         with pytest.raises(
             release_tool.VerificationError,
             match="exact bounded schema",
         ):
             release_tool.verify_failed_model_attempt_evidence(contract, aliased_attempt)
+
+    mismatched_attempt_10_aggregate = deepcopy(attempt_10)
+    mismatched_attempt_10_aggregate["provider_observation"]["actual_cost_usd"] += 0.01
+    with pytest.raises(
+        release_tool.VerificationError,
+        match="exact bounded schema",
+    ):
+        release_tool.verify_failed_model_attempt_evidence(
+            contract,
+            mismatched_attempt_10_aggregate,
+        )
 
 
 def _ledger_summary(items: list[dict]) -> dict:

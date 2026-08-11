@@ -1575,6 +1575,98 @@ def _invoke_plan(runner: InstrumentedStructuredAgent, *, run_id: str = "run-plan
     )
 
 
+def test_orchestrator_plan_accepts_completion_above_legacy_ceiling_with_exact_new_cap(
+    tmp_path: Path,
+):
+    provider_calls = 0
+    received_ceilings: list[int] = []
+
+    class Runnable:
+        def invoke(self, *_args, **_kwargs):
+            nonlocal provider_calls
+            provider_calls += 1
+            return _plan_envelope(
+                usage={
+                    "prompt_tokens": 700,
+                    "completion_tokens": 650,
+                    "total_tokens": 1_350,
+                    "cost": 0.008,
+                }
+            )
+
+    def factory(_agent_id, _schema, _key, _orchestration_id, max_tokens):
+        received_ceilings.append(max_tokens)
+        return Runnable()
+
+    storage = Storage(str(tmp_path / "expanded-plan-ceiling.db"))
+    runner = InstrumentedStructuredAgent(
+        storage,
+        runnable_factory=factory,
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+
+    result = _invoke_plan(runner, run_id="run-expanded-plan-ceiling")
+
+    assert ROLE_OUTPUT_TOKENS["orchestrator_plan"] == 800
+    assert received_ceilings == [800]
+    assert provider_calls == 1
+    assert result["cache_hit"] is False
+    assert result["outcome"] == "succeeded"
+    assert result["usage"]["completion_tokens"] == 650 > 400
+    ledger = storage.model_calls()
+    assert len(ledger) == 1
+    assert ledger[0]["call_count"] == 1
+    assert ledger[0]["outcome"] == "succeeded"
+
+
+def test_orchestrator_plan_length_at_new_ceiling_fails_closed_without_cache(
+    tmp_path: Path,
+):
+    provider_calls = 0
+    received_ceilings: list[int] = []
+
+    class Runnable:
+        def invoke(self, *_args, **_kwargs):
+            nonlocal provider_calls
+            provider_calls += 1
+            return _plan_envelope(
+                finish_reason="length",
+                usage={
+                    "prompt_tokens": 700,
+                    "completion_tokens": 800,
+                    "total_tokens": 1_500,
+                    "cost": 0.009,
+                },
+            )
+
+    def factory(_agent_id, _schema, _key, _orchestration_id, max_tokens):
+        received_ceilings.append(max_tokens)
+        return Runnable()
+
+    storage = Storage(str(tmp_path / "length-at-expanded-plan-ceiling.db"))
+    runner = InstrumentedStructuredAgent(
+        storage,
+        runnable_factory=factory,
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+
+    for run_id in ("run-length-at-new-cap-1", "run-length-at-new-cap-2"):
+        with pytest.raises(AgentInvocationFailure, match="provider_finish_reason"):
+            _invoke_plan(runner, run_id=run_id)
+
+    assert ROLE_OUTPUT_TOKENS["orchestrator_plan"] == 800
+    assert received_ceilings == [800, 800]
+    assert provider_calls == 2
+    ledger = storage.model_calls()
+    assert len(ledger) == 2
+    assert all(item["call_count"] == 1 for item in ledger)
+    assert all(item["outcome"] == "failed" for item in ledger)
+    assert all(item["error_invariant"] == "provider_finish_reason" for item in ledger)
+    assert all(item["finish_reason"] == "length" for item in ledger)
+    assert all(item["completion_tokens"] == 800 for item in ledger)
+    assert all(storage.cached_model_output(item["cache_key"]) is None for item in ledger)
+
+
 def test_specialist_wrong_model_metadata_billing_and_missing_id_sync_billing_are_retained(
     tmp_path: Path,
 ):
