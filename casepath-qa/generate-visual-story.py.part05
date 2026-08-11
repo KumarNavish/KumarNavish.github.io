@@ -38,8 +38,11 @@ def render_segment(seg: Segment) -> list[Image.Image]:
     return frames
 
 
-def crossfade(a: Image.Image,b: Image.Image,n=2):
-    return [Image.blend(a,b,(i+1)/(n+1)) for i in range(n)]
+def crossfade(a: Image.Image,b: Image.Image,n=1):
+    white=Image.new('RGB',a.size,BG)
+    outgoing=[Image.blend(a,white,(i+1)/(n+1)) for i in range(n)]
+    incoming=[Image.blend(white,b,(i+1)/(n+1)) for i in range(n)]
+    return outgoing+incoming
 
 all_frames=[]
 keyframes=[]
@@ -47,12 +50,12 @@ for idx,seg in enumerate(segments):
     current=render_segment(seg)
     keyframes.append(current[len(current)//2])
     if all_frames:
-        all_frames.extend(crossfade(all_frames[-1],current[0],2))
+        all_frames.extend(crossfade(all_frames[-1],current[0],1))
     all_frames.extend(current)
 
-# hold final, then a short fade back to start for a clean loop
+# hold final, then fade through white back to the first scene for a clean loop
 all_frames.extend([all_frames[-1].copy() for _ in range(4)])
-all_frames.extend(crossfade(all_frames[-1],all_frames[0],3))
+all_frames.extend(crossfade(all_frames[-1],all_frames[0],2))
 
 # Global palette from a representative contact sheet for coherent, compact color.
 contact=Image.new('RGB',(W*3,H*3),BG)
