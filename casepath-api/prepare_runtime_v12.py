@@ -74,7 +74,7 @@ def main() -> None:
         'from fastapi.responses import Response, RedirectResponse\nfrom fastapi.staticfiles import StaticFiles\n',
         "static frontend imports",
     )
-    deployment_route = f'''\n\n@app.get("/deployment-health")\ndef deployment_health():\n    return {{\n        "status": "ok",\n        "release": __version__,\n        "frontend_release": __version__,\n        "api_release": __version__,\n        "flagship_claim": DEMO_CLAIM["claim_id"],\n        "claims": len(CLAIMS),\n        "artifacts": len(ARTIFACTS),\n        "frontend_route": "/frontend/",\n    }}\n'''
+    deployment_route = '''\n\n@app.get("/deployment-health")\ndef deployment_health():\n    return {\n        "status": "ok",\n        "release": __version__,\n        "frontend_release": __version__,\n        "api_release": __version__,\n        "flagship_claim": DEMO_CLAIM["claim_id"],\n        "claims": len(CLAIMS),\n        "artifacts": len(ARTIFACTS),\n        "frontend_route": "/frontend/",\n    }\n'''
     app = replace_once(app, '\n\n@app.get("/readyz")', deployment_route + '\n@app.get("/readyz")', "deployment health route")
     static_mount = '''\n\n# CASEPATH_STATIC_FRONTEND\n_FRONTEND_DIR = Path(__file__).resolve().parents[2] / "casepath"\nif _FRONTEND_DIR.exists():\n    app.mount("/frontend", StaticFiles(directory=str(_FRONTEND_DIR), html=True), name="casepath-frontend")\n\n\n@app.get("/", include_in_schema=False)\ndef root_redirect():\n    return RedirectResponse(url="/frontend/")\n'''
     if "# CASEPATH_STATIC_FRONTEND" not in app:
@@ -82,7 +82,7 @@ def main() -> None:
     app_file.write_text(app, encoding="utf-8")
 
     (artifacts / "later-claim-email.eml").write_text(
-        """From: Sam Keller <sam.keller@example.ch>\nTo: Protekta Legal Protection <claims@protekta.ch>\nDate: Fri, 14 Aug 2026 09:46:00 +0200\nSubject: Dark spots returned beside the replaced bedroom window\nMessage-ID: <later-claim-20260814@example.ch>\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\n\nHello,\n\nThe dark spots have returned on the outside bedroom wall beside the window that was replaced in May. I cleaned the wall once, but the marks came back after several humid days.\n\nThe property manager says that we probably do not air the room enough. Nobody has inspected the wall or measured the moisture. I attached a current photograph and the notice for the window works.\n\nCould you tell me what should happen next and what evidence is still needed?\n\nKind regards,\nSam Keller\n""",
+        """From: Sam Keller <sam.keller@example.ch>\nTo: Protekta Legal Protection <claims@protekta.ch>\nDate: Mon, 10 Aug 2026 09:46:00 +0200\nSubject: Dark spots returned beside the replaced bedroom window\nMessage-ID: <later-claim-20260810@example.ch>\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\n\nHello,\n\nThe dark spots have returned on the outside bedroom wall beside the window that was replaced in May. I cleaned the wall once, but the marks came back after several humid days.\n\nThe property manager says that we probably do not air the room enough. Nobody has inspected the wall or measured the moisture. I attached a current photograph and the notice for the window works.\n\nCould you tell me what should happen next and what evidence is still needed?\n\nKind regards,\nSam Keller\n""",
         encoding="utf-8",
     )
 
@@ -96,7 +96,7 @@ def main() -> None:
     later = ImageEnhance.Contrast(later).enhance(1.07)
     later = later.filter(ImageFilter.UnsharpMask(radius=1.2, percent=80, threshold=3))
     later.thumbnail((1500, 1000), Image.Resampling.LANCZOS)
-    later.save(artifacts / "later-window-condensation-2026-08-12.jpg", format="JPEG", quality=88, optimize=True)
+    later.save(artifacts / "later-window-condensation-2026-08-08.jpg", format="JPEG", quality=88, optimize=True)
 
     (artifacts / ".flagship-v12").write_text(RELEASE, encoding="utf-8")
 

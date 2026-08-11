@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-casepath-release="20.0.0">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="description" content="Watch specialist agents turn one customer claim into a reviewed handling process and reusable organizational knowledge.">
+  <meta name="description" content="See which returned work came from Nemotron agents, deterministic safety checks, or a simulated reviewer while CasePath builds a source-grounded handling process.">
   <meta name="theme-color" content="#ffffff">
   <meta name="casepath-release" content="20.0.0">
   <title>CasePath — Analyse one claim</title>
@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="assets/live-v17-continuity.css">
   <link rel="stylesheet" href="assets/live-v18.css">
   <link rel="stylesheet" href="assets/live-v19.css">
-  <link rel="stylesheet" href="assets/live-v20-focus.css">
+  <link rel="stylesheet" href="assets/live-v20-focus.css?v=20.0.0">
 </head>
 <body>
   <a class="skip-link" href="#casepathWork">Skip to CasePath</a>
@@ -72,22 +72,26 @@
           <span>Analyse claim</span>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
         </button>
-        <p class="research-boundary">Fictional research claim. No legal decision or customer contact is made.</p>
+        <p class="research-boundary">Generated fictional research claim. No coverage or legal decision is made, and the simulated review is not expert approval.</p>
       </section>
 
       <section class="live-workspace" id="liveWorkspace" hidden>
         <header class="orchestrator-bar" id="orchestratorBar">
           <div class="orchestrator-mark" aria-hidden="true"><span></span><i></i></div>
           <div>
-            <span class="quiet-label">CasePath orchestrator</span>
+            <span class="quiet-label" id="orchestratorLabel">Orchestration status</span>
             <strong id="orchestratorStatus">Opening one shared claim context</strong>
           </div>
           <span class="live-chip" id="liveChip">Live</span>
         </header>
 
+        <section class="orchestration-proof" id="orchestrationProof" aria-labelledby="orchestrationProofTitle" hidden>
+          <h2 class="visually-hidden" id="orchestrationProofTitle">Returned agent activity and deterministic proof</h2>
+        </section>
+
         <nav class="agent-progress" id="agentProgress" aria-label="Active CasePath specialist"></nav>
 
-        <div class="stage-canvas" id="stageCanvas"></div>
+        <div class="stage-canvas" id="stageCanvas" aria-busy="false"></div>
 
         <footer class="journey-actions" id="journeyActions" hidden>
           <button class="secondary-button" id="journeyBack" type="button">Back</button>
@@ -97,7 +101,7 @@
     </section>
   </main>
 
-  <dialog class="source-viewer" id="sourceViewer" aria-labelledby="sourceViewerTitle">
+  <dialog class="source-viewer" id="sourceViewer" aria-labelledby="sourceViewerTitle" aria-busy="false">
     <div class="source-viewer-shell">
       <header class="source-viewer-head">
         <div>
@@ -114,13 +118,26 @@
         </div>
       </header>
       <div class="source-viewer-tabs" role="tablist" aria-label="Attachment representation">
-        <button type="button" role="tab" aria-selected="true" data-source-tab="original">Original attachment</button>
-        <button type="button" role="tab" aria-selected="false" data-source-tab="extraction">What CasePath extracted</button>
+        <button id="sourceTabOriginal" type="button" role="tab" aria-selected="true" aria-controls="sourceStage" tabindex="0" data-source-tab="original">Original attachment</button>
+        <button id="sourceTabExtraction" type="button" role="tab" aria-selected="false" aria-controls="sourceStage" tabindex="-1" data-source-tab="extraction">What CasePath extracted</button>
+      </div>
+      <div class="source-viewer-tools">
+        <form class="source-search" id="sourceSearchForm" role="search">
+          <label for="sourceSearch">Search extracted text</label>
+          <div><input id="sourceSearch" type="search" autocomplete="off" placeholder="Find words in this source"><button type="submit">Find</button></div>
+          <p id="sourceSearchStatus" role="status" aria-live="polite"></p>
+          <div class="source-search-results" id="sourceSearchResults"></div>
+        </form>
+        <nav class="source-gallery-nav" id="sourceGalleryNav" aria-label="Image attachments" hidden>
+          <button class="text-button" id="sourcePrevious" type="button">Previous image</button>
+          <span id="sourcePosition"></span>
+          <button class="text-button" id="sourceNext" type="button">Next image</button>
+        </nav>
       </div>
       <div class="source-viewer-body">
         <aside class="page-thumbnails" id="pageThumbnails" aria-label="Document pages"></aside>
-        <div class="source-stage" id="sourceStage"></div>
-        <aside class="source-evidence" id="sourceEvidence"></aside>
+        <div class="source-stage" id="sourceStage" role="tabpanel" aria-labelledby="sourceTabOriginal" aria-busy="false" tabindex="0"></div>
+        <aside class="source-evidence" id="sourceEvidence" aria-label="Grounding links for this source"></aside>
       </div>
     </div>
   </dialog>
@@ -128,7 +145,7 @@
   <dialog class="audit-drawer" id="auditDrawer" aria-labelledby="auditTitle">
     <div class="audit-shell">
       <header>
-        <div><span class="quiet-label">Research detail</span><h2 id="auditTitle">Audit trail</h2><p>Every specialist handoff, source, model identity, prompt, validator, and accepted artifact from this run.</p></div>
+        <div><span class="quiet-label">Research detail</span><h2 id="auditTitle">Audit trail</h2><p>Returned actor type, handoff, source, model identity, validator, and artifact fields from this run.</p></div>
         <a class="text-button" id="browserEvidenceLink" href="https://casepath-guided-canonical-qa.onrender.com/" target="_blank" rel="noopener" style="margin-left:auto">Guided session evidence</a>
         <button class="icon-button" id="closeAudit" type="button" aria-label="Close audit trail"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </header>
@@ -138,7 +155,7 @@
 
   <dialog class="precedent-viewer" id="precedentViewer" aria-labelledby="precedentTitle">
     <div class="precedent-shell">
-      <header><div><span class="quiet-label">Reviewed organizational experience</span><h2 id="precedentTitle">Previous claim</h2></div><button class="icon-button" id="closePrecedent" type="button" aria-label="Close previous claim"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+      <header><div><span class="quiet-label" id="precedentViewerKind">Reference precedent</span><h2 id="precedentTitle">Previous claim</h2></div><button class="icon-button" id="closePrecedent" type="button" aria-label="Close previous claim"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
       <div id="precedentContent"></div>
     </div>
   </dialog>

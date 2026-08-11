@@ -128,7 +128,7 @@
       }));
       runs.sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
       content.innerHTML = `<div style="padding:17px 0;border-bottom:1px solid #e5e8ec;color:#626a75;font-size:10px;line-height:1.5">Open any event to inspect its <strong style="color:#101318">Implementation</strong>, model, <strong style="color:#101318">Prompt</strong>, tools, <strong style="color:#101318">Validator</strong>, inputs, outputs, and provenance.</div>` + runs.map((run, index) => {
-        const label = index === 0 ? 'Flagship claim and expert learning' : 'Unseen claim using the released playbook';
+        const label = index === 0 ? 'Flagship claim and review memory' : 'Unseen claim under the unchanged shared playbook';
         return `<section class="audit-run-section" style="padding-top:${index ? 26 : 0}px">
           <header style="padding:18px 0 10px;border-bottom:1px solid #e5e8ec">
             <span class="quiet-label">${escapeHtml(label)}</span>

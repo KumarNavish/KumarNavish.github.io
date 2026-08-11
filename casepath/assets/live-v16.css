@@ -251,7 +251,7 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:3px solid 
 .before-after h3{font-size:18px;margin:0 0 10px}
 .before-after ul{list-style:none;padding:0;margin:0;border-top:1px solid var(--line)}
 .before-after li{font-size:10px;line-height:1.4;padding:10px 0;border-bottom:1px solid var(--line)}
-.before-after .improved{color:var(--green);font-weight:730}
+.before-after .reused{color:var(--green);font-weight:730}
 .final-proof{margin-top:23px;padding:17px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
 .final-proof strong{font-size:16px;display:block}
 .final-proof p{font-size:11px;color:var(--muted);margin:4px 0 0}

@@ -41,7 +41,7 @@
     const target = document.querySelector('#agentProgress');
     if (!target) return;
     new MutationObserver(queue).observe(target, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-state', 'data-active-stage'] });
-    window.setInterval(queue, 300);
+    window.addEventListener('casepath:render', queue);
     queue();
   }
 

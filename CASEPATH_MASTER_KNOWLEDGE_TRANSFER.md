@@ -1,88 +1,112 @@
 # CasePath Master Knowledge Transfer
 
-> **Purpose:** operational memory for the next AI agent, researcher, engineer, or product designer with no prior conversation context.  
-> **Canonical product baseline inspected:** `KumarNavish/KumarNavish.github.io` at `a867bb506d8e3f790806fc21f2a24a011c1cd0bc`.  
-> **Live product:** <https://casepath-swiss-claim-lab.onrender.com/>  
-> **Live API:** <https://casepath-agentic-api.onrender.com/>  
-> **Retained browser evidence:** <https://casepath-guided-canonical-qa.onrender.com/>  
+> **Purpose:** operational memory for the next AI agent, researcher, engineer, or product designer.
+> **Audience:** a capable collaborator with no prior conversation context.
+> **Product code baseline inspected:** `KumarNavish/KumarNavish.github.io` at product commit `a867bb506d8e3f790806fc21f2a24a011c1cd0bc`.
+> **Public product inspected:** <https://casepath-swiss-claim-lab.onrender.com/>
+> **Public API inspected:** <https://casepath-agentic-api.onrender.com/>
+> **Canonical browser evidence inspected:** <https://casepath-guided-canonical-qa.onrender.com/>
 > **Reconstruction date:** 11 August 2026.
 
 ---
 
 ## Read this first
 
-CasePath has several generations of code, data, experiments, papers, product redesigns, and release branches. They are related, but they are **not one synchronized system**.
+CasePath has accumulated several generations of code, benchmarks, papers, release branches, prototypes, and product redesigns. They are related, but they are **not one synchronized system**.
 
-Three assets must never be conflated:
+The fastest way for a new collaborator to waste time is to assume that:
 
-| Layer | What it is | Truth status | What it establishes |
+- the 150-claim bilingual corpus is the data used by the deployed product;
+- the hardened 48-journey defects benchmark is committed in the current default branch;
+- the public v20 experience runs LangChain or Nemotron;
+- the public Swiss-law component is a live retrieval system;
+- the public expert correction performs a fresh regression experiment before promotion;
+- the current API has durable persistence;
+- or every version marker in the repository agrees.
+
+None of those statements is currently true.
+
+The current project must be understood as three principal layers:
+
+| Layer | What it is | Current status | What it proves |
 |---|---|---|---|
-| Original bilingual corpus | 150 generated claims and 2,251 files across three broad tenant-law categories | **Prototype / generated-reference only** | Reproducible generation infrastructure and the importance of shortcut audits |
-| Hardened defects vertical slice | 48 generated journeys, 136 episodes, 1,148 attachments, longitudinal and negative cases | **Prototype / generated-reference only** | A materially harder research benchmark for process-grounded planning and sparse adaptation |
-| Deployed v20 flagship demo | Two generated recurring-moisture claims, nine artifacts, deterministic typed reference pipeline | **Implemented and browser-verified as a demonstration** | The complete product story can be shown from source intake through reviewed memory and later-claim reuse |
+| **Original bilingual corpus** | 150 generated claims, three broad categories, 2,251 files | Reproducible generated research asset; not in the current public runtime; not independently expert-approved | Data-generation and packaging infrastructure, plus why shortcut audits are essential |
+| **Hardened defects vertical slice** | 48 generated journeys, 136 episodes, 1,148 attachments, longitudinal and negative cases | Stronger generated-reference benchmark held as a separate research release/archive, not the current default-branch runtime | That the task can be made nontrivial and that process-grounded adaptation can be evaluated under controlled synthetic conditions |
+| **Deployed v20 flagship demonstration** | Two generated recurring-mould claims, nine source artifacts, deterministic typed reference pipeline, expert-review and reuse story | Live and browser-verified as a product demonstration | The complete product concept can be shown coherently from source claim to later-claim reuse |
 
-The deployed product does **not** run the 150-claim corpus. It does **not** currently call LangChain, Nemotron, or OpenRouter. Its legal component is not a live RAG service. Its review and promotion results are generated reference behavior. Its SQLite state is ephemeral. These are not minor qualifications; they determine what can honestly be claimed.
+The public deployment is a **research demonstration**, not an operational claim system. It uses generated claims and a deterministic reference pipeline. No real customer claim, legal decision, coverage decision, deadline calculation, or customer contact is authorized.
 
-### Truth-status vocabulary
+---
 
-Use exactly these labels:
+## Truth-status legend
 
-- **Implemented and verified** — current code or deployment plus aligned test, API, browser, or artifact evidence.
-- **Implemented but not fully verified** — code exists, but current release evidence is incomplete or source/deployment differs.
-- **Prototype / generated-reference only** — generated inputs, deterministic reference logic, static fixtures, simulated reviewers, or hard-coded evaluation outputs.
-- **Planned** — specified but not implemented in the current inspected system.
-- **Rejected / abandoned** — tried and found misleading, unsafe, weak, or contrary to the north star.
+Every substantive capability in this document is classified using one of the following labels.
 
-Do not use `implemented` as a synonym for `validated`. Do not use `agentic` as a synonym for `model-driven`. Do not call generated labels expert truth.
+| Label | Meaning |
+|---|---|
+| **Implemented and verified** | The capability exists in the current inspected code or deployment and has direct test, browser, API, or artifact evidence. |
+| **Implemented but not fully verified** | Code exists, but the relevant behavior is not covered by an aligned current release gate, or the deployment differs from the source. |
+| **Prototype / generated-reference only** | The behavior is demonstrated with generated inputs, static reference logic, simulated reviewers, hard-coded evaluation outputs, or archived research fixtures. It is not evidence of real-world validity. |
+| **Planned** | The design or interface exists only in prompts, papers, archived branches, or backlog documents. |
+| **Rejected / abandoned** | The approach was tried and found misleading, unsafe, weak, too complex, or inconsistent with the north star. It should not be revived without new evidence. |
+
+Do not use “implemented” as a synonym for “validated.” Do not use “agentic” as a synonym for “model-driven.” Do not use “reviewed” when the reviewer was simulated. Do not use “realistic” when the only evidence is visual plausibility judged by the project author.
 
 ---
 
 ## Table of contents
 
-1. [Original mission](#1-original-mission)
-2. [Operational reason for the project](#2-operational-reason-for-the-project)
+1. [The mission](#1-the-mission)
+2. [Why CasePath exists operationally](#2-why-casepath-exists-operationally)
 3. [Current project truth](#3-current-project-truth)
-4. [Benchmark and data landscape](#4-benchmark-and-data-landscape)
-5. [Synthetic claim generator](#5-synthetic-claim-generator)
-6. [Agent architecture](#6-agent-architecture)
-7. [Deterministic boundary](#7-deterministic-boundary)
+4. [The data and benchmark landscape](#4-the-data-and-benchmark-landscape)
+5. [Synthetic claim generation and artifact realism](#5-synthetic-claim-generation-and-artifact-realism)
+6. [Current and historical agent architectures](#6-current-and-historical-agent-architectures)
+7. [What must remain deterministic](#7-what-must-remain-deterministic)
 8. [Process discovery](#8-process-discovery)
-9. [Process-derived evidence and documents](#9-process-derived-evidence-and-documents)
+9. [Process-derived evidence and document requirements](#9-process-derived-evidence-and-document-requirements)
 10. [Swiss-law grounding](#10-swiss-law-grounding)
 11. [Historical claim retrieval](#11-historical-claim-retrieval)
-12. [Expert feedback and organizational learning](#12-expert-feedback-and-organizational-learning)
+12. [Expert feedback, reviewed memory, and shared learning](#12-expert-feedback-reviewed-memory-and-shared-learning)
 13. [Evaluation and research findings](#13-evaluation-and-research-findings)
 14. [Do not rediscover](#14-do-not-rediscover)
 15. [UX journey and design history](#15-ux-journey-and-design-history)
 16. [Deployment and release history](#16-deployment-and-release-history)
-17. [Model-cost constraints](#17-model-cost-constraints)
+17. [Model and cost constraints](#17-model-and-cost-constraints)
 18. [Repository map](#18-repository-map)
-19. [Canonical schemas and examples](#19-canonical-schemas-and-examples)
+19. [Canonical contracts and compact examples](#19-canonical-contracts-and-compact-examples)
 20. [Precise current-state table](#20-precise-current-state-table)
 21. [Irreducible research questions](#21-irreducible-research-questions)
 22. [Immediate next milestone](#22-immediate-next-milestone)
 23. [First 60 minutes](#23-first-60-minutes)
 24. [Glossary](#24-glossary)
-25. [Operating rules for future agents](#25-operating-rules-for-future-agents)
+25. [Operating rules for future collaborators](#25-operating-rules-for-future-collaborators)
+26. [Appendix A: evidence and artifact registry](#appendix-a-evidence-and-artifact-registry)
+27. [Appendix B: known defects and contradictions](#appendix-b-known-defects-and-contradictions)
+28. [Appendix C: release and research evolution](#appendix-c-release-and-research-evolution)
+29. [Appendix D: capability claim matrix](#appendix-d-capability-claim-matrix)
+30. [Appendix E: adversarial handoff quality check](#appendix-e-adversarial-handoff-quality-check)
 
 ---
 
-# 1. Original mission
+# 1. The mission
 
 ## 1.1 North star
 
-CasePath is not primarily a claim classifier, next-action predictor, missing-document detector, or claims dashboard.
+CasePath is not primarily a classifier, a missing-document detector, a next-action predictor, or a polished claims dashboard.
 
-> **Given the customer's first claim message and actual attachments, coordinated agents should infer the complete claim-handling process, derive the evidence and document requirements from that process and relevant Swiss law, retrieve useful historical experience, allow an expert to validate or correct the result, and turn validated cases into reusable organizational knowledge that improves future claims.**
+Its north star is:
 
-The target loop is:
+> **Given the customer’s first claim message and actual attachments, coordinated agents should infer the complete claim-handling process, derive the evidence and document requirements from that process and relevant Swiss law, retrieve useful historical experience, allow an expert to validate or correct the result, and turn validated cases into reusable organizational knowledge that improves future claims.**
+
+The intended loop is:
 
 ```text
 Claim intake
 → Understand message and attachments
 → Research Swiss tenant law
-→ Construct full claim-specific process graph
-→ Derive process-grounded evidence and document model
+→ Construct a complete claim-specific process graph
+→ Derive a process-grounded evidence and document model
 → Retrieve useful historical claims
 → Expert review
 → Approved case memory
@@ -92,84 +116,150 @@ Claim intake
 → Future claim benefits
 ```
 
-The defining causal relationship is:
+The central causal relationship is:
 
-> **Process determines what must be established. Evidence and documents exist to establish those facts.**
+> **The process determines what must be established. Evidence and documents exist to establish those facts.**
 
-If process and checklist are predicted independently, the project has drifted from its core contribution.
+This relationship must remain visible in:
 
-## 1.2 Bounded operational role
+- the problem formulation;
+- canonical schemas;
+- model and agent contracts;
+- process graph;
+- document checklist;
+- expert-review interface;
+- benchmark targets;
+- evaluation;
+- and product experience.
 
-CasePath may prepare a claim for competent human handling by organizing source material, exposing supported and unresolved facts, proposing a handling graph, linking evidence to decisions, surfacing relevant law and experience, and recording expert corrections.
+If process and checklist are predicted independently, CasePath has drifted from its defining idea.
 
-It must not, without separate institutional authorization:
+## 1.2 Bounded operational purpose
 
-- provide legal advice;
-- decide insurance coverage or legal merits;
-- calculate or guarantee deadlines;
-- accept or deny a claim;
+The intended operational contribution is to prepare a claim for competent human handling. CasePath may:
+
+- organize the original submission;
+- expose supported, unknown, and conflicting facts;
+- propose a claim-specific handling process;
+- identify what evidence could resolve each decision;
+- avoid asking again for evidence already present;
+- surface relevant official sources and reviewed experience;
+- record expert corrections;
+- and propose governed updates to reusable knowledge.
+
+It must not, without separate institutional and operational authorization:
+
+- give legal advice;
+- decide insurance coverage;
+- calculate or guarantee legal deadlines;
+- determine legal merits;
+- automatically deny or accept a claim;
 - contact a customer;
 - autonomously escalate a case;
-- or alter shared procedure from one unreviewed event.
+- or change shared organizational procedure from one unreviewed or one-off event.
 
-## 1.3 Research formulations already explored
+## 1.3 What is scientifically interesting
 
-The project has used three related formulations:
+The core scientific problem is not “can a model produce a plausible claim summary?” It is whether a system can recover and maintain a useful, inspectable coupling between:
 
-1. **Claim-readiness planning:** infer current state, unresolved fact, evidence needed now, and next safe action.
+```text
+observable claim facts
+→ operational decisions
+→ process branches
+→ evidence needs
+→ expert corrections
+→ reusable organizational rules
+```
+
+The project has explored at least three research formulations:
+
+1. **Claim-readiness planning:** infer the process state, unresolved fact, evidence needed now, and next safe action.
 2. **Claim-specific process and evidence reasoning:** infer the complete process graph and derive evidence from reached decisions.
-3. **Playbook induction from reviewed contrasts:** learn non-default trigger conditions inside an approved workflow while retaining deterministic execution and regression gates.
+3. **Fixed-workflow playbook induction from reviewed contrasts:** learn the non-default conditions inside an approved workflow while retaining deterministic execution and regression gates.
 
-A future paper or experiment must explicitly choose one. Combining them without a clear primary estimand causes conceptual confusion.
+These formulations are related, but not interchangeable. The deployed v20 product currently emphasizes the second. Several paper artifacts emphasize the first or third. A new paper or experiment must explicitly select one research question instead of combining all three.
 
 ---
 
-# 2. Operational reason for the project
+# 2. Why CasePath exists operationally
 
-Experienced handlers implicitly know:
+## 2.1 The real insurance problem
 
-- whether a real dispute exists;
-- whether tenant-law scope applies;
-- which questions must be answered first;
-- which decisions depend on earlier decisions;
-- which facts are supported, alleged, conflicting, or unknown;
-- which legal sources matter;
-- which evidence can resolve each decision;
-- which internal route follows;
-- and how exceptional cases differ from routine ones.
+Experienced claim handlers carry a large amount of procedural knowledge in their heads. For an incoming tenant-law claim, they implicitly know:
 
-Much of this knowledge lives in people, local templates, emails, and habits rather than an explicit reusable system. Static category checklists flatten the reasoning: they request evidence for inactive branches, miss exceptions, and force experts to reconstruct the process repeatedly.
+- whether the message describes an actual dispute;
+- whether the issue falls within the relevant legal and organizational scope;
+- which questions must be answered before another question becomes meaningful;
+- which facts are already supported;
+- which facts are merely alleged;
+- which documents are relevant to the reached branch;
+- whether a document is sufficient, partial, conflicting, or irrelevant;
+- which legal sources constrain the handling path;
+- which previous claims are useful analogies;
+- where uncertainty must remain open;
+- and when a case is ready for specialist or expert action.
 
-CasePath aims to turn this tacit knowledge into a **living, expert-validated playbook library** containing:
+Conventional intake forms and static category checklists flatten that reasoning. They ask the same questions too early, request documents for inactive branches, omit evidence required by exceptions, and force experts to reconstruct the process repeatedly.
 
-- allowed process structure;
-- decision questions and branch conditions;
-- evidence goals and acceptable alternatives;
-- source authority;
-- ownership and handoffs;
-- exceptions and effective dates;
+The operational unit is therefore not a category label. It is the **claim-specific path from incomplete submission to a safely actionable state**.
+
+## 2.2 Tacit knowledge as a living playbook library
+
+CasePath aims to convert repeated expert behavior into a living, expert-validated organizational playbook library.
+
+A playbook should capture:
+
+- the allowed process structure;
+- decision questions;
+- branch conditions;
+- evidence goals;
+- accepted evidence alternatives;
+- legal or policy sources;
+- ownership and handoff points;
+- exceptions;
+- effective dates;
 - review history;
-- versioning and rollback.
+- and rollback information.
 
-The practical hypotheses are less repetitive expert reasoning, more consistent handling, faster onboarding, fewer unnecessary requests, better first-request completeness, reusable precedent, stronger transparency, and continually improving organizational memory. These remain hypotheses for real operations; generated simulations do not establish real workload or customer-friction reduction.
+The library should not silently learn every observed action. Operational traces contain mistakes, local habits, convenience shortcuts, and context that may not generalize. Observed behavior is evidence for a candidate, not authority.
+
+## 2.3 Practical value hypothesis
+
+The practical hypotheses are:
+
+- **Less repetitive reasoning:** experts do not rebuild the same procedural logic from scratch.
+- **More consistent handling:** similar claims expose similar decisions and evidence rationale.
+- **Faster onboarding:** new handlers can inspect the process and supporting sources.
+- **Fewer unnecessary requests:** evidence is requested only for reached decisions and only if absent or insufficient.
+- **Better first-request completeness:** related needs can be compiled from the active process rather than discovered through repeated follow-up.
+- **Reusable precedent:** reviewed cases become inspectable organizational memory.
+- **Transparency:** every important conclusion can point to source evidence, process logic, and authority.
+- **Continual improvement:** repeated compatible corrections may become tested, approved playbook changes.
+
+These are still hypotheses for real operations. Generated simulations and deterministic demos do not establish actual workload reduction, customer-friction reduction, legal validity, or transfer to production claims.
 
 ---
 
 # 3. Current project truth
 
-## 3.1 Authoritative product components
+## 3.1 Authoritative current product
 
-| Component | Inspected state | Truth status |
-|---|---|---|
-| Frontend | CasePath v20, static two-pane workspace, product baseline `a867bb5` | **Implemented and verified** |
-| API | `pipeline_v15.py`, deterministic typed reference pipeline | **Implemented and verified** |
-| Canonical QA | Focused Playwright journey retained on a QA-only commit | **Implemented and verified, but source alignment is imperfect** |
-| Persistence | SQLite under `/tmp` by default | **Implemented but not durable** |
-| Model runtime | No current model call path | **Not implemented in public runtime** |
-| Legal retrieval | Static official-source registry and handcrafted interpretation | **Prototype / generated-reference only** |
-| Knowledge promotion | Generated support, target-test, and protected-regression outputs | **Prototype / generated-reference only** |
+The currently deployed product is CasePath v20 at:
 
-The repository is a broader personal-site repository. The root README is not the CasePath README. Current CasePath code is concentrated in:
+- Frontend: <https://casepath-swiss-claim-lab.onrender.com/>
+- API: <https://casepath-agentic-api.onrender.com/>
+- Canonical browser evidence: <https://casepath-guided-canonical-qa.onrender.com/>
+
+The product code baseline is:
+
+```text
+Repository: KumarNavish/KumarNavish.github.io
+Product commit: a867bb506d8e3f790806fc21f2a24a011c1cd0bc
+Frontend release marker: 20.0.0
+API pipeline release: 15.0.0
+```
+
+The repository is a broader personal-site repository, not a dedicated CasePath repository. The root README describes a portfolio system and is not a reliable CasePath entry point. CasePath lives mainly under:
 
 ```text
 casepath/
@@ -179,49 +269,77 @@ casepath-qa/
 
 ## 3.2 Deployment SHA reality
 
-At the inspected release:
+The production components are not all on one SHA.
 
-| Service | SHA | Meaning |
-|---|---|---|
-| Frontend | `a867bb506d8e3f790806fc21f2a24a011c1cd0bc` | Frozen v20 interaction baseline |
-| API | `550c42175c2dfa432dd32eb4c5f82361ce1c2f25` | Earlier SHA; API source did not change in the frontend-only v20 pass |
-| Canonical QA | `7be18c72f353366930cd5dcace637884e06e63a7` | QA-only corrections not merged into product baseline |
+| Component | Live SHA | Status | Interpretation |
+|---|---:|---|---|
+| Frontend | `a867bb506d8e3f790806fc21f2a24a011c1cd0bc` | Live | Current v20 focused product |
+| API | `550c42175c2dfa432dd32eb4c5f82361ce1c2f25` | Live | Earlier code SHA, but API code did not change during the v20-only frontend pass |
+| Canonical QA | `7be18c72f353366930cd5dcace637884e06e63a7` | Live | QA-only patch commit; not current product master |
 
-Do not claim that all services run one SHA. The code may still be functionally compatible, but release governance is unsynchronized.
+This is not necessarily a functional mismatch, but it is a release-governance mismatch. The stale `casepath/release.json` says frontend and API must report the same release before acceptance; that contract is not currently satisfied.
 
-## 3.3 What the public journey verifies
+## 3.3 What the deployed product actually demonstrates
 
-The focused production gate verified 57 checks with zero failures. It exercised one uninterrupted route that:
+### Implemented and verified
 
-- shows an intentional loading shell;
-- renders a generated customer message and six source attachments;
-- opens a six-page PDF and source photograph;
-- starts analysis through one action;
-- shows source-level backend events and one current specialist;
-- keeps the source claim visible;
-- makes an 11-stage process graph the dominant artifact;
-- displays current and blocked decisions;
-- places evidence status on graph decisions;
-- shows reviewed-reference cases at the relevant decision;
-- performs one consequential expert correction beside the graph;
-- distinguishes reviewed memory, correction, and shared rule;
-- opens a second generated claim;
-- shows later-claim before/after behavior;
-- creates two backend runs;
-- has no console, page, or public request failures;
-- has no page-level overflow at 390 or 320 pixels;
-- and resets to playbook v3 after QA.
+The v20 browser gate verified an uninterrupted journey that:
 
-Browser correctness is not research validity. The same run does not prove that a model inferred facts, discovered law, learned a process, or safely promoted knowledge.
+1. opens an intentional claim shell;
+2. displays one generated customer message and six inspectable source attachments;
+3. renders a six-page PDF and a source photograph;
+4. starts analysis through one action;
+5. shows source-level backend events;
+6. shows one current specialist while the source claim remains visible;
+7. makes an 11-stage process graph the dominant artifact;
+8. attaches evidence status to process decisions;
+9. shows three reviewed-reference precedents at the relevant decision;
+10. allows one consequential expert correction beside the graph;
+11. shows reviewed memory, expert correction, and shared playbook change;
+12. opens a second generated claim;
+13. shows a before/after effect from the reviewed memory and v4 playbook;
+14. produces two separate backend runs;
+15. works without page-level overflow at 390 px and 320 px;
+16. reports no browser console, page, or public request failures;
+17. resets the demo to playbook v3 after the run.
 
-## 3.4 Public data and execution profile
+The focused gate reported 57 passing checks and zero failures.
 
-The deployed API contains exactly two claims:
+### Prototype / generated-reference only
 
-- `DEF-027-E0-DEMO` — flagship recurring-mould claim.
-- `DEMO-MOULD-002` — later recurring-condensation claim.
+The following are demonstrated, but not validated as real intelligence or real organizational learning:
 
-It exposes nine generated artifacts. It identifies itself as:
+- claim understanding;
+- legal question formulation;
+- legal source selection;
+- process graph generation;
+- evidence model generation;
+- historical retrieval;
+- verification;
+- expert-reviewed memory;
+- playbook promotion;
+- protected regression;
+- and later-claim benefit.
+
+In the public runtime, these are produced by a deterministic typed reference pipeline for two generated cases. Several evaluation values are hard-coded reference outputs.
+
+## 3.4 Current public data boundary
+
+The public runtime contains exactly two claims:
+
+- `DEF-027-E0-DEMO`: flagship recurring-mould claim.
+- `DEMO-MOULD-002`: later recurring-condensation claim.
+
+It exposes nine artifacts:
+
+- six for the flagship claim;
+- three for the later claim.
+
+The public runtime is not a browser over the 150-claim corpus or the 48-journey benchmark.
+
+## 3.5 Current API profile
+
+The deployed API identifies itself as:
 
 ```text
 profile: full-process-reference-agents
@@ -231,450 +349,1091 @@ generated_data_only: true
 real_claims_approved: false
 ```
 
-The specialist stages are deterministic Python functions with typed events. Deliberate pacing makes the work observable. There is no current LLM invocation.
+The implementation is a deterministic Python pipeline with typed event records. It uses a background thread and deliberate pacing to create an observable product narrative. It does not currently invoke a language model.
 
-## 3.5 Important discrepancies
+## 3.6 Status of major architectural claims
 
-- `casepath/index.html` says product release `20.0.0`.
-- API health reports pipeline `15.0.0`.
-- `casepath/release.json` is stale at `12.0.2`.
-- `casepath/source-manifest.json` is stale at `10.0.0`.
-- Frontend behavior still depends on v16–v20 scripts and styles.
-- The default-branch QA wrapper is not exactly the source used for the retained passing canonical QA.
-- Legacy backend tests import `pipeline.py`, while `app.py` imports `pipeline_v15.py`.
-- API build runs a direct smoke rather than an aligned v15 test suite.
-
-These defects are documented technical debt, not reasons to restart the architecture.
+| Claim | Truth status | Evidence |
+|---|---|---|
+| The public product uses real backend run events | **Implemented and verified** | Browser gate observes two API-created runs and source-level events |
+| The public product runs multiple model-driven specialist agents | **Prototype / generated-reference only** | Specialist stages are deterministic functions labeled `typed_reference_agent` |
+| The public product uses LangChain/LangGraph | **Rejected as a statement of current deployment** | No LangChain dependency in current `requirements.txt`; no LangChain source in current master |
+| The public product uses Nemotron through OpenRouter | **Rejected as a statement of current deployment** | No model call path in current deployed API; historical implementation only |
+| The process graph is claim-specific | **Implemented and verified for two handcrafted reference claims** | Flagship and later graph differ; not a general inference result |
+| The evidence checklist is derived from process nodes and facts | **Implemented and verified** | Each current evidence item links to `node_id`, `fact_id`, and `why`; validator and browser checks |
+| Swiss law shapes the process | **Prototype / generated-reference only** | Static official-source registry and handcrafted operational mapping; no qualified expert approval |
+| Historical cases are retrieved by useful process dimensions | **Prototype / generated-reference only** | Deterministic ranking and three static references; reviewed memory is prioritized after review |
+| One expert-reviewed claim changes shared knowledge | **Not the intended rule; public demo simulates a promoted v4 candidate** | Public candidate uses generated support and hard-coded evaluation; not an actual one-case production promotion |
+| Knowledge is durable | **Not implemented for production** | SQLite defaults to `/tmp`, which is ephemeral on Render |
+| The public runtime processes 150 claims | **False** | Two claims in `data.py` and build smoke |
+| The original 150-claim corpus is an approved benchmark | **False** | Generated candidate; distribution and publication flags false |
+| The hardened vertical slice is operationally approved | **False** | Manifest explicitly says not approved for operational use |
 
 ---
 
-# 4. Benchmark and data landscape
+# 4. The data and benchmark landscape
 
-## 4.1 Original bilingual corpus
+## 4.1 Do not collapse the three datasets
 
-**Truth status:** Prototype / generated-reference only.
+### A. Original bilingual corpus
 
-Reported contract and provenance:
+**State:** Prototype / generated-reference only.
+
+The original corpus contains:
+
+| Property | Value |
+|---|---:|
+| Claims | 150 |
+| Languages | 75 German (`de-CH`), 75 English |
+| Categories | 3 |
+| Claims per category | 50 |
+| Receipt-bound files | 2,251 |
+| Scenario or near-duplicate groups | 28 |
+| Independent expert review | Not performed |
+| Distribution allowed | No |
+| Publication eligible | No |
+
+Categories:
+
+- `defect_mold_heating`
+- `lease_termination_dispute`
+- `rent_increase_dispute`
+
+Artifact families include:
+
+- customer messages;
+- attachments;
+- bundled PDFs;
+- canonical JSON;
+- process graphs;
+- checklists;
+- reference answers;
+- provenance records.
+
+Reported reproducibility for the original package:
 
 ```text
-contract: casepath.private-candidate-corpus/2.0.0
-claims: 150
-files: 2,251
-languages: German and English
-corpus SHA-256:
-84d827d30c8688c3e0ccfc71d89a3d64e96048eb2d2e43c32dd719a54209e966
-reported source commit:
-7bebdf3f9fc35641ee91262f61180b27362e99cc
+2,633 passed
+22 skipped
+0 failed
+byte-identical deterministic rebuild
 ```
 
-The reported source commit was not found in the inspected repository. Recover the actual archive origin before making commit-level reproducibility claims.
+The reported source commit was `7bebdf3f9fc35641ee91262f61180b27362e99cc`, but that SHA is not present in the current inspected GitHub repository. Treat it as external release provenance until the corresponding repository or archive is recovered and independently matched.
 
-The corpus covered three initial tenant-law subtypes:
+#### Original corpus defects
 
-- mould or moisture defects;
-- rent increase;
-- security deposit.
+The integrity audit found no missing receipt-bound file, but task validity was weak:
 
-It packaged customer messages, rendered PDFs and images, correspondence, canonical JSON, reference process graphs, checklists, and generation provenance. It was a strong infrastructure proof, but a weak final benchmark because:
+- subject-only category accuracy was 95.3%;
+- each category reused one graph skeleton;
+- all 150 claims were in `submitted` state;
+- all current nodes were category intake nodes;
+- no negative or out-of-scope disputes existed;
+- 105 claims had no attachment, 33 had one, and 12 had two;
+- ground truth was generated and not independently expert-approved.
 
-- subject lines leaked category;
-- each category largely shared one process skeleton;
-- all claims were intake snapshots;
-- negative and out-of-scope cases were missing;
-- attachments were not always decisive;
-- and ground truth was generated rather than adjudicated.
+A high integrity score therefore did not imply a scientifically strong benchmark.
 
-## 4.2 Hardened defects vertical slice
+### B. Hardened defects vertical slice
 
-**Truth status:** Prototype / generated-reference only, stronger than the original corpus.
+**State:** Prototype / generated-reference only; stronger research benchmark.
 
-Reported contract:
+Contract:
 
 ```text
 casepath.defects-vertical-slice-benchmark/1.0.0
 ```
 
-Key scale:
+Core counts:
 
-```text
-48 journeys
-136 episodes
-1,148 attachments
-28 process paths
-12 current process nodes
-longitudinal evidence arrival
-negative and out-of-scope cases
-withheld recurring-condensation / ventilation pattern
-```
+| Property | Value |
+|---|---:|
+| Journeys | 48 |
+| Longitudinal episodes | 136 |
+| Languages | 68 English, 68 German |
+| Attachments | 1,148 |
+| Attachment-decisive episodes | 97 |
+| Hard-negative episodes | 16 |
+| New-pattern episodes | 48 |
+| Expert-review items | 30 |
+| Challenge cases in expert-ready extension | 24 |
 
-The release introduced attachment-decisive cases, neutral or misleading subjects, staged evidence, duplicate and irrelevant files, scope negatives, branch reversal, multiple valid targets, and disagreement-aware review packages. It is the strongest existing generated research asset, but it is not part of the current public runtime and is not independently expert-approved.
+Scenario families:
 
-## 4.3 Observable information
+- 8 ordinary recurring-mould cases;
+- 6 moisture-ingress cases;
+- 4 water-leak cases;
+- 6 heating-failure cases;
+- 16 withheld ventilation-pattern cases, deliberately retaining the broad `mould_recurrence` subtype;
+- 8 negative or boundary cases:
+  - no current dispute;
+  - advisory only;
+  - hotel guest;
+  - owner-occupied property;
+  - wrong jurisdiction;
+  - duplicate claim;
+  - insufficient tenancy/dispute evidence;
+  - adjacent rent issue after a resolved defect.
 
-The downstream system is allowed to see only:
+The vertical slice contains:
 
-- the first customer message or the messages available at the episode;
-- submitted PDFs, images, email files, and documents;
-- metadata available at intake;
-- source hashes and provenance needed for integrity;
-- and canonical facts derived only from those observable materials.
+- 28 distinct process paths;
+- 12 distinct current process nodes;
+- staged evidence episodes;
+- conflicting evidence;
+- source-group identifiers;
+- language and surface-family variation;
+- attachment-decisive cases;
+- hidden generation provenance;
+- observable packages;
+- bundled PDFs;
+- reference plans;
+- and ground-truth objects.
 
-A defensible observable claim object must not expose answer-bearing labels.
+It is not currently committed under the public product’s default branch. Locate it through the archived `CasePath_Defects_Expert_Ready_Agent` release or reconstruct it from its release manifest and checksums before treating it as locally available.
 
-## 4.4 Hidden reference information
+### C. Deployed flagship demonstration
+
+**State:** Implemented and verified as a product demo; generated-reference only as research evidence.
+
+| Property | Value |
+|---|---:|
+| Claims | 2 |
+| Flagship source artifacts | 6 |
+| Later-claim source artifacts | 3 |
+| Process main-spine nodes | 11 |
+| Flagship evidence items | 20 |
+| Static historical references | 3 |
+| Browser acceptance checks | 57 |
+| Model calls | 0 |
+
+The deployed demo is intentionally narrow. It should not be reported as benchmark coverage.
+
+## 4.2 Observable versus hidden information
+
+### Observable Claim Package
+
+A downstream model or agent may see only information available at intake:
+
+- the first customer message;
+- submitted PDFs, images, emails, forms, and other files;
+- filenames and media types if genuinely present in intake;
+- received timestamps and allowed metadata;
+- extracted text or visual descriptions derived from those files;
+- source spans and artifact identifiers;
+- approved public context that is explicitly supplied.
+
+The canonical state must be derived from this observable package.
+
+### Hidden reference information
 
 Generation and evaluation may retain:
 
-- category and subtype;
-- complete reference process;
-- checklist and expected facts;
+- category and subcategory labels;
+- process graph;
 - branch conditions;
-- reference next actions;
-- future artifacts;
-- process ownership;
-- generation prompts and model provenance;
-- synthetic scenario controls;
-- and expert or simulated-review targets.
+- current process state;
+- expected facts;
+- evidence applicability;
+- reference document requirements;
+- reference next action;
+- final outcome;
+- generation prompt;
+- template ID;
+- source group;
+- renderer family;
+- provenance;
+- hidden response schedule;
+- and benchmark split metadata.
 
-These belong in a physically and logically separate hidden package.
+### Why leakage is forbidden
 
-## 4.5 Leakage prohibition
+If hidden labels, generator names, scenario templates, or expected actions enter model-visible fields, the benchmark stops measuring claim understanding. The system can recover the answer from construction artifacts rather than from the customer submission.
 
-Hidden-ground-truth leakage is forbidden because it collapses the scientific problem. The evaluated system must not see:
+Leakage checks must cover:
 
-- category labels encoded in filenames or metadata;
-- reference branch names;
-- future episode evidence;
-- checklist answers;
-- scenario IDs that map to targets;
-- words such as `synthetic`, `generated`, `sample`, or `ground truth` inside evaluated artifacts;
-- or generation notes that reveal the intended cause.
+- filenames;
+- PDF metadata;
+- visible headers and footers;
+- embedded “generated,” “synthetic,” “sample,” or scenario labels;
+- schema field ordering;
+- prompt-template phrases;
+- author or producer metadata;
+- duplicate textual fragments;
+- source-group overlap;
+- and URLs or internal IDs that encode the target.
 
-Current public-demo artifacts visibly disclose that they are generated. That is acceptable for a public demo boundary, but not for a leakage-clean benchmark package. Separate disclosure in the product shell from bytes supplied to the evaluated model.
+The current public artifact generator visibly marks PDFs as generated fictional documents. That is acceptable for a disclosed demo, but it means those same files are not suitable as leakage-clean benchmark inputs without rerendering.
 
-## 4.6 Reproducibility status
+## 4.3 Benchmark object structure
 
-- Original corpus: generated and checksummed, but source-repository provenance must be recovered.
-- Hardened benchmark: reported clean internal releases and manifests, but current default branch does not contain the complete package.
-- Public v20: browser-reproducible product story, but not integrated with the hardened benchmark.
-- Real-world benchmark: not yet approved or released.
+A vertical-slice manifest record points to:
+
+```text
+benchmark/packages/<claim>/<episode>.json          observable package
+benchmark/bundles/<claim>/<episode>.pdf            bundled observable artifact
+benchmark/ground_truth/<claim>/<episode>.json       hidden reference state
+benchmark/reference_plans/<claim>/<episode>.json    hidden reference process and evidence plan
+```
+
+A journey groups multiple chronological episodes. Each episode may add, satisfy, contradict, or supersede evidence from earlier episodes. The evaluation must enforce prefix-only information: no future artifact may influence an earlier prediction.
+
+## 4.4 Quality and reproducibility status
+
+### Original corpus
+
+- Byte-identical rebuild reported.
+- 2,633 passed tests reported.
+- Internal integrity checks passed.
+- No independent expert approval.
+- Distribution and publication disabled.
+- Task validity failed important shortcut tests.
+
+### Hardened vertical slice
+
+- 714 automated tests reported in the expert-ready extension.
+- 47 strict JSON schemas.
+- 136 packages, plans, and ground-truth objects validated.
+- 48 journeys.
+- 30 disagreement-aware targets.
+- 24 challenge cases.
+- 15 browser checks.
+- No qualified domain-review evidence.
+- Some report snapshots disagree slightly on exact split-level metrics; preserve report version and do not silently reconcile.
+
+### Deployed v20 demonstration
+
+- 57 focused production checks passed.
+- Two real API runs created through the UI.
+- No browser console, page, or request failures in the retained gate.
+- The current default-branch QA script contains stale assumptions and should not be assumed to reproduce that pass without repair.
+- API unit tests target a legacy pipeline module rather than `pipeline_v15.py`.
 
 ---
 
-# 5. Synthetic claim generator
+# 5. Synthetic claim generation and artifact realism
 
-## 5.1 Why generation was necessary
+## 5.1 Why generated claims are necessary
 
-Real Mobiliar or Protekta claims were not initially approved for research use. Generated claims enabled rapid iteration on schemas, provenance, artifact rendering, process targets, leakage controls, and evaluation without exposing customer data.
+Real insurance claims contain personal, confidential, legally sensitive, and operationally restricted data. Initial research therefore uses generated claim packages and public legal sources.
 
-Generation is infrastructure for testing a method; it is not evidence that the method transfers to real claims.
+Generated data permits:
 
-## 5.2 Intended generation pipeline
+- complete hidden process and evidence labels;
+- counterfactual variations;
+- staged longitudinal episodes;
+- source-group isolation;
+- deliberate contradictions;
+- rare negative cases;
+- controlled evidence arrival;
+- exact provenance;
+- and public reproducibility.
+
+Generated data is a means to build and falsify the research method. It is not evidence that the method transfers to real claims.
+
+## 5.2 Generation architecture
+
+The hardened research release uses a prompt- and schema-driven generator with deterministic post-processing. The intended pipeline is:
 
 ```text
 scenario specification
-→ model-generated claim narrative and hidden plan
-→ deterministic schema normalization
+→ claim-message prompt
+→ attachment-content prompts
+→ model- or template-generated semantic content
+→ deterministic normalization
+→ schema validation
+→ process/reference-plan generation
+→ document rendering
+→ PDF/image/email packaging
 → cross-document consistency checks
-→ PDF, email, image, and JSON rendering
-→ observable/hidden split
-→ leakage scan
-→ provenance and checksum manifest
-→ benchmark validation
+→ leakage and shortcut checks
+→ manifest and provenance freeze
 ```
 
-The model is useful for linguistic and scenario diversity. Deterministic code must own identifiers, timestamps, schema conformance, cross-file references, checksums, page rendering, and separation of observable from hidden data.
+The exact released generator is not available in the current default branch. The archived `benchmark.py`, manifests, schemas, renderers, and release tools are therefore part of the benchmark handoff, not the public v20 product tree.
 
-## 5.3 Current public artifact generation
+## 5.3 Current public artifact generator
 
-`casepath-api/generate_artifacts.py` creates demo PDFs, emails, and images. `casepath-api/render-build.sh` regenerates artifacts, verifies photographic hashes, and runs a direct API smoke.
+The deployed demo’s `casepath-api/generate_artifacts.py`:
 
-**Truth status:** Implemented and verified for the public generated demo; not a leakage-clean benchmark generator.
+- deterministically creates a six-page lease;
+- creates a two-page chronology;
+- creates a delivery-receipt PDF;
+- writes notification and management-response email files;
+- creates later-claim correspondence;
+- initially generates procedural images;
+- and is followed by `replace_photographic_evidence.py`, which substitutes checksum-verified licensed photographs.
 
-## 5.4 Major lesson
+The Render build verifies:
 
-> The visible claim package must resemble genuine operational input. The evaluated model must not see generation artefacts.
+- required files exist;
+- Wikimedia attribution exists;
+- expected photo hashes match;
+- artifact metadata matches file bytes;
+- the primary claim has six artifacts;
+- the runtime has exactly two claims.
 
-Do not label source files `synthetic`, `sample`, or `generated`. Keep research disclosure in the surrounding application or manifest inaccessible to the evaluated model.
+## 5.4 Major lesson: visible inputs must resemble operations
+
+A benchmark-visible package must not contain generation artifacts. In particular, the evaluated model should not see:
+
+- “synthetic”;
+- “generated”;
+- “sample”;
+- “fictional”;
+- benchmark category names;
+- answer-bearing scenario IDs;
+- renderer labels;
+- or hidden generation metadata.
+
+The current demo lease and related PDFs include visible “Generated fictional document – CasePath demo” footers and generated-author metadata. This is an honest public-demo disclosure, but it violates the stricter benchmark realism standard.
 
 ## 5.5 Current realism weakness
 
-The flagship artifacts are inspectable, but not yet at blind operational realism. Remaining quality requirements include:
+**State:** Prototype / generated-reference only.
 
-- complete multi-page leases with realistic clauses and annexes;
-- landlord letters and notices with credible headers, references, dates, and signatures;
-- invoices and inspection reports with realistic structure and terminology;
-- email threads with quoted history and consistent participants;
-- high-quality photographs whose geometry, lighting, damage pattern, and metadata are plausible;
-- consistent names, addresses, dates, amounts, and incident chronology across files;
-- realistic missingness, duplicates, ambiguity, and irrelevant material;
-- and independent human realism review.
+The flagship package is more operationally inspectable than earlier “safe preview” panels, but it is not yet strong enough for a blind realism claim.
 
-A polished PDF generated by code is still a generated reference. Do not call it a real customer document.
+Current weaknesses include:
+
+- machine-perfect typesetting;
+- explicit generated-document footers;
+- unusually complete lease language tailored to the benchmark;
+- overly clean correspondence;
+- limited scan noise and administrative clutter;
+- no independent realism rating;
+- no realistic logos, signatures, redactions, stamps, or inconsistent formatting where appropriate;
+- a small set of photographs selected or generated for demonstration rather than sourced from an operational distribution;
+- and only two public claim packages.
+
+## 5.6 Desired artifact quality bar
+
+### Multi-page leases
+
+- complete and internally consistent;
+- realistic clauses and page density;
+- plausible formatting and signature pages;
+- no answer-bearing benchmark language;
+- appropriate metadata scrubbed;
+- OCR and visual layout both usable;
+- page-level source references stable.
+
+### Landlord letters and notices
+
+- realistic letterhead and dates;
+- imperfect but plausible phrasing;
+- proper sender and recipient context;
+- attachments and references consistent across files;
+- no hidden branch label in filenames.
+
+### Invoices and inspection reports
+
+- line items, identifiers, dates, author, limitations, and measurement context;
+- realistic uncertainty;
+- conclusions not stronger than the observations;
+- process implications kept separate from report content.
+
+### Email chains
+
+- headers, threading, quotations, and timestamp consistency;
+- occasional irrelevant text and forwarding artifacts;
+- deduplication and source selection tested.
+
+### Photographs
+
+- high resolution;
+- plausible phone-camera perspective and lighting;
+- no procedural drawing or stylized placeholder;
+- visually relevant but not magically diagnostic;
+- location and date consistency;
+- sufficient ambiguity to require technical interpretation.
+
+### Cross-document consistency
+
+- names, addresses, dates, rooms, reported events, and attachment references agree unless contradiction is deliberately part of the case;
+- deliberate conflicts are registered in hidden provenance and detectable from observable files;
+- no impossible sequence of events;
+- no future evidence in earlier episodes.
 
 ---
 
-# 6. Agent architecture
+# 6. Current and historical agent architectures
 
 ## 6.1 Current deployed architecture
 
-**Truth status:** Implemented and verified as deterministic reference agents.
+**State:** Implemented and verified as deterministic reference orchestration.
 
-`casepath-api/casepath_api/app.py` imports `ClaimPipeline` from `pipeline_v15.py`. The pipeline creates one run, opens one shared claim context, emits typed events, and executes specialist stages in a background thread.
-
-Canonical principle:
-
-> Specialist implementations may change. Canonical data contracts and validators should not.
-
-## 6.2 Current specialist contracts
-
-| Specialist | Purpose | Canonical input | Canonical output | Validation | Downstream consumer |
-|---|---|---|---|---|---|
-| Attachment Parsing Agent | Preserve and parse source package | Observable message and artifacts | Source package, artifact inventory, source refs | Artifact existence, type, hashes, page bounds | Claim Understanding |
-| Claim Understanding Agent | Separate supported, alleged, conflicting, and unknown facts | Source package | Canonical claim state and facts | Source-ref requirement, confidence/state checks | Law, process, evidence |
-| Legal Research Agent | Formulate tenant-law handling questions and connect official sources | Canonical claim state | Legal questions, source links, operational implications | Source registry and node-link checks | Process Discovery |
-| Process Discovery Agent | Build complete handling spine and claim overlay | Facts, law, active playbook | Process graph, nodes, edges, branches, current node | Node/edge integrity, reachable states, legal/evidence links | Evidence Agent and UI |
-| Document Requirements Agent | Derive evidence from reached process questions | Process graph and facts | Evidence items with `node_id`, `fact_id`, status, alternatives, reason | Process/fact linkage, no-repeat checks, status vocabulary | Handler, review, verifier |
-| Historical Claims Agent | Retrieve useful organizational experience | Current process state, unresolved facts, evidence needs | Ranked precedents and usefulness rationale | Exclude current claim, source/status checks | Process inspector and expert |
-| Verification Agent | Reject unsupported or inconsistent relationships | Full graph, evidence, legal links, precedents | Verification report and rejected proposals | Deterministic graph/evidence checks | Expert review |
-| Expert Feedback step | Capture one consequential correction | Proposed playbook plus expert choice | Structured correction and downstream delta | Typed choice, reviewed source, audit event | Memory and consolidation |
-| Knowledge Consolidation Agent | Separate case memory from candidate shared knowledge | Reviewed run and correction | Reviewed memory, candidate patch, version/rollback metadata | Support, target/protected gates, approval state | Future retrieval and playbook registry |
-
-The current implementations are deterministic functions, despite the agent names.
-
-## 6.3 Shared run context
-
-A run records:
-
-- claim ID and run ID;
-- profile and release;
-- orchestrator identity;
-- shared context version;
-- accepted artifacts;
-- typed events;
-- source and prompt/validator versions;
-- review;
-- memory;
-- candidate update;
-- and final result.
-
-The public event stream is real backend state, not a browser timer, but its content is generated by deterministic reference logic.
-
-## 6.4 Historical LangChain/LangGraph implementation
-
-Archived branches contained `langchain_agents.py` using LangChain `create_agent` on the LangGraph runtime, structured Pydantic outputs, a shared context, and specialist tools. Historical provider code used OpenRouter and Nemotron.
-
-**Truth status:** Implemented historically, not present in current master and not verified in the current deployment.
-
-Do not claim that the live product runs LangChain, LangGraph, OpenRouter, or Nemotron. Recover the archived source only for a deliberate experiment against the current canonical contracts.
-
-## 6.5 Provider abstraction
-
-The desired model interface is configuration-driven:
+The current public API uses:
 
 ```text
-provider
-model ID
-reasoning options
-temperature
-structured output schema
-prompt version
-retry policy
-cache key
-provider-routing constraints
+ClaimPipeline
+→ one run-scoped shared context
+→ ordered typed specialist stages
+→ deterministic validators
+→ review pause
+→ memory and candidate storage
 ```
 
-The orchestrating model and every specialist must be swappable without changing canonical claim, process, evidence, memory, or candidate-patch schemas.
+The orchestrator is:
 
-## 6.6 Replacement rule
+```text
+casepath-reference-orchestrator/15.0
+```
 
-A new agent implementation is acceptable only if it:
+The profile is:
 
-1. consumes the same observable and canonical inputs;
-2. emits the same typed contract;
-3. preserves provenance and source references;
-4. passes deterministic validators;
-5. is evaluated against the same frozen benchmark split;
-6. reports provider/model identity;
-7. and does not silently bypass uncertainty or governance.
+```text
+full-process-reference-agents
+```
+
+Each emitted event records:
+
+- stage;
+- agent;
+- status;
+- implementation;
+- model identifier;
+- orchestrator identifier;
+- shared-context identifier;
+- validator version;
+- prompt version;
+- and stage-specific payload.
+
+The event record is valuable even though the current “agents” are deterministic functions. It establishes a replaceable event and artifact contract.
+
+## 6.2 Specialist stages in the deployed reference
+
+### 1. Attachment Parsing Agent
+
+| Field | Current contract |
+|---|---|
+| Purpose | Inventory and parse the customer message and source artifacts |
+| Input | Observable claim package and artifact registry |
+| Output | `parsed_submission` / source package |
+| Shared context | Run-scoped artifact list |
+| Tools | Local file access, PDF page metadata, email text, predefined extraction |
+| Model dependency | None in current deployment |
+| Validation | Artifact IDs, media types, pages, extraction availability |
+| Downstream consumer | Claim Understanding Agent |
+| Swap interface | Produce the same source-linked parsed-submission contract |
+
+### 2. Claim Understanding Agent
+
+| Field | Current contract |
+|---|---|
+| Purpose | Separate supported facts, allegations, conflicts, and unknowns |
+| Input | Parsed submission |
+| Output | `canonical_claim_state` with source-linked facts |
+| Shared context | Accepted source package plus fact registry |
+| Tools | Deterministic fact constructor in current deployment |
+| Model dependency | None in current deployment |
+| Validation | Fact IDs, states, confidence, source refs, allowed fact registry |
+| Downstream consumer | Legal research, process discovery, evidence |
+| Swap interface | Any model may replace it if it emits the same canonical state and provenance |
+
+### 3. Legal-query formulation
+
+The current public pipeline does not expose a separate model-driven query agent. Legal questions are created in the research stage from the accepted claim state.
+
+| Field | Current contract |
+|---|---|
+| Purpose | Formulate claim-specific legal and handling questions |
+| Input | Canonical claim state |
+| Output | Question list |
+| Model dependency | None |
+| Validation | Question IDs and source-to-node mapping |
+| Downstream consumer | Swiss-law research |
+| Swap interface | Return typed questions without legal conclusions beyond evidence |
+
+### 4. Legal Research Agent
+
+| Field | Current contract |
+|---|---|
+| Purpose | Select official sources and convert them into handling implications |
+| Input | Claim state and legal questions |
+| Output | `legal_context` |
+| Shared context | Facts plus static law registry |
+| Tools | Static in-memory registry search |
+| Model dependency | None |
+| Validation | Official-source IDs, URLs, node links, explicit review status |
+| Downstream consumer | Process Discovery and inspector UI |
+| Swap interface | Produce source, passage/summary, interpretation, and process implication separately |
+
+### 5. Process Discovery Agent
+
+| Field | Current contract |
+|---|---|
+| Purpose | Produce the complete handling graph and current-claim overlay |
+| Input | Claim state and legal context |
+| Output | `process_graph` |
+| Shared context | Facts, legal sources, versioned playbook |
+| Tools | Deterministic graph constructors for flagship and later variants |
+| Model dependency | None |
+| Validation | Node uniqueness, edge validity, current node, blocked states, branch integrity |
+| Downstream consumer | Evidence model, review UI, verification |
+| Swap interface | Emit the canonical graph; do not change frontend or checklist contracts |
+
+### 6. Document Requirements Agent
+
+| Field | Current contract |
+|---|---|
+| Purpose | Attach evidence requirements to process decisions |
+| Input | Process graph, claim state, source inventory |
+| Output | `evidence_model` / checklist |
+| Shared context | Node and fact registries |
+| Tools | Deterministic item constructors |
+| Model dependency | None |
+| Validation | Every item links to existing node and fact; no repeat request; status and alternatives valid |
+| Downstream consumer | Decision inspector, derived document view, verification |
+| Swap interface | Preserve `node_id`, `fact_id`, `why`, alternatives, status, and source refs |
+
+### 7. Historical Claims Agent
+
+| Field | Current contract |
+|---|---|
+| Purpose | Retrieve up to three useful prior cases at the unresolved decision |
+| Input | Current claim, process state, evidence gap, reviewed memory |
+| Output | `precedents` |
+| Shared context | Current node and stored memories |
+| Tools | Deterministic score and static historical registry |
+| Model dependency | None |
+| Validation | Current claim excluded; reviewed memory prioritized; three distinct cases |
+| Downstream consumer | Decision inspector and later-claim reasoning |
+| Swap interface | Return typed relevance dimensions and reviewed status, not only similarity score |
+
+### 8. Verification Agent
+
+| Field | Current contract |
+|---|---|
+| Purpose | Reject unsupported relationships and verify the playbook before review |
+| Input | Claim state, law, graph, checklist, precedents |
+| Output | `verification_report` |
+| Tools | Deterministic validators |
+| Model dependency | None |
+| Validation | Observable grounding, graph integrity, law links, evidence links, no self-retrieval |
+| Downstream consumer | Expert review |
+| Swap interface | Keep accepted and rejected proposals explicit |
+
+### 9. Expert Feedback Agent
+
+| Field | Current contract |
+|---|---|
+| Purpose | Record one consequential expert evidence-order decision |
+| Input | Generated playbook and selected review choice |
+| Output | Reviewed graph/checklist, typed review record |
+| Model dependency | None |
+| Validation | Allowed choice, recomputed downstream artifacts |
+| Downstream consumer | Memory and knowledge consolidation |
+| Swap interface | Typed operations against canonical artifacts rather than unstructured notes |
+
+### 10. Knowledge Consolidation Agent
+
+| Field | Current contract |
+|---|---|
+| Purpose | Save reviewed case memory and create a candidate reusable playbook change |
+| Input | Reviewed run and correction |
+| Output | Memory, candidate patch, v4 reference result |
+| Model dependency | None |
+| Validation | Support, target tests, protected tests, version and rollback fields |
+| Downstream consumer | Later claim |
+| Swap interface | Separate immediate memory from shared-rule proposal |
+
+## 6.3 Historical LangChain/Nemotron implementation
+
+**State:** Implemented in an archived or external prototype, not in current master or deployment.
+
+Archived source evidence includes a `LangChainAgentSuite` using:
+
+- `langchain.agents.create_agent`;
+- `ToolStrategy`;
+- `ChatOpenAI`;
+- a `SharedRunContext`;
+- structured Pydantic outputs;
+- OpenRouter;
+- NVIDIA-only provider routing;
+- provider fallback disabled;
+- zero automatic retries;
+- and a shared model across specialist agents.
+
+One historical model identifier is:
+
+```text
+nvidia/nemotron-3-ultra-550b-a55b:free
+```
+
+Earlier v3 release artifacts specify:
+
+```text
+nvidia/nemotron-3-super-120b-a12b:free
+```
+
+The two model IDs represent configuration drift across project generations. The current public runtime uses neither.
+
+The historical architecture included eight explicit model-driven agents:
+
+1. attachment parsing;
+2. claim interpretation;
+3. legal query formulation;
+4. legal research;
+5. process graph proposal;
+6. checklist proposal;
+7. historical precedent proposal;
+8. knowledge consolidation proposal.
+
+The architectural principle remains sound:
+
+> **Specialist agents may change. Canonical data contracts, validators, audit records, and human-control boundaries should not.**
+
+Before reintroducing this path:
+
+- recover the exact source into the current repository;
+- choose one model identifier;
+- pin dependencies;
+- make the provider optional;
+- add cached fixtures;
+- run deterministic tests first;
+- run one authorized model-call smoke;
+- compare output against the reference contract;
+- and never claim that a live model is deployed until the public run record proves it.
+
+## 6.4 Model/provider abstraction status
+
+| Capability | State |
+|---|---|
+| Abstract replaceable-agent design | **Implemented in historical prototype and planned for current architecture** |
+| Current public provider selection | **Not applicable; no model call** |
+| OpenRouter integration | **Historical implementation only** |
+| Nemotron live call | **Not verified** |
+| Current canonical model interface in master | **Missing** |
+| Deterministic fallback | **Current public runtime is itself deterministic** |
+| Call cache | **Historical design; not current v15** |
+
+## 6.5 Orchestrator replacement principle
+
+A replacement orchestrator may change:
+
+- scheduling;
+- which agent runs in parallel;
+- prompting;
+- retries;
+- model provider;
+- or tool implementation.
+
+It must not silently change:
+
+- observable-input boundary;
+- canonical state schema;
+- source-reference requirements;
+- process graph contract;
+- evidence-item contract;
+- review operation contract;
+- release gates;
+- versioning;
+- or audit semantics.
 
 ---
 
-# 7. Deterministic boundary
+# 7. What must remain deterministic
 
-Fully agentic does not mean agents control everything.
+“Fully agentic” does not mean giving models control over every layer.
+
+## 7.1 Deterministic responsibilities
 
 Deterministic infrastructure must own:
 
-- schemas and migrations;
-- source provenance and hashes;
-- observable/hidden separation;
-- evidence state vocabulary;
-- graph integrity and reachability;
-- process-to-fact-to-evidence linkage;
-- duplicate and no-repeat request checks;
-- permissions and role boundaries;
-- effective dates and versions;
-- release gates;
-- target and protected regression evaluation;
-- audit logs;
-- approval state;
+- schema validation;
+- allowed enum values;
+- artifact identity and hashes;
+- source provenance;
+- observable-versus-hidden separation;
+- fact-state vocabulary;
+- graph integrity;
+- dangling-node and dangling-edge checks;
+- evidence-to-node linkage;
+- evidence-to-fact linkage;
+- prevention of repeat requests;
+- evidence-state transitions;
+- versioning;
+- effective dates;
+- permissions;
+- model-call quotas;
+- release and promotion gates;
+- protected regression replay;
+- audit logging;
 - rollback;
-- and persistence transactions.
+- and final human authorization.
+
+## 7.2 Agent responsibilities
 
 Agents may propose:
 
-- canonical interpretations;
+- document parses;
+- fact values and confidence;
 - legal questions;
-- graph nodes and branch conditions;
+- retrieved sources;
+- operational interpretations;
+- process nodes and branches;
 - evidence alternatives;
-- precedent candidates;
-- corrections;
-- and candidate reusable rules.
+- precedent ranking;
+- candidate knowledge patterns;
+- and explanations.
 
-Deterministic validation and human approval control consequential shared changes.
+An agent proposal is not accepted merely because it is fluent or internally consistent.
 
-A strong default is:
+## 7.3 Human responsibilities
+
+Qualified humans must control:
+
+- legal and operational validity;
+- allowed scope;
+- disputed alternatives;
+- expert-review approval;
+- candidate knowledge promotion;
+- exceptions to ordinary regression thresholds;
+- and authorization for real-data or customer-facing use.
+
+## 7.4 Three-valued logic
+
+Process conditions should distinguish:
 
 ```text
-agent proposal
-→ schema validation
-→ source/provenance validation
-→ semantic consistency checks
-→ human review where consequential
-→ target evaluation
-→ protected regression
-→ versioned release
-→ rollback retained
+true
+false
+unknown
 ```
+
+A known false literal should make a conjunction false even if another literal is unknown. An unknown higher-priority condition should block a lower-priority branch only when no known literal disproves it. Optional positive-trigger branches should remain inactive until every required positive trigger is established.
+
+This lesson came from a prior safety-critical defect: an irrelevant optional branch could block an ordinary claim because one fact was unknown even though another known fact made the branch impossible.
+
+## 7.5 Fail-closed execution
+
+When a controlling fact is unknown or conflicting:
+
+- do not activate a consequential branch;
+- do not treat the process as complete;
+- do not remove evidence requirements that could resolve the uncertainty;
+- and do not infer a legal conclusion from absence of evidence.
+
+Abstention is an operational result, not a system failure.
 
 ---
 
 # 8. Process discovery
 
-## 8.1 Category template versus process instance
+## 8.1 Category template versus claim-specific process
 
-A category template is a reusable superset or approved workflow family. A claim-specific process instance is the graph instantiated from this claim's supported facts, unresolved questions, legal context, and current evidence.
+A **category template** says:
 
-CasePath must not classify `mould` and copy a fixed graph while calling that process discovery.
+```text
+this is a mould claim
+→ use the mould graph
+```
 
-## 8.2 Required graph semantics
+A **claim-specific process instance** says:
 
-A useful graph may include:
+```text
+this is an in-scope tenant dispute
+→ no urgent health risk is currently supported
+→ notification exists
+→ recurrence is supported
+→ causation is disputed
+→ responsibility and remedy must remain blocked
+→ technical evidence is the active loop
+```
 
-- intake and scope;
-- dispute existence;
-- urgency and health/safety;
-- notification and prerequisites;
-- factual assessment;
+The first can be produced from a subject line. The second requires evidence, uncertainty, law, and branch conditions.
+
+## 8.2 Desired process representation
+
+The complete graph should represent:
+
+- intake;
+- legal and organizational scope;
+- whether a dispute exists;
+- urgency and safety;
+- prerequisite facts;
+- notification;
+- defect or issue establishment;
 - causation;
 - responsibility;
-- remedy selection;
-- conditional branches;
+- remedy;
+- conditional evidence loops;
 - escalation;
-- resolution and closure;
-- evidence loops;
-- ownership and handoff;
-- and terminal states.
+- resolution;
+- terminal and out-of-scope states;
+- and allowed alternative paths.
 
-The desired output is the **complete handling graph**. The current claim's position is an overlay: supported path, unresolved decision, blocked downstream nodes, and inactive alternatives.
+The output is the **complete handling graph**. The current claim’s position is an overlay:
 
-## 8.3 Current public graph
+- completed;
+- current;
+- blocked;
+- available;
+- conditional;
+- inactive;
+- not applicable.
 
-The flagship graph contains an 11-stage main spine from intake through closure. Causation is current; responsibility and remedy remain blocked. Causation alternatives are progressively disclosed. The later claim adds an explicit ventilation-dispute decision and changes evidence ordering.
+Do not reduce process discovery to “what is the next blocker?” The next blocker is one view of the full graph.
 
-**Truth status:** Implemented and browser-verified for two handcrafted reference claims; not evidence of general graph inference.
+## 8.3 Current public process graph
 
-## 8.4 Benchmark lesson
+**State:** Implemented and verified for two reference variants.
 
-The original corpus largely used one graph skeleton per category, making process recovery artificially easy. The hardened defects release introduced 28 process paths and 12 current nodes. Branch accuracy then exposed the difference:
+The flagship main spine contains 11 nodes:
+
+```text
+Claim intake
+→ Tenant-law scope
+→ Existence of a dispute
+→ Urgency and safety
+→ Landlord notification
+→ Defect and recurrence
+→ Causation assessment
+→ Responsibility
+→ Remedy selection
+→ Escalation
+→ Resolution and closure
+```
+
+The flagship overlay places the claim at causation. Responsibility and remedy are blocked. Causation exposes four outcomes:
+
+- building defect;
+- use-related cause;
+- mixed contribution;
+- insufficient evidence.
+
+The later v4 graph adds:
+
+```text
+Test the ventilation allegation
+```
+
+This makes an earlier implicit allegation an explicit decision and changes evidence ownership.
+
+The graph is not inferred by a general model. It is deterministically constructed from two predefined case variants.
+
+## 8.4 Benchmark lesson: category templates were artificially easy
+
+The original 150-claim corpus used one graph skeleton per category. Process-node scores were therefore largely a category-recognition score.
+
+The hardened vertical slice introduced:
+
+- 28 distinct process paths;
+- 12 current nodes;
+- urgency variation;
+- scope variation;
+- dispute variation;
+- notification and response variation;
+- disputed causation;
+- technical-assessment state;
+- access state;
+- evidence sufficiency;
+- remedy state;
+- repair monitoring;
+- conciliation readiness;
+- and negative/out-of-scope cases.
+
+Reported generated-reference branch accuracy:
 
 | Method | Branch accuracy |
 |---|---:|
-| Category template | 0.068 |
+| Category-template baseline | 0.068 |
 | Static process library | 0.705 |
-| Generated reference | 1.000 |
+| Generated reference contract | 1.000 |
 
-The static process library is a strong baseline and must remain in every evaluation. The scientific question is not whether a model can outscore a deliberately weak category lookup.
+The generated reference is an oracle contract, not a learned-method result.
 
-## 8.5 Evaluation challenge
+## 8.5 Multiple valid graphs
 
-Multiple process graphs may be operationally equivalent. Evaluate:
+Claims may admit more than one operationally valid path because:
 
-- required decisions covered;
-- allowed partial order;
-- branch conditions;
-- current state;
-- safety-critical omissions;
-- evidence applicability;
-- terminal behavior;
-- and expert disagreement type.
+- organizations sequence work differently;
+- legal uncertainty supports alternatives;
+- evidence types are substitutable;
+- urgency can justify parallel actions;
+- and experts can disagree on process preference without disagreeing on facts.
 
-Do not rely on raw graph exact match alone.
+Evaluation should therefore support:
 
----
+- accepted alternative graphs;
+- set-valued targets;
+- constraint validity;
+- disagreement types;
+- and expert adjudication.
 
-# 9. Process-derived evidence and documents
+Exact graph match is useful as a strict diagnostic but should not be the sole validity criterion.
 
-## 9.1 Canonical dependency
+## 8.6 Research boundary
+
+The current public demo proves that a complete graph can be represented and used as the product’s organizing artifact. It does not prove that a model can infer such a graph from real claims or sparse operational traces.
+
+The next process-discovery experiment must compare at least:
+
+- category-template graph;
+- supplied-library deterministic instantiation;
+- equally informed direct graph predictor;
+- process-aware model;
+- and an oracle or adjudicated-state upper bound.
+
+
+
+# 9. Process-derived evidence and document requirements
+
+## 9.1 Canonical dependency chain
+
+CasePath’s document logic must follow:
 
 ```text
 Legal or operational requirement
 → Process question
 → Fact that must be established
-→ Evidence capable of establishing it
-→ Document or evidence type
+→ Evidence capable of establishing the fact
+→ Document or source type
 → Current evidence state
 ```
 
-A document checklist is a compiled operational view, not the primary reasoning object.
+A checklist item without this chain is not a CasePath item. It is a category heuristic.
 
-## 9.2 Evidence states
+## 9.2 Evidence requirement versus document name
 
-The long-term contract should support:
+An evidence requirement is a factual goal, not a file label.
 
-- `sufficient` or `provided_sufficient`;
-- `insufficient` or `provided_insufficient`;
-- `missing`;
-- `conditional`;
-- `not_applicable`;
-- `present_unreviewed`;
-- `conflicting`;
-- `future_expected` for longitudinal evaluation only, never exposed to the model at the current episode.
+Example:
 
-The current public runtime uses sufficient, insufficient, missing, conditional, and not applicable.
+```text
+Decision:
+What caused the recurring mould?
 
-## 9.3 Strong design rule
+Fact required:
+Likely technical cause.
 
-> **Do not request documents because this category usually needs them. Request evidence because a specific process question requires facts that are not established.**
+Evidence alternatives:
+- independent technical assessment;
+- moisture and temperature measurements;
+- a sufficiently detailed specialist report;
+- building-envelope assessment if the first assessment cannot distinguish the cause.
 
-Multiple evidence types may satisfy the same factual need. A technical assessment, moisture measurement, inspection photograph, expert statement, or repair record may each contribute differently. The system should represent evidence goals and acceptable alternatives, not one mandatory filename.
+Current state:
+Photos establish visible mould, but not causation.
+```
+
+Several artifacts may satisfy one evidence goal. One artifact may support several facts. A missing filename does not necessarily imply a missing fact.
+
+## 9.3 Evidence states
+
+The canonical state vocabulary should include:
+
+| State | Meaning |
+|---|---|
+| `provided_sufficient` / sufficient | Present and adequate for the specific fact and decision |
+| `provided_insufficient` / insufficient | Present but incomplete, unreliable, unreadable, or unable to establish the required fact |
+| `missing` | Applicable and not present |
+| `conditional` | Becomes applicable only if a registered branch condition is reached |
+| `not_applicable` | Not required on the current path |
+| `present_unreviewed` | Present but not yet assessed by the responsible human or validator |
+| `conflicting` | Relevant sources disagree or support incompatible values |
+| `unknown` | Applicability or sufficiency cannot yet be established |
+
+The public v15 runtime directly uses five states:
+
+```text
+provided_sufficient
+provided_insufficient
+missing
+conditional
+not_applicable
+```
+
+`present_unreviewed` and a first-class checklist-level `conflicting` state are desirable schema extensions, but are not currently implemented in the deployed public checklist.
 
 ## 9.4 Current public evidence model
 
-Every reference item carries:
+**State:** Implemented and verified for the flagship reference claim.
+
+The flagship produces 20 process-grounded evidence items. Each item includes, where relevant:
 
 - `item_id`;
-- title;
+- `title`;
 - `node_id`;
 - `fact_id`;
-- current status;
+- `fact_label`;
 - `why`;
-- and sometimes source or acceptance information.
+- `status`;
+- linked artifact IDs;
+- legal source IDs;
+- accepted alternatives;
+- activation condition;
+- required level;
+- current-path flag.
 
-The validator checks that process and fact links exist and that already submitted evidence is not requested again. The UI places evidence state on process decisions and exposes the complete list only as a derived view.
+The deployed validator checks:
 
-**Truth status:** Implemented and verified as a reference compiler; not model-generated in the public runtime.
+- node exists;
+- fact exists;
+- reason exists;
+- a provided artifact is not requested again;
+- conditional items remain conditional;
+- inactive-branch items are not requested;
+- evidence alternatives are represented;
+- and the graph contains the evidence-owning decision.
 
-## 9.5 Longitudinal behavior
+## 9.5 The no-repeat invariant
 
-The hardened benchmark evaluates removal of satisfied requests, addition of newly required evidence, branch changes, obsolete-branch removal, readiness timing, and future-evidence leakage. This is necessary because a checklist that is correct only at initial intake is not an operational system.
+If a relevant artifact is already present, the system must not ask the customer to submit the same artifact again.
+
+A present but insufficient artifact should be represented as:
+
+```text
+present
++ insufficient for the required fact
++ reason for insufficiency
++ possible way to strengthen or replace it
+```
+
+It should not be silently converted to `missing`.
+
+## 9.6 Static category checklists are insufficient
+
+The operational simulation on the hardened generated benchmark reported:
+
+| Method | Unnecessary requests per journey |
+|---|---:|
+| Verified process-grounded patch | 0.000 |
+| Static category checklist | 9.938 |
+
+This is a controlled generated simulation, not a customer study. Its value is conceptual: static lists ask for items unrelated to the reached path, whereas process-grounded requirements can stop when a fact is already established or a branch is inactive.
+
+## 9.7 Current product presentation
+
+The v20 interface makes evidence secondary to the process:
+
+- evidence state markers appear on process nodes;
+- the selected decision inspector shows “What we know” and “Evidence that could resolve this”;
+- the old standalone evidence-chain explanation is hidden from the primary view;
+- a complete document list is available only through “View document needs”;
+- and each derived document item links back to its process decision.
+
+This is the correct product hierarchy.
+
+## 9.8 What still needs work
+
+- The public evidence model is handcrafted for two claims.
+- Evidence equivalence is not learned.
+- Sufficiency thresholds are not expert-approved.
+- No real document-quality evaluation exists.
+- Current reference artifacts often state exactly what the benchmark expects.
+- Conflicting evidence is represented in facts but not fully propagated through a general evidence-state engine.
+- No evaluation compares process-grounded checklist generation against an equally informed strong direct predictor on expert targets.
 
 ---
 
 # 10. Swiss-law grounding
 
 ## 10.1 Intended pipeline
+
+The legal grounding pipeline should be:
 
 ```text
 Claim understanding
@@ -686,33 +1445,92 @@ Claim understanding
 → Evidence implications
 ```
 
-RAG should not merely return legal text. It should explain why a process decision exists, which condition it constrains, and what uncertainty remains.
+The legal component is useful only when it changes or justifies a decision in the handling process.
 
-## 10.2 Keep four objects distinct
+## 10.2 Four distinct objects
 
-1. **Official source** — legislation, court or authority material, approved internal source.
-2. **Retrieved passage** — exact versioned excerpt with source and effective date.
-3. **Operational interpretation** — claim-specific explanation generated or written from the passage.
-4. **Expert-approved handling rule** — reviewed organizational procedure; not identical to the legal passage.
+Never collapse these objects:
 
-A source does not automatically validate an interpretation. An interpretation does not automatically become a shared rule.
+1. **Official legal source**
+   A statute, regulation, official guidance page, authority document, or approved internal source.
 
-## 10.3 Current implementation
+2. **Retrieved passage**
+   The exact relevant provision or passage, with version, page or section, URL, and retrieval metadata.
 
-`data.py` holds a small static law registry. `pipeline_v15.py` creates legal questions, sources, and node links by deterministic reference logic. The frontend attaches source markers to relevant nodes.
+3. **Operational interpretation**
+   A plain-language statement of what the source may imply for handling the bounded claim.
 
-**Truth status:** Prototype / generated-reference only. It demonstrates the product relationship but does not establish retrieval quality, legal completeness, currentness, or expert approval.
+4. **Expert-approved handling rule**
+   A versioned organizational rule approved for use in a defined scope.
 
-## 10.4 Required next legal-RAG standard
+A model-generated operational interpretation is not an official source. An official source does not automatically determine an organizational process. A retrieved passage does not become a shared playbook rule without review.
 
-- approved official-source registry;
-- source version and effective date;
-- passage-level retrieval with exact citation;
-- retrieval recall evaluation on expert questions;
-- distinction between retrieved text and generated interpretation;
-- qualified Swiss-law review;
-- abstention when authority is insufficient or conflicting;
-- and regression tests when sources or interpretations change.
+## 10.3 Current public legal implementation
+
+**State:** Prototype / generated-reference only.
+
+The public v15 pipeline creates five legal questions and selects from a static registry. Current sources include references to:
+
+- Swiss Code of Obligations Article 256;
+- Article 257g;
+- Articles 259a and following;
+- official information concerning conciliation authorities;
+- and generated operational principles about disputed causation and least-burdensome competent evidence.
+
+The mapping attaches sources to process nodes. The UI shows small law markers and can explain why a decision exists.
+
+This is not a live vector database, web retrieval, or agentic legal RAG system. It is a static question-led source registry plus handcrafted operational translation.
+
+## 10.4 Review status
+
+The current pipeline explicitly records that its operational translation has not been approved by a qualified Swiss tenant-law reviewer.
+
+This status must remain visible in technical detail and in any research claim. Do not describe the graph as legally correct.
+
+## 10.5 Desired legal-RAG contract
+
+A replacement legal agent should output:
+
+```json
+{
+  "question_id": "q_causation",
+  "question": "What must be established before responsibility for recurring mould is assigned?",
+  "sources": [
+    {
+      "source_id": "fedlex_or_256",
+      "source_type": "official_statute",
+      "jurisdiction": "CH",
+      "version_date": "YYYY-MM-DD",
+      "url": "...",
+      "passage": "...",
+      "location": "Article 256"
+    }
+  ],
+  "operational_interpretation": {
+    "text": "Keep causation unresolved until competent evidence supports a branch.",
+    "status": "model_proposed_not_expert_approved"
+  },
+  "process_implications": [
+    {
+      "node_id": "causation",
+      "effect": "required_before_responsibility"
+    }
+  ]
+}
+```
+
+## 10.6 Retrieval quality requirements
+
+Evaluation should measure:
+
+- official-source precision;
+- passage relevance;
+- jurisdiction and effective-date correctness;
+- unsupported interpretation rate;
+- process-node linkage accuracy;
+- and expert agreement with the operational implication.
+
+A legal RAG system that retrieves correct text but links it to the wrong process question has failed.
 
 ---
 
@@ -720,153 +1538,284 @@ A source does not automatically validate an interpretation. An interpretation do
 
 ## 11.1 Purpose
 
-The system retrieves up to three cases to provide organizational memory at a difficult decision, not to show generic vector similarity.
+Retrieving three prior claims is intended to provide organizational memory at the decision where it matters.
 
-Useful dimensions include:
+The target is not “find semantically similar text.” The target is “find prior reviewed experience that helps resolve or handle this process state.”
+
+Relevant dimensions include:
 
 - same legal question;
 - same process branch;
 - same unresolved fact;
-- same evidence need or conflict;
+- same evidence need;
 - same exception;
-- same downstream correction;
-- and useful expert rationale.
+- similar expert correction;
+- and compatible claim scope.
 
-A lexically similar claim on a different branch may be useless. A differently worded claim with the same evidence-order correction may be highly valuable.
+## 11.2 Current public implementation
 
-## 11.2 Current public behavior
+**State:** Implemented and verified as deterministic reference retrieval.
 
-The public reference pipeline ranks static historical cases and, after review, places the reviewed flagship memory first for the later claim. Each precedent includes a usefulness explanation and appears inside the relevant decision inspector.
+The public runtime:
 
-**Truth status:** Prototype / generated-reference only.
+1. loads reviewed case memories first;
+2. excludes the current claim ID;
+3. scores candidates through deterministic attributes;
+4. fills remaining slots from three static generated historical cases;
+5. returns three distinct precedents.
+
+The static references are:
+
+- `HIST-MOULD-014`;
+- `HIST-MOULD-022`;
+- `HIST-MOULD-009`.
+
+After the flagship is reviewed, the later claim retrieves `DEF-027-E0-DEMO` as its first precedent.
 
 ## 11.3 Self-retrieval bug
 
-An earlier retrieval path could return the current claim as its own precedent. The fix is a hard exclusion by claim/run identity before ranking. Keep this as a regression test. Similarity score must never override identity exclusion.
+An earlier retrieval path could return the current claim as a similar case. That creates false confidence and invalidates reuse evidence.
 
-## 11.4 Memory value hierarchy
+The current public pipeline explicitly excludes:
 
-Prefer:
+```text
+candidate.claim_id == current_claim_id
+```
 
-1. qualified expert-reviewed case memory;
-2. adjudicated benchmark reference;
-3. approved internal playbook examples;
-4. generated reference cases;
-5. unreviewed model output.
+The backend test and browser proof assert that the later claim does not retrieve itself.
 
-Generated references must not outrank reviewed operational cases merely because their text is closer.
+Any future retrieval evaluation must include:
 
-## 11.5 Evaluation
+- current-claim exclusion;
+- family or near-duplicate exclusion where needed;
+- source-group isolation;
+- and separate reporting for reviewed memory versus generated reference memory.
 
-Measure retrieval by downstream usefulness:
+## 11.4 Reviewed memory should outrank generated reference
 
-- whether the controlling branch matches;
-- whether the evidence gap matches;
-- whether the correction transfers safely;
-- whether the expert finds it useful;
-- whether it improves the plan;
-- and whether it causes false activation on protected cases.
+A reviewed case memory should carry:
 
-Recall@k on category labels is insufficient.
+- expert decision;
+- correction operations;
+- version;
+- sources;
+- process path;
+- evidence state;
+- disagreement status;
+- reviewer role;
+- and review timestamp.
+
+Generated reference cases should be clearly labeled and receive lower authority. They may support development, but they should not be presented as equivalent to reviewed operational experience.
+
+## 11.5 Limitations of generic similarity
+
+Text similarity can retrieve:
+
+- the same surface vocabulary but the wrong branch;
+- the same category but a resolved rather than unresolved fact;
+- a near-duplicate generated template;
+- or a case whose expert correction is irrelevant.
+
+The retrieval target should be evaluated through **usefulness at a decision**, not only recall of a category label.
+
+## 11.6 Decisive retrieval experiment
+
+For an expert-reviewed set, compare:
+
+- BM25 or lexical similarity;
+- dense text similarity;
+- canonical-fact similarity;
+- process-state similarity;
+- graph-edit similarity;
+- correction-aware retrieval;
+- and hybrid retrieval.
+
+Ask experts:
+
+- Did this case change or confirm the handling decision?
+- Did it provide a reusable evidence pattern?
+- Was the correction relevant?
+- Would the handler have opened it?
+- Did it reduce review time or improve the plan?
 
 ---
 
-# 12. Expert feedback and organizational learning
+# 12. Expert feedback, reviewed memory, and shared learning
 
-## 12.1 Two distinct outcomes
+## 12.1 Two different learning products
 
-### One approved case
+### One reviewed claim
 
-Becomes **reviewed case memory**. It may immediately help future retrieval, with its source package, process path, evidence context, correction, reviewer, and version preserved.
+A single reviewed claim becomes:
+
+```text
+Reviewed Case Memory
+```
+
+It can immediately support future retrieval because it is a record of what happened in one case.
 
 ### Repeated compatible corrections
 
-May become a **candidate reusable process rule or playbook patch**. It must remain quarantined until it passes:
-
-- a support threshold;
-- target evaluation;
-- adversarial and protected regression;
-- expert or process-owner approval;
-- versioning;
-- effective-date controls;
-- and rollback preservation.
-
-One correction must not silently change shared organizational knowledge.
-
-## 12.2 Recurring-condensation and ventilation example
-
-The flagship recurring-mould claim contains disputed causation. The expert correction keeps causation unresolved, arranges one neutral technical assessment first, makes broader building-envelope testing conditional, and introduces explicit testing of the ventilation allegation only when evidence supports that branch.
-
-The later claim uses the reviewed flagship memory and v4 reference playbook. It exposes the ventilation-dispute decision and avoids treating broader building testing as an immediate default request.
-
-This example illustrates:
+Repeated corrections may support:
 
 ```text
-reviewed case memory
-→ candidate evidence-order pattern
-→ target and protected checks
-→ versioned playbook
-→ later claim effect
+Candidate Knowledge Patch
 ```
 
-In the public runtime, the support count and evaluation results are generated reference values. The lifecycle is visible; the learning experiment is not genuinely executed.
+A candidate patch may affect:
 
-## 12.3 Review contract
+- a process node;
+- a branch condition;
+- evidence ownership;
+- evidence applicability;
+- process order;
+- source interpretation;
+- or an allowed alternative.
 
-A correction should record:
+It must not become shared procedure automatically.
 
-- target decision or relationship;
-- previous value;
-- reviewed value;
-- reason;
-- affected process nodes;
-- affected evidence items;
-- next-action delta;
-- reviewer identity and role;
-- timestamp;
-- source version;
-- and whether it is case-specific or a candidate reusable pattern.
+## 12.2 Required promotion gates
 
-## 12.4 Current public review
+A candidate reusable process change should require:
 
-The UI offers one consequential choice beside the graph and displays downstream process, evidence, and next-action changes. The API stores a structured review, memory, and candidate.
+- support from distinct reviewed claims;
+- counterexamples;
+- source-group separation;
+- target-case evaluation;
+- protected regression evaluation;
+- integrity validation;
+- legal or policy authority review where relevant;
+- process-owner approval;
+- versioned release;
+- and rollback target.
 
-**Truth status:** Interaction and storage are implemented; the reviewer and promotion evidence are generated-reference only; persistence is ephemeral.
+A safety exception may use a different promotion threshold only if its authority, severity, scope, and review process were registered in advance.
+
+## 12.3 Current public expert review
+
+**State:** Implemented and verified as a narrow product interaction; generated-reference only as learning evidence.
+
+The expert chooses how to sequence broader building testing:
+
+- **Neutral assessment first**, keeping building-envelope assessment conditional; or
+- **Request broader testing now**.
+
+The UI shows the immediate delta in:
+
+- process;
+- evidence;
+- and next action.
+
+The approved reference correction:
+
+- adds `ventilation_dispute`;
+- links use-related evidence to that decision;
+- keeps causation unresolved;
+- keeps broader building-envelope testing conditional;
+- and makes the later claim use v4.
+
+## 12.4 Public promotion is illustrative, not a real governance result
+
+In the v15 public pipeline, support and evaluation values are generated reference values:
+
+```text
+support_count: 3
+target tests: 6/6
+protected regression: 12/12
+new version: mould-playbook-v4
+rollback: mould-playbook-v3
+```
+
+These are not computed through a fresh model or benchmark run during the public review. They are deterministic demonstration data.
+
+The public UX correctly explains the separation between reviewed memory and shared rule, but the backend promotion should not be cited as evidence that the governance method works.
+
+## 12.5 Recurring-condensation and ventilation lesson
+
+The hardened vertical slice withholds a branch for recurring condensation where the landlord alleges ventilation as the cause.
+
+The broad category remains `mould_recurrence`; the answer is not leaked through a special subtype.
+
+A narrow generated-reference trigger was learned:
+
+```text
+landlord_alleges_ventilation = true
+AND recurring_condensation = true
+AND cause_disputed = true
+AND ventilation_allegation_relevant = true
+AND technical_report_disproves_ventilation = false
+AND visual_evidence_conflicts_with_moisture_claim = false
+AND heating_emergency = false
+```
+
+The operational lesson is not “ventilation is the cause.” It is:
+
+> **Make the allegation an explicit process question and sequence competent evidence before expanding the investigation.**
+
+This distinction matters. The system should preserve the allegation as disputed until evidence supports it.
+
+## 12.6 One correction must not silently change shared knowledge
+
+A one-off correction may reflect:
+
+- a unique fact pattern;
+- an individual preference;
+- an annotation error;
+- a local policy;
+- a legal disagreement;
+- or an exceptional safety case.
+
+Shared knowledge needs support and counterexamples. The safest default is:
+
+```text
+reviewed case saved immediately
+candidate rule quarantined
+shared playbook unchanged
+```
+
+The public demo’s immediate v4 release is a narrative device backed by generated support, not a production precedent.
 
 ---
 
 # 13. Evaluation and research findings
 
-All numerical results below are generated-fixture results unless explicitly stated otherwise.
+This section records questions, setups, results, interpretations, and subsequent decisions. All numerical results below are generated-fixture results unless explicitly stated otherwise.
 
-## 13.1 Original shortcut audit
+## 13.1 Original corpus shortcut audit
 
-| Question | Setup | Result | Interpretation | Change |
-|---|---|---|---|---|
-| Does category accuracy measure understanding? | 150 bilingual generated claims | Subject-only accuracy **95.3%** | Surface text leaked category | Build neutral/misleading-subject vertical slice |
-| Does process performance measure recovery? | Audit original graph targets | One graph skeleton and one intake node per category; all claims submitted | Process recovery reduced largely to category recognition | Add process paths, current nodes, longitudinal episodes, negatives |
+| Item | Description |
+|---|---|
+| Question | Does category accuracy measure claim understanding? |
+| Setup | 150 generated bilingual claims across three categories |
+| Result | Subject-only category accuracy: **95.3%** |
+| Interpretation | Category was strongly encoded in surface text; category accuracy was not strong evidence of document reasoning |
+| What changed | The project built a harder language/source-disjoint defects vertical slice with neutral or misleading subjects |
 
-## 13.2 Original sparse-feedback experiment
+## 13.2 Original process-template audit
 
-Compared static playbooks, legal-RAG-only, nearest-case reuse, and an adaptive process agent over 4,800 method-claim observations.
+| Item | Description |
+|---|---|
+| Question | Does process-node performance measure claim-specific process recovery? |
+| Setup | Audit graph skeletons and current nodes in the original corpus |
+| Result | One graph skeleton and one intake node per category; all claims in `submitted` state |
+| Interpretation | Process recovery largely reduced to category recognition |
+| What changed | Later benchmark introduced 28 process paths, 12 current nodes, longitudinal episodes, and negative cases |
 
-At ten examples:
+## 13.3 Original sparse-feedback experiment
 
-```text
-subcategory accuracy: 27.1%
-process-node F1: 71.6%
-checklist F1: 94.7%
-next-action accuracy: 75.0%
-whole-plan exact: 2.1%
-```
+| Item | Description |
+|---|---|
+| Question | Does nearest-case adaptation improve unseen patterns with 0–10 examples? |
+| Setup | Static playbooks, legal-RAG-only, nearest-case reuse, adaptive process agent; 4,800 method–claim observations |
+| Result at 10 examples | Subcategory 27.1%, process-node F1 71.6%, checklist F1 94.7%, next action 75.0%, whole-plan exact 2.1%; effectively no improvement from zero examples |
+| Interpretation | Retrieval reused outputs but did not reliably induce the controlling rule |
+| What changed | The task was narrowed to a withheld branch with explicit contrast and rule-induction methods |
 
-Performance was effectively unchanged from zero examples. Retrieval could reuse outputs but did not reliably induce the controlling rule. The project narrowed to an explicit withheld branch with contrastive and rule-induction methods.
+## 13.4 Hardened intake-understanding audit
 
-## 13.3 Hardened intake-understanding audit
+There are two report snapshots. Keep them separate.
 
-Two archived snapshots disagree and must remain separate.
-
-Deep-recovery snapshot:
+### Deep-recovery report snapshot
 
 | Input | Balanced accuracy |
 |---|---:|
@@ -877,7 +1826,7 @@ Deep-recovery snapshot:
 | Full message and attachment text | 0.988 |
 | Transparent full-package reference | 1.000 |
 
-Earlier experiment snapshot:
+### Earlier experiment-report snapshot
 
 | Input | Balanced accuracy |
 |---|---:|
@@ -885,20 +1834,21 @@ Earlier experiment snapshot:
 | Full observable package | 1.000 |
 | Transparent reference | 1.000 |
 
-Do not average or silently select a number. Recover the exact split and report version before publication.
+The difference likely reflects report version, split, or task-definition changes. Do not average or silently choose one. Recover exact manifests and split IDs before publication.
 
-## 13.4 Attachment-decisive cases
+Interpretation: the hardened benchmark substantially reduces the original shortcut, and full package access matters.
 
-For 35 attachment-decisive initial episodes:
+## 13.5 Attachment-decisive cases
 
-```text
-message-only whole-plan constraint match: 0.200
-full observable package: 0.914
-```
+| Item | Description |
+|---|---|
+| Question | Do attachments materially change the whole plan? |
+| Setup | 35 attachment-decisive initial episodes in one report; message-only versus full package |
+| Result | Message only: 0.200 whole-plan constraint match; full observable package: 0.914 |
+| Interpretation | The task cannot be solved reliably from the customer narrative alone |
+| What changed | Attachment sufficiency, conflicts, misleading names, duplicates, irrelevant files, and evidence ownership became first-class |
 
-Attachments materially changed the plan. Attachment sufficiency, conflicts, misleading names, duplicates, irrelevant files, and evidence ownership became first-class.
-
-## 13.5 Process instantiation
+## 13.6 Claim-specific process instantiation
 
 | Method | Branch accuracy |
 |---|---:|
@@ -906,37 +1856,59 @@ Attachments materially changed the plan. Attachment sufficiency, conflicts, misl
 | Static process library | 0.705 |
 | Generated reference | 1.000 |
 
-Category is not enough once within-category branches vary. The static library is a mandatory strong baseline.
+Interpretation: category alone is not enough once the benchmark includes real branch variation. The static library is a strong baseline and must remain in every evaluation.
 
-## 13.6 Longitudinal claims
+## 13.7 Longitudinal updating
 
-The deep report states:
+The deeper report states:
 
-```text
-satisfied requests removed: 1.000
-newly required requests added: 1.000
-required branch changes: 1.000
-obsolete branches retained: 0.000
-correct readiness timing: 1.000
-transition constraints satisfied: 0.977
-future-artifact leaks: 0
-```
+| Property | Result |
+|---|---:|
+| Satisfied requests removed | 1.000 |
+| Newly required requests added | 1.000 |
+| Required branch changes made | 1.000 |
+| Obsolete branches retained | 0.000 |
+| Correct readiness timing | 1.000 |
+| Transition constraints satisfied | 0.977 |
+| Future-artifact leaks | 0 |
 
-An earlier simplified report says all transition constraints were 1.000 over 88 transitions. Reconcile at case level before a definitive claim.
+An earlier simplified report states all transition constraints as 1.000 over 88 transitions.
 
-## 13.7 Negative and out-of-scope cases
+Interpretation: the longitudinal mechanism is executable, but report drift and the residual mismatch require case-level reconciliation before a definitive claim.
 
-The hardened benchmark includes no current dispute, advisory-only, hotel, owner-occupied, wrong jurisdiction, duplicate, insufficient tenancy/dispute evidence, and an adjacent rent issue after a resolved defect.
+## 13.8 Negative and out-of-scope cases
 
-A safe system must return `not this process`, `insufficient information`, or `no current dispute`; it must not only choose positive branches.
+The hardened scenario set added:
 
-## 13.8 Whole-plan and disagreement-aware evaluation
+- no current dispute;
+- advisory-only;
+- hotel;
+- owner-occupied;
+- wrong jurisdiction;
+- duplicate;
+- insufficient tenancy/dispute evidence;
+- adjacent rent issue after resolved defect.
 
-The expert-ready release contains 30 generated constraint targets, seven disagreement probes, multiple valid alternatives, and typed disagreements: factual, legal, process preference, and annotation error. Exact match alone over-penalizes valid alternatives and hides disagreement cause.
+Interpretation: a safe system must be able to return “not this process,” “insufficient information,” or “no current dispute,” not only choose among positive branches.
 
-## 13.9 Sparse adaptation methods
+## 13.9 Whole-plan and disagreement-aware evaluation
 
-Methods already compared:
+The expert-ready release includes:
+
+- 30 generated constraint targets;
+- seven explicit disagreement probes;
+- at least one target with multiple valid alternatives;
+- typed disagreements:
+  - factual;
+  - legal;
+  - process preference;
+  - annotation error.
+
+Interpretation: exact match alone over-penalizes valid alternatives and hides the reason for disagreement.
+
+## 13.10 Sparse adaptation comparison
+
+Methods compared:
 
 - static playbook;
 - direct few-shot prediction over canonical facts;
@@ -951,9 +1923,11 @@ Methods already compared:
 
 The provider-backed LLM arm was not run.
 
-Selected generated-fixture method at three examples:
+### Selected generated-fixture method
 
-| Metric | Verified program synthesis |
+Verified program synthesis at three examples:
+
+| Metric | Result |
 |---|---:|
 | Branch accuracy | 1.000 |
 | Critical-document recall | 1.000 |
@@ -961,18 +1935,20 @@ Selected generated-fixture method at three examples:
 | Development false activation | 0.000 |
 | Protected regression | 0.000 |
 
-Development false activation:
+False activation on development cases:
 
-| Method | Rate |
+| Method | False activation |
 |---|---:|
 | Graph-edit retrieval | 0.500 |
 | Contrastive demonstrations | 0.250 |
 | Decision tree | 0.625 |
 | Verified program synthesis | 0.000 |
 
-Verification and narrow predicates mattered more than expressive complexity in this fixture. The result is not yet validated from genuine expert corrections and is not deployed.
+Interpretation: methods that fit positive examples can still over-activate on adversarial negatives. Verification and narrow predicates mattered more than expressive complexity.
 
-## 13.10 Canonical-fact error propagation
+What changed: verified program synthesis became the selected generated-fixture method, but it was not promoted to the public runtime and has not been validated from genuine expert feedback.
+
+## 13.11 Canonical-fact error propagation
 
 | Fact source | Whole-plan match |
 |---|---:|
@@ -980,23 +1956,30 @@ Verification and narrow predicates mattered more than expressive complexity in t
 | Deterministic extracted facts | 0.917 |
 | Local model-extracted facts | 0.000 |
 
-Highest-impact facts were `heating_emergency`, `health_risk`, `deadline_status`, and `landlord_notified`.
+Highest-impact facts:
+
+1. `heating_emergency`
+2. `health_risk`
+3. `deadline_status`
+4. `landlord_notified`
+
+Interpretation:
 
 > Strong process execution cannot compensate for a weak canonicalizer.
 
-Report mechanism-track results on reference facts separately from end-to-end results on predicted facts.
+What changed: the research agenda must evaluate claim interpretation separately and report end-to-end versus mechanism-track performance.
 
-## 13.11 Operational back-and-forth simulation
+## 13.12 Operational back-and-forth simulation
 
-Verified-patch process per generated journey:
+Verified-patch process:
 
-```text
-customer-contact rounds: 1.313
-unnecessary requests: 0.000
-critical evidence missed: 0.000
-expert interventions: 0.208
-wrong-ready decisions: 0.000
-```
+| Metric per journey | Result |
+|---|---:|
+| Customer-contact rounds | 1.313 |
+| Unnecessary requests | 0.000 |
+| Critical evidence missed | 0.000 |
+| Expert interventions | 0.208 |
+| Wrong-ready decisions | 0.000 |
 
 Static category checklist:
 
@@ -1004,93 +1987,99 @@ Static category checklist:
 9.938 unnecessary requests per journey
 ```
 
-This supports a generated-simulation hypothesis, not a real customer-friction claim.
+Interpretation: process-grounded evidence can reduce simulated over-requesting under the generated response schedule.
 
-## 13.12 Simulated review dry run
+Boundary: this does not prove real customer-friction or time savings.
 
-Two simulated reviewer profiles completed 60 reviews over 30 items:
+## 13.13 Simulated review dry run
 
-```text
-approved: 41
-approved with edits: 12
-escalated: 6
-alternative valid plan: 1
-exact decision agreement: 0.567
-unresolved disagreements: 13
-structured edits: 12
-median simulated time: 280 seconds
-```
+Two simulated reviewer profiles completed 60 reviews across 30 items:
 
-The interface can represent disagreement. Simulated reviewers do not validate labels, usability, or review time.
+| Outcome | Count or value |
+|---|---:|
+| Approved | 41 |
+| Approved with edits | 12 |
+| Escalated | 6 |
+| Alternative valid plan | 1 |
+| Exact decision agreement | 0.567 |
+| Unresolved disagreements | 13 |
+| Structured edits | 12 |
+| Median simulated time | 280 seconds |
 
-## 13.13 Public product gate
+Interpretation: the review interface can represent disagreement and correction.
 
-```text
-focused checks: 57/57
-backend UI-created runs: 2
-console errors: 0
-page errors: 0
-public request failures: 0
-390 px overflow: 0
-320 px overflow: 0
-demo reset: v3
-```
+Boundary: simulated reviewers are not experts and do not validate labels, usability, or review time.
 
-This validates the product mechanics only.
+## 13.14 Public v20 product gate
 
-## 13.14 Missing confirmatory evidence
+| Item | Result |
+|---|---:|
+| Focused browser checks | 57/57 |
+| Backend runs through UI | 2 |
+| Console errors | 0 |
+| Page errors | 0 |
+| Public request failures | 0 |
+| 390 px overflow | 0 |
+| 320 px overflow | 0 |
+| Demo reset | v3 |
+
+Interpretation: the product story is technically demonstrable and responsive.
+
+Boundary: browser correctness does not validate research claims.
+
+## 13.15 Missing confirmatory evidence
 
 Still missing:
 
 - independent Swiss-law review;
-- independent process and checklist review;
-- blind artifact-realism study;
+- independent claim-process review;
+- blind realism study;
 - source-isolated naturalistic claims;
 - equally informed direct-model baseline on expert targets;
 - live provider-backed model results;
 - timed expert comparison;
 - real customer-contact reduction;
-- durable multi-version update study;
-- and independent reproduction of the integrated product plus hardened benchmark.
+- durable multi-version sequential update study;
+- and independent clean-environment reproduction of the current integrated v20 product plus the hardened benchmark.
 
 ---
 
 # 14. Do not rediscover
 
-| Attempt or idea | Why tried | Result | Lesson | Current decision |
+| Attempt or idea | Why it was tried | Result | Lesson | Current decision |
 |---|---|---|---|---|
-| Category-template graphs | Fast baseline | High apparent original scores; 0.068 branch accuracy on hardened variation | Category is not a process instance | **Rejected as primary method; retain baseline** |
-| Checklist as independent prediction | Simple supervised task | Plausible but procedurally irrelevant lists | Applicability depends on reached decisions | **Rejected as core; retain baseline** |
-| Static category checklist | Simple operational comparator | 9.938 unnecessary requests per generated journey | Generic lists over-request inactive branches | **Rejected for product; mandatory baseline** |
-| Next-blocker-centric UX | Focus attention | Hid complete process and made CasePath look like a next-action tool | Full graph plus current overlay | **Rejected as main UX** |
-| Giant process modal | Preserve dashboard | Made principal output supplementary | Graph is the claim map | **Abandoned** |
-| Report-like result pages | Expose every artifact | User reconstructed relationships mentally | One dominant artifact; detail on demand | **Abandoned** |
-| Dense three-column dashboard | Show claim, graph, checklist | High density, low comprehension | Persistent source plus one evolving work pane | **Abandoned for flagship** |
-| All agents visible simultaneously | Demonstrate orchestration | Architecture theater and clutter | One current specialist; agent recedes | **Abandoned** |
-| Permanent agent rail | Preserve history | Competed with graph | Collapse completed activity | **Removed in v20** |
-| Repeated Inspect buttons | Expose technical detail | Control noise | Contextual links plus one audit drawer | **Abandoned** |
-| Static safe previews | Avoid raw artifacts | Broke operational realism | Render actual generated PDF, image, email | **Abandoned** |
-| Browser-local corrections as learning | Fast demo | No durable inspectable update | Server review, memory, versioned candidate | **Rejected** |
-| Text-similarity retrieval | Simple precedent baseline | Vocabulary match, weak decision match | Evaluate downstream usefulness | **Insufficient; retain baseline** |
-| Nearest-case reuse | Reuse outputs | 0.556 branch accuracy on withheld pattern | Reuse does not induce a rule | **Insufficient** |
-| Exact process-state retrieval | Structured match | 0.333 branch accuracy | Brittle equality misses controlling literals | **Insufficient** |
-| Graph-edit retrieval | Reuse prior correction | 0.500 dev false activation | Edit similarity is not trigger validity | **Rejected for promotion** |
-| Contrastive demonstrations | Highlight difference | 0.250 dev false activation | Contrast helps but needs verification | **Research baseline** |
-| Small decision tree | Transparent induction | 0.625 dev false activation | Transparency is not safety | **Rejected for promotion** |
-| Structured rule induction | Learn explicit trigger | Improved generated withheld branch | Needs counterexamples and verification | **Useful, not deployed** |
-| Verified program synthesis | Constrained rule search | Perfect selected fixture metrics at three examples | Verification controlled false activation in fixture | **Selected synthetic method; not operationally validated** |
-| Provider-backed LLM rule proposal | Flexible induction | Contract prepared; call not run | Never invent provider results | **Planned experiment** |
-| Subject-only classification | Cheap intake | 95.3% original accuracy | Surface shortcut | **Rejected as understanding evidence** |
-| One graph per category | Easy generation | Predetermined process | Vary branch facts and current state | **Rejected benchmark design** |
-| Positive-only cases | Simpler generation | Scope gate could not fail | Include negatives and insufficiency | **Rejected benchmark design** |
-| Intake-only snapshots | Simpler labels | No evidence arrival or reversal | Use journeys and episodes | **Rejected benchmark design** |
-| Generated exact match as expert truth | Needed targets | No domain validity | Label generated and adjudicate | **Rejected wording** |
-| Hard-coded regression as real learning | Show lifecycle | Useful demo only | Keep explicit generated-reference label | **Prototype only** |
-| LangChain/Nemotron as current claim | Stronger architecture story | Historical source, unverified current deployment | Separate architecture from deployment truth | **Do not claim current use** |
-| Continuous Render deployment during redesign | Immediate feedback | Regressions and SHA confusion | Local acceptance, freeze, deploy once | **Rejected workflow** |
-| Endless layered UI patches | Avoid rewrite | v16–v20 dependency and selector drift | Consolidate after truth milestone | **Current debt; do not add v21 casually** |
-| Composite usefulness score | Single headline | Hides severe safety failures | Report dimensions and failures separately | **Do not use alone** |
-| Broad process-mining platform first | Generality | Infrastructure before feasibility | Validate one bounded vertical slice | **Deferred** |
+| Category-template process graphs | Fast initial baseline | High apparent process scores in original corpus; branch accuracy collapsed to 0.068 on hardened variation | Category is not a process instance | **Rejected as primary method; retain as baseline** |
+| Checklist as independent multi-label prediction | Simple supervised task | Can produce plausible but procedurally irrelevant lists | Evidence applicability depends on reached decisions | **Rejected as CasePath core; retain as baseline** |
+| Static category checklist | Operationally simple comparator | 9.938 unnecessary requests per generated journey | Generic lists over-request inactive branches | **Rejected for final product; mandatory baseline** |
+| Next-blocker-centric product | Focus attention on immediate action | Hid the complete organizational process and made CasePath look like a next-action tool | Show full graph with current overlay | **Rejected as main UX** |
+| Giant process modal | Preserve dashboard while exposing graph | Made the main output feel supplementary and document-like | Graph is the product map | **Abandoned** |
+| Report-like result pages | Display every artifact | Users had to reconstruct relationships mentally | One dominant artifact; complexity on demand | **Abandoned** |
+| Dense three-column dashboards | Show claim, plan, and checklist together | High information density but weak comprehension | Persistent source + one evolving work pane | **Abandoned for flagship** |
+| Expose all agents simultaneously | Demonstrate orchestration | Became architecture theater and persistent clutter | One active specialist; agent recedes after artifact | **Abandoned** |
+| Permanent multi-agent rail | Preserve activity history | Competed with graph after process emerged | Collapse completed activity | **Removed in v20** |
+| Repeated “Inspect” buttons | Make technical detail accessible | Created control noise and unclear hierarchy | Contextual source/law links; one audit view | **Abandoned** |
+| Static safe attachment preview | Avoid exposing raw artifacts | Broke the operational claim experience | Render actual generated PDF/image/email | **Abandoned** |
+| Browser-local corrections presented as learning | Fast front-end demonstration | No durable or inspectable organizational update | Server review + memory + versioned candidate | **Rejected** |
+| Text-similarity retrieval | Simple precedent baseline | Matches vocabulary rather than controlling process state | Evaluate decision usefulness | **Insufficient; retain baseline** |
+| Nearest-case retrieval | Reuse reviewed output | 0.556 branch accuracy on withheld pattern | Reuse does not induce a general rule | **Insufficient** |
+| Exact process-state retrieval | Match structured state | 0.333 branch accuracy | State equality is brittle and may miss controlling literals | **Insufficient** |
+| Graph-edit retrieval | Reuse prior correction | Fit positives but 0.500 dev false activation | Edit similarity does not guarantee trigger validity | **Rejected for promotion** |
+| Contrastive demonstrations | Highlight positive/negative differences | 0.250 dev false activation | Contrasts help but need formal support checks | **Research baseline, not selected** |
+| Small decision tree | Transparent induction | 0.625 dev false activation | Transparency is not enough without semantic constraints | **Rejected for promotion** |
+| Structured rule induction | Learn explicit trigger | Improved withheld branch in generated fixture | Needs counterexamples and verification | **Useful research direction; not deployed** |
+| Verified program synthesis | Find narrow rule satisfying constraints | Perfect generated challenge metrics at three examples | Verification controls false activation in the tested fixture | **Selected synthetic research method; not operationally validated** |
+| Provider-backed LLM rule proposal | Test flexible induction | Contract prepared, call not run | Do not invent provider results | **Planned experiment** |
+| Subject-line classification | Cheap intake model | 95.3% on original corpus | Benchmark leaked category through surface form | **Rejected as evidence of understanding** |
+| One graph skeleton per category | Easy ground-truth generation | Made process recovery nearly predetermined | Vary branch facts and current nodes inside category | **Rejected benchmark design** |
+| Only positive in-scope cases | Simplify generation | Scope gate could never fail correctly | Add negatives and insufficient cases | **Rejected benchmark design** |
+| Intake-only snapshots | Simplify labels | Could not test evidence arrival or branch reversal | Use journeys and episodes | **Rejected benchmark design** |
+| Generated-reference exact match as “expert truth” | Needed labels quickly | No domain validity | Label explicitly and run expert review | **Rejected wording and claim** |
+| Hard-coded generated regression results as production learning | Make lifecycle visible | Useful demo, not real governance evidence | Keep narrative but label generated reference | **Prototype only** |
+| LangChain/Nemotron branch as current product claim | Stronger agentic architecture | Source exists historically, live call unverified, not in current master | Architecture and deployment truth must be separated | **Do not claim current use; recover only for deliberate experiment** |
+| Repeated Render deployment during UX design | Immediate public feedback | Created regressions, SHA confusion, and sideways iteration | Freeze locally, validate, deploy once | **Rejected workflow** |
+| Layering new UI patches indefinitely | Avoid rewriting stable core | v20 works but now has v16–v20 interdependent layers | Consolidate only after the milestone, with visual parity tests | **Current technical debt; do not add v21 patch casually** |
+| Composite “usefulness score” | Summarize many outcomes | Can hide safety failures and target drift | Report dimensions and severe failures separately | **Do not use as sole headline** |
+| Generic process-mining architecture before data feasibility | Ambitious reusable stack | Risked months of infrastructure before task validation | Validate one bounded vertical slice first | **Deferred** |
 
 ---
 
@@ -1098,11 +2087,25 @@ Still missing:
 
 ## 15.1 Repeated failure mode
 
-> **Backend sophistication increased while practical usefulness remained hidden behind report-like interfaces.**
+> **Backend sophistication increased while practical product usefulness remained hidden behind report-like interfaces.**
 
-Several releases displayed process, evidence, law, precedents, counts, agent metadata, and audit text simultaneously. The product described what happened instead of letting the user experience it.
+This was the dominant product failure across several releases.
 
-## 15.2 Accepted flagship journey
+The system accumulated:
+
+- process graphs;
+- evidence relationships;
+- legal sources;
+- agent traces;
+- counts;
+- precedent cards;
+- audit metadata;
+- review controls;
+- and knowledge-update summaries.
+
+The UI displayed them simultaneously. The user had to infer how they related.
+
+## 15.2 Desired flagship journey
 
 ```text
 Customer submission
@@ -1115,65 +2118,111 @@ Customer submission
 → Next claim benefits
 ```
 
-## 15.3 Accepted design principles
+This is a guided product sequence, not a navigation taxonomy.
 
-- Keep the source claim visible.
-- Make generated PDFs, images, and emails inspectable.
-- Drive visible analysis from backend events.
-- Show one current specialist, not the architecture.
-- Let agent activity recede after its artifact appears.
-- Make the process graph the hero artifact.
-- Never hide the graph in a modal.
-- Put evidence state inside decisions.
-- Put law on the node it shapes.
-- Put prior cases where they help.
-- Keep the complete document list derived and secondary.
-- Review the actual reasoning artifact.
-- Reduce learning to a few comprehensible outcomes.
-- End with a later claim.
-- Keep audit detail hidden by default.
-- Show one dominant idea and one next action at a time.
-- Use task language, not paper headings.
+## 15.3 Design principles now accepted
 
-## 15.4 Negative examples to preserve
+- The original claim remains visible.
+- Actual generated PDFs, images, and emails are inspectable.
+- Agent activity corresponds to backend events.
+- One active specialist is shown at a time.
+- Agent activity recedes after producing an artifact.
+- The process graph is the hero artifact.
+- The graph is not hidden in a modal.
+- Evidence status is attached to decisions.
+- Law appears at the decision it shapes.
+- Prior cases appear where useful.
+- The complete document list is derived and secondary.
+- Expert review happens beside the graph.
+- Learning resolves into a few meaningful outcomes.
+- The final moment is a later claim, not a release report.
+- Technical audit is available but hidden by default.
+- One dominant idea appears at a time.
+- Product copy uses task language rather than research-report language.
 
-Archived screenshots include dense three-column dashboards, `desktop-review.png`, `desktop-edited.png`, safe-preview placeholders, giant graph modals, permanent team rails, blank loading canvases, and v17/v18 report dumps. Keep them as regression evidence.
+## 15.4 Important negative examples
 
-## 15.5 Current v20 model
+Archived negative examples include:
 
-Start: source claim plus one question and `Analyse claim`.
+- `desktop-review.png`: dense three-column review dashboard;
+- `desktop-edited.png`: corrected but still dashboard-like;
+- earlier public screenshots with “Safe generated preview” instead of actual source artifacts;
+- v17/v18 report pages showing summaries, counts, and graph simultaneously;
+- giant graph modal;
+- permanent team rail;
+- loading page with a mostly blank workspace.
 
-Early analysis: one current specialist and real event rows.
+These should remain regression references. Do not delete them from the research archive.
 
-Process onward: orchestrator/progress chrome recedes; graph dominates.
+## 15.5 Current v20 interaction model
 
-Evidence and experience: node status and focused inspector.
+The current v20 frontend is a focused layer over older runtime code.
 
-Ready: graph remains primary; document needs open as a temporary derived sheet.
+Start:
 
-Review: graph plus one consequential choice and delta.
+```text
+left: generated customer submission
+right: “What should CasePath do with this claim?”
+action: “Analyse claim”
+```
 
-Learning: reviewed case, correction, and shared change.
+Analysis:
 
-Later claim: trace recedes; before/after becomes primary.
+- one current specialist;
+- source claim remains visible;
+- actual event rows appear.
 
-## 15.6 Current UX debt
+Process moment:
 
-- v20 is a DOM-enhancement layer over v16–v19.
-- CSS hides legacy components rather than deleting all old presentation code.
-- several scripts set mutable release markers;
-- internal selectors have already drifted;
-- current product master does not contain the exact canonical QA wrapper;
-- accessibility testing is basic;
-- no first-time-viewer comprehension study exists.
+- orchestrator and progress chrome are hidden;
+- graph fills the right pane;
+- current and blocked decisions are explicit.
 
-Do not add another additive `live-v21-*` layer. Consolidate only after the evidence-validity milestone and with pixel and interaction parity tests.
+Evidence and experience:
+
+- node-level status;
+- focused inspector;
+- contextual prior cases.
+
+Ready moment:
+
+- graph remains primary;
+- document needs open as a temporary derived sheet.
+
+Review:
+
+- graph plus one evidence-order decision and its delta.
+
+Learning:
+
+- reviewed case saved;
+- expert correction captured;
+- shared playbook change.
+
+Later claim:
+
+- working trace recedes;
+- before/after becomes primary.
+
+## 15.6 Current UX technical debt
+
+- v20 depends on layers from v16, v17, v18, and v19.
+- Behavior is controlled through DOM observation and post-render enhancement.
+- CSS hides legacy components rather than removing all old generation code.
+- Release markers are set by several scripts.
+- `window.CASEPATH_EXPERIENCE_RELEASE` is mutable and may be overwritten by an older layer.
+- The current QA wrapper on master is not the exact wrapper used by the live passing canonical QA.
+- The DOM contract is fragile: internal class names such as `needed` versus `still-needed` have already broken QA.
+- Accessibility is checked only at a basic level.
+- No first-time-user comprehension study has been run.
+
+Do not add another additive UX layer unless a critical bug cannot be fixed within v20. The next consolidation should reduce layers, not add `live-v21-*`.
 
 ---
 
 # 16. Deployment and release history
 
-## 16.1 Current architecture
+## 16.1 Current deployment architecture
 
 ```text
 GitHub repository
@@ -1185,238 +2234,445 @@ GitHub repository
 ### Frontend
 
 ```text
-service: casepath-swiss-claim-lab
-branch: master
-publish path: casepath
+Service: casepath-swiss-claim-lab
+Type: Render static site
+Branch: master
+Publish path: casepath
 URL: https://casepath-swiss-claim-lab.onrender.com/
 ```
 
 ### API
 
 ```text
-service: casepath-agentic-api
-branch: master
-build: bash casepath-api/render-build.sh
-start: bash casepath-api/start.sh
-region: Frankfurt
-plan: free
+Service: casepath-agentic-api
+Type: Render Python web service
+Branch: master
+Build: bash casepath-api/render-build.sh
+Start: bash casepath-api/start.sh
 URL: https://casepath-agentic-api.onrender.com/
+Region: Frankfurt
+Plan: free
 ```
 
 ### Canonical QA
 
 ```text
-service: casepath-guided-canonical-qa
-runtime: Node plus Playwright Chromium
-output: screenshots, report, uninterrupted recording
+Service: casepath-guided-canonical-qa
+Type: Render Node web service
+Build: install dependencies and Chromium, run Playwright, publish evidence directory
 URL: https://casepath-guided-canonical-qa.onrender.com/
 ```
 
 ## 16.2 Persistence
 
-`storage.py` stores runs, events, reviews, memories, and candidates in SQLite. Default:
+The API stores:
+
+- runs;
+- events;
+- reviews;
+- memories;
+- candidates.
+
+Storage is SQLite at:
 
 ```text
-CASEPATH_DB_PATH=/tmp/casepath-useful-demo/casepath.db
+CASEPATH_DB_PATH
+default: /tmp/casepath-useful-demo/casepath.db
 ```
 
-Render `/tmp` is ephemeral. A pilot needs PostgreSQL, migrations, transactions, backups, tenant separation, retention policy, audit immutability, and tested rollback.
+On Render, `/tmp` is ephemeral. This is suitable only for a resettable demonstration.
+
+**State:** Implemented but not durable.
+
+A real pilot needs:
+
+- PostgreSQL or another approved durable store;
+- migrations;
+- transactional versioning;
+- tenant/data separation;
+- retention policy;
+- backup and restore;
+- audit immutability;
+- and explicit reset semantics.
 
 ## 16.3 Environment variables
 
-Current:
+Current runtime:
 
 | Variable | Purpose |
 |---|---|
-| `PORT` | Uvicorn or static evidence server port |
-| `CASEPATH_DB_PATH` | SQLite location |
-| `BASE_URL` | QA frontend target |
-| `API_URL` | QA API target |
-| frontend `api` query | local or QA API override |
+| `PORT` | Render or local Uvicorn port |
+| `CASEPATH_DB_PATH` | SQLite database path |
+| frontend query `api` | Override API URL during local/QA use |
+| `BASE_URL` | Browser QA target |
+| `API_URL` | Browser QA API target |
 
-Historical model prototype required an OpenRouter credential and provider/model configuration. Never store credentials in source, logs, screenshots, or this document.
+Historical live-model prototype:
 
-## 16.4 Preferred workflow
+| Variable | Purpose |
+|---|---|
+| OpenRouter credential, name varied by release | Authorized live model call |
+| model/provider config | Select Nemotron and restrict provider |
+
+Do not include credentials in source, logs, screenshots, manifests, or handoff documents.
+
+## 16.4 Release-marker inconsistency
+
+Current inspected markers:
+
+| Location | Marker |
+|---|---:|
+| `casepath/index.html` | 20.0.0 |
+| public API | 15.0.0 |
+| `casepath/release.json` | 12.0.2 |
+| `casepath/source-manifest.json` | 10.0.0 |
+| older JS layers | 16–19 |
+
+The HTML and API health endpoints are the current runtime truth. The JSON release and source-manifest files are stale. Repair them before another release claim.
+
+## 16.5 Preferred release workflow
 
 ```text
 local iteration
 → visual acceptance screenshots
 → full local uninterrupted demo
 → deterministic and browser tests
-→ freeze candidate
+→ freeze candidate commit
 → deploy once
 → deployment-only fixes
 → retained production evidence
 ```
 
-Repeated deployment during design caused regressions, stale caches, SHA confusion, and sideways progress.
+Do not redesign while debugging deployment.
 
-## 16.5 Render troubleshooting
+## 16.6 Render troubleshooting
 
-- **Stale frontend:** confirm branch, deploy SHA, `publishPath=casepath`, HTML release meta, and loaded asset URLs before clearing cache.
-- **Old API behavior:** confirm `app.py` imports `pipeline_v15`, check `/healthz` and `/deployment-health`, compare deploy SHA.
-- **QA failure:** distinguish product regression from selector assumption; preserve failure screenshot; do not weaken assertions merely to pass.
-- **Late 404 after reset:** close browser context before deleting run state.
-- **No open port:** use `$PORT`; QA serves generated output; API uses `start.sh`.
-- **Cold start:** use long timeouts and warm before an approved recording; do not add fake progress.
+### Static frontend shows stale content
 
-## 16.6 Release discipline
+- Confirm service branch and deploy SHA.
+- Confirm `publishPath=casepath`.
+- Trigger a cache-cleared deploy only after verifying the source commit.
+- Inspect HTML release meta and loaded asset URLs.
+- Do not trust a text-only crawler for the JS-rendered state.
 
-Record separately:
+### API build succeeds but behavior is old
 
-- product SHA;
-- API SHA;
-- QA SHA;
-- benchmark hash;
-- schema version;
-- model profile;
-- legal-source registry version;
-- and playbook version.
+- Confirm `app.py` imports `pipeline_v15`, not legacy `pipeline`.
+- Check live `/healthz` and `/deployment-health`.
+- Compare live deploy SHA with the source SHA.
+- Remember that v20 was frontend-only; API SHA lag may be intentional but must be documented.
 
-One `latest` label is insufficient.
+### QA build fails
+
+- Inspect selector drift.
+- Do not weaken an assertion just to obtain a pass.
+- First determine whether the product regressed or the QA assumption was wrong.
+- Preserve a failure screenshot and exact locator.
+- Run against production, not a preview, for final acceptance.
+- Close browser context before resetting API state to avoid late polling 404s.
+
+### No open port
+
+- Confirm the Render start command uses `$PORT`.
+- For QA evidence service, use an HTTP server over the generated output directory.
+- For API, use `bash casepath-api/start.sh`.
+
+### Free-tier cold start
+
+- Use long navigation and API timeouts.
+- Separate cold-start latency from pipeline latency.
+- Do not script fake progress to hide a sleeping service.
+- Warm the service before a recorded stakeholder demonstration if permitted.
+
+## 16.7 Release-history lesson
+
+The project has many versioned branches because deployment and redesign were interleaved. This made “latest” ambiguous.
+
+Before future work:
+
+- tag the product baseline;
+- distinguish product commit from QA-only commit;
+- distinguish benchmark release from demo release;
+- keep one changelog;
+- and record exact SHAs for frontend, API, QA, and benchmark.
 
 ---
 
-# 17. Model-cost constraints
+# 17. Model and cost constraints
 
-Historical model IDs include:
+## 17.1 Historical reference models
+
+Two model IDs appear in historical artifacts:
 
 ```text
 nvidia/nemotron-3-super-120b-a12b:free
 nvidia/nemotron-3-ultra-550b-a55b:free
 ```
 
-Do not assume either remains free or available. Verify current OpenRouter terms before use.
+Do not assume they are aliases or equally available. Choose and validate one model for any new live experiment.
 
-Historical integration used OpenRouter Chat Completions through `ChatOpenAI`, NVIDIA-only routing, fallback disabled, data collection denied, Pydantic structured output, temperature zero, explicit reasoning configuration, and source validation. It is not in the current runtime.
+## 17.2 OpenRouter design
 
-A prior plan budgeted roughly 50 calls: provider/schema smoke, representative English/German cases, adversarial attachment cases, longitudinal cases, regression, deployed acceptance, and reserve. The record stated zero authorized calls had been used.
+The historical integration used:
 
-Rules:
+- OpenRouter Chat Completions through `ChatOpenAI`;
+- NVIDIA-only routing;
+- fallback disabled;
+- data collection denied;
+- structured Pydantic output;
+- temperature 0;
+- no automatic retry;
+- explicit reasoning configuration;
+- and source/output validation.
 
-1. Run deterministic schemas, leakage scans, validators, unit tests, and browser tests first.
-2. Cache by observable-input hash, claim version, provider, model, prompt, schema, and agent role.
-3. Do not spend model calls on UI debugging.
-4. Use reference canonical states for mechanism tests.
-5. Reserve calls for questions deterministic fixtures cannot answer.
-6. Log secret-stripped request/response envelopes.
-7. Report provider, parsing, and fallback failures.
-8. Never claim Nemotron if another provider or fallback answered.
-9. Keep the public demo usable with no model credential.
-10. The first live experiment should be a bounded canonicalizer contract, not full autonomous orchestration.
+This is not in the current public runtime.
 
----
+## 17.3 Historical free-call budget
+
+A prior budget planned approximately 50 calls:
+
+- 3 provider/auth/schema smoke;
+- 8 representative English/German;
+- 6 adversarial attachment-dependent;
+- 5 longitudinal/correction-sensitive;
+- 5 post-fix regression;
+- 3 deployed acceptance;
+- 20 reserve.
+
+The release record stated zero calls had been used because no authorized credential was available.
+
+This budget is historical. OpenRouter availability, model price, and free quotas can change. Verify current provider terms before any run.
+
+## 17.4 Cost-control rules
+
+1. Run schema, unit, deterministic conformance, leakage, and browser tests first.
+2. Cache by:
+   - claim version;
+   - observable-input hash;
+   - model;
+   - provider;
+   - prompt version;
+   - schema version;
+   - agent role.
+3. Do not spend live calls on UI debugging.
+4. Use generated canonical states for mechanism tests.
+5. Reserve calls for questions that deterministic fixtures cannot answer.
+6. Store complete secret-stripped request and response envelopes.
+7. Report provider failures and parse failures; do not silently fall back and call the result “Nemotron.”
+8. Never make a live-model performance claim from a handful of demonstration calls.
+9. Do not use a visitor-supplied secret in logs or persistent browser storage.
+10. Current public demo must continue to work without a model credential.
+
+## 17.5 What a live call should test first
+
+The first authorized call should test one bounded contract:
+
+```text
+observable flagship package
+→ source-linked canonical claim state
+```
+
+The deterministic pipeline should then build graph, checklist, and verification from that state.
+
+Do not begin with free-form end-to-end graph generation. Canonical-state quality is already known to dominate downstream performance.
+
+
 
 # 18. Repository map
 
-## 18.1 Current default branch
+## 18.1 Repository-level warning
 
-| Path | Why open it |
-|---|---|
-| `casepath/index.html` | Frontend entry, release meta, loading shell, two-pane structure, script order |
-| `casepath/assets/live-v16.js` | Core journey and rendering runtime |
-| `casepath/assets/live-v16.css` | Base visual system and responsive layout |
-| `casepath/assets/live-v16-stability.js` | Core stability protections |
-| `casepath/assets/live-v17.js` | Process/evidence/law/precedent enhancements and derived checklist |
-| `casepath/assets/live-v17-continuity.css` | Graph continuity styling |
-| `casepath/assets/live-v18.js` | Expert-review and learning presentation enhancements |
-| `casepath/assets/live-v18-handoff.js` | Event-backed handoff presentation |
-| `casepath/assets/live-v18-insertion-guard.js` | Duplicate insertion and polling protections |
-| `casepath/assets/live-v19-active-stage.js` | Active-stage synchronization |
-| `casepath/assets/live-v19-runtime-stability.js` | Runtime coalescing and observer stability |
-| `casepath/assets/live-v19.css` | Node signals, review path, team rail styles inherited by v20 |
-| `casepath/assets/live-v20-focus.js` | Focused graph-first interaction, document sheet, review, learning, later-claim result |
-| `casepath/assets/live-v20-focus.css` | One-third/two-thirds workspace and suppression of report framing |
-| `casepath/release.json` | Stale release metadata; inspect to repair, not as current truth |
-| `casepath/source-manifest.json` | Stale source manifest; inspect before replacing |
-| `casepath-api/casepath_api/app.py` | Public API routes and deployed pipeline import |
-| `casepath-api/casepath_api/pipeline_v15.py` | Current deterministic lifecycle and agent contracts |
-| `casepath-api/casepath_api/data.py` | Two public claims, artifacts, law sources, historical references |
-| `casepath-api/casepath_api/storage.py` | SQLite schema, run/event/review/memory/candidate persistence |
-| `casepath-api/generate_artifacts.py` | Public PDF/email/image generation |
-| `casepath-api/render-build.sh` | Build-time artifact generation, hash checks, API smoke |
-| `casepath-api/start.sh` | Uvicorn startup |
-| `casepath-api/requirements.txt` | Current dependencies; absence of LangChain is important |
-| `casepath-api/pipeline.py` | Legacy pipeline; do not confuse with deployed v15 |
-| `casepath-api/tests/test_pipeline.py` | Legacy-aligned tests that currently miss v15 |
-| `casepath-api/tests/test_api.py` | API tests; verify imports and release assumptions before use |
-| `casepath-qa/browser-focused-v20.mjs` | Focused uninterrupted acceptance contract |
-| `casepath-qa/browser-guided-v13-smoke.mjs` | Wrapper; current source has drifted from retained passing QA |
-| `casepath-qa/package.json` | QA dependencies and scripts |
-| `.github/workflows/` | Deployment and QA history; many workflows are release-specific or stale |
+`KumarNavish/KumarNavish.github.io` is not a dedicated CasePath repository. Its root contains unrelated portfolio infrastructure. Do not run root-level commands and assume they validate CasePath.
 
-## 18.2 Archived research assets to recover
+Open the following CasePath paths directly.
 
-The following names occur in archived releases or reports rather than the current integrated default branch:
+## 18.2 Frontend
+
+| Path | State | Why a new agent opens it |
+|---|---|---|
+| [`casepath/index.html`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath/index.html) | Current | Static entry point, initial claim shell, source viewer, work pane, audit and precedent dialogs, loaded asset order |
+| [`casepath/assets/live-v16.js`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath/assets/live-v16.js) | Current core runtime | Main client state machine, API calls, claim rendering, process rendering, review, knowledge, and later-claim flow |
+| [`casepath/assets/live-v16.css`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath/assets/live-v16.css) | Current core style | Base layout, graph, inspector, review, knowledge, source viewer, responsive rules |
+| `casepath/assets/live-v16-stability.js` | Current support | Guards runtime stability around the v16 core |
+| [`casepath/assets/live-v17.js`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath/assets/live-v17.js) | Current enhancement | Adds process continuity, legal mapping, evidence chains, derived checklist, review and reuse enhancements |
+| `casepath/assets/live-v17-continuity.css` | Current enhancement | Styles the graph continuity and v17 additions |
+| `casepath/assets/live-v18.js` | Current enhancement | Additional guided-experience behavior |
+| `casepath/assets/live-v18.css` | Current enhancement | v18 presentation layer |
+| `casepath/assets/live-v18-handoff.js` | Current enhancement | Event-backed handoff and artifact presentation |
+| `casepath/assets/live-v18-insertion-guard.js` | Current guard | Prevents duplicate asynchronous component insertion and coalesces some run reads |
+| `casepath/assets/live-v18-law-normalize.js` | Current support | Normalizes law disclosure behavior |
+| `casepath/assets/live-v19-active-stage.js` | Current enhancement | Active-stage and artifact relationship enhancements |
+| `casepath/assets/live-v19.css` | Current enhancement | Team rail, process law/evidence signals, review preview, support meter |
+| `casepath/assets/live-v19-runtime-stability.js` | Current support | Runtime stabilization |
+| [`casepath/assets/live-v20-focus.js`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath/assets/live-v20-focus.js) | Current product focus layer | Turns the layered runtime into the graph-first, one-artifact-at-a-time v20 experience |
+| [`casepath/assets/live-v20-focus.css`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath/assets/live-v20-focus.css) | Current product focus layer | Hides report framing and agent chrome, creates the focused two-pane journey |
+| [`casepath/release.json`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath/release.json) | **Stale** | Historical release metadata; currently says 12.0.2 and must not be treated as v20 truth |
+| [`casepath/source-manifest.json`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath/source-manifest.json) | **Stale** | Historical v10 manifest; useful for provenance but not current tree integrity |
+| `casepath/_headers` | Current deployment support | Static-site caching and headers |
+| `casepath/README.md` | Historical/minimal | Not a complete current handoff |
+
+### Frontend modification rule
+
+Before changing the frontend:
+
+1. identify which layer currently owns the behavior;
+2. avoid duplicating a behavior already added by a later layer;
+3. capture current screenshots;
+4. run the focused browser journey;
+5. prefer deleting or consolidating code over adding another override layer.
+
+## 18.3 Current API and backend
+
+| Path | State | Why open it |
+|---|---|---|
+| [`casepath-api/casepath_api/app.py`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath-api/casepath_api/app.py) | Current deployed API | Routes, CORS, demo metadata, source-artifact endpoints, run/review/knowledge/reset API |
+| [`casepath-api/casepath_api/pipeline_v15.py`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath-api/casepath_api/pipeline_v15.py) | **Authoritative deployed pipeline** | Complete deterministic reference lifecycle, facts, legal context, graph, evidence, retrieval, verification, review, memory, candidate, and later proof |
+| [`casepath-api/casepath_api/data.py`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath-api/casepath_api/data.py) | Current public data | Exact two claims, nine artifacts, static law sources, static historical cases |
+| [`casepath-api/casepath_api/storage.py`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath-api/casepath_api/storage.py) | Current demo persistence | SQLite schema and CRUD for runs, events, reviews, memories, and candidates |
+| [`casepath-api/casepath_api/pipeline.py`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath-api/casepath_api/pipeline.py) | **Legacy** | Earlier pipeline retained in tree; do not edit expecting deployed behavior |
+| [`casepath-api/generate_artifacts.py`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath-api/generate_artifacts.py) | Current build generator | Produces lease, timeline, receipt, emails, and initial images |
+| `casepath-api/replace_photographic_evidence.py` | Current build step | Replaces procedural images with licensed checksum-bound photographs |
+| `casepath-api/prepare_runtime_v12.py` | Historical support | Earlier runtime-preparation path; verify usage before changing |
+| [`casepath-api/render-build.sh`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath-api/render-build.sh) | Current Render build | Installs, generates artifacts, replaces photos, checks hashes, compiles, and runs direct API smoke |
+| `casepath-api/start.sh` | Current start | Launches Uvicorn on `$PORT` |
+| [`casepath-api/requirements.txt`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath-api/requirements.txt) | Current | Exact API dependencies; absence of LangChain is evidence that current runtime is not model-driven |
+| `casepath-api/artifacts/` | Generated/build artifacts | Public source documents and attribution |
+
+## 18.4 Tests and browser QA
+
+| Path | State | Why open it |
+|---|---|---|
+| [`casepath-api/tests/test_pipeline.py`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath-api/tests/test_pipeline.py) | **Misaligned legacy test** | Reveals old invariants, but imports `pipeline.py`, not deployed `pipeline_v15.py` |
+| [`casepath-qa/browser-focused-v20.mjs`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath-qa/browser-focused-v20.mjs) | Current desired product gate, **brittle on master** | Full claim-to-reuse Playwright journey and visual checks |
+| `casepath-qa/browser-guided-v13-smoke.mjs` | Current wrapper on product commit | Imports the focused v20 gate; the live canonical QA uses a patched variant |
+| `casepath-qa/browser-guided-v19-final.mjs.part*` | Historical QA | v19 production gate source segments |
+| `casepath-qa/generate-visual-story.py.part*` | Historical visual artifact generator | Standalone GIF generator source |
+| `casepath-qa/reset-demo-state.mjs` | Current support | Reset public demo state |
+| `casepath-qa/check-photographic-evidence.mjs` | Historical/current support | Verifies public photo evidence |
+| `casepath-qa/browser-public.mjs`, `check-public.mjs` | Historical gates | Earlier public checks; do not treat as v20 acceptance |
+| `casepath-qa/package.json` | Current QA dependencies | Playwright and Node setup |
+
+### Known focused-QA defects on current product commit
+
+`browser-focused-v20.mjs` currently contains assumptions that differ from the passing canonical service:
+
+- selector uses `data-kind="still-needed"` while the generated group kind is `needed`;
+- one assertion hard-codes that the first selected document returns to `causation`;
+- release check relies on mutable `window.CASEPATH_EXPERIENCE_RELEASE`.
+
+The canonical QA service passed after these assumptions were patched in a QA-only commit. Merge a clean corrected gate into the product branch before claiming local reproducibility.
+
+## 18.5 Deployment configuration
+
+There is no single current infrastructure-as-code file that defines all live services. Render is configured through the service dashboard.
+
+Record externally:
+
+- service IDs;
+- service types;
+- branches;
+- build commands;
+- start commands;
+- publish paths;
+- regions;
+- plans;
+- environment variables;
+- health endpoints;
+- and last accepted SHAs.
+
+Do not infer configuration from old GitHub workflows. Historical v10 installer and verification workflows existed on older branches but are not authoritative for v20.
+
+## 18.6 Research benchmark release
+
+The hardened defects benchmark is not in the current default branch. The important archived structure is:
 
 ```text
-corpus-audit-v2.json
-manifest.json for the defects vertical slice
-benchmark.py
-experiment-results.json
-experiment-report.md
-adaptation comparison report
-error-propagation report
-interaction-simulation report
-expert-review package
-run_all.py
-bootstrap_and_verify.sh
-langchain_agents.py
-model profiles and call-budget plan
+CasePath_Defects_Expert_Ready_Agent/
+├── benchmark/
+│   ├── manifest.json
+│   ├── packages/
+│   ├── bundles/
+│   ├── ground_truth/
+│   ├── reference_plans/
+│   └── expert_review/
+├── casepath_agent/
+│   ├── benchmark.py
+│   ├── process.py
+│   ├── adaptation.py
+│   ├── adaptation_methods.py
+│   ├── interaction.py
+│   ├── error_propagation.py
+│   ├── review.py
+│   └── api.py
+├── challenge/
+├── experiments/
+├── expert_pilot/
+├── knowledge/
+├── reports/
+├── schemas/
+├── scripts/
+│   ├── run_all.py
+│   ├── bootstrap_and_verify.sh
+│   └── release_manifest.py
+├── tests/
+├── ui/
+└── requirements-lock.txt
 ```
 
-Recover them into an immutable `research/releases/<version>/` structure with checksums. Do not silently re-create from prose.
+Why open it:
 
-## 18.3 Recommended future structure
+- it contains the actual research benchmark, methods, reports, and reproducibility tooling;
+- it is the source for most scientific findings in this handoff;
+- and it prevents rebuilding experiments from product-demo code.
 
-After the immediate milestone, not before:
+Before use, verify archive checksums and ensure no absolute `/mnt/data` dependency remains.
+
+## 18.7 Historical model-driven sources
+
+Archived files such as:
 
 ```text
-casepath/
-  frontend/
-  api/
-  contracts/
-  validators/
-  agents/
-  providers/
-  law/
-  retrieval/
-  governance/
-  benchmarks/
-  experiments/
-  tests/
-  releases/
+casepath_agent/langchain_agents.py
+casepath_agent/model_profiles.py
+casepath_agent/schemas.py
+casepath_agent/storage.py
+prompts/
 ```
 
-Do not perform this refactor during evidence validation.
+represent the LangChain/Nemotron architecture generation. They are not part of current master. Recover them only when the next milestone explicitly requires a live model arm.
 
 ---
 
-# 19. Canonical schemas and examples
+# 19. Canonical contracts and compact examples
 
-These are compact representative examples, not substitutes for source schemas.
+> **Schema-location warning:** the current default branch does not contain the full 47-schema hardened benchmark release. The deployed public runtime expresses contracts directly in Python dictionaries and constructors. The authoritative research schemas live in the archived `CasePath_Defects_Expert_Ready_Agent/schemas/` release and must be checksum-recovered before an experiment. Do not invent a new schema set merely because the archive is not mounted locally.
+
+These examples are representative. The exact source of truth should be versioned schema files, not this prose.
 
 ## 19.1 Observable claim
 
 ```json
 {
   "claim_id": "DEF-027-E0-DEMO",
-  "language": "de",
-  "received_at": "2026-07-28T08:42:00+02:00",
-  "subject": "Schimmel im Schlafzimmer",
-  "message_artifact_id": "art_customer_email",
-  "artifact_ids": [
-    "art_lease",
-    "art_photo",
-    "art_notification",
-    "art_management_reply",
-    "art_timeline",
-    "art_delivery_receipt"
+  "received_at": "2026-08-01T09:10:00+02:00",
+  "language": "en",
+  "message": {
+    "subject": "Recurring mould in bedroom",
+    "body": "The mould returned after cleaning. The landlord says ventilation is the cause..."
+  },
+  "artifacts": [
+    {
+      "artifact_id": "art_lease",
+      "filename": "lease-agreement.pdf",
+      "media_type": "application/pdf",
+      "page_count": 6,
+      "sha256": "..."
+    }
   ]
 }
 ```
 
-No category, branch, checklist, reference process, or future artifact belongs here.
+Invariant: no process, category, expected fact, or answer is embedded.
 
 ## 19.2 Canonical claim state
 
@@ -1425,24 +2681,28 @@ No category, branch, checklist, reference process, or future artifact belongs he
   "claim_id": "DEF-027-E0-DEMO",
   "facts": [
     {
-      "fact_id": "mould_recurring",
-      "label": "Recurring mould",
-      "value": true,
-      "state": "supported",
-      "confidence": 0.98,
-      "source_refs": [{"artifact_id": "art_customer_email"}]
-    },
-    {
-      "fact_id": "technical_cause",
+      "fact_id": "fact_cause",
       "label": "Technical cause",
       "value": null,
       "state": "unknown",
-      "confidence": 0.0,
-      "source_refs": []
+      "confidence": 1.0,
+      "controls_process": true,
+      "source_refs": [
+        {
+          "artifact_id": "art_management_reply",
+          "page": 1,
+          "excerpt": "We consider insufficient ventilation the likely cause.",
+          "agent": "Claim Understanding Agent"
+        }
+      ]
     }
   ],
-  "conflicts": ["landlord attributes cause to ventilation"],
-  "unknowns": ["technical cause"]
+  "conflicts": [
+    {
+      "fact_id": "fact_first_observed_date",
+      "values": ["2026-03-12", "2026-03-20"]
+    }
+  ]
 }
 ```
 
@@ -1455,13 +2715,19 @@ No category, branch, checklist, reference process, or future artifact belongs he
   "question": "What caused the recurring mould?",
   "kind": "decision",
   "state": "current",
-  "fact_ids": ["technical_cause"],
-  "legal_source_ids": ["or_259a"],
-  "evidence_requirement_ids": ["neutral_assessment", "moisture_measurement"],
+  "answer": "Unresolved",
+  "why": "Responsibility and remedy depend on the likely cause.",
+  "fact_ids": ["fact_cause", "fact_ventilation_allegation"],
+  "legal_source_ids": ["fedlex_or_256"],
+  "evidence_requirement_ids": [
+    "technical_assessment",
+    "moisture_measurements",
+    "building_envelope"
+  ],
   "branches": [
     {"answer": "building_defect", "target": "responsibility"},
-    {"answer": "use_related", "target": "responsibility"},
-    {"answer": "mixed", "target": "responsibility"},
+    {"answer": "tenant_use", "target": "responsibility"},
+    {"answer": "mixed_cause", "target": "responsibility"},
     {"answer": "insufficient_evidence", "target": "evidence_gap"}
   ]
 }
@@ -1471,17 +2737,24 @@ No category, branch, checklist, reference process, or future artifact belongs he
 
 ```json
 {
-  "graph_id": "mould-process-instance/DEF-027-E0-DEMO",
-  "template_version": "mould-playbook-v3",
+  "graph_id": "mould-playbook-v3:DEF-027-E0-DEMO",
+  "version": "mould-playbook-v3",
   "current_node": "causation",
-  "nodes": [{"node_id": "intake"}, {"node_id": "causation"}],
-  "edges": [
-    {"source": "intake", "target": "scope", "condition": "submission received"}
-  ],
   "main_spine": [
-    "intake", "scope", "dispute", "urgency", "notification",
-    "defect", "causation", "responsibility", "remedy", "escalation", "resolution"
-  ]
+    "intake",
+    "scope",
+    "dispute",
+    "urgency",
+    "notification",
+    "defect",
+    "causation",
+    "responsibility",
+    "remedy",
+    "escalation",
+    "resolution"
+  ],
+  "nodes": [],
+  "edges": []
 }
 ```
 
@@ -1489,30 +2762,41 @@ No category, branch, checklist, reference process, or future artifact belongs he
 
 ```json
 {
-  "item_id": "neutral_technical_assessment",
+  "item_id": "technical_assessment",
   "title": "Independent technical assessment",
   "node_id": "causation",
-  "fact_id": "technical_cause",
-  "goal": "Distinguish building-related, use-related, mixed, or unresolved cause",
-  "acceptable_evidence": ["inspection report", "qualified expert statement"],
+  "fact_id": "fact_cause",
+  "fact_label": "Likely technical cause",
+  "why": "Photos establish visible mould but not its cause.",
   "status": "missing",
-  "why": "Responsibility and remedy remain blocked until causation is supported"
+  "required_level": "competent_independent_assessment",
+  "alternatives": [
+    "specialist moisture report",
+    "equivalent qualified inspection"
+  ],
+  "legal_source_ids": ["fedlex_or_256"],
+  "artifact_ids": [],
+  "applies_when": "cause remains unresolved",
+  "current_path": true
 }
 ```
 
-## 19.6 Derived document requirement
+## 19.6 Document requirement
+
+A document requirement is a user-facing projection of one or more evidence items:
 
 ```json
 {
   "document_type": "technical_assessment",
-  "derived_from": {
+  "label": "Independent technical assessment",
+  "status": "still_needed",
+  "required_for": {
     "node_id": "causation",
-    "fact_id": "technical_cause",
-    "evidence_item_id": "neutral_technical_assessment"
+    "fact_id": "fact_cause"
   },
-  "priority": "next",
-  "condition": "always while causation remains unresolved",
-  "already_satisfied_by": []
+  "reason": "Needed to distinguish building, use-related, mixed, or unresolved cause.",
+  "accepted_alternatives": ["qualified moisture report"],
+  "do_not_request_if": ["equivalent competent report already sufficient"]
 }
 ```
 
@@ -1520,32 +2804,50 @@ No category, branch, checklist, reference process, or future artifact belongs he
 
 ```json
 {
-  "memory_id": "memory/DEF-027-E0-DEMO/review-1",
+  "memory_id": "memory_...",
   "claim_id": "DEF-027-E0-DEMO",
-  "review_status": "approved_with_edit",
-  "reviewed_process_path": ["causation", "evidence_gap"],
-  "corrections": ["neutral assessment before broader testing"],
-  "evidence_context": ["technical cause unresolved"],
-  "reviewer_role": "qualified_claim_expert",
-  "source_run_id": "run_...",
+  "review_status": "expert_approved_generated_case",
+  "reviewed_process_version": "mould-playbook-v3",
+  "facts": [],
+  "process_path": [],
+  "evidence_state": [],
+  "expert_corrections": [
+    {
+      "operation": "replace",
+      "pointer": "/checklist/building_envelope/status",
+      "old": "missing",
+      "new": "conditional",
+      "reason": "Use one neutral assessment first."
+    }
+  ],
+  "source_artifact_hashes": [],
   "created_at": "..."
 }
 ```
+
+For a real expert pilot, the reviewer identity, role, authority, disagreement, and scope version must be explicit.
 
 ## 19.8 Expert correction
 
 ```json
 {
-  "correction_id": "correction/review-1/evidence-order",
-  "target": "causation.building_envelope_mode",
-  "before": "required_now",
-  "after": "conditional",
-  "reason": "Obtain one neutral assessment before activating broader testing",
-  "downstream_delta": {
-    "process_nodes_added": ["ventilation_dispute"],
-    "evidence_changed": ["building_envelope"],
-    "next_action": "arrange neutral assessment"
-  }
+  "correction_id": "corr_...",
+  "run_id": "run_...",
+  "claim_id": "DEF-027-E0-DEMO",
+  "decision": "approve_with_edit",
+  "operations": [
+    {
+      "component": "evidence_requirement",
+      "operation": "replace",
+      "pointer": "/items/building_envelope/status",
+      "old_value": "missing",
+      "new_value": "conditional",
+      "reason": "Broader testing follows only if the neutral assessment cannot distinguish cause.",
+      "confidence": 0.93
+    }
+  ],
+  "reviewer_type": "qualified_human_or_simulated_must_be_explicit",
+  "created_at": "..."
 }
 ```
 
@@ -1553,19 +2855,34 @@ No category, branch, checklist, reference process, or future artifact belongs he
 
 ```json
 {
-  "candidate_id": "candidate/mould-playbook-v4",
-  "base_version": "mould-playbook-v3",
-  "proposed_change": "Make broader building testing conditional after a neutral assessment",
-  "support_memories": ["memory-1", "memory-2", "memory-3"],
-  "target_evaluation": {"status": "passed", "manifest": "target-v1"},
-  "protected_regression": {"status": "passed", "manifest": "protected-v1"},
-  "approval": {"status": "approved", "owner": "process-owner"},
-  "new_version": "mould-playbook-v4",
+  "candidate_id": "candidate_ventilation_sequence_v1",
+  "status": "quarantined",
+  "scope": "CH:tenant-law:mould-recurrence",
+  "from_version": "mould-playbook-v3",
+  "proposed_version": "mould-playbook-v4",
+  "change": {
+    "add_node": "ventilation_dispute",
+    "change_evidence_ownership": true,
+    "make_building_envelope_conditional": true
+  },
+  "support": {
+    "distinct_reviewed_claims": 1,
+    "required": 3
+  },
+  "evaluation": {
+    "target_manifest": null,
+    "protected_manifest": null,
+    "status": "not_run"
+  },
+  "approvals": {
+    "process_owner": "pending",
+    "legal": "pending"
+  },
   "rollback_target": "mould-playbook-v3"
 }
 ```
 
-The public demo currently generates an object of this shape, but does not execute genuine target/protected experiments before release.
+This is the correct default after one genuine reviewed case. The public demo’s generated candidate uses prefilled support and evaluation values for narrative purposes.
 
 ---
 
@@ -1573,43 +2890,203 @@ The public demo currently generates an object of this shape, but does not execut
 
 | Capability | State | Evidence | Main limitation | Next action |
 |---|---|---|---|---|
-| Claim generation | **Prototype / generated-reference only** | Original corpus, hardened benchmark, public artifact generator | Source release fragmented; no blind realism proof | Recover immutable generator release and run realism/leakage audit |
-| Document realism | **Implemented but not fully verified** | Inspectable public PDFs, emails, images | Demo disclosure leaks generation; limited realism | Rebuild flagship package to blind operational quality |
-| Claim browsing | **Planned for broad corpus; intentionally frozen in v20** | Earlier corpus and UI generations | Current public product exposes two claims only | Do not expand until flagship truth milestone passes |
-| Attachment rendering | **Implemented and verified** | Six-page PDF, image, email viewer, extraction separation | Generated artifacts only; accessibility incomplete | Preserve, then test keyboard/screen-reader use |
-| Claim interpretation | **Prototype / generated-reference only** | Typed facts and source refs; hardened canonicalizer studies | Public facts predefined; local model result failed | Implement bounded model canonicalizer and fact-level evaluation |
-| Legal RAG | **Prototype / generated-reference only** | Static source registry and node links | No live retrieval or expert legal validation | Build versioned official corpus and retrieval benchmark |
-| Process discovery | **Prototype / generated-reference only** | Complete public graph and hardened variation experiments | Public graph handcrafted; topology versus instantiation unresolved | Evaluate claim-specific instantiation from predicted facts |
-| Checklist generation | **Implemented as deterministic reference compiler** | `node_id`, `fact_id`, `why`, validator, derived view | Not currently model-generated or expert-approved | Compare deterministic compiler, model, and static baseline |
-| Historical retrieval | **Prototype / generated-reference only** | Three contextual references and reviewed memory priority | Static cases and deterministic ranking | Evaluate usefulness on reviewed memories and protected negatives |
-| Expert review | **Implemented interaction, not domain-validated** | Graph-side choice and stored correction | Simulated/generated reviewer evidence | Conduct qualified independent review |
-| Reviewed case memory | **Implemented but ephemeral** | Memory table and later retrieval | `/tmp` SQLite, generated reviewer | Move to durable store and use real approved review |
-| Shared knowledge evolution | **Prototype / generated-reference only** | v3→v4 lifecycle and rollback display | Support/tests hard-coded | Execute real manifests and keep candidate quarantined |
-| Model/provider swapping | **Implemented historically, absent in current runtime** | Archived provider and LangChain code | Not recovered into current tested architecture | Reintroduce only through canonical adapter after benchmark recovery |
-| Live Nemotron | **Not currently implemented or verified** | Historical model profiles only | No authorized current run | Run a bounded cached canonicalizer experiment |
-| UI | **Implemented and browser-verified** | v20 focused gate 57/57 | Layered v16–v20 architecture; no comprehension study | Freeze design; validate silent comprehension |
-| Persistence | **Implemented but not durable** | SQLite storage | Ephemeral Render filesystem | PostgreSQL, migrations, backup, transactions |
-| Deployment | **Implemented** | Live frontend, API, QA | Different SHAs and stale manifests | Generate one release manifest and align QA source |
-| Benchmark validity | **Prototype / generated-reference only** | Shortcut audits and hardened release | No expert-approved or real transfer set | Independent adjudication and source-isolated transfer panel |
-| Expert validation | **Planned / missing** | Generated review package and simulated dry run | No qualified independent review | Run blinded review with disagreement adjudication |
+| Original 150-claim generation | **Prototype / generated-reference only** | 150 claims, 2,251 files, reproducibility report | Shortcut-heavy, low attachment density, no expert approval, separate from current repo | Preserve as historical baseline; do not extend |
+| Hardened defects generation | **Prototype / generated-reference only** | 48 journeys, 136 episodes, 1,148 attachments | Archived outside current default branch; generated labels | Recover and checksum-verify release |
+| Public flagship artifact generation | **Implemented and verified** | Build script, six-page lease, PDFs/emails/photos | Visible generated markers; only two claims; no blind realism study | Rerender one flagship to leakage-clean realism standard |
+| Claim browsing | **Planned / not in v20 flagship** | Older corpus UI generations | Current product intentionally exposes two claims only | Do not rebuild broad inbox before flagship validation |
+| Attachment rendering | **Implemented and verified** | Six-page PDF, zoom, extraction separation, source photo | Generated and highly curated | Add realism and source-level expert review |
+| Claim interpretation | **Prototype / generated-reference only** | Source-linked facts and conflicts in v15 | Deterministic predefined facts; no current model arm | Reintroduce bounded canonicalizer experiment |
+| Legal query formulation | **Prototype / generated-reference only** | Five questions in v15 | Handcrafted | Evaluate model question quality separately |
+| Legal RAG | **Prototype / generated-reference only** | Static official-source registry and node links | Not live retrieval; operational interpretation unapproved | Build versioned official-source retrieval and expert review |
+| Process discovery | **Prototype / generated-reference only** | 11-node graph, later v4 variation | Handcrafted two-case graph; no general inference | Run adjudicated graph-instantiation experiment |
+| Process graph product UI | **Implemented and verified** | v20 graph-first browser gate | Layered DOM-enhancement technical debt | Preserve until milestone; then consolidate |
+| Checklist generation | **Implemented and verified for reference cases** | 20 node/fact/reason-linked items | Handcrafted evidence model | Compare against direct predictor on expert targets |
+| Historical retrieval | **Implemented and verified for reference cases** | Three precedents, self-exclusion, reviewed memory first | Static deterministic score and generated cases | Evaluate correction-aware retrieval |
+| Expert review UI | **Implemented and verified narrowly** | One graph-adjacent evidence-order choice | Not a general graph editor; no qualified expert session | Run real review on one flagship |
+| General typed correction system | **Implemented in archived expert-ready release** | Typed operation descriptions and review API artifacts | Not integrated into current v20 master | Recover only for expert-pilot milestone |
+| Reviewed case memory | **Implemented and verified in demo** | Memory written and reused by later claim | Ephemeral SQLite; generated review | Move to durable store and real reviewer |
+| Shared knowledge evolution | **Prototype / generated-reference only** | v3→v4 demo, rollback field | Hard-coded support/tests; no fresh regression | Connect candidate to actual evaluation manifests |
+| Verified program synthesis | **Prototype / generated-reference only** | Perfect 3-example challenge result | One synthetic withheld branch; archived | Replicate on expert-reviewed corrections |
+| Orchestrator swapping | **Planned with historical prototype** | Shared contract design and archived LangChain suite | No current interface in master | Add explicit adapter boundary only when model arm begins |
+| Live Nemotron | **Not implemented in current runtime** | Historical OpenRouter source and call budget | No current dependency, no verified call | One authorized canonicalizer smoke after deterministic gates |
+| Model/provider abstraction | **Historical prototype / planned** | Archived profiles and LangChain suite | Not in current public code | Recover selectively, not wholesale |
+| Public UI | **Implemented and verified** | 57/57 focused browser checks | Comprehension not user-tested; layered v16–v20 | Run silent first-time-viewer test |
+| Browser QA | **Implemented but source misaligned** | Live canonical service passed | Product master gate contains stale assumptions | Merge corrected gate and rerun locally |
+| Backend unit tests | **Implemented but not aligned** | `tests/test_pipeline.py` | Imports legacy `pipeline.py`, not v15 | Rewrite tests against deployed pipeline |
+| Persistence | **Implemented but not durable** | SQLite tables | `/tmp` on Render | Add PostgreSQL before real pilot |
+| Deployment | **Implemented and live** | Frontend, API, QA services | Different SHAs/releases, stale manifests | Create one release manifest across services |
+| Benchmark validity | **Not established** | Strong internal generated tests | No qualified expert or source-isolated transfer | Expert annotation and realism study |
+| Legal validity | **Not established** | Official sources linked | Operational translations unreviewed | Qualified Swiss tenant-law review |
+| Expert validation | **Not performed on current flagship** | Simulated dry run only | No real reviewers | Obtain at least two independent reviews and adjudication |
+| Operational benefit | **Not established** | Generated interaction simulation | No real handlers or customers | Timed matched workflow study |
+| Real-claim use | **Not approved** | Safety statements | Privacy, legal, security, institutional approvals absent | Do not ingest real data |
 
 ---
 
 # 21. Irreducible research questions
 
-| Research question | Why engineering alone cannot answer it | Minimum experiment |
-|---|---|---|
-| Can useful claim-specific handling graphs be inferred from limited operational inputs? | A handcrafted graph or category lookup does not test inference | Frozen claims with expert-adjudicated graph constraints; compare category, static library, model instantiation, and direct-plan baselines |
-| Does explicit process reasoning improve evidence requirements? | A plausible checklist may be produced without process | Equal-information comparison: static category checklist, direct checklist model, process-grounded compiler; measure critical recall, false activation, no-repeat, whole-plan validity |
-| How should multiple valid graphs be evaluated? | Exact match treats equivalent paths as errors | Expert-defined partial-order and constraint evaluation plus typed disagreement adjudication |
-| How much feedback is needed for reusable knowledge? | Generated support counts do not estimate sample complexity | Pre-register withheld pattern; acquire sequential independent expert corrections; evaluate after each support count |
-| Which adaptation method avoids false activation? | Positive fit can hide damage to protected cases | Target and adversarial protected manifests comparing retrieval, rule induction, program synthesis, and LLM proposal |
-| How do canonical-fact errors propagate? | Reference facts hide end-to-end failure | Report oracle-fact, deterministic-extractor, and model-extractor tracks with per-fact interventions |
-| How can old playbooks be protected? | Version labels alone do not show safety | Sequential multi-version update study with rollback drills and protected old-policy cases |
-| Does generated performance transfer to real claims? | Synthetic labels and language may encode generator artifacts | Approved source-isolated real or naturalistic panel, blind expert targets, frozen evaluation before tuning |
-| Are legal links correct and useful? | Official URLs alone do not validate interpretation | Passage-retrieval recall plus qualified Swiss-law review of source, interpretation, and process implication |
-| Does CasePath reduce operational back-and-forth? | Simulation schedule predetermines responses | Timed handler study or controlled pilot measuring contacts, unnecessary requests, missed critical evidence, time, and intervention |
-| Do first-time viewers understand the product? | Browser tests validate mechanics, not comprehension | Silent walkthrough with executives, handlers, and researchers; score the ten lifecycle questions without narration |
+Engineering can make CasePath faster or prettier. The questions below require experiments.
+
+## 21.1 Can a system infer useful claim-specific handling graphs from limited traces?
+
+### Decisive experiment
+
+- Obtain expert-reviewed claim families with observable packages.
+- Hide the reviewed graph.
+- Compare:
+  - category template;
+  - deterministic library instantiation;
+  - direct graph predictor;
+  - process-aware model;
+  - retrieval;
+  - and human baseline.
+- Score:
+  - constraint validity;
+  - current-node accuracy;
+  - critical branch recall;
+  - accepted alternative coverage;
+  - and review edit distance.
+- Use source-group-isolated test families.
+
+## 21.2 Does explicit process reasoning improve evidence requirements?
+
+### Decisive experiment
+
+Use the same model, context, training data, and budget.
+
+Compare:
+
+- direct checklist prediction;
+- graph-aware direct prediction;
+- process-bottleneck prediction;
+- process oracle;
+- and static checklist.
+
+Measure:
+
+- critical evidence recall;
+- unnecessary requests;
+- already-present repeat requests;
+- conditional-evidence errors;
+- whole-plan constraint match;
+- and expert review time.
+
+## 21.3 How should multiple valid process graphs be evaluated?
+
+### Decisive experiment
+
+- Two or more qualified handlers independently annotate the same cases.
+- Adjudicate factual versus legal versus preference disagreements.
+- Construct set-valued or constraint-based targets.
+- Compare exact-match, graph edit distance, trace equivalence, and operational outcome equivalence.
+- Determine which metric best predicts expert acceptance.
+
+## 21.4 How much expert feedback is needed to learn reusable process knowledge?
+
+### Decisive experiment
+
+- Predefine withheld process patterns.
+- Collect genuine reviewed corrections sequentially.
+- At budgets 1, 2, 3, 5, and 10:
+  - propose candidate rules;
+  - evaluate target cases;
+  - evaluate adversarial negatives;
+  - replay protected archive;
+  - record expert minutes.
+- Compare verified program synthesis, rule induction, retrieval, direct prompting, and manual playbook editing.
+
+## 21.5 How do we avoid corrupting valid old playbooks?
+
+### Decisive experiment
+
+Run a prequential sequence of corrections across several claim families.
+
+For every proposal:
+
+- record support;
+- run protected replay;
+- measure worst-family regression;
+- preserve rollback;
+- simulate a bad correction;
+- and verify rejection and recovery.
+
+Report severe failures separately from average accuracy.
+
+## 21.6 How much does canonical-state error dominate downstream performance?
+
+### Decisive experiment
+
+Use:
+
+- adjudicated canonical states;
+- model-generated states;
+- deterministic states;
+- controlled perturbations;
+- and provenance ablations.
+
+Measure component and whole-plan degradation, abstention, and unsafe branch activation.
+
+## 21.7 Does generated benchmark performance transfer to real claims?
+
+### Decisive experiment
+
+- Create a legally approved source-isolated evaluation panel.
+- Freeze schema and method before access.
+- Compare generated versus source-isolated performance.
+- Conduct error decomposition for document quality, language, process variation, and legal scope.
+- Do not tune on the source-isolated test panel.
+
+## 21.8 Are generated artifacts realistic enough for the intended reasoning task?
+
+### Decisive experiment
+
+Blind reviewers rate:
+
+- message plausibility;
+- document plausibility;
+- image plausibility;
+- cross-document consistency;
+- process plausibility;
+- and whether generation source is detectable.
+
+Record rejection reasons and agreement. A low source-identification rate alone is not enough; the cases must preserve task-relevant realism.
+
+## 21.9 Does CasePath reduce expert or customer work?
+
+### Decisive experiment
+
+Under matched cases and expert time, compare:
+
+- ordinary handling;
+- static checklist;
+- direct model assistant;
+- CasePath process-grounded assistant.
+
+Measure:
+
+- customer-contact rounds;
+- unnecessary requests;
+- critical misses;
+- time to decision-ready;
+- expert interventions;
+- expert confidence;
+- and wrong-ready decisions.
+
+## 21.10 Is the live multi-agent architecture better than a simpler pipeline?
+
+### Decisive experiment
+
+Hold canonical contracts and model budget constant.
+
+Compare:
+
+- one structured model call;
+- sequential specialist calls;
+- parallel specialist calls with orchestrator;
+- deterministic pipeline;
+- and hybrid model-plus-validator pipeline.
+
+Measure accuracy, latency, cost, repair rate, trace usefulness, and failure recovery. Do not assume multi-agent decomposition is beneficial.
 
 ---
 
@@ -1617,286 +3094,409 @@ The public demo currently generates an object of this shape, but does not execut
 
 ## 22.1 Milestone
 
-> **Make one flagship recurring-mould claim simultaneously realistic, leakage-clean, model-truthful, expert-reviewed, regression-tested, durable, and visually clear from source intake to later-claim reuse.**
+> **Produce one truthfully model-backed and independently reviewed recurring-mould flagship lifecycle without weakening the current v20 product experience.**
 
-The v20 interaction is already close enough. The next milestone is evidence validity and implementation alignment, not another broad redesign.
+The existing v20 demo already shows the desired lifecycle. The next useful step is not another redesign. It is to replace the most consequential generated-reference assumptions with verified evidence.
 
-## 22.2 Required end-to-end lifecycle
+## 22.2 Exact completion criteria
 
-```text
-realistic observable package
-→ model-backed canonical claim state
-→ legal questions and retrieved official passages
-→ claim-specific process instantiation
-→ process-grounded evidence model
-→ reviewed precedent retrieval
-→ direct expert correction
-→ durable reviewed memory
-→ quarantined candidate rule
-→ actual target/protected evaluation
-→ approved or rejected versioned patch
-→ unseen later claim uses only approved knowledge
-```
+### Source package
 
-## 22.3 Completion criteria
-
-### Claim reality
-
-- one complete coherent multi-page lease;
-- realistic correspondence and email history;
-- high-quality photographs;
-- consistent identities, dates, address, chronology, and allegation;
-- no answer-bearing or generation metadata in evaluated bytes;
-- blind realism review by people not involved in generation.
+- one recurring-mould claim with realistic message, lease, correspondence, photographs, chronology, and receipt;
+- no visible or metadata generation leakage in the evaluated package;
+- stable source hashes and page references;
+- blind realism review by at least two independent reviewers;
+- documented contradictions and intended unknowns.
 
 ### Canonicalization
 
-- model sees only observable package;
-- every fact has exact source refs;
-- supported, unknown, conflicting, and alleged states are explicit;
-- no hidden-label leakage;
-- fact-level evaluation against adjudicated target;
-- severe errors on urgency, health, notification, and deadlines surfaced separately.
+- a replaceable model or hybrid canonicalizer reads only the observable package;
+- every consequential fact has source provenance;
+- unsupported-fact and conflict-handling gates pass;
+- output conforms to the canonical schema;
+- deterministic reference state remains available as an oracle, not hidden input.
 
 ### Process and evidence
 
-- full graph instantiated from canonical facts and approved playbook, not copied by category;
-- current state and blocked downstream decisions correct;
-- evidence derived from node and fact;
-- no present sufficient evidence requested again;
-- conditional evidence activates only on its branch;
-- static process-library and direct-checklist baselines included.
+- complete graph generated or instantiated from the canonical state;
+- every evidence item links to node, fact, reason, and current source state;
+- no repeat requests;
+- alternatives and conditional items represented;
+- graph and checklist pass deterministic validators.
 
-### Law
+### Law and precedent
 
-- official source registry versioned;
-- passages retrieved and cited exactly;
-- operational interpretation separated from source;
-- qualified reviewer approves or corrects the claim-specific implications.
+- official-source passages versioned and linked to decisions;
+- operational interpretations reviewed by a qualified Swiss tenant-law expert;
+- prior cases retrieved without self- or source-family leakage;
+- relevance reasons shown.
 
-### Review and learning
+### Expert review
 
-- independent qualified expert edits the graph/evidence artifact;
-- reviewed case stored durably;
-- one case does not auto-promote a shared rule;
-- candidate support is computed from real reviewed memories;
-- target and protected manifests execute, not hard-code;
-- approval and rollback are transactional and auditable.
+- at least two qualified reviewers independently review the graph and evidence model;
+- corrections are typed and source-grounded;
+- disagreements are adjudicated or represented as alternatives;
+- review time and edit distance recorded.
 
-### Reuse
+### Learning and reuse
 
-- second claim is unseen before freeze;
-- reviewed memory and approved playbook source are shown;
-- before/after difference comes from actual pipeline outputs;
-- no invented benefit;
-- protected cases remain unchanged.
+- reviewed case memory saved to durable storage;
+- one candidate patch remains quarantined unless genuine support threshold is met;
+- a second unseen claim retrieves the reviewed memory;
+- any process or evidence effect is derived from the actual pipeline, not hard-coded;
+- before/after is auditable.
 
-### Product and release
+### Engineering and product
 
-- one uninterrupted silent demo answers the ten comprehension questions;
-- deterministic tests, fact tests, graph/evidence tests, browser QA, and deployment smoke pass;
-- one release manifest records all component SHAs and versions;
-- persistence survives service restart;
-- retained screenshots, recording, reports, and hashes are published.
+- backend tests target the deployed pipeline;
+- focused Playwright gate is fixed in master;
+- local uninterrupted run passes;
+- frontend, API, QA, and benchmark release manifest record exact SHAs;
+- one production deployment after candidate freeze;
+- no console, page, or request failures;
+- 320 px and 390 px remain overflow-free;
+- one first-time viewer can explain the lifecycle without narration.
 
-## 22.4 Do not work on until this passes
+## 22.3 What not to work on before this milestone
 
-- more claim categories;
-- a larger claim browser;
-- new agent types;
-- another orchestration framework;
-- a new frontend redesign;
-- more metrics or report pages;
-- generalized process mining;
-- paper expansion beyond evidence supported by the milestone;
-- production integrations;
-- or a v21 patch layer.
+Do not:
+
+- add claim categories;
+- rebuild a broad claims inbox;
+- add more agent types;
+- add dashboards or metrics;
+- create another process visualization;
+- introduce `live-v21-*`;
+- refactor the entire repository;
+- design a general process-mining platform;
+- run large live-model sweeps;
+- write release announcements;
+- or claim real-world benefit.
 
 ---
 
 # 23. First 60 minutes
 
-## First 10 minutes — read truth before code
+## First 10 minutes: understand the truth boundary
 
 Read:
 
-1. this file through Sections 3, 20, and 22;
+1. this file;
 2. `casepath/index.html`;
-3. `casepath-api/casepath_api/app.py`;
-4. the opening, execution, review, and consolidation parts of `pipeline_v15.py`;
-5. `casepath-api/casepath_api/data.py`;
-6. `casepath-qa/browser-focused-v20.mjs`.
+3. `casepath/assets/live-v20-focus.js`;
+4. `casepath-api/casepath_api/app.py`;
+5. `casepath-api/casepath_api/pipeline_v15.py`;
+6. `casepath-api/casepath_api/data.py`;
+7. `casepath-api/casepath_api/storage.py`;
+8. `casepath-qa/browser-focused-v20.mjs`.
 
-Be able to say:
+Be able to state:
 
-- public v20 is a deterministic reference demo;
-- 150 claims and 48 journeys are separate research assets;
-- process→fact→evidence is the central contract;
-- current biggest blocker is validity and alignment, not missing UI.
+- public product has two generated claims;
+- public pipeline is deterministic;
+- public graph is 11-stage and handcrafted;
+- evidence is node/fact linked;
+- memory is SQLite and ephemeral;
+- the hardened research benchmark is separate;
+- live Nemotron is not current.
 
-## Next 15 minutes — run current code
+## Next 15 minutes: run the API and frontend locally
+
+From a clean clone:
 
 ```bash
 git clone https://github.com/KumarNavish/KumarNavish.github.io.git
 cd KumarNavish.github.io
+
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r casepath-api/requirements.txt
-bash casepath-api/render-build.sh
-PORT=8000 bash casepath-api/start.sh
+python -m pip install --upgrade pip
+python -m pip install -r casepath-api/requirements.txt
+
+python casepath-api/generate_artifacts.py
+PYTHONPATH=casepath-api \
+CASEPATH_DB_PATH=/tmp/casepath-local.db \
+uvicorn casepath_api.app:app --host 127.0.0.1 --port 8000
 ```
 
 In a second terminal:
 
 ```bash
-python3 -m http.server 8080 --directory casepath
+python3 -m http.server 4173 --directory casepath
 ```
 
 Open:
 
 ```text
-http://localhost:8080/?api=http://localhost:8000
+http://127.0.0.1:4173/?api=http%3A%2F%2F127.0.0.1%3A8000
 ```
 
-Check:
+Notes:
+
+- `render-build.sh` downloads or verifies licensed photo replacements; use it when reproducing the Render build.
+- Generated local photos may differ if the replacement step is skipped.
+- Do not use production API for local destructive tests.
+
+## Next 15 minutes: inspect product states
+
+Verify manually:
+
+1. claim message and six attachments;
+2. lease PDF pages;
+3. image;
+4. “Analyse claim”;
+5. source-level events;
+6. graph takes over;
+7. causation is current;
+8. evidence status on nodes;
+9. three precedents;
+10. document needs derived from graph;
+11. review delta;
+12. learning summary;
+13. later-claim before/after.
+
+Open the audit trail and distinguish deterministic reference event metadata from model inference.
+
+## Next 20 minutes: reproduce and repair the gate
+
+Install QA dependencies:
 
 ```bash
-curl -s http://localhost:8000/healthz
-curl -s http://localhost:8000/api/demo
-curl -s -X POST http://localhost:8000/api/demo/reset
+cd casepath-qa
+npm install --no-audit --no-fund
+npx playwright install chromium
 ```
 
-## Next 15 minutes — inspect product states
-
-- inspect the customer message;
-- open the lease, photograph, and extraction view;
-- click `Analyse claim`;
-- watch actual events;
-- inspect causation, evidence status, law markers, and precedents;
-- review the evidence-order choice;
-- approve;
-- inspect memory/learning;
-- run the later claim.
-
-Do not use a pre-opened result route.
-
-## Next 20 minutes — audit alignment
-
-Create a one-page discrepancy list:
+Before running the current master gate, repair these known assumptions:
 
 ```text
-what the UI shows
-what pipeline_v15 computes
-what the hardened benchmark evaluates
-what archived papers claim
-what qualified experts have actually validated
+still-needed → needed
+do not hard-code causation for the first document item
+assert immutable v20 release meta/asset rather than mutable legacy global
 ```
 
-Then recover:
+Run against local services first. Then run against production only after local success.
 
-- hardened benchmark manifest;
-- split IDs;
-- checksums;
-- exact report versions;
-- archived LangChain/provider source if needed;
-- and the QA-only fixes behind the retained 57/57 pass.
+Compare:
 
-Run the focused QA only after repairing its stale assumptions. Do not weaken product-level assertions.
+- screenshots;
+- DOM assertions;
+- run IDs;
+- API result objects;
+- console, page, and request errors;
+- reset behavior.
 
-> **Do not modify code until you can explain the complete current lifecycle and the main unresolved product/research problem in your own words.**
+Do not modify product code until you can explain:
+
+```text
+observable package
+→ reference events
+→ claim state
+→ legal context
+→ process graph
+→ evidence model
+→ precedents
+→ expert correction
+→ memory and candidate
+→ later claim
+```
 
 ---
 
 # 24. Glossary
 
-| Term | CasePath meaning |
-|---|---|
-| Observable Claim Package | Customer-visible intake material genuinely available at the current episode: message, files, and intake metadata, excluding hidden labels and future evidence |
-| Canonical Claim State | Typed, source-grounded representation of supported, alleged, conflicting, and unknown facts derived only from observable material |
-| Process Graph | Complete decision and action structure for handling a claim family or instance, including branches, dependencies, ownership, and terminal states |
-| Process Instance | Claim-specific instantiation and current overlay of an approved process graph from this claim's facts, law, and evidence |
-| Evidence Requirement | A factual goal and acceptable evidence alternatives needed to resolve a specific process question |
-| Document Checklist | Derived operational list of available, missing, conditional, insufficient, and not-applicable evidence or document items |
-| Reviewed Case Memory | Versioned record of one expert-reviewed claim, its source context, process path, evidence state, correction, and reviewer provenance |
-| Playbook | Approved reusable process, conditions, evidence rules, source links, ownership, version, and rollback metadata |
-| Candidate Knowledge Patch | Quarantined proposed change inferred from reviewed evidence; not active until target/protected gates and approval pass |
-| Protected Regression Set | Cases, policy versions, branches, and safety constraints that a candidate change must not damage |
-| Agent | Replaceable specialist implementation that proposes one canonical artifact under a typed contract; may be deterministic or model-driven |
-| Orchestrator | Component that manages shared claim context, stage order, artifact handoffs, retries, and audit; it is not authority over release gates |
-| Expert Review | Human validation or correction of the actual process/evidence reasoning artifact, with provenance and downstream delta |
-| Knowledge Consolidation | Deterministic and reviewed separation of immediate case memory from candidate reusable knowledge, followed by testing, approval, versioning, and rollback |
+## Observable Claim Package
+
+The customer message, submitted artifacts, and allowed intake metadata genuinely available to the downstream system. It excludes reference labels and generation provenance.
+
+## Canonical Claim State
+
+A typed, source-linked representation of facts, values, states, confidence, conflicts, and provenance derived from the observable package. It does not contain the final process or checklist answer.
+
+## Process Graph
+
+A versioned directed representation of handling decisions, steps, branches, conditions, owners, and terminal states.
+
+## Process Instance
+
+The complete graph plus the current claim overlay: completed, current, blocked, conditional, inactive, and available decisions.
+
+## Evidence Requirement
+
+A statement of what evidence could establish a fact required by a process decision. It is not synonymous with a filename.
+
+## Document Checklist
+
+A user-facing operational projection of applicable evidence requirements, grouped by current state. It must remain traceable to process decisions and facts.
+
+## Reviewed Case Memory
+
+A versioned record of one expert-reviewed claim, including source package, canonical state, process path, evidence state, corrections, reviewer status, and provenance. It may immediately support retrieval.
+
+## Playbook
+
+A versioned organizational representation of allowed handling structure and decision logic for a defined scope, including evidence relationships, sources, alternatives, and rollback.
+
+## Candidate Knowledge Patch
+
+A quarantined proposal to modify a playbook based on reviewed evidence. It is not shared knowledge until promotion gates pass.
+
+## Protected Regression Set
+
+A frozen collection of ordinary, edge, negative, and safety-critical cases used to ensure that a proposed change does not damage existing valid behavior.
+
+## Agent
+
+A bounded component that proposes one typed artifact or operation. An agent may be model-driven, deterministic, or hybrid; the implementation must be declared.
+
+## Orchestrator
+
+The component that coordinates stage order, shared context, retries, pauses, and artifact handoffs. It does not exempt stage outputs from validation.
+
+## Expert Review
+
+A qualified human’s structured validation or correction of facts, process, evidence, sources, or alternatives. Simulated review must not be called expert validation.
+
+## Knowledge Consolidation
+
+The controlled transformation of a reviewed case into immediate case memory and, where supported, a quarantined candidate reusable rule.
 
 ---
 
-# 25. Operating rules for future agents
+# 25. Operating rules for future collaborators
 
-## 25.1 Preserve truth boundaries
+## 25.1 Preserve judgment, not just code
 
-Always state whether a result is current, archived, generated, simulated, model-driven, deterministic, expert-reviewed, or merely planned. Never silently upgrade a status.
+Before implementing, write down:
 
-## 25.2 Keep observable and hidden data physically separate
+- which project layer you are changing;
+- what evidence currently supports it;
+- what failure it addresses;
+- what invariant must not change;
+- and what would falsify the improvement.
 
-A prompt instruction is not enough. Use separate paths, schemas, processes, access controls, and leakage tests.
+## 25.2 Do not claim more than the artifact supports
 
-## 25.3 Start from the strong baseline
+Use these phrases precisely:
 
-Every research comparison should include:
+- “generated reference,” not “ground truth,” unless expert-adjudicated;
+- “deterministic reference agent,” not “LLM agent”;
+- “official source linked,” not “legally validated”;
+- “simulated review,” not “expert review”;
+- “browser-verified,” not “user-validated”;
+- “generated interaction simulation,” not “customer savings”;
+- “candidate patch,” not “learned organizational rule.”
 
-- category template;
-- static process library;
-- direct plan/checklist model with equal information;
-- process-grounded method;
-- and, where relevant, oracle-fact mechanism track.
+## 25.3 One source of truth per object
 
-Do not manufacture novelty by omitting the static library.
+For each release, identify one authoritative file for:
 
-## 25.4 Report mechanism and end-to-end performance separately
+- product version;
+- API version;
+- schema version;
+- benchmark version;
+- playbook version;
+- deployment SHA;
+- model ID;
+- and evaluation manifest.
 
-Use:
+Current project state violates this rule. Fix it before the next release.
+
+## 25.4 Do not rebuild solved infrastructure
+
+Reuse:
+
+- source viewer;
+- page rendering;
+- process graph renderer;
+- node/fact/evidence contracts;
+- event stream;
+- review-to-memory lifecycle;
+- browser recording;
+- responsive layout;
+- build-time artifact generation;
+- and deterministic validation patterns.
+
+Do not spend research time replacing them unless they block the milestone.
+
+## 25.5 Do not hide failures behind polish
+
+A polished two-pane UI cannot compensate for:
+
+- predefined facts;
+- static law mapping;
+- hard-coded process graphs;
+- unverified model calls;
+- ephemeral memory;
+- or missing expert validity.
+
+Keep uncomfortable facts in the interface audit and in research reports.
+
+## 25.6 Separate mechanism and end-to-end tracks
+
+Mechanism track:
 
 ```text
-reference canonical facts → process/evidence mechanism quality
-predicted canonical facts → end-to-end quality
+adjudicated canonical state
+→ process/evidence/retrieval/learning
 ```
 
-Report the gap and highest-impact fact errors.
+End-to-end track:
 
-## 25.5 Treat severe safety failures separately
+```text
+raw message and files
+→ canonical state
+→ process/evidence/retrieval/learning
+```
 
-Averages must not hide:
+Report both. If the mechanism works and end-to-end fails, the canonicalizer is the bottleneck. Do not obscure that with one aggregate score.
 
-- urgency miss;
-- health-risk miss;
-- wrong jurisdiction;
-- unsupported legal implication;
-- critical evidence omission;
-- premature readiness;
-- false shared-rule activation;
-- or protected regression.
+## 25.7 Freeze before confirmatory evaluation
 
-## 25.6 No shared learning from one case
+Before accessing a confirmatory set, freeze:
 
-One approved case becomes memory. Shared change requires repeated compatible support, target evaluation, protected regression, approval, versioning, and rollback.
+- schema;
+- process registry;
+- document registry;
+- prompt;
+- model;
+- provider;
+- method;
+- hyperparameters;
+- split;
+- metrics;
+- thresholds;
+- and analysis plan.
 
-## 25.7 No sideways product work
+## 25.8 Treat deployment as verification, not design
 
-Before any change ask:
-
-> Does this make the flagship lifecycle more truthful, understandable, useful, or valid?
-
-If not, do not do it now.
-
-## 25.8 No deployment during active redesign
-
-Work locally, capture every major state, run the uninterrupted demo, freeze the candidate, deploy once, and apply only deployment-specific fixes.
+- Design locally.
+- Capture visual states.
+- Run full local demo.
+- Freeze candidate.
+- Deploy once.
+- Fix only deployment defects.
+- Record exact SHAs.
+- Preserve the failed and passing QA artifacts.
 
 ## 25.9 Avoid another architecture reset
 
-The project has already explored static playbooks, deterministic compilers, retrieval, rule induction, program synthesis, durable state graphs, LangChain agents, provider abstraction, and several orchestration narratives. The next milestone needs empirical truth and expert validation, not another framework.
+The project has already explored:
 
-## 25.10 Final self-test
+- static playbooks;
+- deterministic compilers;
+- retrieval;
+- rule induction;
+- verified synthesis;
+- durable state graphs;
+- LangChain specialist agents;
+- and front-end orchestration narratives.
 
-Before modifying code, answer:
+The next milestone needs empirical truth and expert validation, not another orchestration framework.
+
+## 25.10 Final self-test before modifying code
+
+A new collaborator must be able to answer:
 
 1. What is the real problem?
 2. Which current component is deterministic?
@@ -1909,78 +3509,503 @@ Before modifying code, answer:
 9. What did the expert correction change?
 10. What is saved immediately?
 11. What remains quarantined?
-12. Which results are generated-reference only?
+12. What exact result is generated-reference only?
 13. Which current tests are misaligned?
 14. What is the next milestone?
-15. Which tempting work is out of scope?
+15. Which tempting work is explicitly out of scope?
 
 If any answer is unclear, do not begin a broad code change.
 
----
 
-## Evidence registry
 
-### Current product
+# Appendix A: evidence and artifact registry
 
-- [`casepath/index.html`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath/index.html)
-- [`casepath/assets/live-v20-focus.js`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath/assets/live-v20-focus.js)
-- [`casepath/assets/live-v20-focus.css`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath/assets/live-v20-focus.css)
-- [`casepath-api/casepath_api/app.py`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath-api/casepath_api/app.py)
-- [`casepath-api/casepath_api/pipeline_v15.py`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath-api/casepath_api/pipeline_v15.py)
-- [`casepath-api/casepath_api/data.py`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath-api/casepath_api/data.py)
-- [`casepath-api/casepath_api/storage.py`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath-api/casepath_api/storage.py)
-- [`casepath-api/generate_artifacts.py`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath-api/generate_artifacts.py)
-- [`casepath-api/render-build.sh`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath-api/render-build.sh)
-- [`casepath-qa/browser-focused-v20.mjs`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath-qa/browser-focused-v20.mjs)
-- [Live product](https://casepath-swiss-claim-lab.onrender.com/)
-- [Live API](https://casepath-agentic-api.onrender.com/)
-- [Canonical QA](https://casepath-guided-canonical-qa.onrender.com/)
-- [Frozen product commit `a867bb5`](https://github.com/KumarNavish/KumarNavish.github.io/commit/a867bb506d8e3f790806fc21f2a24a011c1cd0bc)
+## A.1 Current product sources
 
-### Known critical defects
-
-1. Release markers disagree across HTML, API, `release.json`, and `source-manifest.json`.
-2. Retained QA passes on a QA-only patch not fully merged into product master.
-3. Backend tests target legacy `pipeline.py` rather than deployed `pipeline_v15.py`.
-4. API build does not run an aligned v15 unit suite.
-5. SQLite persistence is ephemeral.
-6. Public facts, graph, evidence, law, and promotion are deterministic reference output.
-7. Legal grounding lacks qualified review.
-8. No independent expert validation exists.
-9. No real-world transfer evaluation exists.
-10. Current artifacts leak generated-demo markers and are not benchmark-clean.
-11. Layered frontend architecture is fragile.
-12. No user-comprehension evidence exists.
-13. Original benchmark source commit provenance is unresolved.
-14. Archived metric snapshots disagree.
-15. Several Nemotron IDs occur without one current validated profile.
-16. Some papers assume supplied workflow topology while product language says process discovery.
-
----
-
-## Capability claim matrix
-
-| Topic | Allowed wording now | Forbidden wording now |
+| Artifact | Location | What it establishes |
 |---|---|---|
-| Product | Live browser-verified research demonstration | Production claim-handling system |
-| Agents | Typed reference-agent stages emit real backend events | Nemotron agents handled the claim |
-| Documents | Generated source artifacts are inspectable | Real customer documents |
-| Process | Demo constructs and displays a complete reference process graph | System learned the true process |
-| Evidence | Reference evidence is linked to decisions and facts | System proved legally required documents |
-| Law | Official-source references are linked to nodes | Workflow is legally validated |
-| Precedents | Generated references and reviewed demo memory are retrieved | Production historical claims improve decisions |
-| Review | Structured demo correction changes downstream artifacts | Experts validated the method |
-| Learning | Demo illustrates memory and generated v4 promotion | Organization safely learned a new rule |
-| Benefit | Generated simulation reduced unnecessary requests | CasePath reduces customer follow-up |
-| Benchmark | Generated bilingual corpus and hardened defects benchmark | Real-world benchmark |
-| Reproducibility | Specific archived releases reported internal verification | Current integrated system is independently reproduced |
-| Live model | Historical OpenRouter and Nemotron integration exists | Current deployment runs Nemotron |
+| Frontend entry | [`casepath/index.html`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath/index.html) | v20 release meta, intentional loading shell, two-pane structure, loaded layered assets |
+| Focus behavior | [`live-v20-focus.js`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath/assets/live-v20-focus.js) | graph-first moment detection, derived document sheet, focused review, learning, and later result |
+| Focus style | [`live-v20-focus.css`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath/assets/live-v20-focus.css) | one-third/two-thirds layout and removal of report framing |
+| API | [`app.py`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath-api/casepath_api/app.py) | public routes and import of `pipeline_v15` |
+| Deployed pipeline | [`pipeline_v15.py`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath-api/casepath_api/pipeline_v15.py) | deterministic full lifecycle |
+| Public data | [`data.py`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath-api/casepath_api/data.py) | two claims, nine artifacts, static law and historical cases |
+| Storage | [`storage.py`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath-api/casepath_api/storage.py) | SQLite tables and ephemeral default |
+| Artifact generation | [`generate_artifacts.py`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath-api/generate_artifacts.py) | generated PDFs, emails, and image construction |
+| Build | [`render-build.sh`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath-api/render-build.sh) | photo replacement, hashes, and smoke test |
+| Focused gate | [`browser-focused-v20.mjs`](https://github.com/KumarNavish/KumarNavish.github.io/blob/master/casepath-qa/browser-focused-v20.mjs) | desired uninterrupted product assertions |
+| Live product | <https://casepath-swiss-claim-lab.onrender.com/> | deployed v20 experience |
+| Live API | <https://casepath-agentic-api.onrender.com/> | deployed reference API |
+| Canonical QA | <https://casepath-guided-canonical-qa.onrender.com/> | retained browser evidence |
+| Product commit | [`a867bb5`](https://github.com/KumarNavish/KumarNavish.github.io/commit/a867bb506d8e3f790806fc21f2a24a011c1cd0bc) | frozen focused product baseline |
+
+## A.2 Original-corpus sources
+
+The following were inspected as archived research artifacts rather than current default-branch files:
+
+- `corpus-audit-v2.json`
+- benchmark application pack and research brief
+- `experiment-results.json`
+- generated-plan reports
+- source tree manifest
+- benchmark package release reports
+
+Key identifiers:
+
+```text
+contract: casepath.private-candidate-corpus/2.0.0
+claims: 150
+files: 2,251
+corpus SHA-256:
+84d827d30c8688c3e0ccfc71d89a3d64e96048eb2d2e43c32dd719a54209e966
+reported source commit:
+7bebdf3f9fc35641ee91262f61180b27362e99cc
+```
+
+The source commit was not found in the inspected GitHub repository. Recover its actual origin before relying on commit-based reproducibility.
+
+## A.3 Hardened vertical-slice sources
+
+Archived research artifacts:
+
+- `manifest.json`
+- `benchmark.py`
+- deep-recovery report
+- `experiment-report.md`
+- adaptation comparison report
+- error-propagation report
+- interaction-simulation report
+- simulated-pilot analysis
+- `run_all.py`
+- `bootstrap_and_verify.sh`
+- browser smoke report
+- release manifest and checksums
+- expert-review package and preregistered plan
+
+Key identifier:
+
+```text
+contract:
+casepath.defects-vertical-slice-benchmark/1.0.0
+```
+
+## A.4 Historical model-driven sources
+
+Archived sources:
+
+- `langchain_agents.py`
+- historical `app.py` reporting LangChain/LangGraph runtime
+- call-budget plan
+- model profiles
+- old premium-minimal embedded release
+- CasePath v3/v8 execution prompts
+
+They establish that a model-driven architecture was implemented in another project generation. They do not establish that it is present in current master or live.
+
+## A.5 Paper and research-formulation artifacts
+
+Several paper generations exist:
+
+- claim-readiness planning;
+- process-grounded claim readiness;
+- executable playbook induction;
+- certified contrasts and literal-support audit;
+- governed replacement;
+- ICLR collaboration drafts.
+
+They should be read as research-design history. Some explicitly state that workflow topology is supplied rather than discovered. Do not use them as proof that the current public product implements their full method or experiments.
+
+---
+
+# Appendix B: known defects and contradictions
+
+## B.1 Critical truth and release defects
+
+### B1. Current release markers disagree
+
+```text
+HTML: 20.0.0
+API: 15.0.0
+release.json: 12.0.2
+source-manifest.json: 10.0.0
+```
+
+**Impact:** a new agent cannot determine release truth from repository metadata.
+
+**Fix:** create a single generated release manifest containing product, API, QA, benchmark, schema, model, and deployment SHAs. Make old files clearly historical or regenerate them.
+
+### B2. Current default-branch QA does not reproduce the retained pass without patches
+
+**Impact:** a clean clone may fail even though the hosted canonical QA is green.
+
+**Root causes observed:**
+
+- stale `still-needed` selector;
+- hard-coded causation return;
+- mutable legacy global used as release marker.
+
+**Fix:** merge corrected production gate into product master, run locally and on canonical QA, and store report hash.
+
+### B3. Backend unit tests target the wrong pipeline
+
+`casepath-api/tests/test_pipeline.py` imports `pipeline.py`; `app.py` imports `pipeline_v15.py`.
+
+**Impact:** a passing unit test would not prove deployed pipeline behavior.
+
+**Fix:** rewrite or parameterize tests against `pipeline_v15`. Keep legacy tests in a clearly named legacy folder if needed.
+
+### B4. API build does not run the aligned test suite
+
+`render-build.sh` runs a direct smoke, not pytest against v15.
+
+**Impact:** regressions may deploy if the browser gate is not manually triggered.
+
+**Fix:** run fast v15 unit tests in API build or CI; keep long browser gate separate.
+
+### B5. Persistence is ephemeral
+
+SQLite defaults to `/tmp`.
+
+**Impact:** runs, reviews, memory, candidates, and playbook state may disappear on restart; no real pilot durability.
+
+**Fix:** PostgreSQL, migrations, backups, transactional update and rollback.
+
+## B.2 Research-validity defects
+
+### B6. Public facts and outputs are predefined
+
+**Impact:** the product demonstrates interaction but not model reasoning.
+
+**Fix:** bounded model-backed canonicalizer with source validation; preserve deterministic oracle.
+
+### B7. Public process graph is handcrafted
+
+**Impact:** no evidence of claim-specific process inference.
+
+**Fix:** evaluate instantiation from adjudicated and model canonical states.
+
+### B8. Legal RAG is static and unapproved
+
+**Impact:** cannot claim current legal retrieval quality or legal correctness.
+
+**Fix:** versioned official-source corpus, retrieval evaluation, qualified review.
+
+### B9. Public knowledge promotion is hard-coded generated reference
+
+**Impact:** v3→v4 is a lifecycle story, not proof of safe learning.
+
+**Fix:** run actual target/protected manifests and keep candidate quarantined until gates pass.
+
+### B10. No qualified expert validation
+
+**Impact:** process, evidence, law, and review usability remain unvalidated.
+
+**Fix:** independent review, adjudication, and release of disagreement-aware targets.
+
+### B11. No real-world transfer evaluation
+
+**Impact:** generated performance cannot support operational claims.
+
+**Fix:** approved source-isolated panel and frozen transfer study.
+
+### B12. Artifact generation leaks “generated” markers
+
+**Impact:** current files cannot serve as leakage-clean benchmark inputs.
+
+**Fix:** separate public-demo disclosure shell from evaluated artifact bytes; remove answer-bearing metadata.
+
+## B.3 Engineering and product defects
+
+### B13. Layered frontend architecture is fragile
+
+v16–v20 scripts and CSS all remain active.
+
+**Impact:** DOM observation, mutable markers, duplicate behavior, and selector drift.
+
+**Fix:** after milestone, consolidate into one tested runtime without changing interaction semantics.
+
+### B14. No broad claim browsing in current v20
+
+**Impact:** public product cannot demonstrate the 150-claim corpus.
+
+**Decision:** this is intentional for flagship convergence. Do not treat it as immediate blocker.
+
+### B15. Crawler-visible fallback is stale or sparse
+
+Text-only crawlers may see a JavaScript-required loading shell.
+
+**Impact:** automated web inspection may misreport current state.
+
+**Fix:** keep intentional server-rendered shell and use browser QA as acceptance. Optional progressive enhancement later.
+
+### B16. Accessibility is minimally tested
+
+**Impact:** keyboard, focus, screen-reader, contrast, and reduced-motion behavior not comprehensively validated.
+
+**Fix:** run axe, keyboard journey, focus-order tests, and screen-reader review after flagship truth milestone.
+
+### B17. No user comprehension evidence
+
+**Impact:** 57 browser checks validate mechanics, not understanding.
+
+**Fix:** silent demo review with first-time viewers and structured comprehension questions.
+
+## B.4 Data and provenance contradictions
+
+### B18. Original benchmark source commit unavailable
+
+**Impact:** Git-level reproducibility claim is incomplete.
+
+**Fix:** recover archive repository, verify manifest against commit, document supersession.
+
+### B19. Metric snapshots differ
+
+Subject-only and longitudinal results differ across reports.
+
+**Impact:** publication could accidentally mix versions.
+
+**Fix:** attach every metric to benchmark hash, split manifest, code commit, and report timestamp.
+
+### B20. Multiple Nemotron IDs
+
+**Impact:** unclear model identity and cost.
+
+**Fix:** one versioned model profile; log exact provider and model response.
+
+### B21. Papers describe supplied workflows while product narrative says process discovery
+
+**Impact:** scientific contribution can become internally contradictory.
+
+**Fix:** explicitly choose whether the experiment studies workflow induction, graph instantiation, or graph discovery.
+
+---
+
+# Appendix C: release and research evolution
+
+This timeline is conceptual. Use commit history for exact dates.
+
+## C.1 Early product concept
+
+The project began around a living library of tenant-law workflows and document checklists learned from expert traces.
+
+The initial operational story was:
+
+```text
+incomplete claim
+→ category-specific playbook
+→ tailored checklist
+→ expert correction
+→ governed update
+```
+
+Useful insight: expert behavior is procedural weak supervision.
+
+Limitation: category-level playbooks were too coarse and risked static checklisting.
+
+## C.2 Original 150-claim benchmark
+
+The project generated a large bilingual package with strong reproducibility and provenance.
+
+Successes:
+
+- 150 claims;
+- 2,251 files;
+- canonical artifacts;
+- deterministic rebuild;
+- large internal test suite.
+
+Failures discovered:
+
+- subject shortcut;
+- one process skeleton per category;
+- no longitudinal state;
+- no negative cases;
+- weak attachment density;
+- generated labels.
+
+Decision: retain as infrastructure proof and historical baseline, not decisive benchmark.
+
+## C.3 Defects vertical slice
+
+The project narrowed to defects and built longitudinal journeys, attachment-rich cases, negatives, and a withheld ventilation pattern.
+
+Successes:
+
+- harder intake task;
+- claim-specific process variation;
+- staged evidence;
+- negative scope;
+- three-valued process logic;
+- sparse adaptation experiments.
+
+Decision: one strong vertical slice before broad category expansion.
+
+## C.4 Expert-ready research release
+
+The project added:
+
+- 30-case review package;
+- typed corrections;
+- disagreement-aware targets;
+- adaptation comparison;
+- error propagation;
+- interaction simulation;
+- simulated reviewer dry run;
+- reproducibility tooling.
+
+Success: scientific failure modes became explicit and executable.
+
+Boundary: still generated, simulated, and not independently expert-approved.
+
+## C.5 DurableClaimGraph and model-provider generation
+
+A later architecture emphasized:
+
+- explicit state;
+- deterministic compilers;
+- provider-independent model adapters;
+- OpenRouter Nemotron;
+- audit and persistence;
+- governed updates.
+
+Release work encountered source-transfer, deployment, persistence, live-call, and clean-room blockers.
+
+Decision: preserve contracts and safety scaffold; do not claim live model success.
+
+## C.6 LangChain agentic OS generation
+
+Another generation used LangChain `create_agent` on LangGraph runtime with specialist agents and shared context.
+
+Success: architecture matched the “team of agents” narrative.
+
+Boundary: live calls and current deployment were not consistently verified; source did not remain in current master.
+
+Decision: treat as historical implementation reference, not current truth.
+
+## C.7 Product-convergence releases v13–v20
+
+The project repeatedly redesigned the public demo:
+
+- live agent events;
+- persistent source claim;
+- process graph in main canvas;
+- evidence on graph;
+- contextual law;
+- contextual precedents;
+- expert review;
+- memory and later claim;
+- reduced report framing.
+
+v20’s main contribution is not new backend intelligence. It is product hierarchy:
+
+```text
+one source claim
++ one dominant artifact
++ one next action
+```
+
+Decision: freeze UX and pursue truth/validation.
+
+---
+
+# Appendix D: capability claim matrix
+
+Use this table when writing papers, applications, demos, or presentations.
+
+| Potential statement | Allowed wording now | Forbidden wording now |
+|---|---|---|
+| Product status | “A live browser-verified research demonstration” | “Production claim-handling system” |
+| Agent execution | “Typed reference-agent stages emit real backend events” | “Nemotron agents handled the claim” |
+| Documents | “Generated source artifacts are inspectable” | “Real customer documents” |
+| Process | “The demo constructs and displays a complete reference process graph” | “The system learned the true handling process” |
+| Evidence | “Reference evidence items are linked to process decisions and facts” | “The system proved which documents are legally required” |
+| Law | “Official-source references are linked to process nodes” | “The workflow is legally validated” |
+| Precedents | “Generated references and reviewed demo memory are retrieved” | “Historical production claims improve decisions” |
+| Review | “A structured demo correction changes downstream artifacts” | “Experts validated the method” |
+| Learning | “The demo illustrates memory and a generated v4 promotion” | “The organization safely learned a new rule” |
+| Benefit | “Generated simulation reduced unnecessary requests” | “CasePath reduces customer follow-up” |
+| Benchmark | “Generated bilingual corpus and hardened defects benchmark” | “Real-world benchmark” |
+| Reproducibility | “Specific archived releases reported clean internal verification” | “The current integrated system is independently reproduced” |
+| Live model | “Historical OpenRouter/Nemotron integration exists” | “The current deployment runs Nemotron” |
+
+---
+
+# Appendix E: adversarial handoff quality check
+
+This file was reviewed against the following questions.
+
+## E.1 Can a new agent understand the real problem?
+
+Yes: the mission, operational rationale, and process→fact→evidence dependency are stated before implementation detail.
+
+## E.2 Can a new agent distinguish current implementation from aspiration?
+
+Yes: current public deterministic reference, archived LangChain architecture, original corpus, hardened benchmark, and planned experiments are separated.
+
+## E.3 Can a new agent identify what is working?
+
+Yes: the v20 browser-verified journey, source rendering, event stream, graph, evidence linkage, review interaction, memory, and later-claim demo are listed with status.
+
+## E.4 Can a new agent identify what is simulated or generated?
+
+Yes: every research result and public lifecycle component is marked generated-reference where appropriate.
+
+## E.5 Can a new agent understand the benchmark?
+
+Yes: original corpus and hardened vertical slice have separate counts, contracts, defects, and availability.
+
+## E.6 Can a new agent understand the agent pipeline?
+
+Yes: current deterministic specialists and historical model-driven specialists have explicit contracts and status.
+
+## E.7 Can a new agent understand process, evidence, and law?
+
+Yes: canonical dependency chain and separate legal objects are explicit.
+
+## E.8 Can a new agent understand learning?
+
+Yes: reviewed memory and candidate shared knowledge are separated, with promotion gates and public-demo limitations.
+
+## E.9 Can a new agent avoid repeated failures?
+
+Yes: the “Do not rediscover” table records failed methods, UX patterns, and deployment workflow.
+
+## E.10 Can a new agent locate code?
+
+Yes: current frontend, backend, QA, build, storage, and archived research paths are mapped.
+
+## E.11 Can a new agent run the system?
+
+Yes: local API/frontend commands and known QA repairs are documented.
+
+## E.12 Can a new agent identify the biggest blocker?
+
+Yes: the current blocker is evidence validity—realistic leakage-clean flagship input, model-backed canonicalization, qualified expert review, genuine regression-backed learning, and durable storage—not missing UI functionality.
+
+## E.13 Does a new agent know exactly what to do next?
+
+Yes: Section 22 defines one milestone with completion criteria and explicit exclusions.
+
+## E.14 Hidden assumptions deliberately surfaced
+
+- “Agents” may be deterministic.
+- “RAG” may be a static registry.
+- “Reviewed” may be simulated.
+- “Learning” may be hard-coded reference output.
+- “Current release” differs by component.
+- “Benchmark” refers to multiple incompatible assets.
+- “Reproducible” may refer to an archived package, not current integrated master.
+- “Process discovery” may mean graph instantiation rather than topology discovery.
+- “Realistic” lacks blind human validation.
+- “Durable” is false for current `/tmp` SQLite.
 
 ---
 
 ## Final handoff directive
 
-Before adding code, reproduce the flagship journey, recover the hardened benchmark release, and write a one-page discrepancy list between:
+Do not begin by adding code.
+
+First reproduce the current flagship journey, recover the hardened benchmark release, and write a one-page discrepancy list between:
 
 ```text
 what the current product shows
@@ -1990,7 +4015,7 @@ what the paper claims
 what experts have actually validated
 ```
 
-Then pursue Section 22.
+Only then begin the immediate milestone in Section 22.
 
 The best next contribution is not more machinery. It is to make one lifecycle simultaneously:
 
@@ -2002,3 +4027,364 @@ The best next contribution is not more machinery. It is to make one lifecycle si
 - regression-tested;
 - durable;
 - and honestly described.
+
+---
+
+<!-- BEGIN CASEPATH IMPLEMENTATION CONVERGENCE RECORD: 2026-08-11 -->
+
+# 2026-08-11 implementation-convergence record
+
+> **Status:** source-converged candidate; deterministic checks partially complete;
+> accepted model-backed, independent-review, and deployment-alignment evidence
+> pending.
+>
+> **Authority:** the 4,029 lines above are the authoritative reconstructed
+> knowledge transfer supplied on 11 August 2026. This delimited record is a
+> point-in-time correction for the convergence worktree. Where a current-state
+> statement above conflicts with this record, use this record for the convergence
+> candidate and preserve the older statement as historical evidence.
+
+## Record scope and source identity
+
+| Field | Value |
+|---|---|
+| Canonical repository | `KumarNavish/KumarNavish.github.io` |
+| Local checkout | `/Users/kumar0002/Documents/Die Mobiliar/casepath-canonical` |
+| Canonical remote branch fetched | `origin/master` |
+| Fetched baseline at audit start | `48c216c4c3c9ce93ff970ad3a20b3fc86f3e0f99` |
+| Convergence worktree branch | `codex/casepath-convergence` |
+| Candidate source commit | **PENDING — convergence work is not yet frozen or committed** |
+| Current deployed source identity | **PENDING — not established by this worktree audit** |
+| Alignment status | **NOT PROVEN** |
+
+The source architecture, tests, and documents described below are uncommitted
+candidate state unless a later finalization record binds them to a commit. They
+must not be described as deployed merely because they exist in the checkout.
+
+## Converged source architecture
+
+The convergence candidate preserves the two generated public claims and the
+graph-first v20 journey while tightening authority boundaries:
+
+```text
+generated observable claim package
+→ deterministic reference canonicalizer by default
+  OR one bounded OpenRouter canonicalization call when explicitly enabled
+→ deterministic fact-to-decision projection
+→ static, unapproved legal-reference mapping
+→ deterministic process and evidence construction
+→ executable contract and grounding validators
+→ generated-reference precedent retrieval
+→ narrow generated-demo review
+→ unverified reviewed-case memory
+→ quarantined candidate; shared playbook v3 unchanged
+→ explicit baseline/current later-claim runs
+→ computed run-bound comparison, not a quality claim
+```
+
+The replaceable boundary is the source-linked canonical claim state. Model output
+cannot own graph integrity, process-control metadata, review authority,
+promotion, source provenance, budget enforcement, or release identity.
+`casepath-api/casepath_api/canonicalizer.py` contains the optional bounded
+adapter. `casepath-api/casepath_api/validation.py` and deterministic pipeline
+code remain authoritative for accepted artifacts.
+
+### Canonicalization modes
+
+| Mode | Current source behavior | Truth boundary |
+|---|---|---|
+| `deterministic_reference` | Default; uses the generated reference fact catalog and performs no network call | Implemented and deterministically tested; still generated-reference only |
+| `openrouter_nemotron` | Optional; one structured canonicalization request for the observable package, then deterministic merge and validation | Adapter implemented; authorized attempt 1 failed closed and is not accepted model-backed evidence |
+| Downstream process/evidence | Deterministic projection, graph construction, evidence construction, retrieval, and validators | Implemented for the two generated claims; not general model inference |
+
+The configured requested model identity is
+`nvidia/nemotron-3-ultra-550b-a55b`. One provider attempt returned usage but the
+application rejected its source-reference contract, so the release has no
+accepted model-backed execution evidence.
+
+## Backend behavior
+
+The candidate API/pipeline reports component version 15.2.0 while the frontend
+retains product version 20.0.0. These are independent component versions under
+one release contract.
+
+Implemented source behavior:
+
+- state-changing and session-state endpoints require an opaque
+  `X-CasePath-Session` identifier;
+- runs, reviews, memories, candidates, reads, and reset are scoped to the caller's
+  demo session;
+- reset preserves other sessions and the global sanitized model-call ledger;
+- the default database is still resettable SQLite and is not durable pilot
+  infrastructure;
+- review requests use bounded enums;
+- rejection creates neither reviewed memory nor a candidate;
+- an accepted generated-demo edit is labelled
+  `unverified_demo_review`/`unverified_demo_memory`;
+- one accepted edit creates support `1/3`, target tests `not_run`, protected
+  regression `not_run`, approval `pending`, and a quarantined candidate;
+- shared knowledge remains `mould-playbook-v3`;
+- later-claim proof requires two explicitly bound, distinct, completed runs:
+  baseline knowledge mode and current knowledge mode;
+- the proof reports observed result differences and reviewed-memory retrieval;
+  it does not claim improvement or shared-rule promotion;
+- validators execute against claim state, exact source grounding, law provenance,
+  process topology, evidence links, current-state projection, precedents, and
+  post-review artifacts;
+- the public model ledger exposes only a fixed sanitized field set and not prompt
+  or canonical-output payloads.
+
+The OpenRouter path fails closed on missing credentials, wrong response model,
+missing positive paid-usage evidence, invalid structured output, hallucinated or
+wrong-page quotations, incomplete conflicting-source sets, and cumulative cost
+guard violations. Its default cumulative cap is USD 25 and can only be
+configured downward. These are implementation and mocked-test facts, not proof
+of an accepted model-backed run. The retained first attempt failed closed on an
+exact-private-reference mismatch and bound no successful ledger call.
+
+## Frontend behavior
+
+The source candidate keeps the focused v20 visual journey and removes
+success-biased learning claims:
+
+- one immutable static v20 release marker replaces competing timed release
+  writes;
+- the core renderer emits explicit `casepath:render` transitions;
+- the 11-node main spine remains the default reading path;
+- every non-spine node, branch, and graph edge is inspectable through progressive
+  disclosure in the main workspace;
+- decision facts render every typed source reference, locator, agent, state, and
+  confidence, with source-to-fact and fact-to-source navigation;
+- document needs derive their owning decision structurally;
+- the review view renders the actual graph/evidence delta;
+- missing candidate proof is not replaced by passing defaults;
+- the learning view says the reviewed memory is unverified, the candidate is
+  quarantined at one of three, evaluations have not run, and shared v3 is
+  unchanged;
+- the PDF viewer includes extracted-text search, WAI-ARIA tab behavior,
+  busy-state clearing, modal focus management, and focus restoration;
+- compact mobile provenance and graph controls remain present in source.
+
+This record does not claim that those interactions have passed the current
+Playwright journey or a deployed browser run.
+
+## QA behavior
+
+`casepath-qa/browser-focused-v20.mjs` is now the canonical focused gate in
+source. It includes:
+
+- an explicit opt-in before mutating non-local services;
+- frontend/API/QA release-ID and non-unknown source-commit equality checks for
+  production;
+- caller-session isolation and cross-session denial checks;
+- complete process-node and edge coverage;
+- exact text-quote, metadata, and visual-observation grounding checks;
+- derived document-owner navigation;
+- rejection/quarantine/shared-v3 truth checks;
+- baseline/current run-bound later-claim proof;
+- sanitized model-ledger inspection;
+- serious/critical axe checks, keyboard/focus checks, and responsive overflow
+  checks;
+- evidence retention plus reset/cleanup in `finally`.
+
+For a non-local run, the gate requires one cold visible flagship orchestration
+with all six successful paid OpenRouter/Nemotron ledger records bound to the
+journey, including exact response models, distinct response and call IDs,
+positive token counts, positive actual cost, strict accepted majorities, and
+all three passed deterministic gates. This record does not contain a passing
+production QA artifact pair; the four retained authorized attempts remain
+failed-closed history and do not satisfy the production condition.
+
+## Release and artifact behavior
+
+`casepath/release.json` remains the static release criteria contract. Contract
+2.1 deliberately embeds neither a source commit nor a mutable production
+runtime verdict: recording a post-QA `passed` result in source would create a
+new commit that the QA run did not test. Current runtime truth is decided only
+from one atomic, same-commit `report.json` and `evidence-manifest.json` pair.
+The tracked truth fields are therefore:
+
+```text
+generated_data_only: true
+deterministic_build.status: passed
+deterministic_build.execution_mode: deterministic_reference
+deterministic_build.model_calls: 0
+deterministic_build.model_backed: false
+production_runtime_acceptance.verdict_authority: dynamic_same_commit_qa_artifacts
+production_runtime_acceptance.source_contract_embeds_runtime_verdict: false
+production_runtime_acceptance.required_mode: openrouter_nemotron
+production_runtime_acceptance.dynamic_evidence.report_path: report.json
+production_runtime_acceptance.dynamic_evidence.evidence_manifest_path: evidence-manifest.json
+historical_model_validation.scope: failed_closed_history_only
+historical_model_validation.establishes_current_runtime_acceptance: false
+independent_expert_review: false
+blind_review_completed: false
+legal_approval: false
+operational_validation: false
+real_claims_approved: false
+source_identity.authority: dynamic_same_commit_qa_artifacts
+source_identity.source_contract_embeds_commit: false
+```
+
+The release tooling inventories source, browser gates, and model-visible
+artifacts; builds a separate deployment identity; verifies scenario-date
+ordering; checks deterministic artifact hashes; and scans PDF text/metadata,
+email content/headers, image metadata, and raw bytes for construction markers.
+The application shell retains the generated-data disclosure while evaluated
+artifact bytes are isolated from that disclosure.
+
+A mechanical leakage scan is not a blind realism result. The generated documents
+remain research inputs until independent review is completed.
+
+The external hardened benchmark ZIP is not copied into this repository. The
+repository stores its SHA-256 sidecar and a release record that preserves:
+
+- 2,581 internally hash-verified archive files;
+- 1,721 passing tests in a recovered clean environment;
+- an unresolved declared source commit;
+- generated/simulated-only truth status;
+- and the inherited non-idempotent 195-PNG preview rebuild failure.
+
+That record improves provenance; it does not turn the archive into expert truth
+or a current production benchmark.
+
+## Generated-only and unverified boundary
+
+| Surface | Allowed current statement | Still not established |
+|---|---|---|
+| Claims and source artifacts | Two generated research claims with deterministic, hash-bound artifacts | Real-claim validity or operational representativeness |
+| Canonical claim state | Deterministic reference path is implemented; one bounded model adapter and one failed-closed attempt record exist | Accepted call-bound model-backed canonicalization |
+| Law | Official-source references and unapproved operational mappings are linked | Qualified Swiss-law approval |
+| Process and evidence | Typed graph/evidence contracts and validators run for two reference claims | General claim-specific inference or legal correctness |
+| Precedents | Static generated references plus explicitly unverified demo memory | Reviewed production-history retrieval |
+| Review | A constrained generated-demo edit is recorded and revalidated | Qualified expert review |
+| Learning | Memory retrieval and a quarantined `1/3` candidate are demonstrated | Shared-rule promotion, fresh target tests, or protected regression |
+| Persistence | Caller-session isolation exists in resettable SQLite demo storage | Durable, tenant-authorized pilot persistence |
+| QA | Canonical gate source and deterministic syntax exist | Current uninterrupted Playwright pass or production evidence |
+| Release | Contract and identity tooling exist | Frozen deployed commit or frontend/API/QA alignment |
+
+## Deterministic validation recorded in this audit
+
+Commands were run against the unfrozen convergence worktree on 11 August 2026:
+
+| Command | Result |
+|---|---|
+| `PYTHONPATH=casepath-api python -m pytest -q casepath-api/tests` | **57 passed** |
+| `python -m pytest -q casepath/tools/test_build_deployment_identity.py` | **2 passed** |
+| `python -m pytest -q casepath/tools/test_casepath_release.py -k 'not test_release_contract_and_manifests_are_current'` | **10 passed, 1 deselected** |
+| Combined backend/release-tool run before final source-manifest regeneration | **69 passed, 1 failed**; the only failure was exact source-manifest currency after concurrent source edits |
+| `node --check casepath-qa/browser-focused-v20.mjs` | **passed** |
+| `node --check casepath/assets/live-v16.js` | **passed** |
+| `node --check casepath/assets/live-v20-focus.js` | **passed** |
+
+The source-manifest mismatch is not waived. Finalization must regenerate the
+manifest after all source changes, run the complete deterministic suite without
+deselection, and record the resulting manifest hash.
+
+Not run by this documentation audit:
+
+- current uninterrupted local Playwright journey;
+- current 320 px and 390 px visual acceptance;
+- current production Playwright journey;
+- independent blind realism review;
+- qualified claim-process or Swiss-law review;
+- accepted paid model retry after the retained failed-closed attempt;
+- durable-storage migration/rollback;
+- aligned Render deployment.
+
+The 57/57 browser result described earlier in this transfer belongs to the
+historical retained v20 evidence. It is not evidence for this convergence
+worktree.
+
+## Exact dynamic model evidence not yet observed by this record
+
+These point-in-time fields must be supplied by the sanitized ledger and retained
+QA artifacts before this deployment can be described as model-backed. They are
+not fields to write back into the static release contract:
+
+```text
+dynamic_runtime_acceptance_verdict: NOT_ESTABLISHED_BY_THIS_RECORD
+historical_model_validation_scope: failed_closed_history_only
+failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -04.json
+failed_attempt_id: authorized-smoke-20260811-01
+failed_attempt_application_outcome: rejected
+failed_attempt_failure_type: exact_private_reference_mismatch
+failed_attempt_successful_ledger_call_bound: false
+failed_attempt_accepted_ledger_call_id: null
+provider_observed_canonical_model_id: nvidia/nemotron-3-ultra-550b-a55b-20260604
+provider_observed_upstream_provider: DeepInfra
+provider_observed_actual_cost_usd: 0.00756
+provider_observed_prompt_tokens: 3629
+provider_observed_completion_tokens: 2625
+provider_observed_total_tokens: 6254
+provider_observed_finish_reason: stop
+accepted_retry_status: PENDING_NOT_RUN
+candidate_source_commit: PENDING
+release_id: casepath-v20-reference-20260811
+provider: openrouter
+requested_model: nvidia/nemotron-3-ultra-550b-a55b
+accepted_response_model: PENDING
+accepted_upstream_provider: PENDING
+accepted_provider_response_id: PENDING
+accepted_casepath_call_id: PENDING
+accepted_bound_run_id: PENDING
+accepted_purpose: PENDING
+accepted_prompt_tokens: PENDING
+accepted_completion_tokens: PENDING
+accepted_total_tokens: PENDING
+accepted_actual_cost_usd: PENDING
+accepted_latency_ms: PENDING
+accepted_cache_key: PENDING
+accepted_finish_reason: PENDING
+accepted_source_grounding_validation: PENDING
+accepted_whole_playbook_validation: PENDING
+accepted_retained_evidence_hash: PENDING
+```
+
+A configured credential, configured model name, mocked transport response, or
+failed-closed provider attempt is insufficient. The observed attempt values
+above document failure history only. A deployment is model-backed only when its
+passing report and hash-bound evidence manifest prove the six-role cold journey
+on the same deployed commit; no source promotion commit follows that verdict.
+
+## Exact pending deployment evidence
+
+These fields must be completed from public identity payloads and retained QA
+evidence after the candidate commit is frozen and all three services deploy that
+same commit:
+
+```text
+deployment_status: PENDING_NOT_DEPLOYED_BY_THIS_RECORD
+candidate_source_commit: PENDING
+frontend_release_id: PENDING
+frontend_source_commit: PENDING
+frontend_deployment_identity_hash: PENDING
+api_release_id: PENDING
+api_source_commit: PENDING
+api_health_payload_hash: PENDING
+qa_release_id: PENDING
+qa_source_commit: PENDING
+qa_report_status: PENDING
+qa_passed_checks: PENDING
+qa_failed_checks: PENDING
+qa_report_hash: PENDING
+qa_evidence_manifest_hash: PENDING
+frontend_deployed_at: PENDING
+api_deployed_at: PENDING
+qa_executed_at: PENDING
+cross_service_alignment: NOT_PROVEN
+```
+
+Do not substitute semantic-version equality for source identity. A release is
+aligned only when frontend, API, and QA report the same release ID and the same
+non-unknown 40-character source commit, and the retained production gate passes.
+
+## Finalization rule
+
+Before describing this convergence candidate as model-backed, deployed, or
+aligned, the same-commit dynamic QA report and evidence manifest must pass the
+release verifier and remain retained by hash. That runtime verdict does not
+modify the static release contract. Expert review, legal approval, operational
+validation, and suitability for real claims remain separate evidence gates.
+
+<!-- END CASEPATH IMPLEMENTATION CONVERGENCE RECORD: 2026-08-11 -->
