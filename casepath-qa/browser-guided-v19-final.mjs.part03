@@ -33,6 +33,8 @@
 
   await context.close();
   context = null;
+  await sleep(150);
+  check('No late browser console errors after context shutdown', failures.console.length === 0, JSON.stringify(failures.console));
   const videoPath = await video.path();
   await fs.copyFile(videoPath, path.join(OUT, 'uninterrupted-demo.webm'));
   await execFileAsync('python3', ['-m', 'pip', 'install', 'Pillow', '--quiet', '--break-system-packages'], { timeout: 180000 });
