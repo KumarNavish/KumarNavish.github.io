@@ -1,7 +1,6 @@
 (() => {
   'use strict';
 
-  const RELEASE = '19.0.0';
   const params = new URLSearchParams(location.search);
   const API = (params.get('api') || window.CASEPATH_API || 'https://casepath-agentic-api.onrender.com').replace(/\/$/, '');
   const stageDefs = [
@@ -10,8 +9,8 @@
     { id: 'research', label: 'Law', selector: '.law-flow,.v17-law-map', output: 'legal context', next: 'Process Discovery Agent' },
     { id: 'process', label: 'Process', pattern: /complete handling process is taking shape|building the handling process/i, output: 'handling process', next: 'Document Requirements Agent' },
     { id: 'evidence', label: 'Evidence', pattern: /Evidence now follows directly from the process|attaching evidence/i, output: 'evidence model', next: 'Historical Claims Agent' },
-    { id: 'experience', label: 'Experience', selector: '.precedent-inline', output: 'reviewed experience', next: 'Verification Agent' },
-    { id: 'verify', label: 'Verify', selector: '.verification-list', output: 'verified playbook', next: 'Expert review' },
+    { id: 'experience', label: 'Experience', selector: '.precedent-inline', output: 'provenance-labelled reference precedents', next: 'Verification Agent' },
+    { id: 'verify', label: 'Verify', selector: '.verification-list', output: 'verified playbook', next: 'Demo review' },
   ];
   const stageOrder = stageDefs.map(stage => stage.id);
   let scheduled = false;
@@ -93,8 +92,8 @@
   function missionFor(run, stage, kind) {
     if (kind === 'review') return 'Review the evidence-order decision that changes the process and next action.';
     if (kind === 'knowledge') return 'Separate immediately reusable case memory from a governed shared-rule release.';
-    if (kind === 'later') return 'Apply reviewed memory and playbook v4 to the unseen related claim.';
-    if (kind === 'ready') return 'Bring the process, evidence, and reviewed experience together for expert review.';
+    if (kind === 'later') return 'Check whether the unseen claim retrieves unverified demo memory without changing the shared playbook.';
+    if (kind === 'ready') return 'Bring the process, evidence, and provenance-labelled experience together for simulated demo review.';
     if (!stage) return 'Open one shared claim context for the specialist team.';
     const event = eventFor(run, stage.id);
     return event?.question || event?.headline || event?.detail || `Add ${stage.output} to the shared claim context.`;
@@ -128,7 +127,7 @@
     }
     if (activeId && !completed.includes(activeId)) history.push({ label: stage.label, state: 'active', detail: 'working now' });
     if (kind === 'ready') history.push({ label: 'Team', state: 'complete', detail: 'playbook ready' });
-    if (kind === 'review') history.push({ label: 'Expert', state: 'active', detail: 'correcting reasoning' });
+    if (kind === 'review') history.push({ label: 'Demo reviewer', state: 'active', detail: 'simulating one correction' });
     if (kind === 'knowledge') history.push({ label: 'Knowledge', state: 'active', detail: 'testing reuse' });
     if (kind === 'later') history.push({ label: 'Reuse', state: 'active', detail: 'new claim' });
     if (next && !completed.includes(next.id)) history.push({ label: next.label, state: 'next', detail: 'next' });
@@ -143,11 +142,11 @@
   }
 
   function runProcess(run) {
-    return run?.process || run?.result?.process || null;
+    return run?.result?.process || run?.process || null;
   }
 
   function runChecklist(run) {
-    return run?.checklist || run?.result?.checklist || null;
+    return run?.result?.checklist || run?.checklist || null;
   }
 
   function decorateProcessNodes(canvas, run) {
@@ -244,7 +243,7 @@
     const steps = mode === 'conditional'
       ? ['Neutral assessment first', 'Test ventilation allegation only if supported', 'Broader building testing stays conditional']
       : ['Neutral assessment', 'Request broader building testing now', 'Responsibility still waits for causation'];
-    preview.innerHTML = `<small>Process preview after this expert choice</small><div class="v19-review-path">${steps.map(step => `<span>${esc(step)}</span>`).join('')}</div>`;
+    preview.innerHTML = `<small>Process preview after this simulated choice</small><div class="v19-review-path">${steps.map(step => `<span>${esc(step)}</span>`).join('')}</div>`;
     if (form.dataset.v19ReviewBound !== 'true') {
       form.dataset.v19ReviewBound = 'true';
       form.addEventListener('change', event => {
@@ -260,7 +259,7 @@
       const copy = [
         ['Handling process', 'The claim is mapped from intake to closure. Causation is the current decision.'],
         ['Evidence linked to decisions', 'Every decision carries the facts and evidence needed to resolve it.'],
-        ['Organizational experience', 'Reviewed cases appear at the branch where their lessons matter.'],
+        ['Organizational experience', 'Returned precedents appear at the branch where they help and remain labelled by provenance.'],
       ];
       articles.forEach((article, index) => {
         if (!copy[index]) return;
@@ -277,7 +276,7 @@
       const copy = {
         process: 'The complete handling spine and its causation alternatives passed the graph validator.',
         evidence: 'Every evidence requirement points back to the decision, fact, and reason that created it.',
-        experience: 'Reviewed cases were returned for the unresolved causation and evidence-order branch.',
+        experience: 'Reference precedents were returned for the unresolved branch and labelled by provenance.',
         verify: 'Graph integrity, legal links, evidence traceability, and no-repeat requests passed.',
       }[stage];
       if (copy && build.querySelector('p')) build.querySelector('p').textContent = copy;
@@ -289,52 +288,16 @@
     const boundary = canvas.querySelector('.v18-memory-boundary');
     if (!boundary || canvas.querySelector('.v19-support-meter')) return;
     const candidate = run?.candidate || run?.result?.knowledge_update || {};
-    const supported = Math.max(1, Number(candidate.support_count || 1));
-    const required = Math.max(3, Number(candidate.required_support || 3));
+    const supported = Number(candidate.support_count);
+    const required = Number(candidate.required_support);
+    if (!Number.isFinite(supported) || !Number.isFinite(required) || required < 1) return;
     const meter = document.createElement('section');
     meter.className = 'v19-support-meter';
-    meter.innerHTML = `<div><small>Potential reusable process change</small><strong>${Math.min(supported, required)} of ${required} reviewed cases support the same evidence-order rule.</strong></div><div class="v19-support-dots" aria-label="${Math.min(supported, required)} of ${required} support cases">${Array.from({ length: required }, (_, index) => `<i data-supported="${index < supported}">${index < supported ? '✓' : index + 1}</i>`).join('')}</div>`;
+    meter.innerHTML = `<div><small>Potential reusable process change</small><strong>${Math.min(supported, required)} of ${required} support records were returned for the same evidence-order rule.</strong></div><div class="v19-support-dots" aria-label="${Math.min(supported, required)} of ${required} support records">${Array.from({ length: required }, (_, index) => `<i data-supported="${index < supported}">${index < supported ? '✓' : index + 1}</i>`).join('')}</div>`;
     boundary.after(meter);
   }
 
-  function markRelease() {
-    document.documentElement.dataset.casepathRelease = RELEASE;
-    document.body.dataset.casepathRelease = RELEASE;
-    window.CASEPATH_EXPERIENCE_RELEASE = RELEASE;
-    document.querySelector('meta[name="casepath-release"]')?.setAttribute('content', RELEASE);
-    const evidenceLink = document.querySelector('#browserEvidenceLink');
-    if (evidenceLink) evidenceLink.textContent = 'Guided session evidence · v19';
-    const header = document.querySelector('#auditDrawer .audit-shell > header');
-    if (header) {
-      const tag = header.querySelector('.v18-release-tag');
-      if (tag) tag.textContent = `Experience ${RELEASE}`;
-      if (!header.querySelector('#visualStoryLink')) {
-        const link = document.createElement('a');
-        link.id = 'visualStoryLink';
-        link.className = 'text-button v19-story-link';
-        link.href = 'https://casepath-guided-canonical-qa.onrender.com/casepath-flagship-demo.gif';
-        link.target = '_blank';
-        link.rel = 'noopener';
-        link.textContent = 'Self-contained visual story';
-        evidenceLink?.after(link);
-      }
-    }
-  }
-
-  function ensureFallbackHandoff(canvas) {
-    if (!canvas || canvas.querySelector('.v18-handoff')) return;
-    const stage = activeStage(canvas);
-    const shell = canvas.querySelector('.stage-shell');
-    if (!stage || !shell) return;
-    shell.insertAdjacentHTML('beforeend', `
-      <div class="v18-handoff" data-event-stage="${stage.id}" data-event-status="completed" data-event-source="presented-backend-event" data-output-artifact="${stage.output.replaceAll(' ', '_')}">
-        <span aria-hidden="true"></span>
-        <div><small>Live handoff</small><strong>${stage.label} added ${stage.output} to the shared claim context for ${stage.next}.</strong></div>
-      </div>`);
-  }
-
   async function enhance() {
-    markRelease();
     const canvas = document.querySelector('#stageCanvas');
     if (!canvas) return;
     const run = await currentRun();
@@ -344,7 +307,6 @@
     renderReviewGraphPreview(canvas);
     directProductCopy(canvas);
     if (journeyKind(canvas) === 'knowledge') await supportBoundary(canvas, await currentRun({ first: true, fresh: true }));
-    ensureFallbackHandoff(canvas);
   }
 
   function queue() {
@@ -363,7 +325,7 @@
     for (const target of [document.querySelector('#agentProgress'), document.querySelector('#stageCanvas'), document.querySelector('#auditDrawer'), document.querySelector('.submission-pane')]) {
       if (target) observer.observe(target, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden', 'open', 'aria-selected'] });
     }
-    window.setInterval(queue, 260);
+    window.addEventListener('casepath:render', queue);
     queue();
   }
 

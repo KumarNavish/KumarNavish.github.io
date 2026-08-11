@@ -1,0 +1,153 @@
+# CasePath convergence decision log
+
+This log records decisions for the convergence release. Evidence and status are
+updated as implementation and validation progress.
+
+## CPD-001 — Preserve the v20 journey; remove contradictory layers
+
+- **Problem:** The graph-first v20 journey is the clearest product generation,
+  but v18, v19, and v20 repeatedly overwrite release state and infer moments by
+  polling mutable DOM text.
+- **Approaches considered:** add another override layer; rebuild the frontend;
+  consolidate ownership inside the current v20/v16 runtime.
+- **Decision:** keep the existing visual language and URL, remove competing
+  release writes, and make render transitions explicit. Do not create v21.
+- **Evidence:** the retained v20 browser journey is coherent; source audit found
+  simultaneous 450 ms, 260 ms, and 900 ms ownership loops.
+- **Rejected:** another additive layer, because it would deepen the race;
+  wholesale redesign, because it would discard the already accepted journey.
+- **Affected files:** `casepath/index.html`, `casepath/assets/live-v16.js`,
+  `casepath/assets/live-v18.js`, `casepath/assets/live-v18-handoff.js`,
+  `casepath/assets/live-v20-focus.js`.
+- **Validation:** canonical focused browser journey, console checks, responsive
+  states, and immutable release assertion.
+- **Implementation status (2026-08-11):** source-converged and deterministically
+  checked. The static v20 marker is immutable, the core emits
+  `casepath:render`, and the retained enhancement layers no longer poll or
+  rewrite release identity. The current Playwright journey and deployed
+  verification remain pending.
+
+## CPD-002 — One bounded model call, deterministic downstream authority
+
+- **Problem:** The public pipeline labels deterministic functions as agents and
+  contains no verified model-backed understanding step.
+- **Approaches considered:** free-form end-to-end graph generation; one model
+  call per specialist; one source-linked canonicalization call followed by
+  deterministic contracts.
+- **Decision:** use OpenRouter model
+  `nvidia/nemotron-3-ultra-550b-a55b` only for observable-package
+  canonicalization. Keep graph validity, evidence linkage, review authority,
+  promotion, versioning, and budget enforcement deterministic.
+- **Evidence:** the recovered research release found canonical-state errors
+  dominate whole-plan performance; OpenRouter currently exposes structured
+  output and reasoning-capable endpoints for the exact model.
+- **Rejected:** free-form end-to-end graph generation, because it obscures error
+  attribution; many specialist calls, because they increase cost and failure
+  surfaces before the canonicalizer is validated.
+- **Affected files:** `casepath-api/casepath_api/canonicalizer.py`,
+  `casepath-api/casepath_api/pipeline_v15.py`, storage and tests.
+- **Validation:** mocked transport/schema/budget tests, one authorized paid smoke,
+  source-provenance checks, and a complete call ledger.
+- **Implementation status (2026-08-11):** the bounded adapter, exact-model
+  request, source-grounding checks, cache/single-flight behavior, cumulative
+  cost guard, and sanitized ledger are implemented and covered by mocked
+  deterministic tests. One authorized provider attempt is retained as
+  failed-closed evidence: the application rejected an exact-private-reference
+  mismatch and bound no successful ledger call. It is not accepted model-backed
+  release evidence; an accepted retry remains pending.
+
+## CPD-003 — Reviewed memory is immediate; shared knowledge is quarantined
+
+- **Problem:** One public review currently fabricates three supporting cases,
+  successful evaluations, and an approved v4 playbook—even for a rejected
+  review.
+- **Approaches considered:** retain narrative promotion; disable learning;
+  separate case memory from shared-rule promotion.
+- **Decision:** an accepted demo review may create one explicitly unverified
+  reviewed-case memory. A reusable candidate remains quarantined at actual
+  support `1/3`, with target and protected evaluations `not_run`; the shared
+  playbook does not change. Rejection creates neither memory nor candidate.
+- **Evidence:** backend route reproduction showed `decision=reject` returning an
+  approved v4 candidate and changing the later claim.
+- **Rejected:** hard-coded promotion, because it is false governance evidence;
+  disabling memory, because one reviewed case is legitimately useful as a
+  precedent when its authority is explicit.
+- **Affected files:** API request schema, pipeline review/consolidation, storage,
+  frontend learning/reuse views, and browser QA.
+- **Validation:** rejection, duplicate review, quarantine, later-memory retrieval,
+  and no-shared-change regression tests.
+- **Implementation status (2026-08-11):** implemented and covered by aligned
+  backend tests. Rejection creates no memory or candidate; an accepted generated
+  demo edit creates unverified memory and a `1/3` quarantined candidate with
+  target/protected tests `not_run`; shared playbook v3 remains unchanged. The
+  current browser journey is pending.
+
+## CPD-004 — The complete graph is the product artifact
+
+- **Problem:** The API returns 19 nodes and 22 edges, while the UI renders only
+  the 11-node `main_spine`; the current gate encodes that omission as success.
+- **Approaches considered:** preserve spine-only rendering; show all nodes at
+  once; keep the spine primary with compact inspectable branches and loops.
+- **Decision:** retain the spine as the default reading path and expose every
+  branch/evidence-loop node and edge through progressive disclosure in the main
+  workspace.
+- **Evidence:** hidden nodes include scope failure, no dispute, urgent action,
+  formal notice, cause outcomes, and the evidence loop—material handling logic.
+- **Rejected:** a dense all-at-once graph, because it violates deep minimalism;
+  spine-only, because it is not the complete handling process.
+- **Affected files:** process renderer, graph styles, decision inspector, QA.
+- **Validation:** node/edge coverage against the API graph plus visual and
+  keyboard inspection at desktop, 390 px, and 320 px.
+- **Implementation status (2026-08-11):** source-converged. The spine remains
+  primary while all non-spine nodes, branches, and edges are inspectable in the
+  main workspace, and the focused gate asserts API topology coverage. Visual,
+  responsive, and keyboard execution of that gate remains pending.
+
+## CPD-005 — Release alignment means source identity, not equal component versions
+
+- **Problem:** frontend 20.0.0, API 15.0.0, release metadata 12.0.2, and source
+  manifest 10.0.0 are conflated by a stale requirement that semantic versions
+  match.
+- **Approaches considered:** rename every component to one version; keep the
+  current files; introduce one release identity with distinct component
+  versions and a common source commit.
+- **Decision:** use one stable release ID/source identity and preserve truthful
+  component versions. Deployment passes only when frontend, API, and QA expose
+  the same frozen source commit and release ID.
+- **Evidence:** live frontend bytes match product commit `a867bb5`; API bytes are
+  unchanged from `550c421`, but public endpoints expose no commit, so live
+  alignment cannot currently be proven.
+- **Rejected:** semantic-version equality, because independently versioned
+  components need compatibility rather than identical numbers.
+- **Affected files:** release contract, generated source manifest, health
+  endpoints, frontend meta, canonical QA.
+- **Validation:** generated manifest verification and post-deploy identity gate.
+- **Implementation status (2026-08-11):** the release contract, generated
+  deployment identity, API identity payload, and QA preflight are implemented.
+  Local identity deliberately remains `unknown`/`not_proven`; no current
+  frontend/API/QA deployment has yet supplied the same frozen non-unknown
+  commit and release ID.
+
+## CPD-006 — Public disclosure and model-visible leakage are separate boundaries
+
+- **Problem:** the public demo must disclose generated data, while evaluated
+  source bytes currently expose `generated`, `fictional`, `.example`, `DEMO`,
+  and answer-tailored language.
+- **Approaches considered:** hide disclosure; let the model see disclosure;
+  disclose outside an isolated evaluator package.
+- **Decision:** retain an obvious public-shell disclosure, but construct the
+  model-visible observable package from leakage-checked artifact bytes and a DTO
+  that excludes generation lineage, hidden fact IDs, and semantic descriptions.
+- **Evidence:** browser inspection found visible generation text in the lease;
+  release audit found generation metadata across PDF and correspondence files.
+- **Rejected:** hiding the public warning, because it would misrepresent the
+  demo; allowing model-visible clues, because it invalidates the reasoning task.
+- **Affected files:** artifact generation, observable DTO, leakage verifier,
+  release manifest.
+- **Validation:** byte/metadata leakage scan and a pending independent blind
+  realism review; no realism claim before that review.
+- **Implementation status (2026-08-11):** the observable DTO, application-shell
+  disclosure, deterministic artifact generation, byte/text/metadata scan, and
+  artifact manifest are implemented and mechanically tested. Independent blind
+  realism review is still pending, so no blind-safe or realistic-artifact claim
+  is allowed.

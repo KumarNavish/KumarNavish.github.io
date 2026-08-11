@@ -1,13 +1,9 @@
 (() => {
   'use strict';
 
-  const RELEASE = '17.0.0';
   const params = new URLSearchParams(location.search);
   const API = (params.get('api') || window.CASEPATH_API || 'https://casepath-agentic-api.onrender.com').replace(/\/$/, '');
   const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-
-  document.documentElement.dataset.casepathExperience = RELEASE;
-  window.CASEPATH_EXPERIENCE_RELEASE = RELEASE;
 
   const STAGES = {
     read: {
@@ -38,7 +34,7 @@
     experience: {
       label: 'Find experience',
       agent: 'Historical Claims Agent',
-      job: 'Finding reviewed claims that help at the difficult branch.',
+      job: 'Finding provenance-labelled reference precedents at the difficult branch.',
     },
     verify: {
       label: 'Verify plan',
@@ -78,6 +74,7 @@
 
   let scheduled = false;
   let lastProcessMarkup = '';
+  let lastProcessRunId = '';
   let pendingReview = null;
   const runCache = new Map();
 
@@ -101,7 +98,8 @@
 
   async function currentRun({ fresh = false } = {}) {
     const ids = discoveredRunIds();
-    const runId = ids.at(-1);
+    const displayedRunId = document.body.dataset.casepathActiveRunId;
+    const runId = displayedRunId || ids.at(-1);
     if (!runId) return null;
     const cached = runCache.get(runId);
     if (!fresh && cached && Date.now() - cached.fetchedAt < 350) return cached.value;
@@ -127,7 +125,7 @@
     const complete = completedIds.length === steps.length;
     const opening = !activeId && completedIds.length === 0;
     const focus = complete
-      ? { label: 'Playbook ready', agent: 'CasePath team', job: 'The complete process is ready for expert review.' }
+      ? { label: 'Playbook ready', agent: 'CasePath team', job: 'The complete process is ready for a simulated demo review.' }
       : opening
         ? { label: 'Opening the claim', agent: 'CasePath orchestrator', job: 'Creating one shared context for every specialist.' }
         : STAGES[activeId] || { label: 'Working', agent: 'CasePath specialist', job: '' };
@@ -145,7 +143,7 @@
         </div>
         <div class="v17-progress-next">
           <span>${next ? 'Next specialist' : complete ? 'Next step' : 'Shared context'}</span>
-          <strong>${esc(next?.label || (complete ? 'Expert review' : 'All agents use the same claim'))}</strong>
+          <strong>${esc(next?.label || (complete ? 'Demo review' : 'All agents use the same claim'))}</strong>
         </div>
       </div>`;
   }
@@ -153,7 +151,7 @@
   function modeForCanvas(canvas) {
     const text = canvas.textContent || '';
     if (/Handling playbook ready|reconstructed how this claim should be handled/i.test(text)) return 'ready';
-    if (/Review the decision that controls|Expert review/i.test(text)) return 'review';
+    if (/Review the decision that controls|Simulated demo review/i.test(text)) return 'review';
     if (/Previous cases are helping|organizational memory/i.test(text)) return 'experience';
     if (/Evidence now follows|attaching evidence|What this decision requires/i.test(text)) return 'evidence';
     if (/acceptance checks|passed its acceptance|verifying/i.test(text)) return 'verify';
@@ -163,6 +161,8 @@
 
   function preserveProcessDuringHandoff(canvas) {
     if (canvas.querySelector('.process-layout') || !lastProcessMarkup) return;
+    const activeRunId = document.body.dataset.casepathActiveRunId || '';
+    if (!activeRunId || activeRunId !== lastProcessRunId) return;
     const text = canvas.textContent || '';
     let label = '';
     let detail = '';
@@ -171,7 +171,7 @@
       detail = 'Attaching each fact and evidence requirement to the decision it can resolve.';
     } else if (/asking organizational memory|organizational experience/i.test(text)) {
       label = 'Historical Claims Agent';
-      detail = 'Searching reviewed claims at the unresolved causation branch.';
+      detail = 'Searching provenance-labelled reference precedents at the unresolved causation branch.';
     } else if (/verif|checking the complete playbook/i.test(text)) {
       label = 'Verification Agent';
       detail = 'Checking the graph and every process-to-evidence relationship before review.';
@@ -211,9 +211,10 @@
       ${linked.map(({ source, targets }) => `
         <article class="v17-law-link">
           <div class="v17-law-source">
-            <small>${esc(source.source_type || 'Swiss-law source')}</small>
+            <small>${esc(source.url ? 'Official source' : 'Model interpretation · unapproved handling proposal')}</small>
             <strong>${esc(source.title)}</strong>
             <p>${esc(source.role || '')}</p>
+            <p><b>Review state:</b> ${esc(source.validation_status || legal.review_status || (source.url ? 'Official source; handling interpretation remains reviewable' : 'Unapproved'))}</p>
             ${source.url ? `<a href="${esc(source.url)}" target="_blank" rel="noopener">Open official source</a>` : ''}
           </div>
           <span class="v17-law-arrow" aria-hidden="true"></span>
@@ -236,7 +237,7 @@
     const copy = {
       process: ['Process Discovery Agent', 'Reconstructing the handling process', 'Each node comes from the shared facts, law, and current uncertainty.'],
       evidence: ['Document Requirements Agent', 'Attaching evidence to the process', 'The checklist is being generated from the decisions—not retrieved from a generic template.'],
-      experience: ['Historical Claims Agent', 'Contributing organizational experience', 'Reviewed claims appear at the branch where their lessons are useful.'],
+      experience: ['Historical Claims Agent', 'Contributing reference experience', 'Each returned precedent states whether it is generated reference material, qualified memory, or unverified demo memory.'],
       verify: ['Verification Agent', 'Checking the complete playbook', 'Every graph edge and evidence relationship must remain traceable before review.'],
     }[mode];
     if (!copy) return;
@@ -268,9 +269,9 @@
     if (!run || !document.contains(inspector)) return;
 
     const result = run.result || {};
-    const process = run.process || result.process;
-    const checklist = run.checklist || result.checklist;
-    const understanding = run.understanding || result;
+    const process = result.process || run.process;
+    const checklist = result.checklist || run.checklist;
+    const understanding = result.facts ? result : run.understanding;
     if (!process || !checklist) return;
 
     const nodeId = inspector.dataset.inspectorNode || process.current_node;
@@ -310,7 +311,7 @@
     const count = (run?.precedents || run?.result?.precedents || []).length;
     if (!count || !document.contains(precedents)) return;
     precedents.insertAdjacentHTML('afterbegin', `
-      <div class="v17-experience-note"><span aria-hidden="true"></span><div><small>Historical Claims Agent</small><strong>${count} reviewed claims were retrieved at this decision because they share the unresolved branch and evidence gap.</strong></div></div>`);
+      <div class="v17-experience-note"><span aria-hidden="true"></span><div><small>Historical Claims Agent</small><strong>${count} reference precedents were returned here. Each card states its generated, qualified-review, or unverified-demo provenance.</strong></div></div>`);
   }
 
   function groupItems(items) {
@@ -325,7 +326,7 @@
   function checklistItem(item, nodeMap) {
     const node = nodeMap.get(item.node_id);
     const relation = node ? `Required for: ${node.title}` : item.node_id ? `Linked to: ${item.node_id.replaceAll('_', ' ')}` : '';
-    return `<div class="v17-checklist-item"><i aria-hidden="true"></i><div><strong>${esc(item.title)} — ${esc(statusName(item.status))}</strong><p>${esc(relation)}${item.why ? ` · ${esc(item.why)}` : ''}</p></div></div>`;
+    return `<div class="v17-checklist-item" data-item-id="${esc(item.item_id || '')}" data-node-id="${esc(item.node_id || '')}" data-fact-id="${esc(item.fact_id || '')}"><i aria-hidden="true"></i><div><strong>${esc(item.title)} — ${esc(statusName(item.status))}</strong><p>${esc(relation)}${item.why ? ` · ${esc(item.why)}` : ''}</p><small>${esc(item.item_id || '')} · decision ${esc(item.node_id || '')} · fact ${esc(item.fact_id || '')}</small></div></div>`;
   }
 
   async function enhanceReady(canvas) {
@@ -374,6 +375,7 @@
     }
     addBuildState(canvas, layout, mode, nodes.length);
     lastProcessMarkup = layout.outerHTML;
+    lastProcessRunId = document.body.dataset.casepathActiveRunId || '';
   }
 
   function captureReview(event) {
@@ -397,14 +399,9 @@
     const panel = document.createElement('section');
     panel.className = 'v17-review-applied';
     panel.innerHTML = `
-      <header><small>Expert correction applied</small><strong>The reasoning changed before it became organizational knowledge.</strong></header>
+      <header><small>Simulated demo correction applied</small><strong>The returned reasoning changed, but no qualified approval or shared-rule release occurred.</strong></header>
       <div class="v17-review-delta">${pendingReview.rows.map(item => `<article><small>${esc(item.label)}</small><strong>${esc(item.value)}</strong></article>`).join('')}</div>`;
     knowledge.insertBefore(panel, anchor);
-  }
-
-  function ratio(value, noun) {
-    if (!value || typeof value.passed !== 'number' || typeof value.failed !== 'number') return `${noun} recorded in the audit`;
-    return `${value.passed}/${value.passed + value.failed} passed`;
   }
 
   async function enhanceKnowledge(canvas) {
@@ -413,39 +410,40 @@
     const run = await currentRun({ fresh: true });
     if (!run || !document.contains(flow)) return;
     const candidate = run.candidate || run.result?.knowledge_update || {};
-    const support = typeof candidate.support_count === 'number'
-      ? `${candidate.support_count} reviewed claims support the pattern.`
-      : 'Reviewed support is recorded in the audit.';
-    const version = candidate.new_version || run.result?.playbook?.version || 'Approved playbook';
-    const rollback = candidate.rollback_target ? `Rollback: ${candidate.rollback_target}.` : 'The prior playbook remains recoverable.';
-
+    const released = candidate.status === 'released'
+      && candidate.shared_knowledge_changed === true
+      && candidate.target_tests?.status === 'passed'
+      && candidate.protected_regression?.status === 'passed'
+      && candidate.approval?.status === 'approved'
+      && candidate.new_version;
+    if (!released) return;
     flow.dataset.v17Gates = 'true';
     flow.innerHTML = `
-      <div class="knowledge-step"><span>✓</span><div><strong>Reviewed case saved</strong><p>Available immediately to future precedent retrieval.</p></div></div>
-      <div class="knowledge-step"><span>✓</span><div><strong>Pattern supported</strong><p>${esc(support)}</p></div></div>
-      <div class="knowledge-step"><span>✓</span><div><strong>Target cases tested</strong><p>${esc(ratio(candidate.target_tests, 'Target tests'))}.</p></div></div>
-      <div class="knowledge-step"><span>✓</span><div><strong>Protected cases checked</strong><p>${esc(ratio(candidate.protected_regression, 'Protected regression'))}.</p></div></div>
-      <div class="knowledge-step"><span>✓</span><div><strong>Playbook released</strong><p>${esc(version)} is active. ${esc(rollback)}</p></div></div>`;
+      <div class="knowledge-step"><span>✓</span><div><strong>Pattern supported</strong><p>${esc(String(candidate.support_count))} of ${esc(String(candidate.required_support))} reviewed claims.</p></div></div>
+      <div class="knowledge-step"><span>✓</span><div><strong>Target cases tested</strong><p>${esc(String(candidate.target_tests.passed))}/${esc(String(candidate.target_tests.passed + candidate.target_tests.failed))} passed.</p></div></div>
+      <div class="knowledge-step"><span>✓</span><div><strong>Protected cases checked</strong><p>${esc(String(candidate.protected_regression.passed))}/${esc(String(candidate.protected_regression.passed + candidate.protected_regression.failed))} passed.</p></div></div>
+      <div class="knowledge-step"><span>✓</span><div><strong>Playbook released</strong><p>${esc(candidate.new_version)} is active.</p></div></div>`;
   }
 
   async function enhanceReuse(canvas) {
     const resultBlock = canvas.querySelector('#laterResult .before-after');
     if (!resultBlock || canvas.querySelector('.v17-reuse-thread')) return;
+    if (canvas.querySelector('.v20-later-heading')?.dataset.memoryUsed !== 'true') return;
     const run = await currentRun({ fresh: true });
     if (!run || !document.contains(resultBlock)) return;
     const result = run.result || {};
-    const precedent = result.precedents?.[0];
+    if (result.reviewed_memory_used !== true) return;
+    const precedent = result.precedents?.find(item => ['expert_reviewed_memory', 'unverified_demo_memory'].includes(item.review_status) && item.memory_id);
+    if (!precedent) return;
     const playbook = result.playbook?.version;
-    const newNode = result.process?.nodes?.find(node => node.node_id === 'ventilation_dispute');
-    const envelope = result.checklist?.items?.find(item => item.item_id === 'building_envelope');
     const thread = document.createElement('section');
     thread.className = 'v17-reuse-thread';
-    thread.setAttribute('aria-label', 'How reviewed knowledge improved the unseen claim');
+    thread.setAttribute('aria-label', 'How returned review memory was used on the unseen claim');
     thread.innerHTML = `
-      <article><small>Reviewed memory</small><strong>${esc(precedent?.claim_id || 'Reviewed flagship claim')}</strong></article>
-      <article><small>Active playbook</small><strong>${esc(playbook || 'Approved playbook')}</strong></article>
-      <article><small>New process decision</small><strong>${esc(newNode?.title || 'Evidence ordering made explicit')}</strong></article>
-      <article><small>Evidence effect</small><strong>${esc(envelope ? `Building assessment: ${statusName(envelope.status)}` : 'Evidence request changed')}</strong></article>`;
+      <article><small>${esc(precedent.review_status === 'unverified_demo_memory' ? 'Unverified demo review memory returned' : 'Qualified review memory returned')}</small><strong>${esc(precedent.claim_id)} · ${esc(precedent.memory_id)}</strong></article>
+      <article><small>Shared playbook</small><strong>${esc(playbook || 'Version not returned')}</strong></article>
+      <article><small>Shared rule applied</small><strong>${esc(String(result.shared_rule_applied === true))}</strong></article>
+      <article><small>Knowledge mode</small><strong>${esc(result.knowledge?.mode || 'Not returned')}</strong></article>`;
     resultBlock.parentNode.insertBefore(thread, resultBlock);
   }
 
@@ -493,7 +491,7 @@
         performanceObserver.observe({ type: 'resource', buffered: true });
       } catch (_) {}
     }
-    window.setInterval(queueEnhancement, 500);
+    window.addEventListener('casepath:render', queueEnhancement);
     queueEnhancement();
   }
 
