@@ -3,15 +3,16 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="description" content="Watch specialist agents turn a real claim submission into a handling process, process-grounded evidence model, reviewed playbook, and reusable organizational knowledge.">
+  <meta name="description" content="Watch specialist agents turn one customer claim into a reviewed handling process and reusable organizational knowledge.">
   <meta name="theme-color" content="#ffffff">
-  <meta name="casepath-release" content="19.0.0">
-  <title>CasePath — Watch the claim-handling team work</title>
+  <meta name="casepath-release" content="20.0.0">
+  <title>CasePath — Analyse one claim</title>
   <link rel="stylesheet" href="assets/live-v16.css">
   <link rel="stylesheet" href="assets/live-v17.css">
   <link rel="stylesheet" href="assets/live-v17-continuity.css">
   <link rel="stylesheet" href="assets/live-v18.css">
   <link rel="stylesheet" href="assets/live-v19.css">
+  <link rel="stylesheet" href="assets/live-v20-focus.css">
 </head>
 <body>
   <a class="skip-link" href="#casepathWork">Skip to CasePath</a>
@@ -23,7 +24,7 @@
     </a>
     <div class="appbar-context">
       <strong id="headerClaimTitle">Recurring mould</strong>
-      <span id="headerClaimId">Loading claim…</span>
+      <span id="headerClaimId">Opening claim…</span>
     </div>
     <button class="text-button" id="openAudit" type="button" disabled>Audit trail</button>
   </header>
@@ -40,10 +41,23 @@
         </button>
       </header>
       <div class="submission-scroll" id="submissionContent">
-        <article class="customer-email" id="customerEmail" aria-label="Customer email"></article>
+        <article class="customer-email" id="customerEmail" aria-label="Customer email" aria-busy="true">
+          <div class="v20-source-skeleton" aria-hidden="true">
+            <span class="v20-skeleton-line medium"></span>
+            <span class="v20-skeleton-line short"></span>
+            <span class="v20-skeleton-line medium"></span>
+            <span class="v20-skeleton-block"></span>
+          </div>
+        </article>
         <section class="attachments-block" aria-labelledby="attachmentsHeading">
-          <header><h2 id="attachmentsHeading">Attachments</h2><span id="attachmentCount"></span></header>
-          <div class="attachment-list" id="attachmentList"></div>
+          <header><h2 id="attachmentsHeading">Attachments</h2><span id="attachmentCount">Opening files…</span></header>
+          <div class="attachment-list" id="attachmentList">
+            <div class="v20-attachment-skeleton" aria-hidden="true">
+              <div class="v20-skeleton-row"><span class="v20-skeleton-thumb"></span><span><span class="v20-skeleton-line medium"></span><span class="v20-skeleton-line short"></span></span></div>
+              <div class="v20-skeleton-row"><span class="v20-skeleton-thumb"></span><span><span class="v20-skeleton-line medium"></span><span class="v20-skeleton-line short"></span></span></div>
+              <div class="v20-skeleton-row"><span class="v20-skeleton-thumb"></span><span><span class="v20-skeleton-line medium"></span><span class="v20-skeleton-line short"></span></span></div>
+            </div>
+          </div>
         </section>
       </div>
     </aside>
@@ -51,15 +65,11 @@
     <section class="work-pane" aria-live="polite">
       <section class="start-state" id="startState">
         <div class="start-copy">
-          <span class="quiet-label">Recurring-mould claim</span>
-          <h2>Watch CasePath handle this claim</h2>
-          <p>Follow one claim from original evidence through process discovery, expert correction, organizational learning, and reuse on the next claim.</p>
+          <span class="quiet-label">Flagship claim</span>
+          <h2>What should CasePath do with this claim?</h2>
         </div>
-        <div class="start-flow" aria-label="CasePath claim journey">
-          <span>Read</span><i></i><span>Understand</span><i></i><span>Research</span><i></i><span>Build process</span><i></i><span>Map evidence</span><i></i><span>Review</span><i></i><span>Learn</span>
-        </div>
-        <button class="primary-button" id="runCasePath" type="button">
-          <span>Watch CasePath handle this claim</span>
+        <button class="primary-button" id="runCasePath" type="button" disabled>
+          <span>Analyse claim</span>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
         </button>
         <p class="research-boundary">Fictional research claim. No legal decision or customer contact is made.</p>
@@ -141,5 +151,6 @@
   <script src="assets/live-v18.js"></script>
   <script src="assets/live-v18-handoff.js"></script>
   <script src="assets/live-v19-active-stage.js"></script>
+  <script src="assets/live-v20-focus.js"></script>
 </body>
 </html>
