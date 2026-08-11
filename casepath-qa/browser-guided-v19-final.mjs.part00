@@ -78,7 +78,10 @@ async function main() {
   const video = page.video();
 
   page.on('console', message => {
-    if (message.type() === 'error') failures.console.push(message.text());
+    if (message.type() === 'error') {
+      const location = message.location();
+      failures.console.push(`${message.text()}${location?.url ? ` @ ${location.url}:${location.lineNumber || 0}` : ''}`);
+    }
   });
   page.on('pageerror', error => failures.page.push(String(error)));
   page.on('requestfailed', request => {
