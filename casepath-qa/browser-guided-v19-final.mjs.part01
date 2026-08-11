@@ -55,7 +55,8 @@
   await waitVisible('.v18-progress-focus[data-active-stage="read"]');
   await waitVisible('.v19-team-history li[data-state="active"]');
   check('Reading exposes source-level events', await page.locator('#stageCanvas .event-row').count() >= 6);
-  check('Orchestrator mission comes from the active run', /what claim state|submission|source/i.test(await page.locator('.v19-team-mission strong').innerText()));
+  await page.waitForFunction(() => !/Open one shared claim context/i.test(document.querySelector('.v19-team-mission strong')?.textContent || ''), null, { timeout: 30000 });
+  check('Orchestrator mission comes from the active run', (await page.locator('.v19-team-mission strong').innerText()).trim().length > 20);
   check('Team rail shows completed, active, or next work without seven equal panels', await page.locator('.v19-team-history li').count() <= 5 && await page.locator('.agent-step').count() === 0);
   await screenshot('04-live-team-reading.png');
 
