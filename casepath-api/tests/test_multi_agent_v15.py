@@ -941,7 +941,7 @@ def _plan_envelope(
     *,
     response_id: str | None = "gen-plan",
     response_model: str = OPENROUTER_MODEL,
-    provider_name: str = "MockProvider",
+    provider_name: str | None = "MockProvider",
     finish_reason: str | None = "stop",
     usage: dict[str, Any] | None = None,
     parsed: bool = True,
@@ -1062,6 +1062,109 @@ def test_specialist_wrong_model_metadata_billing_and_missing_id_sync_billing_are
     assert missing_ledger["actual_cost_usd"] == pytest.approx(0.0031)
     assert missing_ledger["prompt_tokens"] == 31
     assert "response_id" not in missing_ledger
+
+
+def test_specialist_missing_upstream_provider_uses_generation_metadata(
+    tmp_path: Path,
+):
+    metadata_calls = 0
+    inference_calls = 0
+
+    class Runnable:
+        def invoke(self, *_args, **_kwargs):
+            nonlocal inference_calls
+            inference_calls += 1
+            return _plan_envelope(
+                provider_name=None,
+                usage={
+                    "prompt_tokens": 31,
+                    "completion_tokens": 11,
+                    "total_tokens": 42,
+                    "cost": 0.0031,
+                },
+            )
+
+    def metadata_transport(*_args):
+        nonlocal metadata_calls
+        metadata_calls += 1
+        return {
+            "data": {
+                "id": "gen-plan",
+                "model": "nvidia/nemotron-3-ultra-550b-a55b-20260604",
+                "provider_name": "DeepInfra",
+                "native_tokens_prompt": 41,
+                "native_tokens_completion": 17,
+                "total_cost": 0.0041,
+                "usage": 0.0041,
+                "finish_reason": "stop",
+            }
+        }
+
+    storage = Storage(str(tmp_path / "missing-specialist-provider.db"))
+    runner = InstrumentedStructuredAgent(
+        storage,
+        runnable_factory=lambda *_args: Runnable(),
+        metadata_transport=metadata_transport,
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+    result = _invoke_plan(runner, run_id="run-missing-specialist-provider")
+
+    assert inference_calls == metadata_calls == 1
+    assert result["upstream_provider"] == "DeepInfra"
+    assert result["usage_source"] == "generation_metadata"
+    ledger = storage.sanitized_model_ledger()[0]
+    assert ledger["outcome"] == "succeeded"
+    assert ledger["upstream_provider"] == "DeepInfra"
+    assert ledger["usage_source"] == "generation_metadata"
+
+
+def test_specialist_missing_upstream_provider_fails_closed_without_metadata(
+    tmp_path: Path,
+):
+    inference_calls = 0
+    metadata_calls = 0
+
+    class Runnable:
+        def invoke(self, *_args, **_kwargs):
+            nonlocal inference_calls
+            inference_calls += 1
+            return _plan_envelope(
+                provider_name=None,
+                usage={
+                    "prompt_tokens": 31,
+                    "completion_tokens": 11,
+                    "total_tokens": 42,
+                    "cost": 0.0031,
+                },
+            )
+
+    def incomplete_metadata(*_args):
+        nonlocal metadata_calls
+        metadata_calls += 1
+        return {"data": {}}
+
+    storage = Storage(str(tmp_path / "missing-specialist-provider-incomplete.db"))
+    runner = InstrumentedStructuredAgent(
+        storage,
+        runnable_factory=lambda *_args: Runnable(),
+        metadata_transport=incomplete_metadata,
+        metadata_sleep=lambda _seconds: None,
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+    with pytest.raises(
+        AgentInvocationFailure,
+        match="generation_metadata_completeness",
+    ):
+        _invoke_plan(runner, run_id="run-missing-specialist-provider-incomplete")
+
+    assert inference_calls == 1
+    assert metadata_calls == 3
+    ledger = storage.sanitized_model_ledger()[0]
+    assert ledger["outcome"] == "failed"
+    assert ledger["error_invariant"] == "generation_metadata_completeness"
+    assert ledger["actual_cost_usd"] == pytest.approx(0.0031)
+    assert ledger["usage_source"] == "response"
+    assert ledger["error_type"] != "KeyError"
 
 
 @pytest.mark.parametrize(

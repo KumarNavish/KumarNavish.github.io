@@ -1575,6 +1575,93 @@ def test_missing_finish_reason_uses_metadata_and_warm_cache_retains_origin_finis
     }
 
 
+def test_missing_upstream_provider_uses_metadata_before_persisting_success(
+    tmp_path: Path,
+):
+    inference_calls = 0
+    metadata_calls = 0
+
+    def structured_invoker(*_args):
+        nonlocal inference_calls
+        inference_calls += 1
+        value = response()
+        value.pop("provider")
+        return value
+
+    def metadata_transport(*_args):
+        nonlocal metadata_calls
+        metadata_calls += 1
+        return generation_metadata()
+
+    storage = Storage(str(tmp_path / "missing-provider.db"))
+    canonicalizer = OpenRouterNemotronCanonicalizer(
+        storage,
+        structured_invoker=structured_invoker,
+        metadata_transport=metadata_transport,
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+    result = canonicalizer.canonicalize(
+        package(),
+        run_id="run-missing-provider",
+        allowed_fact_catalog=catalog(),
+    )
+
+    assert inference_calls == metadata_calls == 1
+    assert result["upstream_provider"] == "DeepInfra"
+    assert result["usage_source"] == "generation_metadata"
+    ledger = storage.sanitized_model_ledger()[0]
+    assert ledger["outcome"] == "succeeded"
+    assert ledger["upstream_provider"] == "DeepInfra"
+    assert ledger["usage_source"] == "generation_metadata"
+    assert ledger["response_id"] == "generation-test-1"
+
+
+def test_missing_upstream_provider_fails_closed_when_metadata_is_incomplete(
+    tmp_path: Path,
+):
+    inference_calls = 0
+    metadata_calls = 0
+
+    def structured_invoker(*_args):
+        nonlocal inference_calls
+        inference_calls += 1
+        value = response()
+        value.pop("provider")
+        return value
+
+    def incomplete_metadata(*_args):
+        nonlocal metadata_calls
+        metadata_calls += 1
+        return {"data": {}}
+
+    storage = Storage(str(tmp_path / "missing-provider-incomplete.db"))
+    canonicalizer = OpenRouterNemotronCanonicalizer(
+        storage,
+        structured_invoker=structured_invoker,
+        metadata_transport=incomplete_metadata,
+        metadata_sleep=lambda _seconds: None,
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+    with pytest.raises(
+        ModelResponseError,
+        match="generation_metadata_completeness invariant failed",
+    ):
+        canonicalizer.canonicalize(
+            package(),
+            run_id="run-missing-provider-incomplete",
+            allowed_fact_catalog=catalog(),
+        )
+
+    assert inference_calls == 1
+    assert metadata_calls == 3
+    ledger = storage.sanitized_model_ledger()[0]
+    assert ledger["outcome"] == "failed"
+    assert ledger["error_invariant"] == "generation_metadata_completeness"
+    assert ledger["actual_cost_usd"] == pytest.approx(0.0042)
+    assert ledger["usage_source"] == "response"
+    assert ledger["error_type"] != "KeyError"
+
+
 def test_missing_response_id_with_sync_usage_retains_charge_and_safe_context(
     tmp_path: Path,
 ):
