@@ -4337,9 +4337,37 @@ fallback and ten deterministic source projections. The frozen candidate then
 passed source/artifact manifest verification, 145 combined Python tests, the
 40-fixture QA contract self-test, changed-file Ruff/compile/syntax/diff checks,
 and the complete deterministic Render build. A fresh adversarial audit reported
-no remaining P0/P1 blocker. No second paid request has been executed by this
-record; it remains contingent on deploying this exact candidate commit across
-frontend, API and QA.
+no remaining P0/P1 blocker. The repair was published as source commit
+`697a19fa0be541f46af85d9f31dd5cbda96b2bb8`, deployed with aligned frontend and
+API identity, and exercised by the second same-commit paid request below.
+
+## Production attempt 06 and upstream-provider persistence boundary
+
+The second same-commit production gate ran from QA deploy
+`dep-d9tnp72jobas73df6jmg` against aligned source commit
+`697a19fa0be541f46af85d9f31dd5cbda96b2bb8`. Exactly one canonical-facts
+provider response returned successfully from OpenRouter using the requested
+Nemotron alias. Response `gen-1786477748-NYzcfF7sy7RQ71QO780m` charged USD
+0.0177709 for 23,163 prompt and 2,825 completion tokens, 25,988 total, with
+`stop`. The sanitized ledger recorded call `modelcall_0263759a564abb00` under
+orchestration `orch_2d81acf782aa379b` and then failed closed with `KeyError`.
+
+The synchronous response retained complete usage, response identity and finish
+reason but not an upstream-provider value. The deployed metadata-backfill
+predicate therefore skipped the generation lookup, while canonical-result
+persistence later indexed the absent upstream-provider field. The source order
+proves that canonical source merge, claim-state validation and exact-source
+validation necessarily completed before that failing expression. It does not
+prove any accepted/rejected or source-projection count: the exception occurred
+before those diagnostics were finalized in the sanitized ledger, so this record
+deliberately retains no such counts. No downstream model role or deterministic
+gate produced a receipt, and the QA build failed closed. This remains historical
+failure evidence, not current model-backed runtime acceptance.
+
+The exact failed attempt is retained in
+`casepath/releases/model-validation-attempt-20260811-06.json`. Known aggregate
+charges for attempts 1, 2, 4, 5 and 6 are USD 0.0528110; attempt 3 remains
+unknown and excluded rather than treated as zero.
 
 ## Exact dynamic model evidence not yet observed by this record
 
@@ -4350,7 +4378,7 @@ not fields to write back into the static release contract:
 ```text
 dynamic_runtime_acceptance_verdict: NOT_ESTABLISHED_BY_THIS_RECORD
 historical_model_validation_scope: failed_closed_history_only
-failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -05.json
+failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -06.json
 failed_attempt_id: authorized-smoke-20260811-01
 failed_attempt_application_outcome: rejected
 failed_attempt_failure_type: exact_private_reference_mismatch
@@ -4363,20 +4391,20 @@ provider_observed_prompt_tokens: 3629
 provider_observed_completion_tokens: 2625
 provider_observed_total_tokens: 6254
 provider_observed_finish_reason: stop
-latest_failed_attempt_id: production-flagship-20260811-05
-latest_failed_attempt_source_commit: 89519b7b00c4e3ff1bc0a2719ed9546b90e46c92
-latest_failed_attempt_application_outcome: hybrid_model_contribution_strict_majority
-latest_failed_attempt_accepted_fact_count: 7
-latest_failed_attempt_rejected_fact_count: 11
-latest_failed_attempt_source_reference_set_rejections: 10
-latest_failed_attempt_canonical_state_rejections: 1
-latest_failed_attempt_provider_response_id: gen-1786475792-xFaK7MHwa5i0FStRHruR
-latest_failed_attempt_casepath_call_id: modelcall_ef72cb958e5c9e63
-latest_failed_attempt_prompt_tokens: 23141
-latest_failed_attempt_completion_tokens: 1931
-latest_failed_attempt_total_tokens: 25072
-latest_failed_attempt_actual_cost_usd: 0.0157931
-accepted_retry_status: PENDING_NOT_RUN_AFTER_ATTEMPT_05
+latest_failed_attempt_id: production-flagship-20260811-06
+latest_failed_attempt_source_commit: 697a19fa0be541f46af85d9f31dd5cbda96b2bb8
+latest_failed_attempt_application_outcome: post_validation_missing_upstream_provider_persistence
+latest_failed_attempt_error_type: KeyError
+latest_failed_attempt_fact_counts: NOT_RETAINED
+latest_failed_attempt_source_projection_count: NOT_RETAINED
+latest_failed_attempt_provider_response_id: gen-1786477748-NYzcfF7sy7RQ71QO780m
+latest_failed_attempt_casepath_call_id: modelcall_0263759a564abb00
+latest_failed_attempt_prompt_tokens: 23163
+latest_failed_attempt_completion_tokens: 2825
+latest_failed_attempt_total_tokens: 25988
+latest_failed_attempt_actual_cost_usd: 0.0177709
+known_failed_attempt_cost_usd_excluding_attempt_03: 0.0528110
+accepted_retry_status: PENDING_NOT_RUN_AFTER_ATTEMPT_06
 candidate_source_commit: PENDING
 release_id: casepath-v20-reference-20260811
 provider: openrouter

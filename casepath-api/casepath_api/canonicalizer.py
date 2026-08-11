@@ -34,7 +34,7 @@ OPENROUTER_ACCEPTED_RESPONSE_MODELS = {OPENROUTER_MODEL, OPENROUTER_CANONICAL_MO
 OPENROUTER_PROVIDER = "openrouter"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_GENERATION_URL = "https://openrouter.ai/api/v1/generation"
-CANONICALIZER_VERSION = "1.6.0"
+CANONICALIZER_VERSION = "1.6.1"
 PROMPT_VERSION = "canonical-facts/1.5.0"
 SCHEMA_VERSION = "casepath.canonical-facts/1.4.0"
 NORMALIZED_VALUES = [
@@ -1266,7 +1266,10 @@ class OpenRouterNemotronCanonicalizer:
                 provider_ledger_patch.update(synchronous_usage)
             needs_metadata = synchronous_usage is None or (
                 identity["provenance_violation"] is None
-                and identity.get("response_finish_reason") is None
+                and (
+                    identity.get("response_finish_reason") is None
+                    or identity.get("upstream_provider") is None
+                )
             )
             if needs_metadata and identity["response_id"] is not None:
                 provider_ledger_patch.update(
