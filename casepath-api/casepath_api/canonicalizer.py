@@ -17,6 +17,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
 
 from .langchain_runtime import (
+    OpenRouterProtocolError,
     assert_external_tracing_disabled,
     sanitize_provider_provenance,
     structured_nemotron_runnable,
@@ -34,7 +35,7 @@ OPENROUTER_ACCEPTED_RESPONSE_MODELS = {OPENROUTER_MODEL, OPENROUTER_CANONICAL_MO
 OPENROUTER_PROVIDER = "openrouter"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_GENERATION_URL = "https://openrouter.ai/api/v1/generation"
-CANONICALIZER_VERSION = "1.6.1"
+CANONICALIZER_VERSION = "1.6.2"
 PROMPT_VERSION = "canonical-facts/1.5.0"
 SCHEMA_VERSION = "casepath.canonical-facts/1.4.0"
 NORMALIZED_VALUES = [
@@ -165,10 +166,19 @@ def _default_structured_invoker(
         max_tokens=max_tokens,
     )
     assert_external_tracing_disabled()
-    envelope = runnable.invoke(
-        [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)],
-        config={"callbacks": []},
-    )
+    protocol_invariant: str | None = None
+    try:
+        envelope = runnable.invoke(
+            [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)],
+            config={"callbacks": []},
+        )
+    except OpenRouterProtocolError as exc:
+        protocol_invariant = exc.invariant
+    if protocol_invariant is not None:
+        raise ModelResponseError(
+            "provider_response_envelope invariant failed",
+            invariant=protocol_invariant,
+        )
     if not isinstance(envelope, dict):
         raise ModelResponseError("OpenRouter omitted the LangChain response envelope")
     parsed = envelope.get("parsed")
@@ -1272,18 +1282,21 @@ class OpenRouterNemotronCanonicalizer:
                 )
             )
             if needs_metadata and identity["response_id"] is not None:
-                provider_ledger_patch.update(
-                    _generation_metadata_ledger_patch(
-                        identity=identity,
-                        headers=headers,
-                        metadata_transport=self.metadata_transport,
-                        metadata_sleep=self.metadata_sleep,
-                        timeout_seconds=self.metadata_timeout_seconds,
-                        poll_attempts=self.metadata_poll_attempts,
-                        poll_interval_seconds=self.metadata_poll_interval_seconds,
-                        latency_ms=latency_ms,
-                    )
+                metadata_patch = _generation_metadata_ledger_patch(
+                    identity=identity,
+                    headers=headers,
+                    metadata_transport=self.metadata_transport,
+                    metadata_sleep=self.metadata_sleep,
+                    timeout_seconds=self.metadata_timeout_seconds,
+                    poll_attempts=self.metadata_poll_attempts,
+                    poll_interval_seconds=self.metadata_poll_interval_seconds,
+                    latency_ms=latency_ms,
                 )
+                provider_ledger_patch.update(metadata_patch)
+                if identity["response_finish_reason"] is not None:
+                    provider_ledger_patch["finish_reason"] = identity[
+                        "response_finish_reason"
+                    ]
             if "actual_cost_usd" in provider_ledger_patch:
                 with self.storage.lock:
                     self.storage.finish_model_call(
@@ -1308,6 +1321,11 @@ class OpenRouterNemotronCanonicalizer:
                 raise ModelResponseError(
                     "generation_metadata_completeness invariant failed",
                     invariant="generation_metadata_completeness",
+                )
+            if provider_ledger_patch.get("finish_reason") != "stop":
+                raise ModelResponseError(
+                    "provider_finish_reason invariant failed",
+                    invariant="provider_finish_reason",
                 )
             output = _response_content(response)
             merged_facts, diagnostics = _merge_fact_contracts(

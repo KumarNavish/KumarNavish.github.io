@@ -109,7 +109,7 @@ bound identically across the run audit and sanitized ledger. A paid provider
 response, a cache replay, or a weak/unbound role
 record does not satisfy that gate.
 
-Six authorized model attempts failed closed:
+Seven authorized model attempts failed closed:
 
 - Attempt 1 reached DeepInfra through OpenRouter and returned the provider's
   dated canonical model ID. It charged USD 0.00756 for 3,629 prompt and 2,625
@@ -148,14 +148,36 @@ Six authorized model attempts failed closed:
   projection counts, so none are inferred. Ledger call
   `modelcall_0263759a564abb00` records `failed`; no downstream model role or
   deterministic gate produced a receipt.
+- Attempt 7 exercised the provenance-persistence repair on aligned source
+  commit `7e87f40bc866444f16fd837fa3e6a999faa1c7e0`. One OpenRouter network call
+  returned HTTP 200, but `openrouter` SDK 0.11.46 raised
+  `ResponseValidationError` while decoding the JSON body as `ChatResult`,
+  before LangChain or CasePath could retain response identity, usage, or actual
+  cost. The ledger records a USD 0.027645 estimated reservation and 28,814.669
+  ms latency; the estimate is not an observed charge. Actual cost and response
+  identity remain unknown and unverified. Ledger call
+  `modelcall_2c6614b3bc53305b` records `failed`; no downstream model role or
+  deterministic gate produced a receipt, and the QA build failed closed.
 
-Known aggregate provider charges for attempts 1, 2, 4, 5, and 6 are USD
-0.0528110; attempt 3 remains unknown and unconfirmed. The responses remain failed-attempt
-history, not successful application evidence. No raw prompt, raw output,
-credential, or private reference is retained, and no attempt is accepted
-model-backed release evidence.
+The source repair does not retry or bypass LangChain. The shared
+`ChatOpenRouter` client facade still delegates exactly one SDK request. It
+catches only `ResponseValidationError`, accepts only a bounded HTTP 200 JSON
+completion envelope containing one assistant string choice, projects only the
+identity/finish/usage fields CasePath consumes, and then resumes LangChain's
+native strict structured-output parser. Invalid envelopes raise the constant
+`provider_response_envelope` invariant outside the SDK exception scope; raw
+response bodies are neither logged nor persisted. Current acceptance still
+requires a new same-commit cold production journey with all six bound calls and
+three passed deterministic gates.
 
-The six records above are listed under `historical_model_validation` with
+Known aggregate provider charges for attempts 1, 2, 4, 5, and 6 remain USD
+0.0528110; attempts 3 and 7 are unknown and excluded rather than treated as
+zero. Attempt 7's USD 0.027645 reservation is not included. The responses
+remain failed-attempt history, not successful application evidence. No raw
+prompt, raw output, credential, or private reference is retained, and no
+attempt is accepted model-backed release evidence.
+
+The seven records above are listed under `historical_model_validation` with
 `scope: failed_closed_history_only`; they can never establish current runtime
 acceptance. No passing dynamic QA artifact pair has been verified as part of
 this source edit, so current production model acceptance remains unestablished.

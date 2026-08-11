@@ -261,7 +261,7 @@ QA_EVIDENCE_MANIFEST_PATH = "evidence-manifest.json"
 QA_EVIDENCE_MANIFEST_CONTRACT = "casepath.qa-evidence-manifest/1.0.0"
 HISTORICAL_MODEL_VALIDATION_RECORDS = tuple(
     f"casepath/releases/model-validation-attempt-20260811-{number:02d}.json"
-    for number in range(1, 7)
+    for number in range(1, 8)
 )
 REQUIRED_QA_EVIDENCE_FILES = {
     "deployment-identity.json",
@@ -988,13 +988,41 @@ def verify_failed_model_attempt_evidence(
             "charge_included_in_known_aggregate": False,
             "charge_status": "unknown_unconfirmed",
             "new_openrouter_log_generation_observed": False,
-            "provider_cache_replay_assessment": "likely_unconfirmed",
             "synchronous_usage_cost_present": False,
         }
         for key, expected in expected_unknown_usage.items():
             if provider_observation.get(key) != expected:
                 raise VerificationError(
                     f"Unknown historical usage requires {key}={expected!r}"
+                )
+        cache_assessment = provider_observation.get("provider_cache_replay_assessment")
+        if cache_assessment not in {"likely_unconfirmed", "not_assessed"}:
+            raise VerificationError(
+                "Unknown historical usage requires a bounded cache-replay assessment"
+            )
+        if (
+            cache_assessment == "not_assessed"
+            and provider_observation.get("openrouter_log_check_performed") is not False
+        ):
+            raise VerificationError(
+                "A non-assessed cache replay requires openrouter_log_check_performed=false"
+            )
+        estimated_reservation = provider_observation.get(
+            "estimated_cost_reservation_usd"
+        )
+        if estimated_reservation is not None:
+            if (
+                not isinstance(estimated_reservation, (int, float))
+                or isinstance(estimated_reservation, bool)
+                or not math.isfinite(estimated_reservation)
+                or estimated_reservation <= 0
+            ):
+                raise VerificationError(
+                    "Historical estimated cost reservation must be positive and finite"
+                )
+            if provider_observation.get("estimated_reservation_is_actual_charge") is not False:
+                raise VerificationError(
+                    "Historical estimated reservation must not be represented as actual charge"
                 )
         if "response_id" in provider_observation or "response_model" in provider_observation:
             raise VerificationError(
@@ -1066,7 +1094,7 @@ def verify_static_runtime_acceptance_contract(release: dict[str, Any]) -> None:
     }
     if history != expected_history:
         raise VerificationError(
-            "Historical model validation must retain exactly six failed-closed records"
+            "Historical model validation must retain exactly seven failed-closed records"
         )
     for path_text in HISTORICAL_MODEL_VALIDATION_RECORDS:
         verify_failed_model_attempt_evidence(

@@ -6,8 +6,13 @@ import json
 from pathlib import Path
 import time
 
+import httpx
+from openrouter import components
+from openrouter.utils.unmarshal_json_response import unmarshal_json_response
 import pytest
 
+from casepath_api import canonicalizer as canonicalizer_module
+from casepath_api import langchain_runtime
 from casepath_api.canonicalizer import (
     DEFAULT_CUMULATIVE_USD_CAP,
     MODEL_MODE_REFERENCE,
@@ -883,6 +888,31 @@ def test_foreign_response_model_is_hashed_and_rejected_as_invalid_provenance(
     assert "different/model" not in json.dumps(entry)
 
 
+def test_nonstop_canonical_response_cannot_be_accepted_or_cached(tmp_path: Path):
+    value = response()
+    value["choices"][0]["finish_reason"] = "length"
+    storage = Storage(str(tmp_path / "nonstop-canonical.db"))
+    canonicalizer = OpenRouterNemotronCanonicalizer(
+        storage,
+        transport=lambda *_args: value,
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+
+    with pytest.raises(ModelResponseError, match="provider_finish_reason"):
+        canonicalizer.canonicalize(
+            package(),
+            run_id="run-nonstop-canonical",
+            allowed_fact_catalog=catalog(),
+        )
+
+    ledger = storage.model_calls()[0]
+    assert ledger["outcome"] == "failed"
+    assert ledger["error_invariant"] == "provider_finish_reason"
+    assert ledger["finish_reason"] == "length"
+    assert ledger["actual_cost_usd"] == pytest.approx(0.0042)
+    assert storage.cached_model_output(ledger["cache_key"]) is None
+
+
 def test_canonicalizer_fails_closed_on_source_reference_id_outside_registry(tmp_path: Path):
     storage = Storage(str(tmp_path / "ledger.db"))
 
@@ -1614,6 +1644,177 @@ def test_missing_upstream_provider_uses_metadata_before_persisting_success(
     assert ledger["upstream_provider"] == "DeepInfra"
     assert ledger["usage_source"] == "generation_metadata"
     assert ledger["response_id"] == "generation-test-1"
+
+
+def test_default_langchain_invoker_maps_protocol_failure_to_bounded_invariant(
+    monkeypatch,
+):
+    class Runnable:
+        def invoke(self, *_args, **_kwargs):
+            raise langchain_runtime.OpenRouterProtocolError()
+
+    monkeypatch.setattr(
+        canonicalizer_module,
+        "structured_nemotron_runnable",
+        lambda **_kwargs: Runnable(),
+    )
+
+    with pytest.raises(ModelResponseError) as captured:
+        canonicalizer_module._default_structured_invoker(
+            {"type": "object", "properties": {}, "additionalProperties": False},
+            "bounded system",
+            "bounded user",
+            "runtime-only-test-value",
+            "orch-protocol-boundary",
+            100,
+        )
+
+    assert captured.value.invariant == "provider_response_envelope"
+    assert captured.value.__cause__ is None
+    assert captured.value.__context__ is None
+
+
+def test_canonicalizer_replays_sdk_schema_drift_through_real_langchain_once(
+    tmp_path: Path,
+    monkeypatch,
+):
+    provider_calls = 0
+    metadata_calls = 0
+    expected = response()
+    provider_payload = {
+        "id": expected["id"],
+        "model": expected["model"],
+        "object": "chat.completion",
+        "created": 1786479000,
+        "choices": [
+            {
+                "index": 0,
+                "finish_reason": "stop",
+                "message": expected["choices"][0]["message"],
+            }
+        ],
+        "usage": expected["usage"],
+        # Deliberately no system_fingerprint: openrouter==0.11.46 rejects this
+        # otherwise valid response before LangChain without the shared bridge.
+    }
+
+    class GeneratedSdkChat:
+        def send(self, **_kwargs):
+            nonlocal provider_calls
+            provider_calls += 1
+            response_value = httpx.Response(
+                200,
+                headers={"content-type": "application/json"},
+                json=provider_payload,
+                request=httpx.Request(
+                    "POST", "https://openrouter.ai/api/v1/chat/completions"
+                ),
+            )
+            return unmarshal_json_response(components.ChatResult, response_value)
+
+    class FakeOpenRouter:
+        def __init__(self, **_kwargs):
+            self.chat = GeneratedSdkChat()
+
+    def metadata_transport(*_args):
+        nonlocal metadata_calls
+        metadata_calls += 1
+        return generation_metadata()
+
+    monkeypatch.setattr(langchain_runtime, "OpenRouter", FakeOpenRouter)
+    storage = Storage(str(tmp_path / "sdk-drift-replay.db"))
+    canonicalizer = OpenRouterNemotronCanonicalizer(
+        storage,
+        metadata_transport=metadata_transport,
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+
+    result = canonicalizer.canonicalize(
+        package(),
+        run_id="run-sdk-drift-replay",
+        allowed_fact_catalog=catalog(),
+    )
+
+    assert provider_calls == 1
+    assert metadata_calls == 1
+    assert result["facts"][0]["fact_id"] == "fact_report"
+    assert result["upstream_provider"] == "DeepInfra"
+    assert result["usage_source"] == "generation_metadata"
+    ledger = storage.sanitized_model_ledger()[0]
+    assert ledger["outcome"] == "succeeded"
+    assert ledger["response_id"] == "generation-test-1"
+    assert ledger["actual_cost_usd"] == pytest.approx(0.0057)
+
+
+def test_canonical_sdk_drift_nonstop_retains_billing_before_rejection(
+    tmp_path: Path,
+    monkeypatch,
+):
+    provider_calls = 0
+    metadata_calls = 0
+    expected = response()
+    provider_payload = {
+        "id": expected["id"],
+        "model": expected["model"],
+        "object": "chat.completion",
+        "created": 1786479000,
+        "choices": [
+            {
+                "index": 0,
+                "finish_reason": "length",
+                "message": expected["choices"][0]["message"],
+            }
+        ],
+        "usage": expected["usage"],
+    }
+
+    class GeneratedSdkChat:
+        def send(self, **_kwargs):
+            nonlocal provider_calls
+            provider_calls += 1
+            response_value = httpx.Response(
+                200,
+                headers={"content-type": "application/json"},
+                json=provider_payload,
+                request=httpx.Request(
+                    "POST", "https://openrouter.ai/api/v1/chat/completions"
+                ),
+            )
+            return unmarshal_json_response(components.ChatResult, response_value)
+
+    class FakeOpenRouter:
+        def __init__(self, **_kwargs):
+            self.chat = GeneratedSdkChat()
+
+    def metadata_transport(*_args):
+        nonlocal metadata_calls
+        metadata_calls += 1
+        return generation_metadata()
+
+    monkeypatch.setattr(langchain_runtime, "OpenRouter", FakeOpenRouter)
+    storage = Storage(str(tmp_path / "sdk-drift-nonstop.db"))
+    canonicalizer = OpenRouterNemotronCanonicalizer(
+        storage,
+        metadata_transport=metadata_transport,
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+
+    with pytest.raises(ModelResponseError, match="provider_finish_reason"):
+        canonicalizer.canonicalize(
+            package(),
+            run_id="run-sdk-drift-nonstop",
+            allowed_fact_catalog=catalog(),
+        )
+
+    assert provider_calls == 1
+    assert metadata_calls == 1
+    ledger = storage.sanitized_model_ledger()[0]
+    assert ledger["outcome"] == "failed"
+    assert ledger["error_invariant"] == "provider_finish_reason"
+    assert ledger["response_id"] == "generation-test-1"
+    assert ledger["finish_reason"] == "length"
+    assert ledger["actual_cost_usd"] == pytest.approx(0.0057)
+    assert storage.cached_model_output(ledger["cache_key"]) is None
 
 
 def test_missing_upstream_provider_fails_closed_when_metadata_is_incomplete(
