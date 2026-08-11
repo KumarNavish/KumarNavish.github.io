@@ -27,14 +27,15 @@
   check('No page errors', failures.page.length === 0, JSON.stringify(failures.page));
   check('No public request failures', failures.request.length === 0, JSON.stringify(failures.request));
 
-  await getJson(`${API}/api/demo/reset`, { method: 'POST' });
-  const knowledge = await getJson(`${API}/api/knowledge`);
-  check('Demo resets to v3 after QA', knowledge.active_playbook?.version === 'mould-playbook-v3');
-
   await context.close();
   context = null;
   await sleep(150);
   check('No late browser console errors after context shutdown', failures.console.length === 0, JSON.stringify(failures.console));
+
+  const resetAfterRun = await getJson(`${API}/api/demo/reset`, { method: 'POST' });
+  const knowledge = await getJson(`${API}/api/knowledge`);
+  check('Demo resets to v3 after QA', resetAfterRun.active_playbook === 'mould-playbook-v3' && knowledge.active_playbook?.version === 'mould-playbook-v3');
+
   const videoPath = await video.path();
   await fs.copyFile(videoPath, path.join(OUT, 'uninterrupted-demo.webm'));
   await execFileAsync('python3', ['-m', 'pip', 'install', 'Pillow', '--quiet', '--break-system-packages'], { timeout: 180000 });
