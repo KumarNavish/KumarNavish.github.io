@@ -44,7 +44,7 @@ from .langchain_runtime import (
 )
 
 
-MULTI_AGENT_VERSION = "1.0.0"
+MULTI_AGENT_VERSION = "1.0.1"
 MULTI_AGENT_SCHEMA_VERSION = "casepath.nemotron-agent-dag/1.0.0"
 MULTI_AGENT_AUTHORITY_MODE = "multi_agent_hybrid_guarded"
 MULTI_AGENT_IMPLEMENTATION = "langgraph_stategraph_langchain_openrouter"
@@ -898,7 +898,10 @@ class InstrumentedStructuredAgent:
                 provider_patch.update(usage)
             needs_metadata = usage is None or (
                 identity["provenance_violation"] is None
-                and identity.get("response_finish_reason") is None
+                and (
+                    identity.get("response_finish_reason") is None
+                    or identity.get("upstream_provider") is None
+                )
             )
             if needs_metadata and identity["response_id"] is not None:
                 provider_patch.update(_generation_metadata_ledger_patch(

@@ -107,10 +107,10 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
             release_tool.REPOSITORY
             / f"casepath/releases/model-validation-attempt-20260811-{number:02d}.json"
         )
-        for number in range(1, 6)
+        for number in range(1, 7)
     }
-    attempt_1, attempt_2, attempt_3, attempt_4, attempt_5 = (
-        attempts[number] for number in range(1, 6)
+    attempt_1, attempt_2, attempt_3, attempt_4, attempt_5, attempt_6 = (
+        attempts[number] for number in range(1, 7)
     )
     for evidence in attempts.values():
         assert evidence["status"] == "failed_closed"
@@ -208,11 +208,52 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
             "canonical_state": 1,
         },
     }
+    assert attempt_6["execution_observation"] == {
+        "source_commit": "697a19fa0be541f46af85d9f31dd5cbda96b2bb8",
+        "qa_deploy_id": "dep-d9tnp72jobas73df6jmg",
+        "qa_deploy_outcome": "build_failed",
+        "qa_run_id": "run_b67c7356cac2cf12",
+        "orchestration_id": "orch_2d81acf782aa379b",
+        "failed_agent_id": "canonical_facts",
+        "provider_response_count": 1,
+        "downstream_model_calls": 0,
+        "deterministic_gate_receipts": 0,
+    }
+    assert attempt_6["provider_observation"] == {
+        "provider": "openrouter",
+        "provider_outcome": "succeeded",
+        "response_model": "nvidia/nemotron-3-ultra-550b-a55b",
+        "response_id": "gen-1786477748-NYzcfF7sy7RQ71QO780m",
+        "actual_cost_usd": 0.0177709,
+        "prompt_tokens": 23163,
+        "completion_tokens": 2825,
+        "total_tokens": 25988,
+        "finish_reason": "stop",
+        "usage_source": "response",
+        "latency_ms": 25786.994,
+    }
+    assert attempt_6["application_result"] == {
+        "outcome": "rejected",
+        "failure_type": "post_validation_missing_upstream_provider_persistence",
+        "error_type": "KeyError",
+        "successful_ledger_call_bound": False,
+        "ledger_call_id": "modelcall_0263759a564abb00",
+        "ledger_outcome": "failed",
+        "canonical_result_accepted": False,
+        "upstream_provider_persisted": False,
+        "contribution_diagnostics_retained": False,
+    }
+    for unavailable_count in (
+        "accepted_fact_count",
+        "rejected_fact_count",
+        "source_reference_projection_count",
+    ):
+        assert unavailable_count not in attempt_6["application_result"]
     assert sum(
         attempt["provider_observation"]["actual_cost_usd"]
         for attempt in attempts.values()
         if "actual_cost_usd" in attempt["provider_observation"]
-    ) == pytest.approx(0.0350401)
+    ) == pytest.approx(0.0528110)
     assert "actual_cost_usd" not in attempt_3["provider_observation"]
     assert "prompt_tokens" not in attempt_3["provider_observation"]
     assert attempt_3["provider_observation"]["charge_status"] == "unknown_unconfirmed"

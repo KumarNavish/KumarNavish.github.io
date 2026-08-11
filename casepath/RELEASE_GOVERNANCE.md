@@ -109,7 +109,7 @@ bound identically across the run audit and sanitized ledger. A paid provider
 response, a cache replay, or a weak/unbound role
 record does not satisfy that gate.
 
-Five authorized model attempts failed closed:
+Six authorized model attempts failed closed:
 
 - Attempt 1 reached DeepInfra through OpenRouter and returned the provider's
   dated canonical model ID. It charged USD 0.00756 for 3,629 prompt and 2,625
@@ -137,14 +137,25 @@ Five authorized model attempts failed closed:
   mismatch), then failed the strict-majority boundary. Ledger call
   `modelcall_ef72cb958e5c9e63` records `failed`; no downstream model role or
   final playbook was accepted.
+- Attempt 6 exercised the source-projection repair on aligned source commit
+  `697a19fa0be541f46af85d9f31dd5cbda96b2bb8`. Exactly one provider response
+  returned successfully using the requested alias and charged USD 0.0177709
+  for 23,163 prompt and 2,825 completion tokens with `stop`. The application
+  then failed closed with `KeyError` while persisting missing upstream-provider
+  metadata. By source order, canonical source merge, claim-state validation,
+  and exact-source validation necessarily completed before that failing
+  expression; however, ledger finalization did not retain contribution or
+  projection counts, so none are inferred. Ledger call
+  `modelcall_0263759a564abb00` records `failed`; no downstream model role or
+  deterministic gate produced a receipt.
 
-Known aggregate provider charges for attempts 1, 2, 4, and 5 are USD 0.0350401;
-attempt 3 remains unknown and unconfirmed. The responses remain failed-attempt
+Known aggregate provider charges for attempts 1, 2, 4, 5, and 6 are USD
+0.0528110; attempt 3 remains unknown and unconfirmed. The responses remain failed-attempt
 history, not successful application evidence. No raw prompt, raw output,
 credential, or private reference is retained, and no attempt is accepted
 model-backed release evidence.
 
-The five records above are listed under `historical_model_validation` with
+The six records above are listed under `historical_model_validation` with
 `scope: failed_closed_history_only`; they can never establish current runtime
 acceptance. No passing dynamic QA artifact pair has been verified as part of
 this source edit, so current production model acceptance remains unestablished.
