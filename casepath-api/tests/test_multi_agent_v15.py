@@ -14,6 +14,7 @@ from openrouter import OpenRouter, components, errors
 from openrouter.utils.unmarshal_json_response import unmarshal_json_response
 import pytest
 
+from casepath_api import canonicalizer as canonicalizer_module
 from casepath_api import langchain_runtime
 from casepath_api.canonicalizer import OPENROUTER_MODEL
 from casepath_api.canonicalizer import resolve_observable_source_reference_id
@@ -1351,6 +1352,66 @@ def test_specialist_missing_upstream_provider_uses_generation_metadata(
     assert ledger["usage_source"] == "generation_metadata"
 
 
+def test_specialist_generation_metadata_eventual_consistency_uses_bounded_backoff(
+    tmp_path: Path,
+):
+    metadata_calls = 0
+    inference_calls = 0
+    sleeps: list[float] = []
+
+    class Runnable:
+        def invoke(self, *_args, **_kwargs):
+            nonlocal inference_calls
+            inference_calls += 1
+            return _plan_envelope(
+                provider_name=None,
+                usage={
+                    "prompt_tokens": 31,
+                    "completion_tokens": 11,
+                    "total_tokens": 42,
+                    "cost": 0.0031,
+                },
+            )
+
+    def metadata_transport(*_args):
+        nonlocal metadata_calls
+        metadata_calls += 1
+        if metadata_calls < canonicalizer_module.GENERATION_METADATA_POLL_ATTEMPTS:
+            return {"data": {}}
+        return {
+            "data": {
+                "id": "gen-plan",
+                "model": "nvidia/nemotron-3-ultra-550b-a55b-20260604",
+                "provider_name": "DeepInfra",
+                "native_tokens_prompt": 31,
+                "native_tokens_completion": 11,
+                "total_cost": 0.0031,
+                "usage": 0.0031,
+                "finish_reason": "stop",
+            }
+        }
+
+    storage = Storage(str(tmp_path / "delayed-specialist-provider.db"))
+    runner = InstrumentedStructuredAgent(
+        storage,
+        runnable_factory=lambda *_args: Runnable(),
+        metadata_transport=metadata_transport,
+        metadata_sleep=sleeps.append,
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+    result = _invoke_plan(runner, run_id="run-delayed-specialist-provider")
+
+    assert inference_calls == 1
+    assert metadata_calls == 8
+    assert sleeps == [0.5, 1.0, 2.0, 4.0, 8.0, 8.0, 8.0]
+    assert result["upstream_provider"] == "DeepInfra"
+    assert result["usage_source"] == "generation_metadata"
+    ledger = storage.sanitized_model_ledger()[0]
+    assert ledger["outcome"] == "succeeded"
+    assert ledger["metadata_poll_count"] == 8
+    assert ledger["actual_cost_usd"] == pytest.approx(0.0031)
+
+
 def test_specialist_missing_upstream_provider_fails_closed_without_metadata(
     tmp_path: Path,
 ):
@@ -1391,13 +1452,86 @@ def test_specialist_missing_upstream_provider_fails_closed_without_metadata(
         _invoke_plan(runner, run_id="run-missing-specialist-provider-incomplete")
 
     assert inference_calls == 1
-    assert metadata_calls == 3
+    assert metadata_calls == 8
     ledger = storage.sanitized_model_ledger()[0]
     assert ledger["outcome"] == "failed"
     assert ledger["error_invariant"] == "generation_metadata_completeness"
     assert ledger["actual_cost_usd"] == pytest.approx(0.0031)
     assert ledger["usage_source"] == "response"
+    assert ledger["response_id"] == "gen-plan"
+    assert ledger["response_model"] == OPENROUTER_MODEL
+    assert ledger["finish_reason"] == "stop"
+    assert ledger["prompt_tokens"] == 31
+    assert ledger["completion_tokens"] == 11
+    assert ledger["total_tokens"] == 42
+    assert ledger["metadata_poll_count"] == 8
+    assert ledger["metadata_latency_ms"] >= 0
     assert ledger["error_type"] != "KeyError"
+    assert storage.cached_model_output(ledger["cache_key"]) is None
+
+
+def test_specialist_invalid_generation_usage_retains_bounded_poll_evidence(
+    tmp_path: Path,
+):
+    inference_calls = 0
+    metadata_calls = 0
+
+    class Runnable:
+        def invoke(self, *_args, **_kwargs):
+            nonlocal inference_calls
+            inference_calls += 1
+            return _plan_envelope(
+                provider_name=None,
+                usage={
+                    "prompt_tokens": 31,
+                    "completion_tokens": 11,
+                    "total_tokens": 42,
+                    "cost": 0.0031,
+                },
+            )
+
+    def invalid_metadata(*_args):
+        nonlocal metadata_calls
+        metadata_calls += 1
+        return {
+            "data": {
+                "id": "gen-plan",
+                "model": "nvidia/nemotron-3-ultra-550b-a55b-20260604",
+                "provider_name": "DeepInfra",
+                "native_tokens_prompt": 31,
+                "native_tokens_completion": 11,
+                "total_cost": 0.0,
+                "usage": 0.0,
+                "finish_reason": "stop",
+            }
+        }
+
+    storage = Storage(str(tmp_path / "invalid-specialist-generation-usage.db"))
+    runner = InstrumentedStructuredAgent(
+        storage,
+        runnable_factory=lambda *_args: Runnable(),
+        metadata_transport=invalid_metadata,
+        metadata_sleep=lambda _seconds: None,
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+    with pytest.raises(AgentInvocationFailure, match="generation_metadata_usage"):
+        _invoke_plan(runner, run_id="run-invalid-specialist-generation-usage")
+
+    assert inference_calls == metadata_calls == 1
+    ledger = storage.sanitized_model_ledger()[0]
+    assert ledger["outcome"] == "failed"
+    assert ledger["error_invariant"] == "generation_metadata_usage"
+    assert ledger["response_id"] == "gen-plan"
+    assert ledger["response_model"] == OPENROUTER_MODEL
+    assert ledger["finish_reason"] == "stop"
+    assert ledger["prompt_tokens"] == 31
+    assert ledger["completion_tokens"] == 11
+    assert ledger["total_tokens"] == 42
+    assert ledger["actual_cost_usd"] == pytest.approx(0.0031)
+    assert ledger["usage_source"] == "response"
+    assert ledger["metadata_poll_count"] == 1
+    assert ledger["metadata_latency_ms"] >= 0
+    assert storage.cached_model_output(ledger["cache_key"]) is None
 
 
 @pytest.mark.parametrize(

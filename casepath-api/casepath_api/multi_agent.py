@@ -45,7 +45,7 @@ from .langchain_runtime import (
 )
 
 
-MULTI_AGENT_VERSION = "1.0.2"
+MULTI_AGENT_VERSION = "1.0.3"
 MULTI_AGENT_SCHEMA_VERSION = "casepath.nemotron-agent-dag/1.0.0"
 MULTI_AGENT_AUTHORITY_MODE = "multi_agent_hybrid_guarded"
 MULTI_AGENT_IMPLEMENTATION = "langgraph_stategraph_langchain_openrouter"

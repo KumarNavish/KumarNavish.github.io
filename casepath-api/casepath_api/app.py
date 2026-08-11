@@ -37,7 +37,7 @@ from .multi_agent import (
     MULTI_AGENT_IMPLEMENTATION,
     MULTI_AGENT_SCHEMA_VERSION,
 )
-from .storage import Storage
+from .storage import ActiveRunResetError, Storage
 from .langchain_runtime import external_tracing_environment_disabled
 
 storage = Storage()
@@ -395,7 +395,13 @@ def learning_proof(
 @app.post("/api/demo/reset")
 def reset_demo(session_id: str = Depends(require_session)):
     ledger_records_before = storage.model_call_summary()["records"]
-    removed = storage.reset(session_id=session_id)
+    try:
+        removed = storage.reset(session_id=session_id)
+    except ActiveRunResetError:
+        raise HTTPException(
+            409,
+            "Cannot reset demo state while this session has a queued or running analysis",
+        ) from None
     return {
         "status": "reset",
         "session_scope": "caller_only",

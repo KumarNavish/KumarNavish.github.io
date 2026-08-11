@@ -35,7 +35,7 @@ OPENROUTER_ACCEPTED_RESPONSE_MODELS = {OPENROUTER_MODEL, OPENROUTER_CANONICAL_MO
 OPENROUTER_PROVIDER = "openrouter"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_GENERATION_URL = "https://openrouter.ai/api/v1/generation"
-CANONICALIZER_VERSION = "1.6.2"
+CANONICALIZER_VERSION = "1.6.3"
 PROMPT_VERSION = "canonical-facts/1.5.0"
 SCHEMA_VERSION = "casepath.canonical-facts/1.4.0"
 NORMALIZED_VALUES = [
@@ -70,8 +70,9 @@ OUTPUT_USD_PER_MILLION_TOKENS = 3.60
 MAX_OUTPUT_TOKENS = 4_000
 DEFAULT_CUMULATIVE_USD_CAP = 25.0
 ABSOLUTE_CUMULATIVE_USD_CAP = 400.0
-GENERATION_METADATA_POLL_ATTEMPTS = 3
-GENERATION_METADATA_POLL_INTERVAL_SECONDS = 0.25
+GENERATION_METADATA_POLL_ATTEMPTS = 8
+GENERATION_METADATA_POLL_INTERVAL_SECONDS = 0.5
+GENERATION_METADATA_POLL_MAX_INTERVAL_SECONDS = 8.0
 GENERATION_METADATA_TIMEOUT_SECONDS = 10.0
 
 
@@ -450,7 +451,12 @@ def _generation_metadata_ledger_patch(
                 "usage",
                 "finish_reason",
             }
-            if required.issubset(data):
+            # The generation row is eventually materialized. During that window
+            # OpenRouter can expose the full key set with nullable fields still
+            # unset; treat that shape like a 404/partial row and keep polling.
+            if required.issubset(data) and all(
+                data[key] is not None for key in required
+            ):
                 prompt_tokens = data["native_tokens_prompt"]
                 completion_tokens = data["native_tokens_completion"]
                 total_cost = data["total_cost"]
@@ -484,6 +490,13 @@ def _generation_metadata_ledger_patch(
                     raise ModelResponseError(
                         "generation_metadata_usage invariant failed",
                         invariant="generation_metadata_usage",
+                        safe_context={
+                            "latency_ms": latency_ms,
+                            "metadata_latency_ms": round(
+                                (perf_counter() - started) * 1000, 3
+                            ),
+                            "metadata_poll_count": attempt,
+                        },
                     )
                 total_tokens = prompt_tokens + completion_tokens
                 billing_patch = {
@@ -526,10 +539,20 @@ def _generation_metadata_ledger_patch(
                     "finish_reason": finish_reason,
                 }
         if attempt < poll_attempts:
-            metadata_sleep(poll_interval_seconds)
+            metadata_sleep(
+                min(
+                    poll_interval_seconds * (2 ** (attempt - 1)),
+                    GENERATION_METADATA_POLL_MAX_INTERVAL_SECONDS,
+                )
+            )
     raise ModelResponseError(
         "generation_metadata_completeness invariant failed",
         invariant="generation_metadata_completeness",
+        safe_context={
+            "latency_ms": latency_ms,
+            "metadata_latency_ms": round((perf_counter() - started) * 1000, 3),
+            "metadata_poll_count": poll_attempts,
+        },
     )
 
 
