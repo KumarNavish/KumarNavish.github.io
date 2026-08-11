@@ -9,7 +9,7 @@ import pytest
 import casepath_api.app as app_module
 from casepath_api.canonicalizer import OPENROUTER_MODEL
 from casepath_api.pipeline_v15 import COMPONENT_VERSIONS, ClaimPipeline
-from casepath_api.storage import Storage
+from casepath_api.storage import ActiveRunResetError, Storage
 
 SESSION_A = "session-a-12345678"
 SESSION_B = "session-b-12345678"
@@ -285,6 +285,81 @@ def test_two_sessions_are_isolated_and_reset_preserves_other_session_and_global_
     assert reset.json()["model_ledger_preserved"] is True
     assert client.get(f"/api/runs/{run_a['run_id']}", headers=headers(SESSION_A)).status_code == 404
     assert client.get(f"/api/runs/{run_b['run_id']}", headers=headers(SESSION_B)).status_code == 200
+    assert app_module.storage.model_calls()[0]["call_id"] == call_id
+
+
+def test_storage_reset_rejects_active_runs_then_allows_terminal_reset(tmp_path: Path):
+    storage = Storage(str(tmp_path / "active-reset.db"))
+    queued_run_id = storage.create_run("DEF-027-E0-DEMO", session_id=SESSION_A)
+    running_run_id = storage.create_run("DEMO-MOULD-002", session_id=SESSION_A)
+    storage.patch_run(running_run_id, status="running")
+
+    with pytest.raises(ActiveRunResetError, match="while a run is active") as caught:
+        storage.reset(session_id=SESSION_A)
+
+    assert caught.value.__cause__ is None
+    assert queued_run_id not in str(caught.value)
+    assert running_run_id not in str(caught.value)
+    assert storage.get_run(queued_run_id, session_id=SESSION_A) is not None
+    assert storage.get_run(running_run_id, session_id=SESSION_A) is not None
+
+    storage.patch_run(queued_run_id, status="failed")
+    storage.patch_run(running_run_id, status="complete")
+    removed = storage.reset(session_id=SESSION_A)
+
+    assert removed["runs"] == 2
+    assert storage.get_run(queued_run_id, session_id=SESSION_A) is None
+    assert storage.get_run(running_run_id, session_id=SESSION_A) is None
+
+
+def test_active_reset_guard_is_session_scoped_and_returns_bounded_409(client: TestClient):
+    active_run_id = app_module.storage.create_run(
+        "DEF-027-E0-DEMO",
+        session_id=SESSION_A,
+    )
+    app_module.storage.patch_run(
+        active_run_id,
+        status="running",
+        patch={"raw_error": "RAW_ACTIVE_RESET_SENTINEL"},
+    )
+    other_run_id = app_module.storage.create_run(
+        "DEMO-MOULD-002",
+        session_id=SESSION_B,
+    )
+    app_module.storage.patch_run(other_run_id, status="running")
+    call_id = app_module.storage.create_model_call(
+        run_id=active_run_id,
+        provider="openrouter",
+        model=OPENROUTER_MODEL,
+        cache_key="active-reset-global-ledger",
+        purpose="active-reset-test",
+        call_count=0,
+        estimated_cost_usd=0,
+        outcome="blocked_missing_credential",
+    )
+
+    blocked = client.post("/api/demo/reset", headers=headers(SESSION_A))
+
+    assert blocked.status_code == 409
+    assert blocked.json() == {
+        "detail": "Cannot reset demo state while this session has a queued or running analysis"
+    }
+    assert active_run_id not in blocked.text
+    assert other_run_id not in blocked.text
+    assert "RAW_ACTIVE_RESET_SENTINEL" not in blocked.text
+    assert "OPENROUTER_API_KEY" not in blocked.text
+    assert app_module.storage.get_run(active_run_id, session_id=SESSION_A) is not None
+    assert app_module.storage.get_run(other_run_id, session_id=SESSION_B) is not None
+    assert app_module.storage.model_calls()[0]["call_id"] == call_id
+
+    app_module.storage.patch_run(active_run_id, status="failed")
+    reset = client.post("/api/demo/reset", headers=headers(SESSION_A))
+
+    assert reset.status_code == 200
+    assert reset.json()["session_scope"] == "caller_only"
+    assert reset.json()["model_ledger_preserved"] is True
+    assert app_module.storage.get_run(active_run_id, session_id=SESSION_A) is None
+    assert app_module.storage.get_run(other_run_id, session_id=SESSION_B) is not None
     assert app_module.storage.model_calls()[0]["call_id"] == call_id
 
 

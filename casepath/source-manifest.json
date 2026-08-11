@@ -82,7 +82,7 @@
     "sha256": "6c7eeff3b5d19f234d15547aad34f077864dd9afa24dfb24c4529a6c4c1a17f8"
   },
   "contract": "casepath.source-manifest/2.0.0",
-  "file_count": 107,
+  "file_count": 108,
   "files": [
     {
       "executable": false,
@@ -99,14 +99,14 @@
     {
       "executable": false,
       "path": "casepath-api/casepath_api/app.py",
-      "sha256": "3ad69ea227f2b8e301bf1dda0cdae28d1e115d62b27ad0f3450bf5550ce51b29",
-      "size_bytes": 14791
+      "sha256": "a956c3285bb6beb58d17110071ec219ae4687b4993fb1abc4c8479e073704739",
+      "size_bytes": 15014
     },
     {
       "executable": false,
       "path": "casepath-api/casepath_api/canonicalizer.py",
-      "sha256": "878b2ab47e6ced1d67a3d1fed149a3d335c4d6c75b259bc828fc77fd69f8482d",
-      "size_bytes": 64686
+      "sha256": "54a822aca97ceb5425f088ef6b9412fb8a4e31b0327eb7c508814a7b2cd134c5",
+      "size_bytes": 65761
     },
     {
       "executable": false,
@@ -123,7 +123,7 @@
     {
       "executable": false,
       "path": "casepath-api/casepath_api/multi_agent.py",
-      "sha256": "a9c91a9fcaaf3e1da104a1f3f1bd8ed7ed70fe4f011155f8c75406dca3998779",
+      "sha256": "59f5c14f7faae6911f593f6f1cb5947145cfbd1264cfd846fb4f2fb02ec8a69d",
       "size_bytes": 84121
     },
     {
@@ -141,8 +141,8 @@
     {
       "executable": false,
       "path": "casepath-api/casepath_api/storage.py",
-      "sha256": "8e63745425f1e5234743a7650e367f49ed25b4a10f1592fec97f29d9fc6f3a33",
-      "size_bytes": 20436
+      "sha256": "0c4ab053d29d6c1632c651e1644a15f0c89e8f90e8011e7a6c94822143dc6e4a",
+      "size_bytes": 21005
     },
     {
       "executable": false,
@@ -207,20 +207,20 @@
     {
       "executable": false,
       "path": "casepath-api/tests/test_app_v15.py",
-      "sha256": "57185644c2b344a5f96231cc8bdeb28c2bd49a8024f934f9acc53751b9c7cab7",
-      "size_bytes": 15991
+      "sha256": "9de935754d4ab25d1027450892d3f47993169bb31bbf099a56538ca2efe2134e",
+      "size_bytes": 19223
     },
     {
       "executable": false,
       "path": "casepath-api/tests/test_canonicalizer_v15.py",
-      "sha256": "1f0799c81c436e0fb85d1bd579702bb095aaca98ec49c47769ca9744e9248782",
-      "size_bytes": 70325
+      "sha256": "f26a773719cb90461e59b81ca98c12f89c415550506c0c99fcb3bd6f1634ef3f",
+      "size_bytes": 72779
     },
     {
       "executable": false,
       "path": "casepath-api/tests/test_multi_agent_v15.py",
-      "sha256": "521aea6f6796ab02fa5d0447c0defcac15111a4a6cb21c3ffaff29947f10a902",
-      "size_bytes": 62281
+      "sha256": "8997ba89b4523afed133cc2ef75c77251c2de3597c7d6269e5431af5a67cb7df",
+      "size_bytes": 67210
     },
     {
       "executable": false,
@@ -231,7 +231,7 @@
     {
       "executable": false,
       "path": "casepath-qa/browser-focused-v20.mjs",
-      "sha256": "67b0fcb8ee55a283084b82e51d1c3686ce17190cc8bc97b2edc4eabf0f2bc095",
+      "sha256": "a36c43e98f6827759b08f307a206501a668e8fb80fe9c053b365d0eee6dc7b83",
       "size_bytes": 157775
     },
     {
@@ -381,8 +381,8 @@
     {
       "executable": false,
       "path": "casepath/RELEASE_GOVERNANCE.md",
-      "sha256": "f39bca4f3d4ae01ec4928215bb2f9d68477a656be6480afe95c2aa156ad3bc36",
-      "size_bytes": 16327
+      "sha256": "6e69fd292cc8f4d890b3228ab503e796be65bd8e0eb255f40d60b24316e3218a",
+      "size_bytes": 17222
     },
     {
       "executable": false,
@@ -603,8 +603,8 @@
     {
       "executable": false,
       "path": "casepath/defect-ledger.md",
-      "sha256": "58f1602144e3e24b76f7354d049ed176e33edf43ff7d46268669ab3cc96d246e",
-      "size_bytes": 10813
+      "sha256": "fbb39bb615c068ed6e41d08eba3c6a0eea5cc4ce164f95feb72a571a92065cab",
+      "size_bytes": 11684
     },
     {
       "executable": false,
@@ -615,14 +615,14 @@
     {
       "executable": false,
       "path": "casepath/release.json",
-      "sha256": "602f8b8bb398b9bcc85b3b1a24c7225dc828ffe7686fc80dd4ffd065366115d3",
-      "size_bytes": 6713
+      "sha256": "504b69ff08372244b76e9e352a67a218f4f501dd12f8881d82aab53058b0cf5e",
+      "size_bytes": 6784
     },
     {
       "executable": false,
       "path": "casepath/release.schema.json",
-      "sha256": "2f3de806dcd784ee09d448ce399b265a445a415b0b407f3f7480e013d7bd432a",
-      "size_bytes": 13697
+      "sha256": "5346701c1b8ce965936cca2970b21596c30d9dcd46406880d215f1b72a5dfb0a",
+      "size_bytes": 13776
     },
     {
       "executable": false,
@@ -680,6 +680,12 @@
     },
     {
       "executable": false,
+      "path": "casepath/releases/model-validation-attempt-20260811-08.json",
+      "sha256": "36314ca46518aa7cd1f6331f9986adbec1b199db3bffd9199c313e7d58812390",
+      "size_bytes": 2869
+    },
+    {
+      "executable": false,
       "path": "casepath/tools/browser_qa.py",
       "sha256": "ee0d546fdf234d66aa066ddf6cd63678a61f46d0ffadae2835613c89218704e3",
       "size_bytes": 9405
@@ -693,7 +699,7 @@
     {
       "executable": false,
       "path": "casepath/tools/casepath_release.py",
-      "sha256": "920fb751ef08ebf0e9b3f45aa677ad4c211750ca0f3a7832f3ecd2a84d49e07e",
+      "sha256": "5e7912ac86d10e008d0327518ead410c0cab51f1de96f3c10d1d9ec451df6142",
       "size_bytes": 75596
     },
     {
@@ -705,8 +711,8 @@
     {
       "executable": false,
       "path": "casepath/tools/test_casepath_release.py",
-      "sha256": "5e952143fe3067bcff195f8232ff8fc1240eea3d4e0903cb5068ea19f8cdd8b1",
-      "size_bytes": 39460
+      "sha256": "e86c236dbf05176c58e03e632b7adc969116f3abc5fcbfd81d657a00fd13fa85",
+      "size_bytes": 42124
     },
     {
       "executable": false,
@@ -731,7 +737,7 @@
   "gates": [
     {
       "path": "casepath-qa/browser-focused-v20.mjs",
-      "sha256": "67b0fcb8ee55a283084b82e51d1c3686ce17190cc8bc97b2edc4eabf0f2bc095"
+      "sha256": "a36c43e98f6827759b08f307a206501a668e8fb80fe9c053b365d0eee6dc7b83"
     },
     {
       "path": "casepath-qa/browser-guided-v13-smoke.mjs",
