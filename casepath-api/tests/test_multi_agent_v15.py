@@ -84,7 +84,7 @@ class FakeStructuredRunnable:
                 "id": f"gen-{self.agent_id}",
                 "model_name": OPENROUTER_MODEL,
                 "finish_reason": "stop",
-                "provider_name": "MockProvider",
+                "provider_name": "DeepInfra",
                 "usage": {
                     "prompt_tokens": 100,
                     "completion_tokens": 40,
@@ -226,7 +226,7 @@ def graph_fixture(tmp_path: Path):
         "origin_call_id": "modelcall-canonical",
         "response_id": "gen-canonical",
         "response_model": OPENROUTER_MODEL,
-        "upstream_provider": "MockProvider",
+        "upstream_provider": "DeepInfra",
         "usage_source": "response",
         "finish_reason": "stop",
         "usage": {
@@ -656,11 +656,29 @@ def test_shared_langchain_adapter_has_exact_nonretrying_private_configuration(mo
     assert sdk_kwargs["retry_config"] is None
     assert sdk_kwargs["timeout_ms"] == 180_000
     assert sdk_kwargs["x_open_router_title"] == "CasePath"
+    assert "client" not in sdk_kwargs
+    assert langchain_runtime.OPENROUTER_ENDPOINT_TAG == "deepinfra/fp4"
     assert chat_kwargs["model"] == OPENROUTER_MODEL
     assert chat_kwargs["max_retries"] == 0
     assert chat_kwargs["timeout"] == 180_000
     assert chat_kwargs["max_tokens"] == 777
     assert chat_kwargs["openrouter_provider"] == {
+        "only": ["deepinfra/fp4"],
+        "allow_fallbacks": False,
+        "require_parameters": True,
+        "data_collection": "deny",
+    }
+    assert "model_kwargs" not in chat_kwargs
+    assert chat_kwargs["openrouter_provider"] is not langchain_runtime.OPENROUTER_PROVIDER_POLICY
+    assert (
+        chat_kwargs["openrouter_provider"]["only"]
+        is not langchain_runtime.OPENROUTER_PROVIDER_POLICY["only"]
+    )
+    assert components.ProviderPreferences.model_validate(
+        chat_kwargs["openrouter_provider"]
+    ).model_dump(exclude_none=True, by_alias=True) == {
+        "only": ["deepinfra/fp4"],
+        "allow_fallbacks": False,
         "require_parameters": True,
         "data_collection": "deny",
     }
@@ -673,6 +691,106 @@ def test_shared_langchain_adapter_has_exact_nonretrying_private_configuration(mo
         "strict": True,
         "include_raw": True,
     }
+
+
+def test_shared_runnable_forwards_exact_private_route_in_one_sdk_send(monkeypatch):
+    requests: list[httpx.Request] = []
+    sdk_clients: list[httpx.Client] = []
+    real_client = httpx.Client
+    real_openrouter = OpenRouter
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            json={
+                "id": "gen-exact-route-1",
+                "model": OPENROUTER_MODEL,
+                "object": "chat.completion",
+                "created": 1786483159,
+                "system_fingerprint": None,
+                "openrouter_metadata": {
+                    "attempt": 1,
+                    "endpoints": {
+                        "available": [
+                            {
+                                "model": OPENROUTER_MODEL,
+                                "provider": "DeepInfra",
+                                "selected": True,
+                            }
+                        ],
+                        "total": 1,
+                    },
+                    "is_byok": False,
+                    "region": None,
+                    "requested": OPENROUTER_MODEL,
+                    "strategy": "direct",
+                    "summary": "RAW_ROUTER_SUMMARY_SENTINEL",
+                },
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": "stop",
+                        "message": {
+                            "role": "assistant",
+                            "content": json.dumps({"answer": "bounded"}),
+                        },
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 2,
+                    "total_tokens": 12,
+                    "cost": 0.001,
+                },
+            },
+        )
+
+    def instrumented_openrouter(**kwargs):
+        client = real_client(transport=httpx.MockTransport(handler))
+        sdk_clients.append(client)
+        return real_openrouter(client=client, **kwargs)
+
+    monkeypatch.setattr(langchain_runtime, "OpenRouter", instrumented_openrouter)
+    runnable = langchain_runtime.structured_nemotron_runnable(
+        schema={
+            "title": "exact_route_test",
+            "type": "object",
+            "properties": {"answer": {"type": "string"}},
+            "required": ["answer"],
+            "additionalProperties": False,
+        },
+        api_key="runtime-only-test-value",
+        orchestration_id="orch-exact-route",
+        max_tokens=100,
+    )
+
+    envelope = runnable.invoke(
+        [HumanMessage(content="Return the bounded object")],
+        config={"callbacks": []},
+    )
+
+    assert envelope["parsed"] == {"answer": "bounded"}
+    assert envelope["raw"].response_metadata["provider_name"] == "DeepInfra"
+    assert "RAW_ROUTER_SUMMARY_SENTINEL" not in repr(
+        envelope["raw"].response_metadata
+    )
+    assert len(requests) == 1
+    body = json.loads(requests[0].content)
+    assert body["model"] == OPENROUTER_MODEL
+    assert body["provider"] == {
+        "only": ["deepinfra/fp4"],
+        "allow_fallbacks": False,
+        "require_parameters": True,
+        "data_collection": "deny",
+    }
+    assert "x_open_router_metadata" not in body
+    assert "models" not in body
+    assert "trace" not in body
+    assert requests[0].headers["X-OpenRouter-Metadata"] == "enabled"
+    assert len(sdk_clients) == 1
+    sdk_clients[0].close()
 
 
 def _native_response_payload() -> dict[str, Any]:
@@ -703,10 +821,16 @@ def _native_response_payload() -> dict[str, Any]:
     }
 
 
-def _http_response(body: str, *, status: int = 200, content_type: str = "application/json"):
+def _http_response(
+    body: str,
+    *,
+    status: int = 200,
+    content_type: str = "application/json",
+    headers: dict[str, str] | None = None,
+):
     return httpx.Response(
         status,
-        headers={"content-type": content_type},
+        headers={"content-type": content_type, **(headers or {})},
         content=body.encode("utf-8"),
         request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions"),
     )
@@ -768,6 +892,91 @@ def test_response_bridge_recovers_sdk_schema_drift_through_langchain_once():
     assert "RAW_USAGE_SENTINEL" not in repr(raw.response_metadata)
 
 
+def test_response_bridge_projects_text_content_parts_through_langchain_once():
+    payload = _native_response_payload()
+    payload["choices"][0]["message"]["content"] = [
+        {"type": "text", "text": json.dumps({"answer": "bounded-parts"})}
+    ]
+
+    class GeneratedSdkChat:
+        calls = 0
+
+        def send(self, **_kwargs):
+            self.calls += 1
+            response = _http_response(json.dumps(payload))
+            return unmarshal_json_response(components.ChatResult, response)
+
+    chat = GeneratedSdkChat()
+    client = type("ProviderClient", (), {"chat": chat})()
+    model = langchain_runtime.ChatOpenRouter(
+        model=OPENROUTER_MODEL,
+        api_key="runtime-only-test-value",
+        client=langchain_runtime._OpenRouterClientBridge(client),
+        temperature=0,
+        max_tokens=100,
+        max_retries=0,
+    )
+    runnable = model.with_structured_output(
+        {
+            "title": "response_bridge_text_parts_test",
+            "type": "object",
+            "properties": {"answer": {"type": "string"}},
+            "required": ["answer"],
+            "additionalProperties": False,
+        },
+        method="json_schema",
+        strict=True,
+        include_raw=True,
+    )
+
+    envelope = runnable.invoke(
+        [HumanMessage(content="Return the bounded test object")],
+        config={"callbacks": []},
+    )
+
+    assert chat.calls == 1
+    assert envelope["parsed"] == {"answer": "bounded-parts"}
+    assert envelope["parsing_error"] is None
+    assert envelope["raw"].response_metadata["id"] == payload["id"]
+    assert envelope["raw"].usage_metadata == {
+        "input_tokens": 120,
+        "output_tokens": 30,
+        "total_tokens": 150,
+    }
+
+
+def test_response_bridge_recovers_nullable_content_as_bounded_failed_finish():
+    payload = _native_response_payload()
+    payload["choices"][0]["finish_reason"] = "error"
+    payload["choices"][0]["message"]["content"] = None
+    payload["choices"][0]["error"] = {"message": "RAW_NULL_CONTENT_SENTINEL"}
+
+    class GeneratedSdkChat:
+        calls = 0
+
+        def send(self, **_kwargs):
+            self.calls += 1
+            response = _http_response(json.dumps(payload))
+            return unmarshal_json_response(components.ChatResult, response)
+
+    chat = GeneratedSdkChat()
+    client = type("ProviderClient", (), {"chat": chat})()
+    recovered = langchain_runtime._OpenRouterClientBridge(client).chat.send(messages=[])
+
+    assert chat.calls == 1
+    assert recovered["id"] == payload["id"]
+    assert recovered["model"] == payload["model"]
+    assert recovered["choices"][0]["finish_reason"] == "error"
+    assert recovered["choices"][0]["message"]["content"] == ""
+    assert recovered["usage"] == {
+        "prompt_tokens": 120,
+        "completion_tokens": 30,
+        "total_tokens": 150,
+        "cost": 0.0042,
+    }
+    assert "RAW_NULL_CONTENT_SENTINEL" not in repr(recovered)
+
+
 def test_response_bridge_passes_through_sdk_validated_results_by_identity():
     payload = {**_native_response_payload(), "system_fingerprint": None}
     expected = unmarshal_json_response(
@@ -789,17 +998,161 @@ def test_response_bridge_passes_through_sdk_validated_results_by_identity():
     assert chat.calls == 1
 
 
+@pytest.mark.parametrize("variant", ["missing", "odd"])
+def test_response_bridge_ignores_nonconsumed_envelope_field_drift(variant):
+    payload = _native_response_payload()
+    if variant == "missing":
+        payload.pop("created")
+        payload.pop("object")
+        payload["choices"][0].pop("index")
+    else:
+        payload["created"] = "RAW_CREATED_SENTINEL"
+        payload["object"] = {"raw": "RAW_OBJECT_SENTINEL"}
+        payload["choices"][0]["index"] = True
+    body = json.dumps(payload)
+
+    class RejectingSdkChat:
+        calls = 0
+
+        def send(self, **_kwargs):
+            self.calls += 1
+            response = _http_response(body)
+            raise errors.ResponseValidationError(
+                "RAW_FIELD_DRIFT_SENTINEL",
+                response,
+                ValueError("RAW_FIELD_DRIFT_SENTINEL"),
+                body,
+            )
+
+    chat = RejectingSdkChat()
+    recovered = langchain_runtime._ChatSendBridge(chat).send(messages=[])
+
+    assert chat.calls == 1
+    assert recovered["id"] == payload["id"]
+    assert recovered["model"] == payload["model"]
+    assert "created" not in recovered
+    assert "object" not in recovered
+    assert "index" not in recovered["choices"][0]
+    assert "RAW_" not in repr(recovered)
+
+
+@pytest.mark.parametrize(
+    ("generation_id", "error_code", "expected_context"),
+    [
+        (
+            "gen-1786483159-hyYthqPv76o6PHXpGLzl",
+            400,
+            {
+                "response_id": "gen-1786483159-hyYthqPv76o6PHXpGLzl",
+                "provider_error_code": 400,
+            },
+        ),
+        ("DEF-027-E0-DEMO", 400, {"provider_error_code": 400}),
+        ("DOC-8842-INSPECTION", 400, {"provider_error_code": 400}),
+        ("REVGLTAyNy1FMC1ERU1P", 400, {"provider_error_code": 400}),
+        ("Bearer RAW_HEADER_SENTINEL", 100_000, {}),
+    ],
+)
+def test_response_bridge_classifies_top_level_upstream_rejection_without_raw(
+    generation_id,
+    error_code,
+    expected_context,
+):
+    body = json.dumps(
+        {
+            "error": {
+                "code": error_code,
+                "message": "RAW_UPSTREAM_REJECTION_SENTINEL",
+                "metadata": {"raw": "RAW_UPSTREAM_METADATA_SENTINEL"},
+            }
+        }
+    )
+
+    class RejectingSdkChat:
+        calls = 0
+
+        def send(self, **_kwargs):
+            self.calls += 1
+            response = _http_response(
+                body,
+                headers={"X-Generation-Id": generation_id},
+            )
+            return unmarshal_json_response(components.ChatResult, response)
+
+    chat = RejectingSdkChat()
+    with pytest.raises(
+        langchain_runtime.OpenRouterUpstreamRejectionError
+    ) as captured:
+        langchain_runtime._ChatSendBridge(chat).send(messages=[])
+
+    assert chat.calls == 1
+    assert captured.value.invariant == "provider_upstream_rejection"
+    assert captured.value.safe_context == expected_context
+    assert captured.value.__cause__ is None
+    assert captured.value.__context__ is None
+    assert "RAW_" not in str(captured.value)
+    assert "RAW_" not in repr(captured.value)
+    assert "RAW_" not in repr(captured.value.safe_context)
+
+
 @pytest.mark.parametrize(
     ("body", "status", "content_type"),
     [
         ("RAW_PROTOCOL_SENTINEL", 200, "application/json"),
         ('{"id":"a","id":"b"}', 200, "application/json"),
         ('{"value":NaN}', 200, "application/json"),
-        (json.dumps({**_native_response_payload(), "error": {"message": "RAW_PROTOCOL_SENTINEL"}}), 200, "application/json"),
         (json.dumps({**_native_response_payload(), "choices": []}), 200, "application/json"),
+        (
+            json.dumps(
+                {
+                    **_native_response_payload(),
+                    "choices": [
+                        {
+                            **_native_response_payload()["choices"][0],
+                            "message": {
+                                "role": "assistant",
+                                "content": [
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": "RAW_MULTIMODAL_SENTINEL"
+                                        },
+                                    }
+                                ],
+                            },
+                        }
+                    ],
+                }
+            ),
+            200,
+            "application/json",
+        ),
+        (
+            json.dumps(
+                {
+                    **_native_response_payload(),
+                    "choices": [
+                        {
+                            **_native_response_payload()["choices"][0],
+                            "message": {
+                                "role": "assistant",
+                                "content": [
+                                    {"type": "text", "text": "x"}
+                                    for _ in range(
+                                        langchain_runtime.OPENROUTER_RESPONSE_TEXT_PART_LIMIT
+                                        + 1
+                                    )
+                                ],
+                            },
+                        }
+                    ],
+                }
+            ),
+            200,
+            "application/json",
+        ),
         (json.dumps({key: value for key, value in _native_response_payload().items() if key != "id"}), 200, "application/json"),
         (json.dumps({key: value for key, value in _native_response_payload().items() if key != "model"}), 200, "application/json"),
-        (json.dumps({**_native_response_payload(), "object": "provider-specific-object"}), 200, "application/json"),
         (json.dumps(_native_response_payload()), 200, "text/plain"),
         (json.dumps(_native_response_payload()), 500, "application/json"),
         ("x" * (langchain_runtime.OPENROUTER_RESPONSE_BODY_LIMIT_BYTES + 1), 200, "application/json"),
@@ -1076,7 +1429,7 @@ def test_specialist_requires_strict_accepted_majority_and_never_caches_minority(
                         "id": f"gen-majority-{calls}",
                         "model_name": OPENROUTER_MODEL,
                         "finish_reason": "stop",
-                        "provider_name": "MockProvider",
+                        "provider_name": "DeepInfra",
                         "usage": {
                             "prompt_tokens": 10,
                             "completion_tokens": 5,
@@ -1175,7 +1528,7 @@ def _plan_envelope(
     *,
     response_id: str | None = "gen-plan",
     response_model: str = OPENROUTER_MODEL,
-    provider_name: str | None = "MockProvider",
+    provider_name: str | None = "DeepInfra",
     finish_reason: str | None = "stop",
     usage: dict[str, Any] | None = None,
     parsed: bool = True,
@@ -1756,6 +2109,149 @@ def test_specialist_protocol_failure_has_bounded_invariant_and_ledger(tmp_path: 
     assert ledger["error_invariant"] == "provider_response_envelope"
     assert caught.value.safe_context["call_id"] == ledger["call_id"]
     assert "response envelope" not in json.dumps(storage.sanitized_model_ledger())
+
+
+def test_specialist_upstream_rejection_retains_only_safe_unknown_cost_evidence(
+    tmp_path: Path,
+):
+    inference_calls = 0
+
+    class Runnable:
+        def invoke(self, *_args, **_kwargs):
+            nonlocal inference_calls
+            inference_calls += 1
+            raise langchain_runtime.OpenRouterUpstreamRejectionError(
+                response_id="gen-1786483162-CCCCCCCCCCCCCCCCCCCC",
+                provider_error_code=400,
+            )
+
+    storage = Storage(str(tmp_path / "specialist-upstream-rejection.db"))
+    runner = InstrumentedStructuredAgent(
+        storage,
+        runnable_factory=lambda *_args: Runnable(),
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+
+    with pytest.raises(
+        AgentInvocationFailure,
+        match="provider_upstream_rejection",
+    ) as captured:
+        _invoke_plan(runner, run_id="run-specialist-upstream-rejection")
+
+    assert inference_calls == 1
+    assert captured.value.safe_context["response_id"] == (
+        "gen-1786483162-CCCCCCCCCCCCCCCCCCCC"
+    )
+    assert captured.value.safe_context["provider_error_code"] == 400
+    ledger = storage.sanitized_model_ledger()[0]
+    assert ledger["outcome"] == "failed"
+    assert ledger["error_invariant"] == "provider_upstream_rejection"
+    assert ledger["response_id"] == "gen-1786483162-CCCCCCCCCCCCCCCCCCCC"
+    assert ledger["provider_error_code"] == 400
+    assert ledger["actual_cost_usd"] is None
+    assert "usage_source" not in ledger
+    assert "prompt_tokens" not in ledger
+    assert storage.cached_model_output(ledger["cache_key"]) is None
+    assert storage.model_call_summary()["actual_cost_complete"] is False
+    assert storage.model_call_summary()["unknown_cost_call_count"] == 1
+
+
+def test_specialist_upstream_rejection_receipt_exposes_only_bounded_status(
+    tmp_path: Path,
+):
+    _, _, _, package, canonicalization, result = graph_fixture(tmp_path)
+    receipts: list[dict[str, Any]] = []
+
+    class FailingRunner:
+        calls = 0
+
+        def invoke(self, **values):
+            self.calls += 1
+            raise AgentInvocationFailure(
+                values["agent_id"],
+                "provider_upstream_rejection",
+                safe_context={
+                    "call_id": "modelcall-specialist-rejected",
+                    "parent_call_id": values["parent_call_id"],
+                    "delegation_id": values["delegation_id"],
+                    "response_id": "gen-1786483163-DDDDDDDDDDDDDDDDDDDD",
+                    "provider_error_code": 400,
+                    "outcome": "failed",
+                },
+            )
+
+    runner = FailingRunner()
+    orchestrator = NemotronMultiAgentOrchestrator(
+        Storage(str(tmp_path / "specialist-receipt.db")),
+        agent_runner=runner,
+    )
+
+    with pytest.raises(AgentInvocationFailure, match="provider_upstream_rejection"):
+        orchestrator.invoke(
+            run_id="run-specialist-receipt",
+            orchestration_id="orch-specialist-receipt",
+            observable_package=package,
+            canonicalization=canonicalization,
+            facts=result["facts"],
+            process=result["process"],
+            checklist=result["checklist"],
+            verification=result["verification"],
+            progress_sink=receipts.append,
+        )
+
+    assert runner.calls == 1
+    failure = next(item for item in receipts if item.get("receipt_type") == "agent_failed")
+    assert failure["agent_id"] == "orchestrator_plan"
+    assert failure["error_invariant"] == "provider_upstream_rejection"
+    assert failure["response_id"] == "gen-1786483163-DDDDDDDDDDDDDDDDDDDD"
+    assert failure["provider_error_code"] == 400
+    assert "response_model" not in failure
+    assert "upstream_provider" not in failure
+    assert "usage_source" not in failure
+
+
+def test_specialist_success_rejects_nonpinned_upstream_after_retaining_billing(
+    tmp_path: Path,
+):
+    inference_calls = 0
+
+    class Runnable:
+        def invoke(self, *_args, **_kwargs):
+            nonlocal inference_calls
+            inference_calls += 1
+            return _plan_envelope(
+                provider_name="Together",
+                usage={
+                    "prompt_tokens": 31,
+                    "completion_tokens": 11,
+                    "total_tokens": 42,
+                    "cost": 0.0031,
+                },
+            )
+
+    storage = Storage(str(tmp_path / "specialist-wrong-upstream.db"))
+    runner = InstrumentedStructuredAgent(
+        storage,
+        runnable_factory=lambda *_args: Runnable(),
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+
+    with pytest.raises(
+        AgentInvocationFailure,
+        match="upstream_provider_policy",
+    ):
+        _invoke_plan(runner, run_id="run-specialist-wrong-upstream")
+
+    assert inference_calls == 1
+    ledger = storage.sanitized_model_ledger()[0]
+    assert ledger["outcome"] == "failed"
+    assert ledger["error_invariant"] == "upstream_provider_policy"
+    assert ledger["response_id"] == "gen-plan"
+    assert ledger["response_model"] == OPENROUTER_MODEL
+    assert ledger["upstream_provider"] == "Together"
+    assert ledger["actual_cost_usd"] == pytest.approx(0.0031)
+    assert ledger["usage_source"] == "response"
+    assert storage.cached_model_output(ledger["cache_key"]) is None
 
 
 def test_specialist_blocked_and_actual_overrun_failures_keep_safe_ledger_lineage(

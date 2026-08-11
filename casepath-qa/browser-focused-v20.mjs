@@ -78,7 +78,7 @@ const ALLOWED_LEDGER_FIELDS = new Set([
   'orchestration_id', 'agent_id', 'agent_role', 'parent_call_id', 'delegation_id', 'call_count',
   'prompt_tokens', 'completion_tokens', 'total_tokens', 'estimated_cost_usd', 'actual_cost_usd',
   'latency_ms', 'cache_key', 'purpose', 'outcome', 'error_type', 'error_agent_id', 'error_fact_id',
-  'error_invariant', 'invalid_provenance_field', 'invalid_provenance_value_hash',
+  'error_invariant', 'provider_error_code', 'invalid_provenance_field', 'invalid_provenance_value_hash',
   'ignored_noncontrolling_normalized_proposals', 'authority_mode',
   'accepted_fact_ids', 'accepted_fact_count', 'rejected_facts', 'rejected_fact_count',
   'source_reference_projection_fact_ids', 'source_reference_projection_count',
@@ -87,6 +87,10 @@ const ALLOWED_LEDGER_FIELDS = new Set([
   'origin_usage', 'origin_finish_reason', 'response_model', 'generation_model', 'usage_source', 'metadata_poll_count', 'metadata_latency_ms',
   'finish_reason', 'created_at', 'updated_at',
 ]);
+const ALLOWED_LEDGER_SUMMARY_FIELDS = new Set([
+  'records', 'network_calls', 'prompt_tokens', 'completion_tokens', 'total_tokens',
+  'actual_cost_usd', 'actual_cost_complete', 'unknown_cost_call_count', 'outcomes',
+]);
 const ALLOWED_AGENT_FAILURE_RECEIPT_FIELDS = new Set([
   'event_id', 'ordinal', 'created_at', 'stage', 'label', 'agent', 'agent_id', 'actor_type', 'status',
   'headline', 'detail', 'implementation', 'model', 'orchestrator', 'validator', 'prompt_version',
@@ -94,11 +98,12 @@ const ALLOWED_AGENT_FAILURE_RECEIPT_FIELDS = new Set([
   'delegation_id', 'parent_call_id', 'orchestration_id', 'call_id', 'response_id', 'outcome',
   'provider', 'requested_model', 'call_count',
   'response_model', 'upstream_provider', 'usage_source', 'handoff_from', 'handoff_to',
-  'input_artifact', 'input_artifact_hash', 'finish_reason', 'error_type', 'error_invariant',
+  'input_artifact', 'input_artifact_hash', 'finish_reason', 'error_type', 'error_invariant', 'provider_error_code',
   'invalid_provenance_field', 'invalid_provenance_value_hash', 'external_tracing',
 ]);
 const FAILURE_OUTCOMES = new Set(['failed', 'blocked_cost_guard', 'blocked_missing_credential', 'actual_cost_overrun']);
 const SAFE_RESPONSE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{2,159}$/;
+const EXACT_OPENROUTER_GENERATION_ID = /^gen-[0-9]{10}-[A-Za-z0-9]{20}$/;
 const SAFE_UPSTREAM_PROVIDER = /^[A-Za-z0-9][A-Za-z0-9._-]{1,79}$/;
 const FORBIDDEN_PROVENANCE_MARKERS = Object.freeze([
   'authorization', 'api_key', 'apikey', 'bearer ', 'credential', 'sk-or-', 'sk-', 'secret', 'sentinel',
@@ -125,7 +130,7 @@ const EXPECTED_RUNTIME_ACCEPTANCE_CRITERIA = Object.freeze({
   requires_source_reference_projection_disclosure: true,
 });
 const EXPECTED_FAILED_MODEL_ATTEMPT_RECORDS = Object.freeze(
-  Array.from({ length: 8 }, (_, index) => `casepath/releases/model-validation-attempt-20260811-${String(index + 1).padStart(2, '0')}.json`),
+  Array.from({ length: 9 }, (_, index) => `casepath/releases/model-validation-attempt-20260811-${String(index + 1).padStart(2, '0')}.json`),
 );
 const EXPECTED_PRODUCTION_OPENING_BOUNDARY = 'Application code opened the shared context; no model call is claimed for this setup step. The call-bound Nemotron plan appears only when its returned event arrives.';
 const QA_SESSION_ID = `qa-${randomUUID()}`;
@@ -205,6 +210,20 @@ function exactMembers(values, expected) {
     && values.length === expected.length
     && new Set(values).size === values.length
     && expected.every(value => values.includes(value));
+}
+
+function contributionExpectation(value, expectedAttribution, reviewTransform = null) {
+  if (reviewTransform?.acceptance_scope === 'post_review_unverified_transform') return null;
+  const entries = (Array.isArray(value) ? value : value && typeof value === 'object' ? [value] : [])
+    .filter(item => item && typeof item === 'object');
+  const acceptedCount = entries.filter(item => item.deterministic_fallback_applied === false && item.attribution === expectedAttribution).length;
+  const fallbackCount = entries.filter(item => item.deterministic_fallback_applied === true).length;
+  if (!acceptedCount && !fallbackCount) return null;
+  return {
+    authority: acceptedCount && fallbackCount ? 'mixed' : acceptedCount ? 'nemotron-accepted' : 'deterministic-fallback',
+    accepted_count: String(acceptedCount),
+    fallback_count: String(fallbackCount),
+  };
 }
 
 function orchestrationAudit(run) {
@@ -356,6 +375,10 @@ function terminalFailureContractViolations(run) {
       if (!PROVIDER_PROVENANCE_FIELDS.has(receipt.invalid_provenance_field)
         || !SHA256_PATTERN.test(receipt.invalid_provenance_value_hash || '')
         || receipt[receipt.invalid_provenance_field] != null) issues.push(`${receipt.agent_id || 'unknown'} invalid-provenance failure lacks its safe field/hash diagnostic or retained the rejected value`);
+    } else if (receipt.error_invariant === 'provider_upstream_rejection') {
+      if (receipt.response_model != null || receipt.upstream_provider != null || receipt.usage_source != null || receipt.finish_reason != null) issues.push(`${receipt.agent_id || 'unknown'} upstream rejection claims unavailable provider success metadata`);
+      if (receipt.provider_error_code != null && (!Number.isInteger(receipt.provider_error_code) || receipt.provider_error_code < 0 || receipt.provider_error_code > 9999)) issues.push(`${receipt.agent_id || 'unknown'} upstream rejection error code is unbounded`);
+      if (responseIdPresent && !EXACT_OPENROUTER_GENERATION_ID.test(receipt.response_id)) issues.push(`${receipt.agent_id || 'unknown'} upstream rejection response ID is not an exact OpenRouter generation ID`);
     } else if ((responseIdPresent || responseModelPresent) && (
       !responseIdPresent
       || !responseModelPresent
@@ -365,6 +388,7 @@ function terminalFailureContractViolations(run) {
     }
     if (receipt.error_invariant !== 'invalid_provenance'
       && (receipt.invalid_provenance_field != null || receipt.invalid_provenance_value_hash != null)) issues.push(`${receipt.agent_id || 'unknown'} failure carries an out-of-scope invalid-provenance diagnostic`);
+    if (receipt.error_invariant !== 'provider_upstream_rejection' && receipt.provider_error_code != null) issues.push(`${receipt.agent_id || 'unknown'} failure carries an out-of-scope provider error code`);
     if (receipt.outcome === 'actual_cost_overrun' && (
       !responseIdPresent
       || !responseModelPresent
@@ -432,7 +456,7 @@ function orchestrationContractViolations(run, cacheMode, expectedFramework = EXP
     if (!nonemptyString(item.response_id) || !EXACT_NEMOTRON_RESPONSE_MODELS.has(item.response_model)) issues.push(`${agentId}: returned response identity is invalid`);
     if (!providerProvenanceValueIsSafe('response_id', item.response_id)
       || !providerProvenanceValueIsSafe('response_model', item.response_model)
-      || !nonemptyString(item.upstream_provider)
+      || item.upstream_provider !== 'DeepInfra'
       || !providerProvenanceValueIsSafe('upstream_provider', item.upstream_provider)
       || !nonemptyString(item.finish_reason)
       || !providerProvenanceValueIsSafe('finish_reason', item.finish_reason)
@@ -540,9 +564,42 @@ function orchestrationContractViolations(run, cacheMode, expectedFramework = EXP
   return issues;
 }
 
+function ledgerSummary(items) {
+  const unknownCostCallCount = items.filter(item => item.call_count > 0 && item.actual_cost_usd == null).length;
+  const outcomes = Object.fromEntries([...new Set(items.map(item => item.outcome))]
+    .sort()
+    .map(outcome => [outcome, items.filter(item => item.outcome === outcome).length]));
+  return {
+    records: items.length,
+    network_calls: items.reduce((total, item) => total + item.call_count, 0),
+    prompt_tokens: items.reduce((total, item) => total + (item.prompt_tokens ?? 0), 0),
+    completion_tokens: items.reduce((total, item) => total + (item.completion_tokens ?? 0), 0),
+    total_tokens: items.reduce((total, item) => total + (item.total_tokens ?? 0), 0),
+    actual_cost_usd: Number(items.reduce((total, item) => total + (item.actual_cost_usd ?? 0), 0).toFixed(8)),
+    actual_cost_complete: unknownCostCallCount === 0,
+    unknown_cost_call_count: unknownCostCallCount,
+    outcomes,
+  };
+}
+
 function sanitizedLedgerViolations(ledger) {
   const issues = [];
   if (ledger?.scope !== 'global_budget_ledger' || !Array.isArray(ledger?.items)) return ['global sanitized ledger is absent'];
+  const summary = ledger?.summary;
+  if (!summary || typeof summary !== 'object' || !exactMembers(Object.keys(summary), [...ALLOWED_LEDGER_SUMMARY_FIELDS])) {
+    issues.push('ledger summary violates the exact public schema');
+  } else {
+    const sourceRowsValid = ledger.items.every(item => Number.isInteger(item?.call_count)
+      && item.call_count >= 0
+      && ['prompt_tokens', 'completion_tokens', 'total_tokens'].every(field => !Object.hasOwn(item, field) || (Number.isInteger(item[field]) && item[field] >= 0))
+      && (item.actual_cost_usd == null || (Number.isFinite(item.actual_cost_usd) && item.actual_cost_usd >= 0))
+      && nonemptyString(item.outcome));
+    if (!sourceRowsValid) {
+      issues.push('ledger summary source rows contain invalid accounting fields');
+    } else {
+      if (stableJson(summary) !== stableJson(ledgerSummary(ledger.items))) issues.push('ledger summary is inconsistent with its network rows');
+    }
+  }
   const callIds = ledger.items.map(item => item?.call_id);
   if (!callIds.every(nonemptyString) || new Set(callIds).size !== callIds.length) issues.push('ledger call IDs are absent or duplicated');
   ledger.items.forEach((item, index) => {
@@ -560,6 +617,8 @@ function sanitizedLedgerViolations(ledger) {
     } else if (item.invalid_provenance_field != null || item.invalid_provenance_value_hash != null) {
       issues.push(`ledger[${index}] carries an out-of-scope invalid-provenance diagnostic`);
     }
+    if (item.provider_error_code != null && (item.error_invariant !== 'provider_upstream_rejection' || !Number.isInteger(item.provider_error_code) || item.provider_error_code < 0 || item.provider_error_code > 9999)) issues.push(`ledger[${index}] provider error code is unbounded or out of scope`);
+    if (item.error_invariant === 'provider_upstream_rejection' && item.response_id != null && !EXACT_OPENROUTER_GENERATION_ID.test(item.response_id)) issues.push(`ledger[${index}] response ID is not an exact OpenRouter generation ID`);
     if (Object.hasOwn(item, 'origin_usage')) {
       const usage = item.origin_usage;
       if (!usage
@@ -597,11 +656,11 @@ function coldLedgerContractViolations(audit, ledger) {
     if (!item) continue;
     if (item.orchestration_id !== audit.orchestration_id || item.agent_id !== agent.agent_id) issues.push(`${agent.agent_id}: ledger orchestration binding mismatch`);
     if (item.parent_call_id !== agent.parent_call_id || item.delegation_id !== agent.delegation_id) issues.push(`${agent.agent_id}: ledger parent/delegation binding mismatch`);
-    if (agent.response_id !== item.response_id || agent.response_model !== item.response_model || agent.call_count !== item.call_count) issues.push(`${agent.agent_id}: run audit and ledger response binding mismatch`);
+    if (agent.response_id !== item.response_id || agent.response_model !== item.response_model || agent.upstream_provider !== item.upstream_provider || agent.call_count !== item.call_count) issues.push(`${agent.agent_id}: run audit and ledger response binding mismatch`);
     if (item.call_count !== 1 || !SUCCESSFUL_MODEL_OUTCOMES.has(item.outcome)) issues.push(`${agent.agent_id}: ledger is not a successful cold network call`);
     if (item.provider !== 'openrouter' || item.provider_endpoint !== 'https://openrouter.ai/api/v1/chat/completions') issues.push(`${agent.agent_id}: provider identity mismatch`);
     if (item.model !== REQUESTED_NEMOTRON_MODEL || !EXACT_NEMOTRON_RESPONSE_MODELS.has(item.response_model)) issues.push(`${agent.agent_id}: requested/returned model mismatch`);
-    if (!nonemptyString(item.response_id) || !nonemptyString(item.upstream_provider) || !nonemptyString(item.finish_reason)) issues.push(`${agent.agent_id}: complete sanitized provider identity is absent`);
+    if (!nonemptyString(item.response_id) || item.upstream_provider !== 'DeepInfra' || !nonemptyString(item.finish_reason)) issues.push(`${agent.agent_id}: complete exact provider identity is absent`);
     if (!ALLOWED_USAGE_SOURCES.has(item.usage_source)) issues.push(`${agent.agent_id}: usage provenance is invalid`);
     if (!Number.isFinite(item.actual_cost_usd) || item.actual_cost_usd <= 0) issues.push(`${agent.agent_id}: actual cost must be positive`);
     if (!Number.isInteger(item.prompt_tokens) || item.prompt_tokens <= 0 || !Number.isInteger(item.completion_tokens) || item.completion_tokens <= 0 || !Number.isInteger(item.total_tokens) || item.total_tokens < item.prompt_tokens + item.completion_tokens) issues.push(`${agent.agent_id}: token accounting is invalid`);
@@ -631,10 +690,10 @@ function warmLineageContractViolations(coldAudit, warmAudit, ledger) {
     if (warm.call_id === cold.call_id || warm.origin_call_id !== cold.call_id || item.origin_call_id !== cold.call_id) issues.push(`${warm.agent_id}: warm origin does not bind to the cold call`);
     if (item.orchestration_id !== warmAudit.orchestration_id || item.agent_id !== warm.agent_id) issues.push(`${warm.agent_id}: warm ledger orchestration binding mismatch`);
     if (item.parent_call_id !== warm.parent_call_id || item.delegation_id !== warm.delegation_id) issues.push(`${warm.agent_id}: warm ledger parent/delegation binding mismatch`);
-    if (warm.response_id !== item.response_id || warm.response_model !== item.response_model || warm.call_count !== item.call_count) issues.push(`${warm.agent_id}: warm run audit and ledger response binding mismatch`);
+    if (warm.response_id !== item.response_id || warm.response_model !== item.response_model || warm.upstream_provider !== item.upstream_provider || warm.call_count !== item.call_count) issues.push(`${warm.agent_id}: warm run audit and ledger response binding mismatch`);
     if (item.call_count !== 0 || item.outcome !== 'cache_hit' || item.usage_source !== 'cache') issues.push(`${warm.agent_id}: warm record made or claims a provider call`);
     const coldLedger = ledger.items.find(value => value.call_id === cold.call_id);
-    if (!coldLedger || item.response_id !== coldLedger.response_id || item.response_model !== coldLedger.response_model) issues.push(`${warm.agent_id}: cached response identity does not match cold origin`);
+    if (!coldLedger || item.response_id !== coldLedger.response_id || item.response_model !== coldLedger.response_model || item.upstream_provider !== 'DeepInfra' || coldLedger.upstream_provider !== 'DeepInfra') issues.push(`${warm.agent_id}: cached response identity/provider does not match the exact cold origin`);
     const originUsage = item.origin_usage;
     const expectedOriginUsage = coldLedger && {
       prompt_tokens: coldLedger.prompt_tokens,
@@ -777,7 +836,7 @@ function assertHealthRuntimeContract(health, releaseRuntime) {
   check('Production health returns the active Nemotron LangGraph runtime profile and schema', health.runtime_profile === EXPECTED_RUNTIME.runtime_profile && runtime?.profile === EXPECTED_RUNTIME.runtime_profile && runtime?.execution_mode === 'nemotron_multi_agent' && runtime?.authority_mode === EXPECTED_RUNTIME.authority_mode && runtime?.implementation === EXPECTED_RUNTIME.implementation && runtime?.schema === EXPECTED_RUNTIME.orchestration_schema && health.model === REQUESTED_NEMOTRON_MODEL, JSON.stringify(runtime));
   check('Production health returns the exact requested framework versions', stableJson(runtime?.framework) === stableJson(releaseRuntime.framework) && stableJson(runtime?.framework) === stableJson(EXPECTED_FRAMEWORK), JSON.stringify(runtime?.framework));
   check('Production health returns the exact six model roles and three deterministic gates', exactMembers(runtime?.required_agent_ids, REQUIRED_NEMOTRON_AGENT_IDS) && exactMembers(runtime?.deterministic_gate_ids, REQUIRED_DETERMINISTIC_GATE_IDS), JSON.stringify(runtime));
-  check('Production health explicitly disables external tracing, prompt/raw-output storage, fallback, and automatic inference retries', runtime?.safety?.deterministic_contract_authority === true && runtime?.safety?.external_tracing === false && runtime?.safety?.prompt_storage === false && runtime?.safety?.raw_output_storage === false && runtime?.safety?.model_fallback === false && runtime?.safety?.automatic_inference_retry === false, JSON.stringify(runtime?.safety));
+  check('Production health attests the exact private DeepInfra route and disables tracing, storage, fallback, and inference retries', runtime?.safety?.deterministic_contract_authority === true && runtime?.safety?.external_tracing === false && runtime?.safety?.prompt_storage === false && runtime?.safety?.raw_output_storage === false && runtime?.safety?.model_fallback === false && runtime?.safety?.automatic_inference_retry === false && stableJson(runtime?.safety?.provider_routing) === stableJson({ endpoint_tag: 'deepinfra/fp4', expected_upstream_provider: 'DeepInfra', allow_fallbacks: false, require_parameters: true, data_collection: 'deny' }), JSON.stringify(runtime?.safety));
 }
 
 function assertReadinessContract(readiness) {
@@ -804,6 +863,12 @@ async function getJsonForSession(url, sessionId, options = {}) {
 
 async function getJson(url, options = {}) {
   return getJsonForSession(url, QA_SESSION_ID, options);
+}
+
+async function getText(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`GET ${url}: ${response.status}`);
+  return response.text();
 }
 
 async function resetDemo() {
@@ -1177,6 +1242,11 @@ async function execute() {
   check('Product returns HTTP 200', response.status() === 200, `status=${response.status()}`);
   check('HTML owns immutable v20 release identity', /<html[^>]*data-casepath-release=["']20\.0\.0["']/i.test(sourceHtml) && /<meta[^>]*name=["']casepath-release["'][^>]*content=["']20\.0\.0["']/i.test(sourceHtml));
   check('First paint contains an intentional claim shell', sourceHtml.includes('v20-source-skeleton') && sourceHtml.includes('Opening claim…'));
+  const flagshipScriptPaths = ['assets/live-v16.js', 'assets/live-v17.js', 'assets/live-v18.js', 'assets/live-v18-handoff.js', 'assets/live-v20-focus.js'];
+  const flagshipScriptSources = await Promise.all(flagshipScriptPaths.map(async scriptPath => ({ scriptPath, source: await getText(`${BASE}/${scriptPath}`) })));
+  const syntheticActorLabels = ['Agent complete', 'Attachment Parsing Agent', 'Claim Understanding Agent', 'Legal Research Agent', 'Process Discovery Agent', 'Document Requirements Agent', 'Historical Claims Agent', 'Verification Agent', 'Knowledge Agent'];
+  const syntheticActorSources = flagshipScriptSources.flatMap(({ scriptPath, source }) => syntheticActorLabels.filter(label => source.includes(label)).map(label => `${scriptPath}:${label}`));
+  check('Loaded flagship scripts never present deterministic stages or knowledge governance as extra model agents', syntheticActorSources.length === 0, JSON.stringify(syntheticActorSources));
 
   await page.waitForFunction(expected => document.querySelectorAll('.attachment-row').length === expected, demo.claim.artifacts.length, { timeout: 120000 });
   await page.waitForFunction(() => !document.querySelector('#runCasePath')?.disabled, null, { timeout: 120000 });
@@ -1297,6 +1367,19 @@ async function execute() {
     check('Cold flagship visibly presented every Nemotron role and deterministic gate', exactMembers(visibleProof.agent_ids, REQUIRED_NEMOTRON_AGENT_IDS) && exactMembers(visibleProof.gate_ids, REQUIRED_DETERMINISTIC_GATE_IDS) && visibleProof.proof_visible, JSON.stringify(visibleProof));
     check('Flagship visibly distinguishes the Nemotron focus plan from deterministic LangGraph topology', visibleProof.orchestrator_label === 'Nemotron focus plan · deterministic LangGraph topology', visibleProof.orchestrator_label);
     check('Visible orchestration proof retains the fictional-data, non-decision, unapproved-law, simulated-review, and quarantine boundary', /fictional claim/i.test(visibleProof.proof_boundary) && /no coverage or legal decision/i.test(visibleProof.proof_boundary) && /unapproved/i.test(visibleProof.proof_boundary) && /simulated review is not expert approval/i.test(visibleProof.proof_boundary) && /quarantined/i.test(visibleProof.proof_boundary), visibleProof.proof_boundary);
+    const returnedTeam = await page.locator('.orchestration-run-summary').evaluate(node => ({
+      role_count: node.dataset.nemotronRoleCount,
+      gate_count: node.dataset.deterministicGateCount,
+      role_ids: (node.dataset.nemotronRoleIds || '').split(',').filter(Boolean),
+      gate_ids: (node.dataset.deterministicGateIds || '').split(',').filter(Boolean),
+    }));
+    check('Stable flagship summary proves exactly six returned Nemotron roles and three returned deterministic gates', returnedTeam.role_count === '6' && returnedTeam.gate_count === '3' && exactMembers(returnedTeam.role_ids, REQUIRED_NEMOTRON_AGENT_IDS) && exactMembers(returnedTeam.gate_ids, REQUIRED_DETERMINISTIC_GATE_IDS), JSON.stringify(returnedTeam));
+    const parallelBranch = await page.locator('.orchestration-parallel-branch').evaluateAll(nodes => nodes.map(node => ({
+      role_ids: node.dataset.parallelRoleIds,
+      gate_id: node.dataset.parallelGateId,
+      labels: [...node.querySelectorAll('span,strong')].map(item => item.textContent.trim()),
+    })));
+    check('Stable flagship visibly proves the returned source/process fan-out and deterministic join gate', parallelBranch.length === 1 && stableJson(parallelBranch[0]) === stableJson({ role_ids: 'document_source_integrity,process_decision_mapping', gate_id: 'deterministic_process_gate', labels: ['Document and Source Integrity Agent', 'Process Decision Mapping Agent', 'Deterministic Process Contract Gate'] }), JSON.stringify(parallelBranch));
     await page.locator('#teamTrace summary').click();
     const traceProof = await page.locator('#teamTrace').evaluate(node => {
       const modelRows = [...node.querySelectorAll('li[data-actor-type="nemotron_agent"][data-call-id]:not([data-call-id=""])')];
@@ -1335,6 +1418,17 @@ async function execute() {
   const processGraph = processRun.result?.process || processRun.process;
   check('Uninterrupted journey rendered both process and evidence moments before stable review readiness', await page.evaluate(() => ['process', 'evidence', 'ready'].every(moment => window.__casepathMomentHistory.includes(moment))), JSON.stringify(await page.evaluate(() => window.__casepathMomentHistory)));
   check('Main spine remains the dominant collapsed graph', await page.locator('.process-spine .process-node').count() === processGraph.main_spine.length && await page.locator('#processBranchGrid').isHidden());
+  if (isProductionJourney()) {
+    const expectedProcessContributions = processGraph.nodes.map(node => ({
+      node_id: node.node_id,
+      contribution: contributionExpectation(node.agent_decision_contributions, 'Process Decision Mapping Agent'),
+    })).filter(item => item.contribution);
+    const renderedProcessContributions = await page.locator('.process-map .process-node-button[data-node-id],.process-map .process-branch-node[data-node-id]').evaluateAll(nodes => nodes.flatMap(node => {
+      const badge = node.querySelector('.model-contribution-attribution');
+      return badge ? [{ node_id: node.dataset.nodeId, contribution: { authority: badge.dataset.contributionAuthority, accepted_count: badge.dataset.acceptedCount, fallback_count: badge.dataset.fallbackCount } }] : [];
+    }));
+    check('Every visible process contribution is exactly bound to returned Nemotron acceptance or deterministic fallback', stableJson(renderedProcessContributions.sort((a, b) => a.node_id.localeCompare(b.node_id))) === stableJson(expectedProcessContributions.sort((a, b) => a.node_id.localeCompare(b.node_id))) && renderedProcessContributions.some(item => Number(item.contribution.accepted_count) > 0), JSON.stringify({ expectedProcessContributions, renderedProcessContributions }));
+  }
   await page.locator('[data-toggle-all-branches]').click();
   const renderedNodeIds = await page.evaluate(() => [...new Set([...document.querySelectorAll('.process-node-button[data-node-id],.process-branch-node[data-node-id]')].map(node => node.dataset.nodeId))]);
   const expectedNodeIds = processGraph.nodes.map(node => node.node_id);
@@ -1425,6 +1519,17 @@ async function execute() {
   await waitVisible('#v20DocumentSheet[open]');
   const neededItem = page.locator('.v20-document-body .v17-checklist-group[data-kind="needed"] .v17-checklist-item[data-node-id][data-fact-id][data-item-id]').first();
   check('Derived document items own structural node, fact, and item identifiers', await neededItem.count() === 1 && Boolean(await neededItem.getAttribute('data-node-id')) && Boolean(await neededItem.getAttribute('data-fact-id')) && Boolean(await neededItem.getAttribute('data-item-id')));
+  if (isProductionJourney()) {
+    const expectedChecklistContributions = processRun.result.checklist.items.map(item => ({
+      item_id: item.item_id,
+      contribution: contributionExpectation(item.agent_contribution, 'Evidence and Checklist Agent'),
+    })).filter(item => item.contribution);
+    const renderedChecklistContributions = await page.locator('.v20-document-body .v17-checklist-item[data-item-id]').evaluateAll(items => items.flatMap(item => {
+      const badge = item.querySelector('.model-contribution-attribution');
+      return badge ? [{ item_id: item.dataset.itemId, contribution: { authority: badge.dataset.contributionAuthority, accepted_count: badge.dataset.acceptedCount, fallback_count: badge.dataset.fallbackCount } }] : [];
+    }));
+    check('Every document need visibly preserves its exact Nemotron acceptance or deterministic fallback attribution', expectedChecklistContributions.length === processRun.result.checklist.items.length && stableJson(renderedChecklistContributions.sort((a, b) => a.item_id.localeCompare(b.item_id))) === stableJson(expectedChecklistContributions.sort((a, b) => a.item_id.localeCompare(b.item_id))) && renderedChecklistContributions.some(item => Number(item.contribution.accepted_count) > 0), JSON.stringify({ expectedChecklistContributions, renderedChecklistContributions }));
+  }
   check('Document sheet is a labelled modal dialog with focus inside', await page.evaluate(() => { const sheet = document.querySelector('#v20DocumentSheet'); return sheet?.tagName === 'DIALOG' && sheet.getAttribute('aria-labelledby') === 'v20DocumentTitle' && sheet.contains(document.activeElement); }));
   await page.keyboard.press('Escape');
   await waitHidden('#v20DocumentSheet');
@@ -1456,6 +1561,12 @@ async function execute() {
   const appliedReviewCopy = await page.locator('#stageCanvas').innerText();
   check('Applied-review UI keeps the edit explicitly unverified', /unverified/i.test(appliedReviewCopy), appliedReviewCopy);
   if (isProductionJourney()) check('Applied-review UI says model acceptance was not reused for the unverified edit', /model acceptance\b[^.]{0,120}\b(?:was|is)\s+not reused/i.test(appliedReviewCopy), appliedReviewCopy);
+  const appliedContributionBadgeCount = await page.locator('.review-applied .model-contribution-attribution').count();
+  const postReviewContributionExpectations = [
+    ...reviewed.result.process.nodes.flatMap(node => (node.agent_decision_contributions || []).map(contribution => contributionExpectation(contribution, 'Process Decision Mapping Agent', reviewed.review_transform))),
+    ...reviewed.result.checklist.items.map(item => contributionExpectation(item.agent_contribution, 'Evidence and Checklist Agent', reviewed.review_transform)),
+  ];
+  check('Applied-review result fails closed on every pre-review model contribution badge', reviewed.review_transform?.acceptance_scope === 'post_review_unverified_transform' && reviewed.review_transform?.model_acceptance_reused === false && postReviewContributionExpectations.every(value => value === null) && appliedContributionBadgeCount === 0, JSON.stringify({ review_transform: reviewed.review_transform, post_review_expectations: postReviewContributionExpectations, rendered_badge_count: appliedContributionBadgeCount }));
   const reviewedNodeIds = reviewed.result.process.nodes.map(node => node.node_id);
   const appliedNodeIds = await page.evaluate(() => [...new Set([...document.querySelectorAll('.review-applied .process-node-button[data-node-id],.review-applied .process-branch-node[data-node-id]')].map(node => node.dataset.nodeId))]);
   check('Applied view shows the actual server-returned reviewed graph', reviewedNodeIds.every(id => appliedNodeIds.includes(id)) && reviewedNodeIds.length === appliedNodeIds.length);
@@ -1576,7 +1687,7 @@ function mockOrchestration(cacheMode, coldRun = null) {
     outcome: cacheMode === 'warm' ? 'cache_hit' : 'succeeded',
     response_id: cacheMode === 'cold' ? `response_${agentId}` : coldByAgent.get(agentId)?.response_id,
     response_model: 'nvidia/nemotron-3-ultra-550b-a55b-20260604',
-    upstream_provider: 'mock-provider',
+    upstream_provider: 'DeepInfra',
     usage_source: cacheMode === 'warm' ? 'cache' : 'response',
     finish_reason: 'stop',
     accepted_ids: [`accepted_${agentId}_1`, `accepted_${agentId}_2`],
@@ -1658,14 +1769,11 @@ function mockOrchestration(cacheMode, coldRun = null) {
 function mockLedgerForRun(run, cacheMode, coldLedger = null) {
   const audit = orchestrationAudit(run);
   const coldByAgent = new Map((coldLedger?.items || []).map(item => [item.agent_id, item]));
-  return {
-    scope: 'global_budget_ledger',
-    summary: { records: audit.agents.length },
-    items: audit.agents.map(agent => ({
+  const items = audit.agents.map(agent => ({
       call_id: agent.call_id,
       provider: 'openrouter',
       provider_endpoint: 'https://openrouter.ai/api/v1/chat/completions',
-      upstream_provider: 'mock-provider',
+      upstream_provider: 'DeepInfra',
       model: REQUESTED_NEMOTRON_MODEL,
       implementation: agent.agent_id === 'canonical_facts' ? 'model_backed_openrouter_canonicalizer' : EXPECTED_RUNTIME.implementation,
       orchestration_id: audit.orchestration_id,
@@ -1704,7 +1812,11 @@ function mockLedgerForRun(run, cacheMode, coldLedger = null) {
       finish_reason: 'stop',
       created_at: '2026-08-11T00:00:00Z',
       updated_at: '2026-08-11T00:00:01Z',
-    })).map(item => Object.fromEntries(Object.entries(item).filter(([, value]) => value !== undefined))),
+    })).map(item => Object.fromEntries(Object.entries(item).filter(([, value]) => value !== undefined)));
+  return {
+    scope: 'global_budget_ledger',
+    summary: ledgerSummary(items),
+    items,
   };
 }
 
@@ -1717,11 +1829,24 @@ function runContractSelfTest() {
   ];
   if (pythonFloatHashes.some(([value, pythonHash]) => dtoHash(value) === pythonHash)) throw new Error('Float parity fixture unexpectedly became hash-compatible; update the shared numeric contract explicitly');
   if (nonIntegerNumberPaths({ negative_zero: -0.0, exponent: 1e-7 }).length !== 2) throw new Error('Non-integer accepted-DTO guard missed -0.0 or exponent notation');
+  const acceptedContribution = contributionExpectation({ attribution: 'Process Decision Mapping Agent', deterministic_fallback_applied: false }, 'Process Decision Mapping Agent');
+  const fallbackContribution = contributionExpectation({ attribution: 'deterministic_application', deterministic_fallback_applied: true }, 'Process Decision Mapping Agent');
+  const postReviewContribution = contributionExpectation(
+    { attribution: 'Process Decision Mapping Agent', deterministic_fallback_applied: false },
+    'Process Decision Mapping Agent',
+    { acceptance_scope: 'post_review_unverified_transform', model_acceptance_reused: false },
+  );
+  if (stableJson(acceptedContribution) !== stableJson({ authority: 'nemotron-accepted', accepted_count: '1', fallback_count: '0' })
+    || stableJson(fallbackContribution) !== stableJson({ authority: 'deterministic-fallback', accepted_count: '0', fallback_count: '1' })
+    || postReviewContribution !== null
+    || contributionExpectation({ attribution: 'Process Decision Mapping Agent' }, 'Process Decision Mapping Agent') !== null
+    || contributionExpectation({ attribution: 'foreign_agent', deterministic_fallback_applied: false }, 'Process Decision Mapping Agent') !== null) throw new Error('Visible contribution attribution does not fail closed on authority or fallback state');
   const coldRun = mockOrchestration('cold');
   const coldLedger = mockLedgerForRun(coldRun, 'cold');
   const warmRun = mockOrchestration('warm', coldRun);
   const warmOnlyLedger = mockLedgerForRun(warmRun, 'warm', coldLedger);
-  const combinedLedger = { ...coldLedger, items: [...coldLedger.items, ...warmOnlyLedger.items] };
+  const combinedItems = [...coldLedger.items, ...warmOnlyLedger.items];
+  const combinedLedger = { ...coldLedger, items: combinedItems, summary: ledgerSummary(combinedItems) };
   const openingContextFixture = [{ boundary_text: EXPECTED_PRODUCTION_OPENING_BOUNDARY, actor_type: 'deterministic_tool', nemotron_plan_visible: false }];
   if (productionOpeningContextViolations(openingContextFixture).length) throw new Error('Positive production opening-context fixture failed');
   const legacyProductionOpening = structuredClone(openingContextFixture);
@@ -1737,6 +1862,31 @@ function runContractSelfTest() {
     ...warmLineageContractViolations(orchestrationAudit(coldRun), orchestrationAudit(warmRun), combinedLedger).issues,
   ];
   if (failures.length) throw new Error(`Positive contract fixture failed: ${JSON.stringify(failures)}`);
+  const forgedSummaryValues = {
+    records: 999,
+    network_calls: 0,
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    total_tokens: 0,
+    actual_cost_usd: 0,
+    actual_cost_complete: false,
+    unknown_cost_call_count: 1,
+    outcomes: {},
+  };
+  for (const [field, value] of Object.entries(forgedSummaryValues)) {
+    const forgedSummaryLedger = structuredClone(coldLedger);
+    forgedSummaryLedger.summary[field] = value;
+    if (!sanitizedLedgerViolations(forgedSummaryLedger).some(item => item.includes('summary is inconsistent'))) throw new Error(`Forged ledger-summary ${field} fixture was not rejected`);
+  }
+  const wrongUpstreamRun = structuredClone(coldRun);
+  orchestrationAudit(wrongUpstreamRun).agents[0].upstream_provider = 'Together';
+  if (!orchestrationContractViolations(wrongUpstreamRun, 'cold').some(item => item.includes('provider provenance'))) throw new Error('Non-DeepInfra cold audit fixture was not rejected');
+  const wrongUpstreamLedger = structuredClone(coldLedger);
+  wrongUpstreamLedger.items[0].upstream_provider = 'Together';
+  if (!coldLedgerContractViolations(orchestrationAudit(coldRun), wrongUpstreamLedger).some(item => item.includes('provider'))) throw new Error('Non-DeepInfra cold ledger fixture was not rejected');
+  const wrongWarmLedger = structuredClone(combinedLedger);
+  wrongWarmLedger.items.find(item => item.call_count === 0).upstream_provider = 'Together';
+  if (!warmLineageContractViolations(orchestrationAudit(coldRun), orchestrationAudit(warmRun), wrongWarmLedger).issues.some(item => item.includes('provider'))) throw new Error('Non-DeepInfra warm cache fixture was not rejected');
   const aliasResponseRun = structuredClone(coldRun);
   const aliasResponseLedger = structuredClone(coldLedger);
   orchestrationAudit(aliasResponseRun).agents.forEach(item => { item.response_model = REQUESTED_NEMOTRON_MODEL; });
@@ -1883,6 +2033,22 @@ function runContractSelfTest() {
   };
   const safeFailureIssues = terminalFailureContractViolations(safeTerminalFailure);
   if (safeFailureIssues.length) throw new Error(`Safe terminal-failure fixture failed: ${JSON.stringify(safeFailureIssues)}`);
+  const upstreamRejectionFailure = structuredClone(safeTerminalFailure);
+  const upstreamReceipt = upstreamRejectionFailure.events.find(item => item.receipt_type === 'agent_failed');
+  Object.assign(upstreamReceipt, {
+    error_invariant: 'provider_upstream_rejection',
+    response_id: 'gen-1786483159-hyYthqPv76o6PHXpGLzl',
+    provider_error_code: 400,
+  });
+  upstreamRejectionFailure.events.find(item => item.stage === 'failed').failure_invariant = 'provider_upstream_rejection';
+  const upstreamFailureIssues = terminalFailureContractViolations(upstreamRejectionFailure);
+  if (upstreamFailureIssues.length) throw new Error(`Bounded upstream-rejection fixture failed: ${JSON.stringify(upstreamFailureIssues)}`);
+  const unboundedUpstreamCodeFailure = structuredClone(upstreamRejectionFailure);
+  unboundedUpstreamCodeFailure.events.find(item => item.receipt_type === 'agent_failed').provider_error_code = 'RAW_PROVIDER_CODE';
+  if (!terminalFailureContractViolations(unboundedUpstreamCodeFailure).some(item => item.includes('error code'))) throw new Error('Unbounded upstream provider-code fixture was not rejected');
+  const claimBearingUpstreamIdFailure = structuredClone(upstreamRejectionFailure);
+  claimBearingUpstreamIdFailure.events.find(item => item.receipt_type === 'agent_failed').response_id = 'DEF-027-E0-DEMO';
+  if (!terminalFailureContractViolations(claimBearingUpstreamIdFailure).some(item => item.includes('exact OpenRouter generation ID'))) throw new Error('Claim-bearing upstream response-ID fixture was not rejected');
   const unsafeFailureAllowlist = structuredClone(safeTerminalFailure);
   unsafeFailureAllowlist.events.find(item => item.receipt_type === 'agent_failed').provider_payload = 'must never be retained';
   if (!terminalFailureContractViolations(unsafeFailureAllowlist).some(item => item.includes('non-allowlisted fields'))) throw new Error('Failure-receipt allowlist negative fixture was not rejected');
@@ -2004,6 +2170,7 @@ function runContractSelfTest() {
     invalid_provenance_value_hash: '9'.repeat(64),
   });
   delete boundedInvalidProvenanceLedger.items[0].response_model;
+  boundedInvalidProvenanceLedger.summary = ledgerSummary(boundedInvalidProvenanceLedger.items);
   const boundedInvalidLedgerIssues = sanitizedLedgerViolations(boundedInvalidProvenanceLedger);
   if (boundedInvalidLedgerIssues.length) throw new Error(`Bounded invalid-provenance ledger fixture failed: ${JSON.stringify(boundedInvalidLedgerIssues)}`);
   const retainedInvalidProvenanceLedger = structuredClone(boundedInvalidProvenanceLedger);
@@ -2012,6 +2179,15 @@ function runContractSelfTest() {
   const foreignInvalidProvenanceFieldLedger = structuredClone(boundedInvalidProvenanceLedger);
   foreignInvalidProvenanceFieldLedger.items[0].invalid_provenance_field = 'provider_payload';
   if (!sanitizedLedgerViolations(foreignInvalidProvenanceFieldLedger).some(item => item.includes('unbounded'))) throw new Error('Foreign invalid-provenance field fixture was not rejected');
+  const claimBearingUpstreamIdLedger = structuredClone(coldLedger);
+  Object.assign(claimBearingUpstreamIdLedger.items[0], {
+    outcome: 'failed',
+    error_invariant: 'provider_upstream_rejection',
+    provider_error_code: 400,
+    response_id: 'DEF-027-E0-DEMO',
+  });
+  claimBearingUpstreamIdLedger.summary = ledgerSummary(claimBearingUpstreamIdLedger.items);
+  if (!sanitizedLedgerViolations(claimBearingUpstreamIdLedger).some(item => item.includes('exact OpenRouter generation ID'))) throw new Error('Claim-bearing upstream ledger response-ID fixture was not rejected');
   const minorityRun = structuredClone(coldRun);
   minorityRun.result.audit.agent_orchestration.agents[0].rejected_count = 2;
   minorityRun.result.audit.agent_orchestration.agents[0].deterministic_fallback_applied = true;
@@ -2031,7 +2207,7 @@ function runContractSelfTest() {
   const brokenLineageLedger = structuredClone(combinedLedger);
   brokenLineageLedger.items.find(item => item.call_id === orchestrationAudit(warmRun).agents[0].call_id).origin_call_id = 'wrong_origin';
   if (!warmLineageContractViolations(orchestrationAudit(coldRun), orchestrationAudit(warmRun), brokenLineageLedger).issues.some(item => item.includes('warm origin'))) throw new Error('Broken-lineage negative fixture was not rejected');
-  return { status: 'passed', fixtures: ['python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
+  return { status: 'passed', fixtures: ['python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'fail_closed_model_contribution_badges', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'cold_upstream_provider_policy_rejection', 'warm_upstream_provider_policy_rejection', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'safe_upstream_rejection_receipt', 'unbounded_upstream_error_code_rejection', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
 }
 
 let report;

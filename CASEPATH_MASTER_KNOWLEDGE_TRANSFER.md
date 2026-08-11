@@ -4439,10 +4439,48 @@ sanitized record is retained at
 `in_progress` until delayed availability and a terminal timeout are both covered
 without a second inference call and an aligned production journey passes.
 
+## Production attempt 09 and upstream rejection
+
+Attempt 09 ran from QA deploy `dep-d9tp3fjncjis739pbnrg` against source commit
+`1464e482503f2b22bebffaa01a9cff84e70113ff`. The deploy was created at
+2026-08-11T21:18:54.833304Z, finished `build_failed` at
+2026-08-11T21:19:50.743049Z, and retained QA run
+`run_3abf4f5dcf955488`. Its sanitized ledger retained one CasePath network
+call: canonical-facts call `modelcall_eda1fe14d069e2d4` under orchestration
+`orch_16fbcb9e76eaff90`. The ledger was created at
+2026-08-11T21:19:16.695619+00:00 and finalized as `failed` at
+2026-08-11T21:19:45.558899+00:00. It records 28,858.701 ms application latency,
+`ModelResponseError`, and the constant `provider_response_envelope` invariant.
+No downstream model call followed.
+
+The signed-in OpenRouter Upstream Requests view showed the corresponding
+request, `gen-1786483159-hyYthqPv76o6PHXpGLzl`, at 23:19 Europe/Zurich.
+OpenRouter's default provider routing made two router-level upstream attempts;
+Together was the final provider and returned status 400 after 759 ms of router
+latency. The prior DeepInfra request returned 200. This is one CasePath
+inference network call with two provider-routing attempts, not an application
+retry. The exact internal provider error message remains unknown. A read-only
+`GET /api/v1/generation` lookup for that exact request ID returned 404.
+Consequently, no completed generation, response usage, token count, or actual
+cost was recovered, and the request ID is not an accepted response identity.
+
+The ledger's USD 0.027645 value is only an estimated reservation. The actual
+charge remains unknown and is not included in the aggregate. No canonical
+result was accepted and no model-backed release evidence was established. The
+sanitized record is retained at
+`casepath/releases/model-validation-attempt-20260811-09.json`. The current
+source now pins the exact `deepinfra/fp4` endpoint tag, disables provider
+fallbacks, requires parameter support, denies provider data collection, and
+accepts successful provenance only from `DeepInfra`. It enables generation
+metadata through the `X-OpenRouter-Metadata: enabled` request header, never the
+prompt or JSON body. Those controls are locally verified but do not promote the
+failed attempt; CP-022 remains production-unverified until a same-commit
+journey passes.
+
 Known aggregate charges for attempts 1, 2, 4, 5, 6, and 8 are USD 0.0707403.
-Attempts 3 and 7 remain unknown and excluded rather than treated as zero;
-attempt 7's USD 0.027645 reservation remains an estimate, not an observed
-charge.
+Attempts 3, 7, and 9 remain unknown and excluded rather than treated as zero;
+the USD 0.027645 reservations recorded for attempts 7 and 9 remain estimates,
+not observed charges.
 
 ## Exact dynamic model evidence not yet observed by this record
 
@@ -4453,7 +4491,7 @@ not fields to write back into the static release contract:
 ```text
 dynamic_runtime_acceptance_verdict: NOT_ESTABLISHED_BY_THIS_RECORD
 historical_model_validation_scope: failed_closed_history_only
-failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -08.json
+failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -09.json
 failed_attempt_id: authorized-smoke-20260811-01
 failed_attempt_application_outcome: rejected
 failed_attempt_failure_type: exact_private_reference_mismatch
@@ -4466,25 +4504,36 @@ provider_observed_prompt_tokens: 3629
 provider_observed_completion_tokens: 2625
 provider_observed_total_tokens: 6254
 provider_observed_finish_reason: stop
-latest_failed_attempt_id: production-flagship-20260811-08
-latest_failed_attempt_source_commit: 2ab71f600f1e523388dec62e11da4c85b9a15be7
-latest_failed_attempt_application_outcome: same_generation_metadata_not_available_within_bounded_lookup
+latest_failed_attempt_id: production-flagship-20260811-09
+latest_failed_attempt_source_commit: 1464e482503f2b22bebffaa01a9cff84e70113ff
+latest_failed_attempt_qa_deploy_id: dep-d9tp3fjncjis739pbnrg
+latest_failed_attempt_qa_deploy_outcome: build_failed
+latest_failed_attempt_qa_deploy_created_at: 2026-08-11T21:18:54.833304Z
+latest_failed_attempt_qa_deploy_finished_at: 2026-08-11T21:19:50.743049Z
+latest_failed_attempt_qa_run_id: run_3abf4f5dcf955488
+latest_failed_attempt_application_outcome: provider_response_envelope
 latest_failed_attempt_error_type: ModelResponseError
-latest_failed_attempt_error_invariant: generation_metadata_completeness
+latest_failed_attempt_error_invariant: provider_response_envelope
 latest_failed_attempt_fact_counts: NOT_RETAINED
 latest_failed_attempt_source_projection_count: NOT_RETAINED
-latest_failed_attempt_provider_outcome: succeeded
-latest_failed_attempt_provider_response_id: gen-1786481671-XHJr7oDjH1PtrUL2kNg3
-latest_failed_attempt_response_model: nvidia/nemotron-3-ultra-550b-a55b
-latest_failed_attempt_later_generation_model: nvidia/nemotron-3-ultra-550b-a55b-20260604
-latest_failed_attempt_later_upstream_provider: DeepInfra
-latest_failed_attempt_casepath_call_id: modelcall_58f841d20124e35f
-latest_failed_attempt_prompt_tokens: 23163
-latest_failed_attempt_completion_tokens: 2897
-latest_failed_attempt_total_tokens: 26060
-latest_failed_attempt_actual_cost_usd: 0.0179293
-known_failed_attempt_cost_usd_excluding_attempts_03_and_07: 0.0707403
-accepted_retry_status: PENDING_NOT_RUN_AFTER_ATTEMPT_08
+latest_failed_attempt_provider_outcome: upstream_rejected
+latest_failed_attempt_routing_policy: default_provider_routing
+latest_failed_attempt_upstream_request_id: gen-1786483159-hyYthqPv76o6PHXpGLzl
+latest_failed_attempt_final_provider: Together
+latest_failed_attempt_upstream_status: 400
+latest_failed_attempt_router_attempts: 2
+latest_failed_attempt_router_latency_ms: 759
+latest_failed_attempt_prior_deepinfra_status: 200
+latest_failed_attempt_internal_provider_error: NOT_OBSERVED
+latest_failed_attempt_generation_lookup_status: 404_NOT_FOUND
+latest_failed_attempt_casepath_call_id: modelcall_eda1fe14d069e2d4
+latest_failed_attempt_prompt_tokens: NOT_RETAINED
+latest_failed_attempt_completion_tokens: NOT_RETAINED
+latest_failed_attempt_total_tokens: NOT_RETAINED
+latest_failed_attempt_actual_cost_usd: UNKNOWN_UNCONFIRMED
+latest_failed_attempt_estimated_reservation_usd: 0.027645
+known_failed_attempt_cost_usd_excluding_attempts_03_07_and_09: 0.0707403
+accepted_retry_status: PENDING_NOT_RUN_AFTER_ATTEMPT_09
 candidate_source_commit: PENDING
 release_id: casepath-v20-reference-20260811
 provider: openrouter

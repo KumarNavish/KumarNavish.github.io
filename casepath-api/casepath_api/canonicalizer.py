@@ -17,8 +17,11 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
 
 from .langchain_runtime import (
+    OPENROUTER_EXPECTED_UPSTREAM_PROVIDER,
     OpenRouterProtocolError,
+    OpenRouterUpstreamRejectionError,
     assert_external_tracing_disabled,
+    openrouter_provider_policy,
     sanitize_provider_provenance,
     structured_nemotron_runnable,
 )
@@ -35,7 +38,7 @@ OPENROUTER_ACCEPTED_RESPONSE_MODELS = {OPENROUTER_MODEL, OPENROUTER_CANONICAL_MO
 OPENROUTER_PROVIDER = "openrouter"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_GENERATION_URL = "https://openrouter.ai/api/v1/generation"
-CANONICALIZER_VERSION = "1.6.3"
+CANONICALIZER_VERSION = "1.6.4"
 PROMPT_VERSION = "canonical-facts/1.5.0"
 SCHEMA_VERSION = "casepath.canonical-facts/1.4.0"
 NORMALIZED_VALUES = [
@@ -168,17 +171,21 @@ def _default_structured_invoker(
     )
     assert_external_tracing_disabled()
     protocol_invariant: str | None = None
+    protocol_safe_context: dict[str, Any] = {}
     try:
         envelope = runnable.invoke(
             [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)],
             config={"callbacks": []},
         )
-    except OpenRouterProtocolError as exc:
+    except (OpenRouterProtocolError, OpenRouterUpstreamRejectionError) as exc:
         protocol_invariant = exc.invariant
+        if isinstance(exc, OpenRouterUpstreamRejectionError):
+            protocol_safe_context = exc.safe_context
     if protocol_invariant is not None:
         raise ModelResponseError(
-            "provider_response_envelope invariant failed",
+            f"{protocol_invariant} invariant failed",
             invariant=protocol_invariant,
+            safe_context=protocol_safe_context,
         )
     if not isinstance(envelope, dict):
         raise ModelResponseError("OpenRouter omitted the LangChain response envelope")
@@ -1248,10 +1255,7 @@ class OpenRouterNemotronCanonicalizer:
                     "schema": canonical_facts_schema(source_reference_ids),
                 },
             },
-            "provider": {
-                "require_parameters": True,
-                "data_collection": "deny",
-            },
+            "provider": openrouter_provider_policy(),
         }
         headers = {
             "Authorization": f"Bearer {key}",
@@ -1344,6 +1348,14 @@ class OpenRouterNemotronCanonicalizer:
                 raise ModelResponseError(
                     "generation_metadata_completeness invariant failed",
                     invariant="generation_metadata_completeness",
+                )
+            if (
+                provider_ledger_patch.get("upstream_provider")
+                != OPENROUTER_EXPECTED_UPSTREAM_PROVIDER
+            ):
+                raise ModelResponseError(
+                    "upstream_provider_policy invariant failed",
+                    invariant="upstream_provider_policy",
                 )
             if provider_ledger_patch.get("finish_reason") != "stop":
                 raise ModelResponseError(
@@ -1461,6 +1473,7 @@ class OpenRouterNemotronCanonicalizer:
                     "finish_reason",
                     "invalid_provenance_field",
                     "invalid_provenance_value_hash",
+                    "provider_error_code",
                 ):
                     if key in exc.safe_context:
                         provider_ledger_patch[key] = exc.safe_context[key]
@@ -1498,6 +1511,7 @@ class OpenRouterNemotronCanonicalizer:
                             "finish_reason",
                             "invalid_provenance_field",
                             "invalid_provenance_value_hash",
+                            "provider_error_code",
                         )
                         if key in provider_ledger_patch
                     },

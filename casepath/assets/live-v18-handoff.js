@@ -4,12 +4,12 @@
   const params = new URLSearchParams(location.search);
   const API = (params.get('api') || window.CASEPATH_API || 'https://casepath-agentic-api.onrender.com').replace(/\/$/, '');
   const stageDefs = [
-    { id: 'read', label: 'Read', selector: '.event-list', output: 'source package', next: 'Claim Understanding Agent' },
-    { id: 'understand', label: 'Understand', selector: '.fact-stream', output: 'claim state', next: 'Legal Research Agent' },
-    { id: 'research', label: 'Law', selector: '.law-flow,.v17-law-map', output: 'legal context', next: 'Process Discovery Agent' },
-    { id: 'process', label: 'Process', pattern: /complete handling process is taking shape|building the handling process/i, output: 'handling process', next: 'Document Requirements Agent' },
-    { id: 'evidence', label: 'Evidence', pattern: /Evidence now follows directly from the process|attaching evidence/i, output: 'evidence model', next: 'Historical Claims Agent' },
-    { id: 'experience', label: 'Experience', selector: '.precedent-inline', output: 'provenance-labelled reference precedents', next: 'Verification Agent' },
+    { id: 'read', label: 'Read', selector: '.event-list', output: 'source package', next: 'Canonical Claim Preparation Tool' },
+    { id: 'understand', label: 'Understand', selector: '.fact-stream', output: 'claim state', next: 'Swiss Legal Source Tool' },
+    { id: 'research', label: 'Law', selector: '.law-flow,.v17-law-map', output: 'legal context', next: 'Process Projection Tool' },
+    { id: 'process', label: 'Process', pattern: /complete handling process is taking shape|building the handling process/i, output: 'handling process', next: 'Evidence Checklist Tool' },
+    { id: 'evidence', label: 'Evidence', pattern: /Evidence now follows directly from the process|attaching evidence/i, output: 'evidence model', next: 'Historical Retrieval Tool' },
+    { id: 'experience', label: 'Experience', selector: '.precedent-inline', output: 'provenance-labelled reference precedents', next: 'Whole-Playbook Verification Gate' },
     { id: 'verify', label: 'Verify', selector: '.verification-list', output: 'verified playbook', next: 'Demo review' },
   ];
   const stageOrder = stageDefs.map(stage => stage.id);
