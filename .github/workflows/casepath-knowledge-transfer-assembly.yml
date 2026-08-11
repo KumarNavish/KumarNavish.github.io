@@ -5,7 +5,7 @@ on:
     branches:
       - master
     paths:
-      - .github/workflows/casepath-knowledge-transfer-assembly.yml
+      - .casepath-handoff/assembly-trigger
 
 permissions:
   contents: write
@@ -40,14 +40,16 @@ jobs:
           grep -q '^# CasePath Master Knowledge Transfer$' /tmp/CASEPATH_MASTER_KNOWLEDGE_TRANSFER.md
           grep -q '^## 25\. Operating rules for future agents$' /tmp/CASEPATH_MASTER_KNOWLEDGE_TRANSFER.md
 
-      - name: Commit the root handoff and remove this temporary workflow
+      - name: Commit the root handoff and remove temporary assembly files
         shell: bash
         run: |
           set -euo pipefail
           cp /tmp/CASEPATH_MASTER_KNOWLEDGE_TRANSFER.md ./CASEPATH_MASTER_KNOWLEDGE_TRANSFER.md
           rm .github/workflows/casepath-knowledge-transfer-assembly.yml
+          rm .casepath-handoff/assembly-trigger
+          rmdir .casepath-handoff 2>/dev/null || true
           git config user.name "CasePath Knowledge Transfer Bot"
           git config user.email "actions@users.noreply.github.com"
-          git add CASEPATH_MASTER_KNOWLEDGE_TRANSFER.md .github/workflows/casepath-knowledge-transfer-assembly.yml
+          git add CASEPATH_MASTER_KNOWLEDGE_TRANSFER.md .github/workflows/casepath-knowledge-transfer-assembly.yml .casepath-handoff/assembly-trigger
           git commit -m "Add CasePath master knowledge transfer"
           git push origin HEAD:master
