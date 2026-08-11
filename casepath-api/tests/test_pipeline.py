@@ -1279,4 +1279,4 @@ def test_flagship_fact_contract_fits_single_bounded_model_response(runtime):
     compact = json.dumps({"facts": facts}, ensure_ascii=False, separators=(",", ":"))
     conservative_tokens = math.ceil(len(compact.encode("utf-8")) / 3)
     assert len(facts) == 18
-    assert conservative_tokens < MAX_OUTPUT_TOKENS == 4000
+    assert conservative_tokens < MAX_OUTPUT_TOKENS == 8192

@@ -31,6 +31,7 @@ from casepath_api.multi_agent import (
     ROLE_OUTPUT_TOKENS,
     _evidence_provider_payload,
     _final_brief_provider_payload,
+    _plan_validator,
     _source_registry,
     accepted_artifact_hash,
 )
@@ -170,17 +171,7 @@ def graph_fixture(tmp_path: Path):
     )
     responses = {
         "orchestrator_plan": {
-            "focus_fact_ids": [fact["fact_id"] for fact in facts],
-            "focus_source_ref_ids": sorted(
-                refs[0]
-                for artifact_id, refs in refs_by_artifact.items()
-                if refs
-                and any(
-                    item["artifact_id"] == artifact_id
-                    and item["media_type"] in {"application/pdf", "message/rfc822"}
-                    for item in package["artifacts"]
-                )
-            ),
+            "priority_fact_ids": [fact["fact_id"] for fact in facts[:6]],
             "priority_task_codes": [
                 "source_integrity",
                 "process_decisions",
@@ -243,11 +234,19 @@ def graph_fixture(tmp_path: Path):
             "rejected_fact_count": 0,
         },
     }
-    return orchestrator, storage, captures, package, canonicalization, result
+    return orchestrator, storage, captures, responses, package, canonicalization, result
 
 
 def test_compiled_langgraph_fanout_join_and_bounded_payloads(tmp_path: Path):
-    orchestrator, storage, captures, package, canonicalization, result = graph_fixture(tmp_path)
+    (
+        orchestrator,
+        storage,
+        captures,
+        responses,
+        package,
+        canonicalization,
+        result,
+    ) = graph_fixture(tmp_path)
     receipts: list[dict[str, Any]] = []
     audit = orchestrator.invoke(
         run_id="run-graph-test",
@@ -302,8 +301,43 @@ def test_compiled_langgraph_fanout_join_and_bounded_payloads(tmp_path: Path):
         ],
     }
     plan_artifact = audit["specialist_artifacts"]["orchestrator_plan"]
+    fact_ids = [item["fact_id"] for item in result["facts"]]
+    assert len(fact_ids) == 18
     assert plan_artifact["contribution_type"] == "constrained_focus_prioritization"
-    assert plan_artifact["attribution"] == "Nemotron Orchestrator"
+    assert plan_artifact["model_priority_fact_ids"] == fact_ids[:6]
+    assert plan_artifact["model_priority_attribution"] == "Nemotron Orchestrator"
+    assert plan_artifact["model_priority_task_codes"] == plan_artifact[
+        "priority_task_codes"
+    ]
+    assert "attribution" not in plan_artifact
+    assert plan_artifact["focus_fact_ids"] == fact_ids
+    assert len(plan_artifact["focus_source_ref_ids"]) == 5
+    assert plan_artifact["deterministic_coverage"] == {
+        "fact_ids": fact_ids[6:],
+        "source_ref_ids": plan_artifact["focus_source_ref_ids"],
+        "required_text_artifact_ids": [
+            "art_delivery",
+            "art_lease",
+            "art_management_reply",
+            "art_notification",
+            "art_timeline",
+        ],
+        "attribution": "deterministic_application",
+    }
+    plan_audit = next(
+        item for item in audit["agents"] if item["agent_id"] == "orchestrator_plan"
+    )
+    assert plan_audit["model_priority_fact_ids"] == fact_ids[:6]
+    assert plan_audit["model_priority_task_codes"] == plan_artifact[
+        "priority_task_codes"
+    ]
+    assert plan_audit["derived_focus_fact_ids"] == fact_ids
+    assert plan_audit["derived_focus_source_ref_ids"] == plan_artifact[
+        "focus_source_ref_ids"
+    ]
+    assert plan_audit["deterministic_coverage"] == plan_artifact[
+        "deterministic_coverage"
+    ]
     assert "delegations" not in plan_artifact
     assert "parallel_groups" not in plan_artifact
     assert audit["external_tracing"] is False
@@ -348,6 +382,38 @@ def test_compiled_langgraph_fanout_join_and_bounded_payloads(tmp_path: Path):
         }
     ) == 22
     serialized_payloads = json.dumps(captures, sort_keys=True)
+    plan_payload = captures["orchestrator_plan"][0]
+    assert set(responses["orchestrator_plan"]) == {
+        "priority_fact_ids",
+        "priority_task_codes",
+    }
+    plan_schema = OrchestratorPlan.model_json_schema()
+    assert set(plan_schema["properties"]) == {
+        "priority_fact_ids",
+        "priority_task_codes",
+    }
+    assert plan_schema["properties"]["priority_fact_ids"] == {
+        "items": {"type": "string"},
+        "maxItems": 6,
+        "minItems": 1,
+        "title": "Priority Fact Ids",
+        "type": "array",
+        "uniqueItems": True,
+    }
+    assert plan_schema["properties"]["priority_task_codes"]["maxItems"] == 4
+    assert plan_schema["properties"]["priority_task_codes"]["minItems"] == 4
+    assert plan_schema["properties"]["priority_task_codes"]["uniqueItems"] is True
+    assert set(plan_payload) == {
+        "schema_version",
+        "max_priority_fact_count",
+        "fact_candidates",
+        "task_codes",
+    }
+    assert len(plan_payload["fact_candidates"]) == 18
+    assert len(_source_registry(package)) == 356
+    assert "source_reference_candidates" not in plan_payload
+    assert "source_ref_id" not in json.dumps(plan_payload, sort_keys=True)
+    assert len(json.dumps(plan_payload, separators=(",", ":")).encode()) < 2_000
     for private_name in (
         "expected_state",
         "canonical_value",
@@ -395,9 +461,15 @@ def test_compiled_langgraph_fanout_join_and_bounded_payloads(tmp_path: Path):
 def test_evidence_payload_omits_poisoned_private_answers_and_plan_changes_order(
     tmp_path: Path,
 ):
-    _orchestrator, _storage, _captures, package, _canonicalization, result = graph_fixture(
-        tmp_path
-    )
+    (
+        _orchestrator,
+        _storage,
+        _captures,
+        _responses,
+        package,
+        _canonicalization,
+        result,
+    ) = graph_fixture(tmp_path)
     registry = _source_registry(package)
     text_artifacts = {
         item["artifact_id"]
@@ -470,9 +542,15 @@ def test_evidence_payload_omits_poisoned_private_answers_and_plan_changes_order(
 def test_final_audit_payload_ignores_applied_answers_but_tracks_prior_contributions(
     tmp_path: Path,
 ):
-    orchestrator, _storage, _captures, package, canonicalization, result = graph_fixture(
-        tmp_path
-    )
+    (
+        orchestrator,
+        _storage,
+        _captures,
+        _responses,
+        package,
+        canonicalization,
+        result,
+    ) = graph_fixture(tmp_path)
     audit = orchestrator.invoke(
         run_id="run-final-payload",
         orchestration_id="orch-final-payload",
@@ -662,6 +740,8 @@ def test_shared_langchain_adapter_has_exact_nonretrying_private_configuration(mo
     assert chat_kwargs["max_retries"] == 0
     assert chat_kwargs["timeout"] == 180_000
     assert chat_kwargs["max_tokens"] == 777
+    assert chat_kwargs["reasoning"] == {"effort": "medium"}
+    assert set(chat_kwargs["reasoning"]) == {"effort"}
     assert chat_kwargs["openrouter_provider"] == {
         "only": ["deepinfra/fp4"],
         "allow_fallbacks": False,
@@ -785,6 +865,9 @@ def test_shared_runnable_forwards_exact_private_route_in_one_sdk_send(monkeypatc
         "require_parameters": True,
         "data_collection": "deny",
     }
+    assert body["reasoning"] == {"effort": "medium"}
+    assert "max_tokens" not in body["reasoning"]
+    assert "exclude" not in body["reasoning"]
     assert "x_open_router_metadata" not in body
     assert "models" not in body
     assert "trace" not in body
@@ -1366,9 +1449,15 @@ def test_external_tracing_blocks_runner_and_graph_before_invocation(
         )
     assert factory_calls == 0
 
-    orchestrator, _storage, _captures, package, canonicalization, result = graph_fixture(
-        tmp_path
-    )
+    (
+        orchestrator,
+        _storage,
+        _captures,
+        _responses,
+        package,
+        canonicalization,
+        result,
+    ) = graph_fixture(tmp_path)
 
     class SpyGraph:
         entered = False
@@ -1439,8 +1528,7 @@ def test_specialist_requires_strict_accepted_majority_and_never_caches_minority(
                     },
                 ),
                 "parsed": OrchestratorPlan(
-                    focus_fact_ids=["fact"],
-                    focus_source_ref_ids=["source"],
+                    priority_fact_ids=["fact"],
                     priority_task_codes=[
                         "source_integrity",
                         "process_decisions",
@@ -1490,10 +1578,16 @@ def test_accepted_artifact_hash_rejects_all_floats(value: float):
         accepted_artifact_hash({"bounded": [1, value]})
 
 
-def test_evidence_role_has_complete_two_thousand_token_ceiling(tmp_path: Path):
-    orchestrator, _storage, _captures, package, canonicalization, result = graph_fixture(
-        tmp_path
-    )
+def test_evidence_role_reserves_large_answer_headroom(tmp_path: Path):
+    (
+        orchestrator,
+        _storage,
+        _captures,
+        _responses,
+        package,
+        canonicalization,
+        result,
+    ) = graph_fixture(tmp_path)
     audit = orchestrator.invoke(
         run_id="run-size-test",
         orchestration_id="orch-size-test",
@@ -1509,7 +1603,171 @@ def test_evidence_role_has_complete_two_thousand_token_ceiling(tmp_path: Path):
     conservative_tokens = (
         len(json.dumps({"proposals": proposals}, separators=(",", ":")).encode()) + 2
     ) // 3
-    assert conservative_tokens < ROLE_OUTPUT_TOKENS["evidence_checklist"] == 2_000
+    assert conservative_tokens * 2 < ROLE_OUTPUT_TOKENS["evidence_checklist"] == 8_192
+
+
+def test_all_production_specialist_artifacts_leave_half_completion_budget(
+    tmp_path: Path,
+):
+    assert ROLE_OUTPUT_TOKENS == {
+        "orchestrator_plan": 4_096,
+        "document_source_integrity": 4_096,
+        "process_decision_mapping": 4_096,
+        "evidence_checklist": 8_192,
+        "final_claim_brief_audit": 4_096,
+    }
+    (
+        orchestrator,
+        _storage,
+        _captures,
+        responses,
+        package,
+        canonicalization,
+        result,
+    ) = graph_fixture(tmp_path)
+    audit = orchestrator.invoke(
+        run_id="run-answer-headroom",
+        orchestration_id="orch-answer-headroom",
+        observable_package=package,
+        canonicalization=canonicalization,
+        facts=result["facts"],
+        process=result["process"],
+        checklist=result["checklist"],
+        verification=result["verification"],
+    )
+
+    assert audit["all_required_agents_contributed"] is True
+    assert set(responses) == set(ROLE_OUTPUT_TOKENS)
+    for role, response in responses.items():
+        conservative_answer_tokens = (
+            len(json.dumps(response, separators=(",", ":")).encode()) + 2
+        ) // 3
+        assert conservative_answer_tokens * 2 < ROLE_OUTPUT_TOKENS[role], (
+            role,
+            conservative_answer_tokens,
+            ROLE_OUTPUT_TOKENS[role],
+        )
+
+
+@pytest.mark.parametrize(
+    ("priority_fact_ids", "task_codes"),
+    [
+        ([], ["source_integrity", "process_decisions", "evidence_gaps", "final_brief"]),
+        (["fact_1", "fact_1"], ["source_integrity", "process_decisions", "evidence_gaps", "final_brief"]),
+        (["unknown"], ["source_integrity", "process_decisions", "evidence_gaps", "final_brief"]),
+        (
+            [f"fact_{index}" for index in range(1, 8)],
+            ["source_integrity", "process_decisions", "evidence_gaps", "final_brief"],
+        ),
+        (["fact_1"], ["source_integrity", "process_decisions", "evidence_gaps"]),
+        (
+            ["fact_1"],
+            ["source_integrity", "source_integrity", "evidence_gaps", "final_brief"],
+        ),
+        (
+            ["fact_1"],
+            ["source_integrity", "process_decisions", "evidence_gaps", "unknown"],
+        ),
+    ],
+)
+def test_plan_validator_rejects_unbounded_or_incomplete_priorities(
+    priority_fact_ids: list[str], task_codes: list[str]
+):
+    canonical_fact_ids = [f"fact_{index}" for index in range(1, 19)]
+    validator = _plan_validator(
+        canonical_fact_ids=canonical_fact_ids,
+        deterministic_focus_source_ref_ids=[f"src_{index}" for index in range(5)],
+        required_text_artifact_ids=[f"artifact_{index}" for index in range(5)],
+    )
+
+    contribution, diagnostics = validator(
+        {
+            "priority_fact_ids": priority_fact_ids,
+            "priority_task_codes": task_codes,
+        }
+    )
+
+    assert diagnostics["accepted_item_count"] == 0
+    assert diagnostics["rejected_item_count"] == 1
+    assert diagnostics["rejected_items"][0]["invariant"] == (
+        "bounded_priority_selection"
+    )
+    assert contribution["model_priority_fact_ids"] == []
+    assert contribution["focus_fact_ids"] == []
+    assert contribution["focus_source_ref_ids"] == []
+
+
+def test_model_fact_priority_changes_derived_downstream_order_without_losing_coverage(
+    tmp_path: Path,
+):
+    (
+        _orchestrator,
+        _storage,
+        _captures,
+        _responses,
+        package,
+        _canonicalization,
+        result,
+    ) = graph_fixture(tmp_path)
+    canonical_fact_ids = [item["fact_id"] for item in result["facts"]]
+    required_artifacts = sorted(
+        item["artifact_id"]
+        for item in package["artifacts"]
+        if item["media_type"] in {"application/pdf", "message/rfc822"}
+    )
+    registry = _source_registry(package)
+    deterministic_sources = [
+        min(
+            item["source_ref_id"]
+            for item in registry
+            if item["artifact_id"] == artifact_id
+        )
+        for artifact_id in required_artifacts
+    ]
+    validator = _plan_validator(
+        canonical_fact_ids=canonical_fact_ids,
+        deterministic_focus_source_ref_ids=deterministic_sources,
+        required_text_artifact_ids=required_artifacts,
+    )
+    task_codes = ["source_integrity", "process_decisions", "evidence_gaps", "final_brief"]
+
+    forward, forward_diagnostics = validator(
+        {
+            "priority_fact_ids": canonical_fact_ids[:2],
+            "priority_task_codes": task_codes,
+        }
+    )
+    reverse, reverse_diagnostics = validator(
+        {
+            "priority_fact_ids": list(reversed(canonical_fact_ids[-2:])),
+            "priority_task_codes": task_codes,
+        }
+    )
+
+    assert forward_diagnostics["accepted_item_count"] == 1
+    assert reverse_diagnostics["accepted_item_count"] == 1
+    assert forward["focus_fact_ids"][:2] == canonical_fact_ids[:2]
+    assert reverse["focus_fact_ids"][:2] == list(reversed(canonical_fact_ids[-2:]))
+    assert set(forward["focus_fact_ids"]) == set(reverse["focus_fact_ids"]) == set(
+        canonical_fact_ids
+    )
+    assert len(forward["focus_fact_ids"]) == len(reverse["focus_fact_ids"]) == 18
+    assert forward["focus_source_ref_ids"] == reverse["focus_source_ref_ids"]
+    assert len(forward["focus_source_ref_ids"]) == 5
+
+    def evidence_order(plan: dict[str, Any]) -> list[str]:
+        payload = _evidence_provider_payload(
+            {
+                "orchestrator_plan": plan,
+                "checklist": result["checklist"],
+                "facts": result["facts"],
+                "source_registry": registry,
+                "observable_package": package,
+            }
+        )
+        return [item["fact_id"] for item in payload["fact_handoff"]]
+
+    assert evidence_order(forward) != evidence_order(reverse)
 
 
 def _accepted_plan_validator(value: dict[str, Any]):
@@ -1546,8 +1804,7 @@ def _plan_envelope(
         "raw": AIMessage(content="", response_metadata=metadata),
         "parsed": (
             OrchestratorPlan(
-                focus_fact_ids=["fact"],
-                focus_source_ref_ids=["source"],
+                priority_fact_ids=["fact"],
                 priority_task_codes=[
                     "source_integrity",
                     "process_decisions",
@@ -1562,11 +1819,16 @@ def _plan_envelope(
     }
 
 
-def _invoke_plan(runner: InstrumentedStructuredAgent, *, run_id: str = "run-plan"):
+def _invoke_plan(
+    runner: InstrumentedStructuredAgent,
+    *,
+    run_id: str = "run-plan",
+    agent_id: str = "orchestrator_plan",
+):
     return runner.invoke(
         run_id=run_id,
         orchestration_id="orch-plan",
-        agent_id="orchestrator_plan",
+        agent_id=agent_id,
         schema=OrchestratorPlan,
         system_prompt="bounded",
         provider_payload={"observable": True},
@@ -1588,8 +1850,8 @@ def test_orchestrator_plan_accepts_completion_above_legacy_ceiling_with_exact_ne
             return _plan_envelope(
                 usage={
                     "prompt_tokens": 700,
-                    "completion_tokens": 650,
-                    "total_tokens": 1_350,
+                    "completion_tokens": 3_500,
+                    "total_tokens": 4_200,
                     "cost": 0.008,
                 }
             )
@@ -1607,20 +1869,30 @@ def test_orchestrator_plan_accepts_completion_above_legacy_ceiling_with_exact_ne
 
     result = _invoke_plan(runner, run_id="run-expanded-plan-ceiling")
 
-    assert ROLE_OUTPUT_TOKENS["orchestrator_plan"] == 800
-    assert received_ceilings == [800]
+    assert ROLE_OUTPUT_TOKENS["orchestrator_plan"] == 4_096
+    assert received_ceilings == [4_096]
     assert provider_calls == 1
     assert result["cache_hit"] is False
     assert result["outcome"] == "succeeded"
-    assert result["usage"]["completion_tokens"] == 650 > 400
+    assert result["usage"]["completion_tokens"] == 3_500 > 800
     ledger = storage.model_calls()
     assert len(ledger) == 1
     assert ledger[0]["call_count"] == 1
     assert ledger[0]["outcome"] == "succeeded"
 
 
-def test_orchestrator_plan_length_at_new_ceiling_fails_closed_without_cache(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    ("agent_id", "ceiling"),
+    [
+        ("orchestrator_plan", 4_096),
+        ("document_source_integrity", 4_096),
+        ("process_decision_mapping", 4_096),
+        ("evidence_checklist", 8_192),
+        ("final_claim_brief_audit", 4_096),
+    ],
+)
+def test_each_specialist_length_at_new_ceiling_is_billed_and_never_cached(
+    tmp_path: Path, agent_id: str, ceiling: int
 ):
     provider_calls = 0
     received_ceilings: list[int] = []
@@ -1633,8 +1905,8 @@ def test_orchestrator_plan_length_at_new_ceiling_fails_closed_without_cache(
                 finish_reason="length",
                 usage={
                     "prompt_tokens": 700,
-                    "completion_tokens": 800,
-                    "total_tokens": 1_500,
+                    "completion_tokens": ceiling,
+                    "total_tokens": 700 + ceiling,
                     "cost": 0.009,
                 },
             )
@@ -1643,7 +1915,7 @@ def test_orchestrator_plan_length_at_new_ceiling_fails_closed_without_cache(
         received_ceilings.append(max_tokens)
         return Runnable()
 
-    storage = Storage(str(tmp_path / "length-at-expanded-plan-ceiling.db"))
+    storage = Storage(str(tmp_path / f"length-at-{agent_id}-ceiling.db"))
     runner = InstrumentedStructuredAgent(
         storage,
         runnable_factory=factory,
@@ -1652,10 +1924,10 @@ def test_orchestrator_plan_length_at_new_ceiling_fails_closed_without_cache(
 
     for run_id in ("run-length-at-new-cap-1", "run-length-at-new-cap-2"):
         with pytest.raises(AgentInvocationFailure, match="provider_finish_reason"):
-            _invoke_plan(runner, run_id=run_id)
+            _invoke_plan(runner, run_id=run_id, agent_id=agent_id)
 
-    assert ROLE_OUTPUT_TOKENS["orchestrator_plan"] == 800
-    assert received_ceilings == [800, 800]
+    assert ROLE_OUTPUT_TOKENS[agent_id] == ceiling
+    assert received_ceilings == [ceiling, ceiling]
     assert provider_calls == 2
     ledger = storage.model_calls()
     assert len(ledger) == 2
@@ -1663,7 +1935,7 @@ def test_orchestrator_plan_length_at_new_ceiling_fails_closed_without_cache(
     assert all(item["outcome"] == "failed" for item in ledger)
     assert all(item["error_invariant"] == "provider_finish_reason" for item in ledger)
     assert all(item["finish_reason"] == "length" for item in ledger)
-    assert all(item["completion_tokens"] == 800 for item in ledger)
+    assert all(item["completion_tokens"] == ceiling for item in ledger)
     assert all(storage.cached_model_output(item["cache_key"]) is None for item in ledger)
 
 
@@ -2110,8 +2382,7 @@ def test_specialist_sdk_drift_nonstop_retains_billing_before_rejection(
                     "role": "assistant",
                     "content": json.dumps(
                         {
-                            "focus_fact_ids": ["fact"],
-                            "focus_source_ref_ids": ["source"],
+                            "priority_fact_ids": ["fact"],
                             "priority_task_codes": [
                                 "source_integrity",
                                 "process_decisions",
@@ -2251,7 +2522,7 @@ def test_specialist_upstream_rejection_retains_only_safe_unknown_cost_evidence(
 def test_specialist_upstream_rejection_receipt_exposes_only_bounded_status(
     tmp_path: Path,
 ):
-    _, _, _, package, canonicalization, result = graph_fixture(tmp_path)
+    _, _, _, _, package, canonicalization, result = graph_fixture(tmp_path)
     receipts: list[dict[str, Any]] = []
 
     class FailingRunner:

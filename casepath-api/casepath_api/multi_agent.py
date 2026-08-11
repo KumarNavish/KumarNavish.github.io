@@ -47,7 +47,7 @@ from .langchain_runtime import (
 )
 
 
-MULTI_AGENT_VERSION = "1.0.5"
+MULTI_AGENT_VERSION = "1.1.0"
 MULTI_AGENT_SCHEMA_VERSION = "casepath.nemotron-agent-dag/1.0.0"
 MULTI_AGENT_AUTHORITY_MODE = "multi_agent_hybrid_guarded"
 MULTI_AGENT_IMPLEMENTATION = "langgraph_stategraph_langchain_openrouter"
@@ -92,13 +92,19 @@ EVIDENCE_STATUS_CANDIDATES = [
     "conditional",
     "not_applicable",
 ]
+PRIORITY_TASK_CODES = (
+    "source_integrity",
+    "process_decisions",
+    "evidence_gaps",
+    "final_brief",
+)
 
 ROLE_OUTPUT_TOKENS = {
-    "orchestrator_plan": 800,
-    "document_source_integrity": 900,
-    "process_decision_mapping": 900,
-    "evidence_checklist": 2_000,
-    "final_claim_brief_audit": 900,
+    "orchestrator_plan": 4_096,
+    "document_source_integrity": 4_096,
+    "process_decision_mapping": 4_096,
+    "evidence_checklist": 8_192,
+    "final_claim_brief_audit": 4_096,
 }
 ROLE_PURPOSES = {
     "orchestrator_plan": "bounded claim-agent focus and priority plan",
@@ -158,11 +164,18 @@ class _StrictModel(BaseModel):
 
 
 class OrchestratorPlan(_StrictModel):
-    focus_fact_ids: list[str]
-    focus_source_ref_ids: list[str]
+    priority_fact_ids: list[str] = Field(
+        min_length=1,
+        max_length=6,
+        json_schema_extra={"uniqueItems": True},
+    )
     priority_task_codes: list[
         Literal["source_integrity", "process_decisions", "evidence_gaps", "final_brief"]
-    ]
+    ] = Field(
+        min_length=4,
+        max_length=4,
+        json_schema_extra={"uniqueItems": True},
+    )
 
 
 class SourceIntegrityProposal(_StrictModel):
@@ -337,6 +350,31 @@ def _expected_text_ref_ids(
         for ref in refs
         if ref.get("locator_kind") == "text_quote"
     )
+
+
+def _deterministic_focus_source_ref_ids(
+    registry: list[dict[str, Any]],
+    required_text_artifact_ids: list[str],
+) -> list[str]:
+    """Select one stable observable passage for every text-bearing artifact."""
+
+    if len(set(required_text_artifact_ids)) != len(required_text_artifact_ids):
+        raise AgentBoundaryError("orchestrator_plan", "text_artifact_membership")
+    refs_by_artifact: dict[str, list[str]] = {}
+    for item in registry:
+        artifact_id = item.get("artifact_id")
+        source_ref_id = item.get("source_ref_id")
+        if isinstance(artifact_id, str) and isinstance(source_ref_id, str):
+            refs_by_artifact.setdefault(artifact_id, []).append(source_ref_id)
+    selected: list[str] = []
+    for artifact_id in required_text_artifact_ids:
+        candidates = refs_by_artifact.get(artifact_id, [])
+        if not candidates:
+            raise AgentBoundaryError(
+                "orchestrator_plan", "text_artifact_source_coverage"
+            )
+        selected.append(min(candidates))
+    return selected
 
 
 def _assigned_focus(plan: Mapping[str, Any], task_code: str) -> dict[str, Any]:
@@ -1128,54 +1166,87 @@ def _proposal_map(values: Any, key: str, agent_id: str) -> tuple[dict[str, dict[
 
 def _plan_validator(
     *,
-    allowed_fact_ids: set[str],
-    allowed_source_ids: set[str],
-    source_artifact_by_id: Mapping[str, str],
-    required_text_artifact_ids: set[str],
+    canonical_fact_ids: list[str],
+    deterministic_focus_source_ref_ids: list[str],
+    required_text_artifact_ids: list[str],
 ) -> ContributionValidator:
-    allowed_task_codes = {
-        "source_integrity",
-        "process_decisions",
-        "evidence_gaps",
-        "final_brief",
-    }
+    if len(set(canonical_fact_ids)) != len(canonical_fact_ids):
+        raise AgentBoundaryError("orchestrator_plan", "canonical_fact_membership")
+    allowed_fact_ids = set(canonical_fact_ids)
+    allowed_task_codes = set(PRIORITY_TASK_CODES)
 
     def validate(value: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-        fact_ids = value.get("focus_fact_ids")
-        source_ids = value.get("focus_source_ref_ids")
+        priority_fact_ids = value.get("priority_fact_ids")
         task_codes = value.get("priority_task_codes")
         accepted = (
-            isinstance(fact_ids, list)
-            and bool(fact_ids)
-            and len(set(fact_ids)) == len(fact_ids)
-            and set(fact_ids) == allowed_fact_ids
-            and isinstance(source_ids, list)
-            and bool(source_ids)
-            and len(set(source_ids)) == len(source_ids)
-            and set(source_ids) <= allowed_source_ids
-            and {
-                source_artifact_by_id[source_id]
-                for source_id in source_ids
-            }
-            >= required_text_artifact_ids
+            isinstance(priority_fact_ids, list)
+            and 1 <= len(priority_fact_ids) <= 6
+            and all(isinstance(item, str) for item in priority_fact_ids)
+            and len(set(priority_fact_ids)) == len(priority_fact_ids)
+            and set(priority_fact_ids) <= allowed_fact_ids
             and isinstance(task_codes, list)
             and len(task_codes) == len(allowed_task_codes)
+            and all(isinstance(item, str) for item in task_codes)
             and len(set(task_codes)) == len(task_codes)
             and set(task_codes) == allowed_task_codes
         )
+        model_priority_fact_ids = list(priority_fact_ids) if accepted else []
+        deterministic_fact_ids = (
+            [
+                fact_id
+                for fact_id in canonical_fact_ids
+                if fact_id not in model_priority_fact_ids
+            ]
+            if accepted
+            else []
+        )
+        focus_fact_ids = (
+            [*model_priority_fact_ids, *deterministic_fact_ids]
+            if accepted
+            else []
+        )
+        focus_source_ref_ids = (
+            list(deterministic_focus_source_ref_ids) if accepted else []
+        )
         contribution = {
-            "focus_fact_ids": list(fact_ids) if accepted else [],
-            "focus_source_ref_ids": list(source_ids) if accepted else [],
-            "priority_task_codes": task_codes if accepted else [],
+            "model_priority_fact_ids": model_priority_fact_ids,
+            "model_priority_task_codes": list(task_codes) if accepted else [],
+            "priority_task_codes": list(task_codes) if accepted else [],
+            "model_priority_attribution": (
+                "Nemotron Orchestrator" if accepted else None
+            ),
+            "deterministic_coverage": {
+                "fact_ids": deterministic_fact_ids,
+                "source_ref_ids": focus_source_ref_ids,
+                "required_text_artifact_ids": (
+                    list(required_text_artifact_ids) if accepted else []
+                ),
+                "attribution": "deterministic_application",
+            },
+            "focus_fact_ids": focus_fact_ids,
+            "focus_source_ref_ids": focus_source_ref_ids,
             "contribution_type": "constrained_focus_prioritization",
-            "attribution": "Nemotron Orchestrator" if accepted else "deterministic_application",
         }
-        return contribution, _diagnostics(
-            ["orchestration_focus"] if accepted else [],
+        diagnostics = _diagnostics(
+            ["model_priority_order"] if accepted else [],
             []
             if accepted
-            else [{"item_id": "orchestration_focus", "invariant": "bounded_focus_selection"}],
+            else [
+                {
+                    "item_id": "model_priority_order",
+                    "invariant": "bounded_priority_selection",
+                }
+            ],
         )
+        diagnostics.update(
+            {
+                "model_priority_fact_ids": model_priority_fact_ids,
+                "deterministic_coverage_fact_ids": deterministic_fact_ids,
+                "derived_focus_fact_ids": focus_fact_ids,
+                "derived_focus_source_ref_ids": focus_source_ref_ids,
+            }
+        )
+        return contribution, diagnostics
 
     return validate
 
@@ -1475,49 +1546,65 @@ class NemotronMultiAgentOrchestrator:
         return result["contribution"], audit
 
     def _orchestrator_plan_node(self, state: AgentGraphState) -> dict[str, Any]:
-        allowed_fact_ids = {fact["fact_id"] for fact in state["facts"]}
-        allowed_source_ids = {item["source_ref_id"] for item in state["source_registry"]}
-        source_artifact_by_id = {
-            item["source_ref_id"]: item["artifact_id"] for item in state["source_registry"]
-        }
-        required_text_artifact_ids = {
-            item["artifact_id"]
-            for item in state["observable_package"].get("artifacts", [])
-            if _integrity_class(item["media_type"]) == "text_grounded"
-        }
+        canonical_fact_ids = [fact["fact_id"] for fact in state["facts"]]
+        required_text_artifact_ids = sorted(
+            {
+                item["artifact_id"]
+                for item in state["observable_package"].get("artifacts", [])
+                if _integrity_class(item["media_type"]) == "text_grounded"
+            }
+        )
+        deterministic_source_ref_ids = _deterministic_focus_source_ref_ids(
+            state["source_registry"], required_text_artifact_ids
+        )
         contribution, audit = self._run_agent(
             state,
             agent_id="orchestrator_plan",
             schema=OrchestratorPlan,
             system_prompt=(
-                "Select every supplied observable fact ID, the smallest source-reference focus that includes at "
-                "least one passage for every text-bearing artifact, and every supplied task code for the "
-                "specialist workflow. Do not return topology, expected decisions, legal conclusions, or prose."
+                "Prioritize between one and six of the supplied observable fact IDs by consequence, then return "
+                "an exact priority ordering of every supplied specialist task code. Return only those two bounded "
+                "lists; the application adds mandatory fact and source coverage deterministically. Do not return "
+                "topology, source references, expected decisions, legal conclusions, or prose."
             ),
             provider_payload={
                 "schema_version": MULTI_AGENT_SCHEMA_VERSION,
+                "max_priority_fact_count": 6,
                 "fact_candidates": [
                     {"fact_id": fact["fact_id"], "label": fact["label"]}
                     for fact in state["facts"]
                 ],
-                "source_reference_candidates": state["source_registry"],
-                "task_codes": [
-                    "source_integrity",
-                    "process_decisions",
-                    "evidence_gaps",
-                    "final_brief",
-                ],
+                "task_codes": list(PRIORITY_TASK_CODES),
             },
             validator=_plan_validator(
-                allowed_fact_ids=allowed_fact_ids,
-                allowed_source_ids=allowed_source_ids,
-                source_artifact_by_id=source_artifact_by_id,
+                canonical_fact_ids=canonical_fact_ids,
+                deterministic_focus_source_ref_ids=deterministic_source_ref_ids,
                 required_text_artifact_ids=required_text_artifact_ids,
             ),
             private_contract={
-                "allowed_fact_ids": sorted(allowed_fact_ids),
-                "allowed_source_ids": sorted(allowed_source_ids),
+                "canonical_fact_ids": canonical_fact_ids,
+                "deterministic_source_ref_ids": deterministic_source_ref_ids,
             },
+        )
+        audit.update(
+            {
+                "model_priority_fact_ids": contribution[
+                    "model_priority_fact_ids"
+                ],
+                "model_priority_attribution": contribution[
+                    "model_priority_attribution"
+                ],
+                "model_priority_task_codes": contribution[
+                    "model_priority_task_codes"
+                ],
+                "deterministic_coverage": contribution[
+                    "deterministic_coverage"
+                ],
+                "derived_focus_fact_ids": contribution["focus_fact_ids"],
+                "derived_focus_source_ref_ids": contribution[
+                    "focus_source_ref_ids"
+                ],
+            }
         )
         return {
             "orchestrator_plan": contribution,

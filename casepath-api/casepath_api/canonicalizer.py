@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from .langchain_runtime import (
     OPENROUTER_EXPECTED_UPSTREAM_PROVIDER,
+    OPENROUTER_REASONING,
     OpenRouterProtocolError,
     OpenRouterUpstreamRejectionError,
     assert_external_tracing_disabled,
@@ -38,8 +39,8 @@ OPENROUTER_ACCEPTED_RESPONSE_MODELS = {OPENROUTER_MODEL, OPENROUTER_CANONICAL_MO
 OPENROUTER_PROVIDER = "openrouter"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_GENERATION_URL = "https://openrouter.ai/api/v1/generation"
-CANONICALIZER_VERSION = "1.6.4"
-PROMPT_VERSION = "canonical-facts/1.5.0"
+CANONICALIZER_VERSION = "1.6.5"
+PROMPT_VERSION = "canonical-facts/1.5.1"
 SCHEMA_VERSION = "casepath.canonical-facts/1.4.0"
 NORMALIZED_VALUES = [
     "absent",
@@ -70,7 +71,7 @@ MODEL_SINGLE_FLIGHT_LOCK = threading.RLock()
 
 INPUT_USD_PER_MILLION_TOKENS = 0.625
 OUTPUT_USD_PER_MILLION_TOKENS = 3.60
-MAX_OUTPUT_TOKENS = 4_000
+MAX_OUTPUT_TOKENS = 8_192
 DEFAULT_CUMULATIVE_USD_CAP = 25.0
 ABSOLUTE_CUMULATIVE_USD_CAP = 400.0
 GENERATION_METADATA_POLL_ATTEMPTS = 8
@@ -1247,6 +1248,7 @@ class OpenRouterNemotronCanonicalizer:
             "stream": False,
             "temperature": 0,
             "max_tokens": MAX_OUTPUT_TOKENS,
+            "reasoning": dict(OPENROUTER_REASONING),
             "response_format": {
                 "type": "json_schema",
                 "json_schema": {
