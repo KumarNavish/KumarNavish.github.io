@@ -1,7 +1,7 @@
 {
   "$schema": "./release.schema.json",
-  "contract": "casepath.release-contract/2.1.0",
-  "schema_version": "2.1.0",
+  "contract": "casepath.release-contract/2.2.0",
+  "schema_version": "2.2.0",
   "release_id": "casepath-v20-reference-20260811",
   "released_on": "2026-08-11",
   "product": "CasePath focused claim-handling reference workspace",
@@ -140,7 +140,8 @@
       "requires_accepted_majority_per_agent": true,
       "requires_cold_network_run": true,
       "requires_deterministic_gate_passes": true,
-      "requires_guarded_fallback_disclosure": true
+      "requires_guarded_fallback_disclosure": true,
+      "requires_source_reference_projection_disclosure": true
     },
     "historical_model_validation": {
       "scope": "failed_closed_history_only",
@@ -148,7 +149,8 @@
         "casepath/releases/model-validation-attempt-20260811-01.json",
         "casepath/releases/model-validation-attempt-20260811-02.json",
         "casepath/releases/model-validation-attempt-20260811-03.json",
-        "casepath/releases/model-validation-attempt-20260811-04.json"
+        "casepath/releases/model-validation-attempt-20260811-04.json",
+        "casepath/releases/model-validation-attempt-20260811-05.json"
       ],
       "establishes_current_runtime_acceptance": false
     },

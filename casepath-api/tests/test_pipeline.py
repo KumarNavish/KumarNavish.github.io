@@ -818,13 +818,89 @@ def test_model_mode_retains_process_owned_visual_locator_and_passes_grounding(tm
     assert model_storage.model_calls()[0]["outcome"] == "succeeded"
 
 
+def test_production_shaped_canonical_source_projection_succeeds_17_to_1(tmp_path: Path):
+    oracle_storage = Storage(str(tmp_path / "oracle-projection.db"))
+    oracle = ClaimPipeline(oracle_storage, pace_seconds=0)
+    oracle_result = wait(oracle_storage, oracle.create("DEF-027-E0-DEMO"))["result"]
+    proposals = provider_fact_proposals(oracle_result["facts"])
+    text_grounded_fact_ids = {
+        value["fact_id"]
+        for value in oracle_result["facts"]
+        if any(ref["locator_kind"] == "text_quote" for ref in value["source_refs"])
+    }
+    for proposal in proposals:
+        if proposal["fact_id"] in text_grounded_fact_ids:
+            proposal["source_ref_ids"] = []
+    next(
+        value for value in proposals if value["fact_id"] == "fact_date_conflict"
+    )["state"] = "known"
+
+    def transport(_url, _headers, _payload, _timeout):
+        return {
+            "id": "mock-production-shaped-projection",
+            "model": OPENROUTER_MODEL,
+            "provider": "mock-upstream-provider",
+            "choices": [
+                {
+                    "finish_reason": "stop",
+                    "message": {"content": json.dumps({"facts": proposals})},
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 23141,
+                "completion_tokens": 1931,
+                "total_tokens": 25072,
+                "cost": 0.0157931,
+            },
+        }
+
+    model_storage = Storage(str(tmp_path / "model-projection.db"))
+    pipeline = ClaimPipeline(
+        model_storage,
+        model_mode=MODEL_MODE_OPENROUTER,
+        canonicalizer=OpenRouterNemotronCanonicalizer(
+            model_storage,
+            transport=transport,
+            api_key_provider=lambda: "runtime-only-test-value",
+        ),
+        agent_orchestrator=StubAgentOrchestrator(),
+        pace_seconds=0,
+    )
+    run = wait(model_storage, pipeline.create("DEF-027-E0-DEMO"))
+    assert run["status"] == "complete", run.get("error")
+    diagnostics = run["result"]["audit"]["canonicalization"]["diagnostics"]
+    assert diagnostics["accepted_fact_count"] == 17
+    assert diagnostics["rejected_facts"] == [
+        {"fact_id": "fact_date_conflict", "invariant": "canonical_state"}
+    ]
+    assert diagnostics["rejected_fact_count"] == 1
+    expected_projections = sorted(text_grounded_fact_ids - {"fact_date_conflict"})
+    assert sorted(diagnostics["source_reference_projection_fact_ids"]) == (
+        expected_projections
+    )
+    assert diagnostics["source_reference_projection_count"] == 10
+    oracle_by_id = {value["fact_id"]: value for value in oracle_result["facts"]}
+    model_by_id = {value["fact_id"]: value for value in run["result"]["facts"]}
+    for fact_id in expected_projections:
+        assert sorted(
+            json.dumps(ref, sort_keys=True) for ref in model_by_id[fact_id]["source_refs"]
+        ) == sorted(
+            json.dumps(ref, sort_keys=True) for ref in oracle_by_id[fact_id]["source_refs"]
+        )
+    assert "projected 10 authoritative citation sets" in run["result"]["summary"]
+    ledger = model_storage.model_calls()[0]
+    assert ledger["outcome"] == "succeeded_with_guarded_fallback"
+    assert ledger["accepted_fact_count"] == 17
+    assert ledger["source_reference_projection_count"] == 10
+
+
 def test_hybrid_rejected_controlling_fact_uses_exact_oracle_fallback(tmp_path: Path):
     oracle_storage = Storage(str(tmp_path / "oracle.db"))
     oracle = ClaimPipeline(oracle_storage, pace_seconds=0)
     oracle_result = wait(oracle_storage, oracle.create("DEF-027-E0-DEMO"))["result"]
     proposals = provider_fact_proposals(oracle_result["facts"])
     rejected_proposal = next(value for value in proposals if value["fact_id"] == "fact_dispute")
-    rejected_proposal["source_ref_ids"] = []
+    rejected_proposal["state"] = "unknown"
     accepted_proposal = next(value for value in proposals if value["fact_id"] == "fact_tenancy")
     accepted_proposal["confidence"] = 0.41
 
@@ -888,7 +964,7 @@ def test_hybrid_rejected_controlling_fact_uses_exact_oracle_fallback(tmp_path: P
     assert diagnostics["authority_mode"] == "hybrid_guarded"
     assert diagnostics["accepted_fact_count"] == len(proposals) - 1
     assert diagnostics["rejected_facts"] == [
-        {"fact_id": "fact_dispute", "invariant": "source_reference_set"}
+        {"fact_id": "fact_dispute", "invariant": "canonical_state"}
     ]
     assert diagnostics["rejected_fact_count"] == 1
     assert "Model-assisted hybrid canonicalization" in result["summary"]

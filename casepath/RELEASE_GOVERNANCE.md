@@ -2,7 +2,7 @@
 
 ## Release identity
 
-`release.json` is the `casepath.release-contract/2.1.0` product contract. A
+`release.json` is the `casepath.release-contract/2.2.0` product contract. A
 release is aligned only when the
 frontend, API, and QA services report the same `release_id` and the same
 non-`unknown` source commit. Frontend, API, pipeline, and QA semantic versions
@@ -104,10 +104,12 @@ contribution, and more accepted than rejected proposals. The records must share
 one orchestration ID, preserve the canonical-to-orchestrator-to-specialist
 parent/delegation chain, and bind sanitized input/output artifact hashes. All
 three deterministic gates must pass, and the exact guarded-fallback count must
-be disclosed. A paid provider response, a cache replay, or a weak/unbound role
+be disclosed. Canonical source-reference projection IDs and counts must be
+bound identically across the run audit and sanitized ledger. A paid provider
+response, a cache replay, or a weak/unbound role
 record does not satisfy that gate.
 
-Four authorized smoke attempts failed closed:
+Five authorized model attempts failed closed:
 
 - Attempt 1 reached DeepInfra through OpenRouter and returned the provider's
   dated canonical model ID. It charged USD 0.00756 for 3,629 prompt and 2,625
@@ -128,14 +130,21 @@ Four authorized smoke attempts failed closed:
   but the application rejected the `fact_dispute/source_reference_set` value.
   Ledger call `modelcall_29c9c7fde86d9fcf` records `failed`; no canonical result
   was accepted.
+- Attempt 5 was the first same-commit production flagship gate. The exact
+  requested alias returned successfully and charged USD 0.0157931 for 23,141
+  prompt and 1,931 completion tokens with `stop`. The application accepted 7
+  fact contributions and rejected 11 (10 citation-set mismatches and one state
+  mismatch), then failed the strict-majority boundary. Ledger call
+  `modelcall_ef72cb958e5c9e63` records `failed`; no downstream model role or
+  final playbook was accepted.
 
-Known aggregate provider charges for attempts 1, 2, and 4 are USD 0.0192470;
+Known aggregate provider charges for attempts 1, 2, 4, and 5 are USD 0.0350401;
 attempt 3 remains unknown and unconfirmed. The responses remain failed-attempt
 history, not successful application evidence. No raw prompt, raw output,
 credential, or private reference is retained, and no attempt is accepted
 model-backed release evidence.
 
-The four records above are listed under `historical_model_validation` with
+The five records above are listed under `historical_model_validation` with
 `scope: failed_closed_history_only`; they can never establish current runtime
 acceptance. No passing dynamic QA artifact pair has been verified as part of
 this source edit, so current production model acceptance remains unestablished.

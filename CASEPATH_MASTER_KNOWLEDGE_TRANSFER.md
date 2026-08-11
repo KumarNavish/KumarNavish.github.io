@@ -4136,8 +4136,11 @@ Implemented source behavior:
 
 The OpenRouter path fails closed on missing credentials, wrong response model,
 missing positive paid-usage evidence, invalid structured output, hallucinated or
-wrong-page quotations, incomplete conflicting-source sets, and cumulative cost
-guard violations. Its default cumulative cap is USD 25 and can only be
+wrong-page quotations, malformed/duplicate/unregistered source-reference IDs,
+and cumulative cost guard violations. A registered but nonexact source set,
+including an incomplete conflict-side selection, cannot control final citations:
+it is replaced by the application-owned exact source set and disclosed as a
+source-reference projection. Its default cumulative cap is USD 25 and can only be
 configured downward. These are implementation and mocked-test facts, not proof
 of an accepted model-backed run. The retained first attempt failed closed on an
 exact-private-reference mismatch and bound no successful ledger call.
@@ -4296,6 +4299,48 @@ The 57/57 browser result described earlier in this transfer belongs to the
 historical retained v20 evidence. It is not evidence for this convergence
 worktree.
 
+## Post-record production attempt 05 and canonical projection repair
+
+The first same-commit production flagship was executed on source commit
+`89519b7b00c4e3ff1bc0a2719ed9546b90e46c92`. Frontend and API identity were
+aligned, readiness proved the exact Nemotron/LangGraph runtime and credential,
+and QA opened one cold flagship run. The canonical-facts provider call returned
+normally with valid structured content and complete usage, but the application
+failed closed before any downstream specialist ran.
+
+Sanitized evidence shows that Nemotron produced the complete 18-fact shape,
+passed label/confidence/normalized-value checks, and matched 17 of 18 canonical
+states. Seven zero-text-reference facts were accepted. Ten otherwise
+semantically valid text-grounded facts were rejected only because their valid
+observable passage IDs did not exactly equal one hidden, shortest private-oracle
+segmentation; `fact_date_conflict` was rejected for `canonical_state`. The 7:11
+count correctly failed the then-current strict-majority gate, but exposed a
+contract-design defect rather than a provider, parsing, billing or deployment
+failure.
+
+The candidate source now separates semantic contribution from authoritative
+source binding. Malformed, duplicate or unregistered reference IDs and any
+state/polarity mismatch still reject a fact. A structurally valid observable
+reference proposal whose ID set is not exactly the private resolved canonical
+set—including a broader passage that fully contains the required quote—does not
+control the final citations: the deterministic source gate projects the complete
+exact source set and records
+`source_reference_projection_fact_ids/count`. The model contributes only a
+semantically verified state and confidence; canonical prose, process metadata
+and exact citations remain application-owned. This is disclosed separately from
+semantic deterministic fallback and is bound across run audit, visible receipt,
+sanitized ledger, QA and runtime-evidence verification.
+
+A production-shaped local regression using the exact 23,141/1,931-token attempt
+shape now completes with 17 accepted semantic contributions, one canonical-state
+fallback and ten deterministic source projections. The frozen candidate then
+passed source/artifact manifest verification, 145 combined Python tests, the
+40-fixture QA contract self-test, changed-file Ruff/compile/syntax/diff checks,
+and the complete deterministic Render build. A fresh adversarial audit reported
+no remaining P0/P1 blocker. No second paid request has been executed by this
+record; it remains contingent on deploying this exact candidate commit across
+frontend, API and QA.
+
 ## Exact dynamic model evidence not yet observed by this record
 
 These point-in-time fields must be supplied by the sanitized ledger and retained
@@ -4305,7 +4350,7 @@ not fields to write back into the static release contract:
 ```text
 dynamic_runtime_acceptance_verdict: NOT_ESTABLISHED_BY_THIS_RECORD
 historical_model_validation_scope: failed_closed_history_only
-failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -04.json
+failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -05.json
 failed_attempt_id: authorized-smoke-20260811-01
 failed_attempt_application_outcome: rejected
 failed_attempt_failure_type: exact_private_reference_mismatch
@@ -4318,7 +4363,20 @@ provider_observed_prompt_tokens: 3629
 provider_observed_completion_tokens: 2625
 provider_observed_total_tokens: 6254
 provider_observed_finish_reason: stop
-accepted_retry_status: PENDING_NOT_RUN
+latest_failed_attempt_id: production-flagship-20260811-05
+latest_failed_attempt_source_commit: 89519b7b00c4e3ff1bc0a2719ed9546b90e46c92
+latest_failed_attempt_application_outcome: hybrid_model_contribution_strict_majority
+latest_failed_attempt_accepted_fact_count: 7
+latest_failed_attempt_rejected_fact_count: 11
+latest_failed_attempt_source_reference_set_rejections: 10
+latest_failed_attempt_canonical_state_rejections: 1
+latest_failed_attempt_provider_response_id: gen-1786475792-xFaK7MHwa5i0FStRHruR
+latest_failed_attempt_casepath_call_id: modelcall_ef72cb958e5c9e63
+latest_failed_attempt_prompt_tokens: 23141
+latest_failed_attempt_completion_tokens: 1931
+latest_failed_attempt_total_tokens: 25072
+latest_failed_attempt_actual_cost_usd: 0.0157931
+accepted_retry_status: PENDING_NOT_RUN_AFTER_ATTEMPT_05
 candidate_source_commit: PENDING
 release_id: casepath-v20-reference-20260811
 provider: openrouter
