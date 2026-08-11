@@ -407,7 +407,7 @@ def test_missing_sync_usage_polls_generation_metadata_without_retrying_inference
     assert result["facts"][0]["decision_value"] == "recurrence_supported"
     assert inference_calls == 1
     assert len(metadata_calls) == 2
-    assert sleeps == [0.25]
+    assert sleeps == [0.5]
     for url, metadata_headers, timeout in metadata_calls:
         assert url == f"{OPENROUTER_GENERATION_URL}?id=generation-test-1"
         assert metadata_headers == {
@@ -431,6 +431,61 @@ def test_missing_sync_usage_polls_generation_metadata_without_retrying_inference
     serialized = json.dumps(storage.model_calls())
     assert "runtime-only-test-value" not in serialized
     assert "must-not-be-persisted" not in serialized
+
+
+def test_generation_metadata_eventual_consistency_uses_bounded_backoff(
+    tmp_path: Path,
+):
+    storage = Storage(str(tmp_path / "delayed-metadata.db"))
+    inference_calls = 0
+    metadata_calls = 0
+    sleeps: list[float] = []
+
+    def transport(*_args):
+        nonlocal inference_calls
+        inference_calls += 1
+        value = response()
+        value.pop("provider")
+        return value
+
+    metadata_success = generation_metadata(
+        cost=0.0042,
+        prompt_tokens=123,
+        completion_tokens=45,
+    )
+
+    def metadata_transport(*_args):
+        nonlocal metadata_calls
+        metadata_calls += 1
+        if metadata_calls < canonicalizer_module.GENERATION_METADATA_POLL_ATTEMPTS:
+            partial = deepcopy(metadata_success)
+            partial["data"]["usage"] = None
+            return partial
+        return metadata_success
+
+    canonicalizer = OpenRouterNemotronCanonicalizer(
+        storage,
+        transport=transport,
+        metadata_transport=metadata_transport,
+        metadata_sleep=sleeps.append,
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+    result = canonicalizer.canonicalize(
+        package(),
+        run_id="run-delayed-generation-metadata",
+        allowed_fact_catalog=catalog(),
+    )
+
+    assert result["facts"][0]["decision_value"] == "recurrence_supported"
+    assert inference_calls == 1
+    assert metadata_calls == 8
+    assert sleeps == [0.5, 1.0, 2.0, 4.0, 8.0, 8.0, 8.0]
+    ledger = storage.sanitized_model_ledger()[0]
+    assert ledger["outcome"] == "succeeded"
+    assert ledger["metadata_poll_count"] == 8
+    assert ledger["usage_source"] == "generation_metadata"
+    assert ledger["upstream_provider"] == "DeepInfra"
+    assert ledger["actual_cost_usd"] == pytest.approx(0.0042)
 
 
 def test_identical_canonicalization_uses_cache_without_network(tmp_path: Path):
@@ -578,7 +633,7 @@ def test_incomplete_sync_usage_fails_when_generation_metadata_remains_missing(
             run_id="run_invalid_usage",
             allowed_fact_catalog=catalog(),
         )
-    assert metadata_calls == 3
+    assert metadata_calls == 8
     assert storage.model_calls()[0]["outcome"] == "failed"
 
 
@@ -600,7 +655,7 @@ def test_incomplete_sync_usage_fails_when_generation_metadata_remains_missing(
         (
             {"data": {}},
             "generation_metadata_completeness",
-            3,
+            8,
             None,
         ),
         (
@@ -655,6 +710,12 @@ def test_generation_metadata_mismatch_missing_or_zero_fails_closed(
     assert entry["response_model"] == OPENROUTER_MODEL
     assert entry["actual_cost_usd"] == expected_cost
     assert entry["error_invariant"] == expected_invariant
+    if expected_invariant in {
+        "generation_metadata_completeness",
+        "generation_metadata_usage",
+    }:
+        assert entry["metadata_poll_count"] == expected_calls
+        assert entry["metadata_latency_ms"] >= 0
     if expected_invariant == "invalid_provenance":
         assert entry["invalid_provenance_field"] == "response_model"
         assert len(entry["invalid_provenance_value_hash"]) == 64
@@ -1854,13 +1915,22 @@ def test_missing_upstream_provider_fails_closed_when_metadata_is_incomplete(
         )
 
     assert inference_calls == 1
-    assert metadata_calls == 3
+    assert metadata_calls == 8
     ledger = storage.sanitized_model_ledger()[0]
     assert ledger["outcome"] == "failed"
     assert ledger["error_invariant"] == "generation_metadata_completeness"
     assert ledger["actual_cost_usd"] == pytest.approx(0.0042)
     assert ledger["usage_source"] == "response"
+    assert ledger["response_id"] == "generation-test-1"
+    assert ledger["response_model"] == OPENROUTER_MODEL
+    assert ledger["finish_reason"] == "stop"
+    assert ledger["prompt_tokens"] == 123
+    assert ledger["completion_tokens"] == 45
+    assert ledger["total_tokens"] == 168
+    assert ledger["metadata_poll_count"] == 8
+    assert ledger["metadata_latency_ms"] >= 0
     assert ledger["error_type"] != "KeyError"
+    assert storage.cached_model_output(ledger["cache_key"]) is None
 
 
 def test_missing_response_id_with_sync_usage_retains_charge_and_safe_context(

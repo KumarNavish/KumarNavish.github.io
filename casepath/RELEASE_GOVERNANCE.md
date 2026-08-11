@@ -109,7 +109,7 @@ bound identically across the run audit and sanitized ledger. A paid provider
 response, a cache replay, or a weak/unbound role
 record does not satisfy that gate.
 
-Seven authorized model attempts failed closed:
+Eight authorized model attempts failed closed:
 
 - Attempt 1 reached DeepInfra through OpenRouter and returned the provider's
   dated canonical model ID. It charged USD 0.00756 for 3,629 prompt and 2,625
@@ -158,6 +158,16 @@ Seven authorized model attempts failed closed:
   identity remain unknown and unverified. Ledger call
   `modelcall_2c6614b3bc53305b` records `failed`; no downstream model role or
   deterministic gate produced a receipt, and the QA build failed closed.
+- Attempt 8 exercised the SDK response bridge on source commit
+  `2ab71f600f1e523388dec62e11da4c85b9a15be7`. The one canonical-facts call
+  returned the requested alias and charged USD 0.0179293 for 23,163 prompt and
+  2,897 completion tokens with `stop`. CasePath retained that identity and
+  usage, then failed `generation_metadata_completeness` because the same
+  generation's upstream metadata was not available within the bounded lookup.
+  A later read-only lookup returned the dated model, DeepInfra, and identical
+  usage, proving eventual availability but not application acceptance. Ledger
+  call `modelcall_58f841d20124e35f` records `failed`; no downstream agent or
+  deterministic gate produced a receipt, and the QA build failed closed.
 
 The source repair does not retry or bypass LangChain. The shared
 `ChatOpenRouter` client facade still delegates exactly one SDK request. It
@@ -166,18 +176,20 @@ completion envelope containing one assistant string choice, projects only the
 identity/finish/usage fields CasePath consumes, and then resumes LangChain's
 native strict structured-output parser. Invalid envelopes raise the constant
 `provider_response_envelope` invariant outside the SDK exception scope; raw
-response bodies are neither logged nor persisted. Current acceptance still
+response bodies are neither logged nor persisted. Attempt 8 proves that bridge
+reached LangChain and preserved billing, but it also exposes a later
+same-generation metadata availability boundary. Current acceptance still
 requires a new same-commit cold production journey with all six bound calls and
 three passed deterministic gates.
 
-Known aggregate provider charges for attempts 1, 2, 4, 5, and 6 remain USD
-0.0528110; attempts 3 and 7 are unknown and excluded rather than treated as
+Known aggregate provider charges for attempts 1, 2, 4, 5, 6, and 8 are USD
+0.0707403; attempts 3 and 7 are unknown and excluded rather than treated as
 zero. Attempt 7's USD 0.027645 reservation is not included. The responses
 remain failed-attempt history, not successful application evidence. No raw
 prompt, raw output, credential, or private reference is retained, and no
 attempt is accepted model-backed release evidence.
 
-The seven records above are listed under `historical_model_validation` with
+The eight records above are listed under `historical_model_validation` with
 `scope: failed_closed_history_only`; they can never establish current runtime
 acceptance. No passing dynamic QA artifact pair has been verified as part of
 this source edit, so current production model acceptance remains unestablished.

@@ -4409,6 +4409,41 @@ Local pinned-SDK replay and canonical/specialist boundary tests pass; CP-020 is
 `fixed_unverified` until a fresh same-commit production acceptance journey
 proves the six roles and three deterministic gates.
 
+## Production attempt 08 and eventual generation-metadata availability
+
+The next gate ran from QA deploy `dep-d9tont6gekts7394fu50` against source
+commit `2ab71f600f1e523388dec62e11da4c85b9a15be7`. The QA deploy ran from
+2026-08-11T20:54:12.154773Z through 2026-08-11T20:54:58.013224Z. Its runtime
+error was recorded at 2026-08-11T20:54:57.057789659Z, its build was marked
+failed at 2026-08-11T20:54:57.157747982Z, and the final deploy outcome was
+`build_failed`. QA run `run_06fb240a468fd0c8` made exactly one canonical-facts
+call, `modelcall_58f841d20124e35f`, under orchestration
+`orch_0083b550d06c4b83`; no downstream model call, agent receipt, or
+deterministic-gate receipt followed.
+
+The response bridge retained completion
+`gen-1786481671-XHJr7oDjH1PtrUL2kNg3` using the exact requested response alias.
+It recorded 23,163 prompt and 2,897 completion tokens, 26,060 total, USD
+0.0179293, `stop`, and 25,938.06 ms latency. The application then rejected the
+call with `ModelResponseError` under `generation_metadata_completeness`: the
+same generation's upstream metadata was not available before the bounded
+lookup ended, so no canonical result was accepted.
+
+A later read-only lookup for that exact response returned the dated model
+`nvidia/nemotron-3-ultra-550b-a55b-20260604`, upstream provider DeepInfra, and
+the same cost, token counts, and finish reason. That observation proves eventual
+metadata availability and that the deployed lookup ended too early. It does not
+retroactively accept the run or create any missing downstream receipt. The
+sanitized record is retained at
+`casepath/releases/model-validation-attempt-20260811-08.json`; CP-021 remains
+`in_progress` until delayed availability and a terminal timeout are both covered
+without a second inference call and an aligned production journey passes.
+
+Known aggregate charges for attempts 1, 2, 4, 5, 6, and 8 are USD 0.0707403.
+Attempts 3 and 7 remain unknown and excluded rather than treated as zero;
+attempt 7's USD 0.027645 reservation remains an estimate, not an observed
+charge.
+
 ## Exact dynamic model evidence not yet observed by this record
 
 These point-in-time fields must be supplied by the sanitized ledger and retained
@@ -4418,7 +4453,7 @@ not fields to write back into the static release contract:
 ```text
 dynamic_runtime_acceptance_verdict: NOT_ESTABLISHED_BY_THIS_RECORD
 historical_model_validation_scope: failed_closed_history_only
-failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -07.json
+failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -08.json
 failed_attempt_id: authorized-smoke-20260811-01
 failed_attempt_application_outcome: rejected
 failed_attempt_failure_type: exact_private_reference_mismatch
@@ -4431,23 +4466,25 @@ provider_observed_prompt_tokens: 3629
 provider_observed_completion_tokens: 2625
 provider_observed_total_tokens: 6254
 provider_observed_finish_reason: stop
-latest_failed_attempt_id: production-flagship-20260811-07
-latest_failed_attempt_source_commit: 7e87f40bc866444f16fd837fa3e6a999faa1c7e0
-latest_failed_attempt_application_outcome: openrouter_sdk_chat_result_response_validation
-latest_failed_attempt_error_type: ResponseValidationError
+latest_failed_attempt_id: production-flagship-20260811-08
+latest_failed_attempt_source_commit: 2ab71f600f1e523388dec62e11da4c85b9a15be7
+latest_failed_attempt_application_outcome: same_generation_metadata_not_available_within_bounded_lookup
+latest_failed_attempt_error_type: ModelResponseError
+latest_failed_attempt_error_invariant: generation_metadata_completeness
 latest_failed_attempt_fact_counts: NOT_RETAINED
 latest_failed_attempt_source_projection_count: NOT_RETAINED
-latest_failed_attempt_provider_http_status: 200
-latest_failed_attempt_provider_response_id: UNKNOWN_UNVERIFIED
-latest_failed_attempt_casepath_call_id: modelcall_2c6614b3bc53305b
-latest_failed_attempt_prompt_tokens: UNKNOWN_UNVERIFIED
-latest_failed_attempt_completion_tokens: UNKNOWN_UNVERIFIED
-latest_failed_attempt_total_tokens: UNKNOWN_UNVERIFIED
-latest_failed_attempt_actual_cost_usd: UNKNOWN_UNVERIFIED
-latest_failed_attempt_estimated_cost_reservation_usd: 0.027645
-latest_failed_attempt_estimate_is_actual_charge: false
-known_failed_attempt_cost_usd_excluding_attempts_03_and_07: 0.0528110
-accepted_retry_status: PENDING_NOT_RUN_AFTER_ATTEMPT_07
+latest_failed_attempt_provider_outcome: succeeded
+latest_failed_attempt_provider_response_id: gen-1786481671-XHJr7oDjH1PtrUL2kNg3
+latest_failed_attempt_response_model: nvidia/nemotron-3-ultra-550b-a55b
+latest_failed_attempt_later_generation_model: nvidia/nemotron-3-ultra-550b-a55b-20260604
+latest_failed_attempt_later_upstream_provider: DeepInfra
+latest_failed_attempt_casepath_call_id: modelcall_58f841d20124e35f
+latest_failed_attempt_prompt_tokens: 23163
+latest_failed_attempt_completion_tokens: 2897
+latest_failed_attempt_total_tokens: 26060
+latest_failed_attempt_actual_cost_usd: 0.0179293
+known_failed_attempt_cost_usd_excluding_attempts_03_and_07: 0.0707403
+accepted_retry_status: PENDING_NOT_RUN_AFTER_ATTEMPT_08
 candidate_source_commit: PENDING
 release_id: casepath-v20-reference-20260811
 provider: openrouter

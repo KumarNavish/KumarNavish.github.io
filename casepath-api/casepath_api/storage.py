@@ -14,6 +14,13 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+class ActiveRunResetError(RuntimeError):
+    """Raised when session state cannot be reset without orphaning a worker."""
+
+    def __init__(self) -> None:
+        super().__init__("Cannot reset session state while a run is active")
+
+
 class Storage:
     def __init__(self, path: str | None = None):
         self.path = Path(path or os.getenv("CASEPATH_DB_PATH", "/tmp/casepath-useful-demo/casepath.db"))
@@ -437,6 +444,16 @@ class Storage:
 
     def reset(self, *, session_id: str = "public") -> dict[str, int]:
         with self.lock, self.connect() as con:
+            active_run = con.execute(
+                """
+                SELECT 1 FROM runs
+                WHERE session_id=? AND status IN ('queued', 'running')
+                LIMIT 1
+                """,
+                (session_id,),
+            ).fetchone()
+            if active_run:
+                raise ActiveRunResetError()
             # The model-call ledger is intentionally retained so reset cannot bypass
             # cumulative cost controls or erase model provenance.
             counts = {
