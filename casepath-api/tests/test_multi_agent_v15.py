@@ -8,9 +8,10 @@ import time
 from typing import Any
 
 import httpx
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langsmith.run_helpers import tracing_context
-from openrouter import OpenRouter
+from openrouter import OpenRouter, components, errors
+from openrouter.utils.unmarshal_json_response import unmarshal_json_response
 import pytest
 
 from casepath_api import langchain_runtime
@@ -631,6 +632,7 @@ def test_shared_langchain_adapter_has_exact_nonretrying_private_configuration(mo
     class FakeProviderClient:
         def __init__(self, **kwargs):
             sdk_kwargs.update(kwargs)
+            self.chat = object()
 
     class FakeChatOpenRouter:
         def __init__(self, **kwargs):
@@ -661,7 +663,8 @@ def test_shared_langchain_adapter_has_exact_nonretrying_private_configuration(mo
         "require_parameters": True,
         "data_collection": "deny",
     }
-    assert chat_kwargs["client"].__class__ is FakeProviderClient
+    assert isinstance(chat_kwargs["client"], langchain_runtime._OpenRouterClientBridge)
+    assert chat_kwargs["client"].chat._chat.__class__ is object
     assert "trace" not in chat_kwargs
     assert structured_kwargs == {
         "schema": schema,
@@ -669,6 +672,236 @@ def test_shared_langchain_adapter_has_exact_nonretrying_private_configuration(mo
         "strict": True,
         "include_raw": True,
     }
+
+
+def _native_response_payload() -> dict[str, Any]:
+    return {
+        "id": "gen-response-bridge-123",
+        "model": OPENROUTER_MODEL,
+        "object": "chat.completion",
+        "created": 1786479000,
+        # OpenRouter legitimately omits this nullable field; openrouter==0.11.46
+        # nevertheless declares it required in its generated ChatResult model.
+        "choices": [
+            {
+                "index": 0,
+                "finish_reason": "stop",
+                "message": {
+                    "role": "assistant",
+                    "content": json.dumps({"answer": "bounded"}),
+                },
+            }
+        ],
+        "usage": {
+            "prompt_tokens": 120,
+            "completion_tokens": 30,
+            "total_tokens": 150,
+            "cost": 0.0042,
+            "cost_details": {"provider_authored_extra": "RAW_USAGE_SENTINEL"},
+        },
+    }
+
+
+def _http_response(body: str, *, status: int = 200, content_type: str = "application/json"):
+    return httpx.Response(
+        status,
+        headers={"content-type": content_type},
+        content=body.encode("utf-8"),
+        request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions"),
+    )
+
+
+def test_response_bridge_recovers_sdk_schema_drift_through_langchain_once():
+    payload = _native_response_payload()
+
+    class GeneratedSdkChat:
+        calls = 0
+
+        def send(self, **kwargs):
+            self.calls += 1
+            response = _http_response(json.dumps(payload))
+            return unmarshal_json_response(components.ChatResult, response)
+
+    chat = GeneratedSdkChat()
+    client = type("ProviderClient", (), {"chat": chat})()
+    model = langchain_runtime.ChatOpenRouter(
+        model=OPENROUTER_MODEL,
+        api_key="runtime-only-test-value",
+        client=langchain_runtime._OpenRouterClientBridge(client),
+        temperature=0,
+        max_tokens=100,
+        max_retries=0,
+    )
+    runnable = model.with_structured_output(
+        {
+            "title": "response_bridge_test",
+            "type": "object",
+            "properties": {"answer": {"type": "string"}},
+            "required": ["answer"],
+            "additionalProperties": False,
+        },
+        method="json_schema",
+        strict=True,
+        include_raw=True,
+    )
+
+    envelope = runnable.invoke(
+        [HumanMessage(content="Return the bounded test object")],
+        config={"callbacks": []},
+    )
+
+    assert chat.calls == 1
+    assert envelope["parsed"] == {"answer": "bounded"}
+    assert envelope["parsing_error"] is None
+    raw = envelope["raw"]
+    assert raw.response_metadata["id"] == payload["id"]
+    assert raw.response_metadata["model_name"] == OPENROUTER_MODEL
+    assert raw.response_metadata["finish_reason"] == "stop"
+    assert raw.response_metadata["cost"] == 0.0042
+    assert raw.usage_metadata == {
+        "input_tokens": 120,
+        "output_tokens": 30,
+        "total_tokens": 150,
+    }
+    assert "cost_details" not in raw.response_metadata
+    assert "RAW_USAGE_SENTINEL" not in repr(raw.response_metadata)
+
+
+def test_response_bridge_passes_through_sdk_validated_results_by_identity():
+    payload = {**_native_response_payload(), "system_fingerprint": None}
+    expected = unmarshal_json_response(
+        components.ChatResult,
+        _http_response(json.dumps(payload)),
+    )
+
+    class PassingChat:
+        calls = 0
+
+        def send(self, **kwargs):
+            self.calls += 1
+            return expected
+
+    chat = PassingChat()
+    bridge = langchain_runtime._ChatSendBridge(chat)
+
+    assert bridge.send(messages=[]) is expected
+    assert chat.calls == 1
+
+
+@pytest.mark.parametrize(
+    ("body", "status", "content_type"),
+    [
+        ("RAW_PROTOCOL_SENTINEL", 200, "application/json"),
+        ('{"id":"a","id":"b"}', 200, "application/json"),
+        ('{"value":NaN}', 200, "application/json"),
+        (json.dumps({**_native_response_payload(), "error": {"message": "RAW_PROTOCOL_SENTINEL"}}), 200, "application/json"),
+        (json.dumps({**_native_response_payload(), "choices": []}), 200, "application/json"),
+        (json.dumps({key: value for key, value in _native_response_payload().items() if key != "id"}), 200, "application/json"),
+        (json.dumps({key: value for key, value in _native_response_payload().items() if key != "model"}), 200, "application/json"),
+        (json.dumps({**_native_response_payload(), "object": "provider-specific-object"}), 200, "application/json"),
+        (json.dumps(_native_response_payload()), 200, "text/plain"),
+        (json.dumps(_native_response_payload()), 500, "application/json"),
+        ("x" * (langchain_runtime.OPENROUTER_RESPONSE_BODY_LIMIT_BYTES + 1), 200, "application/json"),
+        ("[" * 20_000 + "0" + "]" * 20_000, 200, "application/json"),
+    ],
+)
+def test_response_bridge_fails_bounded_without_raw_exception_chain(
+    body: str,
+    status: int,
+    content_type: str,
+):
+    class RejectingSdkChat:
+        calls = 0
+
+        def send(self, **kwargs):
+            self.calls += 1
+            response = _http_response(body, status=status, content_type=content_type)
+            raise errors.ResponseValidationError(
+                "RAW_PROTOCOL_SENTINEL",
+                response,
+                ValueError("RAW_PROTOCOL_SENTINEL"),
+                body,
+            )
+
+    chat = RejectingSdkChat()
+    bridge = langchain_runtime._ChatSendBridge(chat)
+
+    with pytest.raises(langchain_runtime.OpenRouterProtocolError) as captured:
+        bridge.send(messages=[])
+
+    assert chat.calls == 1
+    assert captured.value.invariant == "provider_response_envelope"
+    assert captured.value.__cause__ is None
+    assert captured.value.__context__ is None
+    assert "RAW_PROTOCOL_SENTINEL" not in str(captured.value)
+    assert "RAW_PROTOCOL_SENTINEL" not in repr(captured.value)
+
+
+@pytest.mark.parametrize(
+    "finish_reason",
+    [None, "length", "content_filter", "tool_calls", "error", "cancelled"],
+)
+def test_response_bridge_retains_bounded_nonstop_identity_and_usage(finish_reason):
+    payload = _native_response_payload()
+    payload["choices"][0]["finish_reason"] = finish_reason
+    payload["choices"][0]["message"]["content"] = ""
+    body = json.dumps(payload)
+
+    class RejectingSdkChat:
+        calls = 0
+
+        def send(self, **_kwargs):
+            self.calls += 1
+            response = _http_response(body)
+            raise errors.ResponseValidationError(
+                "RAW_NONSTOP_SENTINEL",
+                response,
+                ValueError("RAW_NONSTOP_SENTINEL"),
+                body,
+            )
+
+    chat = RejectingSdkChat()
+    recovered = langchain_runtime._ChatSendBridge(chat).send(messages=[])
+
+    assert chat.calls == 1
+    assert recovered["id"] == payload["id"]
+    assert recovered["model"] == payload["model"]
+    assert recovered["choices"][0]["finish_reason"] == finish_reason
+    assert recovered["choices"][0]["message"]["content"] == ""
+    assert recovered["usage"] == {
+        "prompt_tokens": 120,
+        "completion_tokens": 30,
+        "total_tokens": 150,
+        "cost": 0.0042,
+    }
+    assert "RAW_NONSTOP_SENTINEL" not in repr(recovered)
+
+
+def test_response_bridge_projects_choice_error_to_bounded_failed_finish():
+    payload = _native_response_payload()
+    payload["choices"][0]["error"] = {"message": "RAW_CHOICE_ERROR_SENTINEL"}
+    body = json.dumps(payload)
+
+    class RejectingSdkChat:
+        calls = 0
+
+        def send(self, **_kwargs):
+            self.calls += 1
+            response = _http_response(body)
+            raise errors.ResponseValidationError(
+                "RAW_CHOICE_ERROR_SENTINEL",
+                response,
+                ValueError("RAW_CHOICE_ERROR_SENTINEL"),
+                body,
+            )
+
+    chat = RejectingSdkChat()
+    recovered = langchain_runtime._ChatSendBridge(chat).send(messages=[])
+
+    assert chat.calls == 1
+    assert recovered["choices"][0]["finish_reason"] == "error"
+    assert "error" not in recovered["choices"][0]
+    assert "RAW_CHOICE_ERROR_SENTINEL" not in repr(recovered)
 
 
 def test_provider_provenance_field_grammars_accept_real_ids_and_hash_credentials():
@@ -1246,6 +1479,149 @@ def test_specialist_schema_failure_retains_billing_without_raw_error(tmp_path: P
     assert ledger["outcome"] == "failed"
     assert ledger["error_invariant"] == "provider_native_schema"
     assert "raw-provider-detail" not in json.dumps(storage.sanitized_model_ledger())
+
+
+def test_nonstop_specialist_response_cannot_be_accepted_or_cached(tmp_path: Path):
+    class Runnable:
+        def invoke(self, *_args, **_kwargs):
+            return _plan_envelope(
+                finish_reason="length",
+                usage={
+                    "prompt_tokens": 21,
+                    "completion_tokens": 9,
+                    "total_tokens": 30,
+                    "cost": 0.0021,
+                },
+            )
+
+    storage = Storage(str(tmp_path / "nonstop-specialist.db"))
+    runner = InstrumentedStructuredAgent(
+        storage,
+        runnable_factory=lambda *_args: Runnable(),
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+
+    with pytest.raises(AgentInvocationFailure, match="provider_finish_reason"):
+        _invoke_plan(runner, run_id="run-nonstop-specialist")
+
+    ledger = storage.model_calls()[0]
+    assert ledger["outcome"] == "failed"
+    assert ledger["error_invariant"] == "provider_finish_reason"
+    assert ledger["finish_reason"] == "length"
+    assert ledger["actual_cost_usd"] == pytest.approx(0.0021)
+    assert storage.cached_model_output(ledger["cache_key"]) is None
+
+
+def test_specialist_sdk_drift_nonstop_retains_billing_before_rejection(
+    tmp_path: Path,
+    monkeypatch,
+):
+    provider_calls = 0
+    metadata_calls = 0
+    provider_payload = {
+        "id": "gen-plan-drift",
+        "model": OPENROUTER_MODEL,
+        "object": "chat.completion",
+        "created": 1786479000,
+        "choices": [
+            {
+                "index": 0,
+                "finish_reason": "length",
+                "message": {
+                    "role": "assistant",
+                    "content": json.dumps(
+                        {
+                            "focus_fact_ids": ["fact"],
+                            "focus_source_ref_ids": ["source"],
+                            "priority_task_codes": [
+                                "source_integrity",
+                                "process_decisions",
+                                "evidence_gaps",
+                                "final_brief",
+                            ],
+                        }
+                    ),
+                },
+            }
+        ],
+        "usage": {
+            "prompt_tokens": 21,
+            "completion_tokens": 9,
+            "total_tokens": 30,
+            "cost": 0.0021,
+        },
+    }
+
+    class GeneratedSdkChat:
+        def send(self, **_kwargs):
+            nonlocal provider_calls
+            provider_calls += 1
+            response_value = _http_response(json.dumps(provider_payload))
+            return unmarshal_json_response(components.ChatResult, response_value)
+
+    class FakeOpenRouter:
+        def __init__(self, **_kwargs):
+            self.chat = GeneratedSdkChat()
+
+    def metadata_transport(*_args):
+        nonlocal metadata_calls
+        metadata_calls += 1
+        return {
+            "data": {
+                "id": "gen-plan-drift",
+                "model": OPENROUTER_MODEL,
+                "provider_name": "DeepInfra",
+                "native_tokens_prompt": 31,
+                "native_tokens_completion": 11,
+                "total_cost": 0.0033,
+                "usage": 0.0033,
+                "finish_reason": "stop",
+            }
+        }
+
+    monkeypatch.setattr(langchain_runtime, "OpenRouter", FakeOpenRouter)
+    storage = Storage(str(tmp_path / "sdk-drift-specialist-nonstop.db"))
+    runner = InstrumentedStructuredAgent(
+        storage,
+        metadata_transport=metadata_transport,
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+
+    with pytest.raises(AgentInvocationFailure, match="provider_finish_reason"):
+        _invoke_plan(runner, run_id="run-sdk-drift-specialist-nonstop")
+
+    assert provider_calls == 1
+    assert metadata_calls == 1
+    ledger = storage.sanitized_model_ledger()[0]
+    assert ledger["outcome"] == "failed"
+    assert ledger["error_invariant"] == "provider_finish_reason"
+    assert ledger["response_id"] == "gen-plan-drift"
+    assert ledger["finish_reason"] == "length"
+    assert ledger["actual_cost_usd"] == pytest.approx(0.0033)
+    assert storage.cached_model_output(ledger["cache_key"]) is None
+
+
+def test_specialist_protocol_failure_has_bounded_invariant_and_ledger(tmp_path: Path):
+    class Runnable:
+        def invoke(self, *_args, **_kwargs):
+            raise langchain_runtime.OpenRouterProtocolError()
+
+    storage = Storage(str(tmp_path / "protocol-failure.db"))
+    runner = InstrumentedStructuredAgent(
+        storage,
+        runnable_factory=lambda *_args: Runnable(),
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+
+    with pytest.raises(AgentInvocationFailure, match="provider_response_envelope") as caught:
+        _invoke_plan(runner, run_id="run-protocol-failure")
+
+    ledger = storage.model_calls()[0]
+    assert ledger["outcome"] == "failed"
+    assert ledger["error_type"] == "OpenRouterProtocolError"
+    assert ledger["error_invariant"] == "provider_response_envelope"
+    assert caught.value.safe_context["call_id"] == ledger["call_id"]
+    assert "response envelope" not in json.dumps(storage.sanitized_model_ledger())
 
 
 def test_specialist_blocked_and_actual_overrun_failures_keep_safe_ledger_lineage(

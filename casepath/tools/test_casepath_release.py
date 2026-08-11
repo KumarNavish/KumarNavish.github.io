@@ -107,10 +107,10 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
             release_tool.REPOSITORY
             / f"casepath/releases/model-validation-attempt-20260811-{number:02d}.json"
         )
-        for number in range(1, 7)
+        for number in range(1, 8)
     }
-    attempt_1, attempt_2, attempt_3, attempt_4, attempt_5, attempt_6 = (
-        attempts[number] for number in range(1, 7)
+    attempt_1, attempt_2, attempt_3, attempt_4, attempt_5, attempt_6, attempt_7 = (
+        attempts[number] for number in range(1, 8)
     )
     for evidence in attempts.values():
         assert evidence["status"] == "failed_closed"
@@ -249,6 +249,49 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         "source_reference_projection_count",
     ):
         assert unavailable_count not in attempt_6["application_result"]
+    assert attempt_7["execution_observation"] == {
+        "source_commit": "7e87f40bc866444f16fd837fa3e6a999faa1c7e0",
+        "frontend_deploy_id": "dep-d9to4r942hec738ntcdg",
+        "api_deploy_id": "dep-d9to4qqjnfac73cc5seg",
+        "qa_deploy_id": "dep-d9to5onavr4c73c9lh3g",
+        "qa_deploy_outcome": "build_failed",
+        "qa_run_id": "run_a4ce02e0125690b2",
+        "orchestration_id": "orch_60c6c6a9508c39f9",
+        "failed_agent_id": "canonical_facts",
+        "provider_response_count": 1,
+        "downstream_model_calls": 0,
+        "deterministic_gate_receipts": 0,
+    }
+    assert attempt_7["provider_observation"] == {
+        "provider": "openrouter",
+        "provider_outcome": "http_200_response_schema_rejected_by_sdk",
+        "response_http_status": 200,
+        "sdk": "openrouter",
+        "sdk_version": "0.11.46",
+        "sdk_error_type": "ResponseValidationError",
+        "response_identity_status": "unknown_unverified",
+        "synchronous_usage_cost_present": False,
+        "new_openrouter_log_generation_observed": False,
+        "openrouter_log_check_performed": False,
+        "provider_cache_replay_assessment": "not_assessed",
+        "charge_status": "unknown_unconfirmed",
+        "charge_included_in_known_aggregate": False,
+        "estimated_cost_reservation_usd": 0.027645,
+        "estimated_reservation_is_actual_charge": False,
+        "latency_ms": 28814.669,
+    }
+    assert attempt_7["application_result"] == {
+        "outcome": "rejected",
+        "failure_type": "openrouter_sdk_chat_result_response_validation",
+        "error_type": "ResponseValidationError",
+        "successful_ledger_call_bound": False,
+        "ledger_call_id": "modelcall_2c6614b3bc53305b",
+        "ledger_outcome": "failed",
+        "canonical_result_accepted": False,
+        "response_identity_retained": False,
+        "usage_metadata_retained": False,
+        "contribution_diagnostics_retained": False,
+    }
     assert sum(
         attempt["provider_observation"]["actual_cost_usd"]
         for attempt in attempts.values()
@@ -257,6 +300,10 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
     assert "actual_cost_usd" not in attempt_3["provider_observation"]
     assert "prompt_tokens" not in attempt_3["provider_observation"]
     assert attempt_3["provider_observation"]["charge_status"] == "unknown_unconfirmed"
+    assert "actual_cost_usd" not in attempt_7["provider_observation"]
+    assert "prompt_tokens" not in attempt_7["provider_observation"]
+    assert attempt_7["provider_observation"]["charge_status"] == "unknown_unconfirmed"
+    assert attempt_7["provider_observation"]["estimated_reservation_is_actual_charge"] is False
     for attempt in attempts.values():
         release_tool.verify_failed_model_attempt_evidence(contract, attempt)
 
@@ -264,6 +311,13 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
     incomplete_usage["provider_observation"]["actual_cost_usd"] = 0.01
     with pytest.raises(release_tool.VerificationError, match="complete or explicitly unavailable"):
         release_tool.verify_failed_model_attempt_evidence(contract, incomplete_usage)
+
+    mislabeled_estimate = deepcopy(attempt_7)
+    mislabeled_estimate["provider_observation"][
+        "estimated_reservation_is_actual_charge"
+    ] = True
+    with pytest.raises(release_tool.VerificationError, match="must not be represented"):
+        release_tool.verify_failed_model_attempt_evidence(contract, mislabeled_estimate)
 
 
 def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, bytes]:

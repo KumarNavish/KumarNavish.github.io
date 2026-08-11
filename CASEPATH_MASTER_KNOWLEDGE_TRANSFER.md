@@ -4369,6 +4369,46 @@ The exact failed attempt is retained in
 charges for attempts 1, 2, 4, 5 and 6 are USD 0.0528110; attempt 3 remains
 unknown and excluded rather than treated as zero.
 
+## Production attempt 07 and SDK response-schema boundary
+
+The next aligned gate ran from QA deploy `dep-d9to5onavr4c73c9lh3g` against
+source commit `7e87f40bc866444f16fd837fa3e6a999faa1c7e0`. Frontend deploy
+`dep-d9to4r942hec738ntcdg` and API deploy `dep-d9to4qqjnfac73cc5seg` were live
+on that same commit. QA created run `run_a4ce02e0125690b2`; the first and only
+model call was `modelcall_2c6614b3bc53305b` under orchestration
+`orch_60c6c6a9508c39f9`.
+
+OpenRouter returned an HTTP 200 JSON response after 28,814.669 ms, but
+`openrouter` SDK 0.11.46 raised `ResponseValidationError` while decoding it as
+`ChatResult`. That exception occurred before the LangChain adapter returned an
+envelope, so CasePath retained no response ID/model, upstream provider, finish
+reason, usage source, token counts, or actual cost. The ledger's USD 0.027645
+value is only the pre-call estimated reservation; it is not evidence of a
+charge. Actual cost and response identity remain unknown and unverified, and
+the aggregate's zero-valued missing usage must not be read as a zero charge.
+
+No canonical contribution was accepted, no downstream agent or deterministic
+gate produced a receipt, and QA deploy `dep-d9to5onavr4c73c9lh3g` failed its
+build. Its failed run was reset and is no longer retrievable; the public model
+ledger is instance-ephemeral, and the failed QA deploy did not publish an
+attempt-07 report or evidence manifest. The sanitized record is retained at
+`casepath/releases/model-validation-attempt-20260811-07.json`. Known charges
+remain USD 0.0528110 for attempts 1, 2, 4, 5 and 6; attempts 3 and 7 are
+excluded as unknown rather than treated as zero.
+
+The bounded source repair retains LangChain/LangGraph as the runtime and makes
+no second inference attempt. A facade around the pinned OpenRouter client's
+`chat.send` catches only `ResponseValidationError`, transiently validates a
+size-bounded HTTP 200 JSON completion with one assistant string choice, removes
+all response fields CasePath does not consume, and passes the projected dict
+back into `ChatOpenRouter`'s native strict structured-output parser. Duplicate
+keys, non-finite numbers, excessive nesting/size, error envelopes, or incomplete
+identity fail under the constant `provider_response_envelope` invariant after
+the raw SDK exception has left scope. The raw body is not logged or persisted.
+Local pinned-SDK replay and canonical/specialist boundary tests pass; CP-020 is
+`fixed_unverified` until a fresh same-commit production acceptance journey
+proves the six roles and three deterministic gates.
+
 ## Exact dynamic model evidence not yet observed by this record
 
 These point-in-time fields must be supplied by the sanitized ledger and retained
@@ -4378,7 +4418,7 @@ not fields to write back into the static release contract:
 ```text
 dynamic_runtime_acceptance_verdict: NOT_ESTABLISHED_BY_THIS_RECORD
 historical_model_validation_scope: failed_closed_history_only
-failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -06.json
+failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -07.json
 failed_attempt_id: authorized-smoke-20260811-01
 failed_attempt_application_outcome: rejected
 failed_attempt_failure_type: exact_private_reference_mismatch
@@ -4391,20 +4431,23 @@ provider_observed_prompt_tokens: 3629
 provider_observed_completion_tokens: 2625
 provider_observed_total_tokens: 6254
 provider_observed_finish_reason: stop
-latest_failed_attempt_id: production-flagship-20260811-06
-latest_failed_attempt_source_commit: 697a19fa0be541f46af85d9f31dd5cbda96b2bb8
-latest_failed_attempt_application_outcome: post_validation_missing_upstream_provider_persistence
-latest_failed_attempt_error_type: KeyError
+latest_failed_attempt_id: production-flagship-20260811-07
+latest_failed_attempt_source_commit: 7e87f40bc866444f16fd837fa3e6a999faa1c7e0
+latest_failed_attempt_application_outcome: openrouter_sdk_chat_result_response_validation
+latest_failed_attempt_error_type: ResponseValidationError
 latest_failed_attempt_fact_counts: NOT_RETAINED
 latest_failed_attempt_source_projection_count: NOT_RETAINED
-latest_failed_attempt_provider_response_id: gen-1786477748-NYzcfF7sy7RQ71QO780m
-latest_failed_attempt_casepath_call_id: modelcall_0263759a564abb00
-latest_failed_attempt_prompt_tokens: 23163
-latest_failed_attempt_completion_tokens: 2825
-latest_failed_attempt_total_tokens: 25988
-latest_failed_attempt_actual_cost_usd: 0.0177709
-known_failed_attempt_cost_usd_excluding_attempt_03: 0.0528110
-accepted_retry_status: PENDING_NOT_RUN_AFTER_ATTEMPT_06
+latest_failed_attempt_provider_http_status: 200
+latest_failed_attempt_provider_response_id: UNKNOWN_UNVERIFIED
+latest_failed_attempt_casepath_call_id: modelcall_2c6614b3bc53305b
+latest_failed_attempt_prompt_tokens: UNKNOWN_UNVERIFIED
+latest_failed_attempt_completion_tokens: UNKNOWN_UNVERIFIED
+latest_failed_attempt_total_tokens: UNKNOWN_UNVERIFIED
+latest_failed_attempt_actual_cost_usd: UNKNOWN_UNVERIFIED
+latest_failed_attempt_estimated_cost_reservation_usd: 0.027645
+latest_failed_attempt_estimate_is_actual_charge: false
+known_failed_attempt_cost_usd_excluding_attempts_03_and_07: 0.0528110
+accepted_retry_status: PENDING_NOT_RUN_AFTER_ATTEMPT_07
 candidate_source_commit: PENDING
 release_id: casepath-v20-reference-20260811
 provider: openrouter
