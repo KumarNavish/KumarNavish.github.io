@@ -38,13 +38,14 @@ from .canonicalizer import (
 )
 from .storage import Storage
 from .langchain_runtime import (
+    OpenRouterProtocolError,
     assert_external_tracing_disabled,
     sanitize_provider_provenance,
     structured_nemotron_runnable,
 )
 
 
-MULTI_AGENT_VERSION = "1.0.1"
+MULTI_AGENT_VERSION = "1.0.2"
 MULTI_AGENT_SCHEMA_VERSION = "casepath.nemotron-agent-dag/1.0.0"
 MULTI_AGENT_AUTHORITY_MODE = "multi_agent_hybrid_guarded"
 MULTI_AGENT_IMPLEMENTATION = "langgraph_stategraph_langchain_openrouter"
@@ -904,7 +905,7 @@ class InstrumentedStructuredAgent:
                 )
             )
             if needs_metadata and identity["response_id"] is not None:
-                provider_patch.update(_generation_metadata_ledger_patch(
+                metadata_patch = _generation_metadata_ledger_patch(
                     identity=identity,
                     headers={"Authorization": f"Bearer {key}"},
                     metadata_transport=self.metadata_transport,
@@ -913,7 +914,12 @@ class InstrumentedStructuredAgent:
                     poll_attempts=GENERATION_METADATA_POLL_ATTEMPTS,
                     poll_interval_seconds=GENERATION_METADATA_POLL_INTERVAL_SECONDS,
                     latency_ms=latency_ms,
-                ))
+                )
+                provider_patch.update(metadata_patch)
+                if identity["response_finish_reason"] is not None:
+                    provider_patch["finish_reason"] = identity[
+                        "response_finish_reason"
+                    ]
             if "actual_cost_usd" in provider_patch:
                 with self.storage.lock:
                     self.storage.finish_model_call(
@@ -931,6 +937,8 @@ class InstrumentedStructuredAgent:
                 raise AgentBoundaryError(agent_id, "generation_metadata_model")
             if "actual_cost_usd" not in provider_patch:
                 raise AgentBoundaryError(agent_id, "generation_metadata_completeness")
+            if provider_patch.get("finish_reason") != "stop":
+                raise AgentBoundaryError(agent_id, "provider_finish_reason")
             if response.get("parsing_error") is not None or response.get("parsed") is None:
                 raise AgentBoundaryError(agent_id, "provider_native_schema")
             parsed = _model_dump(response["parsed"])
@@ -1039,14 +1047,14 @@ class InstrumentedStructuredAgent:
                     "error_type": type(exc).__name__,
                     "error_agent_id": agent_id,
                 }
-                if isinstance(exc, (AgentBoundaryError, ModelResponseError)):
+                if isinstance(exc, (AgentBoundaryError, ModelResponseError, OpenRouterProtocolError)):
                     patch["error_invariant"] = exc.invariant
                 self.storage.finish_model_call(call_id, outcome="failed", **patch)
             if isinstance(exc, (ModelCostGuardError, AgentInvocationFailure)):
                 raise
             invariant = (
                 exc.invariant
-                if isinstance(exc, (AgentBoundaryError, ModelResponseError))
+                if isinstance(exc, (AgentBoundaryError, ModelResponseError, OpenRouterProtocolError))
                 else "provider_invocation"
             )
             safe_context = {
