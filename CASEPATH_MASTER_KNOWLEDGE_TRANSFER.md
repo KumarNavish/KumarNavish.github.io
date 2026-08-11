@@ -4513,8 +4513,45 @@ only the orchestrator plan ceiling from 400 to 800 tokens and retains the
 fail-closed `length` boundary at the new ceiling; its local regression evidence
 does not promote attempt 10 or replace a same-commit production journey.
 
-Known aggregate charges for attempts 1, 2, 4, 5, 6, 8, and 10 are USD
-0.1014902.
+## Production attempt 11 and unresolved orchestrator output ceiling
+
+Attempt 11 ran from QA deploy `dep-d9tqd4ht0dsc73bthmgg` against source commit
+`d59978be2f1824f6d769f6f2e32fb7a13e3843e7`. Render records a deploy start at
+2026-08-11T22:47:46.222303Z, creation at 2026-08-11T22:47:46.251804Z, the
+terminal QA error at 2026-08-11T22:48:48.17386701Z, the build-failed marker at
+2026-08-11T22:48:48.211155358Z, and deploy completion at
+2026-08-11T22:48:49.788544Z. The QA log binds run
+`run_bdd1832d34d2188f` to orchestration `orch_6ca09d18eed0e3f6`.
+
+The public sanitized ledger contains exactly two network calls, both from
+DeepInfra. Canonical-facts call `modelcall_0e3ac23f5327d9de`, response
+`gen-1786488490-tndMk9aYrOZRx6zRO0bs`, completed with `stop` and disclosed
+guarded fallback. It retained 17 accepted and one rejected fact contribution,
+23,163 prompt and 2,432 completion tokens, USD 0.0169063, and 25,695.53 ms
+latency. Its ledger interval was 2026-08-11T22:48:07.570335+00:00 through
+2026-08-11T22:48:33.279294+00:00.
+
+Orchestrator-plan call `modelcall_72e43889f3f0bece`, response
+`gen-1786488517-b5k43pHtTXGdyxrtSIP8`, then returned `length` at exactly 800
+completion tokens. It retained 20,034 prompt tokens, 20,834 total, USD
+0.0117514, 9,017.156 ms latency, `AgentBoundaryError`, and the constant
+`provider_finish_reason` invariant. Its ledger interval was
+2026-08-11T22:48:36.865710+00:00 through
+2026-08-11T22:48:45.892252+00:00. The aggregate is cost-complete at USD
+0.0286577 for 43,197 prompt and 3,232 completion tokens, with no unknown-cost
+call.
+
+CasePath correctly rejected the second truncated plan. No later specialist
+call or deterministic gate ran, the full orchestration was not accepted, and
+this failed QA build establishes no current runtime acceptance. The sanitized
+record is retained at
+`casepath/releases/model-validation-attempt-20260811-11.json`. Attempt 11
+proves that the 800-token change did not resolve CP-023; that defect is again
+in progress and requires a new source repair plus an aligned production
+journey.
+
+Known aggregate charges for attempts 1, 2, 4, 5, 6, 8, 10, and 11 are USD
+0.1301479.
 Attempts 3, 7, and 9 remain unknown and excluded rather than treated as zero;
 the USD 0.027645 reservations recorded for attempts 7 and 9 remain estimates,
 not observed charges.
@@ -4528,7 +4565,7 @@ not fields to write back into the static release contract:
 ```text
 dynamic_runtime_acceptance_verdict: NOT_ESTABLISHED_BY_THIS_RECORD
 historical_model_validation_scope: failed_closed_history_only
-failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -10.json
+failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -11.json
 failed_attempt_id: authorized-smoke-20260811-01
 failed_attempt_application_outcome: rejected
 failed_attempt_failure_type: exact_private_reference_mismatch
@@ -4541,13 +4578,13 @@ provider_observed_prompt_tokens: 3629
 provider_observed_completion_tokens: 2625
 provider_observed_total_tokens: 6254
 provider_observed_finish_reason: stop
-latest_failed_attempt_id: production-flagship-20260811-10
-latest_failed_attempt_source_commit: 0c73193688db85be2e84a8a83b73e311581e3874
-latest_failed_attempt_qa_deploy_id: dep-d9tq5bmgekts73978kdg
+latest_failed_attempt_id: production-flagship-20260811-11
+latest_failed_attempt_source_commit: d59978be2f1824f6d769f6f2e32fb7a13e3843e7
+latest_failed_attempt_qa_deploy_id: dep-d9tqd4ht0dsc73bthmgg
 latest_failed_attempt_qa_deploy_outcome: build_failed
-latest_failed_attempt_qa_deploy_created_at: 2026-08-11T22:31:10.431539Z
-latest_failed_attempt_qa_deploy_finished_at: 2026-08-11T22:33:20.129521Z
-latest_failed_attempt_qa_run_id: run_d2c28f11f5a4b30e
+latest_failed_attempt_qa_deploy_created_at: 2026-08-11T22:47:46.251804Z
+latest_failed_attempt_qa_deploy_finished_at: 2026-08-11T22:48:49.788544Z
+latest_failed_attempt_qa_run_id: run_bdd1832d34d2188f
 latest_failed_attempt_application_outcome: orchestrator_plan_truncated_at_output_limit
 latest_failed_attempt_error_type: AgentBoundaryError
 latest_failed_attempt_error_invariant: provider_finish_reason
@@ -4556,17 +4593,17 @@ latest_failed_attempt_source_projection_count: 10
 latest_failed_attempt_provider_outcome: partial_success_then_length_rejected
 latest_failed_attempt_upstream_provider: DeepInfra
 latest_failed_attempt_network_call_count: 2
-latest_failed_attempt_completed_call_id: modelcall_1079d5361af8d6b8
-latest_failed_attempt_failed_call_id: modelcall_0be219e96b14ec27
+latest_failed_attempt_completed_call_id: modelcall_0e3ac23f5327d9de
+latest_failed_attempt_failed_call_id: modelcall_72e43889f3f0bece
 latest_failed_attempt_failed_agent_id: orchestrator_plan
 latest_failed_attempt_finish_reason: length
 latest_failed_attempt_prompt_tokens: 43197
-latest_failed_attempt_completion_tokens: 4183
-latest_failed_attempt_total_tokens: 47380
-latest_failed_attempt_actual_cost_usd: 0.0307499
+latest_failed_attempt_completion_tokens: 3232
+latest_failed_attempt_total_tokens: 46429
+latest_failed_attempt_actual_cost_usd: 0.0286577
 latest_failed_attempt_actual_cost_complete: true
-known_failed_attempt_cost_usd_excluding_attempts_03_07_and_09: 0.1014902
-accepted_retry_status: PENDING_NOT_RUN_AFTER_ATTEMPT_10
+known_failed_attempt_cost_usd_excluding_attempts_03_07_and_09: 0.1301479
+accepted_retry_status: PENDING_NOT_RUN_AFTER_ATTEMPT_11
 candidate_source_commit: PENDING
 release_id: casepath-v20-reference-20260811
 provider: openrouter

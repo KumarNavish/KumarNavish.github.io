@@ -107,7 +107,7 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
             release_tool.REPOSITORY
             / f"casepath/releases/model-validation-attempt-20260811-{number:02d}.json"
         )
-        for number in range(1, 11)
+        for number in range(1, 12)
     }
     (
         attempt_1,
@@ -120,8 +120,9 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         attempt_8,
         attempt_9,
         attempt_10,
+        attempt_11,
     ) = (
-        attempts[number] for number in range(1, 11)
+        attempts[number] for number in range(1, 12)
     )
     for evidence in attempts.values():
         assert evidence["status"] == "failed_closed"
@@ -514,11 +515,102 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         "runtime_acceptance_established": False,
         "downstream_execution_started": False,
     }
+    assert attempt_11["execution_observation"] == {
+        "source_commit": "d59978be2f1824f6d769f6f2e32fb7a13e3843e7",
+        "qa_deploy_id": "dep-d9tqd4ht0dsc73bthmgg",
+        "qa_deploy_outcome": "build_failed",
+        "qa_deploy_created_at": "2026-08-11T22:47:46.251804Z",
+        "qa_deploy_started_at": "2026-08-11T22:47:46.222303Z",
+        "qa_error_at": "2026-08-11T22:48:48.17386701Z",
+        "qa_build_failed_at": "2026-08-11T22:48:48.211155358Z",
+        "qa_deploy_finished_at": "2026-08-11T22:48:49.788544Z",
+        "qa_run_id": "run_bdd1832d34d2188f",
+        "ledger_created_at": "2026-08-11T22:48:07.570335+00:00",
+        "ledger_updated_at": "2026-08-11T22:48:45.892252+00:00",
+        "orchestration_id": "orch_6ca09d18eed0e3f6",
+        "failed_agent_id": "orchestrator_plan",
+        "network_call_count": 2,
+        "completed_model_calls": 1,
+        "failed_model_calls": 1,
+        "downstream_model_calls_after_failure": 0,
+        "deterministic_gate_receipts": 0,
+    }
+    assert attempt_11["provider_observation"] == {
+        "provider": "openrouter",
+        "provider_outcome": "partial_success_then_length_rejected",
+        "requested_model": "nvidia/nemotron-3-ultra-550b-a55b",
+        "upstream_provider": "DeepInfra",
+        "network_call_count": 2,
+        "actual_cost_usd": 0.0286577,
+        "actual_cost_complete": True,
+        "unknown_cost_call_count": 0,
+        "prompt_tokens": 43197,
+        "completion_tokens": 3232,
+        "total_tokens": 46429,
+        "calls": [
+            {
+                "call_id": "modelcall_0e3ac23f5327d9de",
+                "agent_id": "canonical_facts",
+                "outcome": "succeeded_with_guarded_fallback",
+                "response_id": "gen-1786488490-tndMk9aYrOZRx6zRO0bs",
+                "response_model": "nvidia/nemotron-3-ultra-550b-a55b",
+                "upstream_provider": "DeepInfra",
+                "finish_reason": "stop",
+                "actual_cost_usd": 0.0169063,
+                "prompt_tokens": 23163,
+                "completion_tokens": 2432,
+                "total_tokens": 25595,
+                "latency_ms": 25695.53,
+                "created_at": "2026-08-11T22:48:07.570335+00:00",
+                "updated_at": "2026-08-11T22:48:33.279294+00:00",
+                "deterministic_fallback_applied": True,
+                "accepted_fact_count": 17,
+                "rejected_fact_count": 1,
+                "source_reference_projection_count": 10,
+            },
+            {
+                "call_id": "modelcall_72e43889f3f0bece",
+                "agent_id": "orchestrator_plan",
+                "outcome": "failed",
+                "response_id": "gen-1786488517-b5k43pHtTXGdyxrtSIP8",
+                "response_model": "nvidia/nemotron-3-ultra-550b-a55b",
+                "upstream_provider": "DeepInfra",
+                "finish_reason": "length",
+                "actual_cost_usd": 0.0117514,
+                "prompt_tokens": 20034,
+                "completion_tokens": 800,
+                "total_tokens": 20834,
+                "latency_ms": 9017.156,
+                "created_at": "2026-08-11T22:48:36.865710+00:00",
+                "updated_at": "2026-08-11T22:48:45.892252+00:00",
+                "error_type": "AgentBoundaryError",
+                "error_invariant": "provider_finish_reason",
+            },
+        ],
+    }
+    assert attempt_11["application_result"] == {
+        "outcome": "rejected",
+        "failure_type": "orchestrator_plan_truncated_at_output_limit",
+        "error_type": "AgentBoundaryError",
+        "error_invariant": "provider_finish_reason",
+        "successful_ledger_call_bound": False,
+        "ledger_call_id": "modelcall_72e43889f3f0bece",
+        "ledger_outcome": "failed",
+        "canonical_stage_completed": True,
+        "canonical_stage_outcome": "succeeded_with_guarded_fallback",
+        "canonical_stage_call_id": "modelcall_0e3ac23f5327d9de",
+        "canonical_guarded_fallback_applied": True,
+        "canonical_contribution_diagnostics_retained": True,
+        "orchestrator_plan_accepted": False,
+        "full_orchestration_accepted": False,
+        "runtime_acceptance_established": False,
+        "downstream_execution_started": False,
+    }
     assert sum(
         attempt["provider_observation"]["actual_cost_usd"]
         for attempt in attempts.values()
         if "actual_cost_usd" in attempt["provider_observation"]
-    ) == pytest.approx(0.1014902)
+    ) == pytest.approx(0.1301479)
     assert "actual_cost_usd" not in attempt_3["provider_observation"]
     assert "prompt_tokens" not in attempt_3["provider_observation"]
     assert attempt_3["provider_observation"]["charge_status"] == "unknown_unconfirmed"
@@ -632,6 +724,26 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         release_tool.verify_failed_model_attempt_evidence(
             contract,
             mismatched_attempt_10_aggregate,
+        )
+
+    mismatched_attempt_11_output_limit = deepcopy(attempt_11)
+    mismatched_attempt_11_output_limit["provider_observation"]["calls"][1][
+        "completion_tokens"
+    ] = 799
+    mismatched_attempt_11_output_limit["provider_observation"]["calls"][1][
+        "total_tokens"
+    ] = 20833
+    mismatched_attempt_11_output_limit["provider_observation"][
+        "completion_tokens"
+    ] = 3231
+    mismatched_attempt_11_output_limit["provider_observation"]["total_tokens"] = 46428
+    with pytest.raises(
+        release_tool.VerificationError,
+        match="exact bounded schema",
+    ):
+        release_tool.verify_failed_model_attempt_evidence(
+            contract,
+            mismatched_attempt_11_output_limit,
         )
 
 

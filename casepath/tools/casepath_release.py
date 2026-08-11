@@ -276,7 +276,7 @@ QA_EVIDENCE_MANIFEST_PATH = "evidence-manifest.json"
 QA_EVIDENCE_MANIFEST_CONTRACT = "casepath.qa-evidence-manifest/1.0.0"
 HISTORICAL_MODEL_VALIDATION_RECORDS = tuple(
     f"casepath/releases/model-validation-attempt-20260811-{number:02d}.json"
-    for number in range(1, 11)
+    for number in range(1, 12)
 )
 _HISTORICAL_TOP_FIELDS = frozenset(
     {
@@ -321,6 +321,14 @@ _HISTORICAL_EXECUTION_FIELDS = {
         "ledger_created_at ledger_updated_at orchestration_id failed_agent_id "
         "network_call_count completed_model_calls failed_model_calls "
         "downstream_model_calls_after_failure deterministic_gate_receipts".split()
+    ),
+    "production-flagship-20260811-11": frozenset(
+        "source_commit qa_deploy_id qa_deploy_outcome qa_deploy_created_at "
+        "qa_deploy_started_at qa_error_at qa_build_failed_at "
+        "qa_deploy_finished_at qa_run_id ledger_created_at ledger_updated_at "
+        "orchestration_id failed_agent_id network_call_count "
+        "completed_model_calls failed_model_calls downstream_model_calls_after_failure "
+        "deterministic_gate_receipts".split()
     ),
 }
 _HISTORICAL_PROVIDER_FIELDS = {
@@ -373,6 +381,11 @@ _HISTORICAL_PROVIDER_FIELDS = {
         "estimated_reservation_is_actual_charge latency_ms".split()
     ),
     "production-flagship-20260811-10": frozenset(
+        "provider provider_outcome requested_model upstream_provider network_call_count "
+        "actual_cost_usd actual_cost_complete unknown_cost_call_count prompt_tokens "
+        "completion_tokens total_tokens calls".split()
+    ),
+    "production-flagship-20260811-11": frozenset(
         "provider provider_outcome requested_model upstream_provider network_call_count "
         "actual_cost_usd actual_cost_complete unknown_cost_call_count prompt_tokens "
         "completion_tokens total_tokens calls".split()
@@ -430,6 +443,15 @@ _HISTORICAL_APPLICATION_FIELDS = {
         "full_orchestration_accepted runtime_acceptance_established "
         "downstream_execution_started".split()
     ),
+    "production-flagship-20260811-11": frozenset(
+        "outcome failure_type error_type error_invariant successful_ledger_call_bound "
+        "ledger_call_id ledger_outcome canonical_stage_completed "
+        "canonical_stage_outcome canonical_stage_call_id "
+        "canonical_guarded_fallback_applied "
+        "canonical_contribution_diagnostics_retained orchestrator_plan_accepted "
+        "full_orchestration_accepted runtime_acceptance_established "
+        "downstream_execution_started".split()
+    ),
 }
 _HISTORICAL_FAILURE_TYPES = {
     "authorized-smoke-20260811-01": "exact_private_reference_mismatch",
@@ -442,6 +464,7 @@ _HISTORICAL_FAILURE_TYPES = {
     "production-flagship-20260811-08": "same_generation_metadata_not_available_within_bounded_lookup",
     "production-flagship-20260811-09": "provider_response_envelope",
     "production-flagship-20260811-10": "orchestrator_plan_truncated_at_output_limit",
+    "production-flagship-20260811-11": "orchestrator_plan_truncated_at_output_limit",
 }
 _HISTORICAL_PROVIDER_OUTCOMES = {
     "authorized-smoke-20260811-02": "succeeded",
@@ -453,6 +476,7 @@ _HISTORICAL_PROVIDER_OUTCOMES = {
     "production-flagship-20260811-08": "succeeded",
     "production-flagship-20260811-09": "upstream_rejected",
     "production-flagship-20260811-10": "partial_success_then_length_rejected",
+    "production-flagship-20260811-11": "partial_success_then_length_rejected",
 }
 _HISTORICAL_ERROR_TYPES = {
     "production-flagship-20260811-06": "KeyError",
@@ -460,13 +484,15 @@ _HISTORICAL_ERROR_TYPES = {
     "production-flagship-20260811-08": "ModelResponseError",
     "production-flagship-20260811-09": "ModelResponseError",
     "production-flagship-20260811-10": "AgentBoundaryError",
+    "production-flagship-20260811-11": "AgentBoundaryError",
 }
 _HISTORICAL_ERROR_INVARIANTS = {
     "production-flagship-20260811-08": "generation_metadata_completeness",
     "production-flagship-20260811-09": "provider_response_envelope",
     "production-flagship-20260811-10": "provider_finish_reason",
+    "production-flagship-20260811-11": "provider_finish_reason",
 }
-_HISTORICAL_ATTEMPT_10_CALL_FIELDS = {
+_HISTORICAL_TWO_CALL_FIELDS = {
     "canonical_facts": frozenset(
         "call_id agent_id outcome response_id response_model upstream_provider "
         "finish_reason actual_cost_usd prompt_tokens completion_tokens total_tokens "
@@ -478,6 +504,10 @@ _HISTORICAL_ATTEMPT_10_CALL_FIELDS = {
         "finish_reason actual_cost_usd prompt_tokens completion_tokens total_tokens "
         "latency_ms created_at updated_at error_type error_invariant".split()
     ),
+}
+_HISTORICAL_TWO_CALL_OUTPUT_LIMITS = {
+    "production-flagship-20260811-10": 400,
+    "production-flagship-20260811-11": 800,
 }
 _HISTORICAL_SOURCE_COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 _HISTORICAL_DEPLOY_ID_PATTERN = re.compile(r"^dep-[a-z0-9]{12,40}$")
@@ -1318,7 +1348,7 @@ def _verify_historical_execution(
         _historical_schema_error("execution observation")
     expected_failed_agent = (
         "orchestrator_plan"
-        if attempt_id == "production-flagship-20260811-10"
+        if attempt_id in _HISTORICAL_TWO_CALL_OUTPUT_LIMITS
         else "canonical_facts"
     )
     if values.get("failed_agent_id") != expected_failed_agent:
@@ -1329,7 +1359,7 @@ def _verify_historical_execution(
     for field in ("provider_response_count", "network_call_count"):
         expected_count = (
             2
-            if attempt_id == "production-flagship-20260811-10"
+            if attempt_id in _HISTORICAL_TWO_CALL_OUTPUT_LIMITS
             and field == "network_call_count"
             else 1
         )
@@ -1350,7 +1380,10 @@ def _verify_historical_execution(
             _historical_schema_error("execution observation")
 
 
-def _verify_attempt_10_provider_calls(values: dict[str, Any]) -> None:
+def _verify_two_call_provider_observation(
+    attempt_id: str,
+    values: dict[str, Any],
+) -> None:
     calls = values.get("calls")
     if (
         not isinstance(calls, list)
@@ -1365,7 +1398,7 @@ def _verify_attempt_10_provider_calls(values: dict[str, Any]) -> None:
         agent_id = call["agent_id"]
         call = _require_historical_fields(
             call,
-            _HISTORICAL_ATTEMPT_10_CALL_FIELDS[agent_id],
+            _HISTORICAL_TWO_CALL_FIELDS[agent_id],
             "provider call observation",
         )
         if (
@@ -1398,7 +1431,10 @@ def _verify_attempt_10_provider_calls(values: dict[str, Any]) -> None:
         )
         or orchestrator["outcome"] != "failed"
         or orchestrator["finish_reason"] != "length"
-        or not _is_exact_historical_int(orchestrator["completion_tokens"], 400)
+        or not _is_exact_historical_int(
+            orchestrator["completion_tokens"],
+            _HISTORICAL_TWO_CALL_OUTPUT_LIMITS[attempt_id],
+        )
         or orchestrator["error_type"] != "AgentBoundaryError"
         or orchestrator["error_invariant"] != "provider_finish_reason"
     ):
@@ -1469,8 +1505,8 @@ def _verify_historical_provider_observation(
         _verify_positive_usage(values, "Historical provider observation")
         if values["actual_cost_usd"] > 25 or values["total_tokens"] > 10_000_000:
             _historical_schema_error("provider observation")
-    if attempt_id == "production-flagship-20260811-10":
-        _verify_attempt_10_provider_calls(values)
+    if attempt_id in _HISTORICAL_TWO_CALL_OUTPUT_LIMITS:
+        _verify_two_call_provider_observation(attempt_id, values)
     if "latency_ms" in values and not _is_bounded_historical_number(
         values["latency_ms"], minimum=0.001
     ):
@@ -1673,7 +1709,7 @@ def _verify_historical_application_result(
         expected_booleans["usage_metadata_retained"] = retained
     if "later_generation_metadata_verified" in values:
         expected_booleans["later_generation_metadata_verified"] = True
-    if attempt_id == "production-flagship-20260811-10":
+    if attempt_id in _HISTORICAL_TWO_CALL_OUTPUT_LIMITS:
         expected_booleans.update(
             {
                 "canonical_stage_completed": True,
@@ -1738,7 +1774,7 @@ def _verify_historical_attempt_schema(evidence: Any) -> None:
         attempt_id,
         evidence.get("application_result"),
     )
-    if attempt_id == "production-flagship-20260811-10":
+    if attempt_id in _HISTORICAL_TWO_CALL_OUTPUT_LIMITS:
         provider_calls = evidence["provider_observation"]["calls"]
         result = evidence["application_result"]
         execution = evidence["execution_observation"]
@@ -1960,7 +1996,7 @@ def verify_static_runtime_acceptance_contract(release: dict[str, Any]) -> None:
     }
     if history != expected_history:
         raise VerificationError(
-            "Historical model validation must retain exactly ten failed-closed records"
+            "Historical model validation must retain exactly eleven failed-closed records"
         )
     for path_text in HISTORICAL_MODEL_VALIDATION_RECORDS:
         verify_failed_model_attempt_evidence(
