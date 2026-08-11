@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from pathlib import Path
+import re
 import secrets
 import sqlite3
 import threading
 from datetime import datetime, timezone
 from typing import Any
+
+
+_OPENROUTER_GENERATION_ID_PATTERN = re.compile(
+    r"^gen-[0-9]{10}-[A-Za-z0-9]{20}$"
+)
 
 
 def now() -> str:
@@ -359,6 +366,7 @@ class Storage:
             "error_agent_id",
             "error_fact_id",
             "error_invariant",
+            "provider_error_code",
             "invalid_provenance_field",
             "invalid_provenance_value_hash",
             "ignored_noncontrolling_normalized_proposals",
@@ -388,10 +396,25 @@ class Storage:
             "created_at",
             "updated_at",
         }
-        return [
-            {key: value for key, value in call.items() if key in allowed}
-            for call in self.model_calls()
-        ]
+        sanitized: list[dict[str, Any]] = []
+        for call in self.model_calls():
+            item = {key: value for key, value in call.items() if key in allowed}
+            provider_error_code = item.get("provider_error_code")
+            if (
+                item.get("error_invariant") != "provider_upstream_rejection"
+                or not isinstance(provider_error_code, int)
+                or isinstance(provider_error_code, bool)
+                or not 0 <= provider_error_code <= 9_999
+            ):
+                item.pop("provider_error_code", None)
+            if item.get("error_invariant") == "provider_upstream_rejection" and (
+                not isinstance(item.get("response_id"), str)
+                or _OPENROUTER_GENERATION_ID_PATTERN.fullmatch(item["response_id"])
+                is None
+            ):
+                item.pop("response_id", None)
+            sanitized.append(item)
+        return sanitized
 
     def cached_model_output(self, cache_key: str) -> dict[str, Any] | None:
         with self.connect() as con:
@@ -432,13 +455,32 @@ class Storage:
 
     def model_call_summary(self) -> dict[str, Any]:
         calls = self.model_calls()
+        unknown_cost_call_count = sum(
+            1
+            for item in calls
+            if int(item.get("call_count", 0)) > 0
+            and (
+                not isinstance(item.get("actual_cost_usd"), (int, float))
+                or isinstance(item.get("actual_cost_usd"), bool)
+                or not math.isfinite(float(item["actual_cost_usd"]))
+            )
+        )
+        confirmed_costs = [
+            float(item["actual_cost_usd"])
+            for item in calls
+            if isinstance(item.get("actual_cost_usd"), (int, float))
+            and not isinstance(item.get("actual_cost_usd"), bool)
+            and math.isfinite(float(item["actual_cost_usd"]))
+        ]
         return {
             "records": len(calls),
             "network_calls": sum(int(item.get("call_count", 0)) for item in calls),
             "prompt_tokens": sum(int(item.get("prompt_tokens", 0)) for item in calls),
             "completion_tokens": sum(int(item.get("completion_tokens", 0)) for item in calls),
             "total_tokens": sum(int(item.get("total_tokens", 0)) for item in calls),
-            "actual_cost_usd": round(sum(float(item.get("actual_cost_usd") or 0) for item in calls), 8),
+            "actual_cost_usd": round(sum(confirmed_costs), 8),
+            "actual_cost_complete": unknown_cost_call_count == 0,
+            "unknown_cost_call_count": unknown_cost_call_count,
             "outcomes": {outcome: sum(item.get("outcome") == outcome for item in calls) for outcome in sorted({str(item.get("outcome")) for item in calls})},
         }
 

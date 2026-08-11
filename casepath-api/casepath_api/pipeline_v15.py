@@ -1204,6 +1204,7 @@ class ClaimPipeline:
                             "orchestration_id",
                             "invalid_provenance_field",
                             "invalid_provenance_value_hash",
+                            "provider_error_code",
                         )
                         if key in safe_context
                     },
