@@ -1,0 +1,1217 @@
+from __future__ import annotations
+
+from collections import defaultdict
+import json
+from pathlib import Path
+import threading
+import time
+from typing import Any
+
+import httpx
+from langchain_core.messages import AIMessage
+from langsmith.run_helpers import tracing_context
+from openrouter import OpenRouter
+import pytest
+
+from casepath_api import langchain_runtime
+from casepath_api.canonicalizer import OPENROUTER_MODEL
+from casepath_api.canonicalizer import resolve_observable_source_reference_id
+from casepath_api.data import CLAIMS, observable_claim_package
+from casepath_api.multi_agent import (
+    AI_AGENT_IDS,
+    AgentBoundaryError,
+    AgentInvocationFailure,
+    DETERMINISTIC_GATE_IDS,
+    EVIDENCE_STATUS_CANDIDATES,
+    InstrumentedStructuredAgent,
+    NemotronMultiAgentOrchestrator,
+    OrchestratorPlan,
+    ROLE_OUTPUT_TOKENS,
+    _evidence_provider_payload,
+    _final_brief_provider_payload,
+    _source_registry,
+    accepted_artifact_hash,
+)
+from casepath_api.pipeline_v15 import ClaimPipeline
+from casepath_api.storage import Storage
+
+
+def wait(storage: Storage, run_id: str) -> dict[str, Any]:
+    for _ in range(500):
+        run = storage.get_run(run_id)
+        if run and run["status"] in {"complete", "failed"}:
+            return run
+        time.sleep(0.01)
+    raise AssertionError("run timeout")
+
+
+def oracle_result(tmp_path: Path) -> dict[str, Any]:
+    storage = Storage(str(tmp_path / "oracle.db"))
+    pipeline = ClaimPipeline(storage, pace_seconds=0)
+    run = wait(storage, pipeline.create("DEF-027-E0-DEMO"))
+    assert run["status"] == "complete", run.get("error")
+    return run["result"]
+
+
+class FakeStructuredRunnable:
+    def __init__(
+        self,
+        *,
+        agent_id: str,
+        schema,
+        response: dict[str, Any],
+        captures: dict[str, list[dict[str, Any]]],
+        fanout_barrier: threading.Barrier,
+    ):
+        self.agent_id = agent_id
+        self.schema = schema
+        self.response = response
+        self.captures = captures
+        self.fanout_barrier = fanout_barrier
+
+    def invoke(self, messages, config=None):
+        payload = json.loads(messages[-1].content)
+        self.captures[self.agent_id].append(payload)
+        if self.agent_id in {"document_source_integrity", "process_decision_mapping"}:
+            self.fanout_barrier.wait(timeout=2)
+            time.sleep(0.02)
+        parsed = self.schema.model_validate(self.response)
+        raw = AIMessage(
+            content="",
+            response_metadata={
+                "id": f"gen-{self.agent_id}",
+                "model_name": OPENROUTER_MODEL,
+                "finish_reason": "stop",
+                "provider_name": "MockProvider",
+                "usage": {
+                    "prompt_tokens": 100,
+                    "completion_tokens": 40,
+                    "total_tokens": 140,
+                    "cost": 0.001,
+                },
+            },
+            usage_metadata={"input_tokens": 100, "output_tokens": 40, "total_tokens": 140},
+        )
+        return {"raw": raw, "parsed": parsed, "parsing_error": None}
+
+
+def graph_fixture(tmp_path: Path):
+    result = oracle_result(tmp_path)
+    facts = result["facts"]
+    process = result["process"]
+    checklist = result["checklist"]
+    package = observable_claim_package(CLAIMS["DEF-027-E0-DEMO"])
+    registry = _source_registry(package)
+    refs_by_artifact: dict[str, list[str]] = defaultdict(list)
+    for ref in registry:
+        refs_by_artifact[ref["artifact_id"]].append(ref["source_ref_id"])
+    source_proposals = []
+    for artifact in package["artifacts"]:
+        source_proposals.append(
+            {
+                "artifact_id": artifact["artifact_id"],
+                "integrity_class": (
+                    "visual_only"
+                    if artifact["media_type"].startswith("image/")
+                    else "text_grounded"
+                ),
+                "source_ref_ids": (
+                    sorted(refs_by_artifact[artifact["artifact_id"]])[:1]
+                    if not artifact["media_type"].startswith("image/")
+                    else []
+                ),
+                "confidence": 0.81,
+            }
+        )
+    controlling = [fact for fact in facts if fact["controls_process"] is True]
+    process_proposals = [
+        {
+            "fact_id": fact["fact_id"],
+            "state": fact["state"],
+            "normalized_value": fact["normalized_value"],
+            "source_ref_ids": sorted(
+                resolve_observable_source_reference_id(ref, registry)
+                for ref in fact["source_refs"]
+                if ref["locator_kind"] == "text_quote"
+            ),
+            "confidence": 0.82,
+        }
+        for fact in controlling
+    ]
+    facts_by_id = {fact["fact_id"]: fact for fact in facts}
+    evidence_proposals = [
+        {
+            "item_id": item["item_id"],
+            "status": item["status"],
+            "artifact_ids": sorted(item.get("artifact_ids", [])),
+            "source_ref_ids": sorted(
+                resolve_observable_source_reference_id(ref, registry)
+                for ref in facts_by_id[item["fact_id"]]["source_refs"]
+                if ref["locator_kind"] == "text_quote"
+            ),
+            "confidence": 0.83,
+        }
+        for item in checklist["items"]
+    ]
+    current = process["current_overlay"]
+    current_node = next(
+        node for node in process["nodes"] if node["node_id"] == current["current_node_id"]
+    )
+    final_source_ids = sorted(
+        {
+            resolve_observable_source_reference_id(ref, registry)
+            for fact in facts
+            if fact["fact_id"] in current_node.get("fact_ids", [])
+            for ref in fact["source_refs"]
+            if ref["locator_kind"] == "text_quote"
+        }
+    )
+    responses = {
+        "orchestrator_plan": {
+            "focus_fact_ids": [fact["fact_id"] for fact in facts],
+            "focus_source_ref_ids": sorted(
+                refs[0]
+                for artifact_id, refs in refs_by_artifact.items()
+                if refs
+                and any(
+                    item["artifact_id"] == artifact_id
+                    and item["media_type"] in {"application/pdf", "message/rfc822"}
+                    for item in package["artifacts"]
+                )
+            ),
+            "priority_task_codes": [
+                "source_integrity",
+                "process_decisions",
+                "evidence_gaps",
+                "final_brief",
+            ],
+        },
+        "document_source_integrity": {"proposals": source_proposals},
+        "process_decision_mapping": {"proposals": process_proposals},
+        "evidence_checklist": {"proposals": evidence_proposals},
+        "final_claim_brief_audit": {
+            "proposal": {
+                "current_node_id": current["current_node_id"],
+                "next_action_node_id": current["next_action_node_id"],
+                "source_ref_ids": final_source_ids,
+                "confidence": 0.84,
+            }
+        },
+    }
+    captures: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    barrier = threading.Barrier(2)
+
+    def factory(agent_id, schema, _key, _orchestration_id, _max_tokens):
+        return FakeStructuredRunnable(
+            agent_id=agent_id,
+            schema=schema,
+            response=responses[agent_id],
+            captures=captures,
+            fanout_barrier=barrier,
+        )
+
+    storage = Storage(str(tmp_path / "agents.db"))
+    runner = InstrumentedStructuredAgent(
+        storage,
+        runnable_factory=factory,
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+    orchestrator = NemotronMultiAgentOrchestrator(storage, agent_runner=runner)
+    canonicalization = {
+        "model": OPENROUTER_MODEL,
+        "call_id": "modelcall-canonical",
+        "cache_hit": False,
+        "origin_call_id": "modelcall-canonical",
+        "response_id": "gen-canonical",
+        "response_model": OPENROUTER_MODEL,
+        "upstream_provider": "MockProvider",
+        "usage_source": "response",
+        "finish_reason": "stop",
+        "usage": {
+            "prompt_tokens": 100,
+            "completion_tokens": 40,
+            "total_tokens": 140,
+            "actual_cost_usd": 0.001,
+            "usage_source": "response",
+        },
+        "diagnostics": {
+            "accepted_fact_ids": [fact["fact_id"] for fact in facts],
+            "accepted_fact_count": len(facts),
+            "rejected_facts": [],
+            "rejected_fact_count": 0,
+        },
+    }
+    return orchestrator, storage, captures, package, canonicalization, result
+
+
+def test_compiled_langgraph_fanout_join_and_bounded_payloads(tmp_path: Path):
+    orchestrator, storage, captures, package, canonicalization, result = graph_fixture(tmp_path)
+    receipts: list[dict[str, Any]] = []
+    audit = orchestrator.invoke(
+        run_id="run-graph-test",
+        orchestration_id="orch-graph-test",
+        observable_package=package,
+        canonicalization=canonicalization,
+        facts=result["facts"],
+        process=result["process"],
+        checklist=result["checklist"],
+        verification=result["verification"],
+        progress_sink=receipts.append,
+    )
+
+    assert audit["all_required_agents_contributed"] is True
+    assert {item["agent_id"] for item in audit["agents"]} == set(AI_AGENT_IDS)
+    assert {item["agent_id"] for item in audit["deterministic_gates"]} == set(
+        DETERMINISTIC_GATE_IDS
+    )
+    assert all(item["actor_type"] == "nemotron_agent" for item in audit["agents"])
+    assert all(
+        item["acceptance_scope"] == "pre_review_model_output"
+        for item in audit["agents"]
+    )
+    assert all(item["provider"] == "openrouter" for item in audit["agents"])
+    assert all(item["requested_model"] == OPENROUTER_MODEL for item in audit["agents"])
+    assert all(item["response_id"] for item in audit["agents"])
+    assert all(item["finish_reason"] == "stop" for item in audit["agents"])
+    assert all(item["usage"]["total_tokens"] > 0 for item in audit["agents"])
+    assert audit["execution_topology"] == {
+        "authority": "deterministic_application",
+        "implementation": "compiled_langgraph_stategraph",
+        "delegations": [
+            {
+                "agent_id": "document_source_integrity",
+                "dependencies": ["orchestrator_plan"],
+            },
+            {
+                "agent_id": "process_decision_mapping",
+                "dependencies": ["orchestrator_plan"],
+            },
+            {
+                "agent_id": "evidence_checklist",
+                "dependencies": ["deterministic_process_gate"],
+            },
+            {
+                "agent_id": "final_claim_brief_audit",
+                "dependencies": ["deterministic_evidence_gate"],
+            },
+        ],
+        "parallel_groups": [
+            ["document_source_integrity", "process_decision_mapping"]
+        ],
+    }
+    plan_artifact = audit["specialist_artifacts"]["orchestrator_plan"]
+    assert plan_artifact["contribution_type"] == "constrained_focus_prioritization"
+    assert plan_artifact["attribution"] == "Nemotron Orchestrator"
+    assert "delegations" not in plan_artifact
+    assert "parallel_groups" not in plan_artifact
+    assert audit["external_tracing"] is False
+    assert set(audit["specialist_artifacts"]) == {
+        "orchestrator_plan",
+        "document_source_integrity",
+        "process_decision_mapping",
+        "evidence_checklist",
+        "final_claim_brief_audit",
+    }
+    assert any(item["receipt_type"] == "gate_passed" for item in receipts)
+    assert all("reasoning" not in json.dumps(item).lower() for item in receipts)
+    completed_receipts = [
+        item for item in receipts if item.get("receipt_type") == "agent_completed"
+    ]
+    assert len(completed_receipts) == 5
+    assert all(
+        item["acceptance_scope"] == "pre_review_model_output"
+        for item in completed_receipts
+    )
+
+    process_payload = captures["process_decision_mapping"][0]
+    assert all("state" not in item and "normalized_value" not in item for item in process_payload["fact_candidates"])
+    assert all(len(item["allowed_normalized_values"]) > 1 for item in process_payload["fact_candidates"])
+    evidence_payload = captures["evidence_checklist"][0]
+    assert evidence_payload["allowed_statuses"] == EVIDENCE_STATUS_CANDIDATES
+    assert all("status" not in item and "artifact_ids" not in item for item in evidence_payload["evidence_candidates"])
+    final_payload = captures["final_claim_brief_audit"][0]
+    assert "current_node_id" not in final_payload
+    assert "next_action_node_id" not in final_payload
+    assert "checklist_artifacts" not in final_payload
+    assert "verification_artifacts" not in final_payload
+    topology = final_payload["static_process_topology"]
+    assert all("answer" not in item and "state" not in item for item in topology["nodes"])
+    assert all("state" not in branch for item in topology["nodes"] for branch in item["branches"])
+    assert all("state" not in item for item in topology["edges"])
+    assert len(topology["edges"]) == len(result["process"]["edges"]) == 22
+    assert len(
+        {
+            (item["source"], item["target"], item["condition"])
+            for item in topology["edges"]
+        }
+    ) == 22
+    serialized_payloads = json.dumps(captures, sort_keys=True)
+    for private_name in (
+        "expected_state",
+        "canonical_value",
+        "canonical_explanation",
+        "required_text_reference_count",
+        "required_source_reference_count",
+        "expected_status",
+        "expected_artifact_ids",
+        "expected_current_node_id",
+        "expected_next_action_node_id",
+    ):
+        assert private_name not in serialized_payloads
+
+    specialist_artifacts = audit["specialist_artifacts"]
+    assert specialist_artifacts["process_decision_mapping"]["decisions"][0][
+        "confidence_basis_points"
+    ] == 8200
+    assert specialist_artifacts["evidence_checklist"]["items"][0][
+        "confidence_basis_points"
+    ] == 8300
+    assert specialist_artifacts["final_claim_brief_audit"][
+        "confidence_basis_points"
+    ] == 8400
+    assert specialist_artifacts["final_claim_brief_audit"][
+        "input_contribution_ids"
+    ] == [
+        "document_source_integrity",
+        "process_decision_mapping",
+        "evidence_checklist",
+    ]
+    assert specialist_artifacts["final_claim_brief_audit"][
+        "lineage_authority"
+    ] == "deterministic_application"
+
+    calls = storage.model_calls()
+    assert len(calls) == 5
+    assert all(item["call_count"] == 1 for item in calls)
+    plan_call = next(item for item in calls if item["agent_id"] == "orchestrator_plan")
+    workers = [item for item in calls if item["agent_id"] != "orchestrator_plan"]
+    assert all(item["parent_call_id"] == plan_call["call_id"] for item in workers)
+    assert all(item["delegation_id"].startswith("dlg_") for item in calls)
+    assert all(item["actual_cost_usd"] == 0.001 for item in calls)
+
+
+def test_evidence_payload_omits_poisoned_private_answers_and_plan_changes_order(
+    tmp_path: Path,
+):
+    _orchestrator, _storage, _captures, package, _canonicalization, result = graph_fixture(
+        tmp_path
+    )
+    registry = _source_registry(package)
+    text_artifacts = {
+        item["artifact_id"]
+        for item in package["artifacts"]
+        if item["media_type"] in {"application/pdf", "message/rfc822"}
+    }
+    focused_sources: list[str] = []
+    for artifact_id in sorted(text_artifacts):
+        focused_sources.append(
+            next(
+                item["source_ref_id"]
+                for item in registry
+                if item["artifact_id"] == artifact_id
+            )
+        )
+    poisoned = json.loads(json.dumps(result["checklist"]))
+    for item in poisoned["items"]:
+        item["why"] = "PRIVATE_WHY_SENTINEL"
+        item["status"] = "PRIVATE_STATUS_SENTINEL"
+        item["node_id"] = "PRIVATE_PATH_SENTINEL"
+        item["current_path"] = "PRIVATE_APPLICABILITY_SENTINEL"
+        item["artifact_ids"] = ["PRIVATE_EXPECTED_ARTIFACT_SENTINEL"]
+    fact_ids = [item["fact_id"] for item in result["facts"]]
+    task_codes = [
+        "source_integrity",
+        "process_decisions",
+        "evidence_gaps",
+        "final_brief",
+    ]
+
+    def payload(fact_order, task_order):
+        return _evidence_provider_payload(
+            {
+                "orchestrator_plan": {
+                    "focus_fact_ids": fact_order,
+                    "focus_source_ref_ids": focused_sources,
+                    "priority_task_codes": task_order,
+                },
+                "checklist": poisoned,
+                "facts": result["facts"],
+                "source_registry": registry,
+                "observable_package": package,
+            }
+        )
+
+    forward = payload(fact_ids, task_codes)
+    reverse = payload(list(reversed(fact_ids)), list(reversed(task_codes)))
+    serialized = json.dumps(forward, sort_keys=True)
+    for sentinel in (
+        "PRIVATE_WHY_SENTINEL",
+        "PRIVATE_STATUS_SENTINEL",
+        "PRIVATE_PATH_SENTINEL",
+        "PRIVATE_APPLICABILITY_SENTINEL",
+        "PRIVATE_EXPECTED_ARTIFACT_SENTINEL",
+    ):
+        assert sentinel not in serialized
+    assert all(
+        set(item) == {"item_id", "title", "fact_id"}
+        for item in forward["evidence_candidates"]
+    )
+    assert {
+        item["item_id"] for item in forward["evidence_candidates"]
+    } == {item["item_id"] for item in reverse["evidence_candidates"]}
+    assert forward["evidence_candidates"] != reverse["evidence_candidates"]
+    assert forward["orchestrator_focus"]["task_code"] == "evidence_gaps"
+    assert forward["orchestrator_focus"]["priority_rank"] == 2
+    assert reverse["orchestrator_focus"]["priority_rank"] == 1
+
+
+def test_final_audit_payload_ignores_applied_answers_but_tracks_prior_contributions(
+    tmp_path: Path,
+):
+    orchestrator, _storage, _captures, package, canonicalization, result = graph_fixture(
+        tmp_path
+    )
+    audit = orchestrator.invoke(
+        run_id="run-final-payload",
+        orchestration_id="orch-final-payload",
+        observable_package=package,
+        canonicalization=canonicalization,
+        facts=result["facts"],
+        process=result["process"],
+        checklist=result["checklist"],
+        verification=result["verification"],
+    )
+    artifacts = audit["specialist_artifacts"]
+    state = {
+        "orchestrator_plan": artifacts["orchestrator_plan"],
+        "source_integrity": artifacts["document_source_integrity"],
+        "process_mapping": artifacts["process_decision_mapping"],
+        "evidence_checklist": artifacts["evidence_checklist"],
+        "facts": result["facts"],
+        "process": result["process"],
+        "checklist": result["checklist"],
+        "verification": result["verification"],
+        "source_registry": _source_registry(package),
+    }
+    baseline = _final_brief_provider_payload(state)
+    assert set(baseline) == {
+        "orchestrator_focus",
+        "static_process_topology",
+        "canonical_fact_handoff",
+        "prior_accepted_contributions",
+        "source_reference_registry",
+    }
+    assert set(baseline["static_process_topology"]) == {
+        "nodes",
+        "edges",
+        "evidence_bindings",
+    }
+    assert all(
+        set(item) == {
+            "node_id",
+            "title",
+            "kind",
+            "main_spine",
+            "fact_ids",
+            "activation",
+            "branches",
+        }
+        for item in baseline["static_process_topology"]["nodes"]
+    )
+    assert all(
+        set(item) == {"source", "target", "condition"}
+        for item in baseline["static_process_topology"]["edges"]
+    )
+    assert all(
+        set(item) == {"item_id", "fact_id", "node_id"}
+        for item in baseline["static_process_topology"]["evidence_bindings"]
+    )
+    poisoned = json.loads(json.dumps(state))
+    poison_values = {
+        "state": "PRIVATE_APPLIED_STATE_SENTINEL",
+        "answer": "PRIVATE_APPLIED_ANSWER_SENTINEL",
+        "why": "PRIVATE_APPLIED_WHY_SENTINEL",
+        "status": "PRIVATE_APPLIED_STATUS_SENTINEL",
+        "current_path": "PRIVATE_CURRENT_PATH_SENTINEL",
+        "artifact_ids": ["PRIVATE_EXPECTED_ARTIFACT_SENTINEL"],
+        "name": "PRIVATE_VERIFICATION_NAME_SENTINEL",
+    }
+
+    def recursively_poison(value):
+        if isinstance(value, dict):
+            return {
+                key: poison_values[key]
+                if key in poison_values
+                else recursively_poison(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, list):
+            return [recursively_poison(item) for item in value]
+        return value
+
+    poisoned["process"] = recursively_poison(poisoned["process"])
+    poisoned["process"]["current_overlay"] = {
+        "current_node_id": "PRIVATE_CURRENT_NODE_SENTINEL",
+        "next_action_node_id": "PRIVATE_NEXT_NODE_SENTINEL",
+    }
+    poisoned["process"]["current_node"] = "PRIVATE_CURRENT_NODE_SENTINEL"
+    poisoned["process"]["selected_path"] = ["PRIVATE_SELECTED_PATH_SENTINEL"]
+    poisoned["checklist"] = recursively_poison(poisoned["checklist"])
+    poisoned["verification"] = {
+        "PRIVATE_VERIFICATION_OBJECT_SENTINEL": recursively_poison(
+            poisoned["verification"]
+        )
+    }
+
+    poisoned_payload = _final_brief_provider_payload(poisoned)
+    assert poisoned_payload == baseline
+    serialized = json.dumps(poisoned_payload, sort_keys=True)
+    assert all(
+        sentinel not in serialized
+        for value in poison_values.values()
+        for sentinel in ([value] if isinstance(value, str) else value)
+    )
+    for sentinel in (
+        "PRIVATE_VERIFICATION_OBJECT_SENTINEL",
+        "PRIVATE_CURRENT_NODE_SENTINEL",
+        "PRIVATE_NEXT_NODE_SENTINEL",
+        "PRIVATE_SELECTED_PATH_SENTINEL",
+    ):
+        assert sentinel not in serialized
+    assert all("state" not in item for item in baseline["static_process_topology"]["nodes"])
+    assert all("state" not in item for item in baseline["static_process_topology"]["edges"])
+    assert all(
+        "state" not in branch
+        for item in baseline["static_process_topology"]["nodes"]
+        for branch in item["branches"]
+    )
+    assert set(baseline["prior_accepted_contributions"]["evidence_checklist"]) == {
+        "item_ids",
+        "source_ref_ids",
+        "fallback_item_ids",
+    }
+    assert "contribution_candidates" not in baseline
+    assert "relied_on_contribution_ids" not in serialized
+
+    unreferenced = json.loads(json.dumps(state))
+    unreferenced["source_registry"].append(
+        {
+            "source_ref_id": "src_unreferenced_private_sentinel",
+            "artifact_id": "PRIVATE_UNREFERENCED_ARTIFACT_SENTINEL",
+            "page": 1,
+            "excerpt": "PRIVATE_UNREFERENCED_EXCERPT_SENTINEL",
+        }
+    )
+    assert _final_brief_provider_payload(unreferenced) == baseline
+
+    counterfactual = json.loads(json.dumps(state))
+    counterfactual["process_mapping"]["decisions"][0][
+        "normalized_value"
+    ] = "counterfactual_bounded_value"
+    counterfactual_payload = _final_brief_provider_payload(counterfactual)
+    assert counterfactual_payload["prior_accepted_contributions"][
+        "process_decision_mapping"
+    ] != baseline["prior_accepted_contributions"]["process_decision_mapping"]
+    assert {
+        key: value
+        for key, value in counterfactual_payload.items()
+        if key != "prior_accepted_contributions"
+    } == {
+        key: value
+        for key, value in baseline.items()
+        if key != "prior_accepted_contributions"
+    }
+
+
+def test_shared_langchain_adapter_has_exact_nonretrying_private_configuration(monkeypatch):
+    sdk_kwargs: dict[str, Any] = {}
+    chat_kwargs: dict[str, Any] = {}
+    structured_kwargs: dict[str, Any] = {}
+
+    class FakeProviderClient:
+        def __init__(self, **kwargs):
+            sdk_kwargs.update(kwargs)
+
+    class FakeChatOpenRouter:
+        def __init__(self, **kwargs):
+            chat_kwargs.update(kwargs)
+
+        def with_structured_output(self, schema, **kwargs):
+            structured_kwargs.update({"schema": schema, **kwargs})
+            return object()
+
+    monkeypatch.setattr(langchain_runtime, "OpenRouter", FakeProviderClient)
+    monkeypatch.setattr(langchain_runtime, "ChatOpenRouter", FakeChatOpenRouter)
+    schema = {"type": "object", "properties": {}, "additionalProperties": False}
+    langchain_runtime.structured_nemotron_runnable(
+        schema=schema,
+        api_key="runtime-only-test-value",
+        orchestration_id="orch-adapter",
+        max_tokens=777,
+    )
+
+    assert sdk_kwargs["retry_config"] is None
+    assert sdk_kwargs["timeout_ms"] == 180_000
+    assert sdk_kwargs["x_open_router_title"] == "CasePath"
+    assert chat_kwargs["model"] == OPENROUTER_MODEL
+    assert chat_kwargs["max_retries"] == 0
+    assert chat_kwargs["timeout"] == 180_000
+    assert chat_kwargs["max_tokens"] == 777
+    assert chat_kwargs["openrouter_provider"] == {
+        "require_parameters": True,
+        "data_collection": "deny",
+    }
+    assert chat_kwargs["client"].__class__ is FakeProviderClient
+    assert "trace" not in chat_kwargs
+    assert structured_kwargs == {
+        "schema": schema,
+        "method": "json_schema",
+        "strict": True,
+        "include_raw": True,
+    }
+
+
+def test_provider_provenance_field_grammars_accept_real_ids_and_hash_credentials():
+    for response_model in (
+        OPENROUTER_MODEL,
+        f"{OPENROUTER_MODEL}-20260604",
+    ):
+        sanitized, violation = langchain_runtime.sanitize_provider_provenance(
+            response_id="gen-1786460163-SVSIhqiSG3ko4ZbBb0IS",
+            response_model=response_model,
+            upstream_provider="DeepInfra",
+            finish_reason="stop",
+        )
+        assert violation is None
+        assert sanitized == {
+            "response_id": "gen-1786460163-SVSIhqiSG3ko4ZbBb0IS",
+            "response_model": response_model,
+            "upstream_provider": "DeepInfra",
+            "finish_reason": "stop",
+        }
+
+    for field, invalid_value in (
+        ("response_id", "sk-or-v1-credential-material"),
+        ("response_id", "tenant-reported-moisture"),
+        ("upstream_provider", "Deep Infra"),
+        ("upstream_provider", "landlord-claim"),
+        ("response_model", "different/model"),
+        ("finish_reason", "tenant stopped payment"),
+    ):
+        values = {
+            "response_id": "gen-safe-id",
+            "response_model": OPENROUTER_MODEL,
+            "upstream_provider": "DeepInfra",
+            "finish_reason": "stop",
+        }
+        values[field] = invalid_value
+        sanitized, violation = langchain_runtime.sanitize_provider_provenance(
+            **values
+        )
+        assert violation is not None
+        assert violation["invalid_provenance_field"] == field
+        assert len(violation["invalid_provenance_value_hash"]) == 64
+        assert sanitized[field] is None
+        assert invalid_value not in json.dumps(
+            {"sanitized": sanitized, "violation": violation}
+        )
+
+
+def test_openrouter_sdk_explicit_none_retry_config_makes_one_http_attempt():
+    class CountingClient:
+        def __init__(self):
+            self.delegate = httpx.Client()
+            self.attempts = 0
+
+        def build_request(self, *args, **kwargs):
+            return self.delegate.build_request(*args, **kwargs)
+
+        def send(self, request, **_kwargs):
+            self.attempts += 1
+            return httpx.Response(503, request=request, json={"error": {"message": "safe"}})
+
+        def close(self):
+            self.delegate.close()
+
+    client = CountingClient()
+    sdk = OpenRouter(
+        api_key="runtime-only-test-value",
+        client=client,
+        retry_config=None,
+        timeout_ms=180_000,
+    )
+    with pytest.raises(Exception):
+        sdk.chat.send(
+            model=OPENROUTER_MODEL,
+            messages=[{"role": "user", "content": "bounded test"}],
+            max_tokens=1,
+        )
+    assert client.attempts == 1
+
+
+def test_external_tracing_blocks_runner_and_graph_before_invocation(
+    tmp_path: Path, monkeypatch
+):
+    factory_calls = 0
+
+    def forbidden_factory(*_args):
+        nonlocal factory_calls
+        factory_calls += 1
+        raise AssertionError("provider runnable must not be created")
+
+    runner = InstrumentedStructuredAgent(
+        Storage(str(tmp_path / "trace-runner.db")),
+        runnable_factory=forbidden_factory,
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+    with tracing_context(enabled=True), pytest.raises(
+        RuntimeError, match="Inherited LangChain tracing"
+    ):
+        runner.invoke(
+            run_id="run-trace",
+            orchestration_id="orch-trace",
+            agent_id="orchestrator_plan",
+            schema=OrchestratorPlan,
+            system_prompt="bounded",
+            provider_payload={"fact_candidates": []},
+            validator=lambda value: (value, {}),
+            private_contract_hash="0" * 64,
+        )
+    assert factory_calls == 0
+
+    orchestrator, _storage, _captures, package, canonicalization, result = graph_fixture(
+        tmp_path
+    )
+
+    class SpyGraph:
+        entered = False
+
+        def stream(self, *_args, **_kwargs):
+            self.entered = True
+            return iter(())
+
+    spy = SpyGraph()
+    orchestrator.graph = spy
+    with tracing_context(enabled=True), pytest.raises(
+        RuntimeError, match="Inherited LangChain tracing"
+    ):
+        orchestrator.invoke(
+            run_id="run-trace-graph",
+            orchestration_id="orch-trace-graph",
+            observable_package=package,
+            canonicalization=canonicalization,
+            facts=result["facts"],
+            process=result["process"],
+            checklist=result["checklist"],
+            verification=result["verification"],
+        )
+    assert spy.entered is False
+
+    monkeypatch.setattr(
+        langchain_runtime,
+        "get_tracing_context",
+        lambda: {"enabled": "local"},
+    )
+    with pytest.raises(RuntimeError, match="Inherited LangChain tracing"):
+        orchestrator.invoke(
+            run_id="run-trace-graph-nonboolean",
+            orchestration_id="orch-trace-graph-nonboolean",
+            observable_package=package,
+            canonicalization=canonicalization,
+            facts=result["facts"],
+            process=result["process"],
+            checklist=result["checklist"],
+            verification=result["verification"],
+        )
+    assert spy.entered is False
+
+
+def test_specialist_requires_strict_accepted_majority_and_never_caches_minority(
+    tmp_path: Path,
+):
+    calls = 0
+
+    class Runnable:
+        def invoke(self, _messages, config=None):
+            nonlocal calls
+            calls += 1
+            return {
+                "raw": AIMessage(
+                    content="",
+                    response_metadata={
+                        "id": f"gen-majority-{calls}",
+                        "model_name": OPENROUTER_MODEL,
+                        "finish_reason": "stop",
+                        "provider_name": "MockProvider",
+                        "usage": {
+                            "prompt_tokens": 10,
+                            "completion_tokens": 5,
+                            "total_tokens": 15,
+                            "cost": 0.001,
+                        },
+                    },
+                ),
+                "parsed": OrchestratorPlan(
+                    focus_fact_ids=["fact"],
+                    focus_source_ref_ids=["source"],
+                    priority_task_codes=[
+                        "source_integrity",
+                        "process_decisions",
+                        "evidence_gaps",
+                        "final_brief",
+                    ],
+                ),
+                "parsing_error": None,
+            }
+
+    storage = Storage(str(tmp_path / "majority.db"))
+    runner = InstrumentedStructuredAgent(
+        storage,
+        runnable_factory=lambda *_args: Runnable(),
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+    diagnostics = {
+        "authority_mode": "multi_agent_hybrid_guarded",
+        "accepted_item_ids": ["accepted"],
+        "accepted_item_count": 1,
+        "rejected_items": [{"item_id": "rejected", "invariant": "bounded"}],
+        "rejected_item_count": 1,
+        "ignored_proposal_count": 0,
+        "deterministic_fallback_applied": True,
+    }
+    for index in range(2):
+        with pytest.raises(
+            AgentInvocationFailure, match="model_contribution_majority"
+        ):
+            runner.invoke(
+                run_id=f"run-majority-{index}",
+                orchestration_id="orch-majority",
+                agent_id="orchestrator_plan",
+                schema=OrchestratorPlan,
+                system_prompt="bounded",
+                provider_payload={"stable": True},
+                validator=lambda value: (value, diagnostics),
+                private_contract_hash="1" * 64,
+            )
+    assert calls == 2
+    assert [item["outcome"] for item in storage.model_calls()] == ["failed", "failed"]
+
+
+@pytest.mark.parametrize("value", [1.0, -0.0, 1e-7, float("inf"), float("nan")])
+def test_accepted_artifact_hash_rejects_all_floats(value: float):
+    with pytest.raises(AgentBoundaryError, match="float_at"):
+        accepted_artifact_hash({"bounded": [1, value]})
+
+
+def test_evidence_role_has_complete_two_thousand_token_ceiling(tmp_path: Path):
+    orchestrator, _storage, _captures, package, canonicalization, result = graph_fixture(
+        tmp_path
+    )
+    audit = orchestrator.invoke(
+        run_id="run-size-test",
+        orchestration_id="orch-size-test",
+        observable_package=package,
+        canonicalization=canonicalization,
+        facts=result["facts"],
+        process=result["process"],
+        checklist=result["checklist"],
+        verification=result["verification"],
+    )
+    proposals = audit["specialist_artifacts"]["evidence_checklist"]["items"]
+    assert len(proposals) == len(result["checklist"]["items"]) == 21
+    conservative_tokens = (
+        len(json.dumps({"proposals": proposals}, separators=(",", ":")).encode()) + 2
+    ) // 3
+    assert conservative_tokens < ROLE_OUTPUT_TOKENS["evidence_checklist"] == 2_000
+
+
+def _accepted_plan_validator(value: dict[str, Any]):
+    return value, {
+        "authority_mode": "multi_agent_hybrid_guarded",
+        "accepted_item_ids": ["orchestration_focus"],
+        "accepted_item_count": 1,
+        "rejected_items": [],
+        "rejected_item_count": 0,
+        "ignored_proposal_count": 0,
+        "deterministic_fallback_applied": False,
+    }
+
+
+def _plan_envelope(
+    *,
+    response_id: str | None = "gen-plan",
+    response_model: str = OPENROUTER_MODEL,
+    provider_name: str = "MockProvider",
+    finish_reason: str | None = "stop",
+    usage: dict[str, Any] | None = None,
+    parsed: bool = True,
+):
+    metadata: dict[str, Any] = {
+        "model_name": response_model,
+        "provider_name": provider_name,
+        "finish_reason": finish_reason,
+    }
+    if response_id is not None:
+        metadata["id"] = response_id
+    if usage is not None:
+        metadata["usage"] = usage
+    return {
+        "raw": AIMessage(content="", response_metadata=metadata),
+        "parsed": (
+            OrchestratorPlan(
+                focus_fact_ids=["fact"],
+                focus_source_ref_ids=["source"],
+                priority_task_codes=[
+                    "source_integrity",
+                    "process_decisions",
+                    "evidence_gaps",
+                    "final_brief",
+                ],
+            )
+            if parsed
+            else None
+        ),
+        "parsing_error": None if parsed else ValueError("raw-provider-detail"),
+    }
+
+
+def _invoke_plan(runner: InstrumentedStructuredAgent, *, run_id: str = "run-plan"):
+    return runner.invoke(
+        run_id=run_id,
+        orchestration_id="orch-plan",
+        agent_id="orchestrator_plan",
+        schema=OrchestratorPlan,
+        system_prompt="bounded",
+        provider_payload={"observable": True},
+        validator=_accepted_plan_validator,
+        private_contract_hash="2" * 64,
+    )
+
+
+def test_specialist_wrong_model_metadata_billing_and_missing_id_sync_billing_are_retained(
+    tmp_path: Path,
+):
+    metadata_calls = 0
+
+    class WrongModelRunnable:
+        def invoke(self, *_args, **_kwargs):
+            return _plan_envelope(response_model="different/model", usage=None)
+
+    def metadata_transport(*_args):
+        nonlocal metadata_calls
+        metadata_calls += 1
+        return {
+            "data": {
+                "id": "gen-plan",
+                "model": "nvidia/nemotron-3-ultra-550b-a55b-20260604",
+                "provider_name": "DeepInfra",
+                "native_tokens_prompt": 41,
+                "native_tokens_completion": 17,
+                "total_cost": 0.0041,
+                "usage": 0.0041,
+                "finish_reason": "stop",
+            }
+        }
+
+    wrong_storage = Storage(str(tmp_path / "wrong-model.db"))
+    wrong_runner = InstrumentedStructuredAgent(
+        wrong_storage,
+        runnable_factory=lambda *_args: WrongModelRunnable(),
+        metadata_transport=metadata_transport,
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+    with pytest.raises(AgentInvocationFailure, match="invalid_provenance") as caught:
+        _invoke_plan(wrong_runner, run_id="run-wrong-model")
+    assert metadata_calls == 1
+    assert caught.value.safe_context["response_id"] == "gen-plan"
+    wrong_ledger = wrong_storage.model_calls()[0]
+    assert wrong_ledger["outcome"] == "failed"
+    assert wrong_ledger["actual_cost_usd"] == pytest.approx(0.0041)
+    assert wrong_ledger["prompt_tokens"] == 41
+    assert wrong_ledger["completion_tokens"] == 17
+    assert "response_model" not in wrong_ledger
+    assert wrong_ledger["invalid_provenance_field"] == "response_model"
+    assert len(wrong_ledger["invalid_provenance_value_hash"]) == 64
+    assert wrong_ledger["generation_model"].endswith("-20260604")
+    assert "different/model" not in json.dumps(wrong_ledger)
+
+    class MissingIdRunnable:
+        def invoke(self, *_args, **_kwargs):
+            return _plan_envelope(
+                response_id=None,
+                usage={
+                    "prompt_tokens": 31,
+                    "completion_tokens": 11,
+                    "total_tokens": 42,
+                    "cost": 0.0031,
+                },
+            )
+
+    missing_storage = Storage(str(tmp_path / "missing-id.db"))
+    missing_runner = InstrumentedStructuredAgent(
+        missing_storage,
+        runnable_factory=lambda *_args: MissingIdRunnable(),
+        metadata_transport=lambda *_args: (_ for _ in ()).throw(
+            AssertionError("metadata lookup requires a valid response ID")
+        ),
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+    with pytest.raises(AgentInvocationFailure, match="response_identity"):
+        _invoke_plan(missing_runner, run_id="run-missing-id")
+    missing_ledger = missing_storage.model_calls()[0]
+    assert missing_ledger["actual_cost_usd"] == pytest.approx(0.0031)
+    assert missing_ledger["prompt_tokens"] == 31
+    assert "response_id" not in missing_ledger
+
+
+@pytest.mark.parametrize(
+    "envelope_overrides",
+    [
+        {"response_id": "gen-" + "x" * 200},
+        {"provider_name": "SECRET_SENTINEL_PROVIDER"},
+        {"finish_reason": "SECRET_SENTINEL_FINISH"},
+    ],
+)
+def test_specialist_provider_provenance_is_bounded_before_ledger_and_failure_context(
+    tmp_path: Path,
+    envelope_overrides: dict[str, Any],
+):
+    invalid_value = next(iter(envelope_overrides.values()))
+
+    class Runnable:
+        def invoke(self, *_args, **_kwargs):
+            return _plan_envelope(
+                **envelope_overrides,
+                usage={
+                    "prompt_tokens": 31,
+                    "completion_tokens": 11,
+                    "total_tokens": 42,
+                    "cost": 0.0031,
+                    "secret_usage_sentinel": "must-not-be-stored",
+                },
+            )
+
+    storage = Storage(str(tmp_path / "invalid-provenance.db"))
+    runner = InstrumentedStructuredAgent(
+        storage,
+        runnable_factory=lambda *_args: Runnable(),
+        metadata_transport=lambda *_args: (_ for _ in ()).throw(
+            AssertionError("invalid provenance must not trigger metadata polling")
+        ),
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+    with pytest.raises(AgentInvocationFailure, match="invalid_provenance") as caught:
+        _invoke_plan(runner, run_id="run-invalid-provenance")
+    ledger = storage.model_calls()[0]
+    serialized = json.dumps(ledger)
+    assert ledger["outcome"] == "failed"
+    assert ledger["error_invariant"] == "invalid_provenance"
+    assert ledger["actual_cost_usd"] == pytest.approx(0.0031)
+    assert len(ledger["invalid_provenance_value_hash"]) == 64
+    assert invalid_value not in serialized
+    assert "secret_usage_sentinel" not in serialized
+    assert "must-not-be-stored" not in serialized
+    assert caught.value.safe_context["invalid_provenance_value_hash"] == ledger[
+        "invalid_provenance_value_hash"
+    ]
+
+
+def test_specialist_schema_failure_retains_billing_without_raw_error(tmp_path: Path):
+    class Runnable:
+        def invoke(self, *_args, **_kwargs):
+            return _plan_envelope(
+                parsed=False,
+                usage={
+                    "prompt_tokens": 21,
+                    "completion_tokens": 9,
+                    "total_tokens": 30,
+                    "cost": 0.0021,
+                },
+            )
+
+    storage = Storage(str(tmp_path / "schema-failure.db"))
+    runner = InstrumentedStructuredAgent(
+        storage,
+        runnable_factory=lambda *_args: Runnable(),
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+    with pytest.raises(AgentInvocationFailure, match="provider_native_schema") as caught:
+        _invoke_plan(runner)
+    assert caught.value.safe_context["call_id"] == storage.model_calls()[0]["call_id"]
+    ledger = storage.model_calls()[0]
+    assert ledger["actual_cost_usd"] == pytest.approx(0.0021)
+    assert ledger["outcome"] == "failed"
+    assert ledger["error_invariant"] == "provider_native_schema"
+    assert "raw-provider-detail" not in json.dumps(storage.sanitized_model_ledger())
+
+
+def test_specialist_blocked_and_actual_overrun_failures_keep_safe_ledger_lineage(
+    tmp_path: Path,
+):
+    factory_calls = 0
+
+    def forbidden_factory(*_args):
+        nonlocal factory_calls
+        factory_calls += 1
+        raise AssertionError("missing credential must block before provider construction")
+
+    blocked_storage = Storage(str(tmp_path / "blocked.db"))
+    blocked_runner = InstrumentedStructuredAgent(
+        blocked_storage,
+        runnable_factory=forbidden_factory,
+        api_key_provider=lambda: None,
+    )
+    with pytest.raises(AgentInvocationFailure, match="missing_credential") as blocked:
+        _invoke_plan(blocked_runner, run_id="run-blocked")
+    assert factory_calls == 0
+    assert blocked.value.safe_context["outcome"] == "blocked_missing_credential"
+    assert blocked_storage.model_calls()[0]["outcome"] == "blocked_missing_credential"
+
+    cost_storage = Storage(str(tmp_path / "blocked-cost.db"))
+    committed_call = cost_storage.create_model_call(
+        run_id="prior",
+        provider="openrouter",
+        model=OPENROUTER_MODEL,
+        cache_key="prior",
+        purpose="prior paid call",
+        call_count=1,
+        estimated_cost_usd=25.0,
+        outcome="started",
+    )
+    cost_storage.finish_model_call(
+        committed_call, outcome="failed", actual_cost_usd=25.0
+    )
+    cost_runner = InstrumentedStructuredAgent(
+        cost_storage,
+        runnable_factory=forbidden_factory,
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+    with pytest.raises(AgentInvocationFailure, match="cost_guard") as blocked_cost:
+        _invoke_plan(cost_runner, run_id="run-blocked-cost")
+    assert blocked_cost.value.safe_context["outcome"] == "blocked_cost_guard"
+    assert cost_storage.model_calls()[-1]["outcome"] == "blocked_cost_guard"
+
+    class ExpensiveRunnable:
+        def invoke(self, *_args, **_kwargs):
+            return _plan_envelope(
+                usage={
+                    "prompt_tokens": 20,
+                    "completion_tokens": 10,
+                    "total_tokens": 30,
+                    "cost": 26.0,
+                }
+            )
+
+    overrun_storage = Storage(str(tmp_path / "overrun.db"))
+    overrun_runner = InstrumentedStructuredAgent(
+        overrun_storage,
+        runnable_factory=lambda *_args: ExpensiveRunnable(),
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+    with pytest.raises(AgentInvocationFailure, match="actual_cost_overrun") as overrun:
+        _invoke_plan(overrun_runner, run_id="run-overrun")
+    assert overrun.value.safe_context["outcome"] == "actual_cost_overrun"
+    assert overrun.value.safe_context["response_id"] == "gen-plan"
+    ledger = overrun_storage.model_calls()[0]
+    assert ledger["outcome"] == "actual_cost_overrun"
+    assert ledger["actual_cost_usd"] == 26.0

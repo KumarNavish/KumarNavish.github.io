@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from email import policy
 from email.parser import BytesParser
 from hashlib import sha256
@@ -91,17 +90,17 @@ DEMO_ARTIFACTS = [
     artifact(
         "art_notification", "notification-email.eml", "Email notifying the property manager", "email", "2026-08-01T09:03:00Z",
         "defect_notification", ["fact_notification", "fact_access"],
-        "Original generated RFC 822 email sent by the tenant on 15 July 2026.",
+        "Original RFC 822 email dated 15 July 2026.",
     ),
     artifact(
         "art_management_reply", "management-reply.eml", "Management reply", "email", "2026-08-01T09:03:00Z",
         "landlord_response", ["fact_ventilation_allegation", "fact_no_inspection"],
-        "Original generated RFC 822 reply attributing the marks to ventilation without arranging an inspection.",
+        "Original RFC 822 property-management reply.",
     ),
     artifact(
         "art_photo", "bedroom-mould-2026-07-27.jpg", "Bedroom photograph", "image", "2026-08-01T09:03:00Z",
         "dated_photograph", ["fact_visible_mould", "fact_recurrence"],
-        "Generated source photograph supplied by the tenant, dated 27 July 2026.",
+        "Source photograph dated 27 July 2026.",
     ),
     artifact(
         "art_timeline", "defect-timeline.pdf", "Defect timeline", "pdf", "2026-08-01T09:03:00Z",
@@ -117,19 +116,19 @@ DEMO_ARTIFACTS = [
 
 LATER_ARTIFACTS = [
     artifact(
-        "art_later_email", "later-claim-email.eml", "Customer email", "email", "2026-08-14T09:46:00Z",
+        "art_later_email", "later-claim-email.eml", "Customer email", "email", "2026-08-10T07:46:00Z",
         "claim_message", ["later_fact_recurrence", "later_fact_ventilation_allegation", "later_fact_no_inspection"],
-        "Original generated email reporting condensation after window replacement.",
+        "Original RFC 822 email reporting condensation after window replacement.",
     ),
     artifact(
-        "art_later_photo", "later-window-condensation-2026-08-12.jpg", "Window-corner photograph", "image", "2026-08-14T09:46:00Z",
+        "art_later_photo", "later-window-condensation-2026-08-08.jpg", "Window-corner photograph", "image", "2026-08-10T07:46:00Z",
         "dated_photograph", ["later_fact_visible_spots", "later_fact_recurrence"],
-        "Generated source photograph of condensation and spotting around the replaced window.",
+        "Source photograph dated 8 August 2026.",
     ),
     artifact(
-        "art_window_notice", "window-replacement-notice.pdf", "Window replacement notice", "pdf", "2026-08-14T09:46:00Z",
+        "art_window_notice", "window-replacement-notice.pdf", "Window replacement notice", "pdf", "2026-08-10T07:46:00Z",
         "repair_record", ["later_fact_recent_window_work", "later_fact_no_inspection"],
-        "Generated notice confirming recent window replacement but no post-installation moisture assessment.",
+        "Window-replacement notice dated May 2026.",
     ),
 ]
 
@@ -161,7 +160,7 @@ LATER_CLAIM = {
     "generated": True,
     "language": "en",
     "canton": "BS",
-    "received_at": "2026-08-14T09:46:00Z",
+    "received_at": "2026-08-10T07:46:00Z",
     "customer": {"name": "Sam Keller", "address": "Klybeckstrasse 77, 4057 Basel", "policy": "LP-2025-04192"},
     "subject": "Condensation after window replacement",
     "message": email_payload(ARTIFACT_DIR / "later-claim-email.eml")["body"],
@@ -176,28 +175,56 @@ LAW_SOURCES = [
         "source_id": "fedlex-or-256",
         "title": "Swiss Code of Obligations, Art. 256",
         "url": "https://www.fedlex.admin.ch/eli/cc/27/317_321_377/en",
-        "role": "Frames the landlord's duty to make the premises available and maintain them in a condition fit for the agreed use.",
+        "source_type": "official_statute",
+        "jurisdiction": "CH",
+        "version_date": "2023-09-01",
+        "location": "Article 256",
+        "passage_summary": "The landlord must hand over and maintain the premises in a condition fit for their intended use.",
+        "operational_interpretation": "Generated reference interpretation: fitness for intended use makes the alleged condition relevant to the handling process, but does not establish technical cause or responsibility.",
+        "review_status": "qualified_review_pending",
+        "role": "Makes the condition and maintenance question relevant without deciding causation.",
         "approved": False,
     },
     {
         "source_id": "fedlex-or-257g",
         "title": "Swiss Code of Obligations, Art. 257g",
         "url": "https://www.fedlex.admin.ch/eli/cc/27/317_321_377/en",
-        "role": "Makes written notice of a non-minor defect a relevant handling fact.",
+        "source_type": "official_statute",
+        "jurisdiction": "CH",
+        "version_date": "2023-09-01",
+        "location": "Article 257g",
+        "passage_summary": "A tenant must report defects they are not responsible for remedying and may be liable for loss caused by failing to report them.",
+        "operational_interpretation": "Generated reference interpretation: notification is a relevant fact; written evidence can help establish that it occurred. The provision is not represented as imposing a statutory writing requirement.",
+        "review_status": "qualified_review_pending",
+        "role": "Makes notification a relevant fact; written evidence helps establish it.",
         "approved": False,
     },
     {
         "source_id": "fedlex-or-259a",
         "title": "Swiss Code of Obligations, Art. 259a et seq.",
         "url": "https://www.fedlex.admin.ch/eli/cc/27/317_321_377/en",
-        "role": "Frames potential remedies when a defect is not attributable to the tenant and is not minor maintenance.",
+        "source_type": "official_statute",
+        "jurisdiction": "CH",
+        "version_date": "2023-09-01",
+        "location": "Article 259a and following",
+        "passage_summary": "The provisions frame remedies for defects not attributable to the tenant and not within the tenant's maintenance responsibility.",
+        "operational_interpretation": "Generated reference interpretation: remedy questions follow supported defect and attribution facts; the provision itself does not establish causation.",
+        "review_status": "qualified_review_pending",
+        "role": "Frames possible remedy questions without deciding causation or attribution.",
         "approved": False,
     },
     {
         "source_id": "bwo-conciliation",
         "title": "Federal Housing Office - tenancy conciliation",
         "url": "https://www.bwo.admin.ch/de/schlichtungsverfahren",
-        "role": "Explains the institutional conciliation route for residential tenancy disputes.",
+        "source_type": "official_guidance",
+        "jurisdiction": "CH",
+        "version_date": "2024-07-16",
+        "location": "Schlichtungsverfahren page",
+        "passage_summary": "A conciliation attempt precedes judicial proceedings in civil disputes; tenancy conciliation bodies are independently chaired with parity tenant and landlord representation under the Civil Procedure Code.",
+        "operational_interpretation": "Generated reference interpretation: conciliation may become relevant after the supported remedy remains disputed; case-specific escalation still requires qualified review.",
+        "review_status": "qualified_review_pending",
+        "role": "Explains the institutional conciliation route without deciding whether this claim should escalate.",
         "approved": False,
     },
 ]
@@ -206,45 +233,91 @@ HISTORICAL_CASES = [
     {
         "claim_id": "HIST-MOULD-014",
         "title": "Recurring mould at an external wall",
-        "review_status": "expert_reviewed",
-        "why_useful": "Same disputed-causation branch. An independent inspection identified a facade thermal bridge before responsibility was assessed.",
+        "review_status": "generated_reference",
+        "why_useful": "Generated reference with the same disputed-causation branch. Its reference outcome uses an independent inspection before responsibility is assessed.",
+        "provenance": "generated_reference_not_qualified_review",
         "shared_features": ["recurring mould", "cause disputed", "technical assessment"],
         "final_process": ["scope", "notification", "independent inspection", "building defect established", "repair request"],
         "evidence": ["notification email", "dated photographs", "independent inspection report"],
-        "expert_correction": "The first handler requested a ventilation diary immediately. Review changed it to conditional because the inspection first established a structural defect.",
+        "reference_lesson": "The generated reference sequence keeps a ventilation diary conditional because its reference inspection first establishes a structural defect.",
         "outcome": "Facade insulation repaired; repair branch used.",
     },
     {
         "claim_id": "HIST-MOULD-022",
         "title": "Condensation after renovation",
-        "review_status": "expert_reviewed",
-        "why_useful": "Similar recurrence after building work. Expert review kept the ventilation allegation as disputed and required neutral causation evidence.",
+        "review_status": "generated_reference",
+        "why_useful": "Generated reference with recurrence after building work; its reference path keeps the ventilation allegation disputed and requests neutral causation evidence.",
+        "provenance": "generated_reference_not_qualified_review",
         "shared_features": ["renovation", "ventilation allegation", "cause disputed"],
         "final_process": ["scope", "notification", "causation dispute", "neutral assessment", "evidence review"],
         "evidence": ["management correspondence", "thermal imaging report", "humidity readings"],
-        "expert_correction": "The management allegation was not treated as proof of tenant causation.",
+        "reference_lesson": "The generated reference does not treat the management allegation as proof of tenant causation.",
         "outcome": "Seal defect identified; landlord repair arranged.",
     },
     {
         "claim_id": "HIST-MOULD-009",
         "title": "Mould reported, inspection missing",
-        "review_status": "reviewed",
-        "why_useful": "Same evidence gap. The claim could not move beyond causation until a technical assessment arrived.",
+        "review_status": "generated_reference",
+        "why_useful": "Generated reference with the same evidence gap; its reference path remains at causation until a technical assessment arrives.",
+        "provenance": "generated_reference_not_qualified_review",
         "shared_features": ["mould", "landlord notified", "inspection missing"],
         "final_process": ["scope", "urgency", "notification", "technical assessment required"],
         "evidence": ["lease", "notification", "photographs"],
-        "expert_correction": "Building-envelope testing remained conditional on an inconclusive first inspection.",
+        "reference_lesson": "The generated reference keeps building-envelope testing conditional on an inconclusive first inspection.",
         "outcome": "Awaiting inspection at the recorded stage.",
     },
 ]
 
 
 def public_artifact(a: dict[str, Any]) -> dict[str, Any]:
-    return {k: v for k, v in a.items() if k not in {"path", "pages", "email"}}
+    return {k: v for k, v in a.items() if k not in {"path", "pages", "email", "fact_ids"}}
 
 
 def public_claim(claim: dict[str, Any]) -> dict[str, Any]:
     return {
         **claim,
         "artifacts": [public_artifact(ARTIFACTS[x]) for x in claim["artifact_ids"]],
+    }
+
+
+def observable_claim_package(claim: dict[str, Any]) -> dict[str, Any]:
+    """Return the only claim DTO that a model-backed component may consume.
+
+    Generation provenance, lineage, reference fact IDs, semantic document labels,
+    and answer-bearing descriptions deliberately remain outside this boundary.
+    """
+
+    artifacts: list[dict[str, Any]] = []
+    for artifact_id in claim["artifact_ids"]:
+        value = ARTIFACTS[artifact_id]
+        item: dict[str, Any] = {
+            "artifact_id": artifact_id,
+            "filename": value["filename"],
+            "media_type": value["media_type"],
+            "received_at": value["received_at"],
+            "page_count": value["page_count"],
+            "sha256": value["sha256"],
+        }
+        if value["media_type"] == "application/pdf":
+            item["extracted_pages"] = [
+                {"page": index + 1, "text": text}
+                for index, text in enumerate(value["pages"])
+            ]
+        elif value["media_type"] == "message/rfc822":
+            item["parsed_email"] = value["email"]
+        else:
+            item["binary_source_available"] = True
+        artifacts.append(item)
+    return {
+        "schema": "casepath.observable-claim-package/1.0.0",
+        "received_at": claim["received_at"],
+        "language": claim["language"],
+        "jurisdiction": {"country": "CH", "canton": claim["canton"]},
+        "intake_metadata": {"policy_reference": claim["customer"]["policy"]},
+        "customer_message": {
+            "artifact_id": "message",
+            "subject": claim["subject"],
+            "body": claim["message"],
+        },
+        "artifacts": artifacts,
     }

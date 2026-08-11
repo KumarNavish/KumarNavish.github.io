@@ -82,7 +82,7 @@
     const canvas = document.querySelector('#stageCanvas');
     if (!canvas) return;
     new MutationObserver(() => requestAnimationFrame(normalize)).observe(canvas, { childList: true, subtree: true });
-    window.setInterval(normalize, 120);
+    window.addEventListener('casepath:render', () => requestAnimationFrame(normalize));
     normalize();
   }
 

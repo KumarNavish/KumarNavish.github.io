@@ -1,7 +1,6 @@
 (() => {
   'use strict';
 
-  const RELEASE = '18.0.0';
   const params = new URLSearchParams(location.search);
   const API = (params.get('api') || window.CASEPATH_API || 'https://casepath-agentic-api.onrender.com').replace(/\/$/, '');
   const stageOrder = ['read', 'understand', 'research', 'process', 'evidence', 'experience', 'verify'];
@@ -11,7 +10,7 @@
     research: { label: 'Research law', agent: 'Legal Research Agent', job: 'Connecting Swiss-law sources to the decisions they shape.' },
     process: { label: 'Build process', agent: 'Process Discovery Agent', job: 'Working out every decision from intake to resolution.' },
     evidence: { label: 'Map evidence', agent: 'Document Requirements Agent', job: 'Attaching facts and evidence needs to each process decision.' },
-    experience: { label: 'Find experience', agent: 'Historical Claims Agent', job: 'Finding reviewed claims that help at the difficult branch.' },
+    experience: { label: 'Find experience', agent: 'Historical Claims Agent', job: 'Finding provenance-labelled reference precedents at the difficult branch.' },
     verify: { label: 'Verify plan', agent: 'Verification Agent', job: 'Checking graph integrity, grounding, and document traceability.' },
   };
   const artifactLabels = {
@@ -20,7 +19,7 @@
     research: 'legal context',
     process: 'handling process',
     evidence: 'evidence model',
-    experience: 'reviewed experience',
+    experience: 'provenance-labelled reference precedents',
     verify: 'verified playbook',
   };
 
@@ -33,14 +32,23 @@
   const runCache = new Map();
   let scheduled = false;
   let highestPresentedStage = -1;
+  const sessionId = (() => { try { return sessionStorage.getItem('casepath:demo-session') || ''; } catch (_) { return ''; } })();
 
-  document.documentElement.dataset.casepathExperience = RELEASE;
-  window.CASEPATH_EXPERIENCE_RELEASE = RELEASE;
   window.CASEPATH_RUN_IDS = runIds;
 
   const originalFetch = window.fetch.bind(window);
   window.fetch = async (input, init = {}) => {
-    const response = await originalFetch(input, init);
+    let requestInit = init;
+    try {
+      const requestUrl = typeof input === 'string' || input instanceof URL ? String(input) : input.url;
+      if (new URL(requestUrl, location.href).origin === new URL(API).origin && sessionId) {
+        const headers = new Headers(typeof input === 'object' && input?.headers ? input.headers : undefined);
+        new Headers(init.headers || {}).forEach((value, key) => headers.set(key, value));
+        if (!headers.has('X-CasePath-Session')) headers.set('X-CasePath-Session', sessionId);
+        requestInit = { ...init, headers };
+      }
+    } catch (_) {}
+    const response = await originalFetch(input, requestInit);
     try {
       const requestUrl = typeof input === 'string' || input instanceof URL ? String(input) : input.url;
       const method = String(init.method || (typeof input === 'object' && input?.method) || 'GET').toUpperCase();
@@ -67,7 +75,7 @@
   }
 
   async function fetchJson(path) {
-    const response = await originalFetch(`${API}${path}`, { headers: { Accept: 'application/json' } });
+    const response = await originalFetch(`${API}${path}`, { headers: { Accept: 'application/json', ...(sessionId ? { 'X-CasePath-Session': sessionId } : {}) } });
     if (!response.ok) throw new Error(`${response.status} ${path}`);
     return response.json();
   }
@@ -132,7 +140,7 @@
       agent = stage.agent;
       label = stage.label;
       job = stage.job;
-      nextLabel = stages[stageOrder[index + 1]]?.label || 'Expert review';
+      nextLabel = stages[stageOrder[index + 1]]?.label || 'Demo review';
       context = progressContext(index);
       activeStage = current.stage;
     } else if (current.kind === 'ready') {
@@ -140,14 +148,14 @@
       state = 'complete';
       count = '✓';
       agent = 'CasePath team';
-      label = 'Ready for expert review';
-      job = 'The process, evidence model, and reviewed experience are together in one playbook.';
+      label = 'Ready for simulated review';
+      job = 'The process, evidence model, and provenance-labelled references are together in one playbook.';
       nextLabel = 'Review the playbook';
       context = progressContext(stageOrder.length - 1);
     } else if (current.kind === 'review') {
       state = 'human';
       count = 'EX';
-      agent = 'Expert review';
+      agent = 'Simulated demo review';
       label = 'Correct the reasoning where it matters';
       job = 'The process, evidence order, and next action update together.';
       nextLabel = 'Knowledge Agent';
@@ -157,18 +165,18 @@
       count = 'KA';
       agent = 'Knowledge Agent';
       label = 'Decide what can safely be reused';
-      job = 'Reviewed memory is immediate; shared playbook changes pass support and regression gates.';
+      job = 'Unverified demo memory is immediate; shared playbook changes still require qualified support and regression gates.';
       nextLabel = 'Unseen claim';
-      context = 'Expert correction → reviewed memory → tested playbook release.';
+      context = 'Simulated correction → unverified demo memory → quarantined shared-rule candidate.';
     } else if (current.kind === 'later') {
       state = 'reuse';
       count = '↻';
       const latest = [...canvas.querySelectorAll('.later-agent-row strong')].at(-1)?.textContent?.trim();
       agent = latest ? `${latest} specialist` : 'CasePath team';
       label = latest ? 'Re-running the unseen claim' : 'Opening an unseen claim';
-      job = 'The same agent team is working under the newly released playbook.';
-      nextLabel = canvas.querySelector('#laterResult .before-after') ? 'Improved result' : 'Next specialist';
-      context = 'Reviewed memory and playbook v4 are available to this new claim.';
+      job = 'The same team is checking whether unverified demo memory is actually retrieved.';
+      nextLabel = canvas.querySelector('#laterResult .before-after') ? 'Computed comparison' : 'Next specialist';
+      context = 'Unverified demo memory may be retrieved; the shared playbook remains unchanged.';
     }
 
     nav.innerHTML = `
@@ -203,7 +211,7 @@
     if (!run || !document.contains(canvas)) return;
     const completed = stageCompletedInCanvas(canvas, current.stage);
     const events = (run.events || []).filter(event => event.stage === current.stage);
-    const event = [...events].reverse().find(item => item.status === (completed ? 'completed' : 'started')) || events.at(-1);
+    const event = [...events].reverse().find(item => item.status === (completed ? 'completed' : 'started'));
     if (!event) return;
     const shell = canvas.querySelector('.stage-shell');
     if (!shell) return;
@@ -225,8 +233,8 @@
     if (!run || !document.contains(state)) return;
     const current = stageFromCanvas(canvas);
     const result = run.result || {};
-    const process = run.process || result.process || {};
-    const checklist = run.checklist || result.checklist || {};
+    const process = result.process || run.process || {};
+    const checklist = result.checklist || run.checklist || {};
     const precedents = run.precedents || result.precedents || [];
     const verification = run.verification || result.verification || {};
     const copy = {
@@ -241,8 +249,8 @@
         artifact: 'evidence_model',
       },
       experience: {
-        title: 'Reviewed experience connected to the difficult branch',
-        detail: `${precedents.length || 0} expert-reviewed claims were returned for the unresolved causation and evidence-order question.`,
+        title: 'Provenance-labelled references connected to the difficult branch',
+        detail: `${precedents.length || 0} reference precedents were returned with provenance and review-state labels.`,
         artifact: 'precedents',
       },
       verify: {
@@ -306,11 +314,11 @@
     if (!anchor) return;
     const rail = document.createElement('section');
     rail.className = 'v18-ready-artifacts';
-    rail.setAttribute('aria-label', 'The three artifacts ready for expert review');
+    rail.setAttribute('aria-label', 'The three artifacts ready for simulated demo review');
     rail.innerHTML = `
       <article><small>Handling process</small><strong>From intake to closure</strong><p>${(process.main_spine || []).length || 0} main decisions; the current claim remains at causation.</p></article>
       <article><small>Evidence</small><strong>Linked to each decision</strong><p>${(checklist.items || []).length || 0} fact-and-reason relationships, grouped by current status.</p></article>
-      <article><small>Previous cases</small><strong>At the difficult branch</strong><p>${precedents.length || 0} reviewed claims contribute institutional experience.</p></article>`;
+      <article><small>Previous cases</small><strong>At the difficult branch</strong><p>${precedents.length || 0} returned references are labelled by provenance and review state.</p></article>`;
     anchor.parentNode.insertBefore(rail, anchor);
   }
 
@@ -327,11 +335,11 @@
     if (!panel) {
       panel = document.createElement('section');
       panel.className = 'v18-review-propagation';
-      panel.setAttribute('aria-label', 'How the expert correction propagates');
+      panel.setAttribute('aria-label', 'How the simulated demo correction propagates');
       form.querySelector('#reviewImpact')?.before(panel);
     }
     const rows = reviewRows(form);
-    panel.innerHTML = `<header><small>Correction propagation</small><strong>One expert choice changes the generated artifacts together.</strong></header><div>${rows.map((row, index) => `<article><span>${index + 1}</span><small>${esc(row.label)}</small><strong>${esc(row.value)}</strong></article>`).join('')}</div>`;
+    panel.innerHTML = `<header><small>Simulated correction propagation</small><strong>One unverified demo choice changes the returned artifacts together.</strong></header><div>${rows.map((row, index) => `<article><span>${index + 1}</span><small>${esc(row.label)}</small><strong>${esc(row.value)}</strong></article>`).join('')}</div>`;
   }
 
   function markReviewGraph(canvas) {
@@ -366,12 +374,13 @@
     const run = await currentRun({ fresh: true, first: true });
     if (!run || !document.contains(flow)) return;
     const candidate = run.candidate || run.result?.knowledge_update || {};
+    if (!run.memory_id || !candidate.status || !candidate.base_version) return;
     const boundary = document.createElement('section');
     boundary.className = 'v18-memory-boundary';
     boundary.innerHTML = `
-      <article><small>Available immediately</small><strong>Reviewed claim memory</strong><p>The expert-reviewed case can now help later precedent retrieval.</p></article>
+      <article><small>Available for retrieval</small><strong>Unverified demo memory</strong><p>The server-returned demo memory can help later precedent retrieval; it is not qualified review.</p></article>
       <span aria-hidden="true"></span>
-      <article><small>Shared only after gates</small><strong>${esc(candidate.new_version || 'Approved playbook')}</strong><p>Support, target tests, protected regression, approval, and rollback are recorded before release.</p></article>`;
+      <article><small>Shared-rule candidate</small><strong>${esc(candidate.status)} · base ${esc(candidate.base_version)}</strong><p>Support, target tests, protected regression, and approval must be explicitly returned before any release is claimed.</p></article>`;
     flow.parentNode.insertBefore(boundary, flow);
   }
 
@@ -380,7 +389,7 @@
     if (!thread || thread.closest('.v18-reuse-proof')) return;
     const wrapper = document.createElement('section');
     wrapper.className = 'v18-reuse-proof';
-    wrapper.innerHTML = '<header><small>New organizational knowledge used</small><strong>This is the exact path from reviewed experience to a better unseen claim.</strong></header>';
+    wrapper.innerHTML = '<header><small>Unverified demo memory returned</small><strong>This trace implies neither qualified review nor release of the quarantined shared-rule candidate.</strong></header>';
     thread.parentNode.insertBefore(wrapper, thread);
     wrapper.append(thread);
   }
@@ -392,22 +401,8 @@
     map.setAttribute('aria-label', 'Swiss-law sources connected to the process decisions they shape');
   }
 
-  function markRelease() {
-    document.body.dataset.casepathRelease = RELEASE;
-    const evidenceLink = document.querySelector('#browserEvidenceLink');
-    if (evidenceLink) evidenceLink.textContent = 'Guided session evidence · v18';
-    const auditHeader = document.querySelector('#auditDrawer .audit-shell > header');
-    if (auditHeader && !auditHeader.querySelector('.v18-release-tag')) {
-      const tag = document.createElement('span');
-      tag.className = 'v18-release-tag';
-      tag.textContent = `Experience ${RELEASE}`;
-      evidenceLink?.before(tag);
-    }
-  }
-
   async function enhance() {
     renderProgress();
-    markRelease();
     const canvas = document.querySelector('#stageCanvas');
     if (!canvas) return;
     markLawAsBacked(canvas);
@@ -439,7 +434,7 @@
         performanceObserver.observe({ type: 'resource', buffered: true });
       } catch (_) {}
     }
-    window.setInterval(queueEnhancement, 450);
+    window.addEventListener('casepath:render', queueEnhancement);
     queueEnhancement();
   }
 

@@ -1,22 +1,6 @@
 (() => {
   'use strict';
 
-  const RELEASE = '20.0.0';
-  const NODE_IDS = {
-    'Claim intake': 'intake',
-    'Tenant-law scope': 'scope',
-    'Existence of a dispute': 'dispute',
-    'Urgency and safety': 'urgency',
-    'Landlord notification': 'notification',
-    'Defect and recurrence': 'defect',
-    'Causation assessment': 'causation',
-    'Responsibility': 'responsibility',
-    'Remedy selection': 'remedy',
-    'Escalation': 'escalation',
-    'Resolution and closure': 'resolution',
-    'Causation evidence loop': 'evidence_gap',
-    'Test the ventilation allegation': 'ventilation_dispute',
-  };
   const MOMENT_COPY = {
     process: {
       eyebrow: 'Process Discovery Agent complete',
@@ -31,7 +15,7 @@
     experience: {
       eyebrow: 'Historical Claims Agent complete',
       title: 'Previous experience at the difficult decision',
-      detail: 'Reviewed cases contribute where the current process is uncertain.',
+      detail: 'Returned precedents contribute where the current process is uncertain and remain labelled by provenance.',
     },
     verify: {
       eyebrow: 'Verification Agent complete',
@@ -39,12 +23,12 @@
       detail: 'Unsupported links were rejected. The remaining process and evidence relationships are ready for review.',
     },
     ready: {
-      eyebrow: 'Ready for expert review',
+      eyebrow: 'Ready for simulated review',
       title: 'Handling playbook',
       detail: 'Review the process itself. Supporting evidence, law, and experience are attached to its decisions.',
     },
     review: {
-      eyebrow: 'Expert review',
+      eyebrow: 'Simulated demo review',
       title: 'Correct the decision that changes the downstream process',
       detail: 'The selected evidence order updates the process, evidence requirements, and next action together.',
     },
@@ -68,6 +52,7 @@
     const canvas = $('#stageCanvas');
     if (visible(start)) return 'start';
     if (!canvas) return 'opening';
+    if (canvas.dataset.casepathMoment) return canvas.dataset.casepathMoment;
     if (canvas.querySelector('#reviewForm')) return 'review';
     if (canvas.querySelector('.knowledge-agent')) return 'knowledge';
     if (canvas.querySelector('.later-run')) {
@@ -87,14 +72,6 @@
     if (/separated what is known/i.test(text)) return 'understand';
     if (/original submission is in the shared claim context|Reading the message/i.test(text)) return 'read';
     return 'opening';
-  }
-
-  function markRelease() {
-    document.documentElement.dataset.casepathRelease = RELEASE;
-    document.body.dataset.casepathRelease = RELEASE;
-    window.CASEPATH_EXPERIENCE_RELEASE = RELEASE;
-    const meta = $('meta[name="casepath-release"]');
-    if (meta && meta.content !== RELEASE) meta.content = RELEASE;
   }
 
   function updateClaimReadiness() {
@@ -158,16 +135,12 @@
       button.type = 'button';
       button.className = 'v20-quiet-action';
       button.dataset.v20OpenDocuments = 'true';
+      button.setAttribute('aria-haspopup', 'dialog');
+      button.setAttribute('aria-controls', 'v20DocumentSheet');
+      button.setAttribute('aria-expanded', 'false');
       button.textContent = 'View document needs';
       actions?.append(button);
     }
-  }
-
-  function checklistNodeId(item) {
-    const relation = item.querySelector('p')?.textContent || '';
-    const match = relation.match(/Required for:\s*([^·]+)/i);
-    if (!match) return '';
-    return NODE_IDS[match[1].trim()] || '';
   }
 
   function ensureDocumentSheet(canvas) {
@@ -175,23 +148,23 @@
     const workPane = $('.work-pane');
     if (!checklist || !workPane || workPane.querySelector('.v20-document-sheet')) return;
 
-    const sheet = document.createElement('section');
+    const sheet = document.createElement('dialog');
+    sheet.id = 'v20DocumentSheet';
     sheet.className = 'v20-document-sheet';
-    sheet.hidden = true;
-    sheet.setAttribute('aria-label', 'Complete document needs derived from the handling process');
+    sheet.setAttribute('aria-labelledby', 'v20DocumentTitle');
     const clone = checklist.cloneNode(true);
     clone.removeAttribute('class');
     clone.className = 'v20-document-checklist';
     for (const item of $$('.v17-checklist-item', clone)) {
-      const nodeId = checklistNodeId(item);
-      if (nodeId) item.dataset.v20NodeId = nodeId;
+      const nodeId = item.dataset.nodeId || '';
+      item.dataset.v20NodeId = nodeId;
       item.tabIndex = 0;
       item.setAttribute('role', 'button');
       item.setAttribute('aria-label', `${item.querySelector('strong')?.textContent || 'Document need'}; open its process decision`);
     }
     sheet.innerHTML = `
       <header>
-        <div><span class="quiet-label">Derived from the process</span><h2>Document needs</h2><p>Every item returns to the decision that requires it.</p></div>
+        <div><span class="quiet-label">Derived from the process</span><h2 id="v20DocumentTitle">Document needs</h2><p>Every item keeps its item, decision, and fact identifiers and returns to the decision that requires it.</p></div>
         <button class="icon-button" type="button" data-v20-close-documents aria-label="Return to handling process"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
       </header>
       <div class="v20-document-body"></div>`;
@@ -202,20 +175,23 @@
   function openDocuments() {
     const sheet = $('.v20-document-sheet');
     if (!sheet) return;
-    sheet.hidden = false;
+    openDocuments.returnFocus = $('[data-v20-open-documents]');
+    $('[data-v20-open-documents]')?.setAttribute('aria-expanded', 'true');
+    if (!sheet.open) sheet.showModal();
     sheet.querySelector('[data-v20-close-documents]')?.focus();
   }
 
   function closeDocuments({ nodeId = '' } = {}) {
     const sheet = $('.v20-document-sheet');
     if (!sheet) return;
-    sheet.hidden = true;
+    if (sheet.open) sheet.close();
+    $('[data-v20-open-documents]')?.setAttribute('aria-expanded', 'false');
     if (nodeId) {
-      const target = $(`.process-node-button[data-node-id="${CSS.escape(nodeId)}"]`, $('#stageCanvas'));
+      const target = $(`.process-node-button[data-node-id="${CSS.escape(nodeId)}"],.process-branch-node[data-node-id="${CSS.escape(nodeId)}"]`, $('#stageCanvas'));
       target?.click();
-      requestAnimationFrame(() => target?.focus());
+      requestAnimationFrame(() => $(`.process-node-button[data-node-id="${CSS.escape(nodeId)}"],.process-branch-node[data-node-id="${CSS.escape(nodeId)}"]`, $('#stageCanvas'))?.focus());
     } else {
-      $('[data-v20-open-documents]')?.focus();
+      openDocuments.returnFocus?.focus();
     }
   }
 
@@ -223,9 +199,9 @@
     const form = canvas?.querySelector('#reviewForm');
     if (!form) return;
     const submit = form.querySelector('button[type="submit"] span');
-    if (submit && /Approve correction/i.test(submit.textContent || '')) submit.textContent = 'Apply correction';
+    if (submit && /Apply demo correction/i.test(submit.textContent || '')) submit.textContent = 'Apply demo correction';
     const label = form.querySelector(':scope > .quiet-label');
-    if (label && label.textContent !== 'Expert decision') label.textContent = 'Expert decision';
+    if (label && label.textContent !== 'Simulated reviewer choice') label.textContent = 'Simulated reviewer choice';
     if (!form.querySelector('.v20-review-note')) {
       const note = document.createElement('p');
       note.className = 'v20-review-note';
@@ -234,55 +210,16 @@
     }
   }
 
-  function learningText(canvas) {
-    const correctionRows = $$('.v17-review-applied .v17-review-delta article', canvas)
-      .map(row => row.querySelector('strong')?.textContent?.trim())
-      .filter(Boolean);
-    const rule = canvas.querySelector('.knowledge-release h3')?.textContent?.trim()
-      || 'Use competent evidence before expanding the causation investigation.';
-    const version = canvas.querySelector('.version-shift')?.textContent?.replace(/\s+/g, ' ').trim()
-      || 'The reviewed playbook is versioned and recoverable.';
-    const support = canvas.querySelector('.v19-support-meter strong')?.textContent?.trim()
-      || canvas.querySelector('.knowledge-step:nth-child(2) p')?.textContent?.trim()
-      || 'Repeated reviewed evidence supported the shared change.';
-    return {
-      correction: correctionRows.slice(0, 2).join(' ') || 'The expert kept causation unresolved and made broader testing conditional on the first neutral assessment.',
-      rule,
-      version,
-      support,
-    };
-  }
-
   function focusKnowledge(canvas) {
-    const result = canvas?.querySelector('#knowledgeResult');
-    if (!result || !result.querySelector('.knowledge-flow')) return;
-    let summary = canvas.querySelector('.v20-learning-summary');
-    const copy = learningText(canvas);
-    const fingerprint = JSON.stringify(copy);
-    if (!summary) {
-      summary = document.createElement('section');
-      summary.className = 'v20-learning-summary';
-      result.prepend(summary);
+    if (canvas?.querySelector('.v20-learning-summary') && document.body.dataset.casepathLearningReady !== 'true') {
+      document.body.dataset.casepathLearningReady = 'true';
     }
-    if (summary.dataset.fingerprint !== fingerprint) {
-      summary.dataset.fingerprint = fingerprint;
-      summary.innerHTML = `
-        <span>What CasePath learned</span>
-        <h2>Reviewed knowledge is ready for the next claim.</h2>
-        <article class="v20-learning-row"><span>✓</span><div><small>Reviewed case saved</small><strong>This claim can now help future precedent retrieval.</strong><p>The original evidence, reviewed process path, and expert decision remain traceable together.</p></div></article>
-        <article class="v20-learning-row"><span>✓</span><div><small>Expert correction captured</small><strong>${esc(copy.correction)}</strong></div></article>
-        <article class="v20-learning-row"><span>✓</span><div><small>Shared playbook change</small><strong>${esc(copy.rule)}</strong><p>${esc(copy.support)} ${esc(copy.version)}</p></div></article>`;
-    }
-    if (document.body.dataset.casepathLearningReady !== 'true') document.body.dataset.casepathLearningReady = 'true';
   }
 
   function focusLater(canvas) {
     const result = canvas?.querySelector('#laterResult');
-    if (!result?.querySelector('.before-after') || result.querySelector('.v20-later-heading')) return;
-    const heading = document.createElement('header');
-    heading.className = 'v20-later-heading';
-    heading.innerHTML = `<small>Reviewed knowledge used</small><h2>The next claim starts with a better evidence path.</h2><p>CasePath retrieved the reviewed flagship claim, made the ventilation allegation explicit, and avoided an unnecessary immediate request.</p>`;
-    result.prepend(heading);
+    if (!result?.querySelector('.before-after')) return;
+    result.dataset.v20LaterReady = 'true';
   }
 
   function setMoment(moment) {
@@ -293,7 +230,6 @@
   }
 
   function enhance() {
-    markRelease();
     normalizeStart();
     updateClaimReadiness();
     const canvas = $('#stageCanvas');
@@ -343,7 +279,7 @@
       event.preventDefault();
       closeDocuments({ nodeId: item.dataset.v20NodeId || '' });
     }
-    if (event.key === 'Escape' && !$('.v20-document-sheet')?.hidden) closeDocuments();
+    if (event.key === 'Escape' && $('.v20-document-sheet')?.open) closeDocuments();
   }
 
   function boot() {
@@ -353,7 +289,7 @@
     for (const target of [document.body, $('#stageCanvas'), $('#agentProgress'), $('#submissionContent')]) {
       if (target) observer.observe(target, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class', 'data-active-stage'] });
     }
-    window.setInterval(queueEnhance, 900);
+    window.addEventListener('casepath:render', queueEnhance);
     queueEnhance();
   }
 
