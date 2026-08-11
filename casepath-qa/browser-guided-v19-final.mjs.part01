@@ -76,6 +76,7 @@
   await waitVisible('.v18-progress-focus[data-active-stage="research"]');
   await waitVisible('.v17-law-map[data-v18-backed="true"]');
   check('Swiss-law sources visibly connect to process decisions', await page.locator('.v17-law-link').count() >= 3 && await page.locator('.v17-law-target').count() >= 3);
+  await page.waitForFunction(() => document.querySelectorAll('.v17-law-details:not([open])').length === 1, null, { timeout: 30000 });
   check('Full legal questions remain secondary', await page.locator('.v17-law-details:not([open])').count() === 1);
   await screenshot('06-law-shapes-process.png');
 
