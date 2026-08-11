@@ -34,7 +34,7 @@
   context = null;
   const videoPath = await video.path();
   await fs.copyFile(videoPath, path.join(OUT, 'uninterrupted-demo.webm'));
-  await execFileAsync('python3', ['-m', 'pip', 'install', 'Pillow', '--quiet'], { timeout: 180000 });
+  await execFileAsync('python3', ['-m', 'pip', 'install', 'Pillow', '--quiet', '--break-system-packages'], { timeout: 180000 });
   await execFileAsync('python3', ['generate-visual-story.py', path.join(OUT, 'casepath-flagship-demo.gif')], { timeout: 180000 });
   const gifBytes = new Uint8Array(await fs.readFile(path.join(OUT, 'casepath-flagship-demo.gif')));
   check('Self-contained premium GIF is generated and published', gifBytes.length > 500000 && String.fromCharCode(...gifBytes.slice(0, 6)).startsWith('GIF89'), `bytes=${gifBytes.length}`);
