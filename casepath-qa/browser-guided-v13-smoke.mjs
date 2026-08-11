@@ -9,6 +9,10 @@ const source = (await fs.readFile(sourceUrl, 'utf8'))
   .replace(
     "check('CasePath v20 is loaded', await page.evaluate(() => window.CASEPATH_EXPERIENCE_RELEASE === '20.0.0'));",
     "check('CasePath v20 is loaded', await page.evaluate(() => document.body.dataset.casepathRelease === '20.0.0'));",
+  )
+  .replace(
+    '.decision-inspector[data-inspector-node="causation"]',
+    '.decision-inspector[data-inspector-node]',
   );
 await fs.writeFile(runtimeUrl, source);
 await import(runtimeUrl.href);
