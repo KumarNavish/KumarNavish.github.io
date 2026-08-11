@@ -55,8 +55,8 @@
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
-  const esc = (value = '') => String(value).replace(/[&<>'\"]/g, character => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '\"': '&quot;'
+  const esc = (value = '') => String(value).replace(/[&<>'"]/g, character => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
   }[character]));
 
   function visible(element) {
@@ -94,17 +94,17 @@
     document.body.dataset.casepathRelease = RELEASE;
     window.CASEPATH_EXPERIENCE_RELEASE = RELEASE;
     const meta = $('meta[name="casepath-release"]');
-    if (meta) meta.content = RELEASE;
+    if (meta && meta.content !== RELEASE) meta.content = RELEASE;
   }
 
   function updateClaimReadiness() {
     const ready = $$('.attachment-row').length > 0 && Boolean($('#customerEmail .email-body'));
-    document.body.dataset.claimReady = String(ready);
+    if (document.body.dataset.claimReady !== String(ready)) document.body.dataset.claimReady = String(ready);
     const button = $('#runCasePath');
     if (button && visible($('#startState'))) {
-      button.disabled = !ready;
+      if (button.disabled === ready) button.disabled = !ready;
       const label = button.querySelector('span');
-      if (label && ready && !/Opening|Could not/i.test(label.textContent || '')) label.textContent = 'Analyse claim';
+      if (label && ready && !/Opening|Could not/i.test(label.textContent || '') && label.textContent !== 'Analyse claim') label.textContent = 'Analyse claim';
     }
     const header = $('#headerClaimId');
     if (header && !ready && /Loading claim/i.test(header.textContent || '')) header.textContent = 'Opening claim…';
@@ -132,7 +132,7 @@
         if (text === 'Why this step exists') heading.textContent = 'Relevant law';
       }
       const precedent = inspector.querySelector('.precedent-inline h4');
-      if (precedent) precedent.textContent = 'Previous experience that may help';
+      if (precedent && precedent.textContent !== 'Previous experience that may help') precedent.textContent = 'Previous experience that may help';
     }
   }
 
@@ -146,18 +146,20 @@
       header.className = 'v20-artifact-header';
       shell.prepend(header);
     }
-    header.dataset.moment = moment;
-    header.innerHTML = `
-      <div><small>${esc(copy.eyebrow)}</small><h2>${esc(copy.title)}</h2><p>${esc(copy.detail)}</p></div>
-      <div class="v20-artifact-actions"></div>`;
+    if (header.dataset.moment !== moment) {
+      header.dataset.moment = moment;
+      header.innerHTML = `
+        <div><small>${esc(copy.eyebrow)}</small><h2>${esc(copy.title)}</h2><p>${esc(copy.detail)}</p></div>
+        <div class="v20-artifact-actions"></div>`;
+    }
     const actions = header.querySelector('.v20-artifact-actions');
-    if (moment === 'ready' && canvas.querySelector('.v17-derived-checklist')) {
+    if (moment === 'ready' && canvas.querySelector('.v17-derived-checklist') && !actions?.querySelector('[data-v20-open-documents]')) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'v20-quiet-action';
       button.dataset.v20OpenDocuments = 'true';
       button.textContent = 'View document needs';
-      actions.append(button);
+      actions?.append(button);
     }
   }
 
@@ -223,7 +225,7 @@
     const submit = form.querySelector('button[type="submit"] span');
     if (submit && /Approve correction/i.test(submit.textContent || '')) submit.textContent = 'Apply correction';
     const label = form.querySelector(':scope > .quiet-label');
-    if (label) label.textContent = 'Expert decision';
+    if (label && label.textContent !== 'Expert decision') label.textContent = 'Expert decision';
     if (!form.querySelector('.v20-review-note')) {
       const note = document.createElement('p');
       note.className = 'v20-review-note';
@@ -256,18 +258,22 @@
     if (!result || !result.querySelector('.knowledge-flow')) return;
     let summary = canvas.querySelector('.v20-learning-summary');
     const copy = learningText(canvas);
+    const fingerprint = JSON.stringify(copy);
     if (!summary) {
       summary = document.createElement('section');
       summary.className = 'v20-learning-summary';
       result.prepend(summary);
     }
-    summary.innerHTML = `
-      <span>What CasePath learned</span>
-      <h2>Reviewed knowledge is ready for the next claim.</h2>
-      <article class="v20-learning-row"><span>✓</span><div><small>Reviewed case saved</small><strong>This claim can now help future precedent retrieval.</strong><p>The original evidence, reviewed process path, and expert decision remain traceable together.</p></div></article>
-      <article class="v20-learning-row"><span>✓</span><div><small>Expert correction captured</small><strong>${esc(copy.correction)}</strong></div></article>
-      <article class="v20-learning-row"><span>✓</span><div><small>Shared playbook change</small><strong>${esc(copy.rule)}</strong><p>${esc(copy.support)} ${esc(copy.version)}</p></div></article>`;
-    document.body.dataset.casepathLearningReady = 'true';
+    if (summary.dataset.fingerprint !== fingerprint) {
+      summary.dataset.fingerprint = fingerprint;
+      summary.innerHTML = `
+        <span>What CasePath learned</span>
+        <h2>Reviewed knowledge is ready for the next claim.</h2>
+        <article class="v20-learning-row"><span>✓</span><div><small>Reviewed case saved</small><strong>This claim can now help future precedent retrieval.</strong><p>The original evidence, reviewed process path, and expert decision remain traceable together.</p></div></article>
+        <article class="v20-learning-row"><span>✓</span><div><small>Expert correction captured</small><strong>${esc(copy.correction)}</strong></div></article>
+        <article class="v20-learning-row"><span>✓</span><div><small>Shared playbook change</small><strong>${esc(copy.rule)}</strong><p>${esc(copy.support)} ${esc(copy.version)}</p></div></article>`;
+    }
+    if (document.body.dataset.casepathLearningReady !== 'true') document.body.dataset.casepathLearningReady = 'true';
   }
 
   function focusLater(canvas) {
