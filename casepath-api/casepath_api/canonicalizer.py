@@ -34,8 +34,8 @@ OPENROUTER_ACCEPTED_RESPONSE_MODELS = {OPENROUTER_MODEL, OPENROUTER_CANONICAL_MO
 OPENROUTER_PROVIDER = "openrouter"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_GENERATION_URL = "https://openrouter.ai/api/v1/generation"
-CANONICALIZER_VERSION = "1.5.0"
-PROMPT_VERSION = "canonical-facts/1.4.0"
+CANONICALIZER_VERSION = "1.6.0"
+PROMPT_VERSION = "canonical-facts/1.5.0"
 SCHEMA_VERSION = "casepath.canonical-facts/1.4.0"
 NORMALIZED_VALUES = [
     "absent",
@@ -711,6 +711,7 @@ def _merge_fact_contracts(
     merged: list[dict[str, Any]] = []
     accepted_fact_ids: list[str] = []
     rejected_facts: list[dict[str, str]] = []
+    source_reference_projection_fact_ids: list[str] = []
     ignored_noncontrolling_normalized_proposals = 0
     for returned_fact in output["facts"]:
         fact_id = returned_fact["fact_id"]
@@ -798,6 +799,7 @@ def _merge_fact_contracts(
             raise ModelConfigurationError("Fact catalog bounded enrichments are invalid")
 
         rejection_invariant: str | None = None
+        source_reference_projection_required = False
         returned_ref_ids = returned_fact.get("source_ref_ids")
         provider_confidence = returned_fact.get("confidence")
         if set(returned_fact) != PROVIDER_FACT_FIELDS:
@@ -824,26 +826,30 @@ def _merge_fact_contracts(
             rejection_invariant = "source_reference_ids"
         elif set(returned_ref_ids) - set(registry_by_id):
             rejection_invariant = "source_reference_registry"
-        elif set(returned_ref_ids) != {
-            resolve_observable_source_reference_id(ref, source_reference_registry)
-            for ref in admissible_text_refs
-        }:
-            rejection_invariant = "source_reference_set"
+        else:
+            source_reference_projection_required = set(returned_ref_ids) != {
+                resolve_observable_source_reference_id(ref, source_reference_registry)
+                for ref in admissible_text_refs
+            }
 
         if not controls_process and returned_fact.get("normalized_value") is not None:
             ignored_noncontrolling_normalized_proposals += 1
         if rejection_invariant is None:
             accepted_fact_ids.append(fact_id)
-            fact_refs = [
-                {
-                    "artifact_id": registry_by_id[ref_id]["artifact_id"],
-                    "locator_kind": "text_quote",
-                    "page": registry_by_id[ref_id]["page"],
-                    "excerpt": registry_by_id[ref_id]["excerpt"],
-                    "agent": "OpenRouter Nemotron Canonicalizer",
-                }
-                for ref_id in returned_ref_ids
-            ]
+            if source_reference_projection_required:
+                source_reference_projection_fact_ids.append(fact_id)
+                fact_refs = deterministic_text_refs
+            else:
+                fact_refs = [
+                    {
+                        "artifact_id": registry_by_id[ref_id]["artifact_id"],
+                        "locator_kind": "text_quote",
+                        "page": registry_by_id[ref_id]["page"],
+                        "excerpt": registry_by_id[ref_id]["excerpt"],
+                        "agent": "OpenRouter Nemotron Canonicalizer",
+                    }
+                    for ref_id in returned_ref_ids
+                ]
             confidence = provider_confidence
         else:
             rejected_facts.append({"fact_id": fact_id, "invariant": rejection_invariant})
@@ -870,6 +876,8 @@ def _merge_fact_contracts(
         "accepted_fact_count": len(accepted_fact_ids),
         "rejected_facts": rejected_facts,
         "rejected_fact_count": len(rejected_facts),
+        "source_reference_projection_fact_ids": source_reference_projection_fact_ids,
+        "source_reference_projection_count": len(source_reference_projection_fact_ids),
         "deterministic_fallback_applied": bool(rejected_facts),
         "ignored_noncontrolling_normalized_proposals": (
             ignored_noncontrolling_normalized_proposals
@@ -895,6 +903,8 @@ def _validated_hybrid_diagnostics(
         "accepted_fact_count",
         "rejected_facts",
         "rejected_fact_count",
+        "source_reference_projection_fact_ids",
+        "source_reference_projection_count",
         "deterministic_fallback_applied",
         "ignored_noncontrolling_normalized_proposals",
     }
@@ -902,6 +912,7 @@ def _validated_hybrid_diagnostics(
         raise ModelConfigurationError("Cached hybrid diagnostics are invalid")
     accepted = value["accepted_fact_ids"]
     rejected = value["rejected_facts"]
+    projected = value["source_reference_projection_fact_ids"]
     if (
         value["authority_mode"] != "hybrid_guarded"
         or not isinstance(accepted, list)
@@ -923,6 +934,13 @@ def _validated_hybrid_diagnostics(
         or set(accepted) & {item["fact_id"] for item in rejected}
         or set(accepted) | {item["fact_id"] for item in rejected} != allowed_fact_ids
         or value["rejected_fact_count"] != len(rejected)
+        or not isinstance(projected, list)
+        or any(
+            not isinstance(fact_id, str) or fact_id not in accepted
+            for fact_id in projected
+        )
+        or len(set(projected)) != len(projected)
+        or value["source_reference_projection_count"] != len(projected)
         or value["deterministic_fallback_applied"] is not bool(rejected)
         or not isinstance(value["ignored_noncontrolling_normalized_proposals"], int)
         or isinstance(value["ignored_noncontrolling_normalized_proposals"], bool)
@@ -1082,6 +1100,8 @@ class OpenRouterNemotronCanonicalizer:
             "support the proposed fact state, including the smallest passage from every observable side of a conflict, "
             "and return an empty array when no candidate supports it. Choose normalized_value "
             "only from allowed_normalized_values; use null when that field is null. "
+            "Treat source_ref_ids as bounded evidence proposals: the application independently validates them and "
+            "projects the authoritative exact source bindings. "
             "Do not return value, explanation, controls_process, decision_key, or decision_value: the application owns and "
             "deterministically attaches canonical prose and all process metadata after this call."
         )

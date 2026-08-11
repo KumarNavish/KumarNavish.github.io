@@ -360,6 +360,8 @@ class Storage:
             "accepted_fact_count",
             "rejected_facts",
             "rejected_fact_count",
+            "source_reference_projection_fact_ids",
+            "source_reference_projection_count",
             "accepted_item_ids",
             "accepted_item_count",
             "rejected_items",

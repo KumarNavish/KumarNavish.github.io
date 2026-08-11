@@ -107,10 +107,10 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
             release_tool.REPOSITORY
             / f"casepath/releases/model-validation-attempt-20260811-{number:02d}.json"
         )
-        for number in range(1, 5)
+        for number in range(1, 6)
     }
-    attempt_1, attempt_2, attempt_3, attempt_4 = (
-        attempts[number] for number in range(1, 5)
+    attempt_1, attempt_2, attempt_3, attempt_4, attempt_5 = (
+        attempts[number] for number in range(1, 6)
     )
     for evidence in attempts.values():
         assert evidence["status"] == "failed_closed"
@@ -183,11 +183,36 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         "ledger_outcome": "failed",
         "canonical_result_accepted": False,
     }
+    assert attempt_5["provider_observation"] == {
+        "provider": "openrouter",
+        "provider_outcome": "succeeded",
+        "response_model": "nvidia/nemotron-3-ultra-550b-a55b",
+        "response_id": "gen-1786475792-xFaK7MHwa5i0FStRHruR",
+        "actual_cost_usd": 0.0157931,
+        "prompt_tokens": 23141,
+        "completion_tokens": 1931,
+        "total_tokens": 25072,
+        "finish_reason": "stop",
+    }
+    assert attempt_5["application_result"] == {
+        "outcome": "rejected",
+        "failure_type": "hybrid_model_contribution_strict_majority",
+        "successful_ledger_call_bound": False,
+        "ledger_call_id": "modelcall_ef72cb958e5c9e63",
+        "ledger_outcome": "failed",
+        "canonical_result_accepted": False,
+        "accepted_fact_count": 7,
+        "rejected_fact_count": 11,
+        "rejected_invariants": {
+            "source_reference_set": 10,
+            "canonical_state": 1,
+        },
+    }
     assert sum(
         attempt["provider_observation"]["actual_cost_usd"]
         for attempt in attempts.values()
         if "actual_cost_usd" in attempt["provider_observation"]
-    ) == pytest.approx(0.0192470)
+    ) == pytest.approx(0.0350401)
     assert "actual_cost_usd" not in attempt_3["provider_observation"]
     assert "prompt_tokens" not in attempt_3["provider_observation"]
     assert attempt_3["provider_observation"]["charge_status"] == "unknown_unconfirmed"
@@ -244,6 +269,12 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
                 ],
                 "accepted_count": 3,
                 "rejected_count": 0,
+                "source_reference_projection_fact_ids": (
+                    [] if agent_id == "canonical_facts" else None
+                ),
+                "source_reference_projection_count": (
+                    0 if agent_id == "canonical_facts" else None
+                ),
                 "deterministic_fallback_applied": False,
                 "input_artifact_hash": f"{index:064x}",
                 "output_artifact_hash": f"{index + 100:064x}",
@@ -362,6 +393,12 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
                     {
                         "accepted_fact_count": agent["accepted_count"],
                         "rejected_fact_count": agent["rejected_count"],
+                        "source_reference_projection_fact_ids": agent[
+                            "source_reference_projection_fact_ids"
+                        ],
+                        "source_reference_projection_count": agent[
+                            "source_reference_projection_count"
+                        ],
                     }
                     if agent["agent_id"] == "canonical_facts"
                     else {
