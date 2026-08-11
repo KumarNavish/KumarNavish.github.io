@@ -15,6 +15,7 @@
     'v18-reuse-proof',
   ];
   const originalInsertBefore = Node.prototype.insertBefore;
+  const originalInsertAdjacentHTML = Element.prototype.insertAdjacentHTML;
 
   Node.prototype.insertBefore = function guardedInsertBefore(newNode, referenceNode) {
     if (newNode instanceof Element) {
@@ -25,6 +26,11 @@
       }
     }
     return originalInsertBefore.call(this, newNode, referenceNode);
+  };
+
+  Element.prototype.insertAdjacentHTML = function guardedInsertAdjacentHTML(position, markup) {
+    if (typeof markup === 'string' && markup.includes('data-event-source="presented-backend-event"')) return;
+    return originalInsertAdjacentHTML.call(this, position, markup);
   };
 
   const nativeFetch = window.fetch.bind(window);
@@ -77,6 +83,6 @@
     });
   }
 
-  window.CASEPATH_INSERTION_GUARD = '19.0.0';
+  window.CASEPATH_INSERTION_GUARD = '19.0.1';
   window.CASEPATH_RUNTIME_STABILITY = '19.0.0';
 })();
