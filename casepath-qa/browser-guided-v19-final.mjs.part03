@@ -12,6 +12,7 @@
   ]) {
     await page.setViewportSize(viewport);
     await sleep(300);
+    await waitVisible('.v19-team-rail', 30000);
     const overflow = await horizontalOverflow();
     check(`${viewport.name}px has no page-level horizontal overflow`, overflow <= 1, `overflow=${overflow}`);
     check(`${viewport.name}px keeps the claim available`, await page.locator('.submission-pane').isVisible());
