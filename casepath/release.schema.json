@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://casepath.invalid/schemas/release-contract-2.1.0.json",
+  "$id": "https://casepath.invalid/schemas/release-contract-2.2.0.json",
   "title": "CasePath release contract",
   "type": "object",
   "additionalProperties": false,
@@ -21,8 +21,8 @@
   ],
   "properties": {
     "$schema": { "type": "string" },
-    "contract": { "const": "casepath.release-contract/2.1.0" },
-    "schema_version": { "const": "2.1.0" },
+    "contract": { "const": "casepath.release-contract/2.2.0" },
+    "schema_version": { "const": "2.2.0" },
     "release_id": { "type": "string", "pattern": "^casepath-[a-z0-9-]+$" },
     "released_on": { "type": "string", "format": "date" },
     "product": { "type": "string", "minLength": 1 },
@@ -216,7 +216,8 @@
             "requires_accepted_majority_per_agent",
             "requires_cold_network_run",
             "requires_deterministic_gate_passes",
-            "requires_guarded_fallback_disclosure"
+            "requires_guarded_fallback_disclosure",
+            "requires_source_reference_projection_disclosure"
           ],
           "properties": {
             "verdict_authority": { "const": "dynamic_same_commit_qa_artifacts" },
@@ -263,7 +264,8 @@
             "requires_accepted_majority_per_agent": { "const": true },
             "requires_cold_network_run": { "const": true },
             "requires_deterministic_gate_passes": { "const": true },
-            "requires_guarded_fallback_disclosure": { "const": true }
+            "requires_guarded_fallback_disclosure": { "const": true },
+            "requires_source_reference_projection_disclosure": { "const": true }
           }
         },
         "historical_model_validation": {
@@ -281,7 +283,8 @@
                 "casepath/releases/model-validation-attempt-20260811-01.json",
                 "casepath/releases/model-validation-attempt-20260811-02.json",
                 "casepath/releases/model-validation-attempt-20260811-03.json",
-                "casepath/releases/model-validation-attempt-20260811-04.json"
+                "casepath/releases/model-validation-attempt-20260811-04.json",
+                "casepath/releases/model-validation-attempt-20260811-05.json"
               ]
             },
             "establishes_current_runtime_acceptance": { "const": false }

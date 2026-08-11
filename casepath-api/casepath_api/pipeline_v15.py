@@ -1216,7 +1216,9 @@ class ClaimPipeline:
             summary = (
                 "Model-assisted hybrid canonicalization accepted "
                 f"{diagnostics['accepted_fact_count']} bounded fact contributions; deterministic fallback "
-                f"replaced {diagnostics['rejected_fact_count']} rejected proposals. Consequential uncertainty "
+                f"replaced {diagnostics['rejected_fact_count']} rejected proposals, and the deterministic source "
+                f"gate projected {diagnostics['source_reference_projection_count']} authoritative citation sets. "
+                "Consequential uncertainty "
                 "remains explicit."
             )
             issues = [
@@ -1317,9 +1319,15 @@ class ClaimPipeline:
             accepted_ids=canonicalization.get("diagnostics", {}).get("accepted_fact_ids", []),
             accepted_count=canonicalization.get("diagnostics", {}).get("accepted_fact_count"),
             rejected_count=canonicalization.get("diagnostics", {}).get("rejected_fact_count"),
-            deterministic_fallback_applied=bool(
-                canonicalization.get("diagnostics", {}).get("rejected_fact_count")
-            ),
+            source_reference_projection_fact_ids=canonicalization.get(
+                "diagnostics", {}
+            ).get("source_reference_projection_fact_ids", []),
+            source_reference_projection_count=canonicalization.get(
+                "diagnostics", {}
+            ).get("source_reference_projection_count", 0),
+            deterministic_fallback_applied=canonicalization.get(
+                "diagnostics", {}
+            ).get("deterministic_fallback_applied", False),
             input_artifact="observable_claim_package",
             external_tracing=False,
         )

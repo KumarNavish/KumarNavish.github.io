@@ -265,6 +265,8 @@ def test_openrouter_request_is_one_bounded_exact_model_structured_call(tmp_path:
         "accepted_fact_count": 1,
         "rejected_facts": [],
         "rejected_fact_count": 0,
+        "source_reference_projection_fact_ids": [],
+        "source_reference_projection_count": 0,
         "deterministic_fallback_applied": False,
         "ignored_noncontrolling_normalized_proposals": 0,
     }
@@ -464,10 +466,10 @@ def test_partial_guarded_fallback_preserves_diagnostics_and_cache(tmp_path: Path
         output = json.loads(value["choices"][0]["message"]["content"])
         output["facts"][0]["confidence"] = 0.37
         output["facts"].append(
-            {
-                "fact_id": "fact_context",
-                "label": "Context detail",
-                "state": "known",
+                {
+                    "fact_id": "fact_context",
+                    "label": "Context detail",
+                    "state": "unknown",
                 "source_ref_ids": [],
                 "confidence": 0.99,
                 "normalized_value": None,
@@ -505,9 +507,11 @@ def test_partial_guarded_fallback_preserves_diagnostics_and_cache(tmp_path: Path
         "accepted_fact_ids": ["fact_report", "fact_background"],
         "accepted_fact_count": 2,
         "rejected_facts": [
-            {"fact_id": "fact_context", "invariant": "source_reference_set"}
+            {"fact_id": "fact_context", "invariant": "canonical_state"}
         ],
         "rejected_fact_count": 1,
+        "source_reference_projection_fact_ids": [],
+        "source_reference_projection_count": 0,
         "deterministic_fallback_applied": True,
         "ignored_noncontrolling_normalized_proposals": 0,
     }
@@ -530,7 +534,7 @@ def test_partial_guarded_fallback_preserves_diagnostics_and_cache(tmp_path: Path
         assert item["authority_mode"] == "hybrid_guarded"
         assert item["accepted_fact_ids"] == ["fact_report", "fact_background"]
         assert item["rejected_facts"] == [
-            {"fact_id": "fact_context", "invariant": "source_reference_set"}
+            {"fact_id": "fact_context", "invariant": "canonical_state"}
         ]
     sanitized = json.dumps(storage.sanitized_model_ledger())
     assert "reports a recurring mark" not in sanitized
@@ -903,13 +907,159 @@ def test_canonicalizer_fails_closed_on_source_reference_id_outside_registry(tmp_
     assert_zero_accepted_rejection(storage, "source_reference_registry")
 
 
+def test_containing_observable_passage_is_projected_to_exact_source_contract(tmp_path: Path):
+    observable = package()
+    observable["customer_message"]["body"] = (
+        "The tenant reports a recurring mark; the room remains occupied."
+    )
+    containing_ref = {
+        "artifact_id": "message",
+        "page": 1,
+        "excerpt": "The tenant reports a recurring mark; the room remains occupied.",
+    }
+    containing_ref_id = source_reference_id(containing_ref)
+    assert containing_ref_id in {
+        item["source_ref_id"] for item in observable_source_reference_registry(observable)
+    }
+
+    def containing_passage_response(*_args):
+        value = response()
+        output = json.loads(value["choices"][0]["message"]["content"])
+        output["facts"][0]["source_ref_ids"] = [containing_ref_id]
+        value["choices"][0]["message"]["content"] = json.dumps(output)
+        return value
+
+    storage = Storage(str(tmp_path / "ledger.db"))
+    result = OpenRouterNemotronCanonicalizer(
+        storage,
+        transport=containing_passage_response,
+        api_key_provider=lambda: "runtime-only-test-value",
+    ).canonicalize(observable, run_id="run_containing_passage", allowed_fact_catalog=catalog())
+
+    assert result["diagnostics"]["accepted_fact_ids"] == ["fact_report"]
+    assert result["diagnostics"]["rejected_facts"] == []
+    assert result["diagnostics"]["source_reference_projection_fact_ids"] == [
+        "fact_report"
+    ]
+    assert result["diagnostics"]["source_reference_projection_count"] == 1
+    assert result["facts"][0]["source_refs"] == catalog()[0]["deterministic_text_refs"]
+
+
+def test_source_projection_rebinds_unrelated_extra_passage(tmp_path: Path):
+    observable = package()
+    observable["customer_message"]["body"] = (
+        "The tenant reports a recurring mark; the room remains occupied."
+    )
+    registry = observable_source_reference_registry(observable)
+    selected_ids = [
+        item["source_ref_id"]
+        for item in registry
+        if item["artifact_id"] == "message"
+        and item["excerpt"]
+        in {
+            "The tenant reports a recurring mark",
+            "the room remains occupied.",
+        }
+    ]
+    assert len(selected_ids) == 2
+
+    def extra_passage_response(*_args):
+        value = response()
+        output = json.loads(value["choices"][0]["message"]["content"])
+        output["facts"][0]["source_ref_ids"] = selected_ids
+        value["choices"][0]["message"]["content"] = json.dumps(output)
+        return value
+
+    storage = Storage(str(tmp_path / "ledger.db"))
+    canonicalizer = OpenRouterNemotronCanonicalizer(
+        storage,
+        transport=extra_passage_response,
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+    result = canonicalizer.canonicalize(
+        observable,
+        run_id="run_unrelated_extra",
+        allowed_fact_catalog=catalog(),
+    )
+    cached = canonicalizer.canonicalize(
+        observable,
+        run_id="run_unrelated_extra_cache",
+        allowed_fact_catalog=catalog(),
+    )
+    assert result["diagnostics"]["accepted_fact_ids"] == ["fact_report"]
+    assert result["diagnostics"]["rejected_facts"] == []
+    assert result["diagnostics"]["source_reference_projection_fact_ids"] == [
+        "fact_report"
+    ]
+    assert result["diagnostics"]["source_reference_projection_count"] == 1
+    assert result["facts"][0]["source_refs"] == catalog()[0]["deterministic_text_refs"]
+    assert cached["cache_hit"] is True
+    assert cached["facts"] == result["facts"]
+    assert cached["diagnostics"] == result["diagnostics"]
+    assert [item["outcome"] for item in storage.model_calls()] == [
+        "succeeded",
+        "cache_hit",
+    ]
+    assert all(
+        item["source_reference_projection_fact_ids"] == ["fact_report"]
+        and item["source_reference_projection_count"] == 1
+        for item in storage.sanitized_model_ledger()
+    )
+
+
+def test_source_projection_restores_missing_side_of_conflict(tmp_path: Path):
+    observable = package()
+    observable["customer_message"]["body"] = "Observed 12 March; observed 20 March."
+    registry = observable_source_reference_registry(observable)
+    first_side_id = next(
+        item["source_ref_id"]
+        for item in registry
+        if item["artifact_id"] == "message" and item["excerpt"] == "Observed 12 March"
+    )
+    conflict_catalog = catalog()
+    conflict_catalog[0]["expected_state"] = "conflicting"
+    set_contract_text_refs(
+        conflict_catalog[0],
+        [
+            text_reference(excerpt="Observed 12 March"),
+            text_reference(excerpt="observed 20 March"),
+        ],
+    )
+
+    def one_sided_response(*_args):
+        value = response()
+        output = json.loads(value["choices"][0]["message"]["content"])
+        output["facts"][0]["state"] = "conflicting"
+        output["facts"][0]["source_ref_ids"] = [first_side_id]
+        value["choices"][0]["message"]["content"] = json.dumps(output)
+        return value
+
+    storage = Storage(str(tmp_path / "ledger.db"))
+    result = OpenRouterNemotronCanonicalizer(
+        storage,
+        transport=one_sided_response,
+        api_key_provider=lambda: "runtime-only-test-value",
+    ).canonicalize(
+        observable,
+        run_id="run_one_sided_conflict",
+        allowed_fact_catalog=conflict_catalog,
+    )
+    assert result["diagnostics"]["accepted_fact_ids"] == ["fact_report"]
+    assert result["diagnostics"]["source_reference_projection_fact_ids"] == [
+        "fact_report"
+    ]
+    assert result["facts"][0]["source_refs"] == conflict_catalog[0][
+        "deterministic_text_refs"
+    ]
+
+
 def test_semantic_rejection_retains_charged_provider_usage_and_identity(tmp_path: Path):
     storage = Storage(str(tmp_path / "ledger.db"))
 
     def semantically_invalid_response(*_args):
         value = response(model=OPENROUTER_CANONICAL_MODEL, cost=0.0061)
         output = json.loads(value["choices"][0]["message"]["content"])
-        output["facts"][0]["source_ref_ids"] = []
+        output["facts"][0]["state"] = "unknown"
         value["choices"][0]["message"]["content"] = json.dumps(output)
         return value
 
@@ -936,7 +1086,7 @@ def test_semantic_rejection_retains_charged_provider_usage_and_identity(tmp_path
     assert entry["total_tokens"] == 168
     assert entry["actual_cost_usd"] == pytest.approx(0.0061)
     assert storage.model_actual_cost_total() == pytest.approx(0.0061)
-    assert_zero_accepted_rejection(storage, "source_reference_set")
+    assert_zero_accepted_rejection(storage, "canonical_state")
 
 
 def test_dated_canonical_nemotron_response_identity_is_accepted(tmp_path: Path):
@@ -1013,7 +1163,7 @@ def test_conflicting_fact_requires_all_private_conflicting_text_refs(tmp_path: P
         )
 
 
-def test_text_grounded_unknown_fact_cannot_drop_all_private_refs(tmp_path: Path):
+def test_text_grounded_unknown_fact_projects_private_refs_when_model_drops_them(tmp_path: Path):
     contract = catalog()
     contract[0].update(
         {
@@ -1035,17 +1185,21 @@ def test_text_grounded_unknown_fact_cannot_drop_all_private_refs(tmp_path: Path)
         value["choices"][0]["message"]["content"] = json.dumps(output)
         return value
 
-    canonicalizer = OpenRouterNemotronCanonicalizer(
-        Storage(str(tmp_path / "ledger.db")),
+    storage = Storage(str(tmp_path / "ledger.db"))
+    result = OpenRouterNemotronCanonicalizer(
+        storage,
         transport=ungrounded_response,
         api_key_provider=lambda: "runtime-only-test-value",
+    ).canonicalize(
+        package(),
+        run_id="run_test",
+        allowed_fact_catalog=contract,
     )
-    with pytest.raises(ModelResponseError, match="hybrid_model_contribution invariant failed"):
-        canonicalizer.canonicalize(
-            package(),
-            run_id="run_test",
-            allowed_fact_catalog=contract,
-        )
+    assert result["diagnostics"]["accepted_fact_ids"] == ["fact_report"]
+    assert result["diagnostics"]["source_reference_projection_fact_ids"] == [
+        "fact_report"
+    ]
+    assert result["facts"][0]["source_refs"] == contract[0]["deterministic_text_refs"]
 
 
 def test_exact_excerpt_grounding_normalizes_whitespace_and_rejects_hallucination():
@@ -1170,6 +1324,8 @@ def test_noncontrolling_normalized_proposal_is_ignored_and_counted(tmp_path: Pat
         "accepted_fact_count": 1,
         "rejected_facts": [],
         "rejected_fact_count": 0,
+        "source_reference_projection_fact_ids": [],
+        "source_reference_projection_count": 0,
         "deterministic_fallback_applied": False,
         "ignored_noncontrolling_normalized_proposals": 1,
     }
@@ -1457,10 +1613,10 @@ def test_canonical_equal_accept_reject_minority_fails_and_never_caches(tmp_path:
         value = response()
         output = json.loads(value["choices"][0]["message"]["content"])
         output["facts"].append(
-            {
-                "fact_id": "fact_context",
-                "label": "Context detail",
-                "state": "known",
+                {
+                    "fact_id": "fact_context",
+                    "label": "Context detail",
+                    "state": "unknown",
                 "source_ref_ids": [],
                 "confidence": 0.5,
                 "normalized_value": None,

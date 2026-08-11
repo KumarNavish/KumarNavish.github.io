@@ -182,6 +182,7 @@
       rejected_count: 'Rejected',
       accepted_fact_count: 'Facts accepted',
       rejected_fact_count: 'Facts rejected',
+      source_reference_projection_count: 'Source bindings projected',
       facts: 'Facts',
       unknowns: 'Unknowns',
       conflicts: 'Conflicts',

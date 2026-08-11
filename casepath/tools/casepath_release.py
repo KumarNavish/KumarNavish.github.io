@@ -31,7 +31,7 @@ SOURCE_MANIFEST_PATH = REPOSITORY / "casepath" / "source-manifest.json"
 ARTIFACT_ROOT = REPOSITORY / "casepath-api" / "artifacts"
 ARTIFACT_MANIFEST_PATH = ARTIFACT_ROOT / "artifact-manifest.json"
 SOURCE_DATE_EPOCH = int(os.environ.get("SOURCE_DATE_EPOCH", "1786406400"))
-RELEASE_CONTRACT = "casepath.release-contract/2.1.0"
+RELEASE_CONTRACT = "casepath.release-contract/2.2.0"
 REQUIRED_PRODUCTION_MODE = "openrouter_nemotron"
 REQUIRED_PRODUCTION_MODEL = "nvidia/nemotron-3-ultra-550b-a55b"
 ACCEPTED_PRODUCTION_RESPONSE_MODELS = {
@@ -131,6 +131,8 @@ ALLOWED_MODEL_LEDGER_FIELDS = {
     "accepted_fact_count",
     "rejected_facts",
     "rejected_fact_count",
+    "source_reference_projection_fact_ids",
+    "source_reference_projection_count",
     "accepted_item_ids",
     "accepted_item_count",
     "rejected_items",
@@ -251,6 +253,7 @@ REQUIRED_RUNTIME_ACCEPTANCE_FLAGS = (
     "requires_cold_network_run",
     "requires_deterministic_gate_passes",
     "requires_guarded_fallback_disclosure",
+    "requires_source_reference_projection_disclosure",
 )
 RUNTIME_VERDICT_AUTHORITY = "dynamic_same_commit_qa_artifacts"
 QA_REPORT_PATH = "report.json"
@@ -258,7 +261,7 @@ QA_EVIDENCE_MANIFEST_PATH = "evidence-manifest.json"
 QA_EVIDENCE_MANIFEST_CONTRACT = "casepath.qa-evidence-manifest/1.0.0"
 HISTORICAL_MODEL_VALIDATION_RECORDS = tuple(
     f"casepath/releases/model-validation-attempt-20260811-{number:02d}.json"
-    for number in range(1, 5)
+    for number in range(1, 6)
 )
 REQUIRED_QA_EVIDENCE_FILES = {
     "deployment-identity.json",
@@ -1194,6 +1197,18 @@ def _verify_cold_flagship_evidence(
                 f"Dynamic flagship agent {agent_id} fallback disclosure is inconsistent"
             )
         fallback_count += int(fallback_applied)
+        if agent_id == "canonical_facts":
+            projected = agent.get("source_reference_projection_fact_ids")
+            projection_count = agent.get("source_reference_projection_count")
+            if (
+                not isinstance(projected, list)
+                or len(set(projected)) != len(projected)
+                or any(item not in accepted_ids for item in projected)
+                or projection_count != len(projected)
+            ):
+                raise VerificationError(
+                    "Canonical facts source-reference projection disclosure is invalid"
+                )
         call_ids.append(agent["call_id"])
         response_ids.append(agent["response_id"])
 
@@ -1332,6 +1347,15 @@ def _verify_cold_flagship_evidence(
         ):
             raise VerificationError(
                 f"Dynamic flagship ledger {agent_id} contribution counts are unbound"
+            )
+        if agent_id == "canonical_facts" and (
+            item.get("source_reference_projection_fact_ids")
+            != agent["source_reference_projection_fact_ids"]
+            or item.get("source_reference_projection_count")
+            != agent["source_reference_projection_count"]
+        ):
+            raise VerificationError(
+                "Dynamic flagship ledger canonical source projection is unbound"
             )
         ledger_response_ids.append(item["response_id"])
     if len(set(ledger_response_ids)) != len(ledger_response_ids):
@@ -1517,7 +1541,7 @@ def verify_release_contract() -> None:
     release = load_json(RELEASE_PATH)
     required_pairs = {
         ("contract",): RELEASE_CONTRACT,
-        ("schema_version",): "2.1.0",
+        ("schema_version",): "2.2.0",
         ("release_id",): "casepath-v20-reference-20260811",
         ("components", "frontend", "version"): "20.0.0",
         ("components", "api", "version"): "15.2.0",

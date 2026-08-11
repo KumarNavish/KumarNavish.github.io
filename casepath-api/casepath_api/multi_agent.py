@@ -1270,8 +1270,14 @@ class NemotronMultiAgentOrchestrator:
                     "accepted_count": diagnostics.get("accepted_fact_count"),
                     "accepted_ids": diagnostics.get("accepted_fact_ids", []),
                     "rejected_count": diagnostics.get("rejected_fact_count"),
+                    "source_reference_projection_fact_ids": diagnostics.get(
+                        "source_reference_projection_fact_ids", []
+                    ),
+                    "source_reference_projection_count": diagnostics.get(
+                        "source_reference_projection_count", 0
+                    ),
                     "deterministic_fallback_applied": bool(
-                        diagnostics.get("rejected_fact_count")
+                        diagnostics.get("deterministic_fallback_applied")
                     ),
                     "input_artifact_hash": _safe_hash(state["observable_package"]),
                     "output_artifact_hash": _safe_hash(state["facts"]),
