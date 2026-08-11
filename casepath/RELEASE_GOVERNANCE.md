@@ -109,7 +109,7 @@ bound identically across the run audit and sanitized ledger. A paid provider
 response, a cache replay, or a weak/unbound role
 record does not satisfy that gate.
 
-Eight authorized model attempts failed closed:
+Nine authorized model attempts failed closed:
 
 - Attempt 1 reached DeepInfra through OpenRouter and returned the provider's
   dated canonical model ID. It charged USD 0.00756 for 3,629 prompt and 2,625
@@ -168,28 +168,59 @@ Eight authorized model attempts failed closed:
   usage, proving eventual availability but not application acceptance. Ledger
   call `modelcall_58f841d20124e35f` records `failed`; no downstream agent or
   deterministic gate produced a receipt, and the QA build failed closed.
+- Attempt 9 ran from QA deploy `dep-d9tp3fjncjis739pbnrg` against source commit
+  `1464e482503f2b22bebffaa01a9cff84e70113ff`. The deploy ran from
+  2026-08-11T21:18:54.833304Z through 2026-08-11T21:19:50.743049Z and finished
+  `build_failed`. QA run `run_3abf4f5dcf955488` produced a sanitized ledger
+  containing exactly one CasePath network call: canonical-facts call
+  `modelcall_eda1fe14d069e2d4` under orchestration
+  `orch_16fbcb9e76eaff90`. The signed-in OpenRouter Upstream Requests view later
+  linked that call to request `gen-1786483159-hyYthqPv76o6PHXpGLzl` at 23:19
+  Europe/Zurich. Default provider routing made two router-level upstream
+  attempts, with Together as the final provider, and the upstream request ended
+  with status 400 after 759 ms of router latency. The prior DeepInfra request
+  returned 200; the exact internal provider error message for Together remains
+  unknown. Those two upstream attempts are not two CasePath inference calls. A
+  read-only generation lookup for the exact request ID returned 404, so no
+  completed generation, response usage, or actual cost was recovered. The
+  application ledger failed under `ModelResponseError` /
+  `provider_response_envelope` after 28,858.701 ms and retained only a USD
+  0.027645 estimated reservation. No canonical contribution or downstream
+  model call was accepted.
+
+The current source pins OpenRouter to the exact `deepinfra/fp4` endpoint tag,
+sets `allow_fallbacks: false`, keeps `require_parameters: true`, and denies
+provider data collection. A successful call is accepted only when retained
+generation metadata identifies the upstream provider as `DeepInfra`. The same
+request also enables OpenRouter generation metadata through the
+`X-OpenRouter-Metadata: enabled` header; that control is not serialized into the
+prompt or JSON request body. These routing controls are locally tested but are
+not production acceptance evidence.
 
 The source repair does not retry or bypass LangChain. The shared
 `ChatOpenRouter` client facade still delegates exactly one SDK request. It
 catches only `ResponseValidationError`, accepts only a bounded HTTP 200 JSON
-completion envelope containing one assistant string choice, projects only the
+completion envelope containing one assistant text choice, projects only the
 identity/finish/usage fields CasePath consumes, and then resumes LangChain's
-native strict structured-output parser. Invalid envelopes raise the constant
-`provider_response_envelope` invariant outside the SDK exception scope; raw
-response bodies are neither logged nor persisted. Attempt 8 proves that bridge
-reached LangChain and preserved billing, but it also exposes a later
+native strict structured-output parser. A bounded OpenRouter error envelope
+retains only a grammar-validated generation identifier and numeric error code,
+marks the charge as unknown, and fails closed. Invalid envelopes raise the
+constant `provider_response_envelope` invariant outside the SDK exception
+scope; raw response bodies are neither logged nor persisted. Attempt 8 proves
+that bridge reached LangChain and preserved billing, but it also exposes a later
 same-generation metadata availability boundary. Current acceptance still
 requires a new same-commit cold production journey with all six bound calls and
 three passed deterministic gates.
 
 Known aggregate provider charges for attempts 1, 2, 4, 5, 6, and 8 are USD
-0.0707403; attempts 3 and 7 are unknown and excluded rather than treated as
-zero. Attempt 7's USD 0.027645 reservation is not included. The responses
-remain failed-attempt history, not successful application evidence. No raw
+0.0707403; attempts 3, 7, and 9 are unknown and excluded rather than treated as
+zero. Attempts 7 and 9 each retain a USD 0.027645 estimated reservation, neither
+of which is included as an actual charge. The attempts remain failed-attempt
+history, not successful application evidence. No raw
 prompt, raw output, credential, or private reference is retained, and no
 attempt is accepted model-backed release evidence.
 
-The eight records above are listed under `historical_model_validation` with
+The nine records above are listed under `historical_model_validation` with
 `scope: failed_closed_history_only`; they can never establish current runtime
 acceptance. No passing dynamic QA artifact pair has been verified as part of
 this source edit, so current production model acceptance remains unestablished.

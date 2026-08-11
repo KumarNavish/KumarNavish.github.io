@@ -3,22 +3,22 @@
 
   const MOMENT_COPY = {
     process: {
-      eyebrow: 'Process Discovery Agent complete',
+      eyebrow: 'Deterministic process candidate ready',
       title: 'Handling process',
       detail: 'The main handling path is visible. Select a decision to inspect what it knows and what it still needs.',
     },
     evidence: {
-      eyebrow: 'Document Requirements Agent complete',
+      eyebrow: 'Deterministic evidence candidate ready',
       title: 'Evidence within the process',
       detail: 'Evidence now appears at the decision it can resolve—not as a separate report.',
     },
     experience: {
-      eyebrow: 'Historical Claims Agent complete',
+      eyebrow: 'Reference retrieval complete',
       title: 'Previous experience at the difficult decision',
       detail: 'Returned precedents contribute where the current process is uncertain and remain labelled by provenance.',
     },
     verify: {
-      eyebrow: 'Verification Agent complete',
+      eyebrow: 'Deterministic verification complete',
       title: 'Verified handling process',
       detail: 'Unsupported links were rejected. The remaining process and evidence relationships are ready for review.',
     },

@@ -13,6 +13,7 @@ from casepath_api.canonicalizer import (
     MAX_OUTPUT_TOKENS,
     MODEL_MODE_OPENROUTER,
     OPENROUTER_MODEL,
+    ModelResponseError,
     OpenRouterNemotronCanonicalizer,
     observable_source_reference_registry,
     resolve_observable_source_reference_id,
@@ -738,7 +739,7 @@ def test_model_mode_retains_process_owned_visual_locator_and_passes_grounding(tm
         return {
             "id": "mock-flagship-model-call",
             "model": OPENROUTER_MODEL,
-            "provider": "mock-upstream-provider",
+            "provider": "DeepInfra",
             "choices": [{"finish_reason": "stop", "message": {"content": json.dumps({"facts": raw_facts})}}],
             "usage": {
                 "prompt_tokens": 1000,
@@ -839,7 +840,7 @@ def test_production_shaped_canonical_source_projection_succeeds_17_to_1(tmp_path
         return {
             "id": "mock-production-shaped-projection",
             "model": OPENROUTER_MODEL,
-            "provider": "mock-upstream-provider",
+            "provider": "DeepInfra",
             "choices": [
                 {
                     "finish_reason": "stop",
@@ -908,7 +909,7 @@ def test_hybrid_rejected_controlling_fact_uses_exact_oracle_fallback(tmp_path: P
         return {
             "id": "mock-hybrid-fallback-call",
             "model": OPENROUTER_MODEL,
-            "provider": "mock-upstream-provider",
+            "provider": "DeepInfra",
             "choices": [
                 {
                     "finish_reason": "stop",
@@ -989,7 +990,7 @@ def test_late_specialist_failure_keeps_bounded_partial_truth_and_no_final_result
         return {
             "id": "gen-late-failure",
             "model": OPENROUTER_MODEL,
-            "provider": "MockProvider",
+            "provider": "DeepInfra",
             "choices": [
                 {
                     "finish_reason": "stop",
@@ -1014,7 +1015,7 @@ def test_late_specialist_failure_keeps_bounded_partial_truth_and_no_final_result
                     "parent_call_id": "modelcall-plan",
                     "response_id": "gen-failed-specialist",
                     "response_model": OPENROUTER_MODEL,
-                    "upstream_provider": "MockProvider",
+                    "upstream_provider": "DeepInfra",
                     "usage_source": "response",
                     "finish_reason": "stop",
                     "outcome": "failed",
@@ -1035,7 +1036,7 @@ def test_late_specialist_failure_keeps_bounded_partial_truth_and_no_final_result
                     "parent_call_id": "modelcall-plan",
                     "response_id": "gen-failed-specialist",
                     "response_model": OPENROUTER_MODEL,
-                    "upstream_provider": "MockProvider",
+                    "upstream_provider": "DeepInfra",
                     "usage_source": "response",
                     "outcome": "failed",
                     "error_type": "AgentInvocationFailure",
@@ -1094,7 +1095,7 @@ def test_canonical_paid_failure_emits_joinable_safe_agent_receipt(tmp_path: Path
         return {
             "id": "gen-canonical-wrong-model",
             "model": "different/model",
-            "provider": "MockProvider",
+            "provider": "DeepInfra",
             "choices": [
                 {
                     "finish_reason": "stop",
@@ -1182,6 +1183,62 @@ def test_canonical_paid_failure_emits_joinable_safe_agent_receipt(tmp_path: Path
         "runtime-only-test-value",
     ):
         assert forbidden not in serialized
+
+
+def test_canonical_upstream_rejection_receipt_exposes_only_bounded_status(
+    tmp_path: Path,
+):
+    inference_calls = 0
+
+    def rejected_invoker(*_args):
+        nonlocal inference_calls
+        inference_calls += 1
+        raise ModelResponseError(
+            "provider_upstream_rejection invariant failed",
+            invariant="provider_upstream_rejection",
+            safe_context={
+                "response_id": "gen-1786483164-EEEEEEEEEEEEEEEEEEEE",
+                "provider_error_code": 400,
+            },
+        )
+
+    storage = Storage(str(tmp_path / "canonical-upstream-rejection.db"))
+    pipeline = ClaimPipeline(
+        storage,
+        model_mode=MODEL_MODE_OPENROUTER,
+        canonicalizer=OpenRouterNemotronCanonicalizer(
+            storage,
+            structured_invoker=rejected_invoker,
+            api_key_provider=lambda: "runtime-only-test-value",
+        ),
+        agent_orchestrator=StubAgentOrchestrator(),
+        pace_seconds=0,
+    )
+
+    run = wait(storage, pipeline.create("DEF-027-E0-DEMO"))
+
+    assert inference_calls == 1
+    assert run["status"] == "failed"
+    receipt = next(
+        item
+        for item in run["events"]
+        if item.get("receipt_type") == "agent_failed"
+        and item.get("agent_id") == "canonical_facts"
+    )
+    assert receipt["error_invariant"] == "provider_upstream_rejection"
+    assert receipt["response_id"] == "gen-1786483164-EEEEEEEEEEEEEEEEEEEE"
+    assert receipt["provider_error_code"] == 400
+    assert receipt["call_count"] == 1
+    assert receipt["response_model"] is None
+    assert receipt["upstream_provider"] is None
+    assert receipt["usage_source"] is None
+    ledger = storage.sanitized_model_ledger()[0]
+    assert ledger["provider_error_code"] == 400
+    assert ledger["actual_cost_usd"] is None
+    assert storage.model_call_summary()["actual_cost_complete"] is False
+    serialized = json.dumps(run)
+    assert "provider_error_code" in serialized
+    assert "provider message" not in serialized.lower()
 
 
 def test_canonical_root_blocked_receipt_has_explicit_safe_invariant(tmp_path: Path):

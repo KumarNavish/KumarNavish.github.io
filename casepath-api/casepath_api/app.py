@@ -38,7 +38,12 @@ from .multi_agent import (
     MULTI_AGENT_SCHEMA_VERSION,
 )
 from .storage import ActiveRunResetError, Storage
-from .langchain_runtime import external_tracing_environment_disabled
+from .langchain_runtime import (
+    OPENROUTER_ENDPOINT_TAG,
+    OPENROUTER_EXPECTED_UPSTREAM_PROVIDER,
+    openrouter_provider_policy,
+    external_tracing_environment_disabled,
+)
 
 storage = Storage()
 pipeline = ClaimPipeline(storage)
@@ -188,6 +193,15 @@ def release_metadata() -> dict[str, Any]:
                 "cache_scope": "instance_lifetime",
                 "external_key_hard_limit_guard": "configured",
                 "credential_configured": credential_configured,
+                "provider_routing": {
+                    "endpoint_tag": OPENROUTER_ENDPOINT_TAG,
+                    "expected_upstream_provider": OPENROUTER_EXPECTED_UPSTREAM_PROVIDER,
+                    **{
+                        key: value
+                        for key, value in openrouter_provider_policy().items()
+                        if key != "only"
+                    },
+                },
             },
         },
         "components": COMPONENT_VERSIONS,

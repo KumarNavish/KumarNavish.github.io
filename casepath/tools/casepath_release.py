@@ -14,7 +14,7 @@ import re
 import stat
 import subprocess
 import sys
-from datetime import date
+from datetime import date, datetime
 from email import policy
 from email.parser import BytesParser
 from pathlib import Path
@@ -47,6 +47,9 @@ PROVIDER_PROVENANCE_PATTERNS = {
     "response_id": re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{2,159}$"),
     "upstream_provider": re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{1,79}$"),
 }
+OPENROUTER_GENERATION_ID_PATTERN = re.compile(
+    r"^gen-[0-9]{10}-[A-Za-z0-9]{20}$"
+)
 FORBIDDEN_PROVIDER_PROVENANCE_MARKERS = (
     "authorization",
     "api_key",
@@ -123,6 +126,7 @@ ALLOWED_MODEL_LEDGER_FIELDS = {
     "error_agent_id",
     "error_fact_id",
     "error_invariant",
+    "provider_error_code",
     "invalid_provenance_field",
     "invalid_provenance_value_hash",
     "ignored_noncontrolling_normalized_proposals",
@@ -151,6 +155,17 @@ ALLOWED_MODEL_LEDGER_FIELDS = {
     "finish_reason",
     "created_at",
     "updated_at",
+}
+MODEL_LEDGER_SUMMARY_FIELDS = {
+    "records",
+    "network_calls",
+    "prompt_tokens",
+    "completion_tokens",
+    "total_tokens",
+    "actual_cost_usd",
+    "actual_cost_complete",
+    "unknown_cost_call_count",
+    "outcomes",
 }
 ORIGIN_USAGE_FIELDS = {
     "prompt_tokens",
@@ -261,7 +276,178 @@ QA_EVIDENCE_MANIFEST_PATH = "evidence-manifest.json"
 QA_EVIDENCE_MANIFEST_CONTRACT = "casepath.qa-evidence-manifest/1.0.0"
 HISTORICAL_MODEL_VALIDATION_RECORDS = tuple(
     f"casepath/releases/model-validation-attempt-20260811-{number:02d}.json"
-    for number in range(1, 9)
+    for number in range(1, 10)
+)
+_HISTORICAL_TOP_FIELDS = frozenset(
+    {
+        "contract",
+        "release_id",
+        "attempt_id",
+        "status",
+        "acceptance_passed",
+        "model_backed_release_evidence",
+        "requested_runtime",
+        "provider_observation",
+        "accepted_ledger_record",
+        "application_result",
+        "sanitization",
+    }
+)
+_HISTORICAL_EXECUTION_FIELDS = {
+    "production-flagship-20260811-06": frozenset(
+        "source_commit qa_deploy_id qa_deploy_outcome qa_run_id orchestration_id "
+        "failed_agent_id provider_response_count downstream_model_calls "
+        "deterministic_gate_receipts".split()
+    ),
+    "production-flagship-20260811-07": frozenset(
+        "source_commit frontend_deploy_id api_deploy_id qa_deploy_id "
+        "qa_deploy_outcome qa_run_id orchestration_id failed_agent_id "
+        "provider_response_count downstream_model_calls deterministic_gate_receipts".split()
+    ),
+    "production-flagship-20260811-08": frozenset(
+        "source_commit qa_deploy_id qa_deploy_outcome qa_deploy_started_at "
+        "qa_error_at qa_build_failed_at qa_deploy_finished_at qa_run_id "
+        "orchestration_id failed_agent_id provider_response_count "
+        "downstream_model_calls downstream_agent_receipts deterministic_gate_receipts".split()
+    ),
+    "production-flagship-20260811-09": frozenset(
+        "source_commit qa_deploy_id qa_deploy_outcome qa_deploy_created_at "
+        "qa_deploy_finished_at qa_run_id ledger_created_at ledger_updated_at "
+        "orchestration_id failed_agent_id network_call_count downstream_model_calls".split()
+    ),
+}
+_HISTORICAL_PROVIDER_FIELDS = {
+    "authorized-smoke-20260811-01": frozenset(
+        "canonical_model_id upstream_provider actual_cost_usd prompt_tokens "
+        "completion_tokens total_tokens finish_reason".split()
+    ),
+    "authorized-smoke-20260811-02": frozenset(
+        "provider provider_outcome upstream_provider response_model response_id "
+        "actual_cost_usd prompt_tokens completion_tokens total_tokens finish_reason".split()
+    ),
+    "authorized-smoke-20260811-03": frozenset(
+        "provider provider_outcome synchronous_usage_cost_present "
+        "new_openrouter_log_generation_observed provider_cache_replay_assessment "
+        "charge_status charge_included_in_known_aggregate".split()
+    ),
+    "authorized-smoke-20260811-04": frozenset(
+        "provider provider_outcome upstream_provider response_model response_id "
+        "actual_cost_usd prompt_tokens completion_tokens total_tokens finish_reason".split()
+    ),
+    "production-flagship-20260811-05": frozenset(
+        "provider provider_outcome response_model response_id actual_cost_usd "
+        "prompt_tokens completion_tokens total_tokens finish_reason".split()
+    ),
+    "production-flagship-20260811-06": frozenset(
+        "provider provider_outcome response_model response_id actual_cost_usd "
+        "prompt_tokens completion_tokens total_tokens finish_reason usage_source latency_ms".split()
+    ),
+    "production-flagship-20260811-07": frozenset(
+        "provider provider_outcome response_http_status sdk sdk_version sdk_error_type "
+        "response_identity_status synchronous_usage_cost_present "
+        "new_openrouter_log_generation_observed openrouter_log_check_performed "
+        "provider_cache_replay_assessment charge_status "
+        "charge_included_in_known_aggregate estimated_cost_reservation_usd "
+        "estimated_reservation_is_actual_charge latency_ms".split()
+    ),
+    "production-flagship-20260811-08": frozenset(
+        "provider provider_outcome requested_model response_model response_id "
+        "actual_cost_usd prompt_tokens completion_tokens total_tokens finish_reason "
+        "latency_ms bounded_generation_metadata_lookup "
+        "later_generation_metadata_observation".split()
+    ),
+    "production-flagship-20260811-09": frozenset(
+        "provider provider_outcome requested_model response_identity_status "
+        "routing_diagnosis upstream_request_log_observation generation_metadata_lookup "
+        "synchronous_usage_cost_present openrouter_upstream_request_log_observed "
+        "new_openrouter_log_generation_observed openrouter_log_check_performed "
+        "provider_cache_replay_assessment charge_status "
+        "charge_included_in_known_aggregate estimated_cost_reservation_usd "
+        "estimated_reservation_is_actual_charge latency_ms".split()
+    ),
+}
+_HISTORICAL_APPLICATION_FIELDS = {
+    "authorized-smoke-20260811-01": frozenset(
+        "outcome failure_type successful_ledger_call_bound ledger_call_id".split()
+    ),
+    "authorized-smoke-20260811-02": frozenset(
+        "outcome failure_type successful_ledger_call_bound ledger_call_id "
+        "ledger_outcome canonical_result_accepted".split()
+    ),
+    "authorized-smoke-20260811-03": frozenset(
+        "outcome failure_type successful_ledger_call_bound ledger_call_id "
+        "canonical_result_accepted".split()
+    ),
+    "authorized-smoke-20260811-04": frozenset(
+        "outcome failure_type successful_ledger_call_bound ledger_call_id "
+        "ledger_outcome canonical_result_accepted".split()
+    ),
+    "production-flagship-20260811-05": frozenset(
+        "outcome failure_type successful_ledger_call_bound ledger_call_id ledger_outcome "
+        "canonical_result_accepted accepted_fact_count rejected_fact_count "
+        "rejected_invariants".split()
+    ),
+    "production-flagship-20260811-06": frozenset(
+        "outcome failure_type error_type successful_ledger_call_bound ledger_call_id "
+        "ledger_outcome canonical_result_accepted upstream_provider_persisted "
+        "contribution_diagnostics_retained".split()
+    ),
+    "production-flagship-20260811-07": frozenset(
+        "outcome failure_type error_type successful_ledger_call_bound ledger_call_id "
+        "ledger_outcome canonical_result_accepted response_identity_retained "
+        "usage_metadata_retained contribution_diagnostics_retained".split()
+    ),
+    "production-flagship-20260811-08": frozenset(
+        "outcome failure_type error_type error_invariant successful_ledger_call_bound "
+        "ledger_call_id ledger_outcome canonical_result_accepted "
+        "response_identity_retained usage_metadata_retained "
+        "later_generation_metadata_verified contribution_diagnostics_retained".split()
+    ),
+    "production-flagship-20260811-09": frozenset(
+        "outcome failure_type error_type error_invariant successful_ledger_call_bound "
+        "ledger_call_id ledger_outcome canonical_result_accepted "
+        "response_identity_retained usage_metadata_retained "
+        "accepted_generation_recovered contribution_diagnostics_retained".split()
+    ),
+}
+_HISTORICAL_FAILURE_TYPES = {
+    "authorized-smoke-20260811-01": "exact_private_reference_mismatch",
+    "authorized-smoke-20260811-02": "non_controlling_normalized_value",
+    "authorized-smoke-20260811-03": "usage_metadata_completeness",
+    "authorized-smoke-20260811-04": "fact_dispute/source_reference_set",
+    "production-flagship-20260811-05": "hybrid_model_contribution_strict_majority",
+    "production-flagship-20260811-06": "post_validation_missing_upstream_provider_persistence",
+    "production-flagship-20260811-07": "openrouter_sdk_chat_result_response_validation",
+    "production-flagship-20260811-08": "same_generation_metadata_not_available_within_bounded_lookup",
+    "production-flagship-20260811-09": "provider_response_envelope",
+}
+_HISTORICAL_PROVIDER_OUTCOMES = {
+    "authorized-smoke-20260811-02": "succeeded",
+    "authorized-smoke-20260811-03": "structured_content_returned",
+    "authorized-smoke-20260811-04": "succeeded",
+    "production-flagship-20260811-05": "succeeded",
+    "production-flagship-20260811-06": "succeeded",
+    "production-flagship-20260811-07": "http_200_response_schema_rejected_by_sdk",
+    "production-flagship-20260811-08": "succeeded",
+    "production-flagship-20260811-09": "upstream_rejected",
+}
+_HISTORICAL_ERROR_TYPES = {
+    "production-flagship-20260811-06": "KeyError",
+    "production-flagship-20260811-07": "ResponseValidationError",
+    "production-flagship-20260811-08": "ModelResponseError",
+    "production-flagship-20260811-09": "ModelResponseError",
+}
+_HISTORICAL_ERROR_INVARIANTS = {
+    "production-flagship-20260811-08": "generation_metadata_completeness",
+    "production-flagship-20260811-09": "provider_response_envelope",
+}
+_HISTORICAL_SOURCE_COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
+_HISTORICAL_DEPLOY_ID_PATTERN = re.compile(r"^dep-[a-z0-9]{12,40}$")
+_HISTORICAL_RUN_ID_PATTERN = re.compile(r"^run_[0-9a-f]{16}$")
+_HISTORICAL_ORCHESTRATION_ID_PATTERN = re.compile(r"^orch_[0-9a-f]{16}$")
+_HISTORICAL_CALL_ID_PATTERN = re.compile(r"^modelcall_[0-9a-f]{16}$")
+_HISTORICAL_LOCAL_TIME_PATTERN = re.compile(
+    r"^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2} Europe/Zurich$"
 )
 REQUIRED_QA_EVIDENCE_FILES = {
     "deployment-identity.json",
@@ -803,6 +989,8 @@ def _verify_successful_provider_provenance(record: Any, label: str) -> None:
             raise VerificationError(
                 f"{label} {field} violates the provider-provenance sanitizer"
             )
+    if record.get("upstream_provider") != "DeepInfra":
+        raise VerificationError(f"{label} upstream_provider must be 'DeepInfra'")
 
 
 def _verify_bounded_origin_usage(value: Any, label: str) -> None:
@@ -823,6 +1011,44 @@ def _verify_public_model_ledger(ledger: Any, label: str) -> None:
     ):
         raise VerificationError(f"{label} is absent or unsanitized")
     call_ids: list[str] = []
+    summary = ledger.get("summary")
+    if not isinstance(summary, dict) or set(summary) != MODEL_LEDGER_SUMMARY_FIELDS:
+        raise VerificationError(f"{label}.summary violates the exact public schema")
+    summary_count_fields = (
+        "records",
+        "network_calls",
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+        "unknown_cost_call_count",
+    )
+    if any(
+        not isinstance(summary.get(field), int)
+        or isinstance(summary.get(field), bool)
+        or summary[field] < 0
+        for field in summary_count_fields
+    ):
+        raise VerificationError(f"{label}.summary has invalid count fields")
+    summary_cost = summary.get("actual_cost_usd")
+    if (
+        not isinstance(summary_cost, (int, float))
+        or isinstance(summary_cost, bool)
+        or not math.isfinite(float(summary_cost))
+        or summary_cost < 0
+    ):
+        raise VerificationError(f"{label}.summary has invalid actual cost")
+    if not isinstance(summary.get("actual_cost_complete"), bool):
+        raise VerificationError(f"{label}.summary has invalid cost completeness")
+    summary_outcomes = summary.get("outcomes")
+    if not isinstance(summary_outcomes, dict) or any(
+        not isinstance(outcome, str)
+        or not outcome
+        or not isinstance(count, int)
+        or isinstance(count, bool)
+        or count <= 0
+        for outcome, count in summary_outcomes.items()
+    ):
+        raise VerificationError(f"{label}.summary has invalid outcome counts")
     for index, item in enumerate(ledger["items"]):
         item_path = f"{label}.items[{index}]"
         if not isinstance(item, dict):
@@ -883,6 +1109,28 @@ def _verify_public_model_ledger(ledger: Any, label: str) -> None:
             raise VerificationError(
                 f"{item_path}.invalid_provenance_field is out of scope"
             )
+        provider_error_code = item.get("provider_error_code")
+        if provider_error_code is not None and (
+            item.get("error_invariant") != "provider_upstream_rejection"
+            or not isinstance(provider_error_code, int)
+            or isinstance(provider_error_code, bool)
+            or not 0 <= provider_error_code <= 9_999
+        ):
+            raise VerificationError(
+                f"{item_path}.provider_error_code is unbounded or out of scope"
+            )
+        if (
+            item.get("error_invariant") == "provider_upstream_rejection"
+            and item.get("response_id") is not None
+            and (
+                not isinstance(item["response_id"], str)
+                or OPENROUTER_GENERATION_ID_PATTERN.fullmatch(item["response_id"])
+                is None
+            )
+        ):
+            raise VerificationError(
+                f"{item_path}.response_id is not an exact OpenRouter generation ID"
+            )
         if "origin_usage" in item:
             _verify_bounded_origin_usage(
                 item["origin_usage"],
@@ -896,6 +1144,451 @@ def _verify_public_model_ledger(ledger: Any, label: str) -> None:
                 )
     if len(set(call_ids)) != len(call_ids):
         raise VerificationError(f"{label}.items contain duplicate call_id fields")
+    token_fields = ("prompt_tokens", "completion_tokens", "total_tokens")
+    network_calls = 0
+    token_totals = {field: 0 for field in token_fields}
+    confirmed_costs: list[float] = []
+    unknown_cost_call_count = 0
+    outcomes: dict[str, int] = {}
+    for item in ledger["items"]:
+        call_count = item.get("call_count")
+        if (
+            not isinstance(call_count, int)
+            or isinstance(call_count, bool)
+            or call_count < 0
+        ):
+            raise VerificationError(f"{label}.summary source call_count is invalid")
+        network_calls += call_count
+        for field in token_fields:
+            value = item.get(field, 0)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                raise VerificationError(f"{label}.summary source {field} is invalid")
+            token_totals[field] += value
+        actual_cost = item.get("actual_cost_usd")
+        if actual_cost is None:
+            if call_count > 0:
+                unknown_cost_call_count += 1
+        elif (
+            not isinstance(actual_cost, (int, float))
+            or isinstance(actual_cost, bool)
+            or not math.isfinite(float(actual_cost))
+            or actual_cost < 0
+        ):
+            raise VerificationError(f"{label}.summary source actual cost is invalid")
+        else:
+            confirmed_costs.append(float(actual_cost))
+        outcome = item.get("outcome")
+        if not isinstance(outcome, str) or not outcome:
+            raise VerificationError(f"{label}.summary source outcome is invalid")
+        outcomes[outcome] = outcomes.get(outcome, 0) + 1
+    expected_summary = {
+        "records": len(ledger["items"]),
+        "network_calls": network_calls,
+        **token_totals,
+        "actual_cost_usd": round(sum(confirmed_costs), 8),
+        "actual_cost_complete": unknown_cost_call_count == 0,
+        "unknown_cost_call_count": unknown_cost_call_count,
+        "outcomes": {key: outcomes[key] for key in sorted(outcomes)},
+    }
+    if summary != expected_summary:
+        raise VerificationError(f"{label}.summary is inconsistent with ledger rows")
+
+
+def _historical_schema_error(section: str) -> None:
+    """Fail without echoing a provider-authored key or value."""
+
+    raise VerificationError(
+        f"Historical model validation {section} violates its exact bounded schema"
+    )
+
+
+def _require_historical_fields(
+    value: Any,
+    expected: frozenset[str],
+    section: str,
+) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != expected:
+        _historical_schema_error(section)
+    return value
+
+
+def _is_historical_timestamp(value: Any) -> bool:
+    if not isinstance(value, str) or not 20 <= len(value) <= 40:
+        return False
+    # Render timestamps can carry nanoseconds while ``datetime`` accepts at most
+    # microseconds.  Preserve strict ISO/offset validation without rejecting the
+    # additional bounded precision in a retained deployment receipt.
+    normalized = re.sub(r"(\.\d{6})\d+(?=Z|[+-]\d{2}:\d{2}$)", r"\1", value)
+    try:
+        parsed = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None
+
+
+def _is_bounded_historical_number(
+    value: Any,
+    *,
+    minimum: float = 0,
+    maximum: float = 180_000,
+) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
+        and minimum <= float(value) <= maximum
+    )
+
+
+def _is_exact_historical_int(value: Any, expected: int) -> bool:
+    return (
+        isinstance(value, int)
+        and not isinstance(value, bool)
+        and value == expected
+    )
+
+
+def _verify_historical_execution(
+    attempt_id: str,
+    execution: Any,
+) -> None:
+    expected_fields = _HISTORICAL_EXECUTION_FIELDS.get(attempt_id)
+    if expected_fields is None:
+        if execution is not None:
+            _historical_schema_error("execution observation")
+        return
+    values = _require_historical_fields(
+        execution,
+        expected_fields,
+        "execution observation",
+    )
+    patterns = {
+        "source_commit": _HISTORICAL_SOURCE_COMMIT_PATTERN,
+        "frontend_deploy_id": _HISTORICAL_DEPLOY_ID_PATTERN,
+        "api_deploy_id": _HISTORICAL_DEPLOY_ID_PATTERN,
+        "qa_deploy_id": _HISTORICAL_DEPLOY_ID_PATTERN,
+        "qa_run_id": _HISTORICAL_RUN_ID_PATTERN,
+        "orchestration_id": _HISTORICAL_ORCHESTRATION_ID_PATTERN,
+    }
+    for field, pattern in patterns.items():
+        if field in values and (
+            not isinstance(values[field], str)
+            or pattern.fullmatch(values[field]) is None
+        ):
+            _historical_schema_error("execution observation")
+    if values.get("qa_deploy_outcome") != "build_failed":
+        _historical_schema_error("execution observation")
+    if values.get("failed_agent_id") != "canonical_facts":
+        _historical_schema_error("execution observation")
+    for field in values:
+        if field.endswith("_at") and not _is_historical_timestamp(values[field]):
+            _historical_schema_error("execution observation")
+    for field in ("provider_response_count", "network_call_count"):
+        if field in values and not _is_exact_historical_int(values[field], 1):
+            _historical_schema_error("execution observation")
+    for field in (
+        "downstream_model_calls",
+        "downstream_agent_receipts",
+        "deterministic_gate_receipts",
+    ):
+        if field in values and not _is_exact_historical_int(values[field], 0):
+            _historical_schema_error("execution observation")
+
+
+def _verify_historical_provider_observation(
+    attempt_id: str,
+    provider: Any,
+) -> None:
+    values = _require_historical_fields(
+        provider,
+        _HISTORICAL_PROVIDER_FIELDS[attempt_id],
+        "provider observation",
+    )
+    if "provider" in values and values["provider"] != "openrouter":
+        _historical_schema_error("provider observation")
+    expected_outcome = _HISTORICAL_PROVIDER_OUTCOMES.get(attempt_id)
+    if expected_outcome is not None and values.get("provider_outcome") != expected_outcome:
+        _historical_schema_error("provider observation")
+    for field in ("canonical_model_id", "model"):
+        if field in values and values[field] != (
+            "nvidia/nemotron-3-ultra-550b-a55b-20260604"
+        ):
+            _historical_schema_error("provider observation")
+    if "requested_model" in values and values["requested_model"] != REQUIRED_PRODUCTION_MODEL:
+        _historical_schema_error("provider observation")
+    if (
+        "response_model" in values
+        and values["response_model"] not in ACCEPTED_PRODUCTION_RESPONSE_MODELS
+    ):
+        _historical_schema_error("provider observation")
+    if "response_id" in values and (
+        not isinstance(values["response_id"], str)
+        or OPENROUTER_GENERATION_ID_PATTERN.fullmatch(values["response_id"]) is None
+    ):
+        _historical_schema_error("provider observation")
+    if "upstream_provider" in values and values["upstream_provider"] != "DeepInfra":
+        _historical_schema_error("provider observation")
+    if "finish_reason" in values and values["finish_reason"] != "stop":
+        _historical_schema_error("provider observation")
+    if "usage_source" in values and values["usage_source"] != "response":
+        _historical_schema_error("provider observation")
+    present_usage = {
+        "actual_cost_usd",
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+    }.intersection(values)
+    if present_usage:
+        _verify_positive_usage(values, "Historical provider observation")
+        if values["actual_cost_usd"] > 25 or values["total_tokens"] > 10_000_000:
+            _historical_schema_error("provider observation")
+    if "latency_ms" in values and not _is_bounded_historical_number(
+        values["latency_ms"], minimum=0.001
+    ):
+        _historical_schema_error("provider observation")
+    if "estimated_cost_reservation_usd" in values and not _is_bounded_historical_number(
+        values["estimated_cost_reservation_usd"], minimum=0.000_000_01, maximum=25
+    ):
+        _historical_schema_error("provider observation")
+    expected_booleans = {
+        "synchronous_usage_cost_present": False,
+        "new_openrouter_log_generation_observed": False,
+        "charge_included_in_known_aggregate": False,
+        "estimated_reservation_is_actual_charge": False,
+        "openrouter_upstream_request_log_observed": True,
+    }
+    for field, expected in expected_booleans.items():
+        if field in values and values[field] is not expected:
+            _historical_schema_error("provider observation")
+    if "openrouter_log_check_performed" in values:
+        expected = attempt_id == "production-flagship-20260811-09"
+        if values["openrouter_log_check_performed"] is not expected:
+            _historical_schema_error("provider observation")
+    expected_cache_assessment = {
+        "authorized-smoke-20260811-03": "likely_unconfirmed",
+        "production-flagship-20260811-07": "not_assessed",
+        "production-flagship-20260811-09": "not_applicable_upstream_rejected",
+    }.get(attempt_id)
+    if (
+        expected_cache_assessment is not None
+        and values.get("provider_cache_replay_assessment") != expected_cache_assessment
+    ):
+        _historical_schema_error("provider observation")
+    if "charge_status" in values and values["charge_status"] != "unknown_unconfirmed":
+        _historical_schema_error("provider observation")
+    if "response_http_status" in values and not _is_exact_historical_int(
+        values["response_http_status"], 200
+    ):
+        _historical_schema_error("provider observation")
+    if "sdk" in values and values["sdk"] != "openrouter":
+        _historical_schema_error("provider observation")
+    if "sdk_version" in values and values["sdk_version"] != "0.11.46":
+        _historical_schema_error("provider observation")
+    if "sdk_error_type" in values and values["sdk_error_type"] != "ResponseValidationError":
+        _historical_schema_error("provider observation")
+    expected_identity_status = {
+        "production-flagship-20260811-07": "unknown_unverified",
+        "production-flagship-20260811-09": "upstream_request_only_no_generation",
+    }.get(attempt_id)
+    if (
+        expected_identity_status is not None
+        and values.get("response_identity_status") != expected_identity_status
+    ):
+        _historical_schema_error("provider observation")
+    if "bounded_generation_metadata_lookup" in values and values[
+        "bounded_generation_metadata_lookup"
+    ] != "not_available_before_deadline":
+        _historical_schema_error("provider observation")
+
+    later = values.get("later_generation_metadata_observation")
+    if later is not None:
+        later = _require_historical_fields(
+            later,
+            frozenset(
+                "read_only response_id model provider_name actual_cost_usd prompt_tokens "
+                "completion_tokens total_tokens finish_reason same_generation_confirmed "
+                "available_after_bounded_lookup".split()
+            ),
+            "later generation observation",
+        )
+        if (
+            later["read_only"] is not True
+            or later["response_id"] != values.get("response_id")
+            or later["model"] != "nvidia/nemotron-3-ultra-550b-a55b-20260604"
+            or later["provider_name"] != "DeepInfra"
+            or later["finish_reason"] != "stop"
+            or later["same_generation_confirmed"] is not True
+            or later["available_after_bounded_lookup"] is not True
+        ):
+            _historical_schema_error("later generation observation")
+        _verify_positive_usage(later, "Historical later generation observation")
+        for field in (
+            "actual_cost_usd",
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens",
+        ):
+            if later[field] != values[field]:
+                _historical_schema_error("later generation observation")
+
+    routing = values.get("routing_diagnosis")
+    if routing is not None:
+        routing = _require_historical_fields(
+            routing,
+            frozenset(
+                {
+                    "attempt_09_policy",
+                    "prior_deepinfra_request_status",
+                    "exact_internal_provider_error_message_observed",
+                }
+            ),
+            "routing diagnosis",
+        )
+        if (
+            routing["attempt_09_policy"] != "default_provider_routing"
+            or not _is_exact_historical_int(
+                routing["prior_deepinfra_request_status"], 200
+            )
+            or routing["exact_internal_provider_error_message_observed"] is not False
+        ):
+            _historical_schema_error("routing diagnosis")
+
+    upstream_log = values.get("upstream_request_log_observation")
+    if upstream_log is not None:
+        upstream_log = _require_historical_fields(
+            upstream_log,
+            frozenset(
+                "read_only displayed_at_local request_id final_provider upstream_status "
+                "router_attempts router_latency_ms".split()
+            ),
+            "upstream request observation",
+        )
+        if (
+            upstream_log["read_only"] is not True
+            or not isinstance(upstream_log["displayed_at_local"], str)
+            or _HISTORICAL_LOCAL_TIME_PATTERN.fullmatch(
+                upstream_log["displayed_at_local"]
+            )
+            is None
+            or not isinstance(upstream_log["request_id"], str)
+            or OPENROUTER_GENERATION_ID_PATTERN.fullmatch(upstream_log["request_id"])
+            is None
+            or upstream_log["final_provider"] != "Together"
+            or not _is_exact_historical_int(upstream_log["upstream_status"], 400)
+            or not isinstance(upstream_log["router_attempts"], int)
+            or isinstance(upstream_log["router_attempts"], bool)
+            or not 1 <= upstream_log["router_attempts"] <= 10
+            or not _is_bounded_historical_number(upstream_log["router_latency_ms"])
+        ):
+            _historical_schema_error("upstream request observation")
+
+    generation_lookup = values.get("generation_metadata_lookup")
+    if generation_lookup is not None:
+        generation_lookup = _require_historical_fields(
+            generation_lookup,
+            frozenset("read_only request_id http_status generation_recovered".split()),
+            "generation lookup",
+        )
+        if (
+            generation_lookup["read_only"] is not True
+            or upstream_log is None
+            or generation_lookup["request_id"] != upstream_log["request_id"]
+            or not _is_exact_historical_int(generation_lookup["http_status"], 404)
+            or generation_lookup["generation_recovered"] is not False
+        ):
+            _historical_schema_error("generation lookup")
+
+
+def _verify_historical_application_result(
+    attempt_id: str,
+    result: Any,
+) -> None:
+    values = _require_historical_fields(
+        result,
+        _HISTORICAL_APPLICATION_FIELDS[attempt_id],
+        "application result",
+    )
+    if (
+        values["outcome"] != "rejected"
+        or values["failure_type"] != _HISTORICAL_FAILURE_TYPES[attempt_id]
+        or values["successful_ledger_call_bound"] is not False
+    ):
+        _historical_schema_error("application result")
+    expected_error_type = _HISTORICAL_ERROR_TYPES.get(attempt_id)
+    if expected_error_type is not None and values.get("error_type") != expected_error_type:
+        _historical_schema_error("application result")
+    expected_invariant = _HISTORICAL_ERROR_INVARIANTS.get(attempt_id)
+    if expected_invariant is not None and values.get("error_invariant") != expected_invariant:
+        _historical_schema_error("application result")
+    ledger_call_id = values.get("ledger_call_id")
+    if ledger_call_id is not None and (
+        not isinstance(ledger_call_id, str)
+        or _HISTORICAL_CALL_ID_PATTERN.fullmatch(ledger_call_id) is None
+    ):
+        _historical_schema_error("application result")
+    if "ledger_outcome" in values and values["ledger_outcome"] != "failed":
+        _historical_schema_error("application result")
+    expected_booleans: dict[str, bool] = {
+        "canonical_result_accepted": False,
+        "upstream_provider_persisted": False,
+        "contribution_diagnostics_retained": False,
+        "accepted_generation_recovered": False,
+    }
+    if attempt_id in {
+        "production-flagship-20260811-07",
+        "production-flagship-20260811-08",
+        "production-flagship-20260811-09",
+    }:
+        retained = attempt_id == "production-flagship-20260811-08"
+        expected_booleans["response_identity_retained"] = retained
+        expected_booleans["usage_metadata_retained"] = retained
+    if "later_generation_metadata_verified" in values:
+        expected_booleans["later_generation_metadata_verified"] = True
+    for field, expected in expected_booleans.items():
+        if field in values and values[field] is not expected:
+            _historical_schema_error("application result")
+    if "accepted_fact_count" in values:
+        rejected = values.get("rejected_invariants")
+        if (
+            not _is_exact_historical_int(values["accepted_fact_count"], 7)
+            or not _is_exact_historical_int(values.get("rejected_fact_count"), 11)
+            or not isinstance(rejected, dict)
+            or set(rejected) != {"source_reference_set", "canonical_state"}
+            or not _is_exact_historical_int(rejected.get("source_reference_set"), 10)
+            or not _is_exact_historical_int(rejected.get("canonical_state"), 1)
+        ):
+            _historical_schema_error("application result")
+
+
+def _verify_historical_attempt_schema(evidence: Any) -> None:
+    if not isinstance(evidence, dict):
+        _historical_schema_error("record")
+    attempt_id = evidence.get("attempt_id")
+    if attempt_id not in _HISTORICAL_PROVIDER_FIELDS:
+        _historical_schema_error("record identity")
+    expected_top = _HISTORICAL_TOP_FIELDS
+    if attempt_id in _HISTORICAL_EXECUTION_FIELDS:
+        expected_top = expected_top | {"execution_observation"}
+    _require_historical_fields(evidence, frozenset(expected_top), "record")
+    requested_runtime = _require_historical_fields(
+        evidence.get("requested_runtime"),
+        frozenset({"mode", "model"}),
+        "requested runtime",
+    )
+    if requested_runtime != {
+        "mode": REQUIRED_PRODUCTION_MODE,
+        "model": REQUIRED_PRODUCTION_MODEL,
+    }:
+        _historical_schema_error("requested runtime")
+    _verify_historical_execution(attempt_id, evidence.get("execution_observation"))
+    _verify_historical_provider_observation(
+        attempt_id,
+        evidence.get("provider_observation"),
+    )
+    _verify_historical_application_result(
+        attempt_id,
+        evidence.get("application_result"),
+    )
 
 
 def _verify_sanitized_evidence(value: Any, label: str) -> None:
@@ -921,6 +1614,7 @@ def verify_failed_model_attempt_evidence(
 ) -> None:
     """Verify one retained provider attempt without treating it as acceptance."""
 
+    _verify_historical_attempt_schema(evidence)
     if evidence.get("contract") != "casepath.model-validation-evidence/1.0.0":
         raise VerificationError("Unsupported historical model validation evidence contract")
     if evidence.get("release_id") != release.get("release_id"):
@@ -996,7 +1690,11 @@ def verify_failed_model_attempt_evidence(
                     f"Unknown historical usage requires {key}={expected!r}"
                 )
         cache_assessment = provider_observation.get("provider_cache_replay_assessment")
-        if cache_assessment not in {"likely_unconfirmed", "not_assessed"}:
+        if cache_assessment not in {
+            "likely_unconfirmed",
+            "not_assessed",
+            "not_applicable_upstream_rejected",
+        }:
             raise VerificationError(
                 "Unknown historical usage requires a bounded cache-replay assessment"
             )
@@ -1006,6 +1704,14 @@ def verify_failed_model_attempt_evidence(
         ):
             raise VerificationError(
                 "A non-assessed cache replay requires openrouter_log_check_performed=false"
+            )
+        if cache_assessment == "not_applicable_upstream_rejected" and (
+            provider_observation.get("provider_outcome") != "upstream_rejected"
+            or provider_observation.get("openrouter_log_check_performed") is not True
+            or provider_observation.get("openrouter_upstream_request_log_observed") is not True
+        ):
+            raise VerificationError(
+                "An upstream-rejected cache assessment requires a checked upstream request log"
             )
         estimated_reservation = provider_observation.get(
             "estimated_cost_reservation_usd"
@@ -1094,7 +1800,7 @@ def verify_static_runtime_acceptance_contract(release: dict[str, Any]) -> None:
     }
     if history != expected_history:
         raise VerificationError(
-            "Historical model validation must retain exactly eight failed-closed records"
+            "Historical model validation must retain exactly nine failed-closed records"
         )
     for path_text in HISTORICAL_MODEL_VALIDATION_RECORDS:
         verify_failed_model_attempt_evidence(

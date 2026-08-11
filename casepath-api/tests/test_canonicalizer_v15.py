@@ -7,7 +7,7 @@ from pathlib import Path
 import time
 
 import httpx
-from openrouter import components
+from openrouter import OpenRouter, components
 from openrouter.utils.unmarshal_json_response import unmarshal_json_response
 import pytest
 
@@ -110,7 +110,7 @@ def response(*, model: str = OPENROUTER_MODEL, cost: float = 0.0042) -> dict:
     return {
         "id": "generation-test-1",
         "model": model,
-        "provider": "mock-upstream-provider",
+        "provider": "DeepInfra",
         "choices": [
             {
                 "finish_reason": "stop",
@@ -124,7 +124,7 @@ def response(*, model: str = OPENROUTER_MODEL, cost: float = 0.0042) -> dict:
             "cost": cost,
             "cost_details": {"upstream_inference_cost": cost},
         },
-        "openrouter_metadata": {"provider_name": "mock-upstream-provider"},
+        "openrouter_metadata": {"provider_name": "DeepInfra"},
     }
 
 
@@ -234,6 +234,51 @@ def assert_zero_accepted_rejection(storage: Storage, invariant: str) -> None:
     assert entry["rejected_fact_count"] == 1
 
 
+def test_model_call_summary_marks_only_network_rows_with_unknown_cost(tmp_path: Path):
+    storage = Storage(str(tmp_path / "summary.db"))
+    assert storage.model_call_summary()["actual_cost_complete"] is True
+    assert storage.model_call_summary()["unknown_cost_call_count"] == 0
+
+    for outcome in ("blocked_cost_guard", "cache_hit"):
+        storage.create_model_call(
+            run_id=None,
+            provider="openrouter",
+            model=OPENROUTER_MODEL,
+            cache_key=f"cache-{outcome}",
+            purpose="summary fixture",
+            call_count=0,
+            estimated_cost_usd=0,
+            outcome=outcome,
+        )
+    known_call = storage.create_model_call(
+        run_id=None,
+        provider="openrouter",
+        model=OPENROUTER_MODEL,
+        cache_key="cache-known",
+        purpose="summary fixture",
+        call_count=1,
+        estimated_cost_usd=0.01,
+        outcome="started",
+    )
+    storage.finish_model_call(known_call, outcome="succeeded", actual_cost_usd=0.004)
+    storage.create_model_call(
+        run_id=None,
+        provider="openrouter",
+        model=OPENROUTER_MODEL,
+        cache_key="cache-unknown",
+        purpose="summary fixture",
+        call_count=1,
+        estimated_cost_usd=0.01,
+        outcome="failed",
+    )
+
+    summary = storage.model_call_summary()
+    assert summary["network_calls"] == 2
+    assert summary["actual_cost_usd"] == pytest.approx(0.004)
+    assert summary["actual_cost_complete"] is False
+    assert summary["unknown_cost_call_count"] == 1
+
+
 def test_openrouter_request_is_one_bounded_exact_model_structured_call(tmp_path: Path):
     storage = Storage(str(tmp_path / "ledger.db"))
     calls: list[tuple] = []
@@ -298,7 +343,12 @@ def test_openrouter_request_is_one_bounded_exact_model_structured_call(tmp_path:
     registry_ids = fact_schema["properties"]["source_ref_ids"]["items"]["enum"]
     assert observable_ref_id(package()) in registry_ids
     assert len(registry_ids) > 1
-    assert request["provider"] == {"require_parameters": True, "data_collection": "deny"}
+    assert request["provider"] == {
+        "only": ["deepinfra/fp4"],
+        "allow_fallbacks": False,
+        "require_parameters": True,
+        "data_collection": "deny",
+    }
     assert "usage" not in request
     user_prompt = request["messages"][1]["content"]
     for private_field in (
@@ -362,7 +412,7 @@ def test_openrouter_request_is_one_bounded_exact_model_structured_call(tmp_path:
     assert entry["accepted_fact_count"] == 1
     assert entry["rejected_facts"] == []
     assert entry["rejected_fact_count"] == 0
-    assert entry["upstream_provider"] == "mock-upstream-provider"
+    assert entry["upstream_provider"] == "DeepInfra"
     assert entry["model"] == OPENROUTER_MODEL
     assert entry["response_model"] == OPENROUTER_MODEL
     assert entry["response_id"] == "generation-test-1"
@@ -1170,7 +1220,7 @@ def test_semantic_rejection_retains_charged_provider_usage_and_identity(tmp_path
     assert entry["error_type"] == "ModelResponseError"
     assert entry["model"] == OPENROUTER_MODEL
     assert entry["response_model"] == OPENROUTER_CANONICAL_MODEL
-    assert entry["upstream_provider"] == "mock-upstream-provider"
+    assert entry["upstream_provider"] == "DeepInfra"
     assert entry["response_id"] == "generation-test-1"
     assert entry["prompt_tokens"] == 123
     assert entry["completion_tokens"] == 45
@@ -1196,7 +1246,7 @@ def test_dated_canonical_nemotron_response_identity_is_accepted(tmp_path: Path):
     entry = storage.model_calls()[0]
     assert entry["model"] == OPENROUTER_MODEL
     assert entry["response_model"] == OPENROUTER_CANONICAL_MODEL
-    assert entry["upstream_provider"] == "mock-upstream-provider"
+    assert entry["upstream_provider"] == "DeepInfra"
 
 
 def test_conflicting_fact_requires_all_private_conflicting_text_refs(tmp_path: Path):
@@ -1735,6 +1785,222 @@ def test_default_langchain_invoker_maps_protocol_failure_to_bounded_invariant(
     assert captured.value.__context__ is None
 
 
+def test_default_langchain_invoker_maps_upstream_rejection_to_safe_context(
+    monkeypatch,
+):
+    class Runnable:
+        def invoke(self, *_args, **_kwargs):
+            raise langchain_runtime.OpenRouterUpstreamRejectionError(
+                response_id="gen-1786483160-AAAAAAAAAAAAAAAAAAAA",
+                provider_error_code=400,
+            )
+
+    monkeypatch.setattr(
+        canonicalizer_module,
+        "structured_nemotron_runnable",
+        lambda **_kwargs: Runnable(),
+    )
+
+    with pytest.raises(ModelResponseError) as captured:
+        canonicalizer_module._default_structured_invoker(
+            {"type": "object", "properties": {}, "additionalProperties": False},
+            "bounded system",
+            "bounded user",
+            "runtime-only-test-value",
+            "orch-upstream-rejection",
+            100,
+        )
+
+    assert captured.value.invariant == "provider_upstream_rejection"
+    assert captured.value.safe_context == {
+        "response_id": "gen-1786483160-AAAAAAAAAAAAAAAAAAAA",
+        "provider_error_code": 400,
+    }
+    assert captured.value.__cause__ is None
+    assert captured.value.__context__ is None
+
+
+def test_canonical_upstream_rejection_retains_only_safe_unknown_cost_evidence(
+    tmp_path: Path,
+):
+    inference_calls = 0
+
+    def rejected_invoker(*_args):
+        nonlocal inference_calls
+        inference_calls += 1
+        raise ModelResponseError(
+            "provider_upstream_rejection invariant failed",
+            invariant="provider_upstream_rejection",
+            safe_context={
+                "response_id": "gen-1786483161-BBBBBBBBBBBBBBBBBBBB",
+                "provider_error_code": 400,
+            },
+        )
+
+    storage = Storage(str(tmp_path / "upstream-rejection.db"))
+    canonicalizer = OpenRouterNemotronCanonicalizer(
+        storage,
+        structured_invoker=rejected_invoker,
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+
+    with pytest.raises(ModelResponseError, match="provider_upstream_rejection"):
+        canonicalizer.canonicalize(
+            package(),
+            run_id="run-upstream-rejection",
+            allowed_fact_catalog=catalog(),
+        )
+
+    assert inference_calls == 1
+    ledger = storage.sanitized_model_ledger()[0]
+    assert ledger["outcome"] == "failed"
+    assert ledger["error_invariant"] == "provider_upstream_rejection"
+    assert ledger["response_id"] == "gen-1786483161-BBBBBBBBBBBBBBBBBBBB"
+    assert ledger["provider_error_code"] == 400
+    assert ledger["actual_cost_usd"] is None
+    assert "usage_source" not in ledger
+    assert "prompt_tokens" not in ledger
+    assert storage.cached_model_output(ledger["cache_key"]) is None
+    assert storage.model_call_summary()["actual_cost_complete"] is False
+    assert storage.model_call_summary()["unknown_cost_call_count"] == 1
+
+
+def test_canonical_success_rejects_nonpinned_upstream_after_retaining_billing(
+    tmp_path: Path,
+):
+    inference_calls = 0
+
+    def transport(*_args):
+        nonlocal inference_calls
+        inference_calls += 1
+        value = response()
+        value["provider"] = "Together"
+        value["openrouter_metadata"]["provider_name"] = "Together"
+        return value
+
+    storage = Storage(str(tmp_path / "wrong-upstream.db"))
+    canonicalizer = OpenRouterNemotronCanonicalizer(
+        storage,
+        transport=transport,
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+
+    with pytest.raises(ModelResponseError, match="upstream_provider_policy"):
+        canonicalizer.canonicalize(
+            package(),
+            run_id="run-wrong-upstream",
+            allowed_fact_catalog=catalog(),
+        )
+
+    assert inference_calls == 1
+    ledger = storage.sanitized_model_ledger()[0]
+    assert ledger["outcome"] == "failed"
+    assert ledger["error_invariant"] == "upstream_provider_policy"
+    assert ledger["response_id"] == "generation-test-1"
+    assert ledger["response_model"] == OPENROUTER_MODEL
+    assert ledger["upstream_provider"] == "Together"
+    assert ledger["actual_cost_usd"] == pytest.approx(0.0042)
+    assert ledger["usage_source"] == "response"
+    assert storage.cached_model_output(ledger["cache_key"]) is None
+
+
+def test_canonicalizer_uses_synchronous_sdk_provider_without_generation_poll(
+    tmp_path: Path,
+    monkeypatch,
+):
+    requests: list[httpx.Request] = []
+    sdk_clients: list[httpx.Client] = []
+    metadata_calls = 0
+    expected = response()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            json={
+                "id": expected["id"],
+                "model": expected["model"],
+                "object": "chat.completion",
+                "created": 1786479000,
+                "system_fingerprint": None,
+                "openrouter_metadata": {
+                    "attempt": 1,
+                    "endpoints": {
+                        "available": [
+                            {
+                                "model": OPENROUTER_MODEL,
+                                "provider": "DeepInfra",
+                                "selected": True,
+                            }
+                        ],
+                        "total": 1,
+                    },
+                    "is_byok": False,
+                    "region": None,
+                    "requested": OPENROUTER_MODEL,
+                    "strategy": "direct",
+                    "summary": "RAW_CANONICAL_ROUTER_SUMMARY_SENTINEL",
+                },
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": "stop",
+                        "message": expected["choices"][0]["message"],
+                    }
+                ],
+                "usage": expected["usage"],
+            },
+        )
+
+    def instrumented_openrouter(**kwargs):
+        client = httpx.Client(transport=httpx.MockTransport(handler))
+        sdk_clients.append(client)
+        return OpenRouter(client=client, **kwargs)
+
+    def forbidden_metadata_transport(*_args):
+        nonlocal metadata_calls
+        metadata_calls += 1
+        raise AssertionError("synchronous DeepInfra metadata must avoid generation polling")
+
+    monkeypatch.setattr(langchain_runtime, "OpenRouter", instrumented_openrouter)
+    storage = Storage(str(tmp_path / "synchronous-sdk-provider.db"))
+    canonicalizer = OpenRouterNemotronCanonicalizer(
+        storage,
+        metadata_transport=forbidden_metadata_transport,
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+
+    try:
+        result = canonicalizer.canonicalize(
+            package(),
+            run_id="run-synchronous-sdk-provider",
+            allowed_fact_catalog=catalog(),
+        )
+    finally:
+        for client in sdk_clients:
+            client.close()
+
+    assert len(requests) == 1
+    assert metadata_calls == 0
+    request_body = json.loads(requests[0].content)
+    assert request_body["provider"] == {
+        "only": ["deepinfra/fp4"],
+        "allow_fallbacks": False,
+        "require_parameters": True,
+        "data_collection": "deny",
+    }
+    assert "x_open_router_metadata" not in request_body
+    assert requests[0].headers["X-OpenRouter-Metadata"] == "enabled"
+    assert result["upstream_provider"] == "DeepInfra"
+    assert result["usage_source"] == "response"
+    ledger = storage.sanitized_model_ledger()[0]
+    assert ledger["outcome"] == "succeeded"
+    assert ledger["upstream_provider"] == "DeepInfra"
+    assert ledger["actual_cost_usd"] == pytest.approx(0.0042)
+    assert "RAW_CANONICAL_ROUTER_SUMMARY_SENTINEL" not in json.dumps(ledger)
+
+
 def test_canonicalizer_replays_sdk_schema_drift_through_real_langchain_once(
     tmp_path: Path,
     monkeypatch,
@@ -1747,6 +2013,10 @@ def test_canonicalizer_replays_sdk_schema_drift_through_real_langchain_once(
         "model": expected["model"],
         "object": "chat.completion",
         "created": 1786479000,
+        "openrouter_metadata": {
+            "provider_name": "DeepInfra",
+            "summary": "RAW_SCHEMA_DRIFT_ROUTER_SENTINEL",
+        },
         "choices": [
             {
                 "index": 0,
@@ -1780,7 +2050,7 @@ def test_canonicalizer_replays_sdk_schema_drift_through_real_langchain_once(
     def metadata_transport(*_args):
         nonlocal metadata_calls
         metadata_calls += 1
-        return generation_metadata()
+        raise AssertionError("synchronous DeepInfra metadata must avoid generation polling")
 
     monkeypatch.setattr(langchain_runtime, "OpenRouter", FakeOpenRouter)
     storage = Storage(str(tmp_path / "sdk-drift-replay.db"))
@@ -1797,35 +2067,47 @@ def test_canonicalizer_replays_sdk_schema_drift_through_real_langchain_once(
     )
 
     assert provider_calls == 1
-    assert metadata_calls == 1
+    assert metadata_calls == 0
     assert result["facts"][0]["fact_id"] == "fact_report"
     assert result["upstream_provider"] == "DeepInfra"
-    assert result["usage_source"] == "generation_metadata"
+    assert result["usage_source"] == "response"
     ledger = storage.sanitized_model_ledger()[0]
     assert ledger["outcome"] == "succeeded"
     assert ledger["response_id"] == "generation-test-1"
-    assert ledger["actual_cost_usd"] == pytest.approx(0.0057)
+    assert ledger["actual_cost_usd"] == pytest.approx(0.0042)
+    assert "RAW_SCHEMA_DRIFT_ROUTER_SENTINEL" not in json.dumps(ledger)
 
 
+@pytest.mark.parametrize("response_variant", ["length", "nullable_choice_error"])
 def test_canonical_sdk_drift_nonstop_retains_billing_before_rejection(
     tmp_path: Path,
     monkeypatch,
+    response_variant: str,
 ):
     provider_calls = 0
     metadata_calls = 0
     expected = response()
+    expected_finish_reason = "length" if response_variant == "length" else "error"
+    choice = {
+        "index": 0,
+        "finish_reason": expected_finish_reason,
+        "message": {
+            **expected["choices"][0]["message"],
+            "content": (
+                expected["choices"][0]["message"]["content"]
+                if response_variant == "length"
+                else None
+            ),
+        },
+    }
+    if response_variant == "nullable_choice_error":
+        choice["error"] = {"message": "RAW_NULL_CONTENT_SENTINEL"}
     provider_payload = {
         "id": expected["id"],
         "model": expected["model"],
         "object": "chat.completion",
         "created": 1786479000,
-        "choices": [
-            {
-                "index": 0,
-                "finish_reason": "length",
-                "message": expected["choices"][0]["message"],
-            }
-        ],
+        "choices": [choice],
         "usage": expected["usage"],
     }
 
@@ -1853,7 +2135,7 @@ def test_canonical_sdk_drift_nonstop_retains_billing_before_rejection(
         return generation_metadata()
 
     monkeypatch.setattr(langchain_runtime, "OpenRouter", FakeOpenRouter)
-    storage = Storage(str(tmp_path / "sdk-drift-nonstop.db"))
+    storage = Storage(str(tmp_path / f"sdk-drift-{response_variant}.db"))
     canonicalizer = OpenRouterNemotronCanonicalizer(
         storage,
         metadata_transport=metadata_transport,
@@ -1863,7 +2145,7 @@ def test_canonical_sdk_drift_nonstop_retains_billing_before_rejection(
     with pytest.raises(ModelResponseError, match="provider_finish_reason"):
         canonicalizer.canonicalize(
             package(),
-            run_id="run-sdk-drift-nonstop",
+            run_id=f"run-sdk-drift-{response_variant}",
             allowed_fact_catalog=catalog(),
         )
 
@@ -1873,8 +2155,9 @@ def test_canonical_sdk_drift_nonstop_retains_billing_before_rejection(
     assert ledger["outcome"] == "failed"
     assert ledger["error_invariant"] == "provider_finish_reason"
     assert ledger["response_id"] == "generation-test-1"
-    assert ledger["finish_reason"] == "length"
+    assert ledger["finish_reason"] == expected_finish_reason
     assert ledger["actual_cost_usd"] == pytest.approx(0.0057)
+    assert "RAW_NULL_CONTENT_SENTINEL" not in json.dumps(ledger)
     assert storage.cached_model_output(ledger["cache_key"]) is None
 
 

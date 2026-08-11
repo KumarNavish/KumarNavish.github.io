@@ -287,7 +287,8 @@
                 "casepath/releases/model-validation-attempt-20260811-05.json",
                 "casepath/releases/model-validation-attempt-20260811-06.json",
                 "casepath/releases/model-validation-attempt-20260811-07.json",
-                "casepath/releases/model-validation-attempt-20260811-08.json"
+                "casepath/releases/model-validation-attempt-20260811-08.json",
+                "casepath/releases/model-validation-attempt-20260811-09.json"
               ]
             },
             "establishes_current_runtime_acceptance": { "const": false }

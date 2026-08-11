@@ -38,14 +38,16 @@ from .canonicalizer import (
 )
 from .storage import Storage
 from .langchain_runtime import (
+    OPENROUTER_EXPECTED_UPSTREAM_PROVIDER,
     OpenRouterProtocolError,
+    OpenRouterUpstreamRejectionError,
     assert_external_tracing_disabled,
     sanitize_provider_provenance,
     structured_nemotron_runnable,
 )
 
 
-MULTI_AGENT_VERSION = "1.0.3"
+MULTI_AGENT_VERSION = "1.0.4"
 MULTI_AGENT_SCHEMA_VERSION = "casepath.nemotron-agent-dag/1.0.0"
 MULTI_AGENT_AUTHORITY_MODE = "multi_agent_hybrid_guarded"
 MULTI_AGENT_IMPLEMENTATION = "langgraph_stategraph_langchain_openrouter"
@@ -937,6 +939,11 @@ class InstrumentedStructuredAgent:
                 raise AgentBoundaryError(agent_id, "generation_metadata_model")
             if "actual_cost_usd" not in provider_patch:
                 raise AgentBoundaryError(agent_id, "generation_metadata_completeness")
+            if (
+                provider_patch.get("upstream_provider")
+                != OPENROUTER_EXPECTED_UPSTREAM_PROVIDER
+            ):
+                raise AgentBoundaryError(agent_id, "upstream_provider_policy")
             if provider_patch.get("finish_reason") != "stop":
                 raise AgentBoundaryError(agent_id, "provider_finish_reason")
             if response.get("parsing_error") is not None or response.get("parsed") is None:
@@ -1035,9 +1042,12 @@ class InstrumentedStructuredAgent:
                     "finish_reason",
                     "invalid_provenance_field",
                     "invalid_provenance_value_hash",
+                    "provider_error_code",
                 ):
                     if key in exc.safe_context:
                         provider_patch[key] = exc.safe_context[key]
+            elif isinstance(exc, OpenRouterUpstreamRejectionError):
+                provider_patch.update(exc.safe_context)
             if not finished:
                 patch = {
                     **provider_patch,
@@ -1047,14 +1057,30 @@ class InstrumentedStructuredAgent:
                     "error_type": type(exc).__name__,
                     "error_agent_id": agent_id,
                 }
-                if isinstance(exc, (AgentBoundaryError, ModelResponseError, OpenRouterProtocolError)):
+                if isinstance(
+                    exc,
+                    (
+                        AgentBoundaryError,
+                        ModelResponseError,
+                        OpenRouterProtocolError,
+                        OpenRouterUpstreamRejectionError,
+                    ),
+                ):
                     patch["error_invariant"] = exc.invariant
                 self.storage.finish_model_call(call_id, outcome="failed", **patch)
             if isinstance(exc, (ModelCostGuardError, AgentInvocationFailure)):
                 raise
             invariant = (
                 exc.invariant
-                if isinstance(exc, (AgentBoundaryError, ModelResponseError, OpenRouterProtocolError))
+                if isinstance(
+                    exc,
+                    (
+                        AgentBoundaryError,
+                        ModelResponseError,
+                        OpenRouterProtocolError,
+                        OpenRouterUpstreamRejectionError,
+                    ),
+                )
                 else "provider_invocation"
             )
             safe_context = {
@@ -1072,6 +1098,7 @@ class InstrumentedStructuredAgent:
                         "finish_reason",
                         "invalid_provenance_field",
                         "invalid_provenance_value_hash",
+                        "provider_error_code",
                     )
                     if key in provider_patch
                 },
@@ -1373,6 +1400,7 @@ class NemotronMultiAgentOrchestrator:
                             "outcome",
                             "invalid_provenance_field",
                             "invalid_provenance_value_hash",
+                            "provider_error_code",
                         )
                         if key in safe_context
                     },

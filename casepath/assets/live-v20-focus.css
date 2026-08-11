@@ -70,6 +70,12 @@ html[data-casepath-release="20.0.0"] .v18-handoff{display:none!important}
 .orchestration-receipt.gate-receipt[data-gate-outcome*="fail"] .receipt-mark,.orchestration-receipt.gate-receipt[data-gate-outcome*="reject"] .receipt-mark{background:#fff1f0;color:#a33b32}
 .orchestration-receipt small{display:block;color:var(--quiet);font-size:7px;font-weight:770;letter-spacing:.06em;text-transform:uppercase}
 .orchestration-receipt strong{display:block;margin-top:2px;font-size:9px;line-height:1.25;overflow-wrap:anywhere}
+.orchestration-run-summary{display:grid;grid-template-columns:minmax(190px,.72fr) minmax(300px,1fr);align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--line)}
+.orchestration-run-summary>div:first-child small{display:block;color:var(--quiet);font-size:7px;font-weight:780;letter-spacing:.06em;text-transform:uppercase}
+.orchestration-run-summary>div:first-child strong{display:block;margin-top:2px;font-size:10px;line-height:1.3}
+.orchestration-parallel-branch{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:6px;min-width:0;color:var(--muted);font-size:7px}
+.orchestration-parallel-branch span,.orchestration-parallel-branch strong{min-width:0;padding:5px 7px;border:1px solid var(--line);border-radius:5px;background:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.orchestration-parallel-branch span{color:var(--accent);font-weight:720}.orchestration-parallel-branch strong{color:var(--green);font-size:7px}.orchestration-parallel-branch i{color:var(--quiet);font-size:6px;font-style:normal;font-weight:780;letter-spacing:.05em;text-transform:uppercase}.orchestration-parallel-branch b{color:var(--quiet)}
 .orchestration-team-trace{border-top:1px solid var(--line)}
 .orchestration-team-trace summary{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:9px;min-height:30px;cursor:pointer;list-style:none;color:var(--muted);font-size:8px}
 .orchestration-team-trace summary::-webkit-details-marker{display:none}
@@ -126,6 +132,12 @@ html[data-casepath-release="20.0.0"] .decision-inspector>p{margin-bottom:15px;fo
 html[data-casepath-release="20.0.0"] .inspector-section{padding:12px 0}
 html[data-casepath-release="20.0.0"] .inspector-section h4{margin-bottom:7px;font-size:10px}
 html[data-casepath-release="20.0.0"] .inspector-row{margin:6px 0}
+.model-contribution-attribution{display:flex;align-items:flex-start;gap:5px;margin-top:6px;color:var(--muted);font-size:7px;line-height:1.35}
+.model-contribution-attribution>i{flex:0 0 auto;width:6px;height:6px;margin-top:2px;border-radius:50%;background:var(--accent)}
+.model-contribution-attribution>span{min-width:0}.model-contribution-attribution strong{display:block;color:var(--accent);font-size:7px;font-weight:780}.model-contribution-attribution small{display:block;margin-top:1px;color:var(--quiet);font-size:6.5px}
+.model-contribution-attribution.deterministic-fallback>i{background:var(--amber)}.model-contribution-attribution.deterministic-fallback strong{color:#805a14}
+.model-contribution-attribution.mixed>i{background:linear-gradient(90deg,var(--accent) 50%,var(--amber) 50%)}.model-contribution-attribution.mixed strong{color:var(--ink)}
+.inspector-row .model-contribution-attribution{margin-top:5px}.inspector-row .model-contribution-attribution>i{margin-top:2px}
 html[data-casepath-release="20.0.0"] .precedent-inline{margin-top:12px;padding-top:12px}
 html[data-casepath-release="20.0.0"] .precedent-inline header span{display:none}
 html[data-casepath-release="20.0.0"] .precedent-mini{padding:8px 0}
@@ -283,6 +295,9 @@ html[data-casepath-release="20.0.0"] .journey-actions .primary-button{min-height
   .orchestration-actor-meta>span{flex:1 1 126px;max-width:none;padding:4px 6px}
   .orchestration-receipts{grid-template-columns:1fr;gap:5px;padding-bottom:6px}
   .orchestration-receipt{grid-column:1;padding:6px 8px}
+  .orchestration-run-summary{grid-template-columns:1fr;gap:7px}
+  .orchestration-parallel-branch{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr)}
+  .orchestration-parallel-branch b,.orchestration-parallel-branch strong{display:none}
   .orchestration-team-trace ol{margin:0 -16px;padding:5px 16px 9px}
   .orchestration-boundary{margin:0 -16px;padding:5px 16px}
   .orchestration-team-trace li{grid-template-columns:105px minmax(110px,1fr) auto}

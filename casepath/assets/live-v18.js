@@ -5,13 +5,13 @@
   const API = (params.get('api') || window.CASEPATH_API || 'https://casepath-agentic-api.onrender.com').replace(/\/$/, '');
   const stageOrder = ['read', 'understand', 'research', 'process', 'evidence', 'experience', 'verify'];
   const stages = {
-    read: { label: 'Read evidence', agent: 'Attachment Parsing Agent', job: 'Reading the customer message and every original attachment.' },
-    understand: { label: 'Understand claim', agent: 'Claim Understanding Agent', job: 'Separating supported facts, allegations, conflicts, and unknowns.' },
-    research: { label: 'Research law', agent: 'Legal Research Agent', job: 'Connecting Swiss-law sources to the decisions they shape.' },
-    process: { label: 'Build process', agent: 'Process Discovery Agent', job: 'Working out every decision from intake to resolution.' },
-    evidence: { label: 'Map evidence', agent: 'Document Requirements Agent', job: 'Attaching facts and evidence needs to each process decision.' },
-    experience: { label: 'Find experience', agent: 'Historical Claims Agent', job: 'Finding provenance-labelled reference precedents at the difficult branch.' },
-    verify: { label: 'Verify plan', agent: 'Verification Agent', job: 'Checking graph integrity, grounding, and document traceability.' },
+    read: { label: 'Read evidence', agent: 'Attachment Parsing Tool', job: 'Reading the customer message and every original attachment.' },
+    understand: { label: 'Understand claim', agent: 'Canonical Claim Preparation Tool', job: 'Separating supported facts, allegations, conflicts, and unknowns.' },
+    research: { label: 'Research law', agent: 'Swiss Legal Source Tool', job: 'Connecting Swiss-law sources to the decisions they shape.' },
+    process: { label: 'Build process', agent: 'Process Projection Tool', job: 'Working out every decision from intake to resolution.' },
+    evidence: { label: 'Map evidence', agent: 'Evidence Checklist Tool', job: 'Attaching facts and evidence needs to each process decision.' },
+    experience: { label: 'Find experience', agent: 'Historical Retrieval Tool', job: 'Finding provenance-labelled reference precedents at the difficult branch.' },
+    verify: { label: 'Verify plan', agent: 'Whole-Playbook Verification Gate', job: 'Checking graph integrity, grounding, and document traceability.' },
   };
   const artifactLabels = {
     read: 'source package',
@@ -158,12 +158,12 @@
       agent = 'Simulated demo review';
       label = 'Correct the reasoning where it matters';
       job = 'The process, evidence order, and next action update together.';
-      nextLabel = 'Knowledge Agent';
+      nextLabel = 'Deterministic knowledge governance';
       context = 'Human correction is being applied to the generated playbook.';
     } else if (current.kind === 'knowledge') {
       state = 'knowledge';
       count = 'KA';
-      agent = 'Knowledge Agent';
+      agent = 'Deterministic knowledge governance';
       label = 'Decide what can safely be reused';
       job = 'Unverified demo memory is immediate; shared playbook changes still require qualified support and regression gates.';
       nextLabel = 'Unseen claim';
@@ -172,7 +172,7 @@
       state = 'reuse';
       count = '↻';
       const latest = [...canvas.querySelectorAll('.later-agent-row strong')].at(-1)?.textContent?.trim();
-      agent = latest ? `${latest} specialist` : 'CasePath team';
+      agent = latest ? `${latest} stage` : 'CasePath pipeline';
       label = latest ? 'Re-running the unseen claim' : 'Opening an unseen claim';
       job = 'The same team is checking whether unverified demo memory is actually retrieved.';
       nextLabel = canvas.querySelector('#laterResult .before-after') ? 'Computed comparison' : 'Next specialist';

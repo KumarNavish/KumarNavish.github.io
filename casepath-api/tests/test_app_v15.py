@@ -93,6 +93,8 @@ def test_health_and_release_metadata_expose_semantic_identity(client: TestClient
     ready = client.get("/readyz").json()
     assert ready["model_budget"]["cumulative_usd_cap"] == 25.0
     assert ready["model_budget"]["network_calls"] == 0
+    assert ready["model_budget"]["actual_cost_complete"] is True
+    assert ready["model_budget"]["unknown_cost_call_count"] == 0
     assert ready["model_budget"]["budget_scope"] == "instance_lifetime"
     assert ready["model_budget"]["ledger_persistence"] == "ephemeral_instance"
 
@@ -117,6 +119,14 @@ def test_model_ready_requires_exact_runtime_profile_and_secret_presence(
     assert ready.status_code == 200
     assert ready.json()["agentic_runtime"]["profile_aligned"] is True
     assert ready.json()["agentic_runtime"]["safety"]["credential_configured"] is True
+    health = client.get("/healthz").json()
+    assert health["agentic_runtime"]["safety"]["provider_routing"] == {
+        "endpoint_tag": "deepinfra/fp4",
+        "expected_upstream_provider": "DeepInfra",
+        "allow_fallbacks": False,
+        "require_parameters": True,
+        "data_collection": "deny",
+    }
     assert "runtime-only-test-value" not in ready.text
 
     monkeypatch.setenv("CASEPATH_AGENT_RUNTIME_PROFILE", "wrong-runtime")
@@ -386,6 +396,7 @@ def test_model_ledger_endpoint_is_global_and_strictly_sanitized(client: TestClie
         error_type="SafeErrorType",
         error_fact_id="fact_safe_identifier",
         error_invariant="normalized_value_admissibility",
+        provider_error_code="provider-error-secret-must-not-leak",
         ignored_noncontrolling_normalized_proposals=1,
         authority_mode="hybrid_guarded",
         accepted_fact_ids=["fact_safe_identifier"],
@@ -408,6 +419,10 @@ def test_model_ledger_endpoint_is_global_and_strictly_sanitized(client: TestClie
     assert response.status_code == 200
     value = response.json()
     assert value["scope"] == "global_budget_ledger"
+    assert value["summary"]["network_calls"] == 1
+    assert value["summary"]["actual_cost_usd"] == 0
+    assert value["summary"]["actual_cost_complete"] is False
+    assert value["summary"]["unknown_cost_call_count"] == 1
     assert value["items"][0]["error_type"] == "SafeErrorType"
     assert value["items"][0]["orchestration_id"] == "orch_safe_identifier"
     assert value["items"][0]["agent_id"] == "canonical_facts"
@@ -435,6 +450,7 @@ def test_model_ledger_endpoint_is_global_and_strictly_sanitized(client: TestClie
         "openrouter_metadata",
         "origin_usage",
         "origin_finish_reason",
+        "provider_error_code",
     ):
         assert forbidden_key not in value["items"][0]
     serialized = response.text
@@ -443,5 +459,6 @@ def test_model_ledger_endpoint_is_global_and_strictly_sanitized(client: TestClie
         "secret-message-must-not-leak",
         "canonical-output-must-not-leak",
         "provider_internal",
+        "provider-error-secret-must-not-leak",
     ):
         assert forbidden not in serialized

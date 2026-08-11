@@ -8,37 +8,37 @@
   const STAGES = {
     read: {
       label: 'Read evidence',
-      agent: 'Attachment Parsing Agent',
+      agent: 'Attachment Parsing Tool',
       job: 'Reading the customer message and every original attachment.',
     },
     understand: {
       label: 'Understand claim',
-      agent: 'Claim Understanding Agent',
+      agent: 'Canonical Claim Preparation Tool',
       job: 'Separating supported facts, allegations, conflicts, and unknowns.',
     },
     research: {
       label: 'Research law',
-      agent: 'Legal Research Agent',
+      agent: 'Swiss Legal Source Tool',
       job: 'Finding the Swiss-law questions that shape this process.',
     },
     process: {
       label: 'Build process',
-      agent: 'Process Discovery Agent',
+      agent: 'Process Projection Tool',
       job: 'Working out every decision from intake to resolution.',
     },
     evidence: {
       label: 'Map evidence',
-      agent: 'Document Requirements Agent',
+      agent: 'Evidence Checklist Tool',
       job: 'Attaching facts and evidence needs to each process decision.',
     },
     experience: {
       label: 'Find experience',
-      agent: 'Historical Claims Agent',
+      agent: 'Historical Retrieval Tool',
       job: 'Finding provenance-labelled reference precedents at the difficult branch.',
     },
     verify: {
       label: 'Verify plan',
-      agent: 'Verification Agent',
+      agent: 'Whole-Playbook Verification Gate',
       job: 'Checking graph integrity, grounding, and document traceability.',
     },
   };
@@ -167,13 +167,13 @@
     let label = '';
     let detail = '';
     if (/attaching evidence needs|attaching evidence/i.test(text)) {
-      label = 'Document Requirements Agent';
+      label = 'Evidence Checklist Tool';
       detail = 'Attaching each fact and evidence requirement to the decision it can resolve.';
     } else if (/asking organizational memory|organizational experience/i.test(text)) {
-      label = 'Historical Claims Agent';
+      label = 'Historical Retrieval Tool';
       detail = 'Searching provenance-labelled reference precedents at the unresolved causation branch.';
     } else if (/verif|checking the complete playbook/i.test(text)) {
-      label = 'Verification Agent';
+      label = 'Whole-Playbook Verification Gate';
       detail = 'Checking the graph and every process-to-evidence relationship before review.';
     }
     if (!label || canvas.querySelector('.v17-continuity')) return;
@@ -235,10 +235,10 @@
   function addBuildState(canvas, layout, mode, nodeCount) {
     if (canvas.querySelector('.v17-build-state') || ['ready', 'review'].includes(mode)) return;
     const copy = {
-      process: ['Process Discovery Agent', 'Reconstructing the handling process', 'Each node comes from the shared facts, law, and current uncertainty.'],
-      evidence: ['Document Requirements Agent', 'Attaching evidence to the process', 'The checklist is being generated from the decisions—not retrieved from a generic template.'],
-      experience: ['Historical Claims Agent', 'Contributing reference experience', 'Each returned precedent states whether it is generated reference material, qualified memory, or unverified demo memory.'],
-      verify: ['Verification Agent', 'Checking the complete playbook', 'Every graph edge and evidence relationship must remain traceable before review.'],
+      process: ['Deterministic process candidate', 'Reconstructing the handling process', 'Each node comes from the shared facts, law, and current uncertainty.'],
+      evidence: ['Deterministic evidence candidate', 'Attaching evidence to the process', 'The checklist is being generated from the decisions—not retrieved from a generic template.'],
+      experience: ['Reference retrieval', 'Contributing reference experience', 'Each returned precedent states whether it is generated reference material, qualified memory, or unverified demo memory.'],
+      verify: ['Deterministic verification', 'Checking the complete playbook', 'Every graph edge and evidence relationship must remain traceable before review.'],
     }[mode];
     if (!copy) return;
     const state = document.createElement('div');
@@ -311,7 +311,7 @@
     const count = (run?.precedents || run?.result?.precedents || []).length;
     if (!count || !document.contains(precedents)) return;
     precedents.insertAdjacentHTML('afterbegin', `
-      <div class="v17-experience-note"><span aria-hidden="true"></span><div><small>Historical Claims Agent</small><strong>${count} reference precedents were returned here. Each card states its generated, qualified-review, or unverified-demo provenance.</strong></div></div>`);
+      <div class="v17-experience-note"><span aria-hidden="true"></span><div><small>Reference retrieval</small><strong>${count} reference precedents were returned here. Each card states its generated, qualified-review, or unverified-demo provenance.</strong></div></div>`);
   }
 
   function groupItems(items) {
@@ -323,10 +323,22 @@
     ];
   }
 
+  function checklistContribution(item) {
+    const contribution = item?.agent_contribution;
+    if (!contribution || typeof contribution !== 'object') return '';
+    const fallback = contribution.deterministic_fallback_applied === true;
+    const attribution = typeof contribution.attribution === 'string' ? contribution.attribution : '';
+    const accepted = contribution.deterministic_fallback_applied === false && attribution === 'Evidence and Checklist Agent';
+    if (!accepted && !fallback) return '';
+    const authority = accepted ? 'nemotron-accepted' : 'deterministic-fallback';
+    const label = accepted ? 'Nemotron accepted · 1 item' : 'Deterministic fallback · 1 item';
+    return `<span class="model-contribution-attribution ${authority}" data-contribution-authority="${authority}" data-accepted-count="${accepted ? 1 : 0}" data-fallback-count="${fallback ? 1 : 0}"><i aria-hidden="true"></i><span><strong>${label}</strong>${accepted ? `<small>${esc(attribution)}</small>` : ''}</span></span>`;
+  }
+
   function checklistItem(item, nodeMap) {
     const node = nodeMap.get(item.node_id);
     const relation = node ? `Required for: ${node.title}` : item.node_id ? `Linked to: ${item.node_id.replaceAll('_', ' ')}` : '';
-    return `<div class="v17-checklist-item" data-item-id="${esc(item.item_id || '')}" data-node-id="${esc(item.node_id || '')}" data-fact-id="${esc(item.fact_id || '')}"><i aria-hidden="true"></i><div><strong>${esc(item.title)} — ${esc(statusName(item.status))}</strong><p>${esc(relation)}${item.why ? ` · ${esc(item.why)}` : ''}</p><small>${esc(item.item_id || '')} · decision ${esc(item.node_id || '')} · fact ${esc(item.fact_id || '')}</small></div></div>`;
+    return `<div class="v17-checklist-item" data-item-id="${esc(item.item_id || '')}" data-node-id="${esc(item.node_id || '')}" data-fact-id="${esc(item.fact_id || '')}"><i aria-hidden="true"></i><div><strong>${esc(item.title)} — ${esc(statusName(item.status))}</strong><p>${esc(relation)}${item.why ? ` · ${esc(item.why)}` : ''}</p><small>${esc(item.item_id || '')} · decision ${esc(item.node_id || '')} · fact ${esc(item.fact_id || '')}</small>${checklistContribution(item)}</div></div>`;
   }
 
   async function enhanceReady(canvas) {
