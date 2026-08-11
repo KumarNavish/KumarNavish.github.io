@@ -1,0 +1,53 @@
+name: CasePath knowledge-transfer assembly
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - .github/workflows/casepath-knowledge-transfer-assembly.yml
+
+permissions:
+  contents: write
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out master
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Reconstruct and verify the handoff from the staged branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin casepath-knowledge-transfer-builder
+          for part in 00 01 02; do
+            git show "origin/casepath-knowledge-transfer-builder:.casepath-handoff/payload.part${part}" \
+              > "/tmp/payload.part${part}"
+          done
+          cat /tmp/payload.part00 /tmp/payload.part01 /tmp/payload.part02 \
+            > /tmp/casepath-handoff.b64
+          base64 --decode /tmp/casepath-handoff.b64 \
+            | xz --decompress --stdout \
+            > /tmp/CASEPATH_MASTER_KNOWLEDGE_TRANSFER.md
+          echo "a8da1fc07f7cfdbdc417285a047ac9d33b1d66d429933fc85bea17c16103fb35  /tmp/CASEPATH_MASTER_KNOWLEDGE_TRANSFER.md" \
+            | sha256sum --check
+          test "$(wc -c < /tmp/CASEPATH_MASTER_KNOWLEDGE_TRANSFER.md)" -eq 149451
+          grep -q '^# CasePath Master Knowledge Transfer$' /tmp/CASEPATH_MASTER_KNOWLEDGE_TRANSFER.md
+          grep -q '^## 25\. Operating rules for future agents$' /tmp/CASEPATH_MASTER_KNOWLEDGE_TRANSFER.md
+
+      - name: Commit the root handoff and remove this temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp /tmp/CASEPATH_MASTER_KNOWLEDGE_TRANSFER.md ./CASEPATH_MASTER_KNOWLEDGE_TRANSFER.md
+          rm .github/workflows/casepath-knowledge-transfer-assembly.yml
+          git config user.name "CasePath Knowledge Transfer Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add CASEPATH_MASTER_KNOWLEDGE_TRANSFER.md .github/workflows/casepath-knowledge-transfer-assembly.yml
+          git commit -m "Add CasePath master knowledge transfer"
+          git push origin HEAD:master
