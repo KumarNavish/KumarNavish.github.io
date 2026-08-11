@@ -329,7 +329,8 @@ def test_openrouter_request_is_one_bounded_exact_model_structured_call(tmp_path:
     assert headers["X-OpenRouter-Metadata"] == "enabled"
     assert request["model"] == OPENROUTER_MODEL
     assert "models" not in request
-    assert request["max_tokens"] == 4000
+    assert request["max_tokens"] == 8192
+    assert request["reasoning"] == {"effort": "medium"}
     assert request["stream"] is False
     assert request["response_format"]["type"] == "json_schema"
     assert request["response_format"]["json_schema"]["strict"] is True

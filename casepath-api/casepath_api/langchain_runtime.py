@@ -23,6 +23,7 @@ OPENROUTER_PROVIDER_POLICY = {
     "require_parameters": True,
     "data_collection": "deny",
 }
+OPENROUTER_REASONING = {"effort": "medium"}
 OPENROUTER_TIMEOUT_MILLISECONDS = 180_000
 OPENROUTER_RESPONSE_BODY_LIMIT_BYTES = 1_000_000
 OPENROUTER_RESPONSE_TEXT_PART_LIMIT = 64
@@ -543,6 +544,7 @@ def structured_nemotron_runnable(
         timeout=OPENROUTER_TIMEOUT_MILLISECONDS,
         max_retries=0,
         openrouter_provider=openrouter_provider_policy(),
+        reasoning=dict(OPENROUTER_REASONING),
         app_title="CasePath",
         session_id=orchestration_id,
     )
@@ -560,6 +562,7 @@ __all__ = [
     "OPENROUTER_EXPECTED_UPSTREAM_PROVIDER",
     "OPENROUTER_PROVIDER_ERROR_CODE_MAX",
     "OPENROUTER_PROVIDER_POLICY",
+    "OPENROUTER_REASONING",
     "OPENROUTER_RESPONSE_BODY_LIMIT_BYTES",
     "OPENROUTER_RESPONSE_TEXT_PART_LIMIT",
     "OPENROUTER_TIMEOUT_MILLISECONDS",
