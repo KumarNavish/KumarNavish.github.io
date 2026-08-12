@@ -5335,4 +5335,76 @@ evidence catalog remains a bounded deterministic mould/moisture playbook, and
 shared playbook v3 remains unchanged while the one-case memory is unverified and
 quarantined.
 
+## Hosted desktop convergence after the local freeze
+
+This section supersedes the point-in-time deployment-status statements above
+without rewriting the immutable attempt 01–21 history. A later hosted desktop
+journey ran with frontend, API, and QA aligned on exact source commit
+`0db743a2a7a06c56bd5f011cc5928ef39efe424d`. The browser report completed the
+full end-to-end flagship, review, learning, and held-out-later-claim flow with
+`218` passed checks and `0` failed checks. The retained production evidence was
+exactly 15 JSON documents, 14 PNG screenshots, and one WebM recording. Public
+artifact bytes, sizes, SHA-256 values, content types, and no-store headers were
+checked against that manifest.
+
+The model topology completed twice cold and twice warm: the flagship produced
+six paid calls followed by six exact zero-network cache hits, and the held-out
+later claim produced another six paid calls followed by another six exact
+cache hits. The immutable final application ledger contained exactly 24 rows,
+12 network calls, and 12 cache hits. It was cost complete at USD 0.0459277,
+with 58,845 prompt tokens, 7,642 completion tokens, 66,487 total tokens, and
+zero unknown-cost calls. This raises the known actual provider-charge total,
+including the historical USD 0.3612726, to USD 0.4072003.
+
+The `0db743a` browser pass did not establish the final release verdict because
+the verifier published on that same commit rejected valid retained evidence
+after its authority had drifted from the backend contracts. The exact root
+causes were:
+
+- one global fact ordering in place of claim-specific ordering;
+- non-exact required-check handling and a checklist summary that omitted
+  secondary owners;
+- integer/float JSON representation differences in canonical hashing;
+- use of full per-run hashes where the learning proof requires separately
+  normalized, model-attribution-stripped semantic hashes;
+- an obsolete learning snapshot shape rather than the exact 21-field contract;
+  and
+- semantic verification of only a selected retained subset rather than every
+  manifest-bound JSON document and the complete evidence inventory.
+
+This classification matters: the hosted browser and provider journey passed,
+while the release-authority implementation failed closed. The correction makes
+the backend-owned claim order, exact required checks, and exact 21-field
+learning snapshot shape shared verifier authority. `run-definitive-v20.sh` now
+requires the complete deterministic browser output to pass
+`verify-runtime-causal-evidence` before the production marker and before any
+provider call. That preflight has one exact 27-file inventory: 14 JSON, 12 PNG,
+and one WebM. After the one production journey,
+`verify-runtime-evidence` requires the exact 30-file production inventory:
+15 JSON, 14 PNG, and one WebM. It parses and sanitizes every JSON document;
+checks hash, byte size, media type, and PNG/WebM magic; binds deployment,
+release, runtime, and readiness identity; validates exact flagship cold-six and
+warm-six origin lineage; validates the later cold-six and warm-six pair; and
+reconciles the immutable final 24-row, 12-network, 12-cache ledger. Production
+evidence is published only after that full verifier succeeds.
+
+The correction status is `fixed_unverified` until a new hosted run has
+frontend, API, and QA on one correction commit and passes both the causal
+preflight verifier and the full production verifier. Work on the verifier alone
+is not another authorized model attempt, creates no attempt record, and adds no
+provider charge.
+
+The global sanitized ledger is intentionally immutable for one API instance.
+Caller reset preserves it and must never be expanded to erase release history.
+Operationally, each candidate receives one fresh API instance/deploy and must
+start with an exactly empty ledger. If a provider-bearing run adds rows and a
+later gate fails, the next candidate requires another fresh API instance/deploy;
+deleting rows, resetting the caller session, or weakening the ledger assertion
+is prohibited.
+
+The release target remains the reliable 1440×900 desktop browser product.
+Responsive/mobile website work is deferred. This does not defer customer
+evidence: customer PDF, email, image, source-grounding, document-inspection,
+screenshot, and recording evidence remain mandatory in the desktop journey.
+
 <!-- END CASEPATH IMPLEMENTATION CONVERGENCE RECORD: 2026-08-12 -->

@@ -160,6 +160,8 @@ wait_for_http "http://127.0.0.1:$api_port/readyz" "$api_pid" "deterministic API"
 printf 'Running mandatory zero-provider full-browser preflight.\n'
 (
   cd "$qa_directory"
+  unset OPENROUTER_API_KEY CASEPATH_AGENT_RUNTIME_PROFILE CASEPATH_SOURCE_COMMIT \
+    CASEPATH_MODEL_MODE CASEPATH_MODEL_CUMULATIVE_USD_CAP
   CASEPATH_QA_OUT="$preflight_output" \
   CASEPATH_EXPECTED_SOURCE_COMMIT="$RENDER_GIT_COMMIT" \
   CASEPATH_ALLOW_PRODUCTION_MUTATION=0 \
@@ -167,6 +169,11 @@ printf 'Running mandatory zero-provider full-browser preflight.\n'
   API_URL="http://127.0.0.1:$api_port" \
   node browser-guided-v13-smoke.mjs
 )
+
+"$python_environment/bin/python" casepath/tools/casepath_release.py \
+  verify-runtime-causal-evidence \
+  --report "$preflight_output/report.json" \
+  --evidence-manifest "$preflight_output/evidence-manifest.json"
 
 "$python_environment/bin/python" - "$preflight_output/report.json" "http://127.0.0.1:$api_port/api/model-ledger" <<'PY'
 import json
@@ -201,3 +208,8 @@ printf 'Deterministic preflight cleared; starting the one authorized production 
   API_URL=https://casepath-agentic-api.onrender.com \
   node browser-guided-v13-smoke.mjs
 )
+
+"$python_environment/bin/python" casepath/tools/casepath_release.py \
+  verify-runtime-evidence \
+  --report "$qa_output/report.json" \
+  --evidence-manifest "$qa_output/evidence-manifest.json"

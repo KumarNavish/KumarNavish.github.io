@@ -20,6 +20,7 @@ from casepath_api import langchain_runtime
 from casepath_api import multi_agent as multi_agent_module
 from casepath_api.canonicalizer import OPENROUTER_MODEL
 from casepath_api.data import CLAIMS, observable_claim_package
+from casepath_api.evidence_relations import EVIDENCE_ITEM_IDS_BY_CLAIM
 from casepath_api.multi_agent import (
     AI_AGENT_IDS,
     AgentBoundaryError,
@@ -950,6 +951,11 @@ def test_governed_claims_share_exact_specialist_candidate_cardinality(
     assert {item["item_id"] for item in result["checklist"]["items"]} == set(
         EVIDENCE_ITEM_IDS
     )
+    assert tuple(
+        item["item_id"] for item in result["checklist"]["items"]
+    ) == EVIDENCE_ITEM_IDS_BY_CLAIM[claim_id]
+    if claim_id == "DEF-027-E0-DEMO":
+        assert EVIDENCE_ITEM_IDS == EVIDENCE_ITEM_IDS_BY_CLAIM[claim_id]
 
 
 @pytest.mark.parametrize(
