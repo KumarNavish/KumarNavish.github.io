@@ -80,6 +80,19 @@ def test_loaded_precedent_renderers_preserve_exact_review_authority() -> None:
     assert "Unverified demo review memory returned" in reuse_renderer
 
 
+def test_loaded_orchestration_renderer_keeps_validator_identity_out_of_gate_ids() -> None:
+    source = (
+        release_tool.REPOSITORY / "casepath" / "assets" / "live-v16.js"
+    ).read_text(encoding="utf-8")
+    assert "const gateId = returnedValue(event, 'gate_id', 'agent_id');" in source
+    assert "const validator = returnedValue(event, 'validator');" in source
+    assert "const gateIdentity = gateId ? ` data-gate-id=" in source
+    assert (
+        "returnedValue(event, 'gate_id', 'agent_id', 'validator', 'label')"
+        not in source
+    )
+
+
 def test_every_observable_claim_artifact_is_model_visible_and_scanned() -> None:
     api_root = release_tool.REPOSITORY / "casepath-api"
     if str(api_root) not in sys.path:
@@ -238,7 +251,7 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
             release_tool.REPOSITORY
             / f"casepath/releases/model-validation-attempt-20260811-{number:02d}.json"
         )
-        for number in range(1, 15)
+        for number in range(1, 16)
     }
     (
         attempt_1,
@@ -255,7 +268,8 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         attempt_12,
         attempt_13,
         attempt_14,
-    ) = (attempts[number] for number in range(1, 15))
+        attempt_15,
+    ) = (attempts[number] for number in range(1, 16))
     for evidence in attempts.values():
         assert evidence["status"] == "failed_closed"
         assert evidence["acceptance_passed"] is False
@@ -1024,11 +1038,87 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
     assert attempt_14["capture_provenance"]["public_qa_origin"]["classification"] == (
         "stale_previous_deploy_not_attempt_14"
     )
+    assert {
+        section: release_tool._historical_json_sha256(attempt_15[section])
+        for section in release_tool._HISTORICAL_ATTEMPT_15_SECTION_SHA256
+    } == release_tool._HISTORICAL_ATTEMPT_15_SECTION_SHA256
+    assert attempt_15["execution_observation"]["source_commit"] == (
+        "c030f041566b1b318a030dca85e672717efd489f"
+    )
+    assert attempt_15["execution_observation"]["qa_deploy_id"] == (
+        "dep-d9u2s2bm8hqs73ecqik0"
+    )
+    assert attempt_15["execution_observation"]["qa_run_id"] == (
+        "run_5f6b88f669bb0316"
+    )
+    assert attempt_15["execution_observation"]["orchestration_id"] == (
+        "orch_47fcf18494e7c1ec"
+    )
+    attempt_15_calls = attempt_15["provider_observation"]["calls"]
+    assert [item["agent_id"] for item in attempt_15_calls] == [
+        "canonical_facts",
+        "orchestrator_plan",
+        "document_source_integrity",
+        "process_decision_mapping",
+        "evidence_checklist",
+        "final_claim_brief_audit",
+    ]
+    assert [item["outcome"] for item in attempt_15_calls] == [
+        "succeeded_with_guarded_fallback",
+        "succeeded",
+        "succeeded",
+        "succeeded",
+        "succeeded_with_guarded_fallback",
+        "succeeded",
+    ]
+    assert all(item["upstream_provider"] == "DeepInfra" for item in attempt_15_calls)
+    assert [item["orchestration_id"] for item in attempt_15_calls] == [
+        "orch_47fcf18494e7c1ec"
+    ] * 6
+    assert [item["parent_call_id"] for item in attempt_15_calls] == [
+        None,
+        "modelcall_c64fbe8b2fe28c2d",
+        "modelcall_02505ca6820a00f5",
+        "modelcall_02505ca6820a00f5",
+        "modelcall_02505ca6820a00f5",
+        "modelcall_02505ca6820a00f5",
+    ]
+    assert attempt_15_calls[0]["accepted_fact_count"] == 17
+    assert attempt_15_calls[0]["rejected_fact_count"] == 1
+    assert attempt_15_calls[0]["source_reference_projection_count"] == 10
+    assert attempt_15_calls[0]["ignored_noncontrolling_normalized_proposals"] == 6
+    assert attempt_15_calls[0]["updated_at"] < attempt_15_calls[1]["created_at"]
+    assert attempt_15_calls[1]["updated_at"] < attempt_15_calls[2]["created_at"]
+    assert max(call["updated_at"] for call in attempt_15_calls[2:4]) < (
+        attempt_15_calls[4]["created_at"]
+    )
+    assert attempt_15_calls[4]["updated_at"] < attempt_15_calls[5]["created_at"]
+    assert attempt_15["provider_observation"]["actual_cost_usd"] == pytest.approx(
+        0.0254122
+    )
+    assert attempt_15["provider_observation"]["actual_cost_complete"] is True
+    assert attempt_15["provider_observation"]["unknown_cost_call_count"] == 0
+    assert attempt_15["application_result"]["outcome"] == "accepted"
+    assert attempt_15["application_result"]["full_orchestration_accepted"] is True
+    assert attempt_15["application_result"]["deterministic_gates_complete"] is True
+    assert attempt_15["application_result"]["runtime_acceptance_established"] is False
+    assert attempt_15["qa_result"]["outcome"] == "rejected"
+    assert attempt_15["qa_result"]["visible_gate_ids"] == [
+        "deterministic_process_gate",
+        "deterministic_evidence_gate",
+        "whole_playbook_gate",
+        "whole-playbook-validator/15.2",
+    ]
+    assert attempt_15["qa_result"]["current_report_retained"] is False
+    assert attempt_15["qa_result"]["current_evidence_manifest_retained"] is False
+    assert attempt_15["capture_provenance"]["public_qa_origin"]["classification"] == (
+        "stale_previous_deploy_not_attempt_15"
+    )
     assert sum(
         attempt["provider_observation"]["actual_cost_usd"]
         for attempt in attempts.values()
         if "actual_cost_usd" in attempt["provider_observation"]
-    ) == pytest.approx(0.1798320)
+    ) == pytest.approx(0.2052442)
     assert "actual_cost_usd" not in attempt_3["provider_observation"]
     assert "prompt_tokens" not in attempt_3["provider_observation"]
     assert attempt_3["provider_observation"]["charge_status"] == "unknown_unconfirmed"
@@ -1367,6 +1457,93 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         message = str(caught.value)
         assert "gen-1786513914-oQ9RsMSIInmknRyHgohy" not in message
         assert "modelcall_509e1d20d5f03da7" not in message
+
+    forged_attempt_15_records = []
+    wrong_attempt_15_commit = deepcopy(attempt_15)
+    wrong_attempt_15_commit["execution_observation"]["source_commit"] = "0" * 40
+    forged_attempt_15_records.append(wrong_attempt_15_commit)
+
+    wrong_attempt_15_role_order = deepcopy(attempt_15)
+    wrong_attempt_15_role_order["execution_observation"][
+        "required_model_agent_ids"
+    ].reverse()
+    forged_attempt_15_records.append(wrong_attempt_15_role_order)
+
+    wrong_attempt_15_response = deepcopy(attempt_15)
+    wrong_attempt_15_response["provider_observation"]["calls"][4]["response_id"] = (
+        "gen-1786523198-AAAAAAAAAAAAAAAAAAAA"
+    )
+    forged_attempt_15_records.append(wrong_attempt_15_response)
+
+    wrong_attempt_15_orchestration = deepcopy(attempt_15)
+    wrong_attempt_15_orchestration["provider_observation"]["calls"][3][
+        "orchestration_id"
+    ] = "orch_0000000000000000"
+    forged_attempt_15_records.append(wrong_attempt_15_orchestration)
+
+    wrong_attempt_15_parent = deepcopy(attempt_15)
+    wrong_attempt_15_parent["provider_observation"]["calls"][4]["parent_call_id"] = (
+        "modelcall_c64fbe8b2fe28c2d"
+    )
+    forged_attempt_15_records.append(wrong_attempt_15_parent)
+
+    wrong_attempt_15_timestamp = deepcopy(attempt_15)
+    wrong_attempt_15_timestamp["provider_observation"]["calls"][4]["created_at"] = (
+        "2026-08-12T08:26:37.000000+00:00"
+    )
+    forged_attempt_15_records.append(wrong_attempt_15_timestamp)
+
+    wrong_attempt_15_fact_count = deepcopy(attempt_15)
+    wrong_attempt_15_fact_count["provider_observation"]["calls"][0][
+        "accepted_fact_count"
+    ] = 18
+    forged_attempt_15_records.append(wrong_attempt_15_fact_count)
+
+    wrong_attempt_15_cost = deepcopy(attempt_15)
+    wrong_attempt_15_cost["provider_observation"]["actual_cost_usd"] = 0.0254121
+    forged_attempt_15_records.append(wrong_attempt_15_cost)
+
+    wrong_attempt_15_fallback = deepcopy(attempt_15)
+    wrong_attempt_15_fallback["provider_observation"]["calls"][4][
+        "deterministic_fallback_applied"
+    ] = False
+    forged_attempt_15_records.append(wrong_attempt_15_fallback)
+
+    wrong_attempt_15_application = deepcopy(attempt_15)
+    wrong_attempt_15_application["application_result"][
+        "full_orchestration_accepted"
+    ] = False
+    forged_attempt_15_records.append(wrong_attempt_15_application)
+
+    forged_attempt_15_runtime = deepcopy(attempt_15)
+    forged_attempt_15_runtime["application_result"][
+        "runtime_acceptance_established"
+    ] = True
+    forged_attempt_15_records.append(forged_attempt_15_runtime)
+
+    wrong_attempt_15_visible_gates = deepcopy(attempt_15)
+    wrong_attempt_15_visible_gates["qa_result"]["visible_gate_ids"].pop()
+    forged_attempt_15_records.append(wrong_attempt_15_visible_gates)
+
+    forged_attempt_15_report = deepcopy(attempt_15)
+    forged_attempt_15_report["qa_result"]["current_report_retained"] = True
+    forged_attempt_15_records.append(forged_attempt_15_report)
+
+    wrong_attempt_15_capture = deepcopy(attempt_15)
+    wrong_attempt_15_capture["capture_provenance"]["public_api_model_ledger"][
+        "response_sha256"
+    ] = "0" * 64
+    forged_attempt_15_records.append(wrong_attempt_15_capture)
+
+    for forged_attempt in forged_attempt_15_records:
+        with pytest.raises(
+            release_tool.VerificationError,
+            match="exact bounded schema",
+        ) as caught:
+            release_tool.verify_failed_model_attempt_evidence(contract, forged_attempt)
+        message = str(caught.value)
+        assert "gen-1786523198-A8vhBZHdAYRjUqqokm6I" not in message
+        assert "modelcall_164106a7469fa643" not in message
 
 
 def _ledger_summary(items: list[dict]) -> dict:

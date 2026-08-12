@@ -4687,9 +4687,61 @@ safety contract and dynamic acceptance criteria require
 transport and must fail closed as `blocked_provider_concurrency` with
 `call_count: 0`, null actual cost, no provider result metadata, and no cacheable
 output. This mitigation does not resolve or explain the external 429 condition;
-same-commit production acceptance remains pending.
+at the Attempt 14 observation, same-commit production acceptance remained
+pending.
 
-## Exact dynamic model evidence not yet observed by this record
+## Production attempt 15, accepted orchestration, and presentation-identity failure
+
+Attempt 15 ran against aligned source commit
+`c030f041566b1b318a030dca85e672717efd489f`. Frontend deploy
+`dep-d9u2pg142hec739dtd1g` and API deploy
+`dep-d9u2oi6417fc73fjto3g` were live before QA deploy
+`dep-d9u2s2bm8hqs73ecqik0` accepted run `run_5f6b88f669bb0316` at
+2026-08-12T08:26:06.393323468Z. The run bound orchestration
+`orch_47fcf18494e7c1ec`. It made exactly six provider calls under the retained
+single-flight runtime cap and was the first retained production attempt whose
+application accepted all six required model roles and the three release-owned
+deterministic gates. Exact ledger times additionally prove the canonical call
+completed before plan creation, the plan completed before both logical
+specialist rows were created, both specialists completed before evidence
+creation, and evidence completed before final creation. The two specialist
+rows remain a logical fan-out; their near-simultaneous record creation is not
+misstated as a second physical provider-send overlap.
+
+All six responses used the requested model alias through DeepInfra, completed
+with `stop`, and retained complete usage and actual cost. Canonical facts and
+evidence checklist succeeded with disclosed guarded fallback; the other four
+roles succeeded directly. The ledger totaled 34,988 prompt and 3,669
+completion tokens, 38,657 total tokens, and USD 0.0254122 actual cost with no
+unknown-cost call. The six call IDs are `modelcall_c64fbe8b2fe28c2d`,
+`modelcall_02505ca6820a00f5`, `modelcall_14ab428aed1c371d`,
+`modelcall_57134fd6cc869742`, `modelcall_164106a7469fa643`, and
+`modelcall_f117ef17925abdbb` in required role order.
+Every call row binds orchestration `orch_47fcf18494e7c1ec`. Canonical facts has
+no parent; the plan names canonical facts as parent; all four remaining roles
+name the plan as parent. Canonical facts retained 17 accepted and one rejected
+fact, 10 source-reference projections, and six ignored noncontrolling
+normalization proposals. Document/source integrity and process mapping each
+retained six accepted, zero rejected, and zero ignored proposals.
+
+The focused browser gate still failed closed. The renderer fell back from
+`gate_id` to a terminal event's `validator` field, so validator label
+`whole-playbook-validator/15.2` appeared as a fourth `data-gate-id` beside
+`deterministic_process_gate`, `deterministic_evidence_gate`, and
+`whole_playbook_gate`. The browser did show all six agent identities, the
+proof, exact orchestrator label, and exact production boundary. The failed QA
+build published no current report or evidence manifest; the public QA origin
+continued serving a stale prior report without release identity and returned
+404 for the manifest. The immutable sanitized attempt is retained at
+`casepath/releases/model-validation-attempt-20260811-15.json`.
+
+This distinction is release-critical: application orchestration was accepted,
+but Attempt 15 established no dynamic release acceptance. A passing same-commit report
+and hash-bound evidence manifest remain mandatory. Known aggregate actual
+charges are now USD 0.2052442; attempts 3, 7, 9, and 13 plus the two failed
+calls in attempt 14 remain unknown rather than zero.
+
+## Exact dynamic release evidence not yet observed by this record
 
 These point-in-time fields must be supplied by the sanitized ledger and retained
 QA artifacts before this deployment can be described as model-backed. They are
@@ -4698,7 +4750,7 @@ not fields to write back into the static release contract:
 ```text
 dynamic_runtime_acceptance_verdict: NOT_ESTABLISHED_BY_THIS_RECORD
 historical_model_validation_scope: failed_closed_history_only
-failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -14.json
+failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -15.json
 failed_attempt_id: authorized-smoke-20260811-01
 failed_attempt_application_outcome: rejected
 failed_attempt_failure_type: exact_private_reference_mismatch
@@ -4711,44 +4763,40 @@ provider_observed_prompt_tokens: 3629
 provider_observed_completion_tokens: 2625
 provider_observed_total_tokens: 6254
 provider_observed_finish_reason: stop
-latest_failed_attempt_id: production-flagship-20260812-14
-latest_failed_attempt_source_commit: 765c610378e7acdc224e200c0e7bbbc65c697c6b
+latest_failed_attempt_id: production-flagship-20260812-15
+latest_failed_attempt_source_commit: c030f041566b1b318a030dca85e672717efd489f
 latest_failed_attempt_qa_service_id: srv-d9se2bh42hec73c54sjg
-latest_failed_attempt_qa_deploy_id: dep-d9u0jnbm8hqs73e7kj3g
+latest_failed_attempt_qa_deploy_id: dep-d9u2s2bm8hqs73ecqik0
 latest_failed_attempt_qa_deploy_outcome: build_failed
-latest_failed_attempt_qa_deploy_created_at: 2026-08-12T05:51:25.689876Z
-latest_failed_attempt_qa_deploy_started_at: 2026-08-12T05:51:25.662198Z
-latest_failed_attempt_qa_deploy_finished_at: 2026-08-12T05:53:05.203502Z
-latest_failed_attempt_run_id: run_3010703608cef786
-latest_failed_attempt_orchestration_id: orch_5c8e411d9ccf1b05
-latest_failed_attempt_application_outcome: parallel_specialist_provider_upstream_rejection
-latest_failed_attempt_error_type: OpenRouterUpstreamRejectionError
-latest_failed_attempt_error_invariant: provider_upstream_rejection
-latest_failed_attempt_fact_counts: canonical_18_accepted_0_rejected
-latest_failed_attempt_source_projection_count: 12
-latest_failed_attempt_provider_outcome: two_successes_then_parallel_upstream_429
+latest_failed_attempt_qa_deploy_created_at: 2026-08-12T08:25:45.871622Z
+latest_failed_attempt_qa_deploy_started_at: 2026-08-12T08:25:45.842746Z
+latest_failed_attempt_qa_deploy_finished_at: 2026-08-12T08:26:52.180067Z
+latest_failed_attempt_run_id: run_5f6b88f669bb0316
+latest_failed_attempt_orchestration_id: orch_47fcf18494e7c1ec
+latest_failed_attempt_application_outcome: accepted
+latest_failed_attempt_full_orchestration_accepted: true
+latest_failed_attempt_required_model_roles_complete: true
+latest_failed_attempt_deterministic_gates_complete: true
+latest_failed_attempt_qa_outcome: rejected
+latest_failed_attempt_qa_failure_type: validator_label_promoted_to_gate_identity
+latest_failed_attempt_expected_gate_ids: deterministic_process_gate,deterministic_evidence_gate,whole_playbook_gate
+latest_failed_attempt_visible_gate_ids: deterministic_process_gate,deterministic_evidence_gate,whole_playbook_gate,whole-playbook-validator/15.2
+latest_failed_attempt_provider_outcome: six_roles_succeeded
 latest_failed_attempt_successful_upstream_provider: DeepInfra
-latest_failed_attempt_failed_call_expected_upstream_provider: DeepInfra
-latest_failed_attempt_failed_call_actual_upstream_provider: NOT_RETAINED
-latest_failed_attempt_network_call_count: 4
-latest_failed_attempt_canonical_call_id: modelcall_b5582c002c6f20bb
-latest_failed_attempt_orchestrator_call_id: modelcall_47529c6d5a49d7cc
-latest_failed_attempt_process_call_id: modelcall_509e1d20d5f03da7
-latest_failed_attempt_document_source_call_id: modelcall_17477d1f8a445c6f
-latest_failed_attempt_failed_call_ids: modelcall_509e1d20d5f03da7,modelcall_17477d1f8a445c6f
-latest_failed_attempt_failed_agent_ids: process_decision_mapping,document_source_integrity
-latest_failed_attempt_successful_finish_reasons: stop,stop
-latest_failed_attempt_failed_finish_reasons: NOT_RETAINED
-latest_failed_attempt_prompt_tokens_known: 23626
-latest_failed_attempt_completion_tokens_known: 2121
-latest_failed_attempt_total_tokens_known: 25747
-latest_failed_attempt_actual_cost_usd_known_partial: 0.016428
-latest_failed_attempt_actual_cost_complete: false
-latest_failed_attempt_unknown_cost_call_count: 2
-known_failed_attempt_cost_usd_excluding_attempts_03_07_09_13_and_attempt_14_unknown_calls: 0.1798320
+latest_failed_attempt_network_call_count: 6
+latest_failed_attempt_guarded_fallback_call_count: 2
+latest_failed_attempt_prompt_tokens: 34988
+latest_failed_attempt_completion_tokens: 3669
+latest_failed_attempt_total_tokens: 38657
+latest_failed_attempt_actual_cost_usd: 0.0254122
+latest_failed_attempt_actual_cost_complete: true
+latest_failed_attempt_unknown_cost_call_count: 0
+latest_failed_attempt_current_report_retained: false
+latest_failed_attempt_current_evidence_manifest_retained: false
+known_failed_attempt_cost_usd_excluding_attempts_03_07_09_13_and_attempt_14_unknown_calls: 0.2052442
 logical_specialist_topology: fan_out_and_join
 physical_provider_max_in_flight: 1
-accepted_retry_status: PENDING_NOT_RUN_AFTER_ATTEMPT_14
+accepted_retry_status: APPLICATION_ACCEPTED_RELEASE_GATE_FAILED_ON_ATTEMPT_15
 candidate_source_commit: PENDING
 release_id: casepath-v20-reference-20260811
 provider: openrouter
@@ -4873,11 +4921,11 @@ Exact local freeze gates:
 
 ```text
 backend_tests: 280 passed
-release_contract_tests: 98 passed
+release_contract_tests: 99 passed
 deployment_and_static_publish_tests: 8 passed
-release_tests_total: 106 passed
+release_tests_total: 107 passed
 browser_contract_self_test: 85 fixtures passed
-source_manifest_files: 129
+source_manifest_files: 130
 release_artifact_files: 25
 model_visible_artifact_files: 24
 curated_frontend_publish_files: 20
@@ -4888,10 +4936,14 @@ javascript_syntax: passed
 git_diff_check: passed
 ```
 
-The static source and artifact contract is therefore locally verified. Dynamic
-production acceptance remains deliberately pending: attempts 01–14 are
-failed-closed history, no same-commit six-role cold QA report is retained for
-this candidate, and no new provider call or deployment is asserted here.
+The static source and artifact contract is therefore locally verified. At this
+source-history freeze, dynamic production acceptance remained unestablished:
+attempts 01–15 are failed-closed release history. Attempt 15 accepted the
+same-commit six-role, three-gate application orchestration, but retained no
+passing current report and evidence-manifest pair because its
+presentation-identity assertion failed. A later authoritative same-commit QA
+artifact pair may supersede that point-in-time verdict without modifying this
+historical record.
 
 The following evidence remains external to this local freeze and must not be
 inferred from it: qualified expert approval, qualified Swiss-law approval,
