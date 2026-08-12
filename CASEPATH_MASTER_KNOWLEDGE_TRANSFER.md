@@ -4787,6 +4787,64 @@ the declared evidence/precedent capabilities on each process workspace and
 rerenders the clicked workspace from those local values; a new passing
 same-commit report and hash-bound evidence manifest remain mandatory.
 
+## Production attempt 17 and evidence-cardinality boundary
+
+Attempt 17 ran against aligned source commit
+`580974b0844f3a7e66ba3d324685cd3290798114`. Frontend deploy
+`dep-d9u49i7lk1mc73fhl4f0` and API deploy `dep-d9u49ibm8hqs73eg67ug` were live
+before QA deploy `dep-d9u4bqjncjis73ag4iag` accepted run
+`run_020a11fbd8dc3231` at 2026-08-12T10:07:57.045614253Z. The run bound
+orchestration `orch_03c1bbb4a9e4269b`, made exactly five provider calls under
+the single-flight cap, and performed no application retry.
+
+Canonical-facts call `modelcall_1a86f535db81984c`, response
+`gen-1786529280-uGzNPF2ZCY54LcsTZEbS`, completed directly with 18 accepted
+and zero rejected facts, 11 source-reference projections, and one ignored
+noncontrolling normalization proposal. It used 23,188 prompt and 2,021
+completion tokens and cost USD 0.0160146. Orchestrator-plan call
+`modelcall_ef480b12358d325e`, response
+`gen-1786529306-pWJvW6D5enjRbiwXKd8Q`, accepted its one bounded contribution
+for USD 0.000332. Document/source-integrity call
+`modelcall_012b7a5523628d6b`, response
+`gen-1786529315-nBI3kJ2WJJyP1RnuoQ2A`, and process-decision-mapping call
+`modelcall_9e3ada6a84519278`, response
+`gen-1786529312-N1598aWPxvOS8ERprQvw`, each accepted all six bounded
+contributions. The deterministic process gate then passed and handed off to
+the evidence role.
+
+Evidence-checklist call `modelcall_a91022b32cf47215`, response
+`gen-1786529324-2J6kUN6zNOoL7vpGLPFq`, completed with `stop` through
+DeepInfra after 1,702.089 ms. It used 3,932 prompt and 11 completion tokens and
+cost USD 0.0019646. The sanitized contribution diagnostics retained zero
+accepted and 42 rejected fields: both `status` and `artifact_ids` failed the
+exact `evidence_contract` for every one of the 21 expected checklist item IDs.
+The application therefore raised `AgentBoundaryError` /
+`model_contribution_majority` and failed closed. No raw provider output is
+retained, so the record does not infer content beyond those bounded
+diagnostics.
+
+The deterministic evidence gate, final model role, whole-playbook gate, and
+warm replay never started. The five calls total 29,347 prompt and 2,569
+completion tokens, 31,916 total tokens, and USD 0.0201973 actual cost with no
+unknown-cost call. The failed QA build published no current report or evidence
+manifest; the read-only capture at 2026-08-12T10:14:52Z still observed the
+57-check legacy report from commit
+`7be18c72f353366930cd5dcace637884e06e63a7` and a 404 manifest response.
+
+The immutable sanitized record is
+`casepath/releases/model-validation-attempt-20260811-17.json`. Known aggregate
+actual charges are now USD 0.2491399. Attempts 3, 7, 9, and 13 plus the two
+failed calls in attempt 14 remain unknown rather than zero. The coverage-role
+response arrays had admitted empty or partial proposal membership; the evidence
+role specifically allowed zero through 21 proposals and did not bind the exact
+required item-ID coverage in its bounded payload. Agent-graph `1.2.1` now
+requires exact document/process/evidence cardinalities of `6/6/21`, exposes the
+required counts and candidate IDs, and rejects missing, duplicate, or unknown
+membership before semantic field scoring. Guarded deterministic projection is
+retained only for an incorrect field on a returned candidate. A new aligned
+production journey remains mandatory to verify that boundary and to establish
+dynamic release acceptance.
+
 ## Exact dynamic release evidence not yet observed by this record
 
 These point-in-time fields must be supplied by the sanitized ledger and retained
@@ -4796,7 +4854,7 @@ not fields to write back into the static release contract:
 ```text
 dynamic_runtime_acceptance_verdict: NOT_ESTABLISHED_BY_THIS_RECORD
 historical_model_validation_scope: failed_closed_history_only
-failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -16.json
+failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -17.json
 failed_attempt_id: authorized-smoke-20260811-01
 failed_attempt_application_outcome: rejected
 failed_attempt_failure_type: exact_private_reference_mismatch
@@ -4809,45 +4867,45 @@ provider_observed_prompt_tokens: 3629
 provider_observed_completion_tokens: 2625
 provider_observed_total_tokens: 6254
 provider_observed_finish_reason: stop
-latest_failed_attempt_id: production-flagship-20260812-16
-latest_failed_attempt_source_commit: c325c8a0ec27fe0e3fcec5c24407d7b578df2356
+latest_failed_attempt_id: production-flagship-20260812-17
+latest_failed_attempt_source_commit: 580974b0844f3a7e66ba3d324685cd3290798114
 latest_failed_attempt_qa_service_id: srv-d9se2bh42hec73c54sjg
-latest_failed_attempt_qa_deploy_id: dep-d9u3iinlk1mc73fgfcqg
+latest_failed_attempt_qa_deploy_id: dep-d9u4bqjncjis73ag4iag
 latest_failed_attempt_qa_deploy_outcome: build_failed
-latest_failed_attempt_qa_deploy_created_at: 2026-08-12T09:13:46.5408Z
-latest_failed_attempt_qa_deploy_started_at: 2026-08-12T09:13:46.508736Z
-latest_failed_attempt_qa_deploy_finished_at: 2026-08-12T09:15:22.067151Z
-latest_failed_attempt_run_id: run_67fa8a8b0607c476
-latest_failed_attempt_orchestration_id: orch_b3474368efacacda
-latest_failed_attempt_warm_run_id: run_5b434ab92b9fe4a6
-latest_failed_attempt_warm_orchestration_id: orch_bb0033c34697657c
-latest_failed_attempt_application_outcome: accepted
-latest_failed_attempt_warm_cache_outcome: accepted
-latest_failed_attempt_warm_provider_network_call_count: 0
-latest_failed_attempt_full_orchestration_accepted: true
-latest_failed_attempt_required_model_roles_complete: true
-latest_failed_attempt_deterministic_gates_complete: true
-latest_failed_attempt_qa_outcome: rejected
-latest_failed_attempt_qa_failure_type: precedent_cards_lost_after_process_interaction
-latest_failed_attempt_initial_precedent_cards_exact: true
-latest_failed_attempt_precedent_cards_after_interaction: 0
-latest_failed_attempt_terminal_validator_excluded_from_gate_identity: true
-latest_failed_attempt_provider_outcome: six_roles_succeeded
+latest_failed_attempt_qa_deploy_created_at: 2026-08-12T10:07:38.148836Z
+latest_failed_attempt_qa_deploy_started_at: 2026-08-12T10:07:38.116981Z
+latest_failed_attempt_qa_deploy_finished_at: 2026-08-12T10:08:48.161549Z
+latest_failed_attempt_run_id: run_020a11fbd8dc3231
+latest_failed_attempt_orchestration_id: orch_03c1bbb4a9e4269b
+latest_failed_attempt_application_outcome: rejected
+latest_failed_attempt_failure_type: evidence_checklist_model_contribution_majority
+latest_failed_attempt_error_type: AgentBoundaryError
+latest_failed_attempt_error_invariant: model_contribution_majority
+latest_failed_attempt_full_orchestration_accepted: false
+latest_failed_attempt_deterministic_process_gate_passed: true
+latest_failed_attempt_evidence_checklist_accepted: false
+latest_failed_attempt_evidence_accepted_item_count: 0
+latest_failed_attempt_evidence_rejected_item_count: 42
+latest_failed_attempt_deterministic_evidence_gate_started: false
+latest_failed_attempt_final_model_role_started: false
+latest_failed_attempt_whole_playbook_gate_started: false
+latest_failed_attempt_warm_replay_started: false
+latest_failed_attempt_provider_outcome: four_successes_then_evidence_majority_rejected
 latest_failed_attempt_successful_upstream_provider: DeepInfra
-latest_failed_attempt_network_call_count: 6
-latest_failed_attempt_guarded_fallback_call_count: 2
-latest_failed_attempt_prompt_tokens: 34988
-latest_failed_attempt_completion_tokens: 2890
-latest_failed_attempt_total_tokens: 37878
-latest_failed_attempt_actual_cost_usd: 0.0236984
+latest_failed_attempt_network_call_count: 5
+latest_failed_attempt_guarded_fallback_call_count: 0
+latest_failed_attempt_prompt_tokens: 29347
+latest_failed_attempt_completion_tokens: 2569
+latest_failed_attempt_total_tokens: 31916
+latest_failed_attempt_actual_cost_usd: 0.0201973
 latest_failed_attempt_actual_cost_complete: true
 latest_failed_attempt_unknown_cost_call_count: 0
 latest_failed_attempt_current_report_retained: false
 latest_failed_attempt_current_evidence_manifest_retained: false
-known_failed_attempt_cost_usd_excluding_attempts_03_07_09_13_and_attempt_14_unknown_calls: 0.2289426
+known_failed_attempt_cost_usd_excluding_attempts_03_07_09_13_and_attempt_14_unknown_calls: 0.2491399
 logical_specialist_topology: fan_out_and_join
 physical_provider_max_in_flight: 1
-accepted_retry_status: COLD_AND_WARM_APPLICATION_ACCEPTED_RELEASE_GATE_FAILED_ON_ATTEMPT_16
+accepted_retry_status: APPLICATION_REJECTED_AT_EVIDENCE_BOUNDARY_ON_ATTEMPT_17
 candidate_source_commit: PENDING
 release_id: casepath-v20-reference-20260811
 provider: openrouter
@@ -4971,12 +5029,12 @@ evidence, not qualified review or production model acceptance.
 Exact local freeze gates:
 
 ```text
-backend_tests: 280 passed
+backend_tests: 287 passed
 release_contract_tests: 100 passed
 deployment_and_static_publish_tests: 8 passed
 release_tests_total: 108 passed
 browser_contract_self_test: 85 fixtures passed
-source_manifest_files: 131
+source_manifest_files: 132
 release_artifact_files: 25
 model_visible_artifact_files: 24
 curated_frontend_publish_files: 20
@@ -4989,11 +5047,13 @@ git_diff_check: passed
 
 The static source and artifact contract is therefore locally verified. At this
 source-history freeze, dynamic production acceptance remained unestablished:
-attempts 01–16 are failed-closed release history. Attempt 16 accepted the
+attempts 01–17 are failed-closed release history. Attempt 16 accepted the
 same-commit six-role, three-gate cold application orchestration and exact
 zero-call warm cache replay, but retained no passing current report and
 evidence-manifest pair because its process interaction removed the three ranked
-precedent cards. A later authoritative same-commit QA
+precedent cards. Attempt 17 then passed the first four model roles and
+deterministic process gate but rejected all 42 evidence fields before the
+remaining roles, gates, or warm replay could start. A later authoritative same-commit QA
 artifact pair may supersede that point-in-time verdict without modifying this
 historical record.
 

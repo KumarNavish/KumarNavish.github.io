@@ -9,6 +9,7 @@ import pytest
 
 import casepath_api.app as app_module
 from casepath_api.canonicalizer import OPENROUTER_MODEL
+from casepath_api.multi_agent import MULTI_AGENT_VERSION
 from casepath_api.pipeline_v15 import COMPONENT_VERSIONS, ClaimPipeline, digest
 from casepath_api.storage import ActiveRunResetError, Storage
 
@@ -85,6 +86,7 @@ def test_health_and_release_metadata_expose_semantic_identity(client: TestClient
     assert value["agentic_runtime"]["safety"]["provider_max_in_flight"] == 1
     assert value["configured_model_identity"] == OPENROUTER_MODEL
     assert value["components"] == COMPONENT_VERSIONS
+    assert value["components"]["agent_graph"] == MULTI_AGENT_VERSION == "1.2.1"
     deployment = client.get("/deployment-health").json()
     assert deployment["source_commit"] == source_commit
     assert deployment["api_release"] == "15.2.0"

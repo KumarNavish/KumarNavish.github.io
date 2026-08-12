@@ -266,7 +266,7 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
             release_tool.REPOSITORY
             / f"casepath/releases/model-validation-attempt-20260811-{number:02d}.json"
         )
-        for number in range(1, 17)
+        for number in range(1, 18)
     }
     (
         attempt_1,
@@ -285,7 +285,8 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         attempt_14,
         attempt_15,
         attempt_16,
-    ) = (attempts[number] for number in range(1, 17))
+        attempt_17,
+    ) = (attempts[number] for number in range(1, 18))
     for evidence in attempts.values():
         assert evidence["status"] == "failed_closed"
         assert evidence["acceptance_passed"] is False
@@ -1195,11 +1196,74 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
     assert attempt_16["capture_provenance"]["public_qa_origin"]["classification"] == (
         "stale_previous_deploy_not_attempt_16"
     )
+    assert {
+        section: release_tool._historical_json_sha256(attempt_17[section])
+        for section in release_tool._HISTORICAL_ATTEMPT_17_SECTION_SHA256
+    } == release_tool._HISTORICAL_ATTEMPT_17_SECTION_SHA256
+    assert attempt_17["execution_observation"]["source_commit"] == (
+        "580974b0844f3a7e66ba3d324685cd3290798114"
+    )
+    assert attempt_17["execution_observation"]["qa_run_id"] == (
+        "run_020a11fbd8dc3231"
+    )
+    assert attempt_17["execution_observation"]["orchestration_id"] == (
+        "orch_03c1bbb4a9e4269b"
+    )
+    attempt_17_calls = attempt_17["provider_observation"]["calls"]
+    assert [call["agent_id"] for call in attempt_17_calls] == [
+        "canonical_facts",
+        "orchestrator_plan",
+        "document_source_integrity",
+        "process_decision_mapping",
+        "evidence_checklist",
+    ]
+    assert [call["outcome"] for call in attempt_17_calls] == [
+        "succeeded",
+        "succeeded",
+        "succeeded",
+        "succeeded",
+        "failed",
+    ]
+    failed_evidence = attempt_17_calls[-1]
+    expected_rejections = [
+        {"item_id": f"item:{item_id}:{field}", "invariant": "evidence_contract"}
+        for item_id in release_tool._HISTORICAL_ATTEMPT_17_EVIDENCE_ITEM_IDS
+        for field in ("status", "artifacts")
+    ]
+    assert failed_evidence["accepted_item_ids"] == []
+    assert failed_evidence["accepted_item_count"] == 0
+    assert failed_evidence["rejected_items"] == expected_rejections
+    assert failed_evidence["rejected_item_count"] == 42
+    assert failed_evidence["ignored_proposal_count"] == 0
+    assert failed_evidence["error_type"] == "AgentBoundaryError"
+    assert failed_evidence["error_invariant"] == "model_contribution_majority"
+    assert attempt_17["provider_observation"]["actual_cost_usd"] == pytest.approx(
+        0.0201973
+    )
+    assert attempt_17["provider_observation"]["actual_cost_complete"] is True
+    assert attempt_17["provider_observation"]["unknown_cost_call_count"] == 0
+    assert attempt_17["application_result"]["outcome"] == "rejected"
+    assert (
+        attempt_17["application_result"]["deterministic_process_gate_passed"]
+        is True
+    )
+    assert attempt_17["application_result"]["evidence_checklist_accepted"] is False
+    assert (
+        attempt_17["application_result"]["deterministic_evidence_gate_started"]
+        is False
+    )
+    assert attempt_17["application_result"]["final_model_role_started"] is False
+    assert attempt_17["application_result"]["whole_playbook_gate_started"] is False
+    assert attempt_17["application_result"]["warm_replay_started"] is False
+    assert attempt_17["application_result"]["runtime_acceptance_established"] is False
+    assert attempt_17["capture_provenance"]["public_qa_origin"]["classification"] == (
+        "stale_previous_deploy_not_attempt_17"
+    )
     assert sum(
         attempt["provider_observation"]["actual_cost_usd"]
         for attempt in attempts.values()
         if "actual_cost_usd" in attempt["provider_observation"]
-    ) == pytest.approx(0.2289426)
+    ) == pytest.approx(0.2491399)
     assert "actual_cost_usd" not in attempt_3["provider_observation"]
     assert "prompt_tokens" not in attempt_3["provider_observation"]
     assert attempt_3["provider_observation"]["charge_status"] == "unknown_unconfirmed"
@@ -1670,6 +1734,39 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         message = str(caught.value)
         assert "gen-1786526081-TnJHzHHIomfoMLN0kUMr" not in message
         assert "modelcall_9f92e9bc170b700f" not in message
+
+    forged_attempt_17_records = []
+    forged_attempt_17_rejection = deepcopy(attempt_17)
+    forged_attempt_17_rejection["provider_observation"]["calls"][-1][
+        "rejected_items"
+    ].pop()
+    forged_attempt_17_records.append(forged_attempt_17_rejection)
+
+    forged_attempt_17_cost = deepcopy(attempt_17)
+    forged_attempt_17_cost["provider_observation"]["actual_cost_usd"] = 0.0201972
+    forged_attempt_17_records.append(forged_attempt_17_cost)
+
+    forged_attempt_17_gate = deepcopy(attempt_17)
+    forged_attempt_17_gate["application_result"][
+        "deterministic_evidence_gate_started"
+    ] = True
+    forged_attempt_17_records.append(forged_attempt_17_gate)
+
+    forged_attempt_17_capture = deepcopy(attempt_17)
+    forged_attempt_17_capture["capture_provenance"]["public_api_model_ledger"][
+        "response_sha256"
+    ] = "0" * 64
+    forged_attempt_17_records.append(forged_attempt_17_capture)
+
+    for forged_attempt in forged_attempt_17_records:
+        with pytest.raises(
+            release_tool.VerificationError,
+            match="exact bounded schema",
+        ) as caught:
+            release_tool.verify_failed_model_attempt_evidence(contract, forged_attempt)
+        message = str(caught.value)
+        assert "gen-1786529324-2J6kUN6zNOoL7vpGLPFq" not in message
+        assert "modelcall_a91022b32cf47215" not in message
 
 
 def _ledger_summary(items: list[dict]) -> dict:
