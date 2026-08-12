@@ -13,6 +13,7 @@ from langsmith.run_helpers import tracing_context
 from openrouter import OpenRouter, components, errors
 from openrouter.utils.unmarshal_json_response import unmarshal_json_response
 import pytest
+from pydantic import ValidationError
 
 from casepath_api import canonicalizer as canonicalizer_module
 from casepath_api import langchain_runtime
@@ -24,16 +25,23 @@ from casepath_api.multi_agent import (
     AgentBoundaryError,
     AgentInvocationFailure,
     DETERMINISTIC_GATE_IDS,
+    EVIDENCE_ITEM_IDS,
     EVIDENCE_STATUS_CANDIDATES,
+    EvidenceChecklistResponse,
     FINAL_AUDIT_CHECK_IDS,
     InstrumentedStructuredAgent,
     NemotronMultiAgentOrchestrator,
     OrchestratorPlan,
     PROCESS_DECISION_VALUE_CANDIDATES,
+    PROCESS_DECISION_PROPOSAL_COUNT,
+    ProcessDecisionResponse,
     ROLE_OUTPUT_TOKENS,
+    SOURCE_INTEGRITY_PROPOSAL_COUNT,
+    SourceIntegrityResponse,
     _evidence_provider_payload,
     _final_brief_provider_payload,
     _plan_validator,
+    _require_exact_proposal_membership,
     _source_registry,
     accepted_artifact_hash,
     apply_evidence_contribution,
@@ -82,7 +90,12 @@ class FakeStructuredRunnable:
         if self.agent_id in {"document_source_integrity", "process_decision_mapping"}:
             self.fanout_barrier.wait(timeout=2)
             time.sleep(0.02)
-        parsed = self.schema.model_validate(self.response)
+        try:
+            parsed = self.schema.model_validate(self.response)
+            parsing_error = None
+        except ValidationError as exc:
+            parsed = None
+            parsing_error = exc
         raw = AIMessage(
             content="",
             response_metadata={
@@ -99,7 +112,7 @@ class FakeStructuredRunnable:
             },
             usage_metadata={"input_tokens": 100, "output_tokens": 40, "total_tokens": 140},
         )
-        return {"raw": raw, "parsed": parsed, "parsing_error": None}
+        return {"raw": raw, "parsed": parsed, "parsing_error": parsing_error}
 
 
 def graph_fixture(tmp_path: Path):
@@ -348,12 +361,30 @@ def test_compiled_langgraph_fanout_join_and_bounded_payloads(tmp_path: Path):
         for item in completed_receipts
     )
 
+    source_payload = captures["document_source_integrity"][0]
+    assert set(source_payload) == {
+        "orchestrator_focus",
+        "required_proposal_count",
+        "required_artifact_ids",
+        "artifact_candidates",
+        "source_reference_registry",
+    }
+    assert source_payload["required_proposal_count"] == 6
+    assert source_payload["required_artifact_ids"] == [
+        item["artifact_id"] for item in source_payload["artifact_candidates"]
+    ]
     process_payload = captures["process_decision_mapping"][0]
     assert set(process_payload) == {
         "orchestrator_focus",
+        "required_proposal_count",
+        "required_fact_ids",
         "canonical_fact_handoff",
         "decision_value_vocabulary",
     }
+    assert process_payload["required_proposal_count"] == 6
+    assert process_payload["required_fact_ids"] == [
+        item["fact_id"] for item in process_payload["canonical_fact_handoff"]
+    ]
     assert process_payload["decision_value_vocabulary"] == (
         PROCESS_DECISION_VALUE_CANDIDATES
     )
@@ -375,12 +406,19 @@ def test_compiled_langgraph_fanout_join_and_bounded_payloads(tmp_path: Path):
     assert set(evidence_payload) == {
         "orchestrator_focus",
         "accepted_process_gate_handoff",
+        "required_proposal_count",
+        "required_item_ids",
         "evidence_candidates",
         "allowed_statuses",
         "canonical_fact_handoff",
         "source_integrity_artifact_inventory",
     }
     assert evidence_payload["allowed_statuses"] == EVIDENCE_STATUS_CANDIDATES
+    assert evidence_payload["required_proposal_count"] == len(EVIDENCE_ITEM_IDS) == 21
+    assert evidence_payload["required_item_ids"] == [
+        item["item_id"] for item in evidence_payload["evidence_candidates"]
+    ]
+    assert set(evidence_payload["required_item_ids"]) == set(EVIDENCE_ITEM_IDS)
     assert all(
         "status" not in item
         and "artifact_ids" not in item
@@ -732,6 +770,178 @@ def test_evidence_specialist_scores_status_and_artifacts_independently(
     assert contributions["artifact_ids"]["deterministic_fallback_applied"] is False
     assert accepted_item["attribution"] == "mixed_model_and_deterministic"
     assert accepted_item["status"] == result["checklist"]["items"][0]["status"]
+
+
+def test_coverage_schemas_require_exact_bounded_cardinality_and_ids():
+    for response_schema, expected_count in (
+        (SourceIntegrityResponse, SOURCE_INTEGRITY_PROPOSAL_COUNT),
+        (ProcessDecisionResponse, PROCESS_DECISION_PROPOSAL_COUNT),
+        (EvidenceChecklistResponse, len(EVIDENCE_ITEM_IDS)),
+    ):
+        proposals_schema = response_schema.model_json_schema()["properties"][
+            "proposals"
+        ]
+        assert proposals_schema["minItems"] == expected_count
+        assert proposals_schema["maxItems"] == expected_count
+        assert proposals_schema["uniqueItems"] is True
+        with pytest.raises(ValidationError):
+            response_schema.model_validate({"proposals": []})
+
+    source_proposals = [
+        {
+            "artifact_id": f"artifact-{index}",
+            "integrity_class": "metadata_only",
+            "source_ref_ids": [],
+            "confidence": 0.5,
+        }
+        for index in range(SOURCE_INTEGRITY_PROPOSAL_COUNT)
+    ]
+    process_proposals = [
+        {
+            "fact_id": f"fact-{index}",
+            "decision_value": "in_scope",
+            "confidence": 0.5,
+        }
+        for index in range(PROCESS_DECISION_PROPOSAL_COUNT)
+    ]
+    for response_schema, proposals, id_key in (
+        (SourceIntegrityResponse, source_proposals, "artifact_id"),
+        (ProcessDecisionResponse, process_proposals, "fact_id"),
+    ):
+        assert len(
+            response_schema.model_validate({"proposals": proposals}).proposals
+        ) == 6
+        duplicate = [dict(item) for item in proposals]
+        duplicate[-1][id_key] = duplicate[0][id_key]
+        with pytest.raises(ValidationError):
+            response_schema.model_validate({"proposals": duplicate})
+        with pytest.raises(ValidationError):
+            response_schema.model_validate({"proposals": proposals[:4]})
+
+    evidence_schema = EvidenceChecklistResponse.model_json_schema()
+    item_id_schema = evidence_schema["$defs"]["EvidenceChecklistProposal"][
+        "properties"
+    ]["item_id"]
+    assert item_id_schema["enum"] == list(EVIDENCE_ITEM_IDS)
+    evidence_proposals = [
+        {
+            "item_id": item_id,
+            "status": "missing",
+            "artifact_ids": [],
+            "confidence": 0.5,
+        }
+        for item_id in EVIDENCE_ITEM_IDS
+    ]
+    assert len(
+        EvidenceChecklistResponse.model_validate(
+            {"proposals": evidence_proposals}
+        ).proposals
+    ) == 21
+    for malformed in (
+        evidence_proposals[:11],
+        evidence_proposals[:20],
+        [*evidence_proposals, evidence_proposals[0]],
+        [
+            {**evidence_proposals[0], "item_id": "unknown"},
+            *evidence_proposals[1:],
+        ],
+        [*evidence_proposals[:-1], dict(evidence_proposals[0])],
+    ):
+        with pytest.raises(ValidationError):
+            EvidenceChecklistResponse.model_validate({"proposals": malformed})
+
+
+@pytest.mark.parametrize("claim_id", sorted(CLAIMS))
+def test_governed_claims_share_exact_specialist_candidate_cardinality(
+    tmp_path: Path,
+    claim_id: str,
+):
+    storage = Storage(str(tmp_path / f"{claim_id}.db"))
+    pipeline = ClaimPipeline(storage, pace_seconds=0)
+    run = wait(storage, pipeline.create(claim_id))
+    assert run["status"] == "complete", run.get("error")
+    result = run["result"]
+    package = observable_claim_package(CLAIMS[claim_id])
+    assert len(package["artifacts"]) == SOURCE_INTEGRITY_PROPOSAL_COUNT == 6
+    assert sum(
+        fact.get("controls_process") is True for fact in result["facts"]
+    ) == PROCESS_DECISION_PROPOSAL_COUNT == 6
+    assert len(result["checklist"]["items"]) == len(EVIDENCE_ITEM_IDS) == 21
+    assert {item["item_id"] for item in result["checklist"]["items"]} == set(
+        EVIDENCE_ITEM_IDS
+    )
+
+
+@pytest.mark.parametrize(
+    ("agent_id", "invariant"),
+    [
+        ("document_source_integrity", "source_proposal_membership"),
+        ("process_decision_mapping", "process_proposal_membership"),
+        ("evidence_checklist", "evidence_proposal_membership"),
+    ],
+)
+def test_coverage_membership_guard_rejects_omissions_unknowns_and_duplicates(
+    agent_id: str,
+    invariant: str,
+):
+    expected = {f"candidate-{index}" for index in range(6)}
+    malformed = (
+        ({key: {} for key in sorted(expected)[:-1]}, 0),
+        ({**{key: {} for key in expected}, "unknown": {}}, 0),
+        ({key: {} for key in expected}, 1),
+    )
+    for proposed, duplicates in malformed:
+        with pytest.raises(AgentBoundaryError, match=invariant):
+            _require_exact_proposal_membership(
+                proposed,
+                duplicates=duplicates,
+                expected_ids=expected,
+                agent_id=agent_id,
+                invariant=invariant,
+            )
+
+
+def test_evidence_specialist_rejects_empty_native_output_without_cache_or_retry(
+    tmp_path: Path,
+):
+    (
+        orchestrator,
+        storage,
+        captures,
+        responses,
+        package,
+        canonicalization,
+        result,
+    ) = graph_fixture(tmp_path)
+    responses["evidence_checklist"]["proposals"] = []
+
+    for ordinal in range(2):
+        with pytest.raises(
+            AgentInvocationFailure, match="provider_native_schema"
+        ):
+            orchestrator.invoke(
+                run_id=f"run-evidence-empty-{ordinal}",
+                orchestration_id=f"orch-evidence-empty-{ordinal}",
+                observable_package=package,
+                canonicalization=canonicalization,
+                facts=result["facts"],
+                process=result["process"],
+                checklist=result["checklist"],
+                verification=result["verification"],
+            )
+
+    ledger = [
+        item
+        for item in storage.model_calls()
+        if item["agent_id"] == "evidence_checklist"
+    ]
+    assert len(ledger) == len(captures["evidence_checklist"]) == 2
+    assert len({item["cache_key"] for item in ledger}) == 1
+    assert all(item["outcome"] == "failed" for item in ledger)
+    assert all(item["call_count"] == 1 for item in ledger)
+    assert all(item["error_invariant"] == "provider_native_schema" for item in ledger)
+    assert all(item["actual_cost_usd"] == pytest.approx(0.001) for item in ledger)
+    assert all(storage.cached_model_output(item["cache_key"]) is None for item in ledger)
 
 
 def test_evidence_specialist_equal_field_split_fails_strict_majority(
@@ -2761,7 +2971,7 @@ def test_multi_agent_version_bump_invalidates_success_cache(
         api_key_provider=lambda: "runtime-only-test-value",
     )
 
-    assert multi_agent_module.MULTI_AGENT_VERSION == "1.2.0"
+    assert multi_agent_module.MULTI_AGENT_VERSION == "1.2.1"
     assert multi_agent_module.MULTI_AGENT_SCHEMA_VERSION.endswith("/1.0.0")
     first = _invoke_plan(runner, run_id="run-version-cache-first")
     cached = _invoke_plan(runner, run_id="run-version-cache-hit")
@@ -2772,7 +2982,7 @@ def test_multi_agent_version_bump_invalidates_success_cache(
     monkeypatch.setattr(
         multi_agent_module,
         "MULTI_AGENT_VERSION",
-        "1.2.0-test-cache-invalidation",
+        "1.2.1-test-cache-invalidation",
     )
     invalidated = _invoke_plan(runner, run_id="run-version-cache-invalidated")
     assert invalidated["cache_hit"] is False

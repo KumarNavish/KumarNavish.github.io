@@ -10,12 +10,12 @@ import operator
 import os
 import threading
 from time import perf_counter, sleep
-from typing import Annotated, Any, Literal, Protocol, TypedDict
+from typing import Annotated, Any, Literal, Protocol, TypedDict, get_args
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .canonicalizer import (
     GENERATION_METADATA_POLL_ATTEMPTS,
@@ -55,7 +55,7 @@ from .langchain_runtime import (
 )
 
 
-MULTI_AGENT_VERSION = "1.2.0"
+MULTI_AGENT_VERSION = "1.2.1"
 MULTI_AGENT_SCHEMA_VERSION = "casepath.nemotron-agent-dag/1.0.0"
 MULTI_AGENT_AUTHORITY_MODE = "multi_agent_hybrid_guarded"
 MULTI_AGENT_IMPLEMENTATION = "langgraph_stategraph_langchain_openrouter"
@@ -95,6 +95,32 @@ EVIDENCE_STATUS_CANDIDATES = [
     "conditional",
     "not_applicable",
 ]
+EvidenceItemId = Literal[
+    "claim_message",
+    "source_integrity",
+    "lease",
+    "policy_reference",
+    "customer_objective",
+    "management_position",
+    "health_safety_statement",
+    "defect_notice",
+    "proof_of_delivery",
+    "dated_photos",
+    "recurrence_chronology",
+    "technical_assessment",
+    "moisture_measurements",
+    "building_envelope",
+    "repair_history",
+    "use_evidence",
+    "remediation_plan",
+    "financial_impact",
+    "settlement_proposal",
+    "conciliation_bundle",
+    "completion_record",
+]
+EVIDENCE_ITEM_IDS = tuple(get_args(EvidenceItemId))
+SOURCE_INTEGRITY_PROPOSAL_COUNT = 6
+PROCESS_DECISION_PROPOSAL_COUNT = 6
 PRIORITY_TASK_CODES = (
     "source_integrity",
     "process_decisions",
@@ -195,7 +221,18 @@ class SourceIntegrityProposal(_StrictModel):
 
 
 class SourceIntegrityResponse(_StrictModel):
-    proposals: list[SourceIntegrityProposal]
+    proposals: list[SourceIntegrityProposal] = Field(
+        min_length=SOURCE_INTEGRITY_PROPOSAL_COUNT,
+        max_length=SOURCE_INTEGRITY_PROPOSAL_COUNT,
+        json_schema_extra={"uniqueItems": True},
+    )
+
+    @model_validator(mode="after")
+    def require_unique_artifact_ids(self) -> SourceIntegrityResponse:
+        artifact_ids = [proposal.artifact_id for proposal in self.proposals]
+        if len(set(artifact_ids)) != len(artifact_ids):
+            raise ValueError("source_integrity_proposal_membership")
+        return self
 
 
 DecisionOption = Literal[
@@ -228,11 +265,22 @@ class ProcessDecisionProposal(_StrictModel):
 
 
 class ProcessDecisionResponse(_StrictModel):
-    proposals: list[ProcessDecisionProposal] = Field(max_length=6)
+    proposals: list[ProcessDecisionProposal] = Field(
+        min_length=PROCESS_DECISION_PROPOSAL_COUNT,
+        max_length=PROCESS_DECISION_PROPOSAL_COUNT,
+        json_schema_extra={"uniqueItems": True},
+    )
+
+    @model_validator(mode="after")
+    def require_unique_fact_ids(self) -> ProcessDecisionResponse:
+        fact_ids = [proposal.fact_id for proposal in self.proposals]
+        if len(set(fact_ids)) != len(fact_ids):
+            raise ValueError("process_decision_proposal_membership")
+        return self
 
 
 class EvidenceChecklistProposal(_StrictModel):
-    item_id: str
+    item_id: EvidenceItemId
     status: Literal[
         "provided_sufficient",
         "provided_insufficient",
@@ -248,7 +296,20 @@ class EvidenceChecklistProposal(_StrictModel):
 
 
 class EvidenceChecklistResponse(_StrictModel):
-    proposals: list[EvidenceChecklistProposal] = Field(max_length=21)
+    proposals: list[EvidenceChecklistProposal] = Field(
+        min_length=len(EVIDENCE_ITEM_IDS),
+        max_length=len(EVIDENCE_ITEM_IDS),
+        json_schema_extra={"uniqueItems": True},
+    )
+
+    @model_validator(mode="after")
+    def require_exact_item_ids(self) -> EvidenceChecklistResponse:
+        item_ids = [proposal.item_id for proposal in self.proposals]
+        if len(set(item_ids)) != len(item_ids) or set(item_ids) != set(
+            EVIDENCE_ITEM_IDS
+        ):
+            raise ValueError("evidence_proposal_membership")
+        return self
 
 
 class FinalClaimBriefProposal(_StrictModel):
@@ -479,6 +540,33 @@ def _evidence_provider_payload(state: AgentGraphState) -> dict[str, Any]:
                 ),
             }
         )
+    evidence_candidates = [
+        {
+            key: deepcopy(item[key])
+            for key in (
+                "item_id",
+                "title",
+                "fact_id",
+                "node_id",
+                "legal_basis_ids",
+                "acceptable_alternatives",
+                "applies_when",
+                "required_level",
+                "current_path",
+            )
+        }
+        for item in sorted(
+            state["checklist"]["items"],
+            key=lambda value: (focus_rank[value["fact_id"]], value["item_id"]),
+        )
+    ]
+    required_item_ids = [item["item_id"] for item in evidence_candidates]
+    if (
+        len(required_item_ids) != len(EVIDENCE_ITEM_IDS)
+        or len(set(required_item_ids)) != len(required_item_ids)
+        or set(required_item_ids) != set(EVIDENCE_ITEM_IDS)
+    ):
+        raise AgentBoundaryError("evidence_checklist", "evidence_candidate_membership")
     return {
         "orchestrator_focus": _assigned_focus(
             state["orchestrator_plan"], "evidence_gaps"
@@ -498,26 +586,9 @@ def _evidence_provider_payload(state: AgentGraphState) -> dict[str, Any]:
                 )
             },
         },
-        "evidence_candidates": [
-            {
-                key: deepcopy(item[key])
-                for key in (
-                    "item_id",
-                    "title",
-                    "fact_id",
-                    "node_id",
-                    "legal_basis_ids",
-                    "acceptable_alternatives",
-                    "applies_when",
-                    "required_level",
-                    "current_path",
-                )
-            }
-            for item in sorted(
-                state["checklist"]["items"],
-                key=lambda value: (focus_rank[value["fact_id"]], value["item_id"]),
-            )
-        ],
+        "required_proposal_count": len(EVIDENCE_ITEM_IDS),
+        "required_item_ids": required_item_ids,
+        "evidence_candidates": evidence_candidates,
         "allowed_statuses": EVIDENCE_STATUS_CANDIDATES,
         "canonical_fact_handoff": [
             {
@@ -1454,6 +1525,18 @@ def _proposal_map(values: Any, key: str, agent_id: str) -> tuple[dict[str, dict[
     return mapped, duplicates
 
 
+def _require_exact_proposal_membership(
+    proposed: Mapping[str, Any],
+    *,
+    duplicates: int,
+    expected_ids: set[str],
+    agent_id: str,
+    invariant: str,
+) -> None:
+    if duplicates or set(proposed) != expected_ids:
+        raise AgentBoundaryError(agent_id, invariant)
+
+
 def _plan_validator(
     *,
     canonical_fact_ids: list[str],
@@ -1942,10 +2025,21 @@ class NemotronMultiAgentOrchestrator:
                 # Private fallback is bounded to one plan-selected observable ref.
                 "source_ref_ids": fallback_refs[:1] if integrity_class == "text_grounded" else [],
             }
+        if len(expected) != SOURCE_INTEGRITY_PROPOSAL_COUNT:
+            raise AgentBoundaryError(
+                "document_source_integrity", "source_candidate_membership"
+            )
 
         def validate(value: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
             proposed, duplicates = _proposal_map(
                 value.get("proposals"), "artifact_id", "document_source_integrity"
+            )
+            _require_exact_proposal_membership(
+                proposed,
+                duplicates=duplicates,
+                expected_ids=set(expected),
+                agent_id="document_source_integrity",
+                invariant="source_proposal_membership",
             )
             accepted: list[str] = []
             rejected: list[dict[str, str]] = []
@@ -1994,15 +2088,19 @@ class NemotronMultiAgentOrchestrator:
             agent_id="document_source_integrity",
             schema=SourceIntegrityResponse,
             system_prompt=(
-                "Assess every supplied artifact using only its observable media class and a small nonempty "
+                "Return exactly six proposals: exactly one for every required_artifact_id and no duplicates or "
+                "omissions. Assess every supplied artifact using only its observable media class and a small nonempty "
                 "subset of the orchestrator-selected source-reference IDs for each text artifact. Text IDs "
                 "must belong to that artifact; visual and metadata-only artifacts use no text IDs. "
-                "Return no prose, legal conclusions, process decisions, or hidden metadata."
+                "Never return an empty or partial proposal list. Return no prose, legal conclusions, process "
+                "decisions, or hidden metadata."
             ),
             provider_payload={
                 "orchestrator_focus": _assigned_focus(
                     state["orchestrator_plan"], "source_integrity"
                 ),
+                "required_proposal_count": SOURCE_INTEGRITY_PROPOSAL_COUNT,
+                "required_artifact_ids": list(expected),
                 "artifact_candidates": [
                     {"artifact_id": item["artifact_id"], "media_type": item["media_type"]}
                     for item in state["observable_package"].get("artifacts", [])
@@ -2036,10 +2134,37 @@ class NemotronMultiAgentOrchestrator:
                         fact.get("source_refs", []), state["source_registry"]
                     ),
                 }
+        if len(expected) != PROCESS_DECISION_PROPOSAL_COUNT:
+            raise AgentBoundaryError(
+                "process_decision_mapping", "process_candidate_membership"
+            )
+        canonical_fact_handoff = [
+            {
+                "fact_id": fact["fact_id"],
+                "label": fact["label"],
+                "state": fact["state"],
+                "decision_key": fact["decision_key"],
+                "normalized_value": fact["normalized_value"],
+                "source_ref_ids": _expected_text_ref_ids(
+                    fact.get("source_refs", []), state["source_registry"]
+                ),
+            }
+            for fact in sorted(
+                state["facts"], key=lambda item: focus_rank[item["fact_id"]]
+            )
+            if fact.get("controls_process") is True
+        ]
 
         def validate(value: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
             proposed, duplicates = _proposal_map(
                 value.get("proposals"), "fact_id", "process_decision_mapping"
+            )
+            _require_exact_proposal_membership(
+                proposed,
+                duplicates=duplicates,
+                expected_ids=set(expected),
+                agent_id="process_decision_mapping",
+                invariant="process_proposal_membership",
             )
             accepted: list[str] = []
             rejected: list[dict[str, str]] = []
@@ -2082,8 +2207,10 @@ class NemotronMultiAgentOrchestrator:
             agent_id="process_decision_mapping",
             schema=ProcessDecisionResponse,
             system_prompt=(
+                "Return exactly six proposals: exactly one for every required_fact_id and no duplicates or omissions. "
                 "Map every accepted canonical controlling fact to one bounded decision_value from the general "
-                "vocabulary for its decision_key. Return only fact_id, decision_value, and confidence. The "
+                "vocabulary for its decision_key. Return only fact_id, decision_value, and confidence. Never return "
+                "an empty or partial proposal list. The "
                 "deterministic application verifies each mapping and reprojects the route; return no citations, "
                 "raw evidence, process nodes, edges, current path, next action, expected values, or prose."
             ),
@@ -2091,22 +2218,11 @@ class NemotronMultiAgentOrchestrator:
                 "orchestrator_focus": _assigned_focus(
                     state["orchestrator_plan"], "process_decisions"
                 ),
-                "canonical_fact_handoff": [
-                    {
-                        "fact_id": fact["fact_id"],
-                        "label": fact["label"],
-                        "state": fact["state"],
-                        "decision_key": fact["decision_key"],
-                        "normalized_value": fact["normalized_value"],
-                        "source_ref_ids": _expected_text_ref_ids(
-                            fact.get("source_refs", []), state["source_registry"]
-                        ),
-                    }
-                    for fact in sorted(
-                        state["facts"], key=lambda item: focus_rank[item["fact_id"]]
-                    )
-                    if fact.get("controls_process") is True
+                "required_proposal_count": PROCESS_DECISION_PROPOSAL_COUNT,
+                "required_fact_ids": [
+                    fact["fact_id"] for fact in canonical_fact_handoff
                 ],
+                "canonical_fact_handoff": canonical_fact_handoff,
                 "decision_value_vocabulary": PROCESS_DECISION_VALUE_CANDIDATES,
             },
             validator=validate,
@@ -2186,6 +2302,13 @@ class NemotronMultiAgentOrchestrator:
         def validate(value: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
             proposed, duplicates = _proposal_map(
                 value.get("proposals"), "item_id", "evidence_checklist"
+            )
+            _require_exact_proposal_membership(
+                proposed,
+                duplicates=duplicates,
+                expected_ids=set(expected),
+                agent_id="evidence_checklist",
+                invariant="evidence_proposal_membership",
             )
             accepted: list[str] = []
             rejected: list[dict[str, str]] = []
@@ -2281,12 +2404,13 @@ class NemotronMultiAgentOrchestrator:
             agent_id="evidence_checklist",
             schema=EvidenceChecklistResponse,
             system_prompt=(
-                "For every evidence candidate, classify its bounded status and select only supporting artifact IDs "
+                "Return exactly 21 proposals: exactly one for every required_item_id and no duplicates or omissions. "
+                "For each evidence candidate, classify its bounded status and select only supporting artifact IDs "
                 "from the accepted inventory. Use the verified process overlay, applicability metadata, accepted "
                 "canonical facts, and fact-to-artifact bindings. Return only item_id, status, artifact_ids, and "
-                "confidence. The application independently verifies each field, binds canonical source references, "
-                "and rebuilds checklist aggregates. Return no source-reference IDs, raw excerpts, deterministic why, "
-                "requests, legal conclusions, or prose."
+                "confidence. Never return an empty or partial proposal list. The application independently verifies "
+                "each field, binds canonical source references, and rebuilds checklist aggregates. Return no "
+                "source-reference IDs, raw excerpts, deterministic why, requests, legal conclusions, or prose."
             ),
             provider_payload=_evidence_provider_payload(state),
             validator=validate,
