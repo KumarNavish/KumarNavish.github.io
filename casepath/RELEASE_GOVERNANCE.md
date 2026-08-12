@@ -213,6 +213,20 @@ Eleven authorized model attempts failed closed:
   two-call ledger is cost complete at USD 0.0286577 for 43,197 prompt and
   3,232 completion tokens. This proves the 800-token change did not resolve
   CP-023 and establishes no current runtime acceptance.
+- Attempt 12 ran from QA deploy `dep-d9tqqlfavr4c73cfqb0g` against source commit
+  `a839ff99870f5be11f232d1bfc818854202bd2dd`. QA run
+  `run_403c755cd290a3dc` bound four cost-complete DeepInfra calls to
+  orchestration `orch_bdc09ac146345588`. Canonical facts completed with
+  disclosed guarded fallback for USD 0.0175791 and 25,907 tokens. The bounded
+  orchestrator plan then completed without fallback for USD 0.0003892 and 527
+  tokens, proving the prior output-ceiling defect resolved. Document/source
+  integrity also completed without fallback for USD 0.0011036 and 1,082
+  tokens. Process-decision mapping returned a complete `stop` response costing
+  USD 0.0141842 for 20,240 prompt and 1,859 completion tokens, but failed the
+  strict `model_contribution_majority` boundary under `AgentBoundaryError`.
+  No later model role or deterministic gate ran. The four-call ledger is
+  complete at USD 0.0332561 for 49,615 tokens and establishes no current
+  runtime acceptance.
 
 The current source pins OpenRouter to the exact `deepinfra/fp4` endpoint tag,
 sets `allow_fallbacks: false`, keeps `require_parameters: true`, and denies
@@ -238,15 +252,15 @@ same-generation metadata availability boundary. Current acceptance still
 requires a new same-commit cold production journey with all six bound calls and
 three passed deterministic gates.
 
-Known aggregate provider charges for attempts 1, 2, 4, 5, 6, 8, 10, and 11
-are USD 0.1301479; attempts 3, 7, and 9 are unknown and excluded rather than
+Known aggregate provider charges for attempts 1, 2, 4, 5, 6, 8, 10, 11, and 12
+are USD 0.1634040; attempts 3, 7, and 9 are unknown and excluded rather than
 treated as zero. Attempts 7 and 9 each retain a USD 0.027645 estimated
 reservation, neither of which is included as an actual charge. The attempts
 remain failed-attempt history, not successful application evidence. No raw
 prompt, raw output, credential, or private reference is retained, and no
 attempt is accepted model-backed release evidence.
 
-The eleven records above are listed under `historical_model_validation` with
+The twelve records above are listed under `historical_model_validation` with
 `scope: failed_closed_history_only`; they can never establish current runtime
 acceptance. No passing dynamic QA artifact pair has been verified as part of
 this source edit, so current production model acceptance remains unestablished.

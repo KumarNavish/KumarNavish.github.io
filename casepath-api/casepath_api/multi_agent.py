@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from copy import deepcopy
 from dataclasses import dataclass
 from hashlib import sha256
 import json
@@ -37,6 +38,12 @@ from .canonicalizer import (
     source_reference_id,
 )
 from .storage import Storage
+from .projections import (
+    DECISION_OPTIONS,
+    apply_process_projection,
+    checklist_derived_sections,
+    decision_projection,
+)
 from .langchain_runtime import (
     OPENROUTER_EXPECTED_UPSTREAM_PROVIDER,
     OpenRouterProtocolError,
@@ -47,7 +54,7 @@ from .langchain_runtime import (
 )
 
 
-MULTI_AGENT_VERSION = "1.1.0"
+MULTI_AGENT_VERSION = "1.2.0"
 MULTI_AGENT_SCHEMA_VERSION = "casepath.nemotron-agent-dag/1.0.0"
 MULTI_AGENT_AUTHORITY_MODE = "multi_agent_hybrid_guarded"
 MULTI_AGENT_IMPLEMENTATION = "langgraph_stategraph_langchain_openrouter"
@@ -77,13 +84,8 @@ EXECUTION_DELEGATIONS = (
     {"agent_id": "evidence_checklist", "dependencies": ["deterministic_process_gate"]},
     {"agent_id": "final_claim_brief_audit", "dependencies": ["deterministic_evidence_gate"]},
 )
-DECISION_NORMALIZED_CANDIDATES = {
-    "scope": ["supported_in_scope", "supported_out_of_scope", "unverified"],
-    "dispute": ["present", "absent", "unverified"],
-    "urgency": ["urgent", "not_urgent", "unverified"],
-    "notification": ["notified", "not_notified", "unverified"],
-    "recurrence": ["supported", "not_supported", "unverified"],
-    "causation": ["building", "tenant_use", "mixed", "unresolved"],
+PROCESS_DECISION_VALUE_CANDIDATES = {
+    key: sorted(values.values()) for key, values in DECISION_OPTIONS.items()
 }
 EVIDENCE_STATUS_CANDIDATES = [
     "provided_sufficient",
@@ -97,6 +99,12 @@ PRIORITY_TASK_CODES = (
     "process_decisions",
     "evidence_gaps",
     "final_brief",
+)
+FINAL_AUDIT_CHECK_IDS = (
+    "current_node_supported_by_canonical_facts",
+    "next_action_connected_in_static_topology",
+    "evidence_items_bound_to_process_nodes",
+    "upstream_contribution_lineage_complete",
 )
 
 ROLE_OUTPUT_TOKENS = {
@@ -189,34 +197,81 @@ class SourceIntegrityResponse(_StrictModel):
     proposals: list[SourceIntegrityProposal]
 
 
+DecisionOption = Literal[
+    "in_scope",
+    "out_of_scope",
+    "scope_unverified",
+    "dispute_present",
+    "no_dispute",
+    "dispute_unverified",
+    "urgent",
+    "not_urgent",
+    "urgency_unverified",
+    "notified",
+    "not_notified",
+    "notification_unverified",
+    "recurrence_supported",
+    "recurrence_not_supported",
+    "recurrence_unverified",
+    "cause_building",
+    "cause_tenant_use",
+    "cause_mixed",
+    "cause_unresolved",
+]
+
+
 class ProcessDecisionProposal(_StrictModel):
     fact_id: str
-    state: Literal["known", "unknown", "conflicting", "not_applicable"]
-    normalized_value: str | None
-    source_ref_ids: list[str]
+    decision_value: DecisionOption
     confidence: float = Field(ge=0, le=1)
 
 
 class ProcessDecisionResponse(_StrictModel):
-    proposals: list[ProcessDecisionProposal]
+    proposals: list[ProcessDecisionProposal] = Field(max_length=6)
 
 
 class EvidenceChecklistProposal(_StrictModel):
     item_id: str
-    status: str
-    artifact_ids: list[str]
-    source_ref_ids: list[str]
+    status: Literal[
+        "provided_sufficient",
+        "provided_insufficient",
+        "missing",
+        "conditional",
+        "not_applicable",
+    ]
+    artifact_ids: list[str] = Field(
+        max_length=8,
+        json_schema_extra={"uniqueItems": True},
+    )
     confidence: float = Field(ge=0, le=1)
 
 
 class EvidenceChecklistResponse(_StrictModel):
-    proposals: list[EvidenceChecklistProposal]
+    proposals: list[EvidenceChecklistProposal] = Field(max_length=21)
 
 
 class FinalClaimBriefProposal(_StrictModel):
     current_node_id: str
     next_action_node_id: str
-    source_ref_ids: list[str]
+    supporting_fact_ids: list[str] = Field(
+        max_length=6,
+        json_schema_extra={"uniqueItems": True},
+    )
+    upstream_contribution_ids: list[
+        Literal[
+            "document_source_integrity",
+            "process_decision_mapping",
+            "evidence_checklist",
+        ]
+    ] = Field(max_length=3, json_schema_extra={"uniqueItems": True})
+    audit_check_ids: list[
+        Literal[
+            "current_node_supported_by_canonical_facts",
+            "next_action_connected_in_static_topology",
+            "evidence_items_bound_to_process_nodes",
+            "upstream_contribution_lineage_complete",
+        ]
+    ] = Field(max_length=4, json_schema_extra={"uniqueItems": True})
     confidence: float = Field(ge=0, le=1)
 
 
@@ -392,15 +447,70 @@ def _evidence_provider_payload(state: AgentGraphState) -> dict[str, Any]:
         fact_id: index
         for index, fact_id in enumerate(state["orchestrator_plan"]["focus_fact_ids"])
     }
+    source_integrity = {
+        item["artifact_id"]: item
+        for item in state.get("source_integrity", {}).get("artifacts", [])
+    }
+    artifact_inventory = [
+        {
+            "artifact_id": "message",
+            "media_type": "text/plain",
+            "integrity_class": "text_grounded",
+        },
+        {
+            "artifact_id": "intake",
+            "media_type": "application/casepath-intake+json",
+            "integrity_class": "metadata_only",
+        },
+    ]
+    for artifact in state["observable_package"].get("artifacts", []):
+        accepted = source_integrity.get(artifact["artifact_id"], {})
+        artifact_inventory.append(
+            {
+                "artifact_id": artifact["artifact_id"],
+                "filename": artifact["filename"],
+                "media_type": artifact["media_type"],
+                "integrity_class": accepted.get(
+                    "integrity_class", _integrity_class(artifact["media_type"])
+                ),
+                "source_integrity_fallback_applied": bool(
+                    accepted.get("deterministic_fallback_applied", True)
+                ),
+            }
+        )
     return {
         "orchestrator_focus": _assigned_focus(
             state["orchestrator_plan"], "evidence_gaps"
         ),
+        "accepted_process_gate_handoff": {
+            "gate_id": "deterministic_process_gate",
+            **{
+                key: deepcopy(state["process"]["current_overlay"][key])
+                for key in (
+                    "completed_node_ids",
+                    "current_node_id",
+                    "selected_branch_id",
+                    "blocked_node_ids",
+                    "inactive_branch_ids",
+                    "next_action_node_id",
+                    "decisions",
+                )
+            },
+        },
         "evidence_candidates": [
             {
-                "item_id": item["item_id"],
-                "title": item["title"],
-                "fact_id": item["fact_id"],
+                key: deepcopy(item[key])
+                for key in (
+                    "item_id",
+                    "title",
+                    "fact_id",
+                    "node_id",
+                    "legal_basis_ids",
+                    "acceptable_alternatives",
+                    "applies_when",
+                    "required_level",
+                    "current_path",
+                )
             }
             for item in sorted(
                 state["checklist"]["items"],
@@ -408,10 +518,20 @@ def _evidence_provider_payload(state: AgentGraphState) -> dict[str, Any]:
             )
         ],
         "allowed_statuses": EVIDENCE_STATUS_CANDIDATES,
-        "fact_handoff": [
+        "canonical_fact_handoff": [
             {
                 "fact_id": fact["fact_id"],
+                "label": fact["label"],
+                "value": fact["value"],
                 "state": fact["state"],
+                "normalized_value": fact.get("normalized_value"),
+                "source_artifact_ids": sorted(
+                    {
+                        ref["artifact_id"]
+                        for ref in fact.get("source_refs", [])
+                        if isinstance(ref.get("artifact_id"), str)
+                    }
+                ),
                 "source_ref_ids": _expected_text_ref_ids(
                     fact.get("source_refs", []), state["source_registry"]
                 ),
@@ -420,26 +540,12 @@ def _evidence_provider_payload(state: AgentGraphState) -> dict[str, Any]:
                 state["facts"], key=lambda value: focus_rank[value["fact_id"]]
             )
         ],
-        "artifact_candidates": [
-            {"artifact_id": "message", "media_type": "text/plain"},
-            {
-                "artifact_id": "intake",
-                "media_type": "application/casepath-intake+json",
-            },
-            *[
-                {
-                    "artifact_id": artifact["artifact_id"],
-                    "media_type": artifact["media_type"],
-                }
-                for artifact in state["observable_package"].get("artifacts", [])
-            ],
-        ],
-        "source_reference_registry": state["source_registry"],
+        "source_integrity_artifact_inventory": artifact_inventory,
     }
 
 
 def _final_brief_provider_payload(state: AgentGraphState) -> dict[str, Any]:
-    """Expose static topology and accepted upstream work, never applied answers."""
+    """Expose accepted handoffs for one bounded, independently scored audit."""
 
     source_items = state.get("source_integrity", {}).get("artifacts", [])
     process_items = state.get("process_mapping", {}).get("decisions", [])
@@ -454,17 +560,24 @@ def _final_brief_provider_payload(state: AgentGraphState) -> dict[str, Any]:
     process_items = sorted(
         process_items, key=lambda item: focus_rank[item["fact_id"]]
     )
-    relevant_source_ids = set(state["orchestrator_plan"]["focus_source_ref_ids"])
-    for fact in canonical_items:
-        relevant_source_ids.update(
-            _expected_text_ref_ids(fact.get("source_refs", []), state["source_registry"])
-        )
-    for item in [*source_items, *process_items, *evidence_items]:
-        relevant_source_ids.update(item.get("source_ref_ids", []))
     return {
         "orchestrator_focus": _assigned_focus(
             state["orchestrator_plan"], "final_brief"
         ),
+        "accepted_process_gate_handoff": {
+            "gate_id": "deterministic_process_gate",
+            "current_overlay": deepcopy(state["process"]["current_overlay"]),
+        },
+        "accepted_evidence_gate_handoff": {
+            "gate_id": "deterministic_evidence_gate",
+            "item_ids": sorted(item["item_id"] for item in evidence_items),
+            "fallback_unit_ids": sorted(
+                contribution["contribution_id"]
+                for item in evidence_items
+                for contribution in item.get("field_contributions", [])
+                if contribution.get("deterministic_fallback_applied") is True
+            ),
+        },
         "static_process_topology": {
             "nodes": [
                 {
@@ -538,8 +651,10 @@ def _final_brief_provider_payload(state: AgentGraphState) -> dict[str, Any]:
                             "fact_id",
                             "state",
                             "normalized_value",
+                            "decision_value",
                             "source_ref_ids",
                             "confidence_basis_points",
+                            "contribution_scope",
                             "deterministic_fallback_applied",
                         )
                         if key in item
@@ -563,10 +678,25 @@ def _final_brief_provider_payload(state: AgentGraphState) -> dict[str, Any]:
                 ],
             },
         },
-        "source_reference_registry": [
-            item
-            for item in state["source_registry"]
-            if item["source_ref_id"] in relevant_source_ids
+        "audit_check_candidates": [
+            {
+                "audit_check_id": check_id,
+                "requirement": {
+                    "current_node_supported_by_canonical_facts": (
+                        "The current node is bound to the supplied canonical facts."
+                    ),
+                    "next_action_connected_in_static_topology": (
+                        "The next action is connected from the accepted current route."
+                    ),
+                    "evidence_items_bound_to_process_nodes": (
+                        "Every supplied evidence item is bound to a static process node."
+                    ),
+                    "upstream_contribution_lineage_complete": (
+                        "All three required upstream specialist contribution IDs are present."
+                    ),
+                }[check_id],
+            }
+            for check_id in FINAL_AUDIT_CHECK_IDS
         ],
     }
 def _raw_metadata(raw: Any) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -707,6 +837,124 @@ def _require_contribution_majority(agent_id: str, diagnostics: Mapping[str, Any]
         or accepted <= rejected
     ):
         raise AgentBoundaryError(agent_id, "model_contribution_majority")
+
+
+def apply_process_contribution(
+    process: Mapping[str, Any],
+    contribution: Mapping[str, Any],
+    canonical_facts: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Reproject a process from accepted-or-fallback specialist decision units."""
+
+    expected = {
+        fact["fact_id"]: fact
+        for fact in canonical_facts
+        if fact.get("controls_process") is True
+    }
+    decisions = contribution.get("decisions")
+    if not isinstance(decisions, list):
+        raise AgentBoundaryError("deterministic_process_gate", "process_contribution")
+    by_fact = {
+        item.get("fact_id"): item
+        for item in decisions
+        if isinstance(item, Mapping) and isinstance(item.get("fact_id"), str)
+    }
+    if len(by_fact) != len(decisions) or set(by_fact) != set(expected):
+        raise AgentBoundaryError(
+            "deterministic_process_gate", "process_fact_membership"
+        )
+    projection_facts: list[dict[str, Any]] = []
+    for fact_id, fact in expected.items():
+        item = by_fact[fact_id]
+        if (
+            item.get("decision_key") != fact.get("decision_key")
+            or item.get("decision_value") != fact.get("decision_value")
+        ):
+            raise AgentBoundaryError(
+                "deterministic_process_gate", "canonical_decision_binding"
+            )
+        projection_facts.append(
+            {
+                "controls_process": True,
+                "decision_key": item["decision_key"],
+                "decision_value": item["decision_value"],
+            }
+        )
+    projection = decision_projection(projection_facts)
+    accepted = deepcopy(dict(process))
+    accepted["nodes"] = deepcopy(list(process["nodes"]))
+    accepted["edges"] = deepcopy(list(process["edges"]))
+    overlay = apply_process_projection(
+        accepted["nodes"],
+        accepted["edges"],
+        projection,
+        list(process["main_spine"]),
+    )
+    accepted["current_node"] = projection["current_node"]
+    accepted["selected_path"] = list(projection["selected_path"])
+    accepted["current_overlay"] = overlay
+    return accepted
+
+
+def apply_evidence_contribution(
+    checklist: Mapping[str, Any], contribution: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Build the accepted checklist from model-owned or fallback field units."""
+
+    proposed = contribution.get("items")
+    if not isinstance(proposed, list):
+        raise AgentBoundaryError(
+            "deterministic_evidence_gate", "evidence_contribution"
+        )
+    by_id = {
+        item.get("item_id"): item
+        for item in proposed
+        if isinstance(item, Mapping) and isinstance(item.get("item_id"), str)
+    }
+    source_items = checklist.get("items")
+    if not isinstance(source_items, list):
+        raise AgentBoundaryError("deterministic_evidence_gate", "evidence_items")
+    expected_ids = {item["item_id"] for item in source_items}
+    if len(by_id) != len(proposed) or set(by_id) != expected_ids:
+        raise AgentBoundaryError(
+            "deterministic_evidence_gate", "evidence_item_membership"
+        )
+    accepted = deepcopy(dict(checklist))
+    accepted_items: list[dict[str, Any]] = []
+    for source in source_items:
+        item = deepcopy(source)
+        effective = by_id[item["item_id"]]
+        status = effective.get("status")
+        artifact_ids = effective.get("artifact_ids")
+        if status not in EVIDENCE_STATUS_CANDIDATES or not isinstance(
+            artifact_ids, list
+        ):
+            raise AgentBoundaryError(
+                "deterministic_evidence_gate", "evidence_effective_fields"
+            )
+        if (
+            any(not isinstance(value, str) for value in artifact_ids)
+            or len(set(artifact_ids)) != len(artifact_ids)
+            or artifact_ids != sorted(artifact_ids)
+        ):
+            raise AgentBoundaryError(
+                "deterministic_evidence_gate", "evidence_artifact_order"
+            )
+        if status != source.get("status") or artifact_ids != sorted(
+            source.get("artifact_ids", [])
+        ):
+            raise AgentBoundaryError(
+                "deterministic_evidence_gate", "evidence_contract_binding"
+            )
+        item["status"] = status
+        # Artifact IDs are a set-like model contribution. Preserve the
+        # authoritative checklist order so the primary/source-integrity view
+        # remains stable after the guarded set comparison.
+        item["artifact_ids"] = list(source.get("artifact_ids", []))
+        accepted_items.append(item)
+    accepted["items"] = accepted_items
+    accepted.update(checklist_derived_sections(accepted_items))
+    return accepted
 
 
 @dataclass
@@ -988,6 +1236,24 @@ class InstrumentedStructuredAgent:
                 raise AgentBoundaryError(agent_id, "provider_native_schema")
             parsed = _model_dump(response["parsed"])
             contribution, diagnostics = validator(parsed)
+            bounded_diagnostics = {
+                key: diagnostics[key]
+                for key in (
+                    "authority_mode",
+                    "accepted_item_ids",
+                    "accepted_item_count",
+                    "rejected_items",
+                    "rejected_item_count",
+                    "ignored_proposal_count",
+                )
+            }
+            with self.storage.lock:
+                self.storage.finish_model_call(
+                    call_id,
+                    outcome="provider_succeeded",
+                    **provider_patch,
+                    **bounded_diagnostics,
+                )
             _require_contribution_majority(agent_id, diagnostics)
             outcome = (
                 "succeeded"
@@ -1721,6 +1987,8 @@ class NemotronMultiAgentOrchestrator:
             if fact.get("controls_process") is True:
                 expected[fact["fact_id"]] = {
                     "fact_id": fact["fact_id"],
+                    "decision_key": fact["decision_key"],
+                    "decision_value": fact["decision_value"],
                     "state": fact["state"],
                     "normalized_value": fact["normalized_value"],
                     "source_ref_ids": _expected_text_ref_ids(
@@ -1737,17 +2005,27 @@ class NemotronMultiAgentOrchestrator:
             output: list[dict[str, Any]] = []
             for item_id, oracle in expected.items():
                 proposal = proposed.get(item_id)
-                matches = proposal is not None and all(
-                    proposal.get(key) == oracle[key]
-                    for key in ("fact_id", "state", "normalized_value", "source_ref_ids")
+                contribution_id = f"fact:{item_id}:decision_value"
+                matches = (
+                    proposal is not None
+                    and proposal.get("fact_id") == item_id
+                    and proposal.get("decision_value") == oracle["decision_value"]
                 )
                 if matches:
-                    accepted.append(item_id)
+                    accepted.append(contribution_id)
                 else:
-                    rejected.append({"item_id": item_id, "invariant": "process_decision_contract"})
+                    rejected.append(
+                        {
+                            "item_id": contribution_id,
+                            "invariant": "process_decision_contract",
+                        }
+                    )
                 output.append(
                     {
                         **oracle,
+                        "contribution_id": contribution_id,
+                        "contribution_scope": "canonical_to_process_decision_mapping",
+                        "model_owned_fields": ["decision_value"],
                         "confidence_basis_points": _confidence_basis_points(
                             proposal["confidence"] if matches else 1
                         ),
@@ -1763,28 +2041,32 @@ class NemotronMultiAgentOrchestrator:
             agent_id="process_decision_mapping",
             schema=ProcessDecisionResponse,
             system_prompt=(
-                "Propose only bounded fact states, normalized values, confidence, and source-reference IDs. "
-                "The application privately owns routing and rejects every mismatch; return no node or edge mapping."
+                "Map every accepted canonical controlling fact to one bounded decision_value from the general "
+                "vocabulary for its decision_key. Return only fact_id, decision_value, and confidence. The "
+                "deterministic application verifies each mapping and reprojects the route; return no citations, "
+                "raw evidence, process nodes, edges, current path, next action, expected values, or prose."
             ),
             provider_payload={
                 "orchestrator_focus": _assigned_focus(
                     state["orchestrator_plan"], "process_decisions"
                 ),
-                "fact_candidates": [
+                "canonical_fact_handoff": [
                     {
                         "fact_id": fact["fact_id"],
                         "label": fact["label"],
-                        "allowed_states": ["known", "unknown", "conflicting", "not_applicable"],
-                        "allowed_normalized_values": DECISION_NORMALIZED_CANDIDATES[
-                            fact["decision_key"]
-                        ],
+                        "state": fact["state"],
+                        "decision_key": fact["decision_key"],
+                        "normalized_value": fact["normalized_value"],
+                        "source_ref_ids": _expected_text_ref_ids(
+                            fact.get("source_refs", []), state["source_registry"]
+                        ),
                     }
                     for fact in sorted(
                         state["facts"], key=lambda item: focus_rank[item["fact_id"]]
                     )
                     if fact.get("controls_process") is True
                 ],
-                "source_reference_registry": state["source_registry"],
+                "decision_value_vocabulary": PROCESS_DECISION_VALUE_CANDIDATES,
             },
             validator=validate,
             private_contract=expected,
@@ -1798,13 +2080,16 @@ class NemotronMultiAgentOrchestrator:
             raise AgentBoundaryError("deterministic_process_gate", "source_contribution")
         if not state.get("process_mapping", {}).get("decisions"):
             raise AgentBoundaryError("deterministic_process_gate", "process_contribution")
-        current = state["process"]["current_overlay"]["current_node_id"]
-        if current != state["process"]["current_node"]:
+        accepted_process = apply_process_contribution(
+            state["process"], state["process_mapping"], state["facts"]
+        )
+        current = accepted_process["current_overlay"]["current_node_id"]
+        if current != accepted_process["current_node"]:
             raise AgentBoundaryError("deterministic_process_gate", "current_node")
         input_hash = _safe_hash(
             {"source_integrity": state["source_integrity"], "process_mapping": state["process_mapping"]}
         )
-        output_hash = accepted_artifact_hash(state["process"])
+        output_hash = accepted_artifact_hash(accepted_process)
         writer(
             {
                 "receipt_type": "gate_passed",
@@ -1821,6 +2106,7 @@ class NemotronMultiAgentOrchestrator:
             }
         )
         return {
+            "process": accepted_process,
             "audit_entries": [
                 {
                     "agent_id": "deterministic_process_gate",
@@ -1836,6 +2122,14 @@ class NemotronMultiAgentOrchestrator:
 
     def _evidence_node(self, state: AgentGraphState) -> dict[str, Any]:
         facts = {fact["fact_id"]: fact for fact in state["facts"]}
+        allowed_artifact_ids = {
+            "message",
+            "intake",
+            *(
+                artifact["artifact_id"]
+                for artifact in state["observable_package"].get("artifacts", [])
+            ),
+        }
         expected: dict[str, dict[str, Any]] = {}
         for item in state["checklist"]["items"]:
             fact = facts[item["fact_id"]]
@@ -1857,22 +2151,85 @@ class NemotronMultiAgentOrchestrator:
             output: list[dict[str, Any]] = []
             for item_id, oracle in expected.items():
                 proposal = proposed.get(item_id)
-                matches = proposal is not None and all(
-                    proposal.get(key) == oracle[key]
-                    for key in ("item_id", "status", "artifact_ids", "source_ref_ids")
+                proposed_artifacts = (
+                    proposal.get("artifact_ids") if proposal is not None else None
                 )
-                if matches:
-                    accepted.append(item_id)
-                else:
-                    rejected.append({"item_id": item_id, "invariant": "evidence_contract"})
+                artifacts_well_formed = (
+                    isinstance(proposed_artifacts, list)
+                    and all(isinstance(value, str) for value in proposed_artifacts)
+                    and len(set(proposed_artifacts)) == len(proposed_artifacts)
+                    and set(proposed_artifacts) <= allowed_artifact_ids
+                )
+                canonical_artifacts = (
+                    sorted(proposed_artifacts) if artifacts_well_formed else []
+                )
+                status_matches = (
+                    proposal is not None and proposal.get("status") == oracle["status"]
+                )
+                artifacts_match = (
+                    proposal is not None
+                    and artifacts_well_formed
+                    and canonical_artifacts == oracle["artifact_ids"]
+                )
+                status_id = f"item:{item_id}:status"
+                artifacts_id = f"item:{item_id}:artifacts"
+                field_contributions: list[dict[str, Any]] = []
+                for contribution_id, field, matches in (
+                    (status_id, "status", status_matches),
+                    (artifacts_id, "artifact_ids", artifacts_match),
+                ):
+                    if matches:
+                        accepted.append(contribution_id)
+                    else:
+                        rejected.append(
+                            {
+                                "item_id": contribution_id,
+                                "invariant": "evidence_contract",
+                            }
+                        )
+                    field_contributions.append(
+                        {
+                            "contribution_id": contribution_id,
+                            "field": field,
+                            "attribution": (
+                                ROLE_LABELS["evidence_checklist"]
+                                if matches
+                                else "deterministic_application"
+                            ),
+                            "confidence_basis_points": _confidence_basis_points(
+                                proposal["confidence"]
+                                if matches and proposal is not None
+                                else 1
+                            ),
+                            "deterministic_fallback_applied": not matches,
+                        }
+                    )
                 output.append(
                     {
                         **oracle,
-                        "confidence_basis_points": _confidence_basis_points(
-                            proposal["confidence"] if matches else 1
+                        "status": (
+                            proposal["status"] if status_matches else oracle["status"]
                         ),
-                        "attribution": ROLE_LABELS["evidence_checklist"] if matches else "deterministic_application",
-                        "deterministic_fallback_applied": not matches,
+                        "artifact_ids": (
+                            canonical_artifacts
+                            if artifacts_match
+                            else oracle["artifact_ids"]
+                        ),
+                        "field_contributions": field_contributions,
+                        "model_owned_fields": ["status", "artifact_ids"],
+                        "confidence_basis_points": _confidence_basis_points(
+                            proposal["confidence"] if proposal is not None else 1
+                        ),
+                        "attribution": (
+                            ROLE_LABELS["evidence_checklist"]
+                            if status_matches and artifacts_match
+                            else "mixed_model_and_deterministic"
+                            if status_matches or artifacts_match
+                            else "deterministic_application"
+                        ),
+                        "deterministic_fallback_applied": not (
+                            status_matches and artifacts_match
+                        ),
                     }
                 )
             ignored = len(set(proposed) - set(expected)) + duplicates
@@ -1883,8 +2240,12 @@ class NemotronMultiAgentOrchestrator:
             agent_id="evidence_checklist",
             schema=EvidenceChecklistResponse,
             system_prompt=(
-                "Check only bounded evidence item, artifact, status, and source-reference IDs. The deterministic "
-                "evidence contract remains authoritative. Return no requests, prose, or legal conclusions."
+                "For every evidence candidate, classify its bounded status and select only supporting artifact IDs "
+                "from the accepted inventory. Use the verified process overlay, applicability metadata, accepted "
+                "canonical facts, and fact-to-artifact bindings. Return only item_id, status, artifact_ids, and "
+                "confidence. The application independently verifies each field, binds canonical source references, "
+                "and rebuilds checklist aggregates. Return no source-reference IDs, raw excerpts, deterministic why, "
+                "requests, legal conclusions, or prose."
             ),
             provider_payload=_evidence_provider_payload(state),
             validator=validate,
@@ -1899,8 +2260,11 @@ class NemotronMultiAgentOrchestrator:
             raise AgentBoundaryError("deterministic_evidence_gate", "evidence_contribution")
         if state["verification"].get("valid") is not True:
             raise AgentBoundaryError("deterministic_evidence_gate", "playbook_verification")
+        accepted_checklist = apply_evidence_contribution(
+            state["checklist"], state["evidence_checklist"]
+        )
         input_hash = _safe_hash(state["evidence_checklist"])
-        output_hash = accepted_artifact_hash(state["checklist"])
+        output_hash = accepted_artifact_hash(accepted_checklist)
         writer(
             {
                 "receipt_type": "gate_passed",
@@ -1917,6 +2281,7 @@ class NemotronMultiAgentOrchestrator:
             }
         )
         return {
+            "checklist": accepted_checklist,
             "audit_entries": [
                 {
                     "agent_id": "deterministic_evidence_gate",
@@ -1935,55 +2300,128 @@ class NemotronMultiAgentOrchestrator:
         current_node = next(
             node for node in state["process"]["nodes"] if node["node_id"] == current["current_node_id"]
         )
-        source_ids = sorted(
-            {
-                resolve_observable_source_reference_id(ref, state["source_registry"])
-                for fact in state["facts"]
-                if fact["fact_id"] in current_node.get("fact_ids", [])
-                for ref in fact.get("source_refs", [])
-                if ref.get("locator_kind") == "text_quote"
-            }
-        )
         expected = {
             "current_node_id": current["current_node_id"],
             "next_action_node_id": current["next_action_node_id"],
-            "source_ref_ids": source_ids,
+            "supporting_fact_ids": sorted(current_node.get("fact_ids", [])),
+            "upstream_contribution_ids": [
+                "document_source_integrity",
+                "process_decision_mapping",
+                "evidence_checklist",
+            ],
+            "audit_check_ids": list(FINAL_AUDIT_CHECK_IDS),
         }
 
         def validate(value: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
             proposal = value.get("proposal")
-            matches = isinstance(proposal, dict) and all(
-                proposal.get(key) == expected[key] for key in expected
-            )
-            return {
-                **expected,
-                "input_contribution_ids": [
-                    "document_source_integrity",
-                    "process_decision_mapping",
-                    "evidence_checklist",
-                ],
-                "lineage_authority": "deterministic_application",
-                "confidence_basis_points": _confidence_basis_points(
-                    proposal["confidence"] if matches else 1
+            proposal = proposal if isinstance(proposal, dict) else {}
+            accepted: list[str] = []
+            rejected: list[dict[str, str]] = []
+            effective: dict[str, Any] = {}
+            field_contributions: list[dict[str, Any]] = []
+            units = (
+                ("current_node_id", "final:current_node"),
+                ("next_action_node_id", "final:next_action"),
+                ("supporting_fact_ids", "final:supporting_facts"),
+                (
+                    "upstream_contribution_ids",
+                    "final:upstream_contributions",
                 ),
-                "attribution": ROLE_LABELS["final_claim_brief_audit"] if matches else "deterministic_application",
-                "deterministic_fallback_applied": not matches,
-            }, _diagnostics(
-                ["final_claim_brief"] if matches else [],
-                []
-                if matches
-                else [{"item_id": "final_claim_brief", "invariant": "final_brief_contract"}],
+                ("audit_check_ids", "final:audit_checks"),
             )
+            for field, contribution_id in units:
+                proposed_value = proposal.get(field)
+                expected_value = expected[field]
+                if isinstance(expected_value, list):
+                    well_formed = (
+                        isinstance(proposed_value, list)
+                        and all(isinstance(item, str) for item in proposed_value)
+                        and len(set(proposed_value)) == len(proposed_value)
+                    )
+                    canonical_value = sorted(proposed_value) if well_formed else []
+                    canonical_expected = sorted(expected_value)
+                    matches = well_formed and canonical_value == canonical_expected
+                    effective[field] = (
+                        canonical_value if matches else canonical_expected
+                    )
+                else:
+                    matches = proposed_value == expected_value
+                    effective[field] = (
+                        proposed_value if matches else expected_value
+                    )
+                if matches:
+                    accepted.append(contribution_id)
+                else:
+                    rejected.append(
+                        {
+                            "item_id": contribution_id,
+                            "invariant": "final_brief_contract",
+                        }
+                    )
+                field_contributions.append(
+                    {
+                        "contribution_id": contribution_id,
+                        "field": field,
+                        "attribution": (
+                            ROLE_LABELS["final_claim_brief_audit"]
+                            if matches
+                            else "deterministic_application"
+                        ),
+                        "confidence_basis_points": _confidence_basis_points(
+                            proposal["confidence"] if matches else 1
+                        ),
+                        "deterministic_fallback_applied": not matches,
+                    }
+                )
+            accepted_supporting = set(effective["supporting_fact_ids"])
+            bound_source_ids = sorted(
+                {
+                    resolve_observable_source_reference_id(
+                        ref, state["source_registry"]
+                    )
+                    for fact in state["facts"]
+                    if fact["fact_id"] in accepted_supporting
+                    for ref in fact.get("source_refs", [])
+                    if ref.get("locator_kind") == "text_quote"
+                }
+            )
+            fallback_applied = bool(rejected)
+            return {
+                **effective,
+                "source_ref_ids": bound_source_ids,
+                "input_contribution_ids": effective[
+                    "upstream_contribution_ids"
+                ],
+                "lineage_authority": (
+                    "hybrid_guarded_model_audit"
+                    if "final:upstream_contributions" in accepted
+                    else "deterministic_application"
+                ),
+                "contribution_scope": "independent_final_claim_brief_audit",
+                "field_contributions": field_contributions,
+                "confidence_basis_points": _confidence_basis_points(
+                    proposal["confidence"]
+                ),
+                "attribution": (
+                    ROLE_LABELS["final_claim_brief_audit"]
+                    if not fallback_applied
+                    else "mixed_model_and_deterministic"
+                    if accepted
+                    else "deterministic_application"
+                ),
+                "deterministic_fallback_applied": fallback_applied,
+            }, _diagnostics(accepted, rejected)
 
         contribution, audit = self._run_agent(
             state,
             agent_id="final_claim_brief_audit",
             schema=FinalClaimBriefResponse,
             system_prompt=(
-                "Independently audit the bounded current and next process nodes from the static topology, canonical "
-                "fact handoff, and accepted specialist contributions. Cite only supplied source-reference IDs and "
-                "return only the audited node IDs, source IDs, and confidence. The application binds contribution "
-                "lineage separately. Return no generated prose, legal conclusion, remedy, or new action."
+                "Independently audit the accepted process and evidence gate handoffs against the static topology, "
+                "canonical facts, and prior accepted specialist contributions. Return only current_node_id, "
+                "next_action_node_id, supporting_fact_ids, upstream_contribution_ids, audit_check_ids, and confidence. "
+                "The application scores each field independently and binds source references from accepted canonical "
+                "supporting facts. Return no source-reference IDs, prose, legal conclusion, remedy, or new action."
             ),
             provider_payload=_final_brief_provider_payload(state),
             validator=validate,
@@ -1996,6 +2434,31 @@ class NemotronMultiAgentOrchestrator:
         writer = get_stream_writer()
         if state["verification"].get("valid") is not True or not state.get("final_brief"):
             raise AgentBoundaryError("whole_playbook_gate", "whole_playbook")
+        current = state["process"]["current_overlay"]
+        if (
+            state["final_brief"].get("current_node_id")
+            != current["current_node_id"]
+            or state["final_brief"].get("next_action_node_id")
+            != current["next_action_node_id"]
+        ):
+            raise AgentBoundaryError("whole_playbook_gate", "final_route_binding")
+        current_node = next(
+            node
+            for node in state["process"]["nodes"]
+            if node["node_id"] == current["current_node_id"]
+        )
+        if state["final_brief"].get("supporting_fact_ids") != sorted(
+            current_node.get("fact_ids", [])
+        ):
+            raise AgentBoundaryError(
+                "whole_playbook_gate", "final_supporting_fact_binding"
+            )
+        if state["final_brief"].get("input_contribution_ids") != [
+            "document_source_integrity",
+            "evidence_checklist",
+            "process_decision_mapping",
+        ]:
+            raise AgentBoundaryError("whole_playbook_gate", "final_lineage_binding")
         input_hash = _safe_hash(
             {"final_brief": state["final_brief"], "verification": state["verification"]}
         )

@@ -88,6 +88,24 @@
 
   const EXPLICIT_ACTOR_TYPES = new Set(['nemotron_agent', 'deterministic_tool', 'deterministic_gate']);
   const SUCCESS_EVENT_STATES = new Set(['accepted', 'cache_hit', 'completed', 'passed', 'succeeded', 'succeeded_with_guarded_fallback', 'success']);
+  const PROCESS_CONTRIBUTION_ROLE = 'Process Decision Mapping Agent';
+  const EVIDENCE_CONTRIBUTION_ROLE = 'Evidence and Checklist Agent';
+  const FINAL_CONTRIBUTION_ROLE = 'Final Claim Brief Agent';
+  const DETERMINISTIC_CONTRIBUTION_ROLE = 'deterministic_application';
+  const FINAL_FIELD_CONTRACT = [
+    ['current_node_id', 'final:current_node'],
+    ['next_action_node_id', 'final:next_action'],
+    ['supporting_fact_ids', 'final:supporting_facts'],
+    ['upstream_contribution_ids', 'final:upstream_contributions'],
+    ['audit_check_ids', 'final:audit_checks'],
+  ];
+  const FINAL_UPSTREAM_CONTRIBUTION_IDS = ['document_source_integrity', 'evidence_checklist', 'process_decision_mapping'];
+  const FINAL_AUDIT_CHECK_IDS = [
+    'current_node_supported_by_canonical_facts',
+    'evidence_items_bound_to_process_nodes',
+    'next_action_connected_in_static_topology',
+    'upstream_contribution_lineage_complete',
+  ];
 
   function returnedValue(event, ...keys) {
     for (const key of keys) {
@@ -792,23 +810,62 @@
     })[status] || status?.replaceAll('_', ' ') || '';
   }
 
-  function renderContributionAttribution(value, unit) {
+  function validatedContributionEntries(value, expectedAttribution, expectedEntityId = '') {
+    const entries = (Array.isArray(value) ? value : value && typeof value === 'object' ? [value] : [])
+      .filter(item => item && typeof item === 'object');
+    if (!entries.length) return [];
+    const ids = entries.map(item => item.contribution_id);
+    if (ids.some(id => typeof id !== 'string' || !id) || new Set(ids).size !== ids.length) return [];
+    const valid = entries.every(item => {
+      if (typeof item.deterministic_fallback_applied !== 'boolean'
+        || !Number.isInteger(item.confidence_basis_points)
+        || item.confidence_basis_points < 0
+        || item.confidence_basis_points > 10000) return false;
+      const expectedRole = item.deterministic_fallback_applied ? DETERMINISTIC_CONTRIBUTION_ROLE : expectedAttribution;
+      if (item.attribution !== expectedRole) return false;
+      if (expectedAttribution === PROCESS_CONTRIBUTION_ROLE) {
+        return typeof item.fact_id === 'string'
+          && Boolean(item.fact_id)
+          && item.contribution_id === `fact:${item.fact_id}:decision_value`
+          && Array.isArray(item.model_owned_fields)
+          && item.model_owned_fields.length === 1
+          && item.model_owned_fields[0] === 'decision_value';
+      }
+      if (expectedAttribution === EVIDENCE_CONTRIBUTION_ROLE) {
+        const match = item.contribution_id.match(/^item:(.+):(status|artifacts)$/);
+        return Boolean(match
+          && (!expectedEntityId || match[1] === expectedEntityId)
+          && item.field === (match[2] === 'status' ? 'status' : 'artifact_ids'));
+      }
+      if (expectedAttribution === FINAL_CONTRIBUTION_ROLE) {
+        return FINAL_FIELD_CONTRACT.some(([field, id]) => field === item.field && id === item.contribution_id);
+      }
+      return false;
+    });
+    return valid ? entries : [];
+  }
+
+  function renderContributionAttribution(value, unit, expectedEntityId = '') {
     const reviewTransform = currentRun()?.result?.review_transform
       || currentRun()?.review_transform
       || currentRun()?.result?.audit?.review_transform;
     if (reviewTransform?.acceptance_scope === 'post_review_unverified_transform') return '';
-    const entries = (Array.isArray(value) ? value : value && typeof value === 'object' ? [value] : [])
-      .filter(item => item && typeof item === 'object');
-    const expectedAttribution = unit === 'fact' ? 'Process Decision Mapping Agent' : 'Evidence and Checklist Agent';
+    const expectedAttribution = unit === 'fact'
+      ? PROCESS_CONTRIBUTION_ROLE
+      : unit === 'final'
+        ? FINAL_CONTRIBUTION_ROLE
+        : EVIDENCE_CONTRIBUTION_ROLE;
+    const entries = validatedContributionEntries(value, expectedAttribution, expectedEntityId);
     const accepted = entries.filter(item => item.deterministic_fallback_applied === false && returnedValue(item, 'attribution') === expectedAttribution);
-    const fallback = entries.filter(item => item.deterministic_fallback_applied === true);
+    const fallback = entries.filter(item => item.deterministic_fallback_applied === true && returnedValue(item, 'attribution') === DETERMINISTIC_CONTRIBUTION_ROLE);
     if (!accepted.length && !fallback.length) return '';
     const authority = accepted.length && fallback.length ? 'mixed' : accepted.length ? 'nemotron-accepted' : 'deterministic-fallback';
     const roles = [...new Set(accepted.map(item => returnedValue(item, 'attribution')).filter(Boolean))];
-    const countLabel = count => `${count} ${unit}${count === 1 ? '' : 's'}`;
+    const unitLabel = unit === 'fact' ? 'decision field' : 'field';
+    const countLabel = count => `${count} ${unitLabel}${count === 1 ? '' : 's'}`;
     const acceptedLabel = accepted.length ? `Nemotron accepted · ${countLabel(accepted.length)}` : '';
     const fallbackLabel = fallback.length ? `Deterministic fallback · ${countLabel(fallback.length)}` : '';
-    return `<span class="model-contribution-attribution ${authority}" data-contribution-authority="${authority}" data-accepted-count="${accepted.length}" data-fallback-count="${fallback.length}"><i aria-hidden="true"></i><span><strong>${esc([acceptedLabel, fallbackLabel].filter(Boolean).join(' · '))}</strong>${roles.length ? `<small>${esc(roles.join(' · '))}</small>` : ''}</span></span>`;
+    return `<span class="model-contribution-attribution ${authority}" data-contribution-authority="${authority}" data-accepted-count="${accepted.length}" data-fallback-count="${fallback.length}" data-accepted-contribution-ids="${esc(accepted.map(item => item.contribution_id).join(','))}" data-fallback-contribution-ids="${esc(fallback.map(item => item.contribution_id).join(','))}"><i aria-hidden="true"></i><span><strong>${esc([acceptedLabel, fallbackLabel].filter(Boolean).join(' · '))}</strong>${roles.length ? `<small>${esc(roles.join(' · '))}</small>` : ''}</span></span>`;
   }
 
   function renderProcessStage(stage, event, options) {
@@ -860,7 +917,7 @@
     const previous = run?.result?.precedents || run?.precedents || [];
     return `<aside class="decision-inspector" data-inspector-node="${esc(node.node_id)}" tabindex="-1"><div class="inspector-label"><span>${esc(node.kind === 'outcome' ? 'Outcome' : node.kind === 'action' ? 'Action' : 'Process decision')} · ${esc(node.node_id)}</span><span>${esc(nodeState(node.node_id) === 'current' ? 'Current claim' : '')}</span></div><h3>${esc(node.question)}</h3><p>${esc(node.why || node.answer || '')}</p>
       ${facts.length ? `<section class="inspector-section"><h4>What this decision knows</h4>${facts.map(fact => `<article class="inspector-fact ${fact.state === 'unknown' || fact.state === 'conflicting' ? 'conditional' : ''}" data-fact-id="${esc(fact.fact_id)}" data-node-id="${esc(node.node_id)}"><header><strong>${esc(fact.label)}:</strong> ${esc(fact.value)}</header><p>${esc(fact.explanation)}</p><small>${esc(fact.fact_id)} · ${esc(fact.state || 'unclassified')} · confidence ${formatConfidence(fact.confidence)}</small>${(fact.source_refs || []).length ? `<div class="fact-source-list">${fact.source_refs.map(ref => sourceRefButton(fact, ref, node.node_id)).join('')}</div>` : '<p class="grounding-warning">No source reference returned.</p>'}</article>`).join('')}</section>` : ''}
-      ${evidence ? `<section class="inspector-section"><h4>What this decision requires</h4>${items.length ? items.map(item => `<article class="inspector-row ${item.status === 'missing' ? 'missing' : item.status === 'conditional' || item.status === 'provided_insufficient' ? 'conditional' : ''}" data-item-id="${esc(item.item_id)}" data-node-id="${esc(item.node_id)}" data-fact-id="${esc(item.fact_id)}"><i></i><span><strong>${esc(item.title)} — ${esc(statusLabel(item.status))}</strong><br>${esc(item.why)}<br><small>${esc(item.item_id)} · fact ${esc(item.fact_id)}</small>${renderContributionAttribution(item.agent_contribution, 'item')}${item.applies_when && item.status === 'conditional' ? `<br><em>Only if: ${esc(item.applies_when)}</em>` : ''}${(item.artifact_ids || []).map(artifactId => ` <button class="source-link evidence-artifact-link" type="button" data-source-ref="${esc(artifactId)}" data-fact-id="${esc(item.fact_id)}" data-node-id="${esc(item.node_id)}">Open ${esc(sourceTitle(artifactId))}</button>`).join('')}</span></article>`).join('') : '<div class="inspector-row"><i></i><span>No separate evidence requirement is linked to this decision.</span></div>'}</section>` : ''}
+      ${evidence ? `<section class="inspector-section"><h4>What this decision requires</h4>${items.length ? items.map(item => `<article class="inspector-row ${item.status === 'missing' ? 'missing' : item.status === 'conditional' || item.status === 'provided_insufficient' ? 'conditional' : ''}" data-item-id="${esc(item.item_id)}" data-node-id="${esc(item.node_id)}" data-fact-id="${esc(item.fact_id)}"><i></i><span><strong>${esc(item.title)} — ${esc(statusLabel(item.status))}</strong><br>${esc(item.why)}<br><small>${esc(item.item_id)} · fact ${esc(item.fact_id)}</small>${renderContributionAttribution(item.agent_contribution, 'item', item.item_id)}${item.applies_when && item.status === 'conditional' ? `<br><em>Only if: ${esc(item.applies_when)}</em>` : ''}${(item.artifact_ids || []).map(artifactId => ` <button class="source-link evidence-artifact-link" type="button" data-source-ref="${esc(artifactId)}" data-fact-id="${esc(item.fact_id)}" data-node-id="${esc(item.node_id)}">Open ${esc(sourceTitle(artifactId))}</button>`).join('')}</span></article>`).join('') : '<div class="inspector-row"><i></i><span>No separate evidence requirement is linked to this decision.</span></div>'}</section>` : ''}
       ${laws.length ? `<section class="inspector-section"><h4>Why this step exists</h4>${laws.map(source => { const provenance = legalProvenance(source); return `<button class="law-marker ${provenance.kind}" type="button" data-law-id="${esc(source.source_id)}"><small>${esc(provenance.label)}</small>§ ${esc(source.title)}</button><div class="law-detail" data-law-detail="${esc(source.source_id)}" hidden><p>${esc(source.role)}</p><p><strong>Review state:</strong> ${esc(source.validation_status || legalData()?.review_status || (source.url ? 'Official source; handling interpretation remains reviewable' : 'Unapproved handling proposal'))}</p>${source.url ? `<a href="${esc(source.url)}" target="_blank" rel="noopener">Open official source</a>` : ''}</div>`; }).join('')}</section>` : ''}
       ${precedents && previous.length ? `<section class="precedent-inline"><header><h4>Previous cases that help</h4><span>${previous.length} returned</span></header>${previous.map((item, index) => `<button class="precedent-mini" type="button" data-precedent-index="${index}"><small>${esc(precedentProvenance(item))}</small><strong>${esc(item.claim_id)} · ${esc(item.title)}</strong><p>${esc(item.why_useful)}</p></button>`).join('')}</section>` : ''}
     </aside>`;
@@ -916,11 +973,54 @@
     renderReadyMoment();
   }
 
+  function renderFinalHandoff(result) {
+    const run = currentRun();
+    const reviewTransform = result?.review_transform
+      || result?.audit?.review_transform
+      || run?.review_transform
+      || run?.result?.review_transform
+      || run?.result?.audit?.review_transform;
+    if (reviewTransform?.acceptance_scope === 'post_review_unverified_transform') return '';
+    const finalBrief = result?.agent_orchestration?.final_claim_brief
+      || result?.audit?.agent_orchestration?.final_claim_brief;
+    const process = result?.process;
+    const entries = validatedContributionEntries(finalBrief?.field_contributions, FINAL_CONTRIBUTION_ROLE);
+    const exactFields = entries.length === FINAL_FIELD_CONTRACT.length
+      && entries.every((entry, index) => entry.field === FINAL_FIELD_CONTRACT[index][0] && entry.contribution_id === FINAL_FIELD_CONTRACT[index][1]);
+    if (!finalBrief || !process || !exactFields) return '';
+    const overlay = process.current_overlay || {};
+    if (finalBrief.current_node_id !== process.current_node
+      || finalBrief.current_node_id !== overlay.current_node_id
+      || finalBrief.next_action_node_id !== overlay.next_action_node_id
+      || finalBrief.next_action_node_id !== result?.next_action?.process_node_id) return '';
+    const nodes = new Map((process.nodes || []).map(node => [node.node_id, node]));
+    const current = nodes.get(finalBrief.current_node_id);
+    const next = nodes.get(finalBrief.next_action_node_id);
+    if (!current || !next) return '';
+    const expectedSupportingFacts = [...(current.fact_ids || [])].sort();
+    if (JSON.stringify(finalBrief.supporting_fact_ids) !== JSON.stringify(expectedSupportingFacts)
+      || JSON.stringify(finalBrief.upstream_contribution_ids) !== JSON.stringify(FINAL_UPSTREAM_CONTRIBUTION_IDS)
+      || JSON.stringify(finalBrief.input_contribution_ids) !== JSON.stringify(FINAL_UPSTREAM_CONTRIBUTION_IDS)
+      || JSON.stringify(finalBrief.audit_check_ids) !== JSON.stringify(FINAL_AUDIT_CHECK_IDS)) return '';
+    const accepted = entries.filter(item => item.deterministic_fallback_applied === false);
+    const fallback = entries.filter(item => item.deterministic_fallback_applied === true);
+    return `<section class="v20-final-handoff" aria-label="Accepted final claim handoff" data-current-node-id="${esc(finalBrief.current_node_id)}" data-next-action-node-id="${esc(finalBrief.next_action_node_id)}" data-field-count="${entries.length}" data-field-ids="${esc(entries.map(item => item.contribution_id).join(','))}" data-accepted-count="${accepted.length}" data-fallback-count="${fallback.length}" data-accepted-contribution-ids="${esc(accepted.map(item => item.contribution_id).join(','))}" data-fallback-contribution-ids="${esc(fallback.map(item => item.contribution_id).join(','))}">
+      <div class="v20-final-handoff-route"><small>Final Claim Brief Agent → Whole-Playbook Gate</small><strong><span>${esc(current.title)}</span><i aria-hidden="true">→</i><span>${esc(next.title)}</span></strong><p>The agent named the live decision and next action; application code checked five independent fields before accepting the handoff.</p></div>
+      ${renderContributionAttribution(entries, 'final')}
+    </section>`;
+  }
+
   function renderReadyMoment() {
     const result = state.run.result;
     const verification = result.verification || {};
     const accepted = verification.checks || verification.accepted_checks || [];
-    renderCanvas(`<div class="stage-shell"><div class="process-synthesis"><section class="synthesis-primary"><span class="quiet-label">Handling playbook ready</span><h3>CasePath has reconstructed how this claim should be handled.</h3><p>The full process stays visible. The current claim sits at causation, and the evidence needed for that decision is attached directly to the graph.</p>${renderProcessWorkspace({ evidence: true, precedents: true })}</section><section><span class="quiet-label">What was constructed</span><div class="artifact-summary"><div class="artifact-row"><span class="artifact-icon">P</span><div><strong>Handling process</strong><p>From claim intake through responsibility, remedy, escalation, and closure.</p></div><span>Ready</span></div><div class="artifact-row"><span class="artifact-icon">E</span><div><strong>Evidence across the process</strong><p>Every requirement retains the decision, fact, reason, and current status.</p></div><span>Ready</span></div><div class="artifact-row"><span class="artifact-icon">H</span><div><strong>Previous cases that help</strong><p>Returned references retain generated, qualified-review, or unverified-demo provenance.</p></div><span>Ready</span></div></div><span class="quiet-label" style="margin-top:22px">Acceptance checks</span><div class="verification-list">${accepted.slice(0, 5).map(check => `<div class="verification-row"><span>✓</span><div>${esc(typeof check === 'string' ? check : check.label || check.name || JSON.stringify(check))}</div></div>`).join('')}</div></section></div></div>`, 'ready');
+    const process = result.process || {};
+    const current = (process.nodes || []).find(node => node.node_id === process.current_overlay?.current_node_id);
+    const next = (process.nodes || []).find(node => node.node_id === process.current_overlay?.next_action_node_id);
+    const routeCopy = current && next
+      ? `${current.title} is the current decision; ${next.title} is the next action, with the evidence for that handoff attached directly to the graph.`
+      : 'The full process, current decision, next action, and supporting evidence remain visible together.';
+    renderCanvas(`<div class="stage-shell"><div class="process-synthesis"><section class="synthesis-primary"><span class="quiet-label">Handling playbook ready</span><h3>CasePath has reconstructed how this claim should be handled.</h3><p>${esc(routeCopy)}</p>${renderFinalHandoff(result)}${renderProcessWorkspace({ evidence: true, precedents: true })}</section><section><span class="quiet-label">What was constructed</span><div class="artifact-summary"><div class="artifact-row"><span class="artifact-icon">P</span><div><strong>Handling process</strong><p>From claim intake through responsibility, remedy, escalation, and closure.</p></div><span>Ready</span></div><div class="artifact-row"><span class="artifact-icon">E</span><div><strong>Evidence across the process</strong><p>Every requirement retains the decision, fact, reason, and current status.</p></div><span>Ready</span></div><div class="artifact-row"><span class="artifact-icon">H</span><div><strong>Previous cases that help</strong><p>Returned references retain generated, qualified-review, or unverified-demo provenance.</p></div><span>Ready</span></div></div><span class="quiet-label" style="margin-top:22px">Acceptance checks</span><div class="verification-list">${accepted.slice(0, 5).map(check => `<div class="verification-row"><span>✓</span><div>${esc(typeof check === 'string' ? check : check.label || check.name || JSON.stringify(check))}</div></div>`).join('')}</div></section></div></div>`, 'ready');
     bindProcessInteractions();
     showJourneyActions({ back: false, next: 'Review the proposed playbook' });
   }

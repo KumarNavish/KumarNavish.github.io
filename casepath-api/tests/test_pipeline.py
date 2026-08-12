@@ -25,7 +25,11 @@ from casepath_api.pipeline_v15 import (
     decision_projection,
     digest,
 )
-from casepath_api.multi_agent import AgentInvocationFailure, accepted_artifact_hash
+from casepath_api.multi_agent import (
+    AgentBoundaryError,
+    AgentInvocationFailure,
+    accepted_artifact_hash,
+)
 from casepath_api.storage import Storage
 from casepath_api.validation import ContractValidationError
 
@@ -174,9 +178,18 @@ class StubAgentOrchestrator:
         decisions = [
             {
                 "fact_id": fact["fact_id"],
+                "decision_key": fact["decision_key"],
+                "decision_value": fact["decision_value"],
                 "state": fact["state"],
                 "normalized_value": fact["normalized_value"],
                 "source_ref_ids": [],
+                "contribution_id": (
+                    f"fact:{fact['fact_id']}:decision_value"
+                ),
+                "contribution_scope": (
+                    "canonical_to_process_decision_mapping"
+                ),
+                "model_owned_fields": ["decision_value"],
                 "confidence_basis_points": 8200,
                 "attribution": "Process Decision Mapping Agent",
                 "deterministic_fallback_applied": False,
@@ -188,8 +201,25 @@ class StubAgentOrchestrator:
             {
                 "item_id": item["item_id"],
                 "status": item["status"],
-                "artifact_ids": item.get("artifact_ids", []),
+                "artifact_ids": sorted(item.get("artifact_ids", [])),
                 "source_ref_ids": [],
+                "field_contributions": [
+                    {
+                        "contribution_id": f"item:{item['item_id']}:status",
+                        "field": "status",
+                        "attribution": "Evidence and Checklist Agent",
+                        "confidence_basis_points": 8300,
+                        "deterministic_fallback_applied": False,
+                    },
+                    {
+                        "contribution_id": f"item:{item['item_id']}:artifacts",
+                        "field": "artifact_ids",
+                        "attribution": "Evidence and Checklist Agent",
+                        "confidence_basis_points": 8300,
+                        "deterministic_fallback_applied": False,
+                    },
+                ],
+                "model_owned_fields": ["status", "artifact_ids"],
                 "confidence_basis_points": 8300,
                 "attribution": "Evidence and Checklist Agent",
                 "deterministic_fallback_applied": False,
@@ -199,13 +229,32 @@ class StubAgentOrchestrator:
         final_brief = {
             "current_node_id": process["current_overlay"]["current_node_id"],
             "next_action_node_id": process["current_overlay"]["next_action_node_id"],
+            "supporting_fact_ids": sorted(
+                next(
+                    node
+                    for node in process["nodes"]
+                    if node["node_id"]
+                    == process["current_overlay"]["current_node_id"]
+                ).get("fact_ids", [])
+            ),
+            "upstream_contribution_ids": [
+                "document_source_integrity",
+                "evidence_checklist",
+                "process_decision_mapping",
+            ],
+            "audit_check_ids": [
+                "current_node_supported_by_canonical_facts",
+                "evidence_items_bound_to_process_nodes",
+                "next_action_connected_in_static_topology",
+                "upstream_contribution_lineage_complete",
+            ],
             "source_ref_ids": [],
             "input_contribution_ids": [
                 "document_source_integrity",
-                "process_decision_mapping",
                 "evidence_checklist",
+                "process_decision_mapping",
             ],
-            "lineage_authority": "deterministic_application",
+            "lineage_authority": "hybrid_guarded_model_audit",
             "confidence_basis_points": 8400,
             "attribution": "Final Claim Brief Agent",
             "deterministic_fallback_applied": False,
@@ -284,6 +333,147 @@ def test_v15_completed_outputs_have_no_dangling_contract_refs(runtime, claim_id:
                 for ref in facts_by_id[item["fact_id"]]["source_refs"]
             }
             assert set(item["artifact_ids"]) & fact_sources
+
+
+def test_whole_playbook_validation_binds_exact_projection_and_checklist_derivations(
+    runtime,
+):
+    storage, pipeline = runtime
+    result = wait(storage, pipeline.create("DEF-027-E0-DEMO"))["result"]
+    claim = CLAIMS["DEF-027-E0-DEMO"]
+    understanding = {"facts": result["facts"]}
+
+    def verify(
+        *,
+        process: dict | None = None,
+        checklist: dict | None = None,
+    ) -> dict:
+        return pipeline._verification_report(
+            claim,
+            understanding,
+            result["legal_research"],
+            deepcopy(process if process is not None else result["process"]),
+            deepcopy(checklist if checklist is not None else result["checklist"]),
+            result["precedents"],
+        )
+
+    assert verify()["valid"] is True
+
+    tampered_overlay = deepcopy(result["process"])
+    tampered_overlay["current_overlay"]["decisions"]["causation"] = (
+        "cause_building"
+    )
+    with pytest.raises(ContractValidationError, match="current_overlay.decisions"):
+        verify(process=tampered_overlay)
+
+    tampered_node = deepcopy(result["process"])
+    current_node = next(
+        node
+        for node in tampered_node["nodes"]
+        if node["node_id"] == tampered_node["current_node"]
+    )
+    current_node["answer"] = "Tampered projected answer"
+    with pytest.raises(ContractValidationError, match="nodes.*answer"):
+        verify(process=tampered_node)
+
+    tampered_edge = deepcopy(result["process"])
+    selected_edge = next(
+        edge for edge in tampered_edge["edges"] if edge["state"] == "selected"
+    )
+    selected_edge["state"] = "possible"
+    with pytest.raises(ContractValidationError, match="edges.*state"):
+        verify(process=tampered_edge)
+
+    tampered_summary = deepcopy(result["checklist"])
+    tampered_summary["summary"]["missing"] += 1
+    with pytest.raises(ContractValidationError, match="summary"):
+        verify(checklist=tampered_summary)
+
+    tampered_present = deepcopy(result["checklist"])
+    tampered_present["present"][0]["why"] = "Tampered derived entry"
+    with pytest.raises(ContractValidationError, match="present"):
+        verify(checklist=tampered_present)
+
+
+def test_model_final_result_consumes_only_matching_final_brief_route(tmp_path: Path):
+    oracle_storage = Storage(str(tmp_path / "final-selector-oracle.db"))
+    oracle = ClaimPipeline(oracle_storage, pace_seconds=0)
+    result = wait(
+        oracle_storage, oracle.create("DEF-027-E0-DEMO")
+    )["result"]
+    pipeline = ClaimPipeline(
+        Storage(str(tmp_path / "final-selector-model.db")),
+        model_mode=MODEL_MODE_OPENROUTER,
+        canonicalizer=object(),
+        agent_orchestrator=object(),
+        pace_seconds=0,
+    )
+    overlay = result["process"]["current_overlay"]
+
+    class TrackingBrief(dict):
+        item_reads: list[str]
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.item_reads = []
+
+        def __getitem__(self, key):
+            self.item_reads.append(key)
+            return super().__getitem__(key)
+
+    final_brief = TrackingBrief(
+        current_node_id=overlay["current_node_id"],
+        next_action_node_id=overlay["next_action_node_id"],
+    )
+    understanding = {
+        key: result[key]
+        for key in (
+            "summary",
+            "scope",
+            "category",
+            "subcategory",
+            "dispute",
+            "facts",
+            "issues",
+        )
+    }
+    values = {
+        "claim": CLAIMS["DEF-027-E0-DEMO"],
+        "parsed": {"input_hash": "1" * 64},
+        "understanding": understanding,
+        "legal": result["legal_research"],
+        "process": result["process"],
+        "checklist": result["checklist"],
+        "precedents": result["precedents"],
+        "verification": result["verification"],
+        "knowledge": {"version": result["process"]["playbook_version"]},
+        "knowledge_mode": "current",
+    }
+    model_result = pipeline._final_result(
+        **values,
+        agent_orchestration={"final_claim_brief": final_brief},
+    )
+    assert final_brief.item_reads == [
+        "current_node_id",
+        "next_action_node_id",
+    ]
+    nodes = {node["node_id"]: node for node in result["process"]["nodes"]}
+    assert model_result["current_blocker"] == nodes[
+        final_brief["current_node_id"]
+    ]["question"]
+    assert model_result["next_action"]["process_node_id"] == final_brief[
+        "next_action_node_id"
+    ]
+
+    mismatched = {
+        "current_node_id": "scope",
+        "next_action_node_id": overlay["next_action_node_id"],
+    }
+    with pytest.raises(AgentBoundaryError, match="final_route_binding"):
+        pipeline._final_result(
+            **values,
+            agent_orchestration={"final_claim_brief": mismatched},
+        )
 
 
 def test_later_scope_and_unknown_urgency_remain_unverified_and_unsupplied(runtime):
@@ -795,7 +985,18 @@ def test_model_mode_retains_process_owned_visual_locator_and_passes_grounding(tm
     assert scope_node["agent_decision_contributions"][0]["attribution"] == (
         "Process Decision Mapping Agent"
     )
-    assert run["result"]["checklist"]["items"][0]["agent_contribution"]["confidence_basis_points"] == 8300
+    checklist_contributions = run["result"]["checklist"]["items"][0][
+        "agent_contribution"
+    ]
+    assert {item["field"] for item in checklist_contributions} == {
+        "status",
+        "artifact_ids",
+    }
+    assert all(
+        item["confidence_basis_points"] == 8300
+        and item["attribution"] == "Evidence and Checklist Agent"
+        for item in checklist_contributions
+    )
     assert run["result"]["next_action"]["agent_brief_contribution"]["confidence_basis_points"] == 8400
     assert run["result"]["audit"]["canonicalization"]["mode"] == MODEL_MODE_OPENROUTER
     assert run["result"]["audit"]["canonicalization"]["authority_mode"] == "hybrid_guarded"
@@ -956,8 +1157,27 @@ def test_hybrid_rejected_controlling_fact_uses_exact_oracle_fallback(tmp_path: P
         (item["source"], item["target"], item["state"])
         for item in oracle_result["process"]["edges"]
     ]
-    assert result["process"]["agent_contribution"]["deterministic_route_unchanged"] is True
-    assert result["checklist"]["agent_contribution"]["deterministic_statuses_unchanged"] is True
+    process_contribution = result["process"]["agent_contribution"]
+    assert process_contribution["authority"] == (
+        "hybrid_guarded_model_contribution"
+    )
+    assert process_contribution["model_owned_fields"] == ["decision_value"]
+    assert process_contribution["deterministic_fallback_fields"] == []
+    assert process_contribution["deterministic_fallback_count"] == 0
+    assert process_contribution["derived_from"] == (
+        "accepted_or_fallback_specialist_artifact"
+    )
+    checklist_contribution = result["checklist"]["agent_contribution"]
+    assert checklist_contribution["authority"] == (
+        "hybrid_guarded_model_contribution"
+    )
+    assert checklist_contribution["model_owned_fields"] == [
+        "status",
+        "artifact_ids",
+    ]
+    assert checklist_contribution["derived_from"] == (
+        "accepted_or_fallback_specialist_artifact"
+    )
     assert result["verification"]["valid"] is True
     assert result["verification"]["computed"] is True
     assert len(result["verification"]["checks"]) == 8

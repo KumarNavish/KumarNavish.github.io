@@ -4195,7 +4195,7 @@ with all six successful paid OpenRouter/Nemotron ledger records bound to the
 journey, including exact response models, distinct response and call IDs,
 positive token counts, positive actual cost, strict accepted majorities, and
 all three passed deterministic gates. This record does not contain a passing
-production QA artifact pair; the four retained authorized attempts remain
+production QA artifact pair; the twelve retained attempts remain
 failed-closed history and do not satisfy the production condition.
 
 ## Release and artifact behavior
@@ -4550,8 +4550,61 @@ proves that the 800-token change did not resolve CP-023; that defect is again
 in progress and requires a new source repair plus an aligned production
 journey.
 
-Known aggregate charges for attempts 1, 2, 4, 5, 6, 8, 10, and 11 are USD
-0.1301479.
+## Production attempt 12 and process-decision contribution boundary
+
+Attempt 12 ran from QA deploy `dep-d9tqqlfavr4c73cfqb0g` against source commit
+`a839ff99870f5be11f232d1bfc818854202bd2dd`. Render records a deploy start at
+2026-08-11T23:16:37.149773Z, creation at 2026-08-11T23:16:37.178532Z, the
+terminal QA error at 2026-08-11T23:18:55.342617058Z, the build-failed marker at
+2026-08-11T23:18:55.38377292Z, and deploy completion at
+2026-08-11T23:18:56.810953Z. The public QA log binds run
+`run_403c755cd290a3dc` to orchestration `orch_bdc09ac146345588`.
+
+The public sanitized ledger contains exactly four network calls, all from
+DeepInfra. Canonical-facts call `modelcall_f738b46b703992a2`, response
+`gen-1786490215-0nOpYjNjTeMxtSF7ZbzI`, completed with `stop` and disclosed
+guarded fallback. It retained 17 accepted and one rejected fact contribution,
+11 source-reference projections, 23,171 prompt and 2,736 completion tokens,
+USD 0.0175791, and 44,011.294 ms latency. Its ledger interval was
+2026-08-11T23:16:52.937497+00:00 through
+2026-08-11T23:17:36.966427+00:00.
+
+The bounded orchestrator-plan call `modelcall_19ca5512d3d071b2`, response
+`gen-1786490261-TMfcJt5jr492iTT2dA6M`, completed with `stop`, one accepted
+item, no rejected or ignored proposal, and no deterministic fallback. It used
+438 prompt and 89 completion tokens, cost USD 0.0003892, and ran from
+2026-08-11T23:17:40.626131+00:00 through
+2026-08-11T23:17:43.894060+00:00. This production result resolves the specific
+CP-023 plan-output ceiling, but not the overall runtime acceptance gate.
+
+The parallel document/source-integrity call
+`modelcall_1acb408e46e5998b`, response
+`gen-1786490265-IreIMO88mFsoshGiYAxN`, also completed with `stop`, six accepted
+items, no rejected or ignored proposal, and no deterministic fallback. It used
+736 prompt and 346 completion tokens, cost USD 0.0011036, and ran from
+2026-08-11T23:17:43.910751+00:00 through
+2026-08-11T23:17:56.744034+00:00.
+
+Parallel process-decision-mapping call `modelcall_0a572660847e0df6`, response
+`gen-1786490266-bA9bYAcZ5u9sx20mRS4t`, returned a complete `stop` response but
+failed the strict `model_contribution_majority` boundary under
+`AgentBoundaryError`. It retained 20,240 prompt and 1,859 completion tokens,
+22,099 total, USD 0.0141842, and 61,943.078 ms latency. Its ledger interval was
+2026-08-11T23:17:43.914769+00:00 through
+2026-08-11T23:18:45.865871+00:00. The sanitized ledger does not retain
+item-level rejection diagnostics for this failed call, so this record does not
+infer which proposals missed the boundary.
+
+No later model role or deterministic gate ran. The aggregate is cost-complete
+at USD 0.0332561 for 44,585 prompt and 5,030 completion tokens, 49,615 total,
+with no unknown-cost call. The full orchestration was rejected and the failed
+QA build establishes no current runtime acceptance. The sanitized record is
+retained at
+`casepath/releases/model-validation-attempt-20260811-12.json`; CP-024 tracks
+the unresolved process-decision contribution boundary.
+
+Known aggregate charges for attempts 1, 2, 4, 5, 6, 8, 10, 11, and 12 are USD
+0.1634040.
 Attempts 3, 7, and 9 remain unknown and excluded rather than treated as zero;
 the USD 0.027645 reservations recorded for attempts 7 and 9 remain estimates,
 not observed charges.
@@ -4565,7 +4618,7 @@ not fields to write back into the static release contract:
 ```text
 dynamic_runtime_acceptance_verdict: NOT_ESTABLISHED_BY_THIS_RECORD
 historical_model_validation_scope: failed_closed_history_only
-failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -11.json
+failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -12.json
 failed_attempt_id: authorized-smoke-20260811-01
 failed_attempt_application_outcome: rejected
 failed_attempt_failure_type: exact_private_reference_mismatch
@@ -4578,32 +4631,34 @@ provider_observed_prompt_tokens: 3629
 provider_observed_completion_tokens: 2625
 provider_observed_total_tokens: 6254
 provider_observed_finish_reason: stop
-latest_failed_attempt_id: production-flagship-20260811-11
-latest_failed_attempt_source_commit: d59978be2f1824f6d769f6f2e32fb7a13e3843e7
-latest_failed_attempt_qa_deploy_id: dep-d9tqd4ht0dsc73bthmgg
+latest_failed_attempt_id: production-flagship-20260811-12
+latest_failed_attempt_source_commit: a839ff99870f5be11f232d1bfc818854202bd2dd
+latest_failed_attempt_qa_deploy_id: dep-d9tqqlfavr4c73cfqb0g
 latest_failed_attempt_qa_deploy_outcome: build_failed
-latest_failed_attempt_qa_deploy_created_at: 2026-08-11T22:47:46.251804Z
-latest_failed_attempt_qa_deploy_finished_at: 2026-08-11T22:48:49.788544Z
-latest_failed_attempt_qa_run_id: run_bdd1832d34d2188f
-latest_failed_attempt_application_outcome: orchestrator_plan_truncated_at_output_limit
+latest_failed_attempt_qa_deploy_created_at: 2026-08-11T23:16:37.178532Z
+latest_failed_attempt_qa_deploy_finished_at: 2026-08-11T23:18:56.810953Z
+latest_failed_attempt_qa_run_id: run_403c755cd290a3dc
+latest_failed_attempt_application_outcome: process_decision_mapping_model_contribution_majority
 latest_failed_attempt_error_type: AgentBoundaryError
-latest_failed_attempt_error_invariant: provider_finish_reason
+latest_failed_attempt_error_invariant: model_contribution_majority
 latest_failed_attempt_fact_counts: 17_ACCEPTED_1_REJECTED_WITH_GUARDED_FALLBACK
-latest_failed_attempt_source_projection_count: 10
-latest_failed_attempt_provider_outcome: partial_success_then_length_rejected
+latest_failed_attempt_source_projection_count: 11
+latest_failed_attempt_provider_outcome: three_successes_then_process_majority_rejected
 latest_failed_attempt_upstream_provider: DeepInfra
-latest_failed_attempt_network_call_count: 2
-latest_failed_attempt_completed_call_id: modelcall_0e3ac23f5327d9de
-latest_failed_attempt_failed_call_id: modelcall_72e43889f3f0bece
-latest_failed_attempt_failed_agent_id: orchestrator_plan
-latest_failed_attempt_finish_reason: length
-latest_failed_attempt_prompt_tokens: 43197
-latest_failed_attempt_completion_tokens: 3232
-latest_failed_attempt_total_tokens: 46429
-latest_failed_attempt_actual_cost_usd: 0.0286577
+latest_failed_attempt_network_call_count: 4
+latest_failed_attempt_canonical_call_id: modelcall_f738b46b703992a2
+latest_failed_attempt_orchestrator_call_id: modelcall_19ca5512d3d071b2
+latest_failed_attempt_document_source_call_id: modelcall_1acb408e46e5998b
+latest_failed_attempt_failed_call_id: modelcall_0a572660847e0df6
+latest_failed_attempt_failed_agent_id: process_decision_mapping
+latest_failed_attempt_finish_reason: stop
+latest_failed_attempt_prompt_tokens: 44585
+latest_failed_attempt_completion_tokens: 5030
+latest_failed_attempt_total_tokens: 49615
+latest_failed_attempt_actual_cost_usd: 0.0332561
 latest_failed_attempt_actual_cost_complete: true
-known_failed_attempt_cost_usd_excluding_attempts_03_07_and_09: 0.1301479
-accepted_retry_status: PENDING_NOT_RUN_AFTER_ATTEMPT_11
+known_failed_attempt_cost_usd_excluding_attempts_03_07_and_09: 0.1634040
+accepted_retry_status: PENDING_NOT_RUN_AFTER_ATTEMPT_12
 candidate_source_commit: PENDING
 release_id: casepath-v20-reference-20260811
 provider: openrouter

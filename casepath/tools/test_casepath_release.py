@@ -57,7 +57,9 @@ def test_archive_release_record_keeps_external_limits_explicit() -> None:
     )
     assert record["verification"]["tests_passed"] == 1721
     assert record["source_commit_resolution"]["status"] == "unresolved"
-    assert record["clean_environment_reproduction"]["overall_status"].startswith("blocked_")
+    assert record["clean_environment_reproduction"]["overall_status"].startswith(
+        "blocked_"
+    )
     assert record["truth"]["independent_expert_review_completed"] is False
 
 
@@ -107,7 +109,7 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
             release_tool.REPOSITORY
             / f"casepath/releases/model-validation-attempt-20260811-{number:02d}.json"
         )
-        for number in range(1, 12)
+        for number in range(1, 13)
     }
     (
         attempt_1,
@@ -121,9 +123,8 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         attempt_9,
         attempt_10,
         attempt_11,
-    ) = (
-        attempts[number] for number in range(1, 12)
-    )
+        attempt_12,
+    ) = (attempts[number] for number in range(1, 13))
     for evidence in attempts.values():
         assert evidence["status"] == "failed_closed"
         assert evidence["acceptance_passed"] is False
@@ -606,23 +607,167 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         "runtime_acceptance_established": False,
         "downstream_execution_started": False,
     }
+    assert attempt_12["execution_observation"] == {
+        "source_commit": "a839ff99870f5be11f232d1bfc818854202bd2dd",
+        "qa_deploy_id": "dep-d9tqqlfavr4c73cfqb0g",
+        "qa_deploy_outcome": "build_failed",
+        "qa_deploy_created_at": "2026-08-11T23:16:37.178532Z",
+        "qa_deploy_started_at": "2026-08-11T23:16:37.149773Z",
+        "qa_error_at": "2026-08-11T23:18:55.342617058Z",
+        "qa_build_failed_at": "2026-08-11T23:18:55.38377292Z",
+        "qa_deploy_finished_at": "2026-08-11T23:18:56.810953Z",
+        "qa_run_id": "run_403c755cd290a3dc",
+        "ledger_created_at": "2026-08-11T23:16:52.937497+00:00",
+        "ledger_updated_at": "2026-08-11T23:18:45.865871+00:00",
+        "orchestration_id": "orch_bdc09ac146345588",
+        "failed_agent_id": "process_decision_mapping",
+        "network_call_count": 4,
+        "completed_model_calls": 3,
+        "failed_model_calls": 1,
+        "downstream_model_calls_after_failure": 0,
+        "deterministic_gate_receipts": 0,
+    }
+    assert attempt_12["provider_observation"] == {
+        "provider": "openrouter",
+        "provider_outcome": "three_successes_then_process_majority_rejected",
+        "requested_model": "nvidia/nemotron-3-ultra-550b-a55b",
+        "upstream_provider": "DeepInfra",
+        "network_call_count": 4,
+        "actual_cost_usd": 0.0332561,
+        "actual_cost_complete": True,
+        "unknown_cost_call_count": 0,
+        "prompt_tokens": 44585,
+        "completion_tokens": 5030,
+        "total_tokens": 49615,
+        "calls": [
+            {
+                "call_id": "modelcall_f738b46b703992a2",
+                "agent_id": "canonical_facts",
+                "outcome": "succeeded_with_guarded_fallback",
+                "response_id": "gen-1786490215-0nOpYjNjTeMxtSF7ZbzI",
+                "response_model": "nvidia/nemotron-3-ultra-550b-a55b",
+                "upstream_provider": "DeepInfra",
+                "finish_reason": "stop",
+                "actual_cost_usd": 0.0175791,
+                "prompt_tokens": 23171,
+                "completion_tokens": 2736,
+                "total_tokens": 25907,
+                "latency_ms": 44011.294,
+                "created_at": "2026-08-11T23:16:52.937497+00:00",
+                "updated_at": "2026-08-11T23:17:36.966427+00:00",
+                "deterministic_fallback_applied": True,
+                "accepted_fact_count": 17,
+                "rejected_fact_count": 1,
+                "source_reference_projection_count": 11,
+            },
+            {
+                "call_id": "modelcall_19ca5512d3d071b2",
+                "agent_id": "orchestrator_plan",
+                "outcome": "succeeded",
+                "response_id": "gen-1786490261-TMfcJt5jr492iTT2dA6M",
+                "response_model": "nvidia/nemotron-3-ultra-550b-a55b",
+                "upstream_provider": "DeepInfra",
+                "finish_reason": "stop",
+                "actual_cost_usd": 0.0003892,
+                "prompt_tokens": 438,
+                "completion_tokens": 89,
+                "total_tokens": 527,
+                "latency_ms": 3256.765,
+                "created_at": "2026-08-11T23:17:40.626131+00:00",
+                "updated_at": "2026-08-11T23:17:43.894060+00:00",
+                "deterministic_fallback_applied": False,
+                "accepted_item_count": 1,
+                "rejected_item_count": 0,
+                "ignored_proposal_count": 0,
+            },
+            {
+                "call_id": "modelcall_1acb408e46e5998b",
+                "agent_id": "document_source_integrity",
+                "outcome": "succeeded",
+                "response_id": "gen-1786490265-IreIMO88mFsoshGiYAxN",
+                "response_model": "nvidia/nemotron-3-ultra-550b-a55b",
+                "upstream_provider": "DeepInfra",
+                "finish_reason": "stop",
+                "actual_cost_usd": 0.0011036,
+                "prompt_tokens": 736,
+                "completion_tokens": 346,
+                "total_tokens": 1082,
+                "latency_ms": 12820.868,
+                "created_at": "2026-08-11T23:17:43.910751+00:00",
+                "updated_at": "2026-08-11T23:17:56.744034+00:00",
+                "deterministic_fallback_applied": False,
+                "accepted_item_count": 6,
+                "rejected_item_count": 0,
+                "ignored_proposal_count": 0,
+            },
+            {
+                "call_id": "modelcall_0a572660847e0df6",
+                "agent_id": "process_decision_mapping",
+                "outcome": "failed",
+                "response_id": "gen-1786490266-bA9bYAcZ5u9sx20mRS4t",
+                "response_model": "nvidia/nemotron-3-ultra-550b-a55b",
+                "upstream_provider": "DeepInfra",
+                "finish_reason": "stop",
+                "actual_cost_usd": 0.0141842,
+                "prompt_tokens": 20240,
+                "completion_tokens": 1859,
+                "total_tokens": 22099,
+                "latency_ms": 61943.078,
+                "created_at": "2026-08-11T23:17:43.914769+00:00",
+                "updated_at": "2026-08-11T23:18:45.865871+00:00",
+                "error_type": "AgentBoundaryError",
+                "error_invariant": "model_contribution_majority",
+            },
+        ],
+    }
+    assert attempt_12["application_result"] == {
+        "outcome": "rejected",
+        "failure_type": "process_decision_mapping_model_contribution_majority",
+        "error_type": "AgentBoundaryError",
+        "error_invariant": "model_contribution_majority",
+        "successful_ledger_call_bound": False,
+        "ledger_call_id": "modelcall_0a572660847e0df6",
+        "ledger_outcome": "failed",
+        "canonical_stage_completed": True,
+        "canonical_stage_outcome": "succeeded_with_guarded_fallback",
+        "canonical_stage_call_id": "modelcall_f738b46b703992a2",
+        "canonical_guarded_fallback_applied": True,
+        "canonical_contribution_diagnostics_retained": True,
+        "orchestrator_plan_accepted": True,
+        "orchestrator_plan_call_id": "modelcall_19ca5512d3d071b2",
+        "document_source_integrity_accepted": True,
+        "document_source_integrity_call_id": "modelcall_1acb408e46e5998b",
+        "process_decision_mapping_accepted": False,
+        "full_orchestration_accepted": False,
+        "runtime_acceptance_established": False,
+        "downstream_execution_started": True,
+        "later_model_calls_after_failure": False,
+    }
     assert sum(
         attempt["provider_observation"]["actual_cost_usd"]
         for attempt in attempts.values()
         if "actual_cost_usd" in attempt["provider_observation"]
-    ) == pytest.approx(0.1301479)
+    ) == pytest.approx(0.1634040)
     assert "actual_cost_usd" not in attempt_3["provider_observation"]
     assert "prompt_tokens" not in attempt_3["provider_observation"]
     assert attempt_3["provider_observation"]["charge_status"] == "unknown_unconfirmed"
     assert "actual_cost_usd" not in attempt_7["provider_observation"]
     assert "prompt_tokens" not in attempt_7["provider_observation"]
     assert attempt_7["provider_observation"]["charge_status"] == "unknown_unconfirmed"
-    assert attempt_7["provider_observation"]["estimated_reservation_is_actual_charge"] is False
+    assert (
+        attempt_7["provider_observation"]["estimated_reservation_is_actual_charge"]
+        is False
+    )
     assert "actual_cost_usd" not in attempt_9["provider_observation"]
     assert "prompt_tokens" not in attempt_9["provider_observation"]
     assert attempt_9["provider_observation"]["charge_status"] == "unknown_unconfirmed"
-    assert attempt_9["provider_observation"]["charge_included_in_known_aggregate"] is False
-    assert attempt_9["provider_observation"]["estimated_reservation_is_actual_charge"] is False
+    assert (
+        attempt_9["provider_observation"]["charge_included_in_known_aggregate"] is False
+    )
+    assert (
+        attempt_9["provider_observation"]["estimated_reservation_is_actual_charge"]
+        is False
+    )
     for attempt in attempts.values():
         release_tool.verify_failed_model_attempt_evidence(contract, attempt)
 
@@ -643,7 +788,9 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         "openrouter_upstream_request_log_observed"
     ] = False
     with pytest.raises(release_tool.VerificationError, match="exact bounded schema"):
-        release_tool.verify_failed_model_attempt_evidence(contract, unbound_upstream_log)
+        release_tool.verify_failed_model_attempt_evidence(
+            contract, unbound_upstream_log
+        )
 
     privacy_mutations = []
     raw_provider_message = deepcopy(attempt_9)
@@ -665,9 +812,9 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
     privacy_mutations.append(claim_prose_value)
 
     nested_provider_message = deepcopy(attempt_10)
-    nested_provider_message["provider_observation"]["calls"][1][
-        "provider_message"
-    ] = "RAW provider output for a private claim"
+    nested_provider_message["provider_observation"]["calls"][1]["provider_message"] = (
+        "RAW provider output for a private claim"
+    )
     privacy_mutations.append(nested_provider_message)
 
     for unsafe_attempt in privacy_mutations:
@@ -703,9 +850,9 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
     numeric_type_aliases.append(boolean_rejected_count)
 
     boolean_unknown_cost_count = deepcopy(attempt_10)
-    boolean_unknown_cost_count["provider_observation"][
-        "unknown_cost_call_count"
-    ] = False
+    boolean_unknown_cost_count["provider_observation"]["unknown_cost_call_count"] = (
+        False
+    )
     numeric_type_aliases.append(boolean_unknown_cost_count)
 
     for aliased_attempt in numeric_type_aliases:
@@ -733,9 +880,9 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
     mismatched_attempt_11_output_limit["provider_observation"]["calls"][1][
         "total_tokens"
     ] = 20833
-    mismatched_attempt_11_output_limit["provider_observation"][
-        "completion_tokens"
-    ] = 3231
+    mismatched_attempt_11_output_limit["provider_observation"]["completion_tokens"] = (
+        3231
+    )
     mismatched_attempt_11_output_limit["provider_observation"]["total_tokens"] = 46428
     with pytest.raises(
         release_tool.VerificationError,
@@ -746,11 +893,47 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
             mismatched_attempt_11_output_limit,
         )
 
+    mismatched_attempt_12_majority = deepcopy(attempt_12)
+    mismatched_attempt_12_majority["provider_observation"]["calls"][3][
+        "error_invariant"
+    ] = "provider_finish_reason"
+    with pytest.raises(
+        release_tool.VerificationError,
+        match="exact bounded schema",
+    ):
+        release_tool.verify_failed_model_attempt_evidence(
+            contract,
+            mismatched_attempt_12_majority,
+        )
+
+    unbound_attempt_12_document_call = deepcopy(attempt_12)
+    unbound_attempt_12_document_call["application_result"][
+        "document_source_integrity_call_id"
+    ] = "modelcall_0000000000000000"
+    with pytest.raises(
+        release_tool.VerificationError,
+        match="exact bounded schema",
+    ):
+        release_tool.verify_failed_model_attempt_evidence(
+            contract,
+            unbound_attempt_12_document_call,
+        )
+
+    inconsistent_attempt_12_aggregate = deepcopy(attempt_12)
+    inconsistent_attempt_12_aggregate["provider_observation"]["actual_cost_usd"] += 0.01
+    with pytest.raises(
+        release_tool.VerificationError,
+        match="exact bounded schema",
+    ):
+        release_tool.verify_failed_model_attempt_evidence(
+            contract,
+            inconsistent_attempt_12_aggregate,
+        )
+
 
 def _ledger_summary(items: list[dict]) -> dict:
     unknown_cost_call_count = sum(
-        item["call_count"] > 0 and item.get("actual_cost_usd") is None
-        for item in items
+        item["call_count"] > 0 and item.get("actual_cost_usd") is None for item in items
     )
     outcomes = {
         outcome: sum(item["outcome"] == outcome for item in items)
@@ -760,9 +943,7 @@ def _ledger_summary(items: list[dict]) -> dict:
         "records": len(items),
         "network_calls": sum(item["call_count"] for item in items),
         "prompt_tokens": sum(item.get("prompt_tokens", 0) for item in items),
-        "completion_tokens": sum(
-            item.get("completion_tokens", 0) for item in items
-        ),
+        "completion_tokens": sum(item.get("completion_tokens", 0) for item in items),
         "total_tokens": sum(item.get("total_tokens", 0) for item in items),
         "actual_cost_usd": round(
             sum(item.get("actual_cost_usd") or 0 for item in items), 8
@@ -779,6 +960,321 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
     call_ids = {
         item["agent_id"]: f"modelcall_{index:02d}_release_acceptance"
         for index, item in enumerate(required_agents, start=1)
+    }
+    def source_ref(index: int) -> str:
+        return f"src_{index:024x}"
+
+    source_artifact = {
+        "artifacts": [
+            {
+                "artifact_id": "art_notice",
+                "integrity_class": "text_grounded",
+                "source_ref_ids": [source_ref(1)],
+                "confidence_basis_points": 9100,
+                "attribution": "Document and Source Integrity Agent",
+                "deterministic_fallback_applied": False,
+            },
+            {
+                "artifact_id": "art_reply",
+                "integrity_class": "text_grounded",
+                "source_ref_ids": [source_ref(2)],
+                "confidence_basis_points": 9000,
+                "attribution": "Document and Source Integrity Agent",
+                "deterministic_fallback_applied": False,
+            },
+            {
+                "artifact_id": "art_photo",
+                "integrity_class": "visual_only",
+                "source_ref_ids": [],
+                "confidence_basis_points": 9500,
+                "attribution": "Document and Source Integrity Agent",
+                "deterministic_fallback_applied": False,
+            },
+        ]
+    }
+    decision_specs = [
+        ("fact_scope", "scope", "in_scope", "confirmed", "covered", [source_ref(1)]),
+        (
+            "fact_dispute",
+            "dispute",
+            "dispute_present",
+            "confirmed",
+            "present",
+            [source_ref(2)],
+        ),
+        ("fact_urgency", "urgency", "not_urgent", "confirmed", "routine", []),
+        (
+            "fact_notification",
+            "notification",
+            "notified",
+            "confirmed",
+            "sent",
+            [source_ref(3)],
+        ),
+        (
+            "fact_recurrence",
+            "recurrence",
+            "recurrence_supported",
+            "confirmed",
+            "recurring",
+            [source_ref(4)],
+        ),
+        (
+            "fact_cause",
+            "causation",
+            "cause_unresolved",
+            "uncertain",
+            "unresolved",
+            [source_ref(5), source_ref(6)],
+        ),
+    ]
+    process_decisions = []
+    for index, (
+        fact_id,
+        decision_key,
+        decision_value,
+        state,
+        normalized_value,
+        source_ref_ids,
+    ) in enumerate(decision_specs):
+        fallback = index == len(decision_specs) - 1
+        process_decisions.append(
+            {
+                "fact_id": fact_id,
+                "decision_key": decision_key,
+                "decision_value": decision_value,
+                "state": state,
+                "normalized_value": normalized_value,
+                "source_ref_ids": source_ref_ids,
+                "contribution_id": f"fact:{fact_id}:decision_value",
+                "contribution_scope": "canonical_to_process_decision_mapping",
+                "model_owned_fields": ["decision_value"],
+                "confidence_basis_points": 10_000 if fallback else 8800 + index * 100,
+                "attribution": (
+                    "deterministic_application"
+                    if fallback
+                    else "Process Decision Mapping Agent"
+                ),
+                "deterministic_fallback_applied": fallback,
+            }
+        )
+    process_artifact = {"decisions": process_decisions}
+
+    evidence_specs = [
+        (
+            "claim_message",
+            "fact_scope",
+            "provided_sufficient",
+            ["message"],
+            [source_ref(1)],
+            False,
+        ),
+        (
+            "dispute_reply",
+            "fact_dispute",
+            "provided_sufficient",
+            ["art_reply"],
+            [source_ref(2)],
+            False,
+        ),
+        (
+            "defect_notice",
+            "fact_notification",
+            "provided_insufficient",
+            ["art_notice"],
+            [source_ref(3)],
+            True,
+        ),
+        (
+            "technical_assessment",
+            "fact_cause",
+            "missing",
+            [],
+            [source_ref(5), source_ref(6)],
+            False,
+        ),
+        (
+            "ventilation_statement",
+            "fact_ventilation_allegation",
+            "provided_sufficient",
+            ["art_reply"],
+            [source_ref(7)],
+            False,
+        ),
+    ]
+    evidence_items = []
+    for item_id, fact_id, status, artifact_ids, source_ref_ids, status_fallback in (
+        evidence_specs
+    ):
+        field_contributions = [
+            {
+                "contribution_id": f"item:{item_id}:status",
+                "field": "status",
+                "attribution": (
+                    "deterministic_application"
+                    if status_fallback
+                    else "Evidence and Checklist Agent"
+                ),
+                "confidence_basis_points": 10_000 if status_fallback else 9000,
+                "deterministic_fallback_applied": status_fallback,
+            },
+            {
+                "contribution_id": f"item:{item_id}:artifacts",
+                "field": "artifact_ids",
+                "attribution": "Evidence and Checklist Agent",
+                "confidence_basis_points": 9000,
+                "deterministic_fallback_applied": False,
+            },
+        ]
+        evidence_items.append(
+            {
+                "item_id": item_id,
+                "status": status,
+                "artifact_ids": sorted(artifact_ids),
+                "source_ref_ids": source_ref_ids,
+                "field_contributions": field_contributions,
+                "model_owned_fields": ["status", "artifact_ids"],
+                "confidence_basis_points": 9000,
+                "attribution": (
+                    "mixed_model_and_deterministic"
+                    if status_fallback
+                    else "Evidence and Checklist Agent"
+                ),
+                "deterministic_fallback_applied": status_fallback,
+            }
+        )
+    evidence_artifact = {"items": evidence_items}
+    plan_artifact = {
+        "model_priority_fact_ids": [
+            "fact_cause",
+            "fact_notification",
+            "fact_dispute",
+        ],
+        "model_priority_task_codes": [
+            "source_integrity",
+            "process_decisions",
+            "evidence_gaps",
+            "final_brief",
+        ],
+        "priority_task_codes": [
+            "source_integrity",
+            "process_decisions",
+            "evidence_gaps",
+            "final_brief",
+        ],
+        "model_priority_attribution": "Nemotron Orchestrator",
+        "deterministic_coverage": {
+            "fact_ids": [
+                "fact_scope",
+                "fact_urgency",
+                "fact_recurrence",
+                "fact_ventilation_allegation",
+            ],
+            "source_ref_ids": [source_ref(1), source_ref(2)],
+            "required_text_artifact_ids": ["art_notice", "art_reply"],
+            "attribution": "deterministic_application",
+        },
+        "focus_fact_ids": [
+            "fact_cause",
+            "fact_notification",
+            "fact_dispute",
+            "fact_scope",
+            "fact_urgency",
+            "fact_recurrence",
+            "fact_ventilation_allegation",
+        ],
+        "focus_source_ref_ids": [source_ref(1), source_ref(2)],
+        "contribution_type": "constrained_focus_prioritization",
+    }
+    final_fields = [
+        ("current_node_id", "final:current_node", False),
+        ("next_action_node_id", "final:next_action", False),
+        ("supporting_fact_ids", "final:supporting_facts", False),
+        (
+            "upstream_contribution_ids",
+            "final:upstream_contributions",
+            False,
+        ),
+        ("audit_check_ids", "final:audit_checks", True),
+    ]
+    final_claim_brief = {
+        "current_node_id": "causation",
+        "next_action_node_id": "evidence_gap",
+        "supporting_fact_ids": ["fact_cause", "fact_ventilation_allegation"],
+        "upstream_contribution_ids": list(
+            release_tool.FINAL_UPSTREAM_CONTRIBUTION_IDS
+        ),
+        "audit_check_ids": list(release_tool.FINAL_AUDIT_CHECK_IDS),
+        "source_ref_ids": [source_ref(5), source_ref(6), source_ref(7)],
+        "input_contribution_ids": list(
+            release_tool.FINAL_UPSTREAM_CONTRIBUTION_IDS
+        ),
+        "lineage_authority": "hybrid_guarded_model_audit",
+        "contribution_scope": "independent_final_claim_brief_audit",
+        "field_contributions": [
+            {
+                "contribution_id": contribution_id,
+                "field": field,
+                "attribution": (
+                    "deterministic_application"
+                    if fallback
+                    else "Final Claim Brief Agent"
+                ),
+                "confidence_basis_points": 10_000 if fallback else 9200,
+                "deterministic_fallback_applied": fallback,
+            }
+            for field, contribution_id, fallback in final_fields
+        ],
+        "confidence_basis_points": 9200,
+        "attribution": "mixed_model_and_deterministic",
+        "deterministic_fallback_applied": True,
+    }
+    specialist_artifacts = {
+        "orchestrator_plan": plan_artifact,
+        "document_source_integrity": source_artifact,
+        "process_decision_mapping": process_artifact,
+        "evidence_checklist": evidence_artifact,
+        "final_claim_brief_audit": final_claim_brief,
+    }
+
+    accepted_by_agent = {
+        "canonical_facts": [
+            "fact_scope",
+            "fact_dispute",
+            "fact_urgency",
+            "fact_notification",
+            "fact_recurrence",
+            "fact_cause",
+            "fact_ventilation_allegation",
+        ],
+        "orchestrator_plan": ["model_priority_order"],
+        "document_source_integrity": [
+            item["artifact_id"] for item in source_artifact["artifacts"]
+        ],
+        "process_decision_mapping": [
+            item["contribution_id"]
+            for item in process_decisions
+            if item["deterministic_fallback_applied"] is False
+        ],
+        "evidence_checklist": [
+            field["contribution_id"]
+            for item in evidence_items
+            for field in item["field_contributions"]
+            if field["deterministic_fallback_applied"] is False
+        ],
+        "final_claim_brief_audit": [
+            field["contribution_id"]
+            for field in final_claim_brief["field_contributions"]
+            if field["deterministic_fallback_applied"] is False
+        ],
+    }
+    rejected_by_agent = {
+        "canonical_facts": 0,
+        "orchestrator_plan": 0,
+        "document_source_integrity": 0,
+        "process_decision_mapping": 1,
+        "evidence_checklist": 1,
+        "final_claim_brief_audit": 1,
     }
     records = []
     for index, item in enumerate(required_agents, start=1):
@@ -804,46 +1300,183 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
                 "requested_model": release_tool.REQUIRED_PRODUCTION_MODEL,
                 "response_model": release_tool.REQUIRED_PRODUCTION_MODEL,
                 "finish_reason": "stop",
+                "usage_source": "response",
                 "call_id": call_ids[agent_id],
+                "origin_call_id": call_ids[agent_id],
                 "response_id": f"generation_runtime_proof_{index:02d}",
                 "parent_call_id": parent_call_id,
                 "delegation_id": delegation_id,
                 "call_count": 1,
                 "cache_hit": False,
-                "outcome": "succeeded",
-                "accepted_ids": [
-                    f"accepted_{agent_id}_{accepted_index}"
-                    for accepted_index in range(1, 4)
-                ],
-                "accepted_count": 3,
-                "rejected_count": 0,
+                "outcome": (
+                    "succeeded_with_guarded_fallback"
+                    if rejected_by_agent[agent_id]
+                    else "succeeded"
+                ),
+                "accepted_ids": accepted_by_agent[agent_id],
+                "accepted_count": len(accepted_by_agent[agent_id]),
+                "rejected_count": rejected_by_agent[agent_id],
                 "source_reference_projection_fact_ids": (
                     [] if agent_id == "canonical_facts" else None
                 ),
                 "source_reference_projection_count": (
                     0 if agent_id == "canonical_facts" else None
                 ),
-                "deterministic_fallback_applied": False,
+                "deterministic_fallback_applied": bool(
+                    rejected_by_agent[agent_id]
+                ),
                 "input_artifact_hash": f"{index:064x}",
-                "output_artifact_hash": f"{index + 100:064x}",
+                "output_artifact": (
+                    "canonical_claim_state"
+                    if agent_id == "canonical_facts"
+                    else release_tool.SPECIALIST_OUTPUT_ARTIFACTS[agent_id]
+                ),
+                "output_artifact_hash": (
+                    f"{index + 100:064x}"
+                    if agent_id == "canonical_facts"
+                    else release_tool.accepted_artifact_hash(
+                        specialist_artifacts[agent_id]
+                    )
+                ),
             }
         )
     runtime = contract["agentic_runtime"]
+    by_agent = {record["agent_id"]: record for record in records}
+    lineage_fields = release_tool.ACCEPTED_LINEAGE_FIELDS
+
+    def lineage(agent_id: str) -> dict:
+        agent = by_agent[agent_id]
+        return {field: agent[field] for field in lineage_fields if field in agent}
+
+    node_by_fact = {
+        "fact_scope": "scope",
+        "fact_dispute": "dispute",
+        "fact_urgency": "urgency",
+        "fact_notification": "notification",
+        "fact_recurrence": "recurrence",
+        "fact_cause": "causation",
+    }
+    assert len(decision_specs) == len(process_decisions)
+    process_nodes = [
+        {
+            "node_id": node_by_fact[fact_id],
+            "state": "completed" if fact_id != "fact_cause" else "active",
+            "fact_ids": (
+                [fact_id, "fact_ventilation_allegation"]
+                if fact_id == "fact_cause"
+                else [fact_id]
+            ),
+            "agent_decision_contributions": [decision],
+        }
+        for fact_id, decision in zip(
+            [item[0] for item in decision_specs], process_decisions
+        )
+    ]
+    process_nodes.append(
+        {"node_id": "evidence_gap", "state": "available", "fact_ids": []}
+    )
     process = {
         "contract": "casepath.process-graph/15.2",
-        "current_node": "scope",
-        "nodes": [{"node_id": "scope", "state": "active"}],
+        "current_node": "causation",
+        "selected_path": [
+            "scope",
+            "dispute",
+            "urgency",
+            "notification",
+            "recurrence",
+            "causation",
+        ],
+        "current_overlay": {
+            "completed_node_ids": [
+                "scope",
+                "dispute",
+                "urgency",
+                "notification",
+                "recurrence",
+            ],
+            "current_node_id": "causation",
+            "selected_branch_id": "insufficient",
+            "blocked_node_ids": [],
+            "inactive_branch_ids": [],
+            "next_action_node_id": "evidence_gap",
+            "decisions": {
+                item["decision_key"]: item["decision_value"]
+                for item in process_decisions
+            },
+        },
+        "nodes": process_nodes,
+        "edges": [
+            {"source": "causation", "target": "evidence_gap", "state": "selected"}
+        ],
+        "agent_contribution": {
+            "authority": "hybrid_guarded_model_contribution",
+            "model_owned_fields": ["decision_value"],
+            "deterministic_fallback_fields": ["fact_cause.decision_value"],
+            "deterministic_fallback_count": 1,
+            "derived_from": "accepted_or_fallback_specialist_artifact",
+            "artifact": process_artifact,
+            "provenance": lineage("process_decision_mapping"),
+            "source_integrity_artifact": source_artifact,
+            "source_integrity_provenance": lineage(
+                "document_source_integrity"
+            ),
+        },
     }
+    public_evidence_items = []
+    titles = {
+        "claim_message": "Original claim message",
+        "dispute_reply": "Management reply",
+        "defect_notice": "Defect notice",
+        "technical_assessment": "Independent technical assessment",
+        "ventilation_statement": "Ventilation allegation",
+    }
+    node_ids = {
+        "claim_message": "scope",
+        "dispute_reply": "dispute",
+        "defect_notice": "notification",
+        "technical_assessment": "causation",
+        "ventilation_statement": "causation",
+    }
+    fact_by_evidence_item = {item_id: fact_id for item_id, fact_id, *_ in evidence_specs}
+    for item in evidence_items:
+        public_evidence_items.append(
+            {
+                "item_id": item["item_id"],
+                "title": titles[item["item_id"]],
+                "status": item["status"],
+                "node_id": node_ids[item["item_id"]],
+                "fact_id": fact_by_evidence_item[item["item_id"]],
+                "why": "Bounded fixture evidence relationship.",
+                "artifact_ids": list(item["artifact_ids"]),
+                "current_path": True,
+                "applies_when": "The accepted process reaches this node",
+                "agent_contribution": item["field_contributions"],
+            }
+        )
+    derived = release_tool._checklist_derived_sections(public_evidence_items)
     checklist = {
         "contract": "casepath.evidence-model/15.2",
-        "items": [{"item_id": "lease", "status": "provided_sufficient"}],
+        "items": public_evidence_items,
+        **derived,
+        "agent_contribution": {
+            "authority": "hybrid_guarded_model_contribution",
+            "model_owned_fields": ["status", "artifact_ids"],
+            "deterministic_fallback_fields": ["item:defect_notice:status"],
+            "deterministic_fallback_count": 1,
+            "derived_from": "accepted_or_fallback_specialist_artifact",
+            "artifact": evidence_artifact,
+            "provenance": lineage("evidence_checklist"),
+        },
     }
-    final_claim_brief = {
-        "contract": "casepath.final-claim-brief/1.0.0",
-        "current_node_id": "scope",
-        "next_action_node_id": "notice",
+    verification = {
+        "valid": True,
+        "computed": True,
+        "checks": [
+            {"name": "graph_integrity", "status": "passed"},
+            {"name": "evidence_projection", "status": "passed"},
+            {"name": "final_action_binding", "status": "passed"},
+        ],
     }
-    by_agent = {record["agent_id"]: record for record in records}
     gate_bindings = {
         "deterministic_process_gate": (
             "process_graph",
@@ -875,11 +1508,16 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         "raw_output_storage": False,
         "deterministic_safety_authority": True,
         "execution_topology": deepcopy(release_tool.REQUIRED_EXECUTION_TOPOLOGY),
-        "guarded_fallback_count": 0,
+        "guarded_fallback_count": 3,
         "agents": records,
         "deterministic_gates": [
             {
                 "agent_id": gate_id,
+                "role": next(
+                    item["role"]
+                    for item in release_tool.REQUIRED_DETERMINISTIC_GATES
+                    if item["gate_id"] == gate_id
+                ),
                 "actor_type": "deterministic_gate",
                 "receipt_type": "accepted_artifact",
                 "acceptance_scope": "pre_review_model_output",
@@ -890,10 +1528,38 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
                 "delegation_id": by_agent[source_agent_id]["delegation_id"],
                 "accepted_ids": by_agent[source_agent_id]["accepted_ids"],
                 "accepted_count": by_agent[source_agent_id]["accepted_count"],
-                "input_artifact_hash": f"{index + 200:064x}",
+                "input_artifact_hash": (
+                    release_tool.accepted_artifact_hash(
+                        {
+                            "source_integrity": source_artifact,
+                            "process_mapping": process_artifact,
+                        }
+                    )
+                    if gate_id == "deterministic_process_gate"
+                    else release_tool.accepted_artifact_hash(evidence_artifact)
+                    if gate_id == "deterministic_evidence_gate"
+                    else release_tool.accepted_artifact_hash(
+                        {
+                            "final_brief": final_claim_brief,
+                            "verification": verification,
+                        }
+                    )
+                ),
                 "output_artifact": output_artifact,
                 "output_artifact_hash": release_tool.accepted_artifact_hash(
                     artifact_value
+                ),
+                **(
+                    {
+                        "verification_report_hash": release_tool.accepted_artifact_hash(
+                            verification
+                        ),
+                        "accepted_verification_ids": [
+                            item["name"] for item in verification["checks"]
+                        ],
+                    }
+                    if gate_id == "whole_playbook_gate"
+                    else {}
                 ),
             }
             for index, (
@@ -901,18 +1567,57 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
                 (output_artifact, artifact_value, source_agent_id),
             ) in enumerate(gate_bindings.items(), start=1)
         ],
+        "specialist_artifacts": specialist_artifacts,
         "final_claim_brief": final_claim_brief,
     }
     flagship_run = {
         "run_id": "flagship-run",
         "status": "complete",
+        "agent_orchestration": audit,
         "result": {
             "process": process,
             "checklist": checklist,
+            "verification": verification,
+            "current_overlay": process["current_overlay"],
+            "facts": [
+                {
+                    "fact_id": fact_id,
+                    "controls_process": True,
+                    "decision_key": decision_key,
+                    "decision_value": decision_value,
+                    "state": state,
+                    "normalized_value": normalized_value,
+                }
+                for (
+                    fact_id,
+                    decision_key,
+                    decision_value,
+                    state,
+                    normalized_value,
+                    _source_ref_ids,
+                ) in decision_specs
+            ]
+            + [
+                {
+                    "fact_id": "fact_ventilation_allegation",
+                    "controls_process": False,
+                    "state": "disputed",
+                }
+            ],
+            "next_action": {
+                "title": "Resolve the evidence gap",
+                "detail": "Obtain the missing independent assessment.",
+                "requires_expert_approval": True,
+                "process_node_id": "evidence_gap",
+                "agent_brief_contribution": final_claim_brief,
+            },
             "agent_orchestration": audit,
             "audit": {"agent_orchestration": audit},
         },
     }
+    by_agent["canonical_facts"]["output_artifact_hash"] = (
+        release_tool.runtime_artifact_hash(flagship_run["result"]["facts"])
+    )
     ledger = {
         "scope": "global_budget_ledger",
         "items": [
@@ -928,7 +1633,7 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
                 "model": release_tool.REQUIRED_PRODUCTION_MODEL,
                 "response_id": agent["response_id"],
                 "response_model": agent["response_model"],
-                "outcome": "succeeded",
+                "outcome": agent["outcome"],
                 "upstream_provider": "DeepInfra",
                 "usage_source": "response",
                 "finish_reason": "stop",
@@ -936,7 +1641,9 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
                 "completion_tokens": 20 + index,
                 "total_tokens": 120 + index * 2,
                 "actual_cost_usd": 0.001 + index / 100_000,
-                "deterministic_fallback_applied": False,
+                "deterministic_fallback_applied": agent[
+                    "deterministic_fallback_applied"
+                ],
                 **(
                     {
                         "accepted_fact_count": agent["accepted_count"],
@@ -972,7 +1679,9 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
     runtime_versions = {"node": "v24.14.1", "playwright": "1.55.0", "chromium": "140"}
     files = [
         {"path": path, "sha256": f"{index:064x}", "bytes": 100 + index}
-        for index, path in enumerate(sorted(release_tool.REQUIRED_QA_EVIDENCE_FILES), start=1)
+        for index, path in enumerate(
+            sorted(release_tool.REQUIRED_QA_EVIDENCE_FILES), start=1
+        )
     ]
     manifest = {
         "contract": release_tool.QA_EVIDENCE_MANIFEST_CONTRACT,
@@ -1010,10 +1719,90 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
     return report, manifest, retained, manifest_bytes
 
 
+def _runtime_result_and_audit(retained: dict) -> tuple[dict, dict]:
+    result = retained["flagship-run.json"]["result"]
+    return result, result["audit"]["agent_orchestration"]
+
+
+def _refresh_causal_artifact_hashes(retained: dict) -> None:
+    """Re-sign fixture joins so a negative reaches the intended invariant."""
+
+    result, audit = _runtime_result_and_audit(retained)
+    artifacts = audit["specialist_artifacts"]
+    agents = {item["agent_id"]: item for item in audit["agents"]}
+    for agent_id in release_tool.SPECIALIST_ARTIFACT_IDS:
+        agents[agent_id]["output_artifact_hash"] = (
+            release_tool.accepted_artifact_hash(artifacts[agent_id])
+        )
+
+    process_artifact = artifacts["process_decision_mapping"]
+    source_artifact = artifacts["document_source_integrity"]
+    process_contribution = result["process"]["agent_contribution"]
+    process_contribution["artifact"] = process_artifact
+    process_contribution["source_integrity_artifact"] = source_artifact
+    decisions = {
+        item["fact_id"]: item for item in process_artifact["decisions"]
+    }
+    for node in result["process"]["nodes"]:
+        expected = [
+            decisions[fact_id]
+            for fact_id in node.get("fact_ids", [])
+            if fact_id in decisions
+        ]
+        if expected:
+            node["agent_decision_contributions"] = expected
+        else:
+            node.pop("agent_decision_contributions", None)
+
+    evidence_artifact = artifacts["evidence_checklist"]
+    result["checklist"]["agent_contribution"]["artifact"] = evidence_artifact
+    evidence_by_id = {
+        item["item_id"]: item for item in evidence_artifact["items"]
+    }
+    for item in result["checklist"]["items"]:
+        accepted = evidence_by_id[item["item_id"]]
+        item["status"] = accepted["status"]
+        item["artifact_ids"] = list(accepted["artifact_ids"])
+        item["agent_contribution"] = accepted["field_contributions"]
+    result["checklist"].update(
+        release_tool._checklist_derived_sections(result["checklist"]["items"])
+    )
+
+    final_artifact = artifacts["final_claim_brief_audit"]
+    audit["final_claim_brief"] = final_artifact
+    result["next_action"]["agent_brief_contribution"] = final_artifact
+    gates = {item["agent_id"]: item for item in audit["deterministic_gates"]}
+    gates["deterministic_process_gate"]["input_artifact_hash"] = (
+        release_tool.accepted_artifact_hash(
+            {
+                "source_integrity": source_artifact,
+                "process_mapping": process_artifact,
+            }
+        )
+    )
+    gates["deterministic_evidence_gate"]["input_artifact_hash"] = (
+        release_tool.accepted_artifact_hash(evidence_artifact)
+    )
+    gates["deterministic_process_gate"]["output_artifact_hash"] = (
+        release_tool.accepted_artifact_hash(result["process"])
+    )
+    gates["deterministic_evidence_gate"]["output_artifact_hash"] = (
+        release_tool.accepted_artifact_hash(result["checklist"])
+    )
+    gates["whole_playbook_gate"]["output_artifact_hash"] = (
+        release_tool.accepted_artifact_hash(final_artifact)
+    )
+    gates["whole_playbook_gate"]["verification_report_hash"] = (
+        release_tool.accepted_artifact_hash(result["verification"])
+    )
+
+
 def test_dynamic_runtime_acceptance_passes_without_source_promotion() -> None:
     contract = release_tool.load_json(release_tool.RELEASE_PATH)
     original = deepcopy(contract)
-    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(contract)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
     result = release_tool.verify_dynamic_runtime_acceptance(
         contract,
         report,
@@ -1031,6 +1820,389 @@ def test_dynamic_runtime_acceptance_passes_without_source_promotion() -> None:
         "verdict_source": "dynamic_same_commit_qa_artifacts",
     }
     assert contract == original
+
+
+def test_dynamic_runtime_acceptance_rejects_forged_specialist_hash() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    _result, audit = _runtime_result_and_audit(retained)
+    agent = next(
+        item
+        for item in audit["agents"]
+        if item["agent_id"] == "document_source_integrity"
+    )
+    agent["output_artifact_hash"] = "f" * 64
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=r"audit\.agents\.document_source_integrity\.output_artifact_hash",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+def test_dynamic_runtime_acceptance_rejects_forged_specialist_artifact() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    _result, audit = _runtime_result_and_audit(retained)
+    private_sentinel = "private-forged-artifact-value"
+    audit["specialist_artifacts"]["orchestrator_plan"][
+        "contribution_type"
+    ] = private_sentinel
+
+    with pytest.raises(release_tool.VerificationError) as caught:
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+    assert "audit.agents.orchestrator_plan.output_artifact_hash" in str(caught.value)
+    assert private_sentinel not in str(caught.value)
+
+
+def test_dynamic_runtime_acceptance_rejects_forged_canonical_fact() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    result, _audit = _runtime_result_and_audit(retained)
+    private_sentinel = "private-forged-canonical-state"
+    result["facts"][-1]["state"] = private_sentinel
+
+    with pytest.raises(release_tool.VerificationError) as caught:
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+    assert "audit.agents.canonical_facts.output_artifact_hash" in str(caught.value)
+    assert private_sentinel not in str(caught.value)
+
+
+def test_dynamic_runtime_acceptance_rejects_forged_orchestrator_unit() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    _result, audit = _runtime_result_and_audit(retained)
+    plan = audit["specialist_artifacts"]["orchestrator_plan"]
+    plan["deterministic_coverage"]["fact_ids"] = []
+    _refresh_causal_artifact_hashes(retained)
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=r"orchestrator_plan\.focus_fact_ids",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+def test_dynamic_runtime_acceptance_rejects_unbound_plan_source_handoff() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    _result, audit = _runtime_result_and_audit(retained)
+    plan = audit["specialist_artifacts"]["orchestrator_plan"]
+    forged_ref = "src_eeeeeeeeeeeeeeeeeeeeeeee"
+    plan["focus_source_ref_ids"][1] = forged_ref
+    plan["deterministic_coverage"]["source_ref_ids"][1] = forged_ref
+    _refresh_causal_artifact_hashes(retained)
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=r"orchestrator_plan\.focus_source_ref_ids",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+def test_dynamic_runtime_acceptance_rejects_forged_process_gate_input() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    _result, audit = _runtime_result_and_audit(retained)
+    process_gate = next(
+        item
+        for item in audit["deterministic_gates"]
+        if item["agent_id"] == "deterministic_process_gate"
+    )
+    process_gate["input_artifact_hash"] = "f" * 64
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=r"deterministic_process_gate\.input_artifact_hash",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+def test_dynamic_runtime_acceptance_rejects_forged_inherited_process_field() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    _result, audit = _runtime_result_and_audit(retained)
+    private_sentinel = "private-forged-process-state"
+    audit["specialist_artifacts"]["process_decision_mapping"]["decisions"][0][
+        "state"
+    ] = private_sentinel
+    _refresh_causal_artifact_hashes(retained)
+
+    with pytest.raises(release_tool.VerificationError) as caught:
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+    assert "process_decision_mapping.decisions[].state" in str(caught.value)
+    assert private_sentinel not in str(caught.value)
+
+
+def test_dynamic_runtime_acceptance_rejects_forged_evidence_fact_binding() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    result, _audit = _runtime_result_and_audit(retained)
+    item = next(
+        value
+        for value in result["checklist"]["items"]
+        if value["item_id"] == "ventilation_statement"
+    )
+    item["fact_id"] = "fact_scope"
+    _refresh_causal_artifact_hashes(retained)
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=r"final_claim_brief_audit\.source_ref_ids",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+def test_dynamic_runtime_acceptance_rejects_forged_evidence_source_ref() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    _result, audit = _runtime_result_and_audit(retained)
+    evidence_item = next(
+        item
+        for item in audit["specialist_artifacts"]["evidence_checklist"]["items"]
+        if item["item_id"] == "ventilation_statement"
+    )
+    evidence_item["source_ref_ids"] = ["src_ffffffffffffffffffffffff"]
+    _refresh_causal_artifact_hashes(retained)
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=r"final_claim_brief_audit\.source_ref_ids",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "forged_value"),
+    [
+        ("current_node_id", "scope"),
+        ("next_action_node_id", "scope"),
+        ("supporting_fact_ids", ["fact_cause"]),
+        (
+            "upstream_contribution_ids",
+            ["document_source_integrity", "process_decision_mapping"],
+        ),
+        (
+            "audit_check_ids",
+            [
+                "current_node_supported_by_canonical_facts",
+                "next_action_connected_in_static_topology",
+            ],
+        ),
+    ],
+)
+def test_dynamic_runtime_acceptance_rejects_forged_final_field(
+    field: str,
+    forged_value: object,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    _result, audit = _runtime_result_and_audit(retained)
+    audit["specialist_artifacts"]["final_claim_brief_audit"][field] = forged_value
+    _refresh_causal_artifact_hashes(retained)
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=rf"final_claim_brief_audit\.{field}",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+def test_dynamic_runtime_acceptance_rejects_forged_field_unit() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    _result, audit = _runtime_result_and_audit(retained)
+    field = audit["specialist_artifacts"]["evidence_checklist"]["items"][0][
+        "field_contributions"
+    ][0]
+    field["contribution_id"] = "item:claim_message:forged"
+    _refresh_causal_artifact_hashes(retained)
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=r"evidence_checklist\.items\[0\]\.field_contributions\[0\]",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+def test_dynamic_runtime_acceptance_rejects_forged_projection_lineage() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    result, audit = _runtime_result_and_audit(retained)
+    private_sentinel = "private-forged-lineage-call"
+    result["process"]["agent_contribution"]["provenance"][
+        "call_id"
+    ] = private_sentinel
+    process_gate = next(
+        item
+        for item in audit["deterministic_gates"]
+        if item["agent_id"] == "deterministic_process_gate"
+    )
+    process_gate["output_artifact_hash"] = release_tool.accepted_artifact_hash(
+        result["process"]
+    )
+
+    with pytest.raises(release_tool.VerificationError) as caught:
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+    assert "result.process.agent_contribution.provenance" in str(caught.value)
+    assert private_sentinel not in str(caught.value)
+
+
+def test_dynamic_runtime_acceptance_rejects_unbound_final_next_action() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    result, _audit = _runtime_result_and_audit(retained)
+    result["next_action"]["process_node_id"] = "scope"
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=r"result\.next_action\.process_node_id",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+@pytest.mark.parametrize(
+    ("actor", "expected_path"),
+    [
+        ("agent", "Dynamic flagship agent orchestrator_plan role"),
+        ("gate", "Dynamic flagship gate deterministic_process_gate role"),
+    ],
+)
+def test_dynamic_runtime_acceptance_rejects_relabelled_runtime_roles(
+    actor: str,
+    expected_path: str,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    _result, audit = _runtime_result_and_audit(retained)
+    if actor == "agent":
+        target = next(
+            item
+            for item in audit["agents"]
+            if item["agent_id"] == "orchestrator_plan"
+        )
+    else:
+        target = next(
+            item
+            for item in audit["deterministic_gates"]
+            if item["agent_id"] == "deterministic_process_gate"
+        )
+    target["role"] = "Relabelled Runtime Actor"
+
+    with pytest.raises(release_tool.VerificationError, match=expected_path):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
 
 
 def _append_realistic_warm_ledger_item(retained: dict) -> dict:
@@ -1084,7 +2256,9 @@ def _append_realistic_warm_ledger_item(retained: dict) -> dict:
 
 def test_dynamic_runtime_acceptance_accepts_real_public_ledger_shape() -> None:
     contract = release_tool.load_json(release_tool.RELEASE_PATH)
-    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(contract)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
     _append_realistic_warm_ledger_item(retained)
 
     result = release_tool.verify_dynamic_runtime_acceptance(
@@ -1099,7 +2273,9 @@ def test_dynamic_runtime_acceptance_accepts_real_public_ledger_shape() -> None:
 
 def test_dynamic_runtime_acceptance_rejects_forbidden_retained_run_field() -> None:
     contract = release_tool.load_json(release_tool.RELEASE_PATH)
-    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(contract)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
     unsafe_value = "private provider narrative must not be retained"
     retained["flagship-run.json"]["reasoning"] = unsafe_value
 
@@ -1119,7 +2295,9 @@ def test_dynamic_runtime_acceptance_rejects_forbidden_retained_run_field() -> No
 
 def test_dynamic_runtime_acceptance_rejects_non_allowlisted_ledger_field() -> None:
     contract = release_tool.load_json(release_tool.RELEASE_PATH)
-    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(contract)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
     unsafe_value = "private provider trace must not be retained"
     retained["flagship-cold-model-ledger.json"]["items"][0][
         "provider_trace_excerpt"
@@ -1141,7 +2319,9 @@ def test_dynamic_runtime_acceptance_rejects_non_allowlisted_ledger_field() -> No
 
 def test_dynamic_runtime_acceptance_rejects_nonexact_origin_usage_schema() -> None:
     contract = release_tool.load_json(release_tool.RELEASE_PATH)
-    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(contract)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
     warm_item = _append_realistic_warm_ledger_item(retained)
     warm_item["origin_usage"]["provider_trace_excerpt"] = "not retained"
 
@@ -1196,10 +2376,12 @@ def test_dynamic_runtime_acceptance_rejects_unsafe_successful_provenance(
     unsafe_value: str,
 ) -> None:
     contract = release_tool.load_json(release_tool.RELEASE_PATH)
-    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(contract)
-    agent = retained["flagship-run.json"]["result"]["audit"][
-        "agent_orchestration"
-    ]["agents"][0]
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    agent = retained["flagship-run.json"]["result"]["audit"]["agent_orchestration"][
+        "agents"
+    ][0]
     ledger_item = retained["flagship-cold-model-ledger.json"]["items"][0]
     agent[field] = unsafe_value
     ledger_item[field] = unsafe_value
@@ -1220,11 +2402,13 @@ def test_dynamic_runtime_acceptance_rejects_unsafe_successful_provenance(
 
 def test_dynamic_runtime_acceptance_rejects_unsafe_ledger_only_provenance() -> None:
     contract = release_tool.load_json(release_tool.RELEASE_PATH)
-    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(contract)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
     unsafe_value = "credential-provider-unit-test"
-    retained["flagship-cold-model-ledger.json"]["items"][0][
-        "upstream_provider"
-    ] = unsafe_value
+    retained["flagship-cold-model-ledger.json"]["items"][0]["upstream_provider"] = (
+        unsafe_value
+    )
 
     with pytest.raises(
         release_tool.VerificationError,
@@ -1242,7 +2426,9 @@ def test_dynamic_runtime_acceptance_rejects_unsafe_ledger_only_provenance() -> N
 
 def test_dynamic_runtime_acceptance_rejects_valid_but_unpinned_upstream() -> None:
     contract = release_tool.load_json(release_tool.RELEASE_PATH)
-    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(contract)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
     audit_agent = retained["flagship-run.json"]["result"]["audit"][
         "agent_orchestration"
     ]["agents"][0]
@@ -1375,7 +2561,9 @@ def test_public_ledger_rejects_every_forged_summary_field() -> None:
             release_tool._verify_public_model_ledger(forged, "fixture")
 
 
-def test_dynamic_runtime_evidence_paths_verify_the_atomic_artifact_pair(tmp_path: Path) -> None:
+def test_dynamic_runtime_evidence_paths_verify_the_atomic_artifact_pair(
+    tmp_path: Path,
+) -> None:
     contract = release_tool.load_json(release_tool.RELEASE_PATH)
     report, manifest, retained, _ = successful_dynamic_qa_evidence(contract)
     records = []
@@ -1416,7 +2604,9 @@ def test_dynamic_runtime_evidence_paths_verify_the_atomic_artifact_pair(tmp_path
 
 def test_dynamic_runtime_acceptance_rejects_weak_or_unbound_proof() -> None:
     contract = release_tool.load_json(release_tool.RELEASE_PATH)
-    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(contract)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
 
     misaligned = deepcopy(report)
     misaligned["deployment"]["api"]["source_commit"] = "d" * 40
@@ -1434,7 +2624,9 @@ def test_dynamic_runtime_acceptance_rejects_weak_or_unbound_proof() -> None:
         "agent_orchestration"
     ]["agents"]
     agents[1]["response_id"] = agents[0]["response_id"]
-    with pytest.raises(release_tool.VerificationError, match="response IDs must be distinct"):
+    with pytest.raises(
+        release_tool.VerificationError, match="response IDs must be distinct"
+    ):
         release_tool.verify_dynamic_runtime_acceptance(
             contract,
             report,
@@ -1454,7 +2646,9 @@ def test_dynamic_runtime_acceptance_rejects_weak_or_unbound_proof() -> None:
             "deterministic_fallback_applied": True,
         }
     )
-    with pytest.raises(release_tool.VerificationError, match="strict accepted majority"):
+    with pytest.raises(
+        release_tool.VerificationError, match="strict accepted majority"
+    ):
         release_tool.verify_dynamic_runtime_acceptance(
             contract,
             report,
@@ -1464,7 +2658,9 @@ def test_dynamic_runtime_acceptance_rejects_weak_or_unbound_proof() -> None:
         )
 
     traced = deepcopy(retained)
-    traced["flagship-run.json"]["result"]["audit"]["agent_orchestration"]["external_tracing"] = True
+    traced["flagship-run.json"]["result"]["audit"]["agent_orchestration"][
+        "external_tracing"
+    ] = True
     with pytest.raises(release_tool.VerificationError, match="external_tracing"):
         release_tool.verify_dynamic_runtime_acceptance(
             contract,
@@ -1546,9 +2742,14 @@ def test_dynamic_runtime_acceptance_rejects_weak_or_unbound_proof() -> None:
 
 
 def test_accepted_artifact_hash_matches_backend_and_rejects_floats() -> None:
-    assert release_tool.accepted_artifact_hash(
-        {"z": "ü", "a": [{"basis_points": 9100}, True, None]}
-    ) == "a0d744bb4829b2124b022b17dd45499e7012bd19dd95940d1a8a3aed474e42c3"
+    artifact = {"z": "ü", "a": [{"basis_points": 9100}, True, None]}
+    expected = "a0d744bb4829b2124b022b17dd45499e7012bd19dd95940d1a8a3aed474e42c3"
+    assert release_tool.accepted_artifact_hash(artifact) == expected
+    assert release_tool.runtime_artifact_hash(artifact) == expected
+    assert (
+        release_tool.runtime_artifact_hash({"confidence": 0.91})
+        == "917ee2f800c6299c798234ab12ba84a416bd6439dd70b1fad1cab3f4a775662a"
+    )
     with pytest.raises(release_tool.VerificationError, match="contains a float"):
         release_tool.accepted_artifact_hash({"confidence": 0.91})
 

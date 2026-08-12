@@ -21,11 +21,20 @@ from .canonicalizer import (
 from .data import ARTIFACTS, CLAIMS, HISTORICAL_CASES, LAW_SOURCES, observable_claim_package
 from .multi_agent import (
     AGENT_RUNTIME_PROFILE,
+    AgentBoundaryError,
     MULTI_AGENT_AUTHORITY_MODE,
     MULTI_AGENT_IMPLEMENTATION,
     MULTI_AGENT_VERSION,
     NemotronMultiAgentOrchestrator,
     accepted_artifact_hash,
+    apply_evidence_contribution,
+    apply_process_contribution,
+)
+from .projections import (
+    DECISION_OPTIONS,
+    apply_evidence_projection,
+    apply_process_projection,
+    decision_projection,
 )
 from .storage import Storage
 from .validation import validate_playbook, validate_review_operations
@@ -43,42 +52,6 @@ COMPONENT_VERSIONS = {
     "agent_graph": MULTI_AGENT_VERSION,
     "storage": "1.3.0",
 }
-
-DECISION_OPTIONS = {
-    "scope": {
-        "supported_in_scope": "in_scope",
-        "supported_out_of_scope": "out_of_scope",
-        "unverified": "scope_unverified",
-    },
-    "dispute": {
-        "present": "dispute_present",
-        "absent": "no_dispute",
-        "unverified": "dispute_unverified",
-    },
-    "urgency": {
-        "urgent": "urgent",
-        "not_urgent": "not_urgent",
-        "unverified": "urgency_unverified",
-    },
-    "notification": {
-        "notified": "notified",
-        "not_notified": "not_notified",
-        "unverified": "notification_unverified",
-    },
-    "recurrence": {
-        "supported": "recurrence_supported",
-        "not_supported": "recurrence_not_supported",
-        "unverified": "recurrence_unverified",
-    },
-    "causation": {
-        "building": "cause_building",
-        "tenant_use": "cause_tenant_use",
-        "mixed": "cause_mixed",
-        "unresolved": "cause_unresolved",
-    },
-}
-PROCESS_DECISION_KEYS = ("scope", "dispute", "urgency", "notification", "recurrence", "causation")
-
 
 class ReviewOperation(TypedDict):
     component: Literal["process_graph", "evidence_model"]
@@ -166,238 +139,6 @@ def fact(
         "normalized_value": normalized_value,
         "decision_value": decision_value,
     }
-
-
-def decision_projection(facts: list[dict[str, Any]]) -> dict[str, Any]:
-    """Project the active process route from typed fact decisions only."""
-
-    grouped: dict[str, list[str]] = {key: [] for key in PROCESS_DECISION_KEYS}
-    for value in facts:
-        key = value.get("decision_key")
-        if key in grouped and value.get("controls_process") is True:
-            grouped[key].append(value.get("decision_value"))
-    invalid = [key for key, values in grouped.items() if len(values) != 1]
-    if invalid:
-        raise ValueError(f"Process projection requires exactly one controlling fact for {invalid}")
-    decisions = {key: values[0] for key, values in grouped.items()}
-
-    route = ["intake", "scope"]
-    if decisions["scope"] == "out_of_scope":
-        return _projection(decisions, route + ["out_of_scope"], "scope", "out_of_scope", "out-of-scope")
-    if decisions["scope"] == "scope_unverified":
-        return _projection(decisions, route, "scope", "scope", "scope-unverified")
-    if decisions["scope"] != "in_scope":
-        raise ValueError(f"Unsupported scope decision {decisions['scope']!r}")
-
-    route.append("dispute")
-    if decisions["dispute"] == "no_dispute":
-        return _projection(decisions, route + ["no_dispute"], "dispute", "no_dispute", "no-dispute")
-    if decisions["dispute"] == "dispute_unverified":
-        return _projection(decisions, route, "dispute", "dispute", "dispute-unverified")
-    if decisions["dispute"] != "dispute_present":
-        raise ValueError(f"Unsupported dispute decision {decisions['dispute']!r}")
-
-    route.append("urgency")
-    if decisions["urgency"] == "urgent":
-        return _projection(decisions, route + ["urgent_escalation"], "urgency", "urgent_escalation", "urgent")
-    if decisions["urgency"] == "urgency_unverified":
-        return _projection(decisions, route, "urgency", "urgency", "urgency-unverified")
-    if decisions["urgency"] != "not_urgent":
-        raise ValueError(f"Unsupported urgency decision {decisions['urgency']!r}")
-
-    route.append("notification")
-    if decisions["notification"] in {"not_notified", "notification_unverified"}:
-        return _projection(decisions, route + ["formal_notice"], "notification", "formal_notice", "notice-gap")
-    if decisions["notification"] != "notified":
-        raise ValueError(f"Unsupported notification decision {decisions['notification']!r}")
-
-    route.append("defect")
-    if decisions["recurrence"] in {"recurrence_not_supported", "recurrence_unverified"}:
-        return _projection(decisions, route, "defect", "defect", "recurrence-gap")
-    if decisions["recurrence"] != "recurrence_supported":
-        raise ValueError(f"Unsupported recurrence decision {decisions['recurrence']!r}")
-
-    route.append("causation")
-    cause_routes = {
-        "cause_building": ("building_defect", "building-defect"),
-        "cause_tenant_use": ("tenant_use", "tenant-use"),
-        "cause_mixed": ("mixed_cause", "mixed-cause"),
-        "cause_unresolved": ("evidence_gap", "insufficient"),
-    }
-    if decisions["causation"] not in cause_routes:
-        raise ValueError(f"Unsupported causation decision {decisions['causation']!r}")
-    target, branch_id = cause_routes[decisions["causation"]]
-    return _projection(decisions, route + [target], "causation", target, branch_id)
-
-
-def _projection(
-    decisions: dict[str, str],
-    selected_path: list[str],
-    current_node: str,
-    next_action_node: str,
-    selected_branch_id: str,
-) -> dict[str, Any]:
-    return {
-        "decisions": decisions,
-        "selected_path": selected_path,
-        "current_node": current_node,
-        "next_action_node": next_action_node,
-        "selected_branch_id": selected_branch_id,
-    }
-
-
-def apply_process_projection(
-    nodes: list[dict[str, Any]],
-    edges: list[dict[str, Any]],
-    projection: dict[str, Any],
-    main_spine: list[str],
-) -> dict[str, Any]:
-    """Apply one fail-closed decision projection to the fixed graph template."""
-
-    current = projection["current_node"]
-    next_action = projection["next_action_node"]
-    selected_path = projection["selected_path"]
-    selected_pairs = set(zip(selected_path, selected_path[1:]))
-    completed = selected_path[: selected_path.index(current)]
-    spine_position = main_spine.index(current) if current in main_spine else len(main_spine)
-    blocked = [node_id for node_id in main_spine[spine_position + 1 :] if node_id in {"responsibility", "remedy"}]
-
-    branch_targets: set[str] = set()
-    answer_by_node = {
-        "scope": {
-            "in_scope": "In scope",
-            "out_of_scope": "Outside scope",
-            "scope_unverified": "Unverified",
-        }[projection["decisions"]["scope"]],
-        "dispute": {
-            "dispute_present": "Dispute established",
-            "no_dispute": "No dispute established",
-            "dispute_unverified": "Unverified",
-        }[projection["decisions"]["dispute"]],
-        "urgency": {
-            "urgent": "Urgent",
-            "not_urgent": "No acute concern reported",
-            "urgency_unverified": "Unverified",
-        }[projection["decisions"]["urgency"]],
-        "notification": {
-            "notified": "Notification established",
-            "not_notified": "Not notified",
-            "notification_unverified": "Unverified",
-        }[projection["decisions"]["notification"]],
-        "defect": {
-            "recurrence_supported": "Recurrence supported",
-            "recurrence_not_supported": "Recurrence not supported",
-            "recurrence_unverified": "Unverified",
-        }[projection["decisions"]["recurrence"]],
-        "causation": {
-            "cause_building": "Building-related cause supported",
-            "cause_tenant_use": "Use-related cause supported",
-            "cause_mixed": "Mixed cause supported",
-            "cause_unresolved": "Unresolved",
-        }[projection["decisions"]["causation"]],
-    }
-    for node in nodes:
-        branch_targets.update(branch["target"] for branch in node.get("branches", []))
-        if node["node_id"] in completed:
-            node["state"] = "complete"
-        elif node["node_id"] == current:
-            node["state"] = "current"
-        elif node["node_id"] == next_action:
-            node["state"] = "next"
-        elif node["node_id"] in blocked:
-            node["state"] = "blocked"
-        elif node["main_spine"]:
-            node["state"] = "future"
-        else:
-            node["state"] = "inactive"
-        if node["node_id"] in answer_by_node:
-            node["answer"] = answer_by_node[node["node_id"]]
-        elif node["main_spine"] and node["state"] in {"blocked", "future"}:
-            node["answer"] = "Not reached"
-        for branch in node.get("branches", []):
-            branch["state"] = "selected" if branch["branch_id"] == projection["selected_branch_id"] else "possible"
-
-    for value in edges:
-        pair = (value["source"], value["target"])
-        if pair in selected_pairs:
-            value["state"] = "selected"
-        elif pair == ("evidence_gap", "causation"):
-            value["state"] = "loop"
-        elif value["source"] in {"remedy", "escalation"}:
-            value["state"] = "future"
-        else:
-            value["state"] = "possible"
-
-    inactive_targets = sorted(branch_targets - {next_action, current})
-    return {
-        "completed_node_ids": completed,
-        "current_node_id": current,
-        "selected_branch_id": projection["selected_branch_id"],
-        "blocked_node_ids": blocked,
-        "inactive_branch_ids": inactive_targets,
-        "next_action_node_id": next_action,
-        "decisions": projection["decisions"],
-    }
-
-
-def apply_evidence_projection(
-    items: list[dict[str, Any]],
-    process: dict[str, Any],
-) -> None:
-    """Project checklist relevance and statuses from the same typed decisions."""
-
-    decisions = process["current_overlay"]["decisions"]
-    by_id = {item["item_id"]: item for item in items}
-
-    if decisions["urgency"] == "urgency_unverified":
-        by_id["health_safety_statement"]["status"] = "missing"
-        by_id["health_safety_statement"]["artifact_ids"] = []
-        by_id["health_safety_statement"]["why"] = (
-            "Current health, safety and deadline information is absent and must be established before ordinary handling continues."
-        )
-
-    if decisions["notification"] == "not_notified":
-        for item_id in ("defect_notice", "proof_of_delivery"):
-            by_id[item_id]["status"] = "missing"
-            by_id[item_id]["artifact_ids"] = []
-    elif decisions["notification"] == "notification_unverified":
-        by_id["defect_notice"]["status"] = (
-            "provided_insufficient" if by_id["defect_notice"]["artifact_ids"] else "missing"
-        )
-        by_id["proof_of_delivery"]["status"] = "missing"
-        by_id["proof_of_delivery"]["artifact_ids"] = []
-
-    if decisions["recurrence"] in {"recurrence_unverified", "recurrence_not_supported"}:
-        by_id["dated_photos"]["status"] = (
-            "provided_insufficient" if by_id["dated_photos"]["artifact_ids"] else "missing"
-        )
-        by_id["recurrence_chronology"]["status"] = "missing"
-
-    cause = decisions["causation"]
-    if cause == "cause_building":
-        by_id["building_envelope"]["status"] = "missing"
-        by_id["building_envelope"]["required_level"] = "mandatory"
-        by_id["use_evidence"]["status"] = "not_applicable"
-    elif cause == "cause_tenant_use":
-        by_id["building_envelope"]["status"] = "not_applicable"
-        by_id["use_evidence"]["status"] = "missing"
-        by_id["use_evidence"]["required_level"] = "mandatory"
-    elif cause == "cause_mixed":
-        for item_id in ("building_envelope", "use_evidence"):
-            by_id[item_id]["status"] = "missing"
-            by_id[item_id]["required_level"] = "mandatory"
-
-    active_nodes = set(process["selected_path"]) | {process["current_overlay"]["next_action_node_id"]}
-    for value in items:
-        value["current_path"] = value["node_id"] in active_nodes
-        if not value["current_path"] and value["status"] == "missing":
-            value["status"] = "conditional"
-            value["required_level"] = "conditional"
-            value["applies_when"] = f"The {value['node_id']} process node is reached"
-    if decisions["urgency"] == "urgency_unverified":
-        by_id["health_safety_statement"]["status"] = "missing"
-        by_id["health_safety_statement"]["artifact_ids"] = []
-        by_id["health_safety_statement"]["required_level"] = "mandatory"
 
 
 def text_ref(artifact_id: str, page: int, excerpt: str, agent: str) -> dict[str, Any]:
@@ -666,7 +407,7 @@ class ClaimPipeline:
                             "receipt_type": "accepted_artifact",
                             "acceptance_scope": "pre_review_model_output",
                             "headline": headline,
-                            "detail": "The retained hash covers the exact final DTO, including bound advisory provenance.",
+                            "detail": "The retained hash covers the exact hybrid DTO rebuilt from accepted model fields and explicit deterministic fallbacks.",
                             "implementation": MULTI_AGENT_IMPLEMENTATION,
                             "model": None,
                             "source_model": OPENROUTER_MODEL,
@@ -687,6 +428,15 @@ class ClaimPipeline:
                             "external_tracing": False,
                         },
                     )
+                self.storage.patch_run(
+                    run_id,
+                    patch={
+                        "process": process,
+                        "checklist": checklist,
+                        "verification": verification,
+                        "agent_orchestration": agent_orchestration,
+                    },
+                )
             result = self._final_result(
                 claim,
                 parsed,
@@ -1840,6 +1590,9 @@ class ClaimPipeline:
         process: dict[str, Any],
         checklist: dict[str, Any],
         precedents: list[dict[str, Any]],
+        *,
+        allowed_process_extension_node_ids: set[str] | None = None,
+        allowed_process_extension_edge_pairs: set[tuple[str, str]] | None = None,
     ) -> dict[str, Any]:
         checks = validate_playbook(
             claim_id=claim["claim_id"],
@@ -1858,6 +1611,12 @@ class ClaimPipeline:
                 for artifact_id in claim["artifact_ids"]
             },
             observable_package=observable_claim_package(claim),
+            allowed_process_extension_node_ids=(
+                allowed_process_extension_node_ids
+            ),
+            allowed_process_extension_edge_pairs=(
+                allowed_process_extension_edge_pairs
+            ),
         )
         process_checks = [
             check["name"]
@@ -2058,9 +1817,29 @@ class ClaimPipeline:
             raise RuntimeError("Required Nemotron specialist contribution is incomplete")
         artifacts = audit["specialist_artifacts"]
         agents = {entry["agent_id"]: entry for entry in audit["agents"]}
+        accepted_process = apply_process_contribution(
+            process,
+            artifacts["process_decision_mapping"],
+            understanding["facts"],
+        )
+        process.clear()
+        process.update(accepted_process)
+        accepted_checklist = apply_evidence_contribution(
+            checklist, artifacts["evidence_checklist"]
+        )
+        checklist.clear()
+        checklist.update(accepted_checklist)
+        process_fallback_fields = [
+            f"{item['fact_id']}.decision_value"
+            for item in artifacts["process_decision_mapping"]["decisions"]
+            if item["deterministic_fallback_applied"] is True
+        ]
         process["agent_contribution"] = {
-            "authority": "advisory_model_proposal",
-            "deterministic_route_unchanged": True,
+            "authority": "hybrid_guarded_model_contribution",
+            "model_owned_fields": ["decision_value"],
+            "deterministic_fallback_fields": process_fallback_fields,
+            "deterministic_fallback_count": len(process_fallback_fields),
+            "derived_from": "accepted_or_fallback_specialist_artifact",
             "artifact": artifacts["process_decision_mapping"],
             "provenance": _accepted_agent_lineage(agents["process_decision_mapping"]),
             "source_integrity_artifact": artifacts["document_source_integrity"],
@@ -2080,9 +1859,18 @@ class ClaimPipeline:
             ]
             if bound:
                 node["agent_decision_contributions"] = bound
+        evidence_fallback_fields = sorted(
+            contribution["contribution_id"]
+            for item in artifacts["evidence_checklist"]["items"]
+            for contribution in item["field_contributions"]
+            if contribution["deterministic_fallback_applied"] is True
+        )
         checklist["agent_contribution"] = {
-            "authority": "advisory_model_proposal",
-            "deterministic_statuses_unchanged": True,
+            "authority": "hybrid_guarded_model_contribution",
+            "model_owned_fields": ["status", "artifact_ids"],
+            "deterministic_fallback_fields": evidence_fallback_fields,
+            "deterministic_fallback_count": len(evidence_fallback_fields),
+            "derived_from": "accepted_or_fallback_specialist_artifact",
             "artifact": artifacts["evidence_checklist"],
             "provenance": _accepted_agent_lineage(agents["evidence_checklist"]),
         }
@@ -2090,7 +1878,9 @@ class ClaimPipeline:
             item["item_id"]: item for item in artifacts["evidence_checklist"]["items"]
         }
         for item in checklist["items"]:
-            item["agent_contribution"] = evidence_contributions[item["item_id"]]
+            item["agent_contribution"] = evidence_contributions[item["item_id"]][
+                "field_contributions"
+            ]
         gate_bindings = {
             "deterministic_process_gate": (
                 "process_graph",
@@ -2125,9 +1915,10 @@ class ClaimPipeline:
                 }
             )
         understanding["summary"] = (
-            f"{understanding['summary']} Nemotron specialists contributed source-integrity, process-mapping, "
-            "evidence-checklist and final-brief proposals through a guarded LangGraph DAG; deterministic "
-            "contract gates remained authoritative."
+            f"{understanding['summary']} Nemotron specialists supplied bounded process decisions, evidence "
+            "statuses, artifact selections and final-brief audit fields through a guarded LangGraph DAG; the "
+            "application verified every field, applied explicit fallbacks, reprojected the route and checklist, "
+            "and retained deterministic acceptance authority."
         )
         self.storage.patch_run(run_id, patch={"agent_orchestration": audit})
         return audit
@@ -2152,8 +1943,26 @@ class ClaimPipeline:
         )
         current_overlay = process["current_overlay"]
         nodes_by_id = {node["node_id"]: node for node in process["nodes"]}
-        current_node = nodes_by_id[current_overlay["current_node_id"]]
-        next_node = nodes_by_id[current_overlay["next_action_node_id"]]
+        current_node_id = current_overlay["current_node_id"]
+        next_action_node_id = current_overlay["next_action_node_id"]
+        if self.model_mode == MODEL_MODE_OPENROUTER:
+            final_brief = agent_orchestration.get("final_claim_brief")
+            if not isinstance(final_brief, dict):
+                raise AgentBoundaryError(
+                    "whole_playbook_gate", "final_brief_binding"
+                )
+            if (
+                final_brief.get("current_node_id") != current_node_id
+                or final_brief.get("next_action_node_id")
+                != next_action_node_id
+            ):
+                raise AgentBoundaryError(
+                    "whole_playbook_gate", "final_route_binding"
+                )
+            current_node_id = final_brief["current_node_id"]
+            next_action_node_id = final_brief["next_action_node_id"]
+        current_node = nodes_by_id[current_node_id]
+        next_node = nodes_by_id[next_action_node_id]
         return {
             "claim_id": claim["claim_id"],
             "summary": understanding["summary"],
@@ -2463,6 +2272,11 @@ class ClaimPipeline:
                 process,
                 checklist,
                 result["precedents"],
+                allowed_process_extension_node_ids={"ventilation_dispute"},
+                allowed_process_extension_edge_pairs={
+                    ("evidence_gap", "ventilation_dispute"),
+                    ("ventilation_dispute", "causation"),
+                },
             )
             verification["checks"].extend(review_operation_checks)
             verification["review_operations_hash"] = digest(operations)

@@ -323,22 +323,44 @@
     ];
   }
 
-  function checklistContribution(item) {
+  function checklistContribution(item, reviewTransform) {
+    if (reviewTransform?.acceptance_scope === 'post_review_unverified_transform') return '';
+    const itemId = item?.item_id;
+    if (typeof itemId !== 'string' || !itemId) return '';
     const contribution = item?.agent_contribution;
-    if (!contribution || typeof contribution !== 'object') return '';
-    const fallback = contribution.deterministic_fallback_applied === true;
-    const attribution = typeof contribution.attribution === 'string' ? contribution.attribution : '';
-    const accepted = contribution.deterministic_fallback_applied === false && attribution === 'Evidence and Checklist Agent';
-    if (!accepted && !fallback) return '';
-    const authority = accepted ? 'nemotron-accepted' : 'deterministic-fallback';
-    const label = accepted ? 'Nemotron accepted · 1 item' : 'Deterministic fallback · 1 item';
-    return `<span class="model-contribution-attribution ${authority}" data-contribution-authority="${authority}" data-accepted-count="${accepted ? 1 : 0}" data-fallback-count="${fallback ? 1 : 0}"><i aria-hidden="true"></i><span><strong>${label}</strong>${accepted ? `<small>${esc(attribution)}</small>` : ''}</span></span>`;
+    const entries = (Array.isArray(contribution) ? contribution : contribution && typeof contribution === 'object' ? [contribution] : [])
+      .filter(value => value && typeof value === 'object');
+    const expectedUnits = [
+      { contribution_id: `item:${itemId}:status`, field: 'status' },
+      { contribution_id: `item:${itemId}:artifacts`, field: 'artifact_ids' },
+    ];
+    const ids = entries.map(value => value.contribution_id);
+    const valid = entries.length === expectedUnits.length
+      && ids.every(value => typeof value === 'string' && value)
+      && new Set(ids).size === ids.length
+      && expectedUnits.every(expected => entries.some(value => value.contribution_id === expected.contribution_id && value.field === expected.field))
+      && entries.every(value => {
+        if (typeof value.deterministic_fallback_applied !== 'boolean'
+          || !Number.isInteger(value.confidence_basis_points)
+          || value.confidence_basis_points < 0
+          || value.confidence_basis_points > 10000) return false;
+        const expectedAttribution = value.deterministic_fallback_applied ? 'deterministic_application' : 'Evidence and Checklist Agent';
+        return value.attribution === expectedAttribution;
+      });
+    if (!valid) return '';
+    const accepted = entries.filter(value => value.deterministic_fallback_applied === false && value.attribution === 'Evidence and Checklist Agent');
+    const fallback = entries.filter(value => value.deterministic_fallback_applied === true && value.attribution === 'deterministic_application');
+    if (!accepted.length && !fallback.length) return '';
+    const authority = accepted.length && fallback.length ? 'mixed' : accepted.length ? 'nemotron-accepted' : 'deterministic-fallback';
+    const acceptedLabel = accepted.length ? `Nemotron accepted · ${accepted.length} field${accepted.length === 1 ? '' : 's'}` : '';
+    const fallbackLabel = fallback.length ? `Deterministic fallback · ${fallback.length} field${fallback.length === 1 ? '' : 's'}` : '';
+    return `<span class="model-contribution-attribution ${authority}" data-contribution-authority="${authority}" data-accepted-count="${accepted.length}" data-fallback-count="${fallback.length}" data-accepted-contribution-ids="${esc(accepted.map(value => value.contribution_id).join(','))}" data-fallback-contribution-ids="${esc(fallback.map(value => value.contribution_id).join(','))}"><i aria-hidden="true"></i><span><strong>${esc([acceptedLabel, fallbackLabel].filter(Boolean).join(' · '))}</strong>${accepted.length ? '<small>Evidence and Checklist Agent</small>' : ''}</span></span>`;
   }
 
-  function checklistItem(item, nodeMap) {
+  function checklistItem(item, nodeMap, reviewTransform) {
     const node = nodeMap.get(item.node_id);
     const relation = node ? `Required for: ${node.title}` : item.node_id ? `Linked to: ${item.node_id.replaceAll('_', ' ')}` : '';
-    return `<div class="v17-checklist-item" data-item-id="${esc(item.item_id || '')}" data-node-id="${esc(item.node_id || '')}" data-fact-id="${esc(item.fact_id || '')}"><i aria-hidden="true"></i><div><strong>${esc(item.title)} — ${esc(statusName(item.status))}</strong><p>${esc(relation)}${item.why ? ` · ${esc(item.why)}` : ''}</p><small>${esc(item.item_id || '')} · decision ${esc(item.node_id || '')} · fact ${esc(item.fact_id || '')}</small>${checklistContribution(item)}</div></div>`;
+    return `<div class="v17-checklist-item" data-item-id="${esc(item.item_id || '')}" data-node-id="${esc(item.node_id || '')}" data-fact-id="${esc(item.fact_id || '')}"><i aria-hidden="true"></i><div><strong>${esc(item.title)} — ${esc(statusName(item.status))}</strong><p>${esc(relation)}${item.why ? ` · ${esc(item.why)}` : ''}</p><small>${esc(item.item_id || '')} · decision ${esc(item.node_id || '')} · fact ${esc(item.fact_id || '')}</small>${checklistContribution(item, reviewTransform)}</div></div>`;
   }
 
   async function enhanceReady(canvas) {
@@ -349,6 +371,7 @@
     const process = result.process || run.process;
     const checklist = result.checklist || run.checklist;
     const verification = result.verification || run.verification || {};
+    const reviewTransform = result.review_transform || run.review_transform || result.audit?.review_transform;
     if (!process || !checklist) return;
 
     const synthesis = canvas.querySelector('.process-synthesis');
@@ -367,7 +390,7 @@
         ${groups.map(group => {
           const visible = group.items.slice(0, 3);
           const rest = group.items.slice(3);
-          return `<section class="v17-checklist-group" data-kind="${group.kind}"><header><h4>${esc(group.title)}</h4><span>${group.items.length}</span></header>${visible.length ? visible.map(item => checklistItem(item, nodeMap)).join('') : '<div class="v17-checklist-item"><i aria-hidden="true"></i><div><strong>No items in this state</strong></div></div>'}${rest.length ? `<details class="v17-checklist-more"><summary>Show ${rest.length} more</summary>${rest.map(item => checklistItem(item, nodeMap)).join('')}</details>` : ''}</section>`;
+          return `<section class="v17-checklist-group" data-kind="${group.kind}"><header><h4>${esc(group.title)}</h4><span>${group.items.length}</span></header>${visible.length ? visible.map(item => checklistItem(item, nodeMap, reviewTransform)).join('') : '<div class="v17-checklist-item"><i aria-hidden="true"></i><div><strong>No items in this state</strong></div></div>'}${rest.length ? `<details class="v17-checklist-more"><summary>Show ${rest.length} more</summary>${rest.map(item => checklistItem(item, nodeMap, reviewTransform)).join('')}</details>` : ''}</section>`;
         }).join('')}
       </div>
       ${checks.length ? `<details class="v17-acceptance"><summary>Inspect ${checks.length} acceptance checks</summary><div class="verification-list">${checks.map(check => `<div class="verification-row"><span>✓</span><div>${esc(typeof check === 'string' ? check : check.label || check.name || JSON.stringify(check))}</div></div>`).join('')}</div></details>` : ''}`;
