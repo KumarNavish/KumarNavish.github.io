@@ -266,7 +266,7 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
             release_tool.REPOSITORY
             / f"casepath/releases/model-validation-attempt-20260811-{number:02d}.json"
         )
-        for number in range(1, 18)
+        for number in range(1, 19)
     }
     (
         attempt_1,
@@ -286,7 +286,8 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         attempt_15,
         attempt_16,
         attempt_17,
-    ) = (attempts[number] for number in range(1, 18))
+        attempt_18,
+    ) = (attempts[number] for number in range(1, 19))
     for evidence in attempts.values():
         assert evidence["status"] == "failed_closed"
         assert evidence["acceptance_passed"] is False
@@ -1259,11 +1260,89 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
     assert attempt_17["capture_provenance"]["public_qa_origin"]["classification"] == (
         "stale_previous_deploy_not_attempt_17"
     )
+    assert {
+        section: release_tool._historical_json_sha256(attempt_18[section])
+        for section in release_tool._HISTORICAL_ATTEMPT_18_SECTION_SHA256
+    } == release_tool._HISTORICAL_ATTEMPT_18_SECTION_SHA256
+    assert attempt_18["execution_observation"]["source_commit"] == (
+        "df4db4872e0854af7dbe97e5c86833ab827a1c1b"
+    )
+    assert attempt_18["execution_observation"]["qa_run_id"] == (
+        "run_b7e02e168c3217ac"
+    )
+    assert attempt_18["execution_observation"]["orchestration_id"] == (
+        "orch_2ca291c7f62ef75a"
+    )
+    attempt_18_calls = attempt_18["provider_observation"]["calls"]
+    assert [call["agent_id"] for call in attempt_18_calls] == [
+        "canonical_facts",
+        "orchestrator_plan",
+        "document_source_integrity",
+        "process_decision_mapping",
+    ]
+    assert [call["outcome"] for call in attempt_18_calls] == [
+        "succeeded",
+        "succeeded",
+        "failed",
+        "succeeded",
+    ]
+    failed_document = attempt_18_calls[2]
+    assert failed_document["finish_reason"] == "length"
+    assert failed_document["completion_tokens"] == 4096
+    assert failed_document["semantic_scoring_started"] is False
+    assert failed_document["deterministic_fallback_applied"] is False
+    assert failed_document["error_type"] == "AgentBoundaryError"
+    assert failed_document["error_invariant"] == "provider_finish_reason"
+    assert attempt_18_calls[3]["accepted_item_ids"] == [
+        "fact:fact_tenancy:decision_value",
+        "fact:fact_dispute:decision_value",
+        "fact:fact_recurrence:decision_value",
+        "fact:fact_notification:decision_value",
+        "fact:fact_cause:decision_value",
+        "fact:fact_health:decision_value",
+    ]
+    assert attempt_18["provider_observation"]["actual_cost_usd"] == pytest.approx(
+        0.0273757
+    )
+    assert attempt_18["provider_observation"]["actual_cost_complete"] is True
+    assert attempt_18["provider_observation"]["unknown_cost_call_count"] == 0
+    assert attempt_18["execution_observation"]["deterministic_gate_receipts"] == 0
+    assert attempt_18["execution_observation"]["receipt_sequence"] == [
+        {"ordinal": 16, "agent_id": "orchestrator_plan", "state": "started"},
+        {"ordinal": 17, "agent_id": "orchestrator_plan", "state": "completed"},
+        {
+            "ordinal": 18,
+            "agent_id": "document_source_integrity",
+            "state": "started",
+        },
+        {
+            "ordinal": 19,
+            "agent_id": "process_decision_mapping",
+            "state": "started",
+        },
+        {
+            "ordinal": 20,
+            "agent_id": "document_source_integrity",
+            "state": "failed",
+        },
+    ]
+    assert attempt_18["execution_observation"][
+        "process_output_succeeded_after_failure"
+    ] is True
+    assert attempt_18["execution_observation"][
+        "process_completed_receipt_observed"
+    ] is False
+    assert attempt_18["application_result"]["deterministic_process_gate_started"] is False
+    assert attempt_18["application_result"]["evidence_checklist_started"] is False
+    assert attempt_18["application_result"]["runtime_acceptance_established"] is False
+    assert attempt_18["capture_provenance"]["public_qa_origin"]["classification"] == (
+        "stale_previous_deploy_not_attempt_18"
+    )
     assert sum(
         attempt["provider_observation"]["actual_cost_usd"]
         for attempt in attempts.values()
         if "actual_cost_usd" in attempt["provider_observation"]
-    ) == pytest.approx(0.2491399)
+    ) == pytest.approx(0.2765156)
     assert "actual_cost_usd" not in attempt_3["provider_observation"]
     assert "prompt_tokens" not in attempt_3["provider_observation"]
     assert attempt_3["provider_observation"]["charge_status"] == "unknown_unconfirmed"
@@ -1767,6 +1846,41 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         message = str(caught.value)
         assert "gen-1786529324-2J6kUN6zNOoL7vpGLPFq" not in message
         assert "modelcall_a91022b32cf47215" not in message
+
+    forged_attempt_18_records = []
+    forged_attempt_18_finish = deepcopy(attempt_18)
+    forged_attempt_18_finish["provider_observation"]["calls"][2][
+        "finish_reason"
+    ] = "stop"
+    forged_attempt_18_records.append(forged_attempt_18_finish)
+
+    forged_attempt_18_process_ids = deepcopy(attempt_18)
+    forged_attempt_18_process_ids["provider_observation"]["calls"][3][
+        "accepted_item_ids"
+    ].pop()
+    forged_attempt_18_records.append(forged_attempt_18_process_ids)
+
+    forged_attempt_18_receipt = deepcopy(attempt_18)
+    forged_attempt_18_receipt["execution_observation"][
+        "process_completed_receipt_observed"
+    ] = True
+    forged_attempt_18_records.append(forged_attempt_18_receipt)
+
+    forged_attempt_18_capture = deepcopy(attempt_18)
+    forged_attempt_18_capture["capture_provenance"]["public_api_model_ledger"][
+        "response_sha256"
+    ] = "0" * 64
+    forged_attempt_18_records.append(forged_attempt_18_capture)
+
+    for forged_attempt in forged_attempt_18_records:
+        with pytest.raises(
+            release_tool.VerificationError,
+            match="exact bounded schema",
+        ) as caught:
+            release_tool.verify_failed_model_attempt_evidence(contract, forged_attempt)
+        message = str(caught.value)
+        assert "gen-1786532401-OHjtmk6aiCms72NZ62rn" not in message
+        assert "modelcall_4abdccd0ab5d8d6f" not in message
 
 
 def _ledger_summary(items: list[dict]) -> dict:
