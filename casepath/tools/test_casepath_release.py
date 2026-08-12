@@ -5480,6 +5480,31 @@ def test_review_mutation_cannot_reuse_a_stale_coalesced_run_read() -> None:
     )
 
 
+def test_accessibility_audit_waits_for_stable_animations_and_keeps_diagnostics() -> None:
+    browser_gate = (
+        release_tool.REPOSITORY / "casepath-qa/browser-focused-v20.mjs"
+    ).read_text(encoding="utf-8")
+    focus_css = (
+        release_tool.REPOSITORY / "casepath/assets/live-v20-focus.css"
+    ).read_text(encoding="utf-8")
+    keyframe_start = focus_css.index("@keyframes v20-rise")
+    keyframe = focus_css[keyframe_start : focus_css.index("}", keyframe_start) + 1]
+    assert "opacity" not in keyframe
+    assert "async function settleFiniteAnimationsForAxe(label)" in browser_gate
+    assert "Number.isFinite(timing?.endTime)" in browser_gate
+    assert "document.getAnimations()" in browser_gate
+    assert browser_gate.index("await settleFiniteAnimationsForAxe(label);") < browser_gate.index(
+        "new AxeBuilder({ page }).analyze()"
+    )
+    assert "function axeViolationDiagnostics(violations)" in browser_gate
+    assert "const safeAxeToken" in browser_gate
+    assert "sha256:${sha256(text)}" in browser_gate
+    assert "safeCheckData(check.data)" in browser_gate
+    assert "failure_summary:" not in browser_gate
+    assert "message: String(check.message" not in browser_gate
+    assert "axeViolationDiagnostics(serious)" in browser_gate
+
+
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [

@@ -96,6 +96,7 @@ const SUCCESSFUL_MODEL_OUTCOMES = new Set(['succeeded', 'succeeded_with_guarded_
 const SHA256_PATTERN = /^[0-9a-f]{64}$/i;
 const LOCAL_RUN_TIMEOUT_MS = 180000;
 const PRODUCTION_RUN_TIMEOUT_MS = 15 * 60 * 1000;
+const AXE_ANIMATION_SETTLE_TIMEOUT_MS = 2500;
 const FORBIDDEN_PUBLIC_FIELDS = new Set([
   'prompt',
   'system_prompt',
@@ -1696,11 +1697,96 @@ async function auditViewports(label, selector) {
   await runAxe(`${label} desktop`);
 }
 
+async function settleFiniteAnimationsForAxe(label) {
+  const result = await page.evaluate(async ({ timeoutMs }) => {
+    const describeTarget = target => {
+      if (!(target instanceof Element)) return null;
+      if (target.id) return `#${CSS.escape(target.id)}`;
+      const classes = [...target.classList].slice(0, 4).map(value => `.${CSS.escape(value)}`).join('');
+      return `${target.tagName.toLowerCase()}${classes}`;
+    };
+    const describeAnimation = animation => {
+      const timing = animation.effect?.getComputedTiming?.() || {};
+      return {
+        type: animation.constructor?.name || 'Animation',
+        name: animation.animationName || animation.transitionProperty || null,
+        play_state: animation.playState,
+        target: describeTarget(animation.effect?.target),
+        current_time_ms: Number.isFinite(animation.currentTime) ? Math.round(animation.currentTime) : null,
+        end_time_ms: Number.isFinite(timing.endTime) ? Math.round(timing.endTime) : null,
+      };
+    };
+    const activeFiniteAnimations = () => document.getAnimations().filter(animation => {
+      const timing = animation.effect?.getComputedTiming?.();
+      return ['pending', 'running'].includes(animation.playState) && Number.isFinite(timing?.endTime);
+    });
+    const nextStablePaint = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const deadline = performance.now() + timeoutMs;
+    let passes = 0;
+    while (passes < 8) {
+      let active = activeFiniteAnimations();
+      if (!active.length) {
+        await nextStablePaint();
+        active = activeFiniteAnimations();
+        if (!active.length) return { settled: true, passes, active: [] };
+      }
+      const remaining = deadline - performance.now();
+      if (remaining <= 0) break;
+      await new Promise(resolve => {
+        const timer = setTimeout(resolve, remaining);
+        Promise.allSettled(active.map(animation => animation.finished)).then(() => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+      passes += 1;
+    }
+    return {
+      settled: false,
+      passes,
+      active: activeFiniteAnimations().slice(0, 12).map(describeAnimation),
+    };
+  }, { timeoutMs: AXE_ANIMATION_SETTLE_TIMEOUT_MS });
+  if (!result.settled) throw new Error(`${label} did not reach a stable finite-animation state before Axe: ${JSON.stringify(result)}`);
+}
+
+function axeViolationDiagnostics(violations) {
+  const safeDataFields = ['fgColor', 'bgColor', 'contrastRatio', 'expectedContrastRatio', 'fontSize', 'fontWeight'];
+  const safeAxeToken = value => {
+    const text = String(value || '').slice(0, 512);
+    return /^[a-z][a-z0-9_-]{0,79}$/i.test(text) ? text : `sha256:${sha256(text)}`;
+  };
+  const safeTargets = targets => (targets || []).slice(0, 4).map(target => {
+    if (Array.isArray(target)) return target.slice(0, 8).map(safeAxeToken);
+    return safeAxeToken(target);
+  });
+  const safeCheckData = data => {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+    const safeValue = value => typeof value === 'string' ? value.slice(0, 120) : (typeof value === 'number' && Number.isFinite(value)) || typeof value === 'boolean' ? value : null;
+    return Object.fromEntries(safeDataFields.filter(field => Object.hasOwn(data, field)).map(field => [field, safeValue(data[field])]));
+  };
+  return violations.slice(0, 8).map(item => ({
+    id: safeAxeToken(item.id),
+    impact: ['minor', 'moderate', 'serious', 'critical'].includes(item.impact) ? item.impact : null,
+    node_count: (item.nodes || []).length,
+    omitted_node_count: Math.max(0, (item.nodes || []).length - 6),
+    nodes: (item.nodes || []).slice(0, 6).map(node => ({
+      target: safeTargets(node.target),
+      checks: [...(node.any || []), ...(node.all || []), ...(node.none || [])].slice(0, 8).map(check => ({
+        id: safeAxeToken(check.id),
+        impact: ['minor', 'moderate', 'serious', 'critical'].includes(check.impact) ? check.impact : null,
+        data: safeCheckData(check.data),
+      })),
+    })),
+  }));
+}
+
 async function runAxe(label) {
+  await settleFiniteAnimationsForAxe(label);
   const { default: AxeBuilder } = await import('@axe-core/playwright');
   const results = await new AxeBuilder({ page }).analyze();
   const serious = results.violations.filter(item => ['serious', 'critical'].includes(item.impact));
-  check(`${label} has no serious or critical axe violations`, serious.length === 0, JSON.stringify(serious.map(item => ({ id: item.id, impact: item.impact }))));
+  check(`${label} has no serious or critical axe violations`, serious.length === 0, JSON.stringify(axeViolationDiagnostics(serious)));
 }
 
 function sha256(value) {
@@ -4025,7 +4111,10 @@ async function runContractSelfTest() {
   const brokenLineageLedger = structuredClone(combinedLedger);
   brokenLineageLedger.items.find(item => item.call_id === orchestrationAudit(warmRun).agents[0].call_id).origin_call_id = 'wrong_origin';
   if (!warmLineageContractViolations(orchestrationAudit(coldRun), orchestrationAudit(warmRun), brokenLineageLedger).issues.some(item => item.includes('warm origin'))) throw new Error('Broken-lineage negative fixture was not rejected');
-  return { status: 'passed', fixtures: ['session_scoped_run_read_coalescing', 'stable_text_grounding_fact_selection', 'normalized_text_grounding', 'python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'fail_closed_model_contribution_badges', 'mixed_field_contribution_badge', 'post_memory_contribution_suppression', 'reciprocal_evidence_truth_and_tamper', 'structured_legal_truth_and_tamper', 'visual_reference_truth_and_tamper', 'precedent_ranking_truth_and_tamper', 'memory_application_truth_and_tamper', 'memory_boundary_event_cross_binding', 'dormant_memory_retrieval_not_application', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'parallel_source_artifact_hash_rejection', 'parallel_process_artifact_hash_rejection', 'process_field_membership_rejection', 'process_field_attribution_rejection', 'process_inherited_field_rejection_with_recomputed_hashes', 'evidence_field_membership_rejection', 'evidence_field_attribution_rejection', 'evidence_source_ref_rejection_with_recomputed_hashes', 'final_field_membership_rejection', 'final_current_node_binding_rejection', 'final_next_action_binding_rejection', 'final_supporting_facts_binding_rejection', 'final_upstream_contributions_binding_rejection', 'final_audit_checks_binding_rejection', 'noncontrolling_supporting_fact_source_binding', 'cold_upstream_provider_policy_rejection', 'warm_upstream_provider_policy_rejection', 'agent_role_label_rejection', 'gate_role_label_rejection', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'provider_concurrency_zero_call_receipt', 'provider_concurrency_receipt_call_rejection', 'provider_concurrency_receipt_identity_rejection', 'safe_upstream_rejection_receipt', 'forged_upstream_rejection_receipt_attribution_rejection', 'missing_upstream_rejection_receipt_attribution_rejection', 'out_of_scope_upstream_rejection_receipt_attribution_rejection', 'unbounded_upstream_error_code_rejection', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'safe_upstream_rejection_ledger', 'provider_concurrency_zero_call_ledger', 'provider_concurrency_ledger_call_rejection', 'provider_concurrency_ledger_cost_rejection', 'provider_concurrency_ledger_identity_rejection', 'forged_upstream_rejection_ledger_attribution_rejection', 'missing_upstream_rejection_ledger_attribution_rejection', 'out_of_scope_upstream_rejection_ledger_attribution_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
+  const unsafeAxeTarget = `.v20-learning-row[data-customer="${'claim-bearing-'.repeat(700)}"] > span`;
+  const axeDiagnostics = axeViolationDiagnostics([{ id: 'color-contrast', impact: 'serious', help: 'Elements must meet minimum color contrast ratio thresholds', nodes: [{ target: [unsafeAxeTarget], html: '<span>claim-bearing text must not be logged</span>', failureSummary: 'Claim-bearing failure prose must not be logged', any: [{ id: 'color-contrast', impact: 'serious', message: 'Claim-bearing check prose must not be logged', data: { fgColor: '#147a56', bgColor: '#edf8f3', contrastRatio: 4.44, raw: 'must not be retained' } }], all: [], none: [] }] }]);
+  if (axeDiagnostics.length !== 1 || axeDiagnostics[0].node_count !== 1 || axeDiagnostics[0].omitted_node_count !== 0 || !/^sha256:[0-9a-f]{64}$/.test(axeDiagnostics[0].nodes[0].target[0]) || JSON.stringify(axeDiagnostics).includes('claim-bearing') || axeDiagnostics[0].nodes[0].checks[0].data.contrastRatio !== 4.44 || 'raw' in axeDiagnostics[0].nodes[0].checks[0].data || 'html' in axeDiagnostics[0].nodes[0] || 'message' in axeDiagnostics[0].nodes[0].checks[0] || 'failure_summary' in axeDiagnostics[0].nodes[0]) throw new Error(`Bounded Axe diagnostics fixture failed: ${JSON.stringify(axeDiagnostics)}`);
+  return { status: 'passed', fixtures: ['bounded_axe_node_diagnostics', 'session_scoped_run_read_coalescing', 'stable_text_grounding_fact_selection', 'normalized_text_grounding', 'python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'fail_closed_model_contribution_badges', 'mixed_field_contribution_badge', 'post_memory_contribution_suppression', 'reciprocal_evidence_truth_and_tamper', 'structured_legal_truth_and_tamper', 'visual_reference_truth_and_tamper', 'precedent_ranking_truth_and_tamper', 'memory_application_truth_and_tamper', 'memory_boundary_event_cross_binding', 'dormant_memory_retrieval_not_application', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'parallel_source_artifact_hash_rejection', 'parallel_process_artifact_hash_rejection', 'process_field_membership_rejection', 'process_field_attribution_rejection', 'process_inherited_field_rejection_with_recomputed_hashes', 'evidence_field_membership_rejection', 'evidence_field_attribution_rejection', 'evidence_source_ref_rejection_with_recomputed_hashes', 'final_field_membership_rejection', 'final_current_node_binding_rejection', 'final_next_action_binding_rejection', 'final_supporting_facts_binding_rejection', 'final_upstream_contributions_binding_rejection', 'final_audit_checks_binding_rejection', 'noncontrolling_supporting_fact_source_binding', 'cold_upstream_provider_policy_rejection', 'warm_upstream_provider_policy_rejection', 'agent_role_label_rejection', 'gate_role_label_rejection', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'provider_concurrency_zero_call_receipt', 'provider_concurrency_receipt_call_rejection', 'provider_concurrency_receipt_identity_rejection', 'safe_upstream_rejection_receipt', 'forged_upstream_rejection_receipt_attribution_rejection', 'missing_upstream_rejection_receipt_attribution_rejection', 'out_of_scope_upstream_rejection_receipt_attribution_rejection', 'unbounded_upstream_error_code_rejection', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'safe_upstream_rejection_ledger', 'provider_concurrency_zero_call_ledger', 'provider_concurrency_ledger_call_rejection', 'provider_concurrency_ledger_cost_rejection', 'provider_concurrency_ledger_identity_rejection', 'forged_upstream_rejection_ledger_attribution_rejection', 'missing_upstream_rejection_ledger_attribution_rejection', 'out_of_scope_upstream_rejection_ledger_attribution_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
 }
 
 let report;
