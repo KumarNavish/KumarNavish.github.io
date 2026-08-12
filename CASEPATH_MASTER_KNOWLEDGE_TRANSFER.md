@@ -5338,8 +5338,9 @@ quarantined.
 ## Hosted desktop convergence after the local freeze
 
 This section supersedes the point-in-time deployment-status statements above
-without rewriting the immutable attempt 01–21 history. A later hosted desktop
-journey ran with frontend, API, and QA aligned on exact source commit
+without rewriting the immutable attempt 01–21 history. The next hosted desktop
+journey is frozen as Attempt 22 and ran with frontend, API, and QA aligned on
+exact source commit
 `0db743a2a7a06c56bd5f011cc5928ef39efe424d`. The browser report completed the
 full end-to-end flagship, review, learning, and held-out-later-claim flow with
 `218` passed checks and `0` failed checks. The retained production evidence was
@@ -5393,6 +5394,23 @@ frontend, API, and QA on one correction commit and passes both the causal
 preflight verifier and the full production verifier. Work on the verifier alone
 is not another authorized model attempt, creates no attempt record, and adds no
 provider charge.
+
+Attempt 23 on exact commit `9812f961da556c0daad55a6235ebf2f5ddc9a9ee`
+passed the 197/0 causal preflight, then made exactly one canonical call under
+run `run_34f1c86b5ee01ca8` and orchestration `orch_a6c4d159c78e6a4d`. It
+accepted only `fact_date_conflict`, rejected the other exact 17 fact IDs under
+`canonical_state`, and stopped before downstream roles, gates, or warm replay.
+The call used 23,188 prompt and 4,767 completion tokens and cost USD 0.0220558;
+the cumulative known actual cost through Attempt 23 is USD 0.4292561. Public QA
+remained the exact atomic Attempt 22 bundle. Immutable history now spans
+`model-validation-attempt-20260811-01.json` through `-23.json`.
+
+CP-047 is `fixed_unverified`. Canonicalizer `1.7.0`, prompt contract `1.6`, and
+canonical schema `1.5` remove deterministic-owned label, state, normalized
+value, prose, and process fields from provider judgment. The provider now
+contributes only exact `fact_id`, `source_ref_ids`, and `confidence` for the
+exact required count and IDs, while strict majority remains bound to real model
+contributions. A new aligned hosted journey must verify the correction.
 
 The global sanitized ledger is intentionally immutable for one API instance.
 Caller reset preserves it and must never be expanded to erase release history.

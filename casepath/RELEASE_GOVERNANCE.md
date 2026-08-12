@@ -118,7 +118,7 @@ bound identically across the run audit and sanitized ledger. A paid provider
 response, a cache replay, or a weak/unbound role
 record does not satisfy that gate.
 
-Twenty authorized model attempts failed closed at the release gate:
+Twenty-three authorized model attempts failed closed at the release gate:
 
 - Attempt 1 reached DeepInfra through OpenRouter and returned the provider's
   dated canonical model ID. It charged USD 0.00756 for 3,629 prompt and 2,625
@@ -378,6 +378,36 @@ Twenty authorized model attempts failed closed at the release gate:
   QA origin remained the stale prior deployment. The exact twelve ledger rows
   and three-gate progression are retained. Per-gate hashes and session-scoped
   run bodies are unrecoverable after caller cleanup and are not fabricated.
+- Attempt 22 ran from QA deploy `dep-d9uanerm8hqs73evh5cg` against aligned
+  source commit `0db743a2a7a06c56bd5f011cc5928ef39efe424d`. The exact
+  deterministic preflight passed 197 checks with zero failures, then the
+  production desktop journey passed 218 checks with zero failures. Flagship
+  cold run `run_f898edf7d200e517`, orchestration
+  `orch_ed9f4aeda23d5d6f`, and later cold run `run_3160b04fb5678903`,
+  orchestration `orch_050ac02b596a966a`, each completed six paid model roles
+  and three deterministic gates. Warm runs `run_cecf63ac0c835d66` and
+  `run_2c628520b8635f56` reproduced the corresponding twelve roles from exact
+  cache origins with zero provider calls. The immutable 24-row ledger contains
+  12 network calls and 12 cache hits, 58,845 prompt and 7,642 completion tokens,
+  and complete actual cost of USD 0.0459277. The exact atomic 30-file bundle
+  contains 15 JSON documents, 14 PNG screenshots, and one WebM recording.
+  Nevertheless, the verifier published on that commit rejected the valid
+  retained bundle because its authority had drifted from backend contracts.
+  Attempt 22 is therefore immutable failed-closed release history, not accepted
+  runtime evidence, even though its provider, application, warm-cache, and
+  browser journeys passed.
+- Attempt 23 ran from QA deploy `dep-d9ubtu6gekts73dnf5mg` against aligned
+  source commit `9812f961da556c0daad55a6235ebf2f5ddc9a9ee`. Its exact causal
+  deterministic preflight passed 197 checks with zero failures before the
+  production marker. Cold run `run_34f1c86b5ee01ca8`, orchestration
+  `orch_a6c4d159c78e6a4d`, then made exactly one canonical-facts call,
+  `modelcall_08eaec8a9743413e`. DeepInfra returned a complete `stop` response
+  costing USD 0.0220558 for 23,188 prompt and 4,767 completion tokens. The
+  application accepted only `fact_date_conflict` and rejected the other exact
+  17 fact IDs under `canonical_state`, then failed
+  `hybrid_model_contribution`. No downstream model role, deterministic gate, or
+  warm replay started. The failed build did not replace public QA: its atomic
+  state remained the exact Attempt 22 `0db743a` bundle.
 
 The repaired agent-graph implementation is version `1.2.2`. The document,
 process, and evidence coverage roles now require exact `6`, `6`, and `21`
@@ -423,18 +453,20 @@ three passed deterministic gates.
 
 Known aggregate provider charges for attempts 1, 2, 4, 5, 6, 8, 10, 11, 12,
 the two cost-known calls in attempt 14, all six calls in attempts 15, 16, 19,
-20, and 21, all five calls in attempt 17, and all four calls in attempt 18 are
-USD 0.3612726. Attempts 3, 7, 9, and 13,
+20, and 21, all five calls in attempt 17, all four calls in attempt 18, all
+twelve calls in attempt 22, and the one call in attempt 23 are USD 0.4292561.
+Attempts 3, 7, 9, and 13,
 plus the two failed calls in attempt 14,
 are unknown and excluded rather than treated as zero. Attempts 7 and 9 each retain a USD 0.027645 estimated
 reservation, neither of which is included as an actual charge. The attempts
-remain failed-closed release history; Attempts 15, 16, 19, 20, and 21 contain
-successful application-orchestration evidence, and Attempts 16, 19, 20, and 21
-additionally contain accepted zero-network-call cache replays, but none is
-accepted model-backed release evidence. No raw prompt, raw output, credential,
-or private reference is retained.
+remain failed-closed release history; Attempts 15, 16, 19, 20, 21, and 22
+contain successful application-orchestration evidence, and Attempts 16, 19, 20,
+21, and 22 additionally contain accepted zero-network-call cache replays, but
+none is accepted model-backed release evidence. Attempt 23 failed at its first
+model role. No raw prompt, raw output, credential, or private reference is
+retained.
 
-The twenty-one records above are listed under `historical_model_validation` with
+The twenty-three records above are listed under `historical_model_validation` with
 `scope: failed_closed_history_only`; they can never establish current runtime
 acceptance. At this source-history freeze, no passing dynamic QA artifact pair
 had been verified. A later same-commit passing pair may supersede that
@@ -552,9 +584,31 @@ this exact full verification is the final build predecessor.
 The correction remains `fixed_unverified` until one new hosted run deploys the
 frontend, API, and QA from the same correction commit and both verifier stages
 pass. Verifier-only development is not a new authorized model attempt and adds
-no provider charge. Historical attempts and the USD 0.3612726 aggregate above
-remain unchanged; including the later `0db743a` hosted journey, the known
-actual provider-charge total is USD 0.4072003.
+no provider charge. The `0db743a` journey is immutable Attempt 22 and raised the
+known actual provider-charge total from USD 0.3612726 through Attempt 21 to
+USD 0.4072003.
+
+Attempt 23 then exercised that corrected causal-preflight wiring on source
+commit `9812f961da556c0daad55a6235ebf2f5ddc9a9ee`. The preflight passed 197/0
+and the production marker was emitted before exactly one paid canonical call.
+That call returned 18 proposals but only `fact_date_conflict` survived the
+provider-owned `canonical_state` comparison; the other 17 exact IDs were
+rejected, no downstream or warm execution started, and the QA deploy failed
+closed. Its USD 0.0220558 charge raises the cumulative known actual total
+through Attempt 23 to USD 0.4292561. Public QA remained the exact atomic
+Attempt 22 bundle.
+
+CP-047 isolates the canonical failure. The canonical provider schema allowed
+the model to propose state and normalized values while the bounded prompt
+catalog withheld the expected deterministic answers. The resulting response
+therefore retained only 1 of 18 fact contributions. Canonicalizer `1.7.0`,
+prompt contract `1.6`, and canonical response schema `1.5` make label, state,
+normalized value, prose, and process projection deterministic-owned. The
+provider now contributes only the exact `fact_id`, `source_ref_ids`, and
+`confidence` fields for the exact required count and IDs; strict majority is
+still computed over those real model contributions. This correction is
+`fixed_unverified` until a new aligned hosted candidate passes both verifier
+stages and the full production journey.
 
 The global model ledger is immutable for the life of an API instance. Caller
 reset intentionally does not erase it and must never be changed to do so. Each

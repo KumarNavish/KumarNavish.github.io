@@ -378,7 +378,7 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
             release_tool.REPOSITORY
             / f"casepath/releases/model-validation-attempt-20260811-{number:02d}.json"
         )
-        for number in range(1, 22)
+        for number in range(1, 24)
     }
     (
         attempt_1,
@@ -402,7 +402,9 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         attempt_19,
         attempt_20,
         attempt_21,
-    ) = (attempts[number] for number in range(1, 22))
+        attempt_22,
+        attempt_23,
+    ) = (attempts[number] for number in range(1, 24))
     for evidence in attempts.values():
         assert evidence["status"] == "failed_closed"
         assert evidence["acceptance_passed"] is False
@@ -1579,11 +1581,68 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
     assert attempt_21["capture_provenance"]["public_qa_origin"]["classification"] == (
         "stale_previous_deploy_not_attempt_21"
     )
+    assert {
+        section: release_tool._historical_json_sha256(attempt_22[section])
+        for section in release_tool._HISTORICAL_ATTEMPT_22_SECTION_SHA256
+    } == release_tool._HISTORICAL_ATTEMPT_22_SECTION_SHA256
+    assert attempt_22["execution_observation"]["source_commit"] == (
+        "0db743a2a7a06c56bd5f011cc5928ef39efe424d"
+    )
+    assert attempt_22["execution_observation"]["production_browser_passed_checks"] == 218
+    assert attempt_22["provider_observation"]["global_ledger_summary"] == {
+        "records": 24,
+        "network_calls": 12,
+        "prompt_tokens": 58845,
+        "completion_tokens": 7642,
+        "total_tokens": 66487,
+        "actual_cost_usd": 0.0459277,
+        "actual_cost_complete": True,
+        "unknown_cost_call_count": 0,
+        "outcomes": {
+            "cache_hit": 12,
+            "succeeded": 8,
+            "succeeded_with_guarded_fallback": 4,
+        },
+    }
+    assert attempt_22["qa_result"] == {
+        "outcome": "rejected",
+        "failure_type": "authoritative_runtime_verifier_contract_drift",
+        "browser_report_status": "passed",
+        "browser_report_passed": 218,
+        "browser_report_failed": 0,
+        "retained_json_count": 15,
+        "retained_png_count": 14,
+        "retained_webm_count": 1,
+        "current_report_retained": True,
+        "current_evidence_manifest_retained": True,
+        "runtime_acceptance_established": False,
+    }
+    assert {
+        section: release_tool._historical_json_sha256(attempt_23[section])
+        for section in release_tool._HISTORICAL_ATTEMPT_23_SECTION_SHA256
+    } == release_tool._HISTORICAL_ATTEMPT_23_SECTION_SHA256
+    assert attempt_23["execution_observation"]["qa_run_id"] == (
+        "run_34f1c86b5ee01ca8"
+    )
+    assert attempt_23["execution_observation"]["orchestration_id"] == (
+        "orch_a6c4d159c78e6a4d"
+    )
+    assert attempt_23["provider_observation"]["call"]["accepted_fact_ids"] == [
+        "fact_date_conflict"
+    ]
+    assert attempt_23["provider_observation"]["call"]["rejected_fact_count"] == 17
+    assert {
+        item["invariant"]
+        for item in attempt_23["provider_observation"]["call"]["rejected_facts"]
+    } == {"canonical_state"}
+    assert attempt_23["capture_provenance"]["public_qa_atomic_state"][
+        "classification"
+    ] == "unchanged_attempt_22_exact_bundle"
     assert sum(
         attempt["provider_observation"]["actual_cost_usd"]
         for attempt in attempts.values()
         if "actual_cost_usd" in attempt["provider_observation"]
-    ) == pytest.approx(0.3612726)
+    ) == pytest.approx(0.4292561)
     assert "actual_cost_usd" not in attempt_3["provider_observation"]
     assert "prompt_tokens" not in attempt_3["provider_observation"]
     assert attempt_3["provider_observation"]["charge_status"] == "unknown_unconfirmed"
@@ -2227,6 +2286,38 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         forged_attempt_21_records.append(forged_attempt)
 
     for forged_attempt in forged_attempt_21_records:
+        with pytest.raises(
+            release_tool.VerificationError,
+            match="exact bounded schema",
+        ):
+            release_tool.verify_failed_model_attempt_evidence(contract, forged_attempt)
+
+    for attempt, section, mutate in (
+        (
+            attempt_22,
+            "provider_observation",
+            lambda item: item["global_ledger_summary"].__setitem__("records", 23),
+        ),
+        (
+            attempt_22,
+            "capture_provenance",
+            lambda item: item["evidence_manifest"].__setitem__("sha256", "0" * 64),
+        ),
+        (
+            attempt_23,
+            "provider_observation",
+            lambda item: item["call"].__setitem__("accepted_fact_count", 2),
+        ),
+        (
+            attempt_23,
+            "capture_provenance",
+            lambda item: item["public_qa_atomic_state"].__setitem__(
+                "served_source_commit", "0" * 40
+            ),
+        ),
+    ):
+        forged_attempt = deepcopy(attempt)
+        mutate(forged_attempt[section])
         with pytest.raises(
             release_tool.VerificationError,
             match="exact bounded schema",

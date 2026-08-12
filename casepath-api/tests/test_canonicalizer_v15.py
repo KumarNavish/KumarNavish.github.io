@@ -100,11 +100,8 @@ def response(*, model: str = OPENROUTER_MODEL, cost: float = 0.0042) -> dict:
         "facts": [
             {
                 "fact_id": "fact_report",
-                "label": "Reported condition",
-                "state": "known",
                 "source_ref_ids": [observable_ref_id(package())],
                 "confidence": 0.9,
-                "normalized_value": "supported",
             }
         ]
     }
@@ -337,11 +334,16 @@ def test_openrouter_request_is_one_bounded_exact_model_structured_call(tmp_path:
     assert request["response_format"]["type"] == "json_schema"
     assert request["response_format"]["json_schema"]["strict"] is True
     fact_schema = request["response_format"]["json_schema"]["schema"]["properties"]["facts"]["items"]
-    assert "value" not in fact_schema["properties"]
-    assert "explanation" not in fact_schema["properties"]
-    assert "controls_process" not in fact_schema["properties"]
-    assert "decision_value" not in fact_schema["properties"]
-    assert "source_refs" not in fact_schema["properties"]
+    facts_schema = request["response_format"]["json_schema"]["schema"]["properties"]["facts"]
+    assert set(fact_schema["properties"]) == {
+        "fact_id",
+        "source_ref_ids",
+        "confidence",
+    }
+    assert fact_schema["required"] == ["confidence", "fact_id", "source_ref_ids"]
+    assert fact_schema["additionalProperties"] is False
+    assert fact_schema["properties"]["fact_id"]["enum"] == ["fact_report"]
+    assert facts_schema["minItems"] == facts_schema["maxItems"] == 1
     assert fact_schema["properties"]["source_ref_ids"]["uniqueItems"] is True
     registry_ids = fact_schema["properties"]["source_ref_ids"]["items"]["enum"]
     assert observable_ref_id(package()) in registry_ids
@@ -373,7 +375,8 @@ def test_openrouter_request_is_one_bounded_exact_model_structured_call(tmp_path:
     assert '"excerpt":"The tenant reports a recurring mark."' in user_prompt
     system_prompt = request["messages"][0]["content"]
     assert "required_text_reference_count" not in system_prompt
-    assert "smallest passage from every observable side of a conflict" in system_prompt
+    assert "smallest passage from every observable side when sources conflict" in system_prompt
+    assert "application exclusively owns labels, canonical states, normalized values" in system_prompt
     assert result["facts"][0]["controls_process"] is True
     assert result["facts"][0]["decision_key"] == "recurrence"
     assert result["facts"][0]["decision_value"] == "recurrence_supported"
@@ -422,6 +425,222 @@ def test_openrouter_request_is_one_bounded_exact_model_structured_call(tmp_path:
     assert "cost_details" not in json.dumps(entry)
     assert "openrouter_metadata" not in json.dumps(entry)
     assert "runtime-only-test-value" not in json.dumps(entry)
+
+
+def test_prior_one_of_eighteen_state_collapse_cannot_override_deterministic_state():
+    expected_states = ["known"] * 10 + ["unknown"] * 7 + ["conflicting"]
+    contracts = []
+    for index, expected_state in enumerate(expected_states):
+        contract = deepcopy(catalog()[0])
+        contract.update(
+            {
+                "fact_id": (
+                    "fact_date_conflict"
+                    if expected_state == "conflicting"
+                    else f"fact_{index:02d}"
+                ),
+                "label": f"Deterministic fact {index}",
+                "controls_process": False,
+                "decision_key": None,
+                "normalized_options": {},
+                "admissible_normalized_values": [],
+                "expected_state": expected_state,
+                "canonical_value": f"Canonical value {index}",
+                "canonical_explanation": f"Canonical explanation {index}.",
+            }
+        )
+        contracts.append(contract)
+
+    reference_id = observable_ref_id(package())
+    provider_proposals = [
+        {
+            "fact_id": contract["fact_id"],
+            "source_ref_ids": [reference_id],
+            "confidence": 0.5 + index / 100,
+        }
+        for index, contract in reversed(list(enumerate(contracts)))
+    ]
+    facts, diagnostics = canonicalizer_module._merge_fact_contracts(
+        {"facts": provider_proposals},
+        contracts,
+        observable_source_reference_registry(package()),
+    )
+
+    assert sum(state == "conflicting" for state in expected_states) == 1
+    assert [fact["fact_id"] for fact in facts] == [
+        contract["fact_id"] for contract in contracts
+    ]
+    assert [fact["label"] for fact in facts] == [
+        contract["label"] for contract in contracts
+    ]
+    assert [fact["state"] for fact in facts] == expected_states
+    assert all(fact["normalized_value"] is None for fact in facts)
+    assert diagnostics["accepted_fact_count"] == 18
+    assert diagnostics["rejected_fact_count"] == 0
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("label", "Provider-authored label"),
+        ("state", "conflicting"),
+        ("normalized_value", "urgent"),
+    ],
+)
+def test_provider_cannot_inject_deterministic_owned_fact_fields(
+    tmp_path: Path,
+    field: str,
+    value: object,
+):
+    storage = Storage(str(tmp_path / f"deterministic-field-{field}.db"))
+
+    def transport(*_args):
+        provider_response = response()
+        output = json.loads(provider_response["choices"][0]["message"]["content"])
+        output["facts"][0][field] = value
+        provider_response["choices"][0]["message"]["content"] = json.dumps(output)
+        return provider_response
+
+    canonicalizer = OpenRouterNemotronCanonicalizer(
+        storage,
+        transport=transport,
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+    with pytest.raises(ModelResponseError, match="hybrid_model_contribution"):
+        canonicalizer.canonicalize(
+            package(),
+            run_id=f"run-deterministic-field-{field}",
+            allowed_fact_catalog=catalog(),
+        )
+    assert_zero_accepted_rejection(storage, "provider_fact_fields")
+
+
+@pytest.mark.parametrize("mutation", ["missing", "duplicate", "unknown"])
+def test_fact_catalog_membership_is_exact_before_catalog_order_merge(mutation: str):
+    contracts = three_fact_catalog()
+    proposals = [
+        {
+            "fact_id": contract["fact_id"],
+            "source_ref_ids": [observable_ref_id(package())],
+            "confidence": 0.8,
+        }
+        for contract in contracts
+    ]
+    if mutation == "missing":
+        proposals.pop()
+    elif mutation == "duplicate":
+        proposals[-1]["fact_id"] = proposals[0]["fact_id"]
+    else:
+        proposals[-1]["fact_id"] = "fact_outside_catalog"
+
+    with pytest.raises(ModelResponseError, match="fact_catalog_membership") as caught:
+        canonicalizer_module._merge_fact_contracts(
+            {"facts": proposals},
+            contracts,
+            observable_source_reference_registry(package()),
+        )
+    assert caught.value.invariant == "fact_catalog_membership"
+
+
+def test_all_canonicalizer_contract_versions_invalidate_success_cache(
+    tmp_path: Path,
+    monkeypatch,
+):
+    storage = Storage(str(tmp_path / "versioned-cache.db"))
+    provider_calls = 0
+
+    def transport(*_args):
+        nonlocal provider_calls
+        provider_calls += 1
+        provider_response = response()
+        provider_response["id"] = f"generation-version-{provider_calls}"
+        return provider_response
+
+    canonicalizer = OpenRouterNemotronCanonicalizer(
+        storage,
+        transport=transport,
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+    baseline = canonicalizer.canonicalize(
+        package(), run_id="run-version-baseline", allowed_fact_catalog=catalog()
+    )
+    cached = canonicalizer.canonicalize(
+        package(), run_id="run-version-cache-hit", allowed_fact_catalog=catalog()
+    )
+    assert canonicalizer_module.CANONICALIZER_VERSION == "1.7.0"
+    assert canonicalizer_module.PROMPT_VERSION == "canonical-facts/1.6.0"
+    assert canonicalizer_module.SCHEMA_VERSION == "casepath.canonical-facts/1.5.0"
+    assert baseline["cache_hit"] is False
+    assert cached["cache_hit"] is True
+
+    changed_keys = []
+    for name in ("CANONICALIZER_VERSION", "PROMPT_VERSION", "SCHEMA_VERSION"):
+        with monkeypatch.context() as patcher:
+            patcher.setattr(
+                canonicalizer_module,
+                name,
+                f"{getattr(canonicalizer_module, name)}-cache-invalidation-test",
+            )
+            invalidated = canonicalizer.canonicalize(
+                package(),
+                run_id=f"run-version-{name.lower()}",
+                allowed_fact_catalog=catalog(),
+            )
+            assert invalidated["cache_hit"] is False
+            changed_keys.append(invalidated["cache_key"])
+
+    assert provider_calls == 4
+    assert len({baseline["cache_key"], *changed_keys}) == 4
+
+
+def test_canonical_cache_binds_exact_wire_policy(monkeypatch):
+    provider_schema = canonicalizer_module.canonical_facts_schema(
+        ["src_example"], ["fact_report"]
+    )
+
+    def cache_key() -> str:
+        return canonicalizer_module._cache_key(
+            {"package": package(), "fact_catalog": catalog()},
+            provider_schema=provider_schema,
+            system_prompt=canonicalizer_module.CANONICAL_SYSTEM_PROMPT,
+        )
+
+    baseline = cache_key()
+    mutations = [
+        (canonicalizer_module, "MAX_OUTPUT_TOKENS", 4096),
+        (canonicalizer_module, "OPENROUTER_REASONING", {"effort": "none"}),
+        (
+            canonicalizer_module,
+            "openrouter_provider_policy",
+            lambda: {
+                "only": ["deepinfra/fp4"],
+                "allow_fallbacks": False,
+                "require_parameters": False,
+                "data_collection": "deny",
+            },
+        ),
+        (
+            canonicalizer_module,
+            "CANONICAL_SYSTEM_PROMPT",
+            f"{canonicalizer_module.CANONICAL_SYSTEM_PROMPT} Changed.",
+        ),
+    ]
+    changed = []
+    for owner, name, value in mutations:
+        with monkeypatch.context() as patcher:
+            patcher.setattr(owner, name, value)
+            changed.append(cache_key())
+
+    altered_schema = deepcopy(provider_schema)
+    altered_schema["properties"]["facts"]["items"]["properties"]["confidence"][
+        "maximum"
+    ] = 0.99
+    schema_changed = canonicalizer_module._cache_key(
+        {"package": package(), "fact_catalog": catalog()},
+        provider_schema=altered_schema,
+        system_prompt=canonicalizer_module.CANONICAL_SYSTEM_PROMPT,
+    )
+    assert len({baseline, *changed, schema_changed}) == 6
 
 
 def test_missing_sync_usage_polls_generation_metadata_without_retrying_inference(tmp_path: Path):
@@ -579,23 +798,17 @@ def test_partial_guarded_fallback_preserves_diagnostics_and_cache(tmp_path: Path
         output = json.loads(value["choices"][0]["message"]["content"])
         output["facts"][0]["confidence"] = 0.37
         output["facts"].append(
-                {
-                    "fact_id": "fact_context",
-                    "label": "Context detail",
-                    "state": "unknown",
+            {
+                "fact_id": "fact_context",
                 "source_ref_ids": [],
-                "confidence": 0.99,
-                "normalized_value": None,
+                "confidence": 1.01,
             }
         )
         output["facts"].append(
             {
                 "fact_id": "fact_background",
-                "label": "Background detail",
-                "state": "known",
                 "source_ref_ids": [observable_ref_id(package())],
                 "confidence": 0.61,
-                "normalized_value": None,
             }
         )
         value["choices"][0]["message"]["content"] = json.dumps(output)
@@ -620,7 +833,7 @@ def test_partial_guarded_fallback_preserves_diagnostics_and_cache(tmp_path: Path
         "accepted_fact_ids": ["fact_report", "fact_background"],
         "accepted_fact_count": 2,
         "rejected_facts": [
-            {"fact_id": "fact_context", "invariant": "canonical_state"}
+            {"fact_id": "fact_context", "invariant": "confidence_contract"}
         ],
         "rejected_fact_count": 1,
         "source_reference_projection_fact_ids": [],
@@ -647,7 +860,7 @@ def test_partial_guarded_fallback_preserves_diagnostics_and_cache(tmp_path: Path
         assert item["authority_mode"] == "hybrid_guarded"
         assert item["accepted_fact_ids"] == ["fact_report", "fact_background"]
         assert item["rejected_facts"] == [
-            {"fact_id": "fact_context", "invariant": "canonical_state"}
+            {"fact_id": "fact_context", "invariant": "confidence_contract"}
         ]
     sanitized = json.dumps(storage.sanitized_model_ledger())
     assert "reports a recurring mark" not in sanitized
@@ -1173,7 +1386,6 @@ def test_source_projection_restores_missing_side_of_conflict(tmp_path: Path):
     def one_sided_response(*_args):
         value = response()
         output = json.loads(value["choices"][0]["message"]["content"])
-        output["facts"][0]["state"] = "conflicting"
         output["facts"][0]["source_ref_ids"] = [first_side_id]
         value["choices"][0]["message"]["content"] = json.dumps(output)
         return value
@@ -1203,7 +1415,7 @@ def test_semantic_rejection_retains_charged_provider_usage_and_identity(tmp_path
     def semantically_invalid_response(*_args):
         value = response(model=OPENROUTER_CANONICAL_MODEL, cost=0.0061)
         output = json.loads(value["choices"][0]["message"]["content"])
-        output["facts"][0]["state"] = "unknown"
+        output["facts"][0]["normalized_value"] = "urgent"
         value["choices"][0]["message"]["content"] = json.dumps(output)
         return value
 
@@ -1230,7 +1442,7 @@ def test_semantic_rejection_retains_charged_provider_usage_and_identity(tmp_path
     assert entry["total_tokens"] == 168
     assert entry["actual_cost_usd"] == pytest.approx(0.0061)
     assert storage.model_actual_cost_total() == pytest.approx(0.0061)
-    assert_zero_accepted_rejection(storage, "canonical_state")
+    assert_zero_accepted_rejection(storage, "provider_fact_fields")
 
 
 def test_dated_canonical_nemotron_response_identity_is_accepted(tmp_path: Path):
@@ -1284,8 +1496,6 @@ def test_conflicting_fact_requires_all_private_conflicting_text_refs(tmp_path: P
         output = json.loads(value["choices"][0]["message"]["content"])
         output["facts"][0].update(
             {
-                "state": "conflicting",
-                "normalized_value": None,
                 "source_ref_ids": [
                     source_reference_id(text_reference(excerpt="20 March"))
                 ],
@@ -1323,9 +1533,7 @@ def test_text_grounded_unknown_fact_projects_private_refs_when_model_drops_them(
     def ungrounded_response(*_args):
         value = response()
         output = json.loads(value["choices"][0]["message"]["content"])
-        output["facts"][0].update(
-            {"state": "unknown", "normalized_value": None, "source_ref_ids": []}
-        )
+        output["facts"][0]["source_ref_ids"] = []
         value["choices"][0]["message"]["content"] = json.dumps(output)
         return value
 
@@ -1431,7 +1639,9 @@ def test_model_cannot_override_deterministic_process_control_metadata(tmp_path: 
         )
 
 
-def test_noncontrolling_normalized_proposal_is_ignored_and_counted(tmp_path: Path):
+def test_noncontrolling_normalized_proposal_is_rejected_as_deterministic_owned(
+    tmp_path: Path,
+):
     storage = Storage(str(tmp_path / "ledger.db"))
     contract = catalog()
     contract[0].update(
@@ -1454,26 +1664,13 @@ def test_noncontrolling_normalized_proposal_is_ignored_and_counted(tmp_path: Pat
         transport=proposed_value_response,
         api_key_provider=lambda: "runtime-only-test-value",
     )
-    result = canonicalizer.canonicalize(
-        package(),
-        run_id="run_noncontrolling_proposal",
-        allowed_fact_catalog=contract,
-    )
-    assert result["facts"][0]["controls_process"] is False
-    assert result["facts"][0]["normalized_value"] is None
-    assert result["facts"][0]["decision_value"] is None
-    assert result["diagnostics"] == {
-        "authority_mode": "hybrid_guarded",
-        "accepted_fact_ids": ["fact_report"],
-        "accepted_fact_count": 1,
-        "rejected_facts": [],
-        "rejected_fact_count": 0,
-        "source_reference_projection_fact_ids": [],
-        "source_reference_projection_count": 0,
-        "deterministic_fallback_applied": False,
-        "ignored_noncontrolling_normalized_proposals": 1,
-    }
-    assert storage.model_calls()[0]["ignored_noncontrolling_normalized_proposals"] == 1
+    with pytest.raises(ModelResponseError, match="hybrid_model_contribution"):
+        canonicalizer.canonicalize(
+            package(),
+            run_id="run_noncontrolling_proposal",
+            allowed_fact_catalog=contract,
+        )
+    assert_zero_accepted_rejection(storage, "provider_fact_fields")
 
 
 def test_model_cannot_invert_fixture_bound_decision_polarity(tmp_path: Path):
@@ -1539,7 +1736,7 @@ def test_model_cannot_invert_fixture_bound_decision_polarity(tmp_path: Path):
             run_id="run_test",
             allowed_fact_catalog=contract,
         )
-    assert_zero_accepted_rejection(storage, "normalized_value_admissibility")
+    assert_zero_accepted_rejection(storage, "provider_fact_fields")
 
 
 def test_provider_cannot_author_contradictory_display_prose(tmp_path: Path):
@@ -2304,13 +2501,10 @@ def test_canonical_equal_accept_reject_minority_fails_and_never_caches(tmp_path:
         value = response()
         output = json.loads(value["choices"][0]["message"]["content"])
         output["facts"].append(
-                {
-                    "fact_id": "fact_context",
-                    "label": "Context detail",
-                    "state": "unknown",
+            {
+                "fact_id": "fact_context",
                 "source_ref_ids": [],
-                "confidence": 0.5,
-                "normalized_value": None,
+                "confidence": 1.01,
             }
         )
         value["choices"][0]["message"]["content"] = json.dumps(output)

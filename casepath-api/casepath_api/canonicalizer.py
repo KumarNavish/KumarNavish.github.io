@@ -40,34 +40,29 @@ OPENROUTER_ACCEPTED_RESPONSE_MODELS = {OPENROUTER_MODEL, OPENROUTER_CANONICAL_MO
 OPENROUTER_PROVIDER = "openrouter"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_GENERATION_URL = "https://openrouter.ai/api/v1/generation"
-CANONICALIZER_VERSION = "1.6.5"
-PROMPT_VERSION = "canonical-facts/1.5.1"
-SCHEMA_VERSION = "casepath.canonical-facts/1.4.0"
-NORMALIZED_VALUES = [
-    "absent",
-    "building",
-    "mixed",
-    "not_notified",
-    "not_supported",
-    "not_urgent",
-    "notified",
-    "present",
-    "supported",
-    "supported_in_scope",
-    "supported_out_of_scope",
-    "tenant_use",
-    "unresolved",
-    "unverified",
-    "urgent",
-]
+CANONICALIZER_VERSION = "1.7.0"
+PROMPT_VERSION = "canonical-facts/1.6.0"
+SCHEMA_VERSION = "casepath.canonical-facts/1.5.0"
 PROVIDER_FACT_FIELDS = {
     "fact_id",
-    "label",
-    "state",
     "source_ref_ids",
     "confidence",
-    "normalized_value",
 }
+CANONICAL_SYSTEM_PROMPT = (
+    "You are the bounded CasePath canonical-facts component. Read only the supplied observable claim package. "
+    "Return exactly one bounded evidence proposal for every supplied fact ID: source-reference IDs and confidence only. "
+    "The application exclusively owns labels, canonical states, normalized values, display prose, and process metadata; "
+    "do not return any of those fields. Never infer a process, legal conclusion, responsibility, remedy, checklist, "
+    "precedent, or knowledge update. Use only the supplied fact IDs. Select source_ref_ids only from the global "
+    "SOURCE REFERENCE REGISTRY; each ID deterministically maps "
+    "to one exact observable artifact, page, and excerpt. Binary images expose no textual content in "
+    "this package: do not cite or describe their pixels. Select the smallest nonredundant exact passage or passages "
+    "that support the bounded fact concept, including the smallest passage from every observable side when sources "
+    "conflict, and return an empty array when no textual candidate supports it. "
+    "Treat source_ref_ids as bounded evidence proposals: the application independently validates them and "
+    "projects the authoritative exact source bindings. "
+    "Confidence expresses only the strength of the returned evidence proposal for that fact concept."
+)
 MODEL_SINGLE_FLIGHT_LOCK = threading.RLock()
 
 INPUT_USD_PER_MILLION_TOKENS = 0.625
@@ -257,7 +252,18 @@ def _default_metadata_transport(url: str, headers: dict[str, str], timeout: floa
         raise ModelResponseError("OpenRouter generation-metadata request failed") from exc
 
 
-def canonical_facts_schema(source_reference_ids: list[str]) -> dict[str, Any]:
+def canonical_facts_schema(
+    source_reference_ids: list[str],
+    fact_ids: list[str],
+) -> dict[str, Any]:
+    if (
+        not fact_ids
+        or any(not isinstance(fact_id, str) or not fact_id.strip() for fact_id in fact_ids)
+        or len(set(fact_ids)) != len(fact_ids)
+    ):
+        raise ModelConfigurationError(
+            "Canonical-facts schema requires nonempty unique fact identifiers"
+        )
     source_ref_ids: dict[str, Any] = {
         "type": "array",
         "items": {"type": "string"},
@@ -270,27 +276,48 @@ def canonical_facts_schema(source_reference_ids: list[str]) -> dict[str, Any]:
     fact = {
         "type": "object",
         "properties": {
-            "fact_id": {"type": "string", "minLength": 1},
-            "label": {"type": "string", "minLength": 1},
-            "state": {"type": "string", "enum": ["known", "unknown", "conflicting", "not_applicable"]},
+            "fact_id": {"type": "string", "enum": fact_ids},
             "source_ref_ids": source_ref_ids,
             "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-            "normalized_value": {
-                "anyOf": [
-                    {"type": "string", "enum": NORMALIZED_VALUES},
-                    {"type": "null"},
-                ]
-            },
         },
         "required": sorted(PROVIDER_FACT_FIELDS),
         "additionalProperties": False,
     }
     return {
         "type": "object",
-        "properties": {"facts": {"type": "array", "minItems": 1, "items": fact}},
+        "properties": {
+            "facts": {
+                "type": "array",
+                "minItems": len(fact_ids),
+                "maxItems": len(fact_ids),
+                "items": fact,
+            }
+        },
         "required": ["facts"],
         "additionalProperties": False,
     }
+
+
+def _fact_catalog_identity(fact_catalog: list[dict[str, Any]]) -> list[str]:
+    """Validate the provider-visible catalog identity before any cache/provider work."""
+
+    if not isinstance(fact_catalog, list) or not fact_catalog:
+        raise ModelConfigurationError("Fact catalog must be a nonempty list")
+    if any(
+        not isinstance(item, dict)
+        or not isinstance(item.get("fact_id"), str)
+        or not item.get("fact_id", "").strip()
+        or not isinstance(item.get("label"), str)
+        or not item.get("label", "").strip()
+        for item in fact_catalog
+    ):
+        raise ModelConfigurationError(
+            "Fact catalog identifiers and labels must be nonempty strings"
+        )
+    fact_ids = [item["fact_id"] for item in fact_catalog]
+    if len(set(fact_ids)) != len(fact_ids):
+        raise ModelConfigurationError("Fact catalog identifiers must be unique")
+    return fact_ids
 
 
 def _input_token_estimate(value: str) -> int:
@@ -307,13 +334,25 @@ def _estimated_cost(input_tokens: int) -> float:
     )
 
 
-def _cache_key(package: dict[str, Any]) -> str:
+def _cache_key(
+    input_contract: dict[str, Any],
+    *,
+    provider_schema: dict[str, Any],
+    system_prompt: str,
+) -> str:
     value = {
         "model": OPENROUTER_MODEL,
         "canonicalizer_version": CANONICALIZER_VERSION,
         "prompt_version": PROMPT_VERSION,
         "schema_version": SCHEMA_VERSION,
-        "package": package,
+        "provider_schema": provider_schema,
+        "system_prompt_sha256": sha256(system_prompt.encode("utf-8")).hexdigest(),
+        "max_tokens": MAX_OUTPUT_TOKENS,
+        "reasoning": dict(OPENROUTER_REASONING),
+        "provider_policy": openrouter_provider_policy(),
+        "temperature": 0,
+        "strict_schema": True,
+        "input_contract": input_contract,
     }
     return sha256(json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
 
@@ -736,13 +775,17 @@ def _merge_fact_contracts(
         raise ModelConfigurationError("Fact catalog identifiers must be present and unique")
     returned_ids = [item.get("fact_id") for item in output["facts"] if isinstance(item, dict)]
     if len(returned_ids) != len(output["facts"]) or len(set(returned_ids)) != len(returned_ids):
-        raise ModelResponseError("Canonical facts must be objects with unique identifiers")
+        raise ModelResponseError(
+            "fact_catalog_membership invariant failed",
+            invariant="fact_catalog_membership",
+        )
     allowed_ids = set(catalog_by_id)
     if set(returned_ids) != allowed_ids:
         raise ModelResponseError(
             "fact_catalog_membership invariant failed",
             invariant="fact_catalog_membership",
         )
+    returned_by_id = {item["fact_id"]: item for item in output["facts"]}
 
     registry_by_id = {
         item.get("source_ref_id"): item
@@ -764,9 +807,9 @@ def _merge_fact_contracts(
     rejected_facts: list[dict[str, str]] = []
     source_reference_projection_fact_ids: list[str] = []
     ignored_noncontrolling_normalized_proposals = 0
-    for returned_fact in output["facts"]:
-        fact_id = returned_fact["fact_id"]
-        contract = catalog_by_id[fact_id]
+    for contract in fact_catalog:
+        fact_id = contract["fact_id"]
+        returned_fact = returned_by_id[fact_id]
         label = contract.get("label")
         expected_state = contract.get("expected_state")
         canonical_value = contract.get("canonical_value")
@@ -857,20 +900,12 @@ def _merge_fact_contracts(
         provider_confidence = returned_fact.get("confidence")
         if set(returned_fact) != PROVIDER_FACT_FIELDS:
             rejection_invariant = "provider_fact_fields"
-        elif returned_fact["label"] != label:
-            rejection_invariant = "catalog_label"
-        elif returned_fact["state"] != expected_state:
-            rejection_invariant = "canonical_state"
         elif (
             not isinstance(provider_confidence, (int, float))
             or isinstance(provider_confidence, bool)
             or not 0 <= provider_confidence <= 1
         ):
             rejection_invariant = "confidence_contract"
-        elif controls_process and returned_fact["normalized_value"] not in normalized_options:
-            rejection_invariant = "normalized_value_contract"
-        elif controls_process and returned_fact["normalized_value"] != normalized_value:
-            rejection_invariant = "normalized_value_admissibility"
         elif (
             not isinstance(returned_ref_ids, list)
             or any(not isinstance(ref_id, str) or not ref_id for ref_id in returned_ref_ids)
@@ -885,8 +920,6 @@ def _merge_fact_contracts(
                 for ref in admissible_text_refs
             }
 
-        if not controls_process and returned_fact.get("normalized_value") is not None:
-            ignored_noncontrolling_normalized_proposals += 1
         if rejection_invariant is None:
             accepted_fact_ids.append(fact_id)
             if source_reference_projection_required:
@@ -1061,6 +1094,7 @@ class OpenRouterNemotronCanonicalizer:
             or not 0 <= self.metadata_poll_interval_seconds <= GENERATION_METADATA_POLL_INTERVAL_SECONDS
         ):
             raise ModelConfigurationError("Generation-metadata polling must remain within its fixed safety bounds")
+        fact_ids = _fact_catalog_identity(allowed_fact_catalog)
         package_text = json.dumps(package, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
         orchestration_id = f"orch_{sha256(run_id.encode('utf-8')).hexdigest()[:16]}"
         source_reference_registry = observable_source_reference_registry(package)
@@ -1075,21 +1109,22 @@ class OpenRouterNemotronCanonicalizer:
             {
                 "fact_id": item["fact_id"],
                 "label": item["label"],
-                "allowed_normalized_values": (
-                    list(item["normalized_options"])
-                    if item.get("controls_process") is True
-                    else None
-                ),
             }
             for item in allowed_fact_catalog
         ]
         catalog_text = json.dumps(model_fact_catalog, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
-        cache_key = _cache_key({"package": package, "fact_catalog": allowed_fact_catalog})
+        provider_schema = canonical_facts_schema(source_reference_ids, fact_ids)
+        system_prompt = CANONICAL_SYSTEM_PROMPT
+        cache_key = _cache_key(
+            {"package": package, "fact_catalog": allowed_fact_catalog},
+            provider_schema=provider_schema,
+            system_prompt=system_prompt,
+        )
         cached = self.storage.cached_model_output(cache_key)
         if cached is not None:
             diagnostics = _validated_hybrid_diagnostics(
                 cached.get("diagnostics"),
-                allowed_fact_ids={item["fact_id"] for item in allowed_fact_catalog},
+                allowed_fact_ids=set(fact_ids),
             )
             call_id = self.storage.create_model_call(
                 run_id=run_id,
@@ -1143,22 +1178,6 @@ class OpenRouterNemotronCanonicalizer:
                 "usage_source": "cache",
             }
 
-        system_prompt = (
-            "You are the bounded CasePath canonical-facts component. Read only the supplied observable claim package. "
-            "Return fact states, bounded source-reference IDs, confidence, and allowed normalized values. Never infer a process, legal conclusion, responsibility, remedy, "
-            "checklist, precedent, or knowledge update. Preserve unknown and conflicting states. Use only the supplied fact IDs "
-            "and labels. Select source_ref_ids only from the global SOURCE REFERENCE REGISTRY; each ID deterministically maps "
-            "to one exact observable artifact, page, and excerpt. Binary images expose no textual content in "
-            "this package: do not cite or describe their pixels, and leave image-dependent facts unknown unless a textual source "
-            "independently states them. Select the smallest nonredundant exact passage or passages that independently "
-            "support the proposed fact state, including the smallest passage from every observable side of a conflict, "
-            "and return an empty array when no candidate supports it. Choose normalized_value "
-            "only from allowed_normalized_values; use null when that field is null. "
-            "Treat source_ref_ids as bounded evidence proposals: the application independently validates them and "
-            "projects the authoritative exact source bindings. "
-            "Do not return value, explanation, controls_process, decision_key, or decision_value: the application owns and "
-            "deterministically attaches canonical prose and all process metadata after this call."
-        )
         user_prompt = (
             f"FACT CATALOG:\n{catalog_text}\n\n"
             f"SOURCE REFERENCE REGISTRY:\n{registry_text}\n\n"
@@ -1267,7 +1286,7 @@ class OpenRouterNemotronCanonicalizer:
                 "json_schema": {
                     "name": "casepath_canonical_facts",
                     "strict": True,
-                    "schema": canonical_facts_schema(source_reference_ids),
+                    "schema": provider_schema,
                 },
             },
             "provider": openrouter_provider_policy(),
@@ -1284,7 +1303,7 @@ class OpenRouterNemotronCanonicalizer:
         try:
             if self.transport is None:
                 response = self.structured_invoker(
-                    canonical_facts_schema(source_reference_ids),
+                    provider_schema,
                     system_prompt,
                     user_prompt,
                     key,

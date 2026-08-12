@@ -190,7 +190,7 @@ const EXPECTED_RUNTIME_ACCEPTANCE_CRITERIA = Object.freeze({
   requires_learning_replay_proof: true,
 });
 const EXPECTED_FAILED_MODEL_ATTEMPT_RECORDS = Object.freeze(
-  Array.from({ length: 21 }, (_, index) => `casepath/releases/model-validation-attempt-20260811-${String(index + 1).padStart(2, '0')}.json`),
+  Array.from({ length: 23 }, (_, index) => `casepath/releases/model-validation-attempt-20260811-${String(index + 1).padStart(2, '0')}.json`),
 );
 const EXPECTED_PRODUCTION_OPENING_BOUNDARY = 'Application code opened the shared context; no model call is claimed for this setup step. The call-bound Nemotron plan appears only when its returned event arrives.';
 const QA_DIRECTORY = path.resolve(fileURLToPath(new URL('.', import.meta.url)));
