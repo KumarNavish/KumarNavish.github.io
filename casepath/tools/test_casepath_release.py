@@ -109,7 +109,7 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
             release_tool.REPOSITORY
             / f"casepath/releases/model-validation-attempt-20260811-{number:02d}.json"
         )
-        for number in range(1, 13)
+        for number in range(1, 14)
     }
     (
         attempt_1,
@@ -124,7 +124,8 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         attempt_10,
         attempt_11,
         attempt_12,
-    ) = (attempts[number] for number in range(1, 13))
+        attempt_13,
+    ) = (attempts[number] for number in range(1, 14))
     for evidence in attempts.values():
         assert evidence["status"] == "failed_closed"
         assert evidence["acceptance_passed"] is False
@@ -743,6 +744,95 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         "downstream_execution_started": True,
         "later_model_calls_after_failure": False,
     }
+    assert attempt_13["execution_observation"] == {
+        "source_commit": "690f99e63a6eab4120ad75b83671cffe0f9e62af",
+        "qa_service_id": "srv-d9se2bh42hec73c54sjg",
+        "qa_deploy_id": "dep-d9ts68ht0dsc73c0nj5g",
+        "qa_deploy_outcome": "build_failed",
+        "qa_deploy_created_at": "2026-08-12T00:49:39.049742Z",
+        "qa_deploy_started_at": "2026-08-12T00:49:39.025093Z",
+        "qa_deploy_finished_at": "2026-08-12T00:50:00.690848Z",
+        "orchestration_id": "orch_bbf7ee808dc04f57",
+        "failed_agent_id": "canonical_facts",
+        "network_call_count": 1,
+        "completed_model_calls": 0,
+        "failed_model_calls": 1,
+        "downstream_model_calls_after_failure": 0,
+        "downstream_agent_receipts": 0,
+        "deterministic_gate_receipts": 0,
+    }
+    assert attempt_13["provider_observation"] == {
+        "provider": "openrouter",
+        "provider_outcome": "deepinfra_http_429",
+        "requested_model": "nvidia/nemotron-3-ultra-550b-a55b",
+        "upstream_provider": "DeepInfra",
+        "network_call_count": 1,
+        "response_identity_status": "upstream_request_only_no_generation",
+        "synchronous_usage_cost_present": False,
+        "new_openrouter_log_generation_observed": False,
+        "openrouter_log_check_performed": True,
+        "openrouter_upstream_request_log_observed": True,
+        "provider_cache_replay_assessment": "not_applicable_upstream_rejected",
+        "charge_status": "unknown_unconfirmed",
+        "charge_included_in_known_aggregate": False,
+        "actual_cost_complete": False,
+        "unknown_cost_call_count": 1,
+        "upstream_request_log_observation": {
+            "read_only": True,
+            "displayed_at_local": "2026-08-12 02:49 Europe/Zurich",
+            "request_id": "gen-1786495797-wwTpDFx93vAismEWwWvY",
+            "final_provider": "DeepInfra",
+            "upstream_status": 429,
+            "router_attempts": 1,
+            "router_latency_ms": 235,
+        },
+        "application_ledger_observation": {
+            "call_id": "modelcall_f97afa2a05079468",
+            "orchestration_id": "orch_bbf7ee808dc04f57",
+            "agent_id": "canonical_facts",
+            "outcome": "failed",
+            "error_type": "TooManyRequestsResponseError",
+            "latency_ms": 2777.996,
+            "response_identity_retained": False,
+            "response_model_retained": False,
+            "upstream_provider_retained": False,
+            "provider_error_code_retained": False,
+            "usage_metadata_retained": False,
+            "actual_cost_retained": False,
+        },
+        "failure_attribution": {
+            "classification": "external_deepinfra_http_429",
+            "cause_detail": "unknown",
+            "router_origin_established": False,
+            "key_or_account_hard_limit_reached": False,
+        },
+        "key_account_capacity_observation": {
+            "read_only": True,
+            "configured_key_limit_usd": 25,
+            "key_used_percent": 0.6536316,
+            "key_hard_limit_reached": False,
+            "account_credit_status": "healthy",
+        },
+    }
+    assert attempt_13["application_result"] == {
+        "outcome": "rejected",
+        "failure_type": "external_deepinfra_http_429",
+        "error_type": "TooManyRequestsResponseError",
+        "error_invariant_retained": False,
+        "successful_ledger_call_bound": False,
+        "ledger_call_id": "modelcall_f97afa2a05079468",
+        "ledger_outcome": "failed",
+        "canonical_result_accepted": False,
+        "canonical_stage_completed": False,
+        "response_identity_retained": False,
+        "usage_metadata_retained": False,
+        "actual_cost_retained": False,
+        "full_orchestration_accepted": False,
+        "runtime_acceptance_established": False,
+        "downstream_execution_started": False,
+        "deterministic_gates_started": False,
+        "external_cause_detail": "unknown",
+    }
     assert sum(
         attempt["provider_observation"]["actual_cost_usd"]
         for attempt in attempts.values()
@@ -768,6 +858,10 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         attempt_9["provider_observation"]["estimated_reservation_is_actual_charge"]
         is False
     )
+    assert "actual_cost_usd" not in attempt_13["provider_observation"]
+    assert "prompt_tokens" not in attempt_13["provider_observation"]
+    assert attempt_13["provider_observation"]["actual_cost_complete"] is False
+    assert attempt_13["provider_observation"]["unknown_cost_call_count"] == 1
     for attempt in attempts.values():
         release_tool.verify_failed_model_attempt_evidence(contract, attempt)
 
@@ -929,6 +1023,86 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
             contract,
             inconsistent_attempt_12_aggregate,
         )
+
+    forged_attempt_13_records = []
+
+    wrong_attempt_13_status = deepcopy(attempt_13)
+    wrong_attempt_13_status["provider_observation"]["upstream_request_log_observation"][
+        "upstream_status"
+    ] = 200
+    forged_attempt_13_records.append(wrong_attempt_13_status)
+
+    wrong_attempt_13_commit = deepcopy(attempt_13)
+    wrong_attempt_13_commit["execution_observation"]["source_commit"] = "0" * 40
+    forged_attempt_13_records.append(wrong_attempt_13_commit)
+
+    wrong_attempt_13_request = deepcopy(attempt_13)
+    wrong_attempt_13_request["provider_observation"][
+        "upstream_request_log_observation"
+    ]["request_id"] = "gen-1786495797-AAAAAAAAAAAAAAAAAAAA"
+    forged_attempt_13_records.append(wrong_attempt_13_request)
+
+    wrong_attempt_13_provider = deepcopy(attempt_13)
+    wrong_attempt_13_provider["provider_observation"][
+        "upstream_request_log_observation"
+    ]["final_provider"] = "Together"
+    forged_attempt_13_records.append(wrong_attempt_13_provider)
+
+    wrong_attempt_13_attempt_count = deepcopy(attempt_13)
+    wrong_attempt_13_attempt_count["provider_observation"][
+        "upstream_request_log_observation"
+    ]["router_attempts"] = 2
+    forged_attempt_13_records.append(wrong_attempt_13_attempt_count)
+
+    forged_attempt_13_identity = deepcopy(attempt_13)
+    forged_attempt_13_identity["provider_observation"][
+        "application_ledger_observation"
+    ]["response_identity_retained"] = True
+    forged_attempt_13_records.append(forged_attempt_13_identity)
+
+    forged_attempt_13_error_code = deepcopy(attempt_13)
+    forged_attempt_13_error_code["provider_observation"][
+        "application_ledger_observation"
+    ]["provider_error_code_retained"] = True
+    forged_attempt_13_records.append(forged_attempt_13_error_code)
+
+    forged_attempt_13_hard_limit = deepcopy(attempt_13)
+    forged_attempt_13_hard_limit["provider_observation"][
+        "key_account_capacity_observation"
+    ]["key_hard_limit_reached"] = True
+    forged_attempt_13_records.append(forged_attempt_13_hard_limit)
+
+    forged_attempt_13_router_origin = deepcopy(attempt_13)
+    forged_attempt_13_router_origin["provider_observation"]["failure_attribution"][
+        "router_origin_established"
+    ] = True
+    forged_attempt_13_records.append(forged_attempt_13_router_origin)
+
+    forged_attempt_13_cost = deepcopy(attempt_13)
+    forged_attempt_13_cost["provider_observation"]["actual_cost_complete"] = True
+    forged_attempt_13_records.append(forged_attempt_13_cost)
+
+    unbound_attempt_13_call = deepcopy(attempt_13)
+    unbound_attempt_13_call["application_result"]["ledger_call_id"] = (
+        "modelcall_0000000000000000"
+    )
+    forged_attempt_13_records.append(unbound_attempt_13_call)
+
+    unbound_attempt_13_orchestration = deepcopy(attempt_13)
+    unbound_attempt_13_orchestration["provider_observation"][
+        "application_ledger_observation"
+    ]["orchestration_id"] = "orch_0000000000000000"
+    forged_attempt_13_records.append(unbound_attempt_13_orchestration)
+
+    for forged_attempt in forged_attempt_13_records:
+        with pytest.raises(
+            release_tool.VerificationError,
+            match="exact bounded schema",
+        ) as caught:
+            release_tool.verify_failed_model_attempt_evidence(contract, forged_attempt)
+        message = str(caught.value)
+        assert "gen-1786495797-wwTpDFx93vAismEWwWvY" not in message
+        assert "modelcall_f97afa2a05079468" not in message
 
 
 def _ledger_summary(items: list[dict]) -> dict:
@@ -2464,12 +2638,23 @@ def test_public_ledger_accepts_bounded_unknown_cost_upstream_rejection() -> None
         "items": [
             {
                 "call_id": "modelcall-upstream-rejected",
+                "orchestration_id": "orch_upstream_rejected",
+                "agent_id": "canonical_facts",
+                "provider": "openrouter",
+                "provider_endpoint": "https://openrouter.ai/api/v1/chat/completions",
+                "model": "nvidia/nemotron-3-ultra-550b-a55b",
                 "call_count": 1,
                 "outcome": "failed",
+                "error_type": "OpenRouterUpstreamRejectionError",
                 "error_invariant": "provider_upstream_rejection",
                 "response_id": "gen-1786483159-hyYthqPv76o6PHXpGLzl",
-                "provider_error_code": 400,
+                "provider_error_code": 429,
+                "provider_boundary": "openrouter",
+                "expected_upstream_provider": "DeepInfra",
+                "latency_ms": 2777.996,
                 "actual_cost_usd": None,
+                "created_at": "2026-08-12T00:49:55.141493+00:00",
+                "updated_at": "2026-08-12T00:49:57.927268+00:00",
             }
         ],
     }
@@ -2500,7 +2685,7 @@ def test_public_ledger_accepts_bounded_unknown_cost_upstream_rejection() -> None
     ):
         release_tool._verify_public_model_ledger(ledger, "fixture")
 
-    ledger["items"][0]["provider_error_code"] = 400
+    ledger["items"][0]["provider_error_code"] = 429
     unsafe_response_id = "DEF-027-E0-DEMO"
     ledger["items"][0]["response_id"] = unsafe_response_id
     with pytest.raises(
@@ -2509,6 +2694,47 @@ def test_public_ledger_accepts_bounded_unknown_cost_upstream_rejection() -> None
     ) as caught:
         release_tool._verify_public_model_ledger(ledger, "fixture")
     assert unsafe_response_id not in str(caught.value)
+
+    ledger["items"][0]["response_id"] = "gen-1786483159-hyYthqPv76o6PHXpGLzl"
+    for missing_field in ("provider_boundary", "expected_upstream_provider"):
+        missing_pair = deepcopy(ledger)
+        missing_pair["items"][0].pop(missing_field)
+        with pytest.raises(
+            release_tool.VerificationError,
+            match="provider_boundary pair is invalid or out of scope",
+        ):
+            release_tool._verify_public_model_ledger(missing_pair, "fixture")
+
+    for field, forged_value in (
+        ("provider_boundary", "provider-router"),
+        ("expected_upstream_provider", "provider-unit-test"),
+    ):
+        forged_pair = deepcopy(ledger)
+        forged_pair["items"][0][field] = forged_value
+        with pytest.raises(
+            release_tool.VerificationError,
+            match="provider_boundary pair is invalid or out of scope",
+        ) as caught:
+            release_tool._verify_public_model_ledger(forged_pair, "fixture")
+        assert forged_value not in str(caught.value)
+
+    out_of_scope_pair = deepcopy(ledger)
+    out_of_scope_pair["items"][0]["error_invariant"] = "provider_invocation"
+    out_of_scope_pair["items"][0].pop("provider_error_code")
+    with pytest.raises(
+        release_tool.VerificationError,
+        match="provider_boundary pair is invalid or out of scope",
+    ):
+        release_tool._verify_public_model_ledger(out_of_scope_pair, "fixture")
+
+    absent_pair = deepcopy(ledger)
+    absent_pair["items"][0].pop("provider_boundary")
+    absent_pair["items"][0].pop("expected_upstream_provider")
+    with pytest.raises(
+        release_tool.VerificationError,
+        match="provider_boundary pair is invalid or out of scope",
+    ):
+        release_tool._verify_public_model_ledger(absent_pair, "fixture")
 
 
 def test_public_ledger_rejects_every_forged_summary_field() -> None:

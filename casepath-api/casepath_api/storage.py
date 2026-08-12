@@ -367,6 +367,8 @@ class Storage:
             "error_fact_id",
             "error_invariant",
             "provider_error_code",
+            "provider_boundary",
+            "expected_upstream_provider",
             "invalid_provenance_field",
             "invalid_provenance_value_hash",
             "ignored_noncontrolling_normalized_proposals",
@@ -413,6 +415,16 @@ class Storage:
                 is None
             ):
                 item.pop("response_id", None)
+            if (
+                item.get("error_invariant") != "provider_upstream_rejection"
+                or item.get("provider_boundary") != "openrouter"
+            ):
+                item.pop("provider_boundary", None)
+            if (
+                item.get("error_invariant") != "provider_upstream_rejection"
+                or item.get("expected_upstream_provider") != "DeepInfra"
+            ):
+                item.pop("expected_upstream_provider", None)
             sanitized.append(item)
         return sanitized
 

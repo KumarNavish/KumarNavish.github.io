@@ -1418,7 +1418,9 @@ def test_canonical_upstream_rejection_receipt_exposes_only_bounded_status(
             invariant="provider_upstream_rejection",
             safe_context={
                 "response_id": "gen-1786483164-EEEEEEEEEEEEEEEEEEEE",
-                "provider_error_code": 400,
+                "provider_error_code": 429,
+                "provider_boundary": "openrouter",
+                "expected_upstream_provider": "DeepInfra",
             },
         )
 
@@ -1447,13 +1449,17 @@ def test_canonical_upstream_rejection_receipt_exposes_only_bounded_status(
     )
     assert receipt["error_invariant"] == "provider_upstream_rejection"
     assert receipt["response_id"] == "gen-1786483164-EEEEEEEEEEEEEEEEEEEE"
-    assert receipt["provider_error_code"] == 400
+    assert receipt["provider_error_code"] == 429
+    assert receipt["provider_boundary"] == "openrouter"
+    assert receipt["expected_upstream_provider"] == "DeepInfra"
     assert receipt["call_count"] == 1
     assert receipt["response_model"] is None
     assert receipt["upstream_provider"] is None
     assert receipt["usage_source"] is None
     ledger = storage.sanitized_model_ledger()[0]
-    assert ledger["provider_error_code"] == 400
+    assert ledger["provider_error_code"] == 429
+    assert ledger["provider_boundary"] == "openrouter"
+    assert ledger["expected_upstream_provider"] == "DeepInfra"
     assert ledger["actual_cost_usd"] is None
     assert storage.model_call_summary()["actual_cost_complete"] is False
     serialized = json.dumps(run)

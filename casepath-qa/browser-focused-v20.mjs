@@ -9,6 +9,8 @@ const RELEASE_ID = 'casepath-v20-reference-20260811';
 const PRODUCT_RELEASE = '20.0.0';
 const API_RELEASE = '15.2.0';
 const REQUESTED_NEMOTRON_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b';
+const EXPECTED_PROVIDER_BOUNDARY = 'openrouter';
+const EXPECTED_UPSTREAM_PROVIDER = 'DeepInfra';
 const EXACT_NEMOTRON_RESPONSE_MODELS = new Set([
   REQUESTED_NEMOTRON_MODEL,
   'nvidia/nemotron-3-ultra-550b-a55b-20260604',
@@ -113,7 +115,8 @@ const ALLOWED_LEDGER_FIELDS = new Set([
   'orchestration_id', 'agent_id', 'agent_role', 'parent_call_id', 'delegation_id', 'call_count',
   'prompt_tokens', 'completion_tokens', 'total_tokens', 'estimated_cost_usd', 'actual_cost_usd',
   'latency_ms', 'cache_key', 'purpose', 'outcome', 'error_type', 'error_agent_id', 'error_fact_id',
-  'error_invariant', 'provider_error_code', 'invalid_provenance_field', 'invalid_provenance_value_hash',
+  'error_invariant', 'provider_error_code', 'provider_boundary', 'expected_upstream_provider',
+  'invalid_provenance_field', 'invalid_provenance_value_hash',
   'ignored_noncontrolling_normalized_proposals', 'authority_mode',
   'accepted_fact_ids', 'accepted_fact_count', 'rejected_facts', 'rejected_fact_count',
   'source_reference_projection_fact_ids', 'source_reference_projection_count',
@@ -134,6 +137,7 @@ const ALLOWED_AGENT_FAILURE_RECEIPT_FIELDS = new Set([
   'provider', 'requested_model', 'call_count',
   'response_model', 'upstream_provider', 'usage_source', 'handoff_from', 'handoff_to',
   'input_artifact', 'input_artifact_hash', 'finish_reason', 'error_type', 'error_invariant', 'provider_error_code',
+  'provider_boundary', 'expected_upstream_provider',
   'invalid_provenance_field', 'invalid_provenance_value_hash', 'external_tracing',
 ]);
 const FAILURE_OUTCOMES = new Set(['failed', 'blocked_cost_guard', 'blocked_missing_credential', 'actual_cost_overrun']);
@@ -165,7 +169,7 @@ const EXPECTED_RUNTIME_ACCEPTANCE_CRITERIA = Object.freeze({
   requires_source_reference_projection_disclosure: true,
 });
 const EXPECTED_FAILED_MODEL_ATTEMPT_RECORDS = Object.freeze(
-  Array.from({ length: 12 }, (_, index) => `casepath/releases/model-validation-attempt-20260811-${String(index + 1).padStart(2, '0')}.json`),
+  Array.from({ length: 13 }, (_, index) => `casepath/releases/model-validation-attempt-20260811-${String(index + 1).padStart(2, '0')}.json`),
 );
 const EXPECTED_PRODUCTION_OPENING_BOUNDARY = 'Application code opened the shared context; no model call is claimed for this setup step. The call-bound Nemotron plan appears only when its returned event arrives.';
 const QA_SESSION_ID = `qa-${randomUUID()}`;
@@ -238,6 +242,20 @@ function providerProvenanceValueIsSafe(field, value) {
   if (field === 'upstream_provider') return SAFE_UPSTREAM_PROVIDER.test(value);
   if (field === 'finish_reason') return SAFE_FINISH_REASONS.has(value);
   return false;
+}
+
+function providerRejectionBoundaryIssue(value) {
+  const boundaryPresent = Object.hasOwn(value, 'provider_boundary');
+  const expectedProviderPresent = Object.hasOwn(value, 'expected_upstream_provider');
+  if (value.error_invariant !== 'provider_upstream_rejection') {
+    return boundaryPresent || expectedProviderPresent
+      ? 'provider rejection boundary attribution is out of scope'
+      : null;
+  }
+  if (!boundaryPresent || !expectedProviderPresent) return 'provider rejection boundary attribution pair is incomplete';
+  if (value.provider_boundary !== EXPECTED_PROVIDER_BOUNDARY
+    || value.expected_upstream_provider !== EXPECTED_UPSTREAM_PROVIDER) return 'provider rejection boundary attribution is forged';
+  return null;
 }
 
 function exactMembers(values, expected) {
@@ -632,6 +650,8 @@ function terminalFailureContractViolations(run) {
     if (receipt.error_invariant !== 'invalid_provenance'
       && (receipt.invalid_provenance_field != null || receipt.invalid_provenance_value_hash != null)) issues.push(`${receipt.agent_id || 'unknown'} failure carries an out-of-scope invalid-provenance diagnostic`);
     if (receipt.error_invariant !== 'provider_upstream_rejection' && receipt.provider_error_code != null) issues.push(`${receipt.agent_id || 'unknown'} failure carries an out-of-scope provider error code`);
+    const boundaryIssue = providerRejectionBoundaryIssue(receipt);
+    if (boundaryIssue) issues.push(`${receipt.agent_id || 'unknown'} failure ${boundaryIssue}`);
     if (receipt.outcome === 'actual_cost_overrun' && (
       !responseIdPresent
       || !responseModelPresent
@@ -865,6 +885,8 @@ function sanitizedLedgerViolations(ledger) {
     }
     if (item.provider_error_code != null && (item.error_invariant !== 'provider_upstream_rejection' || !Number.isInteger(item.provider_error_code) || item.provider_error_code < 0 || item.provider_error_code > 9999)) issues.push(`ledger[${index}] provider error code is unbounded or out of scope`);
     if (item.error_invariant === 'provider_upstream_rejection' && item.response_id != null && !EXACT_OPENROUTER_GENERATION_ID.test(item.response_id)) issues.push(`ledger[${index}] response ID is not an exact OpenRouter generation ID`);
+    const boundaryIssue = providerRejectionBoundaryIssue(item);
+    if (boundaryIssue) issues.push(`ledger[${index}] ${boundaryIssue}`);
     if (Object.hasOwn(item, 'origin_usage')) {
       const usage = item.origin_usage;
       if (!usage
@@ -2641,11 +2663,25 @@ function runContractSelfTest() {
   Object.assign(upstreamReceipt, {
     error_invariant: 'provider_upstream_rejection',
     response_id: 'gen-1786483159-hyYthqPv76o6PHXpGLzl',
-    provider_error_code: 400,
+    provider_error_code: 429,
+    provider_boundary: EXPECTED_PROVIDER_BOUNDARY,
+    expected_upstream_provider: EXPECTED_UPSTREAM_PROVIDER,
   });
   upstreamRejectionFailure.events.find(item => item.stage === 'failed').failure_invariant = 'provider_upstream_rejection';
   const upstreamFailureIssues = terminalFailureContractViolations(upstreamRejectionFailure);
   if (upstreamFailureIssues.length) throw new Error(`Bounded upstream-rejection fixture failed: ${JSON.stringify(upstreamFailureIssues)}`);
+  const forgedUpstreamBoundaryFailure = structuredClone(upstreamRejectionFailure);
+  forgedUpstreamBoundaryFailure.events.find(item => item.receipt_type === 'agent_failed').expected_upstream_provider = 'Together';
+  if (!terminalFailureContractViolations(forgedUpstreamBoundaryFailure).some(item => item.includes('boundary attribution is forged'))) throw new Error('Forged upstream-rejection receipt attribution fixture was not rejected');
+  const missingUpstreamBoundaryFailure = structuredClone(upstreamRejectionFailure);
+  delete missingUpstreamBoundaryFailure.events.find(item => item.receipt_type === 'agent_failed').expected_upstream_provider;
+  if (!terminalFailureContractViolations(missingUpstreamBoundaryFailure).some(item => item.includes('attribution pair is incomplete'))) throw new Error('Missing upstream-rejection receipt attribution fixture was not rejected');
+  const outOfScopeUpstreamBoundaryFailure = structuredClone(safeTerminalFailure);
+  Object.assign(outOfScopeUpstreamBoundaryFailure.events.find(item => item.receipt_type === 'agent_failed'), {
+    provider_boundary: EXPECTED_PROVIDER_BOUNDARY,
+    expected_upstream_provider: EXPECTED_UPSTREAM_PROVIDER,
+  });
+  if (!terminalFailureContractViolations(outOfScopeUpstreamBoundaryFailure).some(item => item.includes('boundary attribution is out of scope'))) throw new Error('Out-of-scope upstream-rejection receipt attribution fixture was not rejected');
   const unboundedUpstreamCodeFailure = structuredClone(upstreamRejectionFailure);
   unboundedUpstreamCodeFailure.events.find(item => item.receipt_type === 'agent_failed').provider_error_code = 'RAW_PROVIDER_CODE';
   if (!terminalFailureContractViolations(unboundedUpstreamCodeFailure).some(item => item.includes('error code'))) throw new Error('Unbounded upstream provider-code fixture was not rejected');
@@ -2782,11 +2818,40 @@ function runContractSelfTest() {
   const foreignInvalidProvenanceFieldLedger = structuredClone(boundedInvalidProvenanceLedger);
   foreignInvalidProvenanceFieldLedger.items[0].invalid_provenance_field = 'provider_payload';
   if (!sanitizedLedgerViolations(foreignInvalidProvenanceFieldLedger).some(item => item.includes('unbounded'))) throw new Error('Foreign invalid-provenance field fixture was not rejected');
+  const boundedUpstreamRejectionLedger = structuredClone(coldLedger);
+  const boundedUpstreamLedgerItem = boundedUpstreamRejectionLedger.items[0];
+  Object.assign(boundedUpstreamLedgerItem, {
+    outcome: 'failed',
+    error_invariant: 'provider_upstream_rejection',
+    provider_error_code: 429,
+    provider_boundary: EXPECTED_PROVIDER_BOUNDARY,
+    expected_upstream_provider: EXPECTED_UPSTREAM_PROVIDER,
+    response_id: 'gen-1786483165-FFFFFFFFFFFFFFFFFFFF',
+    actual_cost_usd: null,
+  });
+  for (const field of ['prompt_tokens', 'completion_tokens', 'total_tokens', 'response_model', 'upstream_provider', 'usage_source', 'finish_reason']) delete boundedUpstreamLedgerItem[field];
+  boundedUpstreamRejectionLedger.summary = ledgerSummary(boundedUpstreamRejectionLedger.items);
+  const boundedUpstreamLedgerIssues = sanitizedLedgerViolations(boundedUpstreamRejectionLedger);
+  if (boundedUpstreamLedgerIssues.length) throw new Error(`Bounded upstream-rejection ledger fixture failed: ${JSON.stringify(boundedUpstreamLedgerIssues)}`);
+  const forgedUpstreamBoundaryLedger = structuredClone(boundedUpstreamRejectionLedger);
+  forgedUpstreamBoundaryLedger.items[0].provider_boundary = 'OpenRouter';
+  if (!sanitizedLedgerViolations(forgedUpstreamBoundaryLedger).some(item => item.includes('boundary attribution is forged'))) throw new Error('Forged upstream-rejection ledger attribution fixture was not rejected');
+  const missingUpstreamBoundaryLedger = structuredClone(boundedUpstreamRejectionLedger);
+  delete missingUpstreamBoundaryLedger.items[0].expected_upstream_provider;
+  if (!sanitizedLedgerViolations(missingUpstreamBoundaryLedger).some(item => item.includes('attribution pair is incomplete'))) throw new Error('Missing upstream-rejection ledger attribution fixture was not rejected');
+  const outOfScopeUpstreamBoundaryLedger = structuredClone(coldLedger);
+  Object.assign(outOfScopeUpstreamBoundaryLedger.items[0], {
+    provider_boundary: EXPECTED_PROVIDER_BOUNDARY,
+    expected_upstream_provider: EXPECTED_UPSTREAM_PROVIDER,
+  });
+  if (!sanitizedLedgerViolations(outOfScopeUpstreamBoundaryLedger).some(item => item.includes('boundary attribution is out of scope'))) throw new Error('Out-of-scope upstream-rejection ledger attribution fixture was not rejected');
   const claimBearingUpstreamIdLedger = structuredClone(coldLedger);
   Object.assign(claimBearingUpstreamIdLedger.items[0], {
     outcome: 'failed',
     error_invariant: 'provider_upstream_rejection',
     provider_error_code: 400,
+    provider_boundary: EXPECTED_PROVIDER_BOUNDARY,
+    expected_upstream_provider: EXPECTED_UPSTREAM_PROVIDER,
     response_id: 'DEF-027-E0-DEMO',
   });
   claimBearingUpstreamIdLedger.summary = ledgerSummary(claimBearingUpstreamIdLedger.items);
@@ -2810,7 +2875,7 @@ function runContractSelfTest() {
   const brokenLineageLedger = structuredClone(combinedLedger);
   brokenLineageLedger.items.find(item => item.call_id === orchestrationAudit(warmRun).agents[0].call_id).origin_call_id = 'wrong_origin';
   if (!warmLineageContractViolations(orchestrationAudit(coldRun), orchestrationAudit(warmRun), brokenLineageLedger).issues.some(item => item.includes('warm origin'))) throw new Error('Broken-lineage negative fixture was not rejected');
-  return { status: 'passed', fixtures: ['python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'fail_closed_model_contribution_badges', 'mixed_field_contribution_badge', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'parallel_source_artifact_hash_rejection', 'parallel_process_artifact_hash_rejection', 'process_field_membership_rejection', 'process_field_attribution_rejection', 'process_inherited_field_rejection_with_recomputed_hashes', 'evidence_field_membership_rejection', 'evidence_field_attribution_rejection', 'evidence_source_ref_rejection_with_recomputed_hashes', 'final_field_membership_rejection', 'final_current_node_binding_rejection', 'final_next_action_binding_rejection', 'final_supporting_facts_binding_rejection', 'final_upstream_contributions_binding_rejection', 'final_audit_checks_binding_rejection', 'noncontrolling_supporting_fact_source_binding', 'cold_upstream_provider_policy_rejection', 'warm_upstream_provider_policy_rejection', 'agent_role_label_rejection', 'gate_role_label_rejection', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'safe_upstream_rejection_receipt', 'unbounded_upstream_error_code_rejection', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
+  return { status: 'passed', fixtures: ['python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'fail_closed_model_contribution_badges', 'mixed_field_contribution_badge', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'parallel_source_artifact_hash_rejection', 'parallel_process_artifact_hash_rejection', 'process_field_membership_rejection', 'process_field_attribution_rejection', 'process_inherited_field_rejection_with_recomputed_hashes', 'evidence_field_membership_rejection', 'evidence_field_attribution_rejection', 'evidence_source_ref_rejection_with_recomputed_hashes', 'final_field_membership_rejection', 'final_current_node_binding_rejection', 'final_next_action_binding_rejection', 'final_supporting_facts_binding_rejection', 'final_upstream_contributions_binding_rejection', 'final_audit_checks_binding_rejection', 'noncontrolling_supporting_fact_source_binding', 'cold_upstream_provider_policy_rejection', 'warm_upstream_provider_policy_rejection', 'agent_role_label_rejection', 'gate_role_label_rejection', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'safe_upstream_rejection_receipt', 'forged_upstream_rejection_receipt_attribution_rejection', 'missing_upstream_rejection_receipt_attribution_rejection', 'out_of_scope_upstream_rejection_receipt_attribution_rejection', 'unbounded_upstream_error_code_rejection', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'safe_upstream_rejection_ledger', 'forged_upstream_rejection_ledger_attribution_rejection', 'missing_upstream_rejection_ledger_attribution_rejection', 'out_of_scope_upstream_rejection_ledger_attribution_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
 }
 
 let report;
