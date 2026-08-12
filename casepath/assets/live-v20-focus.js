@@ -34,6 +34,33 @@
     },
   };
 
+  const FLAGSHIP_STAGES = [
+    { id: 'understand', label: 'Claim Understanding Agent' },
+    { id: 'research', label: 'Legal Research Agent' },
+    { id: 'process', label: 'Process Discovery Agent' },
+    { id: 'evidence', label: 'Evidence / Document Agent' },
+    { id: 'experience', label: 'Historical Claims Agent' },
+    { id: 'verify', label: 'Verification Agent' },
+    { id: 'knowledge', label: 'Knowledge Agent' },
+  ];
+
+  const FLAGSHIP_FOCUS = {
+    opening: { stage: 'understand', title: 'Opening one shared claim context', context: 'Customer message + 6 original attachments', authority: 'Application source parser', output: 'Shared claim package' },
+    read: { stage: 'understand', title: 'Reading the message and every original attachment', context: 'Customer message + source package', authority: 'Application source parser', output: 'Grounded source package' },
+    understand: { stage: 'understand', title: 'Separating facts, allegations, conflicts and unknowns', context: '18 bounded claim facts + exact source references', authority: 'Nemotron agent · deterministic fact contract', output: 'Canonical claim state' },
+    research: { stage: 'research', title: 'Connecting official Swiss-law passages to handling questions', context: 'Versioned official source registry · qualified legal review pending', authority: 'Deterministic source registry', output: 'Legal questions and exact sources' },
+    process: { stage: 'process', title: 'Building the complete claim-handling process', context: 'Claim state + legal questions + bounded orchestrator focus', authority: 'Nemotron contribution · deterministic process gate', output: 'Handling process graph' },
+    evidence: { stage: 'evidence', title: 'Attaching every evidence need to the decision it can resolve', context: 'Original artifacts + process decisions + source integrity', authority: 'Nemotron agents · deterministic evidence gate', output: 'Process-linked evidence model' },
+    experience: { stage: 'experience', title: 'Ranking the most relevant provenance-labelled reference cases', context: 'Legal question + difficult process branch + unresolved fact', authority: 'Deterministic reference ranking', output: 'Ranked reference cases' },
+    verify: { stage: 'verify', title: 'Checking grounding, consistency and unsupported conclusions', context: 'Agent contributions + graph + evidence relationships', authority: 'Nemotron audit · deterministic acceptance', output: 'Verified handling playbook' },
+    ready: { stage: 'verify', title: 'A source-grounded handling playbook is ready', context: '6 returned model roles + 3 deterministic safety gates', authority: 'Verified runtime result', output: 'Review-ready playbook' },
+    review: { stage: 'verify', title: 'Review the decision that changes the downstream process', context: 'Simulated demo review · not qualified expert approval', authority: 'Human-in-the-loop demonstration', output: 'Proposed process correction' },
+    'review-applied': { stage: 'knowledge', title: 'Applying the correction across process and evidence', context: 'Reviewed graph + reviewed evidence relationships', authority: 'Deterministic review transform', output: 'Corrected handling process' },
+    knowledge: { stage: 'knowledge', title: 'Turning the correction into safely governed knowledge', context: 'Unverified case memory · shared playbook remains unchanged', authority: 'Deterministic knowledge governance', output: 'Quarantined reusable knowledge' },
+    'later-work': { stage: 'knowledge', title: 'Testing the learned guidance on a held-out claim', context: 'Frozen memory receipt + later demo claim', authority: 'Deterministic comparison · no second model run', output: 'Before-and-after comparison' },
+    'later-result': { stage: 'knowledge', title: 'Showing exactly how the future claim improved', context: 'Receipt-bound guidance · shared playbook unchanged', authority: 'Deterministic comparison · no second model run', output: 'Verified learning effect' },
+  };
+
   let queued = false;
   let lastMoment = '';
 
@@ -81,7 +108,7 @@
     if (button && visible($('#startState'))) {
       if (button.disabled === ready) button.disabled = !ready;
       const label = button.querySelector('span');
-      if (label && ready && !/Opening|Could not/i.test(label.textContent || '') && label.textContent !== 'Analyse claim') label.textContent = 'Analyse claim';
+      if (label && ready && !/Opening|Could not/i.test(label.textContent || '') && label.textContent !== 'Watch CasePath handle this claim') label.textContent = 'Watch CasePath handle this claim';
     }
     const header = $('#headerClaimId');
     if (header && !ready && /Loading claim/i.test(header.textContent || '')) header.textContent = 'Opening claim…';
@@ -93,10 +120,41 @@
     const label = start.querySelector('.start-copy .quiet-label');
     const title = start.querySelector('.start-copy h2');
     const buttonLabel = start.querySelector('#runCasePath span');
-    if (label) label.textContent = 'Flagship claim';
-    if (title) title.textContent = 'What should CasePath do with this claim?';
-    if (buttonLabel) buttonLabel.textContent = 'Analyse claim';
+    if (label) label.textContent = 'CasePath flagship';
+    if (title) title.textContent = 'One messy claim. One coordinated handling plan.';
+    if (buttonLabel) buttonLabel.textContent = 'Watch CasePath handle this claim';
     start.dataset.v20Ready = 'true';
+  }
+
+  function ensureFlagshipFocus(canvas, moment) {
+    const live = $('#liveWorkspace');
+    const focus = FLAGSHIP_FOCUS[moment] || FLAGSHIP_FOCUS.opening;
+    if (!live || !canvas || !focus) return;
+    let surface = $('#v21AgentFocus');
+    if (!surface) {
+      surface = document.createElement('section');
+      surface.id = 'v21AgentFocus';
+      surface.className = 'v21-agent-focus';
+      surface.setAttribute('aria-live', 'polite');
+      live.insertBefore(surface, canvas);
+    }
+    const signature = `${moment}:${focus.stage}`;
+    if (surface.dataset.signature === signature) return;
+    const activeIndex = FLAGSHIP_STAGES.findIndex(stage => stage.id === focus.stage);
+    const role = FLAGSHIP_STAGES[activeIndex] || FLAGSHIP_STAGES[0];
+    surface.dataset.signature = signature;
+    surface.dataset.casepathSpecialist = role.id;
+    surface.dataset.workAuthority = focus.authority;
+    surface.innerHTML = `
+      <div class="v21-focus-copy">
+        <small>${esc(role.label)}</small>
+        <h2>${esc(focus.title)}</h2>
+        <p>${esc(focus.context)}</p>
+        <div class="v21-focus-proof"><span>${esc(focus.authority)}</span><strong>Produced · ${esc(focus.output)}</strong></div>
+      </div>
+      <ol class="v21-stage-rail" aria-label="Seven coordinated specialist stages">
+        ${FLAGSHIP_STAGES.map((stage, index) => `<li data-stage="${esc(stage.id)}" data-state="${index < activeIndex ? 'complete' : index === activeIndex ? 'active' : 'next'}"><i>${index < activeIndex ? '✓' : index + 1}</i><span>${esc(stage.label.replace(' Agent', ''))}</span></li>`).join('')}
+      </ol>`;
   }
 
   function directInspectorCopy(canvas) {
@@ -236,6 +294,7 @@
     const moment = currentMoment();
     setMoment(moment);
     if (!canvas) return;
+    ensureFlagshipFocus(canvas, moment);
     directInspectorCopy(canvas);
     ensureArtifactHeader(canvas, moment);
     ensureDocumentSheet(canvas);

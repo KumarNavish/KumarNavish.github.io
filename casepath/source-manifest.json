@@ -329,8 +329,8 @@
     {
       "executable": false,
       "path": "casepath-qa/browser-focused-v20.mjs",
-      "sha256": "7c95d05ead49a25c275e411a21b0384872bd52d800ce032b2e20a1a58b2c7c2c",
-      "size_bytes": 378325
+      "sha256": "be99c08b1c11c3f6402ed9d5cce9b05512988d1537d8e93a4d042688164077a4",
+      "size_bytes": 378822
     },
     {
       "executable": false,
@@ -677,14 +677,14 @@
     {
       "executable": false,
       "path": "casepath/assets/live-v20-focus.css",
-      "sha256": "40339b6219e3f11dba1e48f0d1cb47110df2b31160e5ae2c3351300a07f84dc7",
-      "size_bytes": 43180
+      "sha256": "6f3864c5c1ea988bfc7a95c0bcf82da848c9e8c66f1d059029ec8d4278df9b26",
+      "size_bytes": 46967
     },
     {
       "executable": false,
       "path": "casepath/assets/live-v20-focus.js",
-      "sha256": "50bd2555acdbf80ef8a376fb12b2bbe1f5bb8b86a52c1d2c272dbab55915dd86",
-      "size_bytes": 13234
+      "sha256": "380b4864a2a8d7ab6c5ec4347bb0a8275197426bc6bbcfa0dd59cbfe95e011fc",
+      "size_bytes": 18959
     },
     {
       "executable": false,
@@ -719,8 +719,8 @@
     {
       "executable": false,
       "path": "casepath/index.html",
-      "sha256": "744879f9560271bfc798ab61207dc276b9d96d9b79281790095d7229c0556441",
-      "size_bytes": 10279
+      "sha256": "521be336d991ee56ef5d0c7ead42c27098927b1c7793f5a9872157af0c8a8da9",
+      "size_bytes": 10281
     },
     {
       "executable": false,
@@ -923,7 +923,7 @@
     {
       "executable": false,
       "path": "casepath/tools/test_casepath_release.py",
-      "sha256": "4c56ed256ee51c0fbb407563476ddb20e116ae3d2c8d9da3bb43b71c30602082",
+      "sha256": "308d1e3147ad598f8dc38e2739daaf9f12f9e66f27b3877576a50d9cc70ec193",
       "size_bytes": 278649
     },
     {
@@ -949,7 +949,7 @@
   "gates": [
     {
       "path": "casepath-qa/browser-focused-v20.mjs",
-      "sha256": "7c95d05ead49a25c275e411a21b0384872bd52d800ce032b2e20a1a58b2c7c2c"
+      "sha256": "be99c08b1c11c3f6402ed9d5cce9b05512988d1537d8e93a4d042688164077a4"
     },
     {
       "path": "casepath-qa/browser-guided-v13-smoke.mjs",
