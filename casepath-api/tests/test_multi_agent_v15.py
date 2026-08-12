@@ -1608,12 +1608,45 @@ def test_response_bridge_ignores_nonconsumed_envelope_field_drift(variant):
             {
                 "response_id": "gen-1786483159-hyYthqPv76o6PHXpGLzl",
                 "provider_error_code": 400,
+                "provider_boundary": "openrouter",
+                "expected_upstream_provider": "DeepInfra",
             },
         ),
-        ("DEF-027-E0-DEMO", 400, {"provider_error_code": 400}),
-        ("DOC-8842-INSPECTION", 400, {"provider_error_code": 400}),
-        ("REVGLTAyNy1FMC1ERU1P", 400, {"provider_error_code": 400}),
-        ("Bearer RAW_HEADER_SENTINEL", 100_000, {}),
+        (
+            "DEF-027-E0-DEMO",
+            400,
+            {
+                "provider_error_code": 400,
+                "provider_boundary": "openrouter",
+                "expected_upstream_provider": "DeepInfra",
+            },
+        ),
+        (
+            "DOC-8842-INSPECTION",
+            400,
+            {
+                "provider_error_code": 400,
+                "provider_boundary": "openrouter",
+                "expected_upstream_provider": "DeepInfra",
+            },
+        ),
+        (
+            "REVGLTAyNy1FMC1ERU1P",
+            400,
+            {
+                "provider_error_code": 400,
+                "provider_boundary": "openrouter",
+                "expected_upstream_provider": "DeepInfra",
+            },
+        ),
+        (
+            "Bearer RAW_HEADER_SENTINEL",
+            100_000,
+            {
+                "provider_boundary": "openrouter",
+                "expected_upstream_provider": "DeepInfra",
+            },
+        ),
     ],
 )
 def test_response_bridge_classifies_top_level_upstream_rejection_without_raw(
@@ -1656,6 +1689,73 @@ def test_response_bridge_classifies_top_level_upstream_rejection_without_raw(
     assert "RAW_" not in str(captured.value)
     assert "RAW_" not in repr(captured.value)
     assert "RAW_" not in repr(captured.value.safe_context)
+
+
+@pytest.mark.parametrize(
+    ("generation_id", "expected_response_id"),
+    [
+        ("gen-1786483164-EEEEEEEEEEEEEEEEEEEE", "gen-1786483164-EEEEEEEEEEEEEEEEEEEE"),
+        ("Bearer RAW_HEADER_SENTINEL", None),
+    ],
+)
+def test_response_bridge_classifies_sdk_429_once_without_raw_provider_material(
+    generation_id,
+    expected_response_id,
+):
+    body = json.dumps(
+        {
+            "error": {
+                "code": 429,
+                "message": "RAW_RATE_LIMIT_BODY_SENTINEL",
+                "metadata": {"secret": "sk-or-RAW_SECRET_SENTINEL"},
+            }
+        }
+    )
+
+    class RejectingSdkChat:
+        calls = 0
+
+        def send(self, **_kwargs):
+            self.calls += 1
+            response = _http_response(
+                body,
+                status=429,
+                headers={
+                    "X-Generation-Id": generation_id,
+                    "X-Provider-Secret": "RAW_RESPONSE_HEADER_SENTINEL",
+                },
+            )
+            data = errors.TooManyRequestsResponseErrorData(
+                error={
+                    "code": 429,
+                    "message": "RAW_RATE_LIMIT_MESSAGE_SENTINEL",
+                    "metadata": {"secret": "RAW_ERROR_DATA_SENTINEL"},
+                }
+            )
+            raise errors.TooManyRequestsResponseError(data, response, body)
+
+    chat = RejectingSdkChat()
+    with pytest.raises(
+        langchain_runtime.OpenRouterUpstreamRejectionError
+    ) as captured:
+        langchain_runtime._ChatSendBridge(chat).send(messages=[])
+
+    expected_context = {
+        "provider_error_code": 429,
+        "provider_boundary": "openrouter",
+        "expected_upstream_provider": "DeepInfra",
+    }
+    if expected_response_id is not None:
+        expected_context["response_id"] = expected_response_id
+    assert chat.calls == 1
+    assert captured.value.invariant == "provider_upstream_rejection"
+    assert captured.value.safe_context == expected_context
+    assert captured.value.__cause__ is None
+    assert captured.value.__context__ is None
+    serialized = json.dumps(captured.value.safe_context)
+    assert "upstream_provider" not in captured.value.safe_context
+    assert "RAW_" not in serialized
+    assert "sk-or-" not in serialized
 
 
 @pytest.mark.parametrize(
@@ -1717,7 +1817,6 @@ def test_response_bridge_classifies_top_level_upstream_rejection_without_raw(
         (json.dumps({key: value for key, value in _native_response_payload().items() if key != "id"}), 200, "application/json"),
         (json.dumps({key: value for key, value in _native_response_payload().items() if key != "model"}), 200, "application/json"),
         (json.dumps(_native_response_payload()), 200, "text/plain"),
-        (json.dumps(_native_response_payload()), 500, "application/json"),
         ("x" * (langchain_runtime.OPENROUTER_RESPONSE_BODY_LIMIT_BYTES + 1), 200, "application/json"),
         ("[" * 20_000 + "0" + "]" * 20_000, 200, "application/json"),
     ],
@@ -1752,6 +1851,44 @@ def test_response_bridge_fails_bounded_without_raw_exception_chain(
     assert captured.value.__context__ is None
     assert "RAW_PROTOCOL_SENTINEL" not in str(captured.value)
     assert "RAW_PROTOCOL_SENTINEL" not in repr(captured.value)
+
+
+def test_response_bridge_classifies_non_2xx_validation_failure_without_body():
+    body = "RAW_MALFORMED_503_BODY_SENTINEL"
+
+    class RejectingSdkChat:
+        calls = 0
+
+        def send(self, **_kwargs):
+            self.calls += 1
+            response = _http_response(
+                body,
+                status=503,
+                content_type="text/plain",
+                headers={"X-Generation-Id": "Bearer RAW_503_HEADER_SENTINEL"},
+            )
+            raise errors.ResponseValidationError(
+                "RAW_503_VALIDATION_SENTINEL",
+                response,
+                ValueError("RAW_503_CAUSE_SENTINEL"),
+                body,
+            )
+
+    chat = RejectingSdkChat()
+    with pytest.raises(
+        langchain_runtime.OpenRouterUpstreamRejectionError
+    ) as captured:
+        langchain_runtime._ChatSendBridge(chat).send(messages=[])
+
+    assert chat.calls == 1
+    assert captured.value.safe_context == {
+        "provider_error_code": 503,
+        "provider_boundary": "openrouter",
+        "expected_upstream_provider": "DeepInfra",
+    }
+    assert captured.value.__cause__ is None
+    assert captured.value.__context__ is None
+    assert "RAW_" not in json.dumps(captured.value.safe_context)
 
 
 @pytest.mark.parametrize(
@@ -1867,7 +2004,18 @@ def test_provider_provenance_field_grammars_accept_real_ids_and_hash_credentials
         )
 
 
-def test_openrouter_sdk_explicit_none_retry_config_makes_one_http_attempt():
+@pytest.mark.parametrize(
+    ("status_code", "generation_id"),
+    [
+        (429, "gen-1786483165-FFFFFFFFFFFFFFFFFFFF"),
+        (503, "gen-1786483166-GGGGGGGGGGGGGGGGGGGG"),
+    ],
+    ids=["429-too-many-requests", "503-service-unavailable"],
+)
+def test_openrouter_sdk_non_2xx_bridge_makes_one_attempt_and_retains_only_bounded_context(
+    status_code,
+    generation_id,
+):
     class CountingClient:
         def __init__(self):
             self.delegate = httpx.Client()
@@ -1878,7 +2026,21 @@ def test_openrouter_sdk_explicit_none_retry_config_makes_one_http_attempt():
 
         def send(self, request, **_kwargs):
             self.attempts += 1
-            return httpx.Response(503, request=request, json={"error": {"message": "safe"}})
+            return httpx.Response(
+                status_code,
+                request=request,
+                headers={
+                    "X-Generation-Id": generation_id,
+                    "X-Provider-Secret": "RAW_HTTP_HEADER_SENTINEL",
+                },
+                json={
+                    "error": {
+                        "code": status_code,
+                        "message": "RAW_HTTP_BODY_SENTINEL",
+                        "metadata": {"secret": "sk-or-RAW_HTTP_SECRET_SENTINEL"},
+                    }
+                },
+            )
 
         def close(self):
             self.delegate.close()
@@ -1890,13 +2052,27 @@ def test_openrouter_sdk_explicit_none_retry_config_makes_one_http_attempt():
         retry_config=None,
         timeout_ms=180_000,
     )
-    with pytest.raises(Exception):
-        sdk.chat.send(
+    bridge = langchain_runtime._OpenRouterClientBridge(sdk)
+    with pytest.raises(
+        langchain_runtime.OpenRouterUpstreamRejectionError
+    ) as captured:
+        bridge.chat.send(
             model=OPENROUTER_MODEL,
             messages=[{"role": "user", "content": "bounded test"}],
             max_tokens=1,
         )
     assert client.attempts == 1
+    assert captured.value.safe_context == {
+        "response_id": generation_id,
+        "provider_error_code": status_code,
+        "provider_boundary": "openrouter",
+        "expected_upstream_provider": "DeepInfra",
+    }
+    assert captured.value.__cause__ is None
+    assert captured.value.__context__ is None
+    serialized = json.dumps(captured.value.safe_context)
+    assert "RAW_" not in serialized
+    assert "sk-or-" not in serialized
 
 
 def test_external_tracing_blocks_runner_and_graph_before_invocation(
@@ -3023,7 +3199,7 @@ def test_specialist_upstream_rejection_retains_only_safe_unknown_cost_evidence(
             inference_calls += 1
             raise langchain_runtime.OpenRouterUpstreamRejectionError(
                 response_id="gen-1786483162-CCCCCCCCCCCCCCCCCCCC",
-                provider_error_code=400,
+                provider_error_code=429,
             )
 
     storage = Storage(str(tmp_path / "specialist-upstream-rejection.db"))
@@ -3043,12 +3219,16 @@ def test_specialist_upstream_rejection_retains_only_safe_unknown_cost_evidence(
     assert captured.value.safe_context["response_id"] == (
         "gen-1786483162-CCCCCCCCCCCCCCCCCCCC"
     )
-    assert captured.value.safe_context["provider_error_code"] == 400
+    assert captured.value.safe_context["provider_error_code"] == 429
+    assert captured.value.safe_context["provider_boundary"] == "openrouter"
+    assert captured.value.safe_context["expected_upstream_provider"] == "DeepInfra"
     ledger = storage.sanitized_model_ledger()[0]
     assert ledger["outcome"] == "failed"
     assert ledger["error_invariant"] == "provider_upstream_rejection"
     assert ledger["response_id"] == "gen-1786483162-CCCCCCCCCCCCCCCCCCCC"
-    assert ledger["provider_error_code"] == 400
+    assert ledger["provider_error_code"] == 429
+    assert ledger["provider_boundary"] == "openrouter"
+    assert ledger["expected_upstream_provider"] == "DeepInfra"
     assert ledger["actual_cost_usd"] is None
     assert "usage_source" not in ledger
     assert "prompt_tokens" not in ledger
@@ -3076,7 +3256,9 @@ def test_specialist_upstream_rejection_receipt_exposes_only_bounded_status(
                     "parent_call_id": values["parent_call_id"],
                     "delegation_id": values["delegation_id"],
                     "response_id": "gen-1786483163-DDDDDDDDDDDDDDDDDDDD",
-                    "provider_error_code": 400,
+                    "provider_error_code": 429,
+                    "provider_boundary": "openrouter",
+                    "expected_upstream_provider": "DeepInfra",
                     "outcome": "failed",
                 },
             )
@@ -3105,7 +3287,9 @@ def test_specialist_upstream_rejection_receipt_exposes_only_bounded_status(
     assert failure["agent_id"] == "orchestrator_plan"
     assert failure["error_invariant"] == "provider_upstream_rejection"
     assert failure["response_id"] == "gen-1786483163-DDDDDDDDDDDDDDDDDDDD"
-    assert failure["provider_error_code"] == 400
+    assert failure["provider_error_code"] == 429
+    assert failure["provider_boundary"] == "openrouter"
+    assert failure["expected_upstream_provider"] == "DeepInfra"
     assert "response_model" not in failure
     assert "upstream_provider" not in failure
     assert "usage_source" not in failure

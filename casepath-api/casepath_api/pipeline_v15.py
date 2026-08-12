@@ -955,6 +955,8 @@ class ClaimPipeline:
                             "invalid_provenance_field",
                             "invalid_provenance_value_hash",
                             "provider_error_code",
+                            "provider_boundary",
+                            "expected_upstream_provider",
                         )
                         if key in safe_context
                     },
@@ -1795,6 +1797,9 @@ class ClaimPipeline:
                             "error_invariant",
                             "invalid_provenance_field",
                             "invalid_provenance_value_hash",
+                            "provider_error_code",
+                            "provider_boundary",
+                            "expected_upstream_provider",
                         )
                         if key in receipt
                     },

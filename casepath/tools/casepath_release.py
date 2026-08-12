@@ -127,6 +127,8 @@ ALLOWED_MODEL_LEDGER_FIELDS = {
     "error_fact_id",
     "error_invariant",
     "provider_error_code",
+    "provider_boundary",
+    "expected_upstream_provider",
     "invalid_provenance_field",
     "invalid_provenance_value_hash",
     "ignored_noncontrolling_normalized_proposals",
@@ -333,7 +335,7 @@ QA_EVIDENCE_MANIFEST_PATH = "evidence-manifest.json"
 QA_EVIDENCE_MANIFEST_CONTRACT = "casepath.qa-evidence-manifest/1.0.0"
 HISTORICAL_MODEL_VALIDATION_RECORDS = tuple(
     f"casepath/releases/model-validation-attempt-20260811-{number:02d}.json"
-    for number in range(1, 13)
+    for number in range(1, 14)
 )
 _HISTORICAL_TOP_FIELDS = frozenset(
     {
@@ -394,6 +396,13 @@ _HISTORICAL_EXECUTION_FIELDS = {
         "orchestration_id failed_agent_id network_call_count "
         "completed_model_calls failed_model_calls downstream_model_calls_after_failure "
         "deterministic_gate_receipts".split()
+    ),
+    "production-flagship-20260812-13": frozenset(
+        "source_commit qa_service_id qa_deploy_id qa_deploy_outcome "
+        "qa_deploy_created_at qa_deploy_started_at qa_deploy_finished_at "
+        "orchestration_id failed_agent_id network_call_count "
+        "completed_model_calls failed_model_calls downstream_model_calls_after_failure "
+        "downstream_agent_receipts deterministic_gate_receipts".split()
     ),
 }
 _HISTORICAL_PROVIDER_FIELDS = {
@@ -459,6 +468,16 @@ _HISTORICAL_PROVIDER_FIELDS = {
         "provider provider_outcome requested_model upstream_provider network_call_count "
         "actual_cost_usd actual_cost_complete unknown_cost_call_count prompt_tokens "
         "completion_tokens total_tokens calls".split()
+    ),
+    "production-flagship-20260812-13": frozenset(
+        "provider provider_outcome requested_model upstream_provider network_call_count "
+        "response_identity_status synchronous_usage_cost_present "
+        "new_openrouter_log_generation_observed openrouter_log_check_performed "
+        "openrouter_upstream_request_log_observed provider_cache_replay_assessment "
+        "charge_status charge_included_in_known_aggregate actual_cost_complete "
+        "unknown_cost_call_count upstream_request_log_observation "
+        "application_ledger_observation failure_attribution "
+        "key_account_capacity_observation".split()
     ),
 }
 _HISTORICAL_APPLICATION_FIELDS = {
@@ -533,6 +552,15 @@ _HISTORICAL_APPLICATION_FIELDS = {
         "full_orchestration_accepted runtime_acceptance_established "
         "downstream_execution_started later_model_calls_after_failure".split()
     ),
+    "production-flagship-20260812-13": frozenset(
+        "outcome failure_type error_type error_invariant_retained "
+        "successful_ledger_call_bound ledger_call_id ledger_outcome "
+        "canonical_result_accepted canonical_stage_completed "
+        "response_identity_retained usage_metadata_retained actual_cost_retained "
+        "full_orchestration_accepted runtime_acceptance_established "
+        "downstream_execution_started deterministic_gates_started "
+        "external_cause_detail".split()
+    ),
 }
 _HISTORICAL_FAILURE_TYPES = {
     "authorized-smoke-20260811-01": "exact_private_reference_mismatch",
@@ -547,6 +575,7 @@ _HISTORICAL_FAILURE_TYPES = {
     "production-flagship-20260811-10": "orchestrator_plan_truncated_at_output_limit",
     "production-flagship-20260811-11": "orchestrator_plan_truncated_at_output_limit",
     "production-flagship-20260811-12": "process_decision_mapping_model_contribution_majority",
+    "production-flagship-20260812-13": "external_deepinfra_http_429",
 }
 _HISTORICAL_PROVIDER_OUTCOMES = {
     "authorized-smoke-20260811-02": "succeeded",
@@ -560,6 +589,7 @@ _HISTORICAL_PROVIDER_OUTCOMES = {
     "production-flagship-20260811-10": "partial_success_then_length_rejected",
     "production-flagship-20260811-11": "partial_success_then_length_rejected",
     "production-flagship-20260811-12": "three_successes_then_process_majority_rejected",
+    "production-flagship-20260812-13": "deepinfra_http_429",
 }
 _HISTORICAL_ERROR_TYPES = {
     "production-flagship-20260811-06": "KeyError",
@@ -569,6 +599,7 @@ _HISTORICAL_ERROR_TYPES = {
     "production-flagship-20260811-10": "AgentBoundaryError",
     "production-flagship-20260811-11": "AgentBoundaryError",
     "production-flagship-20260811-12": "AgentBoundaryError",
+    "production-flagship-20260812-13": "TooManyRequestsResponseError",
 }
 _HISTORICAL_ERROR_INVARIANTS = {
     "production-flagship-20260811-08": "generation_metadata_completeness",
@@ -616,6 +647,7 @@ _HISTORICAL_ATTEMPT_12_CALL_FIELDS = {
 }
 _HISTORICAL_SOURCE_COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 _HISTORICAL_DEPLOY_ID_PATTERN = re.compile(r"^dep-[a-z0-9]{12,40}$")
+_HISTORICAL_SERVICE_ID_PATTERN = re.compile(r"^srv-[a-z0-9]{12,40}$")
 _HISTORICAL_RUN_ID_PATTERN = re.compile(r"^run_[0-9a-f]{16}$")
 _HISTORICAL_ORCHESTRATION_ID_PATTERN = re.compile(r"^orch_[0-9a-f]{16}$")
 _HISTORICAL_CALL_ID_PATTERN = re.compile(r"^modelcall_[0-9a-f]{16}$")
@@ -1292,6 +1324,23 @@ def _verify_public_model_ledger(ledger: Any, label: str) -> None:
             raise VerificationError(
                 f"{item_path}.provider_error_code is unbounded or out of scope"
             )
+        boundary_present = "provider_boundary" in item
+        expected_provider_present = "expected_upstream_provider" in item
+        upstream_rejection = item.get("error_invariant") == "provider_upstream_rejection"
+        if (
+            boundary_present != expected_provider_present
+            or upstream_rejection != boundary_present
+            or (
+                upstream_rejection
+                and (
+                    item.get("provider_boundary") != "openrouter"
+                    or item.get("expected_upstream_provider") != "DeepInfra"
+                )
+            )
+        ):
+            raise VerificationError(
+                f"{item_path}.provider_boundary pair is invalid or out of scope"
+            )
         if (
             item.get("error_invariant") == "provider_upstream_rejection"
             and item.get("response_id") is not None
@@ -1440,6 +1489,7 @@ def _verify_historical_execution(
         "frontend_deploy_id": _HISTORICAL_DEPLOY_ID_PATTERN,
         "api_deploy_id": _HISTORICAL_DEPLOY_ID_PATTERN,
         "qa_deploy_id": _HISTORICAL_DEPLOY_ID_PATTERN,
+        "qa_service_id": _HISTORICAL_SERVICE_ID_PATTERN,
         "qa_run_id": _HISTORICAL_RUN_ID_PATTERN,
         "orchestration_id": _HISTORICAL_ORCHESTRATION_ID_PATTERN,
     }
@@ -1482,16 +1532,40 @@ def _verify_historical_execution(
         if field in values and not _is_exact_historical_int(values[field], 0):
             _historical_schema_error("execution observation")
     for field in ("completed_model_calls", "failed_model_calls"):
-        expected_count = (
-            3
-            if attempt_id == "production-flagship-20260811-12"
+        if (
+            attempt_id == "production-flagship-20260811-12"
             and field == "completed_model_calls"
-            else 1
-        )
+        ):
+            expected_count = 3
+        elif (
+            attempt_id == "production-flagship-20260812-13"
+            and field == "completed_model_calls"
+        ):
+            expected_count = 0
+        else:
+            expected_count = 1
         if field in values and not _is_exact_historical_int(
             values[field], expected_count
         ):
             _historical_schema_error("execution observation")
+    if attempt_id == "production-flagship-20260812-13" and values != {
+        "source_commit": "690f99e63a6eab4120ad75b83671cffe0f9e62af",
+        "qa_service_id": "srv-d9se2bh42hec73c54sjg",
+        "qa_deploy_id": "dep-d9ts68ht0dsc73c0nj5g",
+        "qa_deploy_outcome": "build_failed",
+        "qa_deploy_created_at": "2026-08-12T00:49:39.049742Z",
+        "qa_deploy_started_at": "2026-08-12T00:49:39.025093Z",
+        "qa_deploy_finished_at": "2026-08-12T00:50:00.690848Z",
+        "orchestration_id": "orch_bbf7ee808dc04f57",
+        "failed_agent_id": "canonical_facts",
+        "network_call_count": 1,
+        "completed_model_calls": 0,
+        "failed_model_calls": 1,
+        "downstream_model_calls_after_failure": 0,
+        "downstream_agent_receipts": 0,
+        "deterministic_gate_receipts": 0,
+    }:
+        _historical_schema_error("execution observation")
 
 
 def _verify_two_call_provider_observation(
@@ -1662,6 +1736,86 @@ def _verify_attempt_12_provider_observation(values: dict[str, Any]) -> None:
         _historical_schema_error("provider call aggregate")
 
 
+def _verify_attempt_13_provider_observation(values: dict[str, Any]) -> None:
+    ledger = _require_historical_fields(
+        values.get("application_ledger_observation"),
+        frozenset(
+            "call_id orchestration_id agent_id outcome error_type latency_ms "
+            "response_identity_retained response_model_retained "
+            "upstream_provider_retained provider_error_code_retained "
+            "usage_metadata_retained "
+            "actual_cost_retained".split()
+        ),
+        "application ledger observation",
+    )
+    if (
+        ledger["call_id"] != "modelcall_f97afa2a05079468"
+        or ledger["orchestration_id"] != "orch_bbf7ee808dc04f57"
+        or ledger["agent_id"] != "canonical_facts"
+        or ledger["outcome"] != "failed"
+        or ledger["error_type"] != "TooManyRequestsResponseError"
+        or not _is_bounded_historical_number(ledger["latency_ms"], minimum=0.001)
+    ):
+        _historical_schema_error("application ledger observation")
+    for field in (
+        "response_identity_retained",
+        "response_model_retained",
+        "upstream_provider_retained",
+        "provider_error_code_retained",
+        "usage_metadata_retained",
+        "actual_cost_retained",
+    ):
+        if ledger[field] is not False:
+            _historical_schema_error("application ledger observation")
+    if not math.isclose(ledger["latency_ms"], 2777.996, rel_tol=0, abs_tol=1e-9):
+        _historical_schema_error("application ledger observation")
+
+    attribution = _require_historical_fields(
+        values.get("failure_attribution"),
+        frozenset(
+            "classification cause_detail router_origin_established "
+            "key_or_account_hard_limit_reached".split()
+        ),
+        "failure attribution",
+    )
+    if attribution != {
+        "classification": "external_deepinfra_http_429",
+        "cause_detail": "unknown",
+        "router_origin_established": False,
+        "key_or_account_hard_limit_reached": False,
+    }:
+        _historical_schema_error("failure attribution")
+
+    capacity = _require_historical_fields(
+        values.get("key_account_capacity_observation"),
+        frozenset(
+            "read_only configured_key_limit_usd key_used_percent "
+            "key_hard_limit_reached account_credit_status".split()
+        ),
+        "key and account capacity observation",
+    )
+    if (
+        capacity["read_only"] is not True
+        or not _is_exact_historical_int(capacity["configured_key_limit_usd"], 25)
+        or not _is_bounded_historical_number(
+            capacity["key_used_percent"], minimum=0, maximum=100
+        )
+        or not math.isclose(
+            capacity["key_used_percent"], 0.6536316, rel_tol=0, abs_tol=1e-10
+        )
+        or capacity["key_hard_limit_reached"] is not False
+        or capacity["account_credit_status"] != "healthy"
+    ):
+        _historical_schema_error("key and account capacity observation")
+
+    if (
+        not _is_exact_historical_int(values.get("network_call_count"), 1)
+        or values.get("actual_cost_complete") is not False
+        or not _is_exact_historical_int(values.get("unknown_cost_call_count"), 1)
+    ):
+        _historical_schema_error("provider call aggregate")
+
+
 def _verify_historical_provider_observation(
     attempt_id: str,
     provider: Any,
@@ -1713,6 +1867,8 @@ def _verify_historical_provider_observation(
         _verify_two_call_provider_observation(attempt_id, values)
     if attempt_id == "production-flagship-20260811-12":
         _verify_attempt_12_provider_observation(values)
+    if attempt_id == "production-flagship-20260812-13":
+        _verify_attempt_13_provider_observation(values)
     if "latency_ms" in values and not _is_bounded_historical_number(
         values["latency_ms"], minimum=0.001
     ):
@@ -1732,13 +1888,17 @@ def _verify_historical_provider_observation(
         if field in values and values[field] is not expected:
             _historical_schema_error("provider observation")
     if "openrouter_log_check_performed" in values:
-        expected = attempt_id == "production-flagship-20260811-09"
+        expected = attempt_id in {
+            "production-flagship-20260811-09",
+            "production-flagship-20260812-13",
+        }
         if values["openrouter_log_check_performed"] is not expected:
             _historical_schema_error("provider observation")
     expected_cache_assessment = {
         "authorized-smoke-20260811-03": "likely_unconfirmed",
         "production-flagship-20260811-07": "not_assessed",
         "production-flagship-20260811-09": "not_applicable_upstream_rejected",
+        "production-flagship-20260812-13": "not_applicable_upstream_rejected",
     }.get(attempt_id)
     if (
         expected_cache_assessment is not None
@@ -1760,6 +1920,7 @@ def _verify_historical_provider_observation(
     expected_identity_status = {
         "production-flagship-20260811-07": "unknown_unverified",
         "production-flagship-20260811-09": "upstream_request_only_no_generation",
+        "production-flagship-20260812-13": "upstream_request_only_no_generation",
     }.get(attempt_id)
     if (
         expected_identity_status is not None
@@ -1834,8 +1995,13 @@ def _verify_historical_provider_observation(
             ),
             "upstream request observation",
         )
+        expected_upstream = {
+            "production-flagship-20260811-09": ("Together", 400, 2, 759),
+            "production-flagship-20260812-13": ("DeepInfra", 429, 1, 235),
+        }.get(attempt_id)
         if (
-            upstream_log["read_only"] is not True
+            expected_upstream is None
+            or upstream_log["read_only"] is not True
             or not isinstance(upstream_log["displayed_at_local"], str)
             or _HISTORICAL_LOCAL_TIME_PATTERN.fullmatch(
                 upstream_log["displayed_at_local"]
@@ -1844,12 +2010,27 @@ def _verify_historical_provider_observation(
             or not isinstance(upstream_log["request_id"], str)
             or OPENROUTER_GENERATION_ID_PATTERN.fullmatch(upstream_log["request_id"])
             is None
-            or upstream_log["final_provider"] != "Together"
-            or not _is_exact_historical_int(upstream_log["upstream_status"], 400)
-            or not isinstance(upstream_log["router_attempts"], int)
-            or isinstance(upstream_log["router_attempts"], bool)
-            or not 1 <= upstream_log["router_attempts"] <= 10
+            or upstream_log["final_provider"] != expected_upstream[0]
+            or not _is_exact_historical_int(
+                upstream_log["upstream_status"], expected_upstream[1]
+            )
+            or not _is_exact_historical_int(
+                upstream_log["router_attempts"], expected_upstream[2]
+            )
             or not _is_bounded_historical_number(upstream_log["router_latency_ms"])
+            or not math.isclose(
+                upstream_log["router_latency_ms"],
+                expected_upstream[3],
+                rel_tol=0,
+                abs_tol=1e-9,
+            )
+        ):
+            _historical_schema_error("upstream request observation")
+        if attempt_id == "production-flagship-20260812-13" and (
+            upstream_log["displayed_at_local"]
+            != "2026-08-12 02:49 Europe/Zurich"
+            or upstream_log["request_id"]
+            != "gen-1786495797-wwTpDFx93vAismEWwWvY"
         ):
             _historical_schema_error("upstream request observation")
 
@@ -1963,6 +2144,42 @@ def _verify_historical_application_result(
                 or _HISTORICAL_CALL_ID_PATTERN.fullmatch(call_id) is None
             ):
                 _historical_schema_error("application result")
+    if attempt_id == "production-flagship-20260812-13":
+        expected_booleans.update(
+            {
+                "error_invariant_retained": False,
+                "canonical_stage_completed": False,
+                "response_identity_retained": False,
+                "usage_metadata_retained": False,
+                "actual_cost_retained": False,
+                "full_orchestration_accepted": False,
+                "runtime_acceptance_established": False,
+                "downstream_execution_started": False,
+                "deterministic_gates_started": False,
+            }
+        )
+        if values.get("external_cause_detail") != "unknown":
+            _historical_schema_error("application result")
+        if values != {
+            "outcome": "rejected",
+            "failure_type": "external_deepinfra_http_429",
+            "error_type": "TooManyRequestsResponseError",
+            "error_invariant_retained": False,
+            "successful_ledger_call_bound": False,
+            "ledger_call_id": "modelcall_f97afa2a05079468",
+            "ledger_outcome": "failed",
+            "canonical_result_accepted": False,
+            "canonical_stage_completed": False,
+            "response_identity_retained": False,
+            "usage_metadata_retained": False,
+            "actual_cost_retained": False,
+            "full_orchestration_accepted": False,
+            "runtime_acceptance_established": False,
+            "downstream_execution_started": False,
+            "deterministic_gates_started": False,
+            "external_cause_detail": "unknown",
+        }:
+            _historical_schema_error("application result")
     for field, expected in expected_booleans.items():
         if field in values and values[field] is not expected:
             _historical_schema_error("application result")
@@ -2031,6 +2248,22 @@ def _verify_historical_attempt_schema(evidence: Any) -> None:
             or result["ledger_call_id"] != provider_calls[3]["call_id"]
             or execution["ledger_created_at"] != provider_calls[0]["created_at"]
             or execution["ledger_updated_at"] != provider_calls[3]["updated_at"]
+        ):
+            _historical_schema_error("attempt binding")
+    if attempt_id == "production-flagship-20260812-13":
+        provider = evidence["provider_observation"]
+        ledger = provider["application_ledger_observation"]
+        upstream = provider["upstream_request_log_observation"]
+        result = evidence["application_result"]
+        execution = evidence["execution_observation"]
+        if (
+            result["ledger_call_id"] != ledger["call_id"]
+            or execution["orchestration_id"] != ledger["orchestration_id"]
+            or execution["failed_agent_id"] != ledger["agent_id"]
+            or provider["upstream_provider"] != upstream["final_provider"]
+            or result["error_type"] != ledger["error_type"]
+            or result["external_cause_detail"]
+            != provider["failure_attribution"]["cause_detail"]
         ):
             _historical_schema_error("attempt binding")
 
@@ -2150,7 +2383,8 @@ def verify_failed_model_attempt_evidence(
                 "A non-assessed cache replay requires openrouter_log_check_performed=false"
             )
         if cache_assessment == "not_applicable_upstream_rejected" and (
-            provider_observation.get("provider_outcome") != "upstream_rejected"
+            provider_observation.get("provider_outcome")
+            not in {"upstream_rejected", "deepinfra_http_429"}
             or provider_observation.get("openrouter_log_check_performed") is not True
             or provider_observation.get("openrouter_upstream_request_log_observed") is not True
         ):
@@ -2244,7 +2478,7 @@ def verify_static_runtime_acceptance_contract(release: dict[str, Any]) -> None:
     }
     if history != expected_history:
         raise VerificationError(
-            "Historical model validation must retain exactly twelve failed-closed records"
+            "Historical model validation must retain exactly thirteen failed-closed records"
         )
     for path_text in HISTORICAL_MODEL_VALIDATION_RECORDS:
         verify_failed_model_attempt_evidence(

@@ -1347,6 +1347,8 @@ class InstrumentedStructuredAgent:
                     "invalid_provenance_field",
                     "invalid_provenance_value_hash",
                     "provider_error_code",
+                    "provider_boundary",
+                    "expected_upstream_provider",
                 ):
                     if key in exc.safe_context:
                         provider_patch[key] = exc.safe_context[key]
@@ -1403,6 +1405,8 @@ class InstrumentedStructuredAgent:
                         "invalid_provenance_field",
                         "invalid_provenance_value_hash",
                         "provider_error_code",
+                        "provider_boundary",
+                        "expected_upstream_provider",
                     )
                     if key in provider_patch
                 },
@@ -1738,6 +1742,8 @@ class NemotronMultiAgentOrchestrator:
                             "invalid_provenance_field",
                             "invalid_provenance_value_hash",
                             "provider_error_code",
+                            "provider_boundary",
+                            "expected_upstream_provider",
                         )
                         if key in safe_context
                     },
