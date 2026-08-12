@@ -16,8 +16,8 @@ import pytest
 
 from casepath_api import canonicalizer as canonicalizer_module
 from casepath_api import langchain_runtime
+from casepath_api import multi_agent as multi_agent_module
 from casepath_api.canonicalizer import OPENROUTER_MODEL
-from casepath_api.canonicalizer import resolve_observable_source_reference_id
 from casepath_api.data import CLAIMS, observable_claim_package
 from casepath_api.multi_agent import (
     AI_AGENT_IDS,
@@ -25,15 +25,19 @@ from casepath_api.multi_agent import (
     AgentInvocationFailure,
     DETERMINISTIC_GATE_IDS,
     EVIDENCE_STATUS_CANDIDATES,
+    FINAL_AUDIT_CHECK_IDS,
     InstrumentedStructuredAgent,
     NemotronMultiAgentOrchestrator,
     OrchestratorPlan,
+    PROCESS_DECISION_VALUE_CANDIDATES,
     ROLE_OUTPUT_TOKENS,
     _evidence_provider_payload,
     _final_brief_provider_payload,
     _plan_validator,
     _source_registry,
     accepted_artifact_hash,
+    apply_evidence_contribution,
+    apply_process_contribution,
 )
 from casepath_api.pipeline_v15 import ClaimPipeline
 from casepath_api.storage import Storage
@@ -130,28 +134,16 @@ def graph_fixture(tmp_path: Path):
     process_proposals = [
         {
             "fact_id": fact["fact_id"],
-            "state": fact["state"],
-            "normalized_value": fact["normalized_value"],
-            "source_ref_ids": sorted(
-                resolve_observable_source_reference_id(ref, registry)
-                for ref in fact["source_refs"]
-                if ref["locator_kind"] == "text_quote"
-            ),
+            "decision_value": fact["decision_value"],
             "confidence": 0.82,
         }
         for fact in controlling
     ]
-    facts_by_id = {fact["fact_id"]: fact for fact in facts}
     evidence_proposals = [
         {
             "item_id": item["item_id"],
             "status": item["status"],
             "artifact_ids": sorted(item.get("artifact_ids", [])),
-            "source_ref_ids": sorted(
-                resolve_observable_source_reference_id(ref, registry)
-                for ref in facts_by_id[item["fact_id"]]["source_refs"]
-                if ref["locator_kind"] == "text_quote"
-            ),
             "confidence": 0.83,
         }
         for item in checklist["items"]
@@ -159,15 +151,6 @@ def graph_fixture(tmp_path: Path):
     current = process["current_overlay"]
     current_node = next(
         node for node in process["nodes"] if node["node_id"] == current["current_node_id"]
-    )
-    final_source_ids = sorted(
-        {
-            resolve_observable_source_reference_id(ref, registry)
-            for fact in facts
-            if fact["fact_id"] in current_node.get("fact_ids", [])
-            for ref in fact["source_refs"]
-            if ref["locator_kind"] == "text_quote"
-        }
     )
     responses = {
         "orchestrator_plan": {
@@ -186,7 +169,13 @@ def graph_fixture(tmp_path: Path):
             "proposal": {
                 "current_node_id": current["current_node_id"],
                 "next_action_node_id": current["next_action_node_id"],
-                "source_ref_ids": final_source_ids,
+                "supporting_fact_ids": sorted(current_node.get("fact_ids", [])),
+                "upstream_contribution_ids": [
+                    "document_source_integrity",
+                    "process_decision_mapping",
+                    "evidence_checklist",
+                ],
+                "audit_check_ids": list(FINAL_AUDIT_CHECK_IDS),
                 "confidence": 0.84,
             }
         },
@@ -360,16 +349,59 @@ def test_compiled_langgraph_fanout_join_and_bounded_payloads(tmp_path: Path):
     )
 
     process_payload = captures["process_decision_mapping"][0]
-    assert all("state" not in item and "normalized_value" not in item for item in process_payload["fact_candidates"])
-    assert all(len(item["allowed_normalized_values"]) > 1 for item in process_payload["fact_candidates"])
+    assert set(process_payload) == {
+        "orchestrator_focus",
+        "canonical_fact_handoff",
+        "decision_value_vocabulary",
+    }
+    assert process_payload["decision_value_vocabulary"] == (
+        PROCESS_DECISION_VALUE_CANDIDATES
+    )
+    assert len(process_payload["canonical_fact_handoff"]) == 6
+    assert all(
+        set(item)
+        == {
+            "fact_id",
+            "label",
+            "state",
+            "decision_key",
+            "normalized_value",
+            "source_ref_ids",
+        }
+        and "decision_value" not in item
+        for item in process_payload["canonical_fact_handoff"]
+    )
     evidence_payload = captures["evidence_checklist"][0]
+    assert set(evidence_payload) == {
+        "orchestrator_focus",
+        "accepted_process_gate_handoff",
+        "evidence_candidates",
+        "allowed_statuses",
+        "canonical_fact_handoff",
+        "source_integrity_artifact_inventory",
+    }
     assert evidence_payload["allowed_statuses"] == EVIDENCE_STATUS_CANDIDATES
-    assert all("status" not in item and "artifact_ids" not in item for item in evidence_payload["evidence_candidates"])
+    assert all(
+        "status" not in item
+        and "artifact_ids" not in item
+        and "why" not in item
+        for item in evidence_payload["evidence_candidates"]
+    )
+    assert all(
+        "source_artifact_ids" in item
+        for item in evidence_payload["canonical_fact_handoff"]
+    )
     final_payload = captures["final_claim_brief_audit"][0]
-    assert "current_node_id" not in final_payload
-    assert "next_action_node_id" not in final_payload
-    assert "checklist_artifacts" not in final_payload
-    assert "verification_artifacts" not in final_payload
+    assert set(final_payload) == {
+        "orchestrator_focus",
+        "accepted_process_gate_handoff",
+        "accepted_evidence_gate_handoff",
+        "static_process_topology",
+        "canonical_fact_handoff",
+        "prior_accepted_contributions",
+        "audit_check_candidates",
+    }
+    assert "source_reference_registry" not in final_payload
     topology = final_payload["static_process_topology"]
     assert all("answer" not in item and "state" not in item for item in topology["nodes"])
     assert all("state" not in branch for item in topology["nodes"] for branch in item["branches"])
@@ -441,12 +473,12 @@ def test_compiled_langgraph_fanout_join_and_bounded_payloads(tmp_path: Path):
         "input_contribution_ids"
     ] == [
         "document_source_integrity",
-        "process_decision_mapping",
         "evidence_checklist",
+        "process_decision_mapping",
     ]
     assert specialist_artifacts["final_claim_brief_audit"][
         "lineage_authority"
-    ] == "deterministic_application"
+    ] == "hybrid_guarded_model_audit"
 
     calls = storage.model_calls()
     assert len(calls) == 5
@@ -456,6 +488,445 @@ def test_compiled_langgraph_fanout_join_and_bounded_payloads(tmp_path: Path):
     assert all(item["parent_call_id"] == plan_call["call_id"] for item in workers)
     assert all(item["delegation_id"].startswith("dlg_") for item in calls)
     assert all(item["actual_cost_usd"] == 0.001 for item in calls)
+
+
+def _replace_process_decisions_with_valid_alternatives(
+    responses: dict[str, dict[str, Any]],
+    facts: list[dict[str, Any]],
+    count: int,
+) -> None:
+    facts_by_id = {item["fact_id"]: item for item in facts}
+    for proposal in responses["process_decision_mapping"]["proposals"][:count]:
+        fact = facts_by_id[proposal["fact_id"]]
+        proposal["decision_value"] = next(
+            candidate
+            for candidate in PROCESS_DECISION_VALUE_CANDIDATES[
+                fact["decision_key"]
+            ]
+            if candidate != fact["decision_value"]
+        )
+
+
+def test_process_specialist_four_of_six_passes_with_two_field_fallbacks(
+    tmp_path: Path,
+):
+    (
+        orchestrator,
+        _storage,
+        _captures,
+        responses,
+        package,
+        canonicalization,
+        result,
+    ) = graph_fixture(tmp_path)
+    _replace_process_decisions_with_valid_alternatives(
+        responses, result["facts"], 2
+    )
+
+    audit = orchestrator.invoke(
+        run_id="run-process-four-of-six",
+        orchestration_id="orch-process-four-of-six",
+        observable_package=package,
+        canonicalization=canonicalization,
+        facts=result["facts"],
+        process=result["process"],
+        checklist=result["checklist"],
+        verification=result["verification"],
+    )
+
+    process_audit = next(
+        item
+        for item in audit["agents"]
+        if item["agent_id"] == "process_decision_mapping"
+    )
+    assert process_audit["accepted_count"] == 4
+    assert process_audit["rejected_count"] == 2
+    assert process_audit["outcome"] == "succeeded_with_guarded_fallback"
+    decisions = audit["specialist_artifacts"]["process_decision_mapping"][
+        "decisions"
+    ]
+    assert sum(item["deterministic_fallback_applied"] for item in decisions) == 2
+    assert audit["all_required_agents_contributed"] is True
+
+
+def test_process_specialist_three_of_six_fails_without_cache_or_raw_diagnostics(
+    tmp_path: Path,
+):
+    (
+        orchestrator,
+        storage,
+        captures,
+        responses,
+        package,
+        canonicalization,
+        result,
+    ) = graph_fixture(tmp_path)
+    _replace_process_decisions_with_valid_alternatives(
+        responses, result["facts"], 3
+    )
+
+    with pytest.raises(
+        AgentInvocationFailure, match="model_contribution_majority"
+    ):
+        orchestrator.invoke(
+            run_id="run-process-three-of-six",
+            orchestration_id="orch-process-three-of-six",
+            observable_package=package,
+            canonicalization=canonicalization,
+            facts=result["facts"],
+            process=result["process"],
+            checklist=result["checklist"],
+            verification=result["verification"],
+        )
+
+    second_package = json.loads(json.dumps(package))
+    image = next(
+        item
+        for item in second_package["artifacts"]
+        if item["media_type"].startswith("image/")
+    )
+    image["media_type"] = "image/png"
+    with pytest.raises(
+        AgentInvocationFailure, match="model_contribution_majority"
+    ):
+        orchestrator.invoke(
+            run_id="run-process-three-of-six-repeat",
+            orchestration_id="orch-process-three-of-six-repeat",
+            observable_package=second_package,
+            canonicalization=canonicalization,
+            facts=result["facts"],
+            process=result["process"],
+            checklist=result["checklist"],
+            verification=result["verification"],
+        )
+
+    process_ledger = [
+        item
+        for item in storage.model_calls()
+        if item["agent_id"] == "process_decision_mapping"
+    ]
+    assert len(process_ledger) == 2
+    assert len(captures["process_decision_mapping"]) == 2
+    assert len({item["cache_key"] for item in process_ledger}) == 1
+    assert all(item["call_count"] == 1 for item in process_ledger)
+    expected_rejected = [
+        {
+            "item_id": f"fact:{proposal['fact_id']}:decision_value",
+            "invariant": "process_decision_contract",
+        }
+        for proposal in responses["process_decision_mapping"]["proposals"][:3]
+    ]
+    for ledger in process_ledger:
+        assert ledger["outcome"] == "failed"
+        assert ledger["accepted_item_count"] == 3
+        assert ledger["rejected_item_count"] == 3
+        assert ledger["ignored_proposal_count"] == 0
+        assert len(ledger["accepted_item_ids"]) == 3
+        assert all(
+            item.startswith("fact:") and item.endswith(":decision_value")
+            for item in ledger["accepted_item_ids"]
+        )
+        assert ledger["rejected_items"] == expected_rejected
+        assert storage.cached_model_output(ledger["cache_key"]) is None
+        for forbidden in (
+            "deterministic_fallback_applied",
+            "canonical_output",
+        ):
+            assert forbidden not in ledger
+        serialized_ledger = json.dumps(ledger, sort_keys=True)
+        assert "source_ref" not in serialized_ledger
+        assert "excerpt" not in serialized_ledger
+
+
+def test_evidence_specialist_scores_status_and_artifacts_independently(
+    tmp_path: Path,
+):
+    (
+        orchestrator,
+        _storage,
+        _captures,
+        responses,
+        package,
+        canonicalization,
+        result,
+    ) = graph_fixture(tmp_path)
+    proposal = responses["evidence_checklist"]["proposals"][0]
+    proposal["status"] = next(
+        status
+        for status in EVIDENCE_STATUS_CANDIDATES
+        if status != proposal["status"]
+    )
+
+    audit = orchestrator.invoke(
+        run_id="run-evidence-independent-units",
+        orchestration_id="orch-evidence-independent-units",
+        observable_package=package,
+        canonicalization=canonicalization,
+        facts=result["facts"],
+        process=result["process"],
+        checklist=result["checklist"],
+        verification=result["verification"],
+    )
+
+    evidence_audit = next(
+        item
+        for item in audit["agents"]
+        if item["agent_id"] == "evidence_checklist"
+    )
+    assert evidence_audit["accepted_count"] == 41
+    assert evidence_audit["rejected_count"] == 1
+    accepted_item = audit["specialist_artifacts"]["evidence_checklist"][
+        "items"
+    ][0]
+    contributions = {
+        item["field"]: item for item in accepted_item["field_contributions"]
+    }
+    assert contributions["status"]["deterministic_fallback_applied"] is True
+    assert contributions["artifact_ids"]["deterministic_fallback_applied"] is False
+    assert accepted_item["attribution"] == "mixed_model_and_deterministic"
+    assert accepted_item["status"] == result["checklist"]["items"][0]["status"]
+
+
+def test_evidence_specialist_equal_field_split_fails_strict_majority(
+    tmp_path: Path,
+):
+    (
+        orchestrator,
+        storage,
+        _captures,
+        responses,
+        package,
+        canonicalization,
+        result,
+    ) = graph_fixture(tmp_path)
+    for proposal in responses["evidence_checklist"]["proposals"]:
+        proposal["status"] = next(
+            status
+            for status in EVIDENCE_STATUS_CANDIDATES
+            if status != proposal["status"]
+        )
+
+    with pytest.raises(
+        AgentInvocationFailure, match="model_contribution_majority"
+    ):
+        orchestrator.invoke(
+            run_id="run-evidence-equal-split",
+            orchestration_id="orch-evidence-equal-split",
+            observable_package=package,
+            canonicalization=canonicalization,
+            facts=result["facts"],
+            process=result["process"],
+            checklist=result["checklist"],
+            verification=result["verification"],
+        )
+    ledger = next(
+        item
+        for item in storage.model_calls()
+        if item["agent_id"] == "evidence_checklist"
+    )
+    assert (ledger["accepted_item_count"], ledger["rejected_item_count"]) == (
+        21,
+        21,
+    )
+    assert storage.cached_model_output(ledger["cache_key"]) is None
+
+
+def test_final_specialist_accepts_three_of_five_independent_audit_units(
+    tmp_path: Path,
+):
+    (
+        orchestrator,
+        _storage,
+        _captures,
+        responses,
+        package,
+        canonicalization,
+        result,
+    ) = graph_fixture(tmp_path)
+    proposal = responses["final_claim_brief_audit"]["proposal"]
+    proposal["current_node_id"] = "scope"
+    proposal["supporting_fact_ids"] = []
+
+    audit = orchestrator.invoke(
+        run_id="run-final-three-of-five",
+        orchestration_id="orch-final-three-of-five",
+        observable_package=package,
+        canonicalization=canonicalization,
+        facts=result["facts"],
+        process=result["process"],
+        checklist=result["checklist"],
+        verification=result["verification"],
+    )
+
+    final_audit = next(
+        item
+        for item in audit["agents"]
+        if item["agent_id"] == "final_claim_brief_audit"
+    )
+    assert (final_audit["accepted_count"], final_audit["rejected_count"]) == (
+        3,
+        2,
+    )
+    final = audit["final_claim_brief"]
+    assert final["attribution"] == "mixed_model_and_deterministic"
+    assert final["current_node_id"] == result["process"]["current_node"]
+    fields = {item["field"]: item for item in final["field_contributions"]}
+    assert fields["current_node_id"]["deterministic_fallback_applied"] is True
+    assert fields["supporting_fact_ids"]["deterministic_fallback_applied"] is True
+    assert fields["next_action_node_id"]["deterministic_fallback_applied"] is False
+
+
+def test_final_parent_attribution_is_deterministic_when_no_unit_is_accepted(
+    tmp_path: Path, monkeypatch
+):
+    (
+        orchestrator,
+        _storage,
+        _captures,
+        responses,
+        package,
+        canonicalization,
+        result,
+    ) = graph_fixture(tmp_path)
+    proposal = responses["final_claim_brief_audit"]["proposal"]
+    proposal.update(
+        {
+            "current_node_id": "not-a-current-node",
+            "next_action_node_id": "not-a-next-node",
+            "supporting_fact_ids": [],
+            "upstream_contribution_ids": [],
+            "audit_check_ids": [],
+        }
+    )
+    # Bypass only the runner's majority raise so this test can inspect the
+    # already-computed, fallback-only aggregate attribution.
+    monkeypatch.setattr(
+        multi_agent_module,
+        "_require_contribution_majority",
+        lambda *_args, **_kwargs: None,
+    )
+
+    audit = orchestrator.invoke(
+        run_id="run-final-zero-of-five-attribution",
+        orchestration_id="orch-final-zero-of-five-attribution",
+        observable_package=package,
+        canonicalization=canonicalization,
+        facts=result["facts"],
+        process=result["process"],
+        checklist=result["checklist"],
+        verification=result["verification"],
+    )
+
+    final = audit["final_claim_brief"]
+    assert final["attribution"] == "deterministic_application"
+    assert all(
+        item["deterministic_fallback_applied"] is True
+        for item in final["field_contributions"]
+    )
+    final_audit = next(
+        item
+        for item in audit["agents"]
+        if item["agent_id"] == "final_claim_brief_audit"
+    )
+    assert (final_audit["accepted_count"], final_audit["rejected_count"]) == (
+        0,
+        5,
+    )
+    assert audit["all_required_agents_contributed"] is False
+
+
+def test_hybrid_materializers_rebuild_routes_and_checklist_aggregates_fail_closed(
+    tmp_path: Path,
+):
+    result = oracle_result(tmp_path)
+    controlling = [
+        fact for fact in result["facts"] if fact["controls_process"] is True
+    ]
+    process_contribution = {
+        "decisions": [
+            {
+                "fact_id": fact["fact_id"],
+                "decision_key": fact["decision_key"],
+                "decision_value": fact["decision_value"],
+            }
+            for fact in controlling
+        ]
+    }
+    poisoned_process = json.loads(json.dumps(result["process"]))
+    poisoned_process["current_node"] = "scope"
+    poisoned_process["selected_path"] = ["intake", "scope"]
+    poisoned_process["current_overlay"] = {
+        "completed_node_ids": [],
+        "current_node_id": "scope",
+        "selected_branch_id": "scope-unverified",
+        "blocked_node_ids": [],
+        "inactive_branch_ids": [],
+        "next_action_node_id": "scope",
+        "decisions": {},
+    }
+    for node in poisoned_process["nodes"]:
+        node["state"] = "inactive"
+        for branch in node.get("branches", []):
+            branch["state"] = "possible"
+    for edge in poisoned_process["edges"]:
+        edge["state"] = "possible"
+
+    rebuilt_process = apply_process_contribution(
+        poisoned_process, process_contribution, result["facts"]
+    )
+    assert rebuilt_process["current_node"] == result["process"]["current_node"]
+    assert rebuilt_process["selected_path"] == result["process"]["selected_path"]
+    assert rebuilt_process["current_overlay"] == result["process"][
+        "current_overlay"
+    ]
+    assert [
+        (node["node_id"], node["state"], node.get("answer"))
+        for node in rebuilt_process["nodes"]
+    ] == [
+        (node["node_id"], node["state"], node.get("answer"))
+        for node in result["process"]["nodes"]
+    ]
+    tampered_process_contribution = json.loads(json.dumps(process_contribution))
+    first = tampered_process_contribution["decisions"][0]
+    fact = next(item for item in controlling if item["fact_id"] == first["fact_id"])
+    first["decision_value"] = next(
+        value
+        for value in PROCESS_DECISION_VALUE_CANDIDATES[fact["decision_key"]]
+        if value != fact["decision_value"]
+    )
+    with pytest.raises(AgentBoundaryError, match="canonical_decision_binding"):
+        apply_process_contribution(
+            result["process"], tampered_process_contribution, result["facts"]
+        )
+
+    evidence_contribution = {
+        "items": [
+            {
+                "item_id": item["item_id"],
+                "status": item["status"],
+                "artifact_ids": sorted(item.get("artifact_ids", [])),
+            }
+            for item in result["checklist"]["items"]
+        ]
+    }
+    poisoned_checklist = json.loads(json.dumps(result["checklist"]))
+    poisoned_checklist["present"] = []
+    poisoned_checklist["required"] = []
+    poisoned_checklist["summary"] = {"missing": 999}
+    rebuilt_checklist = apply_evidence_contribution(
+        poisoned_checklist, evidence_contribution
+    )
+    assert rebuilt_checklist["present"] == result["checklist"]["present"]
+    assert rebuilt_checklist["required"] == result["checklist"]["required"]
+    assert rebuilt_checklist["summary"] == result["checklist"]["summary"]
+    tampered_evidence = json.loads(json.dumps(evidence_contribution))
+    tampered_evidence["items"][0]["status"] = next(
+        value
+        for value in EVIDENCE_STATUS_CANDIDATES
+        if value != tampered_evidence["items"][0]["status"]
+    )
+    with pytest.raises(AgentBoundaryError, match="evidence_contract_binding"):
+        apply_evidence_contribution(result["checklist"], tampered_evidence)
 
 
 def test_evidence_payload_omits_poisoned_private_answers_and_plan_changes_order(
@@ -489,8 +960,6 @@ def test_evidence_payload_omits_poisoned_private_answers_and_plan_changes_order(
     for item in poisoned["items"]:
         item["why"] = "PRIVATE_WHY_SENTINEL"
         item["status"] = "PRIVATE_STATUS_SENTINEL"
-        item["node_id"] = "PRIVATE_PATH_SENTINEL"
-        item["current_path"] = "PRIVATE_APPLICABILITY_SENTINEL"
         item["artifact_ids"] = ["PRIVATE_EXPECTED_ARTIFACT_SENTINEL"]
     fact_ids = [item["fact_id"] for item in result["facts"]]
     task_codes = [
@@ -508,6 +977,8 @@ def test_evidence_payload_omits_poisoned_private_answers_and_plan_changes_order(
                     "focus_source_ref_ids": focused_sources,
                     "priority_task_codes": task_order,
                 },
+                "source_integrity": {"artifacts": []},
+                "process": result["process"],
                 "checklist": poisoned,
                 "facts": result["facts"],
                 "source_registry": registry,
@@ -521,13 +992,22 @@ def test_evidence_payload_omits_poisoned_private_answers_and_plan_changes_order(
     for sentinel in (
         "PRIVATE_WHY_SENTINEL",
         "PRIVATE_STATUS_SENTINEL",
-        "PRIVATE_PATH_SENTINEL",
-        "PRIVATE_APPLICABILITY_SENTINEL",
         "PRIVATE_EXPECTED_ARTIFACT_SENTINEL",
     ):
         assert sentinel not in serialized
     assert all(
-        set(item) == {"item_id", "title", "fact_id"}
+        set(item)
+        == {
+            "item_id",
+            "title",
+            "fact_id",
+            "node_id",
+            "legal_basis_ids",
+            "acceptable_alternatives",
+            "applies_when",
+            "required_level",
+            "current_path",
+        }
         for item in forward["evidence_candidates"]
     )
     assert {
@@ -576,11 +1056,20 @@ def test_final_audit_payload_ignores_applied_answers_but_tracks_prior_contributi
     baseline = _final_brief_provider_payload(state)
     assert set(baseline) == {
         "orchestrator_focus",
+        "accepted_process_gate_handoff",
+        "accepted_evidence_gate_handoff",
         "static_process_topology",
         "canonical_fact_handoff",
         "prior_accepted_contributions",
-        "source_reference_registry",
+        "audit_check_candidates",
     }
+    assert baseline["accepted_process_gate_handoff"] == {
+        "gate_id": "deterministic_process_gate",
+        "current_overlay": result["process"]["current_overlay"],
+    }
+    assert baseline["accepted_evidence_gate_handoff"]["gate_id"] == (
+        "deterministic_evidence_gate"
+    )
     assert set(baseline["static_process_topology"]) == {
         "nodes",
         "edges",
@@ -630,12 +1119,6 @@ def test_final_audit_payload_ignores_applied_answers_but_tracks_prior_contributi
         return value
 
     poisoned["process"] = recursively_poison(poisoned["process"])
-    poisoned["process"]["current_overlay"] = {
-        "current_node_id": "PRIVATE_CURRENT_NODE_SENTINEL",
-        "next_action_node_id": "PRIVATE_NEXT_NODE_SENTINEL",
-    }
-    poisoned["process"]["current_node"] = "PRIVATE_CURRENT_NODE_SENTINEL"
-    poisoned["process"]["selected_path"] = ["PRIVATE_SELECTED_PATH_SENTINEL"]
     poisoned["checklist"] = recursively_poison(poisoned["checklist"])
     poisoned["verification"] = {
         "PRIVATE_VERIFICATION_OBJECT_SENTINEL": recursively_poison(
@@ -651,12 +1134,7 @@ def test_final_audit_payload_ignores_applied_answers_but_tracks_prior_contributi
         for value in poison_values.values()
         for sentinel in ([value] if isinstance(value, str) else value)
     )
-    for sentinel in (
-        "PRIVATE_VERIFICATION_OBJECT_SENTINEL",
-        "PRIVATE_CURRENT_NODE_SENTINEL",
-        "PRIVATE_NEXT_NODE_SENTINEL",
-        "PRIVATE_SELECTED_PATH_SENTINEL",
-    ):
+    for sentinel in ("PRIVATE_VERIFICATION_OBJECT_SENTINEL",):
         assert sentinel not in serialized
     assert all("state" not in item for item in baseline["static_process_topology"]["nodes"])
     assert all("state" not in item for item in baseline["static_process_topology"]["edges"])
@@ -672,6 +1150,8 @@ def test_final_audit_payload_ignores_applied_answers_but_tracks_prior_contributi
     }
     assert "contribution_candidates" not in baseline
     assert "relied_on_contribution_ids" not in serialized
+    assert "source_reference_registry" not in baseline
+    assert "excerpt" not in serialized
 
     unreferenced = json.loads(json.dumps(state))
     unreferenced["source_registry"].append(
@@ -1569,7 +2049,19 @@ def test_specialist_requires_strict_accepted_majority_and_never_caches_minority(
                 private_contract_hash="1" * 64,
             )
     assert calls == 2
-    assert [item["outcome"] for item in storage.model_calls()] == ["failed", "failed"]
+    ledger = storage.model_calls()
+    assert [item["outcome"] for item in ledger] == ["failed", "failed"]
+    assert all(item["accepted_item_ids"] == ["accepted"] for item in ledger)
+    assert all(
+        item["rejected_items"]
+        == [{"item_id": "rejected", "invariant": "bounded"}]
+        for item in ledger
+    )
+    assert all(item["accepted_item_count"] == 1 for item in ledger)
+    assert all(item["rejected_item_count"] == 1 for item in ledger)
+    assert all("canonical_output" not in item for item in ledger)
+    assert all("deterministic_fallback_applied" not in item for item in ledger)
+    assert all(storage.cached_model_output(item["cache_key"]) is None for item in ledger)
 
 
 @pytest.mark.parametrize("value", [1.0, -0.0, 1e-7, float("inf"), float("nan")])
@@ -1583,12 +2075,12 @@ def test_evidence_role_reserves_large_answer_headroom(tmp_path: Path):
         orchestrator,
         _storage,
         _captures,
-        _responses,
+        responses,
         package,
         canonicalization,
         result,
     ) = graph_fixture(tmp_path)
-    audit = orchestrator.invoke(
+    orchestrator.invoke(
         run_id="run-size-test",
         orchestration_id="orch-size-test",
         observable_package=package,
@@ -1598,7 +2090,7 @@ def test_evidence_role_reserves_large_answer_headroom(tmp_path: Path):
         checklist=result["checklist"],
         verification=result["verification"],
     )
-    proposals = audit["specialist_artifacts"]["evidence_checklist"]["items"]
+    proposals = responses["evidence_checklist"]["proposals"]
     assert len(proposals) == len(result["checklist"]["items"]) == 21
     conservative_tokens = (
         len(json.dumps({"proposals": proposals}, separators=(",", ":")).encode()) + 2
@@ -1759,13 +2251,15 @@ def test_model_fact_priority_changes_derived_downstream_order_without_losing_cov
         payload = _evidence_provider_payload(
             {
                 "orchestrator_plan": plan,
+                "source_integrity": {"artifacts": []},
+                "process": result["process"],
                 "checklist": result["checklist"],
                 "facts": result["facts"],
                 "source_registry": registry,
                 "observable_package": package,
             }
         )
-        return [item["fact_id"] for item in payload["fact_handoff"]]
+        return [item["fact_id"] for item in payload["canonical_fact_handoff"]]
 
     assert evidence_order(forward) != evidence_order(reverse)
 
@@ -1879,6 +2373,50 @@ def test_orchestrator_plan_accepts_completion_above_legacy_ceiling_with_exact_ne
     assert len(ledger) == 1
     assert ledger[0]["call_count"] == 1
     assert ledger[0]["outcome"] == "succeeded"
+
+
+def test_multi_agent_version_bump_invalidates_success_cache(
+    tmp_path: Path, monkeypatch
+):
+    provider_calls = 0
+
+    class Runnable:
+        def invoke(self, *_args, **_kwargs):
+            nonlocal provider_calls
+            provider_calls += 1
+            return _plan_envelope(
+                usage={
+                    "prompt_tokens": 20,
+                    "completion_tokens": 10,
+                    "total_tokens": 30,
+                    "cost": 0.001,
+                }
+            )
+
+    storage = Storage(str(tmp_path / "versioned-cache.db"))
+    runner = InstrumentedStructuredAgent(
+        storage,
+        runnable_factory=lambda *_args: Runnable(),
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+
+    assert multi_agent_module.MULTI_AGENT_VERSION == "1.2.0"
+    assert multi_agent_module.MULTI_AGENT_SCHEMA_VERSION.endswith("/1.0.0")
+    first = _invoke_plan(runner, run_id="run-version-cache-first")
+    cached = _invoke_plan(runner, run_id="run-version-cache-hit")
+    assert first["cache_hit"] is False
+    assert cached["cache_hit"] is True
+    assert provider_calls == 1
+
+    monkeypatch.setattr(
+        multi_agent_module,
+        "MULTI_AGENT_VERSION",
+        "1.2.0-test-cache-invalidation",
+    )
+    invalidated = _invoke_plan(runner, run_id="run-version-cache-invalidated")
+    assert invalidated["cache_hit"] is False
+    assert invalidated["cache_key"] != first["cache_key"]
+    assert provider_calls == 2
 
 
 @pytest.mark.parametrize(
