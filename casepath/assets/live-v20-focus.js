@@ -62,6 +62,35 @@
     failure: { stage: 'understand', title: 'The run stopped safely', context: 'No unsupported result was applied', authority: 'Fail-closed safety boundary', output: 'No artifact produced' },
   };
 
+  const CURSOR_ACTIONS = {
+    opening: 'Opening the customer message and original attachments',
+    read: 'Reading the customer message and original attachments',
+    understand: 'Checking each claim fact against its source',
+    research: 'Linking official passages to handling questions',
+    process: 'Mapping the unresolved causation branch',
+    evidence: 'Attaching evidence to the decisions it can resolve',
+    experience: 'Ranking references at the difficult branch',
+    verify: 'Testing grounding, graph integrity and evidence links',
+    ready: 'Preparing the verified playbook for review',
+    review: 'Waiting for the simulated review decision',
+    'review-applied': 'Applying the correction across the process',
+    knowledge: 'Quarantining unverified learning safely',
+    'later-work': 'Comparing the held-out claim with frozen guidance',
+    'later-result': 'Verifying the receipt-bound learning effect',
+    failure: 'Preserving the last supported state',
+  };
+
+  const PLAIN_AUTHORITIES = {
+    opening: 'CasePath source parser', read: 'CasePath source parser',
+    understand: 'Nemotron + CasePath validation', research: 'Versioned source registry · legal review pending',
+    process: 'Nemotron + process checks', evidence: 'Nemotron + evidence checks',
+    experience: 'CasePath reference ranking', verify: 'Nemotron + safety checks',
+    ready: 'CasePath safety checks', review: 'Simulated review',
+    'review-applied': 'CasePath review transform', knowledge: 'CasePath governance',
+    'later-work': 'Deterministic comparison', 'later-result': 'Deterministic comparison',
+    failure: 'Fail-closed safety boundary',
+  };
+
   let queued = false;
   let lastMoment = '';
 
@@ -127,6 +156,14 @@
     start.dataset.v20Ready = 'true';
   }
 
+  function normalizeSourceRail() {
+    const pane = $('.submission-pane');
+    if (!pane) return;
+    pane.dataset.v21SourceRail = 'true';
+    const label = pane.querySelector('.submission-head .quiet-label');
+    if (label && label.textContent !== 'Customer claim') label.textContent = 'Customer claim';
+  }
+
   function ensureFlagshipFocus(canvas, moment) {
     const live = $('#liveWorkspace');
     const focus = FLAGSHIP_FOCUS[moment] || FLAGSHIP_FOCUS.opening;
@@ -139,23 +176,83 @@
       surface.setAttribute('aria-live', 'polite');
       live.insertBefore(surface, canvas);
     }
-    const signature = `${moment}:${focus.stage}`;
+    const action = CURSOR_ACTIONS[moment] || CURSOR_ACTIONS.opening;
+    const plainAuthority = PLAIN_AUTHORITIES[moment] || PLAIN_AUTHORITIES.opening;
+    const proof = $('#orchestrationProof');
+    const currentEvent = proof ? {
+      eventId: proof.dataset.currentEventId || '', stage: proof.dataset.currentStage || '',
+      actorType: proof.dataset.currentActorType || '', actorId: proof.dataset.currentActorId || '',
+      callId: proof.dataset.currentCallId || '', status: proof.dataset.currentStatus || '',
+      outputArtifact: proof.dataset.currentOutputArtifact || '', headline: proof.dataset.currentHeadline || '',
+    } : {};
+    const eventMoment = currentEvent.stage === 'orchestrator' ? 'opening' : currentEvent.stage === 'complete' ? 'ready' : currentEvent.stage;
+    const eventIsCurrent = Boolean(currentEvent.eventId && eventMoment === moment);
+    if (!eventIsCurrent) Object.keys(currentEvent).forEach(key => { currentEvent[key] = ''; });
+    const liveAction = currentEvent.headline || action;
+    const liveAuthority = currentEvent.actorType === 'nemotron_agent'
+      ? 'Nemotron specialist'
+      : currentEvent.actorType === 'deterministic_gate'
+        ? 'CasePath safety check'
+        : currentEvent.actorType === 'deterministic_tool'
+          ? 'CasePath deterministic tool'
+          : plainAuthority;
+    const signature = `${moment}:${focus.stage}:${action}:${currentEvent.eventId}:${currentEvent.status}`;
     if (surface.dataset.signature === signature) return;
     const activeIndex = FLAGSHIP_STAGES.findIndex(stage => stage.id === focus.stage);
     const role = FLAGSHIP_STAGES[activeIndex] || FLAGSHIP_STAGES[0];
     surface.dataset.signature = signature;
     surface.dataset.casepathSpecialist = role.id;
     surface.dataset.workAuthority = focus.authority;
+    surface.dataset.casepathAction = action;
     surface.innerHTML = `
-      <div class="v21-focus-copy">
-        <small>Workflow specialist · ${esc(role.label)}</small>
-        <h2>${esc(focus.title)}</h2>
-        <p>${esc(focus.context)}</p>
-        <div class="v21-focus-proof"><span>${esc(focus.authority)}</span><strong>Produced · ${esc(focus.output)}</strong></div>
+      <div class="v21-focus-inner">
+        <p class="v21-stage-position"><i aria-hidden="true"></i><span>${activeIndex + 1} of ${FLAGSHIP_STAGES.length} · ${esc(role.label.replace(' Agent', ''))}</span></p>
+        <div class="v21-focus-copy">
+          <h2>${esc(role.label)}</h2>
+          <p>${esc(focus.title)}</p>
+          <div class="v21-agent-cursor" id="v21AgentCursor" role="status" data-action="${esc(liveAction)}" data-casepath-moment="${esc(moment)}" data-casepath-specialist="${esc(role.id)}" data-work-authority="${esc(liveAuthority)}" data-event-id="${esc(currentEvent.eventId)}" data-event-stage="${esc(currentEvent.stage)}" data-actor-type="${esc(currentEvent.actorType)}" data-actor-id="${esc(currentEvent.actorId)}" data-call-id="${esc(currentEvent.callId)}" data-event-status="${esc(currentEvent.status)}" data-output-artifact="${esc(currentEvent.outputArtifact)}">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.8v14.5l3.7-3.3 2.7 5.2 2.5-1.3-2.7-5.1 4.9-.7L5 3.8Z"/></svg>
+            <span>${esc(liveAction)}</span>
+            <small>${esc(liveAuthority)}</small>
+          </div>
+        </div>
+        <div class="v21-focus-artifact"><span>Emerging artifact</span><strong>${esc(focus.output)}</strong></div>
       </div>
-      <ol class="v21-stage-rail" aria-label="Seven coordinated specialist stages">
-        ${FLAGSHIP_STAGES.map((stage, index) => `<li data-stage="${esc(stage.id)}" data-state="${index < activeIndex ? 'complete' : index === activeIndex ? 'active' : 'next'}"><i>${index < activeIndex ? '✓' : index + 1}</i><span>${esc(stage.label.replace(' Agent', ''))}</span></li>`).join('')}
-      </ol>`;
+    `;
+    positionAgentCursor(surface, canvas, moment);
+  }
+
+  function cursorTarget(canvas, moment) {
+    const selectors = {
+      opening: '.live-question,.event-row:last-child', read: '.event-row:last-child,.attachment-row:last-child',
+      understand: '.fact-row:last-child,.event-row:last-child', research: '.law-query:last-child,.law-card:last-child',
+      process: '.process-node.current .process-node-button,.process-node-button[aria-current="step"],.process-node-button:last-child',
+      evidence: '.decision-inspector .inspector-row:last-of-type,.v17-checklist-item:last-child',
+      experience: '.precedent-mini:first-of-type,.precedent-inline', verify: '.verification-row:last-child,.gate-receipt:last-child',
+      ready: '.v20-final-handoff,.process-node.current', review: '.review-choice:has(input:checked),.review-choice:first-of-type',
+      'review-applied': '.review-applied-delta,.review-applied', knowledge: '.v20-learning-summary',
+      'later-work': '#laterResult', 'later-result': '.before-after section:last-child,.v18-reuse-proof', failure: '.failure-state',
+    };
+    return canvas.querySelector(selectors[moment] || selectors.opening) || canvas.querySelector('.stage-shell');
+  }
+
+  function positionAgentCursor(surface, canvas, moment) {
+    const cursor = $('#v21AgentCursor', surface);
+    const target = cursorTarget(canvas, moment);
+    if (!cursor || !target) return;
+    requestAnimationFrame(() => {
+      if (!cursor.isConnected || !target.isConnected) return;
+      const surfaceBox = surface.getBoundingClientRect();
+      const targetBox = target.getBoundingClientRect();
+      const x = Math.max(18, Math.min(surfaceBox.width - 330, targetBox.right - surfaceBox.left - 300));
+      const y = Math.max(145, targetBox.top - surfaceBox.top + Math.min(24, targetBox.height * .35));
+      cursor.style.setProperty('--cursor-x', `${Math.round(x)}px`);
+      cursor.style.setProperty('--cursor-y', `${Math.round(y)}px`);
+      cursor.classList.remove('is-clicking');
+      requestAnimationFrame(() => cursor.classList.add('is-clicking'));
+      target.classList.add('v21-agent-target');
+      window.setTimeout(() => target.classList.remove('v21-agent-target'), 900);
+    });
   }
 
   function directInspectorCopy(canvas) {
@@ -290,6 +387,7 @@
 
   function enhance() {
     normalizeStart();
+    normalizeSourceRail();
     updateClaimReadiness();
     const canvas = $('#stageCanvas');
     const moment = currentMoment();
@@ -302,6 +400,7 @@
     focusReview(canvas);
     focusKnowledge(canvas);
     focusLater(canvas);
+    positionAgentCursor($('#v21AgentFocus'), canvas, moment);
   }
 
   function queueEnhance() {

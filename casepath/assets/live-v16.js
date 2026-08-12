@@ -393,6 +393,15 @@
     proof.classList.toggle('is-artifact-dominant', graphAccepted);
     proof.classList.toggle('is-run-ready', runReady);
     proof.dataset.proofActorType = actorEvent ? eventKind(actorEvent) : '';
+    const currentEvent = events.at(-1) || null;
+    proof.dataset.currentEventId = returnedValue(currentEvent, 'event_id');
+    proof.dataset.currentStage = currentEvent?.stage || '';
+    proof.dataset.currentActorType = currentEvent ? eventKind(currentEvent) : '';
+    proof.dataset.currentActorId = returnedValue(currentEvent, 'actor_id', 'agent_id', 'agent', 'gate_id');
+    proof.dataset.currentCallId = returnedValue(currentEvent, 'call_id');
+    proof.dataset.currentStatus = eventState(currentEvent);
+    proof.dataset.currentOutputArtifact = eventArtifacts(currentEvent).join(', ');
+    proof.dataset.currentHeadline = returnedValue(currentEvent, 'headline', 'result_summary', 'safe_summary', 'detail');
     proof.innerHTML = `<h2 class="visually-hidden" id="orchestrationProofTitle">Returned agent activity and deterministic proof</h2>${renderActorCard(actorEvent)}<div class="orchestration-receipts">${renderHandoffReceipt(handoffEvent)}${renderGateReceipt(gateEvent)}</div>${runReady ? renderReturnedTeamSummary(events) : ''}${renderTeamTrace(events, traceOpen)}<p class="orchestration-boundary">Generated fictional claim · no coverage or legal decision · legal interpretations remain unapproved · simulated review is not expert approval · candidate knowledge remains quarantined pending qualified support, tests, and approval.</p>`;
     document.body.dataset.orchestrationProof = 'true';
   }
@@ -1793,7 +1802,7 @@
         if (state.journey === 'later') state.laterRun = run; else state.run = run;
       } catch (_) {}
     }
-    $('#auditContent').innerHTML = (run.events || []).map(event => {
+    const eventMarkup = (run.events || []).map(event => {
       const kind = eventKind(event);
       const isModelEvent = kind === 'nemotron_agent' || kind === 'legacy_model_event';
       const field = (label, value) => value ? `<dt>${esc(label)}</dt><dd>${esc(value)}</dd>` : '';
@@ -1802,6 +1811,17 @@
       const outputs = eventArtifacts(event).join(', ');
       return `<details class="audit-event" ${event.stage === state.activeStage ? 'open' : ''} data-actor-type="${esc(kind)}" data-call-id="${esc(returnedValue(event, 'call_id'))}" data-delegation-id="${esc(returnedValue(event, 'delegation_id'))}"><summary><span></span><div><strong>${esc(event.label)}</strong><span>${esc(event.headline || '')}</span></div><span>${esc(event.status || '')}</span></summary><div class="audit-event-body"><p>${esc(event.detail || '')}</p><dl class="audit-grid">${field('Actor contract', actorType || `Not returned — ${actorKindLabel(kind)}`)}${field('Returned actor', returnedActorName(event))}${field('Implementation', returnedValue(event, 'implementation'))}${isModelEvent ? field('Requested model', returnedValue(event, 'requested_model', 'model')) : ''}${isModelEvent ? field('Response model', returnedValue(event, 'response_model')) : ''}${field('Call ID', returnedValue(event, 'call_id'))}${field('Delegation ID', returnedValue(event, 'delegation_id'))}${field('Cache origin call', returnedValue(event, 'cache_origin_call_id', 'origin_call_id'))}${field('Prompt version', returnedValue(event, 'prompt_version'))}${field('Validator', returnedValue(event, 'gate_id', 'validator'))}${field('Input artifact', inputs)}${field('Input hash', returnedValue(event, 'input_artifact_hash', 'input_hash'))}${field('Output artifact', outputs)}${field('Output hash', returnedValue(event, 'output_artifact_hash', 'output_hash', 'artifact_hash'))}${field('Handoff from', returnedValue(event, 'handoff_from'))}${field('Handoff to', returnedValue(event, 'handoff_to'))}</dl></div></details>`;
     }).join('');
+    const auditContent = $('#auditContent');
+    const proof = $('#orchestrationProof');
+    const eventList = document.createElement('section');
+    eventList.className = 'audit-event-list';
+    eventList.innerHTML = eventMarkup;
+    auditContent.replaceChildren();
+    if (proof) {
+      proof.classList.add('v21-audit-proof');
+      auditContent.append(proof);
+    }
+    auditContent.append(eventList);
     $('#auditDrawer').showModal();
   }
 
