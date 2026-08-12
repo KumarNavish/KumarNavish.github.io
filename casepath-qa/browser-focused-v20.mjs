@@ -84,6 +84,21 @@ const EXPECTED_RUNTIME = Object.freeze({
   implementation: 'langgraph_stategraph_langchain_openrouter',
   orchestration_schema: 'casepath.nemotron-agent-dag/1.0.0',
 });
+const DETERMINISTIC_REFERENCE_MODE = 'deterministic_reference';
+const DETERMINISTIC_REFERENCE_PROFILE = 'deterministic-reference-playbook';
+const DETERMINISTIC_REFERENCE_ORCHESTRATION = Object.freeze({
+  executed: false,
+  authority_mode: DETERMINISTIC_REFERENCE_MODE,
+  model: null,
+  external_tracing: false,
+  deterministic_safety_authority: true,
+});
+const DETERMINISTIC_REFERENCE_CANONICALIZATION = Object.freeze({
+  implementation: 'deterministic_reference_oracle',
+  model: null,
+  provider: null,
+  mode: DETERMINISTIC_REFERENCE_MODE,
+});
 const EXPECTED_EXECUTION_TOPOLOGY = Object.freeze({
   authority: 'deterministic_application',
   implementation: 'compiled_langgraph_stategraph',
@@ -99,6 +114,7 @@ const SUCCESSFUL_MODEL_OUTCOMES = new Set(['succeeded', 'succeeded_with_guarded_
 const SHA256_PATTERN = /^[0-9a-f]{64}$/i;
 const LOCAL_RUN_TIMEOUT_MS = 180000;
 const PRODUCTION_RUN_TIMEOUT_MS = 15 * 60 * 1000;
+const LATER_TERMINAL_POLL_INTERVAL_MS = 1000;
 const AXE_ANIMATION_SETTLE_TIMEOUT_MS = 2500;
 const FORBIDDEN_PUBLIC_FIELDS = new Set([
   'prompt',
@@ -171,6 +187,12 @@ const PROVIDER_PROVENANCE_FIELDS = new Set(['response_id', 'response_model', 'up
 const EXPECTED_RUNTIME_ACCEPTANCE_CRITERIA = Object.freeze({
   required_mode: 'openrouter_nemotron',
   required_model: REQUESTED_NEMOTRON_MODEL,
+  model_acceptance_scope: 'visible_browser_flagship',
+  learning_comparison_authority: 'deterministic_application_tool',
+  requires_learning_comparison_zero_model_activity: true,
+  required_final_model_ledger_records: 12,
+  required_final_model_network_calls: 6,
+  required_final_cache_hits: 6,
   required_provider_max_in_flight: 1,
   required_runtime_profile: EXPECTED_RUNTIME.runtime_profile,
   requires_successful_call_binding: true,
@@ -190,7 +212,7 @@ const EXPECTED_RUNTIME_ACCEPTANCE_CRITERIA = Object.freeze({
   requires_learning_replay_proof: true,
 });
 const EXPECTED_FAILED_MODEL_ATTEMPT_RECORDS = Object.freeze(
-  Array.from({ length: 23 }, (_, index) => `casepath/releases/model-validation-attempt-20260811-${String(index + 1).padStart(2, '0')}.json`),
+  Array.from({ length: 24 }, (_, index) => `casepath/releases/model-validation-attempt-20260811-${String(index + 1).padStart(2, '0')}.json`),
 );
 const EXPECTED_PRODUCTION_OPENING_BOUNDARY = 'Application code opened the shared context; no model call is claimed for this setup step. The call-bound Nemotron plan appears only when its returned event arrives.';
 const QA_DIRECTORY = path.resolve(fileURLToPath(new URL('.', import.meta.url)));
@@ -1345,6 +1367,24 @@ function initialLedgerAdmissionViolations(ledger) {
   return issues;
 }
 
+function finalLedgerSnapshotViolations(isolationLedger, finalLedger) {
+  const issues = [];
+  if (stableJson(finalLedger) !== stableJson(isolationLedger)) {
+    issues.push('final ledger changed after the flagship warm replay');
+  }
+  const summary = finalLedger?.summary;
+  if (!Array.isArray(finalLedger?.items)
+    || finalLedger.items.length !== 12
+    || summary?.records !== 12
+    || summary?.network_calls !== 6
+    || summary?.outcomes?.cache_hit !== 6
+    || summary?.unknown_cost_call_count !== 0
+    || summary?.actual_cost_complete !== true) {
+    issues.push('final ledger is not exact cold6 plus warm6 accounting');
+  }
+  return issues;
+}
+
 function sanitizedLedgerViolations(ledger) {
   const issues = [];
   if (ledger?.scope !== 'global_budget_ledger' || !Array.isArray(ledger?.items)) return ['global sanitized ledger is absent'];
@@ -1539,12 +1579,58 @@ function reviewTransformContractViolations(reviewed, persistedRun, preReviewRun)
   return issues;
 }
 
-function isNemotronRun(run) {
-  const audit = orchestrationAudit(run);
-  return audit?.implementation === EXPECTED_RUNTIME.implementation
-    && audit?.model === REQUESTED_NEMOTRON_MODEL
-    && exactMembers(audit?.agents?.map(item => item.agent_id), REQUIRED_NEMOTRON_AGENT_IDS)
-    && exactMembers(audit?.deterministic_gates?.map(item => item.agent_id), REQUIRED_DETERMINISTIC_GATE_IDS);
+function deterministicReferenceRunViolations(run, knowledgeMode) {
+  const issues = [];
+  const result = run?.result;
+  const resultAudit = result?.audit;
+  if (run?.status !== 'complete'
+    || run?.claim_id !== 'DEMO-MOULD-002'
+    || run?.knowledge_mode !== knowledgeMode
+    || run?.model_mode !== DETERMINISTIC_REFERENCE_MODE
+    || run?.model != null
+    || run?.profile !== DETERMINISTIC_REFERENCE_PROFILE) issues.push('top-level deterministic-reference identity is invalid');
+  if (!nonemptyString(run?.run_id)) issues.push('run_id is absent');
+  if (stableJson(run?.agent_orchestration) !== stableJson(DETERMINISTIC_REFERENCE_ORCHESTRATION)
+    || stableJson(result?.agent_orchestration) !== stableJson(DETERMINISTIC_REFERENCE_ORCHESTRATION)
+    || stableJson(resultAudit?.agent_orchestration) !== stableJson(DETERMINISTIC_REFERENCE_ORCHESTRATION)) issues.push('deterministic non-executed orchestration binding is not exact');
+  if (resultAudit?.profile !== DETERMINISTIC_REFERENCE_PROFILE
+    || resultAudit?.authority_mode !== DETERMINISTIC_REFERENCE_MODE
+    || stableJson(resultAudit?.canonicalization) !== stableJson(DETERMINISTIC_REFERENCE_CANONICALIZATION)) issues.push('deterministic-reference canonicalization authority is not explicit');
+  if (result?.next_action?.agent_brief_contribution !== null) issues.push('deterministic comparison retained a model-authored final brief');
+  if (!Array.isArray(run?.events)) issues.push('deterministic event stream is absent');
+
+  const forbiddenActivityFields = new Set([
+    'agents', 'deterministic_gates', 'execution_topology', 'specialist_artifacts',
+    'final_claim_brief', 'agent_contribution', 'call_id', 'response_id',
+    'response_model', 'requested_model', 'generation_model', 'upstream_provider',
+    'provider_endpoint', 'cache_hit', 'call_count', 'origin_call_id', 'origin_usage',
+    'origin_finish_reason', 'usage_source', 'orchestration_id', 'delegation_id',
+    'parent_call_id', 'prompt_tokens', 'completion_tokens', 'total_tokens',
+    'estimated_cost_usd', 'actual_cost_usd', 'latency_ms',
+  ]);
+  const activityPaths = [];
+  const visit = (value, currentPath) => {
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => visit(item, `${currentPath}[${index}]`));
+      return;
+    }
+    if (!value || typeof value !== 'object') return;
+    for (const [key, child] of Object.entries(value)) {
+      const childPath = `${currentPath}.${key}`;
+      if (forbiddenActivityFields.has(key)
+        || (['model', 'provider'].includes(key) && child != null)
+        || (key === 'actor_type' && child === 'nemotron_agent')
+        || (key === 'implementation' && child === EXPECTED_RUNTIME.implementation)) activityPaths.push(childPath);
+      visit(child, childPath);
+    }
+  };
+  visit(run, '$');
+  if (activityPaths.length) issues.push(`model execution activity is present at ${activityPaths.join(', ')}`);
+  const sensitive = forbiddenFieldPaths(run);
+  if (sensitive.length) issues.push(`forbidden public fields are present at ${sensitive.join(', ')}`);
+  const sentinels = internalSentinelPaths(run);
+  if (sentinels.length) issues.push(`internal execution sentinels are present at ${sentinels.join(', ')}`);
+  return issues;
 }
 
 function productionOpeningContextViolations(captures) {
@@ -1711,6 +1797,38 @@ async function awaitRunForSession(runId, sessionId) {
 
 async function awaitRun(runId) {
   return awaitRunForSession(runId, QA_SESSION_ID);
+}
+
+function terminalRunFailureMessage(run) {
+  if (run?.status !== 'failed') return null;
+  const terminalIssues = terminalFailureContractViolations(run);
+  return terminalIssues.length
+    ? `run ${run.run_id || 'unknown'} failed public-safety contract: ${JSON.stringify(terminalIssues)}`
+    : `run ${run.run_id || 'unknown'} failed: ${JSON.stringify(runProgressDiagnostic(run))}`;
+}
+
+async function awaitLaterJourneyTerminalUi() {
+  const deadline = Date.now() + runTimeoutMs();
+  const latestRuns = new Map();
+  while (Date.now() < deadline) {
+    const ui = await page.evaluate(() => ({
+      moment: document.querySelector('#stageCanvas')?.dataset.casepathMoment || '',
+      next: document.querySelector('#journeyNext')?.textContent || '',
+    }));
+    if (ui.moment === 'failure') {
+      throw new Error('Later-claim comparison rendered the safe-failure boundary');
+    }
+    if (ui.moment === 'later-result' && /Restart the demo/i.test(ui.next)) return;
+
+    for (const runId of runIds.slice(1)) {
+      const run = await getJson(`${API}/api/runs/${encodeURIComponent(runId)}`);
+      latestRuns.set(runId, run);
+      const failure = terminalRunFailureMessage(run);
+      if (failure) throw new Error(failure);
+    }
+    await sleep(LATER_TERMINAL_POLL_INTERVAL_MS);
+  }
+  throw new Error(`Later-claim comparison timed out after ${runTimeoutMs()}ms: ${JSON.stringify([...latestRuns.values()].map(runProgressDiagnostic))}`);
 }
 
 async function waitJourneyUi(label, operation) {
@@ -2139,7 +2257,7 @@ async function execute() {
   check('Current QA destination is guarded by exact live API identity and an atomic hash-bound report/manifest attestation', loadedFlagshipSource.includes("const qaEvidenceBase = 'https://casepath-guided-canonical-qa.onrender.com'") && loadedFlagshipSource.includes('function releaseEvidenceAttested(') && loadedFlagshipSource.includes("fetch(`${apiBase}/healthz`") && loadedFlagshipSource.includes("api?.source_commit === commit") && loadedFlagshipSource.includes('reportIdentities.every(value => value === commit)') && loadedFlagshipSource.includes('report?.failed === 0') && loadedFlagshipSource.includes('manifest?.source_commit === commit') && loadedFlagshipSource.includes('report.evidence.manifest.sha256 === manifestBinding.sha256') && loadedFlagshipSource.includes('report.evidence.manifest.bytes === manifestBinding.bytes') && loadedFlagshipSource.includes('retainedEvidenceComplete(report, manifest)') && loadedFlagshipSource.includes("link.dataset.evidenceState = 'attested'"));
   check('Loaded release contains no false reviewed-v4 lifecycle claim', !falseReviewedV4Claim.test(loadedFlagshipSource));
   check('Loaded release contains no false image-extraction, model-legal, or live-retrieval authority copy', !falseGroundingAuthority.test(loadedFlagshipSource));
-  check('Loaded release truthfully defines a post-learning held-out comparison without calling the fixture unseen', !falseHeldOutNovelty.test(loadedFlagshipSource) && /held-out later demo claim/i.test(loadedFlagshipSource) && /excluded from the simulated review and memory construction/i.test(loadedFlagshipSource) && /after learning was frozen/i.test(loadedFlagshipSource));
+  check('Loaded release truthfully defines a deterministic post-learning held-out comparison without calling the fixture unseen or claiming another model run', !falseHeldOutNovelty.test(loadedFlagshipSource) && /held-out later demo claim/i.test(loadedFlagshipSource) && /excluded from the simulated review and memory construction/i.test(loadedFlagshipSource) && /after learning was frozen/i.test(loadedFlagshipSource) && /flagship above is the live six-agent nemotron analysis/i.test(loadedFlagshipSource) && /deterministic application layer/i.test(loadedFlagshipSource) && /without another model run/i.test(loadedFlagshipSource));
   const evidenceControl = await page.locator('#browserEvidenceLink').evaluate(node => ({
     tag: node.tagName,
     state: node.dataset.evidenceState,
@@ -2691,8 +2809,7 @@ async function execute() {
 
   await page.locator('#journeyNext').click();
   await waitJourneyUi('Later-claim comparison did not reach its terminal UI state', async () => {
-    await waitText('#journeyNext', /Restart the demo/i, runTimeoutMs());
-    await waitVisible('body[data-casepath-moment="later-result"]', runTimeoutMs());
+    await awaitLaterJourneyTerminalUi();
   });
   const proof = await waitForValue(() => proofResponse, runTimeoutMs());
   retainedEvidence['learning-proof'] = proof;
@@ -2703,7 +2820,9 @@ async function execute() {
   retainedEvidence['later-baseline-run'] = baseline;
   retainedEvidence['later-after-memory-run'] = later;
   if (!isLocal(BASE) || !isLocal(API)) {
-    check('Both later-claim comparisons retain the same bounded Nemotron contract', isNemotronRun(baseline) && isNemotronRun(later), JSON.stringify({ baseline: baseline.result?.audit?.canonicalization, later: later.result?.audit?.canonicalization }));
+    const baselineReferenceIssues = deterministicReferenceRunViolations(baseline, 'baseline');
+    const laterReferenceIssues = deterministicReferenceRunViolations(later, 'current');
+    check('Held-out baseline and current comparisons explicitly disclose deterministic-reference authority with no executed model DAG or call activity', baselineReferenceIssues.length === 0 && laterReferenceIssues.length === 0, JSON.stringify({ baseline: baselineReferenceIssues, later: laterReferenceIssues }));
   }
   for (const [label, run, claim] of [['baseline', baseline, laterClaim], ['later', later, laterClaim]]) {
     const relationIssues = evidenceRelationContractViolations(run.result?.process, run.result?.checklist);
@@ -2811,10 +2930,11 @@ async function execute() {
   const ledgerIssues = sanitizedLedgerViolations(modelLedger);
   check('Public model ledger is sanitized and retains no prompt, raw output, reasoning, or canonical-output payload', ledgerIssues.length === 0, JSON.stringify(ledgerIssues));
   const successfulNetworkCalls = modelLedger.items.filter(item => SUCCESSFUL_MODEL_OUTCOMES.has(item.outcome) && item.call_count === 1 && item.provider_endpoint === 'https://openrouter.ai/api/v1/chat/completions');
-  check('Successful network calls retain an exact unnormalized Nemotron alias or dated response identity and usage provenance', successfulNetworkCalls.every(item => item.provider === 'openrouter' && item.model === REQUESTED_NEMOTRON_MODEL && EXACT_NEMOTRON_RESPONSE_MODELS.has(item.response_model) && ALLOWED_USAGE_SOURCES.has(item.usage_source)), JSON.stringify(successfulNetworkCalls));
+  check('Successful network calls retain an exact unnormalized Nemotron alias or dated response identity and usage provenance', successfulNetworkCalls.every(item => item.provider === 'openrouter' && item.model === REQUESTED_NEMOTRON_MODEL && EXACT_NEMOTRON_RESPONSE_MODELS.has(item.response_model) && ALLOWED_USAGE_SOURCES.has(item.usage_source)) && (!isProductionJourney() || successfulNetworkCalls.length === REQUIRED_NEMOTRON_AGENT_IDS.length), JSON.stringify(successfulNetworkCalls));
   if (isProductionJourney()) {
     const finalColdIssues = coldLedgerContractViolations(coldOrchestration, modelLedger);
-    check('Final ledger still contains all six immutable visible-flagship cold-call acceptance records', finalColdIssues.length === 0, JSON.stringify(finalColdIssues));
+    const finalSnapshotIssues = finalLedgerSnapshotViolations(isolationLedger, modelLedger);
+    check('Final ledger is the immutable 12-row flagship cold6 plus warm6 snapshot with no held-out model activity', finalColdIssues.length === 0 && finalSnapshotIssues.length === 0, JSON.stringify({ finalColdIssues, finalSnapshotIssues, finalSummary: modelLedger.summary, isolationSummary: isolationLedger.summary }));
     const warmLineage = warmLineageContractViolations(coldOrchestration, warmOrchestration, modelLedger);
     check('Post-flagship isolation replay made zero provider calls and binds every cache record to its visible cold origin', warmLineage.issues.length === 0 && warmLineage.lineage.length === REQUIRED_NEMOTRON_AGENT_IDS.length, JSON.stringify(warmLineage));
     retainedEvidence['flagship-cache-lineage'] = {
@@ -3788,6 +3908,42 @@ async function runContractSelfTest() {
   const warmOnlyLedger = mockLedgerForRun(warmRun, 'warm', coldLedger);
   const combinedItems = [...coldLedger.items, ...warmOnlyLedger.items];
   const combinedLedger = { ...coldLedger, items: combinedItems, summary: ledgerSummary(combinedItems) };
+  const referenceRun = {
+    run_id: 'deterministic_reference_run',
+    claim_id: 'DEMO-MOULD-002',
+    status: 'complete',
+    profile: DETERMINISTIC_REFERENCE_PROFILE,
+    model_mode: DETERMINISTIC_REFERENCE_MODE,
+    model: null,
+    knowledge_mode: 'current',
+    agent_orchestration: structuredClone(DETERMINISTIC_REFERENCE_ORCHESTRATION),
+    events: [{ stage: 'orchestrator', actor_type: 'deterministic_tool', status: 'completed', implementation: 'deterministic_application_tool', model: null }],
+    result: {
+      next_action: { agent_brief_contribution: null },
+      agent_orchestration: structuredClone(DETERMINISTIC_REFERENCE_ORCHESTRATION),
+      audit: {
+        profile: DETERMINISTIC_REFERENCE_PROFILE,
+        authority_mode: DETERMINISTIC_REFERENCE_MODE,
+        canonicalization: structuredClone(DETERMINISTIC_REFERENCE_CANONICALIZATION),
+        agent_orchestration: structuredClone(DETERMINISTIC_REFERENCE_ORCHESTRATION),
+      },
+    },
+  };
+  if (deterministicReferenceRunViolations(referenceRun, 'current').length) throw new Error('Positive deterministic-reference held-out fixture failed');
+  const modelActiveReference = structuredClone(referenceRun);
+  modelActiveReference.events.push({ stage: 'agent_orchestration', actor_type: 'nemotron_agent', model: REQUESTED_NEMOTRON_MODEL, call_id: 'forbidden_later_call', call_count: 1 });
+  if (!deterministicReferenceRunViolations(modelActiveReference, 'current').some(item => item.includes('model execution activity'))) throw new Error('Held-out model-activity fixture was not rejected');
+  const executedReference = structuredClone(referenceRun);
+  const executedDag = { ...structuredClone(DETERMINISTIC_REFERENCE_ORCHESTRATION), executed: true, agents: [] };
+  executedReference.agent_orchestration = structuredClone(executedDag);
+  executedReference.result.agent_orchestration = structuredClone(executedDag);
+  executedReference.result.audit.agent_orchestration = structuredClone(executedDag);
+  if (!deterministicReferenceRunViolations(executedReference, 'current').some(item => item.includes('non-executed orchestration'))) throw new Error('Held-out executed-DAG fixture was not rejected');
+  if (finalLedgerSnapshotViolations(combinedLedger, structuredClone(combinedLedger)).length) throw new Error('Positive immutable 12-row final-ledger fixture failed');
+  const thirteenthRowLedger = structuredClone(combinedLedger);
+  thirteenthRowLedger.items.push({ ...structuredClone(thirteenthRowLedger.items.at(-1)), call_id: 'forbidden_thirteenth_row' });
+  thirteenthRowLedger.summary = ledgerSummary(thirteenthRowLedger.items);
+  if (!finalLedgerSnapshotViolations(combinedLedger, thirteenthRowLedger).length) throw new Error('Thirteenth final-ledger row fixture was not rejected');
   const emptyInitialLedger = { scope: 'global_budget_ledger', items: [], summary: ledgerSummary([]) };
   if (initialLedgerAdmissionViolations(emptyInitialLedger).length) throw new Error('Exact-empty initial ledger fixture was rejected');
   if (!initialLedgerAdmissionViolations(coldLedger).some(item => item.includes('not exactly empty'))) throw new Error('Stale initial ledger fixture was not rejected');
@@ -4054,6 +4210,10 @@ async function runContractSelfTest() {
   };
   const safeFailureIssues = terminalFailureContractViolations(safeTerminalFailure);
   if (safeFailureIssues.length) throw new Error(`Safe terminal-failure fixture failed: ${JSON.stringify(safeFailureIssues)}`);
+  const terminalFailureMessage = terminalRunFailureMessage(safeTerminalFailure);
+  if (!terminalFailureMessage?.includes('safe_failed_run failed:')
+    || terminalFailureMessage.includes('provider_invocation')
+    || LATER_TERMINAL_POLL_INTERVAL_MS >= 5000) throw new Error('Later-journey terminal failure does not exit promptly with bounded diagnostics');
   const providerConcurrencyFailure = structuredClone(safeTerminalFailure);
   const providerConcurrencyReceipt = providerConcurrencyFailure.events.find(item => item.receipt_type === 'agent_failed');
   Object.assign(providerConcurrencyReceipt, {

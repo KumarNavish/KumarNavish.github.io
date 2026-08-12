@@ -129,6 +129,12 @@
       },
       "required_mode": "openrouter_nemotron",
       "required_model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "model_acceptance_scope": "visible_browser_flagship",
+      "learning_comparison_authority": "deterministic_application_tool",
+      "requires_learning_comparison_zero_model_activity": true,
+      "required_final_model_ledger_records": 12,
+      "required_final_model_network_calls": 6,
+      "required_final_cache_hits": 6,
       "required_provider_max_in_flight": 1,
       "required_runtime_profile": "nemotron_langgraph_multi_agent_hybrid_guarded",
       "requires_successful_call_binding": true,
@@ -172,7 +178,8 @@
         "casepath/releases/model-validation-attempt-20260811-20.json",
         "casepath/releases/model-validation-attempt-20260811-21.json",
         "casepath/releases/model-validation-attempt-20260811-22.json",
-        "casepath/releases/model-validation-attempt-20260811-23.json"
+        "casepath/releases/model-validation-attempt-20260811-23.json",
+        "casepath/releases/model-validation-attempt-20260811-24.json"
       ],
       "establishes_current_runtime_acceptance": false
     },

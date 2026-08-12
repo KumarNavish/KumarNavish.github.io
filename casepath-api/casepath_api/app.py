@@ -14,6 +14,7 @@ from . import __version__
 from .data import ARTIFACTS, CLAIMS, DEMO_CLAIM, LATER_CLAIM, public_artifact, public_claim
 from .canonicalizer import (
     MODEL_MODE_OPENROUTER,
+    MODEL_MODE_REFERENCE,
     OPENROUTER_MODEL,
     OPENROUTER_PROVIDER,
     cumulative_usd_cap,
@@ -48,11 +49,21 @@ from .langchain_runtime import (
 
 storage = Storage()
 pipeline = ClaimPipeline(storage)
+# The public flagship remains the configured runtime. The fixed held-out fixture
+# is a deterministic causal-comparison surface: routing it here by its exact
+# server-owned claim identity prevents a client-supplied knowledge mode from
+# activating another paid inference DAG.
+held_out_pipeline = ClaimPipeline(storage, model_mode=MODEL_MODE_REFERENCE)
 DEFAULT_RELEASE_ID = "casepath-v20-reference-20260811"
 FRONTEND_CONTRACT = "focused-claim-workspace-v20"
 SESSION_HEADER = "X-CasePath-Session"
 SESSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$")
 COMMIT_PATTERN = re.compile(r"^[0-9a-fA-F]{40}$")
+
+
+def run_pipeline_for_claim(claim_id: str) -> ClaimPipeline:
+    return held_out_pipeline if claim_id == LATER_CLAIM["claim_id"] else pipeline
+
 
 app = FastAPI(
     title="CasePath full-process demo API",
@@ -347,8 +358,9 @@ def artifact_extraction(artifact_id: str):
 
 @app.post("/api/runs", status_code=202)
 def create_run(req: RunRequest, session_id: str = Depends(require_session)):
+    selected_pipeline = run_pipeline_for_claim(req.claim_id)
     try:
-        run_id = pipeline.create(
+        run_id = selected_pipeline.create(
             req.claim_id,
             knowledge_mode=req.knowledge_mode.value,
             session_id=session_id,
@@ -361,11 +373,11 @@ def create_run(req: RunRequest, session_id: str = Depends(require_session)):
         "release": RELEASE,
         "profile": (
             PROFILE
-            if pipeline.model_mode == MODEL_MODE_OPENROUTER
+            if selected_pipeline.model_mode == MODEL_MODE_OPENROUTER
             else DETERMINISTIC_PROFILE
         ),
         "knowledge_mode": req.knowledge_mode.value,
-        "model_mode": pipeline.model_mode,
+        "model_mode": selected_pipeline.model_mode,
     }
 
 
