@@ -1787,6 +1787,48 @@ def test_default_langchain_invoker_maps_protocol_failure_to_bounded_invariant(
     assert captured.value.__context__ is None
 
 
+def test_provider_admission_timeout_is_zero_call_noncacheable_ledger_record(
+    tmp_path: Path,
+    monkeypatch,
+):
+    class Runnable:
+        def invoke(self, *_args, **_kwargs):
+            raise langchain_runtime.OpenRouterSendAdmissionTimeoutError()
+
+    monkeypatch.setattr(
+        canonicalizer_module,
+        "structured_nemotron_runnable",
+        lambda **_kwargs: Runnable(),
+    )
+    storage = Storage(str(tmp_path / "provider-concurrency-timeout.db"))
+    canonicalizer = OpenRouterNemotronCanonicalizer(
+        storage,
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+
+    with pytest.raises(
+        ModelResponseError,
+        match="provider_concurrency_timeout",
+    ) as captured:
+        canonicalizer.canonicalize(
+            package(),
+            run_id="run-provider-concurrency-timeout",
+            allowed_fact_catalog=catalog(),
+        )
+
+    assert captured.value.invariant == "provider_concurrency_timeout"
+    assert captured.value.safe_context["outcome"] == "blocked_provider_concurrency"
+    ledger = storage.model_calls()[0]
+    assert ledger["call_count"] == 0
+    assert ledger["outcome"] == "blocked_provider_concurrency"
+    assert ledger["actual_cost_usd"] is None
+    assert ledger["error_invariant"] == "provider_concurrency_timeout"
+    assert storage.model_call_summary()["network_calls"] == 0
+    assert storage.model_call_summary()["unknown_cost_call_count"] == 0
+    assert storage.model_cost_committed_or_reserved() == 0
+    assert storage.cached_model_output(ledger["cache_key"]) is None
+
+
 def test_default_langchain_invoker_maps_upstream_rejection_to_safe_context(
     monkeypatch,
 ):

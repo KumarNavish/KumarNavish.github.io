@@ -445,9 +445,23 @@ class Storage:
             payload.update(patch)
             payload["outcome"] = outcome
             actual_cost = patch.get("actual_cost_usd", row["actual_cost_usd"])
+            call_count = patch.get("call_count", row["call_count"])
+            if (
+                not isinstance(call_count, int)
+                or isinstance(call_count, bool)
+                or call_count < 0
+            ):
+                raise ValueError("model call_count must be a nonnegative integer")
             con.execute(
-                "UPDATE model_calls SET actual_cost_usd=?, outcome=?, payload=?, updated_at=? WHERE call_id=?",
-                (actual_cost, outcome, json.dumps(payload, ensure_ascii=False), now(), call_id),
+                "UPDATE model_calls SET call_count=?, actual_cost_usd=?, outcome=?, payload=?, updated_at=? WHERE call_id=?",
+                (
+                    call_count,
+                    actual_cost,
+                    outcome,
+                    json.dumps(payload, ensure_ascii=False),
+                    now(),
+                    call_id,
+                ),
             )
 
     def model_calls(self) -> list[dict[str, Any]]:

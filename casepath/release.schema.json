@@ -140,12 +140,14 @@
           "required": [
             "deterministic_safety_authority",
             "external_tracing",
+            "provider_max_in_flight",
             "prompt_storage",
             "raw_output_storage"
           ],
           "properties": {
             "deterministic_safety_authority": { "const": true },
             "external_tracing": { "const": false },
+            "provider_max_in_flight": { "const": 1 },
             "prompt_storage": { "const": false },
             "raw_output_storage": { "const": false }
           }
@@ -204,6 +206,7 @@
             "dynamic_evidence",
             "required_mode",
             "required_model",
+            "required_provider_max_in_flight",
             "required_runtime_profile",
             "requires_successful_call_binding",
             "requires_positive_actual_cost",
@@ -252,6 +255,7 @@
             },
             "required_mode": { "const": "openrouter_nemotron" },
             "required_model": { "const": "nvidia/nemotron-3-ultra-550b-a55b" },
+            "required_provider_max_in_flight": { "const": 1 },
             "required_runtime_profile": {
               "const": "nemotron_langgraph_multi_agent_hybrid_guarded"
             },
@@ -296,7 +300,8 @@
                 "casepath/releases/model-validation-attempt-20260811-10.json",
                 "casepath/releases/model-validation-attempt-20260811-11.json",
                 "casepath/releases/model-validation-attempt-20260811-12.json",
-                "casepath/releases/model-validation-attempt-20260811-13.json"
+                "casepath/releases/model-validation-attempt-20260811-13.json",
+                "casepath/releases/model-validation-attempt-20260811-14.json"
               ]
             },
             "establishes_current_runtime_acceptance": { "const": false }

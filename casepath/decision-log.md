@@ -186,3 +186,51 @@ updated as implementation and validation progress.
 - **Affected files:** pipeline governance report, backend/browser tests, release evidence.
 - **Validation:** origin recomputation, hash equality, candidate tamper rejection,
   and full protected report binding in the browser journey.
+
+## CPD-009 — Logical specialist fan-out uses physical provider single-flight
+
+- **Problem:** the compiled DAG correctly schedules document/source-integrity
+  and process-decision specialists as a fan-out, but attempt 14 created their
+  provider calls only 4.051 ms apart and exposed no application-wide admission
+  limit. Both calls later failed with OpenRouter-boundary 429 responses.
+- **Approaches considered:** make the DAG sequential; add inference retries;
+  preserve fan-out/join semantics while serializing only provider sends.
+- **Decision:** keep `parallel_groups` and the authoritative execution topology
+  unchanged as logical scheduling evidence. Gate all physical OpenRouter sends
+  with a process-wide `provider_max_in_flight: 1` admission contract. A bounded
+  admission timeout occurs before transport and records
+  `blocked_provider_concurrency`, `call_count: 0`, null actual cost, no response
+  or usage provenance, and no cacheable output.
+- **Evidence:** attempt 14 proves application-side overlap was possible. It does
+  not prove concurrency caused the 429s; the failed calls retained the expected
+  DeepInfra route but no actual failed-call upstream identity.
+- **Rejected:** changing the DAG, because topology and transport are different
+  concerns; retries, because they would weaken exact-once inference and could
+  compound unknown provider charges.
+- **Affected files:** shared OpenRouter runtime admission, release/schema pins,
+  public health/readiness, browser QA, governance and transfer records.
+- **Validation:** static cap tamper tests, concurrent admission tests, exact
+  zero-call receipt/ledger tests, QA positive/tamper fixtures, and unchanged
+  logical `parallel_groups` assertions. Same-commit production acceptance is
+  still required.
+
+## CPD-010 — Publish only the active v20 static runtime closure
+
+- **Problem:** Render previously published the entire authored `casepath/`
+  source tree. Unreferenced legacy scripts and obsolete QA programs therefore
+  remained reachable at the product origin even though the v20 page never
+  loaded them; some retained superseded v10/v15 wording.
+- **Approaches considered:** rewrite every historical asset; delete source
+  history; publish an exact generated runtime closure.
+- **Decision:** build ignored `casepath-public/` through
+  `casepath/tools/build_static_site.py` and point Render only at that directory.
+  The builder copies an exact allowlist containing the v20 shell, its direct
+  and recursively injected assets, `_headers`, `release.json`, and a freshly
+  generated known-commit `deployment.json`.
+- **Rejected:** broad source-root publication, because dormant executable code
+  is not part of the flagship product contract; piecemeal legacy copy edits,
+  because they do not prevent later obsolete assets from becoming public.
+- **Validation:** exact 20-file inventory, recursive asset-closure equality,
+  stale-file removal, no tools/docs/releases/legacy assets, known-commit
+  fail-before-mutation behavior, and release-verifier pins for both the build
+  command and publish path.

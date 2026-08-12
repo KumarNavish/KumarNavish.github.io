@@ -41,6 +41,7 @@ from .storage import ActiveRunResetError, Storage
 from .langchain_runtime import (
     OPENROUTER_ENDPOINT_TAG,
     OPENROUTER_EXPECTED_UPSTREAM_PROVIDER,
+    OPENROUTER_PROVIDER_MAX_IN_FLIGHT,
     openrouter_provider_policy,
     external_tracing_environment_disabled,
 )
@@ -188,6 +189,7 @@ def release_metadata() -> dict[str, Any]:
                 "raw_output_storage": False,
                 "model_fallback": False,
                 "automatic_inference_retry": False,
+                "provider_max_in_flight": OPENROUTER_PROVIDER_MAX_IN_FLIGHT,
                 "ledger_persistence": "ephemeral_instance",
                 "budget_scope": "instance_lifetime",
                 "cache_scope": "instance_lifetime",
