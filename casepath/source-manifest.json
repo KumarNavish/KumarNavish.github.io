@@ -102,7 +102,7 @@
     "sha256": "5a8eb4d760fd2d1f82c86233d498870bfd15bb5e9fd6d04ceb626d4460ec28d2"
   },
   "contract": "casepath.source-manifest/2.0.0",
-  "file_count": 135,
+  "file_count": 137,
   "files": [
     {
       "executable": false,
@@ -113,8 +113,8 @@
     {
       "executable": false,
       "path": "CASEPATH_MASTER_KNOWLEDGE_TRANSFER.md",
-      "sha256": "19e6542efb8cdc05eab032c60a67fb77c7a32cf7720cfa74bc1221ce28e70236",
-      "size_bytes": 216087
+      "sha256": "34a3b27e27eb1d8025241e1c9019b853c126f8300aee36b92e38cb48bc73d68f",
+      "size_bytes": 221352
     },
     {
       "executable": false,
@@ -329,8 +329,8 @@
     {
       "executable": false,
       "path": "casepath-qa/browser-focused-v20.mjs",
-      "sha256": "daabd6d2e2919d4fd3a19331613a234b8bd4c8d2fcebe1edb3f3834fff417415",
-      "size_bytes": 344428
+      "sha256": "88d652e1c6f050469770bae8cde749b09d13846dabc328eeb40dff85f01c7e91",
+      "size_bytes": 346005
     },
     {
       "executable": false,
@@ -472,6 +472,12 @@
     },
     {
       "executable": false,
+      "path": "casepath-qa/run-definitive-v20.sh",
+      "sha256": "71c0b64527c36a4c82974b1322f803ef56c8cb23ea318e08c243f58e20d271a0",
+      "size_bytes": 6486
+    },
+    {
+      "executable": false,
       "path": "casepath-qa/serve-evidence.mjs",
       "sha256": "21d2f365e465086b21d30c401b9b14dde1480e20b87904e1d1c896c8f0431b59",
       "size_bytes": 2070
@@ -485,8 +491,8 @@
     {
       "executable": false,
       "path": "casepath/RELEASE_GOVERNANCE.md",
-      "sha256": "2c1d1a7998c206de88663312c2bc8f2e8a5882aa9d9b0545c5d2868af95e6491",
-      "size_bytes": 36248
+      "sha256": "231ba9256d565b60faf9d7c3c7c807fedf70e56f34e51f9d192eb29bc446f94b",
+      "size_bytes": 38889
     },
     {
       "executable": false,
@@ -671,14 +677,14 @@
     {
       "executable": false,
       "path": "casepath/assets/live-v20-focus.css",
-      "sha256": "5bdddb2d0659334ca38ccda3041a180ef99a753a4bcd0049f3e7c04caa37043d",
-      "size_bytes": 43233
+      "sha256": "4380e9b748304f6dee260506d33700ecdf37845d6782d6967a00ff796965705d",
+      "size_bytes": 43255
     },
     {
       "executable": false,
       "path": "casepath/assets/live-v20-focus.js",
-      "sha256": "33b449d606c40ba0037dc8e694dad78b58b02e3d416fd8e887f2596cde317fcd",
-      "size_bytes": 13164
+      "sha256": "50bd2555acdbf80ef8a376fb12b2bbe1f5bb8b86a52c1d2c272dbab55915dd86",
+      "size_bytes": 13234
     },
     {
       "executable": false,
@@ -701,14 +707,14 @@
     {
       "executable": false,
       "path": "casepath/decision-log.md",
-      "sha256": "9887099e3f3614dd6c88806912a00bde38eeb83961f524f8c9887c7690487bc1",
-      "size_bytes": 14999
+      "sha256": "8d59d5627efe48a3313170277e84b6f5e639c88c4e047d9e8c6178d9e3de94aa",
+      "size_bytes": 17076
     },
     {
       "executable": false,
       "path": "casepath/defect-ledger.md",
-      "sha256": "ef4b9d659996028261850f666ace56dfc1b9b4a2de55b99026f4848979da9a4b",
-      "size_bytes": 25101
+      "sha256": "cb8d674be9abf8d7a8645560b02a3a3422396d531064d926799fbfecb666e930",
+      "size_bytes": 26942
     },
     {
       "executable": false,
@@ -719,14 +725,14 @@
     {
       "executable": false,
       "path": "casepath/release.json",
-      "sha256": "5e11002e75d0067b03e70a4a8feff75a68c4c14103e8f22d7d3800c74be95ac8",
-      "size_bytes": 7824
+      "sha256": "21bb404f2356fd7ab43ffb8a32c4341166e3459fb0811e9eb107352af4811975",
+      "size_bytes": 7895
     },
     {
       "executable": false,
       "path": "casepath/release.schema.json",
-      "sha256": "8c54fe06cbfaae77eafe30ed74bf5a4258bb2244790b52ee5116feb5787990c0",
-      "size_bytes": 15182
+      "sha256": "22f71476964705655723bfa1c155fd9c4981a99708c03c253903111013ed3456",
+      "size_bytes": 15261
     },
     {
       "executable": false,
@@ -862,6 +868,12 @@
     },
     {
       "executable": false,
+      "path": "casepath/releases/model-validation-attempt-20260811-21.json",
+      "sha256": "ef67d0dc8a0e16ca39b9a8983b22d77f1ab51c1a7403482fa438abf741ea9a4d",
+      "size_bytes": 38282
+    },
+    {
+      "executable": false,
       "path": "casepath/tools/browser_qa.py",
       "sha256": "ee0d546fdf234d66aa066ddf6cd63678a61f46d0ffadae2835613c89218704e3",
       "size_bytes": 9405
@@ -881,8 +893,8 @@
     {
       "executable": false,
       "path": "casepath/tools/casepath_release.py",
-      "sha256": "e5726a1ed11fc7bb58f3f0bebc8b3877d5d40b1b3dbbbf4c579c33a715f06334",
-      "size_bytes": 395385
+      "sha256": "d190a32482e9d961febef875d00c199d63cd75edad0696c78dcf22b4529c55e5",
+      "size_bytes": 418032
     },
     {
       "executable": false,
@@ -893,8 +905,8 @@
     {
       "executable": false,
       "path": "casepath/tools/test_casepath_release.py",
-      "sha256": "60678ae256658ae216629dca8f148a9bdff991aab25d1271de0d4c2a099d9de4",
-      "size_bytes": 209721
+      "sha256": "154adf219342fdbf8a5da8af422d9cbc3b2f41e61025e06ea4f0ea41a9ebae66",
+      "size_bytes": 218392
     },
     {
       "executable": false,
@@ -911,15 +923,15 @@
     {
       "executable": false,
       "path": "render.yaml",
-      "sha256": "14241d902e53192161d1a5f69916a34e2a0cd2b41d7a9a0d8794d8e8dc87e4dd",
-      "size_bytes": 2158
+      "sha256": "79e8b80e80b871754c5ad36da11b59bf055a33bdaec741665e8b9c05ecbb1a97",
+      "size_bytes": 2119
     }
   ],
   "gate_count": 10,
   "gates": [
     {
       "path": "casepath-qa/browser-focused-v20.mjs",
-      "sha256": "daabd6d2e2919d4fd3a19331613a234b8bd4c8d2fcebe1edb3f3834fff417415"
+      "sha256": "88d652e1c6f050469770bae8cde749b09d13846dabc328eeb40dff85f01c7e91"
     },
     {
       "path": "casepath-qa/browser-guided-v13-smoke.mjs",

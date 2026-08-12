@@ -4970,6 +4970,49 @@ known actual provider charges are USD 0.3280262. CP-038 remains
 visual-authority assertion repair and retains the current
 report/evidence-manifest pair.
 
+## Production attempt 21 and collapsed document-row boundary
+
+Attempt 21 ran against aligned source commit
+`eb5568a1973f63fdbf0ebd0b3f7cd152c73a29cf`. Frontend deploy
+`dep-d9u6mubm8hqs73elmuk0` and API deploy `dep-d9u6msvavr4c73eklnf0`
+were live before QA deploy `dep-d9u6okf40ujc73flp1o0` accepted cold run
+`run_b33e288771f5734e`, orchestration `orch_41c7d6d772421ec1`. All six
+required model roles completed through DeepInfra, followed by the deterministic
+process, evidence, and whole-playbook gates. Warm run
+`run_57307719ce42f9e9`, orchestration `orch_9189d783e3d07e04`, reproduced
+all six role results through exact cache-origin bindings with zero provider
+calls.
+
+The six cold calls used 35,274 prompt and 7,165 completion tokens, 42,439 total,
+and cost USD 0.0332464 with complete billing. Four calls succeeded directly;
+canonical facts and evidence checklist disclosed guarded deterministic
+fallback. The frozen global ledger contains exactly twelve rows: six network
+calls and six cache hits, with provider maximum in flight one, zero application
+retries, zero unknown-cost calls, and complete actual cost.
+
+Focused QA then failed the terminal document-sheet ownership check for
+`defect_notice`. The row's data attributes correctly retained primary owner
+`notification`, ordered owners `notification,formal_notice`, and current path
+`true`, but its enclosing overflow document group remained collapsed. The row
+therefore had empty rendered text and no visible secondary relationship copy.
+The DTO and canonical ownership projection were correct; the browser assertion
+inspected content before making its owning group visible.
+
+The immutable record retains the exact deploy, cold and warm run and
+orchestration IDs, twelve ledger rows, cost/token totals, three-gate progression,
+terminal assertion, endpoint hashes, and stale public-QA classification. It
+truthfully records that per-gate artifact hashes and session-scoped run bodies
+were not retained and are unrecoverable after caller cleanup. The failed QA
+build published no current report or evidence manifest; its public origin still
+served the stale 57-check report for commit
+`7be18c72f353366930cd5dcace637884e06e63a7` and returned 404 for the
+manifest. The record is
+`casepath/releases/model-validation-attempt-20260811-21.json`; cumulative
+known actual provider charges are USD 0.3612726. CP-039 remains
+`fixed_unverified` until a new aligned production journey verifies the
+visibility-first document projection assertion and retains the current
+report/evidence-manifest pair.
+
 ## Exact dynamic release evidence not yet observed by this record
 
 These point-in-time fields must be supplied by the sanitized ledger and retained
@@ -4979,7 +5022,7 @@ not fields to write back into the static release contract:
 ```text
 dynamic_runtime_acceptance_verdict: NOT_ESTABLISHED_BY_THIS_RECORD
 historical_model_validation_scope: failed_closed_history_only
-failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -20.json
+failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -21.json
 failed_attempt_id: authorized-smoke-20260811-01
 failed_attempt_application_outcome: rejected
 failed_attempt_failure_type: exact_private_reference_mismatch
@@ -4992,20 +5035,32 @@ provider_observed_prompt_tokens: 3629
 provider_observed_completion_tokens: 2625
 provider_observed_total_tokens: 6254
 provider_observed_finish_reason: stop
-latest_failed_attempt_id: production-flagship-20260812-20
-latest_failed_attempt_source_commit: 2ab81d4c717c36f86717867230948ffe5c4875f8
+latest_failed_attempt_id: production-flagship-20260812-21
+latest_failed_attempt_source_commit: eb5568a1973f63fdbf0ebd0b3f7cd152c73a29cf
+latest_failed_attempt_frontend_service_id: srv-d9q3ndvavr4c73ao86r0
+latest_failed_attempt_frontend_deploy_id: dep-d9u6mubm8hqs73elmuk0
+latest_failed_attempt_frontend_deploy_finished_at: 2026-08-12T12:48:14.420369Z
+latest_failed_attempt_api_service_id: srv-d9r4v4e417fc73bda92g
+latest_failed_attempt_api_deploy_id: dep-d9u6msvavr4c73eklnf0
+latest_failed_attempt_api_deploy_finished_at: 2026-08-12T12:49:28.841769Z
 latest_failed_attempt_qa_service_id: srv-d9se2bh42hec73c54sjg
-latest_failed_attempt_qa_deploy_id: dep-d9u660fqj5pc73911p2g
+latest_failed_attempt_qa_deploy_id: dep-d9u6okf40ujc73flp1o0
 latest_failed_attempt_qa_deploy_outcome: build_failed
-latest_failed_attempt_qa_deploy_created_at: 2026-08-12T12:11:46.18409Z
-latest_failed_attempt_qa_deploy_started_at: 2026-08-12T12:11:46.145229Z
-latest_failed_attempt_qa_deploy_finished_at: 2026-08-12T12:13:51.343568Z
-latest_failed_attempt_run_id: run_e48f3dfa041155f6
-latest_failed_attempt_orchestration_id: orch_0ea0187de554be2e
+latest_failed_attempt_qa_deploy_created_at: 2026-08-12T12:51:29.954139Z
+latest_failed_attempt_qa_deploy_started_at: 2026-08-12T12:51:29.918727Z
+latest_failed_attempt_qa_error_at: 2026-08-12T12:54:37.489228893Z
+latest_failed_attempt_qa_build_failed_at: 2026-08-12T12:54:37.531067695Z
+latest_failed_attempt_qa_deploy_finished_at: 2026-08-12T12:54:39.158068Z
+latest_failed_attempt_run_id: run_b33e288771f5734e
+latest_failed_attempt_orchestration_id: orch_41c7d6d772421ec1
+latest_failed_attempt_warm_run_id: run_57307719ce42f9e9
+latest_failed_attempt_warm_orchestration_id: orch_9189d783e3d07e04
+latest_failed_attempt_ledger_created_at: 2026-08-12T12:51:53.812313+00:00
+latest_failed_attempt_ledger_updated_at: 2026-08-12T12:53:11.613119+00:00
 latest_failed_attempt_application_outcome: accepted
-latest_failed_attempt_failure_type: visual_authority_copy_wording_drift
+latest_failed_attempt_failure_type: document_sheet_multi_owner_item_not_expanded
 latest_failed_attempt_error_type: Error
-latest_failed_attempt_error_invariant: visual_authority_copy_wording_drift
+latest_failed_attempt_error_invariant: document_sheet_multi_owner_item_not_expanded
 latest_failed_attempt_full_orchestration_accepted: true
 latest_failed_attempt_deterministic_process_gate_started: true
 latest_failed_attempt_evidence_checklist_started: true
@@ -5015,20 +5070,27 @@ latest_failed_attempt_warm_replay_started: true
 latest_failed_attempt_provider_outcome: six_roles_succeeded
 latest_failed_attempt_successful_upstream_provider: DeepInfra
 latest_failed_attempt_network_call_count: 6
+latest_failed_attempt_global_ledger_record_count: 12
+latest_failed_attempt_warm_cache_hit_count: 6
 latest_failed_attempt_guarded_fallback_call_count: 2
-latest_failed_attempt_prompt_tokens: 35300
-latest_failed_attempt_completion_tokens: 3784
-latest_failed_attempt_total_tokens: 39084
-latest_failed_attempt_actual_cost_usd: 0.0258212
+latest_failed_attempt_prompt_tokens: 35274
+latest_failed_attempt_completion_tokens: 7165
+latest_failed_attempt_total_tokens: 42439
+latest_failed_attempt_actual_cost_usd: 0.0332464
 latest_failed_attempt_actual_cost_complete: true
 latest_failed_attempt_unknown_cost_call_count: 0
 latest_failed_attempt_current_report_retained: false
 latest_failed_attempt_current_evidence_manifest_retained: false
+latest_failed_attempt_deterministic_gate_receipts: 3
+latest_failed_attempt_deterministic_gate_ids: deterministic_process_gate, deterministic_evidence_gate, whole_playbook_gate
 latest_failed_attempt_gate_artifact_hashes_recoverable: false
-known_failed_attempt_cost_usd_excluding_attempts_03_07_09_13_and_attempt_14_unknown_calls: 0.3280262
+latest_failed_attempt_public_qa_classification: stale_previous_deploy_not_attempt_21
+latest_failed_attempt_public_qa_report_sha256: 946d6ebd24da538dbf5f7416f93fc27cd653d5dd724015c325b6a845a1cbe425
+latest_failed_attempt_public_qa_manifest_http_status: 404
+known_failed_attempt_cost_usd_excluding_attempts_03_07_09_13_and_attempt_14_unknown_calls: 0.3612726
 logical_specialist_topology: fan_out_and_join
 physical_provider_max_in_flight: 1
-accepted_retry_status: APPLICATION_ACCEPTED_BUT_QA_REJECTED_AT_VISUAL_AUTHORITY_WORDING_BOUNDARY_ON_ATTEMPT_20
+accepted_retry_status: APPLICATION_ACCEPTED_BUT_QA_REJECTED_AT_COLLAPSED_DOCUMENT_ROW_BOUNDARY_ON_ATTEMPT_21
 candidate_source_commit: PENDING
 release_id: casepath-v20-reference-20260811
 provider: openrouter
@@ -5142,22 +5204,38 @@ The frozen local implementation now provides:
 - a curated 20-file static publish tree containing only the active v20 shell,
   its direct and recursively injected runtime assets, `_headers`, the release
   contract, and a known-commit deployment identity—never legacy executable
-  bundles, tools, documentation, release history, or the source manifest.
+  bundles, tools, documentation, release history, or the source manifest; and
+- a mandatory paid-call admission gate in the QA build: the exact curated
+  commit and an isolated deterministic-reference API must complete the full
+  browser lifecycle with a passed temporary report and an empty model ledger
+  before the one production browser journey can start. The temporary artifacts
+  are deleted and cannot be mistaken for production acceptance evidence.
 
 The local rendered journey completed from flagship analysis through simulated
 review, quarantined memory, held-out later claim, visible five-operation receipt,
 and 10/10 proof with no browser console warning or error. This is generated-demo
 evidence, not qualified review or production model acceptance.
 
+The previous paid-first QA order is retired. `run-definitive-v20.sh` makes the
+complete zero-provider browser lifecycle a hard predecessor of production: it
+requires the release-pinned Python 3.13.9 runtime, removes provider credentials
+from the local API process, rebuilds all ignored runtime documents and images
+from tracked deterministic generators and hash-pinned sources, asserts zero ledger
+records/network calls/cost after the local journey, and independently requires
+an empty production global ledger before caller reset or run creation. It writes
+local evidence only to
+an isolated temporary directory. A failure in any deterministic downstream UI
+state stops the build before a production reset or provider call.
+
 Exact local freeze gates:
 
 ```text
 backend_tests: 291 passed
-release_contract_tests: 101 passed
+release_contract_tests: 108 passed
 deployment_and_static_publish_tests: 8 passed
-release_tests_total: 109 passed
+release_tests_total: 116 passed
 browser_contract_self_test: 87 fixtures passed
-source_manifest_files: 135
+source_manifest_files: 137
 release_artifact_files: 25
 model_visible_artifact_files: 24
 curated_frontend_publish_files: 20
@@ -5170,7 +5248,7 @@ git_diff_check: passed
 
 The static source and artifact contract is therefore locally verified. At this
 source-history freeze, dynamic production acceptance remained unestablished:
-attempts 01–20 are failed-closed release history. Attempt 16 accepted the
+attempts 01–21 are failed-closed release history. Attempt 16 accepted the
 same-commit six-role, three-gate cold application orchestration and exact
 zero-call warm cache replay, but retained no passing current report and
 evidence-manifest pair because its process interaction removed the three ranked
@@ -5186,7 +5264,10 @@ terminal browser assertion rejected newline/space-equivalent grounding text.
 Attempt 20 then completed the same exact cold and warm topology before the
 terminal browser assertion rejected the renderer's stronger visual-authority
 copy because it did not contain the obsolete phrase `not an exact quote`.
-The source-bound visual wording repair remains production-unverified.
+Attempt 21 again completed the exact cold and warm topology before the terminal
+document-sheet assertion read a correct multi-owner row while its enclosing
+overflow group was collapsed, leaving its visible text empty. The source-bound
+visibility-first document assertion repair remains production-unverified.
 A later authoritative same-commit QA artifact pair may supersede that
 point-in-time verdict without modifying this historical record.
 
