@@ -59,6 +59,11 @@
     ventilation_dispute: 'Test the ventilation allegation',
   };
 
+  const REVIEWED_MEMORY_STATUSES = new Set([
+    'qualified_expert_reviewed',
+    'unverified_demo_memory',
+  ]);
+
   const esc = (value = '') => String(value).replace(/[&<>'"]/g, character => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
   }[character]));
@@ -87,7 +92,7 @@
 
   const reviewedMemoryState = result => {
     const receipt = validMemoryReceipt(result?.memory_application) ? result.memory_application : null;
-    const precedent = (result?.precedents || []).find(item => item.review_status === 'unverified_demo_memory' && item.memory_id);
+    const precedent = (result?.precedents || []).find(item => REVIEWED_MEMORY_STATUSES.has(item.review_status) && item.memory_id);
     const retrieved = Boolean(precedent)
       && result?.reviewed_memory_retrieved === true
       && result?.knowledge?.reviewed_memory_retrieved === true;
@@ -522,6 +527,9 @@
       || heading.dataset.memoryUsed !== String(memory.used)
       || heading.dataset.memoryRetrievedOnly !== String(memory.retrievedOnly)) return;
     const { receipt, precedent } = memory;
+    const precedentAuthorityCopy = precedent.review_status === 'qualified_expert_reviewed'
+      ? 'Qualified expert-reviewed case memory returned'
+      : 'Unverified demo review memory returned';
     const playbook = result.playbook?.version;
     const proof = window.__casepathLearningProof || null;
     const thread = document.createElement('section');
@@ -536,14 +544,14 @@
       thread.dataset.memoryAuthority = receipt.authority;
       thread.dataset.memoryScope = receipt.scope;
       thread.innerHTML = `
-        <article><small>Unverified demo review memory returned and applied</small><strong>${esc(precedent.claim_id)} · ${esc(precedent.memory_id)}</strong></article>
+        <article><small>${esc(precedentAuthorityCopy)} and applied</small><strong>${esc(precedent.claim_id)} · ${esc(precedent.memory_id)}</strong></article>
         <article><small>Receipt authority and scope</small><strong>${esc(receipt.authority)} · ${esc(receipt.scope)}</strong></article>
         <article><small>Application hash</small><strong><code>${esc(receipt.application_hash || 'not returned')}</code></strong></article>
         <article><small>Shared playbook</small><strong>${esc(playbook || 'Version not returned')} unchanged · shared rule ${esc(String(receipt.shared_rule_applied === true))}</strong></article>
         <article><small>Acceptance boundary</small><strong>Model acceptance reused ${esc(String(receipt.model_acceptance_reused === true))}${proof?.causal_delta?.nonzero === true ? ' · nonzero causal delta computed' : ''}</strong></article>`;
     } else {
       thread.innerHTML = `
-        <article><small>Dormant unverified demo memory retrieved and ranked</small><strong>${esc(precedent.claim_id)} · ${esc(precedent.memory_id)}</strong></article>
+        <article><small>${esc(precedentAuthorityCopy)} and ranked</small><strong>${esc(precedent.claim_id)} · ${esc(precedent.memory_id)}</strong></article>
         <article><small>Guidance state</small><strong>Disabled for this required-now review outcome</strong></article>
         <article><small>Application receipt</small><strong>None returned</strong></article>
         <article><small>Process effect</small><strong>Not used or applied · no memory-driven DTO change</strong></article>
