@@ -20,7 +20,7 @@ from .canonicalizer import (
     configured_model_mode,
 )
 from .data import ARTIFACTS, CLAIMS, HISTORICAL_CASES, observable_claim_package
-from .evidence_relations import apply_evidence_relations
+from .evidence_relations import apply_evidence_relations, validate_evidence_item_order
 from .fact_relations import SEMANTIC_FACT_ID_BY_CLAIM
 from .law_registry import LAW_SOURCES, legal_context
 from .multi_agent import (
@@ -45,6 +45,7 @@ from .precedent_ranking import rank_precedents
 from .storage import Storage
 from .validation import (
     ContractValidationError,
+    LEARNING_SNAPSHOT_FIELDS,
     validate_playbook,
     validate_review_operations,
 )
@@ -2509,6 +2510,7 @@ class ClaimPipeline:
                 item("conciliation_bundle", "Conciliation evidence bundle", "conditional", "escalation", "later_fact_escalation_ready", "Used only if the supported remedy remains disputed.", legal_basis_ids=["bwo-conciliation"], applies_when="Remedy refused or disputed", required_level="conditional"),
                 item("completion_record", "Repair, settlement or closure record", "not_applicable", "resolution", "later_fact_resolution_complete", "Records the terminal outcome.", applies_when="Claim resolved", required_level="conditional"),
             ]
+        validate_evidence_item_order(claim["claim_id"], items)
         apply_evidence_relations(process, items)
         apply_evidence_projection(items, process)
         apply_evidence_relations(process, items)
@@ -4185,7 +4187,7 @@ class ClaimPipeline:
             and result.get("audit", {}).get("accepted") is True
             and result.get("audit", {}).get("verification_computed") is True
         )
-        return {
+        snapshot = {
             "run_id": run["run_id"],
             "completed_at": run.get("completed_at"),
             "result_hash": digest(result),
@@ -4230,6 +4232,9 @@ class ClaimPipeline:
             "shared_rule_applied": result.get("shared_rule_applied") is True,
             "playbook_version": result["playbook"]["version"],
         }
+        if set(snapshot) != LEARNING_SNAPSHOT_FIELDS:
+            raise MemoryApplicationError("memory_proof_snapshot_contract")
+        return snapshot
 
     def learning_proof(self, baseline_run_id: str, later_run_id: str, *, session_id: str = "public") -> dict[str, Any]:
         if baseline_run_id == later_run_id:

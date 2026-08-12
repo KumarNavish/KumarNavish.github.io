@@ -5,9 +5,11 @@ from copy import deepcopy
 import pytest
 
 from casepath_api.evidence_relations import (
+    EVIDENCE_ITEM_IDS_BY_CLAIM,
     EvidenceRelationError,
     apply_evidence_relations,
     derive_evidence_relations,
+    validate_evidence_item_order,
     validate_evidence_relations,
 )
 
@@ -133,3 +135,12 @@ def test_unowned_item_fails_closed():
     values = items() + [{"item_id": "orphan"}]
     with pytest.raises(EvidenceRelationError, match="every evidence item"):
         derive_evidence_relations(process(), values)
+
+
+def test_governed_checklist_order_is_claim_specific_and_fail_closed():
+    for claim_id, item_ids in EVIDENCE_ITEM_IDS_BY_CLAIM.items():
+        values = [{"item_id": item_id} for item_id in item_ids]
+        validate_evidence_item_order(claim_id, values)
+        values[-1], values[-2] = values[-2], values[-1]
+        with pytest.raises(EvidenceRelationError, match="evidence item order"):
+            validate_evidence_item_order(claim_id, values)

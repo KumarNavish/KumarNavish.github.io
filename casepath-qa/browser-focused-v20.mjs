@@ -1,6 +1,9 @@
 import fs from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { chromium } from 'playwright';
 
@@ -190,10 +193,63 @@ const EXPECTED_FAILED_MODEL_ATTEMPT_RECORDS = Object.freeze(
   Array.from({ length: 21 }, (_, index) => `casepath/releases/model-validation-attempt-20260811-${String(index + 1).padStart(2, '0')}.json`),
 );
 const EXPECTED_PRODUCTION_OPENING_BOUNDARY = 'Application code opened the shared context; no model call is claimed for this setup step. The call-bound Nemotron plan appears only when its returned event arrives.';
+const QA_DIRECTORY = path.resolve(fileURLToPath(new URL('.', import.meta.url)));
+const REPOSITORY_ROOT = path.dirname(QA_DIRECTORY);
+const QA_OUTPUT_BASENAME = 'guided-v13-smoke-out';
+const PREFLIGHT_OUTPUT_BASENAME = 'evidence';
+const PREFLIGHT_PARENT_PATTERN = /^casepath-qa-preflight\.[A-Za-z0-9]{6,}$/;
+const QA_TEMP_ROOT = path.resolve(os.tmpdir());
+
+function resolveSafeQaOutputPath(candidate) {
+  if (typeof candidate !== 'string' || candidate.trim() === '') {
+    throw new Error('CASEPATH_QA_OUT must name a dedicated QA evidence directory.');
+  }
+  const resolved = path.resolve(candidate);
+  const dedicatedQaOutput = path.join(QA_DIRECTORY, QA_OUTPUT_BASENAME);
+  const preflightParent = path.dirname(resolved);
+  const dedicatedPreflightOutput = (
+    path.basename(resolved) === PREFLIGHT_OUTPUT_BASENAME
+    && path.dirname(preflightParent) === QA_TEMP_ROOT
+    && PREFLIGHT_PARENT_PATTERN.test(path.basename(preflightParent))
+  );
+  if (resolved === path.parse(resolved).root || resolved === REPOSITORY_ROOT || resolved === QA_DIRECTORY) {
+    throw new Error(`Refusing unsafe CASEPATH_QA_OUT path: ${resolved}`);
+  }
+  if (resolved !== dedicatedQaOutput && !dedicatedPreflightOutput) {
+    throw new Error(`Refusing unsafe CASEPATH_QA_OUT path: ${resolved}`);
+  }
+  return resolved;
+}
+
+function assertSafeQaOutputParent(candidate) {
+  const resolved = resolveSafeQaOutputPath(candidate);
+  const parent = path.dirname(resolved);
+  let realParent;
+  try {
+    realParent = realpathSync(parent);
+  } catch (error) {
+    throw new Error(`CASEPATH_QA_OUT parent must already exist: ${parent}`, { cause: error });
+  }
+  const dedicatedQaOutput = path.join(QA_DIRECTORY, QA_OUTPUT_BASENAME);
+  const expectedParent = resolved === dedicatedQaOutput
+    ? realpathSync(QA_DIRECTORY)
+    : realpathSync(QA_TEMP_ROOT);
+  const parentMatches = resolved === dedicatedQaOutput
+    ? realParent === expectedParent
+    : path.dirname(realParent) === expectedParent
+      && PREFLIGHT_PARENT_PATTERN.test(path.basename(realParent));
+  if (!parentMatches) {
+    throw new Error(`Refusing symlinked or unexpected CASEPATH_QA_OUT parent: ${parent}`);
+  }
+  return resolved;
+}
+
 const QA_SESSION_ID = `qa-${randomUUID()}`;
 const ISOLATION_SESSION_ID = `qa-isolation-${randomUUID()}`;
 const ALLOW_PRODUCTION_MUTATION = process.env.CASEPATH_ALLOW_PRODUCTION_MUTATION === '1';
-const OUT = path.resolve(process.env.CASEPATH_QA_OUT || 'guided-v13-smoke-out');
+const OUT = assertSafeQaOutputParent(
+  process.env.CASEPATH_QA_OUT || path.join(QA_DIRECTORY, QA_OUTPUT_BASENAME),
+);
 const checks = [];
 const notes = [];
 const failures = { console: [], page: [], request: [], cleanup: [] };
@@ -3332,6 +3388,56 @@ async function assertMemoryReuseRendererDeterminism() {
 }
 
 async function runContractSelfTest() {
+  const allowedOutputFixtures = [
+    path.join(QA_DIRECTORY, QA_OUTPUT_BASENAME),
+    path.join(QA_TEMP_ROOT, 'casepath-qa-preflight.A1b2C3', PREFLIGHT_OUTPUT_BASENAME),
+  ];
+  for (const candidate of allowedOutputFixtures) {
+    if (resolveSafeQaOutputPath(candidate) !== path.resolve(candidate)) {
+      throw new Error(`Safe QA output fixture did not resolve exactly: ${candidate}`);
+    }
+  }
+  const rejectedOutputFixtures = [
+    path.parse(REPOSITORY_ROOT).root,
+    REPOSITORY_ROOT,
+    QA_DIRECTORY,
+    path.join(QA_DIRECTORY, 'arbitrary-output'),
+    path.join(QA_TEMP_ROOT, 'arbitrary-writable-output'),
+    path.join(QA_TEMP_ROOT, 'casepath-qa-preflight.A1b2C3', 'arbitrary-output'),
+  ];
+  for (const candidate of rejectedOutputFixtures) {
+    try {
+      resolveSafeQaOutputPath(candidate);
+    } catch (_) {
+      continue;
+    }
+    throw new Error(`Unsafe QA output fixture was accepted: ${candidate}`);
+  }
+  const realPreflightParent = await fs.mkdtemp(path.join(QA_TEMP_ROOT, 'casepath-qa-preflight.'));
+  try {
+    const realPreflightOutput = path.join(realPreflightParent, PREFLIGHT_OUTPUT_BASENAME);
+    if (assertSafeQaOutputParent(realPreflightOutput) !== realPreflightOutput) {
+      throw new Error('Real preflight QA output fixture did not resolve exactly');
+    }
+  } finally {
+    await fs.rmdir(realPreflightParent);
+  }
+  const symlinkedPreflightParent = path.join(
+    QA_TEMP_ROOT,
+    `casepath-qa-preflight.${randomUUID().replaceAll('-', '').slice(0, 12)}`,
+  );
+  await fs.symlink(QA_DIRECTORY, symlinkedPreflightParent, 'dir');
+  let symlinkedParentRejected = false;
+  try {
+    try {
+      assertSafeQaOutputParent(path.join(symlinkedPreflightParent, PREFLIGHT_OUTPUT_BASENAME));
+    } catch (_) {
+      symlinkedParentRejected = true;
+    }
+  } finally {
+    await fs.unlink(symlinkedPreflightParent);
+  }
+  if (!symlinkedParentRejected) throw new Error('Symlinked QA output parent fixture was accepted');
   await assertRunReadSessionIsolation();
   await assertMemoryReuseRendererDeterminism();
   if (dtoHash({ z: 'ü', a: [{ k: 0.91 }, true, null] }) !== '3d745913ce5b8f5555065b544f018be38bd43e9e5bfe1eca86c1d4f25dda68dd') throw new Error('Compact sorted DTO hashing diverges from the Python release contract');

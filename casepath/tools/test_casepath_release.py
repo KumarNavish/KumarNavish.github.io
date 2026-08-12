@@ -2554,8 +2554,8 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         ("technical_assessment", "fact_cause", "missing", [], [source_ref(5), source_ref(6)], False),
         ("moisture_measurements", "fact_cause", "conditional", [], [source_ref(13)], False),
         ("building_envelope", "fact_cause", "conditional", [], [source_ref(14)], False),
-        ("use_evidence", "fact_ventilation_allegation", "not_applicable", [], [source_ref(15)], False),
         ("repair_history", "fact_cause", "conditional", [], [source_ref(16)], False),
+        ("use_evidence", "fact_ventilation_allegation", "not_applicable", [], [source_ref(15)], False),
         ("remediation_plan", "fact_cause", "not_applicable", [], [source_ref(17)], False),
         ("financial_impact", "fact_cause", "conditional", [], [source_ref(18)], False),
         ("settlement_proposal", "fact_dispute", "conditional", [], [source_ref(19)], False),
@@ -3203,7 +3203,10 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
     }
     flagship_run = {
         "run_id": "flagship-run",
+        "claim_id": "DEF-027-E0-DEMO",
         "status": "complete",
+        "model_mode": release_tool.REQUIRED_PRODUCTION_MODE,
+        "model": release_tool.REQUIRED_PRODUCTION_MODEL,
         "agent_orchestration": audit,
         "result": {
             "claim_id": "DEF-027-E0-DEMO",
@@ -3236,6 +3239,8 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
     )
     ledger = {
         "scope": "global_budget_ledger",
+        "budget_scope": "instance_lifetime",
+        "ledger_persistence": "ephemeral_instance",
         "items": [
             {
                 "call_id": agent["call_id"],
@@ -3243,7 +3248,11 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
                 "agent_id": agent["agent_id"],
                 "parent_call_id": agent["parent_call_id"],
                 "delegation_id": agent["delegation_id"],
+                "cache_key": hashlib.sha256(
+                    f"{orchestration_id}:{agent['agent_id']}".encode()
+                ).hexdigest(),
                 "call_count": 1,
+                "estimated_cost_usd": 0.01,
                 "provider": "openrouter",
                 "provider_endpoint": "https://openrouter.ai/api/v1/chat/completions",
                 "model": release_tool.REQUIRED_PRODUCTION_MODEL,
@@ -3262,6 +3271,7 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
                 ],
                 **(
                     {
+                        "accepted_fact_ids": agent["accepted_ids"],
                         "accepted_fact_count": agent["accepted_count"],
                         "rejected_fact_count": agent["rejected_count"],
                         "source_reference_projection_fact_ids": agent[
@@ -3273,6 +3283,7 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
                     }
                     if agent["agent_id"] == "canonical_facts"
                     else {
+                        "accepted_item_ids": agent["accepted_ids"],
                         "accepted_item_count": agent["accepted_count"],
                         "rejected_item_count": agent["rejected_count"],
                     }
@@ -3282,6 +3293,14 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         ],
     }
     ledger["summary"] = _ledger_summary(ledger["items"])
+    for agent, item in zip(records, ledger["items"], strict=True):
+        agent["usage"] = {
+            "prompt_tokens": item["prompt_tokens"],
+            "completion_tokens": item["completion_tokens"],
+            "total_tokens": item["total_tokens"],
+            "actual_cost_usd": item["actual_cost_usd"],
+            "usage_source": item["usage_source"],
+        }
 
     memory_id = "memory_release_replay"
     review_id = "review_release_replay"
@@ -3325,7 +3344,12 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         )
         for fact_id in sorted(required_later_fact_ids - existing_later_fact_ids)
     )
+    later_facts[-1]["confidence"] = 0.0
     canonical_hash = release_tool.runtime_artifact_hash(later_facts)
+    # The hosted QA writer parses and reserializes JSON, so JavaScript writes
+    # an integral 0.0 as 0. The server hash remains authoritative and is bound
+    # across the two runs and proof, while retained fact equality remains exact.
+    later_facts[-1]["confidence"] = 0
     baseline_process = release_tool._semantic_process_dto(process)
     for node in baseline_process["nodes"]:
         node["fact_ids"] = deepcopy(
@@ -3334,6 +3358,13 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
             ]
         )
     baseline_checklist = release_tool._semantic_checklist_dto(checklist)
+    baseline_items_by_id = {
+        item["item_id"]: item for item in baseline_checklist["items"]
+    }
+    baseline_checklist["items"] = [
+        baseline_items_by_id[item_id]
+        for item_id in release_tool.EVIDENCE_ITEM_IDS_BY_CLAIM["DEMO-MOULD-002"]
+    ]
     for item in baseline_checklist["items"]:
         item["fact_id"] = release_tool.RELEASE_EVIDENCE_FACT_ID_BY_CLAIM[
             "DEMO-MOULD-002"
@@ -3449,7 +3480,7 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         "eligible": True,
         "manifest_hash": release_tool.runtime_artifact_hash(eligibility_manifest),
     }
-    before_boundary = {
+    baseline_boundary = {
         "process_dto_hash": release_tool.runtime_artifact_hash(baseline_process),
         "checklist_dto_hash": release_tool.runtime_artifact_hash(baseline_checklist),
         "process_semantic_hash": release_tool.runtime_artifact_hash(
@@ -3458,6 +3489,12 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         "checklist_semantic_hash": release_tool.runtime_artifact_hash(
             release_tool._semantic_checklist_dto(baseline_checklist)
         ),
+    }
+    before_boundary = {
+        "process_dto_hash": "1" * 64,
+        "checklist_dto_hash": "2" * 64,
+        "process_semantic_hash": baseline_boundary["process_semantic_hash"],
+        "checklist_semantic_hash": baseline_boundary["checklist_semantic_hash"],
     }
     after_boundary = {
         "process_dto_hash": release_tool.runtime_artifact_hash(later_process),
@@ -3574,6 +3611,8 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         "run_id": "baseline-run",
         "claim_id": "DEMO-MOULD-002",
         "status": "complete",
+        "model_mode": release_tool.REQUIRED_PRODUCTION_MODE,
+        "model": release_tool.REQUIRED_PRODUCTION_MODEL,
         "knowledge_mode": "baseline",
         "created_at": "2026-08-12T00:01:00+00:00",
         "completed_at": 1786492920.0,
@@ -3583,8 +3622,11 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         "run_id": "later-run",
         "claim_id": "DEMO-MOULD-002",
         "status": "complete",
+        "model_mode": release_tool.REQUIRED_PRODUCTION_MODE,
+        "model": release_tool.REQUIRED_PRODUCTION_MODEL,
         "knowledge_mode": "current",
         "created_at": "2026-08-12T00:03:00+00:00",
+        "completed_at": 1786493100.0,
         "memory_application_boundary": memory_boundary,
         "events": [memory_event],
         "result": later_result,
@@ -3612,6 +3654,327 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         "application_suppressed": True,
     }
     baseline_run["counterfactual_learning_freeze"] = counterfactual_freeze
+
+    def clone_cold_audit(
+        source_audit: dict,
+        *,
+        target_orchestration_id: str,
+        namespace: str,
+    ) -> dict:
+        cloned = deepcopy(source_audit)
+        cloned["orchestration_id"] = target_orchestration_id
+        source_agents = source_audit["agents"]
+        cloned_agents = cloned["agents"]
+        call_id_by_agent = {
+            source_agent["agent_id"]: f"modelcall_{namespace}_{index:02d}"
+            for index, source_agent in enumerate(source_agents, start=1)
+        }
+        for index, (source_agent, cloned_agent) in enumerate(
+            zip(source_agents, cloned_agents, strict=True),
+            start=1,
+        ):
+            agent_id = source_agent["agent_id"]
+            parent_agent_id = next(
+                (
+                    candidate["agent_id"]
+                    for candidate in source_agents
+                    if candidate["call_id"] == source_agent["parent_call_id"]
+                ),
+                None,
+            )
+            cloned_agent.update(
+                {
+                    "call_id": call_id_by_agent[agent_id],
+                    "origin_call_id": call_id_by_agent[agent_id],
+                    "response_id": f"generation_{namespace}_proof_{index:02d}",
+                    "parent_call_id": (
+                        call_id_by_agent[parent_agent_id]
+                        if parent_agent_id is not None
+                        else None
+                    ),
+                    "delegation_id": (
+                        None
+                        if source_agent["delegation_id"] is None
+                        else f"delegation_{namespace}_{index:02d}"
+                    ),
+                    "call_count": 1,
+                    "cache_hit": False,
+                    "usage_source": "response",
+                }
+            )
+        cloned_by_agent = {
+            item["agent_id"]: item for item in cloned_agents
+        }
+        for gate in cloned["deterministic_gates"]:
+            source_agent = cloned_by_agent[gate["source_agent_id"]]
+            gate["source_call_id"] = source_agent["call_id"]
+            gate["delegation_id"] = source_agent["delegation_id"]
+        return cloned
+
+    def cold_ledger_items_for_audit(
+        target_audit: dict,
+        source_items: list[dict],
+    ) -> list[dict]:
+        source_by_agent = {item["agent_id"]: item for item in source_items}
+        return [
+            {
+                **deepcopy(source_by_agent[agent["agent_id"]]),
+                "call_id": agent["call_id"],
+                "orchestration_id": target_audit["orchestration_id"],
+                "parent_call_id": agent["parent_call_id"],
+                "delegation_id": agent["delegation_id"],
+                "cache_key": hashlib.sha256(
+                    (
+                        f"{target_audit['orchestration_id']}:"
+                        f"{agent['agent_id']}"
+                    ).encode()
+                ).hexdigest(),
+                "call_count": 1,
+                "response_id": agent["response_id"],
+                "response_model": agent["response_model"],
+                "outcome": agent["outcome"],
+                "usage_source": "response",
+                "actual_cost_usd": source_by_agent[agent["agent_id"]][
+                    "actual_cost_usd"
+                ],
+            }
+            for agent in target_audit["agents"]
+        ]
+
+    def clone_warm_audit_and_ledger(
+        cold_audit: dict,
+        cold_items: list[dict],
+        *,
+        target_orchestration_id: str,
+        namespace: str,
+    ) -> tuple[dict, list[dict]]:
+        warm_audit = deepcopy(cold_audit)
+        warm_audit["orchestration_id"] = target_orchestration_id
+        cold_by_agent = {item["agent_id"]: item for item in cold_audit["agents"]}
+        cold_items_by_agent = {item["agent_id"]: item for item in cold_items}
+        warm_call_id_by_agent = {
+            item["agent_id"]: f"modelcall_{namespace}_{index:02d}"
+            for index, item in enumerate(cold_audit["agents"], start=1)
+        }
+        warm_items = []
+        for index, warm_agent in enumerate(warm_audit["agents"], start=1):
+            agent_id = warm_agent["agent_id"]
+            cold_agent = cold_by_agent[agent_id]
+            cold_item = cold_items_by_agent[agent_id]
+            parent_agent_id = next(
+                (
+                    candidate["agent_id"]
+                    for candidate in cold_audit["agents"]
+                    if candidate["call_id"] == cold_agent["parent_call_id"]
+                ),
+                None,
+            )
+            origin_usage = {
+                "prompt_tokens": cold_item["prompt_tokens"],
+                "completion_tokens": cold_item["completion_tokens"],
+                "total_tokens": cold_item["total_tokens"],
+                "actual_cost_usd": cold_item["actual_cost_usd"],
+                "usage_source": cold_item["usage_source"],
+            }
+            warm_agent.update(
+                {
+                    "call_id": warm_call_id_by_agent[agent_id],
+                    "origin_call_id": cold_agent["call_id"],
+                    "parent_call_id": (
+                        warm_call_id_by_agent[parent_agent_id]
+                        if parent_agent_id is not None
+                        else None
+                    ),
+                    "delegation_id": (
+                        None
+                        if cold_agent["delegation_id"] is None
+                        else f"delegation_{namespace}_{index:02d}"
+                    ),
+                    "call_count": 0,
+                    "cache_hit": True,
+                    "outcome": "cache_hit",
+                    "usage_source": "cache",
+                    "usage": origin_usage,
+                    "response_id": cold_agent["response_id"],
+                    "response_model": cold_agent["response_model"],
+                }
+            )
+            warm_item = deepcopy(cold_item)
+            for field in (
+                "prompt_tokens",
+                "completion_tokens",
+                "total_tokens",
+                "latency_ms",
+            ):
+                warm_item.pop(field, None)
+            warm_item.update(
+                {
+                    "call_id": warm_agent["call_id"],
+                    "orchestration_id": target_orchestration_id,
+                    "parent_call_id": warm_agent["parent_call_id"],
+                    "delegation_id": warm_agent["delegation_id"],
+                    "call_count": 0,
+                    "estimated_cost_usd": 0,
+                    "actual_cost_usd": None,
+                    "outcome": "cache_hit",
+                    "origin_call_id": cold_agent["call_id"],
+                    "response_id": cold_agent["response_id"],
+                    "response_model": cold_agent["response_model"],
+                    "upstream_provider": "DeepInfra",
+                    "origin_usage": origin_usage,
+                    "origin_finish_reason": cold_item["finish_reason"],
+                    "usage_source": "cache",
+                    "finish_reason": cold_item["finish_reason"],
+                }
+            )
+            warm_items.append(warm_item)
+        warm_by_agent = {
+            item["agent_id"]: item for item in warm_audit["agents"]
+        }
+        for gate in warm_audit["deterministic_gates"]:
+            source_agent = warm_by_agent[gate["source_agent_id"]]
+            gate["source_call_id"] = source_agent["call_id"]
+            gate["delegation_id"] = source_agent["delegation_id"]
+        return warm_audit, warm_items
+
+    isolation_audit, isolation_warm_items = clone_warm_audit_and_ledger(
+        audit,
+        ledger["items"],
+        target_orchestration_id="orch_release_acceptance_isolation",
+        namespace="isolation",
+    )
+    isolation_run = deepcopy(flagship_run)
+    isolation_run["run_id"] = "isolation-run"
+    isolation_run["agent_orchestration"] = isolation_audit
+    isolation_run["result"]["agent_orchestration"] = isolation_audit
+    isolation_run["result"]["audit"]["agent_orchestration"] = isolation_audit
+    isolation_ledger = {
+        "scope": "global_budget_ledger",
+        "budget_scope": "instance_lifetime",
+        "ledger_persistence": "ephemeral_instance",
+        "items": [*deepcopy(ledger["items"]), *isolation_warm_items],
+    }
+    isolation_ledger["summary"] = _ledger_summary(isolation_ledger["items"])
+
+    baseline_audit = clone_cold_audit(
+        audit,
+        target_orchestration_id="orch_release_acceptance_baseline",
+        namespace="baseline",
+    )
+    baseline_cold_items = cold_ledger_items_for_audit(
+        baseline_audit,
+        ledger["items"],
+    )
+    later_audit, later_warm_items = clone_warm_audit_and_ledger(
+        baseline_audit,
+        baseline_cold_items,
+        target_orchestration_id="orch_release_acceptance_later",
+        namespace="later",
+    )
+    baseline_run["agent_orchestration"] = baseline_audit
+    baseline_result["agent_orchestration"] = baseline_audit
+    baseline_result["audit"]["agent_orchestration"] = baseline_audit
+    later_run["agent_orchestration"] = later_audit
+    later_result["agent_orchestration"] = later_audit
+    later_result["audit"]["agent_orchestration"] = later_audit
+    causal_delta = release_tool._keyed_dto_delta(baseline_result, later_result)
+
+    final_model_ledger = {
+        "scope": "global_budget_ledger",
+        "budget_scope": "instance_lifetime",
+        "ledger_persistence": "ephemeral_instance",
+        "items": [
+            *deepcopy(isolation_ledger["items"]),
+            *baseline_cold_items,
+            *later_warm_items,
+        ],
+    }
+    final_model_ledger["summary"] = _ledger_summary(
+        final_model_ledger["items"]
+    )
+    cache_lineage = {
+        "contract": "casepath.flagship-cache-lineage/1.0.0",
+        "requested_model": release_tool.REQUIRED_PRODUCTION_MODEL,
+        "exact_response_models": sorted(
+            release_tool.ACCEPTED_PRODUCTION_RESPONSE_MODELS
+        ),
+        "framework": deepcopy(release_tool.REQUIRED_FRAMEWORK),
+        "cold_orchestration_id": audit["orchestration_id"],
+        "warm_orchestration_id": isolation_audit["orchestration_id"],
+        "cold_run_surface": "visible_browser_flagship",
+        "warm_run_surface": "isolated_session_cache_replay",
+        "cold_guarded_fallback_count": audit["guarded_fallback_count"],
+        "warm_guarded_fallback_count": isolation_audit[
+            "guarded_fallback_count"
+        ],
+        "lineage": [
+            {
+                "agent_id": cold_agent["agent_id"],
+                "cold_call_id": cold_agent["call_id"],
+                "warm_call_id": warm_agent["call_id"],
+                "response_id": cold_agent["response_id"],
+                "response_model": cold_agent["response_model"],
+            }
+            for cold_agent, warm_agent in zip(
+                audit["agents"],
+                isolation_audit["agents"],
+                strict=True,
+            )
+        ],
+        "provider_calls_during_isolation_replay": 0,
+    }
+
+    def learning_snapshot(run: dict, result: dict) -> dict:
+        return {
+            "run_id": run["run_id"],
+            "completed_at": run["completed_at"],
+            "result_hash": release_tool.runtime_artifact_hash(result),
+            "verification_hash": result["verification"]["whole_playbook_hash"],
+            "verification_valid": True,
+            "observable_input_hash": observable_hash,
+            "canonical_state_hash": canonical_hash,
+            "process_dto_hash": release_tool.runtime_artifact_hash(result["process"]),
+            "checklist_dto_hash": release_tool.runtime_artifact_hash(
+                result["checklist"]
+            ),
+            "process_semantic_hash": release_tool.runtime_artifact_hash(
+                release_tool._semantic_process_dto(result["process"])
+            ),
+            "checklist_semantic_hash": release_tool.runtime_artifact_hash(
+                release_tool._semantic_checklist_dto(result["checklist"])
+            ),
+            "process_node_ids": [
+                node["node_id"] for node in result["process"]["nodes"]
+            ],
+            "process_edge_pairs": [
+                [edge["source"], edge["target"]]
+                for edge in result["process"]["edges"]
+            ],
+            "current_node_id": result["process"]["current_node"],
+            "required_now_item_ids": [
+                item["item_id"]
+                for item in result["checklist"]["required"]
+                if item["status"] == "still_needed"
+            ],
+            "conditional_item_ids": [
+                item["item_id"]
+                for item in result["checklist"]["required"]
+                if item["status"] == "conditional"
+            ],
+            "precedents": [
+                {
+                    "claim_id": item["claim_id"],
+                    "memory_id": item.get("memory_id"),
+                    "review_status": item["review_status"],
+                }
+                for item in result["precedents"]
+            ],
+            "reviewed_memory_used": result.get("reviewed_memory_used") is True,
+            "memory_application": deepcopy(result.get("memory_application")),
+            "shared_rule_applied": result.get("shared_rule_applied") is True,
+            "playbook_version": result["playbook"]["version"],
+        }
+
     proof = {
         "ready": True,
         "computed": True,
@@ -3619,18 +3982,8 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         "baseline_run_id": "baseline-run",
         "later_run_id": "later-run",
         "counterfactual_learning_freeze": deepcopy(counterfactual_freeze),
-        "before": {
-            "observable_input_hash": observable_hash,
-            "canonical_state_hash": canonical_hash,
-            "verification_hash": baseline_result["verification"]["whole_playbook_hash"],
-            **before_boundary,
-        },
-        "after": {
-            "observable_input_hash": observable_hash,
-            "canonical_state_hash": canonical_hash,
-            "verification_hash": later_verification["whole_playbook_hash"],
-            **after_boundary,
-        },
+        "before": learning_snapshot(baseline_run, baseline_result),
+        "after": learning_snapshot(later_run, later_result),
         "changes": {"precedent_claim_ids_added": ["DEF-027-E0-DEMO"]},
         "reviewed_memory_proof": {
             "used": True,
@@ -3741,9 +4094,50 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         ],
     }
     commit = "a" * 40
+    public_agentic_runtime = release_tool._expected_public_agentic_runtime()
+    session_isolation = {
+        "enabled": True,
+        "header": "X-CasePath-Session",
+        "format": "8-128 characters; ASCII letters, digits, dot, underscore, colon, or hyphen",
+        "state_scope": "caller_session",
+        "model_ledger_scope": "global",
+        "session_reset_scope": "caller_session_only",
+    }
     deployment = {
-        component: {"release_id": contract["release_id"], "source_commit": commit}
-        for component in ("frontend", "api", "qa")
+        "frontend": {
+            "contract": "casepath.deployment-identity/1.0.0",
+            "component": "frontend",
+            "component_contract": contract["components"]["frontend"]["contract"],
+            "component_version": contract["components"]["frontend"]["version"],
+            "release_id": contract["release_id"],
+            "source_commit": commit,
+            "source_commit_source": "RENDER_GIT_COMMIT",
+            "alignment_eligible": True,
+            "service": contract["services"]["frontend"],
+            "release_contract_sha256": None,
+        },
+        "api": {
+            "status": "ok",
+            "release_id": contract["release_id"],
+            "release": contract["components"]["api"]["version"],
+            "pipeline_release": contract["components"]["pipeline"]["version"],
+            "source_commit": commit,
+            "source_commit_aligned": True,
+            "source_commit_conflict": False,
+            "model_mode": release_tool.REQUIRED_PRODUCTION_MODE,
+            "model": release_tool.REQUIRED_PRODUCTION_MODEL,
+            "configured_model_identity": release_tool.REQUIRED_PRODUCTION_MODEL,
+            "model_provider": "openrouter",
+            "runtime_profile": release_tool.REQUIRED_RUNTIME_PROFILE,
+            "agentic_runtime": deepcopy(public_agentic_runtime),
+            "session_isolation": session_isolation,
+            "generated_data_only": True,
+            "real_claims_approved": False,
+        },
+        "qa": {
+            "release_id": contract["release_id"],
+            "source_commit": commit,
+        },
     }
     gate = {
         "path": "browser-focused-v20.mjs",
@@ -3751,12 +4145,56 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         "bytes": 1234,
     }
     runtime_versions = {"node": "v24.14.1", "playwright": "1.55.0", "chromium": "140"}
-    files = [
-        {"path": path, "sha256": f"{index:064x}", "bytes": 100 + index}
-        for index, path in enumerate(
-            sorted(release_tool.REQUIRED_QA_EVIDENCE_FILES), start=1
+    readiness = {
+        "status": "ready",
+        "database": "sqlite-demo",
+        "claims": len(contract["claims"]),
+        "artifacts": 12,
+        "active_playbook": "mould-playbook-v3",
+        "model_budget": {
+            "cumulative_usd_cap": 25,
+            "budget_scope": "instance_lifetime",
+            "ledger_persistence": "ephemeral_instance",
+            "external_key_hard_limit_guard": "configured",
+            "credential_configured": True,
+            "records": 0,
+            "network_calls": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "actual_cost_usd": 0,
+            "actual_cost_complete": True,
+            "unknown_cost_call_count": 0,
+            "outcomes": {},
+        },
+        "agentic_runtime": deepcopy(public_agentic_runtime),
+    }
+    release_contract_bytes = f"{json.dumps(contract, indent=2)}\n".encode()
+    files = []
+    for index, path in enumerate(
+        sorted(release_tool.REQUIRED_QA_EVIDENCE_FILES),
+        start=1,
+    ):
+        files.append(
+            {
+                "path": path,
+                "sha256": (
+                    hashlib.sha256(release_contract_bytes).hexdigest()
+                    if path == "release-contract.json"
+                    else f"{index:064x}"
+                ),
+                "bytes": (
+                    len(release_contract_bytes)
+                    if path == "release-contract.json"
+                    else 100 + index
+                ),
+            }
         )
-    ]
+    deployment["frontend"]["release_contract_sha256"] = next(
+        item["sha256"]
+        for item in files
+        if item["path"] == "release-contract.json"
+    )
     manifest = {
         "contract": release_tool.QA_EVIDENCE_MANIFEST_CONTRACT,
         "release_id": contract["release_id"],
@@ -3776,10 +4214,29 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         "files": files,
     }
     manifest_bytes = f"{json.dumps(manifest, indent=2)}\n".encode()
+    report_checks = [
+        {
+            "name": f"Production browser acceptance check {index:03d}",
+            "passed": True,
+            "detail": "Verified by the production-shaped runtime fixture.",
+        }
+        for index in range(1, 219)
+    ]
     report = {
         "status": "passed",
+        "release": contract["components"]["frontend"]["version"],
         "release_id": contract["release_id"],
+        "baseUrl": contract["services"]["frontend"],
+        "apiUrl": contract["services"]["api"],
+        "passed": len(report_checks),
         "failed": 0,
+        "checks": report_checks,
+        "failures": {"console": [], "page": [], "request": [], "cleanup": []},
+        "runIds": [
+            flagship_run["run_id"],
+            baseline_run["run_id"],
+            later_run["run_id"],
+        ],
         "deployment": deployment,
         "runtime": runtime_versions,
         "evidence": {
@@ -3795,6 +4252,11 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         },
     }
     retained = {
+        "deployment-identity.json": deepcopy(deployment),
+        "release-contract.json": deepcopy(contract),
+        "readiness-receipt.json": readiness,
+        "isolation-run.json": isolation_run,
+        "isolation-model-ledger.json": isolation_ledger,
         "flagship-run.json": flagship_run,
         "flagship-cold-model-ledger.json": ledger,
         "demo-review.json": demo_review,
@@ -3802,7 +4264,12 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         "later-baseline-run.json": baseline_run,
         "later-after-memory-run.json": later_run,
         "learning-proof.json": proof,
+        "model-ledger.json": final_model_ledger,
+        "runtime-versions.json": deepcopy(runtime_versions),
+        "flagship-cache-lineage.json": cache_lineage,
     }
+    assert set(retained) == set(release_tool.REQUIRED_QA_JSON_EVIDENCE_FILES)
+    assert len(manifest["files"]) == 30
     return report, manifest, retained, manifest_bytes
 
 
@@ -3914,7 +4381,79 @@ def test_dynamic_runtime_acceptance_passes_without_source_promotion() -> None:
         "status": "passed",
         "verdict_source": "dynamic_same_commit_qa_artifacts",
     }
+    retained_facts = retained["later-baseline-run.json"]["result"]["facts"]
+    assert (
+        retained["learning-proof.json"]["before"]["canonical_state_hash"]
+        != release_tool.runtime_artifact_hash(retained_facts)
+    )
     assert contract == original
+
+
+@pytest.mark.parametrize(
+    ("artifact", "claim_id", "expected"),
+    [
+        ("flagship-run.json", "DEF-027-E0-DEMO", r"result\.checklist\.items"),
+        (
+            "later-baseline-run.json",
+            "DEMO-MOULD-002",
+            r"learning\.baseline\.checklist\.items",
+        ),
+    ],
+)
+def test_dynamic_runtime_acceptance_enforces_claim_specific_checklist_order(
+    artifact: str,
+    claim_id: str,
+    expected: str,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    result = retained[artifact]["result"]
+    item_ids = [item["item_id"] for item in result["checklist"]["items"]]
+    assert tuple(item_ids) == release_tool.EVIDENCE_ITEM_IDS_BY_CLAIM[claim_id]
+    result["checklist"]["items"][-1], result["checklist"]["items"][-2] = (
+        result["checklist"]["items"][-2],
+        result["checklist"]["items"][-1],
+    )
+    if artifact == "flagship-run.json":
+        _refresh_causal_artifact_hashes(retained)
+    with pytest.raises(release_tool.VerificationError, match=expected):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+@pytest.mark.parametrize("forgery", ["missing_field", "current_node", "edge_pair"])
+def test_dynamic_runtime_acceptance_rejects_forged_learning_snapshot(
+    forgery: str,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    before = retained["learning-proof.json"]["before"]
+    if forgery == "missing_field":
+        del before["result_hash"]
+        expected = r"learning\.proof\.before"
+    elif forgery == "current_node":
+        before["current_node_id"] = "forged"
+        expected = r"learning\.proof\.before"
+    else:
+        before["process_edge_pairs"][0] = ["intake", "forged"]
+        expected = r"learning\.proof\.before"
+    with pytest.raises(release_tool.VerificationError, match=expected):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
 
 
 def test_dynamic_runtime_acceptance_rejects_self_consistent_semantic_fact_rebind() -> None:
@@ -4180,6 +4719,105 @@ def test_dynamic_runtime_acceptance_rejects_forged_learning_proof(
         )
 
 
+@pytest.mark.parametrize(
+    ("field", "forged_value"),
+    [
+        ("label", "FORGED LABEL"),
+        ("explanation", "FORGED EXPLANATION"),
+        ("confidence", 0.123456),
+    ],
+)
+def test_dynamic_runtime_acceptance_hash_binds_json_normalized_facts(
+    field: str,
+    forged_value: object,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    baseline_facts = retained["later-baseline-run.json"]["result"]["facts"]
+    later_facts = retained["later-after-memory-run.json"]["result"]["facts"]
+    assert any(fact["confidence"] == 0 for fact in baseline_facts)
+    assert release_tool.runtime_artifact_hash(baseline_facts) != retained[
+        "later-baseline-run.json"
+    ]["result"]["audit"]["canonical_state_hash"]
+    for facts in (baseline_facts, later_facts):
+        target = next(fact for fact in facts if fact["semantic_role"] is None)
+        target[field] = forged_value
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=r"learning\.input_and_canonical_binding",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+def test_runtime_canonical_facts_hash_restores_only_declared_float_fields() -> None:
+    retained = [
+        {
+            "fact_id": "fact_numeric_round_trip",
+            "label": "Exact label remains bound",
+            "explanation": "Exact explanation remains bound",
+            "confidence": 1,
+            "source_refs": [
+                {
+                    "locator_kind": "visual_observation",
+                    "region": [0, 0, 1, 1],
+                }
+            ],
+        }
+    ]
+    server = deepcopy(retained)
+    server[0]["confidence"] = 1.0
+    server[0]["source_refs"][0]["region"] = [0.0, 0.0, 1.0, 1.0]
+    assert release_tool._runtime_canonical_facts_hash(
+        retained, "fixture.facts"
+    ) == release_tool.runtime_artifact_hash(server)
+
+
+def test_dynamic_runtime_acceptance_allows_integral_fact_float_round_trip() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    result, audit = _runtime_result_and_audit(retained)
+    fact = result["facts"][0]
+    fact["confidence"] = 1
+    server_facts = deepcopy(result["facts"])
+    server_facts[0]["confidence"] = 1.0
+    canonical_agent = next(
+        agent
+        for agent in audit["agents"]
+        if agent["agent_id"] == "canonical_facts"
+    )
+    canonical_agent["output_artifact_hash"] = release_tool.runtime_artifact_hash(
+        server_facts
+    )
+    isolation_audit = retained["isolation-run.json"]["agent_orchestration"]
+    isolation_canonical_agent = next(
+        agent
+        for agent in isolation_audit["agents"]
+        if agent["agent_id"] == "canonical_facts"
+    )
+    isolation_canonical_agent["output_artifact_hash"] = canonical_agent[
+        "output_artifact_hash"
+    ]
+
+    assert release_tool.verify_dynamic_runtime_acceptance(
+        contract,
+        report,
+        manifest,
+        retained,
+        evidence_manifest_bytes=manifest_bytes,
+    )["status"] == "passed"
+
+
 @pytest.mark.parametrize("forgery", ["target", "source_memory", "before"])
 def test_dynamic_runtime_acceptance_rejects_rehashed_memory_boundary_forgery(
     forgery: str,
@@ -4356,6 +4994,8 @@ def test_dynamic_runtime_acceptance_rejects_rehashed_non_replay_learning_change(
     memory_event = retained["later-after-memory-run.json"]["events"][0]
     for key, value in receipt.items():
         memory_event[key] = deepcopy(value)
+    proof["after"]["memory_application"] = deepcopy(receipt)
+    proof["after"]["result_hash"] = release_tool.runtime_artifact_hash(later)
 
     with pytest.raises(
         release_tool.VerificationError,
@@ -4836,21 +5476,28 @@ def _append_realistic_warm_ledger_item(retained: dict) -> dict:
     return warm_item
 
 
-def test_dynamic_runtime_acceptance_accepts_real_public_ledger_shape() -> None:
+def test_public_ledger_accepts_warm_shape_but_cold_artifact_rejects_it() -> None:
     contract = release_tool.load_json(release_tool.RELEASE_PATH)
     report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
         contract
     )
     _append_realistic_warm_ledger_item(retained)
-
-    result = release_tool.verify_dynamic_runtime_acceptance(
-        contract,
-        report,
-        manifest,
-        retained,
-        evidence_manifest_bytes=manifest_bytes,
+    release_tool._verify_public_model_ledger(
+        retained["flagship-cold-model-ledger.json"],
+        "fixture",
     )
-    assert result["status"] == "passed"
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match="exact cold six",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
 
 
 def test_dynamic_runtime_acceptance_rejects_forbidden_retained_run_field() -> None:
@@ -5195,6 +5842,67 @@ def test_public_ledger_rejects_every_forged_summary_field() -> None:
             release_tool._verify_public_model_ledger(forged, "fixture")
 
 
+def _fixture_evidence_payload(
+    filename: str,
+    retained: dict[str, dict],
+    *,
+    label: str,
+) -> bytes:
+    if filename in retained:
+        return f"{json.dumps(retained[filename], indent=2)}\n".encode()
+    if filename.endswith(".png"):
+        return b"\x89PNG\r\n\x1a\n" + f"{label}: {filename}\n".encode()
+    if filename.endswith(".webm"):
+        return b"\x1aE\xdf\xa3" + f"{label}: {filename}\n".encode()
+    return f"{label}: {filename}\n".encode()
+
+
+def _write_fixture_evidence_pair(
+    tmp_path: Path,
+    report: dict,
+    manifest: dict,
+    retained: dict[str, dict],
+    *,
+    inventory: set[str] | frozenset[str],
+    payload_overrides: dict[str, bytes] | None = None,
+) -> tuple[Path, Path]:
+    overrides = payload_overrides or {}
+    records = []
+    for filename in sorted(inventory):
+        payload = overrides.get(
+            filename,
+            _fixture_evidence_payload(
+                filename,
+                retained,
+                label="retained fixture evidence",
+            ),
+        )
+        (tmp_path / filename).write_bytes(payload)
+        records.append(
+            {
+                "path": filename,
+                "sha256": hashlib.sha256(payload).hexdigest(),
+                "bytes": len(payload),
+            }
+        )
+    manifest["files"] = records
+    report["evidence"]["files"] = records
+    manifest_bytes = f"{json.dumps(manifest, indent=2)}\n".encode()
+    manifest_path = tmp_path / "evidence-manifest.json"
+    manifest_path.write_bytes(manifest_bytes)
+    report["evidence"]["manifest"] = {
+        "path": "evidence-manifest.json",
+        "sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+        "bytes": len(manifest_bytes),
+    }
+    report_path = tmp_path / "report.json"
+    report_path.write_text(
+        f"{json.dumps(report, indent=2)}\n",
+        encoding="utf-8",
+    )
+    return report_path, manifest_path
+
+
 def test_dynamic_runtime_evidence_paths_verify_the_atomic_artifact_pair(
     tmp_path: Path,
 ) -> None:
@@ -5202,10 +5910,11 @@ def test_dynamic_runtime_evidence_paths_verify_the_atomic_artifact_pair(
     report, manifest, retained, _ = successful_dynamic_qa_evidence(contract)
     records = []
     for filename in sorted(release_tool.REQUIRED_QA_EVIDENCE_FILES):
-        if filename in retained:
-            payload = f"{json.dumps(retained[filename], indent=2)}\n".encode()
-        else:
-            payload = f"retained evidence: {filename}\n".encode()
+        payload = _fixture_evidence_payload(
+            filename,
+            retained,
+            label="retained evidence",
+        )
         (tmp_path / filename).write_bytes(payload)
         records.append(
             {
@@ -5234,6 +5943,301 @@ def test_dynamic_runtime_evidence_paths_verify_the_atomic_artifact_pair(
     )
     assert result["status"] == "passed"
     assert result["source_commit"] == "a" * 40
+
+
+def test_dynamic_causal_evidence_paths_verify_exact_preflight_inventory(
+    tmp_path: Path,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, _ = successful_dynamic_qa_evidence(contract)
+    records = []
+    for filename in sorted(release_tool.REQUIRED_CAUSAL_QA_EVIDENCE_FILES):
+        payload = _fixture_evidence_payload(
+            filename,
+            retained,
+            label="deterministic retained evidence",
+        )
+        (tmp_path / filename).write_bytes(payload)
+        records.append(
+            {
+                "path": filename,
+                "sha256": hashlib.sha256(payload).hexdigest(),
+                "bytes": len(payload),
+            }
+        )
+    manifest["files"] = records
+    manifest["retained_media_contract"] = {
+        "json": list(release_tool.REQUIRED_CAUSAL_QA_JSON_EVIDENCE_FILES),
+        "screenshots": list(
+            release_tool.REQUIRED_CAUSAL_QA_SCREENSHOT_EVIDENCE_FILES
+        ),
+        "video": release_tool.REQUIRED_QA_VIDEO_EVIDENCE_FILE,
+        "missing": [],
+        "empty": [],
+    }
+    report["evidence"]["files"] = records
+    manifest_bytes = f"{json.dumps(manifest, indent=2)}\n".encode()
+    (tmp_path / "evidence-manifest.json").write_bytes(manifest_bytes)
+    report["evidence"]["manifest"] = {
+        "path": "evidence-manifest.json",
+        "sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+        "bytes": len(manifest_bytes),
+    }
+    (tmp_path / "report.json").write_text(
+        f"{json.dumps(report, indent=2)}\n",
+        encoding="utf-8",
+    )
+
+    result = release_tool.verify_dynamic_causal_evidence_paths(
+        tmp_path / "report.json",
+        tmp_path / "evidence-manifest.json",
+    )
+    assert result == {
+        "release_id": contract["release_id"],
+        "status": "passed",
+        "verdict_source": "deterministic_retained_causal_preflight",
+    }
+
+
+@pytest.mark.parametrize("forgery", ["duplicate", "zero_bytes"])
+def test_dynamic_causal_evidence_paths_reject_invalid_file_records(
+    tmp_path: Path,
+    forgery: str,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, _ = successful_dynamic_qa_evidence(contract)
+    records = []
+    for filename in sorted(release_tool.REQUIRED_CAUSAL_QA_EVIDENCE_FILES):
+        payload = _fixture_evidence_payload(
+            filename,
+            retained,
+            label="deterministic retained evidence",
+        )
+        (tmp_path / filename).write_bytes(payload)
+        records.append(
+            {
+                "path": filename,
+                "sha256": hashlib.sha256(payload).hexdigest(),
+                "bytes": len(payload),
+            }
+        )
+    if forgery == "duplicate":
+        records.append(deepcopy(records[0]))
+    else:
+        records[0]["bytes"] = 0
+    manifest["files"] = records
+    manifest["retained_media_contract"] = {
+        "json": list(release_tool.REQUIRED_CAUSAL_QA_JSON_EVIDENCE_FILES),
+        "screenshots": list(
+            release_tool.REQUIRED_CAUSAL_QA_SCREENSHOT_EVIDENCE_FILES
+        ),
+        "video": release_tool.REQUIRED_QA_VIDEO_EVIDENCE_FILE,
+        "missing": [],
+        "empty": [],
+    }
+    report["evidence"]["files"] = records
+    manifest_bytes = f"{json.dumps(manifest, indent=2)}\n".encode()
+    (tmp_path / "evidence-manifest.json").write_bytes(manifest_bytes)
+    report["evidence"]["manifest"] = {
+        "path": "evidence-manifest.json",
+        "sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+        "bytes": len(manifest_bytes),
+    }
+    (tmp_path / "report.json").write_text(
+        f"{json.dumps(report, indent=2)}\n",
+        encoding="utf-8",
+    )
+
+    expected = (
+        "Duplicate dynamic QA evidence path"
+        if forgery == "duplicate"
+        else "file record is invalid"
+    )
+    with pytest.raises(release_tool.VerificationError, match=expected):
+        release_tool.verify_dynamic_causal_evidence_paths(
+            tmp_path / "report.json",
+            tmp_path / "evidence-manifest.json",
+        )
+
+
+def test_successful_dynamic_evidence_fixture_matches_production_bundle_shape() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, _ = successful_dynamic_qa_evidence(contract)
+
+    assert set(retained) == set(release_tool.REQUIRED_QA_JSON_EVIDENCE_FILES)
+    assert len(manifest["files"]) == 30
+    assert report["runIds"] == ["flagship-run", "baseline-run", "later-run"]
+    assert report["passed"] == len(report["checks"]) == 218
+    assert report["failed"] == 0
+    assert report["failures"] == {
+        "console": [],
+        "page": [],
+        "request": [],
+        "cleanup": [],
+    }
+    cold = retained["flagship-cold-model-ledger.json"]
+    isolation = retained["isolation-model-ledger.json"]
+    final = retained["model-ledger.json"]
+    assert cold["summary"]["records"] == 6
+    assert cold["summary"]["network_calls"] == 6
+    assert isolation["summary"]["records"] == 12
+    assert isolation["summary"]["network_calls"] == 6
+    assert isolation["summary"]["outcomes"]["cache_hit"] == 6
+    assert final["summary"]["records"] == 24
+    assert final["summary"]["network_calls"] == 12
+    assert final["summary"]["outcomes"]["cache_hit"] == 12
+    assert final["summary"]["actual_cost_complete"] is True
+
+
+def test_dynamic_runtime_evidence_paths_reject_extra_manifest_file(
+    tmp_path: Path,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, _ = successful_dynamic_qa_evidence(contract)
+    inventory = set(release_tool.REQUIRED_QA_EVIDENCE_FILES)
+    inventory.add("unexpected-retained-artifact.txt")
+    report_path, manifest_path = _write_fixture_evidence_pair(
+        tmp_path,
+        report,
+        manifest,
+        retained,
+        inventory=inventory,
+    )
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match="manifest inventory is not exact",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance_paths(
+            report_path,
+            manifest_path,
+        )
+
+
+@pytest.mark.parametrize(
+    "filename",
+    release_tool.REQUIRED_QA_JSON_EVIDENCE_FILES,
+)
+def test_dynamic_runtime_evidence_paths_reject_empty_required_json_object(
+    tmp_path: Path,
+    filename: str,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, _ = successful_dynamic_qa_evidence(contract)
+    report_path, manifest_path = _write_fixture_evidence_pair(
+        tmp_path,
+        report,
+        manifest,
+        retained,
+        inventory=release_tool.REQUIRED_QA_EVIDENCE_FILES,
+        payload_overrides={filename: b"{}\n"},
+    )
+
+    with pytest.raises(release_tool.VerificationError):
+        release_tool.verify_dynamic_runtime_acceptance_paths(
+            report_path,
+            manifest_path,
+        )
+
+
+def test_dynamic_runtime_evidence_paths_reject_malformed_required_json(
+    tmp_path: Path,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, _ = successful_dynamic_qa_evidence(contract)
+    report_path, manifest_path = _write_fixture_evidence_pair(
+        tmp_path,
+        report,
+        manifest,
+        retained,
+        inventory=release_tool.REQUIRED_QA_EVIDENCE_FILES,
+        payload_overrides={"deployment-identity.json": b"{malformed"},
+    )
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match="Cannot read retained deployment-identity.json",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance_paths(
+            report_path,
+            manifest_path,
+        )
+
+
+@pytest.mark.parametrize(
+    ("filename", "expected"),
+    [
+        ("01-start-desktop.png", "is not PNG"),
+        ("uninterrupted-focused-demo.webm", "video is not WebM"),
+    ],
+)
+def test_dynamic_runtime_evidence_paths_reject_wrong_media_magic(
+    tmp_path: Path,
+    filename: str,
+    expected: str,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, _ = successful_dynamic_qa_evidence(contract)
+    report_path, manifest_path = _write_fixture_evidence_pair(
+        tmp_path,
+        report,
+        manifest,
+        retained,
+        inventory=release_tool.REQUIRED_QA_EVIDENCE_FILES,
+        payload_overrides={filename: b"not-the-declared-media-format\n"},
+    )
+
+    with pytest.raises(release_tool.VerificationError, match=expected):
+        release_tool.verify_dynamic_runtime_acceptance_paths(
+            report_path,
+            manifest_path,
+        )
+
+
+def test_dynamic_runtime_acceptance_rejects_extra_flagship_cold_row() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    cold_ledger = retained["flagship-cold-model-ledger.json"]
+    extra = deepcopy(cold_ledger["items"][-1])
+    extra.update(
+        {
+            "call_id": "modelcall_unbound_extra_cold",
+            "orchestration_id": "orch_unbound_extra_cold",
+            "response_id": "generation_unbound_extra_cold",
+        }
+    )
+    cold_ledger["items"].append(extra)
+    cold_ledger["summary"] = _ledger_summary(cold_ledger["items"])
+
+    with pytest.raises(release_tool.VerificationError):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+def test_dynamic_runtime_acceptance_rejects_cache_lineage_tamper() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    retained["flagship-cache-lineage.json"]["lineage"][0][
+        "warm_call_id"
+    ] = "modelcall_forged_warm_lineage"
+
+    with pytest.raises(release_tool.VerificationError, match="cache-lineage receipt"):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
 
 
 def test_dynamic_runtime_acceptance_requires_exact_retained_media_inventory() -> None:
@@ -5584,11 +6588,35 @@ def test_definitive_qa_runs_zero_provider_browser_preflight_before_production() 
     assert script.index("casepath-api/replace_photographic_evidence.py .") < script.index(
         "Running mandatory zero-provider full-browser preflight."
     )
+    causal_verifier = "verify-runtime-causal-evidence"
+    full_verifier = "verify-runtime-evidence"
+    assert script.index(causal_verifier) < script.index(production_marker)
+    assert script.index(full_verifier) > script.index(production_marker)
+    assert '--report "$preflight_output/report.json"' in script
+    assert '--report "$qa_output/report.json"' in script
     assert "test -s \"$repository_root/casepath-api/artifacts/$required_artifact\"" in script
     assert 'summary["network_calls"] == 0' in script
     assert 'summary["actual_cost_usd"] == 0' in script
     assert "bash casepath-qa/run-definitive-v20.sh" in release_tool.DEFINITIVE_QA_BUILD_COMMAND
-    assert "process.env.CASEPATH_QA_OUT || 'guided-v13-smoke-out'" in browser_gate
+    assert "const OUT = assertSafeQaOutputParent(" in browser_gate
+    assert "path.parse(REPOSITORY_ROOT).root" in browser_gate
+    assert "resolved === REPOSITORY_ROOT || resolved === QA_DIRECTORY" in browser_gate
+    assert "PREFLIGHT_PARENT_PATTERN.test(path.basename(preflightParent))" in browser_gate
+    assert "realParent = realpathSync(parent)" in browser_gate
+    assert "Symlinked QA output parent fixture was accepted" in browser_gate
+    deterministic_browser_start = script.index(
+        "Running mandatory zero-provider full-browser preflight."
+    )
+    production_start = script.index(production_marker)
+    deterministic_browser = script[deterministic_browser_start:production_start]
+    assert (
+        "unset OPENROUTER_API_KEY CASEPATH_AGENT_RUNTIME_PROFILE "
+        "CASEPATH_SOURCE_COMMIT" in deterministic_browser
+    )
+    assert (
+        "CASEPATH_MODEL_MODE CASEPATH_MODEL_CUMULATIVE_USD_CAP"
+        in deterministic_browser
+    )
     assert browser_gate.index("initialLedgerAdmissionViolations(initialModelLedger)") < browser_gate.index(
         "const reset = await resetDemo()"
     )

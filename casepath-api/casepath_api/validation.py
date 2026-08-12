@@ -49,6 +49,44 @@ PRECEDENT_STATUSES = {
 REVIEW_COMPONENTS = {"process_graph", "evidence_model"}
 REVIEW_OPERATIONS = {"add", "replace", "remove"}
 LOCATOR_KINDS = {"text_quote", "visual_observation", "metadata_field"}
+REQUIRED_PLAYBOOK_CHECK_NAMES = (
+    "Canonical fact and source contract",
+    "Exact source grounding",
+    "Legal authority contract",
+    "Graph integrity",
+    "Structured law-to-process questions",
+    "Process-to-evidence linkage",
+    "Exact fact relationships",
+    "Precedent exclusion and provenance",
+    "Precedent ranking acceptance binding",
+    "Law-to-process linkage",
+    "Current-state safety",
+)
+LEARNING_SNAPSHOT_FIELDS = frozenset(
+    {
+        "run_id",
+        "completed_at",
+        "result_hash",
+        "verification_hash",
+        "verification_valid",
+        "observable_input_hash",
+        "canonical_state_hash",
+        "process_dto_hash",
+        "checklist_dto_hash",
+        "process_semantic_hash",
+        "checklist_semantic_hash",
+        "process_node_ids",
+        "process_edge_pairs",
+        "current_node_id",
+        "required_now_item_ids",
+        "conditional_item_ids",
+        "precedents",
+        "reviewed_memory_used",
+        "memory_application",
+        "shared_rule_applied",
+        "playbook_version",
+    }
+)
 DECISION_VALUES = {
     "in_scope",
     "out_of_scope",
@@ -1162,4 +1200,14 @@ def validate_playbook(
         )
     checks.append({"name": "Law-to-process linkage", "status": "passed", "detail": f"All {len(legal_ids)} authority records affect a process node or evidence requirement."})
     checks.extend(validate_current_state(understanding, process, checklist))
+    if tuple(check["name"] for check in checks) != REQUIRED_PLAYBOOK_CHECK_NAMES:
+        raise ContractValidationError(
+            [
+                ContractIssue(
+                    "verification",
+                    "checks",
+                    "must preserve the exact governed playbook-check order",
+                )
+            ]
+        )
     return checks

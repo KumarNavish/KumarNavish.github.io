@@ -7,6 +7,56 @@ class EvidenceRelationError(ValueError):
     """Raised when process requirements and checklist ownership diverge."""
 
 
+EVIDENCE_ITEM_IDS_BY_CLAIM: dict[str, tuple[str, ...]] = {
+    "DEF-027-E0-DEMO": (
+        "claim_message",
+        "source_integrity",
+        "lease",
+        "policy_reference",
+        "customer_objective",
+        "management_position",
+        "health_safety_statement",
+        "defect_notice",
+        "proof_of_delivery",
+        "dated_photos",
+        "recurrence_chronology",
+        "technical_assessment",
+        "moisture_measurements",
+        "building_envelope",
+        "repair_history",
+        "use_evidence",
+        "remediation_plan",
+        "financial_impact",
+        "settlement_proposal",
+        "conciliation_bundle",
+        "completion_record",
+    ),
+    "DEMO-MOULD-002": (
+        "claim_message",
+        "source_integrity",
+        "lease",
+        "policy_reference",
+        "customer_objective",
+        "management_position",
+        "health_safety_statement",
+        "defect_notice",
+        "proof_of_delivery",
+        "dated_photos",
+        "recurrence_chronology",
+        "repair_history",
+        "technical_assessment",
+        "moisture_measurements",
+        "building_envelope",
+        "use_evidence",
+        "remediation_plan",
+        "financial_impact",
+        "settlement_proposal",
+        "conciliation_bundle",
+        "completion_record",
+    ),
+}
+
+
 BASE_EVIDENCE_NODE_IDS: dict[str, tuple[str, ...]] = {
     "claim_message": ("intake",),
     "source_integrity": ("intake",),
@@ -34,14 +84,28 @@ BASE_EVIDENCE_NODE_IDS: dict[str, tuple[str, ...]] = {
         "mixed_cause",
         "evidence_gap",
     ),
-    "use_evidence": ("causation", "tenant_use", "mixed_cause"),
     "repair_history": ("responsibility",),
+    "use_evidence": ("causation", "tenant_use", "mixed_cause"),
     "remediation_plan": ("remedy", "building_defect"),
     "financial_impact": ("remedy",),
     "settlement_proposal": ("remedy", "mixed_cause"),
     "conciliation_bundle": ("escalation",),
     "completion_record": ("resolution",),
 }
+
+
+def validate_evidence_item_order(
+    claim_id: str,
+    items: list[dict[str, Any]],
+) -> None:
+    """Fail closed when a governed claim changes its public checklist order."""
+
+    expected = EVIDENCE_ITEM_IDS_BY_CLAIM.get(claim_id)
+    actual = tuple(item.get("item_id") for item in items)
+    if expected is None or actual != expected:
+        raise EvidenceRelationError(
+            f"evidence item order does not match governed claim {claim_id!r}"
+        )
 
 BASE_PROCESS_NODE_IDS = (
     "intake",
@@ -254,9 +318,11 @@ __all__ = [
     "BASE_EVIDENCE_NODE_IDS",
     "BASE_PROCESS_EDGE_PAIRS",
     "BASE_PROCESS_NODE_IDS",
+    "EVIDENCE_ITEM_IDS_BY_CLAIM",
     "EvidenceRelationError",
     "apply_evidence_relations",
     "authoritative_evidence_node_ids",
     "derive_evidence_relations",
+    "validate_evidence_item_order",
     "validate_evidence_relations",
 ]
