@@ -5448,6 +5448,38 @@ def test_definitive_qa_runs_zero_provider_browser_preflight_before_production() 
     )
 
 
+def test_review_mutation_cannot_reuse_a_stale_coalesced_run_read() -> None:
+    guard = (
+        release_tool.REPOSITORY / "casepath/assets/live-v18-insertion-guard.js"
+    ).read_text(encoding="utf-8")
+    renderer = (release_tool.REPOSITORY / "casepath/assets/live-v16.js").read_text(
+        encoding="utf-8"
+    )
+    assert "const pendingRunMutations = new Map();" in guard
+    assert "function effectiveSessionId(request, init)" in guard
+    assert "init.headers !== undefined ? init.headers : request?.headers" in guard
+    assert "headers.get('X-CasePath-Session')" in guard
+    assert "runResourceKey(url, request, init)" in guard
+    assert "const isReviewMutation = method === 'POST'" in guard
+    assert guard.index("pendingRunReads.delete(resourceKey);") < guard.index(
+        "const mutation = nativeFetch(input, init);"
+    )
+    assert "const activeMutation = pendingRunMutations.get(resourceKey);" in guard
+    assert "await activeMutation;" in guard
+    assert "runReadWindowMs" not in guard
+    assert "window.setTimeout" not in guard
+    assert "window.CASEPATH_INSERTION_GUARD = '19.0.2';" in guard
+    applied_renderer = renderer[
+        renderer.index("function showReviewApplied()") : renderer.index(
+            "async function submitReview"
+        )
+    ]
+    assert "result: snapshot(state.review.result)" in applied_renderer
+    assert applied_renderer.index("result: snapshot(state.review.result)") < applied_renderer.index(
+        "renderProcessWorkspace({ evidence: true, precedents: false })"
+    )
+
+
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [

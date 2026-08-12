@@ -35,7 +35,17 @@
 
   const nativeFetch = window.fetch.bind(window);
   const pendingRunReads = new Map();
-  const runReadWindowMs = 350;
+  const pendingRunMutations = new Map();
+
+  function effectiveSessionId(request, init) {
+    const headers = new Headers(init.headers !== undefined ? init.headers : request?.headers);
+    return (headers.get('X-CasePath-Session') || '').trim();
+  }
+
+  function runResourceKey(url, request, init) {
+    const match = url.pathname.match(/^(.*\/api\/runs\/[^/]+)(?:\/review)?$/);
+    return match ? `${url.origin}${match[1]}\n${effectiveSessionId(request, init)}` : '';
+  }
 
   window.fetch = async function stableFetch(input, init = {}) {
     const request = typeof input === 'string' || input instanceof URL ? null : input;
@@ -47,26 +57,45 @@
       return nativeFetch(input, init);
     }
 
-    const isRunRead = method === 'GET' && /^\/api\/runs\/[^/]+$/.test(url.pathname);
+    const resourceKey = runResourceKey(url, request, init);
+    const isRunRead = method === 'GET' && Boolean(resourceKey) && !url.pathname.endsWith('/review');
+    const isReviewMutation = method === 'POST' && Boolean(resourceKey) && url.pathname.endsWith('/review');
+    if (isReviewMutation) {
+      pendingRunReads.delete(resourceKey);
+      const mutation = nativeFetch(input, init);
+      pendingRunMutations.set(resourceKey, mutation);
+      try {
+        return await mutation;
+      } finally {
+        if (pendingRunMutations.get(resourceKey) === mutation) pendingRunMutations.delete(resourceKey);
+        pendingRunReads.delete(resourceKey);
+      }
+    }
     if (!isRunRead) return nativeFetch(input, init);
 
-    const now = performance.now();
-    const existing = pendingRunReads.get(url.href);
-    if (existing && now - existing.startedAt < runReadWindowMs) {
-      const response = await existing.promise;
+    const activeMutation = pendingRunMutations.get(resourceKey);
+    if (activeMutation) {
+      try {
+        await activeMutation;
+      } catch (_) {
+        // The caller still receives a fresh authoritative run read after a
+        // failed review mutation; no pre-mutation response may be reused.
+      }
+    }
+
+    const existing = pendingRunReads.get(resourceKey);
+    if (existing) {
+      const response = await existing;
       return response.clone();
     }
 
     const promise = nativeFetch(input, init);
-    pendingRunReads.set(url.href, { promise, startedAt: now });
+    pendingRunReads.set(resourceKey, promise);
     try {
       const response = await promise;
       return response.clone();
     } finally {
-      window.setTimeout(() => {
-        const current = pendingRunReads.get(url.href);
-        if (current?.promise === promise) pendingRunReads.delete(url.href);
-      }, runReadWindowMs);
+      if (pendingRunReads.get(resourceKey) === promise) pendingRunReads.delete(resourceKey);
     }
   };
 
@@ -83,6 +112,6 @@
     });
   }
 
-  window.CASEPATH_INSERTION_GUARD = '19.0.1';
+  window.CASEPATH_INSERTION_GUARD = '19.0.2';
   window.CASEPATH_RUNTIME_STABILITY = '19.0.0';
 })();
