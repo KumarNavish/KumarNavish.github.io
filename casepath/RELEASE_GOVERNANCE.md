@@ -118,7 +118,7 @@ bound identically across the run audit and sanitized ledger. A paid provider
 response, a cache replay, or a weak/unbound role
 record does not satisfy that gate.
 
-Fifteen authorized model attempts failed closed at the release gate:
+Seventeen authorized model attempts failed closed at the release gate:
 
 - Attempt 1 reached DeepInfra through OpenRouter and returned the provider's
   dated canonical model ID. It charged USD 0.00756 for 3,629 prompt and 2,625
@@ -300,6 +300,32 @@ Fifteen authorized model attempts failed closed at the release gate:
   current report nor an evidence manifest. Cold and warm application
   acceptance remain immutable history; Attempt 16 established no dynamic
   release acceptance.
+- Attempt 17 ran from QA deploy `dep-d9u4bqjncjis73ag4iag` against aligned
+  source commit `580974b0844f3a7e66ba3d324685cd3290798114`. QA accepted run
+  `run_020a11fbd8dc3231` and bound orchestration
+  `orch_03c1bbb4a9e4269b`. Canonical facts, the orchestrator plan, both logical
+  specialists, and the deterministic process gate completed. The evidence
+  call then returned a complete `stop` response through DeepInfra but retained
+  zero accepted and 42 rejected field contributions under
+  `model_contribution_majority`: both `status` and `artifact_ids` failed the
+  exact `evidence_contract` for all 21 expected item IDs. The five responses
+  cost USD 0.0201973 for 29,347 prompt and 2,569 completion tokens. The
+  deterministic evidence gate, final model role, whole-playbook gate, and warm
+  replay never started. The failed build published neither a current report
+  nor an evidence manifest; its public QA origin still served the stale
+  previous-deploy report. Attempt 17 therefore remains failed-closed history
+  and establishes no dynamic release acceptance.
+
+The repaired agent-graph implementation is version `1.2.1`. The document,
+process, and evidence coverage roles now require exact `6`, `6`, and `21`
+proposal cardinalities in their provider-native schemas, disclose the required
+candidate IDs and counts in their bounded prompts, and reject missing,
+duplicate, or unknown membership before semantic field scoring. Guarded
+deterministic projection remains available only for an incorrect field on a
+returned candidate; omitted candidates can no longer satisfy contribution
+majority. The schema, payload, prompt, validator, cache-version, and both
+governed claim cardinalities are locally regression-tested. This repair is not
+itself production acceptance evidence.
 
 The current source pins OpenRouter to the exact `deepinfra/fp4` endpoint tag,
 sets `allow_fallbacks: false`, keeps `require_parameters: true`, and denies
@@ -328,8 +354,9 @@ requires a new same-commit cold production journey with all six bound calls and
 three passed deterministic gates.
 
 Known aggregate provider charges for attempts 1, 2, 4, 5, 6, 8, 10, 11, 12,
-the two cost-known calls in attempt 14, and all six calls in attempts 15 and 16
-are USD 0.2289426. Attempts 3, 7, 9, and 13, plus the two failed calls in attempt 14,
+the two cost-known calls in attempt 14, all six calls in attempts 15 and 16,
+and all five calls in attempt 17 are USD 0.2491399. Attempts 3, 7, 9, and 13,
+plus the two failed calls in attempt 14,
 are unknown and excluded rather than treated as zero. Attempts 7 and 9 each retain a USD 0.027645 estimated
 reservation, neither of which is included as an actual charge. The attempts
 remain failed-closed release history; Attempts 15 and 16 contain successful
@@ -338,7 +365,7 @@ accepted zero-network-call cache replay, but none is accepted model-backed
 release evidence. No raw prompt, raw output, credential, or private reference
 is retained.
 
-The sixteen records above are listed under `historical_model_validation` with
+The seventeen records above are listed under `historical_model_validation` with
 `scope: failed_closed_history_only`; they can never establish current runtime
 acceptance. At this source-history freeze, no passing dynamic QA artifact pair
 had been verified. A later same-commit passing pair may supersede that
