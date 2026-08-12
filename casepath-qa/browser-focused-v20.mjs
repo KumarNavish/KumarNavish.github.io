@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import vm from 'node:vm';
 import { chromium } from 'playwright';
 
 const BASE = (process.env.BASE_URL || 'http://127.0.0.1:4173').replace(/\/$/, '');
@@ -1993,6 +1994,7 @@ async function execute() {
   const flagshipScriptSources = await Promise.all(flagshipScriptPaths.map(async scriptPath => ({ scriptPath, source: await getText(`${BASE}/${scriptPath}`) })));
   const loadedFlagshipSource = [sourceHtml, ...flagshipScriptSources.map(item => item.source)].join('\n');
   const orchestrationRendererSource = flagshipScriptSources.find(item => item.scriptPath === 'assets/live-v16.js')?.source || '';
+  const runReadGuardSource = flagshipScriptSources.find(item => item.scriptPath === 'assets/live-v18-insertion-guard.js')?.source || '';
   const staleQaService = /casepath-guided-(?:v13-smoke|evidence-v13)\.onrender\.com/i;
   const falseReviewedV4Claim = /mould-playbook-v4|released playbook v4|after reviewed knowledge|reviewed playbook release/i;
   const falseGroundingAuthority = /machine-visible image record|model interpretation|live retrieval/i;
@@ -2000,6 +2002,7 @@ async function execute() {
   check('Loaded release contains no obsolete public QA-service destination', !staleQaService.test(loadedFlagshipSource));
   check('Loaded release labels logical specialist topology as fan-out rather than physical parallel transport', loadedFlagshipSource.includes('<i>fan-out</i>') && !loadedFlagshipSource.includes('<i>parallel</i>'));
   check('Loaded orchestration renderer never promotes a validator label to a deterministic gate ID', orchestrationRendererSource.includes("const gateId = returnedValue(event, 'gate_id', 'agent_id');") && orchestrationRendererSource.includes("const validator = returnedValue(event, 'validator');") && orchestrationRendererSource.includes('const gateIdentity = gateId ? ` data-gate-id=') && !orchestrationRendererSource.includes("returnedValue(event, 'gate_id', 'agent_id', 'validator', 'label')"));
+  check('Loaded run-read coalescing is session-scoped, in-flight-only, review-mutation-aware, and renders the authoritative review response', runReadGuardSource.includes("headers.get('X-CasePath-Session')") && runReadGuardSource.includes('runResourceKey(url, request, init)') && runReadGuardSource.includes('const pendingRunMutations = new Map();') && runReadGuardSource.includes("const isReviewMutation = method === 'POST'") && runReadGuardSource.includes('const activeMutation = pendingRunMutations.get(resourceKey);') && runReadGuardSource.includes('await activeMutation;') && !runReadGuardSource.includes('runReadWindowMs') && !runReadGuardSource.includes('window.setTimeout') && orchestrationRendererSource.includes('result: snapshot(state.review.result)'));
   check('Current QA destination is guarded by exact live API identity and an atomic hash-bound report/manifest attestation', loadedFlagshipSource.includes("const qaEvidenceBase = 'https://casepath-guided-canonical-qa.onrender.com'") && loadedFlagshipSource.includes('function releaseEvidenceAttested(') && loadedFlagshipSource.includes("fetch(`${apiBase}/healthz`") && loadedFlagshipSource.includes("api?.source_commit === commit") && loadedFlagshipSource.includes('reportIdentities.every(value => value === commit)') && loadedFlagshipSource.includes('report?.failed === 0') && loadedFlagshipSource.includes('manifest?.source_commit === commit') && loadedFlagshipSource.includes('report.evidence.manifest.sha256 === manifestBinding.sha256') && loadedFlagshipSource.includes('report.evidence.manifest.bytes === manifestBinding.bytes') && loadedFlagshipSource.includes('retainedEvidenceComplete(report, manifest)') && loadedFlagshipSource.includes("link.dataset.evidenceState = 'attested'"));
   check('Loaded release contains no false reviewed-v4 lifecycle claim', !falseReviewedV4Claim.test(loadedFlagshipSource));
   check('Loaded release contains no false image-extraction, model-legal, or live-retrieval authority copy', !falseGroundingAuthority.test(loadedFlagshipSource));
@@ -2535,7 +2538,7 @@ async function execute() {
   check('Applied-review result globally suppresses every pre-review contribution badge and final handoff', reviewed.review_transform?.acceptance_scope === 'post_review_unverified_transform' && reviewed.review_transform?.model_acceptance_reused === false && postReviewContributionExpectations.every(value => value === null) && appliedContributionBadgeCount === 0 && visibleContributionBadgeCount === 0 && visibleFinalHandoffCount === 0, JSON.stringify({ review_transform: reviewed.review_transform, post_review_expectations: postReviewContributionExpectations, rendered_badge_count: appliedContributionBadgeCount, visible_badge_count: visibleContributionBadgeCount, visible_final_handoff_count: visibleFinalHandoffCount }));
   const reviewedNodeIds = reviewed.result.process.nodes.map(node => node.node_id);
   const appliedNodeIds = await page.evaluate(() => [...new Set([...document.querySelectorAll('.review-applied .process-node-button[data-node-id],.review-applied .process-branch-node[data-node-id]')].map(node => node.dataset.nodeId))]);
-  check('Applied view shows the actual server-returned reviewed graph', reviewedNodeIds.every(id => appliedNodeIds.includes(id)) && reviewedNodeIds.length === appliedNodeIds.length);
+  check('Applied view shows the actual server-returned reviewed graph', reviewedNodeIds.every(id => appliedNodeIds.includes(id)) && reviewedNodeIds.length === appliedNodeIds.length, JSON.stringify({ reviewedNodeIds, appliedNodeIds }));
   const appliedEdges = await page.locator('.review-applied .process-edge[data-edge-source][data-edge-target]').evaluateAll(edges => edges.map(edge => ({ source: edge.dataset.edgeSource, target: edge.dataset.edgeTarget, state: edge.dataset.edgeState })));
   const reviewedEdges = reviewed.result.process.edges.map(edge => ({ source: edge.source, target: edge.target, state: edge.state || '' }));
   check('Applied view retains every server-returned reviewed graph connection', JSON.stringify(appliedEdges) === JSON.stringify(reviewedEdges), JSON.stringify({ reviewedEdges, appliedEdges }));
@@ -3066,7 +3069,88 @@ function mockLedgerForRun(run, cacheMode, coldLedger = null) {
   };
 }
 
-function runContractSelfTest() {
+async function assertRunReadSessionIsolation() {
+  const guardSource = await fs.readFile(new URL('../casepath/assets/live-v18-insertion-guard.js', import.meta.url), 'utf8');
+  class FakeNode {}
+  class FakeElement extends FakeNode {}
+  FakeNode.prototype.insertBefore = function insertBefore(node) { return node; };
+  FakeElement.prototype.insertAdjacentHTML = function insertAdjacentHTML() {};
+  class FakeResponse {
+    constructor(body) { this.body = body; }
+    clone() { return new FakeResponse(structuredClone(this.body)); }
+    async json() { return structuredClone(this.body); }
+  }
+  const calls = [];
+  const pending = [];
+  const nativeFetch = (input, init = {}) => {
+    const request = typeof input === 'string' || input instanceof URL ? null : input;
+    const headers = new Headers(init.headers !== undefined ? init.headers : request?.headers);
+    const session = (headers.get('X-CasePath-Session') || '').trim();
+    const method = String(init.method || request?.method || 'GET').toUpperCase();
+    calls.push({ session, method });
+    return new Promise(resolve => pending.push({ session, method, resolve: () => resolve(new FakeResponse({ session, method })) }));
+  };
+  const sandbox = {
+    window: { fetch: nativeFetch },
+    Node: FakeNode,
+    Element: FakeElement,
+    URL,
+    Headers,
+    Request,
+    location: { href: 'https://casepath.test/' },
+    document: { readyState: 'loading', addEventListener() {} },
+    structuredClone,
+  };
+  vm.runInNewContext(guardSource, sandbox, { filename: 'live-v18-insertion-guard.js' });
+  const runUrl = 'https://api.casepath.test/api/runs/run_shared';
+  const requestHeaders = session => ({ 'X-CasePath-Session': session });
+  const settlePending = entries => entries.forEach(entry => entry.resolve());
+
+  const differentSessionStart = calls.length;
+  const sessionA = sandbox.window.fetch(runUrl, { headers: requestHeaders('session-A') });
+  const sessionB = sandbox.window.fetch(runUrl, { headers: requestHeaders('session-B') });
+  if (calls.length - differentSessionStart !== 2) throw new Error('Different sessions shared one in-flight run read');
+  settlePending(pending.splice(0));
+  const [bodyA, bodyB] = await Promise.all((await Promise.all([sessionA, sessionB])).map(response => response.json()));
+  if (bodyA.session !== 'session-A' || bodyB.session !== 'session-B') throw new Error('A run-read response crossed the session boundary');
+
+  const sameSessionStart = calls.length;
+  const sameA1 = sandbox.window.fetch(runUrl, { headers: requestHeaders('session-A') });
+  const sameA2 = sandbox.window.fetch(runUrl, { headers: requestHeaders('session-A') });
+  if (calls.length - sameSessionStart !== 1) throw new Error('Same-session concurrent run reads were not coalesced');
+  settlePending(pending.splice(0));
+  const sameBodies = await Promise.all((await Promise.all([sameA1, sameA2])).map(response => response.json()));
+  if (!sameBodies.every(body => body.session === 'session-A')) throw new Error('Same-session cloned run reads diverged');
+
+  const requestWithA = new Request(runUrl, { headers: requestHeaders('session-A') });
+  const overrideStart = calls.length;
+  const overriddenToB = sandbox.window.fetch(requestWithA, { headers: requestHeaders('session-B') });
+  const sameB = sandbox.window.fetch(runUrl, { headers: requestHeaders('session-B') });
+  const separateA = sandbox.window.fetch(runUrl, { headers: requestHeaders('session-A') });
+  if (calls.length - overrideStart !== 2) throw new Error('Request/init header precedence did not preserve session isolation');
+  settlePending(pending.splice(0));
+  const [overrideBody, sameBBody, separateABody] = await Promise.all((await Promise.all([overriddenToB, sameB, separateA])).map(response => response.json()));
+  if (overrideBody.session !== 'session-B' || sameBBody.session !== 'session-B' || separateABody.session !== 'session-A') throw new Error('Effective session headers were not bound to the run-read key');
+
+  const mutationStart = calls.length;
+  const mutationA = sandbox.window.fetch(`${runUrl}/review`, { method: 'POST', headers: requestHeaders('session-A') });
+  const readB = sandbox.window.fetch(runUrl, { headers: requestHeaders('session-B') });
+  const readA = sandbox.window.fetch(runUrl, { headers: requestHeaders('session-A') });
+  if (calls.length - mutationStart !== 2) throw new Error('A review mutation blocked a different session or failed to block its own session');
+  const mutationEntry = pending.find(entry => entry.method === 'POST');
+  const readBEntry = pending.find(entry => entry.method === 'GET' && entry.session === 'session-B');
+  mutationEntry.resolve();
+  readBEntry.resolve();
+  pending.splice(0, pending.length);
+  await new Promise(resolve => setImmediate(resolve));
+  if (calls.length - mutationStart !== 3) throw new Error('Same-session run read did not resume with a fresh request after review mutation');
+  settlePending(pending.splice(0));
+  const [mutationBody, readBBody, readABody] = await Promise.all((await Promise.all([mutationA, readB, readA])).map(response => response.json()));
+  if (mutationBody.session !== 'session-A' || readBBody.session !== 'session-B' || readABody.session !== 'session-A') throw new Error('Review mutation/read coordination crossed a session boundary');
+}
+
+async function runContractSelfTest() {
+  await assertRunReadSessionIsolation();
   if (dtoHash({ z: 'ü', a: [{ k: 0.91 }, true, null] }) !== '3d745913ce5b8f5555065b544f018be38bd43e9e5bfe1eca86c1d4f25dda68dd') throw new Error('Compact sorted DTO hashing diverges from the Python release contract');
   const splitLeaseSource = 'Tenant\nAlex Morgan, Feldbergstrasse 114, 4057 Basel';
   if (!exactNormalizedGroundingQuote(splitLeaseSource, 'Tenant Alex Morgan, Feldbergstrasse 114, 4057 Basel')) throw new Error('Normalized grounding did not preserve the backend whitespace contract');
@@ -3941,12 +4025,12 @@ function runContractSelfTest() {
   const brokenLineageLedger = structuredClone(combinedLedger);
   brokenLineageLedger.items.find(item => item.call_id === orchestrationAudit(warmRun).agents[0].call_id).origin_call_id = 'wrong_origin';
   if (!warmLineageContractViolations(orchestrationAudit(coldRun), orchestrationAudit(warmRun), brokenLineageLedger).issues.some(item => item.includes('warm origin'))) throw new Error('Broken-lineage negative fixture was not rejected');
-  return { status: 'passed', fixtures: ['stable_text_grounding_fact_selection', 'normalized_text_grounding', 'python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'fail_closed_model_contribution_badges', 'mixed_field_contribution_badge', 'post_memory_contribution_suppression', 'reciprocal_evidence_truth_and_tamper', 'structured_legal_truth_and_tamper', 'visual_reference_truth_and_tamper', 'precedent_ranking_truth_and_tamper', 'memory_application_truth_and_tamper', 'memory_boundary_event_cross_binding', 'dormant_memory_retrieval_not_application', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'parallel_source_artifact_hash_rejection', 'parallel_process_artifact_hash_rejection', 'process_field_membership_rejection', 'process_field_attribution_rejection', 'process_inherited_field_rejection_with_recomputed_hashes', 'evidence_field_membership_rejection', 'evidence_field_attribution_rejection', 'evidence_source_ref_rejection_with_recomputed_hashes', 'final_field_membership_rejection', 'final_current_node_binding_rejection', 'final_next_action_binding_rejection', 'final_supporting_facts_binding_rejection', 'final_upstream_contributions_binding_rejection', 'final_audit_checks_binding_rejection', 'noncontrolling_supporting_fact_source_binding', 'cold_upstream_provider_policy_rejection', 'warm_upstream_provider_policy_rejection', 'agent_role_label_rejection', 'gate_role_label_rejection', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'provider_concurrency_zero_call_receipt', 'provider_concurrency_receipt_call_rejection', 'provider_concurrency_receipt_identity_rejection', 'safe_upstream_rejection_receipt', 'forged_upstream_rejection_receipt_attribution_rejection', 'missing_upstream_rejection_receipt_attribution_rejection', 'out_of_scope_upstream_rejection_receipt_attribution_rejection', 'unbounded_upstream_error_code_rejection', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'safe_upstream_rejection_ledger', 'provider_concurrency_zero_call_ledger', 'provider_concurrency_ledger_call_rejection', 'provider_concurrency_ledger_cost_rejection', 'provider_concurrency_ledger_identity_rejection', 'forged_upstream_rejection_ledger_attribution_rejection', 'missing_upstream_rejection_ledger_attribution_rejection', 'out_of_scope_upstream_rejection_ledger_attribution_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
+  return { status: 'passed', fixtures: ['session_scoped_run_read_coalescing', 'stable_text_grounding_fact_selection', 'normalized_text_grounding', 'python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'fail_closed_model_contribution_badges', 'mixed_field_contribution_badge', 'post_memory_contribution_suppression', 'reciprocal_evidence_truth_and_tamper', 'structured_legal_truth_and_tamper', 'visual_reference_truth_and_tamper', 'precedent_ranking_truth_and_tamper', 'memory_application_truth_and_tamper', 'memory_boundary_event_cross_binding', 'dormant_memory_retrieval_not_application', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'parallel_source_artifact_hash_rejection', 'parallel_process_artifact_hash_rejection', 'process_field_membership_rejection', 'process_field_attribution_rejection', 'process_inherited_field_rejection_with_recomputed_hashes', 'evidence_field_membership_rejection', 'evidence_field_attribution_rejection', 'evidence_source_ref_rejection_with_recomputed_hashes', 'final_field_membership_rejection', 'final_current_node_binding_rejection', 'final_next_action_binding_rejection', 'final_supporting_facts_binding_rejection', 'final_upstream_contributions_binding_rejection', 'final_audit_checks_binding_rejection', 'noncontrolling_supporting_fact_source_binding', 'cold_upstream_provider_policy_rejection', 'warm_upstream_provider_policy_rejection', 'agent_role_label_rejection', 'gate_role_label_rejection', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'provider_concurrency_zero_call_receipt', 'provider_concurrency_receipt_call_rejection', 'provider_concurrency_receipt_identity_rejection', 'safe_upstream_rejection_receipt', 'forged_upstream_rejection_receipt_attribution_rejection', 'missing_upstream_rejection_receipt_attribution_rejection', 'out_of_scope_upstream_rejection_receipt_attribution_rejection', 'unbounded_upstream_error_code_rejection', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'safe_upstream_rejection_ledger', 'provider_concurrency_zero_call_ledger', 'provider_concurrency_ledger_call_rejection', 'provider_concurrency_ledger_cost_rejection', 'provider_concurrency_ledger_identity_rejection', 'forged_upstream_rejection_ledger_attribution_rejection', 'missing_upstream_rejection_ledger_attribution_rejection', 'out_of_scope_upstream_rejection_ledger_attribution_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
 }
 
 let report;
 if (process.env.CASEPATH_QA_CONTRACT_SELF_TEST === '1') {
-  console.log(JSON.stringify(runContractSelfTest(), null, 2));
+  console.log(JSON.stringify(await runContractSelfTest(), null, 2));
 } else {
   try {
     report = await execute();

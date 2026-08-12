@@ -543,6 +543,17 @@ Before caller reset or run creation, production QA independently reads
 Caller reset intentionally preserves that ledger, so it cannot be used to hide
 stale rows or cache lineage from a prior attempt.
 
+Run-read coalescing is strictly in-flight, session-scoped, and mutation-aware.
+Its key binds the effective `X-CasePath-Session` header after normal Fetch
+request/init precedence. A simulated-review POST invalidates any pre-review GET,
+prevents a same-run and same-session GET from completing against the mutation
+window, and invalidates again when the POST settles. The
+applied-review renderer hydrates the graph, checklist, and fact projections from
+the same authoritative review response. This prevents a fast observer read from
+combining a pre-review graph with a post-review checklist while retaining safe
+deduplication for genuinely concurrent read-only consumers without ever sharing
+a session-scoped response.
+
 The canonical QA service explicitly sets
 `CASEPATH_ALLOW_PRODUCTION_MUTATION=1` because its reset-and-review journey
 mutates only the in-scope evaluation service. That opt-in is required authority
