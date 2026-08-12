@@ -113,7 +113,7 @@
     {
       "executable": false,
       "path": "CASEPATH_MASTER_KNOWLEDGE_TRANSFER.md",
-      "sha256": "4c6e55f5f4303370fc535b37adb31ca5d63636ae63658c2161239a7752d554f2",
+      "sha256": "58b4f1c40f88ca971675d527e83d5df73799f4d59fee2e4f81ad2ed118910b8f",
       "size_bytes": 213715
     },
     {
@@ -329,8 +329,8 @@
     {
       "executable": false,
       "path": "casepath-qa/browser-focused-v20.mjs",
-      "sha256": "0b74670e92bfbbd70dc46e1748a847e05fe1ac26306b0914b0811cb2712def66",
-      "size_bytes": 343416
+      "sha256": "567f40f3788ff568273bc52f82b5174011e0b9f5e81580a0e3bd22ffafaf54ce",
+      "size_bytes": 344260
     },
     {
       "executable": false,
@@ -913,7 +913,7 @@
   "gates": [
     {
       "path": "casepath-qa/browser-focused-v20.mjs",
-      "sha256": "0b74670e92bfbbd70dc46e1748a847e05fe1ac26306b0914b0811cb2712def66"
+      "sha256": "567f40f3788ff568273bc52f82b5174011e0b9f5e81580a0e3bd22ffafaf54ce"
     },
     {
       "path": "casepath-qa/browser-guided-v13-smoke.mjs",

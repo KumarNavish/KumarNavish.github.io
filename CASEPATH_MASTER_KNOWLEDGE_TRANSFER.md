@@ -5117,7 +5117,7 @@ backend_tests: 291 passed
 release_contract_tests: 100 passed
 deployment_and_static_publish_tests: 8 passed
 release_tests_total: 108 passed
-browser_contract_self_test: 86 fixtures passed
+browser_contract_self_test: 87 fixtures passed
 source_manifest_files: 134
 release_artifact_files: 25
 model_visible_artifact_files: 24
