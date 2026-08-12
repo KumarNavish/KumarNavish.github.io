@@ -107,7 +107,7 @@
     {
       "executable": false,
       "path": "CASEPATH_MASTER_KNOWLEDGE_TRANSFER.md",
-      "sha256": "340818858f4decf34cd659feebe6b125b0608eb27156409cd620aa87e56e7a90",
+      "sha256": "3bca516baca0267cab9ec5704eeabaf87bd49ed754edf8e7322ec3de73af4a35",
       "size_bytes": 193668
     },
     {
@@ -611,8 +611,8 @@
     {
       "executable": false,
       "path": "casepath/assets/live-v17.js",
-      "sha256": "d55abfcb80572c0376aedee6a6ed6ebd28a50b5102f5820f0e2404f5451d9c33",
-      "size_bytes": 35511
+      "sha256": "bebafe78a97601bb755adb0c0ac0f6c2fae205faa2f3db3cfacdaba7147f1933",
+      "size_bytes": 35807
     },
     {
       "executable": false,
@@ -701,8 +701,8 @@
     {
       "executable": false,
       "path": "casepath/defect-ledger.md",
-      "sha256": "e1bb39e351508767061417a6375efa437a9b44e9db88be83da593bc1f5eb91ca",
-      "size_bytes": 17649
+      "sha256": "cf2915cc61daf75c225176716099bcc3ce1bed24b2c6451b1d2ac9e05ddf45fb",
+      "size_bytes": 18300
     },
     {
       "executable": false,
@@ -839,8 +839,8 @@
     {
       "executable": false,
       "path": "casepath/tools/test_casepath_release.py",
-      "sha256": "f7728c6caccd18129f6c104d3c6010d13d9bcf62c73f452ef3c691a1b3c305bf",
-      "size_bytes": 171482
+      "sha256": "523b5b40842e7946c51218a27193da0056debeff1d69e147566a75d50e8c816c",
+      "size_bytes": 172123
     },
     {
       "executable": false,

@@ -4808,7 +4808,7 @@ Exact local freeze gates:
 
 ```text
 backend_tests: 274 passed
-release_tests: 91 passed
+release_tests: 92 passed
 browser_contract_self_test: 78 fixtures passed
 source_manifest_files: 126
 release_artifact_files: 25

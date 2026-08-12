@@ -65,6 +65,19 @@ def test_browser_gate_pins_complete_runtime_acceptance_criteria() -> None:
     assert "requires_learning_replay_proof: true" in criteria
 
 
+def test_loaded_precedent_renderers_preserve_exact_review_authority() -> None:
+    assets = release_tool.REPOSITORY / "casepath" / "assets"
+    precedent_renderer = (assets / "live-v16.js").read_text(encoding="utf-8")
+    reuse_renderer = (assets / "live-v17.js").read_text(encoding="utf-8")
+    for source in (precedent_renderer, reuse_renderer):
+        assert "'qualified_expert_reviewed'" in source
+        assert "'unverified_demo_memory'" in source
+    assert "Unverified generated-demo review memory returned by the server" in (
+        precedent_renderer
+    )
+    assert "Unverified demo review memory returned" in reuse_renderer
+
+
 def test_every_observable_claim_artifact_is_model_visible_and_scanned() -> None:
     api_root = release_tool.REPOSITORY / "casepath-api"
     if str(api_root) not in sys.path:
