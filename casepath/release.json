@@ -170,7 +170,9 @@
         "casepath/releases/model-validation-attempt-20260811-18.json",
         "casepath/releases/model-validation-attempt-20260811-19.json",
         "casepath/releases/model-validation-attempt-20260811-20.json",
-        "casepath/releases/model-validation-attempt-20260811-21.json"
+        "casepath/releases/model-validation-attempt-20260811-21.json",
+        "casepath/releases/model-validation-attempt-20260811-22.json",
+        "casepath/releases/model-validation-attempt-20260811-23.json"
       ],
       "establishes_current_runtime_acceptance": false
     },

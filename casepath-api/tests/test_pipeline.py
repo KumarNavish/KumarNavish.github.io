@@ -88,17 +88,8 @@ def provider_fact_proposals(oracle_facts: list[dict]) -> list[dict]:
     proposals = []
     for value in oracle_facts:
         proposal = {
-            key: deepcopy(item)
-            for key, item in value.items()
-            if key not in {
-                "value",
-                "explanation",
-                "source_refs",
-                "controls_process",
-                "decision_key",
-                "decision_value",
-                "semantic_role",
-            }
+            "fact_id": value["fact_id"],
+            "confidence": deepcopy(value["confidence"]),
         }
         proposal["source_ref_ids"] = [
             resolve_observable_source_reference_id(ref, registry)
@@ -1686,9 +1677,6 @@ def test_model_mode_retains_process_owned_visual_locator_and_passes_grounding(tm
         if value["controls_process"] is False
     )
     raw_facts = provider_fact_proposals(oracle_facts)
-    next(
-        value for value in raw_facts if value["fact_id"] == proposed_noncontrolling_id
-    )["normalized_value"] = "urgent"
 
     def transport(_url, _headers, _payload, _timeout):
         return {
@@ -1747,7 +1735,7 @@ def test_model_mode_retains_process_owned_visual_locator_and_passes_grounding(tm
     assert diagnostics["accepted_fact_count"] == len(oracle_facts)
     assert diagnostics["rejected_facts"] == []
     assert diagnostics["rejected_fact_count"] == 0
-    assert diagnostics["ignored_noncontrolling_normalized_proposals"] == 1
+    assert diagnostics["ignored_noncontrolling_normalized_proposals"] == 0
     assert "Model-assisted hybrid canonicalization" in run["result"]["summary"]
     assert "deterministic fallback replaced 0 rejected proposals" in run["result"]["summary"]
     assert run["result"]["verification"]["valid"] is True
@@ -1821,7 +1809,7 @@ def test_production_shaped_canonical_source_projection_succeeds_17_to_1(tmp_path
             proposal["source_ref_ids"] = []
     next(
         value for value in proposals if value["fact_id"] == "fact_date_conflict"
-    )["state"] = "known"
+    )["confidence"] = 1.01
 
     def transport(_url, _headers, _payload, _timeout):
         return {
@@ -1859,7 +1847,7 @@ def test_production_shaped_canonical_source_projection_succeeds_17_to_1(tmp_path
     diagnostics = run["result"]["audit"]["canonicalization"]["diagnostics"]
     assert diagnostics["accepted_fact_count"] == 17
     assert diagnostics["rejected_facts"] == [
-        {"fact_id": "fact_date_conflict", "invariant": "canonical_state"}
+        {"fact_id": "fact_date_conflict", "invariant": "confidence_contract"}
     ]
     assert diagnostics["rejected_fact_count"] == 1
     expected_projections = sorted(text_grounded_fact_ids - {"fact_date_conflict"})
@@ -1888,7 +1876,7 @@ def test_hybrid_rejected_controlling_fact_uses_exact_oracle_fallback(tmp_path: P
     oracle_result = wait(oracle_storage, oracle.create("DEF-027-E0-DEMO"))["result"]
     proposals = provider_fact_proposals(oracle_result["facts"])
     rejected_proposal = next(value for value in proposals if value["fact_id"] == "fact_dispute")
-    rejected_proposal["state"] = "unknown"
+    rejected_proposal["confidence"] = 1.01
     accepted_proposal = next(value for value in proposals if value["fact_id"] == "fact_tenancy")
     accepted_proposal["confidence"] = 0.41
 
@@ -1971,7 +1959,7 @@ def test_hybrid_rejected_controlling_fact_uses_exact_oracle_fallback(tmp_path: P
     assert diagnostics["authority_mode"] == "hybrid_guarded"
     assert diagnostics["accepted_fact_count"] == len(proposals) - 1
     assert diagnostics["rejected_facts"] == [
-        {"fact_id": "fact_dispute", "invariant": "canonical_state"}
+        {"fact_id": "fact_dispute", "invariant": "confidence_contract"}
     ]
     assert diagnostics["rejected_fact_count"] == 1
     assert "Model-assisted hybrid canonicalization" in result["summary"]
