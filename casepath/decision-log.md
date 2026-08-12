@@ -234,3 +234,34 @@ updated as implementation and validation progress.
   stale-file removal, no tools/docs/releases/legacy assets, known-commit
   fail-before-mutation behavior, and release-verifier pins for both the build
   command and publish path.
+
+## CPD-011 — Gate paid QA behind the complete deterministic browser lifecycle
+
+- **Problem:** multiple production QA attempts completed six paid model roles
+  before encountering deterministic presentation assertions in later browser
+  states. The assertions were valuable, but their placement made provider work
+  the prerequisite for discovering ordinary UI drift.
+- **Approaches considered:** keep retrying the hosted journey; weaken late UI
+  assertions; split model and presentation validation into an enforced two-phase
+  gate that executes the same browser program.
+- **Decision:** the definitive QA build must first build the curated frontend,
+  launch an isolated deterministic-reference API with no provider credential,
+  and execute the full browser lifecycle. Only a passed temporary report plus
+  an exactly empty model ledger may unlock the production URL phase. Both Node
+  and Python are pinned, and the runner rejects a Python version other than
+  3.13.9 before dependency installation or browser execution. It also rebuilds
+  and checks every ignored deterministic runtime artifact from tracked sources,
+  so a clean Render checkout cannot inherit local-only evidence bytes. The
+  production phase also requires the global model ledger to be exactly empty
+  before caller reset or run creation; reset is not treated as ledger cleanup.
+  The paid
+  phase remains one uninterrupted cold/warm production journey and retains the
+  only publishable acceptance evidence.
+- **Rejected:** paid-first QA, because deterministic UI defects do not require a
+  model call to reproduce; weakening the browser contract, because that would
+  hide inspectability and authority regressions rather than prevent them.
+- **Affected files:** definitive QA runner, browser output isolation, Render
+  Blueprint/verifier, release tests, governance and transfer record.
+- **Validation:** shell and source-order tests, exact Blueprint tamper rejection,
+  full deterministic browser report, zero-record/zero-network/zero-cost ledger,
+  then one separately aligned production journey.

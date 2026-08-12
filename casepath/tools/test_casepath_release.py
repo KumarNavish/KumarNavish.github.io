@@ -124,6 +124,43 @@ def test_visual_grounding_qa_matches_rendered_authority_copy() -> None:
     assert "/not an exact quote/i" not in browser_gate
 
 
+def test_document_sheet_expands_hidden_multi_owner_item_before_reading_text() -> None:
+    browser_gate = (
+        release_tool.REPOSITORY / "casepath-qa" / "browser-focused-v20.mjs"
+    ).read_text(encoding="utf-8")
+    expand = "renderedMultiOwner.locator('xpath=ancestor::details[not(@open)][1]')"
+    scroll = "await renderedMultiOwner.scrollIntoViewIfNeeded();"
+    visible = "await renderedMultiOwner.isVisible()"
+    read = "text: node.innerText"
+    assert expand in browser_gate
+    assert scroll in browser_gate
+    assert visible in browser_gate
+    assert read in browser_gate
+    expand_index = browser_gate.index(expand)
+    scroll_index = browser_gate.index(scroll, expand_index)
+    visible_index = browser_gate.index(visible, scroll_index)
+    read_index = browser_gate.index(read, scroll_index)
+    assert expand_index < scroll_index < visible_index < read_index
+
+
+def test_v20_review_keeps_the_unverified_authority_disclosure_visible() -> None:
+    focus = (
+        release_tool.REPOSITORY / "casepath" / "assets" / "live-v20-focus.js"
+    ).read_text(encoding="utf-8")
+    focus_css = (
+        release_tool.REPOSITORY / "casepath" / "assets" / "live-v20-focus.css"
+    ).read_text(encoding="utf-8")
+    browser_gate = (
+        release_tool.REPOSITORY / "casepath-qa" / "browser-focused-v20.mjs"
+    ).read_text(encoding="utf-8")
+    assert "Simulated demo review only; this is not qualified expert approval." in focus
+    assert '.review-panel>p:not(.v20-review-note)' in focus_css
+    assert '.review-panel>p,body[data-casepath-moment="review"] .review-note' not in focus_css
+    assert "await waitVisible('.v20-review-note');" in browser_gate
+    assert "/simulated demo review/i" in browser_gate
+    assert "/not qualified expert approval/i" in browser_gate
+
+
 def test_every_observable_claim_artifact_is_model_visible_and_scanned() -> None:
     api_root = release_tool.REPOSITORY / "casepath-api"
     if str(api_root) not in sys.path:
@@ -282,7 +319,7 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
             release_tool.REPOSITORY
             / f"casepath/releases/model-validation-attempt-20260811-{number:02d}.json"
         )
-        for number in range(1, 21)
+        for number in range(1, 22)
     }
     (
         attempt_1,
@@ -305,7 +342,8 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         attempt_18,
         attempt_19,
         attempt_20,
-    ) = (attempts[number] for number in range(1, 21))
+        attempt_21,
+    ) = (attempts[number] for number in range(1, 22))
     for evidence in attempts.values():
         assert evidence["status"] == "failed_closed"
         assert evidence["acceptance_passed"] is False
@@ -1434,11 +1472,59 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
     assert attempt_20["capture_provenance"]["public_qa_origin"]["classification"] == (
         "stale_previous_deploy_not_attempt_20"
     )
+    assert {
+        section: release_tool._historical_json_sha256(attempt_21[section])
+        for section in release_tool._HISTORICAL_ATTEMPT_21_SECTION_SHA256
+    } == release_tool._HISTORICAL_ATTEMPT_21_SECTION_SHA256
+    attempt_21_calls = attempt_21["provider_observation"]["calls"]
+    attempt_21_warm_calls = attempt_21["warm_cache_result"]["calls"]
+    assert attempt_21["execution_observation"]["source_commit"] == (
+        "eb5568a1973f63fdbf0ebd0b3f7cd152c73a29cf"
+    )
+    assert attempt_21["execution_observation"]["cold_run_id"] == (
+        "run_b33e288771f5734e"
+    )
+    assert attempt_21["execution_observation"]["warm_run_id"] == (
+        "run_57307719ce42f9e9"
+    )
+    assert len(attempt_21_calls) == len(attempt_21_warm_calls) == 6
+    assert {
+        call["agent_id"]: call["origin_call_id"] for call in attempt_21_warm_calls
+    } == {call["agent_id"]: call["call_id"] for call in attempt_21_calls}
+    assert attempt_21["provider_observation"]["global_ledger_summary"] == {
+        "records": 12,
+        "network_calls": 6,
+        "prompt_tokens": 35274,
+        "completion_tokens": 7165,
+        "total_tokens": 42439,
+        "actual_cost_usd": 0.0332464,
+        "actual_cost_complete": True,
+        "unknown_cost_call_count": 0,
+        "outcomes": {
+            "cache_hit": 6,
+            "succeeded": 4,
+            "succeeded_with_guarded_fallback": 2,
+        },
+    }
+    assert attempt_21["application_result"][
+        "deterministic_gate_progression_observed"
+    ] is True
+    assert attempt_21["application_result"][
+        "deterministic_gate_artifact_hashes_recoverable"
+    ] is False
+    assert attempt_21["qa_result"]["failure_type"] == (
+        "document_sheet_multi_owner_item_not_expanded"
+    )
+    assert attempt_21["qa_result"]["rendered_text"] == ""
+    assert attempt_21["qa_result"]["secondary_relationship_copy_present"] is False
+    assert attempt_21["capture_provenance"]["public_qa_origin"]["classification"] == (
+        "stale_previous_deploy_not_attempt_21"
+    )
     assert sum(
         attempt["provider_observation"]["actual_cost_usd"]
         for attempt in attempts.values()
         if "actual_cost_usd" in attempt["provider_observation"]
-    ) == pytest.approx(0.3280262)
+    ) == pytest.approx(0.3612726)
     assert "actual_cost_usd" not in attempt_3["provider_observation"]
     assert "prompt_tokens" not in attempt_3["provider_observation"]
     assert attempt_3["provider_observation"]["charge_status"] == "unknown_unconfirmed"
@@ -2041,6 +2127,47 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         forged_attempt_20_records.append(forged_attempt)
 
     for forged_attempt in forged_attempt_20_records:
+        with pytest.raises(
+            release_tool.VerificationError,
+            match="exact bounded schema",
+        ):
+            release_tool.verify_failed_model_attempt_evidence(contract, forged_attempt)
+
+    forged_attempt_21_records = []
+    for section, mutate in (
+        ("execution_observation", lambda item: item.__setitem__("network_call_count", 7)),
+        (
+            "provider_observation",
+            lambda item: item["global_ledger_summary"].__setitem__("network_calls", 7),
+        ),
+        (
+            "application_result",
+            lambda item: item.__setitem__(
+                "deterministic_gate_artifact_hashes_recoverable", True
+            ),
+        ),
+        (
+            "warm_cache_result",
+            lambda item: item["calls"][0].__setitem__(
+                "origin_call_id", "modelcall_0000000000000000"
+            ),
+        ),
+        (
+            "qa_result",
+            lambda item: item.__setitem__("secondary_relationship_copy_present", True),
+        ),
+        (
+            "capture_provenance",
+            lambda item: item["public_api_model_ledger"].__setitem__(
+                "response_sha256", "0" * 64
+            ),
+        ),
+    ):
+        forged_attempt = deepcopy(attempt_21)
+        mutate(forged_attempt[section])
+        forged_attempt_21_records.append(forged_attempt)
+
+    for forged_attempt in forged_attempt_21_records:
         with pytest.raises(
             release_tool.VerificationError,
             match="exact bounded schema",
@@ -5275,6 +5402,85 @@ def test_render_uses_curated_frontend_and_model_aware_readiness_probe() -> None:
         if item.get("name") == "casepath-agentic-api"
     )
     assert api_service["healthCheckPath"] == "/readyz"
+    qa_service = next(
+        item
+        for item in blueprint["services"]
+        if item.get("name") == "casepath-guided-canonical-qa"
+    )
+    assert qa_service["buildCommand"] == release_tool.DEFINITIVE_QA_BUILD_COMMAND
+    assert qa_service["startCommand"] == release_tool.DEFINITIVE_QA_START_COMMAND
+    assert qa_service["autoDeployTrigger"] == "off"
+
+
+def test_definitive_qa_runs_zero_provider_browser_preflight_before_production() -> None:
+    script = (release_tool.REPOSITORY / "casepath-qa/run-definitive-v20.sh").read_text(
+        encoding="utf-8"
+    )
+    browser_gate = (release_tool.REPOSITORY / "casepath-qa/browser-focused-v20.mjs").read_text(
+        encoding="utf-8"
+    )
+    preflight_marker = "Running mandatory zero-provider full-browser preflight."
+    production_marker = "starting the one authorized production journey."
+    assert script.index(preflight_marker) < script.index(production_marker)
+    assert script.index("CASEPATH_ALLOW_PRODUCTION_MUTATION=0") < script.index(
+        production_marker
+    )
+    assert script.index("BASE_URL=https://casepath-swiss-claim-lab.onrender.com") > script.index(
+        production_marker
+    )
+    assert "unset OPENROUTER_API_KEY" in script
+    assert "QA Python must be" in script
+    assert "CASEPATH_MODEL_MODE=deterministic_reference" in script
+    assert "CASEPATH_ALLOW_PRODUCTION_MUTATION=0" in script
+    assert script.index("casepath-api/generate_artifacts.py") < script.index(
+        "Running mandatory zero-provider full-browser preflight."
+    )
+    assert script.index("casepath-api/replace_photographic_evidence.py .") < script.index(
+        "Running mandatory zero-provider full-browser preflight."
+    )
+    assert "test -s \"$repository_root/casepath-api/artifacts/$required_artifact\"" in script
+    assert 'summary["network_calls"] == 0' in script
+    assert 'summary["actual_cost_usd"] == 0' in script
+    assert "bash casepath-qa/run-definitive-v20.sh" in release_tool.DEFINITIVE_QA_BUILD_COMMAND
+    assert "process.env.CASEPATH_QA_OUT || 'guided-v13-smoke-out'" in browser_gate
+    assert browser_gate.index("initialLedgerAdmissionViolations(initialModelLedger)") < browser_gate.index(
+        "const reset = await resetDemo()"
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("buildCommand", "node paid-first.mjs", "deterministic browser preflight"),
+        ("startCommand", "python3 -m http.server", "hash-bound evidence"),
+        ("autoDeployTrigger", "commit", "manual release gate"),
+        ("envVars", [], "environment must exactly pin"),
+    ],
+)
+def test_render_definitive_qa_contract_rejects_tampering(
+    field,
+    value,
+    message,
+    monkeypatch,
+    tmp_path,
+) -> None:
+    blueprint = release_tool.yaml.safe_load(
+        (release_tool.REPOSITORY / "render.yaml").read_text(encoding="utf-8")
+    )
+    qa_service = next(
+        item
+        for item in blueprint["services"]
+        if item.get("name") == "casepath-guided-canonical-qa"
+    )
+    qa_service[field] = value
+    (tmp_path / "render.yaml").write_text(
+        release_tool.yaml.safe_dump(blueprint),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(release_tool, "REPOSITORY", tmp_path)
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    with pytest.raises(release_tool.VerificationError, match=message):
+        release_tool.verify_render_runtime_contract(contract)
 
 
 @pytest.mark.parametrize(

@@ -361,6 +361,23 @@ Twenty authorized model attempts failed closed at the release gate:
   artifact hashes are not: the failed build published no evidence artifacts
   and the session-scoped run bodies cannot be recovered without the unlogged
   random session header.
+- Attempt 21 ran from QA deploy `dep-d9u6okf40ujc73flp1o0` against aligned
+  source commit `eb5568a1973f63fdbf0ebd0b3f7cd152c73a29cf`. Cold run
+  `run_b33e288771f5734e`, orchestration `orch_41c7d6d772421ec1`, completed
+  all six required model roles and the deterministic process, evidence, and
+  whole-playbook gates. Warm run `run_57307719ce42f9e9`, orchestration
+  `orch_9189d783e3d07e04`, reproduced all six roles from exact cache origins
+  with zero provider calls. The six DeepInfra calls cost USD 0.0332464 for
+  35,274 prompt and 7,165 completion tokens; four succeeded directly and two
+  disclosed guarded fallback. Focused QA then failed the terminal document
+  projection check for `defect_notice`: the row's ownership attributes still
+  named primary `notification`, ordered owners `notification,formal_notice`,
+  and current path `true`, but the enclosing document group remained collapsed,
+  so rendered text was empty and the secondary relationship was not visible.
+  The failed build retained no current report or evidence manifest; the public
+  QA origin remained the stale prior deployment. The exact twelve ledger rows
+  and three-gate progression are retained. Per-gate hashes and session-scoped
+  run bodies are unrecoverable after caller cleanup and are not fabricated.
 
 The repaired agent-graph implementation is version `1.2.2`. The document,
 process, and evidence coverage roles now require exact `6`, `6`, and `21`
@@ -406,18 +423,18 @@ three passed deterministic gates.
 
 Known aggregate provider charges for attempts 1, 2, 4, 5, 6, 8, 10, 11, 12,
 the two cost-known calls in attempt 14, all six calls in attempts 15, 16, 19,
-and 20, all five calls in attempt 17, and all four calls in attempt 18 are USD
-0.3280262. Attempts 3, 7, 9, and 13,
+20, and 21, all five calls in attempt 17, and all four calls in attempt 18 are
+USD 0.3612726. Attempts 3, 7, 9, and 13,
 plus the two failed calls in attempt 14,
 are unknown and excluded rather than treated as zero. Attempts 7 and 9 each retain a USD 0.027645 estimated
 reservation, neither of which is included as an actual charge. The attempts
-remain failed-closed release history; Attempts 15, 16, 19, and 20 contain
-successful application-orchestration evidence, and Attempts 16, 19, and 20
+remain failed-closed release history; Attempts 15, 16, 19, 20, and 21 contain
+successful application-orchestration evidence, and Attempts 16, 19, 20, and 21
 additionally contain accepted zero-network-call cache replays, but none is
 accepted model-backed release evidence. No raw prompt, raw output, credential,
 or private reference is retained.
 
-The twenty records above are listed under `historical_model_validation` with
+The twenty-one records above are listed under `historical_model_validation` with
 `scope: failed_closed_history_only`; they can never establish current runtime
 acceptance. At this source-history freeze, no passing dynamic QA artifact pair
 had been verified. A later same-commit passing pair may supersede that
@@ -502,13 +519,31 @@ Render associates an existing service by name when a Blueprint is imported.
 Before import, inspect the proposed diff and confirm that none of these services
 is already managed by another Blueprint. The file contains no deploy hook or
 secret. The QA service remains manual so a source-aligned gate is an explicit
-release action. The Blueprint pins the API to Python 3.13.9 and QA to Node.js
-24.14.1 rather than relying on Render's moving defaults; see Render's
+release action. The Blueprint pins the API and QA preflight to Python 3.13.9
+and QA to Node.js 24.14.1 rather than relying on Render's moving defaults; the
+definitive runner also checks `sys.version_info` before creating its isolated
+environment. Because runtime PDFs, emails, extracted pages, and JPEGs are
+deterministic ignored build outputs rather than Git payload, the runner rebuilds
+them from the checked-in generators and hash-pinned source images and requires
+every governed artifact to be non-empty before starting the local API. See Render's
 [Python version](https://render.com/docs/python-version) and
 [Node.js version](https://render.com/docs/node-version) configuration guidance.
 QA dependencies, including Playwright 1.55.0 and `@axe-core/playwright` 4.12.1,
 are resolved from `casepath-qa/package-lock.json` with `npm ci` before Chromium
-is installed. The canonical QA service explicitly sets
+is installed. `casepath-qa/run-definitive-v20.sh` then builds the exact curated
+frontend for the QA commit, launches an isolated deterministic-reference API
+without an OpenRouter credential, and runs the complete browser lifecycle into
+a temporary evidence directory. It requires a passed report and an empty model
+ledger (`records=0`, `network_calls=0`, and zero cost) before stopping both local
+servers and starting the single production journey. A deterministic UI failure
+therefore blocks all paid inference instead of being discovered after it. The
+temporary preflight output is never published as production evidence.
+Before caller reset or run creation, production QA independently reads
+`/api/model-ledger` and requires the exact empty global summary and item list.
+Caller reset intentionally preserves that ledger, so it cannot be used to hide
+stale rows or cache lineage from a prior attempt.
+
+The canonical QA service explicitly sets
 `CASEPATH_ALLOW_PRODUCTION_MUTATION=1` because its reset-and-review journey
 mutates only the in-scope evaluation service. That opt-in is required authority
 for the hosted gate; it does not enable auto-deploy or expose a deploy hook.
@@ -528,6 +563,7 @@ python casepath/tools/casepath_release.py verify
 python casepath/tools/casepath_release.py verify-runtime-evidence \
   --report /path/to/qa-output/report.json \
   --evidence-manifest /path/to/qa-output/evidence-manifest.json
+bash casepath-qa/run-definitive-v20.sh
 ```
 
 Before the browser journey starts, production QA must compare the frontend

@@ -211,7 +211,7 @@ body[data-casepath-moment="review-applied"] .stage-shell{max-width:1180px}
 body[data-casepath-moment="review"] .stage-shell>.stage-kicker,body[data-casepath-moment="review"] .stage-shell>.stage-title,body[data-casepath-moment="review"] .stage-shell>.stage-intro{display:none!important}
 body[data-casepath-moment="review"] .review-layout{grid-template-columns:minmax(0,1fr) minmax(300px,34%);gap:30px;margin-top:0}
 body[data-casepath-moment="review"] .review-panel{position:sticky;top:0;padding-left:25px}
-body[data-casepath-moment="review"] .review-panel>p,body[data-casepath-moment="review"] .review-note,body[data-casepath-moment="review"] .v18-review-propagation>header{display:none!important}
+body[data-casepath-moment="review"] .review-panel>p:not(.v20-review-note),body[data-casepath-moment="review"] .review-note,body[data-casepath-moment="review"] .v18-review-propagation>header{display:none!important}
 body[data-casepath-moment="review"] .review-panel h3{margin-bottom:12px;font-size:18px}
 body[data-casepath-moment="review"] .review-choice{padding:11px 0}
 body[data-casepath-moment="review"] .review-impact{margin:12px 0}
