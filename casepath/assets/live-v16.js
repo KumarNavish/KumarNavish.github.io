@@ -4,7 +4,9 @@
   const params = new URLSearchParams(location.search);
   const API = (params.get('api') || window.CASEPATH_API || 'https://casepath-agentic-api.onrender.com').replace(/\/$/, '');
   const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  const PACE = reduceMotion ? 20 : 520;
+  // Provider work may finish quickly, but the flagship story must remain readable.
+  // This only paces presentation of returned events; it never delays or changes the run.
+  const PACE = reduceMotion ? 20 : 1450;
   const SESSION_STORAGE_KEY = 'casepath:demo-session';
   const SESSION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 

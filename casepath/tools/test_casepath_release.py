@@ -6953,7 +6953,7 @@ def test_handoff_continuity_uses_structured_moments_without_translucent_text() -
         encoding="utf-8"
     )
     assert 'assets/live-v17-continuity.css?v=20.0.0' in index
-    assert 'assets/live-v16.js?v=20.0.2' in index
+    assert 'assets/live-v16.js?v=20.0.3' in index
     assert 'assets/live-v17.js?v=20.0.1' in index
     assert 'assets/live-v18.js?v=20.0.1' in index
     assert 'assets/live-v16.css?v=20.0.0' in index

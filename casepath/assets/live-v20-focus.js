@@ -53,12 +53,13 @@
     evidence: { stage: 'evidence', title: 'Attaching every evidence need to the decision it can resolve', context: 'Original artifacts + process decisions + source integrity', authority: 'Nemotron agents · deterministic evidence gate', output: 'Process-linked evidence model' },
     experience: { stage: 'experience', title: 'Ranking the most relevant provenance-labelled reference cases', context: 'Legal question + difficult process branch + unresolved fact', authority: 'Deterministic reference ranking', output: 'Ranked reference cases' },
     verify: { stage: 'verify', title: 'Checking grounding, consistency and unsupported conclusions', context: 'Agent contributions + graph + evidence relationships', authority: 'Nemotron audit · deterministic acceptance', output: 'Verified handling playbook' },
-    ready: { stage: 'verify', title: 'A source-grounded handling playbook is ready', context: '6 returned model roles + 3 deterministic safety gates', authority: 'Verified runtime result', output: 'Review-ready playbook' },
+    ready: { stage: 'verify', title: 'A source-grounded handling playbook is ready', context: '6 returned model roles + 3 deterministic safety gates', authority: 'Deterministically verified demo result', output: 'Review-ready playbook' },
     review: { stage: 'verify', title: 'Review the decision that changes the downstream process', context: 'Simulated demo review · not qualified expert approval', authority: 'Human-in-the-loop demonstration', output: 'Proposed process correction' },
     'review-applied': { stage: 'knowledge', title: 'Applying the correction across process and evidence', context: 'Reviewed graph + reviewed evidence relationships', authority: 'Deterministic review transform', output: 'Corrected handling process' },
     knowledge: { stage: 'knowledge', title: 'Turning the correction into safely governed knowledge', context: 'Unverified case memory · shared playbook remains unchanged', authority: 'Deterministic knowledge governance', output: 'Quarantined reusable knowledge' },
     'later-work': { stage: 'knowledge', title: 'Testing the learned guidance on a held-out claim', context: 'Frozen memory receipt + later demo claim', authority: 'Deterministic comparison · no second model run', output: 'Before-and-after comparison' },
     'later-result': { stage: 'knowledge', title: 'Showing exactly how the future claim improved', context: 'Receipt-bound guidance · shared playbook unchanged', authority: 'Deterministic comparison · no second model run', output: 'Verified learning effect' },
+    failure: { stage: 'understand', title: 'The run stopped safely', context: 'No unsupported result was applied', authority: 'Fail-closed safety boundary', output: 'No artifact produced' },
   };
 
   let queued = false;
@@ -147,7 +148,7 @@
     surface.dataset.workAuthority = focus.authority;
     surface.innerHTML = `
       <div class="v21-focus-copy">
-        <small>${esc(role.label)}</small>
+        <small>Workflow specialist · ${esc(role.label)}</small>
         <h2>${esc(focus.title)}</h2>
         <p>${esc(focus.context)}</p>
         <div class="v21-focus-proof"><span>${esc(focus.authority)}</span><strong>Produced · ${esc(focus.output)}</strong></div>

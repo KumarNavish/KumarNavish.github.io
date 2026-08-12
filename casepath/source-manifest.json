@@ -329,8 +329,8 @@
     {
       "executable": false,
       "path": "casepath-qa/browser-focused-v20.mjs",
-      "sha256": "be99c08b1c11c3f6402ed9d5cce9b05512988d1537d8e93a4d042688164077a4",
-      "size_bytes": 378822
+      "sha256": "2fd9a8ce14b07ab2cbc00c973a82877e8edc082742146f7d569533b411ed8d84",
+      "size_bytes": 380186
     },
     {
       "executable": false,
@@ -605,8 +605,8 @@
     {
       "executable": false,
       "path": "casepath/assets/live-v16.js",
-      "sha256": "f6a771744156888664e94f506e393b786d1808af681fc7417a5f8c32dd2deac1",
-      "size_bytes": 143768
+      "sha256": "8fe80255f2bc8bd87fc98a9582b1f760c18abeb943f0367d2ab80ec9a9a68d75",
+      "size_bytes": 143943
     },
     {
       "executable": false,
@@ -677,14 +677,14 @@
     {
       "executable": false,
       "path": "casepath/assets/live-v20-focus.css",
-      "sha256": "6f3864c5c1ea988bfc7a95c0bcf82da848c9e8c66f1d059029ec8d4278df9b26",
-      "size_bytes": 46967
+      "sha256": "36c4cac7bd44ce0ed2da0724b99d4c1dbc2f9020ba52ea0f5c55ede0d93722c7",
+      "size_bytes": 47001
     },
     {
       "executable": false,
       "path": "casepath/assets/live-v20-focus.js",
-      "sha256": "380b4864a2a8d7ab6c5ec4347bb0a8275197426bc6bbcfa0dd59cbfe95e011fc",
-      "size_bytes": 18959
+      "sha256": "09d3d9dd164f30f5bc59dafe92ac5be11e5b2399f53a14fe5f5bfb1ad1bb8919",
+      "size_bytes": 19188
     },
     {
       "executable": false,
@@ -719,7 +719,7 @@
     {
       "executable": false,
       "path": "casepath/index.html",
-      "sha256": "521be336d991ee56ef5d0c7ead42c27098927b1c7793f5a9872157af0c8a8da9",
+      "sha256": "a681961ae29d6b3afc2df73d0bfa0cb7e2fb4ee6934298650942b8133b2f25db",
       "size_bytes": 10281
     },
     {
@@ -923,7 +923,7 @@
     {
       "executable": false,
       "path": "casepath/tools/test_casepath_release.py",
-      "sha256": "308d1e3147ad598f8dc38e2739daaf9f12f9e66f27b3877576a50d9cc70ec193",
+      "sha256": "eb7e3c9b4e883db1a790990757ee2f5f7c347315e92ae2013a850458b367ea36",
       "size_bytes": 278649
     },
     {
@@ -949,7 +949,7 @@
   "gates": [
     {
       "path": "casepath-qa/browser-focused-v20.mjs",
-      "sha256": "be99c08b1c11c3f6402ed9d5cce9b05512988d1537d8e93a4d042688164077a4"
+      "sha256": "2fd9a8ce14b07ab2cbc00c973a82877e8edc082742146f7d569533b411ed8d84"
     },
     {
       "path": "casepath-qa/browser-guided-v13-smoke.mjs",
