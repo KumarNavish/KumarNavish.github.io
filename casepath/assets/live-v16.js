@@ -4,9 +4,14 @@
   const params = new URLSearchParams(location.search);
   const API = (params.get('api') || window.CASEPATH_API || 'https://casepath-agentic-api.onrender.com').replace(/\/$/, '');
   const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  // Provider work may finish quickly, but the flagship story must remain readable.
-  // This only paces presentation of returned events; it never delays or changes the run.
-  const PACE = reduceMotion ? 20 : 1450;
+  // Provider work may finish quickly, but each user-facing chapter must remain readable.
+  // These timings pace only the presentation of returned events; they never delay or
+  // change the run, its provider calls, or its persisted result.
+  const WORKING_FRAME_MS = 2400;
+  const ARTIFACT_FRAME_MS = 5600;
+  const RESEARCH_ARTIFACT_FRAME_MS = 9000;
+  const BACKGROUND_BEAT_MS = reduceMotion ? 20 : 120;
+  const KNOWLEDGE_BEAT_MS = 1800;
   const SESSION_STORAGE_KEY = 'casepath:demo-session';
   const SESSION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 
@@ -90,6 +95,7 @@
 
   const EXPLICIT_ACTOR_TYPES = new Set(['nemotron_agent', 'deterministic_tool', 'deterministic_gate']);
   const SUCCESS_EVENT_STATES = new Set(['accepted', 'cache_hit', 'completed', 'passed', 'succeeded', 'succeeded_with_guarded_fallback', 'success']);
+  const PRESENTABLE_STAGE_STATES = new Set([...SUCCESS_EVENT_STATES, 'candidate_prepared']);
   const PROCESS_CONTRIBUTION_ROLE = 'Process Decision Mapping Agent';
   const EVIDENCE_CONTRIBUTION_ROLE = 'Evidence and Checklist Agent';
   const FINAL_CONTRIBUTION_ROLE = 'Final Claim Brief Agent';
@@ -650,6 +656,14 @@
     }
   }
 
+  function announcePresentation(phase, event = null, explicitMoment = '') {
+    if (phase === 'background') return;
+    const moment = explicitMoment || $('#stageCanvas')?.dataset.casepathMoment || '';
+    window.dispatchEvent(new CustomEvent('casepath:presentation', { detail: {
+      phase, moment, eventId: returnedValue(event, 'event_id'), stage: returnedValue(event, 'stage'),
+    } }));
+  }
+
   async function presentQueuedEvents(later) {
     if (state.presenting) return;
     state.presenting = true;
@@ -659,18 +673,30 @@
         state.eventQueue.push(entry);
         break;
       }
+      let phase = 'background';
       if (later) {
         appendLaterEvent(entry.event);
       } else {
-        presentFlagshipEvent(entry.event);
+        phase = presentFlagshipEvent(entry.event);
+        announcePresentation(phase, entry.event);
       }
-      await wait(entry.event.status === 'completed' ? PACE * 1.35 : PACE);
+      const frameMs = phase === 'working'
+        ? WORKING_FRAME_MS
+        : phase === 'artifact' && entry.event.stage === 'research'
+          ? RESEARCH_ARTIFACT_FRAME_MS
+          : phase === 'artifact'
+            ? ARTIFACT_FRAME_MS
+            : BACKGROUND_BEAT_MS;
+      await wait(frameMs);
     }
     state.presenting = false;
     const run = later ? state.laterRun : state.run;
     if (run?.status === 'complete' && !state.eventQueue.some(entry => entry.later === later)) {
       if (later) finishLaterRun();
-      else finishFlagshipRun();
+      else {
+        finishFlagshipRun();
+        if (state.journey === 'ready') announcePresentation('ready', null, 'ready');
+      }
     }
   }
 
@@ -680,17 +706,18 @@
     if (event.stage === 'orchestrator') {
       setOrchestrator(event.headline || event.label);
       renderOpeningContext(event);
-      return;
+      return 'working';
     }
     if (event.stage === 'complete') {
       setOrchestrator(returnedValue(event, 'headline', 'label') || 'Final run event returned', false);
-      return;
+      return 'background';
     }
     const stage = STAGES.find(item => item.id === event.stage);
-    if (!stage) return;
+    if (!stage) return 'background';
     const status = eventState(event).toLowerCase();
     const started = ['started', 'running', 'in_progress'].includes(status);
-    if (!started && !eventSucceeded(event)) return;
+    const artifactReady = PRESENTABLE_STAGE_STATES.has(status);
+    if (!started && !artifactReady) return 'background';
     state.activeStage = stage.id;
     state.stageMode = stage.id;
     const actor = returnedActorName(event);
@@ -699,6 +726,7 @@
     renderProgress(stage.id);
     if (started) renderStageStarted(stage, event);
     else renderStageCompleted(stage, event);
+    return started ? 'working' : 'artifact';
   }
 
   function stageHeader(stage, title, intro) {
@@ -740,7 +768,7 @@
     const rows = (parsed.files || []).map(file => `<div class="event-row"><span class="event-mark">✓</span><div><strong>${esc(file.title)}</strong><p>${esc(file.read_detail)}</p></div></div>`).join('');
     renderCanvas(`<div class="stage-shell">${stageHeader(stage, 'The original submission is in the shared claim context.', event.detail || '')}<div class="event-list"><div class="event-row"><span class="event-mark">✓</span><div><strong>Customer message</strong><p>${parsed.message_chars || 0} characters preserved as submitted.</p></div></div>${rows}</div></div>`, 'read');
     $$('.attachment-row').forEach(row => row.classList.add('is-active'));
-    setTimeout(() => $$('.attachment-row').forEach(row => row.classList.remove('is-active')), PACE * 2.2);
+    setTimeout(() => $$('.attachment-row').forEach(row => row.classList.remove('is-active')), ARTIFACT_FRAME_MS);
   }
 
   function renderUnderstandStage(stage, event) {
@@ -770,19 +798,39 @@
     return `<article class="law-query" data-question-id="${esc(question.question_id || '')}" data-source-ids="${esc((question.source_ids || []).join(','))}" data-interpretation-ids="${esc((question.interpretation_ids || []).join(','))}" data-process-node-ids="${esc((question.process_node_ids || []).join(','))}"><span class="law-number">${index + 1}</span><div><strong>${esc(question.text || 'Legal question not returned')}</strong><p>${esc(question.consequence || 'Consequence not returned')}</p><small>${officials.length} official source${officials.length === 1 ? '' : 's'} · ${principles.length} deterministic proposal${principles.length === 1 ? '' : 's'} · process ${esc((question.process_node_ids || []).join(' → '))}</small><details><summary>Inspect joined passage and provenance</summary><div class="legal-authority-list">${officials.map(officialLegalSourceMarkup).join('')}${principles.map(handlingPrincipleMarkup).join('')}</div></details></div></article>`;
   }
 
+  function officialSourceBrowserMarkup(legal) {
+    const sources = legal.sources || [];
+    if (!sources.length) return '';
+    return `<section class="official-source-browser" data-retrieval-method="versioned_official_source_registry_lookup" data-registry-version="${esc(legal.registry_version || '')}"><header><span><small>Official Swiss source · cached snapshot</small><strong>Swiss tenant-law source registry</strong></span><code>${esc(legal.registry_version || 'version not returned')}</code></header><nav aria-label="Official law sections">${sources.map((source, index) => `<button class="official-source-tab" type="button" data-official-source-tab="${esc(source.source_id)}" aria-selected="${index === 0}">${esc(source.location || source.title)}</button>`).join('')}</nav>${sources.map((source, index) => `<article class="official-source-passage" data-official-source-panel="${esc(source.source_id)}" ${index === 0 ? '' : 'hidden'}><div><small>${esc(source.title)}</small><strong>${esc(source.location || 'Exact section')}</strong></div><blockquote lang="${esc(source.passage_language || '')}">${esc(source.passage_text || 'Official passage not returned.')}</blockquote><footer><span>Cached for reuse · ${esc(source.version_date || 'version date not returned')}</span>${source.url ? `<a href="${esc(source.url)}" target="_blank" rel="noopener">Open official website ↗</a>` : ''}</footer></article>`).join('')}</section>`;
+  }
+
+  function bindOfficialSourceBrowser() {
+    const browser = $('.official-source-browser', $('#stageCanvas'));
+    const buttons = browser ? $$('.official-source-tab', browser) : [];
+    if (!buttons.length) return;
+    for (const button of buttons) button.addEventListener('click', () => {
+      for (const item of buttons) item.setAttribute('aria-selected', String(item === button));
+      for (const panel of $$('.official-source-passage', browser)) panel.hidden = panel.dataset.officialSourcePanel !== button.dataset.officialSourceTab;
+    });
+    buttons.forEach((button, index) => window.setTimeout(() => {
+      if (button.isConnected && $('#stageCanvas')?.dataset.casepathMoment === 'research') button.click();
+    }, 500 + index * 2000));
+  }
+
   function renderLawStage(stage, event) {
     const legal = state.run?.result?.legal_research || state.run?.legal_research || {};
-    renderCanvas(`<div class="stage-shell">${stageHeader(stage, 'Swiss-law questions are joined to versioned official passages.', 'Each question names its official-source IDs, deterministic handling-proposal IDs, process decisions, consequence, and pending qualified-review status.')}<div class="law-flow" data-legal-contract="${esc(legal.contract || '')}" data-registry-version="${esc(legal.registry_version || '')}">${(legal.questions || []).map((question, index) => legalQuestionMarkup(question, legal, index)).join('')}</div></div>`, 'research');
+    renderCanvas(`<div class="stage-shell">${stageHeader(stage, 'Swiss-law questions are joined to versioned official passages.', 'Each question names its official-source IDs, deterministic handling-proposal IDs, process decisions, consequence, and pending qualified-review status.')}${officialSourceBrowserMarkup(legal)}<div class="law-flow" data-legal-contract="${esc(legal.contract || '')}" data-registry-version="${esc(legal.registry_version || '')}">${(legal.questions || []).map((question, index) => legalQuestionMarkup(question, legal, index)).join('')}</div></div>`, 'research');
+    bindOfficialSourceBrowser();
   }
 
   function processData() {
     const run = currentRun();
-    return run?.result?.process || run?.process || null;
+    return run?.result?.process || run?.process || run?.process_candidate || null;
   }
 
   function checklistData() {
     const run = currentRun();
-    return run?.result?.checklist || run?.checklist || null;
+    return run?.result?.checklist || run?.checklist || run?.checklist_candidate || null;
   }
 
   function understandingData() {
@@ -1109,10 +1157,15 @@
   }
 
   function renderVerifyStage(stage, event) {
-    const verification = state.run?.result?.verification || state.run?.verification || {};
+    const verification = state.run?.result?.verification || state.run?.verification || state.run?.verification_candidate || {};
     const checks = verification.checks || verification.accepted_checks || [];
     const rejected = verification.rejected_proposals || [];
-    renderCanvas(`<div class="stage-shell">${stageHeader(stage, 'The playbook passed its acceptance checks.', 'The verifier checks the complete graph and every process-to-evidence link before the result reaches a reviewer.')}<div class="process-synthesis"><section class="synthesis-primary"><h3>The process remains the map of the claim.</h3><p>CasePath preserved the supported path, kept unresolved causation open, and blocked responsibility and remedy until competent evidence arrives.</p>${renderProcessWorkspace({ evidence: true, precedents: true })}</section><section><span class="quiet-label">Verification</span><div class="verification-list">${checks.map(check => `<div class="verification-row"><span>✓</span><div>${esc(typeof check === 'string' ? check : check.label || check.name || JSON.stringify(check))}</div></div>`).join('')}${rejected.map(item => `<div class="verification-row rejected"><span>×</span><div>${esc(item.reason || item.title || item)}</div></div>`).join('')}</div></section></div></div>`, 'verify');
+    const candidate = eventState(event).toLowerCase() === 'candidate_prepared';
+    const title = candidate ? 'The verification candidate passed its executable checks.' : 'The playbook passed its acceptance checks.';
+    const intro = candidate
+      ? 'The candidate graph and every process-to-evidence link passed deterministic verification; final acceptance still occurs at the whole-playbook gate.'
+      : 'The verifier checks the complete graph and every process-to-evidence link before the result reaches a reviewer.';
+    renderCanvas(`<div class="stage-shell">${stageHeader(stage, title, intro)}<div class="process-synthesis"><section class="synthesis-primary"><h3>The process remains the map of the claim.</h3><p>CasePath preserved the supported path, kept unresolved causation open, and blocked responsibility and remedy until competent evidence arrives.</p>${renderProcessWorkspace({ evidence: true, precedents: true })}</section><section><span class="quiet-label">Verification</span><div class="verification-list">${checks.map(check => `<div class="verification-row"><span>✓</span><div>${esc(typeof check === 'string' ? check : check.label || check.name || JSON.stringify(check))}</div></div>`).join('')}${rejected.map(item => `<div class="verification-row rejected"><span>×</span><div>${esc(item.reason || item.title || item)}</div></div>`).join('')}</div></section></div></div>`, 'verify');
     bindProcessInteractions();
   }
 
@@ -1308,7 +1361,7 @@
     for (const event of events) {
       $('#knowledgeThinkingTitle').textContent = event.headline || event.label;
       $('#knowledgeThinkingDetail').textContent = event.detail || '';
-      await wait(PACE * 1.5);
+      await wait(KNOWLEDGE_BEAT_MS);
     }
     renderKnowledgeResult();
   }

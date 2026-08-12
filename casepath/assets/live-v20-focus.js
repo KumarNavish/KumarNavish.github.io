@@ -45,21 +45,21 @@
   ];
 
   const FLAGSHIP_FOCUS = {
-    opening: { stage: 'understand', title: 'Opening one shared claim context', context: 'Customer message + 6 original attachments', authority: 'Application source parser', output: 'Shared claim package' },
-    read: { stage: 'understand', title: 'Reading the message and every original attachment', context: 'Customer message + source package', authority: 'Application source parser', output: 'Grounded source package' },
-    understand: { stage: 'understand', title: 'Separating facts, allegations, conflicts and unknowns', context: '18 bounded claim facts + exact source references', authority: 'Nemotron agent · deterministic fact contract', output: 'Canonical claim state' },
-    research: { stage: 'research', title: 'Connecting official Swiss-law passages to handling questions', context: 'Versioned official source registry · qualified legal review pending', authority: 'Deterministic source registry', output: 'Legal questions and exact sources' },
-    process: { stage: 'process', title: 'Building the complete claim-handling process', context: 'Claim state + legal questions + bounded orchestrator focus', authority: 'Nemotron contribution · deterministic process gate', output: 'Handling process graph' },
-    evidence: { stage: 'evidence', title: 'Attaching every evidence need to the decision it can resolve', context: 'Original artifacts + process decisions + source integrity', authority: 'Nemotron agents · deterministic evidence gate', output: 'Process-linked evidence model' },
-    experience: { stage: 'experience', title: 'Ranking the most relevant provenance-labelled reference cases', context: 'Legal question + difficult process branch + unresolved fact', authority: 'Deterministic reference ranking', output: 'Ranked reference cases' },
-    verify: { stage: 'verify', title: 'Checking grounding, consistency and unsupported conclusions', context: 'Agent contributions + graph + evidence relationships', authority: 'Nemotron audit · deterministic acceptance', output: 'Verified handling playbook' },
-    ready: { stage: 'verify', title: 'A source-grounded handling playbook is ready', context: '6 returned model roles + 3 deterministic safety gates', authority: 'Deterministically verified demo result', output: 'Review-ready playbook' },
-    review: { stage: 'verify', title: 'Review the decision that changes the downstream process', context: 'Simulated demo review · not qualified expert approval', authority: 'Human-in-the-loop demonstration', output: 'Proposed process correction' },
-    'review-applied': { stage: 'knowledge', title: 'Applying the correction across process and evidence', context: 'Reviewed graph + reviewed evidence relationships', authority: 'Deterministic review transform', output: 'Corrected handling process' },
-    knowledge: { stage: 'knowledge', title: 'Turning the correction into safely governed knowledge', context: 'Unverified case memory · shared playbook remains unchanged', authority: 'Deterministic knowledge governance', output: 'Quarantined reusable knowledge' },
-    'later-work': { stage: 'knowledge', title: 'Testing the learned guidance on a held-out claim', context: 'Frozen memory receipt + later demo claim', authority: 'Deterministic comparison · no second model run', output: 'Before-and-after comparison' },
-    'later-result': { stage: 'knowledge', title: 'Showing exactly how the future claim improved', context: 'Receipt-bound guidance · shared playbook unchanged', authority: 'Deterministic comparison · no second model run', output: 'Verified learning effect' },
-    failure: { stage: 'understand', title: 'The run stopped safely', context: 'No unsupported result was applied', authority: 'Fail-closed safety boundary', output: 'No artifact produced' },
+    opening: { stage: 'understand', title: 'Opening one shared claim context', why: 'Every specialist must work from the same message and original files.', context: 'Customer message + 6 original attachments', authority: 'Application source parser', output: 'Shared claim package' },
+    read: { stage: 'understand', title: 'Reading the message and every original attachment', why: 'Nothing should enter the claim state without an exact source.', context: 'Customer message + source package', authority: 'Application source parser', output: 'Grounded source package' },
+    understand: { stage: 'understand', title: 'Separating facts, allegations, conflicts and unknowns', why: 'Unsupported allegations must never become accepted facts.', context: '18 bounded claim facts + exact source references', authority: 'Nemotron agent · deterministic fact contract', output: 'Canonical claim state' },
+    research: { stage: 'research', title: 'Connecting official Swiss-law passages to handling questions', why: 'Law should frame the questions—not guess the technical cause.', context: 'Versioned official source registry · qualified legal review pending', authority: 'Deterministic source registry', output: 'Legal questions and exact sources' },
+    process: { stage: 'process', title: 'Building the complete claim-handling process', why: 'Every downstream action depends on the right decision path.', context: 'Claim state + legal questions + bounded orchestrator focus', authority: 'Nemotron contribution · deterministic process gate', output: 'Handling process graph' },
+    evidence: { stage: 'evidence', title: 'Attaching every evidence need to the decision it can resolve', why: 'A decision should advance only when its required proof exists.', context: 'Original artifacts + process decisions + source integrity', authority: 'Nemotron agents · deterministic evidence gate', output: 'Process-linked evidence model' },
+    experience: { stage: 'experience', title: 'Ranking the most relevant provenance-labelled reference cases', why: 'Past patterns help only when relevance and provenance stay visible.', context: 'Legal question + difficult process branch + unresolved fact', authority: 'Deterministic reference ranking', output: 'Ranked reference cases' },
+    verify: { stage: 'verify', title: 'Checking grounding, consistency and unsupported conclusions', why: 'Unsupported conclusions must fail closed before review.', context: 'Agent contributions + graph + evidence relationships', authority: 'Nemotron audit · deterministic acceptance', output: 'Verified handling playbook' },
+    ready: { stage: 'verify', title: 'A source-grounded handling playbook is ready', why: 'The reviewer should see one coherent path with its evidence attached.', context: '6 returned model roles + 3 deterministic safety gates', authority: 'Deterministically verified demo result', output: 'Review-ready playbook' },
+    review: { stage: 'verify', title: 'Review the decision that changes the downstream process', why: 'One expert correction should update every dependent artifact together.', context: 'Simulated demo review · not qualified expert approval', authority: 'Human-in-the-loop demonstration', output: 'Proposed process correction' },
+    'review-applied': { stage: 'knowledge', title: 'Applying the correction across process and evidence', why: 'The reviewed decision must remain consistent everywhere it appears.', context: 'Reviewed graph + reviewed evidence relationships', authority: 'Deterministic review transform', output: 'Corrected handling process' },
+    knowledge: { stage: 'knowledge', title: 'Turning the correction into safely governed knowledge', why: 'One correction must not silently rewrite shared organizational rules.', context: 'Unverified case memory · shared playbook remains unchanged', authority: 'Deterministic knowledge governance', output: 'Quarantined reusable knowledge' },
+    'later-work': { stage: 'knowledge', title: 'Testing the learned guidance on a held-out claim', why: 'Reusable knowledge should prove its value on a separate claim.', context: 'Frozen memory receipt + later demo claim', authority: 'Deterministic comparison · no second model run', output: 'Before-and-after comparison' },
+    'later-result': { stage: 'knowledge', title: 'Showing exactly how the future claim improved', why: 'The learning effect must be visible, bounded and receipt-backed.', context: 'Receipt-bound guidance · shared playbook unchanged', authority: 'Deterministic comparison · no second model run', output: 'Verified learning effect' },
+    failure: { stage: 'understand', title: 'The run stopped safely', why: 'No partial or unsupported result should reach the handler.', context: 'No unsupported result was applied', authority: 'Fail-closed safety boundary', output: 'No artifact produced' },
   };
 
   const CURSOR_ACTIONS = {
@@ -90,6 +90,8 @@
     'later-work': 'Deterministic comparison', 'later-result': 'Deterministic comparison',
     failure: 'Fail-closed safety boundary',
   };
+
+  const PRODUCED_EVENT_STATES = new Set(['accepted', 'cache_hit', 'candidate_prepared', 'completed', 'passed', 'succeeded', 'succeeded_with_guarded_fallback', 'success']);
 
   let queued = false;
   let lastMoment = '';
@@ -196,6 +198,9 @@
         : currentEvent.actorType === 'deterministic_tool'
           ? 'CasePath deterministic tool'
           : plainAuthority;
+    const outputProduced = PRODUCED_EVENT_STATES.has(currentEvent.status.toLowerCase())
+      || ['ready', 'review-applied', 'later-result', 'failure'].includes(moment)
+      || (moment === 'knowledge' && document.body.dataset.casepathLearningReady === 'true');
     const signature = `${moment}:${focus.stage}:${action}:${currentEvent.eventId}:${currentEvent.status}`;
     if (surface.dataset.signature === signature) return;
     const activeIndex = FLAGSHIP_STAGES.findIndex(stage => stage.id === focus.stage);
@@ -206,17 +211,18 @@
     surface.dataset.casepathAction = action;
     surface.innerHTML = `
       <div class="v21-focus-inner">
-        <p class="v21-stage-position"><i aria-hidden="true"></i><span>${activeIndex + 1} of ${FLAGSHIP_STAGES.length} · ${esc(role.label.replace(' Agent', ''))}</span></p>
+        <p class="v21-stage-position"><i aria-hidden="true"></i><span>${activeIndex + 1} of ${FLAGSHIP_STAGES.length} · ${esc(role.label)}</span></p>
         <div class="v21-focus-copy">
-          <h2>${esc(role.label)}</h2>
-          <p>${esc(focus.title)}</p>
+          <span class="v21-focus-task-label">Doing now</span>
+          <h2>${esc(focus.title)}</h2>
+          <p class="v21-focus-why"><span>Why it matters</span><strong>${esc(focus.why)}</strong></p>
           <div class="v21-agent-cursor" id="v21AgentCursor" role="status" data-action="${esc(liveAction)}" data-casepath-moment="${esc(moment)}" data-casepath-specialist="${esc(role.id)}" data-work-authority="${esc(liveAuthority)}" data-event-id="${esc(currentEvent.eventId)}" data-event-stage="${esc(currentEvent.stage)}" data-actor-type="${esc(currentEvent.actorType)}" data-actor-id="${esc(currentEvent.actorId)}" data-call-id="${esc(currentEvent.callId)}" data-event-status="${esc(currentEvent.status)}" data-output-artifact="${esc(currentEvent.outputArtifact)}">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.8v14.5l3.7-3.3 2.7 5.2 2.5-1.3-2.7-5.1 4.9-.7L5 3.8Z"/></svg>
             <span>${esc(liveAction)}</span>
             <small>${esc(liveAuthority)}</small>
           </div>
         </div>
-        <div class="v21-focus-artifact"><span>Emerging artifact</span><strong>${esc(focus.output)}</strong></div>
+        <div class="v21-focus-artifact"><span>${outputProduced ? 'Produced' : 'Output taking shape'}</span><strong>${esc(focus.output)}</strong></div>
       </div>
     `;
     positionAgentCursor(surface, canvas, moment);
@@ -225,7 +231,7 @@
   function cursorTarget(canvas, moment) {
     const selectors = {
       opening: '.live-question,.event-row:last-child', read: '.event-row:last-child,.attachment-row:last-child',
-      understand: '.fact-row:last-child,.event-row:last-child', research: '.law-query:last-child,.law-card:last-child',
+      understand: '.fact-row:last-child,.event-row:last-child', research: '.official-source-tab[aria-selected="true"],.law-query:last-child,.law-card:last-child',
       process: '.process-node.current .process-node-button,.process-node-button[aria-current="step"],.process-node-button:last-child',
       evidence: '.decision-inspector .inspector-row:last-of-type,.v17-checklist-item:last-child',
       experience: '.precedent-mini:first-of-type,.precedent-inline', verify: '.verification-row:last-child,.gate-receipt:last-child',
