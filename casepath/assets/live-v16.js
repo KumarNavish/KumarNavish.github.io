@@ -992,7 +992,7 @@
     const spineIds = new Set(spine.map(node => node.node_id));
     const branchNodes = (process.nodes || []).filter(node => !spineIds.has(node.node_id));
     if (!state.selectedNodeId || !nodeById(state.selectedNodeId)) state.selectedNodeId = process.current_node || 'causation';
-    return `<div class="process-layout"><div class="process-map"><div class="process-spine">${spine.map((node, index) => {
+    return `<div class="process-layout" data-evidence="${esc(String(evidence))}" data-precedents="${esc(String(precedents))}"><div class="process-map"><div class="process-spine">${spine.map((node, index) => {
       const status = nodeState(node.node_id);
       const count = evidenceForNode(node.node_id).length;
       return `<div class="process-node ${status}" style="animation-delay:${index * 55}ms"><span class="process-marker">${status === 'complete' ? '✓' : status === 'current' ? '?' : index + 1}</span><button class="process-node-button" type="button" data-node-id="${esc(node.node_id)}"><span><small>${status === 'current' ? 'Current decision' : status === 'complete' ? 'Established' : status === 'blocked' ? 'Waits for earlier answer' : 'Later stage'}</small><strong>${esc(node.title)}</strong><span class="node-answer">${esc(node.answer || node.question)}</span>${renderContributionAttribution(node.agent_decision_contributions, 'fact')}</span>${evidence && count ? `<span class="node-evidence-count">${count} evidence link${count === 1 ? '' : 's'}</span>` : ''}</button>${node.node_id === (process.current_node || 'causation') ? renderBranches(node) : ''}</div>`;
@@ -1035,9 +1035,13 @@
   function bindProcessInteractions() {
     $$('.process-node-button[data-node-id],.process-branch-node[data-node-id],.branch-option[data-node-id],.process-edge[data-node-id]').forEach(button => button.addEventListener('click', () => {
       state.selectedNodeId = button.dataset.nodeId;
-      const options = { evidence: state.stageMode !== 'process', precedents: state.stageMode === 'experience' };
-      const layout = $('.process-layout');
-      if (layout) layout.outerHTML = renderProcessWorkspace(options);
+      const layout = button.closest('.process-layout');
+      if (!layout) return;
+      const options = {
+        evidence: layout.dataset.evidence === 'true',
+        precedents: layout.dataset.precedents === 'true',
+      };
+      layout.outerHTML = renderProcessWorkspace(options);
       bindProcessInteractions();
       announceRender($('#stageCanvas')?.dataset.casepathMoment || state.stageMode);
       requestAnimationFrame(() => $(`.decision-inspector[data-inspector-node="${CSS.escape(state.selectedNodeId)}"]`)?.focus?.());
