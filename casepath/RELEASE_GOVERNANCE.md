@@ -118,7 +118,7 @@ bound identically across the run audit and sanitized ledger. A paid provider
 response, a cache replay, or a weak/unbound role
 record does not satisfy that gate.
 
-Fourteen authorized model attempts failed closed:
+Fifteen authorized model attempts failed closed at the release gate:
 
 - Attempt 1 reached DeepInfra through OpenRouter and returned the provider's
   dated canonical model ID. It charged USD 0.00756 for 3,629 prompt and 2,625
@@ -269,6 +269,21 @@ Fourteen authorized model attempts failed closed:
   failure establishes no runtime acceptance. The 4.051 ms start interval proves
   application-side provider-send overlap was possible; it does not prove that
   overlap caused either 429.
+- Attempt 15 ran from QA deploy `dep-d9u2s2bm8hqs73ecqik0` against aligned
+  source commit `c030f041566b1b318a030dca85e672717efd489f`. QA accepted run
+  `run_5f6b88f669bb0316` and bound it to orchestration
+  `orch_47fcf18494e7c1ec`. This was the first attempt whose application
+  orchestration accepted all six required model roles and all three
+  deterministic gates. The six DeepInfra responses cost USD 0.0254122 for
+  34,988 prompt and 3,669 completion tokens; four calls succeeded directly and
+  two succeeded with disclosed guarded fallback. The browser gate nevertheless
+  rejected the presentation because terminal validator label
+  `whole-playbook-validator/15.2` was exposed as a fourth `data-gate-id` in
+  addition to the three release-owned gate IDs. The failed QA build published
+  neither a current report nor an evidence manifest; the public QA origin still
+  exposed its stale previous-deploy report and returned 404 for the manifest.
+  Application-orchestration acceptance is therefore retained as history, but
+  Attempt 15 itself established no dynamic release acceptance.
 
 The current source pins OpenRouter to the exact `deepinfra/fp4` endpoint tag,
 sets `allow_fallbacks: false`, keeps `require_parameters: true`, and denies
@@ -297,18 +312,20 @@ requires a new same-commit cold production journey with all six bound calls and
 three passed deterministic gates.
 
 Known aggregate provider charges for attempts 1, 2, 4, 5, 6, 8, 10, 11, 12,
-and the two cost-known calls in attempt 14 are USD 0.1798320. Attempts 3, 7, 9,
-and 13, plus the two failed calls in attempt 14, are unknown and excluded rather
-than treated as zero. Attempts 7 and 9 each retain a USD 0.027645 estimated
+the two cost-known calls in attempt 14, and all six calls in attempt 15 are USD
+0.2052442. Attempts 3, 7, 9, and 13, plus the two failed calls in attempt 14,
+are unknown and excluded rather than treated as zero. Attempts 7 and 9 each retain a USD 0.027645 estimated
 reservation, neither of which is included as an actual charge. The attempts
-remain failed-attempt history, not successful application evidence. No raw
-prompt, raw output, credential, or private reference is retained, and no
-attempt is accepted model-backed release evidence.
+remain failed-closed release history; Attempt 15 does contain successful
+application-orchestration evidence, but none is accepted model-backed release
+evidence. No raw prompt, raw output, credential, or private reference is
+retained.
 
-The fourteen records above are listed under `historical_model_validation` with
+The fifteen records above are listed under `historical_model_validation` with
 `scope: failed_closed_history_only`; they can never establish current runtime
-acceptance. No passing dynamic QA artifact pair has been verified as part of
-this source edit, so current production model acceptance remains unestablished.
+acceptance. At this source-history freeze, no passing dynamic QA artifact pair
+had been verified. A later same-commit passing pair may supersede that
+point-in-time verdict without a source-promotion commit.
 
 After a successful production journey, there is no source promotion commit.
 The QA output directory itself is the atomic evidence unit:
