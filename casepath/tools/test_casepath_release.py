@@ -70,14 +70,49 @@ def test_browser_gate_pins_complete_runtime_acceptance_criteria() -> None:
 def test_loaded_precedent_renderers_preserve_exact_review_authority() -> None:
     assets = release_tool.REPOSITORY / "casepath" / "assets"
     precedent_renderer = (assets / "live-v16.js").read_text(encoding="utf-8")
-    reuse_renderer = (assets / "live-v17.js").read_text(encoding="utf-8")
-    for source in (precedent_renderer, reuse_renderer):
-        assert "'qualified_expert_reviewed'" in source
-        assert "'unverified_demo_memory'" in source
+    assert "'qualified_expert_reviewed'" in precedent_renderer
+    assert "'unverified_demo_memory'" in precedent_renderer
     assert "Unverified generated-demo review memory returned by the server" in (
         precedent_renderer
     )
-    assert "Unverified demo review memory returned" in reuse_renderer
+    assert "Unverified demo review memory returned" in precedent_renderer
+
+
+def test_memory_reuse_proof_is_synchronous_authoritative_and_receipt_scoped() -> None:
+    assets = release_tool.REPOSITORY / "casepath" / "assets"
+    flagship_renderer = (assets / "live-v16.js").read_text(encoding="utf-8")
+    reuse_renderer = (assets / "live-v17.js").read_text(encoding="utf-8")
+    reuse_wrapper = (assets / "live-v18.js").read_text(encoding="utf-8")
+    browser_gate = (
+        release_tool.REPOSITORY / "casepath-qa" / "browser-focused-v20.mjs"
+    ).read_text(encoding="utf-8")
+    function_start = flagship_renderer.index("  function renderMemoryReuseProof(")
+    function_end = flagship_renderer.index("\n  function factsForNode(", function_start)
+    function_source = flagship_renderer[function_start:function_end]
+    later_result_start = flagship_renderer.index("  function renderLaterResult()")
+    later_result_end = flagship_renderer.index("\n  function restartDemo()", later_result_start)
+    later_result_source = flagship_renderer[later_result_start:later_result_end]
+    assert "currentRun" not in function_source
+    assert "v18-reuse-proof" in function_source
+    assert "v17-reuse-thread" in function_source
+    assert "memoryUsed && !receipt" in function_source
+    assert "data-memory-contract=" in function_source
+    assert "data-application-hash=" in function_source
+    assert "data-memory-authority=" in function_source
+    assert "data-memory-scope=" in function_source
+    assert "renderMemoryReuseProof({ result, proof, memoryUsed, retrievedOnly, memoryState: returnedMemoryState })" in later_result_source
+    assert "proof.causal_delta?.nonzero === true" in later_result_source
+    assert "${reuseProofMarkup}<div class=\"before-after\">" in later_result_source
+    assert "function enhanceReuse" not in reuse_renderer
+    assert "function enhanceReuse" not in reuse_wrapper
+    assert "const validMemoryReceipt = receipt =>" in reuse_renderer
+    assert "validMemoryReceipt(transform)" in reuse_renderer
+    assert (
+        "const reuseThreadSelector = '#laterResult .v18-reuse-proof .v17-reuse-thread';"
+        in browser_gate
+    )
+    assert "laterReuseThreadCount === 1 && reuseProofCount === 1 && proofReuseThreadCount === 1" in browser_gate
+    assert "page.locator('.v17-reuse-thread').innerText()" not in browser_gate
 
 
 def test_loaded_orchestration_renderer_keeps_validator_identity_out_of_gate_ids() -> None:
@@ -5663,7 +5698,9 @@ def test_handoff_continuity_uses_structured_moments_without_translucent_text() -
         encoding="utf-8"
     )
     assert 'assets/live-v17-continuity.css?v=20.0.0' in index
-    assert 'assets/live-v17.js?v=20.0.0' in index
+    assert 'assets/live-v16.js?v=20.0.1' in index
+    assert 'assets/live-v17.js?v=20.0.1' in index
+    assert 'assets/live-v18.js?v=20.0.1' in index
     assert 'assets/live-v16.css?v=20.0.0' in index
 
 

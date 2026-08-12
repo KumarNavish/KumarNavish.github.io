@@ -59,11 +59,6 @@
     ventilation_dispute: 'Test the ventilation allegation',
   };
 
-  const REVIEWED_MEMORY_STATUSES = new Set([
-    'qualified_expert_reviewed',
-    'unverified_demo_memory',
-  ]);
-
   const esc = (value = '') => String(value).replace(/[&<>'"]/g, character => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
   }[character]));
@@ -89,31 +84,6 @@
     && receipt.model_acceptance_reused === false
     && receipt.shared_rule_applied === false
     && receipt.applied === true;
-
-  const reviewedMemoryState = result => {
-    const receipt = validMemoryReceipt(result?.memory_application) ? result.memory_application : null;
-    const precedent = (result?.precedents || []).find(item => REVIEWED_MEMORY_STATUSES.has(item.review_status) && item.memory_id);
-    const retrieved = Boolean(precedent)
-      && result?.reviewed_memory_retrieved === true
-      && result?.knowledge?.reviewed_memory_retrieved === true;
-    const used = retrieved
-      && Boolean(receipt)
-      && result?.memory_used === true
-      && result?.reviewed_memory_used === true
-      && result?.knowledge?.reviewed_memory_used === true
-      && result?.process?.memory_used === true
-      && result?.checklist?.memory_used === true;
-    const retrievedOnly = retrieved
-      && result?.memory_application == null
-      && result?.memory_used === false
-      && result?.reviewed_memory_used === false
-      && result?.knowledge?.reviewed_memory_used === false
-      && result?.process?.memory_used === false
-      && result?.checklist?.memory_used === false
-      && result?.process?.case_specific_guidance_applied !== true
-      && result?.checklist?.case_specific_guidance_applied !== true;
-    return { receipt, precedent, retrieved, used, retrievedOnly };
-  };
 
   let scheduled = false;
   let lastProcessMarkup = '';
@@ -520,52 +490,6 @@
       <div class="knowledge-step"><span>✓</span><div><strong>Playbook released</strong><p>${esc(candidate.new_version)} is active.</p></div></div>`;
   }
 
-  async function enhanceReuse(canvas) {
-    const resultBlock = canvas.querySelector('#laterResult .before-after');
-    if (!resultBlock || canvas.querySelector('.v17-reuse-thread')) return;
-    const heading = canvas.querySelector('.v20-later-heading');
-    if (!heading || heading.dataset.memoryRetrieved !== 'true') return;
-    const run = await currentRun({ fresh: true });
-    if (!run || !document.contains(resultBlock)) return;
-    const result = run.result || {};
-    const memory = reviewedMemoryState(result);
-    if ((!memory.used && !memory.retrievedOnly)
-      || heading.dataset.memoryUsed !== String(memory.used)
-      || heading.dataset.memoryRetrievedOnly !== String(memory.retrievedOnly)) return;
-    const { receipt, precedent } = memory;
-    const precedentAuthorityCopy = precedent.review_status === 'qualified_expert_reviewed'
-      ? 'Qualified expert-reviewed case memory returned'
-      : 'Unverified demo review memory returned';
-    const playbook = result.playbook?.version;
-    const proof = window.__casepathLearningProof || null;
-    const thread = document.createElement('section');
-    thread.className = `v17-reuse-thread${memory.retrievedOnly ? ' retrieved-only' : ''}`;
-    thread.dataset.memoryRetrieved = 'true';
-    thread.dataset.memoryUsed = String(memory.used);
-    thread.dataset.applicationReceipt = String(Boolean(receipt));
-    thread.setAttribute('aria-label', 'How returned review memory was ranked or applied on the held-out later demo claim');
-    if (memory.used) {
-      thread.dataset.memoryContract = receipt.contract;
-      thread.dataset.applicationHash = receipt.application_hash || '';
-      thread.dataset.memoryAuthority = receipt.authority;
-      thread.dataset.memoryScope = receipt.scope;
-      thread.innerHTML = `
-        <article><small>${esc(precedentAuthorityCopy)} and applied</small><strong>${esc(precedent.claim_id)} · ${esc(precedent.memory_id)}</strong></article>
-        <article><small>Receipt authority and scope</small><strong>${esc(receipt.authority)} · ${esc(receipt.scope)}</strong></article>
-        <article><small>Application hash</small><strong><code>${esc(receipt.application_hash || 'not returned')}</code></strong></article>
-        <article><small>Shared playbook</small><strong>${esc(playbook || 'Version not returned')} unchanged · shared rule ${esc(String(receipt.shared_rule_applied === true))}</strong></article>
-        <article><small>Acceptance boundary</small><strong>Model acceptance reused ${esc(String(receipt.model_acceptance_reused === true))}${proof?.causal_delta?.nonzero === true ? ' · nonzero causal delta computed' : ''}</strong></article>`;
-    } else {
-      thread.innerHTML = `
-        <article><small>${esc(precedentAuthorityCopy)} and ranked</small><strong>${esc(precedent.claim_id)} · ${esc(precedent.memory_id)}</strong></article>
-        <article><small>Guidance state</small><strong>Disabled for this required-now review outcome</strong></article>
-        <article><small>Application receipt</small><strong>None returned</strong></article>
-        <article><small>Process effect</small><strong>Not used or applied · no memory-driven DTO change</strong></article>
-        <article><small>Shared playbook</small><strong>${esc(playbook || 'Version not returned')} unchanged</strong></article>`;
-    }
-    resultBlock.parentNode.insertBefore(thread, resultBlock);
-  }
-
   async function enhanceStage() {
     const canvas = document.querySelector('#stageCanvas');
     if (!canvas) return;
@@ -584,7 +508,6 @@
     await enhanceReady(canvas);
     enhanceReviewApplied(canvas);
     await enhanceKnowledge(canvas);
-    await enhanceReuse(canvas);
   }
 
   function queueEnhancement() {
