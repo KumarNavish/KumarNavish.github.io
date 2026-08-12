@@ -338,11 +338,17 @@ def apply_evidence_projection(
         process["current_overlay"]["next_action_node_id"]
     }
     for value in items:
-        value["current_path"] = value["node_id"] in active_nodes
+        owner_node_ids = value.get("node_ids")
+        if not isinstance(owner_node_ids, list) or not owner_node_ids:
+            owner_node_ids = [value["node_id"]]
+        value["current_path"] = bool(active_nodes.intersection(owner_node_ids))
         if not value["current_path"] and value["status"] == "missing":
             value["status"] = "conditional"
             value["required_level"] = "conditional"
-            value["applies_when"] = f"The {value['node_id']} process node is reached"
+            value["applies_when"] = (
+                "One of the linked process nodes is reached: "
+                + ", ".join(owner_node_ids)
+            )
     if decisions["urgency"] == "urgency_unverified":
         by_id["health_safety_statement"]["status"] = "missing"
         by_id["health_safety_statement"]["artifact_ids"] = []
@@ -413,7 +419,13 @@ def checklist_derived_sections(
         "not_applicable": sum(
             item["status"] == "not_applicable" for item in items
         ),
-        "process_nodes_covered": len({item["node_id"] for item in items}),
+        "process_nodes_covered": len(
+            {
+                node_id
+                for item in items
+                for node_id in item.get("node_ids", [item["node_id"]])
+            }
+        ),
     }
     return {"present": present, "required": required, "summary": summary}
 

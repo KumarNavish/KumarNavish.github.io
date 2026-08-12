@@ -44,6 +44,119 @@ def test_release_contract_and_manifests_are_current() -> None:
     )
 
 
+def test_root_knowledge_transfer_is_inventoried_as_release_source() -> None:
+    assert "CASEPATH_MASTER_KNOWLEDGE_TRANSFER.md" in (
+        release_tool.EXTRA_SOURCE_FILES
+    )
+    inventoried_paths = {
+        item["path"] for item in release_tool.source_manifest_payload()["files"]
+    }
+    assert "CASEPATH_MASTER_KNOWLEDGE_TRANSFER.md" in inventoried_paths
+
+
+def test_browser_gate_pins_complete_runtime_acceptance_criteria() -> None:
+    source = (
+        release_tool.REPOSITORY / "casepath-qa" / "browser-focused-v20.mjs"
+    ).read_text(encoding="utf-8")
+    start = source.index("const EXPECTED_RUNTIME_ACCEPTANCE_CRITERIA")
+    end = source.index("\n});", start)
+    criteria = source[start:end]
+    assert "requires_grounded_causal_artifact_recomputation: true" in criteria
+    assert "requires_learning_replay_proof: true" in criteria
+
+
+def test_every_observable_claim_artifact_is_model_visible_and_scanned() -> None:
+    api_root = release_tool.REPOSITORY / "casepath-api"
+    if str(api_root) not in sys.path:
+        sys.path.insert(0, str(api_root))
+    from casepath_api.data import ARTIFACTS, CLAIMS
+
+    observable_files = {
+        ARTIFACTS[artifact_id]["filename"]
+        for claim in CLAIMS.values()
+        for artifact_id in claim["artifact_ids"]
+    }
+    assert observable_files <= release_tool.MODEL_VISIBLE_FILES
+
+    manifest_files = {
+        item["path"]: item
+        for item in release_tool.build_artifact_manifest()["files"]
+    }
+    assert all(manifest_files[path]["model_visible"] for path in observable_files)
+    assert all(
+        manifest_files[path]["leakage_scan"] == "passed"
+        for path in observable_files
+    )
+
+
+def test_every_observable_claim_package_string_is_leakage_scanned() -> None:
+    api_root = release_tool.REPOSITORY / "casepath-api"
+    if str(api_root) not in sys.path:
+        sys.path.insert(0, str(api_root))
+    from casepath_api.data import CLAIMS, observable_claim_package
+
+    def strings(value, path="$"):
+        if isinstance(value, str):
+            if path != "$.schema":
+                yield path, value
+            return
+        if isinstance(value, list):
+            for index, item in enumerate(value):
+                yield from strings(item, f"{path}[{index}]")
+            return
+        if isinstance(value, dict):
+            for key, item in value.items():
+                yield from strings(item, f"{path}.{key}")
+
+    findings = []
+    for claim_id, claim in CLAIMS.items():
+        package = observable_claim_package(claim)
+        for path, value in strings(package):
+            findings.extend(
+                release_tool.scan_text(
+                    f"observable_claim_package[{claim_id}]{path}", value
+                )
+            )
+    assert findings == []
+
+
+def test_generated_artifact_timeline_and_metadata_are_temporally_coherent() -> None:
+    timeline = release_tool.PdfReader(
+        release_tool.ARTIFACT_ROOT / "defect-timeline.pdf"
+    )
+    timeline_text = "\n".join(page.extract_text() or "" for page in timeline.pages)
+    assert "Written notice sent; no attachment recorded." in timeline_text
+    assert "Email + receipt" in timeline_text
+    assert "with one photograph" not in timeline_text
+
+    primary_reply = (
+        release_tool.ARTIFACT_ROOT / "management-reply.eml"
+    ).read_text(encoding="utf-8")
+    later_reply = (
+        release_tool.ARTIFACT_ROOT / "later-management-reply.eml"
+    ).read_text(encoding="utf-8")
+    assert "Based on your description" in primary_reply
+    assert "Based on your description" in later_reply
+    assert "Based on the photograph" not in primary_reply + later_reply
+
+    window = release_tool.PdfReader(
+        release_tool.ARTIFACT_ROOT / "window-replacement-notice.pdf"
+    )
+    window_text = "\n".join(page.extract_text() or "" for page in window.pages)
+    assert window.metadata.title == "Window Replacement Completion Record"
+    assert window.metadata.creation_date.isoformat().startswith("2026-05-22T17:00:00")
+    assert "Works completed 18-22 May 2026" in window_text
+    assert "were replaced between 18 and 22 May 2026" in window_text
+
+    lease = release_tool.PdfReader(
+        release_tool.ARTIFACT_ROOT / "lease-agreement.pdf"
+    )
+    lease_text = "\n".join(page.extract_text() or "" for page in lease.pages)
+    assert lease.metadata.creation_date.isoformat().startswith("2024-01-30T17:30:00")
+    assert "Agreement dated 18 January 2024" in lease_text
+    assert "Recorded condition on 30 January 2024" in lease_text
+
+
 def test_archive_release_record_keeps_external_limits_explicit() -> None:
     record_path = (
         release_tool.REPOSITORY
@@ -1138,6 +1251,168 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
     def source_ref(index: int) -> str:
         return f"src_{index:024x}"
 
+    def canonical_fact(
+        fact_id: str,
+        *,
+        label: str,
+        value: str,
+        state: str,
+        source_refs: list[dict],
+        decision_key: str | None = None,
+        normalized_value: str | None = None,
+        decision_value: str | None = None,
+        semantic_role: str | None = None,
+    ) -> dict:
+        return {
+            "fact_id": fact_id,
+            "label": label,
+            "value": value,
+            "state": state,
+            "explanation": "Bounded release-acceptance fixture fact.",
+            "source_refs": source_refs,
+            "confidence": 0.91,
+            "controls_process": decision_key is not None,
+            "decision_key": decision_key,
+            "normalized_value": normalized_value,
+            "decision_value": decision_value,
+            "semantic_role": semantic_role,
+        }
+
+    fixture_agent = "Canonical Claim Preparation Tool"
+    def message_ref(excerpt: str) -> dict:
+        return {
+            "artifact_id": "message",
+            "locator_kind": "text_quote",
+            "page": 1,
+            "excerpt": excerpt,
+            "agent": fixture_agent,
+        }
+    metadata_ref = {
+        "artifact_id": "intake",
+        "locator_kind": "metadata_field",
+        "field": "policy_reference",
+        "value": "LP-2024-08317",
+        "agent": fixture_agent,
+    }
+    visual_ref = {
+        "artifact_id": "art_photo",
+        "locator_kind": "visual_observation",
+        "region": [0.12, 0.1, 0.42, 0.38],
+        "observation": "Visible dark marks at the bedroom external-wall corner.",
+        "producer": release_tool.VISUAL_ANNOTATION_PRODUCER,
+        "authority": release_tool.VISUAL_ANNOTATION_AUTHORITY,
+        "annotation_contract": release_tool.VISUAL_ANNOTATION_CONTRACT,
+        "annotation_version": release_tool.VISUAL_ANNOTATION_VERSION,
+        "image_sha256": release_tool.CASEPATH_ARTIFACTS["art_photo"]["sha256"],
+    }
+    canonical_facts = [
+        canonical_fact(
+            "fact_tenancy",
+            label="Tenant-law scope",
+            value="Swiss residential tenancy",
+            state="known",
+            source_refs=[metadata_ref],
+            decision_key="scope",
+            normalized_value="supported_in_scope",
+            decision_value="in_scope",
+        ),
+        canonical_fact(
+            "fact_dispute",
+            label="Concrete dispute",
+            value="Management refused inspection and the tenant disagrees",
+            state="known",
+            source_refs=[message_ref("I disagree because the problem keeps returning.")],
+            decision_key="dispute",
+            normalized_value="present",
+            decision_value="dispute_present",
+        ),
+        canonical_fact(
+            "fact_health",
+            label="Urgency",
+            value="No acute concern reported",
+            state="known",
+            source_refs=[message_ref("There are no current health symptoms and no urgent deadline.")],
+            decision_key="urgency",
+            normalized_value="not_urgent",
+            decision_value="not_urgent",
+        ),
+        canonical_fact(
+            "fact_notification",
+            label="Notification",
+            value="Management notified on 15 July",
+            state="known",
+            source_refs=[message_ref("I notified the property manager by email on 15 July.")],
+            decision_key="notification",
+            normalized_value="notified",
+            decision_value="notified",
+        ),
+        canonical_fact(
+            "fact_recurrence",
+            label="Recurrence",
+            value="Condition returns after cleaning",
+            state="known",
+            source_refs=[message_ref("The mould in the external corner of our bedroom keeps coming back.")],
+            decision_key="recurrence",
+            normalized_value="supported",
+            decision_value="recurrence_supported",
+        ),
+        canonical_fact(
+            "fact_cause",
+            label="Technical cause",
+            value="Unresolved",
+            state="unknown",
+            source_refs=[message_ref("They replied that the cause was insufficient ventilation")],
+            decision_key="causation",
+            normalized_value="unresolved",
+            decision_value="cause_unresolved",
+        ),
+        canonical_fact(
+            "fact_ventilation_allegation",
+            label="Management ventilation allegation",
+            value="Insufficient ventilation alleged",
+            state="known",
+            source_refs=[
+                {
+                    "artifact_id": "art_management_reply",
+                    "locator_kind": "text_quote",
+                    "page": 1,
+                    "excerpt": "the marks appear consistent with insufficient ventilation",
+                    "agent": fixture_agent,
+                }
+            ],
+            semantic_role="management_ventilation_allegation",
+        ),
+        canonical_fact(
+            "fact_visible_mould",
+            label="Visible condition",
+            value="Dark marks visible at the external corner",
+            state="known",
+            source_refs=[visual_ref],
+        ),
+    ]
+    required_primary_fact_ids = {
+        fact_id
+        for values in release_tool.RELEASE_PROCESS_FACT_IDS_BY_CLAIM[
+            "DEF-027-E0-DEMO"
+        ].values()
+        for fact_id in values
+    } | set(
+        release_tool.RELEASE_EVIDENCE_FACT_ID_BY_CLAIM[
+            "DEF-027-E0-DEMO"
+        ].values()
+    )
+    existing_primary_fact_ids = {fact["fact_id"] for fact in canonical_facts}
+    canonical_facts.extend(
+        canonical_fact(
+            fact_id,
+            label=fact_id.replace("_", " ").title(),
+            value="Not yet established",
+            state="unknown",
+            source_refs=[],
+        )
+        for fact_id in sorted(required_primary_fact_ids - existing_primary_fact_ids)
+    )
+
     source_artifact = {
         "artifacts": [
             {
@@ -1167,37 +1442,51 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         ]
     }
     decision_specs = [
-        ("fact_scope", "scope", "in_scope", "confirmed", "covered", [source_ref(1)]),
+        (
+            "fact_tenancy",
+            "scope",
+            "in_scope",
+            "known",
+            "supported_in_scope",
+            [source_ref(1)],
+        ),
         (
             "fact_dispute",
             "dispute",
             "dispute_present",
-            "confirmed",
+            "known",
             "present",
             [source_ref(2)],
         ),
-        ("fact_urgency", "urgency", "not_urgent", "confirmed", "routine", []),
+        (
+            "fact_health",
+            "urgency",
+            "not_urgent",
+            "known",
+            "not_urgent",
+            [],
+        ),
         (
             "fact_notification",
             "notification",
             "notified",
-            "confirmed",
-            "sent",
+            "known",
+            "notified",
             [source_ref(3)],
         ),
         (
             "fact_recurrence",
             "recurrence",
             "recurrence_supported",
-            "confirmed",
-            "recurring",
+            "known",
+            "supported",
             [source_ref(4)],
         ),
         (
             "fact_cause",
             "causation",
             "cause_unresolved",
-            "uncertain",
+            "unknown",
             "unresolved",
             [source_ref(5), source_ref(6)],
         ),
@@ -1235,46 +1524,51 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
     process_artifact = {"decisions": process_decisions}
 
     evidence_specs = [
+        ("claim_message", "fact_scope", "provided_sufficient", ["message"], [source_ref(1)], False),
+        ("source_integrity", "fact_scope", "provided_sufficient", ["art_lease"], [source_ref(2)], False),
+        ("lease", "fact_scope", "provided_sufficient", ["art_lease"], [source_ref(3)], False),
+        ("policy_reference", "fact_scope", "provided_sufficient", ["intake"], [source_ref(4)], False),
+        ("customer_objective", "fact_dispute", "provided_sufficient", ["message"], [source_ref(5)], False),
+        ("management_position", "fact_ventilation_allegation", "provided_sufficient", ["art_management_reply"], [source_ref(7)], False),
+        ("health_safety_statement", "fact_urgency", "provided_sufficient", ["message"], [source_ref(8)], False),
+        ("defect_notice", "fact_notification", "provided_sufficient", ["art_notification"], [source_ref(9)], True),
+        ("proof_of_delivery", "fact_notification", "provided_sufficient", ["art_delivery"], [source_ref(10)], False),
+        ("dated_photos", "fact_visible_mould", "provided_sufficient", ["art_photo"], [source_ref(11)], False),
+        ("recurrence_chronology", "fact_recurrence", "provided_insufficient", ["art_timeline"], [source_ref(12)], False),
+        ("technical_assessment", "fact_cause", "missing", [], [source_ref(5), source_ref(6)], False),
+        ("moisture_measurements", "fact_cause", "conditional", [], [source_ref(13)], False),
+        ("building_envelope", "fact_cause", "conditional", [], [source_ref(14)], False),
+        ("use_evidence", "fact_ventilation_allegation", "not_applicable", [], [source_ref(15)], False),
+        ("repair_history", "fact_cause", "conditional", [], [source_ref(16)], False),
+        ("remediation_plan", "fact_cause", "not_applicable", [], [source_ref(17)], False),
+        ("financial_impact", "fact_cause", "conditional", [], [source_ref(18)], False),
+        ("settlement_proposal", "fact_dispute", "conditional", [], [source_ref(19)], False),
+        ("conciliation_bundle", "fact_dispute", "conditional", [], [source_ref(20)], False),
+        ("completion_record", "fact_dispute", "not_applicable", [], [source_ref(21)], False),
+    ]
+    evidence_specs = [
         (
-            "claim_message",
-            "fact_scope",
-            "provided_sufficient",
-            ["message"],
-            [source_ref(1)],
-            False,
-        ),
-        (
-            "dispute_reply",
-            "fact_dispute",
-            "provided_sufficient",
-            ["art_reply"],
-            [source_ref(2)],
-            False,
-        ),
-        (
-            "defect_notice",
-            "fact_notification",
-            "provided_insufficient",
-            ["art_notice"],
-            [source_ref(3)],
-            True,
-        ),
-        (
-            "technical_assessment",
-            "fact_cause",
-            "missing",
-            [],
-            [source_ref(5), source_ref(6)],
-            False,
-        ),
-        (
-            "ventilation_statement",
-            "fact_ventilation_allegation",
-            "provided_sufficient",
-            ["art_reply"],
-            [source_ref(7)],
-            False,
-        ),
+            item_id,
+            release_tool.RELEASE_EVIDENCE_FACT_ID_BY_CLAIM[
+                "DEF-027-E0-DEMO"
+            ][item_id],
+            release_tool.RELEASE_BASE_EVIDENCE_STATUS_BY_CLAIM[
+                "DEF-027-E0-DEMO"
+            ][item_id],
+            release_tool.RELEASE_EVIDENCE_ARTIFACT_IDS_BY_CLAIM[
+                "DEF-027-E0-DEMO"
+            ][item_id],
+            source_ref_ids,
+            fallback,
+        )
+        for (
+            item_id,
+            _fact_id,
+            status,
+            artifact_ids,
+            source_ref_ids,
+            fallback,
+        ) in evidence_specs
     ]
     evidence_items = []
     for item_id, fact_id, status, artifact_ids, source_ref_ids, status_fallback in (
@@ -1343,6 +1637,7 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
                 "fact_urgency",
                 "fact_recurrence",
                 "fact_ventilation_allegation",
+                "fact_visible_mould",
             ],
             "source_ref_ids": [source_ref(1), source_ref(2)],
             "required_text_artifact_ids": ["art_notice", "art_reply"],
@@ -1356,10 +1651,24 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
             "fact_urgency",
             "fact_recurrence",
             "fact_ventilation_allegation",
+            "fact_visible_mould",
         ],
         "focus_source_ref_ids": [source_ref(1), source_ref(2)],
         "contribution_type": "constrained_focus_prioritization",
     }
+    fixture_priority_fact_ids = plan_artifact["model_priority_fact_ids"]
+    fixture_deterministic_fact_ids = [
+        fact["fact_id"]
+        for fact in canonical_facts
+        if fact["fact_id"] not in fixture_priority_fact_ids
+    ]
+    plan_artifact["deterministic_coverage"]["fact_ids"] = (
+        fixture_deterministic_fact_ids
+    )
+    plan_artifact["focus_fact_ids"] = [
+        *fixture_priority_fact_ids,
+        *fixture_deterministic_fact_ids,
+    ]
     final_fields = [
         ("current_node_id", "final:current_node", False),
         ("next_action_node_id", "final:next_action", False),
@@ -1412,15 +1721,7 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
     }
 
     accepted_by_agent = {
-        "canonical_facts": [
-            "fact_scope",
-            "fact_dispute",
-            "fact_urgency",
-            "fact_notification",
-            "fact_recurrence",
-            "fact_cause",
-            "fact_ventilation_allegation",
-        ],
+        "canonical_facts": [fact["fact_id"] for fact in canonical_facts],
         "orchestrator_plan": ["model_priority_order"],
         "document_source_integrity": [
             item["artifact_id"] for item in source_artifact["artifacts"]
@@ -1522,55 +1823,113 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         agent = by_agent[agent_id]
         return {field: agent[field] for field in lineage_fields if field in agent}
 
-    node_by_fact = {
-        "fact_scope": "scope",
-        "fact_dispute": "dispute",
-        "fact_urgency": "urgency",
-        "fact_notification": "notification",
-        "fact_recurrence": "recurrence",
-        "fact_cause": "causation",
-    }
+    legal = release_tool.governed_legal_context()
     assert len(decision_specs) == len(process_decisions)
-    process_nodes = [
-        {
-            "node_id": node_by_fact[fact_id],
-            "state": "completed" if fact_id != "fact_cause" else "active",
-            "fact_ids": (
-                [fact_id, "fact_ventilation_allegation"]
-                if fact_id == "fact_cause"
-                else [fact_id]
-            ),
-            "agent_decision_contributions": [decision],
-        }
-        for fact_id, decision in zip(
-            [item[0] for item in decision_specs], process_decisions
-        )
+    decisions_by_fact = {item["fact_id"]: item for item in process_decisions}
+    facts_by_node = release_tool.RELEASE_PROCESS_FACT_IDS_BY_CLAIM[
+        "DEF-027-E0-DEMO"
     ]
-    process_nodes.append(
-        {"node_id": "evidence_gap", "state": "available", "fact_ids": []}
-    )
-    process = {
-        "contract": "casepath.process-graph/15.2",
-        "current_node": "causation",
-        "selected_path": [
-            "scope",
-            "dispute",
-            "urgency",
-            "notification",
-            "recurrence",
-            "causation",
-        ],
-        "current_overlay": {
-            "completed_node_ids": [
+    requirements_by_node = {
+        node_id: [
+            item_id
+            for item_id, owners in release_tool.BASE_EVIDENCE_NODE_IDS.items()
+            if node_id in owners
+        ]
+        for node_id in release_tool.BASE_PROCESS_NODE_IDS
+    }
+    completed_nodes = ["intake", "scope", "dispute", "urgency", "notification", "defect"]
+    process_nodes = []
+    for node_id in release_tool.BASE_PROCESS_NODE_IDS:
+        if node_id in completed_nodes:
+            state = "complete"
+        elif node_id == "causation":
+            state = "current"
+        elif node_id == "evidence_gap":
+            state = "next"
+        elif node_id in {"responsibility", "remedy"}:
+            state = "blocked"
+        elif node_id in {
+            "out_of_scope",
+            "no_dispute",
+            "urgent_escalation",
+            "formal_notice",
+            "building_defect",
+            "tenant_use",
+            "mixed_cause",
+        }:
+            state = "inactive"
+        else:
+            state = "future"
+        node = {
+            "node_id": node_id,
+            "title": node_id.replace("_", " ").title(),
+            "question": f"What is the governed state of {node_id.replace('_', ' ')}?",
+            "state": state,
+            "answer": "Unresolved" if node_id == "causation" else "Fixture state",
+            "why": "Bounded release-acceptance fixture process relationship.",
+            "kind": "decision",
+            "main_spine": node_id
+            in {
+                "intake",
                 "scope",
                 "dispute",
                 "urgency",
                 "notification",
-                "recurrence",
-            ],
+                "defect",
+                "causation",
+                "responsibility",
+                "remedy",
+                "escalation",
+                "resolution",
+            },
+            "fact_ids": facts_by_node.get(node_id, []),
+            "legal_source_ids": legal["node_links"].get(node_id, []),
+            "evidence_requirement_ids": requirements_by_node[node_id],
+            "branches": [],
+            "activation": "always",
+        }
+        accepted_decisions = [
+            decisions_by_fact[fact_id]
+            for fact_id in node["fact_ids"]
+            if fact_id in decisions_by_fact
+        ]
+        if accepted_decisions:
+            node["agent_decision_contributions"] = accepted_decisions
+        process_nodes.append(node)
+    selected_path = [
+        "intake",
+        "scope",
+        "dispute",
+        "urgency",
+        "notification",
+        "defect",
+        "causation",
+        "evidence_gap",
+    ]
+    process = {
+        "contract": "casepath.process-graph/15.2",
+        "title": "Complete recurring-moisture claim-handling process",
+        "playbook_version": "mould-playbook-v3",
+        "current_node": "causation",
+        "main_spine": [
+            "intake",
+            "scope",
+            "dispute",
+            "urgency",
+            "notification",
+            "defect",
+            "causation",
+            "responsibility",
+            "remedy",
+            "escalation",
+            "resolution",
+        ],
+        "selected_path": selected_path,
+        "current_overlay": {
+            "completed_node_ids": completed_nodes,
             "current_node_id": "causation",
             "selected_branch_id": "insufficient",
-            "blocked_node_ids": [],
+            "blocked_node_ids": ["responsibility", "remedy"],
             "inactive_branch_ids": [],
             "next_action_node_id": "evidence_gap",
             "decisions": {
@@ -1580,8 +1939,22 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         },
         "nodes": process_nodes,
         "edges": [
-            {"source": "causation", "target": "evidence_gap", "state": "selected"}
+            {
+                "source": source,
+                "target": target,
+                "condition": "governed fixture transition",
+                "state": (
+                    "selected"
+                    if (source, target) in set(zip(selected_path, selected_path[1:]))
+                    else "loop"
+                    if (source, target) == ("evidence_gap", "causation")
+                    else "possible"
+                ),
+            }
+            for source, target in release_tool.BASE_PROCESS_EDGE_PAIRS
         ],
+        "memory_used": False,
+        "shared_rule_applied": False,
         "agent_contribution": {
             "authority": "hybrid_guarded_model_contribution",
             "model_owned_fields": ["decision_value"],
@@ -1597,41 +1970,74 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         },
     }
     public_evidence_items = []
-    titles = {
-        "claim_message": "Original claim message",
-        "dispute_reply": "Management reply",
-        "defect_notice": "Defect notice",
-        "technical_assessment": "Independent technical assessment",
-        "ventilation_statement": "Ventilation allegation",
-    }
-    node_ids = {
-        "claim_message": "scope",
-        "dispute_reply": "dispute",
-        "defect_notice": "notification",
-        "technical_assessment": "causation",
-        "ventilation_statement": "causation",
-    }
     fact_by_evidence_item = {item_id: fact_id for item_id, fact_id, *_ in evidence_specs}
+    active_nodes = set(selected_path)
     for item in evidence_items:
+        item_id = item["item_id"]
+        owners = list(release_tool.BASE_EVIDENCE_NODE_IDS[item_id])
+        status = item["status"]
         public_evidence_items.append(
             {
-                "item_id": item["item_id"],
-                "title": titles[item["item_id"]],
-                "status": item["status"],
-                "node_id": node_ids[item["item_id"]],
-                "fact_id": fact_by_evidence_item[item["item_id"]],
+                "item_id": item_id,
+                "title": item_id.replace("_", " ").title(),
+                "status": status,
+                "node_ids": owners,
+                "node_id": owners[0],
+                "fact_id": fact_by_evidence_item[item_id],
                 "why": "Bounded fixture evidence relationship.",
-                "artifact_ids": list(item["artifact_ids"]),
-                "current_path": True,
-                "applies_when": "The accepted process reaches this node",
+                "legal_basis_ids": release_tool.EVIDENCE_LEGAL_BASIS_IDS[item_id],
+                "artifact_ids": deepcopy(
+                    release_tool.RELEASE_EVIDENCE_ARTIFACT_IDS_BY_CLAIM[
+                        "DEF-027-E0-DEMO"
+                    ][item_id]
+                ),
+                "acceptable_alternatives": [],
+                "current_path": bool(active_nodes.intersection(owners)),
+                "applies_when": (
+                    "The accepted process reaches this node"
+                    if status == "conditional"
+                    else "always"
+                ),
+                "required_level": (
+                    "conditional" if status in {"conditional", "not_applicable"} else "mandatory"
+                ),
                 "agent_contribution": item["field_contributions"],
             }
         )
+    final_claim_brief["source_ref_ids"] = sorted(
+        {
+            source_id
+            for fact_id in final_claim_brief["supporting_fact_ids"]
+            for source_id in [
+                *next(
+                    (
+                        decision["source_ref_ids"]
+                        for decision in process_decisions
+                        if decision["fact_id"] == fact_id
+                    ),
+                    [],
+                ),
+                *[
+                    source_id
+                    for evidence in evidence_items
+                    if fact_by_evidence_item[evidence["item_id"]] == fact_id
+                    for source_id in evidence["source_ref_ids"]
+                ],
+            ]
+        }
+    )
+    by_agent["final_claim_brief_audit"]["output_artifact_hash"] = (
+        release_tool.accepted_artifact_hash(final_claim_brief)
+    )
     derived = release_tool._checklist_derived_sections(public_evidence_items)
     checklist = {
         "contract": "casepath.evidence-model/15.2",
+        "title": "Complete process-grounded evidence model",
         "items": public_evidence_items,
         **derived,
+        "playbook_version": "mould-playbook-v3",
+        "memory_used": False,
+        "shared_rule_applied": False,
         "agent_contribution": {
             "authority": "hybrid_guarded_model_contribution",
             "model_owned_fields": ["status", "artifact_ids"],
@@ -1642,14 +2048,49 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
             "provenance": lineage("evidence_checklist"),
         },
     }
-    verification = {
+    process["validator"] = {
+        "valid": True,
+        "computed": True,
+        "checks": ["Graph integrity", "Law-to-process linkage", "Current-state safety"],
+    }
+    checklist["validator"] = {
         "valid": True,
         "computed": True,
         "checks": [
-            {"name": "graph_integrity", "status": "passed"},
-            {"name": "evidence_projection", "status": "passed"},
-            {"name": "final_action_binding", "status": "passed"},
+            "Process-to-evidence linkage",
+            "Law-to-process linkage",
+            "Current-state safety",
         ],
+    }
+    ranked = release_tool.rank_precedents(
+        current_claim_id="DEF-027-E0-DEMO",
+        understanding={
+            "category": "Rental defect - mould and moisture",
+            "subcategory": "Recurring moisture with disputed causation",
+            "facts": canonical_facts,
+        },
+        process=process,
+        checklist=checklist,
+        memories=[],
+        corpus=release_tool.GOVERNED_PRECEDENT_CORPUS,
+    )
+    verification = {
+        "valid": True,
+        "computed": True,
+        "contract_version": "casepath.playbook-contracts/1.2.0",
+        "checks": [
+            {"name": name, "status": "passed", "detail": "Recomputed fixture check."}
+            for name in release_tool.REQUIRED_PLAYBOOK_CHECKS
+        ],
+        "rejected_proposals": [],
+        "accepted_artifacts": [
+            "canonical_claim_state",
+            "legal_context",
+            "process_graph",
+            "evidence_model",
+            "precedents",
+        ],
+        "whole_playbook_hash": "c" * 64,
     }
     gate_bindings = {
         "deterministic_process_gate": (
@@ -1749,35 +2190,20 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         "status": "complete",
         "agent_orchestration": audit,
         "result": {
+            "claim_id": "DEF-027-E0-DEMO",
+            "summary": "Recurring mould with disputed causation.",
+            "scope": "Swiss residential tenancy",
+            "category": "Rental defect - mould and moisture",
+            "subcategory": "Recurring moisture with disputed causation",
+            "dispute": "Concrete dispute appears to exist",
             "process": process,
             "checklist": checklist,
+            "legal_research": legal,
+            "precedents": ranked["results"],
+            "precedent_ranking": ranked["receipt"],
             "verification": verification,
             "current_overlay": process["current_overlay"],
-            "facts": [
-                {
-                    "fact_id": fact_id,
-                    "controls_process": True,
-                    "decision_key": decision_key,
-                    "decision_value": decision_value,
-                    "state": state,
-                    "normalized_value": normalized_value,
-                }
-                for (
-                    fact_id,
-                    decision_key,
-                    decision_value,
-                    state,
-                    normalized_value,
-                    _source_ref_ids,
-                ) in decision_specs
-            ]
-            + [
-                {
-                    "fact_id": "fact_ventilation_allegation",
-                    "controls_process": False,
-                    "state": "disputed",
-                }
-            ],
+            "facts": canonical_facts,
             "next_action": {
                 "title": "Resolve the evidence gap",
                 "detail": "Obtain the missing independent assessment.",
@@ -1840,6 +2266,464 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         ],
     }
     ledger["summary"] = _ledger_summary(ledger["items"])
+
+    memory_id = "memory_release_replay"
+    review_id = "review_release_replay"
+    memory_content_hash = "9" * 64
+    observable_hash = "8" * 64
+    later_fact_id_map = {
+        "fact_tenancy": "later_fact_tenancy",
+        "fact_dispute": "later_fact_dispute",
+        "fact_health": "later_fact_health",
+        "fact_notification": "later_fact_notification",
+        "fact_recurrence": "later_fact_recurrence",
+        "fact_cause": "later_fact_cause",
+        "fact_ventilation_allegation": "later_fact_ventilation_allegation",
+    }
+    later_facts = []
+    for fact in canonical_facts:
+        if fact["fact_id"] not in later_fact_id_map:
+            continue
+        later_fact = deepcopy(fact)
+        later_fact["fact_id"] = later_fact_id_map[fact["fact_id"]]
+        later_facts.append(later_fact)
+    required_later_fact_ids = {
+        fact_id
+        for values in release_tool.RELEASE_PROCESS_FACT_IDS_BY_CLAIM[
+            "DEMO-MOULD-002"
+        ].values()
+        for fact_id in values
+    } | set(
+        release_tool.RELEASE_EVIDENCE_FACT_ID_BY_CLAIM[
+            "DEMO-MOULD-002"
+        ].values()
+    )
+    existing_later_fact_ids = {fact["fact_id"] for fact in later_facts}
+    later_facts.extend(
+        canonical_fact(
+            fact_id,
+            label=fact_id.replace("_", " ").title(),
+            value="Not yet established",
+            state="unknown",
+            source_refs=[],
+        )
+        for fact_id in sorted(required_later_fact_ids - existing_later_fact_ids)
+    )
+    canonical_hash = release_tool.runtime_artifact_hash(later_facts)
+    baseline_process = release_tool._semantic_process_dto(process)
+    for node in baseline_process["nodes"]:
+        node["fact_ids"] = deepcopy(
+            release_tool.RELEASE_PROCESS_FACT_IDS_BY_CLAIM["DEMO-MOULD-002"][
+                node["node_id"]
+            ]
+        )
+    baseline_checklist = release_tool._semantic_checklist_dto(checklist)
+    for item in baseline_checklist["items"]:
+        item["fact_id"] = release_tool.RELEASE_EVIDENCE_FACT_ID_BY_CLAIM[
+            "DEMO-MOULD-002"
+        ][item["item_id"]]
+        item["artifact_ids"] = deepcopy(
+            release_tool.RELEASE_EVIDENCE_ARTIFACT_IDS_BY_CLAIM[
+                "DEMO-MOULD-002"
+            ][item["item_id"]]
+        )
+        item["status"] = release_tool.RELEASE_BASE_EVIDENCE_STATUS_BY_CLAIM[
+            "DEMO-MOULD-002"
+        ][item["item_id"]]
+    baseline_checklist.update(
+        release_tool._checklist_derived_sections(baseline_checklist["items"])
+    )
+    baseline_result = {
+        "claim_id": "DEMO-MOULD-002",
+        "category": "Rental defect - mould and moisture",
+        "subcategory": "Recurring moisture with disputed causation",
+        "facts": deepcopy(later_facts),
+        "process": baseline_process,
+        "checklist": baseline_checklist,
+        "precedents": deepcopy(ranked["results"]),
+        "verification": {"valid": True, "whole_playbook_hash": "7" * 64},
+        "audit": {
+            "observable_input_hash": observable_hash,
+            "canonical_state_hash": canonical_hash,
+        },
+        "reviewed_memory_used": False,
+        "memory_application": None,
+        "shared_rule_applied": False,
+        "playbook": {"version": "mould-playbook-v3"},
+        "next_action": {"agent_brief_contribution": final_claim_brief},
+    }
+    later_process = release_tool._semantic_process_dto(baseline_process)
+    later_checklist = release_tool._semantic_checklist_dto(baseline_checklist)
+    building_before = deepcopy(
+        next(
+            item
+            for item in baseline_checklist["items"]
+            if item["item_id"] == "building_envelope"
+        )
+    )
+    use_before = deepcopy(
+        next(
+            item
+            for item in baseline_checklist["items"]
+            if item["item_id"] == "use_evidence"
+        )
+    )
+    replay = release_tool._replay_memory_transform(
+        later_process,
+        later_checklist,
+        "later_fact_ventilation_allegation",
+    )
+    later_verification = {"valid": True, "whole_playbook_hash": "6" * 64}
+    later_result = {
+        "claim_id": "DEMO-MOULD-002",
+        "category": "Rental defect - mould and moisture",
+        "subcategory": "Recurring moisture with disputed causation",
+        "facts": deepcopy(later_facts),
+        "process": later_process,
+        "checklist": later_checklist,
+        "precedents": [
+            {
+                "claim_id": "DEF-027-E0-DEMO",
+                "memory_id": memory_id,
+                "review_status": "unverified_demo_memory",
+            },
+            *deepcopy(ranked["results"][:2]),
+        ],
+        "verification": later_verification,
+        "audit": {
+            "observable_input_hash": observable_hash,
+            "canonical_state_hash": canonical_hash,
+        },
+        "reviewed_memory_used": True,
+        "shared_rule_applied": False,
+        "playbook": {"version": "mould-playbook-v3"},
+        "next_action": {"agent_brief_contribution": None},
+    }
+    fact_signature = release_tool._semantic_fact_signature(
+        later_result["facts"], "fixture.later.facts"
+    )
+    semantic_signature_hash = release_tool.runtime_artifact_hash(
+        {
+            "category": "Rental defect - mould and moisture",
+            "subcategory": "Recurring moisture with disputed causation",
+            "required_decisions": release_tool.MEMORY_REQUIRED_DECISIONS,
+            "required_fact_roles": release_tool.MEMORY_REQUIRED_FACT_ROLES,
+        }
+    )
+    eligibility_checks = {
+        "source_claim_excluded": True,
+        "category_matched": True,
+        "subcategory_matched": True,
+        "required_decisions_matched": True,
+        "ventilation_allegation_grounded": True,
+        "semantic_signature_bound": True,
+        "guidance_enabled": True,
+    }
+    eligibility_manifest = {
+        "rule_id": "same_grounded_mould_signature_v2",
+        "contract": "casepath.semantic-memory-eligibility/1.0.0",
+        "claim_id": "DEMO-MOULD-002",
+        "semantic_signature_hash": semantic_signature_hash,
+        "decisions": deepcopy(release_tool.MEMORY_REQUIRED_DECISIONS),
+        "facts_hash": release_tool.runtime_artifact_hash(fact_signature),
+        "checks": eligibility_checks,
+    }
+    eligibility = {
+        **eligibility_manifest,
+        "eligible": True,
+        "manifest_hash": release_tool.runtime_artifact_hash(eligibility_manifest),
+    }
+    before_boundary = {
+        "process_dto_hash": release_tool.runtime_artifact_hash(baseline_process),
+        "checklist_dto_hash": release_tool.runtime_artifact_hash(baseline_checklist),
+        "process_semantic_hash": release_tool.runtime_artifact_hash(
+            release_tool._semantic_process_dto(baseline_process)
+        ),
+        "checklist_semantic_hash": release_tool.runtime_artifact_hash(
+            release_tool._semantic_checklist_dto(baseline_checklist)
+        ),
+    }
+    after_boundary = {
+        "process_dto_hash": release_tool.runtime_artifact_hash(later_process),
+        "checklist_dto_hash": release_tool.runtime_artifact_hash(later_checklist),
+        "process_semantic_hash": release_tool.runtime_artifact_hash(later_process),
+        "checklist_semantic_hash": release_tool.runtime_artifact_hash(later_checklist),
+    }
+    receipt = {
+        "receipt_type": "memory_application_receipt",
+        "contract": "casepath.memory-application-receipt/1.0.0",
+        "authority": "unverified_demo",
+        "scope": "case_specific_guidance_only",
+        "source_memory": {
+            "memory_id": memory_id,
+            "claim_id": "DEF-027-E0-DEMO",
+            "review_id": review_id,
+            "content_hash": memory_content_hash,
+            "review_status": "unverified_demo_memory",
+        },
+        "target": {"run_id": "later-run", "claim_id": "DEMO-MOULD-002"},
+        "observable_input_hash": observable_hash,
+        "canonical_state_hash": canonical_hash,
+        "eligibility": eligibility,
+        "allowed_operation_ids": list(release_tool.MEMORY_OPERATION_IDS),
+        "applied_operation_ids": list(release_tool.MEMORY_OPERATION_IDS),
+        "process_operations": [
+            {
+                "operation_id": "add_ventilation_dispute_node",
+                "operation": "add_node",
+                "node_id": "ventilation_dispute",
+                "evidence_requirement_ids": ["management_position", "use_evidence"],
+                "after_hash": release_tool.runtime_artifact_hash(
+                    replay["ventilation_node"]
+                ),
+            },
+            {
+                "operation_id": "add_evidence_gap_to_ventilation_edge",
+                "operation": "add_edge",
+                "source": "evidence_gap",
+                "target": "ventilation_dispute",
+                "after_hash": release_tool.runtime_artifact_hash(
+                    replay["first_edge"]
+                ),
+            },
+            {
+                "operation_id": "add_ventilation_to_causation_edge",
+                "operation": "add_edge",
+                "source": "ventilation_dispute",
+                "target": "causation",
+                "after_hash": release_tool.runtime_artifact_hash(
+                    replay["second_edge"]
+                ),
+            },
+        ],
+        "evidence_operations": [
+            {
+                "operation_id": "condition_building_envelope",
+                "operation": "replace_item",
+                "item_id": "building_envelope",
+                "before_hash": release_tool.runtime_artifact_hash(building_before),
+                "after_hash": release_tool.runtime_artifact_hash(
+                    replay["building_envelope"]
+                ),
+            },
+            {
+                "operation_id": "reassign_use_evidence_to_ventilation",
+                "operation": "reassign_item",
+                "item_id": "use_evidence",
+                "removed_from_node_ids": sorted(replay["removed_from"]),
+                "added_to_node_id": "ventilation_dispute",
+                "before_hash": release_tool.runtime_artifact_hash(use_before),
+                "after_hash": release_tool.runtime_artifact_hash(
+                    replay["use_evidence"]
+                ),
+            },
+        ],
+        "before": before_boundary,
+        "after": after_boundary,
+        "verification_hash": later_verification["whole_playbook_hash"],
+        "shared_playbook_version": "mould-playbook-v3",
+        "shared_rule_applied": False,
+        "model_acceptance_reused": False,
+        "applied": True,
+    }
+    receipt["application_hash"] = release_tool.runtime_artifact_hash(receipt)
+    later_result["memory_application"] = receipt
+    memory_boundary = {
+        "contract": release_tool.MEMORY_BOUNDARY_CONTRACT,
+        "target": deepcopy(receipt["target"]),
+        "source_memory": {
+            "memory_id": memory_id,
+            "content_hash": memory_content_hash,
+        },
+        "before": deepcopy(before_boundary),
+    }
+    memory_boundary["boundary_hash"] = release_tool.runtime_artifact_hash(
+        memory_boundary
+    )
+    memory_event = {
+        "stage": "memory_application",
+        "label": "Bounded case-specific memory guidance applied",
+        "agent": "Deterministic Memory Application Gate",
+        "actor_type": "deterministic_gate",
+        "status": "completed",
+        "implementation": "deterministic_case_specific_memory_transform",
+        "model": None,
+        "orchestrator": "casepath-langgraph-orchestrator/15.2",
+        "validator": "casepath.memory-application-receipt/1.0.0",
+        "prompt_version": None,
+        "output_artifact": "case_specific_memory_guidance",
+        **deepcopy(receipt),
+    }
+    baseline_run = {
+        "run_id": "baseline-run",
+        "claim_id": "DEMO-MOULD-002",
+        "status": "complete",
+        "knowledge_mode": "baseline",
+        "created_at": "2026-08-12T00:01:00+00:00",
+        "completed_at": 1786492920.0,
+        "result": baseline_result,
+    }
+    later_run = {
+        "run_id": "later-run",
+        "claim_id": "DEMO-MOULD-002",
+        "status": "complete",
+        "knowledge_mode": "current",
+        "created_at": "2026-08-12T00:03:00+00:00",
+        "memory_application_boundary": memory_boundary,
+        "events": [memory_event],
+        "result": later_result,
+    }
+    causal_delta = release_tool._keyed_dto_delta(baseline_result, later_result)
+    candidate = {
+        "candidate_id": "candidate_disputed_ventilation_v4",
+        "status": "quarantined",
+        "qualified_support_count": 0,
+        "target_tests": {"status": "passed"},
+        "protected_regression": {"status": "passed"},
+        "approval": {"status": "pending", "qualified_reviewer": False},
+    }
+    freeze_memory = {
+        "memory_id": memory_id,
+        "review_id": review_id,
+        "content_hash": memory_content_hash,
+        "candidate_id": candidate["candidate_id"],
+        "updated_at": "2026-08-12T00:00:00+00:00",
+    }
+    counterfactual_freeze = {
+        "contract": "casepath.counterfactual-learning-freeze/1.0.0",
+        "memory": freeze_memory,
+        "identity_hash": release_tool.runtime_artifact_hash(freeze_memory),
+        "application_suppressed": True,
+    }
+    baseline_run["counterfactual_learning_freeze"] = counterfactual_freeze
+    proof = {
+        "ready": True,
+        "computed": True,
+        "claim_id": "DEMO-MOULD-002",
+        "baseline_run_id": "baseline-run",
+        "later_run_id": "later-run",
+        "counterfactual_learning_freeze": deepcopy(counterfactual_freeze),
+        "before": {
+            "observable_input_hash": observable_hash,
+            "canonical_state_hash": canonical_hash,
+            "verification_hash": baseline_result["verification"]["whole_playbook_hash"],
+            **before_boundary,
+        },
+        "after": {
+            "observable_input_hash": observable_hash,
+            "canonical_state_hash": canonical_hash,
+            "verification_hash": later_verification["whole_playbook_hash"],
+            **after_boundary,
+        },
+        "changes": {"precedent_claim_ids_added": ["DEF-027-E0-DEMO"]},
+        "reviewed_memory_proof": {
+            "used": True,
+            "memory_ids": [memory_id],
+            "present_in_baseline": False,
+            "present_in_later_run": True,
+        },
+        "causal_delta": causal_delta,
+        "memory_application_proof": {
+            "receipt_present": True,
+            "receipt_valid": True,
+            "source_memory_current": True,
+            "before_hashes_match": True,
+            "after_hashes_match": True,
+            "allowed_delta_exact": True,
+            "replay_exact": True,
+            "application_hash": receipt["application_hash"],
+        },
+        "deterministic_checks": [
+            {
+                "name": name,
+                "status": "passed",
+                "detail": "Computed from the retained fixture DTOs.",
+            }
+            for name in release_tool.REQUIRED_LEARNING_CHECKS
+        ],
+        "candidate": candidate,
+        "shared_rule": {
+            "applied": False,
+            "version_before": "mould-playbook-v3",
+            "version_after": "mould-playbook-v3",
+            "shared_knowledge_changed": False,
+            "candidate_status": "quarantined",
+        },
+    }
+    demo_review = {
+        "accepted": True,
+        "review_id": review_id,
+        "memory_id": memory_id,
+        "reviewer": {
+            "type": "unverified_demo_user",
+            "qualification_status": "not_verified",
+        },
+        "candidate": candidate,
+    }
+    review_record = {
+        "decision": "approve_with_edit",
+        "building_envelope_mode": "conditional",
+        "confidence": 0.9,
+        "justification": "Apply the neutral-assessment-first unverified demo edit.",
+        "reviewer": deepcopy(demo_review["reviewer"]),
+        "operations": [
+            {"op": "fixture", "pointer": "/process/nodes/ventilation_dispute"}
+        ],
+        "authority": "unverified_demo",
+    }
+    reviewed_result = {
+        "claim_id": "DEF-027-E0-DEMO",
+        "category": "Rental defect - mould and moisture",
+        "subcategory": "Recurring moisture with disputed causation",
+        "current_blocker": "Technical cause remains unresolved",
+        "facts": deepcopy(canonical_facts),
+        "process": deepcopy(later_process),
+        "checklist": deepcopy(later_checklist),
+        "verification": {"valid": True, "whole_playbook_hash": "5" * 64},
+        "next_action": {"agent_brief_contribution": None},
+        "review": deepcopy(review_record),
+    }
+    review_transform = {
+        "acceptance_scope": "post_review_unverified_transform",
+        "authority": demo_review["reviewer"]["type"],
+        "qualification_status": demo_review["reviewer"]["qualification_status"],
+        "input_run_id": "flagship-run",
+        "input_process_hash": "4" * 64,
+        "input_checklist_hash": "3" * 64,
+        "output_process_hash": release_tool.runtime_artifact_hash(
+            reviewed_result["process"]
+        ),
+        "output_checklist_hash": release_tool.runtime_artifact_hash(
+            reviewed_result["checklist"]
+        ),
+        "model_acceptance_reused": False,
+    }
+    reviewed_result["review_transform"] = review_transform
+    demo_review.update(
+        {
+            "result": reviewed_result,
+            "review": deepcopy(review_record),
+            "review_transform": review_transform,
+        }
+    )
+    post_review_run = {
+        "run_id": "flagship-run",
+        "claim_id": "DEF-027-E0-DEMO",
+        "review_id": review_id,
+        "memory_id": memory_id,
+        "result": reviewed_result,
+        "review_response": demo_review,
+        "candidate": candidate,
+        "events": [
+            {
+                "receipt_type": "knowledge_consolidation_receipt",
+                "memory_id": memory_id,
+                "memory_content_hash": memory_content_hash,
+                "qualified_reviewer": False,
+                "shared_knowledge_changed": False,
+            }
+        ],
+    }
     commit = "a" * 40
     deployment = {
         component: {"release_id": contract["release_id"], "source_commit": commit}
@@ -1889,6 +2773,11 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
     retained = {
         "flagship-run.json": flagship_run,
         "flagship-cold-model-ledger.json": ledger,
+        "demo-review.json": demo_review,
+        "post-review-run.json": post_review_run,
+        "later-baseline-run.json": baseline_run,
+        "later-after-memory-run.json": later_run,
+        "learning-proof.json": proof,
     }
     return report, manifest, retained, manifest_bytes
 
@@ -1933,10 +2822,18 @@ def _refresh_causal_artifact_hashes(retained: dict) -> None:
     evidence_by_id = {
         item["item_id"]: item for item in evidence_artifact["items"]
     }
+    expected_public_artifacts = (
+        release_tool.RELEASE_EVIDENCE_ARTIFACT_IDS_BY_CLAIM[result["claim_id"]]
+    )
     for item in result["checklist"]["items"]:
         accepted = evidence_by_id[item["item_id"]]
         item["status"] = accepted["status"]
-        item["artifact_ids"] = list(accepted["artifact_ids"])
+        governed_order = expected_public_artifacts[item["item_id"]]
+        item["artifact_ids"] = (
+            deepcopy(governed_order)
+            if sorted(governed_order) == accepted["artifact_ids"]
+            else list(accepted["artifact_ids"])
+        )
         item["agent_contribution"] = accepted["field_contributions"]
     result["checklist"].update(
         release_tool._checklist_derived_sections(result["checklist"]["items"])
@@ -1996,6 +2893,493 @@ def test_dynamic_runtime_acceptance_passes_without_source_promotion() -> None:
     assert contract == original
 
 
+def test_dynamic_runtime_acceptance_rejects_self_consistent_semantic_fact_rebind() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    result, _audit = _runtime_result_and_audit(retained)
+    forged_fact_id = "fact_forged_ventilation_allegation"
+    semantic_fact = next(
+        fact
+        for fact in result["facts"]
+        if fact["semantic_role"] == release_tool.SEMANTIC_MEMORY_ROLE
+    )
+    semantic_fact["fact_id"] = forged_fact_id
+    causation = next(
+        node for node in result["process"]["nodes"] if node["node_id"] == "causation"
+    )
+    causation["fact_ids"] = [
+        forged_fact_id if fact_id == "fact_ventilation_allegation" else fact_id
+        for fact_id in causation["fact_ids"]
+    ]
+    _refresh_causal_artifact_hashes(retained)
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=r"result\.fact_relationships",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+@pytest.mark.parametrize("forgery", ["same_fact_source_swap", "artifact_append", "status_promotion"])
+def test_dynamic_runtime_acceptance_rejects_self_consistent_evidence_forgery(
+    forgery: str,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    _result, audit = _runtime_result_and_audit(retained)
+    by_id = {
+        item["item_id"]: item
+        for item in audit["specialist_artifacts"]["evidence_checklist"]["items"]
+    }
+    if forgery == "same_fact_source_swap":
+        by_id["defect_notice"]["artifact_ids"] = ["art_delivery"]
+    elif forgery == "artifact_append":
+        by_id["technical_assessment"]["artifact_ids"] = ["art_photo"]
+    else:
+        by_id["technical_assessment"]["status"] = "provided_sufficient"
+    _refresh_causal_artifact_hashes(retained)
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=r"result\.fact_relationships",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+@pytest.mark.parametrize("forgery", ["node_ids", "current_path"])
+def test_dynamic_runtime_acceptance_rejects_forged_reciprocal_evidence_path(
+    forgery: str,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    result, _audit = _runtime_result_and_audit(retained)
+    item = next(
+        value
+        for value in result["checklist"]["items"]
+        if value["item_id"] == "technical_assessment"
+    )
+    if forgery == "node_ids":
+        item["node_ids"] = list(reversed(item["node_ids"]))
+        item["node_id"] = item["node_ids"][0]
+    else:
+        item["current_path"] = not item["current_path"]
+    _refresh_causal_artifact_hashes(retained)
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=r"result\.checklist\.items\[",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+@pytest.mark.parametrize("forgery", ["passage_hashes", "snapshot_scope", "node_join"])
+def test_dynamic_runtime_acceptance_rejects_self_consistent_law_registry_forgery(
+    forgery: str,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    result, _audit = _runtime_result_and_audit(retained)
+    legal = result["legal_research"]
+    bwo = next(
+        source
+        for source in legal["sources"]
+        if source["source_id"] == "bwo-conciliation"
+    )
+    if forgery == "passage_hashes":
+        bwo["passage_text"] += " Forged but internally rehashed."
+        forged_hash = hashlib.sha256(bwo["passage_text"].encode()).hexdigest()
+        bwo["passage_sha256"] = forged_hash
+        bwo["retrieval"]["snapshot_sha256"] = forged_hash
+    elif forgery == "snapshot_scope":
+        bwo["retrieval"]["snapshot_scope"] = "official_pdf_bytes"
+    else:
+        legal["node_links"]["scope"] = []
+        scope = next(
+            node for node in result["process"]["nodes"] if node["node_id"] == "scope"
+        )
+        scope["legal_source_ids"] = []
+    _refresh_causal_artifact_hashes(retained)
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=r"result\.legal_research",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+@pytest.mark.parametrize("field", ["producer", "image_sha256"])
+def test_dynamic_runtime_acceptance_rejects_forged_visual_annotation(
+    field: str,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    result, _audit = _runtime_result_and_audit(retained)
+    visual_ref = next(
+        ref
+        for fact in result["facts"]
+        for ref in fact["source_refs"]
+        if ref["locator_kind"] == "visual_observation"
+    )
+    visual_ref[field] = "forged-producer" if field == "producer" else "f" * 64
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=r"result\.facts\[",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+def test_dynamic_runtime_acceptance_rejects_rehashed_precedent_ranking_forgery() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    result, _audit = _runtime_result_and_audit(retained)
+    result["precedents"][0]["title"] = "Forged precedent title"
+    result["precedent_ranking"]["result_hash"] = release_tool.runtime_artifact_hash(
+        result["precedents"]
+    )
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=r"result\.precedents",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+@pytest.mark.parametrize(
+    "forgery",
+    [
+        "replay_exact",
+        "check_status",
+        "check_order",
+        "before_hash",
+        "canonical_baseline",
+    ],
+)
+def test_dynamic_runtime_acceptance_rejects_forged_learning_proof(
+    forgery: str,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    proof = retained["learning-proof.json"]
+    if forgery == "replay_exact":
+        proof["memory_application_proof"]["replay_exact"] = False
+        expected = r"learning\.proof\.memory_application_proof"
+    elif forgery == "check_status":
+        proof["deterministic_checks"][0]["status"] = "failed"
+        expected = r"learning\.proof\.deterministic_checks"
+    elif forgery == "check_order":
+        proof["deterministic_checks"] = list(
+            reversed(proof["deterministic_checks"])
+        )
+        expected = r"learning\.proof\.deterministic_checks"
+    elif forgery == "before_hash":
+        later = retained["later-after-memory-run.json"]["result"]
+        receipt = later["memory_application"]
+        forged_hash = "f" * 64
+        receipt["before"]["process_dto_hash"] = forged_hash
+        proof["before"]["process_dto_hash"] = forged_hash
+        receipt_without_hash = {
+            key: value for key, value in receipt.items() if key != "application_hash"
+        }
+        receipt["application_hash"] = release_tool.runtime_artifact_hash(
+            receipt_without_hash
+        )
+        proof["memory_application_proof"]["application_hash"] = receipt[
+            "application_hash"
+        ]
+        expected = r"learning\.later\.memory_application_boundary"
+    else:
+        baseline = retained["later-baseline-run.json"]["result"]
+        nonsemantic_fact = next(
+            fact for fact in baseline["facts"] if fact["semantic_role"] is None
+        )
+        nonsemantic_fact["value"] = "Forged baseline canonical state"
+        expected = r"learning\.input_and_canonical_binding"
+
+    with pytest.raises(release_tool.VerificationError, match=expected):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+@pytest.mark.parametrize("forgery", ["target", "source_memory", "before"])
+def test_dynamic_runtime_acceptance_rejects_rehashed_memory_boundary_forgery(
+    forgery: str,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    later_run = retained["later-after-memory-run.json"]
+    boundary = later_run["memory_application_boundary"]
+    if forgery == "target":
+        boundary["target"]["claim_id"] = "FORGED-CLAIM"
+    elif forgery == "source_memory":
+        boundary["source_memory"]["content_hash"] = "f" * 64
+    else:
+        boundary["before"]["process_dto_hash"] = "f" * 64
+    boundary_without_hash = {
+        key: value for key, value in boundary.items() if key != "boundary_hash"
+    }
+    boundary["boundary_hash"] = release_tool.runtime_artifact_hash(
+        boundary_without_hash
+    )
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=r"learning\.later\.memory_application_boundary",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+def test_dynamic_runtime_acceptance_rejects_result_and_boundary_forgery_not_in_event() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    baseline = retained["later-baseline-run.json"]["result"]
+    later_run = retained["later-after-memory-run.json"]
+    later = later_run["result"]
+    proof = retained["learning-proof.json"]
+    receipt = later["memory_application"]
+    boundary = later_run["memory_application_boundary"]
+    baseline["process"]["title"] = "Rehashed forged pre-transform title"
+    exact_before = {
+        "process_dto_hash": release_tool.runtime_artifact_hash(baseline["process"]),
+        "checklist_dto_hash": release_tool.runtime_artifact_hash(
+            baseline["checklist"]
+        ),
+        "process_semantic_hash": release_tool.runtime_artifact_hash(
+            release_tool._semantic_process_dto(baseline["process"])
+        ),
+        "checklist_semantic_hash": release_tool.runtime_artifact_hash(
+            release_tool._semantic_checklist_dto(baseline["checklist"])
+        ),
+    }
+    receipt["before"] = deepcopy(exact_before)
+    boundary["before"] = deepcopy(exact_before)
+    proof["before"].update(exact_before)
+    receipt_without_hash = {
+        key: value for key, value in receipt.items() if key != "application_hash"
+    }
+    receipt["application_hash"] = release_tool.runtime_artifact_hash(
+        receipt_without_hash
+    )
+    proof["memory_application_proof"]["application_hash"] = receipt[
+        "application_hash"
+    ]
+    boundary_without_hash = {
+        key: value for key, value in boundary.items() if key != "boundary_hash"
+    }
+    boundary["boundary_hash"] = release_tool.runtime_artifact_hash(
+        boundary_without_hash
+    )
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=r"learning\.later\.memory_application_event",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+def test_dynamic_runtime_acceptance_rejects_duplicate_memory_application_event() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    later_run = retained["later-after-memory-run.json"]
+    later_run["events"].append(deepcopy(later_run["events"][0]))
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=r"learning\.later\.memory_application_event",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+def test_dynamic_runtime_acceptance_rejects_required_now_reusable_authority_forgery() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    demo_review = retained["demo-review.json"]
+    reviewed_result = demo_review["result"]
+    reviewed_result["review"]["building_envelope_mode"] = "required_now"
+    demo_review["review"]["building_envelope_mode"] = "required_now"
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=r"learning\.source_memory",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+def test_dynamic_runtime_acceptance_rejects_rehashed_non_replay_learning_change() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    baseline = retained["later-baseline-run.json"]["result"]
+    later = retained["later-after-memory-run.json"]["result"]
+    proof = retained["learning-proof.json"]
+    receipt = later["memory_application"]
+    ventilation = next(
+        node
+        for node in later["process"]["nodes"]
+        if node["node_id"] == "ventilation_dispute"
+    )
+    ventilation["answer"] = "Forged learned answer outside the pure replay transform."
+    semantic_process = release_tool._semantic_process_dto(later["process"])
+    semantic_checklist = release_tool._semantic_checklist_dto(later["checklist"])
+    after_boundary = {
+        "process_dto_hash": release_tool.runtime_artifact_hash(later["process"]),
+        "checklist_dto_hash": release_tool.runtime_artifact_hash(later["checklist"]),
+        "process_semantic_hash": release_tool.runtime_artifact_hash(semantic_process),
+        "checklist_semantic_hash": release_tool.runtime_artifact_hash(
+            semantic_checklist
+        ),
+    }
+    receipt["after"] = deepcopy(after_boundary)
+    proof["after"].update(after_boundary)
+    proof["causal_delta"] = release_tool._keyed_dto_delta(baseline, later)
+    receipt_without_hash = {
+        key: value for key, value in receipt.items() if key != "application_hash"
+    }
+    receipt["application_hash"] = release_tool.runtime_artifact_hash(
+        receipt_without_hash
+    )
+    proof["memory_application_proof"]["application_hash"] = receipt[
+        "application_hash"
+    ]
+    memory_event = retained["later-after-memory-run.json"]["events"][0]
+    for key, value in receipt.items():
+        memory_event[key] = deepcopy(value)
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=r"learning\.pure_replay",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+def test_dynamic_runtime_acceptance_rejects_self_consistent_learned_evidence_topology() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    later = retained["later-after-memory-run.json"]["result"]
+    ventilation = next(
+        node
+        for node in later["process"]["nodes"]
+        if node["node_id"] == "ventilation_dispute"
+    )
+    ventilation["evidence_requirement_ids"] = ["use_evidence"]
+    management = next(
+        item
+        for item in later["checklist"]["items"]
+        if item["item_id"] == "management_position"
+    )
+    management["node_ids"] = ["dispute"]
+    management["node_id"] = "dispute"
+    management["current_path"] = True
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=r"learning\.later\.checklist\.items\[",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
 def test_dynamic_runtime_acceptance_rejects_forged_specialist_hash() -> None:
     contract = release_tool.load_json(release_tool.RELEASE_PATH)
     report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
@@ -2051,8 +3435,8 @@ def test_dynamic_runtime_acceptance_rejects_forged_canonical_fact() -> None:
         contract
     )
     result, _audit = _runtime_result_and_audit(retained)
-    private_sentinel = "private-forged-canonical-state"
-    result["facts"][-1]["state"] = private_sentinel
+    private_sentinel = "private-forged-canonical-value"
+    result["facts"][-1]["value"] = private_sentinel
 
     with pytest.raises(release_tool.VerificationError) as caught:
         release_tool.verify_dynamic_runtime_acceptance(
@@ -2173,14 +3557,14 @@ def test_dynamic_runtime_acceptance_rejects_forged_evidence_fact_binding() -> No
     item = next(
         value
         for value in result["checklist"]["items"]
-        if value["item_id"] == "ventilation_statement"
+        if value["item_id"] == "management_position"
     )
-    item["fact_id"] = "fact_scope"
+    item["fact_id"] = "fact_cause"
     _refresh_causal_artifact_hashes(retained)
 
     with pytest.raises(
         release_tool.VerificationError,
-        match=r"final_claim_brief_audit\.source_ref_ids",
+        match=r"result\.fact_relationships",
     ):
         release_tool.verify_dynamic_runtime_acceptance(
             contract,
@@ -2200,7 +3584,7 @@ def test_dynamic_runtime_acceptance_rejects_forged_evidence_source_ref() -> None
     evidence_item = next(
         item
         for item in audit["specialist_artifacts"]["evidence_checklist"]["items"]
-        if item["item_id"] == "ventilation_statement"
+        if item["item_id"] == "technical_assessment"
     )
     evidence_item["source_ref_ids"] = ["src_ffffffffffffffffffffffff"]
     _refresh_causal_artifact_hashes(retained)

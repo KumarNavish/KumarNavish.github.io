@@ -10,7 +10,7 @@
     research: { label: 'Research law', agent: 'Swiss Legal Source Tool', job: 'Connecting Swiss-law sources to the decisions they shape.' },
     process: { label: 'Build process', agent: 'Process Projection Tool', job: 'Working out every decision from intake to resolution.' },
     evidence: { label: 'Map evidence', agent: 'Evidence Checklist Tool', job: 'Attaching facts and evidence needs to each process decision.' },
-    experience: { label: 'Find experience', agent: 'Historical Retrieval Tool', job: 'Finding provenance-labelled reference precedents at the difficult branch.' },
+    experience: { label: 'Find experience', agent: 'Historical Retrieval Tool', job: 'Ranking provenance-labelled generated reference patterns at the difficult branch.' },
     verify: { label: 'Verify plan', agent: 'Whole-Playbook Verification Gate', job: 'Checking graph integrity, grounding, and document traceability.' },
   };
   const artifactLabels = {
@@ -19,7 +19,7 @@
     research: 'legal context',
     process: 'handling process',
     evidence: 'evidence model',
-    experience: 'provenance-labelled reference precedents',
+    experience: 'provenance-labelled generated reference patterns',
     verify: 'verified playbook',
   };
 
@@ -103,7 +103,7 @@
     if (canvas.querySelector('.later-run')) return { kind: 'later', stage: null };
     if (canvas.querySelector('.artifact-summary,.v17-derived-checklist') || /Handling playbook ready|reconstructed how this claim should be handled/i.test(text)) return { kind: 'ready', stage: null };
     if (/passed its acceptance checks|checking the complete playbook|Acceptance checks/i.test(text)) return { kind: 'stage', stage: 'verify' };
-    if (/Previous cases are helping|asking organizational memory|organizational experience/i.test(text)) return { kind: 'stage', stage: 'experience' };
+    if (/Generated reference patterns are helping|Previous cases are helping|asking organizational memory|organizational experience/i.test(text)) return { kind: 'stage', stage: 'experience' };
     if (/Evidence now follows|attaching evidence needs|attaching evidence to the process/i.test(text)) return { kind: 'stage', stage: 'evidence' };
     if (/complete handling process is taking shape|building the handling process|Reconstructing the handling process/i.test(text)) return { kind: 'stage', stage: 'process' };
     if (/Swiss law has become handling questions|Turning legal sources/i.test(text) || canvas.querySelector('.law-flow,.v17-law-map')) return { kind: 'stage', stage: 'research' };
@@ -165,16 +165,21 @@
       count = 'KA';
       agent = 'Deterministic knowledge governance';
       label = 'Decide what can safely be reused';
-      job = 'Unverified demo memory is immediate; shared playbook changes still require qualified support and regression gates.';
-      nextLabel = 'Unseen claim';
+      job = 'Unverified demo memory can be ranked immediately; application still requires governed eligibility and a receipt.';
+      nextLabel = 'Held-out later demo claim';
       context = 'Simulated correction → unverified demo memory → quarantined shared-rule candidate.';
     } else if (current.kind === 'later') {
       state = 'reuse';
       count = '↻';
       const latest = [...canvas.querySelectorAll('.later-agent-row strong')].at(-1)?.textContent?.trim();
       agent = latest ? `${latest} stage` : 'CasePath pipeline';
-      label = latest ? 'Re-running the unseen claim' : 'Opening an unseen claim';
-      job = 'The same team is checking whether unverified demo memory is actually retrieved.';
+      label = latest ? 'Re-running the held-out later demo claim' : 'Opening the held-out later demo claim';
+      const laterHeading = canvas.querySelector('.v20-later-heading');
+      job = laterHeading?.dataset.memoryUsed === 'true'
+        ? 'A hash-bound receipt proves bounded case-specific guidance was applied.'
+        : laterHeading?.dataset.memoryRetrievedOnly === 'true'
+          ? 'Dormant unverified memory was ranked, but no guidance or process change was applied.'
+          : 'The same team is checking whether unverified demo memory is retrieved and whether any receipt-bound guidance is applied.';
       nextLabel = canvas.querySelector('#laterResult .before-after') ? 'Computed comparison' : 'Next specialist';
       context = 'Unverified demo memory may be retrieved; the shared playbook remains unchanged.';
     }
@@ -245,12 +250,12 @@
       },
       evidence: {
         title: 'Evidence links accepted from the backend',
-        detail: `${(checklist.items || []).length || 0} relationships point back to ${new Set((checklist.items || []).map(item => item.node_id)).size} process decisions. Every link retains a fact and reason.`,
+        detail: `${(checklist.items || []).length || 0} relationships point back to ${new Set((checklist.items || []).flatMap(item => Array.isArray(item.node_ids) && item.node_ids.length ? item.node_ids : item.node_id ? [item.node_id] : [])).size} process decisions. Every link retains a fact and reason.`,
         artifact: 'evidence_model',
       },
       experience: {
         title: 'Provenance-labelled references connected to the difficult branch',
-        detail: `${precedents.length || 0} reference precedents were returned with provenance and review-state labels.`,
+        detail: `${precedents.length || 0} generated reference patterns or governed memory records were returned with provenance and review-state labels.`,
         artifact: 'precedents',
       },
       verify: {
@@ -318,7 +323,7 @@
     rail.innerHTML = `
       <article><small>Handling process</small><strong>From intake to closure</strong><p>${(process.main_spine || []).length || 0} main decisions; the current claim remains at causation.</p></article>
       <article><small>Evidence</small><strong>Linked to each decision</strong><p>${(checklist.items || []).length || 0} fact-and-reason relationships, grouped by current status.</p></article>
-      <article><small>Previous cases</small><strong>At the difficult branch</strong><p>${precedents.length || 0} returned references are labelled by provenance and review state.</p></article>`;
+      <article><small>Generated reference patterns</small><strong>At the difficult branch</strong><p>${precedents.length || 0} returned records are labelled by provenance and review state.</p></article>`;
     anchor.parentNode.insertBefore(rail, anchor);
   }
 
@@ -387,9 +392,12 @@
   async function enhanceReuse(canvas) {
     const thread = canvas.querySelector('.v17-reuse-thread');
     if (!thread || thread.closest('.v18-reuse-proof')) return;
+    const applied = thread.dataset.memoryUsed === 'true' && thread.dataset.applicationReceipt === 'true';
     const wrapper = document.createElement('section');
     wrapper.className = 'v18-reuse-proof';
-    wrapper.innerHTML = '<header><small>Unverified demo memory returned</small><strong>This trace implies neither qualified review nor release of the quarantined shared-rule candidate.</strong></header>';
+    wrapper.innerHTML = applied
+      ? '<header><small>Unverified demo memory returned with a valid application receipt</small><strong>Bounded guidance was applied; this implies neither qualified review nor release of the quarantined shared-rule candidate.</strong></header>'
+      : '<header><small>Unverified demo memory retrieved and ranked only</small><strong>No application receipt or memory-driven DTO change was returned; this implies neither qualified review nor shared-rule release.</strong></header>';
     thread.parentNode.insertBefore(wrapper, thread);
     wrapper.append(thread);
   }

@@ -151,3 +151,38 @@ updated as implementation and validation progress.
   artifact manifest are implemented and mechanically tested. Independent blind
   realism review is still pending, so no blind-safe or realistic-artifact claim
   is allowed.
+
+## CPD-007 — Treat the later fixture as a temporal holdout and prove causality, not quality
+
+- **Problem:** the comparison fixture was analyzed before review and described
+  too close to an unseen/improved claim, while no qualified outcome label exists.
+- **Approaches considered:** call the known fixture unseen; delete the comparison;
+  preserve a same-input counterfactual but freeze it until after memory creation.
+- **Decision:** exclude the later fixture from review and memory construction,
+  compute its no-memory counterfactual only after learning is frozen, then run
+  the identical observable package with governed unverified memory. Claim only
+  the exact causal DTO delta and unchanged shared v3, never quality improvement.
+- **Evidence:** semantic eligibility is claim/fact/artifact-ID independent and
+  the result is bound to one added node, two edges, three evidence changes, pure
+  replay, and ten deterministic checks; qualified usefulness remains absent.
+- **Rejected:** “unseen claim” and “improved outcome” copy, because the fixture
+  and expected transform are known to the application and have no expert label.
+- **Affected files:** flagship journey, browser gate, learning proof tests and KT.
+- **Validation:** uninterrupted local journey, temporal-order source regression,
+  exact receipt/replay/tamper tests, and same-commit production QA when deployed.
+
+## CPD-008 — Protected regression must bind full output hashes
+
+- **Problem:** candidate governance called nine eligibility classifications a
+  protected regression without checking a process or evidence DTO.
+- **Approaches considered:** keep the name; build a second mutable benchmark;
+  add a stable protected source-claim output control alongside routing tests.
+- **Decision:** retain the useful semantic negative matrix and add an independently
+  recomputed source-claim control that must be ineligible and preserve the exact
+  pre-review result, process, and checklist hashes.
+- **Evidence:** case-specific memory excludes its source claim; the persisted
+  pre-review result and review-transform input hashes are independent origins.
+- **Rejected:** eligibility-only reporting, because it cannot detect output drift.
+- **Affected files:** pipeline governance report, backend/browser tests, release evidence.
+- **Validation:** origin recomputation, hash equality, candidate tamper rejection,
+  and full protected report binding in the browser journey.

@@ -8,6 +8,8 @@ from typing import Any
 
 from pypdf import PdfReader
 
+from .law_registry import LAW_SOURCES as LAW_SOURCES
+
 ROOT = Path(__file__).resolve().parents[1]
 ARTIFACT_DIR = ROOT / "artifacts"
 
@@ -85,7 +87,7 @@ DEMO_ARTIFACTS = [
     artifact(
         "art_lease", "lease-agreement.pdf", "Residential lease agreement", "pdf", "2026-08-01T09:03:00Z",
         "lease_contract", ["fact_tenancy", "fact_address"],
-        "Six-page signed lease, including maintenance, defect-notification, access and house-rule clauses.",
+        "Six-page lease agreement, including maintenance, defect-notification, access and house-rule clauses; the signature fields are blank.",
     ),
     artifact(
         "art_notification", "notification-email.eml", "Email notifying the property manager", "email", "2026-08-01T09:03:00Z",
@@ -98,7 +100,7 @@ DEMO_ARTIFACTS = [
         "Original RFC 822 property-management reply.",
     ),
     artifact(
-        "art_photo", "bedroom-mould-2026-07-27.jpg", "Bedroom photograph", "image", "2026-08-01T09:03:00Z",
+        "art_photo", "bedroom-corner-2026-07-27.jpg", "Bedroom photograph", "image", "2026-08-01T09:03:00Z",
         "dated_photograph", ["fact_visible_mould", "fact_recurrence"],
         "Source photograph dated 27 July 2026.",
     ),
@@ -121,14 +123,29 @@ LATER_ARTIFACTS = [
         "Original RFC 822 email reporting condensation after window replacement.",
     ),
     artifact(
-        "art_later_photo", "later-window-condensation-2026-08-08.jpg", "Window-corner photograph", "image", "2026-08-10T07:46:00Z",
+        "art_later_photo", "window-corner-2026-08-08.jpg", "Window-corner photograph", "image", "2026-08-10T07:46:00Z",
         "dated_photograph", ["later_fact_visible_spots", "later_fact_recurrence"],
         "Source photograph dated 8 August 2026.",
     ),
     artifact(
-        "art_window_notice", "window-replacement-notice.pdf", "Window replacement notice", "pdf", "2026-08-10T07:46:00Z",
+        "art_window_notice", "window-replacement-notice.pdf", "Window replacement completion record", "pdf", "2026-08-10T07:46:00Z",
         "repair_record", ["later_fact_recent_window_work", "later_fact_no_inspection"],
-        "Window-replacement notice dated May 2026.",
+        "Window-replacement completion record dated 22 May 2026.",
+    ),
+    artifact(
+        "art_later_lease", "later-lease-agreement.pdf", "Residential lease agreement", "pdf", "2026-08-10T07:46:00Z",
+        "lease_contract", ["later_fact_tenancy"],
+        "Two-page residential lease agreement for Sam Keller; the signature fields are blank.",
+    ),
+    artifact(
+        "art_later_notification", "later-notification-email.eml", "Email notifying the property manager", "email", "2026-08-10T07:46:00Z",
+        "defect_notification", ["later_fact_notification"],
+        "Original RFC 822 email dated 3 August 2026 requesting inspection and repair.",
+    ),
+    artifact(
+        "art_later_management_reply", "later-management-reply.eml", "Management acknowledgement and position", "email", "2026-08-10T07:46:00Z",
+        "landlord_response", ["later_fact_dispute", "later_fact_ventilation_allegation", "later_fact_no_inspection", "later_fact_notification"],
+        "Original RFC 822 reply acknowledging the notice, alleging insufficient airing and declining inspection.",
     ),
 ]
 
@@ -142,7 +159,7 @@ DEMO_CLAIM = {
     "canton": "BS",
     "received_at": "2026-08-01T09:03:00Z",
     "customer": {"name": "Alex Morgan", "address": "Feldbergstrasse 114, 4057 Basel", "policy": "LP-2024-08317"},
-    "subject": "Recurring mould - management says ventilation",
+    "subject": "Bedroom condition keeps returning",
     "message": (
         "Hello,\n\nThe mould in the external corner of our bedroom keeps coming back. I first noticed it around 20 March. "
         "We clean it and it returns. The radiator works and we air the room every morning and evening.\n\n"
@@ -162,72 +179,13 @@ LATER_CLAIM = {
     "canton": "BS",
     "received_at": "2026-08-10T07:46:00Z",
     "customer": {"name": "Sam Keller", "address": "Klybeckstrasse 77, 4057 Basel", "policy": "LP-2025-04192"},
-    "subject": "Condensation after window replacement",
+    "subject": "Recurring bedroom issue - Klybeckstrasse 77",
     "message": email_payload(ARTIFACT_DIR / "later-claim-email.eml")["body"],
     "artifact_ids": [a["artifact_id"] for a in LATER_ARTIFACTS],
     "status": "new",
 }
 
 CLAIMS = {DEMO_CLAIM["claim_id"]: DEMO_CLAIM, LATER_CLAIM["claim_id"]: LATER_CLAIM}
-
-LAW_SOURCES = [
-    {
-        "source_id": "fedlex-or-256",
-        "title": "Swiss Code of Obligations, Art. 256",
-        "url": "https://www.fedlex.admin.ch/eli/cc/27/317_321_377/en",
-        "source_type": "official_statute",
-        "jurisdiction": "CH",
-        "version_date": "2023-09-01",
-        "location": "Article 256",
-        "passage_summary": "The landlord must hand over and maintain the premises in a condition fit for their intended use.",
-        "operational_interpretation": "Generated reference interpretation: fitness for intended use makes the alleged condition relevant to the handling process, but does not establish technical cause or responsibility.",
-        "review_status": "qualified_review_pending",
-        "role": "Makes the condition and maintenance question relevant without deciding causation.",
-        "approved": False,
-    },
-    {
-        "source_id": "fedlex-or-257g",
-        "title": "Swiss Code of Obligations, Art. 257g",
-        "url": "https://www.fedlex.admin.ch/eli/cc/27/317_321_377/en",
-        "source_type": "official_statute",
-        "jurisdiction": "CH",
-        "version_date": "2023-09-01",
-        "location": "Article 257g",
-        "passage_summary": "A tenant must report defects they are not responsible for remedying and may be liable for loss caused by failing to report them.",
-        "operational_interpretation": "Generated reference interpretation: notification is a relevant fact; written evidence can help establish that it occurred. The provision is not represented as imposing a statutory writing requirement.",
-        "review_status": "qualified_review_pending",
-        "role": "Makes notification a relevant fact; written evidence helps establish it.",
-        "approved": False,
-    },
-    {
-        "source_id": "fedlex-or-259a",
-        "title": "Swiss Code of Obligations, Art. 259a et seq.",
-        "url": "https://www.fedlex.admin.ch/eli/cc/27/317_321_377/en",
-        "source_type": "official_statute",
-        "jurisdiction": "CH",
-        "version_date": "2023-09-01",
-        "location": "Article 259a and following",
-        "passage_summary": "The provisions frame remedies for defects not attributable to the tenant and not within the tenant's maintenance responsibility.",
-        "operational_interpretation": "Generated reference interpretation: remedy questions follow supported defect and attribution facts; the provision itself does not establish causation.",
-        "review_status": "qualified_review_pending",
-        "role": "Frames possible remedy questions without deciding causation or attribution.",
-        "approved": False,
-    },
-    {
-        "source_id": "bwo-conciliation",
-        "title": "Federal Housing Office - tenancy conciliation",
-        "url": "https://www.bwo.admin.ch/de/schlichtungsverfahren",
-        "source_type": "official_guidance",
-        "jurisdiction": "CH",
-        "version_date": "2024-07-16",
-        "location": "Schlichtungsverfahren page",
-        "passage_summary": "A conciliation attempt precedes judicial proceedings in civil disputes; tenancy conciliation bodies are independently chaired with parity tenant and landlord representation under the Civil Procedure Code.",
-        "operational_interpretation": "Generated reference interpretation: conciliation may become relevant after the supported remedy remains disputed; case-specific escalation still requires qualified review.",
-        "review_status": "qualified_review_pending",
-        "role": "Explains the institutional conciliation route without deciding whether this claim should escalate.",
-        "approved": False,
-    },
-]
 
 HISTORICAL_CASES = [
     {
@@ -237,6 +195,10 @@ HISTORICAL_CASES = [
         "why_useful": "Generated reference with the same disputed-causation branch. Its reference outcome uses an independent inspection before responsibility is assessed.",
         "provenance": "generated_reference_not_qualified_review",
         "shared_features": ["recurring mould", "cause disputed", "technical assessment"],
+        "ranking_categories": ["Rental defect - mould and moisture"],
+        "ranking_process_node_ids": ["causation", "evidence_gap", "responsibility"],
+        "ranking_fact_ids": ["fact_cause", "later_fact_cause", "fact_recurrence", "later_fact_recurrence"],
+        "ranking_evidence_item_ids": ["technical_assessment", "building_envelope"],
         "final_process": ["scope", "notification", "independent inspection", "building defect established", "repair request"],
         "evidence": ["notification email", "dated photographs", "independent inspection report"],
         "reference_lesson": "The generated reference sequence keeps a ventilation diary conditional because its reference inspection first establishes a structural defect.",
@@ -249,6 +211,10 @@ HISTORICAL_CASES = [
         "why_useful": "Generated reference with recurrence after building work; its reference path keeps the ventilation allegation disputed and requests neutral causation evidence.",
         "provenance": "generated_reference_not_qualified_review",
         "shared_features": ["renovation", "ventilation allegation", "cause disputed"],
+        "ranking_categories": ["Rental defect - mould and moisture"],
+        "ranking_process_node_ids": ["causation", "tenant_use", "evidence_gap"],
+        "ranking_fact_ids": ["fact_cause", "later_fact_cause", "fact_recent_window_work", "later_fact_recent_window_work", "later_fact_ventilation_allegation"],
+        "ranking_evidence_item_ids": ["technical_assessment", "moisture_measurements", "use_evidence"],
         "final_process": ["scope", "notification", "causation dispute", "neutral assessment", "evidence review"],
         "evidence": ["management correspondence", "thermal imaging report", "humidity readings"],
         "reference_lesson": "The generated reference does not treat the management allegation as proof of tenant causation.",
@@ -261,6 +227,10 @@ HISTORICAL_CASES = [
         "why_useful": "Generated reference with the same evidence gap; its reference path remains at causation until a technical assessment arrives.",
         "provenance": "generated_reference_not_qualified_review",
         "shared_features": ["mould", "landlord notified", "inspection missing"],
+        "ranking_categories": ["Rental defect - mould and moisture"],
+        "ranking_process_node_ids": ["notification", "causation", "evidence_gap"],
+        "ranking_fact_ids": ["fact_notification", "later_fact_notification", "fact_cause", "later_fact_cause"],
+        "ranking_evidence_item_ids": ["defect_notice", "proof_of_delivery", "technical_assessment"],
         "final_process": ["scope", "urgency", "notification", "technical assessment required"],
         "evidence": ["lease", "notification", "photographs"],
         "reference_lesson": "The generated reference keeps building-envelope testing conditional on an inconclusive first inspection.",

@@ -4756,4 +4756,85 @@ release verifier and remain retained by hash. That runtime verdict does not
 modify the static release contract. Expert review, legal approval, operational
 validation, and suitability for real claims remain separate evidence gates.
 
-<!-- END CASEPATH IMPLEMENTATION CONVERGENCE RECORD: 2026-08-11 -->
+## Local convergence freeze: grounded flagship and causal learning proof
+
+The current source candidate supersedes earlier statements in this document
+that described the source manifest, legal registry, visual provenance,
+process/evidence joins, precedent ranking, or later-claim learning proof as
+mechanically incomplete. Those statements remain useful history, but they are
+not the current local-source contract.
+
+The frozen local implementation now provides:
+
+- exact generated-demo visual annotations bound to the observable image SHA-256,
+  with no model or pixel-extractor attribution;
+- versioned official Swiss-law passages, retrieval scopes, snapshot hashes,
+  structured question/source/interpretation/node joins, and explicit pending
+  qualified review;
+- reciprocal ordered process-to-evidence ownership plus claim-specific exact
+  fact, artifact, and status relationships;
+- deterministic, hash-bound ranking of exactly three generated reference or
+  explicitly governed unverified-memory records;
+- a claim/fact/artifact-ID-independent semantic memory eligibility contract;
+- one pure five-operation case-specific memory transform, independently bound
+  to the accepted review, quarantined candidate, pre-transform boundary, exact
+  result receipt, and separately persisted application event;
+- a held-out later-demo comparison that revalidates both playbooks, replays the
+  transform, exposes the exact nonzero causal delta, and passes ten ordered
+  deterministic checks while leaving shared playbook v3 unchanged;
+- public knowledge projections that omit review prose and private full-memory
+  payloads;
+- a backend-enforced counterfactual learning freeze that binds the governed
+  memory identity and proves review/memory freeze <= baseline start <= baseline
+  completion <= current-run start, so the later comparison cannot be certified
+  from a pre-learning exposure;
+- a protected-output control that executes the real case-specific memory gate
+  against an independently hash-bound pre-review snapshot and recomputes both
+  before and after outputs instead of mirroring hashes;
+- leakage scans over all twelve observable attachment files and every
+  non-schema string in both observable model packages, including parsed email
+  subjects; and
+- an atomic current-release evidence attestation that joins the live frontend
+  identity, live API health identity, passed QA report, exact evidence-manifest
+  bytes, retained file inventory, screenshots, and video before enabling the
+  public evidence link.
+
+The local rendered journey completed from flagship analysis through simulated
+review, quarantined memory, held-out later claim, visible five-operation receipt,
+and 10/10 proof with no browser console warning or error. This is generated-demo
+evidence, not qualified review or production model acceptance.
+
+Exact local freeze gates:
+
+```text
+backend_tests: 274 passed
+release_tests: 91 passed
+browser_contract_self_test: 78 fixtures passed
+source_manifest_files: 126
+release_artifact_files: 25
+model_visible_artifact_files: 24
+release_leakage_scan: passed
+ruff: passed
+python_compileall: passed
+javascript_syntax: passed
+git_diff_check: passed
+```
+
+The static source and artifact contract is therefore locally verified. Dynamic
+production acceptance remains deliberately pending: attempts 01–13 are
+failed-closed history, no same-commit six-role cold QA report is retained for
+this candidate, and no new provider call or deployment is asserted here.
+
+The following evidence remains external to this local freeze and must not be
+inferred from it: qualified expert approval, qualified Swiss-law approval,
+independent blind realism review, durable organizational persistence beyond the
+demo SQLite deployment, authorization for real claims, and an accepted
+same-commit production-model run. The later claim is a known generated fixture
+that is temporally held out from the learning step, not a genuinely unseen
+external case. Visual observations are curated generated-demo annotations bound
+to exact image bytes; the model does not inspect image pixels. The process and
+evidence catalog remains a bounded deterministic mould/moisture playbook, and
+shared playbook v3 remains unchanged while the one-case memory is unverified and
+quarantined.
+
+<!-- END CASEPATH IMPLEMENTATION CONVERGENCE RECORD: 2026-08-12 -->

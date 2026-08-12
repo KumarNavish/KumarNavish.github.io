@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 import json
 import math
+import sqlite3
 import time
 from pathlib import Path
 
@@ -20,16 +21,23 @@ from casepath_api.canonicalizer import (
 )
 from casepath_api.pipeline_v15 import (
     ClaimPipeline,
+    MEMORY_OPERATION_IDS,
+    _eligibility_evaluation,
+    _execute_protected_output_control,
     apply_evidence_projection,
     apply_process_projection,
     decision_projection,
     digest,
+    replay_case_specific_memory_transform,
+    semantic_checklist_dto,
+    semantic_process_dto,
 )
 from casepath_api.multi_agent import (
     AgentBoundaryError,
     AgentInvocationFailure,
     accepted_artifact_hash,
 )
+from casepath_api.precedent_ranking import rank_precedents
 from casepath_api.storage import Storage
 from casepath_api.validation import ContractValidationError
 
@@ -61,6 +69,18 @@ def accepted_review(pipeline: ClaimPipeline, run_id: str, *, mode: str = "condit
     )
 
 
+def accepted_learning_freeze(
+    storage: Storage, pipeline: ClaimPipeline
+) -> tuple[dict, dict]:
+    flagship = wait(storage, pipeline.create("DEF-027-E0-DEMO"))
+    accepted_review(pipeline, flagship["run_id"])
+    baseline = wait(
+        storage,
+        pipeline.create("DEMO-MOULD-002", knowledge_mode="baseline"),
+    )
+    return baseline, flagship
+
+
 def provider_fact_proposals(oracle_facts: list[dict]) -> list[dict]:
     registry = observable_source_reference_registry(
         observable_claim_package(CLAIMS["DEF-027-E0-DEMO"])
@@ -77,6 +97,7 @@ def provider_fact_proposals(oracle_facts: list[dict]) -> list[dict]:
                 "controls_process",
                 "decision_key",
                 "decision_value",
+                "semantic_role",
             }
         }
         proposal["source_ref_ids"] = [
@@ -303,6 +324,19 @@ def test_source_artifacts_are_real_files():
     assert lease["path"].read_bytes().startswith(b"%PDF")
     assert ARTIFACTS["art_photo"]["path"].read_bytes()[:2] == b"\xff\xd8"
     assert "From:" in ARTIFACTS["art_notification"]["path"].read_text()
+    assert ARTIFACTS["art_photo"]["sha256"] == "b8de375c0a951e3970f4b4a392b5af348ea35b30f5750974fa1d9411da179860"
+    assert ARTIFACTS["art_later_photo"]["sha256"] == "ff16af84a7dffa53305de336bc6cebeb80cb1c8b1544a3303d29caa92f8d5e9f"
+    assert ARTIFACTS["art_later_lease"]["page_count"] == 2
+    assert ARTIFACTS["art_later_lease"]["path"].read_bytes().startswith(b"%PDF")
+    assert "Please arrange an inspection" in ARTIFACTS["art_later_notification"]["email"]["body"]
+    assert "We received your message" in ARTIFACTS["art_later_management_reply"]["email"]["body"]
+    assert "signed" not in ARTIFACTS["art_lease"]["description"].lower()
+    assert "signed" not in ARTIFACTS["art_later_lease"]["description"].lower()
+    assert all(
+        "signed" not in page.lower()
+        for artifact_id in ("art_lease", "art_later_lease")
+        for page in ARTIFACTS[artifact_id]["pages"]
+    )
 
 
 @pytest.mark.parametrize("claim_id", ["DEF-027-E0-DEMO", "DEMO-MOULD-002"])
@@ -313,7 +347,7 @@ def test_v15_completed_outputs_have_no_dangling_contract_refs(runtime, claim_id:
     result = run["result"]
     assert result["verification"]["valid"] is True
     assert result["verification"]["computed"] is True
-    assert len(result["verification"]["checks"]) == 8
+    assert len(result["verification"]["checks"]) == 11
     assert len(result["process"]["nodes"]) == 19
     assert len(result["process"]["edges"]) == 22
     assert result["process"]["validator"] == {
@@ -476,29 +510,43 @@ def test_model_final_result_consumes_only_matching_final_brief_route(tmp_path: P
         )
 
 
-def test_later_scope_and_unknown_urgency_remain_unverified_and_unsupplied(runtime):
+def test_later_claim_is_in_scope_and_reaches_causation_from_attachments(runtime):
     storage, pipeline = runtime
     result = wait(storage, pipeline.create("DEMO-MOULD-002"))["result"]
     tenancy = next(value for value in result["facts"] if value["fact_id"] == "later_fact_tenancy")
-    assert tenancy["state"] == "unknown"
-    assert tenancy["normalized_value"] == "unverified"
-    assert tenancy["source_refs"] == []
-    assert result["category"] == "Moisture and condensation report"
-    assert result["scope"] == "Residential-tenancy scope unverified"
-    assert result["process"]["current_node"] == "scope"
-    scope_node = next(value for value in result["process"]["nodes"] if value["node_id"] == "scope")
-    assert scope_node["state"] == "current"
-    assert scope_node["answer"] == "Unverified"
-    assert result["process"]["selected_path"] == ["intake", "scope"]
-    assert result["process"]["current_overlay"]["next_action_node_id"] == "scope"
-    lease = next(value for value in result["checklist"]["items"] if value["item_id"] == "lease")
-    assert "does not establish a residential-tenancy relationship" in lease["why"]
-    policy = next(value for value in result["checklist"]["items"] if value["item_id"] == "policy_reference")
-    assert policy["artifact_ids"] == ["intake"]
-    health = next(value for value in result["checklist"]["items"] if value["item_id"] == "health_safety_statement")
-    assert health["status"] == "missing"
-    assert health["artifact_ids"] == []
-    assert health["item_id"] not in {value["item_id"] for value in result["checklist"]["present"]}
+    assert tenancy["state"] == "known"
+    assert tenancy["normalized_value"] == "supported_in_scope"
+    assert {ref["artifact_id"] for ref in tenancy["source_refs"]} == {"art_later_lease"}
+    assert result["category"] == "Rental defect - mould and moisture"
+    assert result["scope"] == "Swiss residential tenancy"
+    assert result["process"]["current_node"] == "causation"
+    assert result["process"]["selected_path"] == [
+        "intake", "scope", "dispute", "urgency", "notification", "defect", "causation", "evidence_gap",
+    ]
+    assert result["process"]["current_overlay"]["next_action_node_id"] == "evidence_gap"
+    items = {value["item_id"]: value for value in result["checklist"]["items"]}
+    assert items["lease"]["artifact_ids"] == ["art_later_lease"]
+    assert items["management_position"]["artifact_ids"] == ["art_later_management_reply"]
+    assert items["health_safety_statement"]["status"] == "provided_sufficient"
+    assert items["defect_notice"]["artifact_ids"] == ["art_later_notification"]
+    assert items["proof_of_delivery"]["artifact_ids"] == ["art_later_management_reply"]
+    assert items["building_envelope"]["status"] == "missing"
+    assert items["building_envelope"]["current_path"] is True
+
+
+def test_all_model_visible_subjects_and_filenames_are_neutral() -> None:
+    shortcuts = {"mould", "ventilation", "condensation", "tenant fault"}
+    for claim in CLAIMS.values():
+        package = observable_claim_package(claim)
+        surfaces = [package["customer_message"]["subject"]]
+        for artifact in package["artifacts"]:
+            surfaces.append(artifact["filename"])
+            if isinstance(artifact.get("parsed_email"), dict):
+                surfaces.append(
+                    str(artifact["parsed_email"].get("subject", ""))
+                )
+        normalized = "\n".join(surfaces).casefold()
+        assert all(shortcut not in normalized for shortcut in shortcuts)
 
 
 def test_primary_scope_dispute_and_notification_propositions_have_sufficient_exact_refs(runtime):
@@ -577,7 +625,7 @@ def test_verifier_rejects_provided_evidence_not_linked_to_fact_source(runtime):
     result = deepcopy(run["result"])
     policy = next(value for value in result["checklist"]["items"] if value["item_id"] == "policy_reference")
     policy["artifact_ids"] = ["message"]
-    with pytest.raises(ContractValidationError, match="grounds its linked fact"):
+    with pytest.raises(ContractValidationError, match="ground its linked fact"):
         pipeline._verification_report(  # noqa: SLF001
             CLAIMS[run["claim_id"]],
             {"facts": result["facts"]},
@@ -625,7 +673,7 @@ def test_grounding_rejects_fake_image_quote_invalid_region_and_metadata_mismatch
         if ref["locator_kind"] == "visual_observation"
     )
     visual_ref["region"] = [0.9, 0.9, 0.2, 0.2]
-    with pytest.raises(ContractValidationError, match="normalized"):
+    with pytest.raises(ContractValidationError, match="hash-bound"):
         pipeline._verification_report(  # noqa: SLF001
             CLAIMS[run["claim_id"]],
             {"facts": bad_region["facts"]},
@@ -781,11 +829,51 @@ def test_one_review_creates_memory_and_quarantined_candidate(runtime):
     assert candidate["supporting_claims"] == ["DEF-027-E0-DEMO"]
     assert candidate["support_count"] == 1
     assert candidate["required_support"] == 3
-    assert candidate["target_tests"]["status"] == "not_run"
-    assert candidate["protected_regression"]["status"] == "not_run"
+    assert candidate["qualified_support_count"] == 0
+    assert candidate["required_qualified_support"] == 3
+    assert candidate["support_authority"] == "unverified_demo_only"
+    assert candidate["target_tests"]["status"] == "passed"
+    assert candidate["target_tests"]["failed"] == 0
+    assert candidate["protected_regression"]["status"] == "passed"
+    assert candidate["protected_regression"]["failed"] == 0
+    protected_output = next(
+        case
+        for case in candidate["protected_regression"]["cases"]
+        if case["case_id"] == "source_claim_full_playbook_unchanged"
+    )
+    assert protected_output["expected_memory_application"] is False
+    assert protected_output["actual_memory_application"] is False
+    assert protected_output["execution_contract"] == "deterministic_case_specific_memory_gate/1.0.0"
+    assert protected_output["gate_executed"] is True
+    assert protected_output["output_unchanged"] is True
+    assert protected_output["before_hashes"] == protected_output["after_hashes"]
+    assert set(protected_output["before_hashes"]) == {
+        "result_hash",
+        "process_hash",
+        "checklist_hash",
+    }
+    review = storage.get_review_for_run(run["run_id"])
+    assert review is not None
+    assert digest(review["protected_output_snapshot"]) == review["pre_review_result_hash"]
+    eligible_guidance = deepcopy(storage.memories()[0]["case_specific_guidance"])
+    eligible_guidance["eligibility"]["source_claim_id"] = "OTHER-SOURCE"
+    applied_control = _execute_protected_output_control(
+        eligible_guidance,
+        {"result": review["protected_output_snapshot"]},
+    )
+    assert applied_control["actual_memory_application"] is True
+    assert applied_control["output_unchanged"] is False
+    assert applied_control["before_hashes"] != applied_control["after_hashes"]
+    assert candidate["target_tests"]["manifest_hash"]
+    assert candidate["protected_regression"]["manifest_hash"]
     assert candidate["approval"] == {"status": "pending", "qualified_reviewer": False}
     assert candidate["shared_knowledge_changed"] is False
     memory = storage.memories()[0]
+    assert memory["memory_contract"] == "casepath.reviewed-case-memory/1.0.0"
+    assert memory["authority"] == "unverified_demo"
+    assert memory["scope"] == "case_specific_guidance_only"
+    assert len(memory["content_hash"]) == 64
+    assert memory["case_specific_guidance"]["enabled"] is True
     assert memory["review_status"] == "unverified_demo_memory"
     assert memory["reviewer"] == {
         "type": "unverified_demo_user",
@@ -794,6 +882,8 @@ def test_one_review_creates_memory_and_quarantined_candidate(runtime):
     assert memory["shared_rule_authority"] is False
     assert memory["playbook_version"] == "mould-playbook-v3"
     assert memory["verification"]["valid"] is True
+    stages = [value["stage"] for value in storage.get_run(run["run_id"])["events"]]
+    assert stages[-2:] == ["review", "consolidate"]
 
 
 def test_required_now_does_not_release_conditional_rule(runtime):
@@ -830,25 +920,64 @@ def test_later_claim_retrieves_memory_without_promoting_shared_rule(runtime):
     assert result["process"]["playbook_version"] == "mould-playbook-v3"
     assert result["precedents"][0]["review_status"] == "unverified_demo_memory"
     assert result["precedents"][0]["claim_id"] == "DEF-027-E0-DEMO"
-    assert all(value["node_id"] != "ventilation_dispute" for value in result["process"]["nodes"])
+    receipt = result["memory_application"]
+    assert receipt["contract"] == "casepath.memory-application-receipt/1.0.0"
+    assert receipt["authority"] == "unverified_demo"
+    assert receipt["shared_rule_applied"] is False
+    assert receipt["before"]["process_dto_hash"] != receipt["after"]["process_dto_hash"]
+    assert receipt["before"]["checklist_dto_hash"] != receipt["after"]["checklist_dto_hash"]
+    assert {value["node_id"] for value in result["process"]["nodes"]} - {
+        value["node_id"]
+        for value in wait(storage, pipeline.create("DEMO-MOULD-002", knowledge_mode="baseline"))["result"]["process"]["nodes"]
+    } == {"ventilation_dispute"}
+    assert {
+        (value["source"], value["target"])
+        for value in result["process"]["edges"]
+        if value["source"] == "ventilation_dispute" or value["target"] == "ventilation_dispute"
+    } == {("evidence_gap", "ventilation_dispute"), ("ventilation_dispute", "causation")}
     envelope = next(value for value in result["checklist"]["items"] if value["item_id"] == "building_envelope")
     assert envelope["status"] == "conditional"
-    assert envelope["current_path"] is False
+    assert envelope["current_path"] is True
+    use_evidence = next(value for value in result["checklist"]["items"] if value["item_id"] == "use_evidence")
+    assert use_evidence["node_id"] == "ventilation_dispute"
     assert pipeline.knowledge()["active_playbook"]["version"] == "mould-playbook-v3"
 
 
 def test_learning_proof_is_bound_to_completed_later_runs(runtime):
     storage, pipeline = runtime
-    baseline = wait(storage, pipeline.create("DEMO-MOULD-002", knowledge_mode="baseline"))
     flagship = wait(storage, pipeline.create("DEF-027-E0-DEMO"))
     accepted_review(pipeline, flagship["run_id"])
+    baseline = wait(storage, pipeline.create("DEMO-MOULD-002", knowledge_mode="baseline"))
     later = wait(storage, pipeline.create("DEMO-MOULD-002", knowledge_mode="current"))
     proof = pipeline.learning_proof(baseline["run_id"], later["run_id"])
     assert proof["ready"] is True
     assert proof["computed"] is True
     assert proof["baseline_run_id"] == baseline["run_id"]
     assert proof["later_run_id"] == later["run_id"]
+    assert proof["counterfactual_learning_freeze"] == baseline[
+        "counterfactual_learning_freeze"
+    ]
+    assert proof["counterfactual_learning_freeze"]["application_suppressed"] is True
     assert proof["before"]["result_hash"] != proof["after"]["result_hash"]
+    assert proof["before"]["observable_input_hash"] == proof["after"]["observable_input_hash"]
+    assert proof["before"]["canonical_state_hash"] == proof["after"]["canonical_state_hash"]
+    assert proof["causal_delta"]["nonzero"] is True
+    assert proof["causal_delta"]["process"]["added_node_ids"] == ["ventilation_dispute"]
+    assert proof["causal_delta"]["evidence"]["changed_item_ids"] == [
+        "building_envelope",
+        "management_position",
+        "use_evidence",
+    ]
+    assert proof["memory_application_proof"] == {
+        **proof["memory_application_proof"],
+        "receipt_present": True,
+        "receipt_valid": True,
+        "source_memory_current": True,
+        "before_hashes_match": True,
+        "after_hashes_match": True,
+        "allowed_delta_exact": True,
+    }
+    assert {value["status"] for value in proof["deterministic_checks"]} == {"passed"}
     assert proof["reviewed_memory_proof"]["used"] is True
     assert proof["reviewed_memory_proof"]["present_in_baseline"] is False
     assert proof["reviewed_memory_proof"]["present_in_later_run"] is True
@@ -858,6 +987,612 @@ def test_learning_proof_is_bound_to_completed_later_runs(runtime):
     assert proof["shared_rule"]["version_after"] == "mould-playbook-v3"
     with pytest.raises(ValueError):
         pipeline.learning_proof(later["run_id"], later["run_id"])
+
+
+def test_learning_proof_rejects_baseline_created_before_learning_freeze(runtime):
+    storage, pipeline = runtime
+    baseline = wait(
+        storage,
+        pipeline.create("DEMO-MOULD-002", knowledge_mode="baseline"),
+    )
+    flagship = wait(storage, pipeline.create("DEF-027-E0-DEMO"))
+    accepted_review(pipeline, flagship["run_id"])
+    later = wait(
+        storage,
+        pipeline.create("DEMO-MOULD-002", knowledge_mode="current"),
+    )
+    with pytest.raises(ValueError, match="counterfactual_learning_freeze"):
+        pipeline.learning_proof(baseline["run_id"], later["run_id"])
+
+
+def test_learning_proof_rejects_current_run_started_before_baseline_completed(runtime):
+    storage, pipeline = runtime
+    flagship = wait(storage, pipeline.create("DEF-027-E0-DEMO"))
+    accepted_review(pipeline, flagship["run_id"])
+    baseline = wait(
+        storage,
+        pipeline.create("DEMO-MOULD-002", knowledge_mode="baseline"),
+    )
+    later = wait(
+        storage,
+        pipeline.create("DEMO-MOULD-002", knowledge_mode="current"),
+    )
+    with storage.connect() as connection:
+        row = connection.execute(
+            "SELECT payload FROM runs WHERE run_id=?", (later["run_id"],)
+        ).fetchone()
+        payload = json.loads(row["payload"])
+        connection.execute(
+            "UPDATE runs SET created_at=? WHERE run_id=?",
+            ("2000-01-01T00:00:00+00:00", later["run_id"]),
+        )
+        assert payload["status"] == "complete"
+    with pytest.raises(ValueError, match="counterfactual_learning_temporal_order"):
+        pipeline.learning_proof(baseline["run_id"], later["run_id"])
+
+
+def test_learning_proof_is_not_ready_without_a_nonzero_memory_delta(runtime):
+    storage, pipeline = runtime
+    baseline = wait(storage, pipeline.create("DEMO-MOULD-002", knowledge_mode="baseline"))
+    current = wait(storage, pipeline.create("DEMO-MOULD-002", knowledge_mode="current"))
+    proof = pipeline.learning_proof(baseline["run_id"], current["run_id"])
+    assert proof["ready"] is False
+    assert proof["causal_delta"]["nonzero"] is False
+    assert proof["memory_application_proof"]["receipt_present"] is False
+    failed = {value["name"] for value in proof["deterministic_checks"] if value["status"] == "failed"}
+    assert "Nonzero causal DTO delta" in failed
+    assert "Exact current memory receipt" in failed
+
+
+def test_required_now_memory_is_valid_but_ineligible_for_later_claim(runtime):
+    storage, pipeline = runtime
+    flagship = wait(storage, pipeline.create("DEF-027-E0-DEMO"))
+    review = accepted_review(pipeline, flagship["run_id"], mode="required_now")
+    assert review["candidate"]["target_tests"]["status"] == "failed"
+    later = wait(storage, pipeline.create("DEMO-MOULD-002", knowledge_mode="current"))
+    assert later["status"] == "complete", later.get("error")
+    assert later["result"]["memory_application"] is None
+    assert later["result"]["memory_used"] is False
+    assert later["result"]["reviewed_memory_used"] is False
+    assert later["result"]["reviewed_memory_retrieved"] is True
+    assert later["result"]["knowledge"] == {
+        **later["result"]["knowledge"],
+        "reviewed_memory_used": False,
+        "reviewed_memory_retrieved": True,
+    }
+    assert all(value["node_id"] != "ventilation_dispute" for value in later["result"]["process"]["nodes"])
+
+
+def test_rehashed_required_now_memory_cannot_grant_reusable_authority(runtime):
+    storage, pipeline = runtime
+    flagship = wait(storage, pipeline.create("DEF-027-E0-DEMO"))
+    accepted_review(pipeline, flagship["run_id"], mode="required_now")
+    with storage.connect() as connection:
+        row = connection.execute("SELECT memory_id, payload FROM memories").fetchone()
+        payload = json.loads(row["payload"])
+        guidance = payload["case_specific_guidance"]
+        guidance["enabled"] = True
+        guidance["variant"] = "disputed_ventilation_neutral_first_v1"
+        guidance["allowed_operation_ids"] = list(MEMORY_OPERATION_IDS)
+        payload["content_hash"] = digest(
+            {
+                key: value
+                for key, value in payload.items()
+                if key not in {"content_hash", "memory_id", "claim_id", "updated_at"}
+            }
+        )
+        connection.execute(
+            "UPDATE memories SET payload=? WHERE memory_id=?",
+            (json.dumps(payload), row["memory_id"]),
+        )
+
+    later = wait(
+        storage,
+        pipeline.create("DEMO-MOULD-002", knowledge_mode="current"),
+    )
+    assert later["status"] == "failed"
+    assert later["error"] == "MemoryApplicationError: memory_origin_binding"
+    assert later["accepted_state"]["final_playbook_accepted"] is False
+
+
+def test_forged_memory_fails_current_run_closed(runtime):
+    storage, pipeline = runtime
+    flagship = wait(storage, pipeline.create("DEF-027-E0-DEMO"))
+    accepted_review(pipeline, flagship["run_id"])
+    with storage.connect() as connection:
+        row = connection.execute("SELECT memory_id, payload FROM memories").fetchone()
+        payload = json.loads(row["payload"])
+        payload["authority"] = "qualified_expert"
+        connection.execute(
+            "UPDATE memories SET payload=? WHERE memory_id=?",
+            (json.dumps(payload), row["memory_id"]),
+        )
+    later = wait(storage, pipeline.create("DEMO-MOULD-002", knowledge_mode="current"))
+    assert later["status"] == "failed"
+    assert later["error"] == "MemoryApplicationError: memory_contract_integrity"
+    assert later["accepted_state"]["final_playbook_accepted"] is False
+
+
+def test_rehashed_memory_must_match_the_separately_persisted_review(runtime):
+    storage, pipeline = runtime
+    flagship = wait(storage, pipeline.create("DEF-027-E0-DEMO"))
+    accepted_review(pipeline, flagship["run_id"])
+    with storage.connect() as connection:
+        row = connection.execute("SELECT memory_id, payload FROM memories").fetchone()
+        payload = json.loads(row["payload"])
+        payload["reviewer_explanation"] = "rehashed but not review-bound"
+        payload["content_hash"] = digest(
+            {
+                key: value
+                for key, value in payload.items()
+                if key not in {"content_hash", "memory_id", "claim_id", "updated_at"}
+            }
+        )
+        connection.execute(
+            "UPDATE memories SET payload=? WHERE memory_id=?",
+            (json.dumps(payload), row["memory_id"]),
+        )
+
+    later = wait(
+        storage,
+        pipeline.create("DEMO-MOULD-002", knowledge_mode="current"),
+    )
+    assert later["status"] == "failed"
+    assert later["error"] == "MemoryApplicationError: memory_origin_binding"
+    assert later["accepted_state"]["final_playbook_accepted"] is False
+
+
+@pytest.mark.parametrize("field", ["source_result_hash", "reviewed_result_hash"])
+def test_rehashed_memory_result_hashes_are_origin_bound(runtime, field):
+    storage, pipeline = runtime
+    flagship = wait(storage, pipeline.create("DEF-027-E0-DEMO"))
+    accepted_review(pipeline, flagship["run_id"])
+    with storage.connect() as connection:
+        row = connection.execute("SELECT memory_id, payload FROM memories").fetchone()
+        payload = json.loads(row["payload"])
+        payload[field] = "0" * 64
+        payload["content_hash"] = digest(
+            {
+                key: value
+                for key, value in payload.items()
+                if key not in {"content_hash", "memory_id", "claim_id", "updated_at"}
+            }
+        )
+        connection.execute(
+            "UPDATE memories SET payload=? WHERE memory_id=?",
+            (json.dumps(payload), row["memory_id"]),
+        )
+
+    later = wait(
+        storage,
+        pipeline.create("DEMO-MOULD-002", knowledge_mode="current"),
+    )
+    assert later["status"] == "failed"
+    assert later["error"] == "MemoryApplicationError: memory_origin_binding"
+
+
+def test_learning_proof_rejects_memory_tampered_after_application(runtime):
+    storage, pipeline = runtime
+    baseline, _flagship = accepted_learning_freeze(storage, pipeline)
+    later = wait(storage, pipeline.create("DEMO-MOULD-002", knowledge_mode="current"))
+    with storage.connect() as connection:
+        row = connection.execute("SELECT memory_id, payload FROM memories").fetchone()
+        payload = json.loads(row["payload"])
+        payload["reviewer_explanation"] = "tampered"
+        connection.execute(
+            "UPDATE memories SET payload=? WHERE memory_id=?",
+            (json.dumps(payload), row["memory_id"]),
+        )
+    with pytest.raises(ValueError, match="memory_proof_origin_integrity"):
+        pipeline.learning_proof(baseline["run_id"], later["run_id"])
+
+
+def test_learning_proof_rejects_rebound_receipt_with_recomputed_hash(runtime):
+    storage, pipeline = runtime
+    baseline, _flagship = accepted_learning_freeze(storage, pipeline)
+    later = wait(
+        storage,
+        pipeline.create("DEMO-MOULD-002", knowledge_mode="current"),
+    )
+    forged_result = deepcopy(later["result"])
+    receipt = forged_result["memory_application"]
+    receipt["target"] = {"run_id": "replayed", "claim_id": "OTHER"}
+    receipt["application_hash"] = digest(
+        {key: value for key, value in receipt.items() if key != "application_hash"}
+    )
+    storage.patch_run(later["run_id"], patch={"result": forged_result})
+
+    with pytest.raises(
+        ValueError,
+        match="memory_proof_source_integrity",
+    ):
+        pipeline.learning_proof(baseline["run_id"], later["run_id"])
+
+
+def test_learning_proof_binds_full_before_hashes_to_pre_transform_boundary(runtime):
+    storage, pipeline = runtime
+    baseline, _flagship = accepted_learning_freeze(storage, pipeline)
+    later = wait(
+        storage,
+        pipeline.create("DEMO-MOULD-002", knowledge_mode="current"),
+    )
+    boundary = later["memory_application_boundary"]
+    receipt = later["result"]["memory_application"]
+    assert receipt["before"] == boundary["before"]
+    assert boundary["boundary_hash"] == digest(
+        {key: value for key, value in boundary.items() if key != "boundary_hash"}
+    )
+
+    forged_result = deepcopy(later["result"])
+    forged_receipt = forged_result["memory_application"]
+    forged_receipt["before"]["process_dto_hash"] = "1" * 64
+    forged_receipt["before"]["checklist_dto_hash"] = "2" * 64
+    forged_receipt["application_hash"] = digest(
+        {
+            key: value
+            for key, value in forged_receipt.items()
+            if key != "application_hash"
+        }
+    )
+    storage.patch_run(later["run_id"], patch={"result": forged_result})
+
+    with pytest.raises(ValueError, match="memory_proof_source_integrity"):
+        pipeline.learning_proof(baseline["run_id"], later["run_id"])
+
+
+def test_learning_proof_cross_binds_before_hashes_to_persisted_event(runtime):
+    storage, pipeline = runtime
+    baseline, _flagship = accepted_learning_freeze(storage, pipeline)
+    later = wait(
+        storage,
+        pipeline.create("DEMO-MOULD-002", knowledge_mode="current"),
+    )
+    forged_result = deepcopy(later["result"])
+    forged_receipt = forged_result["memory_application"]
+    forged_receipt["before"]["process_dto_hash"] = "a" * 64
+    forged_receipt["before"]["checklist_dto_hash"] = "b" * 64
+    forged_receipt["application_hash"] = digest(
+        {
+            key: value
+            for key, value in forged_receipt.items()
+            if key != "application_hash"
+        }
+    )
+    forged_boundary = deepcopy(later["memory_application_boundary"])
+    forged_boundary["before"] = deepcopy(forged_receipt["before"])
+    forged_boundary["boundary_hash"] = digest(
+        {
+            key: value
+            for key, value in forged_boundary.items()
+            if key != "boundary_hash"
+        }
+    )
+    storage.patch_run(
+        later["run_id"],
+        patch={
+            "result": forged_result,
+            "memory_application_boundary": forged_boundary,
+        },
+    )
+
+    with pytest.raises(ValueError, match="memory_proof_source_integrity"):
+        pipeline.learning_proof(baseline["run_id"], later["run_id"])
+
+
+def test_learning_proof_recomputes_canonical_hash_from_returned_facts(runtime):
+    storage, pipeline = runtime
+    baseline, _flagship = accepted_learning_freeze(storage, pipeline)
+    later = wait(
+        storage,
+        pipeline.create("DEMO-MOULD-002", knowledge_mode="current"),
+    )
+    forged_result = deepcopy(later["result"])
+    allegation = next(
+        fact
+        for fact in forged_result["facts"]
+        if fact["semantic_role"] == "management_ventilation_allegation"
+    )
+    tenancy = next(
+        fact
+        for fact in forged_result["facts"]
+        if fact["fact_id"] == "later_fact_tenancy"
+    )
+    allegation["semantic_role"] = None
+    tenancy["semantic_role"] = "management_ventilation_allegation"
+    forged_result["audit"]["canonical_state_hash"] = digest(
+        forged_result["facts"]
+    )
+    storage.patch_run(later["run_id"], patch={"result": forged_result})
+
+    with pytest.raises(
+        ValueError,
+        match="memory_proof_canonical_artifact_binding",
+    ):
+        pipeline.learning_proof(baseline["run_id"], later["run_id"])
+
+
+def test_learning_proof_requires_matching_canonical_category(runtime):
+    storage, pipeline = runtime
+    baseline, _flagship = accepted_learning_freeze(storage, pipeline)
+    later = wait(
+        storage,
+        pipeline.create("DEMO-MOULD-002", knowledge_mode="current"),
+    )
+    forged_result = deepcopy(baseline["result"])
+    forged_understanding = deepcopy(baseline["understanding"])
+    forged_result["category"] = "Forged unrelated category"
+    forged_understanding["category"] = "Forged unrelated category"
+    reranked = rank_precedents(
+        current_claim_id=forged_result["claim_id"],
+        understanding={
+            "facts": forged_result["facts"],
+            "category": forged_result["category"],
+            "subcategory": forged_result["subcategory"],
+        },
+        process=forged_result["process"],
+        checklist=forged_result["checklist"],
+        memories=[],
+        corpus=HISTORICAL_CASES,
+    )
+    forged_result["precedents"] = reranked["results"]
+    forged_result["precedent_ranking"] = reranked["receipt"]
+    verification = pipeline._verification_report(
+        CLAIMS["DEMO-MOULD-002"],
+        {**forged_understanding, "facts": forged_result["facts"]},
+        forged_result["legal_research"],
+        forged_result["process"],
+        forged_result["checklist"],
+        forged_result["precedents"],
+        forged_result["precedent_ranking"],
+        [],
+    )
+    forged_result["verification"] = verification
+    storage.patch_run(
+        baseline["run_id"],
+        patch={"understanding": forged_understanding, "result": forged_result},
+    )
+
+    proof = pipeline.learning_proof(baseline["run_id"], later["run_id"])
+    assert proof["ready"] is False
+    same_state = next(
+        check
+        for check in proof["deterministic_checks"]
+        if check["name"] == "Same canonical state"
+    )
+    assert same_state["status"] == "failed"
+
+
+def test_learning_proof_replay_binds_operation_before_fragments(runtime):
+    storage, pipeline = runtime
+    baseline, _flagship = accepted_learning_freeze(storage, pipeline)
+    later = wait(
+        storage,
+        pipeline.create("DEMO-MOULD-002", knowledge_mode="current"),
+    )
+    forged_result = deepcopy(later["result"])
+    receipt = forged_result["memory_application"]
+    receipt["evidence_operations"][0]["before_hash"] = "1" * 64
+    receipt["evidence_operations"][1]["before_hash"] = "2" * 64
+    receipt["application_hash"] = digest(
+        {key: value for key, value in receipt.items() if key != "application_hash"}
+    )
+    storage.patch_run(later["run_id"], patch={"result": forged_result})
+
+    with pytest.raises(ValueError, match="memory_proof_source_integrity"):
+        pipeline.learning_proof(baseline["run_id"], later["run_id"])
+
+
+def test_learning_proof_recomputes_candidate_governance_reports(runtime):
+    storage, pipeline = runtime
+    baseline, _flagship = accepted_learning_freeze(storage, pipeline)
+    later = wait(
+        storage,
+        pipeline.create("DEMO-MOULD-002", knowledge_mode="current"),
+    )
+    with storage.connect() as connection:
+        row = connection.execute(
+            "SELECT candidate_id, payload FROM candidates"
+        ).fetchone()
+        payload = json.loads(row["payload"])
+        payload["target_tests"] = {
+            "status": "passed",
+            "passed": 999,
+            "failed": 0,
+            "cases": [],
+            "manifest_hash": "0" * 64,
+        }
+        payload["protected_regression"] = {
+            "status": "passed",
+            "passed": 999,
+            "failed": 0,
+            "cases": [],
+            "manifest_hash": "1" * 64,
+        }
+        connection.execute(
+            "UPDATE candidates SET payload=? WHERE candidate_id=?",
+            (json.dumps(payload), row["candidate_id"]),
+        )
+
+    proof = pipeline.learning_proof(baseline["run_id"], later["run_id"])
+    assert proof["ready"] is False
+    assert next(
+        check
+        for check in proof["deterministic_checks"]
+        if check["name"]
+        == "Deterministic target and protected checks passed"
+    )["status"] == "failed"
+
+
+def test_learning_proof_binds_candidate_to_its_governed_origin(runtime):
+    storage, pipeline = runtime
+    baseline, _flagship = accepted_learning_freeze(storage, pipeline)
+    later = wait(
+        storage,
+        pipeline.create("DEMO-MOULD-002", knowledge_mode="current"),
+    )
+    with storage.connect() as connection:
+        row = connection.execute(
+            "SELECT candidate_id, payload FROM candidates"
+        ).fetchone()
+        payload = json.loads(row["payload"])
+        payload["shared_knowledge_changed"] = True
+        connection.execute(
+            "UPDATE candidates SET payload=? WHERE candidate_id=?",
+            (json.dumps(payload), row["candidate_id"]),
+        )
+
+    proof = pipeline.learning_proof(baseline["run_id"], later["run_id"])
+    assert proof["ready"] is False
+    assert proof["shared_rule"]["shared_knowledge_changed"] is None
+    assert next(
+        check
+        for check in proof["deterministic_checks"]
+        if check["name"]
+        == "Deterministic target and protected checks passed"
+    )["status"] == "failed"
+
+
+@pytest.mark.parametrize("run_kind", ["baseline", "later"])
+def test_learning_proof_requires_both_bound_playbooks_to_remain_accepted(
+    runtime, run_kind
+):
+    storage, pipeline = runtime
+    baseline, _flagship = accepted_learning_freeze(storage, pipeline)
+    later = wait(
+        storage,
+        pipeline.create("DEMO-MOULD-002", knowledge_mode="current"),
+    )
+    target = baseline if run_kind == "baseline" else later
+    forged_result = deepcopy(target["result"])
+    forged_result["verification"]["valid"] = False
+    forged_result["audit"]["accepted"] = False
+    storage.patch_run(target["run_id"], patch={"result": forged_result})
+
+    proof = pipeline.learning_proof(baseline["run_id"], later["run_id"])
+    assert proof["ready"] is False
+    assert next(
+        check
+        for check in proof["deterministic_checks"]
+        if check["name"] == "Same canonical state"
+    )["status"] == "failed"
+
+
+@pytest.mark.parametrize("target", ["law", "precedent"])
+def test_learning_proof_revalidates_bound_playbook_content(runtime, target):
+    storage, pipeline = runtime
+    baseline, _flagship = accepted_learning_freeze(storage, pipeline)
+    later = wait(
+        storage,
+        pipeline.create("DEMO-MOULD-002", knowledge_mode="current"),
+    )
+    forged_result = deepcopy(later["result"])
+    if target == "law":
+        forged_result["legal_research"]["sources"][0]["passage_text"] = (
+            "FORGED LAW"
+        )
+    else:
+        forged_result["precedents"][0]["why_useful"] = "FORGED PRECEDENT"
+    storage.patch_run(later["run_id"], patch={"result": forged_result})
+
+    with pytest.raises(
+        ValueError, match="memory_proof_playbook_integrity"
+    ):
+        pipeline.learning_proof(baseline["run_id"], later["run_id"])
+
+
+def test_learning_proof_replay_rejects_rehashed_semantic_tamper(runtime):
+    storage, pipeline = runtime
+    baseline, _flagship = accepted_learning_freeze(storage, pipeline)
+    later = wait(
+        storage,
+        pipeline.create("DEMO-MOULD-002", knowledge_mode="current"),
+    )
+    forged_result = deepcopy(later["result"])
+    forged_item = next(
+        item
+        for item in forged_result["checklist"]["items"]
+        if item["item_id"] == "building_envelope"
+    )
+    forged_item["why"] = "Conclusive tenant fault; deny the claim."
+    receipt = forged_result["memory_application"]
+    receipt["after"] = {
+        "process_dto_hash": digest(forged_result["process"]),
+        "checklist_dto_hash": digest(forged_result["checklist"]),
+        "process_semantic_hash": digest(
+            semantic_process_dto(forged_result["process"])
+        ),
+        "checklist_semantic_hash": digest(
+            semantic_checklist_dto(forged_result["checklist"])
+        ),
+    }
+    receipt["evidence_operations"][0]["after_hash"] = digest(forged_item)
+    receipt["application_hash"] = digest(
+        {key: value for key, value in receipt.items() if key != "application_hash"}
+    )
+    storage.patch_run(later["run_id"], patch={"result": forged_result})
+
+    with pytest.raises(
+        ValueError, match="memory_proof_playbook_integrity"
+    ):
+        pipeline.learning_proof(baseline["run_id"], later["run_id"])
+
+
+def test_memory_eligibility_and_transform_are_claim_and_fact_id_agnostic(runtime):
+    storage, pipeline = runtime
+    flagship = wait(storage, pipeline.create("DEF-027-E0-DEMO"))
+    accepted_review(pipeline, flagship["run_id"])
+    memory = storage.memories()[0]
+    guidance = memory["case_specific_guidance"]
+    evaluation = _eligibility_evaluation(
+        guidance,
+        claim_id="UNSEEN-MOULD-999",
+        category="Rental defect - mould and moisture",
+        subcategory="Recurring moisture with disputed causation",
+        decisions=deepcopy(guidance["eligibility"]["required_decisions"]),
+        facts={
+            "management_ventilation_allegation": {
+                "fact_id": "novel_fact_management_allegation",
+                "state": "known",
+                "grounded_source_count": 1,
+            }
+        },
+    )
+    assert evaluation["eligible"] is True
+
+    baseline = wait(
+        storage,
+        pipeline.create("DEMO-MOULD-002", knowledge_mode="baseline"),
+    )
+    process = semantic_process_dto(deepcopy(baseline["result"]["process"]))
+    checklist = semantic_checklist_dto(deepcopy(baseline["result"]["checklist"]))
+    replay_case_specific_memory_transform(
+        process,
+        checklist,
+        ventilation_fact_id="novel_fact_management_allegation",
+    )
+    extension = next(
+        node for node in process["nodes"] if node["node_id"] == "ventilation_dispute"
+    )
+    assert extension["fact_ids"] == ["novel_fact_management_allegation"]
+
+
+def test_atomic_learning_bundle_rolls_back_on_candidate_failure(runtime):
+    storage, pipeline = runtime
+    run = wait(storage, pipeline.create("DEF-027-E0-DEMO"))
+    original = deepcopy(run["result"])
+    with storage.connect() as connection:
+        connection.execute(
+            "CREATE TRIGGER fail_candidate_insert BEFORE INSERT ON candidates "
+            "BEGIN SELECT RAISE(ABORT, 'injected candidate failure'); END"
+        )
+    with pytest.raises(sqlite3.IntegrityError, match="injected candidate failure"):
+        accepted_review(pipeline, run["run_id"])
+    assert storage.memories() == []
+    assert storage.candidates() == []
+    assert storage.get_review_for_run(run["run_id"]) is None
+    persisted = storage.get_run(run["run_id"])
+    assert persisted["result"] == original
+    assert not {"review", "consolidate"} & {value["stage"] for value in persisted["events"]}
 
 
 def test_observable_package_excludes_hidden_generation_fields():
@@ -878,6 +1613,23 @@ def test_observable_package_excludes_hidden_generation_fields():
     assert package["schema"] == "casepath.observable-claim-package/1.0.0"
 
 
+@pytest.mark.parametrize("claim_id", ["DEF-027-E0-DEMO", "DEMO-MOULD-002"])
+def test_observable_envelope_does_not_disclose_category_or_causation_shortcut(
+    claim_id,
+):
+    package = observable_claim_package(CLAIMS[claim_id])
+    envelope = " ".join(
+        [
+            package["customer_message"]["subject"],
+            *(artifact["filename"] for artifact in package["artifacts"]),
+        ]
+    ).lower()
+    assert all(
+        marker not in envelope
+        for marker in ("mould", "ventilation", "condensation", "tenant fault")
+    )
+
+
 def test_duplicate_review_is_idempotent_or_rejected(runtime):
     storage, pipeline = runtime
     run = wait(storage, pipeline.create("DEF-027-E0-DEMO"))
@@ -895,6 +1647,19 @@ def test_duplicate_review_is_idempotent_or_rejected(runtime):
     assert len([value for value in storage.get_run(run["run_id"])["events"] if value["stage"] == "review"]) == 1
     with pytest.raises(ValueError, match="different review"):
         pipeline.review(run["run_id"], {**payload, "building_envelope_mode": "required_now"})
+
+
+def test_second_flagship_review_versions_the_same_case_memory(runtime):
+    storage, pipeline = runtime
+    first_run = wait(storage, pipeline.create("DEF-027-E0-DEMO"))
+    first = accepted_review(pipeline, first_run["run_id"])
+    second_run = wait(storage, pipeline.create("DEF-027-E0-DEMO"))
+    second = accepted_review(pipeline, second_run["run_id"])
+    assert second["memory_id"] == first["memory_id"]
+    assert len(storage.memories()) == 1
+    assert storage.memories()[0]["source_run_id"] == second_run["run_id"]
+    assert len(storage.candidates()) == 1
+    assert [value["stage"] for value in storage.get_run(second_run["run_id"])["events"]][-2:] == ["review", "consolidate"]
 
 
 def test_pipeline_events_disclose_deterministic_vs_model_identity(runtime):
@@ -959,7 +1724,15 @@ def test_model_mode_retains_process_owned_visual_locator_and_passes_grounding(tm
         if ref["locator_kind"] == "visual_observation"
     ]
     assert visual_refs
-    assert {ref["agent"] for ref in visual_refs} == {"Visual Evidence Agent"}
+    assert {ref["producer"] for ref in visual_refs} == {
+        "deterministic_reference_annotation"
+    }
+    assert {ref["authority"] for ref in visual_refs} == {
+        "generated_demo_reference_only"
+    }
+    assert {
+        ref["image_sha256"] for ref in visual_refs
+    } == {ARTIFACTS["art_photo"]["sha256"]}
     noncontrolling_fact = next(
         value
         for value in run["result"]["facts"]
@@ -1018,6 +1791,19 @@ def test_model_mode_retains_process_owned_visual_locator_and_passes_grounding(tm
         for item in run["result"]["agent_orchestration"]["agents"]
     )
     assert model_storage.model_calls()[0]["outcome"] == "succeeded"
+
+    reviewed = accepted_review(pipeline, run["run_id"])["result"]
+    assert "agent_contribution" not in reviewed["process"]
+    assert all(
+        "agent_decision_contributions" not in node
+        for node in reviewed["process"]["nodes"]
+    )
+    assert "agent_contribution" not in reviewed["checklist"]
+    assert all(
+        "agent_contribution" not in item
+        for item in reviewed["checklist"]["items"]
+    )
+    assert reviewed["next_action"]["agent_brief_contribution"] is None
 
 
 def test_production_shaped_canonical_source_projection_succeeds_17_to_1(tmp_path: Path):
@@ -1180,7 +1966,7 @@ def test_hybrid_rejected_controlling_fact_uses_exact_oracle_fallback(tmp_path: P
     )
     assert result["verification"]["valid"] is True
     assert result["verification"]["computed"] is True
-    assert len(result["verification"]["checks"]) == 8
+    assert len(result["verification"]["checks"]) == 11
     diagnostics = result["audit"]["canonicalization"]["diagnostics"]
     assert diagnostics["authority_mode"] == "hybrid_guarded"
     assert diagnostics["accepted_fact_count"] == len(proposals) - 1
