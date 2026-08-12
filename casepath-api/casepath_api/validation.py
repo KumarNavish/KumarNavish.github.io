@@ -6,12 +6,28 @@ import re
 from typing import Any, Iterable
 import unicodedata
 
+from .evidence_relations import (
+    BASE_PROCESS_EDGE_PAIRS,
+    BASE_PROCESS_NODE_IDS,
+    EvidenceRelationError,
+    MEMORY_EXTENSION_EDGE_PAIRS,
+    MEMORY_EXTENSION_NODE_IDS,
+    validate_evidence_relations,
+)
+from .fact_relations import validate_fact_relations
+from .law_registry import legal_context
+from .precedent_ranking import (
+    PRECEDENT_CORPUS_VERSION,
+    PRECEDENT_RANKING_CONTRACT,
+    validate_precedent_ranking_bundle,
+)
 from .projections import (
     PROCESS_DECISION_KEYS,
     apply_process_projection,
     checklist_derived_sections,
     decision_projection,
 )
+from .visual_annotations import VisualAnnotationError, validate_visual_annotation
 
 
 FACT_STATES = {"known", "unknown", "conflicting", "not_applicable"}
@@ -136,10 +152,19 @@ def validate_claim_state(
             _require(value.get("normalized_value") is None, contract, f"facts[{fact_index}].normalized_value", "non-controlling facts require a null normalized value", issues)
             _require(value.get("decision_value") is None, contract, f"facts[{fact_index}].decision_value", "non-controlling facts require a null decision value", issues)
         _require(
-            set(value) == {"fact_id", "label", "value", "state", "explanation", "source_refs", "confidence", "controls_process", "decision_key", "normalized_value", "decision_value"},
+            set(value) == {"fact_id", "label", "value", "state", "explanation", "source_refs", "confidence", "controls_process", "decision_key", "normalized_value", "decision_value", "semantic_role"},
             contract,
             f"facts[{fact_index}]",
             "must contain exactly the canonical fact fields",
+            issues,
+        )
+        semantic_role = value.get("semantic_role")
+        _require(
+            semantic_role is None
+            or semantic_role == "management_ventilation_allegation",
+            contract,
+            f"facts[{fact_index}].semantic_role",
+            "must be null or a supported stable semantic role",
             issues,
         )
         confidence = value.get("confidence")
@@ -159,9 +184,9 @@ def validate_claim_state(
             _require(artifact_id in allowed_sources, contract, f"{path}.artifact_id", f"unknown source {artifact_id!r}", issues)
             locator_kind = ref.get("locator_kind")
             _require(locator_kind in LOCATOR_KINDS, contract, f"{path}.locator_kind", f"unsupported locator {locator_kind!r}", issues)
-            _require(isinstance(ref.get("agent"), str) and bool(ref.get("agent", "").strip()), contract, f"{path}.agent", "must identify the producing component", issues)
             if locator_kind == "text_quote":
                 _require(set(ref) == {"artifact_id", "locator_kind", "page", "excerpt", "agent"}, contract, path, "must contain exactly the text-quote fields", issues)
+                _require(isinstance(ref.get("agent"), str) and bool(ref.get("agent", "").strip()), contract, f"{path}.agent", "must identify the producing component", issues)
                 page = ref.get("page")
                 _require(isinstance(page, int) and page >= 1, contract, f"{path}.page", "must be a positive integer", issues)
                 if artifact_id in artifact_page_counts and isinstance(page, int):
@@ -169,25 +194,55 @@ def validate_claim_state(
                 _require(isinstance(ref.get("excerpt"), str) and bool(ref.get("excerpt", "").strip()), contract, f"{path}.excerpt", "must be present", issues)
                 _require(artifact_id == "message" or media_types.get(artifact_id) in {"application/pdf", "message/rfc822"}, contract, path, "text quotes require an observable textual source", issues)
             elif locator_kind == "visual_observation":
-                _require(set(ref) == {"artifact_id", "locator_kind", "region", "observation", "agent"}, contract, path, "must contain exactly the visual-observation fields", issues)
-                _require(media_types.get(artifact_id, "").startswith("image/"), contract, f"{path}.artifact_id", "visual observations require an image source", issues)
-                _require(ref.get("agent") == "Visual Evidence Agent", contract, f"{path}.agent", "visual observations require Visual Evidence Agent provenance", issues)
-                region = ref.get("region")
-                valid_region = (
-                    isinstance(region, list)
-                    and len(region) == 4
-                    and all(isinstance(value, (int, float)) and not isinstance(value, bool) and 0 <= value <= 1 for value in region)
-                    and region[2] > 0
-                    and region[3] > 0
-                    and region[0] + region[2] <= 1
-                    and region[1] + region[3] <= 1
+                _require(
+                    set(ref)
+                    == {
+                        "artifact_id",
+                        "locator_kind",
+                        "region",
+                        "observation",
+                        "producer",
+                        "authority",
+                        "annotation_contract",
+                        "annotation_version",
+                        "image_sha256",
+                    },
+                    contract,
+                    path,
+                    "must contain exactly the deterministic visual-reference fields",
+                    issues,
                 )
-                _require(valid_region, contract, f"{path}.region", "must be normalized [x,y,width,height] within the image", issues)
-                _require(isinstance(ref.get("observation"), str) and bool(ref.get("observation", "").strip()), contract, f"{path}.observation", "must describe the visual observation without presenting a quote", issues)
+                _require(media_types.get(artifact_id, "").startswith("image/"), contract, f"{path}.artifact_id", "visual observations require an image source", issues)
+                try:
+                    validate_visual_annotation(
+                        ref,
+                        image_sha256=ref.get("image_sha256"),
+                    )
+                except VisualAnnotationError:
+                    issues.append(
+                        ContractIssue(
+                            contract,
+                            path,
+                            "must be a valid hash-bound generated-demo reference annotation",
+                        )
+                    )
             elif locator_kind == "metadata_field":
                 _require(set(ref) == {"artifact_id", "locator_kind", "field", "value", "agent"}, contract, path, "must contain exactly the metadata-field fields", issues)
+                _require(isinstance(ref.get("agent"), str) and bool(ref.get("agent", "").strip()), contract, f"{path}.agent", "must identify the producing component", issues)
                 _require(isinstance(ref.get("field"), str) and bool(ref.get("field", "").strip()), contract, f"{path}.field", "must identify an observed metadata field", issues)
                 _require(isinstance(ref.get("value"), (str, int, float, bool)) and not (isinstance(ref.get("value"), str) and not ref.get("value", "").strip()), contract, f"{path}.value", "must contain the observed metadata value", issues)
+    semantic_roles = [
+        value.get("semantic_role")
+        for value in facts
+        if isinstance(value, dict) and value.get("semantic_role") is not None
+    ]
+    _require(
+        len(semantic_roles) == len(set(semantic_roles)),
+        contract,
+        "facts.semantic_role",
+        "semantic roles must be unique",
+        issues,
+    )
     if issues:
         raise ContractValidationError(issues)
     return [{"name": "Canonical fact and source contract", "status": "passed", "detail": f"{len(facts)} facts have valid states and provenance."}]
@@ -263,6 +318,20 @@ def validate_source_grounding(
             elif locator_kind == "visual_observation":
                 artifact = _package_artifact(observable_package, ref.get("artifact_id"))
                 _require(isinstance(artifact, dict) and str(artifact.get("media_type", "")).startswith("image/"), contract, path, "visual source is not present in the observable package", issues)
+                if isinstance(artifact, dict):
+                    try:
+                        validate_visual_annotation(
+                            ref,
+                            image_sha256=artifact.get("sha256"),
+                        )
+                    except VisualAnnotationError:
+                        issues.append(
+                            ContractIssue(
+                                contract,
+                                path,
+                                "visual annotation is not bound to the observable image bytes",
+                            )
+                        )
             elif locator_kind == "metadata_field":
                 observed = _metadata_value(observable_package, artifact_id=ref.get("artifact_id"), field=ref.get("field", ""))
                 _require(observed is not None and observed == ref.get("value"), contract, path, "metadata value does not match the observable package", issues)
@@ -274,12 +343,21 @@ def validate_source_grounding(
 def validate_legal_context(legal: dict[str, Any]) -> tuple[set[str], list[dict[str, str]]]:
     contract = "legal_context"
     issues: list[ContractIssue] = []
+    _require(
+        legal == legal_context(),
+        contract,
+        "legal_context",
+        "must exactly match the versioned official-source registry and structured question joins",
+        issues,
+    )
     sources = legal.get("sources")
     principles = legal.get("handling_principles")
+    questions = legal.get("questions")
     _require(isinstance(sources, list), contract, "sources", "must be a list", issues)
     _require(isinstance(principles, list), contract, "handling_principles", "must be a list", issues)
     source_values = sources if isinstance(sources, list) else []
     principle_values = principles if isinstance(principles, list) else []
+    question_values = questions if isinstance(questions, list) else []
     source_ids = _unique_ids(source_values + principle_values, "source_id", contract, "authorities", issues)
     for index, source in enumerate(source_values):
         _require(isinstance(source.get("title"), str) and bool(source.get("title", "").strip()), contract, f"sources[{index}].title", "must be present", issues)
@@ -294,10 +372,68 @@ def validate_legal_context(legal: dict[str, Any]) -> tuple[set[str], list[dict[s
         _require(isinstance(source.get("passage_summary"), str) and bool(source.get("passage_summary", "").strip()), contract, f"sources[{index}].passage_summary", "must keep source content separate from interpretation", issues)
         _require(isinstance(source.get("operational_interpretation"), str) and bool(source.get("operational_interpretation", "").strip()), contract, f"sources[{index}].operational_interpretation", "must be explicit", issues)
         _require(isinstance(source.get("role"), str) and bool(source.get("role", "").strip()), contract, f"sources[{index}].role", "must explain handling relevance", issues)
+        retrieval = source.get("retrieval", {})
+        _require(
+            retrieval.get("snapshot_scope")
+            in {"official_pdf_bytes", "normalized_official_passage_utf8"},
+            contract,
+            f"sources[{index}].retrieval.snapshot_scope",
+            "must state exactly what the retained snapshot hash covers",
+            issues,
+        )
+        if retrieval.get("snapshot_scope") == "normalized_official_passage_utf8":
+            _require(
+                retrieval.get("snapshot_sha256") == source.get("passage_sha256"),
+                contract,
+                f"sources[{index}].retrieval.snapshot_sha256",
+                "must hash the exact normalized official passage",
+                issues,
+            )
     for index, principle in enumerate(principle_values):
         _require(principle.get("source_type") == "operational_interpretation", contract, f"handling_principles[{index}].source_type", "must remain separate from official authority", issues)
         _require(principle.get("validation_status") in {"generated_reference_not_expert_approved", "candidate_not_expert_approved"}, contract, f"handling_principles[{index}].validation_status", "must carry an honest review status", issues)
         _require(isinstance(principle.get("role"), str) and bool(principle.get("role", "").strip()), contract, f"handling_principles[{index}].role", "must state the proposed handling rule", issues)
+        _require(
+            principle.get("producer") == "deterministic_application",
+            contract,
+            f"handling_principles[{index}].producer",
+            "must not claim model production",
+            issues,
+        )
+    for index, question in enumerate(question_values):
+        path = f"questions[{index}]"
+        _require(
+            isinstance(question.get("question_id"), str)
+            and bool(question.get("question_id", "").strip()),
+            contract,
+            f"{path}.question_id",
+            "must be present",
+            issues,
+        )
+        _require(
+            bool(question.get("source_ids") or question.get("interpretation_ids")),
+            contract,
+            path,
+            "must bind at least one official source or deterministic interpretation",
+            issues,
+        )
+        for field in ("source_ids", "interpretation_ids"):
+            for source_id in question.get(field, []):
+                _require(
+                    source_id in source_ids,
+                    contract,
+                    f"{path}.{field}",
+                    f"unknown authority {source_id!r}",
+                    issues,
+                )
+        _require(
+            isinstance(question.get("process_node_ids"), list)
+            and bool(question.get("process_node_ids")),
+            contract,
+            f"{path}.process_node_ids",
+            "must bind one or more process nodes",
+            issues,
+        )
     if issues:
         raise ContractValidationError(issues)
     return source_ids, [{"name": "Legal authority contract", "status": "passed", "detail": f"{len(source_ids)} official or proposed authority records are explicitly typed."}]
@@ -323,7 +459,35 @@ def validate_process_graph(
     edge_values = edges if isinstance(edges, list) else []
     extension_node_ids = allowed_extension_node_ids or set()
     extension_edge_pairs = allowed_extension_edge_pairs or set()
+    _require(
+        extension_node_ids in (set(), set(MEMORY_EXTENSION_NODE_IDS)),
+        contract,
+        "allowed_extension_node_ids",
+        "must be empty or the exact governed memory extension",
+        issues,
+    )
+    _require(
+        extension_edge_pairs in (set(), set(MEMORY_EXTENSION_EDGE_PAIRS)),
+        contract,
+        "allowed_extension_edge_pairs",
+        "must be empty or the exact governed memory extension",
+        issues,
+    )
+    _require(
+        bool(extension_node_ids) == bool(extension_edge_pairs),
+        contract,
+        "allowed_extensions",
+        "node and edge authorization must be supplied atomically",
+        issues,
+    )
     node_ids = _unique_ids(node_values, "node_id", contract, "nodes", issues)
+    _require(
+        node_ids == set(BASE_PROCESS_NODE_IDS) | extension_node_ids,
+        contract,
+        "nodes",
+        "must contain exactly the release process topology plus explicit extensions",
+        issues,
+    )
     current_nodes = [node.get("node_id") for node in node_values if node.get("state") == "current"]
     _require(len(current_nodes) == 1, contract, "nodes", "must contain exactly one current node", issues)
     _require(process.get("current_node") in node_ids, contract, "current_node", "must reference a node", issues)
@@ -375,6 +539,13 @@ def validate_process_graph(
         _require(target in node_ids, contract, f"edges[{edge_index}].target", f"unknown node {target!r}", issues)
         _require((source, target) not in edge_pairs, contract, f"edges[{edge_index}]", "duplicate edge", issues)
         edge_pairs.add((source, target))
+    _require(
+        edge_pairs == set(BASE_PROCESS_EDGE_PAIRS) | extension_edge_pairs,
+        contract,
+        "edges",
+        "must contain exactly the release edge topology plus explicit extensions",
+        issues,
+    )
     for index in range(max(0, len(process.get("selected_path", [])) - 1)):
         source, target = process["selected_path"][index : index + 2]
         _require((source, target) in edge_pairs, contract, f"selected_path[{index}:{index + 2}]", f"missing selected edge {source!r} -> {target!r}", issues)
@@ -500,10 +671,11 @@ def validate_process_graph(
 def validate_evidence_model(
     checklist: dict[str, Any],
     *,
-    node_ids: set[str],
+    process: dict[str, Any],
     facts_by_id: dict[str, dict[str, Any]],
     legal_source_ids: set[str],
     allowed_artifact_ids: set[str],
+    allowed_extension_node_ids: set[str] | None = None,
 ) -> list[dict[str, str]]:
     contract = "evidence_model"
     issues: list[ContractIssue] = []
@@ -511,16 +683,79 @@ def validate_evidence_model(
     _require(isinstance(items, list) and bool(items), contract, "items", "must contain evidence items", issues)
     item_values = items if isinstance(items, list) else []
     item_ids = _unique_ids(item_values, "item_id", contract, "items", issues)
+    node_ids = {node.get("node_id") for node in process.get("nodes", [])}
+    try:
+        validate_evidence_relations(
+            process,
+            item_values,
+            allowed_extension_node_ids=allowed_extension_node_ids,
+            enforce_release_topology=True,
+        )
+    except (EvidenceRelationError, KeyError, TypeError):
+        issues.append(
+            ContractIssue(
+                contract,
+                "items",
+                "must be the exact reciprocal projection of process evidence requirements",
+            )
+        )
     allowed_sources = set(allowed_artifact_ids) | {"message", "intake"}
+    canonical_legal_basis_ids = {
+        "claim_message": [],
+        "source_integrity": [],
+        "lease": ["fedlex-or-256"],
+        "policy_reference": [],
+        "customer_objective": [],
+        "management_position": [],
+        "health_safety_statement": [],
+        "defect_notice": ["fedlex-or-257g"],
+        "proof_of_delivery": ["fedlex-or-257g"],
+        "dated_photos": [],
+        "recurrence_chronology": [],
+        "technical_assessment": ["fedlex-or-256", "handling-causation"],
+        "moisture_measurements": ["handling-causation"],
+        "building_envelope": ["handling-evidence-order"],
+        "use_evidence": [],
+        "repair_history": ["fedlex-or-256"],
+        "remediation_plan": ["fedlex-or-259a"],
+        "financial_impact": ["fedlex-or-259a"],
+        "settlement_proposal": ["fedlex-or-259a"],
+        "conciliation_bundle": ["bwo-conciliation"],
+        "completion_record": [],
+    }
     for index, item in enumerate(item_values):
         status = item.get("status")
         _require(status in EVIDENCE_STATES, contract, f"items[{index}].status", f"unsupported status {status!r}", issues)
         _require(item.get("node_id") in node_ids, contract, f"items[{index}].node_id", f"unknown node {item.get('node_id')!r}", issues)
+        _require(
+            isinstance(item.get("node_ids"), list)
+            and bool(item.get("node_ids"))
+            and all(node_id in node_ids for node_id in item.get("node_ids", [])),
+            contract,
+            f"items[{index}].node_ids",
+            "must contain the ordered process nodes that require this evidence item",
+            issues,
+        )
+        _require(
+            type(item.get("current_path")) is bool,
+            contract,
+            f"items[{index}].current_path",
+            "must be a derived boolean",
+            issues,
+        )
         fact_id = item.get("fact_id")
         _require(fact_id in facts_by_id, contract, f"items[{index}].fact_id", f"unknown fact {fact_id!r}", issues)
         _require(isinstance(item.get("why"), str) and bool(item.get("why", "").strip()), contract, f"items[{index}].why", "must explain the process dependency", issues)
         for source_index, source_id in enumerate(item.get("legal_basis_ids", [])):
             _require(source_id in legal_source_ids, contract, f"items[{index}].legal_basis_ids[{source_index}]", f"unknown legal source {source_id!r}", issues)
+        _require(
+            item.get("legal_basis_ids")
+            == canonical_legal_basis_ids.get(item.get("item_id")),
+            contract,
+            f"items[{index}].legal_basis_ids",
+            "must exactly match the release evidence-to-law relationship",
+            issues,
+        )
         for artifact_index, artifact_id in enumerate(item.get("artifact_ids", [])):
             _require(artifact_id in allowed_sources, contract, f"items[{index}].artifact_ids[{artifact_index}]", f"unknown artifact {artifact_id!r}", issues)
         if isinstance(status, str) and status.startswith("provided"):
@@ -530,10 +765,10 @@ def validate_evidence_model(
                 for ref in facts_by_id.get(fact_id, {}).get("source_refs", [])
             }
             _require(
-                bool(set(item.get("artifact_ids", [])) & fact_source_ids),
+                set(item.get("artifact_ids", [])) <= fact_source_ids,
                 contract,
                 f"items[{index}].artifact_ids",
-                "provided evidence must cite a source that grounds its linked fact",
+                "every provided artifact must ground its linked fact",
                 issues,
             )
         if status == "conditional":
@@ -673,12 +908,104 @@ def validate_review_operations(operations: list[dict[str, Any]]) -> list[dict[st
 def validate_precedents(precedents: list[dict[str, Any]], *, current_claim_id: str) -> list[dict[str, str]]:
     contract = "precedents"
     issues: list[ContractIssue] = []
-    _require(0 < len(precedents) <= 3, contract, "precedents", "must contain one to three precedents", issues)
+    _require(len(precedents) == 3, contract, "precedents", "must contain exactly three ranked precedents", issues)
     claim_ids = _unique_ids(precedents, "claim_id", contract, "precedents", issues)
     _require(current_claim_id not in claim_ids, contract, "precedents", "must exclude the current claim", issues)
+    context_hashes: set[str] = set()
+    scores: list[int] = []
     for index, precedent in enumerate(precedents):
         _require(precedent.get("review_status") in PRECEDENT_STATUSES, contract, f"precedents[{index}].review_status", "must distinguish generated reference, unverified memory, and qualified review", issues)
         _require(isinstance(precedent.get("why_useful"), str) and bool(precedent.get("why_useful", "").strip()), contract, f"precedents[{index}].why_useful", "must explain decision usefulness", issues)
+        ranking = precedent.get("ranking")
+        path = f"precedents[{index}].ranking"
+        _require(
+            isinstance(ranking, dict)
+            and set(ranking)
+            == {
+                "contract",
+                "corpus_version",
+                "rank",
+                "score_basis_points",
+                "factors",
+                "context_hash",
+            },
+            contract,
+            path,
+            "must contain the exact inspectable ranking receipt",
+            issues,
+        )
+        if not isinstance(ranking, dict):
+            continue
+        _require(ranking.get("contract") == PRECEDENT_RANKING_CONTRACT, contract, f"{path}.contract", "must use the current ranking contract", issues)
+        _require(ranking.get("corpus_version") == PRECEDENT_CORPUS_VERSION, contract, f"{path}.corpus_version", "must use the current generated-reference corpus", issues)
+        _require(ranking.get("rank") == index + 1, contract, f"{path}.rank", "must match the returned order", issues)
+        score = ranking.get("score_basis_points")
+        _require(type(score) is int and score >= 0, contract, f"{path}.score_basis_points", "must be a non-negative integer", issues)
+        if type(score) is int:
+            scores.append(score)
+        context_hash = ranking.get("context_hash")
+        _require(
+            isinstance(context_hash, str)
+            and len(context_hash) == 64
+            and all(char in "0123456789abcdef" for char in context_hash),
+            contract,
+            f"{path}.context_hash",
+            "must be a SHA-256 digest",
+            issues,
+        )
+        if isinstance(context_hash, str):
+            context_hashes.add(context_hash)
+        factors = ranking.get("factors")
+        _require(isinstance(factors, list), contract, f"{path}.factors", "must be a list", issues)
+        if isinstance(factors, list):
+            factor_total = 0
+            for factor_index, factor in enumerate(factors):
+                factor_path = f"{path}.factors[{factor_index}]"
+                _require(
+                    isinstance(factor, dict)
+                    and set(factor) == {"factor", "value", "weight"},
+                    contract,
+                    factor_path,
+                    "must contain an exact bounded factor",
+                    issues,
+                )
+                if isinstance(factor, dict):
+                    _require(
+                        factor.get("factor")
+                        in {
+                            "current_process_node",
+                            "unresolved_fact",
+                            "current_evidence_need",
+                            "category",
+                            "process_branch",
+                            "shared_feature",
+                        },
+                        contract,
+                        f"{factor_path}.factor",
+                        "is not an allowed ranking factor",
+                        issues,
+                    )
+                    _require(
+                        isinstance(factor.get("value"), str)
+                        and bool(factor.get("value", "").strip()),
+                        contract,
+                        f"{factor_path}.value",
+                        "must be present",
+                        issues,
+                    )
+                    _require(
+                        type(factor.get("weight")) is int
+                        and factor.get("weight", -1) >= 0,
+                        contract,
+                        f"{factor_path}.weight",
+                        "must be a non-negative integer",
+                        issues,
+                    )
+                    if type(factor.get("weight")) is int:
+                        factor_total += factor["weight"]
+            _require(score == factor_total, contract, f"{path}.score_basis_points", "must equal the retained factor total", issues)
+    _require(len(context_hashes) == 1, contract, "precedents.ranking.context_hash", "all three results must bind the same context", issues)
+    _require(scores == sorted(scores, reverse=True), contract, "precedents.ranking.score_basis_points", "must be returned in descending score order", issues)
     if issues:
         raise ContractValidationError(issues)
     return [{"name": "Precedent exclusion and provenance", "status": "passed", "detail": f"{len(claim_ids)} distinct precedents exclude the current claim and declare their authority."}]
@@ -692,6 +1019,9 @@ def validate_playbook(
     process: dict[str, Any],
     checklist: dict[str, Any],
     precedents: list[dict[str, Any]],
+    precedent_ranking: dict[str, Any],
+    precedent_memories: list[dict[str, Any]],
+    precedent_corpus: list[dict[str, Any]],
     allowed_artifact_ids: set[str],
     artifact_page_counts: dict[str, int],
     artifact_media_types: dict[str, str],
@@ -709,7 +1039,6 @@ def validate_playbook(
     legal_ids, legal_checks = validate_legal_context(legal)
     facts_by_id = {fact["fact_id"]: fact for fact in understanding["facts"]}
     fact_ids = set(facts_by_id)
-    node_ids = {node["node_id"] for node in process["nodes"]}
     item_ids = {item["item_id"] for item in checklist["items"]}
     checks.extend(legal_checks)
     checks.extend(
@@ -723,16 +1052,97 @@ def validate_playbook(
             allowed_extension_edge_pairs=allowed_process_extension_edge_pairs,
         )
     )
+    nodes_by_id = {
+        node["node_id"]: node for node in process["nodes"]
+    }
+    legal_join_issues: list[ContractIssue] = []
+    expected_node_links = deepcopy(legal.get("node_links", {}))
+    if "ventilation_dispute" in (allowed_process_extension_node_ids or set()):
+        expected_node_links["ventilation_dispute"] = [
+            "handling-causation",
+            "handling-evidence-order",
+        ]
+    for node_id, node in nodes_by_id.items():
+        _require(
+            node.get("legal_source_ids") == expected_node_links.get(node_id, []),
+            "legal_context",
+            f"process.nodes[{node_id!r}].legal_source_ids",
+            "must exactly equal the structured question registry join",
+            legal_join_issues,
+        )
+    if legal_join_issues:
+        raise ContractValidationError(legal_join_issues)
+    checks.append(
+        {
+            "name": "Structured law-to-process questions",
+            "status": "passed",
+            "detail": f"{len(legal.get('questions', []))} legal questions retain exact authority and process-node joins.",
+        }
+    )
     checks.extend(
         validate_evidence_model(
             checklist,
-            node_ids=node_ids,
+            process=process,
             facts_by_id=facts_by_id,
             legal_source_ids=legal_ids,
             allowed_artifact_ids=allowed_artifact_ids,
+            allowed_extension_node_ids=allowed_process_extension_node_ids,
         )
     )
+    try:
+        validate_fact_relations(
+            claim_id=claim_id,
+            facts=understanding["facts"],
+            process=process,
+            checklist=checklist,
+            include_memory_extension=bool(allowed_process_extension_node_ids),
+        )
+    except ValueError as exc:
+        raise ContractValidationError(
+            [
+                ContractIssue(
+                    "fact_relationships",
+                    "process/checklist/facts",
+                    str(exc),
+                )
+            ]
+        ) from exc
+    checks.append(
+        {
+            "name": "Exact fact relationships",
+            "status": "passed",
+            "detail": "Every process node, evidence item and semantic role matches the claim-specific release fact contract.",
+        }
+    )
     checks.extend(validate_precedents(precedents, current_claim_id=claim_id))
+    try:
+        validate_precedent_ranking_bundle(
+            current_claim_id=claim_id,
+            understanding=understanding,
+            process=process,
+            checklist=checklist,
+            memories=precedent_memories,
+            corpus=precedent_corpus,
+            results=precedents,
+            receipt=precedent_ranking,
+        )
+    except ValueError as exc:
+        raise ContractValidationError(
+            [
+                ContractIssue(
+                    "precedent_ranking",
+                    "bundle",
+                    "does not match the recomputed governed ranking",
+                )
+            ]
+        ) from exc
+    checks.append(
+        {
+            "name": "Precedent ranking acceptance binding",
+            "status": "passed",
+            "detail": "The exact-three results and receipt were recomputed from the governed corpus and current playbook state.",
+        }
+    )
     linked_legal_ids = {
         source_id
         for node in process["nodes"]

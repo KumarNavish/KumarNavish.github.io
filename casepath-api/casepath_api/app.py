@@ -273,12 +273,16 @@ def deployment_health():
 
 @app.get("/api/demo")
 def demo(session_id: str = Depends(require_session)):
+    try:
+        knowledge_value = pipeline.knowledge(session_id=session_id)
+    except ValueError:
+        raise HTTPException(409, "knowledge integrity boundary") from None
     return {
         **release_metadata(),
         "demo_claim_id": DEMO_CLAIM["claim_id"],
         "later_claim_id": LATER_CLAIM["claim_id"],
         "claim": public_claim(DEMO_CLAIM),
-        "knowledge": pipeline.knowledge(session_id=session_id),
+        "knowledge": knowledge_value,
     }
 
 
@@ -387,7 +391,10 @@ def review(run_id: str, req: ReviewRequest, session_id: str = Depends(require_se
 
 @app.get("/api/knowledge")
 def knowledge(session_id: str = Depends(require_session)):
-    return pipeline.knowledge(session_id=session_id)
+    try:
+        return pipeline.knowledge(session_id=session_id)
+    except ValueError:
+        raise HTTPException(409, "knowledge integrity boundary") from None
 
 
 @app.get("/api/learning-proof")

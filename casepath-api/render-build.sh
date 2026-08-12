@@ -26,8 +26,8 @@ CASEPATH_DB_PATH="$casepath_build_tmp/tests.db" \
 python -m pytest -q casepath-api/tests casepath/tools/test_*.py
 
 test -f casepath-api/artifacts/lease-agreement.pdf
-test -f casepath-api/artifacts/bedroom-mould-2026-07-27.jpg
-test -f casepath-api/artifacts/later-window-condensation-2026-08-08.jpg
+test -f casepath-api/artifacts/bedroom-corner-2026-07-27.jpg
+test -f casepath-api/artifacts/window-corner-2026-08-08.jpg
 test -f casepath-api/artifacts/IMAGE_PROVENANCE.json
 test -f casepath-api/artifacts/artifact-manifest.json
 
@@ -50,7 +50,7 @@ assert readiness["status"] == "ready"
 assert readiness["model_budget"]["network_calls"] == 0
 assert DEMO_CLAIM["claim_id"] == "DEF-027-E0-DEMO"
 assert len(CLAIMS) == 2
-assert len(ARTIFACTS) == 9
+assert len(ARTIFACTS) == 12
 
 artifact_root = Path("casepath-api/artifacts")
 manifest = json.loads((artifact_root / "artifact-manifest.json").read_text(encoding="utf-8"))

@@ -217,7 +217,9 @@
             "requires_cold_network_run",
             "requires_deterministic_gate_passes",
             "requires_guarded_fallback_disclosure",
-            "requires_source_reference_projection_disclosure"
+            "requires_source_reference_projection_disclosure",
+            "requires_grounded_causal_artifact_recomputation",
+            "requires_learning_replay_proof"
           ],
           "properties": {
             "verdict_authority": { "const": "dynamic_same_commit_qa_artifacts" },
@@ -265,7 +267,9 @@
             "requires_cold_network_run": { "const": true },
             "requires_deterministic_gate_passes": { "const": true },
             "requires_guarded_fallback_disclosure": { "const": true },
-            "requires_source_reference_projection_disclosure": { "const": true }
+            "requires_source_reference_projection_disclosure": { "const": true },
+            "requires_grounded_causal_artifact_recomputation": { "const": true },
+            "requires_learning_replay_proof": { "const": true }
           }
         },
         "historical_model_validation": {

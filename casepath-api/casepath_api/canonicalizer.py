@@ -762,6 +762,7 @@ def _merge_fact_contracts(
         canonical_value = contract.get("canonical_value")
         canonical_explanation = contract.get("canonical_explanation")
         deterministic_confidence = contract.get("deterministic_confidence")
+        semantic_role = contract.get("semantic_role")
         admissible_text_refs = contract.get("admissible_text_refs")
         deterministic_text_refs = contract.get("deterministic_text_refs")
         if (
@@ -774,6 +775,7 @@ def _merge_fact_contracts(
             or not isinstance(deterministic_confidence, (int, float))
             or isinstance(deterministic_confidence, bool)
             or not 0 <= deterministic_confidence <= 1
+            or semantic_role not in {None, "management_ventilation_allegation"}
             or not isinstance(admissible_text_refs, list)
             or any(
                 not isinstance(ref, dict)
@@ -909,6 +911,7 @@ def _merge_fact_contracts(
                 "decision_key": decision_key,
                 "normalized_value": normalized_value,
                 "decision_value": decision_value,
+                "semantic_role": semantic_role,
             }
         )
     diagnostics = {

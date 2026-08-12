@@ -15,13 +15,13 @@ SOURCES = (
     {
         "source": "casepath-api/source-assets/flagship-bedroom-corner.png",
         "source_sha256": "70645bf156c85d3d6f8117aaa94fe359f3e685c5576173bc0037dd3452dfd65e",
-        "output": "casepath-api/artifacts/bedroom-mould-2026-07-27.jpg",
+        "output": "casepath-api/artifacts/bedroom-corner-2026-07-27.jpg",
         "role": "flagship bedroom corner",
     },
     {
         "source": "casepath-api/source-assets/later-window-condensation.png",
         "source_sha256": "ab2e71da9706f8dcf54a65fae5d6dbab65f4790c708b0f05996b75e80a0fbff8",
-        "output": "casepath-api/artifacts/later-window-condensation-2026-08-08.jpg",
+        "output": "casepath-api/artifacts/window-corner-2026-08-08.jpg",
         "role": "later window condensation",
     },
 )

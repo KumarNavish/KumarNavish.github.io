@@ -141,7 +141,9 @@
       "requires_cold_network_run": true,
       "requires_deterministic_gate_passes": true,
       "requires_guarded_fallback_disclosure": true,
-      "requires_source_reference_projection_disclosure": true
+      "requires_source_reference_projection_disclosure": true,
+      "requires_grounded_causal_artifact_recomputation": true,
+      "requires_learning_replay_proof": true
     },
     "historical_model_validation": {
       "scope": "failed_closed_history_only",

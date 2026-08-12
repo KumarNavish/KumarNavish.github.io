@@ -446,6 +446,23 @@
     return width > 0 && height > 0 && x + width <= 1 && y + height <= 1 ? values : null;
   }
 
+  function validVisualAnnotation(ref) {
+    return ref?.locator_kind === 'visual_observation'
+      && ref?.producer === 'deterministic_reference_annotation'
+      && ref?.authority === 'generated_demo_reference_only'
+      && ref?.annotation_contract === 'casepath.visual-reference-annotation/1.0.0'
+      && typeof ref?.annotation_version === 'string'
+      && ref.annotation_version.startsWith('generated-demo-reference/')
+      && /^[0-9a-f]{64}$/.test(ref?.image_sha256 || '')
+      && Boolean(normalizedRegion(ref))
+      && typeof ref?.observation === 'string'
+      && Boolean(ref.observation.trim());
+  }
+
+  function visualAnnotationAttributes(ref) {
+    return `data-source-producer="${esc(ref?.producer || '')}" data-source-authority="${esc(ref?.authority || '')}" data-annotation-contract="${esc(ref?.annotation_contract || '')}" data-annotation-version="${esc(ref?.annotation_version || '')}" data-image-sha256="${esc(ref?.image_sha256 || '')}"`;
+  }
+
   function sourceLocatorMarkup(ref, className = 'source-locator') {
     const kind = ref?.locator_kind || '';
     const agent = esc(ref?.agent || 'Agent not returned');
@@ -459,7 +476,8 @@
     if (kind === 'visual_observation') {
       const region = normalizedRegion(ref);
       const regionLabel = region ? region.map(value => Number(value).toFixed(2)).join(', ') : 'region not returned';
-      return `<span class="${className} visual-observation" data-locator-kind="visual_observation" data-source-region="${esc(region ? JSON.stringify(region) : '')}" data-source-observation="${esc(ref.observation || '')}" data-source-agent="${esc(ref.agent || '')}"><span>Visual observation · region [${esc(regionLabel)}] · ${agent}</span><span class="locator-detail">${esc(ref.observation || 'Observation not returned.')} <em>This is an observation, not an exact quote.</em></span></span>`;
+      const verified = validVisualAnnotation(ref);
+      return `<span class="${className} visual-observation" data-locator-kind="visual_observation" data-source-region="${esc(region ? JSON.stringify(region) : '')}" data-source-observation="${esc(ref.observation || '')}" ${visualAnnotationAttributes(ref)}><span>${verified ? 'Curated generated-demo reference annotation' : 'Visual annotation provenance incomplete'} · region [${esc(regionLabel)}]</span><span class="locator-detail">${esc(ref.observation || 'Observation not returned.')} <em>${verified ? 'Hash-bound to these demo image bytes; not machine extraction, model output, or qualified review.' : 'No machine extraction or qualified observation is claimed.'}</em></span></span>`;
     }
     if (kind === 'metadata_field') {
       return `<span class="${className} metadata-field" data-locator-kind="metadata_field" data-source-field="${esc(ref.field || '')}" data-source-value="${esc(ref.value ?? '')}" data-source-agent="${esc(ref.agent || '')}"><span>Metadata field · ${agent}</span><span class="locator-detail"><strong>${esc(ref.field || 'Field not returned')}:</strong> <code>${esc(ref.value ?? 'Value not returned')}</code></span></span>`;
@@ -475,7 +493,7 @@
 
   function sourceRefButton(fact, ref, nodeId = '') {
     const region = normalizedRegion(ref);
-    return `<button class="grounding-ref source-link" type="button" data-source-ref="${esc(ref.artifact_id)}" data-source-locator-kind="${esc(ref.locator_kind || '')}" data-source-page="${sourcePage(ref) ?? ''}" data-source-excerpt="${esc(ref.excerpt || '')}" data-source-region="${esc(region ? JSON.stringify(region) : '')}" data-source-observation="${esc(ref.observation || '')}" data-source-field="${esc(ref.field || '')}" data-source-value="${esc(ref.value ?? '')}" data-source-agent="${esc(ref.agent || '')}" data-fact-id="${esc(fact.fact_id || '')}" data-node-id="${esc(nodeId)}" data-fact-confidence="${esc(fact.confidence ?? '')}" data-fact-state="${esc(fact.state || '')}"><strong class="grounding-source-title">${esc(sourceTitle(ref.artifact_id))}</strong>${sourceLocatorMarkup(ref, 'grounding-locator')}<small>confidence ${formatConfidence(fact.confidence)} · ${esc(fact.state || 'state not returned')}</small></button>`;
+    return `<button class="grounding-ref source-link" type="button" data-source-ref="${esc(ref.artifact_id)}" data-source-locator-kind="${esc(ref.locator_kind || '')}" data-source-page="${sourcePage(ref) ?? ''}" data-source-excerpt="${esc(ref.excerpt || '')}" data-source-region="${esc(region ? JSON.stringify(region) : '')}" data-source-observation="${esc(ref.observation || '')}" data-source-field="${esc(ref.field || '')}" data-source-value="${esc(ref.value ?? '')}" data-source-agent="${esc(ref.agent || '')}" ${visualAnnotationAttributes(ref)} data-fact-id="${esc(fact.fact_id || '')}" data-node-id="${esc(nodeId)}" data-fact-confidence="${esc(fact.confidence ?? '')}" data-fact-state="${esc(fact.state || '')}"><strong class="grounding-source-title">${esc(sourceTitle(ref.artifact_id))}</strong>${sourceLocatorMarkup(ref, 'grounding-locator')}<small>confidence ${formatConfidence(fact.confidence)} · ${esc(fact.state || 'state not returned')}</small></button>`;
   }
 
   function artifactUrl(artifactId) {
@@ -720,9 +738,26 @@
     bindSourceLinks($('#stageCanvas'));
   }
 
+  function officialLegalSourceMarkup(source) {
+    const retrieval = source?.retrieval || {};
+    return `<article class="legal-authority official" data-legal-source-id="${esc(source?.source_id || '')}" data-passage-sha256="${esc(source?.passage_sha256 || '')}" data-snapshot-sha256="${esc(retrieval.snapshot_sha256 || '')}" data-snapshot-scope="${esc(retrieval.snapshot_scope || '')}" data-registry-version="${esc(retrieval.registry_version || '')}"><small>Official registry source · qualified review pending</small><strong>${esc(source?.title || 'Official source not returned')}</strong><blockquote lang="${esc(source?.passage_language || '')}">${esc(source?.passage_text || 'Official passage not returned.')}</blockquote><p>${esc(source?.passage_summary || '')}</p><dl><dt>Version</dt><dd>${esc(source?.version_date || 'not returned')}</dd><dt>Location</dt><dd>${esc(source?.location || 'not returned')}</dd><dt>Passage SHA-256</dt><dd><code>${esc(source?.passage_sha256 || 'not returned')}</code></dd><dt>Registry record</dt><dd>${esc(retrieval.method || 'not returned')} · ${esc(retrieval.retrieved_at || 'date not returned')} · ${esc(retrieval.registry_version || 'version not returned')}</dd><dt>Snapshot scope</dt><dd>${esc(retrieval.snapshot_scope || 'not returned')}</dd><dt>Snapshot SHA-256</dt><dd><code>${esc(retrieval.snapshot_sha256 || 'not returned')}</code></dd></dl>${source?.url ? `<a href="${esc(source.url)}" target="_blank" rel="noopener">Open official source</a>` : ''}</article>`;
+  }
+
+  function handlingPrincipleMarkup(source) {
+    return `<article class="legal-authority deterministic" data-legal-source-id="${esc(source?.source_id || '')}" data-producer="${esc(source?.producer || '')}"><small>Deterministic application proposal · qualified review pending</small><strong>${esc(source?.title || 'Handling proposal not returned')}</strong><p>${esc(source?.role || '')}</p><p><b>Producer:</b> ${esc(source?.producer || 'not returned')} · <b>status:</b> ${esc(source?.validation_status || 'not returned')}</p></article>`;
+  }
+
+  function legalQuestionMarkup(question, legal, index) {
+    const officialById = new Map((legal.sources || []).map(source => [source.source_id, source]));
+    const principleById = new Map((legal.handling_principles || []).map(source => [source.source_id, source]));
+    const officials = (question.source_ids || []).map(id => officialById.get(id)).filter(Boolean);
+    const principles = (question.interpretation_ids || []).map(id => principleById.get(id)).filter(Boolean);
+    return `<article class="law-query" data-question-id="${esc(question.question_id || '')}" data-source-ids="${esc((question.source_ids || []).join(','))}" data-interpretation-ids="${esc((question.interpretation_ids || []).join(','))}" data-process-node-ids="${esc((question.process_node_ids || []).join(','))}"><span class="law-number">${index + 1}</span><div><strong>${esc(question.text || 'Legal question not returned')}</strong><p>${esc(question.consequence || 'Consequence not returned')}</p><small>${officials.length} official source${officials.length === 1 ? '' : 's'} · ${principles.length} deterministic proposal${principles.length === 1 ? '' : 's'} · process ${esc((question.process_node_ids || []).join(' → '))}</small><details><summary>Inspect joined passage and provenance</summary><div class="legal-authority-list">${officials.map(officialLegalSourceMarkup).join('')}${principles.map(handlingPrincipleMarkup).join('')}</div></details></div></article>`;
+  }
+
   function renderLawStage(stage, event) {
     const legal = state.run?.result?.legal_research || state.run?.legal_research || {};
-    renderCanvas(`<div class="stage-shell">${stageHeader(stage, 'Swiss law has become handling questions.', 'CasePath keeps a legal source only when it creates or constrains a decision in the process.')}<div class="law-flow">${(legal.questions || []).map((question, index) => `<div class="law-query"><span class="law-number">${index + 1}</span><div><strong>${esc(question)}</strong><p>${esc((legal.handling_principles || [])[index]?.role || (legal.sources || [])[index]?.role || 'This question will shape the process graph.')}</p></div><span class="law-source-count">${index < (legal.sources || []).length ? 'Official source' : 'Model interpretation · unapproved handling proposal'}</span></div>`).join('')}</div></div>`, 'research');
+    renderCanvas(`<div class="stage-shell">${stageHeader(stage, 'Swiss-law questions are joined to versioned official passages.', 'Each question names its official-source IDs, deterministic handling-proposal IDs, process decisions, consequence, and pending qualified-review status.')}<div class="law-flow" data-legal-contract="${esc(legal.contract || '')}" data-registry-version="${esc(legal.registry_version || '')}">${(legal.questions || []).map((question, index) => legalQuestionMarkup(question, legal, index)).join('')}</div></div>`, 'research');
   }
 
   function processData() {
@@ -763,15 +798,30 @@
   }
 
   function precedentProvenance(precedent) {
-    if (precedent?.review_status === 'expert_reviewed_memory' && precedent?.memory_id) return 'Qualified-review case memory returned by the server';
+    if (['qualified_expert_reviewed', 'expert_reviewed_memory'].includes(precedent?.review_status) && precedent?.memory_id) return 'Qualified expert-reviewed case memory returned by the server';
     if (precedent?.review_status === 'unverified_demo_memory' && precedent?.memory_id) return 'Unverified generated-demo review memory returned by the server';
+    if (precedent?.review_status === 'generated_reference') return 'Generated reference pattern · not qualified review';
     const review = precedent?.review_status ? ` · ${precedent.review_status.replaceAll('_', ' ')}` : '';
-    return `Generated reference precedent${review}`;
+    return `Reference pattern${review}`;
+  }
+
+  function precedentRankingSummary(precedent) {
+    const ranking = precedent?.ranking || {};
+    const factors = (ranking.factors || []).map(factor => `${factor.factor}: ${factor.value} (+${factor.weight})`);
+    return `<span class="precedent-rank" data-ranking-contract="${esc(ranking.contract || '')}" data-corpus-version="${esc(ranking.corpus_version || '')}" data-rank="${esc(ranking.rank ?? '')}" data-score-basis-points="${esc(ranking.score_basis_points ?? '')}" data-context-hash="${esc(ranking.context_hash || '')}"><strong>Rank ${esc(ranking.rank ?? 'not returned')} · ${esc(ranking.score_basis_points ?? 'not returned')} points</strong><small>${esc(factors.join(' · ') || 'Ranking factors not returned')}</small><code>${esc(ranking.context_hash || 'Context hash not returned')}</code></span>`;
+  }
+
+  function precedentRankingReceipt(run) {
+    const receipt = run?.result?.precedent_ranking || run?.precedent_ranking;
+    if (!receipt) return '';
+    const context = receipt.context || {};
+    const candidates = (receipt.candidate_scores || []).map(item => `${item.claim_id}: ${item.score_basis_points}`).join(' · ');
+    return `<aside class="precedent-ranking-receipt" data-ranking-contract="${esc(receipt.contract || '')}" data-corpus-version="${esc(receipt.corpus_version || '')}" data-context-hash="${esc(receipt.context_hash || '')}" data-result-hash="${esc(receipt.result_hash || '')}" data-selected-claim-ids="${esc((receipt.selected_claim_ids || []).join(','))}"><small>Inspectable generated-pattern ranking receipt</small><strong>${esc((receipt.selected_claim_ids || []).join(' → ') || 'Selected IDs not returned')}</strong><p>Current decision ${esc(context.current_process_node_id || 'not returned')} · next ${esc(context.next_action_node_id || 'not returned')} · unresolved ${esc((context.unresolved_fact_ids || []).join(', ') || 'none')}</p><small>${esc(candidates || 'Candidate scores not returned')}</small><code>context ${esc(receipt.context_hash || 'not returned')}</code><code>result ${esc(receipt.result_hash || 'not returned')}</code></aside>`;
   }
 
   function legalProvenance(source) {
-    if (source?.url) return { kind: 'official', label: 'Official source' };
-    return { kind: 'interpretation', label: 'Model interpretation · unapproved handling proposal' };
+    if (source?.source_type === 'official_statute' || source?.source_type === 'official_guidance') return { kind: 'official', label: 'Official registry source · passage retained' };
+    return { kind: 'interpretation', label: 'Deterministic application proposal · qualified review pending' };
   }
 
   function nodeState(nodeId) {
@@ -784,7 +834,61 @@
   }
 
   function evidenceForNode(nodeId) {
-    return (checklistData()?.items || []).filter(item => item.node_id === nodeId);
+    return (checklistData()?.items || []).filter(item => evidenceOwnerIds(item).includes(nodeId));
+  }
+
+  function evidenceOwnerIds(item) {
+    const returned = Array.isArray(item?.node_ids) ? item.node_ids.filter(value => typeof value === 'string' && value) : [];
+    return returned.length ? [...new Set(returned)] : item?.node_id ? [item.node_id] : [];
+  }
+
+  function evidenceOwnershipMarkup(item, inspectedNodeId) {
+    const owners = evidenceOwnerIds(item);
+    const primary = owners[0] || item?.node_id || '';
+    const secondary = owners.filter(nodeId => nodeId !== primary);
+    const labels = owners.map(nodeId => nodeById(nodeId)?.title || nodeId.replaceAll('_', ' '));
+    const inspectedIndex = owners.indexOf(inspectedNodeId);
+    return `<span class="evidence-ownership" data-primary-node-id="${esc(primary)}" data-node-ids="${esc(owners.join(','))}" data-current-path="${esc(String(item?.current_path === true))}" data-inspected-owner-index="${esc(inspectedIndex)}"><strong>Primary decision: ${esc(labels[0] || 'not returned')}</strong>${secondary.length ? `<small>Also required by ${esc(labels.slice(1).join(' · '))}</small>` : '<small>Single process owner</small>'}<small>Ordered owner IDs: ${esc(owners.join(' → ') || 'not returned')} · current path ${esc(String(item?.current_path === true))}</small></span>`;
+  }
+
+  function memoryApplicationReceipt(result = currentRun()?.result || currentRun()) {
+    const receipt = result?.memory_application;
+    return receipt?.contract === 'casepath.memory-application-receipt/1.0.0'
+      && receipt.authority === 'unverified_demo'
+      && receipt.scope === 'case_specific_guidance_only'
+      && receipt.eligibility?.contract === 'casepath.semantic-memory-eligibility/1.0.0'
+      && receipt.eligibility?.rule_id === 'same_grounded_mould_signature_v2'
+      && /^[a-f0-9]{64}$/.test(receipt.eligibility?.semantic_signature_hash || '')
+      && receipt.model_acceptance_reused === false
+      && receipt.shared_rule_applied === false
+      && receipt.applied === true
+      ? receipt
+      : null;
+  }
+
+  function reviewedMemoryState(result = currentRun()?.result || currentRun()) {
+    const receipt = memoryApplicationReceipt(result);
+    const retrievedPrecedent = (result?.precedents || []).find(item => item.review_status === 'unverified_demo_memory' && item.memory_id);
+    const retrieved = Boolean(retrievedPrecedent)
+      && result?.reviewed_memory_retrieved === true
+      && result?.knowledge?.reviewed_memory_retrieved === true;
+    const usedFlags = result?.memory_used === true
+      && result?.reviewed_memory_used === true
+      && result?.knowledge?.reviewed_memory_used === true
+      && result?.process?.memory_used === true
+      && result?.checklist?.memory_used === true;
+    const unusedFlags = result?.memory_used === false
+      && result?.reviewed_memory_used === false
+      && result?.knowledge?.reviewed_memory_used === false
+      && result?.process?.memory_used === false
+      && result?.checklist?.memory_used === false;
+    const used = retrieved && usedFlags && Boolean(receipt);
+    const retrievedOnly = retrieved
+      && unusedFlags
+      && result?.memory_application == null
+      && result?.process?.case_specific_guidance_applied !== true
+      && result?.checklist?.case_specific_guidance_applied !== true;
+    return { receipt, retrievedPrecedent, retrieved, used, retrievedOnly };
   }
 
   function factsForNode(node) {
@@ -796,7 +900,8 @@
   function legalForNode(node) {
     const legal = legalData() || {};
     const all = [...(legal.sources || []), ...(legal.handling_principles || [])];
-    const ids = new Set(node?.legal_source_ids || []);
+    const joined = (legal.questions || []).filter(question => (question.process_node_ids || []).includes(node?.node_id)).flatMap(question => [...(question.source_ids || []), ...(question.interpretation_ids || [])]);
+    const ids = new Set([...(node?.legal_source_ids || []), ...(legal.node_links?.[node?.node_id] || []), ...joined]);
     return all.filter(source => ids.has(source.source_id));
   }
 
@@ -849,7 +954,7 @@
     const reviewTransform = currentRun()?.result?.review_transform
       || currentRun()?.review_transform
       || currentRun()?.result?.audit?.review_transform;
-    if (reviewTransform?.acceptance_scope === 'post_review_unverified_transform') return '';
+    if (reviewTransform?.acceptance_scope === 'post_review_unverified_transform' || memoryApplicationReceipt()) return '';
     const expectedAttribution = unit === 'fact'
       ? PROCESS_CONTRIBUTION_ROLE
       : unit === 'final'
@@ -870,8 +975,8 @@
 
   function renderProcessStage(stage, event, options) {
     state.stageMode = options.precedents ? 'experience' : options.evidence ? 'evidence' : 'process';
-    const title = options.precedents ? 'Previous cases are helping with the difficult decision.' : options.evidence ? 'Evidence now follows directly from the process.' : 'The complete handling process is taking shape.';
-    const intro = options.precedents ? 'CasePath searched reference precedents with the same branch, unresolved fact, and evidence need. Each result carries its provenance and review state.' : options.evidence ? 'Each process node now carries the facts and evidence it needs. The checklist is only an aggregate of these links.' : 'The main handling spine is visible first. The current claim is overlaid inside it, and alternative branches stay folded until they matter.';
+    const title = options.precedents ? 'Generated reference patterns are helping with the difficult decision.' : options.evidence ? 'Evidence now follows directly from the process.' : 'The complete handling process is taking shape.';
+    const intro = options.precedents ? 'CasePath ranked generated reference patterns against the same branch, unresolved fact, and evidence need. Each result carries its provenance, factors, context hash, and review state.' : options.evidence ? 'Each process node now carries the facts and evidence it needs. The checklist is only an aggregate of these links.' : 'The main handling spine is visible first. The current claim is overlaid inside it, and alternative branches stay folded until they matter.';
     renderCanvas(`<div class="stage-shell">${stageHeader(stage, title, intro)}${renderProcessWorkspace(options)}</div>`, state.stageMode);
     bindProcessInteractions();
   }
@@ -917,9 +1022,9 @@
     const previous = run?.result?.precedents || run?.precedents || [];
     return `<aside class="decision-inspector" data-inspector-node="${esc(node.node_id)}" tabindex="-1"><div class="inspector-label"><span>${esc(node.kind === 'outcome' ? 'Outcome' : node.kind === 'action' ? 'Action' : 'Process decision')} · ${esc(node.node_id)}</span><span>${esc(nodeState(node.node_id) === 'current' ? 'Current claim' : '')}</span></div><h3>${esc(node.question)}</h3><p>${esc(node.why || node.answer || '')}</p>
       ${facts.length ? `<section class="inspector-section"><h4>What this decision knows</h4>${facts.map(fact => `<article class="inspector-fact ${fact.state === 'unknown' || fact.state === 'conflicting' ? 'conditional' : ''}" data-fact-id="${esc(fact.fact_id)}" data-node-id="${esc(node.node_id)}"><header><strong>${esc(fact.label)}:</strong> ${esc(fact.value)}</header><p>${esc(fact.explanation)}</p><small>${esc(fact.fact_id)} · ${esc(fact.state || 'unclassified')} · confidence ${formatConfidence(fact.confidence)}</small>${(fact.source_refs || []).length ? `<div class="fact-source-list">${fact.source_refs.map(ref => sourceRefButton(fact, ref, node.node_id)).join('')}</div>` : '<p class="grounding-warning">No source reference returned.</p>'}</article>`).join('')}</section>` : ''}
-      ${evidence ? `<section class="inspector-section"><h4>What this decision requires</h4>${items.length ? items.map(item => `<article class="inspector-row ${item.status === 'missing' ? 'missing' : item.status === 'conditional' || item.status === 'provided_insufficient' ? 'conditional' : ''}" data-item-id="${esc(item.item_id)}" data-node-id="${esc(item.node_id)}" data-fact-id="${esc(item.fact_id)}"><i></i><span><strong>${esc(item.title)} — ${esc(statusLabel(item.status))}</strong><br>${esc(item.why)}<br><small>${esc(item.item_id)} · fact ${esc(item.fact_id)}</small>${renderContributionAttribution(item.agent_contribution, 'item', item.item_id)}${item.applies_when && item.status === 'conditional' ? `<br><em>Only if: ${esc(item.applies_when)}</em>` : ''}${(item.artifact_ids || []).map(artifactId => ` <button class="source-link evidence-artifact-link" type="button" data-source-ref="${esc(artifactId)}" data-fact-id="${esc(item.fact_id)}" data-node-id="${esc(item.node_id)}">Open ${esc(sourceTitle(artifactId))}</button>`).join('')}</span></article>`).join('') : '<div class="inspector-row"><i></i><span>No separate evidence requirement is linked to this decision.</span></div>'}</section>` : ''}
-      ${laws.length ? `<section class="inspector-section"><h4>Why this step exists</h4>${laws.map(source => { const provenance = legalProvenance(source); return `<button class="law-marker ${provenance.kind}" type="button" data-law-id="${esc(source.source_id)}"><small>${esc(provenance.label)}</small>§ ${esc(source.title)}</button><div class="law-detail" data-law-detail="${esc(source.source_id)}" hidden><p>${esc(source.role)}</p><p><strong>Review state:</strong> ${esc(source.validation_status || legalData()?.review_status || (source.url ? 'Official source; handling interpretation remains reviewable' : 'Unapproved handling proposal'))}</p>${source.url ? `<a href="${esc(source.url)}" target="_blank" rel="noopener">Open official source</a>` : ''}</div>`; }).join('')}</section>` : ''}
-      ${precedents && previous.length ? `<section class="precedent-inline"><header><h4>Previous cases that help</h4><span>${previous.length} returned</span></header>${previous.map((item, index) => `<button class="precedent-mini" type="button" data-precedent-index="${index}"><small>${esc(precedentProvenance(item))}</small><strong>${esc(item.claim_id)} · ${esc(item.title)}</strong><p>${esc(item.why_useful)}</p></button>`).join('')}</section>` : ''}
+      ${evidence ? `<section class="inspector-section"><h4>What this decision requires</h4>${items.length ? items.map(item => { const owners = evidenceOwnerIds(item); return `<article class="inspector-row ${item.status === 'missing' ? 'missing' : item.status === 'conditional' || item.status === 'provided_insufficient' ? 'conditional' : ''}" data-item-id="${esc(item.item_id)}" data-node-id="${esc(item.node_id)}" data-node-ids="${esc(owners.join(','))}" data-current-path="${esc(String(item.current_path === true))}" data-fact-id="${esc(item.fact_id)}"><i></i><span><strong>${esc(item.title)} — ${esc(statusLabel(item.status))}</strong><br>${esc(item.why)}<br><small>${esc(item.item_id)} · fact ${esc(item.fact_id)}</small>${evidenceOwnershipMarkup(item, node.node_id)}${renderContributionAttribution(item.agent_contribution, 'item', item.item_id)}${item.applies_when && item.status === 'conditional' ? `<br><em>Only if: ${esc(item.applies_when)}</em>` : ''}${(item.artifact_ids || []).map(artifactId => ` <button class="source-link evidence-artifact-link" type="button" data-source-ref="${esc(artifactId)}" data-fact-id="${esc(item.fact_id)}" data-node-id="${esc(node.node_id)}">Open ${esc(sourceTitle(artifactId))}</button>`).join('')}</span></article>`; }).join('') : '<div class="inspector-row"><i></i><span>No separate evidence requirement is linked to this decision.</span></div>'}</section>` : ''}
+      ${laws.length ? `<section class="inspector-section"><h4>Why this step exists</h4>${laws.map(source => { const provenance = legalProvenance(source); return `<button class="law-marker ${provenance.kind}" type="button" data-law-id="${esc(source.source_id)}"><small>${esc(provenance.label)}</small>§ ${esc(source.title)}</button><div class="law-detail" data-law-detail="${esc(source.source_id)}" hidden>${source.url ? officialLegalSourceMarkup(source) : handlingPrincipleMarkup(source)}</div>`; }).join('')}</section>` : ''}
+      ${precedents && previous.length ? `<section class="precedent-inline"><header><h4>Generated reference patterns that help</h4><span>${previous.length} returned</span></header>${precedentRankingReceipt(run)}${previous.map((item, index) => `<button class="precedent-mini" type="button" data-precedent-index="${index}"><small>${esc(precedentProvenance(item))}</small><strong>${esc(item.claim_id)} · ${esc(item.title)}</strong><p>${esc(item.why_useful)}</p>${precedentRankingSummary(item)}</button>`).join('')}</section>` : ''}
     </aside>`;
   }
 
@@ -1020,7 +1125,7 @@
     const routeCopy = current && next
       ? `${current.title} is the current decision; ${next.title} is the next action, with the evidence for that handoff attached directly to the graph.`
       : 'The full process, current decision, next action, and supporting evidence remain visible together.';
-    renderCanvas(`<div class="stage-shell"><div class="process-synthesis"><section class="synthesis-primary"><span class="quiet-label">Handling playbook ready</span><h3>CasePath has reconstructed how this claim should be handled.</h3><p>${esc(routeCopy)}</p>${renderFinalHandoff(result)}${renderProcessWorkspace({ evidence: true, precedents: true })}</section><section><span class="quiet-label">What was constructed</span><div class="artifact-summary"><div class="artifact-row"><span class="artifact-icon">P</span><div><strong>Handling process</strong><p>From claim intake through responsibility, remedy, escalation, and closure.</p></div><span>Ready</span></div><div class="artifact-row"><span class="artifact-icon">E</span><div><strong>Evidence across the process</strong><p>Every requirement retains the decision, fact, reason, and current status.</p></div><span>Ready</span></div><div class="artifact-row"><span class="artifact-icon">H</span><div><strong>Previous cases that help</strong><p>Returned references retain generated, qualified-review, or unverified-demo provenance.</p></div><span>Ready</span></div></div><span class="quiet-label" style="margin-top:22px">Acceptance checks</span><div class="verification-list">${accepted.slice(0, 5).map(check => `<div class="verification-row"><span>✓</span><div>${esc(typeof check === 'string' ? check : check.label || check.name || JSON.stringify(check))}</div></div>`).join('')}</div></section></div></div>`, 'ready');
+    renderCanvas(`<div class="stage-shell"><div class="process-synthesis"><section class="synthesis-primary"><span class="quiet-label">Handling playbook ready</span><h3>CasePath has reconstructed how this claim should be handled.</h3><p>${esc(routeCopy)}</p>${renderFinalHandoff(result)}${renderProcessWorkspace({ evidence: true, precedents: true })}</section><section><span class="quiet-label">What was constructed</span><div class="artifact-summary"><div class="artifact-row"><span class="artifact-icon">P</span><div><strong>Handling process</strong><p>From claim intake through responsibility, remedy, escalation, and closure.</p></div><span>Ready</span></div><div class="artifact-row"><span class="artifact-icon">E</span><div><strong>Evidence across the process</strong><p>Every requirement retains the decision, fact, reason, and current status.</p></div><span>Ready</span></div><div class="artifact-row"><span class="artifact-icon">H</span><div><strong>Generated reference patterns that help</strong><p>Returned records retain generated, qualified-review, or unverified-demo provenance.</p></div><span>Ready</span></div></div><span class="quiet-label" style="margin-top:22px">Acceptance checks</span><div class="verification-list">${accepted.slice(0, 5).map(check => `<div class="verification-row"><span>✓</span><div>${esc(typeof check === 'string' ? check : check.label || check.name || JSON.stringify(check))}</div></div>`).join('')}</div></section></div></div>`, 'ready');
     bindProcessInteractions();
     showJourneyActions({ back: false, next: 'Review the proposed playbook' });
   }
@@ -1094,7 +1199,7 @@
   }
 
   function renderReviewedChecklist(items) {
-    return `<details class="reviewed-checklist" open><summary>Server-returned demo-corrected checklist · ${items.length} items</summary><div>${items.map(item => `<article data-item-id="${esc(item.item_id)}" data-node-id="${esc(item.node_id)}" data-fact-id="${esc(item.fact_id)}"><header><strong>${esc(item.title)}</strong><span>${esc(statusLabel(item.status))}</span></header><p>${esc(item.why)}</p><small>${esc(item.item_id)} · decision ${esc(item.node_id)} · fact ${esc(item.fact_id)}</small></article>`).join('')}</div></details>`;
+    return `<details class="reviewed-checklist" open><summary>Server-returned demo-corrected checklist · ${items.length} items</summary><div>${items.map(item => { const owners = evidenceOwnerIds(item); return `<article data-item-id="${esc(item.item_id)}" data-node-id="${esc(item.node_id)}" data-node-ids="${esc(owners.join(','))}" data-current-path="${esc(String(item.current_path === true))}" data-fact-id="${esc(item.fact_id)}"><header><strong>${esc(item.title)}</strong><span>${esc(statusLabel(item.status))}</span></header><p>${esc(item.why)}</p><small>${esc(item.item_id)} · ordered decisions ${esc(owners.join(' → ') || 'not returned')} · current path ${esc(String(item.current_path === true))} · fact ${esc(item.fact_id)}</small></article>`; }).join('')}</div></details>`;
   }
 
   function showReviewApplied() {
@@ -1117,7 +1222,6 @@
     button.querySelector('span').textContent = 'Capturing a comparison and saving review…';
     try {
       state.reviewBefore = snapshot(state.run?.result);
-      await ensureBaselineLaterRun();
       state.review = await api(`/api/runs/${encodeURIComponent(state.runId)}/review`, {
         method: 'POST',
         body: JSON.stringify({
@@ -1156,13 +1260,15 @@
     const knowledge = state.review?.knowledge || {};
     const memoryAvailable = state.review?.accepted === true && knowledge.reviewed_memory_available === true && Boolean(state.review?.memory_id);
     const supportReturned = Number.isFinite(Number(candidate?.support_count)) && Number.isFinite(Number(candidate?.required_support));
-    const support = supportReturned ? `${Number(candidate.support_count)} of ${Number(candidate.required_support)} support records` : 'Support count not returned';
+    const support = supportReturned ? `${Number(candidate.support_count)} of ${Number(candidate.required_support)} unverified demo support records` : 'Unverified support count not returned';
+    const qualifiedSupportReturned = Number.isFinite(Number(candidate?.qualified_support_count)) && Number.isFinite(Number(candidate?.required_qualified_support));
+    const qualifiedSupport = qualifiedSupportReturned ? `${Number(candidate.qualified_support_count)} of ${Number(candidate.required_qualified_support)} qualified support records` : 'Qualified support count not returned';
     const sharedChanged = candidate?.shared_knowledge_changed === true && knowledge.shared_playbook_version && candidate?.status === 'released';
     const sharedVersion = knowledge.shared_playbook_version || candidate?.base_version || 'Version not returned';
     const targetStatus = candidate?.target_tests?.status || 'not returned';
     const regressionStatus = candidate?.protected_regression?.status || 'not returned';
     const approvalStatus = candidate?.approval?.status || 'not returned';
-    $('#knowledgeResult').innerHTML = `<section class="v20-learning-summary" data-learning-status="${esc(candidate?.status || 'not-returned')}"><span>What CasePath learned</span><h2>${memoryAvailable ? 'One unverified demo memory is available; the shared playbook is unchanged.' : 'No reusable demo-review memory was confirmed.'}</h2><article class="v20-learning-row" data-outcome="reviewed-memory"><span>${memoryAvailable ? '✓' : '!'}</span><div><small>Unverified demo review memory</small><strong>${memoryAvailable ? 'Saved and available as an explicitly unverified precedent.' : 'Not confirmed by the review response.'}</strong><p>${memoryAvailable ? `Memory ${esc(state.review.memory_id)} preserves the source package, returned graph, checklist, correction, and unverified reviewer status.` : 'CasePath will not claim memory reuse without a server-returned memory identifier.'}</p></div></article><article class="v20-learning-row quarantined" data-outcome="candidate"><span>Q</span><div><small>Reusable-rule candidate · ${esc(candidate?.status || 'status not returned')}</small><strong>${esc(support)}; required support has not been met.</strong><p>Target tests: ${esc(targetStatus)} · protected regression: ${esc(regressionStatus)} · approval: ${esc(approvalStatus)}. Proposed version ${esc(candidate?.proposed_version || 'not returned')} is quarantined.</p></div></article><article class="v20-learning-row unchanged" data-outcome="shared-playbook"><span>${sharedChanged ? 'changed' : '—'}</span><div><small>Shared playbook ${sharedChanged ? 'changed' : 'unchanged'}</small><strong>${esc(sharedVersion)} remains the active shared version.</strong><p>${sharedChanged ? 'The server explicitly returned a released shared change.' : 'The simulated correction is not a shared rule. No release, target-test pass, or regression pass is implied.'}</p></div></article></section>`;
+    $('#knowledgeResult').innerHTML = `<section class="v20-learning-summary" data-learning-status="${esc(candidate?.status || 'not-returned')}"><span>What CasePath learned</span><h2>${memoryAvailable ? 'One unverified demo memory is available for ranking; application eligibility remains separate.' : 'No unverified demo-review memory was confirmed.'}</h2><article class="v20-learning-row" data-outcome="reviewed-memory"><span>${memoryAvailable ? '✓' : '!'}</span><div><small>Unverified demo review memory</small><strong>${memoryAvailable ? 'Saved and available as an explicitly unverified precedent.' : 'Not confirmed by the review response.'}</strong><p>${memoryAvailable ? `Memory ${esc(state.review.memory_id)} preserves the source package, returned graph, checklist, correction, and unverified reviewer status. Saving it does not mean later guidance was used or applied.` : 'CasePath will not claim stored or retrievable memory without a server-returned memory identifier.'}</p></div></article><article class="v20-learning-row quarantined" data-outcome="candidate"><span>Q</span><div><small>Reusable-rule candidate · ${esc(candidate?.status || 'status not returned')}</small><strong>${esc(support)} · ${esc(qualifiedSupport)}.</strong><p>Deterministic target tests: ${esc(targetStatus)} · protected regression: ${esc(regressionStatus)} · qualified approval: ${esc(approvalStatus)}. Passing deterministic checks does not supply the missing qualified support or approval; proposed version ${esc(candidate?.proposed_version || 'not returned')} remains quarantined.</p></div></article><article class="v20-learning-row unchanged" data-outcome="shared-playbook"><span>${sharedChanged ? 'changed' : '—'}</span><div><small>Shared playbook ${sharedChanged ? 'changed' : 'unchanged'}</small><strong>${esc(sharedVersion)} remains the active shared version.</strong><p>${sharedChanged ? 'The server explicitly returned a released shared change.' : 'The simulated correction is case-specific unverified guidance. Even with deterministic target and protected checks passed, no qualified approval or shared-rule release occurred.'}</p></div></article></section>`;
     document.body.dataset.casepathLearningReady = 'true';
     announceRender('knowledge');
     setOrchestrator(memoryAvailable ? 'Unverified demo memory saved; shared-rule candidate quarantined' : 'No demo-review memory was confirmed', true);
@@ -1172,18 +1278,20 @@
   async function startLaterClaim() {
     state.journey = 'later';
     hideJourneyActions();
-    setOrchestrator('Opening an unseen related claim with unverified demo memory available', false);
+    setOrchestrator('Opening the held-out later demo claim with unverified demo memory available', false);
     try {
       state.laterClaim = await api(`/api/claims/${encodeURIComponent(state.demo.later_claim_id)}`);
       state.claim = state.laterClaim;
       renderClaim(state.claim);
+      setOrchestrator('Freezing a no-memory counterfactual for the held-out claim after learning', false);
+      await ensureBaselineLaterRun();
       const created = await api('/api/runs', { method: 'POST', body: JSON.stringify({ claim_id: state.demo.later_claim_id, knowledge_mode: 'current' }) });
       state.laterRun = { run_id: created.run_id, events: [], status: 'queued' };
       document.body.dataset.casepathActiveRunId = created.run_id;
       state.laterRunComplete = false;
       state.eventQueue = [];
       state.queuedEventIds.clear();
-      renderCanvas(`<div class="stage-shell later-run"><div class="later-source-banner"><div><span class="quiet-label">Unseen related claim</span><h3>${esc(state.laterClaim.subject)}</h3><p>CasePath may retrieve the explicitly unverified demo case as precedent. The quarantined candidate must not change the shared ${esc(state.review?.knowledge?.shared_playbook_version || 'playbook')}.</p></div><span class="new-knowledge">Unverified demo memory available</span></div><div class="later-agent-stream" id="laterAgentStream"></div><div id="laterResult"></div></div>`, 'later-work');
+      renderCanvas(`<div class="stage-shell later-run"><div class="later-source-banner"><div><span class="quiet-label">Held-out later demo claim</span><h3>${esc(state.laterClaim.subject)}</h3><p>This claim was excluded from the simulated review and memory construction. After learning was frozen, CasePath computed one no-memory counterfactual and now evaluates the same observable package with the explicitly unverified demo memory available. Semantic eligibility does not depend on target claim, fact, or artifact IDs; the quarantined candidate must not change the shared ${esc(state.review?.knowledge?.shared_playbook_version || 'playbook')}.</p></div><span class="new-knowledge">Unverified demo memory available</span></div><div class="later-agent-stream" id="laterAgentStream"></div><div id="laterResult"></div></div>`, 'later-work');
       renderProgress();
       pollRun(created.run_id, true);
     } catch (error) {
@@ -1215,9 +1323,18 @@
       const laterId = state.laterRun?.run_id;
       if (!baselineId || !laterId) throw new Error('Both completed comparison run identifiers are required.');
       state.proof = await api(`/api/learning-proof?baseline_run_id=${encodeURIComponent(baselineId)}&later_run_id=${encodeURIComponent(laterId)}`);
-      renderLaterResult();
-      const memoryUsed = state.laterRun?.result?.reviewed_memory_used === true && state.proof?.reviewed_memory_proof?.used === true;
-      setOrchestrator(memoryUsed ? 'The unseen claim retrieved unverified demo memory; shared playbook stayed unchanged' : 'Demo-memory use was not confirmed for the unseen claim', true);
+      window.__casepathLearningProof = state.proof;
+      const renderedState = renderLaterResult();
+      setOrchestrator(
+        renderedState.memoryUsed
+          ? 'The held-out later demo claim applied case-specific unverified guidance under a valid receipt; shared playbook stayed unchanged'
+          : renderedState.retrievedOnly
+            ? 'The held-out later demo claim retrieved and ranked dormant unverified memory; no guidance was applied'
+            : renderedState.memoryRetrieved
+              ? 'Unverified demo memory was retrieved, but any application claim failed closed'
+              : 'No demo memory retrieval or application was confirmed for the held-out later demo claim',
+        true,
+      );
       renderProgress();
       showJourneyActions({ back: false, next: 'Restart the demo' });
     } catch (error) {
@@ -1232,21 +1349,56 @@
     const before = proof.before || {};
     const after = proof.after || {};
     const changes = proof.changes || {};
-    const memoryUsed = result.reviewed_memory_used === true && proof.reviewed_memory_proof?.used === true;
+    const returnedMemoryState = reviewedMemoryState(result);
+    const receipt = returnedMemoryState.receipt;
+    const receiptProof = proof.memory_application_proof || {};
+    const deterministicChecks = proof.deterministic_checks || [];
+    const expectedCheckNames = ['Same observable input', 'Same canonical state', 'Exact current memory receipt', 'Pure memory replay matches learned DTOs', 'Receipt before semantic hashes match baseline DTOs', 'Receipt after hashes match learned DTOs', 'Nonzero causal DTO delta', 'Only allowed causal operations changed', 'Deterministic target and protected checks passed', 'Shared v3 remains unchanged'];
+    const proofReady = proof.ready === true
+      && proof.computed === true
+      && returnedMemoryState.used
+      && receipt
+      && ['receipt_present', 'receipt_valid', 'source_memory_current', 'before_hashes_match', 'after_hashes_match', 'allowed_delta_exact', 'replay_exact'].every(key => receiptProof[key] === true)
+      && receiptProof.application_hash === receipt.application_hash
+      && JSON.stringify(deterministicChecks.map(check => check.name)) === JSON.stringify(expectedCheckNames)
+      && deterministicChecks.every(check => check.status === 'passed');
+    const memoryRetrieved = returnedMemoryState.retrieved;
+    const retrievedOnly = returnedMemoryState.retrievedOnly;
+    const memoryUsed = returnedMemoryState.used && proof.reviewed_memory_proof?.used === true && Boolean(proofReady);
     const sharedApplied = result.shared_rule_applied === true && proof.shared_rule?.applied === true;
     const beforePrecedents = (before.precedents || []).map(item => item.claim_id);
     const addedPrecedents = changes.precedent_claim_ids_added || [];
-    const addedNodes = changes.process_node_ids_added || [];
-    const evidenceChanges = ['required_now_added', 'required_now_removed', 'conditional_added', 'conditional_removed'].flatMap(key => changes[key] || []);
+    const causalDelta = proof.causal_delta || {};
+    const processDelta = causalDelta.process || {};
+    const evidenceDelta = causalDelta.evidence || {};
+    const addedNodes = processDelta.added_node_ids || changes.process_node_ids_added || [];
+    const addedEdges = processDelta.added_edges || [];
+    const evidenceChanges = evidenceDelta.changed_item_ids || [];
     const currentNodeId = process.current_overlay?.current_node_id || process.current_node || (process.nodes || []).find(node => node.state === 'current')?.node_id || '';
     if (currentNodeId) state.selectedNodeId = currentNodeId;
     state.stageMode = 'experience';
     const processMarkup = (process.nodes || []).length
       ? `<section class="later-process-result" data-run-id="${esc(state.laterRun.run_id || '')}" data-current-node-id="${esc(currentNodeId)}"><header><small>Returned claim state</small><h3>${esc(result.category || 'Category not returned')}</h3><p>${esc(result.scope || 'Scope not returned')}</p></header>${renderProcessWorkspace({ evidence: true, precedents: true })}</section>`
       : '<section class="later-process-result"><p>Process artifact was not returned for this claim.</p></section>';
-    $('#laterResult').innerHTML = `<header class="v20-later-heading" data-memory-used="${memoryUsed}"><small>${memoryUsed ? 'Unverified demo memory used' : 'Demo-memory use not confirmed'}</small><h2>${memoryUsed ? 'The next claim retrieved an unverified demo precedent.' : 'The next claim stayed on the returned shared process.'}</h2><p>${memoryUsed ? 'The run and computed proof both returned the unverified demo memory. This is precedent retrieval, not qualified review or a released shared-rule change.' : 'CasePath does not claim demo-memory reuse because both the run and computed proof did not confirm it.'}</p></header>${processMarkup}<div class="final-proof"><span class="quiet-label">Computed comparison</span><strong>Baseline ${esc(before.result_hash || 'hash not returned')} → after ${esc(after.result_hash || 'hash not returned')}</strong><p>Both sides are completed later-claim runs. Shared rule applied: ${esc(String(sharedApplied))}.</p></div><div class="before-after"><section><h4>Before demo memory</h4><h3>${esc(before.playbook_version || 'Version not returned')}</h3><ul><li>Run ${esc(before.run_id || 'not returned')}</li><li>Precedents: ${esc(beforePrecedents.join(', ') || 'none returned')}</li><li>Process nodes: ${esc(String((before.process_node_ids || []).length))}</li></ul></section><section><h4>After unverified demo memory</h4><h3>${esc(after.playbook_version || 'Version not returned')}</h3><ul><li class="${memoryUsed ? 'reused' : ''}">Run ${esc(after.run_id || 'not returned')}</li><li class="${memoryUsed ? 'reused' : ''}">Precedents added: ${esc(addedPrecedents.join(', ') || 'none')}</li><li>Process nodes added: ${esc(addedNodes.join(', ') || 'none')}</li><li>Evidence status changes: ${esc(String(evidenceChanges.length))}</li></ul></section></div><section class="reuse-boundary"><strong>Shared playbook unchanged</strong><p>${esc(proof.shared_rule?.version_after || result.playbook?.version || 'Version not returned')} remains active; candidate status ${esc(proof.shared_rule?.candidate_status || proof.candidate?.status || 'not returned')}.</p></section>`;
+    const boundaryHashes = side => ['process_dto_hash', 'checklist_dto_hash', 'process_semantic_hash', 'checklist_semantic_hash'].map(key => `<div data-hash-key="${esc(key)}"><small>${esc(key.replaceAll('_', ' '))}</small><code>${esc(side?.[key] || 'not returned')}</code></div>`).join('');
+    const operationRows = receipt ? [...(receipt.process_operations || []), ...(receipt.evidence_operations || [])].map(operation => `<li data-operation-id="${esc(operation.operation_id || '')}"><strong>${esc(operation.operation_id || 'operation not returned')}</strong><span>${esc(operation.operation || '')}${operation.node_id ? ` · node ${esc(operation.node_id)}` : ''}${operation.source ? ` · ${esc(operation.source)} → ${esc(operation.target)}` : ''}${operation.item_id ? ` · item ${esc(operation.item_id)}` : ''}</span></li>`).join('') : '';
+    const semanticFact = (result.facts || []).find(fact => fact.semantic_role === 'management_ventilation_allegation');
+    const eligibility = receipt?.eligibility || {};
+    const receiptMarkup = receipt && memoryUsed ? `<section class="memory-application-receipt" data-memory-contract="${esc(receipt.contract)}" data-memory-authority="${esc(receipt.authority)}" data-memory-scope="${esc(receipt.scope)}" data-application-hash="${esc(receipt.application_hash || '')}" data-model-acceptance-reused="${esc(String(receipt.model_acceptance_reused))}" data-shared-rule-applied="${esc(String(receipt.shared_rule_applied))}" data-memory-application-state="receipt-returned"><header><small>Hash-bound memory application receipt</small><h3>Case-specific unverified guidance only</h3><p>Applied ${esc(String(receipt.applied))} · model acceptance reused ${esc(String(receipt.model_acceptance_reused))} · shared rule applied ${esc(String(receipt.shared_rule_applied))}</p></header><section class="memory-semantic-eligibility" data-eligibility-contract="${esc(eligibility.contract || '')}" data-eligibility-rule-id="${esc(eligibility.rule_id || '')}" data-semantic-signature-hash="${esc(eligibility.semantic_signature_hash || '')}" data-semantic-role="${esc(semanticFact?.semantic_role || '')}"><small>Semantic eligibility — not claim or artifact identity matching</small><strong>${esc(eligibility.contract || 'contract not returned')} · ${esc(eligibility.rule_id || 'rule not returned')}</strong><p>Required fact role <code>${esc(semanticFact?.semantic_role || 'not returned')}</code> is bound to canonical fact <code>${esc(semanticFact?.fact_id || 'not returned')}</code>.</p><code>semantic signature ${esc(eligibility.semantic_signature_hash || 'not returned')}</code><code> · semantic facts ${esc(eligibility.facts_hash || 'not returned')}</code></section><div class="memory-hash-boundary"><section><h4>Before</h4>${boundaryHashes(receipt.before)}</section><section><h4>After</h4>${boundaryHashes(receipt.after)}</section></div><details open><summary>Exact allowed operations</summary><ol class="memory-operation-list">${operationRows}</ol></details><code class="memory-application-hash">application ${esc(receipt.application_hash || 'not returned')}</code></section>` : retrievedOnly ? `<section class="memory-application-receipt retrieved-only" data-memory-application-state="retrieved-not-applied"><header><small>Dormant unverified memory retrieval</small><h3>Retrieved and ranked — not used or applied</h3><p>Generated reference ranking returned memory ${esc(returnedMemoryState.retrievedPrecedent?.memory_id || 'identifier not returned')}, but its guidance is disabled for this review outcome. No application receipt exists and no process or checklist transform is claimed.</p></header></section>` : '<section class="memory-application-receipt incomplete" data-memory-application-state="not-proven"><h3>Current memory application receipt not valid</h3><p>No case-specific transform is claimed.</p></section>';
+    const causalMarkup = `<section class="causal-delta" data-causal-nonzero="${esc(String(causalDelta.nonzero === true))}"><header><small>Computed causal delta</small><h3>${causalDelta.nonzero === true ? 'The exact later process and checklist change is visible.' : 'No nonzero causal delta was returned.'}</h3></header><div><article data-delta-kind="nodes"><small>Added process node</small><strong>${esc(addedNodes.join(', ') || 'none')}</strong></article><article data-delta-kind="edges"><small>Added connections</small><strong>${esc(addedEdges.map(edge => `${edge.source} → ${edge.target}`).join(' · ') || 'none')}</strong></article><article data-delta-kind="evidence"><small>Changed evidence items</small><strong>${esc(evidenceChanges.join(', ') || 'none')}</strong></article></div></section>`;
+    const checksMarkup = `<section class="memory-deterministic-checks"><header><small>All deterministic checks</small><strong>${deterministicChecks.filter(check => check.status === 'passed').length} of ${deterministicChecks.length} passed</strong></header><div class="verification-list">${deterministicChecks.map(check => `<div class="verification-row ${check.status === 'passed' ? '' : 'rejected'}" data-memory-check="${esc(check.name || '')}" data-check-status="${esc(check.status || '')}"><span>${check.status === 'passed' ? '✓' : '×'}</span><div><strong>${esc(check.name || 'Unnamed check')}</strong><small>${esc(check.detail || '')}</small></div></div>`).join('')}</div></section>`;
+    const headerState = memoryUsed
+      ? { small: 'Case-specific unverified guidance applied', title: 'The held-out later demo claim visibly changed under a hash-bound unverified memory receipt.', detail: 'The same observable input and canonical state produced a bounded causal DTO delta: one ventilation-dispute node, two edges, and three changed evidence items. This is not qualified review, model acceptance reuse, or a released shared rule.' }
+      : retrievedOnly
+        ? { small: 'Dormant unverified memory retrieved and ranked — not applied', title: 'The held-out later demo claim retained the unchanged process.', detail: 'The required-now review memory appeared only as an explicitly unverified generated reference pattern. Guidance was disabled, no application receipt exists, and no process or checklist change is claimed.' }
+        : memoryRetrieved
+          ? { small: 'Memory retrieved; application failed closed', title: 'No memory-driven process change is claimed.', detail: 'A returned unverified memory precedent was visible, but the exact usage flags, receipt, and computed proof did not all agree.' }
+          : { small: 'No demo memory retrieved or applied', title: 'The held-out later demo claim stayed on the returned shared process.', detail: 'CasePath found no receipt-bound case-specific transform and claims no memory use.' };
+    const afterLabel = memoryUsed ? 'After unverified demo-memory application' : retrievedOnly ? 'After dormant memory retrieval (not applied)' : 'Current held-out later demo run';
+    $('#laterResult').innerHTML = `<header class="v20-later-heading" data-memory-retrieved="${memoryRetrieved}" data-memory-used="${memoryUsed}" data-memory-retrieved-only="${retrievedOnly}" data-causal-proof-ready="${Boolean(proofReady)}"><small>${headerState.small}</small><h2>${headerState.title}</h2><p>${headerState.detail}</p></header>${receiptMarkup}${causalMarkup}${processMarkup}<div class="final-proof"><span class="quiet-label">Computed comparison</span><strong>Baseline ${esc(before.result_hash || 'hash not returned')} → after ${esc(after.result_hash || 'hash not returned')}</strong><p>Both sides are completed later-claim runs. Shared rule applied: ${esc(String(sharedApplied))}.</p></div><div class="before-after"><section><h4>Baseline without governed memory application</h4><h3>${esc(before.playbook_version || 'Version not returned')}</h3><ul><li>Run ${esc(before.run_id || 'not returned')}</li><li>Precedents: ${esc(beforePrecedents.join(', ') || 'none returned')}</li><li>Process nodes: ${esc(String((before.process_node_ids || []).length))}</li></ul></section><section><h4>${afterLabel}</h4><h3>${esc(after.playbook_version || 'Version not returned')}</h3><ul><li class="${memoryUsed ? 'reused' : ''}">Run ${esc(after.run_id || 'not returned')}</li><li class="${memoryRetrieved ? 'reused' : ''}">Precedents added: ${esc(addedPrecedents.join(', ') || 'none')}</li><li>Process nodes added: ${esc(addedNodes.join(', ') || 'none')}</li><li>Evidence items changed: ${esc(evidenceChanges.join(', ') || 'none')}</li></ul></section></div>${checksMarkup}<section class="reuse-boundary"><strong>Shared playbook v3 unchanged</strong><p>${esc(proof.shared_rule?.version_after || result.playbook?.version || 'Version not returned')} remains active; candidate status ${esc(proof.shared_rule?.candidate_status || proof.candidate?.status || 'not returned')}. Retrieval or passing deterministic checks does not mean application, qualified approval, or shared v4 release.</p></section>`;
     bindProcessInteractions();
     announceRender('later-result');
+    return { proofReady: Boolean(proofReady), memoryRetrieved, memoryUsed, retrievedOnly };
   }
 
   function restartDemo() {
@@ -1280,6 +1432,11 @@
           field: button.dataset.sourceField || '',
           value: button.dataset.sourceValue || '',
           agent: button.dataset.sourceAgent || '',
+          producer: button.dataset.sourceProducer || '',
+          authority: button.dataset.sourceAuthority || '',
+          annotation_contract: button.dataset.annotationContract || '',
+          annotation_version: button.dataset.annotationVersion || '',
+          image_sha256: button.dataset.imageSha256 || '',
           confidence: button.dataset.factConfidence || '',
           state: button.dataset.factState || '',
         });
@@ -1398,7 +1555,8 @@
   function renderImageSource(artifact, zoom) {
     const context = state.viewer.context || {};
     const region = context.locator_kind === 'visual_observation' ? normalizedRegion(context) : null;
-    const highlight = region ? `<span class="visual-region-highlight" role="img" aria-label="Visual observation region: ${esc(context.observation || 'observation not returned')}" data-highlight-region="${esc(JSON.stringify(region))}" style="left:${region[0] * 100}%;top:${region[1] * 100}%;width:${region[2] * 100}%;height:${region[3] * 100}%"><span>Observation region</span></span>` : '';
+    const curated = region && validVisualAnnotation(context) && context.image_sha256 === artifact.sha256;
+    const highlight = region ? `<span class="visual-region-highlight" role="img" aria-label="${curated ? 'Curated generated-demo reference annotation' : 'Unverified visual annotation'} region: ${esc(context.observation || 'observation not returned')}" data-highlight-region="${esc(JSON.stringify(region))}" ${visualAnnotationAttributes(context)} data-artifact-sha256="${esc(artifact.sha256 || '')}" style="left:${region[0] * 100}%;top:${region[1] * 100}%;width:${region[2] * 100}%;height:${region[3] * 100}%"><span>${curated ? 'Curated demo annotation' : 'Unverified annotation'}</span></span>` : '';
     return `<figure class="source-image-frame" style="transform:scale(${zoom})"><img id="sourceImage" src="${artifactUrl(artifact.artifact_id)}" alt="${esc(artifact.title)}">${highlight}</figure>`;
   }
 
@@ -1473,7 +1631,7 @@
       } else if (extraction.email) {
         $('#sourceStage').innerHTML = `<div class="extraction-pages"><div class="extraction-page" data-extraction-page="1"><h3>Structured email fields</h3><pre>${highlightedText(JSON.stringify(extraction.email, null, 2), state.viewer.query)}</pre></div></div>`;
       } else {
-        $('#sourceStage').innerHTML = `<div class="extraction-pages"><div class="extraction-page"><h3>Machine-visible image record</h3><pre>${esc(extraction.image_note || 'Original pixels and metadata preserved.')}</pre></div></div>`;
+        $('#sourceStage').innerHTML = `<div class="extraction-pages"><div class="extraction-page"><h3>Curated generated-demo image reference</h3><pre>${esc(extraction.image_note || 'Original pixels and metadata preserved; no machine extraction is claimed.')}</pre></div></div>`;
       }
     } catch (error) {
       $('#sourceStage').innerHTML = `<p>${esc(error.message)}</p>`;
@@ -1565,11 +1723,12 @@
   }
 
   function openPrecedent(index) {
-    const precedent = (state.run?.precedents || state.run?.result?.precedents || [])[index];
+    const run = currentRun();
+    const precedent = (run?.precedents || run?.result?.precedents || [])[index];
     if (!precedent) return;
     $('#precedentViewerKind').textContent = precedentProvenance(precedent);
     $('#precedentTitle').textContent = `${precedent.claim_id} · ${precedent.title}`;
-    $('#precedentContent').innerHTML = `<p class="precedent-provenance">${esc(precedentProvenance(precedent))}</p><p class="precedent-summary">${esc(precedent.why_useful)}</p><div class="precedent-grid"><section><h3>Relevant branch</h3><p>${esc((precedent.final_process || []).join(' → '))}</p></section><section><h3>Evidence that mattered</h3><ul>${(precedent.evidence || []).map(item => `<li>${esc(typeof item === 'string' ? item : item.title || JSON.stringify(item))}</li>`).join('')}</ul></section><section><h3>Returned review state</h3><p>${esc(precedent.review_status || 'Not returned')}</p></section><section><h3>Outcome</h3><p>${esc(precedent.outcome || 'Outcome not returned')}</p></section></div>`;
+    $('#precedentContent').innerHTML = `<p class="precedent-provenance">${esc(precedentProvenance(precedent))}</p><p class="precedent-summary">${esc(precedent.why_useful)}</p>${precedentRankingSummary(precedent)}${precedentRankingReceipt(run)}<div class="precedent-grid"><section><h3>Relevant branch</h3><p>${esc((precedent.final_process || []).join(' → '))}</p></section><section><h3>Evidence that mattered</h3><ul>${(precedent.evidence || []).map(item => `<li>${esc(typeof item === 'string' ? item : item.title || JSON.stringify(item))}</li>`).join('')}</ul></section><section><h3>Returned review state</h3><p>${esc(precedent.review_status || 'Not returned')}</p></section><section><h3>Outcome</h3><p>${esc(precedent.outcome || 'Outcome not returned')}</p></section></div>`;
     $('#precedentViewer').showModal();
   }
 

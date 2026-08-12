@@ -34,7 +34,7 @@
     experience: {
       label: 'Find experience',
       agent: 'Historical Retrieval Tool',
-      job: 'Finding provenance-labelled reference precedents at the difficult branch.',
+      job: 'Ranking provenance-labelled generated reference patterns at the difficult branch.',
     },
     verify: {
       label: 'Verify plan',
@@ -71,6 +71,44 @@
     conditional: 'Conditional',
     not_applicable: 'Not needed on this path',
   })[status] || String(status || '').replaceAll('_', ' ');
+
+  const evidenceOwnerIds = item => {
+    const returned = Array.isArray(item?.node_ids) ? item.node_ids.filter(value => typeof value === 'string' && value) : [];
+    return returned.length ? [...new Set(returned)] : item?.node_id ? [item.node_id] : [];
+  };
+
+  const validMemoryReceipt = receipt => receipt?.contract === 'casepath.memory-application-receipt/1.0.0'
+    && receipt.authority === 'unverified_demo'
+    && receipt.scope === 'case_specific_guidance_only'
+    && receipt.eligibility?.contract === 'casepath.semantic-memory-eligibility/1.0.0'
+    && receipt.model_acceptance_reused === false
+    && receipt.shared_rule_applied === false
+    && receipt.applied === true;
+
+  const reviewedMemoryState = result => {
+    const receipt = validMemoryReceipt(result?.memory_application) ? result.memory_application : null;
+    const precedent = (result?.precedents || []).find(item => item.review_status === 'unverified_demo_memory' && item.memory_id);
+    const retrieved = Boolean(precedent)
+      && result?.reviewed_memory_retrieved === true
+      && result?.knowledge?.reviewed_memory_retrieved === true;
+    const used = retrieved
+      && Boolean(receipt)
+      && result?.memory_used === true
+      && result?.reviewed_memory_used === true
+      && result?.knowledge?.reviewed_memory_used === true
+      && result?.process?.memory_used === true
+      && result?.checklist?.memory_used === true;
+    const retrievedOnly = retrieved
+      && result?.memory_application == null
+      && result?.memory_used === false
+      && result?.reviewed_memory_used === false
+      && result?.knowledge?.reviewed_memory_used === false
+      && result?.process?.memory_used === false
+      && result?.checklist?.memory_used === false
+      && result?.process?.case_specific_guidance_applied !== true
+      && result?.checklist?.case_specific_guidance_applied !== true;
+    return { receipt, precedent, retrieved, used, retrievedOnly };
+  };
 
   let scheduled = false;
   let lastProcessMarkup = '';
@@ -152,7 +190,7 @@
     const text = canvas.textContent || '';
     if (/Handling playbook ready|reconstructed how this claim should be handled/i.test(text)) return 'ready';
     if (/Review the decision that controls|Simulated demo review/i.test(text)) return 'review';
-    if (/Previous cases are helping|organizational memory/i.test(text)) return 'experience';
+    if (/Generated reference patterns are helping|Previous cases are helping|organizational memory/i.test(text)) return 'experience';
     if (/Evidence now follows|attaching evidence|What this decision requires/i.test(text)) return 'evidence';
     if (/acceptance checks|passed its acceptance|verifying/i.test(text)) return 'verify';
     if (/complete handling process is taking shape|building the handling process/i.test(text)) return 'process';
@@ -171,7 +209,7 @@
       detail = 'Attaching each fact and evidence requirement to the decision it can resolve.';
     } else if (/asking organizational memory|organizational experience/i.test(text)) {
       label = 'Historical Retrieval Tool';
-      detail = 'Searching provenance-labelled reference precedents at the unresolved causation branch.';
+      detail = 'Ranking provenance-labelled generated reference patterns at the unresolved causation branch.';
     } else if (/verif|checking the complete playbook/i.test(text)) {
       label = 'Whole-Playbook Verification Gate';
       detail = 'Checking the graph and every process-to-evidence relationship before review.';
@@ -193,11 +231,20 @@
     if (!legal) return;
 
     const nodeLinks = legal.node_links || {};
+    const joinedQuestionNodes = new Map();
+    for (const question of legal.questions || []) {
+      for (const sourceId of [...(question.source_ids || []), ...(question.interpretation_ids || [])]) {
+        const retained = joinedQuestionNodes.get(sourceId) || [];
+        for (const nodeId of question.process_node_ids || []) if (!retained.includes(nodeId)) retained.push(nodeId);
+        joinedQuestionNodes.set(sourceId, retained);
+      }
+    }
     const sources = [...(legal.sources || []), ...(legal.handling_principles || [])];
     const linked = sources.map(source => {
-      const targets = Object.entries(nodeLinks)
+      const direct = Object.entries(nodeLinks)
         .filter(([, sourceIds]) => (sourceIds || []).includes(source.source_id))
         .map(([nodeId]) => nodeId);
+      const targets = unique([...direct, ...(joinedQuestionNodes.get(source.source_id) || [])]);
       return { source, targets };
     }).filter(item => item.targets.length).slice(0, 4);
     if (!linked.length) return;
@@ -211,10 +258,10 @@
       ${linked.map(({ source, targets }) => `
         <article class="v17-law-link">
           <div class="v17-law-source">
-            <small>${esc(source.url ? 'Official source' : 'Model interpretation · unapproved handling proposal')}</small>
+            <small>${esc(source.url ? 'Official versioned registry passage · qualified review pending' : 'Deterministic application proposal · qualified review pending')}</small>
             <strong>${esc(source.title)}</strong>
-            <p>${esc(source.role || '')}</p>
-            <p><b>Review state:</b> ${esc(source.validation_status || legal.review_status || (source.url ? 'Official source; handling interpretation remains reviewable' : 'Unapproved'))}</p>
+            ${source.url ? `<blockquote lang="${esc(source.passage_language || '')}" data-passage-sha256="${esc(source.passage_sha256 || '')}">${esc(source.passage_text || 'Official passage not returned')}</blockquote><p>${esc(source.passage_summary || '')}</p><p><b>Version/location:</b> ${esc(source.version_date || 'not returned')} · ${esc(source.location || 'not returned')}</p><p><b>Registry provenance:</b> ${esc(source.retrieval?.method || 'not returned')} · ${esc(source.retrieval?.retrieved_at || '')} · ${esc(source.retrieval?.registry_version || '')} · snapshot scope ${esc(source.retrieval?.snapshot_scope || 'not returned')} · snapshot <code>${esc(source.retrieval?.snapshot_sha256 || 'not returned')}</code></p>` : `<p>${esc(source.role || '')}</p><p><b>Producer:</b> ${esc(source.producer || 'not returned')}</p>`}
+            <p><b>Review state:</b> ${esc(source.review_status || source.validation_status || legal.review_status || 'qualified review pending')}</p>
             ${source.url ? `<a href="${esc(source.url)}" target="_blank" rel="noopener">Open official source</a>` : ''}
           </div>
           <span class="v17-law-arrow" aria-hidden="true"></span>
@@ -276,7 +323,7 @@
 
     const nodeId = inspector.dataset.inspectorNode || process.current_node;
     const node = (process.nodes || []).find(item => item.node_id === nodeId);
-    const items = (checklist.items || []).filter(item => item.node_id === nodeId);
+    const items = (checklist.items || []).filter(item => evidenceOwnerIds(item).includes(nodeId));
     if (!node || !items.length) return;
 
     const factIds = unique([...items.map(item => item.fact_id), ...(node.fact_ids || [])]);
@@ -311,7 +358,7 @@
     const count = (run?.precedents || run?.result?.precedents || []).length;
     if (!count || !document.contains(precedents)) return;
     precedents.insertAdjacentHTML('afterbegin', `
-      <div class="v17-experience-note"><span aria-hidden="true"></span><div><small>Reference retrieval</small><strong>${count} reference precedents were returned here. Each card states its generated, qualified-review, or unverified-demo provenance.</strong></div></div>`);
+      <div class="v17-experience-note"><span aria-hidden="true"></span><div><small>Reference retrieval</small><strong>${count} generated reference patterns or explicitly governed memory records were returned here. Each card states its provenance.</strong></div></div>`);
   }
 
   function groupItems(items) {
@@ -323,8 +370,8 @@
     ];
   }
 
-  function checklistContribution(item, reviewTransform) {
-    if (reviewTransform?.acceptance_scope === 'post_review_unverified_transform') return '';
+  function checklistContribution(item, transform) {
+    if (transform?.acceptance_scope === 'post_review_unverified_transform' || validMemoryReceipt(transform)) return '';
     const itemId = item?.item_id;
     if (typeof itemId !== 'string' || !itemId) return '';
     const contribution = item?.agent_contribution;
@@ -357,10 +404,12 @@
     return `<span class="model-contribution-attribution ${authority}" data-contribution-authority="${authority}" data-accepted-count="${accepted.length}" data-fallback-count="${fallback.length}" data-accepted-contribution-ids="${esc(accepted.map(value => value.contribution_id).join(','))}" data-fallback-contribution-ids="${esc(fallback.map(value => value.contribution_id).join(','))}"><i aria-hidden="true"></i><span><strong>${esc([acceptedLabel, fallbackLabel].filter(Boolean).join(' · '))}</strong>${accepted.length ? '<small>Evidence and Checklist Agent</small>' : ''}</span></span>`;
   }
 
-  function checklistItem(item, nodeMap, reviewTransform) {
-    const node = nodeMap.get(item.node_id);
-    const relation = node ? `Required for: ${node.title}` : item.node_id ? `Linked to: ${item.node_id.replaceAll('_', ' ')}` : '';
-    return `<div class="v17-checklist-item" data-item-id="${esc(item.item_id || '')}" data-node-id="${esc(item.node_id || '')}" data-fact-id="${esc(item.fact_id || '')}"><i aria-hidden="true"></i><div><strong>${esc(item.title)} — ${esc(statusName(item.status))}</strong><p>${esc(relation)}${item.why ? ` · ${esc(item.why)}` : ''}</p><small>${esc(item.item_id || '')} · decision ${esc(item.node_id || '')} · fact ${esc(item.fact_id || '')}</small>${checklistContribution(item, reviewTransform)}</div></div>`;
+  function checklistItem(item, nodeMap, transform) {
+    const owners = evidenceOwnerIds(item);
+    const labels = owners.map(nodeId => nodeMap.get(nodeId)?.title || nodeId.replaceAll('_', ' '));
+    const relation = labels.length ? `Primary decision: ${labels[0]}` : '';
+    const secondary = labels.slice(1);
+    return `<div class="v17-checklist-item" data-item-id="${esc(item.item_id || '')}" data-node-id="${esc(item.node_id || '')}" data-node-ids="${esc(owners.join(','))}" data-current-path="${esc(String(item.current_path === true))}" data-fact-id="${esc(item.fact_id || '')}"><i aria-hidden="true"></i><div><strong>${esc(item.title)} — ${esc(statusName(item.status))}</strong><p>${esc(relation)}${secondary.length ? ` · Also required by ${esc(secondary.join(' · '))}` : ''}${item.why ? ` · ${esc(item.why)}` : ''}</p><small>${esc(item.item_id || '')} · ordered decisions ${esc(owners.join(' → ') || 'not returned')} · current path ${esc(String(item.current_path === true))} · fact ${esc(item.fact_id || '')}</small>${checklistContribution(item, transform)}</div></div>`;
   }
 
   async function enhanceReady(canvas) {
@@ -371,7 +420,7 @@
     const process = result.process || run.process;
     const checklist = result.checklist || run.checklist;
     const verification = result.verification || run.verification || {};
-    const reviewTransform = result.review_transform || run.review_transform || result.audit?.review_transform;
+    const reviewTransform = result.memory_application || result.review_transform || run.review_transform || result.audit?.review_transform;
     if (!process || !checklist) return;
 
     const synthesis = canvas.querySelector('.process-synthesis');
@@ -463,22 +512,43 @@
   async function enhanceReuse(canvas) {
     const resultBlock = canvas.querySelector('#laterResult .before-after');
     if (!resultBlock || canvas.querySelector('.v17-reuse-thread')) return;
-    if (canvas.querySelector('.v20-later-heading')?.dataset.memoryUsed !== 'true') return;
+    const heading = canvas.querySelector('.v20-later-heading');
+    if (!heading || heading.dataset.memoryRetrieved !== 'true') return;
     const run = await currentRun({ fresh: true });
     if (!run || !document.contains(resultBlock)) return;
     const result = run.result || {};
-    if (result.reviewed_memory_used !== true) return;
-    const precedent = result.precedents?.find(item => ['expert_reviewed_memory', 'unverified_demo_memory'].includes(item.review_status) && item.memory_id);
-    if (!precedent) return;
+    const memory = reviewedMemoryState(result);
+    if ((!memory.used && !memory.retrievedOnly)
+      || heading.dataset.memoryUsed !== String(memory.used)
+      || heading.dataset.memoryRetrievedOnly !== String(memory.retrievedOnly)) return;
+    const { receipt, precedent } = memory;
     const playbook = result.playbook?.version;
+    const proof = window.__casepathLearningProof || null;
     const thread = document.createElement('section');
-    thread.className = 'v17-reuse-thread';
-    thread.setAttribute('aria-label', 'How returned review memory was used on the unseen claim');
-    thread.innerHTML = `
-      <article><small>${esc(precedent.review_status === 'unverified_demo_memory' ? 'Unverified demo review memory returned' : 'Qualified review memory returned')}</small><strong>${esc(precedent.claim_id)} · ${esc(precedent.memory_id)}</strong></article>
-      <article><small>Shared playbook</small><strong>${esc(playbook || 'Version not returned')}</strong></article>
-      <article><small>Shared rule applied</small><strong>${esc(String(result.shared_rule_applied === true))}</strong></article>
-      <article><small>Knowledge mode</small><strong>${esc(result.knowledge?.mode || 'Not returned')}</strong></article>`;
+    thread.className = `v17-reuse-thread${memory.retrievedOnly ? ' retrieved-only' : ''}`;
+    thread.dataset.memoryRetrieved = 'true';
+    thread.dataset.memoryUsed = String(memory.used);
+    thread.dataset.applicationReceipt = String(Boolean(receipt));
+    thread.setAttribute('aria-label', 'How returned review memory was ranked or applied on the held-out later demo claim');
+    if (memory.used) {
+      thread.dataset.memoryContract = receipt.contract;
+      thread.dataset.applicationHash = receipt.application_hash || '';
+      thread.dataset.memoryAuthority = receipt.authority;
+      thread.dataset.memoryScope = receipt.scope;
+      thread.innerHTML = `
+        <article><small>Unverified demo review memory returned and applied</small><strong>${esc(precedent.claim_id)} · ${esc(precedent.memory_id)}</strong></article>
+        <article><small>Receipt authority and scope</small><strong>${esc(receipt.authority)} · ${esc(receipt.scope)}</strong></article>
+        <article><small>Application hash</small><strong><code>${esc(receipt.application_hash || 'not returned')}</code></strong></article>
+        <article><small>Shared playbook</small><strong>${esc(playbook || 'Version not returned')} unchanged · shared rule ${esc(String(receipt.shared_rule_applied === true))}</strong></article>
+        <article><small>Acceptance boundary</small><strong>Model acceptance reused ${esc(String(receipt.model_acceptance_reused === true))}${proof?.causal_delta?.nonzero === true ? ' · nonzero causal delta computed' : ''}</strong></article>`;
+    } else {
+      thread.innerHTML = `
+        <article><small>Dormant unverified demo memory retrieved and ranked</small><strong>${esc(precedent.claim_id)} · ${esc(precedent.memory_id)}</strong></article>
+        <article><small>Guidance state</small><strong>Disabled for this required-now review outcome</strong></article>
+        <article><small>Application receipt</small><strong>None returned</strong></article>
+        <article><small>Process effect</small><strong>Not used or applied · no memory-driven DTO change</strong></article>
+        <article><small>Shared playbook</small><strong>${esc(playbook || 'Version not returned')} unchanged</strong></article>`;
+    }
     resultBlock.parentNode.insertBefore(thread, resultBlock);
   }
 

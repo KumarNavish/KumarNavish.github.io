@@ -298,6 +298,47 @@ The QA output directory itself is the atomic evidence unit:
   accepted IDs, count, delegation, source agent, and source call must bind the
   contributing agent exactly.
 
+The retained flagship result is also revalidated as a causal grounding bundle,
+not accepted from self-reported hashes. Release acceptance compares every
+canonical fact to the exact fact schema (including the single stable
+`management_ventilation_allegation` semantic role), resolves text and metadata
+locators against the source-commit observable package, and binds a visual
+annotation to the exact photograph SHA-256 plus the generated-reference
+producer and authority. The legal DTO must exactly equal the versioned registry:
+official passage hashes, structured questions, process joins, and retrieval
+scope are all acceptance-bound. In particular, the Fedlex snapshot hash denotes
+the official PDF bytes while the BWO snapshot hash denotes the normalized
+official passage UTF-8 bytes. Process evidence requirements and checklist
+`node_ids`, primary `node_id`, and `current_path` are recomputed in both
+directions. Claim-specific ordered node-to-fact lists, evidence item-to-fact and
+item-to-artifact joins, allowed evidence-status variants, and the semantic-role
+fact binding are exact release-owned contracts. The exact-three precedent result
+and its receipt are independently reranked from the governed corpus and final
+playbook state.
+
+Learning is a separate retained proof obligation. A passing evidence manifest
+must include the unverified demo review, persisted post-review run, later-claim
+baseline run, later-claim post-memory run, and `learning-proof.json`. The release
+verifier binds the memory source to the review/consolidation receipt, recomputes
+semantic eligibility, strips run-specific model attribution, and purely replays
+the five governed operations from the baseline semantic DTO. It requires an
+exact match with the later process and checklist, recomputes the application
+hash and causal delta, and requires all ten ordered deterministic proof checks,
+including `replay_exact`. This remains case-specific unverified demo memory;
+shared playbook v3, qualified support, and approval remain unchanged.
+
+Reusable case guidance is derived from the separately retained review response,
+not from a mutable memory label: the reviewer remains an unverified demo user,
+the response and persisted reviewed result carry the exact same conditional
+review record, and a `required_now` review cannot grant the conditional replay
+operations. The later run must also retain an independent
+`casepath.memory-application-boundary/1.0.0` record binding its target, memory ID
+and content hash, and all four exact pre-transform DTO hashes. Its boundary hash
+is recomputed, its `before` object must exactly equal the result receipt, and one
+separately persisted completed memory-application event must project the exact
+same receipt. Rehashing the mutable result and boundary cannot replace that
+event-row authority.
+
 `casepath_release.py verify-runtime-evidence` evaluates that pair without
 editing `release.json`, regenerating a source manifest, or changing the tested
 commit. It rejects duplicate identities, cache-only evidence, incomplete

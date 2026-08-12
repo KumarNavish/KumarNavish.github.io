@@ -82,8 +82,22 @@ styles.add(
 
 
 def reset_output() -> None:
+    retained_runtime_photos = {
+        "bedroom-corner-2026-07-27.jpg",
+        "window-corner-2026-08-08.jpg",
+    }
     if ROOT.exists():
         for child in ROOT.iterdir():
+            # The two checked-in photographs are independently curated source
+            # evidence. Document regeneration must never delete them; the
+            # build's photographic-evidence step separately verifies and
+            # reproduces their exact runtime bytes from hash-pinned sources.
+            if (
+                child.is_file()
+                and child.suffix.lower() in {".jpg", ".jpeg"}
+                and child.name in retained_runtime_photos
+            ):
+                continue
             if child.is_dir():
                 shutil.rmtree(child)
             else:
@@ -326,16 +340,16 @@ def lease() -> None:
             ]
         )
     )
-    story.extend([PageBreak(), Paragraph("11. Signatures", styles["H1x"]), signature])
+    story.extend([PageBreak(), Paragraph("11. Signature fields", styles["H1x"]), signature])
     make_pdf(
         ROOT / "lease-agreement.pdf",
         title="Residential Lease Agreement",
-        subtitle="Signed 18 January 2024",
+        subtitle="Agreement dated 18 January 2024 · handover bundle completed 30 January 2024",
         story=story,
         reference="Lease reference RB-2024-0118",
         author="Rheinblick Immobilien AG",
         subject="Residential tenancy agreement",
-        pdf_date="D:20240118103000+01'00'",
+        pdf_date="D:20240130173000+01'00'",
     )
 
 
@@ -345,7 +359,7 @@ def timeline() -> None:
         ["12 Mar 2026", "First small dark spots observed in bedroom corner.", "Tenant note"],
         ["20 Mar 2026", "Later message recalls the first observation as 20 March.", "Claim email"],
         ["02 Apr 2026", "Area cleaned; spots returned within approximately two weeks.", "Tenant note"],
-        ["15 Jul 2026", "Written notice sent to property management with one photograph.", "Email attachment"],
+        ["15 Jul 2026", "Written notice sent; no attachment recorded.", "Email + receipt"],
         ["18 Jul 2026", "Management replies that ventilation is the likely cause.", "Management email"],
         ["27 Jul 2026", "Mould visible again after cleaning.", "Photo"],
         ["01 Aug 2026", "Claim submitted to legal-protection insurer.", "Claim intake"],
@@ -397,9 +411,9 @@ def delivery_receipt() -> None:
                 ["Message reference", "20260715-083200-AM"],
                 ["Sent", "15 July 2026, 08:32 CEST"],
                 ["Recipient", "Rheinblick Immobilien AG service desk"],
-                ["Subject", "Recurring mould in bedroom - Feldbergstrasse 114"],
+                ["Subject", "Bedroom condition - Feldbergstrasse 114"],
                 ["Delivery status", "Accepted by recipient mail server"],
-                ["Attachment", "bedroom-corner-2026-07-15.jpg"],
+                ["Attachment", "None recorded"],
             ],
             [42 * mm, 112 * mm],
         ),
@@ -423,7 +437,7 @@ def delivery_receipt() -> None:
 
 def window_notice() -> None:
     story: list = [
-        Paragraph("Window replacement notice", styles["H1x"]),
+        Paragraph("Window replacement completion record", styles["H1x"]),
         Paragraph(
             "The bedroom and living-room windows at Klybeckstrasse 77 were replaced between 18 and 22 May 2026. The work included insulated glazing and new perimeter seals.",
             styles["Bodyx"],
@@ -436,13 +450,69 @@ def window_notice() -> None:
     ]
     make_pdf(
         ROOT / "window-replacement-notice.pdf",
-        title="Window Replacement Notice",
-        subtitle="Works scheduled for 18-22 May 2026",
+        title="Window Replacement Completion Record",
+        subtitle="Works completed 18-22 May 2026",
         story=story,
         reference="Works order RB-2026-0518",
         author="Rheinblick Immobilien AG",
         subject="Window replacement works",
-        pdf_date="D:20260504111500+02'00'",
+        pdf_date="D:20260522170000+02'00'",
+    )
+
+
+def later_lease() -> None:
+    story: list = [
+        Paragraph("1. Parties and premises", styles["H1x"]),
+        styled_table(
+            [
+                ["Landlord", "Rheinblick Immobilien AG, Clarastrasse 28, 4058 Basel"],
+                ["Tenant", "Sam Keller, Klybeckstrasse 77, 4057 Basel"],
+                ["Premises", "2-room apartment, 2nd floor, Klybeckstrasse 77, 4057 Basel"],
+                ["Permitted use", "Residential use"],
+                ["Start date", "1 September 2025"],
+                ["Monthly net rent", "CHF 1,420"],
+            ],
+            [40 * mm, 115 * mm],
+        ),
+        Spacer(1, 12),
+        Paragraph(
+            "The apartment is rented to Sam Keller for residential use. The agreement "
+            "covers the bedroom, living room, kitchen, bathroom and cellar compartment.",
+            styles["Bodyx"],
+        ),
+        Paragraph("2. Defects, maintenance and access", styles["H1x"]),
+        Paragraph(
+            "The tenant reports defects promptly. The property management may arrange "
+            "a technical inspection and gives reasonable notice before access.",
+            styles["Bodyx"],
+        ),
+        PageBreak(),
+        Paragraph("3. Communications and signature fields", styles["H1x"]),
+        Paragraph(
+            "Communications concerning defects may be sent to the property-management "
+            "service address. The parties retain copies of relevant correspondence.",
+            styles["Bodyx"],
+        ),
+        Spacer(1, 20),
+        styled_table(
+            [
+                ["Agreement dated in Basel", "14 August 2025"],
+                ["Landlord", "Rheinblick Immobilien AG"],
+                ["Tenant", "Sam Keller"],
+                ["Signature fields", "________________    ________________"],
+            ],
+            [40 * mm, 115 * mm],
+        ),
+    ]
+    make_pdf(
+        ROOT / "later-lease-agreement.pdf",
+        title="Residential Lease Agreement",
+        subtitle="Klybeckstrasse 77, Basel · agreement dated 14 August 2025",
+        story=story,
+        reference="Lease reference RB-2025-0814-SK",
+        author="Rheinblick Immobilien AG",
+        subject="Residential tenancy agreement for Sam Keller",
+        pdf_date="D:20250814143000+02'00'",
     )
 
 
@@ -455,7 +525,7 @@ def email_files() -> None:
     notification = """From: Alex Morgan
 To: Rheinblick Immobilien AG Service Team
 Date: Wed, 15 Jul 2026 08:32:00 +0200
-Subject: Recurring mould in bedroom - Feldbergstrasse 114
+Subject: Bedroom condition - Feldbergstrasse 114
 X-Archive-Reference: 20260715-083200-AM
 MIME-Version: 1.0
 Content-Type: text/plain; charset=utf-8
@@ -464,7 +534,7 @@ Dear Service Team,
 
 The dark mould in the external corner of the bedroom has returned after cleaning. I first noticed it in March. The radiator works and I air the room twice a day.
 
-Please arrange an inspection and repair. I have attached a photograph. I can provide access on weekdays after 17:30.
+Please arrange an inspection and repair. I can send a current photograph and provide access on weekdays after 17:30.
 
 Kind regards,
 Alex Morgan
@@ -472,14 +542,14 @@ Alex Morgan
     reply = """From: Rheinblick Immobilien AG Service Team
 To: Alex Morgan
 Date: Sat, 18 Jul 2026 10:14:00 +0200
-Subject: Re: Recurring mould in bedroom - Feldbergstrasse 114
+Subject: Re: Bedroom condition - Feldbergstrasse 114
 X-Archive-Reference: 20260718-101400-RB
 MIME-Version: 1.0
 Content-Type: text/plain; charset=utf-8
 
 Dear Mr Morgan,
 
-Thank you for your message. Based on the photograph, the marks appear consistent with insufficient ventilation. Please air the bedroom more often and avoid placing furniture close to the external wall.
+Thank you for your message. Based on your description, the marks appear consistent with insufficient ventilation. Please air the bedroom more often and avoid placing furniture close to the external wall.
 
 We do not currently plan a technical inspection.
 
@@ -490,7 +560,7 @@ Service Team
     later = """From: Sam Keller
 To: Legal Protection Claims Team
 Date: Mon, 10 Aug 2026 09:46:00 +0200
-Subject: Condensation after window replacement
+Subject: Recurring bedroom issue - Klybeckstrasse 77
 X-Archive-Reference: 20260810-094600-SK
 MIME-Version: 1.0
 Content-Type: text/plain; charset=utf-8
@@ -499,14 +569,53 @@ Hello,
 
 Condensation and dark spots have appeared around the bedroom window since the windows were replaced in May. The management says I do not air enough. The problem keeps returning even though I air every morning and evening. I sent the management an email last week. No technician has inspected the window or wall.
 
+I disagree with the management's position. I have no current health symptoms and there is no urgent deadline. I want the cause checked and the recurring condition repaired.
+
 What should I do next?
 
 Regards,
 Sam Keller
 """
+    later_notification = """From: Sam Keller
+To: Rheinblick Immobilien AG Service Team
+Date: Mon, 03 Aug 2026 08:17:00 +0200
+Subject: Bedroom condition - Klybeckstrasse 77
+X-Archive-Reference: 20260803-081700-SK
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Dear Service Team,
+
+Condensation and dark spots have repeatedly appeared around the bedroom window since the replacement work in May. I air the room every morning and evening.
+
+Please arrange an inspection of the window and wall and let me know how the recurring condition will be repaired. I can provide access on weekdays after 17:00.
+
+Kind regards,
+Sam Keller
+"""
+    later_reply = """From: Rheinblick Immobilien AG Service Team
+To: Sam Keller
+Date: Wed, 05 Aug 2026 11:28:00 +0200
+Subject: Re: Bedroom condition - Klybeckstrasse 77
+X-Archive-Reference: 20260805-112800-RB
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Dear Mr Keller,
+
+We received your message of 3 August. Based on your description, we consider insufficient airing the likely cause. Please ventilate more frequently.
+
+We do not plan a technical inspection of the window or wall at present.
+
+Kind regards,
+Rheinblick Immobilien AG
+Service Team
+"""
     write_email(ROOT / "notification-email.eml", notification)
     write_email(ROOT / "management-reply.eml", reply)
     write_email(ROOT / "later-claim-email.eml", later)
+    write_email(ROOT / "later-notification-email.eml", later_notification)
+    write_email(ROOT / "later-management-reply.eml", later_reply)
 
 
 def render_pdf_pages() -> None:
@@ -515,6 +624,7 @@ def render_pdf_pages() -> None:
         "defect-timeline.pdf": "art_timeline",
         "delivery-receipt.pdf": "art_delivery",
         "window-replacement-notice.pdf": "art_window_notice",
+        "later-lease-agreement.pdf": "art_later_lease",
     }
     for filename, artifact_id in mapping.items():
         pdf_path = ROOT / filename
@@ -535,6 +645,7 @@ def main() -> None:
     timeline()
     delivery_receipt()
     window_notice()
+    later_lease()
     email_files()
     render_pdf_pages()
     for directory in sorted((path for path in ROOT.rglob("*") if path.is_dir()), reverse=True):

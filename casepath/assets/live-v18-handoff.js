@@ -9,7 +9,7 @@
     { id: 'research', label: 'Law', selector: '.law-flow,.v17-law-map', output: 'legal context', next: 'Process Projection Tool' },
     { id: 'process', label: 'Process', pattern: /complete handling process is taking shape|building the handling process/i, output: 'handling process', next: 'Evidence Checklist Tool' },
     { id: 'evidence', label: 'Evidence', pattern: /Evidence now follows directly from the process|attaching evidence/i, output: 'evidence model', next: 'Historical Retrieval Tool' },
-    { id: 'experience', label: 'Experience', selector: '.precedent-inline', output: 'provenance-labelled reference precedents', next: 'Whole-Playbook Verification Gate' },
+    { id: 'experience', label: 'Experience', selector: '.precedent-inline', output: 'provenance-labelled generated reference patterns', next: 'Whole-Playbook Verification Gate' },
     { id: 'verify', label: 'Verify', selector: '.verification-list', output: 'verified playbook', next: 'Demo review' },
   ];
   const stageOrder = stageDefs.map(stage => stage.id);
@@ -92,7 +92,7 @@
   function missionFor(run, stage, kind) {
     if (kind === 'review') return 'Review the evidence-order decision that changes the process and next action.';
     if (kind === 'knowledge') return 'Separate immediately reusable case memory from a governed shared-rule release.';
-    if (kind === 'later') return 'Check whether the unseen claim retrieves unverified demo memory without changing the shared playbook.';
+    if (kind === 'later') return 'Check whether the held-out later demo claim retrieves unverified demo memory without changing the shared playbook.';
     if (kind === 'ready') return 'Bring the process, evidence, and provenance-labelled experience together for simulated demo review.';
     if (!stage) return 'Open one shared claim context for the specialist team.';
     const event = eventFor(run, stage.id);
@@ -166,7 +166,10 @@
         signals.setAttribute('aria-hidden', 'true');
         button.append(signals);
       }
-      const items = evidence.filter(item => item.node_id === node.node_id);
+      const items = evidence.filter(item => {
+        const owners = Array.isArray(item.node_ids) && item.node_ids.length ? item.node_ids : item.node_id ? [item.node_id] : [];
+        return owners.includes(node.node_id);
+      });
       const missing = items.filter(item => ['missing', 'provided_insufficient'].includes(item.status)).length;
       const conditional = items.filter(item => item.status === 'conditional').length;
       const available = items.filter(item => item.status === 'provided_sufficient').length;
@@ -259,7 +262,7 @@
       const copy = [
         ['Handling process', 'The claim is mapped from intake to closure. Causation is the current decision.'],
         ['Evidence linked to decisions', 'Every decision carries the facts and evidence needed to resolve it.'],
-        ['Organizational experience', 'Returned precedents appear at the branch where they help and remain labelled by provenance.'],
+        ['Organizational experience', 'Generated reference patterns and governed memory records appear at the branch where they help and remain labelled by provenance.'],
       ];
       articles.forEach((article, index) => {
         if (!copy[index]) return;
@@ -276,7 +279,7 @@
       const copy = {
         process: 'The complete handling spine and its causation alternatives passed the graph validator.',
         evidence: 'Every evidence requirement points back to the decision, fact, and reason that created it.',
-        experience: 'Reference precedents were returned for the unresolved branch and labelled by provenance.',
+        experience: 'Generated reference patterns or governed memory records were returned for the unresolved branch and labelled by provenance.',
         verify: 'Graph integrity, legal links, evidence traceability, and no-repeat requests passed.',
       }[stage];
       if (copy && build.querySelector('p')) build.querySelector('p').textContent = copy;

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Mapping
+from copy import deepcopy
 import hashlib
 import json
 import math
@@ -26,6 +27,19 @@ from pypdf import PdfReader
 
 
 REPOSITORY = Path(__file__).resolve().parents[2]
+API_SOURCE_ROOT = REPOSITORY / "casepath-api"
+if str(API_SOURCE_ROOT) not in sys.path:
+    sys.path.insert(0, str(API_SOURCE_ROOT))
+
+from casepath_api.data import (  # noqa: E402
+    ARTIFACTS as CASEPATH_ARTIFACTS,
+    CLAIMS as CASEPATH_CLAIMS,
+    HISTORICAL_CASES as GOVERNED_PRECEDENT_CORPUS,
+    observable_claim_package,
+)
+from casepath_api.law_registry import legal_context as governed_legal_context  # noqa: E402
+from casepath_api.precedent_ranking import rank_precedents  # noqa: E402
+
 RELEASE_PATH = REPOSITORY / "casepath" / "release.json"
 SOURCE_MANIFEST_PATH = REPOSITORY / "casepath" / "source-manifest.json"
 ARTIFACT_ROOT = REPOSITORY / "casepath-api" / "artifacts"
@@ -328,6 +342,8 @@ REQUIRED_RUNTIME_ACCEPTANCE_FLAGS = (
     "requires_deterministic_gate_passes",
     "requires_guarded_fallback_disclosure",
     "requires_source_reference_projection_disclosure",
+    "requires_grounded_causal_artifact_recomputation",
+    "requires_learning_replay_proof",
 )
 RUNTIME_VERDICT_AUTHORITY = "dynamic_same_commit_qa_artifacts"
 QA_REPORT_PATH = "report.json"
@@ -661,14 +677,515 @@ REQUIRED_QA_EVIDENCE_FILES = {
     "flagship-run.json",
     "flagship-cold-model-ledger.json",
     "flagship-cache-lineage.json",
+    "demo-review.json",
+    "post-review-run.json",
+    "later-baseline-run.json",
+    "later-after-memory-run.json",
+    "learning-proof.json",
     "runtime-versions.json",
     "02-live-nemotron-agent.png",
     "03-deterministic-accepted-artifact.png",
     "uninterrupted-focused-demo.webm",
 }
 
+BASE_EVIDENCE_NODE_IDS = {
+    "claim_message": ("intake",),
+    "source_integrity": ("intake",),
+    "lease": ("scope",),
+    "policy_reference": ("scope",),
+    "customer_objective": ("dispute",),
+    "management_position": ("dispute",),
+    "health_safety_statement": ("urgency",),
+    "defect_notice": ("notification", "formal_notice"),
+    "proof_of_delivery": ("notification", "formal_notice"),
+    "dated_photos": ("defect",),
+    "recurrence_chronology": ("defect",),
+    "technical_assessment": (
+        "causation",
+        "responsibility",
+        "building_defect",
+        "tenant_use",
+        "mixed_cause",
+        "evidence_gap",
+    ),
+    "moisture_measurements": ("causation", "evidence_gap"),
+    "building_envelope": (
+        "causation",
+        "building_defect",
+        "mixed_cause",
+        "evidence_gap",
+    ),
+    "use_evidence": ("causation", "tenant_use", "mixed_cause"),
+    "repair_history": ("responsibility",),
+    "remediation_plan": ("remedy", "building_defect"),
+    "financial_impact": ("remedy",),
+    "settlement_proposal": ("remedy", "mixed_cause"),
+    "conciliation_bundle": ("escalation",),
+    "completion_record": ("resolution",),
+}
+BASE_PROCESS_NODE_IDS = (
+    "intake",
+    "scope",
+    "dispute",
+    "urgency",
+    "notification",
+    "defect",
+    "causation",
+    "responsibility",
+    "remedy",
+    "escalation",
+    "resolution",
+    "out_of_scope",
+    "no_dispute",
+    "urgent_escalation",
+    "formal_notice",
+    "building_defect",
+    "tenant_use",
+    "mixed_cause",
+    "evidence_gap",
+)
+BASE_PROCESS_EDGE_PAIRS = (
+    ("intake", "scope"),
+    ("scope", "dispute"),
+    ("scope", "out_of_scope"),
+    ("dispute", "urgency"),
+    ("dispute", "no_dispute"),
+    ("urgency", "urgent_escalation"),
+    ("urgency", "notification"),
+    ("notification", "defect"),
+    ("notification", "formal_notice"),
+    ("defect", "causation"),
+    ("causation", "building_defect"),
+    ("causation", "tenant_use"),
+    ("causation", "mixed_cause"),
+    ("causation", "evidence_gap"),
+    ("evidence_gap", "causation"),
+    ("building_defect", "responsibility"),
+    ("tenant_use", "responsibility"),
+    ("mixed_cause", "responsibility"),
+    ("responsibility", "remedy"),
+    ("remedy", "resolution"),
+    ("remedy", "escalation"),
+    ("escalation", "resolution"),
+)
+VISUAL_ANNOTATION_CONTRACT = "casepath.visual-reference-annotation/1.0.0"
+VISUAL_ANNOTATION_VERSION = "generated-demo-reference/2026-08-12"
+VISUAL_ANNOTATION_PRODUCER = "deterministic_reference_annotation"
+VISUAL_ANNOTATION_AUTHORITY = "generated_demo_reference_only"
+RELEASE_VISUAL_IMAGE_SHA256_BY_ARTIFACT = {
+    "art_photo": "b8de375c0a951e3970f4b4a392b5af348ea35b30f5750974fa1d9411da179860",
+}
+RELEASE_LAW_CONTRACT = "casepath.legal-context/2.0.0"
+RELEASE_LAW_REGISTRY_VERSION = "ch-tenancy-official-snapshot/2026-08-12"
+RELEASE_LAW_SOURCE_CONTRACTS = {
+    "fedlex-or-256": {
+        "passage_sha256": (
+            "100d0abd42d621949be8a6e4953b0de6f46bf13cea78b46921cef6f6725f53f9"
+        ),
+        "snapshot_sha256": (
+            "6a958ae86cf67f71b1d36b798775b1659f06a9f0130fb9649f6ef045ce409966"
+        ),
+        "snapshot_scope": "official_pdf_bytes",
+    },
+    "fedlex-or-257g": {
+        "passage_sha256": (
+            "ab9316ed8dada48c26b63f566492bd4fdb1bd271b46c3305e6ebde78ca61a268"
+        ),
+        "snapshot_sha256": (
+            "6a958ae86cf67f71b1d36b798775b1659f06a9f0130fb9649f6ef045ce409966"
+        ),
+        "snapshot_scope": "official_pdf_bytes",
+    },
+    "fedlex-or-259a": {
+        "passage_sha256": (
+            "c3f25dae4586691caedb9ad49e256bcc80b28dc92d51d5df76bd3dc6197e8605"
+        ),
+        "snapshot_sha256": (
+            "6a958ae86cf67f71b1d36b798775b1659f06a9f0130fb9649f6ef045ce409966"
+        ),
+        "snapshot_scope": "official_pdf_bytes",
+    },
+    "bwo-conciliation": {
+        "passage_sha256": (
+            "27700e4ed06b60510b992676823c44d9a11aefb94192fdc3bec872df1c843af6"
+        ),
+        "snapshot_sha256": (
+            "27700e4ed06b60510b992676823c44d9a11aefb94192fdc3bec872df1c843af6"
+        ),
+        "snapshot_scope": "normalized_official_passage_utf8",
+    },
+}
+RELEASE_LAW_NODE_LINKS = {
+    "scope": ["fedlex-or-256"],
+    "defect": ["fedlex-or-256"],
+    "building_defect": ["fedlex-or-256", "fedlex-or-259a"],
+    "notification": ["fedlex-or-257g"],
+    "formal_notice": ["fedlex-or-257g"],
+    "causation": [
+        "fedlex-or-256",
+        "handling-causation",
+        "handling-evidence-order",
+    ],
+    "responsibility": [
+        "fedlex-or-256",
+        "handling-causation",
+        "handling-evidence-order",
+        "fedlex-or-259a",
+    ],
+    "evidence_gap": [
+        "fedlex-or-256",
+        "handling-causation",
+        "handling-evidence-order",
+    ],
+    "remedy": ["fedlex-or-259a"],
+    "escalation": ["bwo-conciliation"],
+}
+RELEASE_LAW_QUESTION_JOINS = {
+    "tenancy_scope_and_fitness": {
+        "source_ids": ["fedlex-or-256"],
+        "interpretation_ids": [],
+        "process_node_ids": ["scope", "defect", "building_defect"],
+    },
+    "defect_notification": {
+        "source_ids": ["fedlex-or-257g"],
+        "interpretation_ids": [],
+        "process_node_ids": ["notification", "formal_notice"],
+    },
+    "causation_before_responsibility": {
+        "source_ids": ["fedlex-or-256"],
+        "interpretation_ids": [
+            "handling-causation",
+            "handling-evidence-order",
+        ],
+        "process_node_ids": ["causation", "responsibility", "evidence_gap"],
+    },
+    "defect_remedies": {
+        "source_ids": ["fedlex-or-259a"],
+        "interpretation_ids": [],
+        "process_node_ids": ["building_defect", "responsibility", "remedy"],
+    },
+    "conciliation_route": {
+        "source_ids": ["bwo-conciliation"],
+        "interpretation_ids": [],
+        "process_node_ids": ["escalation"],
+    },
+}
+
+CANONICAL_FACT_FIELDS = {
+    "fact_id",
+    "label",
+    "value",
+    "state",
+    "explanation",
+    "source_refs",
+    "confidence",
+    "controls_process",
+    "decision_key",
+    "normalized_value",
+    "decision_value",
+    "semantic_role",
+}
+SEMANTIC_MEMORY_ROLE = "management_ventilation_allegation"
+VISUAL_REFERENCE_FIELDS = {
+    "artifact_id",
+    "locator_kind",
+    "region",
+    "observation",
+    "producer",
+    "authority",
+    "annotation_contract",
+    "annotation_version",
+    "image_sha256",
+}
+REQUIRED_PLAYBOOK_CHECKS = (
+    "Canonical fact and source contract",
+    "Exact source grounding",
+    "Legal authority contract",
+    "Graph integrity",
+    "Structured law-to-process questions",
+    "Process-to-evidence linkage",
+    "Precedent exclusion and provenance",
+    "Precedent ranking acceptance binding",
+    "Law-to-process linkage",
+    "Current-state safety",
+)
+REQUIRED_LEARNING_CHECKS = (
+    "Same observable input",
+    "Same canonical state",
+    "Exact current memory receipt",
+    "Pure memory replay matches learned DTOs",
+    "Receipt before semantic hashes match baseline DTOs",
+    "Receipt after hashes match learned DTOs",
+    "Nonzero causal DTO delta",
+    "Only allowed causal operations changed",
+    "Deterministic target and protected checks passed",
+    "Shared v3 remains unchanged",
+)
+MEMORY_OPERATION_IDS = (
+    "add_ventilation_dispute_node",
+    "add_evidence_gap_to_ventilation_edge",
+    "add_ventilation_to_causation_edge",
+    "condition_building_envelope",
+    "reassign_use_evidence_to_ventilation",
+)
+MEMORY_BOUNDARY_CONTRACT = "casepath.memory-application-boundary/1.0.0"
+MEMORY_REQUIRED_DECISIONS = {
+    "scope": "in_scope",
+    "dispute": "dispute_present",
+    "urgency": "not_urgent",
+    "notification": "notified",
+    "recurrence": "recurrence_supported",
+    "causation": "cause_unresolved",
+}
+MEMORY_REQUIRED_FACT_ROLES = {
+    SEMANTIC_MEMORY_ROLE: {"state": "known", "min_grounded_sources": 1}
+}
+EVIDENCE_LEGAL_BASIS_IDS = {
+    "claim_message": [],
+    "source_integrity": [],
+    "lease": ["fedlex-or-256"],
+    "policy_reference": [],
+    "customer_objective": [],
+    "management_position": [],
+    "health_safety_statement": [],
+    "defect_notice": ["fedlex-or-257g"],
+    "proof_of_delivery": ["fedlex-or-257g"],
+    "dated_photos": [],
+    "recurrence_chronology": [],
+    "technical_assessment": ["fedlex-or-256", "handling-causation"],
+    "moisture_measurements": ["handling-causation"],
+    "building_envelope": ["handling-evidence-order"],
+    "use_evidence": [],
+    "repair_history": ["fedlex-or-256"],
+    "remediation_plan": ["fedlex-or-259a"],
+    "financial_impact": ["fedlex-or-259a"],
+    "settlement_proposal": ["fedlex-or-259a"],
+    "conciliation_bundle": ["bwo-conciliation"],
+    "completion_record": [],
+}
+RELEASE_PROCESS_FACT_IDS_BY_CLAIM = {
+    "DEF-027-E0-DEMO": {
+        "intake": [],
+        "scope": ["fact_tenancy"],
+        "dispute": ["fact_dispute"],
+        "urgency": ["fact_health"],
+        "notification": ["fact_notification"],
+        "defect": ["fact_recurrence"],
+        "causation": ["fact_cause", "fact_ventilation_allegation"],
+        "responsibility": [],
+        "remedy": [],
+        "escalation": [],
+        "resolution": [],
+        "out_of_scope": [],
+        "no_dispute": [],
+        "urgent_escalation": [],
+        "formal_notice": [],
+        "building_defect": [],
+        "tenant_use": [],
+        "mixed_cause": [],
+        "evidence_gap": [],
+    },
+    "DEMO-MOULD-002": {
+        "intake": [],
+        "scope": ["later_fact_tenancy"],
+        "dispute": ["later_fact_dispute"],
+        "urgency": ["later_fact_health"],
+        "notification": ["later_fact_notification"],
+        "defect": ["later_fact_recurrence", "later_fact_recent_window_work"],
+        "causation": [
+            "later_fact_cause",
+            "later_fact_ventilation_allegation",
+            "later_fact_recent_window_work",
+        ],
+        "responsibility": [],
+        "remedy": [],
+        "escalation": [],
+        "resolution": [],
+        "out_of_scope": [],
+        "no_dispute": [],
+        "urgent_escalation": [],
+        "formal_notice": [],
+        "building_defect": [],
+        "tenant_use": [],
+        "mixed_cause": [],
+        "evidence_gap": [],
+    },
+}
+RELEASE_EVIDENCE_FACT_ID_BY_CLAIM = {
+    "DEF-027-E0-DEMO": {
+        "claim_message": "fact_customer_objective",
+        "source_integrity": "fact_source_integrity",
+        "lease": "fact_tenancy",
+        "policy_reference": "fact_policy_route",
+        "customer_objective": "fact_customer_objective",
+        "management_position": "fact_dispute",
+        "health_safety_statement": "fact_health",
+        "defect_notice": "fact_notification",
+        "proof_of_delivery": "fact_notification",
+        "dated_photos": "fact_recurrence",
+        "recurrence_chronology": "fact_date_conflict",
+        "technical_assessment": "fact_cause",
+        "moisture_measurements": "fact_cause",
+        "building_envelope": "fact_cause",
+        "repair_history": "fact_repair_history",
+        "use_evidence": "fact_tenant_use_cause",
+        "remediation_plan": "fact_remedy_plan",
+        "financial_impact": "fact_financial_remedy",
+        "settlement_proposal": "fact_settlement_proposal",
+        "conciliation_bundle": "fact_escalation_ready",
+        "completion_record": "fact_resolution_complete",
+    },
+    "DEMO-MOULD-002": {
+        "claim_message": "later_fact_customer_objective",
+        "source_integrity": "later_fact_source_integrity",
+        "lease": "later_fact_tenancy",
+        "policy_reference": "later_fact_policy_route",
+        "customer_objective": "later_fact_customer_objective",
+        "management_position": "later_fact_dispute",
+        "health_safety_statement": "later_fact_health",
+        "defect_notice": "later_fact_notification",
+        "proof_of_delivery": "later_fact_notification",
+        "dated_photos": "later_fact_recurrence",
+        "recurrence_chronology": "later_fact_recurrence",
+        "repair_history": "later_fact_recent_window_work",
+        "technical_assessment": "later_fact_cause",
+        "moisture_measurements": "later_fact_cause",
+        "building_envelope": "later_fact_cause",
+        "use_evidence": "later_fact_ventilation_allegation",
+        "remediation_plan": "later_fact_remedy_plan",
+        "financial_impact": "later_fact_financial_remedy",
+        "settlement_proposal": "later_fact_settlement_proposal",
+        "conciliation_bundle": "later_fact_escalation_ready",
+        "completion_record": "later_fact_resolution_complete",
+    },
+}
+RELEASE_EVIDENCE_ARTIFACT_IDS_BY_CLAIM = {
+    "DEF-027-E0-DEMO": {
+        "claim_message": ["message"],
+        "source_integrity": [
+            "art_lease",
+            "art_notification",
+            "art_management_reply",
+            "art_photo",
+            "art_timeline",
+            "art_delivery",
+        ],
+        "lease": ["art_lease"],
+        "policy_reference": ["intake"],
+        "customer_objective": ["message"],
+        "management_position": ["art_management_reply"],
+        "health_safety_statement": ["message"],
+        "defect_notice": ["art_notification"],
+        "proof_of_delivery": ["art_delivery"],
+        "dated_photos": ["art_photo"],
+        "recurrence_chronology": ["art_timeline"],
+        "technical_assessment": [],
+        "moisture_measurements": [],
+        "building_envelope": [],
+        "repair_history": ["art_management_reply"],
+        "use_evidence": [],
+        "remediation_plan": [],
+        "financial_impact": [],
+        "settlement_proposal": [],
+        "conciliation_bundle": [],
+        "completion_record": [],
+    },
+    "DEMO-MOULD-002": {
+        "claim_message": ["art_later_email"],
+        "source_integrity": [
+            "art_later_email",
+            "art_later_photo",
+            "art_window_notice",
+            "art_later_lease",
+            "art_later_notification",
+            "art_later_management_reply",
+        ],
+        "lease": ["art_later_lease"],
+        "policy_reference": ["intake"],
+        "customer_objective": ["art_later_email"],
+        "management_position": ["art_later_management_reply"],
+        "health_safety_statement": ["art_later_email"],
+        "defect_notice": ["art_later_notification"],
+        "proof_of_delivery": ["art_later_management_reply"],
+        "dated_photos": ["art_later_photo"],
+        "recurrence_chronology": [
+            "art_later_notification",
+            "art_later_photo",
+        ],
+        "repair_history": ["art_window_notice"],
+        "technical_assessment": [],
+        "moisture_measurements": [],
+        "building_envelope": [],
+        "use_evidence": [],
+        "remediation_plan": [],
+        "financial_impact": [],
+        "settlement_proposal": [],
+        "conciliation_bundle": [],
+        "completion_record": [],
+    },
+}
+RELEASE_BASE_EVIDENCE_STATUS_BY_CLAIM = {
+    "DEF-027-E0-DEMO": {
+        "claim_message": "provided_sufficient",
+        "source_integrity": "provided_sufficient",
+        "lease": "provided_sufficient",
+        "policy_reference": "provided_sufficient",
+        "customer_objective": "provided_sufficient",
+        "management_position": "provided_sufficient",
+        "health_safety_statement": "provided_sufficient",
+        "defect_notice": "provided_sufficient",
+        "proof_of_delivery": "provided_sufficient",
+        "dated_photos": "provided_sufficient",
+        "recurrence_chronology": "provided_insufficient",
+        "technical_assessment": "missing",
+        "moisture_measurements": "conditional",
+        "building_envelope": "conditional",
+        "repair_history": "conditional",
+        "use_evidence": "not_applicable",
+        "remediation_plan": "not_applicable",
+        "financial_impact": "conditional",
+        "settlement_proposal": "conditional",
+        "conciliation_bundle": "conditional",
+        "completion_record": "not_applicable",
+    },
+    "DEMO-MOULD-002": {
+        "claim_message": "provided_sufficient",
+        "source_integrity": "provided_sufficient",
+        "lease": "provided_sufficient",
+        "policy_reference": "provided_sufficient",
+        "customer_objective": "provided_sufficient",
+        "management_position": "provided_sufficient",
+        "health_safety_statement": "provided_sufficient",
+        "defect_notice": "provided_sufficient",
+        "proof_of_delivery": "provided_sufficient",
+        "dated_photos": "provided_sufficient",
+        "recurrence_chronology": "provided_insufficient",
+        "repair_history": "provided_sufficient",
+        "technical_assessment": "missing",
+        "moisture_measurements": "conditional",
+        "building_envelope": "missing",
+        "use_evidence": "conditional",
+        "remediation_plan": "not_applicable",
+        "financial_impact": "conditional",
+        "settlement_proposal": "conditional",
+        "conciliation_bundle": "conditional",
+        "completion_record": "not_applicable",
+    },
+}
+RELEASE_SEMANTIC_FACT_ID_BY_CLAIM = {
+    "DEF-027-E0-DEMO": {
+        SEMANTIC_MEMORY_ROLE: "fact_ventilation_allegation"
+    },
+    "DEMO-MOULD-002": {
+        SEMANTIC_MEMORY_ROLE: "later_fact_ventilation_allegation"
+    },
+}
+
 SOURCE_ROOTS = ("casepath", "casepath-api", "casepath-qa")
-EXTRA_SOURCE_FILES = ("render.yaml",)
+EXTRA_SOURCE_FILES = (
+    "render.yaml",
+    "CASEPATH_MASTER_KNOWLEDGE_TRANSFER.md",
+)
 SOURCE_EXCLUSIONS = {
     "casepath/deployment.json",
     "casepath/source-manifest.json",
@@ -694,11 +1211,14 @@ ACTIVE_SCENARIO_FILES = (
     "casepath-api/casepath_api/data.py",
 )
 EXPECTED_ARTIFACTS = {
-    "bedroom-mould-2026-07-27.jpg",
+    "bedroom-corner-2026-07-27.jpg",
     "defect-timeline.pdf",
     "delivery-receipt.pdf",
     "later-claim-email.eml",
-    "later-window-condensation-2026-08-08.jpg",
+    "later-lease-agreement.pdf",
+    "later-management-reply.eml",
+    "later-notification-email.eml",
+    "window-corner-2026-08-08.jpg",
     "lease-agreement.pdf",
     "management-reply.eml",
     "notification-email.eml",
@@ -2578,6 +3098,1457 @@ def _causal_basis_points(value: Any, path: str) -> None:
         _causal_failure(path)
 
 
+def _normalized_grounding_text(value: str) -> str:
+    return re.sub(r"\s+", " ", value).strip()
+
+
+def _observable_metadata_value(
+    package: Mapping[str, Any], artifact_id: str, field: str
+) -> Any:
+    if artifact_id == "intake":
+        current: Any = package.get("intake_metadata")
+    elif artifact_id == "message":
+        current = package.get("customer_message")
+    else:
+        current = next(
+            (
+                item
+                for item in package.get("artifacts", [])
+                if isinstance(item, Mapping)
+                and item.get("artifact_id") == artifact_id
+            ),
+            None,
+        )
+    for part in field.split("."):
+        if not isinstance(current, Mapping) or part not in current:
+            return None
+        current = current[part]
+    return current
+
+
+def _observable_text_values(
+    package: Mapping[str, Any], artifact_id: str, page: int
+) -> list[str]:
+    if artifact_id == "message" and page == 1:
+        message = package.get("customer_message")
+        if isinstance(message, Mapping):
+            return [
+                value
+                for key in ("subject", "body")
+                if isinstance((value := message.get(key)), str)
+            ]
+        return []
+    artifact = next(
+        (
+            item
+            for item in package.get("artifacts", [])
+            if isinstance(item, Mapping) and item.get("artifact_id") == artifact_id
+        ),
+        None,
+    )
+    if not isinstance(artifact, Mapping):
+        return []
+    if artifact.get("media_type") == "application/pdf":
+        page_value = next(
+            (
+                item
+                for item in artifact.get("extracted_pages", [])
+                if isinstance(item, Mapping) and item.get("page") == page
+            ),
+            None,
+        )
+        text_value = page_value.get("text") if isinstance(page_value, Mapping) else None
+        return [text_value] if isinstance(text_value, str) else []
+    if artifact.get("media_type") == "message/rfc822" and page == 1:
+        email = artifact.get("parsed_email")
+        if isinstance(email, Mapping):
+            return [value for value in email.values() if isinstance(value, str)]
+    return []
+
+
+def _verify_grounding_ref(
+    ref: Mapping[str, Any], package: Mapping[str, Any], path: str
+) -> None:
+    artifact_id = ref.get("artifact_id")
+    locator_kind = ref.get("locator_kind")
+    package_artifacts = {
+        item.get("artifact_id"): item
+        for item in package.get("artifacts", [])
+        if isinstance(item, Mapping)
+    }
+    if artifact_id not in {"message", "intake", *package_artifacts}:
+        _causal_failure(f"{path}.artifact_id")
+    if locator_kind == "text_quote":
+        if set(ref) != {"artifact_id", "locator_kind", "page", "excerpt", "agent"}:
+            _causal_failure(path)
+        page = ref.get("page")
+        excerpt = ref.get("excerpt")
+        agent = ref.get("agent")
+        if (
+            not isinstance(page, int)
+            or isinstance(page, bool)
+            or page < 1
+            or not isinstance(excerpt, str)
+            or not excerpt.strip()
+            or not isinstance(agent, str)
+            or not agent.strip()
+        ):
+            _causal_failure(path)
+        candidates = _observable_text_values(package, str(artifact_id), page)
+        normalized_excerpt = _normalized_grounding_text(excerpt)
+        if not any(
+            normalized_excerpt in _normalized_grounding_text(candidate)
+            for candidate in candidates
+        ):
+            _causal_failure(f"{path}.excerpt")
+        return
+    if locator_kind == "metadata_field":
+        if set(ref) != {"artifact_id", "locator_kind", "field", "value", "agent"}:
+            _causal_failure(path)
+        field = ref.get("field")
+        agent = ref.get("agent")
+        if (
+            not isinstance(field, str)
+            or not field.strip()
+            or not isinstance(agent, str)
+            or not agent.strip()
+            or _observable_metadata_value(package, str(artifact_id), field)
+            != ref.get("value")
+        ):
+            _causal_failure(path)
+        return
+    if locator_kind != "visual_observation" or set(ref) != VISUAL_REFERENCE_FIELDS:
+        _causal_failure(path)
+    artifact = package_artifacts.get(artifact_id)
+    expected_artifact = CASEPATH_ARTIFACTS.get(artifact_id)
+    release_image_sha256 = RELEASE_VISUAL_IMAGE_SHA256_BY_ARTIFACT.get(artifact_id)
+    region = ref.get("region")
+    if (
+        not isinstance(artifact, Mapping)
+        or not str(artifact.get("media_type", "")).startswith("image/")
+        or not isinstance(expected_artifact, Mapping)
+        or not isinstance(release_image_sha256, str)
+        or artifact.get("sha256") != release_image_sha256
+        or expected_artifact.get("sha256") != release_image_sha256
+        or ref.get("image_sha256") != release_image_sha256
+        or ref.get("producer") != VISUAL_ANNOTATION_PRODUCER
+        or ref.get("authority") != VISUAL_ANNOTATION_AUTHORITY
+        or ref.get("annotation_contract") != VISUAL_ANNOTATION_CONTRACT
+        or ref.get("annotation_version") != VISUAL_ANNOTATION_VERSION
+        or not isinstance(ref.get("observation"), str)
+        or not ref.get("observation", "").strip()
+        or not isinstance(region, list)
+        or len(region) != 4
+        or any(
+            not isinstance(number, (int, float))
+            or isinstance(number, bool)
+            or not math.isfinite(number)
+            or not 0 <= number <= 1
+            for number in region
+        )
+        or region[2] <= 0
+        or region[3] <= 0
+        or region[0] + region[2] > 1
+        or region[1] + region[3] > 1
+    ):
+        _causal_failure(path)
+
+
+def _verify_governed_law_contract(
+    legal: Mapping[str, Any], process: Mapping[str, Any]
+) -> None:
+    expected = governed_legal_context()
+    if (
+        legal != expected
+        or legal.get("contract") != RELEASE_LAW_CONTRACT
+        or legal.get("registry_version") != RELEASE_LAW_REGISTRY_VERSION
+        or legal.get("node_links") != RELEASE_LAW_NODE_LINKS
+    ):
+        _causal_failure("result.legal_research")
+    questions = legal.get("questions")
+    if not isinstance(questions, list):
+        _causal_failure("result.legal_research.questions")
+    actual_question_joins = {
+        question.get("question_id"): {
+            field: question.get(field)
+            for field in ("source_ids", "interpretation_ids", "process_node_ids")
+        }
+        for question in questions
+        if isinstance(question, Mapping)
+    }
+    if (
+        len(actual_question_joins) != len(questions)
+        or actual_question_joins != RELEASE_LAW_QUESTION_JOINS
+    ):
+        _causal_failure("result.legal_research.questions")
+    sources = legal.get("sources")
+    if not isinstance(sources, list):
+        _causal_failure("result.legal_research.sources")
+    source_mappings = [
+        _causal_mapping(source, f"result.legal_research.sources[{index}]")
+        for index, source in enumerate(sources)
+    ]
+    if [source.get("source_id") for source in source_mappings] != list(
+        RELEASE_LAW_SOURCE_CONTRACTS
+    ):
+        _causal_failure("result.legal_research.sources")
+    for index, source in enumerate(source_mappings):
+        path = f"result.legal_research.sources[{index}]"
+        source_contract = RELEASE_LAW_SOURCE_CONTRACTS.get(source.get("source_id"))
+        passage = source.get("passage_text")
+        retrieval = source.get("retrieval")
+        if (
+            not isinstance(source_contract, Mapping)
+            or not isinstance(passage, str)
+            or hashlib.sha256(passage.encode("utf-8")).hexdigest()
+            != source.get("passage_sha256")
+            or source.get("passage_sha256")
+            != source_contract.get("passage_sha256")
+            or not isinstance(retrieval, Mapping)
+            or set(retrieval)
+            != {
+                "method",
+                "retrieved_at",
+                "registry_version",
+                "snapshot_url",
+                "snapshot_sha256",
+                "snapshot_scope",
+            }
+            or retrieval.get("registry_version") != RELEASE_LAW_REGISTRY_VERSION
+            or retrieval.get("snapshot_sha256")
+            != source_contract.get("snapshot_sha256")
+            or retrieval.get("snapshot_scope")
+            != source_contract.get("snapshot_scope")
+        ):
+            _causal_failure(path)
+        scope = retrieval.get("snapshot_scope")
+        if source.get("source_id") == "bwo-conciliation":
+            if (
+                scope != "normalized_official_passage_utf8"
+                or retrieval.get("snapshot_sha256") != source.get("passage_sha256")
+            ):
+                _causal_failure(f"{path}.retrieval")
+        elif scope != "official_pdf_bytes":
+            _causal_failure(f"{path}.retrieval.snapshot_scope")
+    node_links = legal.get("node_links")
+    if not isinstance(node_links, Mapping):
+        _causal_failure("result.legal_research.node_links")
+    nodes = _causal_list(process.get("nodes"), "result.process.nodes")
+    for index, raw_node in enumerate(nodes):
+        node = _causal_mapping(raw_node, f"result.process.nodes[{index}]")
+        node_id = node.get("node_id")
+        if node.get("legal_source_ids") != node_links.get(node_id, []):
+            _causal_failure(f"result.process.nodes[{index}].legal_source_ids")
+
+
+def _verify_reciprocal_evidence_contract(
+    process: Mapping[str, Any],
+    checklist: Mapping[str, Any],
+    *,
+    include_memory_extension: bool = False,
+    path: str = "result",
+) -> None:
+    nodes = _causal_list(process.get("nodes"), f"{path}.process.nodes")
+    node_ids = [
+        node.get("node_id") if isinstance(node, Mapping) else None for node in nodes
+    ]
+    expected_node_ids = list(BASE_PROCESS_NODE_IDS)
+    if include_memory_extension:
+        expected_node_ids.append("ventilation_dispute")
+    if (
+        any(not isinstance(node_id, str) or not node_id for node_id in node_ids)
+        or len(set(node_ids)) != len(node_ids)
+        or node_ids != expected_node_ids
+    ):
+        _causal_failure(f"{path}.process.nodes[].node_id")
+    edges = _causal_list(process.get("edges"), f"{path}.process.edges")
+    edge_pairs = [
+        (edge.get("source"), edge.get("target"))
+        if isinstance(edge, Mapping)
+        else (None, None)
+        for edge in edges
+    ]
+    expected_edge_pairs = list(BASE_PROCESS_EDGE_PAIRS)
+    if include_memory_extension:
+        expected_edge_pairs.extend(
+            [
+                ("evidence_gap", "ventilation_dispute"),
+                ("ventilation_dispute", "causation"),
+            ]
+        )
+    if len(set(edge_pairs)) != len(edge_pairs) or edge_pairs != expected_edge_pairs:
+        _causal_failure(f"{path}.process.edges")
+    items = _causal_list(checklist.get("items"), f"{path}.checklist.items")
+    item_ids = [
+        item.get("item_id") if isinstance(item, Mapping) else None for item in items
+    ]
+    if (
+        any(not isinstance(item_id, str) or not item_id for item_id in item_ids)
+        or len(set(item_ids)) != len(item_ids)
+        or item_ids != list(BASE_EVIDENCE_NODE_IDS)
+    ):
+        _causal_failure(f"{path}.checklist.items[].item_id")
+    owners: dict[str, list[str]] = {str(item_id): [] for item_id in item_ids}
+    for index, raw_node in enumerate(nodes):
+        node = _causal_mapping(raw_node, f"{path}.process.nodes[{index}]")
+        requirements = _causal_text_list(
+            node.get("evidence_requirement_ids"),
+            f"{path}.process.nodes[{index}].evidence_requirement_ids",
+        )
+        if any(item_id not in owners for item_id in requirements):
+            _causal_failure(
+                f"{path}.process.nodes[{index}].evidence_requirement_ids"
+            )
+        for item_id in requirements:
+            owners[item_id].append(str(node["node_id"]))
+    selected_path = _causal_text_list(
+        process.get("selected_path"), f"{path}.process.selected_path"
+    )
+    overlay = _causal_mapping(
+        process.get("current_overlay"), f"{path}.process.current_overlay"
+    )
+    next_action = overlay.get("next_action_node_id")
+    if not isinstance(next_action, str) or next_action not in node_ids:
+        _causal_failure(f"{path}.process.current_overlay.next_action_node_id")
+    active_nodes = {*selected_path, next_action}
+    expected_owners = deepcopy(BASE_EVIDENCE_NODE_IDS)
+    if include_memory_extension:
+        expected_owners["management_position"] = (
+            "dispute",
+            "ventilation_dispute",
+        )
+        expected_owners["use_evidence"] = ("ventilation_dispute",)
+    for index, raw_item in enumerate(items):
+        item = _causal_mapping(raw_item, f"{path}.checklist.items[{index}]")
+        item_id = str(item["item_id"])
+        item_owners = owners[item_id]
+        if (
+            tuple(item_owners) != expected_owners[item_id]
+            or item.get("node_ids") != item_owners
+            or item.get("node_id") != item_owners[0]
+            or item.get("current_path")
+            is not bool(active_nodes.intersection(item_owners))
+            or item.get("legal_basis_ids") != EVIDENCE_LEGAL_BASIS_IDS[item_id]
+        ):
+            _causal_failure(f"{path}.checklist.items[{index}]")
+
+
+def _verify_release_fact_relationships(
+    *,
+    claim_id: str,
+    facts: list[Any],
+    process: Mapping[str, Any],
+    checklist: Mapping[str, Any],
+    include_memory_extension: bool,
+    path: str,
+) -> None:
+    expected_process = deepcopy(RELEASE_PROCESS_FACT_IDS_BY_CLAIM.get(claim_id))
+    expected_evidence = RELEASE_EVIDENCE_FACT_ID_BY_CLAIM.get(claim_id)
+    expected_artifacts = RELEASE_EVIDENCE_ARTIFACT_IDS_BY_CLAIM.get(claim_id)
+    expected_base_statuses = RELEASE_BASE_EVIDENCE_STATUS_BY_CLAIM.get(claim_id)
+    expected_roles = RELEASE_SEMANTIC_FACT_ID_BY_CLAIM.get(claim_id)
+    if (
+        not isinstance(expected_process, dict)
+        or not isinstance(expected_evidence, dict)
+        or not isinstance(expected_artifacts, dict)
+        or not isinstance(expected_base_statuses, dict)
+        or not isinstance(expected_roles, dict)
+    ):
+        _causal_failure(f"{path}.claim_id")
+    if include_memory_extension:
+        expected_process["ventilation_dispute"] = [
+            expected_roles[SEMANTIC_MEMORY_ROLE]
+        ]
+    actual_process = {
+        node.get("node_id"): node.get("fact_ids")
+        for node in process.get("nodes", [])
+        if isinstance(node, Mapping)
+    }
+    actual_evidence = {
+        item.get("item_id"): item.get("fact_id")
+        for item in checklist.get("items", [])
+        if isinstance(item, Mapping)
+    }
+    actual_artifacts = {
+        item.get("item_id"): item.get("artifact_ids")
+        for item in checklist.get("items", [])
+        if isinstance(item, Mapping)
+    }
+    actual_statuses = {
+        item.get("item_id"): item.get("status")
+        for item in checklist.get("items", [])
+        if isinstance(item, Mapping)
+    }
+    actual_roles = {
+        fact.get("semantic_role"): fact.get("fact_id")
+        for fact in facts
+        if isinstance(fact, Mapping) and fact.get("semantic_role") is not None
+    }
+    fact_ids = {
+        fact.get("fact_id") for fact in facts if isinstance(fact, Mapping)
+    }
+    referenced_fact_ids = {
+        fact_id for values in expected_process.values() for fact_id in values
+    } | set(expected_evidence.values()) | set(expected_roles.values())
+    allowed_statuses = [deepcopy(expected_base_statuses)]
+    if include_memory_extension:
+        conditional = deepcopy(expected_base_statuses)
+        conditional["building_envelope"] = "conditional"
+        conditional["use_evidence"] = "conditional"
+        if claim_id == "DEMO-MOULD-002":
+            allowed_statuses = [conditional]
+        else:
+            required_now = deepcopy(conditional)
+            required_now["building_envelope"] = "missing"
+            allowed_statuses = [conditional, required_now]
+    if (
+        actual_process != expected_process
+        or actual_evidence != expected_evidence
+        or actual_artifacts != expected_artifacts
+        or actual_statuses not in allowed_statuses
+        or actual_roles != expected_roles
+        or not referenced_fact_ids <= fact_ids
+    ):
+        _causal_failure(f"{path}.fact_relationships")
+
+
+def _verify_grounded_flagship_contract(result: Mapping[str, Any]) -> None:
+    claim_id = result.get("claim_id")
+    if claim_id != "DEF-027-E0-DEMO":
+        _causal_failure("result.claim_id")
+    package = observable_claim_package(CASEPATH_CLAIMS[claim_id])
+    facts = _causal_list(result.get("facts"), "result.facts")
+    semantic_roles: list[str] = []
+    fact_ids: set[str] = set()
+    for index, raw_fact in enumerate(facts):
+        path = f"result.facts[{index}]"
+        fact = _causal_mapping(raw_fact, path)
+        fact_id = fact.get("fact_id")
+        confidence = fact.get("confidence")
+        semantic_role = fact.get("semantic_role")
+        if (
+            set(fact) != CANONICAL_FACT_FIELDS
+            or not isinstance(fact_id, str)
+            or not fact_id
+            or fact_id in fact_ids
+            or not isinstance(confidence, (int, float))
+            or isinstance(confidence, bool)
+            or not math.isfinite(confidence)
+            or not 0 <= confidence <= 1
+            or semantic_role not in {None, SEMANTIC_MEMORY_ROLE}
+        ):
+            _causal_failure(path)
+        fact_ids.add(fact_id)
+        refs = _causal_list(fact.get("source_refs"), f"{path}.source_refs")
+        for ref_index, raw_ref in enumerate(refs):
+            ref = _causal_mapping(raw_ref, f"{path}.source_refs[{ref_index}]")
+            _verify_grounding_ref(ref, package, f"{path}.source_refs[{ref_index}]")
+        if semantic_role is not None:
+            semantic_roles.append(semantic_role)
+            if fact.get("state") != "known" or not refs:
+                _causal_failure(f"{path}.semantic_role")
+    if semantic_roles != [SEMANTIC_MEMORY_ROLE]:
+        _causal_failure("result.facts[].semantic_role")
+
+    process = _causal_mapping(result.get("process"), "result.process")
+    checklist = _causal_mapping(result.get("checklist"), "result.checklist")
+    legal = _causal_mapping(result.get("legal_research"), "result.legal_research")
+    _verify_governed_law_contract(legal, process)
+    _verify_reciprocal_evidence_contract(process, checklist)
+    _verify_release_fact_relationships(
+        claim_id=claim_id,
+        facts=facts,
+        process=process,
+        checklist=checklist,
+        include_memory_extension=False,
+        path="result",
+    )
+
+    precedents = _causal_list(result.get("precedents"), "result.precedents")
+    receipt = _causal_mapping(
+        result.get("precedent_ranking"), "result.precedent_ranking"
+    )
+    expected_ranking = rank_precedents(
+        current_claim_id=claim_id,
+        understanding={
+            "category": result.get("category"),
+            "subcategory": result.get("subcategory"),
+            "facts": facts,
+        },
+        process=dict(process),
+        checklist=dict(checklist),
+        memories=[],
+        corpus=GOVERNED_PRECEDENT_CORPUS,
+    )
+    if precedents != expected_ranking["results"]:
+        _causal_failure("result.precedents")
+    if receipt != expected_ranking["receipt"]:
+        _causal_failure("result.precedent_ranking")
+
+    verification = _causal_mapping(result.get("verification"), "result.verification")
+    checks = _causal_list(verification.get("checks"), "result.verification.checks")
+    names = [
+        check.get("name") if isinstance(check, Mapping) else None for check in checks
+    ]
+    if (
+        verification.get("valid") is not True
+        or verification.get("computed") is not True
+        or names != list(REQUIRED_PLAYBOOK_CHECKS)
+        or any(
+            not isinstance(check, Mapping) or check.get("status") != "passed"
+            for check in checks
+        )
+    ):
+        _causal_failure("result.verification.checks")
+
+
+def _semantic_process_dto(process: Mapping[str, Any]) -> dict[str, Any]:
+    value = deepcopy(dict(process))
+    value.pop("agent_contribution", None)
+    for node in value.get("nodes", []):
+        if isinstance(node, dict):
+            node.pop("agent_decision_contributions", None)
+    return value
+
+
+def _semantic_checklist_dto(checklist: Mapping[str, Any]) -> dict[str, Any]:
+    value = deepcopy(dict(checklist))
+    value.pop("agent_contribution", None)
+    for item in value.get("items", []):
+        if isinstance(item, dict):
+            item.pop("agent_contribution", None)
+    return value
+
+
+def _semantic_fact_signature(facts: list[Any], path: str) -> dict[str, Any]:
+    roles: dict[str, Any] = {}
+    for index, raw_fact in enumerate(facts):
+        fact = _causal_mapping(raw_fact, f"{path}[{index}]")
+        role = fact.get("semantic_role")
+        if role is None:
+            continue
+        if role != SEMANTIC_MEMORY_ROLE or role in roles:
+            _causal_failure(f"{path}[{index}].semantic_role")
+        refs = _causal_list(fact.get("source_refs"), f"{path}[{index}].source_refs")
+        roles[role] = {
+            "fact_id": fact.get("fact_id"),
+            "state": fact.get("state"),
+            "grounded_source_count": len(refs),
+        }
+    if set(roles) != {SEMANTIC_MEMORY_ROLE}:
+        _causal_failure(f"{path}.semantic_role")
+    return roles
+
+
+def _apply_release_evidence_relations(
+    process: dict[str, Any], checklist: dict[str, Any]
+) -> None:
+    items = checklist.get("items")
+    if not isinstance(items, list):
+        _causal_failure("learning_replay.checklist.items")
+    owners: dict[str, list[str]] = {}
+    for item in items:
+        if not isinstance(item, dict) or not isinstance(item.get("item_id"), str):
+            _causal_failure("learning_replay.checklist.items")
+        owners[item["item_id"]] = []
+    for node in process.get("nodes", []):
+        if not isinstance(node, dict) or not isinstance(node.get("node_id"), str):
+            _causal_failure("learning_replay.process.nodes")
+        requirements = node.get("evidence_requirement_ids")
+        if not isinstance(requirements, list):
+            _causal_failure("learning_replay.process.nodes.evidence_requirement_ids")
+        for item_id in requirements:
+            if item_id not in owners:
+                _causal_failure("learning_replay.process.nodes.evidence_requirement_ids")
+            owners[item_id].append(node["node_id"])
+    overlay = process.get("current_overlay")
+    if not isinstance(overlay, dict):
+        _causal_failure("learning_replay.process.current_overlay")
+    active = set(process.get("selected_path", []))
+    active.add(overlay.get("next_action_node_id"))
+    for item in items:
+        item_owners = owners[item["item_id"]]
+        if not item_owners:
+            _causal_failure("learning_replay.checklist.items.node_ids")
+        item["node_ids"] = item_owners
+        item["node_id"] = item_owners[0]
+        item["current_path"] = bool(active.intersection(item_owners))
+
+
+def _replay_memory_transform(
+    process: dict[str, Any], checklist: dict[str, Any], ventilation_fact_id: str
+) -> dict[str, Any]:
+    if any(
+        isinstance(node, Mapping) and node.get("node_id") == "ventilation_dispute"
+        for node in process.get("nodes", [])
+    ):
+        _causal_failure("learning_replay.process.nodes")
+    items = {
+        item.get("item_id"): item
+        for item in checklist.get("items", [])
+        if isinstance(item, dict)
+    }
+    if not {"building_envelope", "use_evidence"} <= set(items):
+        _causal_failure("learning_replay.checklist.items")
+    ventilation_node = {
+        "node_id": "ventilation_dispute",
+        "title": "Test the ventilation allegation",
+        "question": "What exactly is alleged, and does competent evidence support it?",
+        "state": "inactive",
+        "answer": (
+            "Preserve as disputed; test only if competent assessment leaves a "
+            "plausible use-related branch"
+        ),
+        "why": (
+            "Unverified demo memory guidance keeps the allegation explicit without "
+            "treating it as technical cause."
+        ),
+        "kind": "action",
+        "main_spine": False,
+        "fact_ids": [ventilation_fact_id],
+        "legal_source_ids": ["handling-causation", "handling-evidence-order"],
+        "evidence_requirement_ids": ["management_position", "use_evidence"],
+        "branches": [],
+        "activation": "recurrence + ventilation allegation + cause unresolved",
+    }
+    first_edge = {
+        "source": "evidence_gap",
+        "target": "ventilation_dispute",
+        "condition": "neutral inspection leaves a plausible use-related factor",
+        "state": "possible",
+    }
+    second_edge = {
+        "source": "ventilation_dispute",
+        "target": "causation",
+        "condition": "allegation evidence assessed",
+        "state": "loop",
+    }
+    process["nodes"].append(ventilation_node)
+    process["edges"].extend([first_edge, second_edge])
+    removed_from: list[str] = []
+    for node in process["nodes"]:
+        if node["node_id"] == "ventilation_dispute":
+            continue
+        requirements = node.get("evidence_requirement_ids", [])
+        if "use_evidence" in requirements:
+            node["evidence_requirement_ids"] = [
+                item_id for item_id in requirements if item_id != "use_evidence"
+            ]
+            removed_from.append(node["node_id"])
+    process["memory_used"] = True
+    process["case_specific_guidance_applied"] = True
+    process["shared_rule_applied"] = False
+    items["building_envelope"].update(
+        {
+            "status": "conditional",
+            "required_level": "conditional",
+            "applies_when": (
+                "The neutral first assessment is inconclusive or indicates an "
+                "envelope issue"
+            ),
+            "why": (
+                "Unverified demo memory guidance keeps broader building-envelope "
+                "testing conditional on the first competent assessment."
+            ),
+        }
+    )
+    items["use_evidence"].update(
+        {
+            "status": "conditional",
+            "required_level": "conditional",
+            "applies_when": (
+                "A competent assessment leaves a plausible use-related branch"
+            ),
+            "why": (
+                "Unverified demo memory guidance requests use-related evidence only "
+                "if competent assessment leaves that branch plausible."
+            ),
+        }
+    )
+    _apply_release_evidence_relations(process, checklist)
+    checklist.update(_checklist_derived_sections(checklist["items"]))
+    _apply_release_evidence_relations(process, checklist)
+    checklist["memory_used"] = True
+    checklist["case_specific_guidance_applied"] = True
+    checklist["shared_rule_applied"] = False
+    return {
+        "ventilation_node": ventilation_node,
+        "first_edge": first_edge,
+        "second_edge": second_edge,
+        "removed_from": removed_from,
+        "building_envelope": items["building_envelope"],
+        "use_evidence": items["use_evidence"],
+    }
+
+
+def _keyed_dto_delta(
+    before: Mapping[str, Any], after: Mapping[str, Any]
+) -> dict[str, Any]:
+    before_process = _semantic_process_dto(
+        _causal_mapping(before.get("process"), "learning.baseline.process")
+    )
+    after_process = _semantic_process_dto(
+        _causal_mapping(after.get("process"), "learning.later.process")
+    )
+    before_checklist = _semantic_checklist_dto(
+        _causal_mapping(before.get("checklist"), "learning.baseline.checklist")
+    )
+    after_checklist = _semantic_checklist_dto(
+        _causal_mapping(after.get("checklist"), "learning.later.checklist")
+    )
+
+    def keyed(values: Any, key: Any, path: str) -> dict[Any, Any]:
+        if not isinstance(values, list):
+            _causal_failure(path)
+        result: dict[Any, Any] = {}
+        for value in values:
+            if not isinstance(value, Mapping):
+                _causal_failure(path)
+            item_key = key(value)
+            if item_key in result:
+                _causal_failure(path)
+            result[item_key] = value
+        return result
+
+    before_nodes = keyed(
+        before_process.get("nodes"), lambda value: value.get("node_id"), "learning.baseline.process.nodes"
+    )
+    after_nodes = keyed(
+        after_process.get("nodes"), lambda value: value.get("node_id"), "learning.later.process.nodes"
+    )
+    before_edges = keyed(
+        before_process.get("edges"),
+        lambda value: (value.get("source"), value.get("target")),
+        "learning.baseline.process.edges",
+    )
+    after_edges = keyed(
+        after_process.get("edges"),
+        lambda value: (value.get("source"), value.get("target")),
+        "learning.later.process.edges",
+    )
+    before_items = keyed(
+        before_checklist.get("items"), lambda value: value.get("item_id"), "learning.baseline.checklist.items"
+    )
+    after_items = keyed(
+        after_checklist.get("items"), lambda value: value.get("item_id"), "learning.later.checklist.items"
+    )
+
+    def added(left: Mapping[Any, Any], right: Mapping[Any, Any]) -> list[Any]:
+        return sorted(set(right) - set(left))
+
+    def removed(left: Mapping[Any, Any], right: Mapping[Any, Any]) -> list[Any]:
+        return sorted(set(left) - set(right))
+
+    def changed(left: Mapping[Any, Any], right: Mapping[Any, Any]) -> list[Any]:
+        return sorted(key for key in set(left) & set(right) if left[key] != right[key])
+
+    def root_changes(
+        left: Mapping[str, Any], right: Mapping[str, Any], excluded: set[str]
+    ) -> list[str]:
+        return sorted(
+            key
+            for key in set(left) | set(right)
+            if key not in excluded and left.get(key) != right.get(key)
+        )
+
+    added_edge_pairs = added(before_edges, after_edges)
+    removed_edge_pairs = removed(before_edges, after_edges)
+    changed_edge_pairs = changed(before_edges, after_edges)
+    process_delta = {
+        "added_node_ids": added(before_nodes, after_nodes),
+        "removed_node_ids": removed(before_nodes, after_nodes),
+        "changed_node_ids": changed(before_nodes, after_nodes),
+        "added_edges": [
+            {"source": source, "target": target}
+            for source, target in added_edge_pairs
+        ],
+        "removed_edges": [
+            {"source": source, "target": target}
+            for source, target in removed_edge_pairs
+        ],
+        "changed_edges": [
+            {"source": source, "target": target}
+            for source, target in changed_edge_pairs
+        ],
+        "changed_root_keys": root_changes(
+            before_process, after_process, {"nodes", "edges"}
+        ),
+    }
+    evidence_delta = {
+        "added_item_ids": added(before_items, after_items),
+        "removed_item_ids": removed(before_items, after_items),
+        "changed_item_ids": changed(before_items, after_items),
+        "changed_root_keys": root_changes(
+            before_checklist, after_checklist, {"items"}
+        ),
+    }
+    return {
+        "nonzero": any(
+            process_delta[key]
+            for key in (
+                "added_node_ids",
+                "removed_node_ids",
+                "changed_node_ids",
+                "added_edges",
+                "removed_edges",
+                "changed_edges",
+            )
+        )
+        or any(
+            evidence_delta[key]
+            for key in ("added_item_ids", "removed_item_ids", "changed_item_ids")
+        ),
+        "process": process_delta,
+        "evidence": evidence_delta,
+    }
+
+
+def _verify_learning_replay_contract(
+    *,
+    demo_review: Mapping[str, Any],
+    post_review_run: Mapping[str, Any],
+    baseline_run: Mapping[str, Any],
+    later_run: Mapping[str, Any],
+    proof: Mapping[str, Any],
+) -> None:
+    if (
+        baseline_run.get("status") != "complete"
+        or later_run.get("status") != "complete"
+        or baseline_run.get("claim_id") != "DEMO-MOULD-002"
+        or later_run.get("claim_id") != "DEMO-MOULD-002"
+        or baseline_run.get("knowledge_mode") != "baseline"
+        or later_run.get("knowledge_mode") != "current"
+        or baseline_run.get("run_id") == later_run.get("run_id")
+    ):
+        _causal_failure("learning.runs")
+    freeze = _causal_mapping(
+        baseline_run.get("counterfactual_learning_freeze"),
+        "learning.baseline.counterfactual_learning_freeze",
+    )
+    proof_freeze = _causal_mapping(
+        proof.get("counterfactual_learning_freeze"),
+        "learning.proof.counterfactual_learning_freeze",
+    )
+    baseline = _causal_mapping(
+        baseline_run.get("result"), "learning.baseline.result"
+    )
+    later = _causal_mapping(later_run.get("result"), "learning.later.result")
+    receipt = _causal_mapping(
+        later.get("memory_application"), "learning.later.memory_application"
+    )
+    receipt_fields = {
+        "receipt_type",
+        "contract",
+        "authority",
+        "scope",
+        "source_memory",
+        "target",
+        "observable_input_hash",
+        "canonical_state_hash",
+        "eligibility",
+        "allowed_operation_ids",
+        "applied_operation_ids",
+        "process_operations",
+        "evidence_operations",
+        "before",
+        "after",
+        "verification_hash",
+        "shared_playbook_version",
+        "shared_rule_applied",
+        "model_acceptance_reused",
+        "applied",
+        "application_hash",
+    }
+    if (
+        set(receipt) != receipt_fields
+        or receipt.get("receipt_type") != "memory_application_receipt"
+        or receipt.get("contract")
+        != "casepath.memory-application-receipt/1.0.0"
+        or receipt.get("authority") != "unverified_demo"
+        or receipt.get("scope") != "case_specific_guidance_only"
+        or receipt.get("shared_playbook_version") != "mould-playbook-v3"
+        or receipt.get("shared_rule_applied") is not False
+        or receipt.get("model_acceptance_reused") is not False
+        or receipt.get("applied") is not True
+    ):
+        _causal_failure("learning.later.memory_application")
+    source_memory = _causal_mapping(
+        receipt.get("source_memory"), "learning.later.memory_application.source_memory"
+    )
+    freeze_memory = _causal_mapping(
+        freeze.get("memory"),
+        "learning.baseline.counterfactual_learning_freeze.memory",
+    )
+    reviewer = _causal_mapping(
+        demo_review.get("reviewer"), "learning.demo_review.reviewer"
+    )
+    reviewed_result = _causal_mapping(
+        demo_review.get("result"), "learning.demo_review.result"
+    )
+    review_record = _causal_mapping(
+        demo_review.get("review"), "learning.demo_review.review"
+    )
+    response_guidance = _causal_mapping(
+        reviewed_result.get("review"), "learning.demo_review.result.review"
+    )
+    review_transform = _causal_mapping(
+        reviewed_result.get("review_transform"),
+        "learning.demo_review.result.review_transform",
+    )
+    if (
+        set(source_memory)
+        != {"memory_id", "claim_id", "review_id", "content_hash", "review_status"}
+        or source_memory.get("claim_id") != "DEF-027-E0-DEMO"
+        or source_memory.get("review_status") != "unverified_demo_memory"
+        or not re.fullmatch(r"[0-9a-f]{64}", str(source_memory.get("content_hash", "")))
+        or demo_review.get("accepted") is not True
+        or demo_review.get("memory_id") != source_memory.get("memory_id")
+        or demo_review.get("review_id") != source_memory.get("review_id")
+        or demo_review.get("accepted") is not True
+        or post_review_run.get("run_id") != review_transform.get("input_run_id")
+        or post_review_run.get("claim_id") != source_memory.get("claim_id")
+        or post_review_run.get("memory_id") != source_memory.get("memory_id")
+        or post_review_run.get("review_id") != source_memory.get("review_id")
+        or post_review_run.get("review_response") != demo_review
+        or post_review_run.get("result") != reviewed_result
+        or post_review_run.get("candidate") != demo_review.get("candidate")
+        or demo_review.get("review") != review_record
+        or demo_review.get("review_transform") != review_transform
+        or set(review_record)
+        != {
+            "decision",
+            "building_envelope_mode",
+            "confidence",
+            "justification",
+            "reviewer",
+            "operations",
+            "authority",
+        }
+        or review_record.get("decision") != "approve_with_edit"
+        or review_record.get("building_envelope_mode") != "conditional"
+        or not isinstance(review_record.get("confidence"), (int, float))
+        or isinstance(review_record.get("confidence"), bool)
+        or not isinstance(review_record.get("justification"), str)
+        or not review_record.get("justification", "").strip()
+        or not isinstance(review_record.get("operations"), list)
+        or not review_record.get("operations")
+        or review_record.get("reviewer") != reviewer
+        or review_record.get("authority") != "unverified_demo"
+        or response_guidance != review_record
+        or set(review_transform)
+        != {
+            "acceptance_scope",
+            "authority",
+            "qualification_status",
+            "input_run_id",
+            "input_process_hash",
+            "input_checklist_hash",
+            "output_process_hash",
+            "output_checklist_hash",
+            "model_acceptance_reused",
+        }
+        or review_transform.get("acceptance_scope")
+        != "post_review_unverified_transform"
+        or review_transform.get("authority") != reviewer.get("type")
+        or review_transform.get("qualification_status")
+        != reviewer.get("qualification_status")
+        or review_transform.get("output_process_hash")
+        != runtime_artifact_hash(reviewed_result.get("process"))
+        or review_transform.get("output_checklist_hash")
+        != runtime_artifact_hash(reviewed_result.get("checklist"))
+        or review_transform.get("model_acceptance_reused") is not False
+    ):
+        _causal_failure("learning.source_memory")
+    if (
+        set(freeze)
+        != {
+            "contract",
+            "memory",
+            "identity_hash",
+            "application_suppressed",
+        }
+        or freeze.get("contract")
+        != "casepath.counterfactual-learning-freeze/1.0.0"
+        or freeze.get("application_suppressed") is not True
+        or proof_freeze != freeze
+        or set(freeze_memory)
+        != {
+            "memory_id",
+            "review_id",
+            "content_hash",
+            "candidate_id",
+            "updated_at",
+        }
+        or freeze_memory.get("memory_id") != source_memory.get("memory_id")
+        or freeze_memory.get("review_id") != source_memory.get("review_id")
+        or freeze_memory.get("content_hash") != source_memory.get("content_hash")
+        or freeze_memory.get("candidate_id")
+        != demo_review.get("candidate", {}).get("candidate_id")
+        or not _is_historical_timestamp(freeze_memory.get("updated_at"))
+        or freeze.get("identity_hash") != runtime_artifact_hash(freeze_memory)
+    ):
+        _causal_failure("learning.counterfactual_learning_freeze")
+    try:
+        freeze_time = datetime.fromisoformat(
+            str(freeze_memory["updated_at"]).replace("Z", "+00:00")
+        ).timestamp()
+        baseline_created = datetime.fromisoformat(
+            str(baseline_run["created_at"]).replace("Z", "+00:00")
+        ).timestamp()
+        baseline_completed = float(baseline_run["completed_at"])
+        later_created = datetime.fromisoformat(
+            str(later_run["created_at"]).replace("Z", "+00:00")
+        ).timestamp()
+    except (KeyError, TypeError, ValueError):
+        _causal_failure("learning.counterfactual_temporal_order")
+    if not (
+        freeze_time
+        <= baseline_created
+        <= baseline_completed
+        <= later_created
+    ):
+        _causal_failure("learning.counterfactual_temporal_order")
+    if (
+        reviewer.get("type") != "unverified_demo_user"
+        or reviewer.get("qualification_status") != "not_verified"
+    ):
+        _causal_failure("learning.demo_review.reviewer")
+    consolidation_events = [
+        event
+        for event in post_review_run.get("events", [])
+        if isinstance(event, Mapping)
+        and event.get("receipt_type") == "knowledge_consolidation_receipt"
+    ]
+    if (
+        len(consolidation_events) != 1
+        or consolidation_events[0].get("memory_id") != source_memory.get("memory_id")
+        or consolidation_events[0].get("memory_content_hash")
+        != source_memory.get("content_hash")
+        or consolidation_events[0].get("qualified_reviewer") is not False
+        or consolidation_events[0].get("shared_knowledge_changed") is not False
+    ):
+        _causal_failure("learning.post_review_run.events")
+
+    target = _causal_mapping(receipt.get("target"), "learning.receipt.target")
+    baseline_audit = _causal_mapping(
+        baseline.get("audit"), "learning.baseline.result.audit"
+    )
+    later_audit = _causal_mapping(later.get("audit"), "learning.later.result.audit")
+    baseline_facts = _causal_list(baseline.get("facts"), "learning.baseline.facts")
+    later_facts = _causal_list(later.get("facts"), "learning.later.facts")
+    baseline_signature = _semantic_fact_signature(
+        baseline_facts, "learning.baseline.facts"
+    )
+    later_signature = _semantic_fact_signature(later_facts, "learning.later.facts")
+    canonical_hash = runtime_artifact_hash(later_facts)
+    before_proof = _causal_mapping(proof.get("before"), "learning.proof.before")
+    after_proof = _causal_mapping(proof.get("after"), "learning.proof.after")
+    if (
+        set(target) != {"run_id", "claim_id"}
+        or target.get("run_id") != later_run.get("run_id")
+        or target.get("claim_id") != later_run.get("claim_id")
+        or receipt.get("observable_input_hash")
+        != baseline_audit.get("observable_input_hash")
+        or receipt.get("observable_input_hash")
+        != later_audit.get("observable_input_hash")
+        or receipt.get("observable_input_hash")
+        != before_proof.get("observable_input_hash")
+        or receipt.get("observable_input_hash")
+        != after_proof.get("observable_input_hash")
+        or receipt.get("canonical_state_hash") != canonical_hash
+        or receipt.get("canonical_state_hash")
+        != baseline_audit.get("canonical_state_hash")
+        or receipt.get("canonical_state_hash")
+        != later_audit.get("canonical_state_hash")
+        or receipt.get("canonical_state_hash")
+        != before_proof.get("canonical_state_hash")
+        or receipt.get("canonical_state_hash")
+        != after_proof.get("canonical_state_hash")
+        or runtime_artifact_hash(baseline_facts) != canonical_hash
+        or baseline_signature != later_signature
+    ):
+        _causal_failure("learning.input_and_canonical_binding")
+
+    decisions = {
+        fact.get("decision_key"): fact.get("decision_value")
+        for fact in later_facts
+        if isinstance(fact, Mapping) and fact.get("controls_process") is True
+    }
+    semantic_signature_hash = runtime_artifact_hash(
+        {
+            "category": "Rental defect - mould and moisture",
+            "subcategory": "Recurring moisture with disputed causation",
+            "required_decisions": MEMORY_REQUIRED_DECISIONS,
+            "required_fact_roles": MEMORY_REQUIRED_FACT_ROLES,
+        }
+    )
+    eligibility = _causal_mapping(
+        receipt.get("eligibility"), "learning.receipt.eligibility"
+    )
+    eligibility_checks = {
+        "source_claim_excluded": source_memory.get("claim_id")
+        != later_run.get("claim_id"),
+        "category_matched": later.get("category")
+        == "Rental defect - mould and moisture",
+        "subcategory_matched": later.get("subcategory")
+        == "Recurring moisture with disputed causation",
+        "required_decisions_matched": decisions == MEMORY_REQUIRED_DECISIONS,
+        "ventilation_allegation_grounded": (
+            later_signature[SEMANTIC_MEMORY_ROLE].get("state") == "known"
+            and later_signature[SEMANTIC_MEMORY_ROLE].get("grounded_source_count", 0)
+            >= 1
+        ),
+        "semantic_signature_bound": eligibility.get("semantic_signature_hash")
+        == semantic_signature_hash,
+        "guidance_enabled": True,
+    }
+    eligibility_manifest = {
+        "rule_id": eligibility.get("rule_id"),
+        "contract": eligibility.get("contract"),
+        "claim_id": eligibility.get("claim_id"),
+        "semantic_signature_hash": eligibility.get("semantic_signature_hash"),
+        "decisions": eligibility.get("decisions"),
+        "facts_hash": eligibility.get("facts_hash"),
+        "checks": eligibility.get("checks"),
+    }
+    if (
+        set(eligibility)
+        != {
+            "rule_id",
+            "contract",
+            "claim_id",
+            "semantic_signature_hash",
+            "decisions",
+            "facts_hash",
+            "checks",
+            "eligible",
+            "manifest_hash",
+        }
+        or eligibility.get("rule_id") != "same_grounded_mould_signature_v2"
+        or eligibility.get("contract")
+        != "casepath.semantic-memory-eligibility/1.0.0"
+        or eligibility.get("claim_id") != later_run.get("claim_id")
+        or eligibility.get("semantic_signature_hash") != semantic_signature_hash
+        or eligibility.get("decisions") != MEMORY_REQUIRED_DECISIONS
+        or eligibility.get("facts_hash") != runtime_artifact_hash(later_signature)
+        or eligibility.get("checks") != eligibility_checks
+        or eligibility.get("eligible") is not True
+        or eligibility.get("manifest_hash")
+        != runtime_artifact_hash(eligibility_manifest)
+    ):
+        _causal_failure("learning.receipt.eligibility")
+
+    baseline_process = _causal_mapping(
+        baseline.get("process"), "learning.baseline.process"
+    )
+    baseline_checklist = _causal_mapping(
+        baseline.get("checklist"), "learning.baseline.checklist"
+    )
+    later_process = _causal_mapping(later.get("process"), "learning.later.process")
+    later_checklist = _causal_mapping(
+        later.get("checklist"), "learning.later.checklist"
+    )
+    _verify_reciprocal_evidence_contract(
+        baseline_process,
+        baseline_checklist,
+        path="learning.baseline",
+    )
+    _verify_reciprocal_evidence_contract(
+        later_process,
+        later_checklist,
+        include_memory_extension=True,
+        path="learning.later",
+    )
+    _verify_release_fact_relationships(
+        claim_id="DEMO-MOULD-002",
+        facts=baseline_facts,
+        process=baseline_process,
+        checklist=baseline_checklist,
+        include_memory_extension=False,
+        path="learning.baseline",
+    )
+    _verify_release_fact_relationships(
+        claim_id="DEMO-MOULD-002",
+        facts=later_facts,
+        process=later_process,
+        checklist=later_checklist,
+        include_memory_extension=True,
+        path="learning.later",
+    )
+    semantic_before_process = _semantic_process_dto(baseline_process)
+    semantic_before_checklist = _semantic_checklist_dto(baseline_checklist)
+    semantic_after_process = _semantic_process_dto(later_process)
+    semantic_after_checklist = _semantic_checklist_dto(later_checklist)
+    boundaries = {"process_dto_hash", "checklist_dto_hash", "process_semantic_hash", "checklist_semantic_hash"}
+    proof_boundary_fields = {
+        "observable_input_hash",
+        "canonical_state_hash",
+        "verification_hash",
+        *boundaries,
+    }
+    receipt_before = _causal_mapping(receipt.get("before"), "learning.receipt.before")
+    receipt_after = _causal_mapping(receipt.get("after"), "learning.receipt.after")
+    exact_before = {
+        "process_dto_hash": runtime_artifact_hash(baseline_process),
+        "checklist_dto_hash": runtime_artifact_hash(baseline_checklist),
+        "process_semantic_hash": runtime_artifact_hash(semantic_before_process),
+        "checklist_semantic_hash": runtime_artifact_hash(semantic_before_checklist),
+    }
+    exact_after = {
+        "process_dto_hash": runtime_artifact_hash(later_process),
+        "checklist_dto_hash": runtime_artifact_hash(later_checklist),
+        "process_semantic_hash": runtime_artifact_hash(semantic_after_process),
+        "checklist_semantic_hash": runtime_artifact_hash(semantic_after_checklist),
+    }
+    boundary = _causal_mapping(
+        later_run.get("memory_application_boundary"),
+        "learning.later.memory_application_boundary",
+    )
+    boundary_source = _causal_mapping(
+        boundary.get("source_memory"),
+        "learning.later.memory_application_boundary.source_memory",
+    )
+    boundary_before = _causal_mapping(
+        boundary.get("before"),
+        "learning.later.memory_application_boundary.before",
+    )
+    boundary_without_hash = {
+        key: value for key, value in boundary.items() if key != "boundary_hash"
+    }
+    if (
+        set(boundary)
+        != {"contract", "target", "source_memory", "before", "boundary_hash"}
+        or boundary.get("contract") != MEMORY_BOUNDARY_CONTRACT
+        or boundary.get("target") != receipt.get("target")
+        or boundary_source
+        != {
+            "memory_id": source_memory.get("memory_id"),
+            "content_hash": source_memory.get("content_hash"),
+        }
+        or boundary_before != exact_before
+        or boundary_before != receipt_before
+        or boundary.get("boundary_hash")
+        != runtime_artifact_hash(boundary_without_hash)
+    ):
+        _causal_failure("learning.later.memory_application_boundary")
+    later_events = _causal_list(later_run.get("events"), "learning.later.events")
+    memory_events = [
+        event
+        for event in later_events
+        if isinstance(event, Mapping)
+        and event.get("stage") == "memory_application"
+        and event.get("receipt_type") == "memory_application_receipt"
+        and event.get("status") == "completed"
+    ]
+    if len(memory_events) != 1:
+        _causal_failure("learning.later.memory_application_event")
+    event = memory_events[0]
+    if any(key not in event for key in receipt):
+        _causal_failure("learning.later.memory_application_event")
+    event_receipt = {key: deepcopy(event[key]) for key in receipt}
+    if event_receipt != receipt or event_receipt.get("before") != boundary_before:
+        _causal_failure("learning.later.memory_application_event")
+    if (
+        set(before_proof) != proof_boundary_fields
+        or set(after_proof) != proof_boundary_fields
+        or set(receipt_before) != boundaries
+        or set(receipt_after) != boundaries
+        or receipt_before != exact_before
+        or receipt_after != exact_after
+        or any(receipt_before.get(key) == receipt_after.get(key) for key in boundaries)
+        or any(before_proof.get(key) != value for key, value in exact_before.items())
+        or any(after_proof.get(key) != value for key, value in exact_after.items())
+        or before_proof.get("verification_hash")
+        != baseline.get("verification", {}).get("whole_playbook_hash")
+    ):
+        _causal_failure("learning.receipt.boundaries")
+
+    replay_process = deepcopy(semantic_before_process)
+    replay_checklist = deepcopy(semantic_before_checklist)
+    replay = _replay_memory_transform(
+        replay_process,
+        replay_checklist,
+        str(later_signature[SEMANTIC_MEMORY_ROLE]["fact_id"]),
+    )
+    if replay_process != semantic_after_process or replay_checklist != semantic_after_checklist:
+        _causal_failure("learning.pure_replay")
+
+    process_operations = _causal_list(
+        receipt.get("process_operations"), "learning.receipt.process_operations"
+    )
+    evidence_operations = _causal_list(
+        receipt.get("evidence_operations"), "learning.receipt.evidence_operations"
+    )
+    if (
+        receipt.get("allowed_operation_ids") != list(MEMORY_OPERATION_IDS)
+        or receipt.get("applied_operation_ids") != list(MEMORY_OPERATION_IDS)
+        or [
+            operation.get("operation_id")
+            for operation in [*process_operations, *evidence_operations]
+            if isinstance(operation, Mapping)
+        ]
+        != list(MEMORY_OPERATION_IDS)
+        or len(process_operations) != 3
+        or len(evidence_operations) != 2
+    ):
+        _causal_failure("learning.receipt.operations")
+    expected_operation_fields = (
+        {"operation_id", "operation", "node_id", "evidence_requirement_ids", "after_hash"},
+        {"operation_id", "operation", "source", "target", "after_hash"},
+        {"operation_id", "operation", "source", "target", "after_hash"},
+        {"operation_id", "operation", "item_id", "before_hash", "after_hash"},
+        {
+            "operation_id",
+            "operation",
+            "item_id",
+            "removed_from_node_ids",
+            "added_to_node_id",
+            "before_hash",
+            "after_hash",
+        },
+    )
+    operations = [*process_operations, *evidence_operations]
+    if any(
+        not isinstance(operation, Mapping)
+        or set(operation) != expected_operation_fields[index]
+        for index, operation in enumerate(operations)
+    ):
+        _causal_failure("learning.receipt.operations")
+    if (
+        process_operations[0].get("operation") != "add_node"
+        or process_operations[0].get("node_id") != "ventilation_dispute"
+        or process_operations[0].get("evidence_requirement_ids")
+        != ["management_position", "use_evidence"]
+        or process_operations[0].get("after_hash")
+        != runtime_artifact_hash(replay["ventilation_node"])
+        or any(operation.get("operation") != "add_edge" for operation in process_operations[1:])
+        or process_operations[1].get("after_hash")
+        != runtime_artifact_hash(replay["first_edge"])
+        or process_operations[2].get("after_hash")
+        != runtime_artifact_hash(replay["second_edge"])
+        or evidence_operations[0].get("operation") != "replace_item"
+        or evidence_operations[0].get("item_id") != "building_envelope"
+        or evidence_operations[0].get("after_hash")
+        != runtime_artifact_hash(replay["building_envelope"])
+        or evidence_operations[1].get("operation") != "reassign_item"
+        or evidence_operations[1].get("item_id") != "use_evidence"
+        or evidence_operations[1].get("removed_from_node_ids")
+        != sorted(replay["removed_from"])
+        or evidence_operations[1].get("added_to_node_id") != "ventilation_dispute"
+        or evidence_operations[1].get("after_hash")
+        != runtime_artifact_hash(replay["use_evidence"])
+    ):
+        _causal_failure("learning.receipt.operations")
+    receipt_without_hash = {
+        key: value for key, value in receipt.items() if key != "application_hash"
+    }
+    if receipt.get("application_hash") != runtime_artifact_hash(receipt_without_hash):
+        _causal_failure("learning.receipt.application_hash")
+    verification = _causal_mapping(
+        later.get("verification"), "learning.later.verification"
+    )
+    if (
+        receipt.get("verification_hash") != verification.get("whole_playbook_hash")
+        or receipt.get("verification_hash") != after_proof.get("verification_hash")
+    ):
+        _causal_failure("learning.receipt.verification_hash")
+
+    causal_delta = _keyed_dto_delta(baseline, later)
+    if (
+        proof.get("causal_delta") != causal_delta
+        or causal_delta.get("process", {}).get("added_node_ids")
+        != ["ventilation_dispute"]
+        or causal_delta.get("process", {}).get("added_edges")
+        != [
+            {"source": "evidence_gap", "target": "ventilation_dispute"},
+            {"source": "ventilation_dispute", "target": "causation"},
+        ]
+        or causal_delta.get("evidence", {}).get("changed_item_ids")
+        != ["building_envelope", "management_position", "use_evidence"]
+    ):
+        _causal_failure("learning.proof.causal_delta")
+    deterministic_checks = _causal_list(
+        proof.get("deterministic_checks"), "learning.proof.deterministic_checks"
+    )
+    if (
+        proof.get("ready") is not True
+        or proof.get("computed") is not True
+        or proof.get("baseline_run_id") != baseline_run.get("run_id")
+        or proof.get("later_run_id") != later_run.get("run_id")
+        or [
+            check.get("name") if isinstance(check, Mapping) else None
+            for check in deterministic_checks
+        ]
+        != list(REQUIRED_LEARNING_CHECKS)
+        or any(
+            not isinstance(check, Mapping) or check.get("status") != "passed"
+            for check in deterministic_checks
+        )
+    ):
+        _causal_failure("learning.proof.deterministic_checks")
+    receipt_proof = _causal_mapping(
+        proof.get("memory_application_proof"),
+        "learning.proof.memory_application_proof",
+    )
+    proof_flags = {
+        "receipt_present",
+        "receipt_valid",
+        "source_memory_current",
+        "before_hashes_match",
+        "after_hashes_match",
+        "allowed_delta_exact",
+        "replay_exact",
+    }
+    if (
+        set(receipt_proof) != {*proof_flags, "application_hash"}
+        or any(receipt_proof.get(key) is not True for key in proof_flags)
+        or receipt_proof.get("application_hash") != receipt.get("application_hash")
+    ):
+        _causal_failure("learning.proof.memory_application_proof")
+    reviewed_memory = _causal_mapping(
+        proof.get("reviewed_memory_proof"), "learning.proof.reviewed_memory_proof"
+    )
+    candidate = _causal_mapping(proof.get("candidate"), "learning.proof.candidate")
+    shared_rule = _causal_mapping(
+        proof.get("shared_rule"), "learning.proof.shared_rule"
+    )
+    if (
+        reviewed_memory.get("used") is not True
+        or reviewed_memory.get("present_in_baseline") is not False
+        or reviewed_memory.get("present_in_later_run") is not True
+        or source_memory.get("memory_id") not in reviewed_memory.get("memory_ids", [])
+        or proof.get("changes", {}).get("precedent_claim_ids_added")
+        != ["DEF-027-E0-DEMO"]
+        or candidate.get("status") != "quarantined"
+        or candidate.get("target_tests", {}).get("status") != "passed"
+        or candidate.get("protected_regression", {}).get("status") != "passed"
+        or candidate.get("qualified_support_count") != 0
+        or candidate.get("approval")
+        != {"status": "pending", "qualified_reviewer": False}
+        or later.get("playbook", {}).get("version") != "mould-playbook-v3"
+        or later.get("shared_rule_applied") is not False
+        or shared_rule.get("applied") is not False
+        or shared_rule.get("version_before") != "mould-playbook-v3"
+        or shared_rule.get("version_after") != "mould-playbook-v3"
+        or shared_rule.get("shared_knowledge_changed") is not False
+    ):
+        _causal_failure("learning.proof.governance")
+    if (
+        "agent_contribution" in later_process
+        or any(
+            isinstance(node, Mapping) and "agent_decision_contributions" in node
+            for node in later_process.get("nodes", [])
+        )
+        or "agent_contribution" in later_checklist
+        or any(
+            isinstance(item, Mapping) and "agent_contribution" in item
+            for item in later_checklist.get("items", [])
+        )
+        or later.get("next_action", {}).get("agent_brief_contribution") is not None
+    ):
+        _causal_failure("learning.later.model_attribution")
+
+
 def _accepted_lineage(agent: Mapping[str, Any]) -> dict[str, Any]:
     return {
         field: agent[field]
@@ -3344,6 +5315,7 @@ def _verify_hybrid_causal_artifacts(
     by_agent: Mapping[str, Mapping[str, Any]],
     gates_by_id: Mapping[str, Mapping[str, Any]],
 ) -> None:
+    _verify_grounded_flagship_contract(result)
     facts = _causal_list(result.get("facts"), "result.facts")
     canonical_agent = by_agent["canonical_facts"]
     fact_ids = {
@@ -3885,6 +5857,31 @@ def verify_dynamic_runtime_acceptance(
     if not isinstance(flagship_run, dict) or not isinstance(flagship_ledger, dict):
         raise VerificationError("Dynamic QA pair lacks retained flagship run or cold ledger")
     orchestration_id = _verify_cold_flagship_evidence(flagship_run, flagship_ledger)
+    learning_files = {
+        name: retained_evidence.get(name)
+        for name in (
+            "demo-review.json",
+            "post-review-run.json",
+            "later-baseline-run.json",
+            "later-after-memory-run.json",
+            "learning-proof.json",
+        )
+    }
+    if any(not isinstance(value, dict) for value in learning_files.values()):
+        raise VerificationError(
+            "Dynamic QA pair lacks the retained review and learning replay bundle"
+        )
+    _verify_learning_replay_contract(
+        demo_review=learning_files["demo-review.json"],
+        post_review_run=learning_files["post-review-run.json"],
+        baseline_run=learning_files["later-baseline-run.json"],
+        later_run=learning_files["later-after-memory-run.json"],
+        proof=learning_files["learning-proof.json"],
+    )
+    _verify_sanitized_evidence(
+        {"retained_learning_evidence": learning_files},
+        "Dynamic retained learning evidence",
+    )
     return {
         "release_id": release["release_id"],
         "source_commit": source_commit,
@@ -3938,7 +5935,15 @@ def verify_dynamic_runtime_acceptance_paths(
             raise VerificationError(f"Dynamic QA evidence size mismatch: {record['path']}")
 
     retained_evidence = {}
-    for filename in ("flagship-run.json", "flagship-cold-model-ledger.json"):
+    for filename in (
+        "flagship-run.json",
+        "flagship-cold-model-ledger.json",
+        "demo-review.json",
+        "post-review-run.json",
+        "later-baseline-run.json",
+        "later-after-memory-run.json",
+        "learning-proof.json",
+    ):
         try:
             value = json.loads((evidence_root / filename).read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as exc:

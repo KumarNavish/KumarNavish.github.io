@@ -167,6 +167,8 @@ const EXPECTED_RUNTIME_ACCEPTANCE_CRITERIA = Object.freeze({
   requires_deterministic_gate_passes: true,
   requires_guarded_fallback_disclosure: true,
   requires_source_reference_projection_disclosure: true,
+  requires_grounded_causal_artifact_recomputation: true,
+  requires_learning_replay_proof: true,
 });
 const EXPECTED_FAILED_MODEL_ATTEMPT_RECORDS = Object.freeze(
   Array.from({ length: 13 }, (_, index) => `casepath/releases/model-validation-attempt-20260811-${String(index + 1).padStart(2, '0')}.json`),
@@ -301,8 +303,17 @@ function contributionEntries(value, expectedAttribution) {
   return valid ? entries : null;
 }
 
-function contributionExpectation(value, expectedAttribution, reviewTransform = null) {
-  if (reviewTransform?.acceptance_scope === 'post_review_unverified_transform') return null;
+function transformedContributionSuppressed(transform = null) {
+  return transform?.acceptance_scope === 'post_review_unverified_transform'
+    || (transform?.contract === 'casepath.memory-application-receipt/1.0.0'
+      && transform.authority === 'unverified_demo'
+      && transform.scope === 'case_specific_guidance_only'
+      && transform.model_acceptance_reused === false
+      && transform.applied === true);
+}
+
+function contributionExpectation(value, expectedAttribution, transform = null) {
+  if (transformedContributionSuppressed(transform)) return null;
   const entries = contributionEntries(value, expectedAttribution);
   if (!entries) return null;
   const acceptedCount = entries.filter(item => item.deterministic_fallback_applied === false && item.attribution === expectedAttribution).length;
@@ -315,9 +326,9 @@ function contributionExpectation(value, expectedAttribution, reviewTransform = n
   };
 }
 
-function contributionDomProjection(value, expectedAttribution, reviewTransform = null) {
-  const summary = contributionExpectation(value, expectedAttribution, reviewTransform);
-  const entries = reviewTransform?.acceptance_scope === 'post_review_unverified_transform'
+function contributionDomProjection(value, expectedAttribution, transform = null) {
+  const summary = contributionExpectation(value, expectedAttribution, transform);
+  const entries = transformedContributionSuppressed(transform)
     ? null
     : contributionEntries(value, expectedAttribution);
   if (!summary || !entries) return null;
@@ -359,6 +370,379 @@ function stableJson(value) {
 
 function dtoHash(value) {
   return sha256(stableJson(value));
+}
+
+function semanticProcessDto(process) {
+  const value = structuredClone(process || {});
+  delete value.agent_contribution;
+  for (const node of value.nodes || []) delete node.agent_decision_contributions;
+  return value;
+}
+
+function semanticChecklistDto(checklist) {
+  const value = structuredClone(checklist || {});
+  delete value.agent_contribution;
+  for (const item of value.items || []) delete item.agent_contribution;
+  return value;
+}
+
+function evidenceRelationContractViolations(process, checklist) {
+  const issues = [];
+  if (!process || !checklist || !Array.isArray(process.nodes) || !Array.isArray(checklist.items)) return ['process nodes or checklist items are absent'];
+  const itemIds = checklist.items.map(item => item?.item_id);
+  if (!itemIds.every(nonemptyString) || new Set(itemIds).size !== itemIds.length) return ['checklist item IDs are absent or duplicated'];
+  const itemIdSet = new Set(itemIds);
+  const ownerMap = new Map(itemIds.map(itemId => [itemId, []]));
+  const nodeIds = process.nodes.map(node => node?.node_id);
+  if (!nodeIds.every(nonemptyString) || new Set(nodeIds).size !== nodeIds.length) return ['process node IDs are absent or duplicated'];
+  for (const node of process.nodes) {
+    const requirements = node.evidence_requirement_ids;
+    if (!Array.isArray(requirements) || requirements.some(itemId => !itemIdSet.has(itemId)) || new Set(requirements).size !== requirements.length) {
+      issues.push(`${node.node_id}: evidence requirements are not a unique known-item list`);
+      continue;
+    }
+    for (const itemId of requirements) ownerMap.get(itemId).push(node.node_id);
+  }
+  const selectedPath = process.selected_path;
+  const nextAction = process.current_overlay?.next_action_node_id;
+  if (!Array.isArray(selectedPath) || selectedPath.some(nodeId => !nodeIds.includes(nodeId))) issues.push('selected path is absent or contains an unknown node');
+  if (!nonemptyString(nextAction) || !nodeIds.includes(nextAction)) issues.push('next-action node is absent or unknown');
+  const activeNodes = new Set([...(Array.isArray(selectedPath) ? selectedPath : []), ...(nonemptyString(nextAction) ? [nextAction] : [])]);
+  for (const item of checklist.items) {
+    const owners = ownerMap.get(item.item_id) || [];
+    if (!owners.length) issues.push(`${item.item_id}: no process owner`);
+    if (JSON.stringify(item.node_ids) !== JSON.stringify(owners)) issues.push(`${item.item_id}: node_ids do not match ordered process owners`);
+    if (item.node_id !== owners[0]) issues.push(`${item.item_id}: node_id is not the derived primary owner`);
+    if (item.current_path !== owners.some(nodeId => activeNodes.has(nodeId))) issues.push(`${item.item_id}: current_path is not derived from every owner`);
+  }
+  return issues;
+}
+
+function legalContextContractViolations(legal, process) {
+  const issues = [];
+  if (!legal || legal.contract !== 'casepath.legal-context/2.0.0') return ['legal context contract is absent or wrong'];
+  if (legal.registry_version !== 'ch-tenancy-official-snapshot/2026-08-12' || legal.lookup_method !== 'versioned_official_source_registry_lookup') issues.push('legal registry identity is wrong');
+  if (!Array.isArray(legal.questions) || !Array.isArray(legal.sources) || !Array.isArray(legal.handling_principles)) return [...issues, 'legal questions, sources, or handling principles are absent'];
+  const nodeIds = new Set((process?.nodes || []).map(node => node.node_id));
+  const officialIds = legal.sources.map(source => source?.source_id);
+  const principleIds = legal.handling_principles.map(source => source?.source_id);
+  if (!officialIds.every(nonemptyString) || new Set(officialIds).size !== officialIds.length) issues.push('official legal source IDs are absent or duplicated');
+  if (!principleIds.every(nonemptyString) || new Set(principleIds).size !== principleIds.length) issues.push('handling-principle IDs are absent or duplicated');
+  const officialFields = ['source_id', 'title', 'url', 'source_type', 'jurisdiction', 'version_date', 'location', 'passage_language', 'passage_text', 'passage_sha256', 'passage_summary', 'operational_interpretation', 'review_status', 'role', 'approved', 'retrieval'];
+  for (const source of legal.sources) {
+    if (!exactMembers(Object.keys(source || {}), officialFields)) issues.push(`${source?.source_id || 'official source'}: fields are not exact`);
+    if (!nonemptyString(source?.passage_text) || source.passage_sha256 !== sha256(source.passage_text)) issues.push(`${source?.source_id}: official passage hash is wrong`);
+    if (source?.jurisdiction !== 'CH' || source?.passage_language !== 'de' || !nonemptyString(source?.version_date) || !nonemptyString(source?.location) || source?.review_status !== 'qualified_review_pending' || source?.approved !== false) issues.push(`${source?.source_id}: official passage status/provenance is incomplete`);
+    const retrieval = source?.retrieval;
+    if (!exactMembers(Object.keys(retrieval || {}), ['method', 'retrieved_at', 'registry_version', 'snapshot_url', 'snapshot_sha256', 'snapshot_scope'])
+      || retrieval?.method !== 'versioned_official_source_registry_lookup'
+      || retrieval?.registry_version !== legal.registry_version
+      || !nonemptyString(retrieval?.retrieved_at)
+      || !nonemptyString(retrieval?.snapshot_url)
+      || !SHA256_PATTERN.test(retrieval?.snapshot_sha256 || '')
+      || !['official_pdf_bytes', 'normalized_official_passage_utf8'].includes(retrieval?.snapshot_scope)) issues.push(`${source?.source_id}: official retrieval receipt is invalid`);
+    if (source?.source_id === 'bwo-conciliation' && (retrieval?.snapshot_scope !== 'normalized_official_passage_utf8' || retrieval?.snapshot_sha256 !== source.passage_sha256 || retrieval.snapshot_sha256 !== '27700e4ed06b60510b992676823c44d9a11aefb94192fdc3bec872df1c843af6')) issues.push(`${source.source_id}: normalized official passage snapshot is not exact`);
+    if (source?.source_id?.startsWith('fedlex-') && retrieval?.snapshot_scope !== 'official_pdf_bytes') issues.push(`${source.source_id}: Fedlex snapshot scope is not official PDF bytes`);
+  }
+  for (const principle of legal.handling_principles) {
+    if (!exactMembers(Object.keys(principle || {}), ['source_id', 'title', 'source_type', 'role', 'validation_status', 'producer']) || principle?.producer !== 'deterministic_application') issues.push(`${principle?.source_id || 'principle'}: deterministic producer contract is invalid`);
+  }
+  const authorityIds = new Set([...officialIds, ...principleIds]);
+  const derivedNodeLinks = {};
+  const questionIds = [];
+  for (const question of legal.questions) {
+    if (!exactMembers(Object.keys(question || {}), ['question_id', 'text', 'source_ids', 'interpretation_ids', 'process_node_ids', 'consequence'])) issues.push(`${question?.question_id || 'question'}: fields are not exact`);
+    if (!nonemptyString(question?.question_id) || questionIds.includes(question.question_id)) issues.push('legal question IDs are absent or duplicated');
+    questionIds.push(question?.question_id);
+    if (!nonemptyString(question?.text) || !nonemptyString(question?.consequence)) issues.push(`${question?.question_id}: question text or consequence is absent`);
+    if (!(question?.source_ids || []).every(sourceId => officialIds.includes(sourceId))) issues.push(`${question?.question_id}: official source join is invalid`);
+    if (!(question?.interpretation_ids || []).every(sourceId => principleIds.includes(sourceId))) issues.push(`${question?.question_id}: interpretation join is invalid`);
+    if (!(question?.process_node_ids || []).every(nodeId => nodeIds.has(nodeId))) issues.push(`${question?.question_id}: process-node join is invalid`);
+    for (const nodeId of question?.process_node_ids || []) {
+      const retained = derivedNodeLinks[nodeId] ||= [];
+      for (const sourceId of [...(question.source_ids || []), ...(question.interpretation_ids || [])]) if (!retained.includes(sourceId)) retained.push(sourceId);
+    }
+  }
+  if (Object.values(legal.node_links || {}).flat().some(sourceId => !authorityIds.has(sourceId)) || stableJson(legal.node_links || {}) !== stableJson(derivedNodeLinks)) issues.push('legal node_links do not equal the ID-joined questions');
+  if (/model interpretation|live retrieval/i.test(stableJson(legal))) issues.push('legal DTO contains false model or live-retrieval authority wording');
+  return issues;
+}
+
+function visualReferenceContractViolations(reference, artifact) {
+  const issues = [];
+  const fields = ['artifact_id', 'locator_kind', 'region', 'observation', 'producer', 'authority', 'annotation_contract', 'annotation_version', 'image_sha256'];
+  if (!exactMembers(Object.keys(reference || {}), fields)) issues.push('visual annotation fields are not exact');
+  if (reference?.locator_kind !== 'visual_observation'
+    || reference?.producer !== 'deterministic_reference_annotation'
+    || reference?.authority !== 'generated_demo_reference_only'
+    || reference?.annotation_contract !== 'casepath.visual-reference-annotation/1.0.0'
+    || reference?.annotation_version !== 'generated-demo-reference/2026-08-12') issues.push('visual annotation authority contract is wrong');
+  const region = reference?.region;
+  if (!Array.isArray(region) || region.length !== 4 || region.some(value => typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) || !(region[2] > 0) || !(region[3] > 0) || region[0] + region[2] > 1 || region[1] + region[3] > 1) issues.push('visual annotation region is invalid');
+  if (!nonemptyString(reference?.observation)) issues.push('visual annotation observation is absent');
+  if (!artifact || reference?.artifact_id !== artifact.artifact_id || !artifact.media_type?.startsWith('image/') || !SHA256_PATTERN.test(artifact.sha256 || '') || reference?.image_sha256 !== artifact.sha256) issues.push('visual annotation is not bound to public image bytes');
+  return issues;
+}
+
+function precedentRankingContractViolations(result) {
+  const issues = [];
+  const precedents = result?.precedents;
+  const receipt = result?.precedent_ranking;
+  const contract = 'casepath.precedent-ranking/1.0.0';
+  const corpus = 'generated-reference-patterns/2026-08-12';
+  if (!Array.isArray(precedents) || precedents.length !== 3 || !receipt) return ['exact-three precedents or ranking receipt are absent'];
+  if (!exactMembers(Object.keys(receipt), ['contract', 'corpus_version', 'context', 'context_hash', 'candidate_scores', 'selected_claim_ids', 'result_hash'])) issues.push('precedent ranking receipt fields are not exact');
+  if (receipt.contract !== contract || receipt.corpus_version !== corpus) issues.push('precedent ranking identity is wrong');
+  if (!exactMembers(Object.keys(receipt.context || {}), ['category', 'subcategory', 'current_process_node_id', 'next_action_node_id', 'selected_path', 'unresolved_fact_ids', 'current_evidence_need_ids']) || receipt.context_hash !== dtoHash(receipt.context)) issues.push('precedent ranking context is not exact or hash-bound');
+  const selectedIds = precedents.map(item => item.claim_id);
+  if (JSON.stringify(receipt.selected_claim_ids) !== JSON.stringify(selectedIds) || receipt.result_hash !== dtoHash(precedents)) issues.push('precedent selected IDs or result hash are wrong');
+  if (!Array.isArray(receipt.candidate_scores) || receipt.candidate_scores.length < 3 || new Set(receipt.candidate_scores.map(item => item.claim_id)).size !== receipt.candidate_scores.length || JSON.stringify(receipt.candidate_scores.slice(0, 3).map(item => item.claim_id)) !== JSON.stringify(selectedIds)) issues.push('candidate scores do not retain the ranked selection order');
+  for (const candidate of receipt.candidate_scores || []) {
+    if (!exactMembers(Object.keys(candidate || {}), ['claim_id', 'score_basis_points', 'factors']) || !nonemptyString(candidate.claim_id) || !Number.isInteger(candidate.score_basis_points) || !Array.isArray(candidate.factors) || candidate.factors.some(factor => !exactMembers(Object.keys(factor || {}), ['factor', 'value', 'weight']) || !nonemptyString(factor.factor) || !nonemptyString(factor.value) || !Number.isInteger(factor.weight)) || candidate.score_basis_points !== candidate.factors.reduce((sum, factor) => sum + factor.weight, 0)) issues.push(`${candidate?.claim_id || 'candidate'}: candidate score receipt is invalid`);
+  }
+  const allowedStatuses = new Set(['generated_reference', 'unverified_demo_memory', 'qualified_expert_reviewed']);
+  precedents.forEach((precedent, index) => {
+    const ranking = precedent?.ranking;
+    if (!allowedStatuses.has(precedent?.review_status)) issues.push(`${precedent?.claim_id}: review status is invalid`);
+    if (!exactMembers(Object.keys(ranking || {}), ['contract', 'corpus_version', 'rank', 'score_basis_points', 'factors', 'context_hash']) || ranking?.contract !== contract || ranking?.corpus_version !== corpus || ranking?.rank !== index + 1 || ranking?.context_hash !== receipt.context_hash) issues.push(`${precedent?.claim_id}: per-item ranking is invalid`);
+    if (!Array.isArray(ranking?.factors) || ranking.factors.some(factor => !exactMembers(Object.keys(factor || {}), ['factor', 'value', 'weight']) || !Number.isInteger(factor.weight)) || ranking?.score_basis_points !== (ranking?.factors || []).reduce((sum, factor) => sum + factor.weight, 0)) issues.push(`${precedent?.claim_id}: ranking factors do not sum to the score`);
+    const candidate = receipt.candidate_scores?.find(item => item.claim_id === precedent.claim_id);
+    if (!candidate || candidate.score_basis_points !== ranking?.score_basis_points || stableJson(candidate.factors) !== stableJson(ranking?.factors)) issues.push(`${precedent?.claim_id}: candidate and selected ranking differ`);
+  });
+  return issues;
+}
+
+function memoryRetrievalContractViolations(result) {
+  const issues = [];
+  if (!result || typeof result !== 'object') return ['final result is absent'];
+  const memoryPrecedents = (result.precedents || []).filter(item => item?.review_status === 'unverified_demo_memory' && nonemptyString(item?.memory_id));
+  const expectedRetrieved = memoryPrecedents.length > 0;
+  const receiptPresent = result.memory_application != null;
+  const receiptValid = !receiptPresent || (result.memory_application?.contract === 'casepath.memory-application-receipt/1.0.0'
+    && result.memory_application?.authority === 'unverified_demo'
+    && result.memory_application?.scope === 'case_specific_guidance_only'
+    && result.memory_application?.applied === true
+    && SHA256_PATTERN.test(result.memory_application?.application_hash || ''));
+  const knowledge = result.knowledge || {};
+  const processUsed = result.process?.memory_used;
+  const checklistUsed = result.checklist?.memory_used;
+  const rootUseFlags = [result.memory_used, result.reviewed_memory_used, knowledge.reviewed_memory_used];
+  const retrievalFlags = [result.reviewed_memory_retrieved, knowledge.reviewed_memory_retrieved];
+  if (!retrievalFlags.every(value => typeof value === 'boolean') || retrievalFlags.some(value => value !== expectedRetrieved)) issues.push('reviewed-memory retrieval flags do not equal ranked unverified memory presence');
+  if (!receiptValid) issues.push('memory-use flags point at an invalid application receipt');
+  if (!rootUseFlags.every(value => typeof value === 'boolean') || rootUseFlags.some(value => value !== receiptPresent)) issues.push('root/knowledge memory-use flags do not equal application-receipt presence');
+  if (processUsed !== receiptPresent || checklistUsed !== receiptPresent) issues.push('process/checklist memory_used does not equal application-receipt presence');
+  if (receiptPresent && (!expectedRetrieved || result.memory_application?.applied !== true || result.process?.case_specific_guidance_applied !== true || result.checklist?.case_specific_guidance_applied !== true)) issues.push('application receipt is not bound to retrieved memory and transformed DTO flags');
+  if (!receiptPresent && (result.process?.case_specific_guidance_applied === true || result.checklist?.case_specific_guidance_applied === true)) issues.push('receipt-free result falsely claims case-specific guidance application');
+  if (memoryPrecedents.length > 1) issues.push('more than one unverified memory was ranked into the exact-three result');
+  return issues;
+}
+
+function semanticFactSignature(result) {
+  const roles = {};
+  for (const fact of result?.facts || []) {
+    if (fact?.semantic_role == null) continue;
+    roles[fact.semantic_role] = {
+      fact_id: fact.fact_id,
+      state: fact.state,
+      grounded_source_count: Array.isArray(fact.source_refs) ? fact.source_refs.length : 0,
+    };
+  }
+  return roles;
+}
+
+function semanticFactRoleViolations(result) {
+  const facts = result?.facts;
+  if (!Array.isArray(facts)) return ['canonical facts are absent'];
+  const issues = [];
+  const populated = [];
+  for (const fact of facts) {
+    if (!Object.hasOwn(fact || {}, 'semantic_role')) issues.push(`${fact?.fact_id || 'fact'}: nullable semantic_role is absent`);
+    if (fact?.semantic_role != null && fact.semantic_role !== 'management_ventilation_allegation') issues.push(`${fact?.fact_id || 'fact'}: semantic_role is unsupported`);
+    if (fact?.semantic_role != null) populated.push(fact.semantic_role);
+  }
+  if (JSON.stringify(populated) !== JSON.stringify(['management_ventilation_allegation'])) issues.push('exactly one management_ventilation_allegation semantic role is required');
+  return issues;
+}
+
+function computedCausalDelta(beforeResult, afterResult) {
+  const beforeProcess = semanticProcessDto(beforeResult?.process);
+  const afterProcess = semanticProcessDto(afterResult?.process);
+  const beforeChecklist = semanticChecklistDto(beforeResult?.checklist);
+  const afterChecklist = semanticChecklistDto(afterResult?.checklist);
+  const keyed = (values, key) => new Map((values || []).map(value => [key(value), value]));
+  const beforeNodes = keyed(beforeProcess.nodes, value => value.node_id);
+  const afterNodes = keyed(afterProcess.nodes, value => value.node_id);
+  const edgeKey = value => `${value.source}\u0000${value.target}`;
+  const beforeEdges = keyed(beforeProcess.edges, edgeKey);
+  const afterEdges = keyed(afterProcess.edges, edgeKey);
+  const beforeItems = keyed(beforeChecklist.items, value => value.item_id);
+  const afterItems = keyed(afterChecklist.items, value => value.item_id);
+  const difference = (left, right) => [...left.keys()].filter(key => !right.has(key)).sort();
+  const changed = (left, right) => [...left.keys()].filter(key => right.has(key) && stableJson(left.get(key)) !== stableJson(right.get(key))).sort();
+  const edgeProjection = keys => keys.map(key => { const [source, target] = key.split('\u0000'); return { source, target }; });
+  const rootChanges = (before, after, excluded) => [...new Set([...Object.keys(before), ...Object.keys(after)])].filter(key => !excluded.has(key) && stableJson(before[key]) !== stableJson(after[key])).sort();
+  const addedNodeIds = difference(afterNodes, beforeNodes);
+  const removedNodeIds = difference(beforeNodes, afterNodes);
+  const changedNodeIds = changed(beforeNodes, afterNodes);
+  const addedEdges = edgeProjection(difference(afterEdges, beforeEdges));
+  const removedEdges = edgeProjection(difference(beforeEdges, afterEdges));
+  const changedEdges = edgeProjection(changed(beforeEdges, afterEdges));
+  const addedItemIds = difference(afterItems, beforeItems);
+  const removedItemIds = difference(beforeItems, afterItems);
+  const changedItemIds = changed(beforeItems, afterItems);
+  return {
+    nonzero: Boolean(addedNodeIds.length || removedNodeIds.length || changedNodeIds.length || addedEdges.length || removedEdges.length || changedEdges.length || addedItemIds.length || removedItemIds.length || changedItemIds.length),
+    process: { added_node_ids: addedNodeIds, removed_node_ids: removedNodeIds, changed_node_ids: changedNodeIds, added_edges: addedEdges, removed_edges: removedEdges, changed_edges: changedEdges, changed_root_keys: rootChanges(beforeProcess, afterProcess, new Set(['nodes', 'edges'])) },
+    evidence: { added_item_ids: addedItemIds, removed_item_ids: removedItemIds, changed_item_ids: changedItemIds, changed_root_keys: rootChanges(beforeChecklist, afterChecklist, new Set(['items'])) },
+  };
+}
+
+function memoryApplicationContractViolations(baselineRun, laterRun, proof) {
+  const issues = [];
+  const baseline = baselineRun?.result;
+  const later = laterRun?.result;
+  const receipt = later?.memory_application;
+  const freeze = baselineRun?.counterfactual_learning_freeze;
+  const receiptFields = ['receipt_type', 'contract', 'authority', 'scope', 'source_memory', 'target', 'observable_input_hash', 'canonical_state_hash', 'eligibility', 'allowed_operation_ids', 'applied_operation_ids', 'process_operations', 'evidence_operations', 'before', 'after', 'verification_hash', 'shared_playbook_version', 'shared_rule_applied', 'model_acceptance_reused', 'applied', 'application_hash'];
+  const boundaryFields = ['process_dto_hash', 'checklist_dto_hash', 'process_semantic_hash', 'checklist_semantic_hash'];
+  if (!baseline || !later || !receipt || !proof) return ['baseline, later result, receipt, or proof is absent'];
+  issues.push(...memoryRetrievalContractViolations(baseline).map(issue => `baseline ${issue}`));
+  issues.push(...memoryRetrievalContractViolations(later).map(issue => `later ${issue}`));
+  if (!exactMembers(Object.keys(receipt), receiptFields)) issues.push('memory receipt fields are not exact');
+  if (receipt.receipt_type !== 'memory_application_receipt' || receipt.contract !== 'casepath.memory-application-receipt/1.0.0' || receipt.authority !== 'unverified_demo' || receipt.scope !== 'case_specific_guidance_only' || receipt.shared_playbook_version !== 'mould-playbook-v3' || receipt.shared_rule_applied !== false || receipt.model_acceptance_reused !== false || receipt.applied !== true) issues.push('memory receipt authority boundary is wrong');
+  if (!exactMembers(Object.keys(receipt.source_memory || {}), ['memory_id', 'claim_id', 'review_id', 'content_hash', 'review_status']) || receipt.source_memory.claim_id !== 'DEF-027-E0-DEMO' || receipt.source_memory.review_status !== 'unverified_demo_memory') issues.push('source memory binding is wrong');
+  const freezeIdentity = freeze?.memory || {};
+  if (!freeze || stableJson(proof.counterfactual_learning_freeze) !== stableJson(freeze)
+    || !exactMembers(Object.keys(freeze), ['contract', 'memory', 'identity_hash', 'application_suppressed'])
+    || freeze.contract !== 'casepath.counterfactual-learning-freeze/1.0.0'
+    || freeze.application_suppressed !== true
+    || !exactMembers(Object.keys(freezeIdentity), ['memory_id', 'review_id', 'content_hash', 'candidate_id', 'updated_at'])
+    || freezeIdentity.memory_id !== receipt.source_memory.memory_id
+    || freezeIdentity.review_id !== receipt.source_memory.review_id
+    || freezeIdentity.content_hash !== receipt.source_memory.content_hash
+    || freezeIdentity.candidate_id !== proof.candidate?.candidate_id
+    || !Number.isFinite(Date.parse(freezeIdentity.updated_at || ''))
+    || freeze.identity_hash !== dtoHash(freezeIdentity)) issues.push('counterfactual baseline is not bound to the frozen governed memory identity');
+  const freezeTime = Date.parse(freezeIdentity.updated_at || '');
+  const baselineCreated = Date.parse(baselineRun?.created_at || '');
+  const baselineCompleted = Number(baselineRun?.completed_at) * 1000;
+  const laterCreated = Date.parse(laterRun?.created_at || '');
+  if (![freezeTime, baselineCreated, baselineCompleted, laterCreated].every(Number.isFinite)
+    || !(freezeTime <= baselineCreated && baselineCreated <= baselineCompleted && baselineCompleted <= laterCreated)) issues.push('counterfactual baseline/current runs are not ordered after the learning freeze');
+  if (!exactMembers(Object.keys(receipt.target || {}), ['run_id', 'claim_id']) || receipt.target.run_id !== laterRun.run_id || receipt.target.claim_id !== laterRun.claim_id) issues.push('memory receipt target is not the later run');
+  const retainedBoundary = laterRun.memory_application_boundary;
+  const retainedBoundaryProjection = retainedBoundary && typeof retainedBoundary === 'object' && !Array.isArray(retainedBoundary)
+    ? Object.fromEntries(Object.entries(retainedBoundary).filter(([key]) => key !== 'boundary_hash'))
+    : null;
+  if (!exactMembers(Object.keys(retainedBoundary || {}), ['contract', 'target', 'source_memory', 'before', 'boundary_hash'])) issues.push('memory application boundary fields are not exact');
+  if (retainedBoundary?.contract !== 'casepath.memory-application-boundary/1.0.0'
+    || !exactMembers(Object.keys(retainedBoundary?.target || {}), ['run_id', 'claim_id'])
+    || stableJson(retainedBoundary?.target) !== stableJson(receipt.target)
+    || !exactMembers(Object.keys(retainedBoundary?.source_memory || {}), ['memory_id', 'content_hash'])
+    || retainedBoundary?.source_memory?.memory_id !== receipt.source_memory?.memory_id
+    || retainedBoundary?.source_memory?.content_hash !== receipt.source_memory?.content_hash) issues.push('memory application boundary identity or source join is wrong');
+  if (!exactMembers(Object.keys(retainedBoundary?.before || {}), boundaryFields)
+    || !Object.values(retainedBoundary?.before || {}).every(value => SHA256_PATTERN.test(value || ''))
+    || stableJson(retainedBoundary?.before) !== stableJson(receipt.before)) issues.push('memory application boundary before hashes do not equal receipt.before');
+  if (!SHA256_PATTERN.test(retainedBoundary?.boundary_hash || '')
+    || retainedBoundary?.boundary_hash !== dtoHash(retainedBoundaryProjection)) issues.push('memory application boundary hash is wrong');
+  const completedMemoryEvents = (laterRun.events || []).filter(event => event?.stage === 'memory_application'
+    && event?.receipt_type === 'memory_application_receipt'
+    && event?.status === 'completed');
+  if (completedMemoryEvents.length !== 1) issues.push('exactly one completed persisted memory-application event is required');
+  if (completedMemoryEvents.length === 1) {
+    const event = completedMemoryEvents[0];
+    const eventHasReceiptFields = receiptFields.every(key => Object.hasOwn(event, key));
+    const eventReceiptProjection = eventHasReceiptFields ? Object.fromEntries(receiptFields.map(key => [key, event[key]])) : null;
+    if (!eventHasReceiptFields || stableJson(eventReceiptProjection) !== stableJson(receipt)) issues.push('persisted memory-application event does not project the result receipt');
+  }
+  if (receipt.observable_input_hash !== later.audit?.observable_input_hash || receipt.observable_input_hash !== baseline.audit?.observable_input_hash || receipt.observable_input_hash !== proof.before?.observable_input_hash || receipt.observable_input_hash !== proof.after?.observable_input_hash) issues.push('observable input hash is not bound across both runs');
+  // Canonical facts intentionally contain JSON floats (including integral 1.0 values).
+  // A browser JSON roundtrip erases that lexical distinction, so JS must not forge a
+  // Python hash from the parsed object. Bind the unchanged returned DTO to the two
+  // server-computed run audit hashes and the independently recomputed proof instead.
+  if (stableJson(baseline.facts) !== stableJson(later.facts)
+    || receipt.canonical_state_hash !== later.audit?.canonical_state_hash
+    || receipt.canonical_state_hash !== baseline.audit?.canonical_state_hash
+    || receipt.canonical_state_hash !== proof.before?.canonical_state_hash
+    || receipt.canonical_state_hash !== proof.after?.canonical_state_hash) issues.push('canonical-state hash is not bound across both unchanged runs');
+  issues.push(...semanticFactRoleViolations(baseline).map(issue => `baseline ${issue}`));
+  issues.push(...semanticFactRoleViolations(later).map(issue => `later ${issue}`));
+  const eligibility = receipt.eligibility || {};
+  const requiredDecisions = {
+    scope: 'in_scope', dispute: 'dispute_present', urgency: 'not_urgent', notification: 'notified', recurrence: 'recurrence_supported', causation: 'cause_unresolved',
+  };
+  const requiredFactRoles = {
+    management_ventilation_allegation: { state: 'known', min_grounded_sources: 1 },
+  };
+  const semanticSignatureHash = dtoHash({
+    category: 'Rental defect - mould and moisture',
+    subcategory: 'Recurring moisture with disputed causation',
+    required_decisions: requiredDecisions,
+    required_fact_roles: requiredFactRoles,
+  });
+  const expectedDecisions = Object.fromEntries((later.facts || []).filter(fact => fact.controls_process === true).map(fact => [fact.decision_key, fact.decision_value]));
+  const expectedChecks = {
+    source_claim_excluded: receipt.source_memory?.claim_id !== laterRun.claim_id,
+    category_matched: later.category === 'Rental defect - mould and moisture',
+    subcategory_matched: later.subcategory === 'Recurring moisture with disputed causation',
+    required_decisions_matched: stableJson(expectedDecisions) === stableJson(requiredDecisions),
+    ventilation_allegation_grounded: semanticFactSignature(later).management_ventilation_allegation?.state === 'known'
+      && semanticFactSignature(later).management_ventilation_allegation?.grounded_source_count >= 1,
+    semantic_signature_bound: eligibility.semantic_signature_hash === semanticSignatureHash,
+    guidance_enabled: true,
+  };
+  const eligibilityManifest = Object.fromEntries(['rule_id', 'contract', 'claim_id', 'semantic_signature_hash', 'decisions', 'facts_hash', 'checks'].map(key => [key, eligibility[key]]));
+  if (!exactMembers(Object.keys(eligibility), ['rule_id', 'contract', 'claim_id', 'semantic_signature_hash', 'decisions', 'facts_hash', 'checks', 'eligible', 'manifest_hash'])
+    || eligibility.rule_id !== 'same_grounded_mould_signature_v2'
+    || eligibility.contract !== 'casepath.semantic-memory-eligibility/1.0.0'
+    || eligibility.claim_id !== laterRun.claim_id
+    || eligibility.semantic_signature_hash !== semanticSignatureHash
+    || stableJson(eligibility.decisions) !== stableJson(requiredDecisions)
+    || stableJson(expectedDecisions) !== stableJson(requiredDecisions)
+    || eligibility.facts_hash !== dtoHash(semanticFactSignature(later))
+    || stableJson(eligibility.checks) !== stableJson(expectedChecks)
+    || eligibility.eligible !== true
+    || eligibility.manifest_hash !== dtoHash(eligibilityManifest)) issues.push('semantic eligibility manifest is not exact and hash-bound');
+  if (!exactMembers(Object.keys(receipt.before || {}), boundaryFields) || !exactMembers(Object.keys(receipt.after || {}), boundaryFields) || ![...Object.values(receipt.before || {}), ...Object.values(receipt.after || {})].every(value => SHA256_PATTERN.test(value || ''))) issues.push('memory before/after boundary hashes are not exact');
+  if (receipt.before?.process_semantic_hash !== dtoHash(semanticProcessDto(baseline.process)) || receipt.before?.checklist_semantic_hash !== dtoHash(semanticChecklistDto(baseline.checklist))) issues.push('receipt before semantic hashes do not bind the baseline DTOs');
+  const exactAfter = { process_dto_hash: dtoHash(later.process), checklist_dto_hash: dtoHash(later.checklist), process_semantic_hash: dtoHash(semanticProcessDto(later.process)), checklist_semantic_hash: dtoHash(semanticChecklistDto(later.checklist)) };
+  if (stableJson(receipt.after) !== stableJson(exactAfter) || boundaryFields.some(key => proof.after?.[key] !== exactAfter[key])) issues.push('receipt/proof after hashes do not bind the later DTOs');
+  if (boundaryFields.some(key => receipt.before?.[key] === receipt.after?.[key])) issues.push('memory receipt reports a zero DTO or semantic delta');
+  if (receipt.verification_hash !== later.verification?.whole_playbook_hash || receipt.verification_hash !== proof.after?.verification_hash) issues.push('memory receipt verification hash is not bound to the later result');
+  const operationIds = ['add_ventilation_dispute_node', 'add_evidence_gap_to_ventilation_edge', 'add_ventilation_to_causation_edge', 'condition_building_envelope', 'reassign_use_evidence_to_ventilation'];
+  if (JSON.stringify(receipt.allowed_operation_ids) !== JSON.stringify(operationIds) || JSON.stringify(receipt.applied_operation_ids) !== JSON.stringify(operationIds) || JSON.stringify([...(receipt.process_operations || []), ...(receipt.evidence_operations || [])].map(value => value.operation_id)) !== JSON.stringify(operationIds)) issues.push('memory operation membership or order is wrong');
+  const processOperationFields = [['operation_id', 'operation', 'node_id', 'evidence_requirement_ids', 'after_hash'], ['operation_id', 'operation', 'source', 'target', 'after_hash'], ['operation_id', 'operation', 'source', 'target', 'after_hash']];
+  const evidenceOperationFields = [['operation_id', 'operation', 'item_id', 'before_hash', 'after_hash'], ['operation_id', 'operation', 'item_id', 'removed_from_node_ids', 'added_to_node_id', 'before_hash', 'after_hash']];
+  if ((receipt.process_operations || []).length !== 3 || (receipt.evidence_operations || []).length !== 2 || (receipt.process_operations || []).some((operation, index) => !exactMembers(Object.keys(operation || {}), processOperationFields[index])) || (receipt.evidence_operations || []).some((operation, index) => !exactMembers(Object.keys(operation || {}), evidenceOperationFields[index]))) issues.push('memory operation fields are not exact');
+  const receiptHashes = [receipt.observable_input_hash, receipt.canonical_state_hash, receipt.verification_hash, receipt.application_hash, receipt.source_memory?.content_hash, ...Object.values(receipt.before || {}), ...Object.values(receipt.after || {}), ...(receipt.process_operations || []).map(operation => operation.after_hash), ...(receipt.evidence_operations || []).flatMap(operation => [operation.before_hash, operation.after_hash])];
+  if (!receiptHashes.every(value => SHA256_PATTERN.test(value || ''))) issues.push('memory receipt contains an invalid SHA-256 value');
+  const addedNode = later.process?.nodes?.find(node => node.node_id === 'ventilation_dispute');
+  const firstEdge = later.process?.edges?.find(edge => edge.source === 'evidence_gap' && edge.target === 'ventilation_dispute');
+  const secondEdge = later.process?.edges?.find(edge => edge.source === 'ventilation_dispute' && edge.target === 'causation');
+  const buildingEnvelope = later.checklist?.items?.find(item => item.item_id === 'building_envelope');
+  const useEvidence = later.checklist?.items?.find(item => item.item_id === 'use_evidence');
+  if (!addedNode || receipt.process_operations?.[0]?.node_id !== 'ventilation_dispute' || JSON.stringify(receipt.process_operations?.[0]?.evidence_requirement_ids) !== JSON.stringify(['management_position', 'use_evidence']) || receipt.process_operations?.[0]?.after_hash !== dtoHash(addedNode)) issues.push('added ventilation node operation is not hash-bound');
+  if (!firstEdge || !secondEdge || receipt.process_operations?.[1]?.after_hash !== dtoHash(firstEdge) || receipt.process_operations?.[2]?.after_hash !== dtoHash(secondEdge)) issues.push('added edge operations are not hash-bound');
+  if (!buildingEnvelope || buildingEnvelope.status !== 'conditional' || buildingEnvelope.current_path !== true || receipt.evidence_operations?.[0]?.item_id !== 'building_envelope' || receipt.evidence_operations?.[0]?.after_hash !== dtoHash(buildingEnvelope)) issues.push('building-envelope replacement is not hash-bound');
+  if (!useEvidence || useEvidence.node_id !== 'ventilation_dispute' || receipt.evidence_operations?.[1]?.item_id !== 'use_evidence' || receipt.evidence_operations?.[1]?.added_to_node_id !== 'ventilation_dispute' || receipt.evidence_operations?.[1]?.after_hash !== dtoHash(useEvidence)) issues.push('use-evidence reassignment is not hash-bound');
+  if (receipt.process_operations?.[0]?.operation !== 'add_node' || receipt.process_operations?.slice(1).some(operation => operation.operation !== 'add_edge') || receipt.evidence_operations?.[0]?.operation !== 'replace_item' || receipt.evidence_operations?.[1]?.operation !== 'reassign_item' || stableJson(receipt.evidence_operations?.[1]?.removed_from_node_ids) !== stableJson(['causation', 'mixed_cause', 'tenant_use'])) issues.push('memory operation semantics are wrong');
+  if (receipt.application_hash !== dtoHash(Object.fromEntries(Object.entries(receipt).filter(([key]) => key !== 'application_hash')))) issues.push('memory application hash is wrong');
+  const expectedDelta = computedCausalDelta(baseline, later);
+  if (stableJson(proof.causal_delta) !== stableJson(expectedDelta)) issues.push('learning proof causal delta is not recomputed from both DTOs');
+  if (stableJson(proof.causal_delta?.process?.added_node_ids) !== stableJson(['ventilation_dispute']) || stableJson(proof.causal_delta?.process?.added_edges) !== stableJson([{ source: 'evidence_gap', target: 'ventilation_dispute' }, { source: 'ventilation_dispute', target: 'causation' }]) || stableJson(proof.causal_delta?.evidence?.changed_item_ids) !== stableJson(['building_envelope', 'management_position', 'use_evidence'])) issues.push('causal delta is outside the exact case-specific transform');
+  const expectedCheckNames = ['Same observable input', 'Same canonical state', 'Exact current memory receipt', 'Pure memory replay matches learned DTOs', 'Receipt before semantic hashes match baseline DTOs', 'Receipt after hashes match learned DTOs', 'Nonzero causal DTO delta', 'Only allowed causal operations changed', 'Deterministic target and protected checks passed', 'Shared v3 remains unchanged'];
+  if (proof.ready !== true || proof.computed !== true || proof.baseline_run_id !== baselineRun.run_id || proof.later_run_id !== laterRun.run_id || JSON.stringify((proof.deterministic_checks || []).map(check => check.name)) !== JSON.stringify(expectedCheckNames) || !(proof.deterministic_checks || []).every(check => check.status === 'passed')) issues.push('learning proof checks are absent, reordered, or failed');
+  if (proof.reviewed_memory_proof?.used !== true || proof.reviewed_memory_proof?.present_in_baseline !== false || proof.reviewed_memory_proof?.present_in_later_run !== true || !proof.reviewed_memory_proof?.memory_ids?.includes(receipt.source_memory.memory_id) || stableJson(proof.changes?.precedent_claim_ids_added) !== stableJson(['DEF-027-E0-DEMO'])) issues.push('learning proof does not bind the selected unverified memory');
+  if (proof.candidate?.status !== 'quarantined' || proof.candidate?.target_tests?.status !== 'passed' || proof.candidate?.protected_regression?.status !== 'passed' || proof.candidate?.qualified_support_count !== 0 || proof.candidate?.approval?.status !== 'pending' || proof.candidate?.approval?.qualified_reviewer !== false) issues.push('candidate target/protected checks or qualified-release boundary is wrong');
+  const receiptProof = proof.memory_application_proof || {};
+  if (!exactMembers(Object.keys(receiptProof), ['receipt_present', 'receipt_valid', 'source_memory_current', 'before_hashes_match', 'after_hashes_match', 'allowed_delta_exact', 'replay_exact', 'application_hash'])
+    || !['receipt_present', 'receipt_valid', 'source_memory_current', 'before_hashes_match', 'after_hashes_match', 'allowed_delta_exact', 'replay_exact'].every(key => receiptProof[key] === true)
+    || receiptProof.application_hash !== receipt.application_hash) issues.push('memory application proof does not validate the current receipt and pure replay');
+  if (later.playbook?.version !== 'mould-playbook-v3' || later.shared_rule_applied !== false || proof.shared_rule?.version_before !== 'mould-playbook-v3' || proof.shared_rule?.version_after !== 'mould-playbook-v3' || proof.shared_rule?.applied !== false || proof.shared_rule?.shared_knowledge_changed !== false) issues.push('shared v3 boundary is not unchanged');
+  if (Object.hasOwn(later.process || {}, 'agent_contribution') || (later.process?.nodes || []).some(node => Object.hasOwn(node, 'agent_decision_contributions')) || Object.hasOwn(later.checklist || {}, 'agent_contribution') || (later.checklist?.items || []).some(item => Object.hasOwn(item, 'agent_contribution')) || later.next_action?.agent_brief_contribution !== null) issues.push('post-memory DTOs retain pre-memory model contribution fields or next-action attribution');
+  return issues;
 }
 
 function hybridCausalContractViolations(run) {
@@ -1228,11 +1612,13 @@ async function auditViewports(label, selector) {
     check(`${label} at ${viewport.name}px has no page-level horizontal overflow`, overflow <= 1, `overflow=${overflow}`);
     check(`${label} at ${viewport.name}px retains its primary artifact`, await page.locator(selector).first().isVisible());
     check(`${label} at ${viewport.name}px keeps the source claim available`, await page.locator('.submission-pane').isVisible());
+    await runAxe(`${label} at ${viewport.name}px`);
     await screenshot(`${label}-${viewport.name}.png`, true);
   }
   await page.setViewportSize({ width: 1440, height: 900 });
   await sleep(120);
   check(`${label} returns to desktop`, await page.locator(selector).first().isVisible());
+  await runAxe(`${label} desktop`);
 }
 
 async function runAxe(label) {
@@ -1301,6 +1687,11 @@ async function finalizeEvidenceManifest() {
   const requiredVisualEvidence = [
     '01-start-390.png',
     '02-ready-process-390.png',
+    '03-lease-pdf-overview.png',
+    '03-lease-pdf-detail.png',
+    '03-lease-pdf-mobile.png',
+    '03-image-inspection.png',
+    '03-image-grounding-inspection.png',
     '04-review-390.png',
     '05-review-applied-390.png',
     '06-learning-390.png',
@@ -1510,16 +1901,79 @@ async function execute() {
   check('Product returns HTTP 200', response.status() === 200, `status=${response.status()}`);
   check('HTML owns immutable v20 release identity', /<html[^>]*data-casepath-release=["']20\.0\.0["']/i.test(sourceHtml) && /<meta[^>]*name=["']casepath-release["'][^>]*content=["']20\.0\.0["']/i.test(sourceHtml));
   check('First paint contains an intentional claim shell', sourceHtml.includes('v20-source-skeleton') && sourceHtml.includes('Opening claim…'));
-  const flagshipScriptPaths = ['assets/live-v16.js', 'assets/live-v17.js', 'assets/live-v18.js', 'assets/live-v18-handoff.js', 'assets/live-v20-focus.js'];
+  const flagshipScriptPaths = [
+    'assets/live-v16.js',
+    'assets/live-v16-stability.js',
+    'assets/live-v18-insertion-guard.js',
+    'assets/live-v17.js',
+    'assets/live-v18.js',
+    'assets/live-v18-handoff.js',
+    'assets/live-v19-active-stage.js',
+    'assets/live-v20-focus.js',
+  ];
   const flagshipScriptSources = await Promise.all(flagshipScriptPaths.map(async scriptPath => ({ scriptPath, source: await getText(`${BASE}/${scriptPath}`) })));
+  const loadedFlagshipSource = [sourceHtml, ...flagshipScriptSources.map(item => item.source)].join('\n');
+  const staleQaService = /casepath-guided-(?:v13-smoke|evidence-v13)\.onrender\.com/i;
+  const falseReviewedV4Claim = /mould-playbook-v4|released playbook v4|after reviewed knowledge|reviewed playbook release/i;
+  const falseGroundingAuthority = /machine-visible image record|model interpretation|live retrieval/i;
+  const falseHeldOutNovelty = /\bunseen(?: related)? claim\b/i;
+  check('Loaded release contains no obsolete public QA-service destination', !staleQaService.test(loadedFlagshipSource));
+  check('Current QA destination is guarded by exact live API identity and an atomic hash-bound report/manifest attestation', loadedFlagshipSource.includes("const qaEvidenceBase = 'https://casepath-guided-canonical-qa.onrender.com'") && loadedFlagshipSource.includes('function releaseEvidenceAttested(') && loadedFlagshipSource.includes("fetch(`${apiBase}/healthz`") && loadedFlagshipSource.includes("api?.source_commit === commit") && loadedFlagshipSource.includes('reportIdentities.every(value => value === commit)') && loadedFlagshipSource.includes('report?.failed === 0') && loadedFlagshipSource.includes('manifest?.source_commit === commit') && loadedFlagshipSource.includes('report.evidence.manifest.sha256 === manifestBinding.sha256') && loadedFlagshipSource.includes('report.evidence.manifest.bytes === manifestBinding.bytes') && loadedFlagshipSource.includes('retainedEvidenceComplete(report, manifest)') && loadedFlagshipSource.includes("link.dataset.evidenceState = 'attested'"));
+  check('Loaded release contains no false reviewed-v4 lifecycle claim', !falseReviewedV4Claim.test(loadedFlagshipSource));
+  check('Loaded release contains no false image-extraction, model-legal, or live-retrieval authority copy', !falseGroundingAuthority.test(loadedFlagshipSource));
+  check('Loaded release truthfully defines a post-learning held-out comparison without calling the fixture unseen', !falseHeldOutNovelty.test(loadedFlagshipSource) && /held-out later demo claim/i.test(loadedFlagshipSource) && /excluded from the simulated review and memory construction/i.test(loadedFlagshipSource) && /after learning was frozen/i.test(loadedFlagshipSource));
+  const evidenceControl = await page.locator('#browserEvidenceLink').evaluate(node => ({
+    tag: node.tagName,
+    state: node.dataset.evidenceState,
+    text: node.textContent.trim(),
+    href: node.getAttribute('href'),
+    role: node.getAttribute('role'),
+  }));
+  const evidenceControlIsPending = evidenceControl.tag === 'SPAN' && evidenceControl.state === 'pending' && evidenceControl.text === 'Current release evidence pending' && evidenceControl.href === null && evidenceControl.role === 'status';
+  const evidenceControlIsAttested = evidenceControl.tag === 'A' && evidenceControl.state === 'attested' && evidenceControl.href === 'https://casepath-guided-canonical-qa.onrender.com/report.json' && /^Current release evidence · [0-9a-f]{8}$/.test(evidenceControl.text);
+  check('Current-release evidence is either fail-closed pending or unlocked by exact attestation', evidenceControlIsPending || evidenceControlIsAttested, JSON.stringify(evidenceControl));
+  const attestationMatrix = await page.evaluate(() => {
+    const commit = 'a'.repeat(40);
+    const frontend = { source_commit: commit, release_id: 'casepath-v20-reference-20260811', alignment_eligible: true };
+    const api = { status: 'ok', release_id: frontend.release_id, source_commit: commit, source_commit_aligned: true, source_commit_conflict: false };
+    const files = [
+      { path: 'flagship-run.json', sha256: 'c'.repeat(64), bytes: 10 },
+      { path: 'final-state.png', sha256: 'd'.repeat(64), bytes: 20 },
+      { path: 'uninterrupted-focused-demo.webm', sha256: 'e'.repeat(64), bytes: 30 },
+    ];
+    const binding = { sha256: 'f'.repeat(64), bytes: 1234 };
+    const report = { status: 'passed', passed: 80, failed: 0, release_id: frontend.release_id, deployment: { frontend: { source_commit: commit }, api: { source_commit: commit }, qa: { source_commit: commit } }, evidence: { gate: { sha256: 'b'.repeat(64) }, retained_before_session_reset: true, missing: [], files, manifest: { path: 'evidence-manifest.json', ...binding } } };
+    const manifest = { contract: 'casepath.qa-evidence-manifest/1.0.0', release_id: frontend.release_id, source_commit: commit, gate: { sha256: 'b'.repeat(64) }, retained_before_session_reset: true, retained_media_contract: { json: ['flagship-run.json'], screenshots: ['final-state.png'], video: 'uninterrupted-focused-demo.webm', missing: [], empty: [] }, files };
+    const isAttested = window.__casepathEvidenceAttestation?.isAttested;
+    return {
+      valid: isAttested?.(frontend, api, report, manifest, binding) === true,
+      wrongReportCommit: isAttested?.(frontend, api, { ...report, deployment: { ...report.deployment, api: { source_commit: 'c'.repeat(40) } } }, manifest, binding) === false,
+      liveApiDrift: isAttested?.(frontend, { ...api, source_commit: 'c'.repeat(40) }, report, manifest, binding) === false,
+      missingMedia: isAttested?.(frontend, api, report, { ...manifest, retained_media_contract: { ...manifest.retained_media_contract, missing: ['final-state.png'] } }, binding) === false,
+      failedReport: isAttested?.(frontend, api, { ...report, status: 'failed' }, manifest, binding) === false,
+      failedCount: isAttested?.(frontend, api, { ...report, failed: 17 }, manifest, binding) === false,
+      notRetained: isAttested?.(frontend, api, { ...report, evidence: { ...report.evidence, retained_before_session_reset: false } }, manifest, binding) === false,
+      tamperedManifestBytes: isAttested?.(frontend, api, report, manifest, { ...binding, sha256: '0'.repeat(64) }) === false,
+      changedInventory: isAttested?.(frontend, api, report, { ...manifest, files: manifest.files.slice(1) }, binding) === false,
+    };
+  });
+  check('Evidence attestation accepts only a passed complete exact-commit report/manifest pair', Object.values(attestationMatrix).every(Boolean), JSON.stringify(attestationMatrix));
   const checklistRendererSource = flagshipScriptSources.find(item => item.scriptPath === 'assets/live-v17.js')?.source || '';
-  check('Document-checklist renderer fails closed on the exact two returned field units and suppresses pre-review acceptance after review', [
+  const precedentRendererSource = flagshipScriptSources.find(item => item.scriptPath === 'assets/live-v16.js')?.source || '';
+  const reuseRendererSource = flagshipScriptSources.find(item => item.scriptPath === 'assets/live-v17.js')?.source || '';
+  const laterStageSource = flagshipScriptSources.find(item => item.scriptPath === 'assets/live-v18.js')?.source || '';
+  check('Precedent rendering accepts qualified_expert_reviewed while preserving explicit unverified memory copy', [precedentRendererSource, reuseRendererSource].every(source => source.includes("'qualified_expert_reviewed'") && source.includes("'unverified_demo_memory'")) && precedentRendererSource.includes('Unverified generated-demo review memory returned by the server') && reuseRendererSource.includes('Unverified demo review memory returned'));
+  check('Loaded later-result renderers distinguish retrieval from receipt-bound use/application', precedentRendererSource.includes('reviewed_memory_retrieved') && precedentRendererSource.includes('data-memory-retrieved-only=') && precedentRendererSource.includes('retrieved-not-applied') && precedentRendererSource.includes('Saving it does not mean later guidance was used or applied') && reuseRendererSource.includes('reviewed_memory_retrieved') && reuseRendererSource.includes('Not used or applied · no memory-driven DTO change') && laterStageSource.includes('memoryRetrievedOnly') && laterStageSource.includes('No application receipt or memory-driven DTO change was returned'));
+  check('Document-checklist renderer fails closed on exact field units, reciprocal owners, and transformed acceptance', [
     'const expectedUnits = [',
     'new Set(ids).size === ids.length',
     'Number.isInteger(value.confidence_basis_points)',
     "value.attribution === expectedAttribution",
     'data-accepted-contribution-ids=',
     'post_review_unverified_transform',
+    'casepath.memory-application-receipt/1.0.0',
+    'data-node-ids=',
+    'data-current-path=',
   ].every(fragment => checklistRendererSource.includes(fragment)));
   const syntheticActorLabels = ['Agent complete', 'Attachment Parsing Agent', 'Claim Understanding Agent', 'Legal Research Agent', 'Process Discovery Agent', 'Document Requirements Agent', 'Historical Claims Agent', 'Verification Agent', 'Knowledge Agent'];
   const syntheticActorSources = flagshipScriptSources.flatMap(({ scriptPath, source }) => syntheticActorLabels.filter(label => source.includes(label)).map(label => `${scriptPath}:${label}`));
@@ -1548,11 +2002,28 @@ async function execute() {
   const email = demo.claim.artifacts.find(item => item.media_type === 'message/rfc822');
   check('PDF, image, and email fixtures are available', Boolean(pdf && image && email), JSON.stringify(demo.claim.artifacts.map(item => ({ id: item.artifact_id, type: item.media_type }))));
 
-  await page.locator(`[data-artifact-id="${pdf.artifact_id}"]`).click();
+  const pdfRow = page.locator(`[data-artifact-id="${pdf.artifact_id}"]`);
+  await pdfRow.focus();
+  await page.keyboard.press('Enter');
   await waitVisible('#sourceViewer[open]');
   await page.waitForFunction(() => document.querySelector('#sourceViewer')?.getAttribute('aria-busy') === 'false');
   check('Source dialog moves focus inside on open', await page.evaluate(() => document.querySelector('#sourceViewer')?.contains(document.activeElement)));
   check('PDF original pages remain inspectable', await page.locator('.page-thumb').count() === pdf.page_count && await page.locator('#documentPage').isVisible());
+  check('Lease PDF viewer identifies and serves the selected original artifact', (await page.locator('#sourceViewerTitle').innerText()) === pdf.title && new URL(await page.locator('#openOriginal').getAttribute('href'), API).pathname === `/api/artifacts/${encodeURIComponent(pdf.artifact_id)}`);
+  await screenshot('03-lease-pdf-overview.png');
+  await page.locator('#zoomIn').click();
+  await page.waitForFunction(() => document.querySelector('#sourceViewer')?.getAttribute('aria-busy') === 'false' && document.querySelector('#zoomValue')?.textContent === '115%');
+  check('Lease PDF zoom control changes the rendered page, not just its label', await page.locator('#zoomValue').innerText() === '115%' && (await page.locator('#documentPage').getAttribute('style')).includes('scale(1.15)'));
+  const inspectedPdfPage = Math.max(1, pdf.page_count || 1);
+  if (inspectedPdfPage > 1) {
+    const inspectedThumb = page.locator(`.page-thumb[data-page="${inspectedPdfPage}"]`);
+    await inspectedThumb.focus();
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(pageNumber => document.querySelector(`.page-thumb[data-page="${pageNumber}"]`)?.getAttribute('aria-current') === 'page' && document.querySelector('#documentPage')?.alt.endsWith(`page ${pageNumber}`), inspectedPdfPage);
+  }
+  check('Lease PDF thumbnail navigation renders the requested original page', await page.locator(`.page-thumb[data-page="${inspectedPdfPage}"]`).getAttribute('aria-current') === 'page' && (await page.locator('#documentPage').getAttribute('alt')).endsWith(`page ${inspectedPdfPage}`));
+  await screenshot('03-lease-pdf-detail.png');
+  await runAxe('Lease PDF original viewer');
   check('Source tabs expose keyboard and panel semantics', await page.evaluate(() => [...document.querySelectorAll('[data-source-tab]')].every(tab => tab.getAttribute('role') === 'tab' && tab.getAttribute('aria-controls') === 'sourceStage') && document.querySelector('#sourceStage')?.getAttribute('role') === 'tabpanel'));
   await page.locator('#sourceTabOriginal').focus();
   await page.keyboard.press('ArrowRight');
@@ -1563,14 +2034,26 @@ async function execute() {
   await page.locator('#sourceSearchForm button[type="submit"]').click();
   await waitText('#sourceSearchStatus', /matched/i);
   check('PDF extracted-text search returns navigable page results', await page.locator('#sourceSearchResults [data-search-page]').count() > 0 && await page.locator('#sourceStage mark').count() > 0);
+  await page.locator('#sourceTabOriginal').click();
+  await waitVisible('#documentPage');
   await page.setViewportSize({ width: 390, height: 844 });
   check('Mobile source viewer retains source-to-fact region', await page.locator('#sourceEvidence').isVisible());
+  check('Mobile lease viewer keeps page navigation and the inspected original visible', await page.locator('.page-thumbnails').isVisible() && await page.locator('#documentPage').isVisible());
+  await runAxe('Lease PDF viewer at 390px');
+  await screenshot('03-lease-pdf-mobile.png');
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.locator('#closeSourceViewer').click();
+  await page.keyboard.press('Escape');
+  await waitHidden('#sourceViewer');
+  await page.waitForFunction(artifactId => document.activeElement?.dataset.artifactId === artifactId, pdf.artifact_id);
   check('Closing source dialog restores attachment focus', await page.evaluate(artifactId => document.activeElement?.dataset.artifactId === artifactId, pdf.artifact_id));
 
-  await page.locator(`[data-artifact-id="${image.artifact_id}"]`).click();
+  const imageRow = page.locator(`[data-artifact-id="${image.artifact_id}"]`);
+  await imageRow.focus();
+  await page.keyboard.press('Enter');
   await waitVisible('#sourceImage');
+  await page.waitForFunction(() => { const image = document.querySelector('#sourceImage'); return image?.complete && image.naturalWidth > 0 && image.naturalHeight > 0; });
+  const renderedImage = await page.locator('#sourceImage').evaluate(node => ({ src: node.currentSrc, width: node.naturalWidth, height: node.naturalHeight, alt: node.alt }));
+  check('Image viewer decodes the selected original pixels with an accessible identity', new URL(renderedImage.src).pathname === `/api/artifacts/${encodeURIComponent(image.artifact_id)}` && renderedImage.width > 0 && renderedImage.height > 0 && renderedImage.alt === image.title, JSON.stringify(renderedImage));
   const imageCount = demo.claim.artifacts.filter(item => item.media_type?.startsWith('image/')).length;
   check('Image gallery controls appear only when useful', imageCount > 1 ? await page.locator('#sourceGalleryNav').isVisible() : await page.locator('#sourceGalleryNav').isHidden());
   if (imageCount > 1) {
@@ -1580,7 +2063,15 @@ async function execute() {
     await page.locator('#sourcePrevious').click();
     check('Image previous control returns to the original image', (await page.locator('#sourceViewerTitle').innerText()) === firstImageTitle);
   }
-  await page.locator('#closeSourceViewer').click();
+  await page.locator('#zoomIn').click();
+  await page.waitForFunction(() => document.querySelector('#sourceViewer')?.getAttribute('aria-busy') === 'false' && document.querySelector('#zoomValue')?.textContent === '115%');
+  check('Image zoom control changes the rendered original image frame', await page.locator('#zoomValue').innerText() === '115%' && (await page.locator('.source-image-frame').getAttribute('style')).includes('scale(1.15)'));
+  await screenshot('03-image-inspection.png');
+  await runAxe('Original image viewer');
+  await page.keyboard.press('Escape');
+  await waitHidden('#sourceViewer');
+  await page.waitForFunction(artifactId => document.activeElement?.dataset.artifactId === artifactId, image.artifact_id);
+  check('Closing image viewer restores attachment focus', await page.evaluate(artifactId => document.activeElement?.dataset.artifactId === artifactId, image.artifact_id));
 
   await page.locator(`[data-artifact-id="${email.artifact_id}"]`).click();
   await waitVisible('#sourceViewer .email-document');
@@ -1613,6 +2104,17 @@ async function execute() {
     ...visibleProofCaptures,
   ]));
   retainedEvidence['flagship-run'] = processRun;
+  const flagshipEvidenceIssues = evidenceRelationContractViolations(processRun.result?.process, processRun.result?.checklist);
+  check('Flagship evidence ownership is independently derived from ordered process requirements', flagshipEvidenceIssues.length === 0, JSON.stringify(flagshipEvidenceIssues));
+  const flagshipMemoryStateIssues = memoryRetrievalContractViolations(processRun.result);
+  check('Flagship result keeps retrieval separate from receipt-bound memory use', flagshipMemoryStateIssues.length === 0, JSON.stringify(flagshipMemoryStateIssues));
+  const flagshipLegalIssues = legalContextContractViolations(processRun.result?.legal_research, processRun.result?.process);
+  check('Flagship legal questions join exact official passages and deterministic proposals by ID', flagshipLegalIssues.length === 0, JSON.stringify(flagshipLegalIssues));
+  const flagshipVisualRefs = (processRun.result?.facts || []).flatMap(fact => (fact.source_refs || []).filter(reference => reference.locator_kind === 'visual_observation'));
+  const flagshipVisualIssues = flagshipVisualRefs.flatMap(reference => visualReferenceContractViolations(reference, demo.claim.artifacts.find(artifact => artifact.artifact_id === reference.artifact_id)).map(issue => `${reference.artifact_id}: ${issue}`));
+  check('Every flagship visual observation is an exact curated generated-demo annotation bound to public image bytes', flagshipVisualRefs.length > 0 && flagshipVisualIssues.length === 0, JSON.stringify(flagshipVisualIssues));
+  const flagshipRankingIssues = precedentRankingContractViolations(processRun.result);
+  check('Flagship returns exactly three hash-bound generated reference rankings', flagshipRankingIssues.length === 0, JSON.stringify(flagshipRankingIssues));
   if (isProductionJourney()) {
     const coldIssues = orchestrationContractViolations(processRun, 'cold', releaseContract.agentic_runtime.framework);
     check('Visible flagship proves the exact cold six-agent LangGraph DAG and three deterministic accepted-artifact gates', coldIssues.length === 0, JSON.stringify(coldIssues));
@@ -1695,6 +2197,13 @@ async function execute() {
   const processGraph = processRun.result?.process || processRun.process;
   check('Uninterrupted journey rendered both process and evidence moments before stable review readiness', await page.evaluate(() => ['process', 'evidence', 'ready'].every(moment => window.__casepathMomentHistory.includes(moment))), JSON.stringify(await page.evaluate(() => window.__casepathMomentHistory)));
   check('Main spine remains the dominant collapsed graph', await page.locator('.process-spine .process-node').count() === processGraph.main_spine.length && await page.locator('#processBranchGrid').isHidden());
+  await page.locator('#openAudit').click();
+  await waitVisible('#auditDrawer[open]');
+  check('Visible audit drawer exposes only pending or exactly attested current-release evidence', await page.locator('#browserEvidenceLink').isVisible() && await page.locator('#browserEvidenceLink').evaluate(node => (node.tagName === 'SPAN' && node.dataset.evidenceState === 'pending' && !node.hasAttribute('href')) || (node.tagName === 'A' && node.dataset.evidenceState === 'attested' && node.getAttribute('href') === 'https://casepath-guided-canonical-qa.onrender.com/report.json')));
+  check('No reachable product link targets an obsolete QA service', await page.locator('a').evaluateAll((links, pattern) => links.every(link => !new RegExp(pattern, 'i').test(link.href || '')), staleQaService.source));
+  await runAxe('Audit drawer with pending release evidence');
+  await page.keyboard.press('Escape');
+  await waitHidden('#auditDrawer');
   if (isProductionJourney()) {
     const expectedProcessContributions = processGraph.nodes.map(node => ({
       node_id: node.node_id,
@@ -1745,18 +2254,43 @@ async function execute() {
   const renderedNodeIds = await page.evaluate(() => [...new Set([...document.querySelectorAll('.process-node-button[data-node-id],.process-branch-node[data-node-id]')].map(node => node.dataset.nodeId))]);
   const expectedNodeIds = processGraph.nodes.map(node => node.node_id);
   check('Every backend process node is experienceable', expectedNodeIds.every(id => renderedNodeIds.includes(id)) && renderedNodeIds.length === expectedNodeIds.length, JSON.stringify({ expectedNodeIds, renderedNodeIds }));
-  check('Official law, unapproved model interpretation, and generated-reference provenance remain distinct', await page.locator('.law-marker.official').count() > 0 && await page.locator('.law-marker.interpretation').count() > 0 && /Generated reference precedent/i.test(await page.locator('.precedent-mini').first().innerText()));
+  await page.locator('.process-node-button[data-node-id="causation"],.process-branch-node[data-node-id="causation"]').first().click();
+  const officialLawMarker = page.locator('.decision-inspector .law-marker.official').first();
+  const deterministicLawMarker = page.locator('.decision-inspector .law-marker.interpretation').first();
+  check('Official passages and deterministic application proposals have distinct inspectable controls', await officialLawMarker.count() === 1 && await deterministicLawMarker.count() === 1);
+  const officialLawId = await officialLawMarker.getAttribute('data-law-id');
+  const officialLaw = processRun.result.legal_research.sources.find(source => source.source_id === officialLawId);
+  await officialLawMarker.click();
+  const officialLawDetail = page.locator(`.law-detail[data-law-detail="${officialLawId}"]:not([hidden]) .legal-authority.official`);
+  const officialLawProjection = await officialLawDetail.evaluate(node => ({ source_id: node.dataset.legalSourceId, passage_sha256: node.dataset.passageSha256, snapshot_sha256: node.dataset.snapshotSha256, snapshot_scope: node.dataset.snapshotScope, registry_version: node.dataset.registryVersion, text: node.innerText }));
+  check('Official legal detail shows the exact passage, version/location, passage hash, snapshot scope, and registry provenance pending qualified review', officialLawProjection.source_id === officialLaw.source_id && officialLawProjection.passage_sha256 === officialLaw.passage_sha256 && officialLawProjection.snapshot_sha256 === officialLaw.retrieval.snapshot_sha256 && officialLawProjection.snapshot_scope === officialLaw.retrieval.snapshot_scope && officialLawProjection.registry_version === officialLaw.retrieval.registry_version && officialLawProjection.text.includes(officialLaw.passage_text) && officialLawProjection.text.includes(officialLaw.version_date) && officialLawProjection.text.includes(officialLaw.location) && officialLawProjection.text.includes(officialLaw.retrieval.snapshot_scope) && /official registry source/i.test(officialLawProjection.text) && /qualified review pending/i.test(officialLawProjection.text) && !/model interpretation|live retrieval/i.test(officialLawProjection.text), JSON.stringify(officialLawProjection));
+  const deterministicLawId = await deterministicLawMarker.getAttribute('data-law-id');
+  await deterministicLawMarker.click();
+  const deterministicLaw = processRun.result.legal_research.handling_principles.find(source => source.source_id === deterministicLawId);
+  const deterministicLawProjection = await page.locator(`.law-detail[data-law-detail="${deterministicLawId}"]:not([hidden]) .legal-authority.deterministic`).evaluate(node => ({ source_id: node.dataset.legalSourceId, producer: node.dataset.producer, text: node.innerText }));
+  check('Handling principle is visibly a deterministic application proposal pending qualified review', deterministicLawProjection.source_id === deterministicLaw.source_id && deterministicLawProjection.producer === 'deterministic_application' && /deterministic application proposal/i.test(deterministicLawProjection.text) && /qualified review pending/i.test(deterministicLawProjection.text) && !/model interpretation|live retrieval/i.test(deterministicLawProjection.text), JSON.stringify(deterministicLawProjection));
+  const renderedPrecedents = await page.locator('.precedent-inline .precedent-mini').evaluateAll(nodes => nodes.map(node => { const ranking = node.querySelector('.precedent-rank'); return { claim_id: node.querySelector('strong')?.textContent?.split(' · ')[0], contract: ranking?.dataset.rankingContract, corpus_version: ranking?.dataset.corpusVersion, rank: Number(ranking?.dataset.rank), score_basis_points: Number(ranking?.dataset.scoreBasisPoints), context_hash: ranking?.dataset.contextHash, text: node.innerText }; }));
+  const expectedRenderedPrecedents = processRun.result.precedents.map(item => ({ claim_id: item.claim_id, contract: item.ranking.contract, corpus_version: item.ranking.corpus_version, rank: item.ranking.rank, score_basis_points: item.ranking.score_basis_points, context_hash: item.ranking.context_hash }));
+  check('Exactly three generated reference patterns expose ordered rank, score, factors, corpus, and context hash', renderedPrecedents.length === 3 && renderedPrecedents.every((item, index) => Object.entries(expectedRenderedPrecedents[index]).every(([key, value]) => item[key] === value) && /generated reference pattern/i.test(item.text)), JSON.stringify({ renderedPrecedents, expectedRenderedPrecedents }));
+  const rankingReceiptProjection = await page.locator('.precedent-ranking-receipt').first().evaluate(node => ({ contract: node.dataset.rankingContract, corpus_version: node.dataset.corpusVersion, context_hash: node.dataset.contextHash, result_hash: node.dataset.resultHash, selected_ids: node.dataset.selectedClaimIds, text: node.innerText }));
+  check('Rendered ranking receipt exposes the exact selected IDs, context, candidate scores, and result hash', rankingReceiptProjection.contract === processRun.result.precedent_ranking.contract && rankingReceiptProjection.corpus_version === processRun.result.precedent_ranking.corpus_version && rankingReceiptProjection.context_hash === processRun.result.precedent_ranking.context_hash && rankingReceiptProjection.result_hash === processRun.result.precedent_ranking.result_hash && rankingReceiptProjection.selected_ids === processRun.result.precedent_ranking.selected_claim_ids.join(',') && /candidate scores/i.test(rankingReceiptProjection.text) === false && processRun.result.precedent_ranking.candidate_scores.slice(0, 3).every(candidate => rankingReceiptProjection.text.includes(`${candidate.claim_id}: ${candidate.score_basis_points}`)), JSON.stringify(rankingReceiptProjection));
+  await page.locator('.precedent-inline .precedent-mini').first().click();
+  await waitVisible('#precedentViewer[open] .precedent-rank');
+  check('Precedent dialog preserves inspectable rank factors and ranking receipt', (await page.locator('#precedentViewer .precedent-rank').getAttribute('data-context-hash')) === processRun.result.precedents[0].ranking.context_hash && (await page.locator('#precedentViewer .precedent-ranking-receipt').getAttribute('data-result-hash')) === processRun.result.precedent_ranking.result_hash);
+  await page.locator('#closePrecedent').click();
   const renderedEdges = await page.locator('.process-edge[data-edge-source][data-edge-target]').evaluateAll(edges => edges.map(edge => ({ source: edge.dataset.edgeSource, target: edge.dataset.edgeTarget, state: edge.dataset.edgeState })));
   const expectedEdges = processGraph.edges.map(edge => ({ source: edge.source, target: edge.target, state: edge.state || '' }));
   check('Every backend process edge is experienceable with structural endpoints and state', JSON.stringify(renderedEdges) === JSON.stringify(expectedEdges), JSON.stringify({ expectedEdges, renderedEdges }));
   await page.locator('.process-edge-ledger summary').click();
   check('Compact connection ledger is keyboard-actionable', await page.locator('.process-edge').first().isVisible());
   const firstEdgeTarget = processGraph.edges[0].target;
-  await page.locator('.process-edge').first().click();
-  check('A graph connection routes to its destination decision', await page.locator(`.decision-inspector[data-inspector-node="${firstEdgeTarget}"]`).count() === 1);
+  await page.locator('.process-edge').first().focus();
+  await page.keyboard.press('Enter');
+  check('A graph connection is keyboard-routable to its destination decision', await page.locator(`.decision-inspector[data-inspector-node="${firstEdgeTarget}"]`).count() === 1);
   const firstBranchId = processGraph.nodes.find(node => !processGraph.main_spine.includes(node.node_id)).node_id;
-  await page.locator(`.process-branch-node[data-node-id="${firstBranchId}"]`).click();
-  check('Branch expansion is actionable', await page.locator(`.decision-inspector[data-inspector-node="${firstBranchId}"]`).count() === 1);
+  await page.locator(`.process-branch-node[data-node-id="${firstBranchId}"]`).focus();
+  await page.keyboard.press('Enter');
+  check('Branch expansion is keyboard-actionable', await page.locator(`.decision-inspector[data-inspector-node="${firstBranchId}"]`).count() === 1);
   await auditViewports('02-ready-process', '.process-layout');
 
   const facts = processRun.result?.facts || processRun.understanding?.facts || [];
@@ -1801,12 +2335,15 @@ async function execute() {
   check('Visual observation is not rendered as an exact quote', await visualButton.locator('q').count() === 0 && /not an exact quote/i.test(await visualButton.innerText()));
   await visualButton.click();
   await waitVisible('#sourceViewer[open] .visual-region-highlight');
-  const highlightedRegion = await page.locator('.visual-region-highlight').evaluate(node => ({ region: JSON.parse(node.dataset.highlightRegion), left: parseFloat(node.style.left) / 100, top: parseFloat(node.style.top) / 100, width: parseFloat(node.style.width) / 100, height: parseFloat(node.style.height) / 100, label: node.getAttribute('aria-label') }));
+  const highlightedRegion = await page.locator('.visual-region-highlight').evaluate(node => ({ region: JSON.parse(node.dataset.highlightRegion), left: parseFloat(node.style.left) / 100, top: parseFloat(node.style.top) / 100, width: parseFloat(node.style.width) / 100, height: parseFloat(node.style.height) / 100, label: node.getAttribute('aria-label'), producer: node.dataset.sourceProducer, authority: node.dataset.sourceAuthority, annotation_contract: node.dataset.annotationContract, annotation_version: node.dataset.annotationVersion, image_sha256: node.dataset.imageSha256, artifact_sha256: node.dataset.artifactSha256 }));
   const visualRegionValid = Array.isArray(visualRef.region) && visualRef.region.length === 4 && visualRef.region.every(value => Number.isFinite(value) && value >= 0 && value <= 1) && visualRef.region[2] > 0 && visualRef.region[3] > 0 && visualRef.region[0] + visualRef.region[2] <= 1 && visualRef.region[1] + visualRef.region[3] <= 1;
   const visualArtifact = demo.claim.artifacts.find(item => item.artifact_id === visualRef.artifact_id);
-  check('Opening a visual fact highlights the exact normalized image region', visualRegionValid && visualArtifact?.media_type?.startsWith('image/') && JSON.stringify(highlightedRegion.region) === JSON.stringify(visualRef.region) && [highlightedRegion.left, highlightedRegion.top, highlightedRegion.width, highlightedRegion.height].every((value, index) => Math.abs(value - visualRef.region[index]) < 1e-9) && highlightedRegion.label.includes(visualRef.observation), JSON.stringify({ visualRef, visualArtifact, highlightedRegion }));
-  const visualPassage = await page.locator(`.source-fact[data-fact-id="${visualFact.fact_id}"] .source-passage[data-locator-kind="visual_observation"]`).evaluate(node => ({ region: node.dataset.sourceRegion, observation: node.dataset.sourceObservation, agent: node.dataset.sourceAgent, hasQuote: Boolean(node.querySelector('q')) }));
-  check('Visual source-to-fact grounding retains exact observation, region, and agent without quotation markup', visualPassage.region === JSON.stringify(visualRef.region) && visualPassage.observation === visualRef.observation && visualPassage.agent === visualRef.agent && !visualPassage.hasQuote && await page.locator('.opened-grounding q').count() === 0, JSON.stringify({ visualRef, visualPassage }));
+  check('Opening a visual fact highlights the exact normalized image region and hash-bound generated-demo authority', visualRegionValid && visualArtifact?.media_type?.startsWith('image/') && JSON.stringify(highlightedRegion.region) === JSON.stringify(visualRef.region) && [highlightedRegion.left, highlightedRegion.top, highlightedRegion.width, highlightedRegion.height].every((value, index) => Math.abs(value - visualRef.region[index]) < 1e-9) && highlightedRegion.label.includes(visualRef.observation) && highlightedRegion.producer === visualRef.producer && highlightedRegion.authority === visualRef.authority && highlightedRegion.annotation_contract === visualRef.annotation_contract && highlightedRegion.annotation_version === visualRef.annotation_version && highlightedRegion.image_sha256 === visualRef.image_sha256 && highlightedRegion.artifact_sha256 === visualArtifact.sha256, JSON.stringify({ visualRef, visualArtifact, highlightedRegion }));
+  const visualPassage = await page.locator(`.source-fact[data-fact-id="${visualFact.fact_id}"] .source-passage[data-locator-kind="visual_observation"]`).evaluate(node => ({ region: node.dataset.sourceRegion, observation: node.dataset.sourceObservation, producer: node.dataset.sourceProducer, authority: node.dataset.sourceAuthority, annotation_contract: node.dataset.annotationContract, annotation_version: node.dataset.annotationVersion, image_sha256: node.dataset.imageSha256, hasQuote: Boolean(node.querySelector('q')), text: node.innerText }));
+  check('Visual source-to-fact grounding roundtrips the exact curated annotation without agent, extraction, or quotation authority', visualPassage.region === JSON.stringify(visualRef.region) && visualPassage.observation === visualRef.observation && visualPassage.producer === visualRef.producer && visualPassage.authority === visualRef.authority && visualPassage.annotation_contract === visualRef.annotation_contract && visualPassage.annotation_version === visualRef.annotation_version && visualPassage.image_sha256 === visualArtifact.sha256 && !visualPassage.hasQuote && !/machine extraction|agent observation|model output/i.test(visualPassage.text.replace('not machine extraction, model output', '')) && await page.locator('.opened-grounding q').count() === 0, JSON.stringify({ visualRef, visualPassage }));
+  check('Grounded image inspection retains decoded original pixels', await page.locator('#sourceImage').evaluate(node => node.complete && node.naturalWidth > 0 && node.naturalHeight > 0));
+  await screenshot('03-image-grounding-inspection.png');
+  await runAxe('Grounded image viewer');
   await page.locator('#closeSourceViewer').click();
 
   const metadataFact = facts.find(item => item.source_refs?.some(ref => ref.locator_kind === 'metadata_field'));
@@ -1829,8 +2366,13 @@ async function execute() {
   await waitVisible('[data-v20-open-documents]');
   await page.locator('[data-v20-open-documents]').click();
   await waitVisible('#v20DocumentSheet[open]');
-  const neededItem = page.locator('.v20-document-body .v17-checklist-group[data-kind="needed"] .v17-checklist-item[data-node-id][data-fact-id][data-item-id]').first();
-  check('Derived document items own structural node, fact, and item identifiers', await neededItem.count() === 1 && Boolean(await neededItem.getAttribute('data-node-id')) && Boolean(await neededItem.getAttribute('data-fact-id')) && Boolean(await neededItem.getAttribute('data-item-id')));
+  const neededItem = page.locator('.v20-document-body .v17-checklist-group[data-kind="needed"] .v17-checklist-item[data-node-id][data-node-ids][data-current-path][data-fact-id][data-item-id]').first();
+  check('Derived document items own structural primary, ordered-owner, current-path, fact, and item identifiers', await neededItem.count() === 1 && Boolean(await neededItem.getAttribute('data-node-id')) && Boolean(await neededItem.getAttribute('data-node-ids')) && ['true', 'false'].includes(await neededItem.getAttribute('data-current-path')) && Boolean(await neededItem.getAttribute('data-fact-id')) && Boolean(await neededItem.getAttribute('data-item-id')));
+  const multiOwnerItem = processRun.result.checklist.items.find(item => Array.isArray(item.node_ids) && item.node_ids.length > 1);
+  check('Flagship checklist contains an inspectable reciprocal multi-owner evidence item', Boolean(multiOwnerItem), JSON.stringify(processRun.result.checklist.items.map(item => ({ item_id: item.item_id, node_ids: item.node_ids }))));
+  const renderedMultiOwner = page.locator(`.v20-document-body .v17-checklist-item[data-item-id="${multiOwnerItem.item_id}"]`).first();
+  const multiOwnerProjection = await renderedMultiOwner.evaluate(node => ({ node_id: node.dataset.nodeId, node_ids: node.dataset.nodeIds, current_path: node.dataset.currentPath, text: node.innerText }));
+  check('Document sheet preserves exact owner order, primary owner, current-path state, and secondary relationships', multiOwnerProjection.node_id === multiOwnerItem.node_id && multiOwnerProjection.node_ids === multiOwnerItem.node_ids.join(',') && multiOwnerProjection.current_path === String(multiOwnerItem.current_path === true) && /Also required by/i.test(multiOwnerProjection.text), JSON.stringify({ multiOwnerItem, multiOwnerProjection }));
   if (isProductionJourney()) {
     const expectedChecklistContributions = processRun.result.checklist.items.map(item => ({
       item_id: item.item_id,
@@ -1851,6 +2393,10 @@ async function execute() {
   await neededItem.click();
   await waitHidden('#v20DocumentSheet');
   check('Document need routes by its own node identifier', await page.locator(`.decision-inspector[data-inspector-node="${owningNodeId}"]`).count() === 1);
+  const secondaryOwnerId = multiOwnerItem.node_ids.find(nodeId => nodeId !== multiOwnerItem.node_id);
+  await page.locator(`.process-node-button[data-node-id="${secondaryOwnerId}"],.process-branch-node[data-node-id="${secondaryOwnerId}"]`).first().click();
+  const secondaryOwnerEvidence = page.locator(`.decision-inspector[data-inspector-node="${secondaryOwnerId}"] .inspector-row[data-item-id="${multiOwnerItem.item_id}"][data-node-ids="${multiOwnerItem.node_ids.join(',')}"]`);
+  check('A secondary process owner renders the same reciprocal evidence item and names the additional relationship', await secondaryOwnerEvidence.count() === 1 && /Primary decision:|Also required by/i.test(await secondaryOwnerEvidence.innerText()), JSON.stringify({ item_id: multiOwnerItem.item_id, secondaryOwnerId }));
   const flagshipBeforeReview = processRun;
   await page.locator('#journeyNext').click();
   await waitVisible('body[data-casepath-moment="review"]');
@@ -1868,6 +2414,8 @@ async function execute() {
   check('Demo review response is accepted, typed, and explicitly unverified', reviewed.accepted === true && reviewed.reviewer?.type === 'unverified_demo_user' && reviewed.reviewer?.qualification_status === 'not_verified' && reviewed.result?.process && reviewed.result?.checklist, JSON.stringify(reviewed));
   const persistedReviewedRun = await getJson(`${API}/api/runs/${encodeURIComponent(flagshipRunId)}`);
   retainedEvidence['post-review-run'] = persistedReviewedRun;
+  const reviewedEvidenceIssues = evidenceRelationContractViolations(reviewed.result?.process, reviewed.result?.checklist);
+  check('Applied-review checklist retains exact reciprocal process ownership', reviewedEvidenceIssues.length === 0, JSON.stringify(reviewedEvidenceIssues));
   const reviewTransformIssues = reviewTransformContractViolations(reviewed, persistedReviewedRun, flagshipBeforeReview);
   check(isProductionJourney() ? 'Review is an explicitly unverified post-model transform with exact pre/post hashes and preserved model-time acceptance receipts' : 'Local deterministic review is an explicitly unverified transform with exact pre/post hashes', reviewTransformIssues.length === 0, JSON.stringify(reviewTransformIssues));
   const appliedReviewCopy = await page.locator('#stageCanvas').innerText();
@@ -1888,7 +2436,8 @@ async function execute() {
   const appliedEdges = await page.locator('.review-applied .process-edge[data-edge-source][data-edge-target]').evaluateAll(edges => edges.map(edge => ({ source: edge.dataset.edgeSource, target: edge.dataset.edgeTarget, state: edge.dataset.edgeState })));
   const reviewedEdges = reviewed.result.process.edges.map(edge => ({ source: edge.source, target: edge.target, state: edge.state || '' }));
   check('Applied view retains every server-returned reviewed graph connection', JSON.stringify(appliedEdges) === JSON.stringify(reviewedEdges), JSON.stringify({ reviewedEdges, appliedEdges }));
-  check('Applied view shows the actual server-returned reviewed checklist', await page.locator('.reviewed-checklist [data-item-id]').count() === reviewed.result.checklist.items.length);
+  const reviewedChecklistProjection = await page.locator('.reviewed-checklist [data-item-id]').evaluateAll(nodes => nodes.map(node => ({ item_id: node.dataset.itemId, node_id: node.dataset.nodeId, node_ids: node.dataset.nodeIds, current_path: node.dataset.currentPath })));
+  check('Applied view shows the actual reviewed checklist with ordered owners and current-path state', reviewedChecklistProjection.length === reviewed.result.checklist.items.length && reviewedChecklistProjection.every((projection, index) => projection.item_id === reviewed.result.checklist.items[index].item_id && projection.node_id === reviewed.result.checklist.items[index].node_id && projection.node_ids === reviewed.result.checklist.items[index].node_ids.join(',') && projection.current_path === String(reviewed.result.checklist.items[index].current_path === true)), JSON.stringify(reviewedChecklistProjection));
   const reviewedSelectedNode = reviewed.result.process.nodes.find(node => node.node_id === reviewed.result.process.current_overlay?.current_node_id);
   const reviewedSelectedFacts = reviewed.result.facts.filter(fact => (reviewedSelectedNode?.fact_ids || []).includes(fact.fact_id)).slice(0, 2);
   const reviewedFactChain = await page.locator('.review-applied .v17-evidence-chain').innerText();
@@ -1900,9 +2449,12 @@ async function execute() {
 
   await page.locator('#journeyNext').click();
   await waitVisible('.v20-learning-summary');
-  check('Candidate is honestly quarantined at one of three', reviewed.candidate?.status === 'quarantined' && reviewed.candidate?.support_count === 1 && reviewed.candidate?.required_support === 3 && /1 of 3 support records/i.test(await page.locator('[data-outcome="candidate"]').innerText()));
+  const candidateCopy = await page.locator('[data-outcome="candidate"]').innerText();
+  check('Candidate is honestly quarantined with one unverified support record and zero qualified support', reviewed.candidate?.status === 'quarantined' && reviewed.candidate?.support_count === 1 && reviewed.candidate?.required_support === 3 && reviewed.candidate?.qualified_support_count === 0 && reviewed.candidate?.required_qualified_support === 3 && /1 of 3 unverified demo support records/i.test(candidateCopy) && /0 of 3 qualified support records/i.test(candidateCopy), candidateCopy);
   check('Shared playbook is explicitly unchanged', reviewed.candidate?.shared_knowledge_changed === false && /shared playbook unchanged/i.test(await page.locator('.v20-learning-summary').innerText()) && /mould-playbook-v3/i.test(await page.locator('[data-outcome="shared-playbook"]').innerText()));
-  check('Unrun gates are not presented as successes', /not_run/i.test(await page.locator('[data-outcome="candidate"]').innerText()) && !/playbook released|6\/6 passed|12\/12 unchanged/i.test(await page.locator('.v20-learning-summary').innerText()));
+  check('Passed deterministic gates remain distinct from missing qualified support and approval', reviewed.candidate?.target_tests?.status === 'passed' && reviewed.candidate?.protected_regression?.status === 'passed' && reviewed.candidate?.approval?.status === 'pending' && reviewed.candidate?.approval?.qualified_reviewer === false && /target tests: passed/i.test(candidateCopy) && /protected regression: passed/i.test(candidateCopy) && /qualified approval: pending/i.test(candidateCopy) && /does not supply the missing qualified support or approval/i.test(candidateCopy) && !/playbook released|qualified approval: approved/i.test(await page.locator('.v20-learning-summary').innerText()), candidateCopy);
+  const protectedOutputCase = reviewed.candidate?.protected_regression?.cases?.find(value => value.case_id === 'source_claim_full_playbook_unchanged');
+  check('Protected regression executes the real memory gate and independently binds unchanged full result, process, and checklist hashes', protectedOutputCase?.status === 'passed' && protectedOutputCase?.execution_contract === 'deterministic_case_specific_memory_gate/1.0.0' && protectedOutputCase?.gate_executed === true && protectedOutputCase?.expected_memory_application === false && protectedOutputCase?.actual_memory_application === false && protectedOutputCase?.output_unchanged === true && stableJson(protectedOutputCase?.before_hashes) === stableJson(protectedOutputCase?.after_hashes) && ['result_hash', 'process_hash', 'checklist_hash'].every(key => SHA256_PATTERN.test(protectedOutputCase?.before_hashes?.[key] || '')), JSON.stringify(protectedOutputCase));
   await auditViewports('06-learning', '.v20-learning-summary');
 
   await page.locator('#journeyNext').click();
@@ -1915,30 +2467,102 @@ async function execute() {
   check('Lifecycle produced flagship, baseline, and post-review runs', runIds.length === 3, JSON.stringify(runIds));
   const baseline = await awaitRun(runIds[1]);
   const later = await awaitRun(runIds[2]);
+  const laterClaim = await getJson(`${API}/api/claims/${encodeURIComponent(demo.later_claim_id)}`);
   retainedEvidence['later-baseline-run'] = baseline;
   retainedEvidence['later-after-memory-run'] = later;
   if (!isLocal(BASE) || !isLocal(API)) {
     check('Both later-claim comparisons retain the same bounded Nemotron contract', isNemotronRun(baseline) && isNemotronRun(later), JSON.stringify({ baseline: baseline.result?.audit?.canonicalization, later: later.result?.audit?.canonicalization }));
   }
+  for (const [label, run, claim] of [['baseline', baseline, laterClaim], ['later', later, laterClaim]]) {
+    const relationIssues = evidenceRelationContractViolations(run.result?.process, run.result?.checklist);
+    check(`${label} later-claim run retains exact reciprocal evidence ownership`, relationIssues.length === 0, JSON.stringify(relationIssues));
+    const legalIssues = legalContextContractViolations(run.result?.legal_research, run.result?.process);
+    check(`${label} later-claim run retains exact ID-joined legal context`, legalIssues.length === 0, JSON.stringify(legalIssues));
+    const visualRefs = (run.result?.facts || []).flatMap(fact => (fact.source_refs || []).filter(reference => reference.locator_kind === 'visual_observation'));
+    const visualIssues = visualRefs.flatMap(reference => visualReferenceContractViolations(reference, claim.artifacts.find(artifact => artifact.artifact_id === reference.artifact_id)).map(issue => `${reference.artifact_id}: ${issue}`));
+    check(`${label} later-claim run binds every curated visual annotation to public image bytes`, visualRefs.length > 0 && visualIssues.length === 0, JSON.stringify(visualIssues));
+    const rankingIssues = precedentRankingContractViolations(run.result);
+    check(`${label} later-claim run recomputes an exact-three ranking receipt`, rankingIssues.length === 0, JSON.stringify(rankingIssues));
+    const memoryStateIssues = memoryRetrievalContractViolations(run.result);
+    check(`${label} later-claim run keeps retrieval separate from receipt-bound memory use`, memoryStateIssues.length === 0, JSON.stringify(memoryStateIssues));
+  }
+  const memoryIssues = memoryApplicationContractViolations(baseline, later, proof);
+  check('Later causal proof independently binds the exact memory receipt, retained pre-transform boundary, persisted completed event, DTO hashes, semantic eligibility, operations, delta, ten checks, pure replay, and unchanged v3', memoryIssues.length === 0, JSON.stringify(memoryIssues));
   check('Computed proof names both completed later-claim runs', proof.before?.run_id === baseline.run_id && proof.after?.run_id === later.run_id);
   check('Later claim keeps the shared v3 playbook and applies no shared rule', later.result?.playbook?.version === 'mould-playbook-v3' && later.result?.shared_rule_applied === false);
   const laterProcess = later.result?.process || later.process;
   const laterCurrentNodeId = laterProcess?.current_overlay?.current_node_id || laterProcess?.current_node;
   const laterCurrentNode = laterProcess?.nodes?.find(node => node.node_id === laterCurrentNodeId);
-  check('Later claim stops at the returned unverified tenant-law scope gate', later.result?.category === 'Moisture and condensation report' && later.result?.scope === 'Residential-tenancy scope unverified' && laterCurrentNodeId === 'scope' && laterCurrentNode?.state === 'current' && laterCurrentNode?.answer === 'Unverified', JSON.stringify({ category: later.result?.category, scope: later.result?.scope, current_node_id: laterCurrentNodeId, current_node: laterCurrentNode }));
-  const laterScope = page.locator('#laterResult .later-process-result .process-node.current .process-node-button[data-node-id="scope"]');
-  check('Later UI renders its own current scope node as Unverified', await laterScope.count() === 1 && /Current decision/i.test(await laterScope.innerText()) && /Tenant-law scope/i.test(await laterScope.innerText()) && /Unverified/i.test(await laterScope.innerText()), await page.locator('#laterResult .later-process-result').innerText());
-  const laterProcessText = await page.locator('#laterResult .later-process-result').innerText();
-  const downstreamPrimaryIds = ['dispute', 'urgency', 'notification', 'defect', 'causation', 'responsibility', 'remedy'];
-  const completedDownstreamCount = await page.locator(downstreamPrimaryIds.map(nodeId => `#laterResult .later-process-result .process-node.complete .process-node-button[data-node-id="${nodeId}"]`).join(',')).count();
-  check('Later UI does not reuse the flagship in-scope path or completed downstream decisions', !/\bIn scope\b/i.test(laterProcessText) && completedDownstreamCount === 0, JSON.stringify({ laterProcessText, completedDownstreamCount }));
-  const memoryUsed = later.result?.reviewed_memory_used === true && proof.reviewed_memory_proof?.used === true;
-  check('Later UI claims unverified demo-memory use only when both run and proof return it', memoryUsed ? await page.locator('.v20-later-heading[data-memory-used="true"]').count() === 1 && /unverified demo memory used/i.test(await page.locator('.v20-later-heading').innerText()) : !/unverified demo memory used/i.test(await page.locator('.v20-later-heading').innerText()));
-  check('Before/after uses returned hashes and computed changes', (await page.locator('#laterResult').innerText()).includes(proof.before.result_hash) && (await page.locator('#laterResult').innerText()).includes(proof.after.result_hash));
-  await auditViewports('07-later-result', '#laterResult .before-after');
+  check('Later claim remains in Swiss residential tenancy at unresolved causation with the evidence-gap next action', later.result?.category === 'Rental defect - mould and moisture' && later.result?.scope === 'Swiss residential tenancy' && laterCurrentNodeId === 'causation' && laterCurrentNode?.state === 'current' && laterCurrentNode?.answer === 'Unresolved' && laterProcess?.current_overlay?.next_action_node_id === 'evidence_gap' && laterProcess?.selected_path?.includes('evidence_gap'), JSON.stringify({ category: later.result?.category, scope: later.result?.scope, current_node_id: laterCurrentNodeId, current_node: laterCurrentNode, overlay: laterProcess?.current_overlay, selected_path: laterProcess?.selected_path }));
+  const laterCausation = page.locator('#laterResult .later-process-result .process-node.current .process-node-button[data-node-id="causation"]');
+  check('Later UI renders its own current unresolved causation decision', await laterCausation.count() === 1 && /Current decision/i.test(await laterCausation.innerText()) && /Causation assessment/i.test(await laterCausation.innerText()) && /Unresolved/i.test(await laterCausation.innerText()), await page.locator('#laterResult .later-process-result').innerText());
+  check('Later memory transform adds exactly the ventilation node, two bounded edges, and three evidence-item changes', stableJson(proof.causal_delta?.process?.added_node_ids) === stableJson(['ventilation_dispute']) && stableJson(proof.causal_delta?.process?.added_edges) === stableJson([{ source: 'evidence_gap', target: 'ventilation_dispute' }, { source: 'ventilation_dispute', target: 'causation' }]) && stableJson(proof.causal_delta?.evidence?.changed_item_ids) === stableJson(['building_envelope', 'management_position', 'use_evidence']) && laterProcess.nodes.some(node => node.node_id === 'ventilation_dispute'), JSON.stringify(proof.causal_delta));
+  const memoryUsed = later.result?.memory_application != null
+    && later.result?.memory_used === true
+    && later.result?.reviewed_memory_used === true
+    && later.result?.knowledge?.reviewed_memory_used === true
+    && later.result?.reviewed_memory_retrieved === true
+    && later.result?.knowledge?.reviewed_memory_retrieved === true
+    && later.result?.process?.memory_used === true
+    && later.result?.checklist?.memory_used === true
+    && proof.reviewed_memory_proof?.used === true
+    && memoryIssues.length === 0;
+  check('Later UI claims case-specific unverified guidance only when retrieval, every use flag, exact receipt, and computed proof all agree', memoryUsed && await page.locator('.v20-later-heading[data-memory-retrieved="true"][data-memory-used="true"][data-memory-retrieved-only="false"][data-causal-proof-ready="true"]').count() === 1 && /case-specific unverified guidance applied/i.test(await page.locator('.v20-later-heading').innerText()), await page.locator('.v20-later-heading').innerText());
+  check('Later ranking selects the unverified demo memory and remains exactly three ordered patterns', later.result.precedents.length === 3 && later.result.precedents[0]?.claim_id === 'DEF-027-E0-DEMO' && later.result.precedents[0]?.review_status === 'unverified_demo_memory' && later.result.precedent_ranking.selected_claim_ids[0] === 'DEF-027-E0-DEMO', JSON.stringify(later.result.precedents.map(item => ({ claim_id: item.claim_id, status: item.review_status, rank: item.ranking?.rank }))));
+  const transformedContributionValues = [
+    ...(later.result.process.nodes || []).flatMap(node => (node.agent_decision_contributions || []).map(contribution => contributionExpectation(contribution, PROCESS_CONTRIBUTION_ROLE, later.result.memory_application))),
+    ...(later.result.checklist.items || []).map(item => contributionExpectation(item.agent_contribution, EVIDENCE_CONTRIBUTION_ROLE, later.result.memory_application)),
+  ];
+  check('Post-memory DTOs and UI contain no pre-memory Nemotron acceptance attribution', transformedContributionValues.every(value => value === null) && await page.locator('#laterResult .model-contribution-attribution').count() === 0 && !Object.hasOwn(later.result.process, 'agent_contribution') && !later.result.process.nodes.some(node => Object.hasOwn(node, 'agent_decision_contributions')) && !Object.hasOwn(later.result.checklist, 'agent_contribution') && !later.result.checklist.items.some(item => Object.hasOwn(item, 'agent_contribution')) && later.result.next_action?.agent_brief_contribution === null, JSON.stringify(transformedContributionValues));
+  const returnedUnverifiedMemory = later.result?.precedents?.find(item => item.review_status === 'unverified_demo_memory' && item.memory_id);
+  if (memoryUsed && returnedUnverifiedMemory) {
+    await waitVisible('.v17-reuse-thread');
+    await waitVisible('.v18-reuse-proof .v17-reuse-thread');
+    const reuseCopy = await page.locator('.v17-reuse-thread').innerText();
+    check('Returned demo memory stays explicitly unverified wherever its precedent is rendered', /unverified demo review memory returned/i.test(reuseCopy) && !/qualified expert-reviewed memory returned/i.test(reuseCopy), reuseCopy);
+    const proofLayout = await page.locator('.v18-reuse-proof .v17-reuse-thread').evaluate(node => {
+      const style = getComputedStyle(node);
+      const proofValues = [...node.querySelectorAll('strong,code')].map(value => getComputedStyle(value));
+      return {
+        display: style.display,
+        grid_template_columns: style.gridTemplateColumns,
+        client_width: node.clientWidth,
+        scroll_width: node.scrollWidth,
+        values_wrap: proofValues.every(value => value.overflowWrap === 'anywhere' && value.wordBreak === 'break-word'),
+      };
+    });
+    check('Final memory-proof layout uses responsive grid columns and wraps long receipt hashes without local overflow', proofLayout.display === 'grid' && proofLayout.grid_template_columns !== 'none' && proofLayout.scroll_width <= proofLayout.client_width + 1 && proofLayout.values_wrap, JSON.stringify(proofLayout));
+  }
+  const receiptProjection = await page.locator('.memory-application-receipt').evaluate(node => {
+    const eligibility = node.querySelector('.memory-semantic-eligibility');
+    return {
+      contract: node.dataset.memoryContract,
+      authority: node.dataset.memoryAuthority,
+      scope: node.dataset.memoryScope,
+      application_hash: node.dataset.applicationHash,
+      model_acceptance_reused: node.dataset.modelAcceptanceReused,
+      shared_rule_applied: node.dataset.sharedRuleApplied,
+      eligibility_contract: eligibility?.dataset.eligibilityContract,
+      eligibility_rule_id: eligibility?.dataset.eligibilityRuleId,
+      semantic_signature_hash: eligibility?.dataset.semanticSignatureHash,
+      semantic_role: eligibility?.dataset.semanticRole,
+      text: node.innerText,
+    };
+  });
+  const laterResultText = await page.locator('#laterResult').innerText();
+  check('Rendered receipt exposes exact unverified boundary, semantic eligibility, application hash, and every before/after DTO and semantic hash', receiptProjection.contract === later.result.memory_application.contract && receiptProjection.authority === 'unverified_demo' && receiptProjection.scope === 'case_specific_guidance_only' && receiptProjection.application_hash === later.result.memory_application.application_hash && receiptProjection.model_acceptance_reused === 'false' && receiptProjection.shared_rule_applied === 'false' && receiptProjection.eligibility_contract === later.result.memory_application.eligibility.contract && receiptProjection.eligibility_rule_id === later.result.memory_application.eligibility.rule_id && receiptProjection.semantic_signature_hash === later.result.memory_application.eligibility.semantic_signature_hash && receiptProjection.semantic_role === 'management_ventilation_allegation' && [...Object.values(later.result.memory_application.before), ...Object.values(later.result.memory_application.after)].every(hash => laterResultText.includes(hash)), JSON.stringify(receiptProjection));
+  const renderedDelta = await page.locator('.causal-delta').evaluate(node => ({ nonzero: node.dataset.causalNonzero, text: node.innerText }));
+  check('Rendered causal delta names the exact added node, two edges, and three changed evidence items', renderedDelta.nonzero === 'true' && ['ventilation_dispute', 'evidence_gap → ventilation_dispute', 'ventilation_dispute → causation', 'building_envelope', 'management_position', 'use_evidence'].every(value => renderedDelta.text.includes(value)), renderedDelta.text);
+  const renderedChecks = await page.locator('.memory-deterministic-checks [data-memory-check]').evaluateAll(nodes => nodes.map(node => ({ name: node.dataset.memoryCheck, status: node.dataset.checkStatus })));
+  check('Rendered causal proof shows all ten deterministic checks in order and passed', renderedChecks.length === 10 && stableJson(renderedChecks) === stableJson(proof.deterministic_checks.map(item => ({ name: item.name, status: item.status }))), JSON.stringify(renderedChecks));
+  check('Before/after uses returned result hashes and visibly retains unchanged shared v3', laterResultText.includes(proof.before.result_hash) && laterResultText.includes(proof.after.result_hash) && /Shared playbook v3 unchanged/i.test(laterResultText) && /mould-playbook-v3/i.test(laterResultText));
+  await auditViewports('07-later-result', '#laterResult .v18-reuse-proof');
 
   check('Immutable release marker was never rewritten during the journey', await page.evaluate(() => window.__casepathReleaseMutations.length === 0), JSON.stringify(await page.evaluate(() => window.__casepathReleaseMutations)));
+  check('No lifecycle state exposes a false reviewed-v4 claim', !falseReviewedV4Claim.test(await page.locator('body').innerText()));
   check('Skip link remains present', await page.locator('.skip-link').count() === 1);
+  await page.locator('.skip-link').focus();
+  check('Skip link is keyboard focusable', await page.evaluate(() => document.activeElement?.matches('.skip-link')));
   check('Visible icon controls have accessible names', await page.evaluate(() => [...document.querySelectorAll('button.icon-button:not([hidden]),a.icon-button:not([hidden])')].every(node => node.getAttribute('aria-label') || node.textContent.trim())));
   await runAxe('Final lifecycle state');
   check('No browser console errors', failures.console.length === 0, JSON.stringify(failures.console));
@@ -2385,13 +3009,266 @@ function runContractSelfTest() {
     PROCESS_CONTRIBUTION_ROLE,
     { acceptance_scope: 'post_review_unverified_transform', model_acceptance_reused: false },
   );
+  const postMemoryContribution = contributionExpectation(
+    acceptedProcessUnit,
+    PROCESS_CONTRIBUTION_ROLE,
+    { contract: 'casepath.memory-application-receipt/1.0.0', authority: 'unverified_demo', scope: 'case_specific_guidance_only', model_acceptance_reused: false, applied: true },
+  );
   if (stableJson(acceptedContribution) !== stableJson({ authority: 'nemotron-accepted', accepted_count: '1', fallback_count: '0' })
     || stableJson(fallbackContribution) !== stableJson({ authority: 'deterministic-fallback', accepted_count: '0', fallback_count: '1' })
     || stableJson(mixedFieldContribution) !== stableJson({ authority: 'mixed', accepted_count: '1', fallback_count: '1' })
     || postReviewContribution !== null
+    || postMemoryContribution !== null
     || contributionExpectation({ ...acceptedProcessUnit, deterministic_fallback_applied: undefined }, PROCESS_CONTRIBUTION_ROLE) !== null
     || contributionExpectation({ ...acceptedProcessUnit, attribution: 'foreign_agent' }, PROCESS_CONTRIBUTION_ROLE) !== null
     || contributionExpectation({ ...fallbackProcessUnit, attribution: 'foreign_agent' }, PROCESS_CONTRIBUTION_ROLE) !== null) throw new Error('Visible contribution attribution does not fail closed on authority or fallback state');
+
+  const relationProcess = {
+    selected_path: ['a'],
+    current_overlay: { next_action_node_id: 'b' },
+    nodes: [
+      { node_id: 'a', evidence_requirement_ids: ['one', 'shared'] },
+      { node_id: 'b', evidence_requirement_ids: ['shared'] },
+    ],
+  };
+  const relationChecklist = { items: [
+    { item_id: 'one', node_ids: ['a'], node_id: 'a', current_path: true },
+    { item_id: 'shared', node_ids: ['a', 'b'], node_id: 'a', current_path: true },
+  ] };
+  if (evidenceRelationContractViolations(relationProcess, relationChecklist).length) throw new Error('Positive reciprocal evidence fixture failed');
+  for (const [field, value] of [['node_ids', ['b', 'a']], ['node_id', 'b'], ['current_path', false]]) {
+    const tampered = structuredClone(relationChecklist);
+    tampered.items[1][field] = value;
+    if (!evidenceRelationContractViolations(relationProcess, tampered).some(issue => issue.includes(field))) throw new Error(`Tampered reciprocal evidence ${field} fixture was not rejected`);
+  }
+
+  const officialPassage = 'Versioned official passage.';
+  const legalProcess = { nodes: [{ node_id: 'scope' }] };
+  const legalFixture = {
+    contract: 'casepath.legal-context/2.0.0',
+    registry_version: 'ch-tenancy-official-snapshot/2026-08-12',
+    lookup_method: 'versioned_official_source_registry_lookup',
+    questions: [{ question_id: 'scope_question', text: 'What official rule applies?', source_ids: ['official'], interpretation_ids: ['principle'], process_node_ids: ['scope'], consequence: 'Keep authority and proposal distinct.' }],
+    sources: [{
+      source_id: 'official', title: 'Official source', url: 'https://example.test/official', source_type: 'official_statute', jurisdiction: 'CH', version_date: '2026-08-12', location: 'Article 1', passage_language: 'de', passage_text: officialPassage, passage_sha256: sha256(officialPassage), passage_summary: 'A bounded summary.', operational_interpretation: 'Deterministic reference proposal.', review_status: 'qualified_review_pending', role: 'Shapes scope.', approved: false,
+      retrieval: { method: 'versioned_official_source_registry_lookup', retrieved_at: '2026-08-12', registry_version: 'ch-tenancy-official-snapshot/2026-08-12', snapshot_url: 'https://example.test/snapshot.pdf', snapshot_sha256: sha256('official snapshot'), snapshot_scope: 'official_pdf_bytes' },
+    }],
+    handling_principles: [{ source_id: 'principle', title: 'Deterministic handling proposal', source_type: 'operational_interpretation', role: 'Preserve uncertainty.', validation_status: 'candidate_not_expert_approved', producer: 'deterministic_application' }],
+    node_links: { scope: ['official', 'principle'] },
+    review_status: 'Operational translation not yet approved by a qualified reviewer',
+  };
+  if (legalContextContractViolations(legalFixture, legalProcess).length) throw new Error(`Positive legal-context fixture failed: ${JSON.stringify(legalContextContractViolations(legalFixture, legalProcess))}`);
+  const tamperedPassage = structuredClone(legalFixture);
+  tamperedPassage.sources[0].passage_text = 'Changed passage';
+  if (!legalContextContractViolations(tamperedPassage, legalProcess).some(issue => issue.includes('passage hash'))) throw new Error('Tampered legal passage fixture was not rejected');
+  const unknownLegalJoin = structuredClone(legalFixture);
+  unknownLegalJoin.questions[0].source_ids = ['unknown'];
+  if (!legalContextContractViolations(unknownLegalJoin, legalProcess).some(issue => issue.includes('source join'))) throw new Error('Unknown legal source-ID join fixture was not rejected');
+  const modelOwnedPrinciple = structuredClone(legalFixture);
+  modelOwnedPrinciple.handling_principles[0].producer = 'model_agent';
+  if (!legalContextContractViolations(modelOwnedPrinciple, legalProcess).some(issue => issue.includes('producer'))) throw new Error('Model-owned legal principle fixture was not rejected');
+  const falseSnapshotScope = structuredClone(legalFixture);
+  falseSnapshotScope.sources[0].retrieval.snapshot_scope = 'dynamic_html_page';
+  if (!legalContextContractViolations(falseSnapshotScope, legalProcess).some(issue => issue.includes('retrieval receipt'))) throw new Error('False official snapshot-scope fixture was not rejected');
+
+  const imageArtifact = { artifact_id: 'image', media_type: 'image/png', sha256: sha256('image bytes') };
+  const visualFixture = { artifact_id: 'image', locator_kind: 'visual_observation', region: [0.1, 0.2, 0.3, 0.4], observation: 'Curated visible reference.', producer: 'deterministic_reference_annotation', authority: 'generated_demo_reference_only', annotation_contract: 'casepath.visual-reference-annotation/1.0.0', annotation_version: 'generated-demo-reference/2026-08-12', image_sha256: imageArtifact.sha256 };
+  if (visualReferenceContractViolations(visualFixture, imageArtifact).length) throw new Error('Positive visual-reference fixture failed');
+  const tamperedVisualHash = { ...visualFixture, image_sha256: sha256('other bytes') };
+  if (!visualReferenceContractViolations(tamperedVisualHash, imageArtifact).some(issue => issue.includes('public image bytes'))) throw new Error('Tampered visual image hash fixture was not rejected');
+  const tamperedVisualProducer = { ...visualFixture, producer: 'machine_vision_agent' };
+  if (!visualReferenceContractViolations(tamperedVisualProducer, imageArtifact).some(issue => issue.includes('authority contract'))) throw new Error('Tampered visual producer fixture was not rejected');
+
+  const rankingContext = { category: 'category', subcategory: 'subcategory', current_process_node_id: 'causation', next_action_node_id: 'evidence_gap', selected_path: ['causation', 'evidence_gap'], unresolved_fact_ids: ['cause'], current_evidence_need_ids: ['assessment'] };
+  const rankedPrecedents = [1, 2, 3].map(rank => ({ claim_id: `HIST-${rank}`, title: `Pattern ${rank}`, review_status: 'generated_reference', why_useful: 'Generated reference pattern.', provenance: 'generated_reference_not_qualified_review', final_process: ['causation'], evidence: ['assessment'], outcome: 'Reference only', ranking: { contract: 'casepath.precedent-ranking/1.0.0', corpus_version: 'generated-reference-patterns/2026-08-12', rank, score_basis_points: 40 - rank, factors: [{ factor: 'unresolved_fact', value: 'cause', weight: 40 - rank }], context_hash: dtoHash(rankingContext) } }));
+  const rankingResult = { precedents: rankedPrecedents, precedent_ranking: { contract: 'casepath.precedent-ranking/1.0.0', corpus_version: 'generated-reference-patterns/2026-08-12', context: rankingContext, context_hash: dtoHash(rankingContext), candidate_scores: rankedPrecedents.map(item => ({ claim_id: item.claim_id, score_basis_points: item.ranking.score_basis_points, factors: item.ranking.factors })), selected_claim_ids: rankedPrecedents.map(item => item.claim_id), result_hash: dtoHash(rankedPrecedents) } };
+  if (precedentRankingContractViolations(rankingResult).length) throw new Error(`Positive precedent-ranking fixture failed: ${JSON.stringify(precedentRankingContractViolations(rankingResult))}`);
+  const tamperedRank = structuredClone(rankingResult);
+  tamperedRank.precedents[0].ranking.rank = 2;
+  if (!precedentRankingContractViolations(tamperedRank).some(issue => issue.includes('per-item ranking'))) throw new Error('Tampered precedent rank fixture was not rejected');
+  const tamperedContextHash = structuredClone(rankingResult);
+  tamperedContextHash.precedent_ranking.context_hash = sha256('wrong context');
+  if (!precedentRankingContractViolations(tamperedContextHash).some(issue => issue.includes('context'))) throw new Error('Tampered precedent context-hash fixture was not rejected');
+  const tamperedResultHash = structuredClone(rankingResult);
+  tamperedResultHash.precedent_ranking.result_hash = sha256('wrong result');
+  if (!precedentRankingContractViolations(tamperedResultHash).some(issue => issue.includes('result hash'))) throw new Error('Tampered precedent result-hash fixture was not rejected');
+
+  const baselineProcess = {
+    contract: 'process-graph', selected_path: ['causation', 'evidence_gap'], current_overlay: { current_node_id: 'causation', next_action_node_id: 'evidence_gap' }, shared_rule_applied: false, memory_used: false,
+    nodes: [
+      { node_id: 'dispute', evidence_requirement_ids: ['management_position'] },
+      { node_id: 'causation', evidence_requirement_ids: ['building_envelope', 'use_evidence'] },
+      { node_id: 'mixed_cause', evidence_requirement_ids: ['building_envelope', 'use_evidence'] },
+      { node_id: 'tenant_use', evidence_requirement_ids: ['use_evidence'] },
+      { node_id: 'evidence_gap', evidence_requirement_ids: ['building_envelope'] },
+    ],
+    edges: [{ source: 'evidence_gap', target: 'causation', condition: 'assessment complete', state: 'loop' }],
+  };
+  const baselineChecklist = {
+    contract: 'evidence-model', shared_rule_applied: false, memory_used: false, required: ['before'], summary: { phase: 'before' },
+    items: [
+      { item_id: 'building_envelope', status: 'missing', node_ids: ['causation', 'mixed_cause', 'evidence_gap'], node_id: 'causation', current_path: true },
+      { item_id: 'management_position', status: 'provided_sufficient', node_ids: ['dispute'], node_id: 'dispute', current_path: false },
+      { item_id: 'use_evidence', status: 'conditional', node_ids: ['causation', 'mixed_cause', 'tenant_use'], node_id: 'causation', current_path: true },
+    ],
+  };
+  const laterProcessFixture = structuredClone(baselineProcess);
+  laterProcessFixture.nodes.find(node => node.node_id === 'causation').evidence_requirement_ids = ['building_envelope'];
+  laterProcessFixture.nodes.find(node => node.node_id === 'mixed_cause').evidence_requirement_ids = ['building_envelope'];
+  laterProcessFixture.nodes.find(node => node.node_id === 'tenant_use').evidence_requirement_ids = [];
+  const ventilationNode = { node_id: 'ventilation_dispute', evidence_requirement_ids: ['management_position', 'use_evidence'] };
+  laterProcessFixture.nodes.push(ventilationNode);
+  const memoryEdgeOne = { source: 'evidence_gap', target: 'ventilation_dispute', condition: 'plausible use factor', state: 'possible' };
+  const memoryEdgeTwo = { source: 'ventilation_dispute', target: 'causation', condition: 'allegation assessed', state: 'loop' };
+  laterProcessFixture.edges.push(memoryEdgeOne, memoryEdgeTwo);
+  laterProcessFixture.memory_used = true;
+  laterProcessFixture.case_specific_guidance_applied = true;
+  const laterChecklistFixture = structuredClone(baselineChecklist);
+  laterChecklistFixture.items = [
+    { item_id: 'building_envelope', status: 'conditional', node_ids: ['causation', 'mixed_cause', 'evidence_gap'], node_id: 'causation', current_path: true },
+    { item_id: 'management_position', status: 'provided_sufficient', node_ids: ['dispute', 'ventilation_dispute'], node_id: 'dispute', current_path: false },
+    { item_id: 'use_evidence', status: 'conditional', node_ids: ['ventilation_dispute'], node_id: 'ventilation_dispute', current_path: false },
+  ];
+  laterChecklistFixture.required = ['after'];
+  laterChecklistFixture.summary = { phase: 'after' };
+  laterChecklistFixture.memory_used = true;
+  laterChecklistFixture.case_specific_guidance_applied = true;
+  const decisionFacts = [
+    ['scope', 'in_scope'], ['dispute', 'dispute_present'], ['urgency', 'not_urgent'], ['notification', 'notified'], ['recurrence', 'recurrence_supported'], ['causation', 'cause_unresolved'],
+  ].map(([decision_key, decision_value]) => ({ fact_id: `fact_${decision_key}`, state: 'known', controls_process: true, decision_key, decision_value, semantic_role: null, source_refs: [] }));
+  const memoryFacts = [...decisionFacts, { fact_id: 'later_fact_ventilation_allegation', state: 'known', controls_process: false, decision_key: null, decision_value: null, semantic_role: 'management_ventilation_allegation', source_refs: [{ artifact_id: 'art_later_management_reply' }] }];
+  const observableHash = sha256('observable package');
+  const canonicalHash = dtoHash(memoryFacts);
+  const verificationHash = sha256('verification');
+  const baselineResultFixture = { category: 'Rental defect - mould and moisture', subcategory: 'Recurring moisture with disputed causation', facts: structuredClone(memoryFacts), process: baselineProcess, checklist: baselineChecklist, precedents: [], memory_application: null, memory_used: false, reviewed_memory_used: false, reviewed_memory_retrieved: false, knowledge: { reviewed_memory_used: false, reviewed_memory_retrieved: false }, verification: { whole_playbook_hash: sha256('baseline verification') }, audit: { observable_input_hash: observableHash, canonical_state_hash: canonicalHash }, playbook: { version: 'mould-playbook-v3' }, shared_rule_applied: false };
+  const laterResultFixture = { category: 'Rental defect - mould and moisture', subcategory: 'Recurring moisture with disputed causation', facts: structuredClone(memoryFacts), process: laterProcessFixture, checklist: laterChecklistFixture, next_action: { agent_brief_contribution: null }, precedents: [{ claim_id: 'DEF-027-E0-DEMO', review_status: 'unverified_demo_memory', memory_id: 'memory-1' }], memory_used: true, reviewed_memory_used: true, reviewed_memory_retrieved: true, knowledge: { reviewed_memory_used: true, reviewed_memory_retrieved: true }, verification: { whole_playbook_hash: verificationHash }, audit: { observable_input_hash: observableHash, canonical_state_hash: canonicalHash }, playbook: { version: 'mould-playbook-v3' }, shared_rule_applied: false };
+  const requiredDecisionsFixture = Object.fromEntries(decisionFacts.map(fact => [fact.decision_key, fact.decision_value]));
+  const semanticSignatureFixture = dtoHash({ category: 'Rental defect - mould and moisture', subcategory: 'Recurring moisture with disputed causation', required_decisions: requiredDecisionsFixture, required_fact_roles: { management_ventilation_allegation: { state: 'known', min_grounded_sources: 1 } } });
+  const eligibilityManifest = { rule_id: 'same_grounded_mould_signature_v2', contract: 'casepath.semantic-memory-eligibility/1.0.0', claim_id: 'DEMO-MOULD-002', semantic_signature_hash: semanticSignatureFixture, decisions: requiredDecisionsFixture, facts_hash: dtoHash(semanticFactSignature(laterResultFixture)), checks: { source_claim_excluded: true, category_matched: true, subcategory_matched: true, required_decisions_matched: true, ventilation_allegation_grounded: true, semantic_signature_bound: true, guidance_enabled: true } };
+  const receiptFixture = {
+    receipt_type: 'memory_application_receipt', contract: 'casepath.memory-application-receipt/1.0.0', authority: 'unverified_demo', scope: 'case_specific_guidance_only',
+    source_memory: { memory_id: 'memory-1', claim_id: 'DEF-027-E0-DEMO', review_id: 'review-1', content_hash: sha256('memory content'), review_status: 'unverified_demo_memory' },
+    target: { run_id: 'later-run', claim_id: 'DEMO-MOULD-002' }, observable_input_hash: observableHash, canonical_state_hash: canonicalHash,
+    eligibility: { ...eligibilityManifest, eligible: true, manifest_hash: dtoHash(eligibilityManifest) },
+    allowed_operation_ids: ['add_ventilation_dispute_node', 'add_evidence_gap_to_ventilation_edge', 'add_ventilation_to_causation_edge', 'condition_building_envelope', 'reassign_use_evidence_to_ventilation'],
+    applied_operation_ids: ['add_ventilation_dispute_node', 'add_evidence_gap_to_ventilation_edge', 'add_ventilation_to_causation_edge', 'condition_building_envelope', 'reassign_use_evidence_to_ventilation'],
+    process_operations: [
+      { operation_id: 'add_ventilation_dispute_node', operation: 'add_node', node_id: 'ventilation_dispute', evidence_requirement_ids: ['management_position', 'use_evidence'], after_hash: dtoHash(ventilationNode) },
+      { operation_id: 'add_evidence_gap_to_ventilation_edge', operation: 'add_edge', source: 'evidence_gap', target: 'ventilation_dispute', after_hash: dtoHash(memoryEdgeOne) },
+      { operation_id: 'add_ventilation_to_causation_edge', operation: 'add_edge', source: 'ventilation_dispute', target: 'causation', after_hash: dtoHash(memoryEdgeTwo) },
+    ],
+    evidence_operations: [
+      { operation_id: 'condition_building_envelope', operation: 'replace_item', item_id: 'building_envelope', before_hash: dtoHash(baselineChecklist.items[0]), after_hash: dtoHash(laterChecklistFixture.items[0]) },
+      { operation_id: 'reassign_use_evidence_to_ventilation', operation: 'reassign_item', item_id: 'use_evidence', removed_from_node_ids: ['causation', 'mixed_cause', 'tenant_use'], added_to_node_id: 'ventilation_dispute', before_hash: dtoHash(baselineChecklist.items[2]), after_hash: dtoHash(laterChecklistFixture.items[2]) },
+    ],
+    before: { process_dto_hash: dtoHash(baselineProcess), checklist_dto_hash: dtoHash(baselineChecklist), process_semantic_hash: dtoHash(semanticProcessDto(baselineProcess)), checklist_semantic_hash: dtoHash(semanticChecklistDto(baselineChecklist)) },
+    after: { process_dto_hash: dtoHash(laterProcessFixture), checklist_dto_hash: dtoHash(laterChecklistFixture), process_semantic_hash: dtoHash(semanticProcessDto(laterProcessFixture)), checklist_semantic_hash: dtoHash(semanticChecklistDto(laterChecklistFixture)) },
+    verification_hash: verificationHash, shared_playbook_version: 'mould-playbook-v3', shared_rule_applied: false, model_acceptance_reused: false, applied: true,
+  };
+  receiptFixture.application_hash = dtoHash(receiptFixture);
+  laterResultFixture.memory_application = receiptFixture;
+  const memoryBoundaryFixture = {
+    contract: 'casepath.memory-application-boundary/1.0.0',
+    target: structuredClone(receiptFixture.target),
+    source_memory: { memory_id: receiptFixture.source_memory.memory_id, content_hash: receiptFixture.source_memory.content_hash },
+    before: structuredClone(receiptFixture.before),
+  };
+  memoryBoundaryFixture.boundary_hash = dtoHash(memoryBoundaryFixture);
+  const memoryEventFixture = {
+    event_id: 'event-memory-application', ordinal: 1, created_at: '2026-08-12T00:00:00Z',
+    stage: 'memory_application', label: 'Bounded case-specific memory guidance applied', status: 'completed',
+    ...structuredClone(receiptFixture),
+  };
+  const causalDeltaFixture = computedCausalDelta(baselineResultFixture, laterResultFixture);
+  const memoryCheckNames = ['Same observable input', 'Same canonical state', 'Exact current memory receipt', 'Pure memory replay matches learned DTOs', 'Receipt before semantic hashes match baseline DTOs', 'Receipt after hashes match learned DTOs', 'Nonzero causal DTO delta', 'Only allowed causal operations changed', 'Deterministic target and protected checks passed', 'Shared v3 remains unchanged'];
+  const proofFixture = {
+    ready: true, computed: true, baseline_run_id: 'baseline-run', later_run_id: 'later-run',
+    before: { run_id: 'baseline-run', observable_input_hash: observableHash, canonical_state_hash: canonicalHash, process_semantic_hash: receiptFixture.before.process_semantic_hash, checklist_semantic_hash: receiptFixture.before.checklist_semantic_hash, playbook_version: 'mould-playbook-v3', verification_hash: baselineResultFixture.verification.whole_playbook_hash },
+    after: { run_id: 'later-run', observable_input_hash: observableHash, canonical_state_hash: canonicalHash, ...receiptFixture.after, playbook_version: 'mould-playbook-v3', verification_hash: verificationHash },
+    changes: { precedent_claim_ids_added: ['DEF-027-E0-DEMO'] }, reviewed_memory_proof: { used: true, memory_ids: ['memory-1'], present_in_baseline: false, present_in_later_run: true }, causal_delta: causalDeltaFixture,
+    memory_application_proof: { receipt_present: true, receipt_valid: true, source_memory_current: true, before_hashes_match: true, after_hashes_match: true, allowed_delta_exact: true, replay_exact: true, application_hash: receiptFixture.application_hash },
+    deterministic_checks: memoryCheckNames.map(name => ({ name, status: 'passed', detail: 'Computed from both DTOs.' })),
+    candidate: { candidate_id: 'candidate_disputed_ventilation_v4', status: 'quarantined', qualified_support_count: 0, target_tests: { status: 'passed' }, protected_regression: { status: 'passed' }, approval: { status: 'pending', qualified_reviewer: false } },
+    shared_rule: { applied: false, version_before: 'mould-playbook-v3', version_after: 'mould-playbook-v3', shared_knowledge_changed: false, candidate_status: 'quarantined' },
+  };
+  const frozenMemoryIdentity = { memory_id: 'memory-1', review_id: 'review-1', content_hash: receiptFixture.source_memory.content_hash, candidate_id: 'candidate_disputed_ventilation_v4', updated_at: '2026-08-12T00:00:00+00:00' };
+  const counterfactualFreezeFixture = { contract: 'casepath.counterfactual-learning-freeze/1.0.0', memory: frozenMemoryIdentity, identity_hash: dtoHash(frozenMemoryIdentity), application_suppressed: true };
+  proofFixture.counterfactual_learning_freeze = counterfactualFreezeFixture;
+  const baselineRunFixture = { run_id: 'baseline-run', claim_id: 'DEMO-MOULD-002', created_at: '2026-08-12T00:01:00+00:00', completed_at: Date.parse('2026-08-12T00:02:00+00:00') / 1000, counterfactual_learning_freeze: counterfactualFreezeFixture, result: baselineResultFixture };
+  const laterRunFixture = { run_id: 'later-run', claim_id: 'DEMO-MOULD-002', created_at: '2026-08-12T00:03:00+00:00', result: laterResultFixture, memory_application_boundary: memoryBoundaryFixture, events: [memoryEventFixture] };
+  const positiveMemoryIssues = memoryApplicationContractViolations(baselineRunFixture, laterRunFixture, proofFixture);
+  if (positiveMemoryIssues.length) throw new Error(`Positive memory-application fixture failed: ${JSON.stringify(positiveMemoryIssues)}`);
+  const tamperedCounterfactualFreezeRun = structuredClone(baselineRunFixture);
+  tamperedCounterfactualFreezeRun.counterfactual_learning_freeze.memory.content_hash = sha256('forged frozen memory');
+  tamperedCounterfactualFreezeRun.counterfactual_learning_freeze.identity_hash = dtoHash(tamperedCounterfactualFreezeRun.counterfactual_learning_freeze.memory);
+  if (!memoryApplicationContractViolations(tamperedCounterfactualFreezeRun, laterRunFixture, proofFixture).some(issue => issue.includes('frozen governed memory identity'))) throw new Error('Tampered counterfactual learning-freeze fixture was not rejected');
+  const preFreezeBaselineRun = structuredClone(baselineRunFixture);
+  preFreezeBaselineRun.created_at = '2026-08-11T23:59:00+00:00';
+  if (!memoryApplicationContractViolations(preFreezeBaselineRun, laterRunFixture, proofFixture).some(issue => issue.includes('ordered after the learning freeze'))) throw new Error('Pre-learning baseline fixture was not rejected');
+  const tamperedMemoryBoundaryHashRun = structuredClone(laterRunFixture);
+  tamperedMemoryBoundaryHashRun.memory_application_boundary.boundary_hash = sha256('tampered retained memory boundary');
+  if (!memoryApplicationContractViolations(baselineRunFixture, tamperedMemoryBoundaryHashRun, proofFixture).some(issue => issue.includes('boundary hash'))) throw new Error('Tampered retained memory-boundary hash fixture was not rejected');
+  const tamperedMemoryBoundarySourceRun = structuredClone(laterRunFixture);
+  tamperedMemoryBoundarySourceRun.memory_application_boundary.source_memory.content_hash = sha256('wrong retained source memory');
+  tamperedMemoryBoundarySourceRun.memory_application_boundary.boundary_hash = dtoHash(Object.fromEntries(Object.entries(tamperedMemoryBoundarySourceRun.memory_application_boundary).filter(([key]) => key !== 'boundary_hash')));
+  if (!memoryApplicationContractViolations(baselineRunFixture, tamperedMemoryBoundarySourceRun, proofFixture).some(issue => issue.includes('identity or source join'))) throw new Error('Tampered retained memory-boundary source fixture was not rejected');
+  const tamperedMemoryBoundaryBeforeRun = structuredClone(laterRunFixture);
+  tamperedMemoryBoundaryBeforeRun.memory_application_boundary.before.process_dto_hash = sha256('wrong independently retained before DTO');
+  tamperedMemoryBoundaryBeforeRun.memory_application_boundary.boundary_hash = dtoHash(Object.fromEntries(Object.entries(tamperedMemoryBoundaryBeforeRun.memory_application_boundary).filter(([key]) => key !== 'boundary_hash')));
+  if (!memoryApplicationContractViolations(baselineRunFixture, tamperedMemoryBoundaryBeforeRun, proofFixture).some(issue => issue.includes('before hashes do not equal'))) throw new Error('Retained memory-boundary to receipt.before join fixture was not rejected');
+  const missingMemoryEventRun = structuredClone(laterRunFixture);
+  missingMemoryEventRun.events = [];
+  if (!memoryApplicationContractViolations(baselineRunFixture, missingMemoryEventRun, proofFixture).some(issue => issue.includes('exactly one completed persisted'))) throw new Error('Missing persisted memory-application event fixture was not rejected');
+  const duplicateMemoryEventRun = structuredClone(laterRunFixture);
+  duplicateMemoryEventRun.events.push(structuredClone(memoryEventFixture));
+  if (!memoryApplicationContractViolations(baselineRunFixture, duplicateMemoryEventRun, proofFixture).some(issue => issue.includes('exactly one completed persisted'))) throw new Error('Duplicate persisted memory-application event fixture was not rejected');
+  const forgedResultAndBoundaryRun = structuredClone(laterRunFixture);
+  forgedResultAndBoundaryRun.result.memory_application.before.process_dto_hash = sha256('forged process DTO boundary');
+  forgedResultAndBoundaryRun.result.memory_application.before.checklist_dto_hash = sha256('forged checklist DTO boundary');
+  forgedResultAndBoundaryRun.result.memory_application.application_hash = dtoHash(Object.fromEntries(Object.entries(forgedResultAndBoundaryRun.result.memory_application).filter(([key]) => key !== 'application_hash')));
+  forgedResultAndBoundaryRun.memory_application_boundary.before = structuredClone(forgedResultAndBoundaryRun.result.memory_application.before);
+  forgedResultAndBoundaryRun.memory_application_boundary.boundary_hash = dtoHash(Object.fromEntries(Object.entries(forgedResultAndBoundaryRun.memory_application_boundary).filter(([key]) => key !== 'boundary_hash')));
+  const forgedResultAndBoundaryProof = structuredClone(proofFixture);
+  forgedResultAndBoundaryProof.memory_application_proof.application_hash = forgedResultAndBoundaryRun.result.memory_application.application_hash;
+  if (!memoryApplicationContractViolations(baselineRunFixture, forgedResultAndBoundaryRun, forgedResultAndBoundaryProof).some(issue => issue.includes('persisted memory-application event does not project'))) throw new Error('Joint result/boundary forgery without the persisted memory event was not rejected');
+  const dormantMemoryResult = structuredClone(baselineResultFixture);
+  dormantMemoryResult.precedents = [{ claim_id: 'DEF-027-E0-DEMO', review_status: 'unverified_demo_memory', memory_id: 'memory-1' }];
+  dormantMemoryResult.reviewed_memory_retrieved = true;
+  dormantMemoryResult.knowledge.reviewed_memory_retrieved = true;
+  const dormantMemoryIssues = memoryRetrievalContractViolations(dormantMemoryResult);
+  if (dormantMemoryIssues.length) throw new Error(`Dormant retrieved-memory fixture failed: ${JSON.stringify(dormantMemoryIssues)}`);
+  const falselyUsedDormantMemory = structuredClone(dormantMemoryResult);
+  falselyUsedDormantMemory.reviewed_memory_used = true;
+  if (!memoryRetrievalContractViolations(falselyUsedDormantMemory).some(issue => issue.includes('memory-use flags'))) throw new Error('Receipt-free memory-use flag was not rejected');
+  const falselyAppliedDormantMemory = structuredClone(dormantMemoryResult);
+  falselyAppliedDormantMemory.process.case_specific_guidance_applied = true;
+  if (!memoryRetrievalContractViolations(falselyAppliedDormantMemory).some(issue => issue.includes('falsely claims'))) throw new Error('Receipt-free guidance-application flag was not rejected');
+  const hiddenDormantRetrieval = structuredClone(dormantMemoryResult);
+  hiddenDormantRetrieval.reviewed_memory_retrieved = false;
+  if (!memoryRetrievalContractViolations(hiddenDormantRetrieval).some(issue => issue.includes('retrieval flags'))) throw new Error('Ranked memory with a false retrieval flag was not rejected');
+  const falselyTransformedDormantMemory = structuredClone(dormantMemoryResult);
+  falselyTransformedDormantMemory.checklist.memory_used = true;
+  if (!memoryRetrievalContractViolations(falselyTransformedDormantMemory).some(issue => issue.includes('process/checklist'))) throw new Error('Receipt-free checklist memory-use flag was not rejected');
+  const tamperedApplicationRun = structuredClone(laterRunFixture);
+  tamperedApplicationRun.result.memory_application.application_hash = sha256('tampered application');
+  if (!memoryApplicationContractViolations(baselineRunFixture, tamperedApplicationRun, proofFixture).some(issue => issue.includes('application hash'))) throw new Error('Tampered memory application-hash fixture was not rejected');
+  const tamperedBoundaryProof = structuredClone(proofFixture);
+  tamperedBoundaryProof.after.process_semantic_hash = sha256('tampered boundary');
+  if (!memoryApplicationContractViolations(baselineRunFixture, laterRunFixture, tamperedBoundaryProof).some(issue => issue.includes('after hashes'))) throw new Error('Tampered memory boundary-hash fixture was not rejected');
+  const tamperedDeltaProof = structuredClone(proofFixture);
+  tamperedDeltaProof.causal_delta.evidence.changed_item_ids = ['building_envelope'];
+  if (!memoryApplicationContractViolations(baselineRunFixture, laterRunFixture, tamperedDeltaProof).some(issue => issue.includes('causal delta'))) throw new Error('Tampered memory causal-delta fixture was not rejected');
+  const tamperedCheckProof = structuredClone(proofFixture);
+  tamperedCheckProof.deterministic_checks[0].status = 'failed';
+  if (!memoryApplicationContractViolations(baselineRunFixture, laterRunFixture, tamperedCheckProof).some(issue => issue.includes('checks'))) throw new Error('Failed memory deterministic-check fixture was not rejected');
+  const tamperedSemanticEligibilityRun = structuredClone(laterRunFixture);
+  tamperedSemanticEligibilityRun.result.memory_application.eligibility.semantic_signature_hash = sha256('wrong semantic signature');
+  tamperedSemanticEligibilityRun.result.memory_application.eligibility.manifest_hash = dtoHash(Object.fromEntries(['rule_id', 'contract', 'claim_id', 'semantic_signature_hash', 'decisions', 'facts_hash', 'checks'].map(key => [key, tamperedSemanticEligibilityRun.result.memory_application.eligibility[key]])));
+  tamperedSemanticEligibilityRun.result.memory_application.application_hash = dtoHash(Object.fromEntries(Object.entries(tamperedSemanticEligibilityRun.result.memory_application).filter(([key]) => key !== 'application_hash')));
+  if (!memoryApplicationContractViolations(baselineRunFixture, tamperedSemanticEligibilityRun, proofFixture).some(issue => issue.includes('semantic eligibility'))) throw new Error('Tampered semantic eligibility fixture was not rejected');
+  const tamperedReplayProof = structuredClone(proofFixture);
+  tamperedReplayProof.memory_application_proof.replay_exact = false;
+  if (!memoryApplicationContractViolations(baselineRunFixture, laterRunFixture, tamperedReplayProof).some(issue => issue.includes('pure replay'))) throw new Error('Failed pure-memory replay fixture was not rejected');
   const coldRun = mockOrchestration('cold');
   const coldLedger = mockLedgerForRun(coldRun, 'cold');
   const warmRun = mockOrchestration('warm', coldRun);
@@ -2875,7 +3752,7 @@ function runContractSelfTest() {
   const brokenLineageLedger = structuredClone(combinedLedger);
   brokenLineageLedger.items.find(item => item.call_id === orchestrationAudit(warmRun).agents[0].call_id).origin_call_id = 'wrong_origin';
   if (!warmLineageContractViolations(orchestrationAudit(coldRun), orchestrationAudit(warmRun), brokenLineageLedger).issues.some(item => item.includes('warm origin'))) throw new Error('Broken-lineage negative fixture was not rejected');
-  return { status: 'passed', fixtures: ['python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'fail_closed_model_contribution_badges', 'mixed_field_contribution_badge', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'parallel_source_artifact_hash_rejection', 'parallel_process_artifact_hash_rejection', 'process_field_membership_rejection', 'process_field_attribution_rejection', 'process_inherited_field_rejection_with_recomputed_hashes', 'evidence_field_membership_rejection', 'evidence_field_attribution_rejection', 'evidence_source_ref_rejection_with_recomputed_hashes', 'final_field_membership_rejection', 'final_current_node_binding_rejection', 'final_next_action_binding_rejection', 'final_supporting_facts_binding_rejection', 'final_upstream_contributions_binding_rejection', 'final_audit_checks_binding_rejection', 'noncontrolling_supporting_fact_source_binding', 'cold_upstream_provider_policy_rejection', 'warm_upstream_provider_policy_rejection', 'agent_role_label_rejection', 'gate_role_label_rejection', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'safe_upstream_rejection_receipt', 'forged_upstream_rejection_receipt_attribution_rejection', 'missing_upstream_rejection_receipt_attribution_rejection', 'out_of_scope_upstream_rejection_receipt_attribution_rejection', 'unbounded_upstream_error_code_rejection', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'safe_upstream_rejection_ledger', 'forged_upstream_rejection_ledger_attribution_rejection', 'missing_upstream_rejection_ledger_attribution_rejection', 'out_of_scope_upstream_rejection_ledger_attribution_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
+  return { status: 'passed', fixtures: ['python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'fail_closed_model_contribution_badges', 'mixed_field_contribution_badge', 'post_memory_contribution_suppression', 'reciprocal_evidence_truth_and_tamper', 'structured_legal_truth_and_tamper', 'visual_reference_truth_and_tamper', 'precedent_ranking_truth_and_tamper', 'memory_application_truth_and_tamper', 'memory_boundary_event_cross_binding', 'dormant_memory_retrieval_not_application', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'parallel_source_artifact_hash_rejection', 'parallel_process_artifact_hash_rejection', 'process_field_membership_rejection', 'process_field_attribution_rejection', 'process_inherited_field_rejection_with_recomputed_hashes', 'evidence_field_membership_rejection', 'evidence_field_attribution_rejection', 'evidence_source_ref_rejection_with_recomputed_hashes', 'final_field_membership_rejection', 'final_current_node_binding_rejection', 'final_next_action_binding_rejection', 'final_supporting_facts_binding_rejection', 'final_upstream_contributions_binding_rejection', 'final_audit_checks_binding_rejection', 'noncontrolling_supporting_fact_source_binding', 'cold_upstream_provider_policy_rejection', 'warm_upstream_provider_policy_rejection', 'agent_role_label_rejection', 'gate_role_label_rejection', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'safe_upstream_rejection_receipt', 'forged_upstream_rejection_receipt_attribution_rejection', 'missing_upstream_rejection_receipt_attribution_rejection', 'out_of_scope_upstream_rejection_receipt_attribution_rejection', 'unbounded_upstream_error_code_rejection', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'safe_upstream_rejection_ledger', 'forged_upstream_rejection_ledger_attribution_rejection', 'missing_upstream_rejection_ledger_attribution_rejection', 'out_of_scope_upstream_rejection_ledger_attribution_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
 }
 
 let report;

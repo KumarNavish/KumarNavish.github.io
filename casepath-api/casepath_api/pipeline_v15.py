@@ -6,6 +6,7 @@ import json
 import os
 import threading
 import time
+from datetime import datetime
 from typing import Any, Literal, TypedDict
 
 from .canonicalizer import (
@@ -18,7 +19,10 @@ from .canonicalizer import (
     OpenRouterNemotronCanonicalizer,
     configured_model_mode,
 )
-from .data import ARTIFACTS, CLAIMS, HISTORICAL_CASES, LAW_SOURCES, observable_claim_package
+from .data import ARTIFACTS, CLAIMS, HISTORICAL_CASES, observable_claim_package
+from .evidence_relations import apply_evidence_relations
+from .fact_relations import SEMANTIC_FACT_ID_BY_CLAIM
+from .law_registry import LAW_SOURCES, legal_context
 from .multi_agent import (
     AGENT_RUNTIME_PROFILE,
     AgentBoundaryError,
@@ -34,10 +38,17 @@ from .projections import (
     DECISION_OPTIONS,
     apply_evidence_projection,
     apply_process_projection,
+    checklist_derived_sections,
     decision_projection,
 )
+from .precedent_ranking import rank_precedents
 from .storage import Storage
-from .validation import validate_playbook, validate_review_operations
+from .validation import (
+    ContractValidationError,
+    validate_playbook,
+    validate_review_operations,
+)
+from .visual_annotations import visual_annotation_ref
 
 
 RELEASE = "15.2.0"
@@ -47,11 +58,82 @@ DETERMINISTIC_PROFILE = "deterministic-reference-playbook"
 COMPONENT_VERSIONS = {
     "api": "15.2.0",
     "pipeline": "15.2.0",
-    "contracts": "1.3.0",
+    "contracts": "1.4.0",
     "canonicalizer": CANONICALIZER_VERSION,
     "agent_graph": MULTI_AGENT_VERSION,
-    "storage": "1.3.0",
+    "storage": "1.4.0",
 }
+
+MEMORY_CONTRACT = "casepath.reviewed-case-memory/1.0.0"
+MEMORY_GUIDANCE_CONTRACT = "casepath.case-specific-memory-guidance/1.0.0"
+MEMORY_RECEIPT_CONTRACT = "casepath.memory-application-receipt/1.0.0"
+MEMORY_BOUNDARY_CONTRACT = "casepath.memory-application-boundary/1.0.0"
+MEMORY_ELIGIBILITY_CONTRACT = "casepath.semantic-memory-eligibility/1.0.0"
+MEMORY_AUTHORITY = "unverified_demo"
+SHARED_PLAYBOOK_VERSION = "mould-playbook-v3"
+MEMORY_OPERATION_IDS = (
+    "add_ventilation_dispute_node",
+    "add_evidence_gap_to_ventilation_edge",
+    "add_ventilation_to_causation_edge",
+    "condition_building_envelope",
+    "reassign_use_evidence_to_ventilation",
+)
+MEMORY_REQUIRED_DECISIONS = {
+    "scope": "in_scope",
+    "dispute": "dispute_present",
+    "urgency": "not_urgent",
+    "notification": "notified",
+    "recurrence": "recurrence_supported",
+    "causation": "cause_unresolved",
+}
+MEMORY_REQUIRED_FACT_ROLES = {
+    "management_ventilation_allegation": {
+        "state": "known",
+        "min_grounded_sources": 1,
+    }
+}
+
+
+def _timestamp_seconds(value: Any) -> float:
+    if isinstance(value, bool):
+        raise ValueError("learning_timestamp_type")
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+        except ValueError as exc:
+            raise ValueError("learning_timestamp_value") from exc
+    raise ValueError("learning_timestamp_type")
+
+
+def _counterfactual_learning_freeze(
+    memories: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    if not memories:
+        return None
+    if len(memories) != 1:
+        raise ValueError("counterfactual_memory_count")
+    memory = memories[0]
+    identity = {
+        "memory_id": memory.get("memory_id"),
+        "review_id": memory.get("review_id"),
+        "content_hash": memory.get("content_hash"),
+        "candidate_id": memory.get("candidate_id"),
+        "updated_at": memory.get("updated_at"),
+    }
+    if (
+        any(not isinstance(identity[key], str) or not identity[key] for key in identity)
+        or len(identity["content_hash"]) != 64
+        or any(char not in "0123456789abcdef" for char in identity["content_hash"])
+    ):
+        raise ValueError("counterfactual_memory_identity")
+    return {
+        "contract": "casepath.counterfactual-learning-freeze/1.0.0",
+        "memory": identity,
+        "identity_hash": digest(identity),
+        "application_suppressed": True,
+    }
 
 class ReviewOperation(TypedDict):
     component: Literal["process_graph", "evidence_model"]
@@ -60,6 +142,13 @@ class ReviewOperation(TypedDict):
     old_value: Any
     new_value: Any
     reason: str
+
+
+class MemoryApplicationError(ValueError):
+    def __init__(self, invariant: str):
+        self.invariant = invariant
+        self.safe_context = {"error_invariant": invariant}
+        super().__init__(invariant)
 
 VISIBLE_STAGES = [
     ("read", "Read the submission", "Attachment Parsing Tool"),
@@ -82,6 +171,39 @@ def digest(value: Any) -> str:
             default=str,
         ).encode("utf-8")
     ).hexdigest()
+
+
+def semantic_process_dto(process: dict[str, Any]) -> dict[str, Any]:
+    """Remove run-specific model attribution while preserving process semantics."""
+
+    value = deepcopy(process)
+    value.pop("agent_contribution", None)
+    for node in value.get("nodes", []):
+        node.pop("agent_decision_contributions", None)
+    return value
+
+
+def semantic_checklist_dto(checklist: dict[str, Any]) -> dict[str, Any]:
+    """Remove run-specific model attribution while preserving evidence semantics."""
+
+    value = deepcopy(checklist)
+    value.pop("agent_contribution", None)
+    for item in value.get("items", []):
+        item.pop("agent_contribution", None)
+    return value
+
+
+def strip_model_contribution_attribution(
+    process: dict[str, Any], checklist: dict[str, Any]
+) -> None:
+    """Remove model field ownership after an unverified deterministic transform."""
+
+    process.pop("agent_contribution", None)
+    for node in process.get("nodes", []):
+        node.pop("agent_decision_contributions", None)
+    checklist.pop("agent_contribution", None)
+    for item in checklist.get("items", []):
+        item.pop("agent_contribution", None)
 
 
 def _accepted_agent_lineage(value: dict[str, Any]) -> dict[str, Any]:
@@ -117,6 +239,7 @@ def fact(
     *,
     decision_key: str | None = None,
     normalized_value: str | None = None,
+    semantic_role: str | None = None,
 ) -> dict[str, Any]:
     if (decision_key is None) != (normalized_value is None):
         raise ValueError("decision_key and normalized_value must be provided together")
@@ -138,6 +261,7 @@ def fact(
         "decision_key": decision_key,
         "normalized_value": normalized_value,
         "decision_value": decision_value,
+        "semantic_role": semantic_role,
     }
 
 
@@ -156,13 +280,12 @@ def visual_ref(
     region: list[float],
     observation: str,
 ) -> dict[str, Any]:
-    return {
-        "artifact_id": artifact_id,
-        "locator_kind": "visual_observation",
-        "region": region,
-        "observation": observation,
-        "agent": "Visual Evidence Agent",
-    }
+    return visual_annotation_ref(
+        artifact_id=artifact_id,
+        image_sha256=ARTIFACTS[artifact_id]["sha256"],
+        region=region,
+        observation=observation,
+    )
 
 
 def metadata_ref(
@@ -215,6 +338,947 @@ def process_node(
 
 def edge(source: str, target: str, condition: str, state: str = "available") -> dict[str, Any]:
     return {"source": source, "target": target, "condition": condition, "state": state}
+
+
+def replay_case_specific_memory_transform(
+    process: dict[str, Any],
+    checklist: dict[str, Any],
+    *,
+    ventilation_fact_id: str,
+) -> dict[str, Any]:
+    """Apply the one allowed memory transform as a pure, replayable operation."""
+
+    if (
+        any(node.get("node_id") == "ventilation_dispute" for node in process.get("nodes", []))
+        or any(
+            (value.get("source"), value.get("target"))
+            in {
+                ("evidence_gap", "ventilation_dispute"),
+                ("ventilation_dispute", "causation"),
+            }
+            for value in process.get("edges", [])
+        )
+    ):
+        raise MemoryApplicationError("memory_extension_already_present")
+    items = {value["item_id"]: value for value in checklist["items"]}
+    if not {"building_envelope", "use_evidence"} <= set(items):
+        raise MemoryApplicationError("memory_evidence_precondition")
+
+    ventilation_node = process_node(
+        "ventilation_dispute",
+        "Test the ventilation allegation",
+        "What exactly is alleged, and does competent evidence support it?",
+        "inactive",
+        answer="Preserve as disputed; test only if competent assessment leaves a plausible use-related branch",
+        why="Unverified demo memory guidance keeps the allegation explicit without treating it as technical cause.",
+        kind="action",
+        main_spine=False,
+        fact_ids=[ventilation_fact_id],
+        legal_source_ids=["handling-causation", "handling-evidence-order"],
+        evidence_requirement_ids=["management_position", "use_evidence"],
+        activation="recurrence + ventilation allegation + cause unresolved",
+    )
+    first_edge = edge(
+        "evidence_gap",
+        "ventilation_dispute",
+        "neutral inspection leaves a plausible use-related factor",
+        "possible",
+    )
+    second_edge = edge(
+        "ventilation_dispute",
+        "causation",
+        "allegation evidence assessed",
+        "loop",
+    )
+    process["nodes"].append(ventilation_node)
+    process["edges"].extend([first_edge, second_edge])
+    removed_from: list[str] = []
+    for node in process["nodes"]:
+        if node["node_id"] == "ventilation_dispute":
+            continue
+        if "use_evidence" in node.get("evidence_requirement_ids", []):
+            node["evidence_requirement_ids"] = [
+                value
+                for value in node["evidence_requirement_ids"]
+                if value != "use_evidence"
+            ]
+            removed_from.append(node["node_id"])
+    process["memory_used"] = True
+    process["case_specific_guidance_applied"] = True
+    process["shared_rule_applied"] = False
+
+    building_before = deepcopy(items["building_envelope"])
+    items["building_envelope"].update(
+        {
+            "status": "conditional",
+            "required_level": "conditional",
+            "applies_when": "The neutral first assessment is inconclusive or indicates an envelope issue",
+            "why": "Unverified demo memory guidance keeps broader building-envelope testing conditional on the first competent assessment.",
+        }
+    )
+    use_before = deepcopy(items["use_evidence"])
+    items["use_evidence"].update(
+        {
+            "status": "conditional",
+            "required_level": "conditional",
+            "applies_when": "A competent assessment leaves a plausible use-related branch",
+            "why": "Unverified demo memory guidance requests use-related evidence only if competent assessment leaves that branch plausible.",
+        }
+    )
+    apply_evidence_relations(process, checklist["items"])
+    apply_evidence_projection(checklist["items"], process)
+    apply_evidence_relations(process, checklist["items"])
+    checklist.update(checklist_derived_sections(checklist["items"]))
+    checklist["memory_used"] = True
+    checklist["case_specific_guidance_applied"] = True
+    checklist["shared_rule_applied"] = False
+    strip_model_contribution_attribution(process, checklist)
+    return {
+        "ventilation_node": ventilation_node,
+        "first_edge": first_edge,
+        "second_edge": second_edge,
+        "removed_from": removed_from,
+        "building_before": building_before,
+        "use_before": use_before,
+    }
+
+
+def _memory_content_hash(memory: dict[str, Any]) -> str:
+    excluded = {"content_hash", "memory_id", "claim_id", "updated_at"}
+    return digest({key: value for key, value in memory.items() if key not in excluded})
+
+
+def _fact_signature(understanding: dict[str, Any]) -> dict[str, Any]:
+    roles: dict[str, Any] = {}
+    for value in understanding["facts"]:
+        role = value.get("semantic_role")
+        if role is None:
+            continue
+        if role in roles:
+            raise ValueError("duplicate_semantic_fact_role")
+        roles[role] = {
+            "fact_id": value["fact_id"],
+            "state": value["state"],
+            "grounded_source_count": len(value.get("source_refs", [])),
+        }
+    return roles
+
+
+def _memory_semantic_signature(rule: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "category": rule.get("category"),
+        "subcategory": rule.get("subcategory"),
+        "required_decisions": rule.get("required_decisions"),
+        "required_fact_roles": rule.get("required_fact_roles"),
+    }
+
+
+def _eligibility_evaluation(
+    guidance: dict[str, Any],
+    *,
+    claim_id: str,
+    category: str,
+    subcategory: str,
+    decisions: dict[str, str],
+    facts: dict[str, Any],
+) -> dict[str, Any]:
+    rule = guidance.get("eligibility", {})
+    required_decisions = rule.get("required_decisions", {})
+    required_fact_roles = rule.get("required_fact_roles", {})
+    ventilation = facts.get("management_ventilation_allegation", {})
+    ventilation_rule = required_fact_roles.get(
+        "management_ventilation_allegation", {}
+    )
+    checks = {
+        "source_claim_excluded": claim_id != rule.get("source_claim_id"),
+        "category_matched": category == rule.get("category"),
+        "subcategory_matched": subcategory == rule.get("subcategory"),
+        "required_decisions_matched": all(
+            decisions.get(key) == expected
+            for key, expected in required_decisions.items()
+        ),
+        "ventilation_allegation_grounded": (
+            ventilation.get("state") == ventilation_rule.get("state")
+            and type(ventilation.get("grounded_source_count")) is int
+            and ventilation.get("grounded_source_count", 0)
+            >= ventilation_rule.get("min_grounded_sources", 0)
+        ),
+        "semantic_signature_bound": rule.get("semantic_signature_hash")
+        == digest(_memory_semantic_signature(rule)),
+        "guidance_enabled": guidance.get("enabled") is True,
+    }
+    manifest = {
+        "rule_id": rule.get("rule_id"),
+        "contract": rule.get("contract"),
+        "claim_id": claim_id,
+        "semantic_signature_hash": rule.get("semantic_signature_hash"),
+        "decisions": decisions,
+        "facts_hash": digest(facts),
+        "checks": checks,
+    }
+    return {
+        **manifest,
+        "eligible": all(checks.values()),
+        "manifest_hash": digest(manifest),
+    }
+
+
+def _guidance_eligibility(
+    guidance: dict[str, Any],
+    *,
+    claim_id: str,
+    understanding: dict[str, Any],
+) -> dict[str, Any]:
+    return _eligibility_evaluation(
+        guidance,
+        claim_id=claim_id,
+        category=understanding["category"],
+        subcategory=understanding["subcategory"],
+        decisions={
+            value["decision_key"]: value["decision_value"]
+            for value in understanding["facts"]
+            if value.get("controls_process") is True
+        },
+        facts=_fact_signature(understanding),
+    )
+
+
+def _protected_output_context_from_result(result: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "result": deepcopy(result),
+    }
+
+
+def _protected_output_context_from_origin(
+    source_run: dict[str, Any],
+    review: dict[str, Any],
+) -> dict[str, Any]:
+    snapshot = review.get("protected_output_snapshot")
+    if (
+        not isinstance(snapshot, dict)
+        or digest(snapshot) != source_run.get("pre_review_result_hash")
+        or digest(snapshot) != review.get("pre_review_result_hash")
+        or snapshot.get("claim_id") != source_run.get("claim_id")
+    ):
+        raise ValueError("protected_output_snapshot_binding")
+    return _protected_output_context_from_result(snapshot)
+
+
+def _execute_protected_output_control(
+    guidance: dict[str, Any],
+    protected_output_context: dict[str, Any],
+) -> dict[str, Any]:
+    """Run the real eligibility gate and pure transform against a copied playbook.
+
+    The protected source claim is expected to be ineligible.  Hashes are computed
+    independently from the copied before and after DTOs; they are never mirrored
+    by assignment.  The eligible branch deliberately uses the same replayable
+    transform as production memory application so a regression cannot pass by
+    relabelling an eligibility result as an output test.
+    """
+
+    source_result = protected_output_context.get("result")
+    if not isinstance(source_result, dict):
+        raise ValueError("protected_output_result_missing")
+    before_result = deepcopy(source_result)
+    after_result = deepcopy(source_result)
+    facts = before_result.get("facts")
+    process = after_result.get("process")
+    checklist = after_result.get("checklist")
+    if (
+        not isinstance(facts, list)
+        or not isinstance(process, dict)
+        or not isinstance(checklist, dict)
+    ):
+        raise ValueError("protected_output_result_contract")
+    semantic_facts = _fact_signature({"facts": facts})
+    evaluation = _eligibility_evaluation(
+        guidance,
+        claim_id=before_result["claim_id"],
+        category=before_result["category"],
+        subcategory=before_result["subcategory"],
+        decisions={
+            value["decision_key"]: value["decision_value"]
+            for value in facts
+            if value.get("controls_process") is True
+        },
+        facts=semantic_facts,
+    )
+    applied = evaluation["eligible"] is True
+    if applied:
+        ventilation = semantic_facts.get("management_ventilation_allegation", {})
+        ventilation_fact_id = ventilation.get("fact_id")
+        if not isinstance(ventilation_fact_id, str):
+            raise ValueError("protected_output_semantic_fact_missing")
+        replay_case_specific_memory_transform(
+            process,
+            checklist,
+            ventilation_fact_id=ventilation_fact_id,
+        )
+        after_result["memory_used"] = True
+        after_result["reviewed_memory_used"] = True
+        after_result["memory_application"] = {
+            "applied": True,
+            "scope": "protected_output_control_only",
+        }
+    before_hashes = {
+        "result_hash": digest(before_result),
+        "process_hash": digest(before_result["process"]),
+        "checklist_hash": digest(before_result["checklist"]),
+    }
+    after_hashes = {
+        "result_hash": digest(after_result),
+        "process_hash": digest(after_result["process"]),
+        "checklist_hash": digest(after_result["checklist"]),
+    }
+    return {
+        "evaluation": evaluation,
+        "actual_memory_application": applied,
+        "before_hashes": before_hashes,
+        "after_hashes": after_hashes,
+        "output_unchanged": before_result == after_result
+        and before_hashes == after_hashes,
+    }
+
+
+def _governance_test_report(
+    guidance: dict[str, Any],
+    *,
+    protected_output_context: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    target = {
+        "claim_id": "UNSEEN-MOULD-999",
+        "category": "Rental defect - mould and moisture",
+        "subcategory": "Recurring moisture with disputed causation",
+        "decisions": {
+            "scope": "in_scope",
+            "dispute": "dispute_present",
+            "urgency": "not_urgent",
+            "notification": "notified",
+            "recurrence": "recurrence_supported",
+            "causation": "cause_unresolved",
+        },
+        "facts": {
+            "management_ventilation_allegation": {
+                "fact_id": "novel_fact_management_allegation",
+                "state": "known",
+                "grounded_source_count": 1,
+            }
+        },
+    }
+    protected = [
+        ("source_claim_self_match", {}, {}, {"claim_id": "DEF-027-E0-DEMO"}),
+        ("category_only", {}, {"management_ventilation_allegation": {"fact_id": "x", "state": "unknown", "grounded_source_count": 0}}, {}),
+        ("out_of_scope", {"scope": "out_of_scope"}, {}, {}),
+        ("no_dispute", {"dispute": "no_dispute"}, {}, {}),
+        ("urgent", {"urgency": "urgent"}, {}, {}),
+        ("unnotified", {"notification": "not_notified"}, {}, {}),
+        ("no_recurrence", {"recurrence": "recurrence_not_supported"}, {}, {}),
+        ("resolved_cause", {"causation": "cause_building"}, {}, {}),
+        (
+            "missing_ventilation_allegation",
+            {},
+            {
+                "management_ventilation_allegation": {
+                    "fact_id": "novel_fact_management_allegation",
+                    "state": "unknown",
+                    "grounded_source_count": 0,
+                }
+            },
+            {},
+        ),
+    ]
+
+    def execute(
+        case_id: str,
+        fixture: dict[str, Any],
+        *,
+        expected: bool,
+    ) -> dict[str, Any]:
+        evaluation = _eligibility_evaluation(
+            guidance,
+            claim_id=fixture["claim_id"],
+            category=fixture["category"],
+            subcategory=fixture["subcategory"],
+            decisions=fixture["decisions"],
+            facts=fixture["facts"],
+        )
+        actual = evaluation["eligible"]
+        return {
+            "case_id": case_id,
+            "expected_eligible": expected,
+            "actual_eligible": actual,
+            "operation_count": len(guidance["allowed_operation_ids"]) if actual else 0,
+            "status": "passed" if actual is expected else "failed",
+            "manifest_hash": evaluation["manifest_hash"],
+        }
+
+    target_cases = [execute("eligible_later_claim", target, expected=True)]
+    protected_cases: list[dict[str, Any]] = []
+    for case_id, decision_patch, fact_patch, fixture_patch in protected:
+        fixture = deepcopy(target)
+        fixture["decisions"].update(decision_patch)
+        fixture["facts"].update(fact_patch)
+        fixture.update(fixture_patch)
+        protected_cases.append(execute(case_id, fixture, expected=False))
+
+    output_control = _execute_protected_output_control(
+        guidance,
+        protected_output_context,
+    )
+    output_evaluation = output_control["evaluation"]
+    output_unchanged = (
+        output_control["actual_memory_application"] is False
+        and output_control["output_unchanged"] is True
+    )
+    protected_cases.append(
+        {
+            "case_id": "source_claim_full_playbook_unchanged",
+            "execution_contract": "deterministic_case_specific_memory_gate/1.0.0",
+            "gate_executed": True,
+            "expected_memory_application": False,
+            "actual_memory_application": output_control[
+                "actual_memory_application"
+            ],
+            "before_hashes": output_control["before_hashes"],
+            "after_hashes": output_control["after_hashes"],
+            "output_unchanged": output_unchanged,
+            "eligibility_manifest_hash": output_evaluation["manifest_hash"],
+            "status": "passed" if output_unchanged else "failed",
+        }
+    )
+
+    def report(cases: list[dict[str, Any]]) -> dict[str, Any]:
+        passed = sum(value["status"] == "passed" for value in cases)
+        value = {
+            "status": "passed" if passed == len(cases) else "failed",
+            "evaluator": "deterministic_case_specific_eligibility_and_output/2.0.0",
+            "passed": passed,
+            "failed": len(cases) - passed,
+            "cases": cases,
+        }
+        value["manifest_hash"] = digest(value)
+        return value
+
+    return report(target_cases), report(protected_cases)
+
+
+def _validate_memory(memory: dict[str, Any]) -> None:
+    exact = {
+        "title",
+        "memory_contract",
+        "authority",
+        "scope",
+        "review_status",
+        "reviewer",
+        "source_run_id",
+        "review_id",
+        "candidate_id",
+        "category",
+        "current_blocker",
+        "canonical_facts",
+        "reviewed_process",
+        "reviewed_checklist",
+        "final_process",
+        "final_checklist",
+        "verification",
+        "operations",
+        "next_action",
+        "reviewer_explanation",
+        "confidence",
+        "playbook_version",
+        "source_result_hash",
+        "reviewed_result_hash",
+        "shared_rule_authority",
+        "case_specific_guidance",
+        "content_hash",
+        "memory_id",
+        "claim_id",
+        "updated_at",
+    }
+    if set(memory) != exact:
+        raise ValueError("memory_contract_fields")
+    if (
+        memory.get("memory_contract") != MEMORY_CONTRACT
+        or memory.get("authority") != MEMORY_AUTHORITY
+        or memory.get("scope") != "case_specific_guidance_only"
+        or memory.get("review_status") != "unverified_demo_memory"
+        or memory.get("shared_rule_authority") is not False
+        or memory.get("playbook_version") != SHARED_PLAYBOOK_VERSION
+        or memory.get("content_hash") != _memory_content_hash(memory)
+    ):
+        raise ValueError("memory_contract_integrity")
+    guidance = memory.get("case_specific_guidance")
+    if not isinstance(guidance, dict) or set(guidance) != {
+        "contract",
+        "variant",
+        "enabled",
+        "authority",
+        "scope",
+        "eligibility",
+        "allowed_operation_ids",
+    }:
+        raise ValueError("memory_guidance_contract")
+    if (
+        guidance.get("contract") != MEMORY_GUIDANCE_CONTRACT
+        or guidance.get("authority") != MEMORY_AUTHORITY
+        or guidance.get("scope") != "case_specific_guidance_only"
+    ):
+        raise ValueError("memory_guidance_authority")
+    eligibility = guidance.get("eligibility")
+    if (
+        not isinstance(eligibility, dict)
+        or set(eligibility)
+        != {
+            "contract",
+            "rule_id",
+            "source_claim_id",
+            "category",
+            "subcategory",
+            "required_decisions",
+            "required_fact_roles",
+            "semantic_signature_hash",
+        }
+        or eligibility.get("contract") != MEMORY_ELIGIBILITY_CONTRACT
+        or eligibility.get("source_claim_id") != memory["claim_id"]
+        or eligibility.get("category") != memory["category"]
+        or eligibility.get("required_decisions") != MEMORY_REQUIRED_DECISIONS
+        or eligibility.get("required_fact_roles") != MEMORY_REQUIRED_FACT_ROLES
+        or eligibility.get("semantic_signature_hash")
+        != digest(_memory_semantic_signature(eligibility))
+    ):
+        raise ValueError("memory_guidance_eligibility")
+    operation_ids = guidance.get("allowed_operation_ids")
+    expected = list(MEMORY_OPERATION_IDS) if guidance.get("enabled") else []
+    if operation_ids != expected:
+        raise ValueError("memory_guidance_operations")
+
+
+def _review_guidance_contract(
+    *,
+    claim_id: str,
+    category: str,
+    subcategory: str,
+    building_envelope_mode: str,
+) -> dict[str, Any]:
+    """Derive reusable authority from the accepted review mode, never storage labels."""
+
+    if building_envelope_mode not in {"conditional", "required_now"}:
+        raise ValueError("memory_guidance_review_mode")
+    enabled = building_envelope_mode == "conditional"
+    guidance = {
+        "contract": MEMORY_GUIDANCE_CONTRACT,
+        "variant": (
+            "disputed_ventilation_neutral_first_v1"
+            if enabled
+            else "no_reusable_guidance_required_now_v1"
+        ),
+        "enabled": enabled,
+        "authority": MEMORY_AUTHORITY,
+        "scope": "case_specific_guidance_only",
+        "eligibility": {
+            "contract": MEMORY_ELIGIBILITY_CONTRACT,
+            "rule_id": "same_grounded_mould_signature_v2",
+            "source_claim_id": claim_id,
+            "category": category,
+            "subcategory": subcategory,
+            "required_decisions": deepcopy(MEMORY_REQUIRED_DECISIONS),
+            "required_fact_roles": deepcopy(MEMORY_REQUIRED_FACT_ROLES),
+        },
+        "allowed_operation_ids": list(MEMORY_OPERATION_IDS) if enabled else [],
+    }
+    guidance["eligibility"]["semantic_signature_hash"] = digest(
+        _memory_semantic_signature(guidance["eligibility"])
+    )
+    return guidance
+
+
+def _validate_memory_origin(
+    memory: dict[str, Any],
+    *,
+    source_run: dict[str, Any] | None,
+    review: dict[str, Any] | None,
+) -> None:
+    """Bind a reusable memory to the separately persisted accepted review."""
+
+    _validate_memory(memory)
+    if not isinstance(source_run, dict) or not isinstance(review, dict):
+        raise ValueError("memory_origin_missing")
+    response = review.get("response")
+    reviewed_result = response.get("result") if isinstance(response, dict) else None
+    review_record = response.get("review") if isinstance(response, dict) else None
+    candidate = response.get("candidate") if isinstance(response, dict) else None
+    request = review.get("request")
+    reviewer = review.get("reviewer")
+    expected_guidance = (
+        _review_guidance_contract(
+            claim_id=memory["claim_id"],
+            category=reviewed_result.get("category", ""),
+            subcategory=reviewed_result.get("subcategory", ""),
+            building_envelope_mode=request.get("building_envelope_mode", ""),
+        )
+        if isinstance(reviewed_result, dict) and isinstance(request, dict)
+        else None
+    )
+    if (
+        review.get("accepted") is not True
+        or review.get("review_id") != memory["review_id"]
+        or review.get("run_id") != memory["source_run_id"]
+        or review.get("claim_id") != memory["claim_id"]
+        or not isinstance(response, dict)
+        or response.get("accepted") is not True
+        or response.get("review_id") != memory["review_id"]
+        or response.get("memory_id") != memory["memory_id"]
+        or not isinstance(reviewed_result, dict)
+        or not isinstance(review_record, dict)
+        or not isinstance(candidate, dict)
+        or not isinstance(request, dict)
+        or source_run.get("run_id") != memory["source_run_id"]
+        or source_run.get("claim_id") != memory["claim_id"]
+        or source_run.get("review_id") != memory["review_id"]
+        or source_run.get("memory_id") != memory["memory_id"]
+        or source_run.get("result") != reviewed_result
+        or source_run.get("review_response") != response
+        or source_run.get("candidate") != candidate
+        or candidate.get("candidate_id") != memory["candidate_id"]
+        or memory.get("reviewer") != reviewer
+        or memory.get("reviewer_explanation") != request.get("justification")
+        or memory.get("confidence") != request.get("confidence")
+        or memory.get("canonical_facts") != reviewed_result.get("facts")
+        or memory.get("category") != reviewed_result.get("category")
+        or memory.get("current_blocker") != reviewed_result.get("current_blocker")
+        or memory.get("reviewed_process") != reviewed_result.get("process")
+        or memory.get("reviewed_checklist") != reviewed_result.get("checklist")
+        or memory.get("verification") != reviewed_result.get("verification")
+        or memory.get("verification") != response.get("verification")
+        or memory.get("operations") != review_record.get("operations")
+        or memory.get("next_action") != reviewed_result.get("next_action")
+        or memory.get("final_process")
+        != [node["title"] for node in reviewed_result.get("process", {}).get("nodes", [])]
+        or memory.get("final_checklist")
+        != [
+            {
+                "title": evidence["title"],
+                "status": evidence["status"],
+                "why": evidence["why"],
+                "node_id": evidence["node_id"],
+            }
+            for evidence in reviewed_result.get("checklist", {}).get("items", [])
+        ]
+        or memory.get("source_result_hash")
+        != review.get("pre_review_result_hash")
+        or memory.get("source_result_hash")
+        != source_run.get("pre_review_result_hash")
+        or not isinstance(review.get("protected_output_snapshot"), dict)
+        or digest(review["protected_output_snapshot"])
+        != memory.get("source_result_hash")
+        or memory.get("reviewed_result_hash") != digest(reviewed_result)
+        or memory.get("case_specific_guidance") != expected_guidance
+    ):
+        raise ValueError("memory_origin_binding")
+
+
+def _validate_candidate_origin(
+    candidate: dict[str, Any],
+    *,
+    memory: dict[str, Any],
+    source_run: dict[str, Any],
+    review: dict[str, Any],
+) -> None:
+    response = review.get("response", {})
+    expected_target, expected_protected = _governance_test_report(
+        memory["case_specific_guidance"],
+        protected_output_context=_protected_output_context_from_origin(
+            source_run,
+            review,
+        ),
+    )
+    if (
+        candidate.get("candidate_id") != memory.get("candidate_id")
+        or source_run.get("candidate") != candidate
+        or response.get("candidate") != candidate
+        or candidate.get("status") != "quarantined"
+        or candidate.get("target_tests") != expected_target
+        or candidate.get("protected_regression") != expected_protected
+        or candidate.get("qualified_support_count") != 0
+        or candidate.get("support_authority") != "unverified_demo_only"
+        or candidate.get("approval")
+        != {"status": "pending", "qualified_reviewer": False}
+        or candidate.get("shared_knowledge_changed") is not False
+        or candidate.get("base_version") != SHARED_PLAYBOOK_VERSION
+        or candidate.get("rollback_target") != SHARED_PLAYBOOK_VERSION
+    ):
+        raise ValueError("candidate_origin_binding")
+
+
+def _validate_memory_receipt(
+    receipt: dict[str, Any],
+    *,
+    memory: dict[str, Any],
+    expected_context: dict[str, Any] | None = None,
+) -> None:
+    if set(receipt) != {
+        "receipt_type",
+        "contract",
+        "authority",
+        "scope",
+        "source_memory",
+        "target",
+        "observable_input_hash",
+        "canonical_state_hash",
+        "eligibility",
+        "allowed_operation_ids",
+        "applied_operation_ids",
+        "process_operations",
+        "evidence_operations",
+        "before",
+        "after",
+        "verification_hash",
+        "shared_playbook_version",
+        "shared_rule_applied",
+        "model_acceptance_reused",
+        "applied",
+        "application_hash",
+    }:
+        raise ValueError("memory_receipt_fields")
+    _validate_memory(memory)
+    source = receipt.get("source_memory", {})
+    if (
+        receipt.get("receipt_type") != "memory_application_receipt"
+        or receipt.get("contract") != MEMORY_RECEIPT_CONTRACT
+        or receipt.get("authority") != MEMORY_AUTHORITY
+        or receipt.get("scope") != "case_specific_guidance_only"
+        or source.get("memory_id") != memory["memory_id"]
+        or source.get("claim_id") != memory["claim_id"]
+        or source.get("review_id") != memory["review_id"]
+        or source.get("content_hash") != memory["content_hash"]
+        or source.get("review_status") != "unverified_demo_memory"
+        or receipt.get("allowed_operation_ids") != list(MEMORY_OPERATION_IDS)
+        or receipt.get("applied_operation_ids") != list(MEMORY_OPERATION_IDS)
+        or receipt.get("shared_playbook_version") != SHARED_PLAYBOOK_VERSION
+        or receipt.get("shared_rule_applied") is not False
+        or receipt.get("model_acceptance_reused") is not False
+        or receipt.get("applied") is not True
+        or receipt.get("eligibility", {}).get("eligible") is not True
+    ):
+        raise ValueError("memory_receipt_integrity")
+    expected_boundary_hashes = {
+        "process_dto_hash",
+        "checklist_dto_hash",
+        "process_semantic_hash",
+        "checklist_semantic_hash",
+    }
+    if (
+        set(receipt.get("before", {})) != expected_boundary_hashes
+        or set(receipt.get("after", {})) != expected_boundary_hashes
+    ):
+        raise ValueError("memory_receipt_boundary_fields")
+    process_operations = receipt.get("process_operations")
+    evidence_operations = receipt.get("evidence_operations")
+    if (
+        not isinstance(process_operations, list)
+        or not isinstance(evidence_operations, list)
+        or [value.get("operation_id") for value in process_operations]
+        != list(MEMORY_OPERATION_IDS[:3])
+        or [value.get("operation_id") for value in evidence_operations]
+        != list(MEMORY_OPERATION_IDS[3:])
+    ):
+        raise ValueError("memory_receipt_operations")
+    if (
+        set(process_operations[0])
+        != {
+            "operation_id",
+            "operation",
+            "node_id",
+            "evidence_requirement_ids",
+            "after_hash",
+        }
+        or process_operations[0].get("operation") != "add_node"
+        or process_operations[0].get("node_id") != "ventilation_dispute"
+        or process_operations[0].get("evidence_requirement_ids")
+        != ["management_position", "use_evidence"]
+        or any(
+            set(value)
+            != {
+                "operation_id",
+                "operation",
+                "source",
+                "target",
+                "after_hash",
+            }
+            or value.get("operation") != "add_edge"
+            for value in process_operations[1:]
+        )
+        or set(evidence_operations[0])
+        != {
+            "operation_id",
+            "operation",
+            "item_id",
+            "before_hash",
+            "after_hash",
+        }
+        or evidence_operations[0].get("operation") != "replace_item"
+        or evidence_operations[0].get("item_id") != "building_envelope"
+        or set(evidence_operations[1])
+        != {
+            "operation_id",
+            "operation",
+            "item_id",
+            "removed_from_node_ids",
+            "added_to_node_id",
+            "before_hash",
+            "after_hash",
+        }
+        or evidence_operations[1].get("operation") != "reassign_item"
+        or evidence_operations[1].get("item_id") != "use_evidence"
+        or evidence_operations[1].get("added_to_node_id")
+        != "ventilation_dispute"
+    ):
+        raise ValueError("memory_receipt_operation_fields")
+    hashes = [
+        receipt.get("observable_input_hash"),
+        receipt.get("canonical_state_hash"),
+        receipt.get("verification_hash"),
+        source.get("content_hash"),
+        receipt.get("before", {}).get("process_dto_hash"),
+        receipt.get("before", {}).get("checklist_dto_hash"),
+        receipt.get("after", {}).get("process_dto_hash"),
+        receipt.get("after", {}).get("checklist_dto_hash"),
+        receipt.get("before", {}).get("process_semantic_hash"),
+        receipt.get("before", {}).get("checklist_semantic_hash"),
+        receipt.get("after", {}).get("process_semantic_hash"),
+        receipt.get("after", {}).get("checklist_semantic_hash"),
+        *[
+            operation.get(field)
+            for operation in [*process_operations, *evidence_operations]
+            for field in ("before_hash", "after_hash")
+            if field in operation
+        ],
+    ]
+    if not all(
+        isinstance(value, str)
+        and len(value) == 64
+        and all(char in "0123456789abcdef" for char in value)
+        for value in hashes
+    ):
+        raise ValueError("memory_receipt_hashes")
+    if (
+        receipt["before"]["process_dto_hash"]
+        == receipt["after"]["process_dto_hash"]
+        or receipt["before"]["checklist_dto_hash"]
+        == receipt["after"]["checklist_dto_hash"]
+        or receipt["before"]["process_semantic_hash"]
+        == receipt["after"]["process_semantic_hash"]
+        or receipt["before"]["checklist_semantic_hash"]
+        == receipt["after"]["checklist_semantic_hash"]
+    ):
+        raise ValueError("memory_receipt_zero_delta")
+    expected_application_hash = digest(
+        {key: value for key, value in receipt.items() if key != "application_hash"}
+    )
+    if receipt.get("application_hash") != expected_application_hash:
+        raise ValueError("memory_receipt_application_hash")
+    if expected_context is not None:
+        allowed_context_fields = {
+            "target",
+            "observable_input_hash",
+            "canonical_state_hash",
+            "eligibility",
+            "before",
+            "after",
+            "verification_hash",
+        }
+        if set(expected_context) - allowed_context_fields:
+            raise ValueError("memory_receipt_context_fields")
+        if any(receipt.get(key) != value for key, value in expected_context.items()):
+            raise ValueError("memory_receipt_context_binding")
+
+
+def _memory_application_boundary(
+    *,
+    run_id: str,
+    claim_id: str,
+    memory: dict[str, Any],
+    before: dict[str, Any],
+) -> dict[str, Any]:
+    """Retain an independent hash boundary for the exact pre-transform DTOs."""
+
+    boundary = {
+        "contract": MEMORY_BOUNDARY_CONTRACT,
+        "target": {"run_id": run_id, "claim_id": claim_id},
+        "source_memory": {
+            "memory_id": memory["memory_id"],
+            "content_hash": memory["content_hash"],
+        },
+        "before": deepcopy(before),
+    }
+    boundary["boundary_hash"] = digest(boundary)
+    return boundary
+
+
+def _validate_memory_application_boundary(
+    boundary: dict[str, Any],
+    *,
+    run_id: str,
+    claim_id: str,
+    memory: dict[str, Any],
+) -> None:
+    if set(boundary) != {
+        "contract",
+        "target",
+        "source_memory",
+        "before",
+        "boundary_hash",
+    }:
+        raise ValueError("memory_boundary_fields")
+    before = boundary.get("before", {})
+    if (
+        boundary.get("contract") != MEMORY_BOUNDARY_CONTRACT
+        or boundary.get("target") != {"run_id": run_id, "claim_id": claim_id}
+        or boundary.get("source_memory")
+        != {
+            "memory_id": memory["memory_id"],
+            "content_hash": memory["content_hash"],
+        }
+        or set(before)
+        != {
+            "process_dto_hash",
+            "checklist_dto_hash",
+            "process_semantic_hash",
+            "checklist_semantic_hash",
+        }
+        or any(
+            not isinstance(value, str)
+            or len(value) != 64
+            or any(char not in "0123456789abcdef" for char in value)
+            for value in before.values()
+        )
+        or boundary.get("boundary_hash")
+        != digest({key: value for key, value in boundary.items() if key != "boundary_hash"})
+    ):
+        raise ValueError("memory_boundary_integrity")
+
+
+def _validate_memory_application_event(
+    run: dict[str, Any], receipt: dict[str, Any]
+) -> None:
+    """Cross-bind the mutable result to the separately persisted event row."""
+
+    events = [
+        value
+        for value in run.get("events", [])
+        if value.get("stage") == "memory_application"
+        and value.get("receipt_type") == "memory_application_receipt"
+        and value.get("status") == "completed"
+    ]
+    if len(events) != 1:
+        raise ValueError("memory_event_count")
+    event = events[0]
+    if any(key not in event for key in receipt):
+        raise ValueError("memory_event_fields")
+    event_receipt = {key: deepcopy(event[key]) for key in receipt}
+    if event_receipt != receipt:
+        raise ValueError("memory_event_receipt_binding")
 
 
 class ClaimPipeline:
@@ -290,7 +1354,13 @@ class ClaimPipeline:
 
     def _execute(self, run_id: str, claim_id: str, knowledge_mode: str, session_id: str):
         claim = CLAIMS[claim_id]
-        memories = [] if knowledge_mode == "baseline" else self.storage.memories(session_id=session_id)
+        governed_memories = self.storage.memories(session_id=session_id)
+        counterfactual_learning_freeze = (
+            _counterfactual_learning_freeze(governed_memories)
+            if knowledge_mode == "baseline"
+            else None
+        )
+        memories = [] if knowledge_mode == "baseline" else governed_memories
         knowledge = self._active_knowledge(session_id=session_id)
         self.storage.patch_run(
             run_id,
@@ -308,6 +1378,7 @@ class ClaimPipeline:
                 "knowledge_mode": knowledge_mode,
                 "model_mode": self.model_mode,
                 "model": OPENROUTER_MODEL if self.model_mode == MODEL_MODE_OPENROUTER else None,
+                "counterfactual_learning_freeze": counterfactual_learning_freeze,
             },
         )
         self.storage.add_event(
@@ -335,7 +1406,22 @@ class ClaimPipeline:
             process = self._process_stage(run_id, claim, understanding, legal, memories, knowledge)
             checklist = self._evidence_stage(run_id, claim, understanding, process, legal, memories, knowledge)
             precedents = self._experience_stage(run_id, claim, understanding, process, checklist, memories)
-            verification = self._verify_stage(run_id, claim, understanding, legal, process, checklist, precedents)
+            precedent_ranking = (
+                self.storage.get_run(run_id, session_id=session_id) or {}
+            ).get("precedent_ranking")
+            if not isinstance(precedent_ranking, dict):
+                raise ValueError("precedent_ranking_receipt_missing")
+            verification = self._verify_stage(
+                run_id,
+                claim,
+                understanding,
+                legal,
+                process,
+                checklist,
+                precedents,
+                precedent_ranking,
+                memories,
+            )
             agent_orchestration = self._agent_orchestration_stage(
                 run_id,
                 claim,
@@ -352,6 +1438,8 @@ class ClaimPipeline:
                     process,
                     checklist,
                     precedents,
+                    precedent_ranking,
+                    memories,
                 )
                 self.storage.patch_run(
                     run_id,
@@ -437,6 +1525,20 @@ class ClaimPipeline:
                         "agent_orchestration": agent_orchestration,
                     },
                 )
+            memory_application, memory_verification = self._apply_case_specific_memory(
+                run_id,
+                session_id,
+                claim,
+                understanding,
+                legal,
+                process,
+                checklist,
+                precedents,
+                memories,
+                precedent_ranking,
+            )
+            if memory_verification is not None:
+                verification = memory_verification
             result = self._final_result(
                 claim,
                 parsed,
@@ -449,6 +1551,8 @@ class ClaimPipeline:
                 knowledge,
                 knowledge_mode,
                 agent_orchestration,
+                memory_application,
+                precedent_ranking,
             )
             self.storage.add_event(
                 run_id,
@@ -692,6 +1796,7 @@ class ClaimPipeline:
                     "known",
                     "The reply contains the allegation but no technical proof.",
                     [text_ref("art_management_reply", 1, "consistent with insufficient ventilation", agent)],
+                    semantic_role="management_ventilation_allegation",
                 ),
                 fact(
                     "fact_cause",
@@ -700,7 +1805,7 @@ class ClaimPipeline:
                     "unknown",
                     "No neutral assessment establishes a building defect, tenant-use cause or mixed cause.",
                     [
-                        text_ref("art_management_reply", 1, "Based on the photograph", agent),
+                        text_ref("art_management_reply", 1, "Based on your description", agent),
                         text_ref("art_timeline", 1, "No independent inspection has been carried out.", agent),
                     ],
                     confidence=.92,
@@ -740,21 +1845,27 @@ class ClaimPipeline:
                 fact(
                     "later_fact_tenancy",
                     "Residential tenancy",
-                    "Unverified",
-                    "unknown",
-                    "The observable package does not state that the premises are rented or supply tenancy proof.",
-                    [],
+                    "Established",
+                    "known",
+                    "The lease identifies Sam Keller as tenant of the Basel apartment and states residential use.",
+                    [
+                        text_ref("art_later_lease", 1, "Tenant Sam Keller, Klybeckstrasse 77, 4057 Basel", agent),
+                        text_ref("art_later_lease", 1, "Permitted use Residential use", agent),
+                    ],
                     decision_key="scope",
-                    normalized_value="unverified",
+                    normalized_value="supported_in_scope",
                 ),
                 fact(
                     "later_fact_dispute",
                     "Concrete disagreement",
-                    "Reported but original management message missing",
+                    "Established",
                     "known",
-                    "The customer reports that management blames airing; the original allegation is not attached.",
-                    [text_ref("art_later_email", 1, "management says I do not air enough", agent)],
-                    confidence=.86,
+                    "The customer disagrees with management's ventilation position and requests investigation and repair; management acknowledges the notice and refuses inspection.",
+                    [
+                        text_ref("art_later_email", 1, "I disagree with the management's position.", agent),
+                        text_ref("art_later_email", 1, "I want the cause checked and the recurring condition repaired.", agent),
+                        text_ref("art_later_management_reply", 1, "We do not plan a technical inspection", agent),
+                    ],
                     decision_key="dispute",
                     normalized_value="present",
                 ),
@@ -766,6 +1877,12 @@ class ClaimPipeline:
                     "The email and photograph describe recurrence beside the replaced window.",
                     [
                         text_ref("art_later_email", 1, "dark spots have appeared around the bedroom window", agent),
+                        text_ref(
+                            "art_later_notification",
+                            1,
+                            "Condensation and dark spots have repeatedly appeared around the bedroom window since the replacement work in May.",
+                            agent,
+                        ),
                         visual_ref("art_later_photo", [0.08, 0.40, 0.82, 0.42], "Visible condensation crosses the lower glazing and dark spotting appears beside the window reveal."),
                     ],
                     decision_key="recurrence",
@@ -776,17 +1893,17 @@ class ClaimPipeline:
                     "Recent window replacement",
                     "Established",
                     "known",
-                    "The contractor notice confirms replacement in May 2026.",
+                    "The contractor completion record confirms replacement in May 2026.",
                     [text_ref("art_window_notice", 1, "replaced between 18 and 22 May 2026", agent)],
                 ),
                 fact(
                     "later_fact_ventilation_allegation",
                     "Management alleges insufficient airing",
-                    "Reported by customer",
+                    "Established as an allegation",
                     "known",
-                    "The allegation is observable, but the original correspondence and technical basis are absent.",
-                    [text_ref("art_later_email", 1, "management says I do not air enough", agent)],
-                    confidence=.84,
+                    "Management's original reply alleges insufficient airing while supplying no technical assessment.",
+                    [text_ref("art_later_management_reply", 1, "we consider insufficient airing the likely cause", agent)],
+                    semantic_role="management_ventilation_allegation",
                 ),
                 fact(
                     "later_fact_cause",
@@ -794,7 +1911,10 @@ class ClaimPipeline:
                     "Unresolved",
                     "unknown",
                     "No inspection links the condition to use, seals, insulation or another building cause.",
-                    [text_ref("art_later_email", 1, "No technician has inspected the window or wall.", agent)],
+                    [
+                        text_ref("art_later_email", 1, "No technician has inspected the window or wall.", agent),
+                        text_ref("art_later_management_reply", 1, "We do not plan a technical inspection", agent),
+                    ],
                     confidence=.94,
                     decision_key="causation",
                     normalized_value="unresolved",
@@ -802,23 +1922,23 @@ class ClaimPipeline:
                 fact(
                     "later_fact_health",
                     "Immediate health or safety concern",
-                    "Unverified",
-                    "unknown",
-                    "The submission does not state whether an emergency or acute symptoms exist.",
-                    [],
+                    "Not reported",
+                    "known",
+                    "The customer reports no current health symptoms and no urgent deadline.",
+                    [text_ref("art_later_email", 1, "I have no current health symptoms and there is no urgent deadline.", agent)],
                     decision_key="urgency",
-                    normalized_value="unverified",
+                    normalized_value="not_urgent",
                 ),
             ]
-            summary = "Recurring dark spots beside a recently replaced window. Management allegedly blames airing. The allegation and technical cause remain unverified."
+            summary = "Recurring dark spots beside a recently replaced window in a Basel tenancy. Written notice and a concrete dispute are established. Management blames airing, but technical causation remains unresolved."
             issues = [
                 {"issue": "Technical cause remains unresolved", "severity": "controlling", "why": "The timing after window work and the ventilation allegation require competent evidence."},
-                {"issue": "Original management allegation is missing", "severity": "evidence", "why": "The exact allegation and its stated basis cannot yet be inspected."},
+                {"issue": "No technical inspection has occurred", "severity": "evidence", "why": "Management's allegation is attached, but no competent evidence distinguishes use, seals, insulation or mixed causes."},
             ]
         if primary:
             facts.extend(
                 [
-                    fact("fact_source_integrity", "Source package integrity", "Recorded", "known", "Source hashes and media metadata were recorded before reasoning.", [metadata_ref("art_lease", "sha256", ARTIFACTS["art_lease"]["sha256"], "Source Integrity Agent")]),
+                    fact("fact_source_integrity", "Source package integrity", "Recorded", "known", "Source hashes and media metadata were recorded before reasoning.", [metadata_ref(artifact_id, "sha256", ARTIFACTS[artifact_id]["sha256"], "Source Integrity Agent") for artifact_id in claim["artifact_ids"]]),
                     fact("fact_customer_objective", "Customer objective", "Clarify cause and repair the defect", "known", "The customer asks for the cause to be clarified and the defect repaired.", [text_ref("message", 1, "I want the cause clarified and the defect repaired.", agent)]),
                     fact("fact_repair_history", "Inspection and repair history", "No technical inspection reported", "known", "Management states that it does not plan a technical inspection.", [text_ref("art_management_reply", 1, "We do not currently plan a technical inspection.", agent)]),
                     fact("fact_tenant_use_cause", "Supported use-related cause", "Unresolved", "unknown", "A ventilation allegation is present, but no competent evidence establishes a use-related cause.", [text_ref("art_management_reply", 1, "appear consistent with insufficient ventilation", agent)]),
@@ -832,10 +1952,10 @@ class ClaimPipeline:
         else:
             facts.extend(
                 [
-                    fact("later_fact_source_integrity", "Source package integrity", "Recorded", "known", "Source hashes and media metadata were recorded before reasoning.", [metadata_ref("art_later_email", "sha256", ARTIFACTS["art_later_email"]["sha256"], "Source Integrity Agent")]),
+                    fact("later_fact_source_integrity", "Source package integrity", "Recorded", "known", "Source hashes and media metadata were recorded before reasoning.", [metadata_ref(artifact_id, "sha256", ARTIFACTS[artifact_id]["sha256"], "Source Integrity Agent") for artifact_id in claim["artifact_ids"]]),
                     fact("later_fact_policy_route", "Legal-protection policy reference", "Present", "known", "The intake contains a policy reference without deciding coverage.", [metadata_ref("intake", "policy_reference", claim["customer"]["policy"], "Intake Metadata Agent")]),
-                    fact("later_fact_customer_objective", "Customer objective", "Obtain next-step guidance", "known", "The customer asks what to do next.", [text_ref("art_later_email", 1, "What should I do next?", agent)]),
-                    fact("later_fact_notification", "Landlord notification", "Reported; original notice not supplied", "known", "The customer reports sending management an email, but the original is absent.", [text_ref("art_later_email", 1, "I sent the management an email last week.", agent)], decision_key="notification", normalized_value="unverified"),
+                    fact("later_fact_customer_objective", "Customer objective", "Clarify cause and repair the condition", "known", "The customer requests investigation of the cause and repair of the recurring condition.", [text_ref("art_later_email", 1, "I want the cause checked and the recurring condition repaired.", agent)]),
+                    fact("later_fact_notification", "Landlord notification", "Established", "known", "The original notice requests inspection and repair, and management's reply acknowledges receiving it.", [text_ref("art_later_notification", 1, "Please arrange an inspection of the window and wall", agent), text_ref("art_later_management_reply", 1, "We received your message of 3 August.", agent)], decision_key="notification", normalized_value="notified"),
                     fact("later_fact_remedy_plan", "Supported remedy plan", "Not reached", "unknown", "A remedy plan depends on supported causation and responsibility.", []),
                     fact("later_fact_financial_remedy", "Supported financial remedy", "Not reached", "unknown", "No financial remedy branch has been selected.", []),
                     fact("later_fact_settlement_proposal", "Settlement position", "Not reached", "unknown", "No settlement branch has been reached.", []),
@@ -865,6 +1985,7 @@ class ClaimPipeline:
                     "expected_state": value["state"],
                     "canonical_value": value["value"],
                     "canonical_explanation": value["explanation"],
+                    "semantic_role": value["semantic_role"],
                     "deterministic_confidence": value["confidence"],
                     "admissible_text_refs": [
                         {
@@ -992,13 +2113,13 @@ class ClaimPipeline:
             "category": (
                 "Rental defect - mould and moisture"
                 if primary
-                else "Moisture and condensation report"
+                else "Rental defect - mould and moisture"
             ),
             "subcategory": "Recurring moisture with disputed causation",
             "scope": (
                 "Swiss residential tenancy"
                 if primary
-                else "Residential-tenancy scope unverified"
+                else "Swiss residential tenancy"
             ),
             "dispute": "Concrete dispute appears to exist",
             "facts": facts,
@@ -1089,57 +2210,22 @@ class ClaimPipeline:
 
     def _research_stage(self, run_id: str, claim: dict[str, Any], understanding: dict[str, Any]) -> dict[str, Any]:
         stage, label, agent = VISIBLE_STAGES[2]
-        questions = [
-            "Does the submission fall within Swiss residential-tenancy defect handling?",
-            "Was the landlord notified of the alleged defect?",
-            "Is there a concrete disagreement rather than a purely advisory question?",
-            "Which facts must be established before responsibility and remedies can be assessed?",
-            "When would conciliation or another escalation route become relevant?",
-        ]
+        legal = legal_context()
+        questions = legal["questions"]
         self.emit(
             run_id,
             stage,
             label,
             agent,
             "started",
-            headline="Turning legal sources into claim-handling questions",
-            detail="The agent retrieves only sources that create or constrain a process decision.",
+            headline="Resolving official Swiss-law passages into handling questions",
+            detail="A deterministic versioned registry lookup binds each question to exact official passages, interpretations and process nodes.",
             question="Which legal questions shape the complete handling process?",
             input_artifacts=["canonical_claim_state"],
             output_artifact="legal_context",
             handoff_to="Process Projection Tool",
         )
         self.pause(.4)
-        legal = {
-            "questions": questions,
-            "sources": deepcopy(LAW_SOURCES),
-            "handling_principles": [
-                {
-                    "source_id": "handling-causation",
-                    "title": "Generated handling proposal: preserve disputed causation",
-                    "source_type": "operational_interpretation",
-                    "role": "A party allegation does not establish technical cause. Responsibility remains open until competent evidence distinguishes plausible explanations.",
-                    "validation_status": "generated_reference_not_expert_approved",
-                },
-                {
-                    "source_id": "handling-evidence-order",
-                    "title": "Candidate handling proposal: least-burdensome competent evidence first",
-                    "source_type": "operational_interpretation",
-                    "role": "Request the first competent assessment before broader or more invasive tests unless current evidence already justifies them.",
-                    "validation_status": "candidate_not_expert_approved",
-                },
-            ],
-            "node_links": {
-                "scope": ["fedlex-or-256"],
-                "notification": ["fedlex-or-257g"],
-                "defect": ["fedlex-or-256"],
-                "causation": ["fedlex-or-256", "handling-causation"],
-                "responsibility": ["fedlex-or-256", "fedlex-or-259a", "handling-causation"],
-                "remedy": ["fedlex-or-259a"],
-                "escalation": ["bwo-conciliation"],
-            },
-            "review_status": "Operational translation not yet approved by a qualified Swiss tenant-law reviewer",
-        }
         self.storage.patch_run(run_id, patch={"legal_research": legal})
         self.emit(
             run_id,
@@ -1150,14 +2236,14 @@ class ClaimPipeline:
             headline=f"{len(questions)} legal questions and {len(LAW_SOURCES)} official sources linked",
             detail="Every retained source affects at least one process node or evidence requirement.",
             question="Which legal questions shape the complete handling process?",
-            items=[f"{source['title']}: {source['role']}" for source in LAW_SOURCES],
+            items=[f"{source['title']}: {source['role']}" for source in legal["sources"]],
             metrics={"questions": len(questions), "official_sources": len(LAW_SOURCES), "handling_principles": 2},
             input_hash=digest(understanding),
             output_hash=digest(legal),
             input_artifacts=["canonical_claim_state"],
             output_artifact="legal_context",
             handoff_to="Process Projection Tool",
-            retrieval_method="question-led official-source registry search",
+            retrieval_method="versioned_official_source_registry_lookup",
         )
         self.pause(.25)
         return legal
@@ -1179,7 +2265,7 @@ class ClaimPipeline:
             agent,
             "started",
             headline="Synthesizing the full claim-handling decision graph",
-            detail="The agent instantiates entry checks, factual decisions, evidence loops, remedy branches, escalation and closure.",
+            detail="The deterministic projection instantiates entry checks, factual decisions, evidence loops, remedy branches, escalation and closure.",
             question="How should this claim type be handled from intake to resolution?",
             input_artifacts=["canonical_claim_state", "legal_context"],
             output_artifact="process_graph",
@@ -1187,8 +2273,8 @@ class ClaimPipeline:
         )
         self.pause(.45)
         later = claim["claim_id"] == "DEMO-MOULD-002"
-        notification_answer = "Written notice and receipt established" if not later else "Customer reports notice; original message not attached"
-        notification_state = "complete" if not later else "supported"
+        notification_answer = "Written notice and receipt established"
+        notification_state = "complete"
         node_facts = {
             "scope": ["fact_tenancy"] if not later else ["later_fact_tenancy"],
             "dispute": ["fact_dispute"] if not later else ["later_fact_dispute"],
@@ -1218,7 +2304,7 @@ class ClaimPipeline:
             process_node("out_of_scope", "Route outside tenant law", "Which service should receive the matter?", "inactive", answer="Not applicable", why="Used only when the scope check fails.", kind="outcome", main_spine=False, activation="scope = no"),
             process_node("no_dispute", "Advice or closure", "Can the matter be resolved without a legal dispute process?", "inactive", answer="Not applicable", why="Used when no concrete disagreement exists.", kind="outcome", main_spine=False, activation="dispute = no"),
             process_node("urgent_escalation", "Immediate protective action", "What must happen before ordinary handling continues?", "inactive", answer="Not applicable", why="Used only for acute safety, health or deadline risk.", kind="action", main_spine=False, activation="urgency = yes"),
-            process_node("formal_notice", "Complete the notification record", "What notification or proof gap should be addressed before later remedies are considered?", "inactive" if not later else "possible", answer="No current gap for the primary claim", why="Notification is relevant; written evidence can help establish it, without treating Article 257g as a statutory writing requirement.", kind="action", main_spine=False, legal_source_ids=["fedlex-or-257g"], evidence_requirement_ids=["defect_notice", "proof_of_delivery"], activation="notification = no or unverified"),
+            process_node("formal_notice", "Complete the notification record", "What notification or proof gap should be addressed before later remedies are considered?", "inactive", answer="No current gap", why="Notification is relevant; written evidence can help establish it, without treating Article 257g as a statutory writing requirement.", kind="action", main_spine=False, legal_source_ids=["fedlex-or-257g"], evidence_requirement_ids=["defect_notice", "proof_of_delivery"], activation="notification = no or unverified"),
             process_node("building_defect", "Building-defect branch", "Which building condition caused the defect and what remediation is required?", "unresolved", answer="Possible", why="Activated only when competent evidence supports a building or installation cause.", main_spine=False, legal_source_ids=["fedlex-or-256", "fedlex-or-259a"], evidence_requirement_ids=["technical_assessment", "building_envelope", "remediation_plan"], activation="causation = building defect"),
             process_node("tenant_use", "Use-related branch", "Which use factor is supported and what response is proportionate?", "unresolved", answer="Possible", why="Activated only when competent evidence supports a use-related cause.", main_spine=False, evidence_requirement_ids=["technical_assessment", "use_evidence"], activation="causation = tenant use"),
             process_node("mixed_cause", "Mixed-cause branch", "How should responsibility and remedy reflect multiple contributing causes?", "unresolved", answer="Possible", why="Activated when evidence supports both building and use-related contributions.", main_spine=False, evidence_requirement_ids=["technical_assessment", "building_envelope", "use_evidence", "settlement_proposal"], activation="causation = mixed"),
@@ -1251,6 +2337,11 @@ class ClaimPipeline:
         main_spine = ["intake", "scope", "dispute", "urgency", "notification", "defect", "causation", "responsibility", "remedy", "escalation", "resolution"]
         projection = decision_projection(understanding["facts"])
         current_overlay = apply_process_projection(nodes, edges, projection, main_spine)
+        for node in nodes:
+            node["legal_source_ids"] = deepcopy(
+                legal.get("node_links", {}).get(node["node_id"], [])
+            )
+
         process = {
             "process_id": f"process-{claim['claim_id'].lower()}",
             "title": "Recurring mould and moisture handling playbook",
@@ -1393,19 +2484,19 @@ class ClaimPipeline:
             items = [
                 item("claim_message", "Original claim message", "provided_sufficient", "intake", "later_fact_customer_objective", "Defines the customer's account and objective.", artifact_ids=["art_later_email"]),
                 item("source_integrity", "Source-file checksums and metadata", "provided_sufficient", "intake", "later_fact_source_integrity", "Keeps original files distinct from derived representations.", artifact_ids=claim["artifact_ids"]),
-                item("lease", "Residential lease or equivalent tenancy proof", "missing", "scope", "later_fact_tenancy", "The current package does not establish a residential-tenancy relationship; tenancy proof is required before scope can be confirmed.", legal_basis_ids=["fedlex-or-256"], acceptable_alternatives=["Lease", "Current rent statement naming the premises", "Accepted policy record"]),
+                item("lease", "Residential lease agreement", "provided_sufficient", "scope", "later_fact_tenancy", "Establishes the parties, premises and residential-tenancy relationship.", legal_basis_ids=["fedlex-or-256"], artifact_ids=["art_later_lease"]),
                 item("policy_reference", "Policy and routing reference", "provided_sufficient", "scope", "later_fact_policy_route", "Routes the case without deciding coverage.", artifact_ids=["intake"]),
                 item("customer_objective", "Customer's requested outcome", "provided_sufficient", "dispute", "later_fact_customer_objective", "Distinguishes the requested guidance from any inferred legal remedy.", artifact_ids=["art_later_email"]),
-                item("management_position", "Original management ventilation allegation", "missing", "dispute", "later_fact_dispute", "The customer reports the allegation, but the exact wording and stated basis are absent.", acceptable_alternatives=["Management email", "Letter", "Inspection note"]),
+                item("management_position", "Original management ventilation allegation", "provided_sufficient", "dispute", "later_fact_dispute", "Establishes management's opposing position, receipt acknowledgement and refusal to inspect.", artifact_ids=["art_later_management_reply"]),
                 item("health_safety_statement", "Current health and safety information", "provided_sufficient", "urgency", "later_fact_health", "Supports the present non-emergency triage.", artifact_ids=["art_later_email"]),
-                item("defect_notice", "Evidence of landlord notification", "provided_insufficient", "notification", "later_fact_notification", "Notification is relevant; written evidence helps establish what was sent and received, but Article 257g does not itself impose a writing form.", legal_basis_ids=["fedlex-or-257g"], artifact_ids=["art_later_email"], acceptable_alternatives=["Notice email", "Registered letter", "Management acknowledgement", "Other reliable notification evidence"]),
-                item("proof_of_delivery", "Evidence that notification reached management", "missing", "notification", "later_fact_notification", "The customer reports notification, while receipt remains unverified.", legal_basis_ids=["fedlex-or-257g"], acceptable_alternatives=["Management acknowledgement", "Delivery record", "Other reliable receipt evidence"]),
+                item("defect_notice", "Evidence of landlord notification", "provided_sufficient", "notification", "later_fact_notification", "The original notice records what the customer reported and requested; Article 257g does not itself impose a writing form.", legal_basis_ids=["fedlex-or-257g"], artifact_ids=["art_later_notification"]),
+                item("proof_of_delivery", "Evidence that notification reached management", "provided_sufficient", "notification", "later_fact_notification", "Management's reply expressly acknowledges receiving the 3 August notice.", legal_basis_ids=["fedlex-or-257g"], artifact_ids=["art_later_management_reply"]),
                 item("dated_photos", "Dated photograph of the condition", "provided_sufficient", "defect", "later_fact_recurrence", "Shows the visible condition beside the replaced window.", artifact_ids=["art_later_photo"]),
-                item("recurrence_chronology", "Chronology of recurrence", "missing", "defect", "later_fact_recurrence", "A chronology would help test recurrence and timing without deciding causation.", acceptable_alternatives=["Dated messages", "Inspection chronology", "Clarifying customer statement"]),
-                item("repair_history", "Window replacement record", "provided_sufficient", "defect", "later_fact_recent_window_work", "Makes installation condition relevant to the causation branch.", artifact_ids=["art_window_notice"]),
+                item("recurrence_chronology", "Chronology of recurrence", "provided_insufficient", "defect", "later_fact_recurrence", "The dated correspondence and photograph support recurrence and timing but do not provide a complete chronology.", artifact_ids=["art_later_notification", "art_later_photo"], acceptable_alternatives=["Inspection chronology", "Clarifying customer statement"]),
+                item("repair_history", "Window replacement completion record", "provided_sufficient", "defect", "later_fact_recent_window_work", "The contractor completion record confirms replacement in May 2026 and makes installation condition relevant to the causation branch.", legal_basis_ids=["fedlex-or-256"], artifact_ids=["art_window_notice"]),
                 item("technical_assessment", "Independent technical assessment", "missing", "causation", "later_fact_cause", "Competent evidence is needed to distinguish seals, insulation, use factors and mixed causes.", legal_basis_ids=["fedlex-or-256", "handling-causation"], acceptable_alternatives=["Independent moisture inspection", "Building-physics report"]),
                 item("moisture_measurements", "Moisture and environmental measurements", "conditional", "causation", "later_fact_cause", "Measurements support the assessment when visual inspection is inconclusive.", legal_basis_ids=["handling-causation"], applies_when="The first assessment needs quantitative confirmation", required_level="conditional"),
-                item("building_envelope", "Building-envelope assessment", "missing", "causation", "later_fact_cause", "The v3 reference requests the broader assessment immediately; no quarantined candidate is applied.", legal_basis_ids=["handling-evidence-order"], applies_when="Immediate under the v3 reference", required_level="mandatory"),
+                item("building_envelope", "Building-envelope assessment", "missing", "causation", "later_fact_cause", "The unchanged v3 reference requests the broader assessment immediately; no case-specific memory guidance has been applied.", legal_basis_ids=["handling-evidence-order"], applies_when="Immediate under the v3 reference", required_level="mandatory"),
                 item("use_evidence", "Use-related evidence", "conditional", "tenant_use", "later_fact_ventilation_allegation", "Use-related evidence is requested only after competent assessment makes the allegation relevant.", acceptable_alternatives=["Ventilation record", "Heating data", "Inspection observations"], applies_when="The neutral assessment leaves a plausible use-related branch", required_level="conditional"),
                 item("remediation_plan", "Repair or remediation plan", "not_applicable", "remedy", "later_fact_remedy_plan", "Needed only after responsibility is supported.", legal_basis_ids=["fedlex-or-259a"], applies_when="Building responsibility is established", required_level="conditional"),
                 item("financial_impact", "Evidence supporting a financial remedy", "conditional", "remedy", "later_fact_financial_remedy", "Needed only if a supported financial remedy is pursued.", legal_basis_ids=["fedlex-or-259a"], applies_when="A financial remedy is pursued", required_level="conditional"),
@@ -1413,49 +2504,15 @@ class ClaimPipeline:
                 item("conciliation_bundle", "Conciliation evidence bundle", "conditional", "escalation", "later_fact_escalation_ready", "Used only if the supported remedy remains disputed.", legal_basis_ids=["bwo-conciliation"], applies_when="Remedy refused or disputed", required_level="conditional"),
                 item("completion_record", "Repair, settlement or closure record", "not_applicable", "resolution", "later_fact_resolution_complete", "Records the terminal outcome.", applies_when="Claim resolved", required_level="conditional"),
             ]
+        apply_evidence_relations(process, items)
         apply_evidence_projection(items, process)
-        present = []
-        required = []
-        for evidence in items:
-            if evidence["status"].startswith("provided"):
-                present.append(
-                    {
-                        "item_id": evidence["item_id"],
-                        "title": evidence["title"],
-                        "status": "available" if evidence["status"] == "provided_sufficient" else "insufficient",
-                        "node_id": evidence["node_id"],
-                        "fact": evidence["fact_id"],
-                        "why": evidence["why"],
-                        "artifact_id": evidence["artifact_ids"][0] if evidence["artifact_ids"] else None,
-                    }
-                )
-            elif evidence["status"] in {"missing", "conditional"} and evidence["current_path"]:
-                required.append(
-                    {
-                        "item_id": evidence["item_id"],
-                        "title": evidence["title"],
-                        "status": "still_needed" if evidence["status"] == "missing" else "conditional",
-                        "node_id": evidence["node_id"],
-                        "fact": evidence["fact_id"],
-                        "why": evidence["why"],
-                        "mandatory": "now" if evidence["status"] == "missing" else evidence["applies_when"],
-                        "already_supplied": False,
-                    }
-                )
-        summary = {
-            "provided_sufficient": sum(item["status"] == "provided_sufficient" for item in items),
-            "provided_insufficient": sum(item["status"] == "provided_insufficient" for item in items),
-            "missing": sum(item["status"] == "missing" for item in items),
-            "conditional": sum(item["status"] == "conditional" for item in items),
-            "not_applicable": sum(item["status"] == "not_applicable" for item in items),
-            "process_nodes_covered": len({item["node_id"] for item in items}),
-        }
+        apply_evidence_relations(process, items)
+        derived = checklist_derived_sections(items)
+        summary = derived["summary"]
         checklist = {
             "title": "Complete process-grounded evidence model",
             "items": items,
-            "present": present,
-            "required": required,
-            "summary": summary,
+            **derived,
             "playbook_version": knowledge["version"],
             "memory_used": False,
             "shared_rule_applied": False,
@@ -1529,35 +2586,23 @@ class ClaimPipeline:
             handoff_to="Whole-Playbook Verification Gate",
         )
         self.pause(.4)
-        results: list[dict[str, Any]] = []
-        for memory in memories:
-            if memory.get("claim_id") == claim["claim_id"]:
-                continue
-            results.append(
-                {
-                    "claim_id": memory["claim_id"],
-                    "title": memory.get("title", "Unverified demo recurring-mould memory"),
-                    "review_status": memory.get("review_status", "unverified_demo_memory"),
-                    "why_useful": "Unverified generated-demo memory with the same disputed-causation branch; it may inform retrieval but has no shared-rule authority.",
-                    "shared_features": ["recurrence", "ventilation allegation", "cause unresolved"],
-                    "process_branch": "causation → evidence gap → neutral inspection",
-                    "evidence_that_resolved": ["neutral technical assessment"],
-                    "final_process": memory.get("final_process", []),
-                    "evidence": memory.get("final_checklist", []),
-                    "reviewer_note": memory.get("reviewer_explanation", ""),
-                    "outcome": "Unverified demo memory",
-                    "memory_id": memory["memory_id"],
-                }
-            )
-        for historical in HISTORICAL_CASES:
-            if len(results) >= 3:
-                break
-            item = deepcopy(historical)
-            item["process_branch"] = "causation dispute → competent evidence → remedy"
-            item["evidence_that_resolved"] = item.get("evidence", [])[-2:]
-            results.append(item)
-        results = results[:3]
-        self.storage.patch_run(run_id, patch={"precedents": results})
+        ranked = rank_precedents(
+            current_claim_id=claim["claim_id"],
+            understanding=understanding,
+            process=process,
+            checklist=checklist,
+            memories=memories,
+            corpus=HISTORICAL_CASES,
+        )
+        results = ranked["results"]
+        ranking_receipt = ranked["receipt"]
+        self.storage.patch_run(
+            run_id,
+            patch={
+                "precedents": results,
+                "precedent_ranking": ranking_receipt,
+            },
+        )
         self.emit(
             run_id,
             stage,
@@ -1580,9 +2625,287 @@ class ClaimPipeline:
             output_artifact="precedents",
             handoff_to="Whole-Playbook Verification Gate",
             ranking_dimensions=["legal question", "process branch", "unresolved fact", "evidence need", "declared provenance"],
+            ranking_contract=ranking_receipt["contract"],
+            ranking_context_hash=ranking_receipt["context_hash"],
+            ranking_result_hash=ranking_receipt["result_hash"],
+            selected_claim_ids=ranking_receipt["selected_claim_ids"],
         )
         self.pause(.2)
         return results
+
+    def _apply_case_specific_memory(
+        self,
+        run_id: str,
+        session_id: str,
+        claim: dict[str, Any],
+        understanding: dict[str, Any],
+        legal: dict[str, Any],
+        process: dict[str, Any],
+        checklist: dict[str, Any],
+        precedents: list[dict[str, Any]],
+        memories: list[dict[str, Any]],
+        precedent_ranking: dict[str, Any],
+    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+        # This store contains only reviewed-case memories. Any malformed or
+        # authority-relabelled record is a hard boundary failure, never an
+        # instruction that may be silently ignored.
+        governed_memories = list(memories)
+        eligible: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        for memory in governed_memories:
+            try:
+                source_run = self.storage.get_run(
+                    memory.get("source_run_id", ""),
+                    session_id=session_id,
+                )
+                review = self.storage.get_review_for_run(
+                    memory.get("source_run_id", ""),
+                    session_id=session_id,
+                )
+                _validate_memory_origin(
+                    memory,
+                    source_run=source_run,
+                    review=review,
+                )
+                candidate = next(
+                    (
+                        value
+                        for value in self.storage.candidates(session_id=session_id)
+                        if value.get("candidate_id") == memory.get("candidate_id")
+                    ),
+                    None,
+                )
+                if (
+                    not isinstance(candidate, dict)
+                    or not isinstance(source_run, dict)
+                    or not isinstance(review, dict)
+                ):
+                    raise ValueError("candidate_origin_missing")
+                _validate_candidate_origin(
+                    candidate,
+                    memory=memory,
+                    source_run=source_run,
+                    review=review,
+                )
+            except ValueError as exc:
+                raise MemoryApplicationError(str(exc)) from exc
+            evaluation = _guidance_eligibility(
+                memory["case_specific_guidance"],
+                claim_id=claim["claim_id"],
+                understanding=understanding,
+            )
+            if evaluation["eligible"]:
+                eligible.append((memory, evaluation))
+        if not eligible:
+            return None, None
+        if len(eligible) != 1:
+            raise MemoryApplicationError("ambiguous_applicable_memory")
+        memory, eligibility = eligible[0]
+        ventilation_fact_id = eligibility.get("facts_hash")
+        semantic_facts = _fact_signature(understanding)
+        ventilation_fact = semantic_facts.get(
+            "management_ventilation_allegation", {}
+        )
+        expected_ventilation_fact_id = SEMANTIC_FACT_ID_BY_CLAIM.get(
+            claim["claim_id"], {}
+        ).get("management_ventilation_allegation")
+        if (
+            ventilation_fact_id != digest(semantic_facts)
+            or not isinstance(ventilation_fact.get("fact_id"), str)
+            or ventilation_fact.get("fact_id") != expected_ventilation_fact_id
+        ):
+            raise MemoryApplicationError("semantic_fact_role_binding")
+        before = {
+            "process_dto_hash": digest(process),
+            "checklist_dto_hash": digest(checklist),
+            "process_semantic_hash": digest(semantic_process_dto(process)),
+            "checklist_semantic_hash": digest(semantic_checklist_dto(checklist)),
+        }
+
+        transform = replay_case_specific_memory_transform(
+            process,
+            checklist,
+            ventilation_fact_id=ventilation_fact["fact_id"],
+        )
+        ventilation_node = transform["ventilation_node"]
+        first_edge = transform["first_edge"]
+        second_edge = transform["second_edge"]
+        removed_from = transform["removed_from"]
+        building_before = transform["building_before"]
+        use_before = transform["use_before"]
+        items = {value["item_id"]: value for value in checklist["items"]}
+
+        reranked = rank_precedents(
+            current_claim_id=claim["claim_id"],
+            understanding=understanding,
+            process=process,
+            checklist=checklist,
+            memories=memories,
+            corpus=HISTORICAL_CASES,
+        )
+        precedents[:] = reranked["results"]
+        precedent_ranking.clear()
+        precedent_ranking.update(reranked["receipt"])
+
+        verification = self._verification_report(
+            claim,
+            understanding,
+            legal,
+            process,
+            checklist,
+            precedents,
+            precedent_ranking,
+            memories,
+            allowed_process_extension_node_ids={"ventilation_dispute"},
+            allowed_process_extension_edge_pairs={
+                ("evidence_gap", "ventilation_dispute"),
+                ("ventilation_dispute", "causation"),
+            },
+        )
+        after = {
+            "process_dto_hash": digest(process),
+            "checklist_dto_hash": digest(checklist),
+            "process_semantic_hash": digest(semantic_process_dto(process)),
+            "checklist_semantic_hash": digest(semantic_checklist_dto(checklist)),
+        }
+        process_operations = [
+            {
+                "operation_id": "add_ventilation_dispute_node",
+                "operation": "add_node",
+                "node_id": "ventilation_dispute",
+                "evidence_requirement_ids": deepcopy(
+                    ventilation_node["evidence_requirement_ids"]
+                ),
+                "after_hash": digest(ventilation_node),
+            },
+            {
+                "operation_id": "add_evidence_gap_to_ventilation_edge",
+                "operation": "add_edge",
+                "source": "evidence_gap",
+                "target": "ventilation_dispute",
+                "after_hash": digest(first_edge),
+            },
+            {
+                "operation_id": "add_ventilation_to_causation_edge",
+                "operation": "add_edge",
+                "source": "ventilation_dispute",
+                "target": "causation",
+                "after_hash": digest(second_edge),
+            },
+        ]
+        evidence_operations = [
+            {
+                "operation_id": "condition_building_envelope",
+                "operation": "replace_item",
+                "item_id": "building_envelope",
+                "before_hash": digest(
+                    semantic_checklist_dto({"items": [building_before]})[
+                        "items"
+                    ][0]
+                ),
+                "after_hash": digest(items["building_envelope"]),
+            },
+            {
+                "operation_id": "reassign_use_evidence_to_ventilation",
+                "operation": "reassign_item",
+                "item_id": "use_evidence",
+                "removed_from_node_ids": sorted(removed_from),
+                "added_to_node_id": "ventilation_dispute",
+                "before_hash": digest(
+                    semantic_checklist_dto({"items": [use_before]})["items"][
+                        0
+                    ]
+                ),
+                "after_hash": digest(items["use_evidence"]),
+            },
+        ]
+        receipt = {
+            "receipt_type": "memory_application_receipt",
+            "contract": MEMORY_RECEIPT_CONTRACT,
+            "authority": MEMORY_AUTHORITY,
+            "scope": "case_specific_guidance_only",
+            "source_memory": {
+                "memory_id": memory["memory_id"],
+                "claim_id": memory["claim_id"],
+                "review_id": memory["review_id"],
+                "content_hash": memory["content_hash"],
+                "review_status": memory["review_status"],
+            },
+            "target": {"run_id": run_id, "claim_id": claim["claim_id"]},
+            "observable_input_hash": digest(observable_claim_package(claim)),
+            "canonical_state_hash": digest(understanding["facts"]),
+            "eligibility": eligibility,
+            "allowed_operation_ids": list(MEMORY_OPERATION_IDS),
+            "applied_operation_ids": list(MEMORY_OPERATION_IDS),
+            "process_operations": process_operations,
+            "evidence_operations": evidence_operations,
+            "before": before,
+            "after": after,
+            "verification_hash": verification["whole_playbook_hash"],
+            "shared_playbook_version": SHARED_PLAYBOOK_VERSION,
+            "shared_rule_applied": False,
+            "model_acceptance_reused": False,
+            "applied": True,
+        }
+        receipt["application_hash"] = digest(receipt)
+        memory_boundary = _memory_application_boundary(
+            run_id=run_id,
+            claim_id=claim["claim_id"],
+            memory=memory,
+            before=before,
+        )
+        try:
+            _validate_memory_receipt(
+                receipt,
+                memory=memory,
+                expected_context={
+                    "target": receipt["target"],
+                    "observable_input_hash": receipt["observable_input_hash"],
+                    "canonical_state_hash": receipt["canonical_state_hash"],
+                    "eligibility": eligibility,
+                    "before": before,
+                    "after": after,
+                    "verification_hash": verification["whole_playbook_hash"],
+                },
+            )
+        except ValueError as exc:
+            raise MemoryApplicationError(str(exc)) from exc
+        verification["checks"].append(
+            {
+                "name": "Bounded case-specific memory application",
+                "status": "passed",
+                "detail": "The exact unverified-demo memory, eligibility manifest, allowed operations and before/after DTO hashes are receipt-bound.",
+            }
+        )
+        self.storage.patch_run(
+            run_id,
+            patch={
+                "process": process,
+                "checklist": checklist,
+                "verification": verification,
+                "memory_application": receipt,
+                "memory_application_boundary": memory_boundary,
+                "precedents": precedents,
+                "precedent_ranking": precedent_ranking,
+            },
+        )
+        self.storage.add_event(
+            run_id,
+            {
+                "stage": "memory_application",
+                "label": "Bounded case-specific memory guidance applied",
+                "agent": "Deterministic Memory Application Gate",
+                "actor_type": "deterministic_gate",
+                "status": "completed",
+                "implementation": "deterministic_case_specific_memory_transform",
+                "model": None,
+                "orchestrator": ORCHESTRATOR,
+                "validator": MEMORY_RECEIPT_CONTRACT,
+                "prompt_version": None,
+                "output_artifact": "case_specific_memory_guidance",
+                **deepcopy(receipt),
+            },
+        )
+        return receipt, verification
 
     def _verification_report(
         self,
@@ -1592,17 +2915,45 @@ class ClaimPipeline:
         process: dict[str, Any],
         checklist: dict[str, Any],
         precedents: list[dict[str, Any]],
+        precedent_ranking: dict[str, Any] | None = None,
+        precedent_memories: list[dict[str, Any]] | None = None,
         *,
         allowed_process_extension_node_ids: set[str] | None = None,
         allowed_process_extension_edge_pairs: set[tuple[str, str]] | None = None,
     ) -> dict[str, Any]:
+        effective_understanding = {
+            **understanding,
+            "category": understanding.get(
+                "category", "Rental defect - mould and moisture"
+            ),
+            "subcategory": understanding.get(
+                "subcategory", "Recurring moisture with disputed causation"
+            ),
+        }
+        governed_memories = (
+            self.storage.memories()
+            if precedent_memories is None
+            else precedent_memories
+        )
+        if precedent_ranking is None:
+            precedent_ranking = rank_precedents(
+                current_claim_id=claim["claim_id"],
+                understanding=effective_understanding,
+                process=process,
+                checklist=checklist,
+                memories=governed_memories,
+                corpus=HISTORICAL_CASES,
+            )["receipt"]
         checks = validate_playbook(
             claim_id=claim["claim_id"],
-            understanding=understanding,
+            understanding=effective_understanding,
             legal=legal,
             process=process,
             checklist=checklist,
             precedents=precedents,
+            precedent_ranking=precedent_ranking,
+            precedent_memories=governed_memories,
+            precedent_corpus=HISTORICAL_CASES,
             allowed_artifact_ids=set(claim["artifact_ids"]),
             artifact_page_counts={
                 artifact_id: int(ARTIFACTS[artifact_id]["page_count"])
@@ -1641,11 +2992,12 @@ class ClaimPipeline:
             "accepted_artifacts": ["canonical_claim_state", "legal_context", "process_graph", "evidence_model", "precedents"],
             "whole_playbook_hash": digest(
                 {
-                    "understanding": understanding,
+                    "understanding": effective_understanding,
                     "legal": legal,
                     "process": process,
                     "checklist": checklist,
                     "precedents": precedents,
+                    "precedent_ranking": precedent_ranking,
                 }
             ),
         }
@@ -1659,6 +3011,8 @@ class ClaimPipeline:
         process: dict[str, Any],
         checklist: dict[str, Any],
         precedents: list[dict[str, Any]],
+        precedent_ranking: dict[str, Any],
+        precedent_memories: list[dict[str, Any]],
     ) -> dict[str, Any]:
         stage, label, agent = VISIBLE_STAGES[6]
         self.emit(
@@ -1668,14 +3022,23 @@ class ClaimPipeline:
             agent,
             "started",
             headline="Checking grounding, graph integrity and evidence links",
-            detail="Agent proposals cannot enter canonical state until deterministic checks pass.",
+            detail="Specialist proposals cannot enter canonical state until deterministic checks pass.",
             question="Is the complete playbook internally consistent and source-grounded?",
             input_artifacts=["canonical_claim_state", "legal_context", "process_graph", "evidence_model", "precedents"],
             output_artifact="verification_report",
             handoff_to="LangGraph Orchestration Boundary",
         )
         self.pause(.35)
-        report = self._verification_report(claim, understanding, legal, process, checklist, precedents)
+        report = self._verification_report(
+            claim,
+            understanding,
+            legal,
+            process,
+            checklist,
+            precedents,
+            precedent_ranking,
+            precedent_memories,
+        )
         checks = report["checks"]
         self.storage.patch_run(
             run_id,
@@ -1941,16 +3304,19 @@ class ClaimPipeline:
         knowledge: dict[str, Any],
         knowledge_mode: str,
         agent_orchestration: dict[str, Any],
+        memory_application: dict[str, Any] | None = None,
+        precedent_ranking: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        reviewed_memory_used = any(
+        reviewed_memory_retrieved = any(
             precedent.get("review_status") == "unverified_demo_memory"
             for precedent in precedents
         )
+        reviewed_memory_used = memory_application is not None
         current_overlay = process["current_overlay"]
         nodes_by_id = {node["node_id"]: node for node in process["nodes"]}
         current_node_id = current_overlay["current_node_id"]
         next_action_node_id = current_overlay["next_action_node_id"]
-        if self.model_mode == MODEL_MODE_OPENROUTER:
+        if self.model_mode == MODEL_MODE_OPENROUTER and memory_application is None:
             final_brief = agent_orchestration.get("final_claim_brief")
             if not isinstance(final_brief, dict):
                 raise AgentBoundaryError(
@@ -1981,6 +3347,7 @@ class ClaimPipeline:
             "process": process,
             "checklist": checklist,
             "precedents": precedents,
+            "precedent_ranking": deepcopy(precedent_ranking),
             "verification": verification,
             "agent_orchestration": agent_orchestration,
             "current_overlay": current_overlay,
@@ -1991,7 +3358,11 @@ class ClaimPipeline:
                 "detail": next_node["why"],
                 "requires_expert_approval": True,
                 "process_node_id": next_node["node_id"],
-                "agent_brief_contribution": agent_orchestration.get("final_claim_brief"),
+                "agent_brief_contribution": (
+                    agent_orchestration.get("final_claim_brief")
+                    if memory_application is None
+                    else None
+                ),
             },
             "playbook": {
                 "title": process["title"],
@@ -2003,15 +3374,20 @@ class ClaimPipeline:
             },
             "memory_used": reviewed_memory_used,
             "reviewed_memory_used": reviewed_memory_used,
+            "reviewed_memory_retrieved": reviewed_memory_retrieved,
+            "memory_application": deepcopy(memory_application),
             "shared_rule_applied": False,
             "knowledge": {
                 "mode": knowledge_mode,
                 "reviewed_memory_used": reviewed_memory_used,
+                "reviewed_memory_retrieved": reviewed_memory_retrieved,
                 "shared_playbook_version": knowledge["version"],
                 "shared_rule_applied": False,
             },
             "audit": {
                 "input_hash": parsed["input_hash"],
+                "observable_input_hash": digest(observable_claim_package(claim)),
+                "canonical_state_hash": digest(understanding["facts"]),
                 "profile": (
                     PROFILE
                     if self.model_mode == MODEL_MODE_OPENROUTER
@@ -2032,6 +3408,13 @@ class ClaimPipeline:
                     "Fictional generated claim package",
                     "Legal and operational translations require qualified review",
                     "No autonomous customer contact or legal decision",
+                    *(
+                        [
+                            "Case-specific unverified-demo memory transform; pre-transform model acceptance was not reused"
+                        ]
+                        if memory_application is not None
+                        else []
+                    ),
                 ],
             },
         }
@@ -2130,7 +3513,11 @@ class ClaimPipeline:
                 why="Unverified demo edit: represent the allegation as a question, not as established technical cause.",
                 kind="action",
                 main_spine=False,
-                fact_ids=["fact_ventilation_allegation"],
+                fact_ids=[
+                    SEMANTIC_FACT_ID_BY_CLAIM[run["claim_id"]][
+                        "management_ventilation_allegation"
+                    ]
+                ],
                 legal_source_ids=["handling-causation", "handling-evidence-order"],
                 evidence_requirement_ids=["management_position", "use_evidence"],
                 activation="recurrence + ventilation allegation + cause unresolved",
@@ -2146,6 +3533,26 @@ class ClaimPipeline:
                     "reason": "Keep the reported ventilation allegation explicit and unresolved.",
                 }
             )
+            for node in process["nodes"]:
+                if node["node_id"] == "ventilation_dispute":
+                    continue
+                if "use_evidence" in node.get("evidence_requirement_ids", []):
+                    before_requirements = deepcopy(node["evidence_requirement_ids"])
+                    node["evidence_requirement_ids"] = [
+                        value
+                        for value in node["evidence_requirement_ids"]
+                        if value != "use_evidence"
+                    ]
+                    operations.append(
+                        {
+                            "component": "process_graph",
+                            "operation": "replace",
+                            "pointer": f"/nodes/{node['node_id']}/evidence_requirement_ids",
+                            "old_value": before_requirements,
+                            "new_value": deepcopy(node["evidence_requirement_ids"]),
+                            "reason": "Reassign the conditional use-evidence relationship to the explicit allegation question.",
+                        }
+                    )
             for value in (
                 edge("evidence_gap", "ventilation_dispute", "neutral inspection leaves a plausible use-related factor", "possible"),
                 edge("ventilation_dispute", "causation", "allegation evidence assessed", "loop"),
@@ -2194,7 +3601,6 @@ class ClaimPipeline:
                     before = deepcopy(evidence)
                     evidence["status"] = "conditional"
                     evidence["required_level"] = "conditional"
-                    evidence["node_id"] = "ventilation_dispute"
                     evidence["applies_when"] = "A competent assessment leaves a plausible use-related branch"
                     evidence["why"] = "Unverified demo edit: use-related evidence becomes relevant only after competent assessment leaves a plausible use-related branch."
                     changed_evidence.append(evidence["item_id"])
@@ -2209,41 +3615,34 @@ class ClaimPipeline:
                         }
                     )
 
-            checklist["present"] = [
-                {
-                    "item_id": evidence["item_id"],
-                    "title": evidence["title"],
-                    "status": "available" if evidence["status"] == "provided_sufficient" else "insufficient",
-                    "node_id": evidence["node_id"],
-                    "fact": evidence["fact_id"],
-                    "why": evidence["why"],
-                    "artifact_id": evidence["artifact_ids"][0] if evidence["artifact_ids"] else None,
-                }
-                for evidence in checklist["items"]
-                if evidence["status"].startswith("provided")
-            ]
-            checklist["required"] = [
-                {
-                    "item_id": evidence["item_id"],
-                    "title": evidence["title"],
-                    "status": "still_needed" if evidence["status"] == "missing" else "conditional",
-                    "node_id": evidence["node_id"],
-                    "fact": evidence["fact_id"],
-                    "why": evidence["why"],
-                    "mandatory": "now" if evidence["status"] == "missing" else evidence["applies_when"],
-                    "already_supplied": False,
-                }
-                for evidence in checklist["items"]
-                if evidence["status"] in {"missing", "conditional"} and evidence["current_path"]
-            ]
-            checklist["summary"] = {
-                "provided_sufficient": sum(value["status"] == "provided_sufficient" for value in checklist["items"]),
-                "provided_insufficient": sum(value["status"] == "provided_insufficient" for value in checklist["items"]),
-                "missing": sum(value["status"] == "missing" for value in checklist["items"]),
-                "conditional": sum(value["status"] == "conditional" for value in checklist["items"]),
-                "not_applicable": sum(value["status"] == "not_applicable" for value in checklist["items"]),
-                "process_nodes_covered": len({value["node_id"] for value in checklist["items"]}),
+            apply_evidence_relations(process, checklist["items"])
+            apply_evidence_projection(checklist["items"], process)
+            apply_evidence_relations(process, checklist["items"])
+            reviewed_items = {
+                value["item_id"]: value for value in checklist["items"]
             }
+            for operation in operations:
+                if operation["component"] != "evidence_model":
+                    continue
+                item_id = operation["pointer"].rsplit("/", 1)[-1]
+                operation["new_value"] = deepcopy(reviewed_items[item_id])
+            checklist.update(checklist_derived_sections(checklist["items"]))
+            strip_model_contribution_attribution(process, checklist)
+            result["next_action"]["agent_brief_contribution"] = None
+            review_ranking = rank_precedents(
+                current_claim_id=run["claim_id"],
+                understanding={
+                    "facts": result["facts"],
+                    "category": result["category"],
+                    "subcategory": result["subcategory"],
+                },
+                process=process,
+                checklist=checklist,
+                memories=self.storage.memories(session_id=session_id),
+                corpus=HISTORICAL_CASES,
+            )
+            result["precedents"] = review_ranking["results"]
+            result["precedent_ranking"] = review_ranking["receipt"]
             process["playbook_version"] = "mould-playbook-v3"
             checklist["playbook_version"] = "mould-playbook-v3"
             result["playbook"]["version"] = "mould-playbook-v3"
@@ -2258,7 +3657,7 @@ class ClaimPipeline:
                 **request,
                 "reviewer": reviewer,
                 "operations": operations,
-                "authority": "generated_demo_only",
+                "authority": MEMORY_AUTHORITY,
             }
             result["review"] = review_record
             result["knowledge"] = {
@@ -2272,11 +3671,17 @@ class ClaimPipeline:
             review_operation_checks = validate_review_operations(operations)
             verification = self._verification_report(
                 CLAIMS[run["claim_id"]],
-                {"facts": result["facts"]},
+                {
+                    "facts": result["facts"],
+                    "category": result["category"],
+                    "subcategory": result["subcategory"],
+                },
                 result["legal_research"],
                 process,
                 checklist,
                 result["precedents"],
+                result["precedent_ranking"],
+                self.storage.memories(session_id=session_id),
                 allowed_process_extension_node_ids={"ventilation_dispute"},
                 allowed_process_extension_edge_pairs={
                     ("evidence_gap", "ventilation_dispute"),
@@ -2307,41 +3712,27 @@ class ClaimPipeline:
             result["review_transform"] = review_transform
             result["audit"]["review_transform"] = review_transform
 
-            review_id = self.storage.save_review(
-                run_id,
-                run["claim_id"],
-                {"request": request, "reviewer": reviewer, "accepted": True},
-                session_id=session_id,
+            review_id = self.storage.ident("review")
+            existing_memory = next(
+                (
+                    value
+                    for value in self.storage.memories(session_id=session_id)
+                    if value.get("claim_id") == run["claim_id"]
+                ),
+                None,
+            )
+            memory_id = (
+                existing_memory["memory_id"]
+                if existing_memory is not None
+                else self.storage.ident("memory")
             )
             candidate_id = "candidate_disputed_ventilation_v4"
-            memory = {
-                "title": "Generated-demo edit: disputed ventilation allegation and evidence ordering",
-                "review_status": "unverified_demo_memory",
-                "reviewer": reviewer,
-                "source_run_id": run_id,
-                "review_id": review_id,
-                "candidate_id": candidate_id,
-                "category": result["category"],
-                "current_blocker": result["current_blocker"],
-                "canonical_facts": deepcopy(result["facts"]),
-                "reviewed_process": deepcopy(process),
-                "reviewed_checklist": deepcopy(checklist),
-                "final_process": [node["title"] for node in process["nodes"]],
-                "final_checklist": [
-                    {"title": evidence["title"], "status": evidence["status"], "why": evidence["why"], "node_id": evidence["node_id"]}
-                    for evidence in checklist["items"]
-                ],
-                "verification": deepcopy(verification),
-                "operations": deepcopy(operations),
-                "next_action": deepcopy(result["next_action"]),
-                "reviewer_explanation": request["justification"],
-                "confidence": request["confidence"],
-                "playbook_version": "mould-playbook-v3",
-                "source_result_hash": digest(original_result),
-                "reviewed_result_hash": digest(result),
-                "shared_rule_authority": False,
-            }
-            memory_id = self.storage.save_memory(run["claim_id"], memory, session_id=session_id)
+            guidance = _review_guidance_contract(
+                claim_id=run["claim_id"],
+                category=result["category"],
+                subcategory=result["subcategory"],
+                building_envelope_mode=mode,
+            )
             supporting_claims = sorted(
                 {
                     value["claim_id"]
@@ -2349,6 +3740,13 @@ class ClaimPipeline:
                     if value.get("candidate_id") == candidate_id
                     and value.get("review_status") == "unverified_demo_memory"
                 }
+                | {run["claim_id"]}
+            )
+            target_tests, protected_regression = _governance_test_report(
+                guidance,
+                protected_output_context=_protected_output_context_from_result(
+                    original_result
+                ),
             )
             candidate = {
                 "candidate_id": candidate_id,
@@ -2357,6 +3755,9 @@ class ClaimPipeline:
                 "supporting_claims": supporting_claims,
                 "support_count": len(supporting_claims),
                 "required_support": 3,
+                "qualified_support_count": 0,
+                "required_qualified_support": 3,
+                "support_authority": "unverified_demo_only",
                 "base_version": "mould-playbook-v3",
                 "proposed_version": "mould-playbook-v4",
                 "previous_version": "mould-playbook-v3",
@@ -2373,18 +3774,54 @@ class ClaimPipeline:
                     "node_ids": ["ventilation_dispute"],
                     "evidence_item_ids": changed_evidence,
                 },
-                "target_tests": {"status": "not_run", "passed": 0, "failed": 0},
-                "protected_regression": {"status": "not_run", "passed": 0, "failed": 0},
+                "target_tests": target_tests,
+                "protected_regression": protected_regression,
                 "approval": {"status": "pending", "qualified_reviewer": False},
                 "shared_knowledge_changed": False,
                 "rollback_target": "mould-playbook-v3",
                 "provenance": "one unverified generated-demo review",
             }
-            self.storage.save_candidate(candidate_id, candidate, session_id=session_id)
             result["knowledge_update"] = deepcopy(candidate)
             result["knowledge"]["reviewed_memory_available"] = True
             result["knowledge"]["candidate_status"] = "quarantined"
             result["knowledge"]["shared_knowledge_changed"] = False
+            memory = {
+                "title": "Generated-demo edit: disputed ventilation allegation and evidence ordering",
+                "memory_contract": MEMORY_CONTRACT,
+                "authority": MEMORY_AUTHORITY,
+                "scope": "case_specific_guidance_only",
+                "review_status": "unverified_demo_memory",
+                "reviewer": reviewer,
+                "source_run_id": run_id,
+                "review_id": review_id,
+                "candidate_id": candidate_id,
+                "category": result["category"],
+                "current_blocker": result["current_blocker"],
+                "canonical_facts": deepcopy(result["facts"]),
+                "reviewed_process": deepcopy(process),
+                "reviewed_checklist": deepcopy(checklist),
+                "final_process": [node["title"] for node in process["nodes"]],
+                "final_checklist": [
+                    {
+                        "title": evidence["title"],
+                        "status": evidence["status"],
+                        "why": evidence["why"],
+                        "node_id": evidence["node_id"],
+                    }
+                    for evidence in checklist["items"]
+                ],
+                "verification": deepcopy(verification),
+                "operations": deepcopy(operations),
+                "next_action": deepcopy(result["next_action"]),
+                "reviewer_explanation": request["justification"],
+                "confidence": request["confidence"],
+                "playbook_version": "mould-playbook-v3",
+                "source_result_hash": digest(original_result),
+                "reviewed_result_hash": digest(result),
+                "shared_rule_authority": False,
+                "case_specific_guidance": guidance,
+            }
+            memory["content_hash"] = _memory_content_hash(memory)
             changes = {
                 "process_nodes": {
                     "before": process_before,
@@ -2415,45 +3852,83 @@ class ClaimPipeline:
                     "shared_knowledge_changed": False,
                 },
             }
-            self.storage.update_review(
-                review_id,
-                {"request": request, "reviewer": reviewer, "accepted": True, "response": response},
+            review_event = {
+                "stage": "review",
+                "label": "Unverified generated-demo edit recorded",
+                "agent": "Demo Review Boundary",
+                "actor_type": "deterministic_gate",
+                "status": "completed",
+                "headline": f"{len(operations)} typed operations passed post-review verification",
+                "detail": "The reviewed result is retrievable as unverified demo memory; its candidate remains quarantined and shared playbook v3 is unchanged.",
+                "implementation": "unverified_demo_review",
+                "model": None,
+                "orchestrator": ORCHESTRATOR,
+                "validator": "review-contract/15.2",
+                "prompt_version": None,
+                "input_artifacts": ["claim_handling_playbook", "demo_review"],
+                "output_artifact": "unverified_demo_memory",
+                "receipt_type": "review_transform",
+                **review_transform,
+                "metrics": {
+                    "support_count": candidate["support_count"],
+                    "required_support": candidate["required_support"],
+                    "shared_knowledge_changed": False,
+                },
+            }
+            consolidation_event = {
+                "stage": "consolidate",
+                "label": "Unverified case memory consolidated under governance",
+                "agent": "Deterministic Knowledge Consolidation Gate",
+                "actor_type": "deterministic_gate",
+                "status": "completed",
+                "headline": "Case memory stored and candidate quarantined",
+                "detail": "One unverified-demo case memory and its deterministic test manifests were stored atomically; qualified approval remains pending and shared v3 is unchanged.",
+                "implementation": "deterministic_knowledge_consolidation",
+                "model": None,
+                "orchestrator": ORCHESTRATOR,
+                "validator": "knowledge-consolidation/1.0.0",
+                "prompt_version": None,
+                "receipt_type": "knowledge_consolidation_receipt",
+                "authority": MEMORY_AUTHORITY,
+                "qualification_status": "not_verified",
+                "output_artifact": "unverified_demo_memory_and_quarantined_candidate",
+                "memory_id": memory_id,
+                "memory_content_hash": memory["content_hash"],
+                "candidate_id": candidate_id,
+                "candidate_hash": digest(candidate),
+                "target_tests_manifest_hash": candidate["target_tests"]["manifest_hash"],
+                "protected_regression_manifest_hash": candidate["protected_regression"]["manifest_hash"],
+                "approval_status": "pending",
+                "qualified_reviewer": False,
+                "shared_playbook_version": SHARED_PLAYBOOK_VERSION,
+                "shared_knowledge_changed": False,
+            }
+            self.storage.persist_review_learning_bundle(
+                run_id=run_id,
+                claim_id=run["claim_id"],
                 session_id=session_id,
-            )
-            self.storage.patch_run(
-                run_id,
-                patch={
+                review_id=review_id,
+                review_payload={
+                    "request": request,
+                    "reviewer": reviewer,
+                    "accepted": True,
+                    "pre_review_result_hash": digest(original_result),
+                    "protected_output_snapshot": deepcopy(original_result),
+                    "response": response,
+                },
+                memory_id=memory_id,
+                memory_payload=memory,
+                candidate_id=candidate_id,
+                candidate_payload=candidate,
+                run_patch={
                     "result": result,
                     "review_id": review_id,
                     "memory_id": memory_id,
                     "candidate": candidate,
                     "review_response": response,
+                    "pre_review_result_hash": digest(original_result),
                 },
-            )
-            self.storage.add_event(
-                run_id,
-                {
-                    "stage": "review",
-                    "label": "Unverified generated-demo edit recorded",
-                    "agent": "Demo Review Boundary",
-                    "status": "completed",
-                    "headline": f"{len(operations)} typed operations passed post-review verification",
-                    "detail": "The reviewed result is retrievable as unverified demo memory; its candidate remains quarantined and shared playbook v3 is unchanged.",
-                    "implementation": "unverified_demo_review",
-                    "model": None,
-                    "orchestrator": ORCHESTRATOR,
-                    "validator": "review-contract/15.2",
-                    "prompt_version": None,
-                    "input_artifacts": ["claim_handling_playbook", "demo_review"],
-                    "output_artifact": "unverified_demo_memory",
-                    "receipt_type": "review_transform",
-                    **review_transform,
-                    "metrics": {
-                        "support_count": candidate["support_count"],
-                        "required_support": candidate["required_support"],
-                        "shared_knowledge_changed": False,
-                    },
-                },
+                events=[review_event, consolidation_event],
             )
             return response
 
@@ -2477,24 +3952,252 @@ class ClaimPipeline:
                 "qualified_review_status": "pending",
             }
         ]
+        memories = self.storage.memories(session_id=session_id)
+        candidates = self.storage.candidates(session_id=session_id)
+        candidates_by_id = {
+            value.get("candidate_id"): value for value in candidates
+        }
+        if len(candidates_by_id) != len(candidates):
+            raise MemoryApplicationError("knowledge_candidate_identity")
+        for memory in memories:
+            source_run = self.storage.get_run(
+                memory.get("source_run_id", ""), session_id=session_id
+            )
+            review = self.storage.get_review_for_run(
+                memory.get("source_run_id", ""), session_id=session_id
+            )
+            try:
+                _validate_memory_origin(
+                    memory, source_run=source_run, review=review
+                )
+                candidate = candidates_by_id.get(memory.get("candidate_id"))
+                if (
+                    candidate is None
+                    or not isinstance(source_run, dict)
+                    or not isinstance(review, dict)
+                ):
+                    raise ValueError("knowledge_candidate_missing")
+                _validate_candidate_origin(
+                    candidate,
+                    memory=memory,
+                    source_run=source_run,
+                    review=review,
+                )
+            except ValueError as exc:
+                raise MemoryApplicationError("knowledge_integrity") from exc
+        if set(candidates_by_id) != {
+            memory.get("candidate_id") for memory in memories
+        }:
+            raise MemoryApplicationError("knowledge_orphan_candidate")
         return {
             "active_playbook": active,
             "playbook_versions": versions,
-            "memories": self.storage.memories(session_id=session_id),
-            "candidates": self.storage.candidates(session_id=session_id),
+            "memories": [
+                self._public_memory(value)
+                for value in memories
+            ],
+            "candidates": [
+                self._public_candidate(value)
+                for value in candidates
+            ],
             "shared_knowledge_changed": False,
         }
 
     @staticmethod
-    def _learning_snapshot(run: dict[str, Any]) -> dict[str, Any]:
+    def _public_memory(memory: dict[str, Any]) -> dict[str, Any]:
+        guidance = memory["case_specific_guidance"]
+        eligibility = guidance["eligibility"]
+        return {
+            "memory_id": memory["memory_id"],
+            "title": memory["title"],
+            "memory_contract": memory["memory_contract"],
+            "authority": memory["authority"],
+            "scope": memory["scope"],
+            "review_status": memory["review_status"],
+            "reviewer_qualification_status": memory["reviewer"][
+                "qualification_status"
+            ],
+            "category": memory["category"],
+            "playbook_version": memory["playbook_version"],
+            "shared_rule_authority": memory["shared_rule_authority"],
+            "candidate_id": memory["candidate_id"],
+            "guidance": {
+                "contract": guidance["contract"],
+                "variant": guidance["variant"],
+                "enabled": guidance["enabled"],
+                "authority": guidance["authority"],
+                "scope": guidance["scope"],
+                "eligibility_contract": eligibility["contract"],
+                "semantic_signature_hash": eligibility[
+                    "semantic_signature_hash"
+                ],
+                "allowed_operation_ids": deepcopy(
+                    guidance["allowed_operation_ids"]
+                ),
+            },
+            "updated_at": memory["updated_at"],
+        }
+
+    @staticmethod
+    def _public_candidate(candidate: dict[str, Any]) -> dict[str, Any]:
+        test_fields = ("status", "passed", "failed", "manifest_hash")
+        return {
+            key: deepcopy(candidate[key])
+            for key in (
+                "candidate_id",
+                "title",
+                "status",
+                "support_count",
+                "required_support",
+                "qualified_support_count",
+                "required_qualified_support",
+                "support_authority",
+                "base_version",
+                "proposed_version",
+                "proposed_change",
+                "delta",
+                "approval",
+                "shared_knowledge_changed",
+                "rollback_target",
+                "provenance",
+            )
+        } | {
+            "target_tests": {
+                key: candidate["target_tests"][key]
+                for key in test_fields
+            },
+            "protected_regression": {
+                key: candidate["protected_regression"][key]
+                for key in test_fields
+            },
+        }
+
+    def _learning_snapshot(
+        self, run: dict[str, Any], *, session_id: str
+    ) -> dict[str, Any]:
         result = run["result"]
+        claim_id = run.get("claim_id")
+        claim = CLAIMS.get(claim_id)
+        if claim is None or result.get("claim_id") != claim_id:
+            raise MemoryApplicationError("memory_proof_claim_binding")
+        understanding = run.get("understanding")
+        if (
+            not isinstance(understanding, dict)
+            or result.get("facts") != understanding.get("facts")
+            or result.get("category") != understanding.get("category")
+            or result.get("subcategory") != understanding.get("subcategory")
+        ):
+            raise MemoryApplicationError("memory_proof_canonical_artifact_binding")
+        observable_input_hash = digest(observable_claim_package(claim))
+        canonical_state_hash = digest(understanding["facts"])
+        audit = result.get("audit", {})
+        if (
+            audit.get("observable_input_hash") != observable_input_hash
+            or audit.get("canonical_state_hash") != canonical_state_hash
+        ):
+            raise MemoryApplicationError("memory_proof_run_integrity")
+        retained_memory_ids = {
+            value.get("memory_id")
+            for value in result.get("precedents", [])
+            if value.get("review_status") == "unverified_demo_memory"
+        }
+        governed_memories = [
+            value
+            for value in self.storage.memories(session_id=session_id)
+            if value.get("memory_id") in retained_memory_ids
+        ]
+        if {
+            value.get("memory_id") for value in governed_memories
+        } != retained_memory_ids:
+            raise MemoryApplicationError("memory_proof_precedent_source")
+        has_memory_application = isinstance(
+            result.get("memory_application"), dict
+        )
+        process_copy = deepcopy(result["process"])
+        checklist_copy = deepcopy(result["checklist"])
+        try:
+            proof_understanding = deepcopy(understanding)
+            for key in (
+                "summary",
+                "scope",
+                "category",
+                "subcategory",
+                "dispute",
+                "facts",
+                "issues",
+            ):
+                proof_understanding[key] = deepcopy(result[key])
+            recomputed_verification = self._verification_report(
+                claim,
+                proof_understanding,
+                deepcopy(result["legal_research"]),
+                process_copy,
+                checklist_copy,
+                deepcopy(result["precedents"]),
+                deepcopy(result["precedent_ranking"]),
+                deepcopy(governed_memories),
+                allowed_process_extension_node_ids=(
+                    {"ventilation_dispute"}
+                    if has_memory_application
+                    else None
+                ),
+                allowed_process_extension_edge_pairs=(
+                    {
+                        ("evidence_gap", "ventilation_dispute"),
+                        ("ventilation_dispute", "causation"),
+                    }
+                    if has_memory_application
+                    else None
+                ),
+            )
+        except (ContractValidationError, KeyError, TypeError, ValueError) as exc:
+            raise MemoryApplicationError(
+                "memory_proof_playbook_integrity"
+            ) from exc
+        expected_checks = deepcopy(recomputed_verification["checks"])
+        if has_memory_application:
+            expected_checks.append(
+                {
+                    "name": "Bounded case-specific memory application",
+                    "status": "passed",
+                    "detail": "The exact unverified-demo memory, eligibility manifest, allowed operations and before/after DTO hashes are receipt-bound.",
+                }
+            )
+        stored_verification = result.get("verification", {})
+        verification_valid = (
+            stored_verification.get("valid") is True
+            and stored_verification.get("computed") is True
+            and stored_verification.get("checks") == expected_checks
+            and stored_verification.get("whole_playbook_hash")
+            == recomputed_verification["whole_playbook_hash"]
+            and stored_verification.get("accepted_artifacts")
+            == recomputed_verification["accepted_artifacts"]
+            and stored_verification.get("rejected_proposals")
+            == recomputed_verification["rejected_proposals"]
+            and result.get("audit", {}).get("accepted") is True
+            and result.get("audit", {}).get("verification_computed") is True
+        )
         return {
             "run_id": run["run_id"],
             "completed_at": run.get("completed_at"),
             "result_hash": digest(result),
             "verification_hash": result["verification"]["whole_playbook_hash"],
-            "verification_valid": result["verification"].get("valid") is True,
+            "verification_valid": verification_valid,
+            "observable_input_hash": observable_input_hash,
+            "canonical_state_hash": canonical_state_hash,
+            "process_dto_hash": digest(result["process"]),
+            "checklist_dto_hash": digest(result["checklist"]),
+            "process_semantic_hash": digest(
+                semantic_process_dto(result["process"])
+            ),
+            "checklist_semantic_hash": digest(
+                semantic_checklist_dto(result["checklist"])
+            ),
             "process_node_ids": [node["node_id"] for node in result["process"]["nodes"]],
+            "process_edge_pairs": [
+                [value["source"], value["target"]]
+                for value in result["process"]["edges"]
+            ],
             "current_node_id": result["process"]["current_node"],
             "required_now_item_ids": [
                 item["item_id"]
@@ -2515,6 +4218,7 @@ class ClaimPipeline:
                 for item in result["precedents"]
             ],
             "reviewed_memory_used": result.get("reviewed_memory_used") is True,
+            "memory_application": deepcopy(result.get("memory_application")),
             "shared_rule_applied": result.get("shared_rule_applied") is True,
             "playbook_version": result["playbook"]["version"],
         }
@@ -2534,8 +4238,41 @@ class ClaimPipeline:
             raise ValueError("The baseline run must use baseline knowledge mode")
         if later_run.get("knowledge_mode") != "current":
             raise ValueError("The later run must use current knowledge mode")
-        before = self._learning_snapshot(baseline_run)
-        after = self._learning_snapshot(later_run)
+        freeze = baseline_run.get("counterfactual_learning_freeze")
+        current_memories = self.storage.memories(session_id=session_id)
+        expected_freeze = _counterfactual_learning_freeze(current_memories)
+        if freeze != expected_freeze:
+            raise ValueError("counterfactual_learning_freeze_binding")
+        if current_memories:
+            if not isinstance(freeze, dict):
+                raise ValueError("counterfactual_learning_freeze_missing")
+            memory = current_memories[0]
+            source_review = self.storage.get_review_for_run(
+                memory["source_run_id"], session_id=session_id
+            )
+            if not isinstance(source_review, dict):
+                raise ValueError("counterfactual_review_missing")
+            freeze_time = max(
+                _timestamp_seconds(source_review["created_at"]),
+                _timestamp_seconds(memory["updated_at"]),
+            )
+            baseline_created = _timestamp_seconds(baseline_run["created_at"])
+            baseline_completed = _timestamp_seconds(baseline_run["completed_at"])
+            later_created = _timestamp_seconds(later_run["created_at"])
+            if not (
+                freeze_time <= baseline_created
+                <= baseline_completed
+                <= later_created
+            ):
+                raise ValueError("counterfactual_learning_temporal_order")
+        before = self._learning_snapshot(baseline_run, session_id=session_id)
+        after = self._learning_snapshot(later_run, session_id=session_id)
+        before_result = baseline_run["result"]
+        after_result = later_run["result"]
+        before_process = semantic_process_dto(before_result["process"])
+        after_process = semantic_process_dto(after_result["process"])
+        before_checklist = semantic_checklist_dto(before_result["checklist"])
+        after_checklist = semantic_checklist_dto(after_result["checklist"])
         before_precedents = {item["claim_id"] for item in before["precedents"]}
         after_precedents = {item["claim_id"] for item in after["precedents"]}
         memory_ids = {
@@ -2547,12 +4284,432 @@ class ClaimPipeline:
             (value for value in self.storage.candidates(session_id=session_id) if value.get("candidate_id") == "candidate_disputed_ventilation_v4"),
             None,
         )
+        before_nodes = {
+            value["node_id"]: value for value in before_process["nodes"]
+        }
+        after_nodes = {
+            value["node_id"]: value for value in after_process["nodes"]
+        }
+        before_edges = {
+            (value["source"], value["target"]): value
+            for value in before_process["edges"]
+        }
+        after_edges = {
+            (value["source"], value["target"]): value
+            for value in after_process["edges"]
+        }
+        before_items = {
+            value["item_id"]: value for value in before_checklist["items"]
+        }
+        after_items = {
+            value["item_id"]: value for value in after_checklist["items"]
+        }
+        added_node_ids = sorted(set(after_nodes) - set(before_nodes))
+        removed_node_ids = sorted(set(before_nodes) - set(after_nodes))
+        changed_node_ids = sorted(
+            node_id
+            for node_id in set(before_nodes) & set(after_nodes)
+            if before_nodes[node_id] != after_nodes[node_id]
+        )
+        added_edge_pairs = sorted(set(after_edges) - set(before_edges))
+        removed_edge_pairs = sorted(set(before_edges) - set(after_edges))
+        changed_edge_pairs = sorted(
+            pair
+            for pair in set(before_edges) & set(after_edges)
+            if before_edges[pair] != after_edges[pair]
+        )
+        added_item_ids = sorted(set(after_items) - set(before_items))
+        removed_item_ids = sorted(set(before_items) - set(after_items))
+        changed_item_ids = sorted(
+            item_id
+            for item_id in set(before_items) & set(after_items)
+            if before_items[item_id] != after_items[item_id]
+        )
+        process_root_before = {
+            key: value
+            for key, value in before_process.items()
+            if key not in {"nodes", "edges"}
+        }
+        process_root_after = {
+            key: value
+            for key, value in after_process.items()
+            if key not in {"nodes", "edges"}
+        }
+        changed_process_root_keys = sorted(
+            key
+            for key in set(process_root_before) | set(process_root_after)
+            if process_root_before.get(key) != process_root_after.get(key)
+        )
+        checklist_root_before = {
+            key: value
+            for key, value in before_checklist.items()
+            if key != "items"
+        }
+        checklist_root_after = {
+            key: value
+            for key, value in after_checklist.items()
+            if key != "items"
+        }
+        changed_checklist_root_keys = sorted(
+            key
+            for key in set(checklist_root_before) | set(checklist_root_after)
+            if checklist_root_before.get(key) != checklist_root_after.get(key)
+        )
+        causal_delta = {
+            "nonzero": bool(
+                added_node_ids
+                or removed_node_ids
+                or changed_node_ids
+                or added_edge_pairs
+                or removed_edge_pairs
+                or changed_edge_pairs
+                or added_item_ids
+                or removed_item_ids
+                or changed_item_ids
+            ),
+            "process": {
+                "added_node_ids": added_node_ids,
+                "removed_node_ids": removed_node_ids,
+                "changed_node_ids": changed_node_ids,
+                "added_edges": [
+                    {"source": source, "target": target}
+                    for source, target in added_edge_pairs
+                ],
+                "removed_edges": [
+                    {"source": source, "target": target}
+                    for source, target in removed_edge_pairs
+                ],
+                "changed_edges": [
+                    {"source": source, "target": target}
+                    for source, target in changed_edge_pairs
+                ],
+                "changed_root_keys": changed_process_root_keys,
+            },
+            "evidence": {
+                "added_item_ids": added_item_ids,
+                "removed_item_ids": removed_item_ids,
+                "changed_item_ids": changed_item_ids,
+                "changed_root_keys": changed_checklist_root_keys,
+            },
+        }
+
+        receipt = after["memory_application"]
+        receipt_valid = False
+        source_memory_current = False
+        current_memory: dict[str, Any] | None = None
+        expected_target_tests: dict[str, Any] | None = None
+        expected_protected_regression: dict[str, Any] | None = None
+        candidate_origin_valid = False
+        if receipt is not None:
+            source_id = receipt.get("source_memory", {}).get("memory_id")
+            current_memory = next(
+                (
+                    value
+                    for value in self.storage.memories(session_id=session_id)
+                    if value.get("memory_id") == source_id
+                ),
+                None,
+            )
+            if current_memory is None:
+                raise MemoryApplicationError("memory_proof_source_missing")
+            try:
+                _validate_memory_origin(
+                    current_memory,
+                    source_run=self.storage.get_run(
+                        current_memory.get("source_run_id", ""),
+                        session_id=session_id,
+                    ),
+                    review=self.storage.get_review_for_run(
+                        current_memory.get("source_run_id", ""),
+                        session_id=session_id,
+                    ),
+                )
+            except ValueError as exc:
+                raise MemoryApplicationError(
+                    "memory_proof_origin_integrity"
+                ) from exc
+            proof_understanding = {
+                "facts": after_result["facts"],
+                "category": after_result["category"],
+                "subcategory": after_result["subcategory"],
+            }
+            expected_eligibility = _guidance_eligibility(
+                current_memory["case_specific_guidance"],
+                claim_id=after_result["claim_id"],
+                understanding=proof_understanding,
+            )
+            try:
+                memory_boundary = later_run.get("memory_application_boundary")
+                if not isinstance(memory_boundary, dict):
+                    raise ValueError("memory_boundary_missing")
+                _validate_memory_application_boundary(
+                    memory_boundary,
+                    run_id=later_run_id,
+                    claim_id=after_result["claim_id"],
+                    memory=current_memory,
+                )
+                _validate_memory_application_event(later_run, receipt)
+                if memory_boundary["before"] != receipt["before"]:
+                    raise ValueError("memory_boundary_receipt_binding")
+                _validate_memory_receipt(
+                    receipt,
+                    memory=current_memory,
+                    expected_context={
+                        "target": {
+                            "run_id": later_run_id,
+                            "claim_id": after_result["claim_id"],
+                        },
+                        "observable_input_hash": after["observable_input_hash"],
+                        "canonical_state_hash": after["canonical_state_hash"],
+                        "eligibility": expected_eligibility,
+                        "before": memory_boundary["before"],
+                        "after": {
+                            "process_dto_hash": after["process_dto_hash"],
+                            "checklist_dto_hash": after["checklist_dto_hash"],
+                            "process_semantic_hash": after["process_semantic_hash"],
+                            "checklist_semantic_hash": after["checklist_semantic_hash"],
+                        },
+                        "verification_hash": after["verification_hash"],
+                    },
+                )
+            except ValueError as exc:
+                raise MemoryApplicationError("memory_proof_source_integrity") from exc
+            receipt_valid = True
+            source_memory_current = True
+            if candidate is not None:
+                try:
+                    source_run = self.storage.get_run(
+                        current_memory["source_run_id"], session_id=session_id
+                    )
+                    review = self.storage.get_review_for_run(
+                        current_memory["source_run_id"], session_id=session_id
+                    )
+                    if not isinstance(source_run, dict) or not isinstance(
+                        review, dict
+                    ):
+                        raise ValueError("candidate_origin_missing")
+                    (
+                        expected_target_tests,
+                        expected_protected_regression,
+                    ) = _governance_test_report(
+                        current_memory["case_specific_guidance"],
+                        protected_output_context=(
+                            _protected_output_context_from_origin(
+                                source_run,
+                                review,
+                            )
+                        ),
+                    )
+                    _validate_candidate_origin(
+                        candidate,
+                        memory=current_memory,
+                        source_run=source_run,
+                        review=review,
+                    )
+                except ValueError:
+                    candidate_origin_valid = False
+                else:
+                    candidate_origin_valid = True
+
+        replay_exact = False
+        if receipt_valid:
+            replay_process = deepcopy(before_process)
+            replay_checklist = deepcopy(before_checklist)
+            semantic_facts = _fact_signature(
+                {
+                    "facts": after_result["facts"],
+                }
+            )
+            ventilation_fact = semantic_facts.get(
+                "management_ventilation_allegation", {}
+            )
+            if not isinstance(ventilation_fact.get("fact_id"), str):
+                raise MemoryApplicationError("memory_proof_semantic_role_missing")
+            replay = replay_case_specific_memory_transform(
+                replay_process,
+                replay_checklist,
+                ventilation_fact_id=ventilation_fact["fact_id"],
+            )
+            replay_exact = (
+                replay_process == after_process
+                and replay_checklist == after_checklist
+                and receipt["process_operations"][0]["after_hash"]
+                == digest(replay["ventilation_node"])
+                and receipt["process_operations"][1]["after_hash"]
+                == digest(replay["first_edge"])
+                and receipt["process_operations"][2]["after_hash"]
+                == digest(replay["second_edge"])
+                and receipt["evidence_operations"][0]["after_hash"]
+                == digest(
+                    next(
+                        item
+                        for item in replay_checklist["items"]
+                        if item["item_id"] == "building_envelope"
+                    )
+                )
+                and receipt["evidence_operations"][1]["after_hash"]
+                == digest(
+                    next(
+                        item
+                        for item in replay_checklist["items"]
+                        if item["item_id"] == "use_evidence"
+                    )
+                )
+                and receipt["evidence_operations"][0]["before_hash"]
+                == digest(replay["building_before"])
+                and receipt["evidence_operations"][1]["before_hash"]
+                == digest(replay["use_before"])
+                and receipt["evidence_operations"][1][
+                    "removed_from_node_ids"
+                ]
+                == sorted(replay["removed_from"])
+            )
+
+        expected_changed_nodes: list[str] = []
+        expected_added_nodes: list[str] = []
+        expected_added_edges: list[tuple[str, str]] = []
+        expected_changed_items: list[str] = []
+        if receipt_valid:
+            expected_added_nodes = sorted(
+                value["node_id"]
+                for value in receipt["process_operations"]
+                if value["operation"] == "add_node"
+            )
+            expected_added_edges = sorted(
+                (value["source"], value["target"])
+                for value in receipt["process_operations"]
+                if value["operation"] == "add_edge"
+            )
+            expected_changed_items = sorted(
+                {
+                    value["item_id"]
+                    for value in receipt["evidence_operations"]
+                }
+                | {
+                    item_id
+                    for value in receipt["process_operations"]
+                    if value["operation"] == "add_node"
+                    for item_id in value.get("evidence_requirement_ids", [])
+                    if item_id in before_items
+                }
+            )
+            reassignment = next(
+                value
+                for value in receipt["evidence_operations"]
+                if value["operation_id"]
+                == "reassign_use_evidence_to_ventilation"
+            )
+            expected_changed_nodes = sorted(reassignment["removed_from_node_ids"])
+        allowed_delta_exact = (
+            receipt_valid
+            and added_node_ids == expected_added_nodes
+            and removed_node_ids == []
+            and changed_node_ids == expected_changed_nodes
+            and added_edge_pairs == expected_added_edges
+            and removed_edge_pairs == []
+            and changed_edge_pairs == []
+            and added_item_ids == []
+            and removed_item_ids == []
+            and changed_item_ids == expected_changed_items
+            and changed_process_root_keys
+            == ["case_specific_guidance_applied", "memory_used"]
+            and changed_checklist_root_keys
+            == [
+                "case_specific_guidance_applied",
+                "memory_used",
+                "required",
+                "summary",
+            ]
+        )
+        before_hashes_match = bool(
+            receipt_valid
+            and isinstance(memory_boundary, dict)
+            and receipt["before"] == memory_boundary["before"]
+            and receipt["before"]["process_semantic_hash"]
+            == before["process_semantic_hash"]
+            and receipt["before"]["checklist_semantic_hash"]
+            == before["checklist_semantic_hash"]
+        )
+        after_hashes_match = bool(
+            receipt_valid
+            and receipt["after"]
+            == {
+                "process_dto_hash": after["process_dto_hash"],
+                "checklist_dto_hash": after["checklist_dto_hash"],
+                "process_semantic_hash": after["process_semantic_hash"],
+                "checklist_semantic_hash": after["checklist_semantic_hash"],
+            }
+        )
+        candidate_checks_pass = bool(
+            current_memory
+            and candidate
+            and candidate_origin_valid
+            and candidate.get("candidate_id")
+            == current_memory.get("candidate_id")
+            and candidate.get("status") == "quarantined"
+            and candidate.get("target_tests") == expected_target_tests
+            and candidate.get("protected_regression")
+            == expected_protected_regression
+            and candidate.get("qualified_support_count") == 0
+            and candidate.get("approval")
+            == {"status": "pending", "qualified_reviewer": False}
+        )
+        shared_rule_unchanged = (
+            before["playbook_version"] == SHARED_PLAYBOOK_VERSION
+            and after["playbook_version"] == SHARED_PLAYBOOK_VERSION
+            and before["shared_rule_applied"] is False
+            and after["shared_rule_applied"] is False
+            and (receipt is None or receipt.get("shared_rule_applied") is False)
+        )
+        check_values = [
+            ("Same observable input", before["observable_input_hash"] == after["observable_input_hash"]),
+            (
+                "Same canonical state",
+                before["canonical_state_hash"] == after["canonical_state_hash"]
+                and before_result.get("category") == after_result.get("category")
+                and before_result.get("subcategory")
+                == after_result.get("subcategory")
+                and before["verification_valid"]
+                and after["verification_valid"],
+            ),
+            (
+                "Exact current memory receipt",
+                receipt_valid
+                and source_memory_current
+                and before.get("memory_application") is None
+                and before["reviewed_memory_used"] is False
+                and not any(
+                    item.get("review_status") == "unverified_demo_memory"
+                    for item in before["precedents"]
+                )
+                and after["reviewed_memory_used"] is True
+                and receipt.get("source_memory", {}).get("memory_id")
+                in memory_ids,
+            ),
+            ("Pure memory replay matches learned DTOs", replay_exact),
+            ("Receipt before semantic hashes match baseline DTOs", before_hashes_match),
+            ("Receipt after hashes match learned DTOs", after_hashes_match),
+            ("Nonzero causal DTO delta", causal_delta["nonzero"]),
+            ("Only allowed causal operations changed", allowed_delta_exact),
+            ("Deterministic target and protected checks passed", candidate_checks_pass),
+            ("Shared v3 remains unchanged", shared_rule_unchanged),
+        ]
+        deterministic_checks = [
+            {
+                "name": name,
+                "status": "passed" if passed else "failed",
+                "detail": "Computed from the two bound run DTOs and current governed storage.",
+            }
+            for name, passed in check_values
+        ]
+        ready = all(passed for _, passed in check_values)
         return {
-            "ready": True,
+            "ready": ready,
             "computed": True,
             "claim_id": "DEMO-MOULD-002",
             "baseline_run_id": baseline_run_id,
             "later_run_id": later_run_id,
+            "counterfactual_learning_freeze": deepcopy(freeze),
             "before": before,
             "after": after,
             "changes": {
@@ -2571,13 +4728,29 @@ class ClaimPipeline:
                 "present_in_baseline": any(item.get("review_status") == "unverified_demo_memory" for item in before["precedents"]),
                 "present_in_later_run": bool(memory_ids),
             },
+            "causal_delta": causal_delta,
+            "memory_application_proof": {
+                "receipt_present": receipt is not None,
+                "receipt_valid": receipt_valid,
+                "source_memory_current": source_memory_current,
+                "before_hashes_match": before_hashes_match,
+                "after_hashes_match": after_hashes_match,
+                "allowed_delta_exact": allowed_delta_exact,
+                "replay_exact": replay_exact,
+                "application_hash": receipt.get("application_hash") if receipt else None,
+            },
+            "deterministic_checks": deterministic_checks,
             "candidate": candidate,
             "shared_rule": {
-                "applied": False,
+                "applied": after["shared_rule_applied"],
                 "version_before": before["playbook_version"],
                 "version_after": after["playbook_version"],
-                "shared_knowledge_changed": False,
+                "shared_knowledge_changed": (
+                    candidate.get("shared_knowledge_changed")
+                    if candidate_origin_valid and candidate
+                    else None
+                ),
                 "candidate_status": candidate.get("status") if candidate else None,
             },
-            "interpretation": "This run-bound proof reports observed result differences only; it does not establish quality improvement, expert validation, or shared-rule promotion.",
+            "interpretation": "This run-bound proof reports a bounded case-specific unverified-demo memory transform over the same observable and canonical inputs. It does not establish quality improvement, expert validation, qualified approval, or shared-rule promotion.",
         }

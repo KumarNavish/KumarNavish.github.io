@@ -246,6 +246,128 @@ class Storage:
                     (session_id, candidate_id, json.dumps(payload, ensure_ascii=False), stamp, stamp),
                 )
 
+    def persist_review_learning_bundle(
+        self,
+        *,
+        run_id: str,
+        claim_id: str,
+        session_id: str,
+        review_id: str,
+        review_payload: dict[str, Any],
+        memory_id: str,
+        memory_payload: dict[str, Any],
+        candidate_id: str,
+        candidate_payload: dict[str, Any],
+        run_patch: dict[str, Any],
+        events: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Commit the accepted review and its learning effects as one transaction."""
+
+        with self.lock, self.connect() as con:
+            run = con.execute(
+                "SELECT * FROM runs WHERE run_id=? AND session_id=?",
+                (run_id, session_id),
+            ).fetchone()
+            if not run or run["claim_id"] != claim_id:
+                raise KeyError(run_id)
+            stamp = now()
+            con.execute(
+                "INSERT INTO reviews (review_id, session_id, run_id, claim_id, payload, created_at) VALUES (?,?,?,?,?,?)",
+                (
+                    review_id,
+                    session_id,
+                    run_id,
+                    claim_id,
+                    json.dumps(review_payload, ensure_ascii=False),
+                    stamp,
+                ),
+            )
+            existing_memory = con.execute(
+                "SELECT memory_id FROM memories WHERE session_id=? AND claim_id=?",
+                (session_id, claim_id),
+            ).fetchone()
+            if existing_memory:
+                if existing_memory["memory_id"] != memory_id:
+                    raise ValueError("memory_identity_conflict")
+                con.execute(
+                    "UPDATE memories SET payload=?, updated_at=? WHERE memory_id=?",
+                    (json.dumps(memory_payload, ensure_ascii=False), stamp, memory_id),
+                )
+            else:
+                con.execute(
+                    "INSERT INTO memories (memory_id, session_id, claim_id, payload, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+                    (
+                        memory_id,
+                        session_id,
+                        claim_id,
+                        json.dumps(memory_payload, ensure_ascii=False),
+                        stamp,
+                        stamp,
+                    ),
+                )
+            existing_candidate = con.execute(
+                "SELECT candidate_id FROM candidates WHERE session_id=? AND candidate_id=?",
+                (session_id, candidate_id),
+            ).fetchone()
+            if existing_candidate:
+                con.execute(
+                    "UPDATE candidates SET payload=?, updated_at=? WHERE session_id=? AND candidate_id=?",
+                    (
+                        json.dumps(candidate_payload, ensure_ascii=False),
+                        stamp,
+                        session_id,
+                        candidate_id,
+                    ),
+                )
+            else:
+                con.execute(
+                    "INSERT INTO candidates (session_id, candidate_id, payload, created_at, updated_at) VALUES (?,?,?,?,?)",
+                    (
+                        session_id,
+                        candidate_id,
+                        json.dumps(candidate_payload, ensure_ascii=False),
+                        stamp,
+                        stamp,
+                    ),
+                )
+            run_payload = json.loads(run["payload"])
+            run_payload.update(run_patch)
+            con.execute(
+                "UPDATE runs SET payload=?, updated_at=? WHERE run_id=? AND session_id=?",
+                (
+                    json.dumps(run_payload, ensure_ascii=False),
+                    stamp,
+                    run_id,
+                    session_id,
+                ),
+            )
+            ordinal = con.execute(
+                "SELECT COUNT(*) FROM events WHERE session_id=? AND run_id=?",
+                (session_id, run_id),
+            ).fetchone()[0]
+            persisted_events: list[dict[str, Any]] = []
+            for payload in events:
+                ordinal += 1
+                event = {
+                    "event_id": self.ident("evt"),
+                    "ordinal": ordinal,
+                    "created_at": stamp,
+                    **payload,
+                }
+                con.execute(
+                    "INSERT INTO events (event_id, session_id, run_id, ordinal, payload, created_at) VALUES (?,?,?,?,?,?)",
+                    (
+                        event["event_id"],
+                        session_id,
+                        run_id,
+                        ordinal,
+                        json.dumps(event, ensure_ascii=False),
+                        stamp,
+                    ),
+                )
+                persisted_events.append(event)
+        return persisted_events
+
     def candidates(self, *, session_id: str = "public") -> list[dict[str, Any]]:
         with self.connect() as con:
             return [

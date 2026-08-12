@@ -49,7 +49,7 @@ services:
     region: frankfurt
     plan: free
     buildCommand: cd casepath-qa && npm ci --no-audit --no-fund && npx playwright install chromium && BASE_URL=https://casepath-swiss-claim-lab.onrender.com API_URL=https://casepath-agentic-api.onrender.com node browser-guided-v13-smoke.mjs
-    startCommand: python3 -m http.server $PORT --directory casepath-qa/guided-v13-smoke-out
+    startCommand: node casepath-qa/serve-evidence.mjs
     autoDeployTrigger: off
     envVars:
       - key: NODE_VERSION
