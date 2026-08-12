@@ -895,6 +895,35 @@
     return { receipt, retrievedPrecedent, retrieved, used, retrievedOnly };
   }
 
+  function renderMemoryReuseProof({ result, proof, memoryUsed, retrievedOnly, memoryState }) {
+    if (!memoryUsed && !retrievedOnly) return '';
+    const receipt = memoryState?.receipt || null;
+    const precedent = memoryState?.retrievedPrecedent || null;
+    if (!precedent || (memoryUsed && !receipt)) return '';
+    const authorityCopy = precedent.review_status === 'qualified_expert_reviewed'
+      ? 'Qualified expert-reviewed case memory returned'
+      : 'Unverified demo review memory returned';
+    const playbook = result?.playbook?.version || 'Version not returned';
+    const wrapperHeader = memoryUsed
+      ? '<header><small>Unverified demo memory returned with a valid application receipt</small><strong>Bounded guidance was applied; this implies neither qualified review nor release of the quarantined shared-rule candidate.</strong></header>'
+      : '<header><small>Unverified demo memory retrieved and ranked only</small><strong>No application receipt or memory-driven DTO change was returned; this implies neither qualified review nor shared-rule release.</strong></header>';
+    const receiptAttributes = memoryUsed
+      ? ` data-memory-contract="${esc(receipt.contract)}" data-application-hash="${esc(receipt.application_hash || '')}" data-memory-authority="${esc(receipt.authority)}" data-memory-scope="${esc(receipt.scope)}"`
+      : '';
+    const threadBody = memoryUsed
+      ? `<article><small>${esc(authorityCopy)} and applied</small><strong>${esc(precedent.claim_id)} · ${esc(precedent.memory_id)}</strong></article>
+        <article><small>Receipt authority and scope</small><strong>${esc(receipt.authority)} · ${esc(receipt.scope)}</strong></article>
+        <article><small>Application hash</small><strong><code>${esc(receipt.application_hash || 'not returned')}</code></strong></article>
+        <article><small>Shared playbook</small><strong>${esc(playbook)} unchanged · shared rule ${esc(String(receipt.shared_rule_applied === true))}</strong></article>
+        <article><small>Acceptance boundary</small><strong>Model acceptance reused ${esc(String(receipt.model_acceptance_reused === true))}${proof?.causal_delta?.nonzero === true ? ' · nonzero causal delta computed' : ''}</strong></article>`
+      : `<article><small>${esc(authorityCopy)} and ranked</small><strong>${esc(precedent.claim_id)} · ${esc(precedent.memory_id)}</strong></article>
+        <article><small>Guidance state</small><strong>Disabled for this required-now review outcome</strong></article>
+        <article><small>Application receipt</small><strong>None returned</strong></article>
+        <article><small>Process effect</small><strong>Not used or applied · no memory-driven DTO change</strong></article>
+        <article><small>Shared playbook</small><strong>${esc(playbook)} unchanged</strong></article>`;
+    return `<section class="v18-reuse-proof">${wrapperHeader}<section class="v17-reuse-thread${retrievedOnly ? ' retrieved-only' : ''}" data-memory-retrieved="true" data-memory-used="${esc(String(memoryUsed))}" data-application-receipt="${esc(String(Boolean(receipt)))}"${receiptAttributes} aria-label="How returned review memory was ranked or applied on the held-out later demo claim">${threadBody}</section></section>`;
+  }
+
   function factsForNode(node) {
     const ids = new Set(node?.fact_ids || []);
     for (const item of evidenceForNode(node?.node_id)) if (item.fact_id) ids.add(item.fact_id);
@@ -1374,6 +1403,7 @@
     const expectedCheckNames = ['Same observable input', 'Same canonical state', 'Exact current memory receipt', 'Pure memory replay matches learned DTOs', 'Receipt before semantic hashes match baseline DTOs', 'Receipt after hashes match learned DTOs', 'Nonzero causal DTO delta', 'Only allowed causal operations changed', 'Deterministic target and protected checks passed', 'Shared v3 remains unchanged'];
     const proofReady = proof.ready === true
       && proof.computed === true
+      && proof.causal_delta?.nonzero === true
       && returnedMemoryState.used
       && receipt
       && ['receipt_present', 'receipt_valid', 'source_memory_current', 'before_hashes_match', 'after_hashes_match', 'allowed_delta_exact', 'replay_exact'].every(key => receiptProof[key] === true)
@@ -1413,7 +1443,8 @@
           ? { small: 'Memory retrieved; application failed closed', title: 'No memory-driven process change is claimed.', detail: 'A returned unverified memory precedent was visible, but the exact usage flags, receipt, and computed proof did not all agree.' }
           : { small: 'No demo memory retrieved or applied', title: 'The held-out later demo claim stayed on the returned shared process.', detail: 'CasePath found no receipt-bound case-specific transform and claims no memory use.' };
     const afterLabel = memoryUsed ? 'After unverified demo-memory application' : retrievedOnly ? 'After dormant memory retrieval (not applied)' : 'Current held-out later demo run';
-    $('#laterResult').innerHTML = `<header class="v20-later-heading" data-memory-retrieved="${memoryRetrieved}" data-memory-used="${memoryUsed}" data-memory-retrieved-only="${retrievedOnly}" data-causal-proof-ready="${Boolean(proofReady)}"><small>${headerState.small}</small><h2>${headerState.title}</h2><p>${headerState.detail}</p></header>${receiptMarkup}${causalMarkup}${processMarkup}<div class="final-proof"><span class="quiet-label">Computed comparison</span><strong>Baseline ${esc(before.result_hash || 'hash not returned')} → after ${esc(after.result_hash || 'hash not returned')}</strong><p>Both sides are completed later-claim runs. Shared rule applied: ${esc(String(sharedApplied))}.</p></div><div class="before-after"><section><h4>Baseline without governed memory application</h4><h3>${esc(before.playbook_version || 'Version not returned')}</h3><ul><li>Run ${esc(before.run_id || 'not returned')}</li><li>Precedents: ${esc(beforePrecedents.join(', ') || 'none returned')}</li><li>Process nodes: ${esc(String((before.process_node_ids || []).length))}</li></ul></section><section><h4>${afterLabel}</h4><h3>${esc(after.playbook_version || 'Version not returned')}</h3><ul><li class="${memoryUsed ? 'reused' : ''}">Run ${esc(after.run_id || 'not returned')}</li><li class="${memoryRetrieved ? 'reused' : ''}">Precedents added: ${esc(addedPrecedents.join(', ') || 'none')}</li><li>Process nodes added: ${esc(addedNodes.join(', ') || 'none')}</li><li>Evidence items changed: ${esc(evidenceChanges.join(', ') || 'none')}</li></ul></section></div>${checksMarkup}<section class="reuse-boundary"><strong>Shared playbook v3 unchanged</strong><p>${esc(proof.shared_rule?.version_after || result.playbook?.version || 'Version not returned')} remains active; candidate status ${esc(proof.shared_rule?.candidate_status || proof.candidate?.status || 'not returned')}. Retrieval or passing deterministic checks does not mean application, qualified approval, or shared v4 release.</p></section>`;
+    const reuseProofMarkup = renderMemoryReuseProof({ result, proof, memoryUsed, retrievedOnly, memoryState: returnedMemoryState });
+    $('#laterResult').innerHTML = `<header class="v20-later-heading" data-memory-retrieved="${memoryRetrieved}" data-memory-used="${memoryUsed}" data-memory-retrieved-only="${retrievedOnly}" data-causal-proof-ready="${Boolean(proofReady)}"><small>${headerState.small}</small><h2>${headerState.title}</h2><p>${headerState.detail}</p></header>${receiptMarkup}${causalMarkup}${processMarkup}<div class="final-proof"><span class="quiet-label">Computed comparison</span><strong>Baseline ${esc(before.result_hash || 'hash not returned')} → after ${esc(after.result_hash || 'hash not returned')}</strong><p>Both sides are completed later-claim runs. Shared rule applied: ${esc(String(sharedApplied))}.</p></div>${reuseProofMarkup}<div class="before-after"><section><h4>Baseline without governed memory application</h4><h3>${esc(before.playbook_version || 'Version not returned')}</h3><ul><li>Run ${esc(before.run_id || 'not returned')}</li><li>Precedents: ${esc(beforePrecedents.join(', ') || 'none returned')}</li><li>Process nodes: ${esc(String((before.process_node_ids || []).length))}</li></ul></section><section><h4>${afterLabel}</h4><h3>${esc(after.playbook_version || 'Version not returned')}</h3><ul><li class="${memoryUsed ? 'reused' : ''}">Run ${esc(after.run_id || 'not returned')}</li><li class="${memoryRetrieved ? 'reused' : ''}">Precedents added: ${esc(addedPrecedents.join(', ') || 'none')}</li><li>Process nodes added: ${esc(addedNodes.join(', ') || 'none')}</li><li>Evidence items changed: ${esc(evidenceChanges.join(', ') || 'none')}</li></ul></section></div>${checksMarkup}<section class="reuse-boundary"><strong>Shared playbook v3 unchanged</strong><p>${esc(proof.shared_rule?.version_after || result.playbook?.version || 'Version not returned')} remains active; candidate status ${esc(proof.shared_rule?.candidate_status || proof.candidate?.status || 'not returned')}. Retrieval or passing deterministic checks does not mean application, qualified approval, or shared v4 release.</p></section>`;
     bindProcessInteractions();
     announceRender('later-result');
     return { proofReady: Boolean(proofReady), memoryRetrieved, memoryUsed, retrievedOnly };

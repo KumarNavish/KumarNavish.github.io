@@ -5240,10 +5240,10 @@ Exact local freeze gates:
 
 ```text
 backend_tests: 291 passed
-release_contract_tests: 112 passed
+release_contract_tests: 113 passed
 deployment_and_static_publish_tests: 8 passed
-release_tests_total: 120 passed
-browser_contract_self_test: 89 fixtures passed
+release_tests_total: 121 passed
+browser_contract_self_test: 90 fixtures passed
 source_manifest_files: 137
 release_artifact_files: 25
 model_visible_artifact_files: 24
@@ -5276,7 +5276,20 @@ The definitive release gate now exercises the full desktop flagship at
 1440×900; responsive/mobile website layout is a separate lower-priority surface
 and cannot substitute for desktop acceptance. Customer-provided PDFs, email,
 photos, source grounding, and evidence inspection remain mandatory throughout
-the desktop journey. This continuity repair remains hosted-preflight pending.
+the desktop journey. Exact-commit zero-provider QA deploy
+`dep-d9u9m9p42hec739t8pfg` on
+`53d1838b072d0a80899d8a6cb724aa704a3f9b1e` passed that continuity boundary
+and reached the later result, still without emitting the production marker or
+creating any public ledger row. Its strict global locator then found two
+`.v17-reuse-thread` sections. The legacy v17 path checked uniqueness before an
+await while overlapping enhancement passes were possible; v18 moved the first
+thread under a wrapper, allowing a slower direct-sibling insertion guard to
+miss it. `renderLaterResult()` now emits the complete
+`.v18-reuse-proof > .v17-reuse-thread` synchronously from its authoritative
+validated result, receipt, and causal proof. The asynchronous creator and
+reparenting path are removed, and the browser plus provider-free behavioral
+fixture require exactly one wrapper and thread across applied, retrieved-only,
+incomplete, and repeated renders. This repair remains hosted-preflight pending.
 
 The static source and artifact contract is therefore locally verified. At this
 source-history freeze, dynamic production acceptance remained unestablished:
