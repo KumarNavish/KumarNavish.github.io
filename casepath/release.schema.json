@@ -304,7 +304,8 @@
                 "casepath/releases/model-validation-attempt-20260811-14.json",
                 "casepath/releases/model-validation-attempt-20260811-15.json",
                 "casepath/releases/model-validation-attempt-20260811-16.json",
-                "casepath/releases/model-validation-attempt-20260811-17.json"
+                "casepath/releases/model-validation-attempt-20260811-17.json",
+                "casepath/releases/model-validation-attempt-20260811-18.json"
               ]
             },
             "establishes_current_runtime_acceptance": { "const": false }

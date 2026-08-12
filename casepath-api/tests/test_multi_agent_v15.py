@@ -35,9 +35,13 @@ from casepath_api.multi_agent import (
     PROCESS_DECISION_VALUE_CANDIDATES,
     PROCESS_DECISION_PROPOSAL_COUNT,
     ProcessDecisionResponse,
+    ROLE_REASONING,
     ROLE_OUTPUT_TOKENS,
     SOURCE_INTEGRITY_PROPOSAL_COUNT,
+    SOURCE_INTEGRITY_REASONING_EFFORT,
     SourceIntegrityResponse,
+    _bounded_source_integrity_schema,
+    _default_runnable_factory,
     _evidence_provider_payload,
     _final_brief_provider_payload,
     _plan_validator,
@@ -140,7 +144,7 @@ def graph_fixture(tmp_path: Path):
                     if not artifact["media_type"].startswith("image/")
                     else []
                 ),
-                "confidence": 0.81,
+                "confidence_basis_points": 8_100,
             }
         )
     controlling = [fact for fact in facts if fact["controls_process"] is True]
@@ -792,7 +796,7 @@ def test_coverage_schemas_require_exact_bounded_cardinality_and_ids():
             "artifact_id": f"artifact-{index}",
             "integrity_class": "metadata_only",
             "source_ref_ids": [],
-            "confidence": 0.5,
+            "confidence_basis_points": 5_000,
         }
         for index in range(SOURCE_INTEGRITY_PROPOSAL_COUNT)
     ]
@@ -849,6 +853,82 @@ def test_coverage_schemas_require_exact_bounded_cardinality_and_ids():
     ):
         with pytest.raises(ValidationError):
             EvidenceChecklistResponse.model_validate({"proposals": malformed})
+
+
+def test_source_schema_finitely_binds_request_artifacts_refs_and_confidence():
+    artifact_ids = tuple(f"artifact-{index}" for index in range(6))
+    source_ref_ids = ("src-a", "src-b", "src-c")
+    response_schema = _bounded_source_integrity_schema(
+        artifact_ids=artifact_ids,
+        source_ref_ids=source_ref_ids,
+    )
+    schema = response_schema.model_json_schema()
+    proposal = schema["$defs"]["BoundedSourceIntegrityProposal"]
+    properties = proposal["properties"]
+    assert schema["additionalProperties"] is False
+    assert proposal["additionalProperties"] is False
+    assert properties["artifact_id"]["enum"] == list(artifact_ids)
+    assert properties["source_ref_ids"] == {
+        "items": {"enum": list(source_ref_ids), "type": "string"},
+        "maxItems": 1,
+        "title": "Source Ref Ids",
+        "type": "array",
+        "uniqueItems": True,
+    }
+    assert properties["confidence_basis_points"]["type"] == "integer"
+    assert properties["confidence_basis_points"]["minimum"] == 0
+    assert properties["confidence_basis_points"]["maximum"] == 10_000
+
+    valid = [
+        {
+            "artifact_id": artifact_id,
+            "integrity_class": "text_grounded",
+            "source_ref_ids": [source_ref_ids[index % len(source_ref_ids)]],
+            "confidence_basis_points": 8_100,
+        }
+        for index, artifact_id in enumerate(artifact_ids)
+    ]
+    assert len(response_schema.model_validate({"proposals": valid}).proposals) == 6
+    malformed = (
+        [{**valid[0], "artifact_id": "unknown"}, *valid[1:]],
+        [{**valid[0], "source_ref_ids": ["unknown"]}, *valid[1:]],
+        [{**valid[0], "source_ref_ids": ["src-a", "src-b"]}, *valid[1:]],
+        [{**valid[0], "confidence_basis_points": 10_001}, *valid[1:]],
+        [*valid[:-1], dict(valid[0])],
+    )
+    for proposals in malformed:
+        with pytest.raises(ValidationError):
+            response_schema.model_validate({"proposals": proposals})
+
+
+def test_source_role_uses_bounded_reasoning_without_changing_other_roles(monkeypatch):
+    captured: list[dict[str, Any]] = []
+
+    def factory(**kwargs):
+        captured.append(kwargs)
+        return object()
+
+    monkeypatch.setattr(multi_agent_module, "structured_nemotron_runnable", factory)
+    _default_runnable_factory(
+        "document_source_integrity",
+        SourceIntegrityResponse,
+        "runtime-only-test-value",
+        "orch-source-reasoning",
+        ROLE_OUTPUT_TOKENS["document_source_integrity"],
+    )
+    _default_runnable_factory(
+        "process_decision_mapping",
+        ProcessDecisionResponse,
+        "runtime-only-test-value",
+        "orch-process-reasoning",
+        ROLE_OUTPUT_TOKENS["process_decision_mapping"],
+    )
+
+    assert SOURCE_INTEGRITY_REASONING_EFFORT == "none"
+    assert ROLE_REASONING["document_source_integrity"] == {"effort": "none"}
+    assert captured[0]["reasoning"] == {"effort": "none"}
+    assert captured[0]["max_tokens"] == 4_096
+    assert captured[1]["reasoning"] == {"effort": "medium"}
 
 
 @pytest.mark.parametrize("claim_id", sorted(CLAIMS))
@@ -1749,6 +1829,130 @@ def test_shared_runnable_forwards_exact_private_route_in_one_sdk_send(monkeypatc
     assert requests[0].headers["X-OpenRouter-Metadata"] == "enabled"
     assert len(sdk_clients) == 1
     sdk_clients[0].close()
+
+
+def test_source_role_wire_request_is_finite_strict_and_disables_reasoning(
+    monkeypatch,
+):
+    requests: list[httpx.Request] = []
+    sdk_clients: list[httpx.Client] = []
+    real_client = httpx.Client
+    real_openrouter = OpenRouter
+    artifact_ids = tuple(f"artifact-{index}" for index in range(6))
+    source_ref_ids = ("source-a", "source-b", "source-c")
+    response_schema = _bounded_source_integrity_schema(
+        artifact_ids=artifact_ids,
+        source_ref_ids=source_ref_ids,
+    )
+    parsed = {
+        "proposals": [
+            {
+                "artifact_id": artifact_id,
+                "integrity_class": "metadata_only",
+                "source_ref_ids": [],
+                "confidence_basis_points": 8_100,
+            }
+            for artifact_id in artifact_ids
+        ]
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            json={
+                "id": "gen-source-wire-1",
+                "model": OPENROUTER_MODEL,
+                "object": "chat.completion",
+                "created": 1786533000,
+                "system_fingerprint": None,
+                "openrouter_metadata": {
+                    "attempt": 1,
+                    "endpoints": {
+                        "available": [
+                            {
+                                "model": OPENROUTER_MODEL,
+                                "provider": "DeepInfra",
+                                "selected": True,
+                            }
+                        ],
+                        "total": 1,
+                    },
+                    "is_byok": False,
+                    "region": None,
+                    "requested": OPENROUTER_MODEL,
+                    "strategy": "direct",
+                    "summary": "",
+                },
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": "stop",
+                        "message": {
+                            "role": "assistant",
+                            "content": json.dumps(parsed),
+                        },
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 20,
+                    "completion_tokens": 100,
+                    "total_tokens": 120,
+                    "cost": 0.001,
+                },
+            },
+        )
+
+    def instrumented_openrouter(**kwargs):
+        client = real_client(transport=httpx.MockTransport(handler))
+        sdk_clients.append(client)
+        return real_openrouter(client=client, **kwargs)
+
+    monkeypatch.setattr(langchain_runtime, "OpenRouter", instrumented_openrouter)
+    runnable = _default_runnable_factory(
+        "document_source_integrity",
+        response_schema,
+        "runtime-only-test-value",
+        "orch-source-wire",
+        ROLE_OUTPUT_TOKENS["document_source_integrity"],
+    )
+
+    envelope = runnable.invoke(
+        [HumanMessage(content="Return the bounded source object")],
+        config={"callbacks": []},
+    )
+
+    assert len(envelope["parsed"].proposals) == 6
+    assert len(requests) == 1
+    body = json.loads(requests[0].content)
+    assert body["max_tokens"] == 4_096
+    assert body["reasoning"] == {"effort": "none"}
+    assert body["provider"] == {
+        "only": ["deepinfra/fp4"],
+        "allow_fallbacks": False,
+        "require_parameters": True,
+        "data_collection": "deny",
+    }
+    native_schema = body["response_format"]["json_schema"]["schema"]
+    assert "$defs" not in json.dumps(native_schema)
+    proposal = native_schema["properties"]["proposals"]
+    assert proposal["minItems"] == proposal["maxItems"] == 6
+    properties = proposal["items"]["properties"]
+    assert properties["artifact_id"]["enum"] == list(artifact_ids)
+    assert properties["source_ref_ids"]["items"]["enum"] == list(
+        source_ref_ids
+    )
+    assert properties["source_ref_ids"]["maxItems"] == 1
+    assert properties["confidence_basis_points"] == {
+        "maximum": 10_000,
+        "minimum": 0,
+        "type": "integer",
+    }
+    assert native_schema["additionalProperties"] is False
+    assert proposal["items"]["additionalProperties"] is False
+    for client in sdk_clients:
+        client.close()
 
 
 def _native_response_payload() -> dict[str, Any]:
@@ -2889,13 +3093,14 @@ def _invoke_plan(
     *,
     run_id: str = "run-plan",
     agent_id: str = "orchestrator_plan",
+    system_prompt: str = "bounded",
 ):
     return runner.invoke(
         run_id=run_id,
         orchestration_id="orch-plan",
         agent_id=agent_id,
         schema=OrchestratorPlan,
-        system_prompt="bounded",
+        system_prompt=system_prompt,
         provider_payload={"observable": True},
         validator=_accepted_plan_validator,
         private_contract_hash="2" * 64,
@@ -2971,7 +3176,7 @@ def test_multi_agent_version_bump_invalidates_success_cache(
         api_key_provider=lambda: "runtime-only-test-value",
     )
 
-    assert multi_agent_module.MULTI_AGENT_VERSION == "1.2.1"
+    assert multi_agent_module.MULTI_AGENT_VERSION == "1.2.2"
     assert multi_agent_module.MULTI_AGENT_SCHEMA_VERSION.endswith("/1.0.0")
     first = _invoke_plan(runner, run_id="run-version-cache-first")
     cached = _invoke_plan(runner, run_id="run-version-cache-hit")
@@ -2982,12 +3187,71 @@ def test_multi_agent_version_bump_invalidates_success_cache(
     monkeypatch.setattr(
         multi_agent_module,
         "MULTI_AGENT_VERSION",
-        "1.2.1-test-cache-invalidation",
+        "1.2.2-test-cache-invalidation",
     )
     invalidated = _invoke_plan(runner, run_id="run-version-cache-invalidated")
     assert invalidated["cache_hit"] is False
     assert invalidated["cache_key"] != first["cache_key"]
     assert provider_calls == 2
+
+
+def test_prompt_reasoning_and_token_policy_are_part_of_specialist_cache_identity(
+    tmp_path: Path, monkeypatch
+):
+    provider_calls = 0
+
+    class Runnable:
+        def invoke(self, *_args, **_kwargs):
+            nonlocal provider_calls
+            provider_calls += 1
+            return _plan_envelope(
+                response_id=f"gen-cache-policy-{provider_calls}",
+                usage={
+                    "prompt_tokens": 20,
+                    "completion_tokens": 10,
+                    "total_tokens": 30,
+                    "cost": 0.001,
+                },
+            )
+
+    storage = Storage(str(tmp_path / "runtime-policy-cache.db"))
+    runner = InstrumentedStructuredAgent(
+        storage,
+        runnable_factory=lambda *_args: Runnable(),
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+
+    baseline = _invoke_plan(runner, run_id="run-policy-baseline")
+    cached = _invoke_plan(runner, run_id="run-policy-cached")
+    changed_prompt = _invoke_plan(
+        runner,
+        run_id="run-policy-prompt",
+        system_prompt="bounded but changed",
+    )
+    monkeypatch.setitem(
+        multi_agent_module.ROLE_REASONING,
+        "orchestrator_plan",
+        {"max_tokens": 512},
+    )
+    changed_reasoning = _invoke_plan(runner, run_id="run-policy-reasoning")
+    monkeypatch.setitem(
+        multi_agent_module.ROLE_OUTPUT_TOKENS,
+        "orchestrator_plan",
+        4_097,
+    )
+    changed_ceiling = _invoke_plan(runner, run_id="run-policy-ceiling")
+
+    assert baseline["cache_hit"] is False
+    assert cached["cache_hit"] is True
+    assert provider_calls == 4
+    assert len(
+        {
+            baseline["cache_key"],
+            changed_prompt["cache_key"],
+            changed_reasoning["cache_key"],
+            changed_ceiling["cache_key"],
+        }
+    ) == 4
 
 
 @pytest.mark.parametrize(

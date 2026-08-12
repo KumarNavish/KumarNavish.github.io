@@ -118,7 +118,7 @@ bound identically across the run audit and sanitized ledger. A paid provider
 response, a cache replay, or a weak/unbound role
 record does not satisfy that gate.
 
-Seventeen authorized model attempts failed closed at the release gate:
+Eighteen authorized model attempts failed closed at the release gate:
 
 - Attempt 1 reached DeepInfra through OpenRouter and returned the provider's
   dated canonical model ID. It charged USD 0.00756 for 3,629 prompt and 2,625
@@ -315,17 +315,36 @@ Seventeen authorized model attempts failed closed at the release gate:
   nor an evidence manifest; its public QA origin still served the stale
   previous-deploy report. Attempt 17 therefore remains failed-closed history
   and establishes no dynamic release acceptance.
+- Attempt 18 ran from QA deploy `dep-d9u53vjm8hqs73ei6nk0` against aligned
+  source commit `df4db4872e0854af7dbe97e5c86833ab827a1c1b`. QA accepted run
+  `run_b7e02e168c3217ac` and bound orchestration
+  `orch_2ca291c7f62ef75a`. Canonical facts and the orchestrator plan completed,
+  then both logical specialist branches started. The document/source role
+  returned `length` at exactly 4,096 completion tokens and failed
+  `provider_finish_reason` before semantic scoring or guarded projection. The
+  process role still returned its six exact decision-value contributions from
+  the already-started sibling branch, but no process-completed receipt or
+  deterministic gate followed the document failure. The four DeepInfra calls
+  cost USD 0.0273757 for 25,551 prompt and 6,683 completion tokens. Evidence,
+  final audit, all deterministic gates, and warm replay never started. The
+  failed build published no current report or evidence manifest and remained
+  failed-closed history.
 
-The repaired agent-graph implementation is version `1.2.1`. The document,
+The repaired agent-graph implementation is version `1.2.2`. The document,
 process, and evidence coverage roles now require exact `6`, `6`, and `21`
 proposal cardinalities in their provider-native schemas, disclose the required
 candidate IDs and counts in their bounded prompts, and reject missing,
 duplicate, or unknown membership before semantic field scoring. Guarded
 deterministic projection remains available only for an incorrect field on a
 returned candidate; omitted candidates can no longer satisfy contribution
-majority. The schema, payload, prompt, validator, cache-version, and both
-governed claim cardinalities are locally regression-tested. This repair is not
-itself production acceptance evidence.
+majority. The document/source role additionally receives a request-specific
+finite schema: `artifact_id` is limited to its exact six candidates,
+`source_ref_ids` accepts at most one of the selected references, and confidence
+is an integer basis-point value. Reasoning is disabled for this bounded
+copying/classification role with the exact wire policy `effort: none` inside
+the unchanged 4,096-token response limit; the cache key binds the exact prompt,
+output limit, and reasoning policy. These source changes are locally
+regression-tested but are not production acceptance evidence.
 
 The current source pins OpenRouter to the exact `deepinfra/fp4` endpoint tag,
 sets `allow_fallbacks: false`, keeps `require_parameters: true`, and denies
@@ -355,7 +374,8 @@ three passed deterministic gates.
 
 Known aggregate provider charges for attempts 1, 2, 4, 5, 6, 8, 10, 11, 12,
 the two cost-known calls in attempt 14, all six calls in attempts 15 and 16,
-and all five calls in attempt 17 are USD 0.2491399. Attempts 3, 7, 9, and 13,
+all five calls in attempt 17, and all four calls in attempt 18 are USD
+0.2765156. Attempts 3, 7, 9, and 13,
 plus the two failed calls in attempt 14,
 are unknown and excluded rather than treated as zero. Attempts 7 and 9 each retain a USD 0.027645 estimated
 reservation, neither of which is included as an actual charge. The attempts
@@ -365,7 +385,7 @@ accepted zero-network-call cache replay, but none is accepted model-backed
 release evidence. No raw prompt, raw output, credential, or private reference
 is retained.
 
-The seventeen records above are listed under `historical_model_validation` with
+The eighteen records above are listed under `historical_model_validation` with
 `scope: failed_closed_history_only`; they can never establish current runtime
 acceptance. At this source-history freeze, no passing dynamic QA artifact pair
 had been verified. A later same-commit passing pair may supersede that

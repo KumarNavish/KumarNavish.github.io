@@ -15,7 +15,7 @@ from typing import Annotated, Any, Literal, Protocol, TypedDict, get_args
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, create_model, model_validator
 
 from .canonicalizer import (
     GENERATION_METADATA_POLL_ATTEMPTS,
@@ -46,6 +46,7 @@ from .projections import (
 )
 from .langchain_runtime import (
     OPENROUTER_EXPECTED_UPSTREAM_PROVIDER,
+    OPENROUTER_REASONING,
     OpenRouterProtocolError,
     OpenRouterSendAdmissionTimeoutError,
     OpenRouterUpstreamRejectionError,
@@ -55,7 +56,7 @@ from .langchain_runtime import (
 )
 
 
-MULTI_AGENT_VERSION = "1.2.1"
+MULTI_AGENT_VERSION = "1.2.2"
 MULTI_AGENT_SCHEMA_VERSION = "casepath.nemotron-agent-dag/1.0.0"
 MULTI_AGENT_AUTHORITY_MODE = "multi_agent_hybrid_guarded"
 MULTI_AGENT_IMPLEMENTATION = "langgraph_stategraph_langchain_openrouter"
@@ -141,6 +142,15 @@ ROLE_OUTPUT_TOKENS = {
     "evidence_checklist": 8_192,
     "final_claim_brief_audit": 4_096,
 }
+SOURCE_INTEGRITY_REASONING_EFFORT = "none"
+ROLE_REASONING = {
+    agent_id: (
+        {"effort": SOURCE_INTEGRITY_REASONING_EFFORT}
+        if agent_id == "document_source_integrity"
+        else dict(OPENROUTER_REASONING)
+    )
+    for agent_id in MODEL_AGENT_IDS
+}
 ROLE_PURPOSES = {
     "orchestrator_plan": "bounded claim-agent focus and priority plan",
     "document_source_integrity": "bounded source-integrity proposals",
@@ -216,8 +226,11 @@ class OrchestratorPlan(_StrictModel):
 class SourceIntegrityProposal(_StrictModel):
     artifact_id: str
     integrity_class: Literal["text_grounded", "visual_only", "metadata_only"]
-    source_ref_ids: list[str]
-    confidence: float = Field(ge=0, le=1)
+    source_ref_ids: list[str] = Field(
+        max_length=1,
+        json_schema_extra={"uniqueItems": True},
+    )
+    confidence_basis_points: int = Field(ge=0, le=10_000)
 
 
 class SourceIntegrityResponse(_StrictModel):
@@ -233,6 +246,42 @@ class SourceIntegrityResponse(_StrictModel):
         if len(set(artifact_ids)) != len(artifact_ids):
             raise ValueError("source_integrity_proposal_membership")
         return self
+
+
+def _bounded_source_integrity_schema(
+    *,
+    artifact_ids: tuple[str, ...],
+    source_ref_ids: tuple[str, ...],
+) -> type[SourceIntegrityResponse]:
+    """Bind the provider-native source response to one finite request vocabulary."""
+
+    if len(artifact_ids) != SOURCE_INTEGRITY_PROPOSAL_COUNT or not source_ref_ids:
+        raise AgentBoundaryError(
+            "document_source_integrity", "source_candidate_membership"
+        )
+    artifact_id_type = Literal.__getitem__(artifact_ids)
+    source_ref_id_type = Literal.__getitem__(source_ref_ids)
+    proposal_schema = create_model(
+        "BoundedSourceIntegrityProposal",
+        __base__=SourceIntegrityProposal,
+        artifact_id=(artifact_id_type, ...),
+        source_ref_ids=(
+            list[source_ref_id_type],
+            Field(max_length=1, json_schema_extra={"uniqueItems": True}),
+        ),
+    )
+    return create_model(
+        "BoundedSourceIntegrityResponse",
+        __base__=SourceIntegrityResponse,
+        proposals=(
+            list[proposal_schema],
+            Field(
+                min_length=SOURCE_INTEGRITY_PROPOSAL_COUNT,
+                max_length=SOURCE_INTEGRITY_PROPOSAL_COUNT,
+                json_schema_extra={"uniqueItems": True},
+            ),
+        ),
+    )
 
 
 DecisionOption = Literal[
@@ -878,6 +927,7 @@ def _default_runnable_factory(
         api_key=api_key,
         orchestration_id=orchestration_id,
         max_tokens=max_tokens,
+        reasoning=ROLE_REASONING[agent_id],
     )
 
 
@@ -1060,6 +1110,11 @@ class InstrumentedStructuredAgent:
                 "model": OPENROUTER_MODEL,
                 "agent_id": agent_id,
                 "schema": schema.model_json_schema(),
+                "system_prompt_sha256": sha256(
+                    system_prompt.encode("utf-8")
+                ).hexdigest(),
+                "max_tokens": ROLE_OUTPUT_TOKENS[agent_id],
+                "reasoning": ROLE_REASONING[agent_id],
                 "payload": provider_payload,
                 "private_contract_hash": private_contract_hash,
             }
@@ -2073,8 +2128,10 @@ class NemotronMultiAgentOrchestrator:
                     {
                         **oracle,
                         "source_ref_ids": source_ids if matches else oracle["source_ref_ids"],
-                        "confidence_basis_points": _confidence_basis_points(
-                            proposal["confidence"] if matches else 1
+                        "confidence_basis_points": (
+                            proposal["confidence_basis_points"]
+                            if matches
+                            else 10_000
                         ),
                         "attribution": ROLE_LABELS["document_source_integrity"] if matches else "deterministic_application",
                         "deterministic_fallback_applied": not matches,
@@ -2086,12 +2143,17 @@ class NemotronMultiAgentOrchestrator:
         contribution, audit = self._run_agent(
             state,
             agent_id="document_source_integrity",
-            schema=SourceIntegrityResponse,
+            schema=_bounded_source_integrity_schema(
+                artifact_ids=tuple(expected),
+                source_ref_ids=tuple(focused_source_order),
+            ),
             system_prompt=(
                 "Return exactly six proposals: exactly one for every required_artifact_id and no duplicates or "
                 "omissions. Assess every supplied artifact using only its observable media class and a small nonempty "
                 "subset of the orchestrator-selected source-reference IDs for each text artifact. Text IDs "
-                "must belong to that artifact; visual and metadata-only artifacts use no text IDs. "
+                "must belong to that artifact; copy exactly one matching ID for each text artifact, while visual "
+                "and metadata-only artifacts use no text IDs. Return confidence_basis_points as an integer from "
+                "0 through 10000. "
                 "Never return an empty or partial proposal list. Return no prose, legal conclusions, process "
                 "decisions, or hidden metadata."
             ),
