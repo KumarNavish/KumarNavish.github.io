@@ -499,11 +499,76 @@ separately persisted completed memory-application event must project the exact
 same receipt. Rehashing the mutable result and boundary cannot replace that
 event-row authority.
 
-`casepath_release.py verify-runtime-evidence` evaluates that pair without
-editing `release.json`, regenerating a source manifest, or changing the tested
-commit. It rejects duplicate identities, cache-only evidence, incomplete
-roles, failed gates, weak contributions, unreported fallback, missing
-usage/cost, tracing, unsafe retained fields, and any release or commit mismatch.
+`casepath_release.py verify-runtime-causal-evidence` evaluates the deterministic
+preflight bundle before QA may cross the production marker or make a provider
+call. `casepath_release.py verify-runtime-evidence` then evaluates the complete
+production bundle after the provider-backed journey. Neither command edits
+`release.json`, regenerates a source manifest, or changes the tested commit.
+They reject duplicate identities, incomplete or extra inventories, invalid
+media bytes, cache-only cold evidence, incomplete roles, failed gates, weak
+contributions, unreported fallback, missing usage/cost, broken cache lineage,
+tracing, unsafe retained fields, and any release or commit mismatch.
+
+## Hosted desktop journey and verifier-authority correction
+
+The hosted desktop journey on source commit
+`0db743a2a7a06c56bd5f011cc5928ef39efe424d` completed the full browser flow and
+reported `218` passed checks and `0` failed checks. Its retained production
+inventory was exactly 30 files: 15 JSON documents, 14 PNG screenshots, and one
+WebM recording. The flagship pair comprised six paid cold calls and six exact
+zero-network warm cache hits. The held-out later-claim pair added another six
+paid cold calls and six exact warm cache hits. The final immutable ledger
+therefore contained exactly 24 rows, 12 network calls, and 12 cache hits, with
+complete actual cost of USD 0.0459277 and no unknown-cost call. Frontend, API,
+QA report, manifest, and public deployment identities all named the same
+commit, and the retained public bytes, hashes, sizes, and response headers were
+independently checked.
+
+That successful hosted journey is not yet the release verdict. The verifier
+published in commit `0db743a2a7a06c56bd5f011cc5928ef39efe424d`
+rejected the otherwise valid retained bundle because its release authority had
+drifted from the runtime contracts. The drift comprised a global rather than
+claim-specific fact order, non-exact required-check handling, a checklist
+summary that did not count every owner, integer/float JSON normalization
+differences, conflation of full run hashes with model-attribution-stripped
+semantic learning hashes, an obsolete learning snapshot field set instead of
+the exact 21 fields, and verification of only a retained subset rather than the
+complete manifest-bound JSON bundle. This is a verifier-authority failure, not
+evidence that the desktop journey or provider orchestration failed.
+
+The correction makes backend-owned claim order, required checks, and the exact
+21-field learning snapshot contract authoritative to both runtime and
+verifier. The mandatory zero-provider browser run must now pass the causal
+verifier against an exact 27-file preflight inventory (14 JSON, 12 PNG, and one
+WebM) before the production marker. After the single provider-backed journey,
+the full verifier requires the exact 30-file inventory above, parses and
+sanitizes every JSON document, checks file size, SHA-256, media type and media
+magic, binds deployment/release/runtime/readiness identity, proves the exact
+flagship cold-six and warm-six origin lineage, proves the later cold-six and
+warm-six lineage, and reconciles the final exact 24-row ledger. The production
+artifacts cannot be published merely because the browser report says `passed`;
+this exact full verification is the final build predecessor.
+
+The correction remains `fixed_unverified` until one new hosted run deploys the
+frontend, API, and QA from the same correction commit and both verifier stages
+pass. Verifier-only development is not a new authorized model attempt and adds
+no provider charge. Historical attempts and the USD 0.3612726 aggregate above
+remain unchanged; including the later `0db743a` hosted journey, the known
+actual provider-charge total is USD 0.4072003.
+
+The global model ledger is immutable for the life of an API instance. Caller
+reset intentionally does not erase it and must never be changed to do so. Each
+candidate begins with one fresh API instance/deploy and an exactly empty global
+ledger. If a provider-bearing journey populates that ledger but fails a later
+gate, valid retry recovery is another fresh API instance/deploy for the next
+candidate; neither reset, row deletion, nor a weaker ledger assertion is
+allowed.
+
+The release target is the complete 1440×900 desktop browser journey.
+Responsive/mobile website work is deferred and cannot displace this gate.
+Customer PDF, email, image, source-grounding, document-inspection, and retained
+visual evidence remain mandatory parts of the desktop release journey; they
+are not mobile-layout work and are not deferred.
 
 ## Render Blueprint
 
@@ -533,11 +598,14 @@ are resolved from `casepath-qa/package-lock.json` with `npm ci` before Chromium
 is installed. `casepath-qa/run-definitive-v20.sh` then builds the exact curated
 frontend for the QA commit, launches an isolated deterministic-reference API
 without an OpenRouter credential, and runs the complete browser lifecycle into
-a temporary evidence directory. It requires a passed report and an empty model
-ledger (`records=0`, `network_calls=0`, and zero cost) before stopping both local
-servers and starting the single production journey. A deterministic UI failure
-therefore blocks all paid inference instead of being discovered after it. The
-temporary preflight output is never published as production evidence.
+a temporary evidence directory. It requires the complete causal-evidence
+verifier, a passed report, and an empty model ledger (`records=0`,
+`network_calls=0`, and zero cost) before stopping both local servers and
+starting the single production journey. A deterministic UI or retained-causal
+evidence failure therefore blocks all paid inference instead of being
+discovered after it. The temporary preflight output is never published as
+production evidence. The production browser output must then pass the complete
+runtime-evidence verifier before the QA build may publish it.
 Before caller reset or run creation, production QA independently reads
 `/api/model-ledger` and requires the exact empty global summary and item list.
 Caller reset intentionally preserves that ledger, so it cannot be used to hide
@@ -623,6 +691,9 @@ SOURCE_DATE_EPOCH=1786406400 python casepath-api/generate_artifacts.py
 SOURCE_DATE_EPOCH=1786406400 python casepath-api/replace_photographic_evidence.py .
 python casepath/tools/casepath_release.py generate
 python casepath/tools/casepath_release.py verify
+python casepath/tools/casepath_release.py verify-runtime-causal-evidence \
+  --report /path/to/preflight-output/report.json \
+  --evidence-manifest /path/to/preflight-output/evidence-manifest.json
 python casepath/tools/casepath_release.py verify-runtime-evidence \
   --report /path/to/qa-output/report.json \
   --evidence-manifest /path/to/qa-output/evidence-manifest.json
