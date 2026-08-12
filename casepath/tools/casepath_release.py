@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 from collections.abc import Mapping
 from copy import deepcopy
 import hashlib
@@ -66,6 +67,8 @@ DEFINITIVE_QA_BUILD_COMMAND = (
 DEFINITIVE_QA_START_COMMAND = "node casepath-qa/serve-evidence.mjs"
 REQUIRED_PRODUCTION_MODE = "openrouter_nemotron"
 REQUIRED_PRODUCTION_MODEL = "nvidia/nemotron-3-ultra-550b-a55b"
+DETERMINISTIC_REFERENCE_MODE = "deterministic_reference"
+DETERMINISTIC_REFERENCE_PROFILE = "deterministic-reference-playbook"
 ACCEPTED_PRODUCTION_RESPONSE_MODELS = {
     REQUIRED_PRODUCTION_MODEL,
     "nvidia/nemotron-3-ultra-550b-a55b-20260604",
@@ -362,6 +365,7 @@ REQUIRED_RUNTIME_ACCEPTANCE_FLAGS = (
     "requires_source_reference_projection_disclosure",
     "requires_grounded_causal_artifact_recomputation",
     "requires_learning_replay_proof",
+    "requires_learning_comparison_zero_model_activity",
 )
 RUNTIME_VERDICT_AUTHORITY = "dynamic_same_commit_qa_artifacts"
 QA_REPORT_PATH = "report.json"
@@ -369,7 +373,7 @@ QA_EVIDENCE_MANIFEST_PATH = "evidence-manifest.json"
 QA_EVIDENCE_MANIFEST_CONTRACT = "casepath.qa-evidence-manifest/1.0.0"
 HISTORICAL_MODEL_VALIDATION_RECORDS = tuple(
     f"casepath/releases/model-validation-attempt-20260811-{number:02d}.json"
-    for number in range(1, 24)
+    for number in range(1, 25)
 )
 _HISTORICAL_TOP_FIELDS = frozenset(
     {
@@ -596,6 +600,31 @@ _HISTORICAL_EXECUTION_FIELDS = {
         "downstream_model_calls_after_failure deterministic_gate_receipts "
         "warm_replay_started".split()
     ),
+    "production-flagship-20260812-24": frozenset(
+        "source_commit frontend_service_id frontend_deploy_id "
+        "frontend_deploy_outcome frontend_deploy_created_at "
+        "frontend_deploy_started_at frontend_deploy_finished_at "
+        "api_service_id api_deploy_id api_deploy_outcome api_deploy_created_at "
+        "api_deploy_started_at api_deploy_finished_at "
+        "qa_service_id qa_deploy_id qa_deploy_outcome qa_deploy_created_at "
+        "qa_deploy_started_at qa_deploy_finished_at "
+        "deterministic_preflight_started_at deterministic_preflight_status "
+        "deterministic_preflight_passed_checks deterministic_preflight_failed_checks "
+        "causal_preflight_verifier_passed causal_preflight_verifier_passed_at "
+        "deterministic_zero_provider_confirmed_at production_marker_emitted_at "
+        "production_initial_ledger_checked_at production_initial_ledger_records "
+        "production_initial_ledger_network_calls production_initial_ledger_actual_cost_usd "
+        "production_initial_ledger_checked_before_first_run_post "
+        "first_production_run_post_accepted_at flagship_cold_run_id "
+        "flagship_cold_orchestration_id flagship_warm_run_id "
+        "flagship_warm_orchestration_id later_cold_run_id "
+        "later_cold_orchestration_id later_warm_run_started ledger_created_at "
+        "ledger_updated_at qa_error_at global_ledger_record_count network_call_count "
+        "cache_hit_count completed_network_model_calls failed_model_calls "
+        "flagship_model_roles_complete flagship_deterministic_gate_receipts "
+        "later_model_roles_complete later_downstream_model_calls_after_failure "
+        "later_deterministic_gate_receipts".split()
+    ),
 }
 _HISTORICAL_PROVIDER_FIELDS = {
     "authorized-smoke-20260811-01": frozenset(
@@ -736,6 +765,15 @@ _HISTORICAL_PROVIDER_FIELDS = {
         "network_call_count actual_cost_usd actual_cost_complete "
         "unknown_cost_call_count prompt_tokens completion_tokens total_tokens "
         "outcomes physical_provider_max_in_flight application_retry_count call".split()
+    ),
+    "production-flagship-20260812-24": frozenset(
+        "provider provider_outcome requested_model successful_upstream_provider "
+        "failed_call_expected_upstream_provider "
+        "failed_call_upstream_provider_identity_status network_call_count "
+        "actual_cost_usd actual_cost_complete unknown_cost_call_count prompt_tokens "
+        "completion_tokens total_tokens outcomes prior_cumulative_known_actual_cost_usd "
+        "cumulative_known_actual_cost_usd physical_provider_max_in_flight "
+        "application_retry_count calls".split()
     ),
 }
 _HISTORICAL_APPLICATION_FIELDS = {
@@ -910,6 +948,20 @@ _HISTORICAL_APPLICATION_FIELDS = {
         "downstream_execution_started warm_replay_started "
         "full_orchestration_accepted runtime_acceptance_established".split()
     ),
+    "production-flagship-20260812-24": frozenset(
+        "outcome failure_type error_type error_invariant "
+        "successful_ledger_call_bound ledger_call_id ledger_outcome "
+        "flagship_cold_accepted "
+        "flagship_cold_call_ids flagship_model_roles_complete "
+        "flagship_deterministic_gates_complete "
+        "complete_flagship_deterministic_gate_ids flagship_warm_cache_accepted "
+        "later_canonical_result_accepted later_canonical_call_id "
+        "later_canonical_accepted_fact_count later_canonical_rejected_fact_count "
+        "later_orchestrator_plan_accepted failed_ledger_call_id "
+        "failed_ledger_outcome later_downstream_execution_started "
+        "later_deterministic_gates_started later_warm_replay_started "
+        "full_production_journey_accepted runtime_acceptance_established".split()
+    ),
 }
 _HISTORICAL_FAILURE_TYPES = {
     "authorized-smoke-20260811-01": "exact_private_reference_mismatch",
@@ -936,6 +988,9 @@ _HISTORICAL_FAILURE_TYPES = {
     ),
     "production-flagship-20260812-23": (
         "canonical_facts_hybrid_model_contribution"
+    ),
+    "production-flagship-20260812-24": (
+        "later_orchestrator_upstream_429_followed_by_terminal_ui_timeout"
     ),
 }
 _HISTORICAL_PROVIDER_OUTCOMES = {
@@ -965,6 +1020,9 @@ _HISTORICAL_PROVIDER_OUTCOMES = {
     "production-flagship-20260812-21": "six_roles_succeeded",
     "production-flagship-20260812-22": "twelve_network_calls_succeeded",
     "production-flagship-20260812-23": "canonical_facts_contribution_rejected",
+    "production-flagship-20260812-24": (
+        "seven_successes_six_cache_hits_then_later_orchestrator_upstream_429"
+    ),
 }
 _HISTORICAL_ERROR_TYPES = {
     "production-flagship-20260811-06": "KeyError",
@@ -979,6 +1037,7 @@ _HISTORICAL_ERROR_TYPES = {
     "production-flagship-20260812-17": "AgentBoundaryError",
     "production-flagship-20260812-18": "AgentBoundaryError",
     "production-flagship-20260812-23": "ModelResponseError",
+    "production-flagship-20260812-24": "OpenRouterUpstreamRejectionError",
 }
 _HISTORICAL_ERROR_INVARIANTS = {
     "production-flagship-20260811-08": "generation_metadata_completeness",
@@ -990,6 +1049,7 @@ _HISTORICAL_ERROR_INVARIANTS = {
     "production-flagship-20260812-17": "model_contribution_majority",
     "production-flagship-20260812-18": "provider_finish_reason",
     "production-flagship-20260812-23": "hybrid_model_contribution",
+    "production-flagship-20260812-24": "provider_upstream_rejection",
 }
 _HISTORICAL_TWO_CALL_FIELDS = {
     "canonical_facts": frozenset(
@@ -1384,6 +1444,24 @@ _HISTORICAL_ATTEMPT_23_SECTION_SHA256 = {
     ),
     "capture_provenance": (
         "256e44abde42250617deea5dc79fea6122bb396df77c40c5b286e1429a68aa89"
+    ),
+}
+_HISTORICAL_ATTEMPT_24_SECTION_SHA256 = {
+    "execution_observation": (
+        "1c9d8aaf67389db8f078bcfd860f0ebf5c93356b3e15f96f38efe6f78798c7a6"
+    ),
+    "provider_observation": (
+        "52d3093a6b560c13914d8ffbf9b84456ddaa1d3d0b17c1de00264c29d8d97c10"
+    ),
+    "application_result": (
+        "0b5d61fca74f2cd7168ddbbfc4476da3464da4c86627efee9a96e8d3383a5071"
+    ),
+    "warm_cache_result": (
+        "06252150022ef6a4ff8b8fce3619ea982df60b66891f2a1cf9b32556435b2119"
+    ),
+    "qa_result": "d29de0d6110fa3e61d72aad3489440b3ad799c1750aff9c23c1ab660e8ad3507",
+    "capture_provenance": (
+        "6034fa4ac68ced760c0dcb368ebd3ee862b63c16ae627125802043783ea3b667"
     ),
 }
 _HISTORICAL_ATTEMPT_17_EVIDENCE_ITEM_IDS = (
@@ -2885,6 +2963,65 @@ def _verify_historical_execution(
             )
             or not _is_exact_historical_int(values["deterministic_gate_receipts"], 0)
             or values["warm_replay_started"] is not False
+        ):
+            _historical_schema_error("execution observation")
+        return
+    if attempt_id == "production-flagship-20260812-24":
+        for field in values:
+            if field.endswith("_at") and not _is_historical_timestamp(values[field]):
+                _historical_schema_error("execution observation")
+        exact_id_patterns = {
+            "flagship_cold_run_id": _HISTORICAL_RUN_ID_PATTERN,
+            "flagship_warm_run_id": _HISTORICAL_RUN_ID_PATTERN,
+            "later_cold_run_id": _HISTORICAL_RUN_ID_PATTERN,
+            "flagship_cold_orchestration_id": _HISTORICAL_ORCHESTRATION_ID_PATTERN,
+            "flagship_warm_orchestration_id": _HISTORICAL_ORCHESTRATION_ID_PATTERN,
+            "later_cold_orchestration_id": _HISTORICAL_ORCHESTRATION_ID_PATTERN,
+        }
+        if any(
+            not isinstance(values[field], str)
+            or pattern.fullmatch(values[field]) is None
+            for field, pattern in exact_id_patterns.items()
+        ):
+            _historical_schema_error("execution observation")
+        if (
+            values["qa_deploy_outcome"] != "build_failed"
+            or values["deterministic_preflight_status"] != "passed"
+            or values["causal_preflight_verifier_passed"] is not True
+            or not _is_exact_historical_int(
+                values["deterministic_preflight_passed_checks"], 197
+            )
+            or not _is_exact_historical_int(
+                values["deterministic_preflight_failed_checks"], 0
+            )
+            or not _is_exact_historical_int(values["production_initial_ledger_records"], 0)
+            or not _is_exact_historical_int(
+                values["production_initial_ledger_network_calls"], 0
+            )
+            or values["production_initial_ledger_actual_cost_usd"] != 0
+            or values["production_initial_ledger_checked_before_first_run_post"] is not True
+            or not _is_exact_historical_int(values["global_ledger_record_count"], 14)
+            or not _is_exact_historical_int(values["network_call_count"], 8)
+            or not _is_exact_historical_int(values["cache_hit_count"], 6)
+            or not _is_exact_historical_int(values["completed_network_model_calls"], 7)
+            or not _is_exact_historical_int(values["failed_model_calls"], 1)
+            or not _is_exact_historical_int(values["flagship_model_roles_complete"], 6)
+            or not _is_exact_historical_int(
+                values["flagship_deterministic_gate_receipts"], 3
+            )
+            or not _is_exact_historical_int(values["later_model_roles_complete"], 1)
+            or not _is_exact_historical_int(
+                values["later_downstream_model_calls_after_failure"], 0
+            )
+            or not _is_exact_historical_int(
+                values["later_deterministic_gate_receipts"], 0
+            )
+            or values["later_warm_run_started"] is not False
+            or not (
+                values["production_marker_emitted_at"]
+                < values["production_initial_ledger_checked_at"]
+                < values["first_production_run_post_accepted_at"]
+            )
         ):
             _historical_schema_error("execution observation")
         return
@@ -4648,6 +4785,49 @@ def _verify_historical_application_result(
         }:
             _historical_schema_error("application result")
         return
+    if attempt_id == "production-flagship-20260812-24":
+        if values != {
+            "outcome": "rejected",
+            "failure_type": (
+                "later_orchestrator_upstream_429_followed_by_terminal_ui_timeout"
+            ),
+            "error_type": "OpenRouterUpstreamRejectionError",
+            "error_invariant": "provider_upstream_rejection",
+            "successful_ledger_call_bound": False,
+            "ledger_call_id": "modelcall_b5cbda5d8b277ba3",
+            "ledger_outcome": "failed",
+            "flagship_cold_accepted": True,
+            "flagship_cold_call_ids": [
+                "modelcall_c903756dd0188c53",
+                "modelcall_a0246daa7e5c6e76",
+                "modelcall_0a9b5eaa94b54481",
+                "modelcall_b9d68d39d9608e31",
+                "modelcall_ee9cd0b8a8e50df4",
+                "modelcall_7db7c54ed4c7ea3e",
+            ],
+            "flagship_model_roles_complete": True,
+            "flagship_deterministic_gates_complete": True,
+            "complete_flagship_deterministic_gate_ids": [
+                "deterministic_process_gate",
+                "deterministic_evidence_gate",
+                "whole_playbook_gate",
+            ],
+            "flagship_warm_cache_accepted": True,
+            "later_canonical_result_accepted": True,
+            "later_canonical_call_id": "modelcall_5b379786dee0e98e",
+            "later_canonical_accepted_fact_count": 16,
+            "later_canonical_rejected_fact_count": 0,
+            "later_orchestrator_plan_accepted": False,
+            "failed_ledger_call_id": "modelcall_b5cbda5d8b277ba3",
+            "failed_ledger_outcome": "failed",
+            "later_downstream_execution_started": False,
+            "later_deterministic_gates_started": False,
+            "later_warm_replay_started": False,
+            "full_production_journey_accepted": False,
+            "runtime_acceptance_established": False,
+        }:
+            _historical_schema_error("application result")
+        return
     if attempt_id == "production-flagship-20260812-21":
         if values != {
             "outcome": "accepted",
@@ -6063,6 +6243,180 @@ def _verify_attempt_22_or_23_evidence(evidence: dict[str, Any]) -> None:
         _historical_schema_error("attempt binding")
 
 
+def _verify_attempt_24_evidence(evidence: dict[str, Any]) -> None:
+    for section, expected_sha256 in _HISTORICAL_ATTEMPT_24_SECTION_SHA256.items():
+        if _historical_json_sha256(evidence[section]) != expected_sha256:
+            _historical_schema_error("record hash")
+
+    execution = evidence["execution_observation"]
+    provider = evidence["provider_observation"]
+    application = evidence["application_result"]
+    calls = provider["calls"]
+    if not isinstance(calls, list) or len(calls) != 14:
+        _historical_schema_error("attempt binding")
+    call_ids = [call.get("call_id") for call in calls if isinstance(call, dict)]
+    if (
+        len(call_ids) != 14
+        or len(set(call_ids)) != 14
+        or any(_HISTORICAL_CALL_ID_PATTERN.fullmatch(call_id or "") is None for call_id in call_ids)
+    ):
+        _historical_schema_error("attempt binding")
+
+    cold, warm, later = calls[:6], calls[6:12], calls[12:]
+    required_agents = [item["agent_id"] for item in REQUIRED_MODEL_AGENTS]
+    cold_ids = [call["call_id"] for call in cold]
+    expected_origins = dict(zip(required_agents, cold_ids, strict=True))
+    successful_network = [
+        call
+        for call in calls
+        if call.get("call_count") == 1 and call.get("outcome") != "failed"
+    ]
+    failed = calls[-1]
+    known_network = [
+        call
+        for call in calls
+        if call.get("call_count") == 1 and call.get("actual_cost_usd") is not None
+    ]
+    outcomes = Counter(call.get("outcome") for call in calls)
+    if (
+        [call.get("agent_id") for call in cold] != required_agents
+        or any(call.get("orchestration_id") != execution["flagship_cold_orchestration_id"] for call in cold)
+        or any(call.get("call_count") != 1 for call in cold)
+        or any(call.get("agent_id") not in expected_origins for call in warm)
+        or [call.get("agent_id") for call in warm] != required_agents
+        or any(call.get("orchestration_id") != execution["flagship_warm_orchestration_id"] for call in warm)
+        or any(call.get("call_count") != 0 or call.get("outcome") != "cache_hit" for call in warm)
+        or any(call.get("origin_call_id") != expected_origins[call["agent_id"]] for call in warm)
+        or any(
+            call.get("response_id")
+            != cold[required_agents.index(call["agent_id"])].get("response_id")
+            for call in warm
+        )
+        or [call.get("agent_id") for call in later]
+        != ["canonical_facts", "orchestrator_plan"]
+        or any(call.get("orchestration_id") != execution["later_cold_orchestration_id"] for call in later)
+        or len(successful_network) != 7
+        or any(
+            call.get("upstream_provider") != "DeepInfra"
+            or call.get("response_model") not in ACCEPTED_PRODUCTION_RESPONSE_MODELS
+            or OPENROUTER_GENERATION_ID_PATTERN.fullmatch(call.get("response_id", "")) is None
+            or call.get("finish_reason") != "stop"
+            for call in successful_network
+        )
+        or failed.get("call_id") != application["failed_ledger_call_id"]
+        or failed.get("outcome") != "failed"
+        or failed.get("actual_cost_usd") is not None
+        or failed.get("error_type") != "OpenRouterUpstreamRejectionError"
+        or failed.get("error_invariant") != "provider_upstream_rejection"
+        or failed.get("provider_error_code") != 429
+        or failed.get("provider_boundary") != "openrouter"
+        or failed.get("expected_upstream_provider") != "DeepInfra"
+        or any(
+            field in failed
+            for field in (
+                "response_id",
+                "response_model",
+                "upstream_provider",
+                "finish_reason",
+                "prompt_tokens",
+                "completion_tokens",
+                "total_tokens",
+            )
+        )
+        or provider["network_call_count"] != 8
+        or provider["unknown_cost_call_count"] != 1
+        or provider["actual_cost_complete"] is not False
+        or provider["outcomes"] != dict(outcomes)
+        or provider["prompt_tokens"] != sum(call["prompt_tokens"] for call in known_network)
+        or provider["completion_tokens"] != sum(call["completion_tokens"] for call in known_network)
+        or provider["total_tokens"] != sum(call["total_tokens"] for call in known_network)
+        or provider["total_tokens"] != provider["prompt_tokens"] + provider["completion_tokens"]
+        or not math.isclose(
+            provider["actual_cost_usd"],
+            sum(call["actual_cost_usd"] for call in known_network),
+            rel_tol=0,
+            abs_tol=1e-10,
+        )
+        or not math.isclose(provider["actual_cost_usd"], 0.0336607, rel_tol=0, abs_tol=1e-10)
+        or not math.isclose(
+            provider["prior_cumulative_known_actual_cost_usd"],
+            0.4292561,
+            rel_tol=0,
+            abs_tol=1e-10,
+        )
+        or not math.isclose(
+            provider["cumulative_known_actual_cost_usd"],
+            provider["prior_cumulative_known_actual_cost_usd"] + provider["actual_cost_usd"],
+            rel_tol=0,
+            abs_tol=1e-10,
+        )
+        or cold_ids != application["flagship_cold_call_ids"]
+        or later[0].get("call_id") != application["later_canonical_call_id"]
+        or later[0].get("accepted_fact_count") != 16
+        or later[0].get("rejected_fact_count") != 0
+        or execution["ledger_created_at"] != cold[0].get("created_at")
+        or execution["ledger_updated_at"] != failed.get("updated_at")
+    ):
+        _historical_schema_error("attempt binding")
+
+    warm_result = evidence["warm_cache_result"]
+    qa_result = evidence["qa_result"]
+    capture = evidence["capture_provenance"]
+    summary = capture["public_model_ledger"]
+    public_qa = capture["public_qa_atomic_state"]
+    if (
+        warm_result
+        != {
+            "outcome": "accepted_flagship_only",
+            "run_id": execution["flagship_warm_run_id"],
+            "cold_orchestration_id": execution["flagship_cold_orchestration_id"],
+            "warm_orchestration_id": execution["flagship_warm_orchestration_id"],
+            "provider_network_call_count": 0,
+            "cache_hit_count": 6,
+            "exact_origin_lineage": True,
+            "later_warm_replay_started": False,
+            "runtime_acceptance_established": False,
+        }
+        or qa_result.get("terminal_timeout_ms") != 900000
+        or qa_result.get("provider_failure_observed_before_timeout") is not True
+        or qa_result.get("current_report_retained") is not False
+        or qa_result.get("current_evidence_manifest_retained") is not False
+        or summary.get("records") != 14
+        or summary.get("network_calls") != 8
+        or summary.get("unknown_cost_call_count") != 1
+        or summary.get("actual_cost_complete") is not False
+        or summary.get("sha256")
+        != "d91b9fac36f05aafa92aa83a996fbaee798289a8c0c368fb2ed109017271c386"
+        or public_qa.get("served_source_commit")
+        != "0db743a2a7a06c56bd5f011cc5928ef39efe424d"
+        or public_qa.get("report_sha256")
+        != "0cf3d1ee2efec1e4bd78a82c2a70dcffe637aa198535445e48b26222332ed5f9"
+        or public_qa.get("evidence_manifest_sha256")
+        != "215279d8d2b7a4fbf31536a288c496ae4e1f8ba983a539fdfdd8fc6d0b51bbf8"
+        or public_qa.get("report_manifest_binding_sha256")
+        != public_qa.get("evidence_manifest_sha256")
+        or public_qa.get("report_manifest_binding_bytes")
+        != public_qa.get("evidence_manifest_bytes")
+        or public_qa.get("report_status") != "passed"
+        or public_qa.get("report_passed") != 218
+        or public_qa.get("report_failed") != 0
+        or public_qa.get("retained_total_count") != 30
+        or public_qa.get("missing") != []
+        or public_qa.get("empty") != []
+        or capture["first_exact_failure"]["actual_cost_usd"] is not None
+        or capture["first_exact_failure"]["response_identity_retained"] is not False
+        or capture["first_exact_failure"]["usage_retained"] is not False
+        or not math.isclose(
+            capture["cumulative_known_actual_cost_usd"],
+            0.4629168,
+            rel_tol=0,
+            abs_tol=1e-10,
+        )
+        or capture["cumulative_unknown_cost_call_count"] != 1
+    ):
+        _historical_schema_error("attempt binding")
+
+
 def _verify_historical_attempt_schema(evidence: Any) -> None:
     if not isinstance(evidence, dict):
         _historical_schema_error("record")
@@ -6083,6 +6437,7 @@ def _verify_historical_attempt_schema(evidence: Any) -> None:
         "production-flagship-20260812-21",
         "production-flagship-20260812-22",
         "production-flagship-20260812-23",
+        "production-flagship-20260812-24",
     }:
         expected_top = expected_top | {"capture_provenance"}
     if attempt_id in {
@@ -6092,6 +6447,7 @@ def _verify_historical_attempt_schema(evidence: Any) -> None:
         "production-flagship-20260812-20",
         "production-flagship-20260812-21",
         "production-flagship-20260812-22",
+        "production-flagship-20260812-24",
     }:
         expected_top = expected_top | {"qa_result"}
     if attempt_id in {
@@ -6100,6 +6456,7 @@ def _verify_historical_attempt_schema(evidence: Any) -> None:
         "production-flagship-20260812-20",
         "production-flagship-20260812-21",
         "production-flagship-20260812-22",
+        "production-flagship-20260812-24",
     }:
         expected_top = expected_top | {"warm_cache_result"}
     _require_historical_fields(evidence, frozenset(expected_top), "record")
@@ -6142,6 +6499,8 @@ def _verify_historical_attempt_schema(evidence: Any) -> None:
         "production-flagship-20260812-23",
     }:
         _verify_attempt_22_or_23_evidence(evidence)
+    if attempt_id == "production-flagship-20260812-24":
+        _verify_attempt_24_evidence(evidence)
     if attempt_id in _HISTORICAL_TWO_CALL_OUTPUT_LIMITS:
         provider_calls = evidence["provider_observation"]["calls"]
         result = evidence["application_result"]
@@ -6786,6 +7145,11 @@ def verify_static_runtime_acceptance_contract(release: dict[str, Any]) -> None:
     expected_runtime = {
         "required_mode": REQUIRED_PRODUCTION_MODE,
         "required_model": REQUIRED_PRODUCTION_MODEL,
+        "model_acceptance_scope": "visible_browser_flagship",
+        "learning_comparison_authority": "deterministic_application_tool",
+        "required_final_model_ledger_records": 12,
+        "required_final_model_network_calls": 6,
+        "required_final_cache_hits": 6,
         "required_provider_max_in_flight": 1,
         "required_runtime_profile": REQUIRED_RUNTIME_PROFILE,
     }
@@ -6801,7 +7165,7 @@ def verify_static_runtime_acceptance_contract(release: dict[str, Any]) -> None:
     }
     if history != expected_history:
         raise VerificationError(
-            "Historical model validation must retain exactly twenty-three failed-closed records"
+            "Historical model validation must retain exactly twenty-four failed-closed records"
         )
     for path_text in HISTORICAL_MODEL_VALIDATION_RECORDS:
         verify_failed_model_attempt_evidence(
@@ -10160,6 +10524,112 @@ def _verify_cold_warm_model_pair(
     return expected_lineage, cold_orchestration_id, warm_orchestration_id
 
 
+def _verify_deterministic_learning_run(
+    run: Mapping[str, Any],
+    *,
+    knowledge_mode: str,
+    label: str,
+) -> None:
+    """Require a held-out comparison run with no model-execution surface."""
+
+    result = run.get("result")
+    result_audit = result.get("audit") if isinstance(result, Mapping) else None
+    next_action = result.get("next_action") if isinstance(result, Mapping) else None
+    expected_orchestration = {
+        "executed": False,
+        "authority_mode": DETERMINISTIC_REFERENCE_MODE,
+        "model": None,
+        "external_tracing": False,
+        "deterministic_safety_authority": True,
+    }
+    expected_canonicalization = {
+        "implementation": "deterministic_reference_oracle",
+        "model": None,
+        "provider": None,
+        "mode": DETERMINISTIC_REFERENCE_MODE,
+    }
+    if (
+        run.get("status") != "complete"
+        or run.get("claim_id") != "DEMO-MOULD-002"
+        or run.get("knowledge_mode") != knowledge_mode
+        or run.get("model_mode") != DETERMINISTIC_REFERENCE_MODE
+        or run.get("model") is not None
+        or run.get("profile") != DETERMINISTIC_REFERENCE_PROFILE
+        or not isinstance(run.get("run_id"), str)
+        or not run.get("run_id")
+        or not isinstance(result, Mapping)
+        or not isinstance(result_audit, Mapping)
+        or not isinstance(next_action, Mapping)
+        or run.get("agent_orchestration") != expected_orchestration
+        or result.get("agent_orchestration") != expected_orchestration
+        or result_audit.get("agent_orchestration") != expected_orchestration
+        or result_audit.get("profile") != DETERMINISTIC_REFERENCE_PROFILE
+        or result_audit.get("authority_mode") != DETERMINISTIC_REFERENCE_MODE
+        or result_audit.get("canonicalization") != expected_canonicalization
+        or next_action.get("agent_brief_contribution") is not None
+    ):
+        raise VerificationError(
+            f"{label} is not an exact deterministic-reference comparison run"
+        )
+
+    events = run.get("events")
+    if not isinstance(events, list):
+        raise VerificationError(f"{label} deterministic event stream is absent")
+    forbidden_activity_fields = {
+        "agents",
+        "deterministic_gates",
+        "execution_topology",
+        "specialist_artifacts",
+        "final_claim_brief",
+        "agent_contribution",
+        "call_id",
+        "response_id",
+        "response_model",
+        "requested_model",
+        "generation_model",
+        "upstream_provider",
+        "provider_endpoint",
+        "cache_hit",
+        "call_count",
+        "origin_call_id",
+        "origin_usage",
+        "origin_finish_reason",
+        "usage_source",
+        "orchestration_id",
+        "delegation_id",
+        "parent_call_id",
+        "prompt_tokens",
+        "completion_tokens",
+        "total_tokens",
+        "estimated_cost_usd",
+        "actual_cost_usd",
+        "latency_ms",
+    }
+    activity_paths: list[str] = []
+
+    def visit(value: Any, path: str) -> None:
+        if isinstance(value, Mapping):
+            for key, child in value.items():
+                child_path = f"{path}.{key}"
+                if key in forbidden_activity_fields:
+                    activity_paths.append(child_path)
+                elif key in {"model", "provider"} and child is not None:
+                    activity_paths.append(child_path)
+                elif key == "actor_type" and child == "nemotron_agent":
+                    activity_paths.append(child_path)
+                elif key == "implementation" and child == REQUIRED_AGENT_IMPLEMENTATION:
+                    activity_paths.append(child_path)
+                visit(child, child_path)
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                visit(child, f"{path}[{index}]")
+
+    visit(run, label)
+    if activity_paths:
+        raise VerificationError(f"{label} contains model execution activity")
+    _verify_sanitized_evidence({"run": run}, label)
+
+
 def _verify_warm_cache_lineage(
     *,
     flagship_run: Mapping[str, Any],
@@ -10171,7 +10641,7 @@ def _verify_warm_cache_lineage(
     final_ledger: Mapping[str, Any],
     lineage_receipt: Mapping[str, Any],
 ) -> None:
-    """Bind both cold/warm pairs to exact ordered 6/12/24 ledgers."""
+    """Bind one cold/warm flagship pair and deterministic held-out replay."""
 
     for ledger, label in (
         (cold_ledger, "Dynamic flagship ledger"),
@@ -10188,11 +10658,13 @@ def _verify_warm_cache_lineage(
         or not isinstance(final_items, list)
         or len(cold_items) != 6
         or len(isolation_items) != 12
-        or len(final_items) != 24
+        or len(final_items) != 12
         or isolation_items[:6] != cold_items
-        or final_items[:12] != isolation_items
+        or final_items != isolation_items
     ):
-        raise VerificationError("Dynamic model ledgers are not exact ordered 6/12/24 snapshots")
+        raise VerificationError(
+            "Dynamic model ledgers are not exact immutable ordered 6/12/12 snapshots"
+        )
 
     flagship_lineage, flagship_cold_orch, flagship_warm_orch = (
         _verify_cold_warm_model_pair(
@@ -10203,17 +10675,18 @@ def _verify_warm_cache_lineage(
             label="Dynamic flagship cache",
         )
     )
-    _, later_cold_orch, later_warm_orch = _verify_cold_warm_model_pair(
-        cold_run=baseline_run,
-        warm_run=later_run,
-        cold_items=final_items[12:18],
-        warm_items=final_items[18:24],
-        label="Dynamic later-claim cache",
+    _verify_deterministic_learning_run(
+        baseline_run,
+        knowledge_mode="baseline",
+        label="Dynamic later-claim baseline",
     )
-    if len(
-        {flagship_cold_orch, flagship_warm_orch, later_cold_orch, later_warm_orch}
-    ) != 4:
-        raise VerificationError("Dynamic cold/warm orchestration IDs are not globally distinct")
+    _verify_deterministic_learning_run(
+        later_run,
+        knowledge_mode="current",
+        label="Dynamic later-claim current",
+    )
+    if flagship_cold_orch == flagship_warm_orch:
+        raise VerificationError("Dynamic flagship orchestration IDs are not distinct")
 
     cold_summary = cold_ledger.get("summary")
     isolation_summary = isolation_ledger.get("summary")
@@ -10230,16 +10703,19 @@ def _verify_warm_cache_lineage(
         or isolation_summary.get("records") != 12
         or isolation_summary.get("network_calls") != 6
         or isolation_summary.get("outcomes", {}).get("cache_hit") != 6
-        or final_summary.get("records") != 24
-        or final_summary.get("network_calls") != 12
-        or final_summary.get("outcomes", {}).get("cache_hit") != 12
+        or final_summary != isolation_summary
+        or final_summary.get("records") != 12
+        or final_summary.get("network_calls") != 6
+        or final_summary.get("outcomes", {}).get("cache_hit") != 6
         or any(
             summary.get("unknown_cost_call_count") != 0
             or summary.get("actual_cost_complete") is not True
             for summary in (cold_summary, isolation_summary, final_summary)
         )
     ):
-        raise VerificationError("Dynamic model-ledger summaries do not prove exact 6/12/24 use")
+        raise VerificationError(
+            "Dynamic model-ledger summaries do not prove exact 6/12/12 use"
+        )
 
     expected_lineage_fields = {
         "contract",
@@ -10887,6 +11363,31 @@ def verify_release_contract() -> None:
         ("truth", "deterministic_build", "model_backed"): False,
         ("truth", "production_runtime_acceptance", "required_mode"): REQUIRED_PRODUCTION_MODE,
         ("truth", "production_runtime_acceptance", "required_model"): REQUIRED_PRODUCTION_MODEL,
+        (
+            "truth",
+            "production_runtime_acceptance",
+            "model_acceptance_scope",
+        ): "visible_browser_flagship",
+        (
+            "truth",
+            "production_runtime_acceptance",
+            "learning_comparison_authority",
+        ): "deterministic_application_tool",
+        (
+            "truth",
+            "production_runtime_acceptance",
+            "required_final_model_ledger_records",
+        ): 12,
+        (
+            "truth",
+            "production_runtime_acceptance",
+            "required_final_model_network_calls",
+        ): 6,
+        (
+            "truth",
+            "production_runtime_acceptance",
+            "required_final_cache_hits",
+        ): 6,
         (
             "truth",
             "production_runtime_acceptance",

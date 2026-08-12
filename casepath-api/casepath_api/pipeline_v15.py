@@ -1431,6 +1431,13 @@ class ClaimPipeline:
                 checklist,
                 verification,
             )
+            # Bind the execution authority at the run boundary in every mode.
+            # OpenRouter runs add accepted candidates below; deterministic
+            # reference runs must still make their zero-model execution explicit.
+            self.storage.patch_run(
+                run_id,
+                patch={"agent_orchestration": agent_orchestration},
+            )
             if self.model_mode == MODEL_MODE_OPENROUTER:
                 verification = self._verification_report(
                     claim,
