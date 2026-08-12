@@ -185,7 +185,7 @@ const EXPECTED_RUNTIME_ACCEPTANCE_CRITERIA = Object.freeze({
   requires_learning_replay_proof: true,
 });
 const EXPECTED_FAILED_MODEL_ATTEMPT_RECORDS = Object.freeze(
-  Array.from({ length: 19 }, (_, index) => `casepath/releases/model-validation-attempt-20260811-${String(index + 1).padStart(2, '0')}.json`),
+  Array.from({ length: 20 }, (_, index) => `casepath/releases/model-validation-attempt-20260811-${String(index + 1).padStart(2, '0')}.json`),
 );
 const EXPECTED_PRODUCTION_OPENING_BOUNDARY = 'Application code opened the shared context; no model call is claimed for this setup step. The call-bound Nemotron plan appears only when its returned event arrives.';
 const QA_SESSION_ID = `qa-${randomUUID()}`;
@@ -2411,7 +2411,8 @@ async function execute() {
   const visualNode = processGraph.nodes.find(node => (node.fact_ids || []).includes(visualFact.fact_id));
   await page.locator(`.process-node-button[data-node-id="${visualNode.node_id}"],.process-branch-node[data-node-id="${visualNode.node_id}"]`).first().click();
   const visualButton = page.locator(`.inspector-fact[data-fact-id="${visualFact.fact_id}"] .grounding-ref[data-source-locator-kind="visual_observation"]`).first();
-  check('Visual observation is not rendered as an exact quote', await visualButton.locator('q').count() === 0 && /not an exact quote/i.test(await visualButton.innerText()));
+  const visualButtonText = await visualButton.innerText();
+  check('Visual observation is rendered without quotation or model-extraction authority', await visualButton.locator('q').count() === 0 && /Hash-bound to these demo image bytes; not machine extraction, model output, or qualified review\./i.test(visualButtonText), visualButtonText);
   await visualButton.click();
   await waitVisible('#sourceViewer[open] .visual-region-highlight');
   const highlightedRegion = await page.locator('.visual-region-highlight').evaluate(node => ({ region: JSON.parse(node.dataset.highlightRegion), left: parseFloat(node.style.left) / 100, top: parseFloat(node.style.top) / 100, width: parseFloat(node.style.width) / 100, height: parseFloat(node.style.height) / 100, label: node.getAttribute('aria-label'), producer: node.dataset.sourceProducer, authority: node.dataset.sourceAuthority, annotation_contract: node.dataset.annotationContract, annotation_version: node.dataset.annotationVersion, image_sha256: node.dataset.imageSha256, artifact_sha256: node.dataset.artifactSha256 }));

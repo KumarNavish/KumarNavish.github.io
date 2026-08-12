@@ -4932,6 +4932,44 @@ actual provider charges are USD 0.3022050. CP-037 remains `fixed_unverified`
 until a new aligned production journey verifies the normalized-grounding repair
 and retains the current report/evidence-manifest pair.
 
+## Production attempt 20 and visual-authority wording boundary
+
+Attempt 20 ran against aligned source commit
+`2ab81d4c717c36f86717867230948ffe5c4875f8`. QA deploy
+`dep-d9u660fqj5pc73911p2g` accepted cold run
+`run_e48f3dfa041155f6` with orchestration
+`orch_0ea0187de554be2e`. All six required model roles completed through
+DeepInfra, followed by the deterministic process, evidence, and whole-playbook
+gates. Warm run `run_2ad603cb2a686137`, orchestration
+`orch_1c6bb216c4d5cc63`, then reproduced all six role results through exact
+cache-origin bindings and made zero provider calls.
+
+The six cold calls used 35,300 prompt and 3,784 completion tokens, 39,084 total,
+and cost USD 0.0258212 with complete billing. Four calls succeeded directly;
+canonical facts and evidence checklist disclosed guarded deterministic
+fallback. The global frozen ledger contained exactly twelve rows: those six
+network calls and the six zero-call cache records.
+
+Focused QA reached its terminal visual-grounding check and then failed
+`Visual observation is not rendered as an exact quote`. The renderer was
+already correct: it emitted no `<q>` element and displayed
+`Hash-bound to these demo image bytes; not machine extraction, model output,
+or qualified review.` The assertion additionally required the obsolete phrase
+`not an exact quote`, so the wording check failed despite the stronger
+authority disclaimer.
+
+The immutable record retains the exact deploy, run, orchestration, twelve-row
+ledger, cost/token, gate-progression, terminal-log, readiness, ledger, stale
+report, and missing-manifest observations. It does not invent per-gate artifact
+hashes: the failed build published no current evidence artifacts, the public
+ledger omits gate hashes, and the session-scoped run bodies require an unlogged
+random session header. The record is
+`casepath/releases/model-validation-attempt-20260811-20.json`; cumulative
+known actual provider charges are USD 0.3280262. CP-038 remains
+`fixed_unverified` until a new aligned production journey verifies the
+visual-authority assertion repair and retains the current
+report/evidence-manifest pair.
+
 ## Exact dynamic release evidence not yet observed by this record
 
 These point-in-time fields must be supplied by the sanitized ledger and retained
@@ -4941,7 +4979,7 @@ not fields to write back into the static release contract:
 ```text
 dynamic_runtime_acceptance_verdict: NOT_ESTABLISHED_BY_THIS_RECORD
 historical_model_validation_scope: failed_closed_history_only
-failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -19.json
+failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -20.json
 failed_attempt_id: authorized-smoke-20260811-01
 failed_attempt_application_outcome: rejected
 failed_attempt_failure_type: exact_private_reference_mismatch
@@ -4954,20 +4992,20 @@ provider_observed_prompt_tokens: 3629
 provider_observed_completion_tokens: 2625
 provider_observed_total_tokens: 6254
 provider_observed_finish_reason: stop
-latest_failed_attempt_id: production-flagship-20260812-19
-latest_failed_attempt_source_commit: 72b2527b05e2fc4e25c3b8655d4fe9f2da266580
+latest_failed_attempt_id: production-flagship-20260812-20
+latest_failed_attempt_source_commit: 2ab81d4c717c36f86717867230948ffe5c4875f8
 latest_failed_attempt_qa_service_id: srv-d9se2bh42hec73c54sjg
-latest_failed_attempt_qa_deploy_id: dep-d9u5nhnqj5pc739018eg
+latest_failed_attempt_qa_deploy_id: dep-d9u660fqj5pc73911p2g
 latest_failed_attempt_qa_deploy_outcome: build_failed
-latest_failed_attempt_qa_deploy_created_at: 2026-08-12T11:40:54.331311Z
-latest_failed_attempt_qa_deploy_started_at: 2026-08-12T11:40:54.301747Z
-latest_failed_attempt_qa_deploy_finished_at: 2026-08-12T11:43:34.867679Z
-latest_failed_attempt_run_id: run_7c0b2cd27469bf2e
-latest_failed_attempt_orchestration_id: orch_8c0994a363e6700c
+latest_failed_attempt_qa_deploy_created_at: 2026-08-12T12:11:46.18409Z
+latest_failed_attempt_qa_deploy_started_at: 2026-08-12T12:11:46.145229Z
+latest_failed_attempt_qa_deploy_finished_at: 2026-08-12T12:13:51.343568Z
+latest_failed_attempt_run_id: run_e48f3dfa041155f6
+latest_failed_attempt_orchestration_id: orch_0ea0187de554be2e
 latest_failed_attempt_application_outcome: accepted
-latest_failed_attempt_failure_type: normalized_grounding_text_quote_not_exact_substring
+latest_failed_attempt_failure_type: visual_authority_copy_wording_drift
 latest_failed_attempt_error_type: Error
-latest_failed_attempt_error_invariant: normalized_grounding_text_quote_not_exact_substring
+latest_failed_attempt_error_invariant: visual_authority_copy_wording_drift
 latest_failed_attempt_full_orchestration_accepted: true
 latest_failed_attempt_deterministic_process_gate_started: true
 latest_failed_attempt_evidence_checklist_started: true
@@ -4977,19 +5015,20 @@ latest_failed_attempt_warm_replay_started: true
 latest_failed_attempt_provider_outcome: six_roles_succeeded
 latest_failed_attempt_successful_upstream_provider: DeepInfra
 latest_failed_attempt_network_call_count: 6
-latest_failed_attempt_guarded_fallback_call_count: 1
-latest_failed_attempt_prompt_tokens: 35274
-latest_failed_attempt_completion_tokens: 3730
-latest_failed_attempt_total_tokens: 39004
-latest_failed_attempt_actual_cost_usd: 0.0256894
+latest_failed_attempt_guarded_fallback_call_count: 2
+latest_failed_attempt_prompt_tokens: 35300
+latest_failed_attempt_completion_tokens: 3784
+latest_failed_attempt_total_tokens: 39084
+latest_failed_attempt_actual_cost_usd: 0.0258212
 latest_failed_attempt_actual_cost_complete: true
 latest_failed_attempt_unknown_cost_call_count: 0
 latest_failed_attempt_current_report_retained: false
 latest_failed_attempt_current_evidence_manifest_retained: false
-known_failed_attempt_cost_usd_excluding_attempts_03_07_09_13_and_attempt_14_unknown_calls: 0.3022050
+latest_failed_attempt_gate_artifact_hashes_recoverable: false
+known_failed_attempt_cost_usd_excluding_attempts_03_07_09_13_and_attempt_14_unknown_calls: 0.3280262
 logical_specialist_topology: fan_out_and_join
 physical_provider_max_in_flight: 1
-accepted_retry_status: APPLICATION_ACCEPTED_BUT_QA_REJECTED_AT_NORMALIZED_GROUNDING_BOUNDARY_ON_ATTEMPT_19
+accepted_retry_status: APPLICATION_ACCEPTED_BUT_QA_REJECTED_AT_VISUAL_AUTHORITY_WORDING_BOUNDARY_ON_ATTEMPT_20
 candidate_source_commit: PENDING
 release_id: casepath-v20-reference-20260811
 provider: openrouter
@@ -5114,11 +5153,11 @@ Exact local freeze gates:
 
 ```text
 backend_tests: 291 passed
-release_contract_tests: 100 passed
+release_contract_tests: 101 passed
 deployment_and_static_publish_tests: 8 passed
-release_tests_total: 108 passed
+release_tests_total: 109 passed
 browser_contract_self_test: 87 fixtures passed
-source_manifest_files: 134
+source_manifest_files: 135
 release_artifact_files: 25
 model_visible_artifact_files: 24
 curated_frontend_publish_files: 20
@@ -5131,7 +5170,7 @@ git_diff_check: passed
 
 The static source and artifact contract is therefore locally verified. At this
 source-history freeze, dynamic production acceptance remained unestablished:
-attempts 01–19 are failed-closed release history. Attempt 16 accepted the
+attempts 01–20 are failed-closed release history. Attempt 16 accepted the
 same-commit six-role, three-gate cold application orchestration and exact
 zero-call warm cache replay, but retained no passing current report and
 evidence-manifest pair because its process interaction removed the three ranked
@@ -5144,7 +5183,10 @@ sibling completed without a corresponding completion receipt. Attempt 19
 completed all six cold roles and all three deterministic gates, then
 replayed all six roles through exact zero-call warm cache lineage before the
 terminal browser assertion rejected newline/space-equivalent grounding text.
-The shared NFKC and whitespace-collapse repair remains production-unverified.
+Attempt 20 then completed the same exact cold and warm topology before the
+terminal browser assertion rejected the renderer's stronger visual-authority
+copy because it did not contain the obsolete phrase `not an exact quote`.
+The source-bound visual wording repair remains production-unverified.
 A later authoritative same-commit QA artifact pair may supersede that
 point-in-time verdict without modifying this historical record.
 

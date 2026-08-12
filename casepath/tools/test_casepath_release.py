@@ -108,6 +108,22 @@ def test_process_workspace_interactions_preserve_declared_capabilities() -> None
     assert "precedents: state.stageMode === 'experience'" not in source
 
 
+def test_visual_grounding_qa_matches_rendered_authority_copy() -> None:
+    renderer = (
+        release_tool.REPOSITORY / "casepath" / "assets" / "live-v16.js"
+    ).read_text(encoding="utf-8")
+    browser_gate = (
+        release_tool.REPOSITORY / "casepath-qa" / "browser-focused-v20.mjs"
+    ).read_text(encoding="utf-8")
+    authority_copy = (
+        "Hash-bound to these demo image bytes; not machine extraction, model "
+        "output, or qualified review."
+    )
+    assert authority_copy in renderer
+    assert authority_copy.replace(".", r"\.") in browser_gate
+    assert "/not an exact quote/i" not in browser_gate
+
+
 def test_every_observable_claim_artifact_is_model_visible_and_scanned() -> None:
     api_root = release_tool.REPOSITORY / "casepath-api"
     if str(api_root) not in sys.path:
@@ -266,7 +282,7 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
             release_tool.REPOSITORY
             / f"casepath/releases/model-validation-attempt-20260811-{number:02d}.json"
         )
-        for number in range(1, 20)
+        for number in range(1, 21)
     }
     (
         attempt_1,
@@ -288,7 +304,8 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         attempt_17,
         attempt_18,
         attempt_19,
-    ) = (attempts[number] for number in range(1, 20))
+        attempt_20,
+    ) = (attempts[number] for number in range(1, 21))
     for evidence in attempts.values():
         assert evidence["status"] == "failed_closed"
         assert evidence["acceptance_passed"] is False
@@ -1370,11 +1387,58 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
     assert attempt_19["capture_provenance"]["public_qa_origin"]["classification"] == (
         "stale_previous_deploy_not_attempt_19"
     )
+    assert {
+        section: release_tool._historical_json_sha256(attempt_20[section])
+        for section in release_tool._HISTORICAL_ATTEMPT_20_SECTION_SHA256
+    } == release_tool._HISTORICAL_ATTEMPT_20_SECTION_SHA256
+    attempt_20_calls = attempt_20["provider_observation"]["calls"]
+    attempt_20_warm_calls = attempt_20["warm_cache_result"]["calls"]
+    assert attempt_20["execution_observation"]["source_commit"] == (
+        "2ab81d4c717c36f86717867230948ffe5c4875f8"
+    )
+    assert attempt_20["execution_observation"]["cold_run_id"] == (
+        "run_e48f3dfa041155f6"
+    )
+    assert attempt_20["execution_observation"]["warm_run_id"] == (
+        "run_2ad603cb2a686137"
+    )
+    assert len(attempt_20_calls) == len(attempt_20_warm_calls) == 6
+    assert {
+        call["agent_id"]: call["origin_call_id"] for call in attempt_20_warm_calls
+    } == {call["agent_id"]: call["call_id"] for call in attempt_20_calls}
+    assert attempt_20["provider_observation"]["global_ledger_summary"] == {
+        "records": 12,
+        "network_calls": 6,
+        "prompt_tokens": 35300,
+        "completion_tokens": 3784,
+        "total_tokens": 39084,
+        "actual_cost_usd": 0.0258212,
+        "actual_cost_complete": True,
+        "unknown_cost_call_count": 0,
+        "outcomes": {
+            "cache_hit": 6,
+            "succeeded": 4,
+            "succeeded_with_guarded_fallback": 2,
+        },
+    }
+    assert attempt_20["application_result"][
+        "deterministic_gate_progression_observed"
+    ] is True
+    assert attempt_20["application_result"][
+        "deterministic_gate_artifact_hashes_recoverable"
+    ] is False
+    assert attempt_20["qa_result"]["failure_type"] == (
+        "visual_authority_copy_wording_drift"
+    )
+    assert attempt_20["qa_result"]["visual_quote_element_count"] == 0
+    assert attempt_20["capture_provenance"]["public_qa_origin"]["classification"] == (
+        "stale_previous_deploy_not_attempt_20"
+    )
     assert sum(
         attempt["provider_observation"]["actual_cost_usd"]
         for attempt in attempts.values()
         if "actual_cost_usd" in attempt["provider_observation"]
-    ) == pytest.approx(0.3022050)
+    ) == pytest.approx(0.3280262)
     assert "actual_cost_usd" not in attempt_3["provider_observation"]
     assert "prompt_tokens" not in attempt_3["provider_observation"]
     assert attempt_3["provider_observation"]["charge_status"] == "unknown_unconfirmed"
@@ -1944,6 +2008,39 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         forged_attempt_19_records.append(forged_attempt)
 
     for forged_attempt in forged_attempt_19_records:
+        with pytest.raises(
+            release_tool.VerificationError,
+            match="exact bounded schema",
+        ):
+            release_tool.verify_failed_model_attempt_evidence(contract, forged_attempt)
+
+    forged_attempt_20_records = []
+    for section, mutate in (
+        (
+            "provider_observation",
+            lambda item: item["global_ledger_summary"].__setitem__(
+                "network_calls", 7
+            ),
+        ),
+        (
+            "application_result",
+            lambda item: item.__setitem__(
+                "deterministic_gate_artifact_hashes_recoverable", True
+            ),
+        ),
+        ("qa_result", lambda item: item.__setitem__("visual_quote_element_count", 1)),
+        (
+            "capture_provenance",
+            lambda item: item["gate_progression_capture"].__setitem__(
+                "gate_artifact_hashes_recoverable", True
+            ),
+        ),
+    ):
+        forged_attempt = deepcopy(attempt_20)
+        mutate(forged_attempt[section])
+        forged_attempt_20_records.append(forged_attempt)
+
+    for forged_attempt in forged_attempt_20_records:
         with pytest.raises(
             release_tool.VerificationError,
             match="exact bounded schema",
