@@ -597,7 +597,14 @@ Legacy asynchronous creation and reparenting are removed, so a delayed run read,
 MutationObserver overlap, or wrapper move cannot create a second proof. The
 browser gate requires exactly one wrapper, one thread, and one nested thread;
 the provider-free contract self-test covers applied, retrieved-only, incomplete,
-and repeated-render states. This repair remains hosted-preflight pending.
+and repeated-render states. Zero-provider deploy `dep-d9uaeo61egvs739geq7g`
+on exact commit `20e2b5101661945f19dd5a9242878a3fcdca0929` passed that
+structural boundary and advanced to the returned comparison-hash check. It
+stopped because the focus stylesheet hid the otherwise correct `.final-proof`
+panel, excluding both returned result hashes from visible `innerText`. The
+desktop result now keeps that hash-bound comparison panel visible and
+cache-busts the corrected stylesheet. The production marker was never emitted,
+and the public model ledger remained exactly empty.
 
 The canonical QA service explicitly sets
 `CASEPATH_ALLOW_PRODUCTION_MUTATION=1` because its reset-and-review journey
