@@ -196,6 +196,38 @@ def test_v20_review_keeps_the_unverified_authority_disclosure_visible() -> None:
     assert "/not qualified expert approval/i" in browser_gate
 
 
+def test_flagship_presentation_holds_work_and_artifacts_for_clarity() -> None:
+    renderer = (
+        release_tool.REPOSITORY / "casepath" / "assets" / "live-v16.js"
+    ).read_text(encoding="utf-8")
+    focus = (
+        release_tool.REPOSITORY / "casepath" / "assets" / "live-v20-focus.js"
+    ).read_text(encoding="utf-8")
+    browser_gate = (
+        release_tool.REPOSITORY / "casepath-qa" / "browser-focused-v20.mjs"
+    ).read_text(encoding="utf-8")
+
+    assert "const WORKING_FRAME_MS = 2400;" in renderer
+    assert "const ARTIFACT_FRAME_MS = 5600;" in renderer
+    assert "const RESEARCH_ARTIFACT_FRAME_MS = 9000;" in renderer
+    assert "const BACKGROUND_BEAT_MS = reduceMotion ? 20 : 120;" in renderer
+    assert "const PRESENTABLE_STAGE_STATES = new Set([...SUCCESS_EVENT_STATES, 'candidate_prepared']);" in renderer
+    assert "run?.process_candidate" in renderer
+    assert "run?.checklist_candidate" in renderer
+    assert "state.run?.verification_candidate" in renderer
+    assert "casepath:presentation" in renderer
+    assert 'data-retrieval-method="versioned_official_source_registry_lookup"' in renderer
+    assert "Official Swiss source · cached snapshot" in renderer
+    assert "Open official website ↗" in renderer
+    assert "button.click();" in renderer
+    assert "Why it matters" in focus
+    assert "Doing now" in focus
+    assert "Unsupported conclusions must fail closed before review." in focus
+    assert "window.__casepathPresentationTimeline" in browser_gate
+    assert "working frame ${workMs.toFixed(0)}ms" in browser_gate
+    assert "artifact frame ${artifactMs.toFixed(0)}ms" in browser_gate
+
+
 def test_later_result_keeps_returned_comparison_hashes_visible() -> None:
     focus_css = (
         release_tool.REPOSITORY / "casepath" / "assets" / "live-v20-focus.css"
@@ -213,7 +245,7 @@ def test_later_result_keeps_returned_comparison_hashes_visible() -> None:
         and "display:none!important" in line
     )
     assert ".final-proof" not in hidden_later_result_rule
-    assert 'assets/live-v20-focus.css?v=20.0.3' in index
+    assert 'assets/live-v20-focus.css?v=20.0.5' in index
     assert "const finalComparison = page.locator('#laterResult .final-proof');" in browser_gate
     assert "await finalComparison.isVisible()" in browser_gate
     assert "finalComparisonText.includes(proof.before.result_hash)" in browser_gate
@@ -6953,7 +6985,7 @@ def test_handoff_continuity_uses_structured_moments_without_translucent_text() -
         encoding="utf-8"
     )
     assert 'assets/live-v17-continuity.css?v=20.0.0' in index
-    assert 'assets/live-v16.js?v=20.0.4' in index
+    assert 'assets/live-v16.js?v=20.0.6' in index
     assert 'assets/live-v17.js?v=20.0.1' in index
     assert 'assets/live-v18.js?v=20.0.1' in index
     assert 'assets/live-v16.css?v=20.0.0' in index
