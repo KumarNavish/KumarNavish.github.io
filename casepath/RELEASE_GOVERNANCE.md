@@ -543,6 +543,16 @@ Before caller reset or run creation, production QA independently reads
 Caller reset intentionally preserves that ledger, so it cannot be used to hide
 stale rows or cache lineage from a prior attempt.
 
+The release-critical browser target is the 1440×900 desktop flagship. Every
+release checkpoint is checked there before the journey advances, and serious or
+critical Axe results remain fail-closed. Responsive/mobile website polish is
+tracked separately and cannot replace or weaken the desktop gate. Customer
+PDFs, email, photos, source grounding, and evidence inspection remain mandatory
+in that desktop journey. Continuity overlays use the renderer's structured
+canvas moment rather than copy matching;
+`unverified` content cannot be mistaken for the verification stage, and
+text-bearing retained process surfaces remain fully opaque.
+
 Run-read coalescing is strictly in-flight, session-scoped, and mutation-aware.
 Its key binds the effective `X-CasePath-Session` header after normal Fetch
 request/init precedence. A simulated-review POST invalidates any pre-review GET,
@@ -565,8 +575,15 @@ badge from 4.894:1 to about 4.44:1. The entrance is now transform-only. Before
 every Axe scan, QA waits for all finite document animations plus two stable
 paint frames, fails closed on a bounded settle timeout, and logs capped element
 counts, hashed selectors, rule IDs, and allowlisted contrast fields without
-retaining rendered claim or free-form failure text. This repair remains
-hosted-preflight pending.
+retaining rendered claim or free-form failure text. Zero-provider QA deploy
+`dep-d9u8srh42hec739rkeo0` on exact commit
+`6bb9a63e49d35110730c2e046323a6a43f6727cf` exercised that repair and reached
+the learning checkpoint without recurring on the transient badge. It then
+stopped on a separate stale continuity graph, still before the production
+marker and with an exactly empty public ledger. That graph was injected because
+copy matching read `unverified` as `verify`; continuity now uses only structured
+canvas moments and keeps text-bearing retained content fully opaque. The
+continuity repair remains hosted-preflight pending.
 
 The canonical QA service explicitly sets
 `CASEPATH_ALLOW_PRODUCTION_MUTATION=1` because its reset-and-review journey

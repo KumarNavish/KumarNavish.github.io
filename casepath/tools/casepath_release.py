@@ -1306,23 +1306,47 @@ _HISTORICAL_ATTEMPT_17_EVIDENCE_ITEM_IDS = (
 _HISTORICAL_LOCAL_TIME_PATTERN = re.compile(
     r"^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2} Europe/Zurich$"
 )
-REQUIRED_QA_EVIDENCE_FILES = {
+REQUIRED_QA_JSON_EVIDENCE_FILES = (
     "deployment-identity.json",
     "release-contract.json",
     "readiness-receipt.json",
+    "isolation-run.json",
+    "isolation-model-ledger.json",
     "flagship-run.json",
     "flagship-cold-model-ledger.json",
-    "flagship-cache-lineage.json",
     "demo-review.json",
     "post-review-run.json",
     "later-baseline-run.json",
     "later-after-memory-run.json",
     "learning-proof.json",
+    "model-ledger.json",
     "runtime-versions.json",
+    "flagship-cache-lineage.json",
+)
+REQUIRED_QA_SCREENSHOT_EVIDENCE_FILES = (
+    "01-start-desktop.png",
+    "02-ready-process-desktop.png",
+    "03-lease-pdf-overview.png",
+    "03-lease-pdf-detail.png",
+    "03-lease-pdf-search.png",
+    "03-image-inspection.png",
+    "03-image-grounding-inspection.png",
+    "04-review-desktop.png",
+    "05-review-applied-desktop.png",
+    "06-learning-desktop.png",
+    "07-later-result-desktop.png",
+    "final-state.png",
     "02-live-nemotron-agent.png",
     "03-deterministic-accepted-artifact.png",
-    "uninterrupted-focused-demo.webm",
-}
+)
+REQUIRED_QA_VIDEO_EVIDENCE_FILE = "uninterrupted-focused-demo.webm"
+REQUIRED_QA_EVIDENCE_FILES = frozenset(
+    (
+        *REQUIRED_QA_JSON_EVIDENCE_FILES,
+        *REQUIRED_QA_SCREENSHOT_EVIDENCE_FILES,
+        REQUIRED_QA_VIDEO_EVIDENCE_FILE,
+    )
+)
 
 BASE_EVIDENCE_NODE_IDS = {
     "claim_message": ("intake",),
@@ -9336,11 +9360,20 @@ def verify_dynamic_runtime_acceptance(
     if missing:
         raise VerificationError(f"Dynamic QA evidence manifest lacks required files: {missing}")
     media_contract = evidence_manifest.get("retained_media_contract")
-    if (
-        not isinstance(media_contract, dict)
-        or media_contract.get("missing") != []
-        or media_contract.get("empty") != []
+    if not isinstance(media_contract, dict):
+        raise VerificationError("Dynamic QA retained-media contract is incomplete")
+    expected_media_fields = {"json", "screenshots", "video", "missing", "empty"}
+    if set(media_contract) != expected_media_fields:
+        raise VerificationError("Dynamic QA retained-media contract fields are not exact")
+    if media_contract.get("json") != list(REQUIRED_QA_JSON_EVIDENCE_FILES):
+        raise VerificationError("Dynamic QA retained JSON inventory is not exact")
+    if media_contract.get("screenshots") != list(
+        REQUIRED_QA_SCREENSHOT_EVIDENCE_FILES
     ):
+        raise VerificationError("Dynamic QA retained screenshot inventory is not exact")
+    if media_contract.get("video") != REQUIRED_QA_VIDEO_EVIDENCE_FILE:
+        raise VerificationError("Dynamic QA retained video inventory is not exact")
+    if media_contract.get("missing") != [] or media_contract.get("empty") != []:
         raise VerificationError("Dynamic QA retained-media contract is incomplete")
 
     flagship_run = retained_evidence.get("flagship-run.json")

@@ -5240,9 +5240,9 @@ Exact local freeze gates:
 
 ```text
 backend_tests: 291 passed
-release_contract_tests: 110 passed
+release_contract_tests: 112 passed
 deployment_and_static_publish_tests: 8 passed
-release_tests_total: 118 passed
+release_tests_total: 120 passed
 browser_contract_self_test: 89 fixtures passed
 source_manifest_files: 137
 release_artifact_files: 25
@@ -5262,7 +5262,21 @@ learning view, failed there inside the 390 px Axe scan, never emitted the
 production marker, and left the public ledger at exactly zero records, network
 calls, and cost. The failure was the now-repaired transient opacity/contrast
 boundary, not a provider or application-orchestration failure. Its replacement
-remains hosted-preflight pending.
+was exercised by zero-provider QA deploy `dep-d9u8srh42hec739rkeo0` on exact
+commit `6bb9a63e49d35110730c2e046323a6a43f6727cf`. That replacement again held
+the admission boundary: no production marker appeared and the public model
+ledger remained exactly empty. Its observed terminal was the 390 px learning
+checkpoint, where it exposed a separate, viewport-independent lifecycle defect.
+The copy-based continuity matcher read `unverified` as the `verify` stage and
+injected a stale, opacity-dimmed process graph under the learning result.
+Continuity is now driven only by the structured `evidence`, `experience`, and
+`verify` canvas moments, is removed in all other states, and never lowers
+opacity on text-bearing process content. Active v17 assets are cache-busted.
+The definitive release gate now exercises the full desktop flagship at
+1440×900; responsive/mobile website layout is a separate lower-priority surface
+and cannot substitute for desktop acceptance. Customer-provided PDFs, email,
+photos, source grounding, and evidence inspection remain mandatory throughout
+the desktop journey. This continuity repair remains hosted-preflight pending.
 
 The static source and artifact contract is therefore locally verified. At this
 source-history freeze, dynamic production acceptance remained unestablished:

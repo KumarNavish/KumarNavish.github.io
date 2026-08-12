@@ -147,7 +147,7 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:3px solid 
 .process-node.current strong{color:var(--accent)}
 .process-node.blocked .process-node-button{border-style:dashed;background:#fafbfc}
 .process-node.blocked .process-marker{color:var(--quiet);background:var(--canvas)}
-.process-node.future{opacity:.66}
+.process-node.future{color:var(--quiet)}
 .branch-fork{margin:10px 0 5px 42px;padding:14px 0 2px;border-top:1px solid var(--line)}
 .branch-fork>button{width:100%;display:flex;justify-content:space-between;gap:12px;border:0;background:transparent;padding:0;color:var(--muted);font-size:11px;cursor:pointer}
 .branch-fork>button strong{color:var(--accent);font-size:11px}
@@ -246,7 +246,7 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:3px solid 
 .later-agent-row p{margin:0;color:var(--muted)}
 .before-after{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px;margin-top:24px}
 .before-after section{min-width:0}
-.before-after section:first-child{opacity:.68}
+.before-after section:first-child{color:var(--quiet)}
 .before-after h4{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 10px}
 .before-after h3{font-size:18px;margin:0 0 10px}
 .before-after ul{list-style:none;padding:0;margin:0;border-top:1px solid var(--line)}

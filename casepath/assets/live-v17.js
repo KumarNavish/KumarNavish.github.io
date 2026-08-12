@@ -203,26 +203,32 @@
   }
 
   function preserveProcessDuringHandoff(canvas) {
+    const continuityByMoment = {
+      evidence: {
+        label: 'Evidence Checklist Tool',
+        detail: 'Attaching each fact and evidence requirement to the decision it can resolve.',
+      },
+      experience: {
+        label: 'Historical Retrieval Tool',
+        detail: 'Ranking provenance-labelled generated reference patterns at the unresolved causation branch.',
+      },
+      verify: {
+        label: 'Whole-Playbook Verification Gate',
+        detail: 'Checking the graph and every process-to-evidence relationship before review.',
+      },
+    };
+    const continuity = continuityByMoment[canvas.dataset.casepathMoment || ''];
+    if (!continuity) {
+      canvas.querySelector('.v17-continuity')?.remove();
+      return;
+    }
     if (canvas.querySelector('.process-layout') || !lastProcessMarkup) return;
     const activeRunId = document.body.dataset.casepathActiveRunId || '';
     if (!activeRunId || activeRunId !== lastProcessRunId) return;
-    const text = canvas.textContent || '';
-    let label = '';
-    let detail = '';
-    if (/attaching evidence needs|attaching evidence/i.test(text)) {
-      label = 'Evidence Checklist Tool';
-      detail = 'Attaching each fact and evidence requirement to the decision it can resolve.';
-    } else if (/asking organizational memory|organizational experience/i.test(text)) {
-      label = 'Historical Retrieval Tool';
-      detail = 'Ranking provenance-labelled generated reference patterns at the unresolved causation branch.';
-    } else if (/verif|checking the complete playbook/i.test(text)) {
-      label = 'Whole-Playbook Verification Gate';
-      detail = 'Checking the graph and every process-to-evidence relationship before review.';
-    }
-    if (!label || canvas.querySelector('.v17-continuity')) return;
+    if (canvas.querySelector('.v17-continuity')) return;
     canvas.insertAdjacentHTML('beforeend', `
       <section class="v17-continuity" aria-label="The process remains visible while the next specialist contributes">
-        <div class="v17-continuity-note"><span></span><div><small>${esc(label)}</small><strong>${esc(detail)}</strong></div></div>
+        <div class="v17-continuity-note"><span></span><div><small>${esc(continuity.label)}</small><strong>${esc(continuity.detail)}</strong></div></div>
         ${lastProcessMarkup}
       </section>`);
   }

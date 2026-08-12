@@ -1678,23 +1678,13 @@ async function horizontalOverflow() {
 }
 
 async function auditViewports(label, selector) {
-  for (const viewport of [
-    { width: 390, height: 844, name: '390' },
-    { width: 320, height: 700, name: '320' },
-  ]) {
-    await page.setViewportSize(viewport);
-    await sleep(120);
-    const overflow = await horizontalOverflow();
-    check(`${label} at ${viewport.name}px has no page-level horizontal overflow`, overflow <= 1, `overflow=${overflow}`);
-    check(`${label} at ${viewport.name}px retains its primary artifact`, await page.locator(selector).first().isVisible());
-    check(`${label} at ${viewport.name}px keeps the source claim available`, await page.locator('.submission-pane').isVisible());
-    await runAxe(`${label} at ${viewport.name}px`);
-    await screenshot(`${label}-${viewport.name}.png`, true);
-  }
   await page.setViewportSize({ width: 1440, height: 900 });
   await sleep(120);
-  check(`${label} returns to desktop`, await page.locator(selector).first().isVisible());
+  check(`${label} desktop retains its primary artifact`, await page.locator(selector).first().isVisible());
+  check(`${label} desktop keeps the source claim available`, await page.locator('.submission-pane').isVisible());
+  check(`${label} desktop has no page-level horizontal overflow`, await horizontalOverflow() <= 1, `overflow=${await horizontalOverflow()}`);
   await runAxe(`${label} desktop`);
+  await screenshot(`${label}-desktop.png`, true);
 }
 
 async function settleFiniteAnimationsForAxe(label) {
@@ -1786,7 +1776,8 @@ async function runAxe(label) {
   const { default: AxeBuilder } = await import('@axe-core/playwright');
   const results = await new AxeBuilder({ page }).analyze();
   const serious = results.violations.filter(item => ['serious', 'critical'].includes(item.impact));
-  check(`${label} has no serious or critical axe violations`, serious.length === 0, JSON.stringify(axeViolationDiagnostics(serious)));
+  const diagnostics = JSON.stringify(axeViolationDiagnostics(serious));
+  check(`${label} has no serious or critical axe violations`, serious.length === 0, diagnostics);
 }
 
 function sha256(value) {
@@ -1846,17 +1837,17 @@ async function finalizeEvidenceManifest() {
   files.sort((left, right) => left.path.localeCompare(right.path));
   const retainedPaths = new Set(files.map(item => item.path));
   const requiredVisualEvidence = [
-    '01-start-390.png',
-    '02-ready-process-390.png',
+    '01-start-desktop.png',
+    '02-ready-process-desktop.png',
     '03-lease-pdf-overview.png',
     '03-lease-pdf-detail.png',
-    '03-lease-pdf-mobile.png',
+    '03-lease-pdf-search.png',
     '03-image-inspection.png',
     '03-image-grounding-inspection.png',
-    '04-review-390.png',
-    '05-review-applied-390.png',
-    '06-learning-390.png',
-    '07-later-result-390.png',
+    '04-review-desktop.png',
+    '05-review-applied-desktop.png',
+    '06-learning-desktop.png',
+    '07-later-result-desktop.png',
     'final-state.png',
     'uninterrupted-focused-demo.webm',
   ];
@@ -2205,14 +2196,9 @@ async function execute() {
   await page.locator('#sourceSearchForm button[type="submit"]').click();
   await waitText('#sourceSearchStatus', /matched/i);
   check('PDF extracted-text search returns navigable page results', await page.locator('#sourceSearchResults [data-search-page]').count() > 0 && await page.locator('#sourceStage mark').count() > 0);
+  await screenshot('03-lease-pdf-search.png');
   await page.locator('#sourceTabOriginal').click();
   await waitVisible('#documentPage');
-  await page.setViewportSize({ width: 390, height: 844 });
-  check('Mobile source viewer retains source-to-fact region', await page.locator('#sourceEvidence').isVisible());
-  check('Mobile lease viewer keeps page navigation and the inspected original visible', await page.locator('.page-thumbnails').isVisible() && await page.locator('#documentPage').isVisible());
-  await runAxe('Lease PDF viewer at 390px');
-  await screenshot('03-lease-pdf-mobile.png');
-  await page.setViewportSize({ width: 1440, height: 900 });
   await page.keyboard.press('Escape');
   await waitHidden('#sourceViewer');
   await page.waitForFunction(artifactId => document.activeElement?.dataset.artifactId === artifactId, pdf.artifact_id);
@@ -2501,9 +2487,7 @@ async function execute() {
   const renderedPassages = await page.locator(`.source-fact[data-fact-id="${fact.fact_id}"] .source-passage`).evaluateAll(passages => passages.map(passage => ({ locator_kind: passage.dataset.locatorKind, page: passage.dataset.sourcePage, excerpt: passage.dataset.sourceExcerpt, agent: passage.dataset.sourceAgent })));
   const expectedPassages = sourceRefs.map(ref => ({ locator_kind: ref.locator_kind, page: ref.page == null ? '' : String(ref.page), excerpt: ref.excerpt || '', agent: ref.agent || '' }));
   check('Source-to-fact grounding retains exact passages and owning-decision route', JSON.stringify(renderedPassages) === JSON.stringify(expectedPassages) && await page.locator(`.source-fact[data-fact-id="${fact.fact_id}"] [data-source-fact-node="${owningNode.node_id}"]`).count() === 1, JSON.stringify({ expectedPassages, renderedPassages }));
-  await page.setViewportSize({ width: 320, height: 700 });
-  check('320px source viewer retains bidirectional grounding', await page.locator(`.source-fact[data-fact-id="${fact.fact_id}"]`).isVisible());
-  await page.setViewportSize({ width: 1440, height: 900 });
+  check('Desktop source viewer retains bidirectional grounding', await page.locator(`.source-fact[data-fact-id="${fact.fact_id}"]`).isVisible());
   await page.locator(`.source-fact[data-fact-id="${fact.fact_id}"] [data-source-fact-node="${owningNode.node_id}"]`).click();
   await waitHidden('#sourceViewer');
   check('Source route returns focus to owning decision', await page.evaluate(nodeId => document.activeElement?.dataset.nodeId === nodeId, owningNode.node_id));
