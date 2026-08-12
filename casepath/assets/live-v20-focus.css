@@ -234,7 +234,7 @@ body[data-casepath-moment="knowledge"][data-casepath-learning-ready="true"] .kno
 .v20-learning-row p{margin:3px 0 0;color:var(--muted);font-size:10px;line-height:1.45}
 
 body[data-casepath-moment="later-result"] .stage-shell{max-width:860px}
-body[data-casepath-moment="later-result"] .later-source-banner,body[data-casepath-moment="later-result"] .later-agent-stream,body[data-casepath-moment="later-result"] .final-proof,body[data-casepath-moment="later-result"] .v18-reuse-proof>header{display:none!important}
+body[data-casepath-moment="later-result"] .later-source-banner,body[data-casepath-moment="later-result"] .later-agent-stream,body[data-casepath-moment="later-result"] .v18-reuse-proof>header{display:none!important}
 .v20-later-heading{margin-bottom:22px}
 .v20-later-heading small{display:block;color:var(--green);font-size:9px;font-weight:790;letter-spacing:.08em;text-transform:uppercase}
 .v20-later-heading h2{margin:6px 0 6px;font-size:clamp(28px,4vw,42px);line-height:1.08;letter-spacing:-.045em}
