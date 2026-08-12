@@ -4195,7 +4195,7 @@ with all six successful paid OpenRouter/Nemotron ledger records bound to the
 journey, including exact response models, distinct response and call IDs,
 positive token counts, positive actual cost, strict accepted majorities, and
 all three passed deterministic gates. This record does not contain a passing
-production QA artifact pair; the twelve retained attempts remain
+production QA artifact pair; the thirteen retained attempts remain
 failed-closed history and do not satisfy the production condition.
 
 ## Release and artifact behavior
@@ -4605,9 +4605,37 @@ the unresolved process-decision contribution boundary.
 
 Known aggregate charges for attempts 1, 2, 4, 5, 6, 8, 10, 11, and 12 are USD
 0.1634040.
-Attempts 3, 7, and 9 remain unknown and excluded rather than treated as zero;
+Attempts 3, 7, 9, and 13 remain unknown and excluded rather than treated as zero;
 the USD 0.027645 reservations recorded for attempts 7 and 9 remain estimates,
 not observed charges.
+
+## Production attempt 13 and external DeepInfra 429
+
+Attempt 13 ran from QA service `srv-d9se2bh42hec73c54sjg`, deploy
+`dep-d9ts68ht0dsc73c0nj5g`, against source commit
+`690f99e63a6eab4120ad75b83671cffe0f9e62af`. Render records creation at
+2026-08-12T00:49:39.049742Z, start at 2026-08-12T00:49:39.025093Z, and
+completion at 2026-08-12T00:50:00.690848Z. The public sanitized ledger binds
+only canonical-facts call `modelcall_f97afa2a05079468` to orchestration
+`orch_bbf7ee808dc04f57`. It failed with `TooManyRequestsResponseError` after
+2,777.996 ms and retained no response identity, response model, upstream
+provider success metadata, usage, or actual cost.
+
+The signed-in, read-only OpenRouter upstream-request receipt identifies
+`gen-1786495797-wwTpDFx93vAismEWwWvY`, final provider DeepInfra, status 429,
+exactly one router attempt, and 235 ms router latency. The relevant key had
+used approximately 0.6536316% of its USD 25 limit and the account retained
+healthy credits. This excludes key/account hard-limit exhaustion from the
+bounded classification. The strongest supported attribution is an external
+DeepInfra 429 surfaced through OpenRouter; the provider-internal reason for
+that 429 remains unknown. No raw provider text is retained.
+
+No canonical result, downstream model role, or deterministic gate was
+accepted. Actual cost remains unknown and is excluded from the USD 0.1634040
+known aggregate. The failed QA build establishes no current runtime
+acceptance. The immutable sanitized record is retained at
+`casepath/releases/model-validation-attempt-20260811-13.json`; CP-025 tracks
+the external provider availability boundary.
 
 ## Exact dynamic model evidence not yet observed by this record
 
@@ -4618,7 +4646,7 @@ not fields to write back into the static release contract:
 ```text
 dynamic_runtime_acceptance_verdict: NOT_ESTABLISHED_BY_THIS_RECORD
 historical_model_validation_scope: failed_closed_history_only
-failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -12.json
+failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -13.json
 failed_attempt_id: authorized-smoke-20260811-01
 failed_attempt_application_outcome: rejected
 failed_attempt_failure_type: exact_private_reference_mismatch
@@ -4631,34 +4659,35 @@ provider_observed_prompt_tokens: 3629
 provider_observed_completion_tokens: 2625
 provider_observed_total_tokens: 6254
 provider_observed_finish_reason: stop
-latest_failed_attempt_id: production-flagship-20260811-12
-latest_failed_attempt_source_commit: a839ff99870f5be11f232d1bfc818854202bd2dd
-latest_failed_attempt_qa_deploy_id: dep-d9tqqlfavr4c73cfqb0g
+latest_failed_attempt_id: production-flagship-20260812-13
+latest_failed_attempt_source_commit: 690f99e63a6eab4120ad75b83671cffe0f9e62af
+latest_failed_attempt_qa_service_id: srv-d9se2bh42hec73c54sjg
+latest_failed_attempt_qa_deploy_id: dep-d9ts68ht0dsc73c0nj5g
 latest_failed_attempt_qa_deploy_outcome: build_failed
-latest_failed_attempt_qa_deploy_created_at: 2026-08-11T23:16:37.178532Z
-latest_failed_attempt_qa_deploy_finished_at: 2026-08-11T23:18:56.810953Z
-latest_failed_attempt_qa_run_id: run_403c755cd290a3dc
-latest_failed_attempt_application_outcome: process_decision_mapping_model_contribution_majority
-latest_failed_attempt_error_type: AgentBoundaryError
-latest_failed_attempt_error_invariant: model_contribution_majority
-latest_failed_attempt_fact_counts: 17_ACCEPTED_1_REJECTED_WITH_GUARDED_FALLBACK
-latest_failed_attempt_source_projection_count: 11
-latest_failed_attempt_provider_outcome: three_successes_then_process_majority_rejected
+latest_failed_attempt_qa_deploy_created_at: 2026-08-12T00:49:39.049742Z
+latest_failed_attempt_qa_deploy_started_at: 2026-08-12T00:49:39.025093Z
+latest_failed_attempt_qa_deploy_finished_at: 2026-08-12T00:50:00.690848Z
+latest_failed_attempt_application_outcome: external_deepinfra_http_429
+latest_failed_attempt_error_type: TooManyRequestsResponseError
+latest_failed_attempt_error_invariant: NOT_RETAINED
+latest_failed_attempt_fact_counts: NONE_ACCEPTED
+latest_failed_attempt_source_projection_count: NONE
+latest_failed_attempt_provider_outcome: deepinfra_http_429
 latest_failed_attempt_upstream_provider: DeepInfra
-latest_failed_attempt_network_call_count: 4
-latest_failed_attempt_canonical_call_id: modelcall_f738b46b703992a2
-latest_failed_attempt_orchestrator_call_id: modelcall_19ca5512d3d071b2
-latest_failed_attempt_document_source_call_id: modelcall_1acb408e46e5998b
-latest_failed_attempt_failed_call_id: modelcall_0a572660847e0df6
-latest_failed_attempt_failed_agent_id: process_decision_mapping
-latest_failed_attempt_finish_reason: stop
-latest_failed_attempt_prompt_tokens: 44585
-latest_failed_attempt_completion_tokens: 5030
-latest_failed_attempt_total_tokens: 49615
-latest_failed_attempt_actual_cost_usd: 0.0332561
-latest_failed_attempt_actual_cost_complete: true
-known_failed_attempt_cost_usd_excluding_attempts_03_07_and_09: 0.1634040
-accepted_retry_status: PENDING_NOT_RUN_AFTER_ATTEMPT_12
+latest_failed_attempt_network_call_count: 1
+latest_failed_attempt_canonical_call_id: modelcall_f97afa2a05079468
+latest_failed_attempt_orchestrator_call_id: NONE
+latest_failed_attempt_document_source_call_id: NONE
+latest_failed_attempt_failed_call_id: modelcall_f97afa2a05079468
+latest_failed_attempt_failed_agent_id: canonical_facts
+latest_failed_attempt_finish_reason: NOT_RETAINED
+latest_failed_attempt_prompt_tokens: NOT_RETAINED
+latest_failed_attempt_completion_tokens: NOT_RETAINED
+latest_failed_attempt_total_tokens: NOT_RETAINED
+latest_failed_attempt_actual_cost_usd: UNKNOWN_EXCLUDED
+latest_failed_attempt_actual_cost_complete: false
+known_failed_attempt_cost_usd_excluding_attempts_03_07_09_and_13: 0.1634040
+accepted_retry_status: PENDING_NOT_RUN_AFTER_ATTEMPT_13
 candidate_source_commit: PENDING
 release_id: casepath-v20-reference-20260811
 provider: openrouter

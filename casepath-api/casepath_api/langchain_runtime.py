@@ -11,12 +11,17 @@ from typing import Any
 from langchain_openrouter import ChatOpenRouter as _LangChainChatOpenRouter
 from langsmith.run_helpers import get_tracing_context
 from openrouter import OpenRouter
-from openrouter.errors import ResponseValidationError
+from openrouter.errors import (
+    OpenRouterError,
+    ResponseValidationError,
+    TooManyRequestsResponseError,
+)
 
 
 NEMOTRON_MODEL = "nvidia/nemotron-3-ultra-550b-a55b"
 OPENROUTER_ENDPOINT_TAG = "deepinfra/fp4"
 OPENROUTER_EXPECTED_UPSTREAM_PROVIDER = "DeepInfra"
+OPENROUTER_PROVIDER_BOUNDARY = "openrouter"
 OPENROUTER_PROVIDER_POLICY = {
     "only": [OPENROUTER_ENDPOINT_TAG],
     "allow_fallbacks": False,
@@ -108,6 +113,8 @@ class OpenRouterUpstreamRejectionError(RuntimeError):
             and 0 <= provider_error_code <= OPENROUTER_PROVIDER_ERROR_CODE_MAX
             else None
         )
+        self.provider_boundary = OPENROUTER_PROVIDER_BOUNDARY
+        self.expected_upstream_provider = OPENROUTER_EXPECTED_UPSTREAM_PROVIDER
 
     @property
     def safe_context(self) -> dict[str, str | int]:
@@ -116,6 +123,8 @@ class OpenRouterUpstreamRejectionError(RuntimeError):
             for key, value in {
                 "response_id": self.response_id,
                 "provider_error_code": self.provider_error_code,
+                "provider_boundary": self.provider_boundary,
+                "expected_upstream_provider": self.expected_upstream_provider,
             }.items()
             if value is not None
         }
@@ -217,6 +226,31 @@ def _bounded_provider_error_code(error: Mapping[str, Any]) -> int | None:
     return value
 
 
+def _bounded_http_status(error: OpenRouterError) -> int | None:
+    value = getattr(error, "status_code", None)
+    if (
+        not isinstance(value, int)
+        or isinstance(value, bool)
+        or not 400 <= value <= 599
+    ):
+        return None
+    return value
+
+
+def _bounded_http_rejection(
+    error: OpenRouterError,
+    *,
+    required_status: int | None = None,
+) -> OpenRouterUpstreamRejectionError | None:
+    status = _bounded_http_status(error)
+    if status is None or (required_status is not None and status != required_status):
+        return None
+    return OpenRouterUpstreamRejectionError(
+        response_id=_bounded_generation_id(getattr(error, "headers", None)),
+        provider_error_code=status,
+    )
+
+
 def _metadata_field(value: Any, field: str) -> Any:
     if isinstance(value, Mapping):
         return value.get(field)
@@ -280,6 +314,9 @@ def _recover_openrouter_response(
     returns only those fields, and never stores or rethrows the raw body.
     """
 
+    rejection = _bounded_http_rejection(error)
+    if rejection is not None:
+        return rejection
     try:
         content_type = error.headers.get("content-type", "").split(";", 1)[0].strip().casefold()
         body = error.body
@@ -391,6 +428,10 @@ class _ChatSendBridge:
             return self._chat.send(**kwargs)
         except ResponseValidationError as error:
             recovered = _recover_openrouter_response(error)
+        except TooManyRequestsResponseError as error:
+            recovered = _bounded_http_rejection(error, required_status=429)
+        except OpenRouterError as error:
+            recovered = _bounded_http_rejection(error)
         # Raise outside the SDK exception scope so raw_response/body are not
         # reachable through __context__ or __cause__ on the bounded error.
         if isinstance(recovered, OpenRouterUpstreamRejectionError):
@@ -560,6 +601,7 @@ __all__ = [
     "NEMOTRON_MODEL",
     "OPENROUTER_ENDPOINT_TAG",
     "OPENROUTER_EXPECTED_UPSTREAM_PROVIDER",
+    "OPENROUTER_PROVIDER_BOUNDARY",
     "OPENROUTER_PROVIDER_ERROR_CODE_MAX",
     "OPENROUTER_PROVIDER_POLICY",
     "OPENROUTER_REASONING",

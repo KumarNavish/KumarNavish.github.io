@@ -1793,7 +1793,7 @@ def test_default_langchain_invoker_maps_upstream_rejection_to_safe_context(
         def invoke(self, *_args, **_kwargs):
             raise langchain_runtime.OpenRouterUpstreamRejectionError(
                 response_id="gen-1786483160-AAAAAAAAAAAAAAAAAAAA",
-                provider_error_code=400,
+                provider_error_code=429,
             )
 
     monkeypatch.setattr(
@@ -1815,7 +1815,9 @@ def test_default_langchain_invoker_maps_upstream_rejection_to_safe_context(
     assert captured.value.invariant == "provider_upstream_rejection"
     assert captured.value.safe_context == {
         "response_id": "gen-1786483160-AAAAAAAAAAAAAAAAAAAA",
-        "provider_error_code": 400,
+        "provider_error_code": 429,
+        "provider_boundary": "openrouter",
+        "expected_upstream_provider": "DeepInfra",
     }
     assert captured.value.__cause__ is None
     assert captured.value.__context__ is None
@@ -1834,7 +1836,9 @@ def test_canonical_upstream_rejection_retains_only_safe_unknown_cost_evidence(
             invariant="provider_upstream_rejection",
             safe_context={
                 "response_id": "gen-1786483161-BBBBBBBBBBBBBBBBBBBB",
-                "provider_error_code": 400,
+                "provider_error_code": 429,
+                "provider_boundary": "openrouter",
+                "expected_upstream_provider": "DeepInfra",
             },
         )
 
@@ -1857,7 +1861,9 @@ def test_canonical_upstream_rejection_retains_only_safe_unknown_cost_evidence(
     assert ledger["outcome"] == "failed"
     assert ledger["error_invariant"] == "provider_upstream_rejection"
     assert ledger["response_id"] == "gen-1786483161-BBBBBBBBBBBBBBBBBBBB"
-    assert ledger["provider_error_code"] == 400
+    assert ledger["provider_error_code"] == 429
+    assert ledger["provider_boundary"] == "openrouter"
+    assert ledger["expected_upstream_provider"] == "DeepInfra"
     assert ledger["actual_cost_usd"] is None
     assert "usage_source" not in ledger
     assert "prompt_tokens" not in ledger

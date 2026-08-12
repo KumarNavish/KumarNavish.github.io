@@ -109,7 +109,7 @@ bound identically across the run audit and sanitized ledger. A paid provider
 response, a cache replay, or a weak/unbound role
 record does not satisfy that gate.
 
-Eleven authorized model attempts failed closed:
+Thirteen authorized model attempts failed closed:
 
 - Attempt 1 reached DeepInfra through OpenRouter and returned the provider's
   dated canonical model ID. It charged USD 0.00756 for 3,629 prompt and 2,625
@@ -227,6 +227,21 @@ Eleven authorized model attempts failed closed:
   No later model role or deterministic gate ran. The four-call ledger is
   complete at USD 0.0332561 for 49,615 tokens and establishes no current
   runtime acceptance.
+- Attempt 13 ran from QA service `srv-d9se2bh42hec73c54sjg`, deploy
+  `dep-d9ts68ht0dsc73c0nj5g`, against aligned source commit
+  `690f99e63a6eab4120ad75b83671cffe0f9e62af`. The public application ledger
+  contains one failed `canonical_facts` network call,
+  `modelcall_f97afa2a05079468`, in orchestration
+  `orch_bbf7ee808dc04f57`. It retained `TooManyRequestsResponseError` and
+  2,777.996 ms application latency, but no response identity, provider-success
+  metadata, usage, or actual cost. The read-only OpenRouter request log binds
+  upstream request `gen-1786495797-wwTpDFx93vAismEWwWvY` to DeepInfra status
+  429, one router attempt, and 235 ms router latency. The key had used only
+  0.6536316% of its USD 25 limit and account credits were healthy, so the
+  observed failure is not a key/account hard-limit exhaustion. The bounded
+  classification is an external DeepInfra 429; its provider-internal cause is
+  unknown. No downstream model role or deterministic gate ran, actual cost is
+  unknown and excluded, and the build remains failed closed.
 
 The current source pins OpenRouter to the exact `deepinfra/fp4` endpoint tag,
 sets `allow_fallbacks: false`, keeps `require_parameters: true`, and denies
@@ -253,14 +268,14 @@ requires a new same-commit cold production journey with all six bound calls and
 three passed deterministic gates.
 
 Known aggregate provider charges for attempts 1, 2, 4, 5, 6, 8, 10, 11, and 12
-are USD 0.1634040; attempts 3, 7, and 9 are unknown and excluded rather than
-treated as zero. Attempts 7 and 9 each retain a USD 0.027645 estimated
+are USD 0.1634040; attempts 3, 7, 9, and 13 are unknown and excluded rather
+than treated as zero. Attempts 7 and 9 each retain a USD 0.027645 estimated
 reservation, neither of which is included as an actual charge. The attempts
 remain failed-attempt history, not successful application evidence. No raw
 prompt, raw output, credential, or private reference is retained, and no
 attempt is accepted model-backed release evidence.
 
-The twelve records above are listed under `historical_model_validation` with
+The thirteen records above are listed under `historical_model_validation` with
 `scope: failed_closed_history_only`; they can never establish current runtime
 acceptance. No passing dynamic QA artifact pair has been verified as part of
 this source edit, so current production model acceptance remains unestablished.
