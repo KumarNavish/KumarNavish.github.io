@@ -2735,7 +2735,9 @@ async function execute() {
   check('Rendered causal delta names the exact added node, two edges, and three changed evidence items', renderedDelta.nonzero === 'true' && ['ventilation_dispute', 'evidence_gap → ventilation_dispute', 'ventilation_dispute → causation', 'building_envelope', 'management_position', 'use_evidence'].every(value => renderedDelta.text.includes(value)), renderedDelta.text);
   const renderedChecks = await page.locator('.memory-deterministic-checks [data-memory-check]').evaluateAll(nodes => nodes.map(node => ({ name: node.dataset.memoryCheck, status: node.dataset.checkStatus })));
   check('Rendered causal proof shows all ten deterministic checks in order and passed', renderedChecks.length === 10 && stableJson(renderedChecks) === stableJson(proof.deterministic_checks.map(item => ({ name: item.name, status: item.status }))), JSON.stringify(renderedChecks));
-  check('Before/after uses returned result hashes and visibly retains unchanged shared v3', laterResultText.includes(proof.before.result_hash) && laterResultText.includes(proof.after.result_hash) && /Shared playbook v3 unchanged/i.test(laterResultText) && /mould-playbook-v3/i.test(laterResultText));
+  const finalComparison = page.locator('#laterResult .final-proof');
+  const finalComparisonText = await finalComparison.innerText();
+  check('Before/after visibly exposes both returned result hashes and retains unchanged shared v3', await finalComparison.isVisible() && finalComparisonText.includes(proof.before.result_hash) && finalComparisonText.includes(proof.after.result_hash) && /Shared playbook v3 unchanged/i.test(laterResultText) && /mould-playbook-v3/i.test(laterResultText), JSON.stringify({ comparison: finalComparisonText, shared_playbook_visible: /Shared playbook v3 unchanged/i.test(laterResultText) }));
   await auditViewports('07-later-result', '#laterResult .v18-reuse-proof');
 
   check('Immutable release marker was never rewritten during the journey', await page.evaluate(() => window.__casepathReleaseMutations.length === 0), JSON.stringify(await page.evaluate(() => window.__casepathReleaseMutations)));

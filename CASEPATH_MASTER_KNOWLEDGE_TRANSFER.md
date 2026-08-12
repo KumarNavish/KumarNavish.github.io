@@ -5240,9 +5240,9 @@ Exact local freeze gates:
 
 ```text
 backend_tests: 291 passed
-release_contract_tests: 113 passed
+release_contract_tests: 114 passed
 deployment_and_static_publish_tests: 8 passed
-release_tests_total: 121 passed
+release_tests_total: 122 passed
 browser_contract_self_test: 90 fixtures passed
 source_manifest_files: 137
 release_artifact_files: 25
@@ -5289,7 +5289,14 @@ miss it. `renderLaterResult()` now emits the complete
 validated result, receipt, and causal proof. The asynchronous creator and
 reparenting path are removed, and the browser plus provider-free behavioral
 fixture require exactly one wrapper and thread across applied, retrieved-only,
-incomplete, and repeated renders. This repair remains hosted-preflight pending.
+incomplete, and repeated renders. Zero-provider QA deploy
+`dep-d9uaeo61egvs739geq7g` on exact commit
+`20e2b5101661945f19dd5a9242878a3fcdca0929` passed that exact topology and
+advanced to the returned before/after comparison. It then stopped because the
+desktop focus stylesheet hid the correctly rendered `.final-proof` panel, so
+the returned result hashes were present only in hidden DOM text. The panel is
+now visibly retained and its stylesheet is cache-busted. No production marker
+was emitted and the public model ledger remained exactly empty.
 
 The static source and artifact contract is therefore locally verified. At this
 source-history freeze, dynamic production acceptance remained unestablished:
