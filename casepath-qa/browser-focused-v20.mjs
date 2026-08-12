@@ -1,4528 +1,1875 @@
-import fs from 'node:fs/promises';
-import { realpathSync } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import { createHash, randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
-import vm from 'node:vm';
-import { chromium } from 'playwright';
-
-const BASE = (process.env.BASE_URL || 'http://127.0.0.1:4173').replace(/\/$/, '');
-const API = (process.env.API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '');
-const RELEASE_ID = 'casepath-v20-reference-20260811';
-const PRODUCT_RELEASE = '20.0.0';
-const API_RELEASE = '15.2.0';
-const REQUESTED_NEMOTRON_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b';
-const EXPECTED_PROVIDER_BOUNDARY = 'openrouter';
-const EXPECTED_UPSTREAM_PROVIDER = 'DeepInfra';
-const EXACT_NEMOTRON_RESPONSE_MODELS = new Set([
-  REQUESTED_NEMOTRON_MODEL,
-  'nvidia/nemotron-3-ultra-550b-a55b-20260604',
-]);
-const ALLOWED_USAGE_SOURCES = new Set(['response', 'generation_metadata']);
-const REQUIRED_NEMOTRON_AGENT_IDS = Object.freeze([
-  'canonical_facts',
-  'orchestrator_plan',
-  'document_source_integrity',
-  'process_decision_mapping',
-  'evidence_checklist',
-  'final_claim_brief_audit',
-]);
-const REQUIRED_NEMOTRON_AGENT_ROLES = Object.freeze({
-  canonical_facts: 'Guarded Canonical Facts Agent',
-  orchestrator_plan: 'Nemotron Orchestrator',
-  document_source_integrity: 'Document and Source Integrity Agent',
-  process_decision_mapping: 'Process Decision Mapping Agent',
-  evidence_checklist: 'Evidence and Checklist Agent',
-  final_claim_brief_audit: 'Final Claim Brief Agent',
-});
-const REQUIRED_DETERMINISTIC_GATE_IDS = Object.freeze([
-  'deterministic_process_gate',
-  'deterministic_evidence_gate',
-  'whole_playbook_gate',
-]);
-const REQUIRED_DETERMINISTIC_GATE_ROLES = Object.freeze({
-  deterministic_process_gate: 'Deterministic Process Contract Gate',
-  deterministic_evidence_gate: 'Deterministic Evidence Contract Gate',
-  whole_playbook_gate: 'Deterministic Whole-Playbook Gate',
-});
-const ACCEPTED_ARTIFACT_CONTRACT = Object.freeze({
-  deterministic_process_gate: { output_artifact: 'process_graph', source_agent_id: 'process_decision_mapping' },
-  deterministic_evidence_gate: { output_artifact: 'evidence_model', source_agent_id: 'evidence_checklist' },
-  whole_playbook_gate: { output_artifact: 'final_claim_brief', source_agent_id: 'final_claim_brief_audit' },
-});
-const PROCESS_CONTRIBUTION_ROLE = 'Process Decision Mapping Agent';
-const EVIDENCE_CONTRIBUTION_ROLE = 'Evidence and Checklist Agent';
-const FINAL_CONTRIBUTION_ROLE = 'Final Claim Brief Agent';
-const DETERMINISTIC_CONTRIBUTION_ROLE = 'deterministic_application';
-const FINAL_FIELD_CONTRACT = Object.freeze([
-  { field: 'current_node_id', contribution_id: 'final:current_node' },
-  { field: 'next_action_node_id', contribution_id: 'final:next_action' },
-  { field: 'supporting_fact_ids', contribution_id: 'final:supporting_facts' },
-  { field: 'upstream_contribution_ids', contribution_id: 'final:upstream_contributions' },
-  { field: 'audit_check_ids', contribution_id: 'final:audit_checks' },
-]);
-const FINAL_UPSTREAM_CONTRIBUTION_IDS = Object.freeze([
-  'document_source_integrity',
-  'evidence_checklist',
-  'process_decision_mapping',
-]);
-const FINAL_AUDIT_CHECK_IDS = Object.freeze([
-  'current_node_supported_by_canonical_facts',
-  'evidence_items_bound_to_process_nodes',
-  'next_action_connected_in_static_topology',
-  'upstream_contribution_lineage_complete',
-]);
-const EXPECTED_FRAMEWORK = Object.freeze({
-  langchain: '1.3.14',
-  langgraph: '1.2.9',
-  langchain_openrouter: '0.2.7',
-});
-const EXPECTED_RUNTIME = Object.freeze({
-  runtime_profile: 'nemotron_langgraph_multi_agent_hybrid_guarded',
-  authority_mode: 'multi_agent_hybrid_guarded',
-  implementation: 'langgraph_stategraph_langchain_openrouter',
-  orchestration_schema: 'casepath.nemotron-agent-dag/1.0.0',
-});
-const DETERMINISTIC_REFERENCE_MODE = 'deterministic_reference';
-const DETERMINISTIC_REFERENCE_PROFILE = 'deterministic-reference-playbook';
-const DETERMINISTIC_REFERENCE_ORCHESTRATION = Object.freeze({
-  executed: false,
-  authority_mode: DETERMINISTIC_REFERENCE_MODE,
-  model: null,
-  external_tracing: false,
-  deterministic_safety_authority: true,
-});
-const DETERMINISTIC_REFERENCE_CANONICALIZATION = Object.freeze({
-  implementation: 'deterministic_reference_oracle',
-  model: null,
-  provider: null,
-  mode: DETERMINISTIC_REFERENCE_MODE,
-});
-const EXPECTED_EXECUTION_TOPOLOGY = Object.freeze({
-  authority: 'deterministic_application',
-  implementation: 'compiled_langgraph_stategraph',
-  delegations: [
-    { agent_id: 'document_source_integrity', dependencies: ['orchestrator_plan'] },
-    { agent_id: 'process_decision_mapping', dependencies: ['orchestrator_plan'] },
-    { agent_id: 'evidence_checklist', dependencies: ['deterministic_process_gate'] },
-    { agent_id: 'final_claim_brief_audit', dependencies: ['deterministic_evidence_gate'] },
-  ],
-  parallel_groups: [['document_source_integrity', 'process_decision_mapping']],
-});
-const SUCCESSFUL_MODEL_OUTCOMES = new Set(['succeeded', 'succeeded_with_guarded_fallback']);
-const SHA256_PATTERN = /^[0-9a-f]{64}$/i;
-const LOCAL_RUN_TIMEOUT_MS = 180000;
-const PRODUCTION_RUN_TIMEOUT_MS = 15 * 60 * 1000;
-const LATER_TERMINAL_POLL_INTERVAL_MS = 1000;
-const AXE_ANIMATION_SETTLE_TIMEOUT_MS = 2500;
-const FORBIDDEN_PUBLIC_FIELDS = new Set([
-  'prompt',
-  'system_prompt',
-  'user_prompt',
-  'messages',
-  'raw',
-  'raw_output',
-  'reasoning',
-  'chain_of_thought',
-  'completion',
-  'request_body',
-  'response_body',
-  'canonical_output',
-]);
-const INTERNAL_SENTINEL_PATTERN = /(?:__start__|__end__|branch:to:|PregelTask|Traceback \(most recent call last\)|OPENROUTER_API_KEY|Authorization:\s*Bearer)/i;
-const ALLOWED_LEDGER_FIELDS = new Set([
-  'call_id', 'provider', 'provider_endpoint', 'upstream_provider', 'model', 'implementation',
-  'orchestration_id', 'agent_id', 'agent_role', 'parent_call_id', 'delegation_id', 'call_count',
-  'prompt_tokens', 'completion_tokens', 'total_tokens', 'estimated_cost_usd', 'actual_cost_usd',
-  'latency_ms', 'cache_key', 'purpose', 'outcome', 'error_type', 'error_agent_id', 'error_fact_id',
-  'error_invariant', 'provider_error_code', 'provider_boundary', 'expected_upstream_provider',
-  'invalid_provenance_field', 'invalid_provenance_value_hash',
-  'ignored_noncontrolling_normalized_proposals', 'authority_mode',
-  'accepted_fact_ids', 'accepted_fact_count', 'rejected_facts', 'rejected_fact_count',
-  'source_reference_projection_fact_ids', 'source_reference_projection_count',
-  'accepted_item_ids', 'accepted_item_count', 'rejected_items', 'rejected_item_count',
-  'ignored_proposal_count', 'deterministic_fallback_applied', 'response_id', 'origin_call_id',
-  'origin_usage', 'origin_finish_reason', 'response_model', 'generation_model', 'usage_source', 'metadata_poll_count', 'metadata_latency_ms',
-  'finish_reason', 'created_at', 'updated_at',
-]);
-const ALLOWED_LEDGER_SUMMARY_FIELDS = new Set([
-  'records', 'network_calls', 'prompt_tokens', 'completion_tokens', 'total_tokens',
-  'actual_cost_usd', 'actual_cost_complete', 'unknown_cost_call_count', 'outcomes',
-]);
-const ALLOWED_AGENT_FAILURE_RECEIPT_FIELDS = new Set([
-  'event_id', 'ordinal', 'created_at', 'stage', 'label', 'agent', 'agent_id', 'actor_type', 'status',
-  'headline', 'detail', 'implementation', 'model', 'orchestrator', 'validator', 'prompt_version',
-  'receipt_type', 'acceptance_scope', 'failure_scope', 'root_agent', 'shared_context',
-  'delegation_id', 'parent_call_id', 'orchestration_id', 'call_id', 'response_id', 'outcome',
-  'provider', 'requested_model', 'call_count',
-  'response_model', 'upstream_provider', 'usage_source', 'handoff_from', 'handoff_to',
-  'input_artifact', 'input_artifact_hash', 'finish_reason', 'error_type', 'error_invariant', 'provider_error_code',
-  'provider_boundary', 'expected_upstream_provider',
-  'invalid_provenance_field', 'invalid_provenance_value_hash', 'external_tracing',
-]);
-const FAILURE_OUTCOMES = new Set(['failed', 'blocked_cost_guard', 'blocked_missing_credential', 'blocked_provider_concurrency', 'actual_cost_overrun']);
-const ZERO_CALL_FAILURE_OUTCOMES = new Set(['blocked_cost_guard', 'blocked_missing_credential', 'blocked_provider_concurrency']);
-const ZERO_CALL_PROVIDER_RESULT_FIELDS = Object.freeze([
-  'response_id', 'origin_call_id', 'origin_usage', 'origin_finish_reason', 'response_model',
-  'generation_model', 'upstream_provider', 'usage_source', 'finish_reason',
-  'metadata_poll_count', 'metadata_latency_ms', 'prompt_tokens', 'completion_tokens',
-  'total_tokens', 'provider_error_code', 'provider_boundary',
-  'expected_upstream_provider', 'invalid_provenance_field', 'invalid_provenance_value_hash',
-  'ignored_noncontrolling_normalized_proposals', 'accepted_fact_ids', 'accepted_fact_count',
-  'rejected_facts', 'rejected_fact_count', 'source_reference_projection_fact_ids',
-  'source_reference_projection_count', 'accepted_item_ids', 'accepted_item_count',
-  'rejected_items', 'rejected_item_count', 'ignored_proposal_count',
-  'deterministic_fallback_applied',
-]);
-const SAFE_RESPONSE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{2,159}$/;
-const EXACT_OPENROUTER_GENERATION_ID = /^gen-[0-9]{10}-[A-Za-z0-9]{20}$/;
-const SAFE_UPSTREAM_PROVIDER = /^[A-Za-z0-9][A-Za-z0-9._-]{1,79}$/;
-const FORBIDDEN_PROVENANCE_MARKERS = Object.freeze([
-  'authorization', 'api_key', 'apikey', 'bearer ', 'credential', 'sk-or-', 'sk-', 'secret', 'sentinel',
-  'customer', 'landlord', 'lease', 'mould', 'moisture', 'tenant',
-]);
-const SAFE_FINISH_REASONS = new Set(['stop', 'length', 'tool_calls', 'content_filter', 'error', 'cancelled']);
-const PROVIDER_PROVENANCE_FIELDS = new Set(['response_id', 'response_model', 'upstream_provider', 'finish_reason']);
-const EXPECTED_RUNTIME_ACCEPTANCE_CRITERIA = Object.freeze({
-  required_mode: 'openrouter_nemotron',
-  required_model: REQUESTED_NEMOTRON_MODEL,
-  model_acceptance_scope: 'visible_browser_flagship',
-  learning_comparison_authority: 'deterministic_application_tool',
-  requires_learning_comparison_zero_model_activity: true,
-  required_final_model_ledger_records: 12,
-  required_final_model_network_calls: 6,
-  required_final_cache_hits: 6,
-  required_provider_max_in_flight: 1,
-  required_runtime_profile: EXPECTED_RUNTIME.runtime_profile,
-  requires_successful_call_binding: true,
-  requires_positive_actual_cost: true,
-  requires_positive_token_counts: true,
-  requires_single_orchestration_binding: true,
-  requires_complete_required_agent_set: true,
-  requires_distinct_call_ids: true,
-  requires_distinct_response_ids: true,
-  requires_positive_accepted_contribution_per_agent: true,
-  requires_accepted_majority_per_agent: true,
-  requires_cold_network_run: true,
-  requires_deterministic_gate_passes: true,
-  requires_guarded_fallback_disclosure: true,
-  requires_source_reference_projection_disclosure: true,
-  requires_grounded_causal_artifact_recomputation: true,
-  requires_learning_replay_proof: true,
-});
-const EXPECTED_FAILED_MODEL_ATTEMPT_RECORDS = Object.freeze(
-  Array.from({ length: 24 }, (_, index) => `casepath/releases/model-validation-attempt-20260811-${String(index + 1).padStart(2, '0')}.json`),
-);
-const EXPECTED_PRODUCTION_OPENING_BOUNDARY = 'Application code opened the shared context; no model call is claimed for this setup step. The call-bound Nemotron plan appears only when its returned event arrives.';
-const QA_DIRECTORY = path.resolve(fileURLToPath(new URL('.', import.meta.url)));
-const REPOSITORY_ROOT = path.dirname(QA_DIRECTORY);
-const QA_OUTPUT_BASENAME = 'guided-v13-smoke-out';
-const PREFLIGHT_OUTPUT_BASENAME = 'evidence';
-const PREFLIGHT_PARENT_PATTERN = /^casepath-qa-preflight\.[A-Za-z0-9]{6,}$/;
-const QA_TEMP_ROOT = path.resolve(os.tmpdir());
-
-function resolveSafeQaOutputPath(candidate) {
-  if (typeof candidate !== 'string' || candidate.trim() === '') {
-    throw new Error('CASEPATH_QA_OUT must name a dedicated QA evidence directory.');
-  }
-  const resolved = path.resolve(candidate);
-  const dedicatedQaOutput = path.join(QA_DIRECTORY, QA_OUTPUT_BASENAME);
-  const preflightParent = path.dirname(resolved);
-  const dedicatedPreflightOutput = (
-    path.basename(resolved) === PREFLIGHT_OUTPUT_BASENAME
-    && path.dirname(preflightParent) === QA_TEMP_ROOT
-    && PREFLIGHT_PARENT_PATTERN.test(path.basename(preflightParent))
-  );
-  if (resolved === path.parse(resolved).root || resolved === REPOSITORY_ROOT || resolved === QA_DIRECTORY) {
-    throw new Error(`Refusing unsafe CASEPATH_QA_OUT path: ${resolved}`);
-  }
-  if (resolved !== dedicatedQaOutput && !dedicatedPreflightOutput) {
-    throw new Error(`Refusing unsafe CASEPATH_QA_OUT path: ${resolved}`);
-  }
-  return resolved;
-}
-
-function assertSafeQaOutputParent(candidate) {
-  const resolved = resolveSafeQaOutputPath(candidate);
-  const parent = path.dirname(resolved);
-  let realParent;
-  try {
-    realParent = realpathSync(parent);
-  } catch (error) {
-    throw new Error(`CASEPATH_QA_OUT parent must already exist: ${parent}`, { cause: error });
-  }
-  const dedicatedQaOutput = path.join(QA_DIRECTORY, QA_OUTPUT_BASENAME);
-  const expectedParent = resolved === dedicatedQaOutput
-    ? realpathSync(QA_DIRECTORY)
-    : realpathSync(QA_TEMP_ROOT);
-  const parentMatches = resolved === dedicatedQaOutput
-    ? realParent === expectedParent
-    : path.dirname(realParent) === expectedParent
-      && PREFLIGHT_PARENT_PATTERN.test(path.basename(realParent));
-  if (!parentMatches) {
-    throw new Error(`Refusing symlinked or unexpected CASEPATH_QA_OUT parent: ${parent}`);
-  }
-  return resolved;
-}
-
-const QA_SESSION_ID = `qa-${randomUUID()}`;
-const ISOLATION_SESSION_ID = `qa-isolation-${randomUUID()}`;
-const ALLOW_PRODUCTION_MUTATION = process.env.CASEPATH_ALLOW_PRODUCTION_MUTATION === '1';
-const OUT = assertSafeQaOutputParent(
-  process.env.CASEPATH_QA_OUT || path.join(QA_DIRECTORY, QA_OUTPUT_BASENAME),
-);
-const checks = [];
-const notes = [];
-const failures = { console: [], page: [], request: [], cleanup: [] };
-const runIds = [];
-const retainedEvidence = {};
-const evidenceFiles = [];
-let browser;
-let context;
-let page;
-let video;
-let demoMutated = false;
-let isolationMutated = false;
-let reviewResponse = null;
-let proofResponse = null;
-let deploymentIdentity = { frontend: null, api: null, qa: { release_id: RELEASE_ID, source_commit: process.env.RENDER_GIT_COMMIT || null } };
-let runtimeVersions = { node: process.version, playwright: null, chromium: null };
-
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-
-function check(name, condition, detail = '') {
-  const item = { name, passed: Boolean(condition), detail };
-  checks.push(item);
-  if (!item.passed) throw new Error(`${name}: ${detail || 'failed'}`);
-}
-
-function isLocal(urlValue) {
-  const hostname = new URL(urlValue).hostname;
-  return ['127.0.0.1', 'localhost', '::1'].includes(hostname);
-}
-
-function requireMutationAuthority() {
-  if ((!isLocal(BASE) || !isLocal(API)) && !ALLOW_PRODUCTION_MUTATION) {
-    throw new Error('Production mutation is disabled. Set CASEPATH_ALLOW_PRODUCTION_MUTATION=1 to run the reset/review lifecycle against non-local services.');
-  }
-}
-
-function validSourceCommit(value) {
-  return /^[0-9a-f]{40}$/i.test(value || '');
-}
-
-function isProductionJourney() {
-  return !isLocal(BASE) || !isLocal(API);
-}
-
-function runTimeoutMs() {
-  return isProductionJourney() ? PRODUCTION_RUN_TIMEOUT_MS : LOCAL_RUN_TIMEOUT_MS;
-}
-
-function nonemptyString(value) {
-  return typeof value === 'string' && value.length > 0;
-}
-
-function normalizedGroundingText(value) {
-  return typeof value === 'string'
-    ? value.normalize('NFKC')
-      .replace(/[\u0009-\u000d\u001c-\u001f\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+/gu, ' ')
-      .replace(/^ +| +$/gu, '')
-    : '';
-}
-
-function exactNormalizedGroundingQuote(sourcePage, excerpt) {
-  const normalizedExcerpt = normalizedGroundingText(excerpt);
-  return normalizedExcerpt.length > 0
-    && normalizedGroundingText(sourcePage).includes(normalizedExcerpt);
-}
-
-function selectProcessTextQuoteFact(facts, processGraph, factId) {
-  return facts.find(item => item.fact_id === factId
-    && item.source_refs?.length
-    && item.source_refs.every(ref => ref.locator_kind === 'text_quote')
-    && processGraph.nodes.some(node => (node.fact_ids || []).includes(item.fact_id)));
-}
-
-function containsForbiddenProvenanceMarker(value) {
-  if (typeof value !== 'string') return false;
-  const folded = value.toLowerCase();
-  return FORBIDDEN_PROVENANCE_MARKERS.some(marker => folded.includes(marker));
-}
-
-function providerProvenanceValueIsSafe(field, value) {
-  if (value == null) return true;
-  if (!nonemptyString(value) || value !== value.trim() || containsForbiddenProvenanceMarker(value)) return false;
-  if (field === 'response_id') return SAFE_RESPONSE_ID.test(value);
-  if (field === 'response_model') return EXACT_NEMOTRON_RESPONSE_MODELS.has(value);
-  if (field === 'upstream_provider') return SAFE_UPSTREAM_PROVIDER.test(value);
-  if (field === 'finish_reason') return SAFE_FINISH_REASONS.has(value);
-  return false;
-}
-
-function providerRejectionBoundaryIssue(value) {
-  const boundaryPresent = Object.hasOwn(value, 'provider_boundary');
-  const expectedProviderPresent = Object.hasOwn(value, 'expected_upstream_provider');
-  if (value.error_invariant !== 'provider_upstream_rejection') {
-    return boundaryPresent || expectedProviderPresent
-      ? 'provider rejection boundary attribution is out of scope'
-      : null;
-  }
-  if (!boundaryPresent || !expectedProviderPresent) return 'provider rejection boundary attribution pair is incomplete';
-  if (value.provider_boundary !== EXPECTED_PROVIDER_BOUNDARY
-    || value.expected_upstream_provider !== EXPECTED_UPSTREAM_PROVIDER) return 'provider rejection boundary attribution is forged';
-  return null;
-}
-
-function exactMembers(values, expected) {
-  return Array.isArray(values)
-    && Array.isArray(expected)
-    && values.length === expected.length
-    && new Set(values).size === values.length
-    && new Set(expected).size === expected.length
-    && expected.every(value => values.includes(value));
-}
-
-function contributionEntries(value, expectedAttribution) {
-  const entries = (Array.isArray(value) ? value : value && typeof value === 'object' ? [value] : [])
-    .filter(item => item && typeof item === 'object');
-  if (!entries.length) return null;
-  const ids = entries.map(item => item.contribution_id);
-  if (!ids.every(nonemptyString) || new Set(ids).size !== ids.length) return null;
-  const valid = entries.every(item => {
-    if (typeof item.deterministic_fallback_applied !== 'boolean'
-      || !Number.isInteger(item.confidence_basis_points)
-      || item.confidence_basis_points < 0
-      || item.confidence_basis_points > 10000) return false;
-    const expectedRole = item.deterministic_fallback_applied
-      ? DETERMINISTIC_CONTRIBUTION_ROLE
-      : expectedAttribution;
-    if (item.attribution !== expectedRole) return false;
-    if (expectedAttribution === PROCESS_CONTRIBUTION_ROLE) {
-      return /^fact:[^:]+:decision_value$/.test(item.contribution_id)
-        && exactMembers(item.model_owned_fields, ['decision_value']);
-    }
-    if (expectedAttribution === EVIDENCE_CONTRIBUTION_ROLE) {
-      const match = item.contribution_id.match(/^item:(.+):(status|artifacts)$/);
-      if (!match) return false;
-      const expectedField = match[2] === 'status' ? 'status' : 'artifact_ids';
-      return item.field === expectedField;
-    }
-    if (expectedAttribution === FINAL_CONTRIBUTION_ROLE) {
-      const expected = FINAL_FIELD_CONTRACT.find(unit => unit.contribution_id === item.contribution_id);
-      return Boolean(expected && item.field === expected.field);
-    }
-    return false;
-  });
-  return valid ? entries : null;
-}
-
-function transformedContributionSuppressed(transform = null) {
-  return transform?.acceptance_scope === 'post_review_unverified_transform'
-    || (transform?.contract === 'casepath.memory-application-receipt/1.0.0'
-      && transform.authority === 'unverified_demo'
-      && transform.scope === 'case_specific_guidance_only'
-      && transform.model_acceptance_reused === false
-      && transform.applied === true);
-}
-
-function contributionExpectation(value, expectedAttribution, transform = null) {
-  if (transformedContributionSuppressed(transform)) return null;
-  const entries = contributionEntries(value, expectedAttribution);
-  if (!entries) return null;
-  const acceptedCount = entries.filter(item => item.deterministic_fallback_applied === false && item.attribution === expectedAttribution).length;
-  const fallbackCount = entries.filter(item => item.deterministic_fallback_applied === true && item.attribution === DETERMINISTIC_CONTRIBUTION_ROLE).length;
-  if (!acceptedCount && !fallbackCount) return null;
-  return {
-    authority: acceptedCount && fallbackCount ? 'mixed' : acceptedCount ? 'nemotron-accepted' : 'deterministic-fallback',
-    accepted_count: String(acceptedCount),
-    fallback_count: String(fallbackCount),
-  };
-}
-
-function contributionDomProjection(value, expectedAttribution, transform = null) {
-  const summary = contributionExpectation(value, expectedAttribution, transform);
-  const entries = transformedContributionSuppressed(transform)
-    ? null
-    : contributionEntries(value, expectedAttribution);
-  if (!summary || !entries) return null;
-  return {
-    ...summary,
-    accepted_ids: entries.filter(item => item.deterministic_fallback_applied === false).map(item => item.contribution_id).join(','),
-    fallback_ids: entries.filter(item => item.deterministic_fallback_applied === true).map(item => item.contribution_id).join(','),
-  };
-}
-
-function orchestrationAudit(run) {
-  return run?.result?.audit?.agent_orchestration
-    || run?.result?.agent_orchestration
-    || run?.agent_orchestration
-    || null;
-}
-
-function forbiddenFieldPaths(value, currentPath = '$', found = []) {
-  if (Array.isArray(value)) {
-    value.forEach((item, index) => forbiddenFieldPaths(item, `${currentPath}[${index}]`, found));
-    return found;
-  }
-  if (!value || typeof value !== 'object') return found;
-  for (const [key, child] of Object.entries(value)) {
-    const childPath = `${currentPath}.${key}`;
-    if (FORBIDDEN_PUBLIC_FIELDS.has(key)) found.push(childPath);
-    forbiddenFieldPaths(child, childPath, found);
-  }
-  return found;
-}
-
-function stableJson(value) {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
-  }
-  return JSON.stringify(value);
-}
-
-function dtoHash(value) {
-  return sha256(stableJson(value));
-}
-
-function semanticProcessDto(process) {
-  const value = structuredClone(process || {});
-  delete value.agent_contribution;
-  for (const node of value.nodes || []) delete node.agent_decision_contributions;
-  return value;
-}
-
-function semanticChecklistDto(checklist) {
-  const value = structuredClone(checklist || {});
-  delete value.agent_contribution;
-  for (const item of value.items || []) delete item.agent_contribution;
-  return value;
-}
-
-function evidenceRelationContractViolations(process, checklist) {
-  const issues = [];
-  if (!process || !checklist || !Array.isArray(process.nodes) || !Array.isArray(checklist.items)) return ['process nodes or checklist items are absent'];
-  const itemIds = checklist.items.map(item => item?.item_id);
-  if (!itemIds.every(nonemptyString) || new Set(itemIds).size !== itemIds.length) return ['checklist item IDs are absent or duplicated'];
-  const itemIdSet = new Set(itemIds);
-  const ownerMap = new Map(itemIds.map(itemId => [itemId, []]));
-  const nodeIds = process.nodes.map(node => node?.node_id);
-  if (!nodeIds.every(nonemptyString) || new Set(nodeIds).size !== nodeIds.length) return ['process node IDs are absent or duplicated'];
-  for (const node of process.nodes) {
-    const requirements = node.evidence_requirement_ids;
-    if (!Array.isArray(requirements) || requirements.some(itemId => !itemIdSet.has(itemId)) || new Set(requirements).size !== requirements.length) {
-      issues.push(`${node.node_id}: evidence requirements are not a unique known-item list`);
-      continue;
-    }
-    for (const itemId of requirements) ownerMap.get(itemId).push(node.node_id);
-  }
-  const selectedPath = process.selected_path;
-  const nextAction = process.current_overlay?.next_action_node_id;
-  if (!Array.isArray(selectedPath) || selectedPath.some(nodeId => !nodeIds.includes(nodeId))) issues.push('selected path is absent or contains an unknown node');
-  if (!nonemptyString(nextAction) || !nodeIds.includes(nextAction)) issues.push('next-action node is absent or unknown');
-  const activeNodes = new Set([...(Array.isArray(selectedPath) ? selectedPath : []), ...(nonemptyString(nextAction) ? [nextAction] : [])]);
-  for (const item of checklist.items) {
-    const owners = ownerMap.get(item.item_id) || [];
-    if (!owners.length) issues.push(`${item.item_id}: no process owner`);
-    if (JSON.stringify(item.node_ids) !== JSON.stringify(owners)) issues.push(`${item.item_id}: node_ids do not match ordered process owners`);
-    if (item.node_id !== owners[0]) issues.push(`${item.item_id}: node_id is not the derived primary owner`);
-    if (item.current_path !== owners.some(nodeId => activeNodes.has(nodeId))) issues.push(`${item.item_id}: current_path is not derived from every owner`);
-  }
-  return issues;
-}
-
-function legalContextContractViolations(legal, process) {
-  const issues = [];
-  if (!legal || legal.contract !== 'casepath.legal-context/2.0.0') return ['legal context contract is absent or wrong'];
-  if (legal.registry_version !== 'ch-tenancy-official-snapshot/2026-08-12' || legal.lookup_method !== 'versioned_official_source_registry_lookup') issues.push('legal registry identity is wrong');
-  if (!Array.isArray(legal.questions) || !Array.isArray(legal.sources) || !Array.isArray(legal.handling_principles)) return [...issues, 'legal questions, sources, or handling principles are absent'];
-  const nodeIds = new Set((process?.nodes || []).map(node => node.node_id));
-  const officialIds = legal.sources.map(source => source?.source_id);
-  const principleIds = legal.handling_principles.map(source => source?.source_id);
-  if (!officialIds.every(nonemptyString) || new Set(officialIds).size !== officialIds.length) issues.push('official legal source IDs are absent or duplicated');
-  if (!principleIds.every(nonemptyString) || new Set(principleIds).size !== principleIds.length) issues.push('handling-principle IDs are absent or duplicated');
-  const officialFields = ['source_id', 'title', 'url', 'source_type', 'jurisdiction', 'version_date', 'location', 'passage_language', 'passage_text', 'passage_sha256', 'passage_summary', 'operational_interpretation', 'review_status', 'role', 'approved', 'retrieval'];
-  for (const source of legal.sources) {
-    if (!exactMembers(Object.keys(source || {}), officialFields)) issues.push(`${source?.source_id || 'official source'}: fields are not exact`);
-    if (!nonemptyString(source?.passage_text) || source.passage_sha256 !== sha256(source.passage_text)) issues.push(`${source?.source_id}: official passage hash is wrong`);
-    if (source?.jurisdiction !== 'CH' || source?.passage_language !== 'de' || !nonemptyString(source?.version_date) || !nonemptyString(source?.location) || source?.review_status !== 'qualified_review_pending' || source?.approved !== false) issues.push(`${source?.source_id}: official passage status/provenance is incomplete`);
-    const retrieval = source?.retrieval;
-    if (!exactMembers(Object.keys(retrieval || {}), ['method', 'retrieved_at', 'registry_version', 'snapshot_url', 'snapshot_sha256', 'snapshot_scope'])
-      || retrieval?.method !== 'versioned_official_source_registry_lookup'
-      || retrieval?.registry_version !== legal.registry_version
-      || !nonemptyString(retrieval?.retrieved_at)
-      || !nonemptyString(retrieval?.snapshot_url)
-      || !SHA256_PATTERN.test(retrieval?.snapshot_sha256 || '')
-      || !['official_pdf_bytes', 'normalized_official_passage_utf8'].includes(retrieval?.snapshot_scope)) issues.push(`${source?.source_id}: official retrieval receipt is invalid`);
-    if (source?.source_id === 'bwo-conciliation' && (retrieval?.snapshot_scope !== 'normalized_official_passage_utf8' || retrieval?.snapshot_sha256 !== source.passage_sha256 || retrieval.snapshot_sha256 !== '27700e4ed06b60510b992676823c44d9a11aefb94192fdc3bec872df1c843af6')) issues.push(`${source.source_id}: normalized official passage snapshot is not exact`);
-    if (source?.source_id?.startsWith('fedlex-') && retrieval?.snapshot_scope !== 'official_pdf_bytes') issues.push(`${source.source_id}: Fedlex snapshot scope is not official PDF bytes`);
-  }
-  for (const principle of legal.handling_principles) {
-    if (!exactMembers(Object.keys(principle || {}), ['source_id', 'title', 'source_type', 'role', 'validation_status', 'producer']) || principle?.producer !== 'deterministic_application') issues.push(`${principle?.source_id || 'principle'}: deterministic producer contract is invalid`);
-  }
-  const authorityIds = new Set([...officialIds, ...principleIds]);
-  const derivedNodeLinks = {};
-  const questionIds = [];
-  for (const question of legal.questions) {
-    if (!exactMembers(Object.keys(question || {}), ['question_id', 'text', 'source_ids', 'interpretation_ids', 'process_node_ids', 'consequence'])) issues.push(`${question?.question_id || 'question'}: fields are not exact`);
-    if (!nonemptyString(question?.question_id) || questionIds.includes(question.question_id)) issues.push('legal question IDs are absent or duplicated');
-    questionIds.push(question?.question_id);
-    if (!nonemptyString(question?.text) || !nonemptyString(question?.consequence)) issues.push(`${question?.question_id}: question text or consequence is absent`);
-    if (!(question?.source_ids || []).every(sourceId => officialIds.includes(sourceId))) issues.push(`${question?.question_id}: official source join is invalid`);
-    if (!(question?.interpretation_ids || []).every(sourceId => principleIds.includes(sourceId))) issues.push(`${question?.question_id}: interpretation join is invalid`);
-    if (!(question?.process_node_ids || []).every(nodeId => nodeIds.has(nodeId))) issues.push(`${question?.question_id}: process-node join is invalid`);
-    for (const nodeId of question?.process_node_ids || []) {
-      const retained = derivedNodeLinks[nodeId] ||= [];
-      for (const sourceId of [...(question.source_ids || []), ...(question.interpretation_ids || [])]) if (!retained.includes(sourceId)) retained.push(sourceId);
-    }
-  }
-  if (Object.values(legal.node_links || {}).flat().some(sourceId => !authorityIds.has(sourceId)) || stableJson(legal.node_links || {}) !== stableJson(derivedNodeLinks)) issues.push('legal node_links do not equal the ID-joined questions');
-  if (/model interpretation|live retrieval/i.test(stableJson(legal))) issues.push('legal DTO contains false model or live-retrieval authority wording');
-  return issues;
-}
-
-function visualReferenceContractViolations(reference, artifact) {
-  const issues = [];
-  const fields = ['artifact_id', 'locator_kind', 'region', 'observation', 'producer', 'authority', 'annotation_contract', 'annotation_version', 'image_sha256'];
-  if (!exactMembers(Object.keys(reference || {}), fields)) issues.push('visual annotation fields are not exact');
-  if (reference?.locator_kind !== 'visual_observation'
-    || reference?.producer !== 'deterministic_reference_annotation'
-    || reference?.authority !== 'generated_demo_reference_only'
-    || reference?.annotation_contract !== 'casepath.visual-reference-annotation/1.0.0'
-    || reference?.annotation_version !== 'generated-demo-reference/2026-08-12') issues.push('visual annotation authority contract is wrong');
-  const region = reference?.region;
-  if (!Array.isArray(region) || region.length !== 4 || region.some(value => typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) || !(region[2] > 0) || !(region[3] > 0) || region[0] + region[2] > 1 || region[1] + region[3] > 1) issues.push('visual annotation region is invalid');
-  if (!nonemptyString(reference?.observation)) issues.push('visual annotation observation is absent');
-  if (!artifact || reference?.artifact_id !== artifact.artifact_id || !artifact.media_type?.startsWith('image/') || !SHA256_PATTERN.test(artifact.sha256 || '') || reference?.image_sha256 !== artifact.sha256) issues.push('visual annotation is not bound to public image bytes');
-  return issues;
-}
-
-function precedentRankingContractViolations(result) {
-  const issues = [];
-  const precedents = result?.precedents;
-  const receipt = result?.precedent_ranking;
-  const contract = 'casepath.precedent-ranking/1.0.0';
-  const corpus = 'generated-reference-patterns/2026-08-12';
-  if (!Array.isArray(precedents) || precedents.length !== 3 || !receipt) return ['exact-three precedents or ranking receipt are absent'];
-  if (!exactMembers(Object.keys(receipt), ['contract', 'corpus_version', 'context', 'context_hash', 'candidate_scores', 'selected_claim_ids', 'result_hash'])) issues.push('precedent ranking receipt fields are not exact');
-  if (receipt.contract !== contract || receipt.corpus_version !== corpus) issues.push('precedent ranking identity is wrong');
-  if (!exactMembers(Object.keys(receipt.context || {}), ['category', 'subcategory', 'current_process_node_id', 'next_action_node_id', 'selected_path', 'unresolved_fact_ids', 'current_evidence_need_ids']) || receipt.context_hash !== dtoHash(receipt.context)) issues.push('precedent ranking context is not exact or hash-bound');
-  const selectedIds = precedents.map(item => item.claim_id);
-  if (JSON.stringify(receipt.selected_claim_ids) !== JSON.stringify(selectedIds) || receipt.result_hash !== dtoHash(precedents)) issues.push('precedent selected IDs or result hash are wrong');
-  if (!Array.isArray(receipt.candidate_scores) || receipt.candidate_scores.length < 3 || new Set(receipt.candidate_scores.map(item => item.claim_id)).size !== receipt.candidate_scores.length || JSON.stringify(receipt.candidate_scores.slice(0, 3).map(item => item.claim_id)) !== JSON.stringify(selectedIds)) issues.push('candidate scores do not retain the ranked selection order');
-  for (const candidate of receipt.candidate_scores || []) {
-    if (!exactMembers(Object.keys(candidate || {}), ['claim_id', 'score_basis_points', 'factors']) || !nonemptyString(candidate.claim_id) || !Number.isInteger(candidate.score_basis_points) || !Array.isArray(candidate.factors) || candidate.factors.some(factor => !exactMembers(Object.keys(factor || {}), ['factor', 'value', 'weight']) || !nonemptyString(factor.factor) || !nonemptyString(factor.value) || !Number.isInteger(factor.weight)) || candidate.score_basis_points !== candidate.factors.reduce((sum, factor) => sum + factor.weight, 0)) issues.push(`${candidate?.claim_id || 'candidate'}: candidate score receipt is invalid`);
-  }
-  const allowedStatuses = new Set(['generated_reference', 'unverified_demo_memory', 'qualified_expert_reviewed']);
-  precedents.forEach((precedent, index) => {
-    const ranking = precedent?.ranking;
-    if (!allowedStatuses.has(precedent?.review_status)) issues.push(`${precedent?.claim_id}: review status is invalid`);
-    if (!exactMembers(Object.keys(ranking || {}), ['contract', 'corpus_version', 'rank', 'score_basis_points', 'factors', 'context_hash']) || ranking?.contract !== contract || ranking?.corpus_version !== corpus || ranking?.rank !== index + 1 || ranking?.context_hash !== receipt.context_hash) issues.push(`${precedent?.claim_id}: per-item ranking is invalid`);
-    if (!Array.isArray(ranking?.factors) || ranking.factors.some(factor => !exactMembers(Object.keys(factor || {}), ['factor', 'value', 'weight']) || !Number.isInteger(factor.weight)) || ranking?.score_basis_points !== (ranking?.factors || []).reduce((sum, factor) => sum + factor.weight, 0)) issues.push(`${precedent?.claim_id}: ranking factors do not sum to the score`);
-    const candidate = receipt.candidate_scores?.find(item => item.claim_id === precedent.claim_id);
-    if (!candidate || candidate.score_basis_points !== ranking?.score_basis_points || stableJson(candidate.factors) !== stableJson(ranking?.factors)) issues.push(`${precedent?.claim_id}: candidate and selected ranking differ`);
-  });
-  return issues;
-}
-
-function memoryRetrievalContractViolations(result) {
-  const issues = [];
-  if (!result || typeof result !== 'object') return ['final result is absent'];
-  const memoryPrecedents = (result.precedents || []).filter(item => item?.review_status === 'unverified_demo_memory' && nonemptyString(item?.memory_id));
-  const expectedRetrieved = memoryPrecedents.length > 0;
-  const receiptPresent = result.memory_application != null;
-  const receiptValid = !receiptPresent || (result.memory_application?.contract === 'casepath.memory-application-receipt/1.0.0'
-    && result.memory_application?.authority === 'unverified_demo'
-    && result.memory_application?.scope === 'case_specific_guidance_only'
-    && result.memory_application?.applied === true
-    && SHA256_PATTERN.test(result.memory_application?.application_hash || ''));
-  const knowledge = result.knowledge || {};
-  const processUsed = result.process?.memory_used;
-  const checklistUsed = result.checklist?.memory_used;
-  const rootUseFlags = [result.memory_used, result.reviewed_memory_used, knowledge.reviewed_memory_used];
-  const retrievalFlags = [result.reviewed_memory_retrieved, knowledge.reviewed_memory_retrieved];
-  if (!retrievalFlags.every(value => typeof value === 'boolean') || retrievalFlags.some(value => value !== expectedRetrieved)) issues.push('reviewed-memory retrieval flags do not equal ranked unverified memory presence');
-  if (!receiptValid) issues.push('memory-use flags point at an invalid application receipt');
-  if (!rootUseFlags.every(value => typeof value === 'boolean') || rootUseFlags.some(value => value !== receiptPresent)) issues.push('root/knowledge memory-use flags do not equal application-receipt presence');
-  if (processUsed !== receiptPresent || checklistUsed !== receiptPresent) issues.push('process/checklist memory_used does not equal application-receipt presence');
-  if (receiptPresent && (!expectedRetrieved || result.memory_application?.applied !== true || result.process?.case_specific_guidance_applied !== true || result.checklist?.case_specific_guidance_applied !== true)) issues.push('application receipt is not bound to retrieved memory and transformed DTO flags');
-  if (!receiptPresent && (result.process?.case_specific_guidance_applied === true || result.checklist?.case_specific_guidance_applied === true)) issues.push('receipt-free result falsely claims case-specific guidance application');
-  if (memoryPrecedents.length > 1) issues.push('more than one unverified memory was ranked into the exact-three result');
-  return issues;
-}
-
-function semanticFactSignature(result) {
-  const roles = {};
-  for (const fact of result?.facts || []) {
-    if (fact?.semantic_role == null) continue;
-    roles[fact.semantic_role] = {
-      fact_id: fact.fact_id,
-      state: fact.state,
-      grounded_source_count: Array.isArray(fact.source_refs) ? fact.source_refs.length : 0,
-    };
-  }
-  return roles;
-}
-
-function semanticFactRoleViolations(result) {
-  const facts = result?.facts;
-  if (!Array.isArray(facts)) return ['canonical facts are absent'];
-  const issues = [];
-  const populated = [];
-  for (const fact of facts) {
-    if (!Object.hasOwn(fact || {}, 'semantic_role')) issues.push(`${fact?.fact_id || 'fact'}: nullable semantic_role is absent`);
-    if (fact?.semantic_role != null && fact.semantic_role !== 'management_ventilation_allegation') issues.push(`${fact?.fact_id || 'fact'}: semantic_role is unsupported`);
-    if (fact?.semantic_role != null) populated.push(fact.semantic_role);
-  }
-  if (JSON.stringify(populated) !== JSON.stringify(['management_ventilation_allegation'])) issues.push('exactly one management_ventilation_allegation semantic role is required');
-  return issues;
-}
-
-function computedCausalDelta(beforeResult, afterResult) {
-  const beforeProcess = semanticProcessDto(beforeResult?.process);
-  const afterProcess = semanticProcessDto(afterResult?.process);
-  const beforeChecklist = semanticChecklistDto(beforeResult?.checklist);
-  const afterChecklist = semanticChecklistDto(afterResult?.checklist);
-  const keyed = (values, key) => new Map((values || []).map(value => [key(value), value]));
-  const beforeNodes = keyed(beforeProcess.nodes, value => value.node_id);
-  const afterNodes = keyed(afterProcess.nodes, value => value.node_id);
-  const edgeKey = value => `${value.source}\u0000${value.target}`;
-  const beforeEdges = keyed(beforeProcess.edges, edgeKey);
-  const afterEdges = keyed(afterProcess.edges, edgeKey);
-  const beforeItems = keyed(beforeChecklist.items, value => value.item_id);
-  const afterItems = keyed(afterChecklist.items, value => value.item_id);
-  const difference = (left, right) => [...left.keys()].filter(key => !right.has(key)).sort();
-  const changed = (left, right) => [...left.keys()].filter(key => right.has(key) && stableJson(left.get(key)) !== stableJson(right.get(key))).sort();
-  const edgeProjection = keys => keys.map(key => { const [source, target] = key.split('\u0000'); return { source, target }; });
-  const rootChanges = (before, after, excluded) => [...new Set([...Object.keys(before), ...Object.keys(after)])].filter(key => !excluded.has(key) && stableJson(before[key]) !== stableJson(after[key])).sort();
-  const addedNodeIds = difference(afterNodes, beforeNodes);
-  const removedNodeIds = difference(beforeNodes, afterNodes);
-  const changedNodeIds = changed(beforeNodes, afterNodes);
-  const addedEdges = edgeProjection(difference(afterEdges, beforeEdges));
-  const removedEdges = edgeProjection(difference(beforeEdges, afterEdges));
-  const changedEdges = edgeProjection(changed(beforeEdges, afterEdges));
-  const addedItemIds = difference(afterItems, beforeItems);
-  const removedItemIds = difference(beforeItems, afterItems);
-  const changedItemIds = changed(beforeItems, afterItems);
-  return {
-    nonzero: Boolean(addedNodeIds.length || removedNodeIds.length || changedNodeIds.length || addedEdges.length || removedEdges.length || changedEdges.length || addedItemIds.length || removedItemIds.length || changedItemIds.length),
-    process: { added_node_ids: addedNodeIds, removed_node_ids: removedNodeIds, changed_node_ids: changedNodeIds, added_edges: addedEdges, removed_edges: removedEdges, changed_edges: changedEdges, changed_root_keys: rootChanges(beforeProcess, afterProcess, new Set(['nodes', 'edges'])) },
-    evidence: { added_item_ids: addedItemIds, removed_item_ids: removedItemIds, changed_item_ids: changedItemIds, changed_root_keys: rootChanges(beforeChecklist, afterChecklist, new Set(['items'])) },
-  };
-}
-
-function memoryApplicationContractViolations(baselineRun, laterRun, proof) {
-  const issues = [];
-  const baseline = baselineRun?.result;
-  const later = laterRun?.result;
-  const receipt = later?.memory_application;
-  const freeze = baselineRun?.counterfactual_learning_freeze;
-  const receiptFields = ['receipt_type', 'contract', 'authority', 'scope', 'source_memory', 'target', 'observable_input_hash', 'canonical_state_hash', 'eligibility', 'allowed_operation_ids', 'applied_operation_ids', 'process_operations', 'evidence_operations', 'before', 'after', 'verification_hash', 'shared_playbook_version', 'shared_rule_applied', 'model_acceptance_reused', 'applied', 'application_hash'];
-  const boundaryFields = ['process_dto_hash', 'checklist_dto_hash', 'process_semantic_hash', 'checklist_semantic_hash'];
-  if (!baseline || !later || !receipt || !proof) return ['baseline, later result, receipt, or proof is absent'];
-  issues.push(...memoryRetrievalContractViolations(baseline).map(issue => `baseline ${issue}`));
-  issues.push(...memoryRetrievalContractViolations(later).map(issue => `later ${issue}`));
-  if (!exactMembers(Object.keys(receipt), receiptFields)) issues.push('memory receipt fields are not exact');
-  if (receipt.receipt_type !== 'memory_application_receipt' || receipt.contract !== 'casepath.memory-application-receipt/1.0.0' || receipt.authority !== 'unverified_demo' || receipt.scope !== 'case_specific_guidance_only' || receipt.shared_playbook_version !== 'mould-playbook-v3' || receipt.shared_rule_applied !== false || receipt.model_acceptance_reused !== false || receipt.applied !== true) issues.push('memory receipt authority boundary is wrong');
-  if (!exactMembers(Object.keys(receipt.source_memory || {}), ['memory_id', 'claim_id', 'review_id', 'content_hash', 'review_status']) || receipt.source_memory.claim_id !== 'DEF-027-E0-DEMO' || receipt.source_memory.review_status !== 'unverified_demo_memory') issues.push('source memory binding is wrong');
-  const freezeIdentity = freeze?.memory || {};
-  if (!freeze || stableJson(proof.counterfactual_learning_freeze) !== stableJson(freeze)
-    || !exactMembers(Object.keys(freeze), ['contract', 'memory', 'identity_hash', 'application_suppressed'])
-    || freeze.contract !== 'casepath.counterfactual-learning-freeze/1.0.0'
-    || freeze.application_suppressed !== true
-    || !exactMembers(Object.keys(freezeIdentity), ['memory_id', 'review_id', 'content_hash', 'candidate_id', 'updated_at'])
-    || freezeIdentity.memory_id !== receipt.source_memory.memory_id
-    || freezeIdentity.review_id !== receipt.source_memory.review_id
-    || freezeIdentity.content_hash !== receipt.source_memory.content_hash
-    || freezeIdentity.candidate_id !== proof.candidate?.candidate_id
-    || !Number.isFinite(Date.parse(freezeIdentity.updated_at || ''))
-    || freeze.identity_hash !== dtoHash(freezeIdentity)) issues.push('counterfactual baseline is not bound to the frozen governed memory identity');
-  const freezeTime = Date.parse(freezeIdentity.updated_at || '');
-  const baselineCreated = Date.parse(baselineRun?.created_at || '');
-  const baselineCompleted = Number(baselineRun?.completed_at) * 1000;
-  const laterCreated = Date.parse(laterRun?.created_at || '');
-  if (![freezeTime, baselineCreated, baselineCompleted, laterCreated].every(Number.isFinite)
-    || !(freezeTime <= baselineCreated && baselineCreated <= baselineCompleted && baselineCompleted <= laterCreated)) issues.push('counterfactual baseline/current runs are not ordered after the learning freeze');
-  if (!exactMembers(Object.keys(receipt.target || {}), ['run_id', 'claim_id']) || receipt.target.run_id !== laterRun.run_id || receipt.target.claim_id !== laterRun.claim_id) issues.push('memory receipt target is not the later run');
-  const retainedBoundary = laterRun.memory_application_boundary;
-  const retainedBoundaryProjection = retainedBoundary && typeof retainedBoundary === 'object' && !Array.isArray(retainedBoundary)
-    ? Object.fromEntries(Object.entries(retainedBoundary).filter(([key]) => key !== 'boundary_hash'))
-    : null;
-  if (!exactMembers(Object.keys(retainedBoundary || {}), ['contract', 'target', 'source_memory', 'before', 'boundary_hash'])) issues.push('memory application boundary fields are not exact');
-  if (retainedBoundary?.contract !== 'casepath.memory-application-boundary/1.0.0'
-    || !exactMembers(Object.keys(retainedBoundary?.target || {}), ['run_id', 'claim_id'])
-    || stableJson(retainedBoundary?.target) !== stableJson(receipt.target)
-    || !exactMembers(Object.keys(retainedBoundary?.source_memory || {}), ['memory_id', 'content_hash'])
-    || retainedBoundary?.source_memory?.memory_id !== receipt.source_memory?.memory_id
-    || retainedBoundary?.source_memory?.content_hash !== receipt.source_memory?.content_hash) issues.push('memory application boundary identity or source join is wrong');
-  if (!exactMembers(Object.keys(retainedBoundary?.before || {}), boundaryFields)
-    || !Object.values(retainedBoundary?.before || {}).every(value => SHA256_PATTERN.test(value || ''))
-    || stableJson(retainedBoundary?.before) !== stableJson(receipt.before)) issues.push('memory application boundary before hashes do not equal receipt.before');
-  if (!SHA256_PATTERN.test(retainedBoundary?.boundary_hash || '')
-    || retainedBoundary?.boundary_hash !== dtoHash(retainedBoundaryProjection)) issues.push('memory application boundary hash is wrong');
-  const completedMemoryEvents = (laterRun.events || []).filter(event => event?.stage === 'memory_application'
-    && event?.receipt_type === 'memory_application_receipt'
-    && event?.status === 'completed');
-  if (completedMemoryEvents.length !== 1) issues.push('exactly one completed persisted memory-application event is required');
-  if (completedMemoryEvents.length === 1) {
-    const event = completedMemoryEvents[0];
-    const eventHasReceiptFields = receiptFields.every(key => Object.hasOwn(event, key));
-    const eventReceiptProjection = eventHasReceiptFields ? Object.fromEntries(receiptFields.map(key => [key, event[key]])) : null;
-    if (!eventHasReceiptFields || stableJson(eventReceiptProjection) !== stableJson(receipt)) issues.push('persisted memory-application event does not project the result receipt');
-  }
-  if (receipt.observable_input_hash !== later.audit?.observable_input_hash || receipt.observable_input_hash !== baseline.audit?.observable_input_hash || receipt.observable_input_hash !== proof.before?.observable_input_hash || receipt.observable_input_hash !== proof.after?.observable_input_hash) issues.push('observable input hash is not bound across both runs');
-  // Canonical facts intentionally contain JSON floats (including integral 1.0 values).
-  // A browser JSON roundtrip erases that lexical distinction, so JS must not forge a
-  // Python hash from the parsed object. Bind the unchanged returned DTO to the two
-  // server-computed run audit hashes and the independently recomputed proof instead.
-  if (stableJson(baseline.facts) !== stableJson(later.facts)
-    || receipt.canonical_state_hash !== later.audit?.canonical_state_hash
-    || receipt.canonical_state_hash !== baseline.audit?.canonical_state_hash
-    || receipt.canonical_state_hash !== proof.before?.canonical_state_hash
-    || receipt.canonical_state_hash !== proof.after?.canonical_state_hash) issues.push('canonical-state hash is not bound across both unchanged runs');
-  issues.push(...semanticFactRoleViolations(baseline).map(issue => `baseline ${issue}`));
-  issues.push(...semanticFactRoleViolations(later).map(issue => `later ${issue}`));
-  const eligibility = receipt.eligibility || {};
-  const requiredDecisions = {
-    scope: 'in_scope', dispute: 'dispute_present', urgency: 'not_urgent', notification: 'notified', recurrence: 'recurrence_supported', causation: 'cause_unresolved',
-  };
-  const requiredFactRoles = {
-    management_ventilation_allegation: { state: 'known', min_grounded_sources: 1 },
-  };
-  const semanticSignatureHash = dtoHash({
-    category: 'Rental defect - mould and moisture',
-    subcategory: 'Recurring moisture with disputed causation',
-    required_decisions: requiredDecisions,
-    required_fact_roles: requiredFactRoles,
-  });
-  const expectedDecisions = Object.fromEntries((later.facts || []).filter(fact => fact.controls_process === true).map(fact => [fact.decision_key, fact.decision_value]));
-  const expectedChecks = {
-    source_claim_excluded: receipt.source_memory?.claim_id !== laterRun.claim_id,
-    category_matched: later.category === 'Rental defect - mould and moisture',
-    subcategory_matched: later.subcategory === 'Recurring moisture with disputed causation',
-    required_decisions_matched: stableJson(expectedDecisions) === stableJson(requiredDecisions),
-    ventilation_allegation_grounded: semanticFactSignature(later).management_ventilation_allegation?.state === 'known'
-      && semanticFactSignature(later).management_ventilation_allegation?.grounded_source_count >= 1,
-    semantic_signature_bound: eligibility.semantic_signature_hash === semanticSignatureHash,
-    guidance_enabled: true,
-  };
-  const eligibilityManifest = Object.fromEntries(['rule_id', 'contract', 'claim_id', 'semantic_signature_hash', 'decisions', 'facts_hash', 'checks'].map(key => [key, eligibility[key]]));
-  if (!exactMembers(Object.keys(eligibility), ['rule_id', 'contract', 'claim_id', 'semantic_signature_hash', 'decisions', 'facts_hash', 'checks', 'eligible', 'manifest_hash'])
-    || eligibility.rule_id !== 'same_grounded_mould_signature_v2'
-    || eligibility.contract !== 'casepath.semantic-memory-eligibility/1.0.0'
-    || eligibility.claim_id !== laterRun.claim_id
-    || eligibility.semantic_signature_hash !== semanticSignatureHash
-    || stableJson(eligibility.decisions) !== stableJson(requiredDecisions)
-    || stableJson(expectedDecisions) !== stableJson(requiredDecisions)
-    || eligibility.facts_hash !== dtoHash(semanticFactSignature(later))
-    || stableJson(eligibility.checks) !== stableJson(expectedChecks)
-    || eligibility.eligible !== true
-    || eligibility.manifest_hash !== dtoHash(eligibilityManifest)) issues.push('semantic eligibility manifest is not exact and hash-bound');
-  if (!exactMembers(Object.keys(receipt.before || {}), boundaryFields) || !exactMembers(Object.keys(receipt.after || {}), boundaryFields) || ![...Object.values(receipt.before || {}), ...Object.values(receipt.after || {})].every(value => SHA256_PATTERN.test(value || ''))) issues.push('memory before/after boundary hashes are not exact');
-  if (receipt.before?.process_semantic_hash !== dtoHash(semanticProcessDto(baseline.process)) || receipt.before?.checklist_semantic_hash !== dtoHash(semanticChecklistDto(baseline.checklist))) issues.push('receipt before semantic hashes do not bind the baseline DTOs');
-  const exactAfter = { process_dto_hash: dtoHash(later.process), checklist_dto_hash: dtoHash(later.checklist), process_semantic_hash: dtoHash(semanticProcessDto(later.process)), checklist_semantic_hash: dtoHash(semanticChecklistDto(later.checklist)) };
-  if (stableJson(receipt.after) !== stableJson(exactAfter) || boundaryFields.some(key => proof.after?.[key] !== exactAfter[key])) issues.push('receipt/proof after hashes do not bind the later DTOs');
-  if (boundaryFields.some(key => receipt.before?.[key] === receipt.after?.[key])) issues.push('memory receipt reports a zero DTO or semantic delta');
-  if (receipt.verification_hash !== later.verification?.whole_playbook_hash || receipt.verification_hash !== proof.after?.verification_hash) issues.push('memory receipt verification hash is not bound to the later result');
-  const operationIds = ['add_ventilation_dispute_node', 'add_evidence_gap_to_ventilation_edge', 'add_ventilation_to_causation_edge', 'condition_building_envelope', 'reassign_use_evidence_to_ventilation'];
-  if (JSON.stringify(receipt.allowed_operation_ids) !== JSON.stringify(operationIds) || JSON.stringify(receipt.applied_operation_ids) !== JSON.stringify(operationIds) || JSON.stringify([...(receipt.process_operations || []), ...(receipt.evidence_operations || [])].map(value => value.operation_id)) !== JSON.stringify(operationIds)) issues.push('memory operation membership or order is wrong');
-  const processOperationFields = [['operation_id', 'operation', 'node_id', 'evidence_requirement_ids', 'after_hash'], ['operation_id', 'operation', 'source', 'target', 'after_hash'], ['operation_id', 'operation', 'source', 'target', 'after_hash']];
-  const evidenceOperationFields = [['operation_id', 'operation', 'item_id', 'before_hash', 'after_hash'], ['operation_id', 'operation', 'item_id', 'removed_from_node_ids', 'added_to_node_id', 'before_hash', 'after_hash']];
-  if ((receipt.process_operations || []).length !== 3 || (receipt.evidence_operations || []).length !== 2 || (receipt.process_operations || []).some((operation, index) => !exactMembers(Object.keys(operation || {}), processOperationFields[index])) || (receipt.evidence_operations || []).some((operation, index) => !exactMembers(Object.keys(operation || {}), evidenceOperationFields[index]))) issues.push('memory operation fields are not exact');
-  const receiptHashes = [receipt.observable_input_hash, receipt.canonical_state_hash, receipt.verification_hash, receipt.application_hash, receipt.source_memory?.content_hash, ...Object.values(receipt.before || {}), ...Object.values(receipt.after || {}), ...(receipt.process_operations || []).map(operation => operation.after_hash), ...(receipt.evidence_operations || []).flatMap(operation => [operation.before_hash, operation.after_hash])];
-  if (!receiptHashes.every(value => SHA256_PATTERN.test(value || ''))) issues.push('memory receipt contains an invalid SHA-256 value');
-  const addedNode = later.process?.nodes?.find(node => node.node_id === 'ventilation_dispute');
-  const firstEdge = later.process?.edges?.find(edge => edge.source === 'evidence_gap' && edge.target === 'ventilation_dispute');
-  const secondEdge = later.process?.edges?.find(edge => edge.source === 'ventilation_dispute' && edge.target === 'causation');
-  const buildingEnvelope = later.checklist?.items?.find(item => item.item_id === 'building_envelope');
-  const useEvidence = later.checklist?.items?.find(item => item.item_id === 'use_evidence');
-  if (!addedNode || receipt.process_operations?.[0]?.node_id !== 'ventilation_dispute' || JSON.stringify(receipt.process_operations?.[0]?.evidence_requirement_ids) !== JSON.stringify(['management_position', 'use_evidence']) || receipt.process_operations?.[0]?.after_hash !== dtoHash(addedNode)) issues.push('added ventilation node operation is not hash-bound');
-  if (!firstEdge || !secondEdge || receipt.process_operations?.[1]?.after_hash !== dtoHash(firstEdge) || receipt.process_operations?.[2]?.after_hash !== dtoHash(secondEdge)) issues.push('added edge operations are not hash-bound');
-  if (!buildingEnvelope || buildingEnvelope.status !== 'conditional' || buildingEnvelope.current_path !== true || receipt.evidence_operations?.[0]?.item_id !== 'building_envelope' || receipt.evidence_operations?.[0]?.after_hash !== dtoHash(buildingEnvelope)) issues.push('building-envelope replacement is not hash-bound');
-  if (!useEvidence || useEvidence.node_id !== 'ventilation_dispute' || receipt.evidence_operations?.[1]?.item_id !== 'use_evidence' || receipt.evidence_operations?.[1]?.added_to_node_id !== 'ventilation_dispute' || receipt.evidence_operations?.[1]?.after_hash !== dtoHash(useEvidence)) issues.push('use-evidence reassignment is not hash-bound');
-  if (receipt.process_operations?.[0]?.operation !== 'add_node' || receipt.process_operations?.slice(1).some(operation => operation.operation !== 'add_edge') || receipt.evidence_operations?.[0]?.operation !== 'replace_item' || receipt.evidence_operations?.[1]?.operation !== 'reassign_item' || stableJson(receipt.evidence_operations?.[1]?.removed_from_node_ids) !== stableJson(['causation', 'mixed_cause', 'tenant_use'])) issues.push('memory operation semantics are wrong');
-  if (receipt.application_hash !== dtoHash(Object.fromEntries(Object.entries(receipt).filter(([key]) => key !== 'application_hash')))) issues.push('memory application hash is wrong');
-  const expectedDelta = computedCausalDelta(baseline, later);
-  if (stableJson(proof.causal_delta) !== stableJson(expectedDelta)) issues.push('learning proof causal delta is not recomputed from both DTOs');
-  if (stableJson(proof.causal_delta?.process?.added_node_ids) !== stableJson(['ventilation_dispute']) || stableJson(proof.causal_delta?.process?.added_edges) !== stableJson([{ source: 'evidence_gap', target: 'ventilation_dispute' }, { source: 'ventilation_dispute', target: 'causation' }]) || stableJson(proof.causal_delta?.evidence?.changed_item_ids) !== stableJson(['building_envelope', 'management_position', 'use_evidence'])) issues.push('causal delta is outside the exact case-specific transform');
-  const expectedCheckNames = ['Same observable input', 'Same canonical state', 'Exact current memory receipt', 'Pure memory replay matches learned DTOs', 'Receipt before semantic hashes match baseline DTOs', 'Receipt after hashes match learned DTOs', 'Nonzero causal DTO delta', 'Only allowed causal operations changed', 'Deterministic target and protected checks passed', 'Shared v3 remains unchanged'];
-  if (proof.ready !== true || proof.computed !== true || proof.baseline_run_id !== baselineRun.run_id || proof.later_run_id !== laterRun.run_id || JSON.stringify((proof.deterministic_checks || []).map(check => check.name)) !== JSON.stringify(expectedCheckNames) || !(proof.deterministic_checks || []).every(check => check.status === 'passed')) issues.push('learning proof checks are absent, reordered, or failed');
-  if (proof.reviewed_memory_proof?.used !== true || proof.reviewed_memory_proof?.present_in_baseline !== false || proof.reviewed_memory_proof?.present_in_later_run !== true || !proof.reviewed_memory_proof?.memory_ids?.includes(receipt.source_memory.memory_id) || stableJson(proof.changes?.precedent_claim_ids_added) !== stableJson(['DEF-027-E0-DEMO'])) issues.push('learning proof does not bind the selected unverified memory');
-  if (proof.candidate?.status !== 'quarantined' || proof.candidate?.target_tests?.status !== 'passed' || proof.candidate?.protected_regression?.status !== 'passed' || proof.candidate?.qualified_support_count !== 0 || proof.candidate?.approval?.status !== 'pending' || proof.candidate?.approval?.qualified_reviewer !== false) issues.push('candidate target/protected checks or qualified-release boundary is wrong');
-  const receiptProof = proof.memory_application_proof || {};
-  if (!exactMembers(Object.keys(receiptProof), ['receipt_present', 'receipt_valid', 'source_memory_current', 'before_hashes_match', 'after_hashes_match', 'allowed_delta_exact', 'replay_exact', 'application_hash'])
-    || !['receipt_present', 'receipt_valid', 'source_memory_current', 'before_hashes_match', 'after_hashes_match', 'allowed_delta_exact', 'replay_exact'].every(key => receiptProof[key] === true)
-    || receiptProof.application_hash !== receipt.application_hash) issues.push('memory application proof does not validate the current receipt and pure replay');
-  if (later.playbook?.version !== 'mould-playbook-v3' || later.shared_rule_applied !== false || proof.shared_rule?.version_before !== 'mould-playbook-v3' || proof.shared_rule?.version_after !== 'mould-playbook-v3' || proof.shared_rule?.applied !== false || proof.shared_rule?.shared_knowledge_changed !== false) issues.push('shared v3 boundary is not unchanged');
-  if (Object.hasOwn(later.process || {}, 'agent_contribution') || (later.process?.nodes || []).some(node => Object.hasOwn(node, 'agent_decision_contributions')) || Object.hasOwn(later.checklist || {}, 'agent_contribution') || (later.checklist?.items || []).some(item => Object.hasOwn(item, 'agent_contribution')) || later.next_action?.agent_brief_contribution !== null) issues.push('post-memory DTOs retain pre-memory model contribution fields or next-action attribution');
-  return issues;
-}
-
-function hybridCausalContractViolations(run) {
-  const issues = [];
-  const audit = orchestrationAudit(run);
-  const result = run?.result;
-  const artifacts = audit?.specialist_artifacts;
-  if (!audit || !result || !artifacts || typeof artifacts !== 'object' || Array.isArray(artifacts)) {
-    return ['hybrid specialist artifacts or final result are absent'];
-  }
-  const agents = new Map((audit.agents || []).map(item => [item.agent_id, item]));
-  const gates = new Map((audit.deterministic_gates || []).map(item => [item.agent_id, item]));
-  const sourceArtifact = artifacts.document_source_integrity;
-  const processArtifact = artifacts.process_decision_mapping;
-  const evidenceArtifact = artifacts.evidence_checklist;
-  const finalArtifact = artifacts.final_claim_brief_audit;
-  if (![sourceArtifact, processArtifact, evidenceArtifact, finalArtifact].every(value => value && typeof value === 'object' && !Array.isArray(value))) {
-    return ['one or more causal specialist artifacts are absent'];
-  }
-
-  const sourceAgent = agents.get('document_source_integrity');
-  const processAgent = agents.get('process_decision_mapping');
-  const evidenceAgent = agents.get('evidence_checklist');
-  const finalAgent = agents.get('final_claim_brief_audit');
-  if (sourceAgent?.output_artifact_hash !== dtoHash(sourceArtifact)) issues.push('document source specialist artifact hash is not exact');
-  if (processAgent?.output_artifact_hash !== dtoHash(processArtifact)) issues.push('process specialist artifact hash is not exact');
-  if (evidenceAgent?.output_artifact_hash !== dtoHash(evidenceArtifact)) issues.push('evidence specialist artifact hash is not exact');
-  if (finalAgent?.output_artifact_hash !== dtoHash(finalArtifact)) issues.push('final specialist artifact hash is not exact');
-
-  const processGate = gates.get('deterministic_process_gate');
-  const expectedParallelInputHash = dtoHash({
-    source_integrity: sourceArtifact,
-    process_mapping: processArtifact,
-  });
-  if (processGate?.input_artifact_hash !== expectedParallelInputHash) issues.push('process gate parallel specialist composite input hash is not exact');
-  const evidenceGate = gates.get('deterministic_evidence_gate');
-  if (evidenceGate?.input_artifact_hash !== dtoHash(evidenceArtifact)) issues.push('evidence gate specialist input hash is not exact');
-
-  const process = result.process;
-  const checklist = result.checklist;
-  if (!process || !checklist) return [...issues, 'hybrid process or checklist DTO is absent'];
-  if (stableJson(process.agent_contribution?.source_integrity_artifact) !== stableJson(sourceArtifact)) issues.push('final process does not retain the exact source specialist artifact');
-  if (stableJson(process.agent_contribution?.artifact) !== stableJson(processArtifact)) issues.push('final process does not retain the exact process specialist artifact');
-
-  const decisions = Array.isArray(processArtifact.decisions) ? processArtifact.decisions : [];
-  const validDecisions = contributionEntries(decisions, PROCESS_CONTRIBUTION_ROLE);
-  if (!validDecisions) issues.push('process decision field contributions violate membership or attribution');
-  const controllingFacts = (result.facts || []).filter(item => item?.controls_process === true);
-  const controllingFactIds = controllingFacts.map(item => item.fact_id);
-  const controllingById = new Map(controllingFacts.map(item => [item.fact_id, item]));
-  if (!exactMembers(decisions.map(item => item?.fact_id), controllingFactIds)) issues.push('process decision fact membership is not exact');
-  const decisionsByFact = new Map();
-  for (const decision of decisions) {
-    if (!decision || typeof decision !== 'object' || !nonemptyString(decision.fact_id)) continue;
-    if (decision.contribution_id !== `fact:${decision.fact_id}:decision_value`) issues.push(`process decision ${decision.fact_id} contribution ID is not exact`);
-    if (decisionsByFact.has(decision.fact_id)) issues.push(`process decision ${decision.fact_id} is duplicated`);
-    const canonicalFact = controllingById.get(decision.fact_id);
-    if (!canonicalFact
-      || decision.decision_key !== canonicalFact.decision_key
-      || decision.decision_value !== canonicalFact.decision_value
-      || decision.state !== canonicalFact.state
-      || decision.normalized_value !== canonicalFact.normalized_value) issues.push(`process decision ${decision.fact_id} inherited canonical fields are not exact`);
-    const sourceRefIds = decision.source_ref_ids;
-    if (!Array.isArray(sourceRefIds)
-      || sourceRefIds.some(item => !nonemptyString(item))
-      || new Set(sourceRefIds).size !== sourceRefIds.length
-      || JSON.stringify(sourceRefIds) !== JSON.stringify([...sourceRefIds].sort())) issues.push(`process decision ${decision.fact_id} source reference IDs are not unique and sorted`);
-    decisionsByFact.set(decision.fact_id, decision);
-  }
-  if (validDecisions && processAgent) {
-    const acceptedIds = validDecisions.filter(item => item.deterministic_fallback_applied === false).map(item => item.contribution_id);
-    const fallbackCount = validDecisions.length - acceptedIds.length;
-    if (JSON.stringify(processAgent.accepted_ids) !== JSON.stringify(acceptedIds)
-      || processAgent.accepted_count !== acceptedIds.length
-      || processAgent.rejected_count !== fallbackCount
-      || processAgent.deterministic_fallback_applied !== (fallbackCount > 0)) issues.push('process agent accepted/fallback field diagnostics are not exact');
-  }
-  for (const node of process.nodes || []) {
-    const expected = (node.fact_ids || []).flatMap(factId => decisionsByFact.has(factId) ? [decisionsByFact.get(factId)] : []);
-    const actual = Array.isArray(node.agent_decision_contributions) ? node.agent_decision_contributions : [];
-    if (stableJson(actual) !== stableJson(expected)) issues.push(`process node ${node.node_id || 'unknown'} field attribution is not projected from the specialist artifact`);
-  }
-
-  if (stableJson(checklist.agent_contribution?.artifact) !== stableJson(evidenceArtifact)) issues.push('final checklist does not retain the exact evidence specialist artifact');
-  const artifactItems = Array.isArray(evidenceArtifact.items) ? evidenceArtifact.items : [];
-  const checklistItems = Array.isArray(checklist.items) ? checklist.items : [];
-  if (!exactMembers(artifactItems.map(item => item?.item_id), checklistItems.map(item => item?.item_id))) issues.push('evidence specialist item membership is not exact');
-  const checklistById = new Map(checklistItems.map(item => [item.item_id, item]));
-  const evidenceUnits = [];
-  for (const artifactItem of artifactItems) {
-    const itemId = artifactItem?.item_id;
-    const sourceRefIds = artifactItem?.source_ref_ids;
-    if (!Array.isArray(sourceRefIds)
-      || sourceRefIds.some(item => !nonemptyString(item))
-      || new Set(sourceRefIds).size !== sourceRefIds.length
-      || JSON.stringify(sourceRefIds) !== JSON.stringify([...sourceRefIds].sort())) issues.push(`evidence item ${itemId || 'unknown'} source reference IDs are not unique and sorted`);
-    const units = contributionEntries(artifactItem?.field_contributions, EVIDENCE_CONTRIBUTION_ROLE);
-    const expectedUnits = [
-      { contribution_id: `item:${itemId}:status`, field: 'status' },
-      { contribution_id: `item:${itemId}:artifacts`, field: 'artifact_ids' },
-    ];
-    if (!units || units.length !== 2 || stableJson(units.map(item => ({ contribution_id: item.contribution_id, field: item.field }))) !== stableJson(expectedUnits)) {
-      issues.push(`evidence item ${itemId || 'unknown'} does not contain the exact two field contributions`);
-      continue;
-    }
-    evidenceUnits.push(...units);
-    const finalItem = checklistById.get(itemId);
-    if (!finalItem) continue;
-    if (finalItem.status !== artifactItem.status) issues.push(`evidence item ${itemId} status is not projected from the specialist artifact`);
-    if (!exactMembers(finalItem.artifact_ids, artifactItem.artifact_ids)) issues.push(`evidence item ${itemId} artifact set is not projected from the specialist artifact`);
-    if (stableJson(finalItem.agent_contribution) !== stableJson(units)) issues.push(`evidence item ${itemId} field attribution is not projected from the specialist artifact`);
-  }
-  if (evidenceUnits.length && evidenceAgent) {
-    const acceptedIds = evidenceUnits.filter(item => item.deterministic_fallback_applied === false).map(item => item.contribution_id);
-    const fallbackCount = evidenceUnits.length - acceptedIds.length;
-    if (JSON.stringify(evidenceAgent.accepted_ids) !== JSON.stringify(acceptedIds)
-      || evidenceAgent.accepted_count !== acceptedIds.length
-      || evidenceAgent.rejected_count !== fallbackCount
-      || evidenceAgent.deterministic_fallback_applied !== (fallbackCount > 0)) issues.push('evidence agent accepted/fallback field diagnostics are not exact');
-  }
-
-  const finalBrief = audit.final_claim_brief;
-  if (stableJson(finalArtifact) !== stableJson(finalBrief)) issues.push('final specialist artifact and authoritative final claim brief differ');
-  const finalUnits = contributionEntries(finalBrief?.field_contributions, FINAL_CONTRIBUTION_ROLE);
-  if (!finalUnits
-    || finalUnits.length !== FINAL_FIELD_CONTRACT.length
-    || stableJson(finalUnits.map(item => ({ field: item.field, contribution_id: item.contribution_id }))) !== stableJson(FINAL_FIELD_CONTRACT)) issues.push('final claim brief does not contain the exact five field contributions');
-  if (finalUnits && finalAgent) {
-    const acceptedIds = finalUnits.filter(item => item.deterministic_fallback_applied === false).map(item => item.contribution_id);
-    const fallbackCount = finalUnits.length - acceptedIds.length;
-    if (JSON.stringify(finalAgent.accepted_ids) !== JSON.stringify(acceptedIds)
-      || finalAgent.accepted_count !== acceptedIds.length
-      || finalAgent.rejected_count !== fallbackCount
-      || finalAgent.deterministic_fallback_applied !== (fallbackCount > 0)) issues.push('final agent accepted/fallback field diagnostics are not exact');
-    const expectedAttribution = fallbackCount === 0 ? FINAL_CONTRIBUTION_ROLE : acceptedIds.length ? 'mixed_model_and_deterministic' : DETERMINISTIC_CONTRIBUTION_ROLE;
-    if (finalBrief.attribution !== expectedAttribution || finalBrief.deterministic_fallback_applied !== (fallbackCount > 0)) issues.push('final claim brief aggregate attribution is not exact');
-    const upstreamUnit = finalUnits.find(item => item.field === 'upstream_contribution_ids');
-    const expectedLineageAuthority = upstreamUnit?.deterministic_fallback_applied === false ? 'hybrid_guarded_model_audit' : DETERMINISTIC_CONTRIBUTION_ROLE;
-    if (finalBrief.lineage_authority !== expectedLineageAuthority) issues.push('final claim brief lineage authority is not exact');
-  }
-  if (finalBrief?.contribution_scope !== 'independent_final_claim_brief_audit') issues.push('final claim brief contribution scope is not exact');
-
-  const overlay = process.current_overlay || {};
-  if (finalBrief?.current_node_id !== process.current_node || finalBrief?.current_node_id !== overlay.current_node_id) issues.push('final current-node field is not causally bound to the process overlay');
-  if (finalBrief?.next_action_node_id !== overlay.next_action_node_id || finalBrief?.next_action_node_id !== result.next_action?.process_node_id) issues.push('final next-action field is not causally bound to the result');
-  if (stableJson(result.next_action?.agent_brief_contribution) !== stableJson(finalBrief)) issues.push('result next action does not retain the exact final claim brief');
-  const currentNode = (process.nodes || []).find(item => item.node_id === finalBrief?.current_node_id);
-  const expectedSupportingFacts = [...(currentNode?.fact_ids || [])].sort();
-  if (JSON.stringify(finalBrief?.supporting_fact_ids) !== JSON.stringify(expectedSupportingFacts)) issues.push('final supporting-facts field is not bound to the current process node');
-  if (JSON.stringify(finalBrief?.upstream_contribution_ids) !== JSON.stringify(FINAL_UPSTREAM_CONTRIBUTION_IDS)
-    || JSON.stringify(finalBrief?.input_contribution_ids) !== JSON.stringify(FINAL_UPSTREAM_CONTRIBUTION_IDS)) issues.push('final upstream-contribution field is not complete and exact');
-  if (JSON.stringify(finalBrief?.audit_check_ids) !== JSON.stringify(FINAL_AUDIT_CHECK_IDS)) issues.push('final audit-check field is not complete and exact');
-  const supportingFactSet = new Set(expectedSupportingFacts);
-  const expectedSourceRefs = [...new Set([
-    ...decisions.filter(item => supportingFactSet.has(item.fact_id)).flatMap(item => item.source_ref_ids || []),
-    ...artifactItems.filter(item => supportingFactSet.has(checklistById.get(item.item_id)?.fact_id)).flatMap(item => item.source_ref_ids || []),
-  ])].sort();
-  if (JSON.stringify(finalBrief?.source_ref_ids) !== JSON.stringify(expectedSourceRefs)) issues.push('final source-reference field is not derived from controlling and non-controlling supporting facts');
-  return issues;
-}
-
-function internalSentinelPaths(value, currentPath = '$', found = []) {
-  if (Array.isArray(value)) {
-    value.forEach((item, index) => internalSentinelPaths(item, `${currentPath}[${index}]`, found));
-    return found;
-  }
-  if (value && typeof value === 'object') {
-    Object.entries(value).forEach(([key, child]) => internalSentinelPaths(child, `${currentPath}.${key}`, found));
-    return found;
-  }
-  if (typeof value === 'string' && INTERNAL_SENTINEL_PATTERN.test(value)) found.push(currentPath);
-  return found;
-}
-
-function nonIntegerNumberPaths(value, currentPath = '$', found = []) {
-  if (Array.isArray(value)) {
-    value.forEach((item, index) => nonIntegerNumberPaths(item, `${currentPath}[${index}]`, found));
-    return found;
-  }
-  if (value && typeof value === 'object') {
-    Object.entries(value).forEach(([key, child]) => nonIntegerNumberPaths(child, `${currentPath}.${key}`, found));
-    return found;
-  }
-  if (typeof value === 'number' && (!Number.isInteger(value) || Object.is(value, -0))) found.push(currentPath);
-  return found;
-}
-
-function runProgressDiagnostic(run) {
-  const safeEvents = Array.isArray(run?.events)
-    ? run.events
-      .filter(item => item?.stage === 'agent_orchestration')
-      .slice(-12)
-      .map(item => ({
-        ordinal: item.ordinal,
-        agent_id: item.agent_id,
-        actor_type: item.actor_type,
-        status: item.status,
-        receipt_type: item.receipt_type,
-        outcome: item.outcome,
-        handoff_to: item.handoff_to,
-      }))
-    : [];
-  return {
-    run_id: run?.run_id || null,
-    status: run?.status || 'not_found',
-    stage: run?.stage || null,
-    error_present: nonemptyString(run?.error),
-    recent_agent_receipts: safeEvents,
-  };
-}
-
-function terminalFailureContractViolations(run) {
-  if (run?.status !== 'failed') return [];
-  const issues = [];
-  const sentinelLeaks = internalSentinelPaths(run);
-  if (sentinelLeaks.length) issues.push(`terminal failure leaks internal execution sentinels at ${sentinelLeaks.join(', ')}`);
-  const sensitive = forbiddenFieldPaths(run);
-  if (sensitive.length) issues.push(`terminal failure leaks forbidden fields at ${sensitive.join(', ')}`);
-  const events = Array.isArray(run?.events) ? run.events : [];
-  const completedByAgent = new Map(events
-    .filter(item => item?.actor_type === 'nemotron_agent' && item?.receipt_type === 'agent_completed' && item?.status === 'completed')
-    .map(item => [item.agent_id, item]));
-  const failureReceipts = events.filter(item => item?.receipt_type === 'agent_failed');
-  for (const receipt of failureReceipts) {
-    const unexpected = Object.keys(receipt).filter(key => !ALLOWED_AGENT_FAILURE_RECEIPT_FIELDS.has(key));
-    if (unexpected.length) issues.push(`${receipt.agent_id || 'unknown'} failure receipt has non-allowlisted fields: ${unexpected.join(', ')}`);
-    const isCanonicalRoot = receipt.agent_id === 'canonical_facts';
-    const expectedParent = isCanonicalRoot
-      ? null
-      : receipt.agent_id === 'orchestrator_plan'
-        ? completedByAgent.get('canonical_facts')?.call_id
-        : completedByAgent.get('orchestrator_plan')?.call_id;
-    const rootLineageValid = !isCanonicalRoot || (
-      receipt.failure_scope === 'root_canonical_facts'
-      && receipt.root_agent === true
-      && receipt.parent_call_id == null
-      && receipt.delegation_id == null
-      && receipt.input_artifact === 'observable_claim_package'
-      && receipt.provider === 'openrouter'
-      && receipt.requested_model === REQUESTED_NEMOTRON_MODEL
-      && nonemptyString(receipt.orchestration_id)
-      && receipt.shared_context === `claim-context:${run.run_id}`
-      && Number.isInteger(receipt.call_count)
-      && receipt.call_count === (ZERO_CALL_FAILURE_OUTCOMES.has(receipt.outcome) ? 0 : 1)
-    );
-    const delegatedLineageValid = isCanonicalRoot || (
-      nonemptyString(receipt.delegation_id)
-      && nonemptyString(expectedParent)
-      && receipt.parent_call_id === expectedParent
-    );
-    if (!REQUIRED_NEMOTRON_AGENT_IDS.includes(receipt.agent_id)
-      || receipt.actor_type !== 'nemotron_agent'
-      || receipt.status !== 'failed'
-      || receipt.acceptance_scope !== 'pre_review_model_output'
-      || !nonemptyString(receipt.call_id)
-      || !rootLineageValid
-      || !delegatedLineageValid
-      || !SHA256_PATTERN.test(receipt.input_artifact_hash || '')
-      || !nonemptyString(receipt.error_type)
-      || !nonemptyString(receipt.error_invariant)
-      || !FAILURE_OUTCOMES.has(receipt.outcome)
-      || receipt.handoff_to !== 'failure_boundary'
-      || receipt.external_tracing !== false
-      || receipt.model !== REQUESTED_NEMOTRON_MODEL) issues.push(`${receipt.agent_id || 'unknown'} failure receipt identity/lineage is invalid`);
-    const expectedCallCount = ZERO_CALL_FAILURE_OUTCOMES.has(receipt.outcome) ? 0 : 1;
-    if (!Number.isInteger(receipt.call_count) || receipt.call_count !== expectedCallCount) issues.push(`${receipt.agent_id || 'unknown'} failure receipt call_count does not match its exact provider-call outcome`);
-    if (receipt.outcome === 'blocked_provider_concurrency' || receipt.error_invariant === 'provider_concurrency_timeout') {
-      const retainedProviderResultFields = ZERO_CALL_PROVIDER_RESULT_FIELDS.filter(field => receipt[field] != null);
-      if (receipt.outcome !== 'blocked_provider_concurrency'
-        || receipt.error_invariant !== 'provider_concurrency_timeout'
-        || receipt.call_count !== 0
-        || retainedProviderResultFields.length) issues.push(`${receipt.agent_id || 'unknown'} blocked provider concurrency is not an exact zero-call receipt`);
-    }
-    const responseIdPresent = nonemptyString(receipt.response_id);
-    const responseModelPresent = nonemptyString(receipt.response_model);
-    const responseIdBounded = providerProvenanceValueIsSafe('response_id', receipt.response_id);
-    const responseModelBounded = providerProvenanceValueIsSafe('response_model', receipt.response_model);
-    const upstreamBounded = providerProvenanceValueIsSafe('upstream_provider', receipt.upstream_provider);
-    const finishReasonBounded = providerProvenanceValueIsSafe('finish_reason', receipt.finish_reason);
-    if (!responseIdBounded || !responseModelBounded || !upstreamBounded || !finishReasonBounded) issues.push(`${receipt.agent_id || 'unknown'} failure provider provenance is not bounded`);
-    if (receipt.error_invariant === 'response_identity') {
-      if (responseIdPresent && responseModelPresent) issues.push(`${receipt.agent_id || 'unknown'} response-identity failure is unexpectedly complete`);
-    } else if (receipt.error_invariant === 'invalid_provenance') {
-      if (!PROVIDER_PROVENANCE_FIELDS.has(receipt.invalid_provenance_field)
-        || !SHA256_PATTERN.test(receipt.invalid_provenance_value_hash || '')
-        || receipt[receipt.invalid_provenance_field] != null) issues.push(`${receipt.agent_id || 'unknown'} invalid-provenance failure lacks its safe field/hash diagnostic or retained the rejected value`);
-    } else if (receipt.error_invariant === 'provider_upstream_rejection') {
-      if (receipt.response_model != null || receipt.upstream_provider != null || receipt.usage_source != null || receipt.finish_reason != null) issues.push(`${receipt.agent_id || 'unknown'} upstream rejection claims unavailable provider success metadata`);
-      if (receipt.provider_error_code != null && (!Number.isInteger(receipt.provider_error_code) || receipt.provider_error_code < 0 || receipt.provider_error_code > 9999)) issues.push(`${receipt.agent_id || 'unknown'} upstream rejection error code is unbounded`);
-      if (responseIdPresent && !EXACT_OPENROUTER_GENERATION_ID.test(receipt.response_id)) issues.push(`${receipt.agent_id || 'unknown'} upstream rejection response ID is not an exact OpenRouter generation ID`);
-    } else if ((responseIdPresent || responseModelPresent) && (
-      !responseIdPresent
-      || !responseModelPresent
-      || !EXACT_NEMOTRON_RESPONSE_MODELS.has(receipt.response_model)
-    )) {
-      issues.push(`${receipt.agent_id || 'unknown'} failure response identity is partial or unauthorized`);
-    }
-    if (receipt.error_invariant !== 'invalid_provenance'
-      && (receipt.invalid_provenance_field != null || receipt.invalid_provenance_value_hash != null)) issues.push(`${receipt.agent_id || 'unknown'} failure carries an out-of-scope invalid-provenance diagnostic`);
-    if (receipt.error_invariant !== 'provider_upstream_rejection' && receipt.provider_error_code != null) issues.push(`${receipt.agent_id || 'unknown'} failure carries an out-of-scope provider error code`);
-    const boundaryIssue = providerRejectionBoundaryIssue(receipt);
-    if (boundaryIssue) issues.push(`${receipt.agent_id || 'unknown'} failure ${boundaryIssue}`);
-    if (receipt.outcome === 'actual_cost_overrun' && (
-      !responseIdPresent
-      || !responseModelPresent
-      || !EXACT_NEMOTRON_RESPONSE_MODELS.has(receipt.response_model)
-      || !ALLOWED_USAGE_SOURCES.has(receipt.usage_source)
-    )) issues.push(`${receipt.agent_id || 'unknown'} charged overrun lacks complete provider lineage`);
-    if (receipt.usage_source != null && !ALLOWED_USAGE_SOURCES.has(receipt.usage_source)) issues.push(`${receipt.agent_id || 'unknown'} failure usage provenance is invalid`);
-  }
-  const terminalBoundaries = events.filter(item => item?.stage === 'failed' && item?.status === 'failed' && item?.actor_type === 'deterministic_gate');
-  if (terminalBoundaries.length !== 1) {
-    issues.push('terminal deterministic failure boundary is absent or duplicated');
-  } else {
-    const terminal = terminalBoundaries[0];
-    if (terminal.label !== 'Analysis stopped safely'
-      || terminal.agent !== 'Failure boundary'
-      || terminal.headline !== 'No final playbook was accepted'
-      || terminal.model != null
-      || terminal.failure_stage !== run.failure_stage
-      || terminal.accepted_state?.final_playbook_accepted !== false
-      || stableJson(terminal.accepted_state) !== stableJson(run.accepted_state)) issues.push('terminal deterministic failure labels/state are invalid');
-  }
-  if (REQUIRED_NEMOTRON_AGENT_IDS.includes(run.failure_stage)
-    && failureReceipts.filter(item => item.agent_id === run.failure_stage).length !== 1) issues.push('terminal model failure is not bound to exactly one specialist failure receipt');
-  return issues;
-}
-
-function orchestrationContractViolations(run, cacheMode, expectedFramework = EXPECTED_FRAMEWORK) {
-  const issues = [];
-  const audit = orchestrationAudit(run);
-  if (!audit || typeof audit !== 'object') return ['agent_orchestration audit is absent'];
-  if (audit.schema_version !== EXPECTED_RUNTIME.orchestration_schema) issues.push('orchestration schema mismatch');
-  if (audit.implementation !== EXPECTED_RUNTIME.implementation) issues.push('implementation mismatch');
-  if (audit.authority_mode !== EXPECTED_RUNTIME.authority_mode) issues.push('authority mode mismatch');
-  if (audit.model !== REQUESTED_NEMOTRON_MODEL) issues.push('requested model mismatch');
-  if (stableJson(audit.framework) !== stableJson(expectedFramework)) issues.push('framework versions mismatch');
-  if (!nonemptyString(audit.orchestration_id)) issues.push('orchestration_id is absent');
-  if (!run?.result?.agent_orchestration
-    || !run?.result?.audit?.agent_orchestration
-    || !run?.agent_orchestration
-    || stableJson(run.result.agent_orchestration) !== stableJson(audit)
-    || stableJson(run.result.audit.agent_orchestration) !== stableJson(audit)
-    || stableJson(run.agent_orchestration) !== stableJson(audit)) issues.push('authoritative orchestration audit is not identically visible in every final payload binding');
-  if (audit.model_assisted !== true || audit.deterministic_safety_authority !== true) issues.push('hybrid authority flags are invalid');
-  if (audit.external_tracing !== false || audit.prompt_storage !== false || audit.raw_output_storage !== false) issues.push('privacy flags are invalid');
-  if (audit.all_required_agents_contributed !== true) issues.push('required-agent completion flag is false');
-  if (stableJson(audit.execution_topology) !== stableJson(EXPECTED_EXECUTION_TOPOLOGY)) issues.push('deterministic execution topology authority or structure mismatch');
-
-  const agents = Array.isArray(audit.agents) ? audit.agents : [];
-  const gates = Array.isArray(audit.deterministic_gates) ? audit.deterministic_gates : [];
-  if (!exactMembers(agents.map(item => item?.agent_id), REQUIRED_NEMOTRON_AGENT_IDS)) issues.push('required Nemotron agent set is not exact');
-  if (!exactMembers(gates.map(item => item?.agent_id), REQUIRED_DETERMINISTIC_GATE_IDS)) issues.push('deterministic gate set is not exact');
-
-  const byAgent = new Map(agents.map(item => [item.agent_id, item]));
-  const callIds = agents.map(item => item?.call_id);
-  const delegatedAgents = agents.filter(item => item?.agent_id !== 'canonical_facts');
-  const delegationIds = delegatedAgents.map(item => item?.delegation_id);
-  if (!callIds.every(nonemptyString) || new Set(callIds).size !== REQUIRED_NEMOTRON_AGENT_IDS.length) issues.push('agent call IDs are missing or duplicated');
-  if (!delegationIds.every(nonemptyString) || new Set(delegationIds).size !== REQUIRED_NEMOTRON_AGENT_IDS.length - 1) issues.push('delegated agent IDs are missing or duplicated');
-  for (const agentId of REQUIRED_NEMOTRON_AGENT_IDS) {
-    const item = byAgent.get(agentId);
-    if (!item) continue;
-    if (item.role !== REQUIRED_NEMOTRON_AGENT_ROLES[agentId]) issues.push(`${agentId}: role label is not exact`);
-    if (item.actor_type !== 'nemotron_agent') issues.push(`${agentId}: actor_type must be nemotron_agent`);
-    if (item.acceptance_scope !== 'pre_review_model_output') issues.push(`${agentId}: acceptance_scope must remain pre_review_model_output`);
-    if (item.model !== REQUESTED_NEMOTRON_MODEL || item.requested_model !== REQUESTED_NEMOTRON_MODEL || item.provider !== 'openrouter') issues.push(`${agentId}: requested model/provider mismatch`);
-    if (!nonemptyString(item.response_id) || !EXACT_NEMOTRON_RESPONSE_MODELS.has(item.response_model)) issues.push(`${agentId}: returned response identity is invalid`);
-    if (!providerProvenanceValueIsSafe('response_id', item.response_id)
-      || !providerProvenanceValueIsSafe('response_model', item.response_model)
-      || item.upstream_provider !== 'DeepInfra'
-      || !providerProvenanceValueIsSafe('upstream_provider', item.upstream_provider)
-      || !nonemptyString(item.finish_reason)
-      || !providerProvenanceValueIsSafe('finish_reason', item.finish_reason)
-      || (cacheMode === 'cold' ? !ALLOWED_USAGE_SOURCES.has(item.usage_source) : item.usage_source !== 'cache')) issues.push(`${agentId}: bounded provider provenance/usage is invalid`);
-    if (!Number.isInteger(item.accepted_count) || item.accepted_count < 1) issues.push(`${agentId}: accepted_count must be positive`);
-    if (!Number.isInteger(item.rejected_count) || item.rejected_count < 0) issues.push(`${agentId}: rejected_count must be nonnegative`);
-    if (Number.isInteger(item.accepted_count) && Number.isInteger(item.rejected_count) && item.accepted_count <= item.rejected_count) issues.push(`${agentId}: accepted contributions are not a strict majority`);
-    if (typeof item.deterministic_fallback_applied !== 'boolean' || item.deterministic_fallback_applied !== (item.rejected_count > 0)) issues.push(`${agentId}: guarded fallback disclosure is inconsistent`);
-    if (!SHA256_PATTERN.test(item.input_artifact_hash || '') || !SHA256_PATTERN.test(item.output_artifact_hash || '')) issues.push(`${agentId}: artifact hashes are absent or invalid`);
-    if (!nonemptyString(item.origin_call_id)) issues.push(`${agentId}: origin_call_id is absent`);
-    if (cacheMode === 'cold' && (item.cache_hit !== false || !SUCCESSFUL_MODEL_OUTCOMES.has(item.outcome) || item.origin_call_id !== item.call_id)) issues.push(`${agentId}: cold network lineage is invalid`);
-    if (cacheMode === 'warm' && (item.cache_hit !== true || item.outcome !== 'cache_hit')) issues.push(`${agentId}: warm cache state is invalid`);
-  }
-  const canonical = byAgent.get('canonical_facts');
-  const orchestrator = byAgent.get('orchestrator_plan');
-  if (canonical) {
-    const projected = canonical.source_reference_projection_fact_ids;
-    if (!Array.isArray(projected)
-      || !Number.isInteger(canonical.source_reference_projection_count)
-      || canonical.source_reference_projection_count !== projected.length
-      || new Set(projected).size !== projected.length
-      || projected.some(factId => !canonical.accepted_ids.includes(factId))) issues.push('canonical_facts: deterministic source projection disclosure is invalid');
-  }
-  if (canonical && (canonical.parent_call_id != null || canonical.delegation_id != null)) issues.push('canonical_facts: root parent_call_id and delegation_id must be null');
-  if (canonical && orchestrator && orchestrator.parent_call_id !== canonical.call_id) issues.push('orchestrator_plan: parent must be canonical_facts call');
-  for (const agentId of REQUIRED_NEMOTRON_AGENT_IDS.slice(2)) {
-    if (byAgent.get(agentId)?.parent_call_id !== orchestrator?.call_id) issues.push(`${agentId}: parent must be orchestrator_plan call`);
-  }
-  const disclosedFallbacks = agents.filter(item => item?.deterministic_fallback_applied === true).length;
-  if (!Number.isInteger(audit.guarded_fallback_count) || audit.guarded_fallback_count !== disclosedFallbacks) issues.push('guarded_fallback_count does not match agent receipts');
-  for (const gateId of REQUIRED_DETERMINISTIC_GATE_IDS) {
-    const gate = gates.find(item => item?.agent_id === gateId);
-    if (!gate) continue;
-    if (gate.role !== REQUIRED_DETERMINISTIC_GATE_ROLES[gateId]) issues.push(`${gateId}: role label is not exact`);
-    const artifactContract = ACCEPTED_ARTIFACT_CONTRACT[gateId];
-    const sourceAgent = byAgent.get(artifactContract.source_agent_id);
-    if (gate.actor_type !== 'deterministic_gate' || gate.model != null || gate.outcome !== 'passed' || gate.receipt_type !== 'accepted_artifact' || gate.acceptance_scope !== 'pre_review_model_output') issues.push(`${gateId}: deterministic gate identity/scope is invalid`);
-    if (gate.output_artifact !== artifactContract.output_artifact
-      || gate.source_agent_id !== artifactContract.source_agent_id
-      || gate.source_call_id !== sourceAgent?.call_id
-      || gate.delegation_id !== sourceAgent?.delegation_id
-      || gate.accepted_count !== sourceAgent?.accepted_count
-      || !Array.isArray(gate.accepted_ids)
-      || gate.accepted_ids.length !== gate.accepted_count
-      || new Set(gate.accepted_ids).size !== gate.accepted_ids.length
-      || JSON.stringify(gate.accepted_ids) !== JSON.stringify(sourceAgent?.accepted_ids)) issues.push(`${gateId}: accepted artifact IDs/source binding is invalid`);
-    if (!SHA256_PATTERN.test(gate.input_artifact_hash || '') || !SHA256_PATTERN.test(gate.output_artifact_hash || '')) issues.push(`${gateId}: artifact hashes are absent or invalid`);
-  }
-  const exactGateOutputs = {
-    deterministic_process_gate: run?.result?.process,
-    deterministic_evidence_gate: run?.result?.checklist,
-    whole_playbook_gate: audit.final_claim_brief,
-  };
-  for (const [gateId, dto] of Object.entries(exactGateOutputs)) {
-    const gate = gates.find(item => item?.agent_id === gateId);
-    if (!dto || gate?.output_artifact_hash !== dtoHash(dto)) issues.push(`${gateId}: output hash is not bound to the returned final DTO`);
-    const numericHazards = nonIntegerNumberPaths(dto);
-    if (numericHazards.length) issues.push(`${gateId}: accepted DTO contains non-integer numeric values at ${numericHazards.join(', ')}`);
-  }
-  const allEvents = Array.isArray(run?.events) ? run.events : [];
-  const events = allEvents.filter(item => item?.stage === 'agent_orchestration');
-  if (allEvents.some(item => item?.receipt_type === 'agent_failed' || (item?.stage === 'failed' && item?.status === 'failed'))) issues.push('completed orchestration retained a failure receipt or terminal failure boundary');
-  for (const agentId of REQUIRED_NEMOTRON_AGENT_IDS) {
-    const agent = byAgent.get(agentId);
-    const completed = allEvents.filter(item => item.agent_id === agentId && item.actor_type === 'nemotron_agent' && item.receipt_type === 'agent_completed' && item.status === 'completed');
-    if (completed.length !== 1) {
-      issues.push(`${agentId}: exact completed visible pre-review receipt is absent or duplicated`);
-      continue;
-    }
-    const receipt = completed[0];
-    if (receipt.acceptance_scope !== 'pre_review_model_output'
-      || receipt.call_id !== agent?.call_id
-      || receipt.parent_call_id !== agent?.parent_call_id
-      || receipt.delegation_id !== agent?.delegation_id
-      || receipt.response_id !== agent?.response_id
-      || receipt.response_model !== agent?.response_model
-      || receipt.accepted_count !== agent?.accepted_count
-      || receipt.rejected_count !== agent?.rejected_count
-      || receipt.deterministic_fallback_applied !== agent?.deterministic_fallback_applied
-      || (agentId === 'canonical_facts'
-        && (receipt.source_reference_projection_count !== agent?.source_reference_projection_count
-          || JSON.stringify(receipt.source_reference_projection_fact_ids) !== JSON.stringify(agent?.source_reference_projection_fact_ids)))
-      || JSON.stringify(receipt.accepted_ids) !== JSON.stringify(agent?.accepted_ids)) issues.push(`${agentId}: completed visible receipt is not bound to the authoritative agent audit`);
-    if (agentId !== 'canonical_facts' && receipt.output_artifact_hash !== agent?.output_artifact_hash) issues.push(`${agentId}: completed visible receipt output hash is not bound to the authoritative agent audit`);
-  }
-  for (const gateId of REQUIRED_DETERMINISTIC_GATE_IDS) {
-    const contract = ACCEPTED_ARTIFACT_CONTRACT[gateId];
-    const sourceCallId = byAgent.get(contract.source_agent_id)?.call_id;
-    if (!events.some(item => item.agent_id === gateId
-      && item.actor_type === 'deterministic_gate'
-      && item.receipt_type === 'accepted_artifact'
-      && item.acceptance_scope === 'pre_review_model_output'
-      && item.status === 'completed'
-      && item.output_artifact === contract.output_artifact
-      && item.source_agent_id === contract.source_agent_id
-      && item.source_call_id === sourceCallId
-      && item.delegation_id === byAgent.get(contract.source_agent_id)?.delegation_id
-      && item.accepted_count === byAgent.get(contract.source_agent_id)?.accepted_count
-      && JSON.stringify(item.accepted_ids) === JSON.stringify(byAgent.get(contract.source_agent_id)?.accepted_ids)
-      && SHA256_PATTERN.test(item.output_artifact_hash || ''))) issues.push(`${gateId}: completed accepted-artifact receipt is absent or unbound`);
-  }
-  issues.push(...hybridCausalContractViolations(run));
-  const sensitive = forbiddenFieldPaths(run);
-  if (sensitive.length) issues.push(`forbidden public fields: ${sensitive.join(', ')}`);
-  const sentinelLeaks = internalSentinelPaths(run);
-  if (sentinelLeaks.length) issues.push(`internal execution sentinels leaked: ${sentinelLeaks.join(', ')}`);
-  return issues;
-}
-
-function ledgerSummary(items) {
-  const unknownCostCallCount = items.filter(item => item.call_count > 0 && item.actual_cost_usd == null).length;
-  const outcomes = Object.fromEntries([...new Set(items.map(item => item.outcome))]
-    .sort()
-    .map(outcome => [outcome, items.filter(item => item.outcome === outcome).length]));
-  return {
-    records: items.length,
-    network_calls: items.reduce((total, item) => total + item.call_count, 0),
-    prompt_tokens: items.reduce((total, item) => total + (item.prompt_tokens ?? 0), 0),
-    completion_tokens: items.reduce((total, item) => total + (item.completion_tokens ?? 0), 0),
-    total_tokens: items.reduce((total, item) => total + (item.total_tokens ?? 0), 0),
-    actual_cost_usd: Number(items.reduce((total, item) => total + (item.actual_cost_usd ?? 0), 0).toFixed(8)),
-    actual_cost_complete: unknownCostCallCount === 0,
-    unknown_cost_call_count: unknownCostCallCount,
-    outcomes,
-  };
-}
-
-function initialLedgerAdmissionViolations(ledger) {
-  const issues = sanitizedLedgerViolations(ledger);
-  if (issues.length) return issues;
-  const expected = ledgerSummary([]);
-  if (stableJson(ledger.summary) !== stableJson(expected)) {
-    issues.push('initial global model ledger is not exactly empty');
-  }
-  if (ledger.items.length !== 0) issues.push('initial global model ledger contains rows');
-  return issues;
-}
-
-function finalLedgerSnapshotViolations(isolationLedger, finalLedger) {
-  const issues = [];
-  if (stableJson(finalLedger) !== stableJson(isolationLedger)) {
-    issues.push('final ledger changed after the flagship warm replay');
-  }
-  const summary = finalLedger?.summary;
-  if (!Array.isArray(finalLedger?.items)
-    || finalLedger.items.length !== 12
-    || summary?.records !== 12
-    || summary?.network_calls !== 6
-    || summary?.outcomes?.cache_hit !== 6
-    || summary?.unknown_cost_call_count !== 0
-    || summary?.actual_cost_complete !== true) {
-    issues.push('final ledger is not exact cold6 plus warm6 accounting');
-  }
-  return issues;
-}
-
-function sanitizedLedgerViolations(ledger) {
-  const issues = [];
-  if (ledger?.scope !== 'global_budget_ledger' || !Array.isArray(ledger?.items)) return ['global sanitized ledger is absent'];
-  const summary = ledger?.summary;
-  if (!summary || typeof summary !== 'object' || !exactMembers(Object.keys(summary), [...ALLOWED_LEDGER_SUMMARY_FIELDS])) {
-    issues.push('ledger summary violates the exact public schema');
-  } else {
-    const sourceRowsValid = ledger.items.every(item => Number.isInteger(item?.call_count)
-      && item.call_count >= 0
-      && ['prompt_tokens', 'completion_tokens', 'total_tokens'].every(field => !Object.hasOwn(item, field) || (Number.isInteger(item[field]) && item[field] >= 0))
-      && (item.actual_cost_usd == null || (Number.isFinite(item.actual_cost_usd) && item.actual_cost_usd >= 0))
-      && nonemptyString(item.outcome));
-    if (!sourceRowsValid) {
-      issues.push('ledger summary source rows contain invalid accounting fields');
-    } else {
-      if (stableJson(summary) !== stableJson(ledgerSummary(ledger.items))) issues.push('ledger summary is inconsistent with its network rows');
-    }
-  }
-  const callIds = ledger.items.map(item => item?.call_id);
-  if (!callIds.every(nonemptyString) || new Set(callIds).size !== callIds.length) issues.push('ledger call IDs are absent or duplicated');
-  ledger.items.forEach((item, index) => {
-    const unexpected = Object.keys(item).filter(key => !ALLOWED_LEDGER_FIELDS.has(key));
-    if (unexpected.length) issues.push(`ledger[${index}] unexpected fields: ${unexpected.join(', ')}`);
-    for (const field of PROVIDER_PROVENANCE_FIELDS) {
-      if (Object.hasOwn(item, field) && !providerProvenanceValueIsSafe(field, item[field])) issues.push(`ledger[${index}].${field} violates the exact provider-provenance sanitizer`);
-    }
-    if (Object.hasOwn(item, 'generation_model') && !providerProvenanceValueIsSafe('response_model', item.generation_model)) issues.push(`ledger[${index}].generation_model violates the exact response-model sanitizer`);
-    if (Object.hasOwn(item, 'origin_finish_reason') && !providerProvenanceValueIsSafe('finish_reason', item.origin_finish_reason)) issues.push(`ledger[${index}].origin_finish_reason violates the exact finish-reason sanitizer`);
-    if (item.error_invariant === 'invalid_provenance') {
-      if (!PROVIDER_PROVENANCE_FIELDS.has(item.invalid_provenance_field)
-        || !SHA256_PATTERN.test(item.invalid_provenance_value_hash || '')
-        || item[item.invalid_provenance_field] != null) issues.push(`ledger[${index}] invalid-provenance diagnostic is unbounded or retained the rejected value`);
-    } else if (item.invalid_provenance_field != null || item.invalid_provenance_value_hash != null) {
-      issues.push(`ledger[${index}] carries an out-of-scope invalid-provenance diagnostic`);
-    }
-    if (item.provider_error_code != null && (item.error_invariant !== 'provider_upstream_rejection' || !Number.isInteger(item.provider_error_code) || item.provider_error_code < 0 || item.provider_error_code > 9999)) issues.push(`ledger[${index}] provider error code is unbounded or out of scope`);
-    if (item.error_invariant === 'provider_upstream_rejection' && item.response_id != null && !EXACT_OPENROUTER_GENERATION_ID.test(item.response_id)) issues.push(`ledger[${index}] response ID is not an exact OpenRouter generation ID`);
-    if (item.outcome === 'blocked_provider_concurrency' || item.error_invariant === 'provider_concurrency_timeout') {
-      const retainedProviderResultFields = ZERO_CALL_PROVIDER_RESULT_FIELDS.filter(field => Object.hasOwn(item, field));
-      if (item.outcome !== 'blocked_provider_concurrency'
-        || item.error_invariant !== 'provider_concurrency_timeout'
-        || item.call_count !== 0
-        || item.actual_cost_usd !== null
-        || retainedProviderResultFields.length) issues.push(`ledger[${index}] blocked provider concurrency is not an exact zero-call row`);
-    }
-    const boundaryIssue = providerRejectionBoundaryIssue(item);
-    if (boundaryIssue) issues.push(`ledger[${index}] ${boundaryIssue}`);
-    if (Object.hasOwn(item, 'origin_usage')) {
-      const usage = item.origin_usage;
-      if (!usage
-        || typeof usage !== 'object'
-        || !exactMembers(Object.keys(usage), ['prompt_tokens', 'completion_tokens', 'total_tokens', 'actual_cost_usd', 'usage_source'])
-        || !Number.isInteger(usage.prompt_tokens)
-        || usage.prompt_tokens <= 0
-        || !Number.isInteger(usage.completion_tokens)
-        || usage.completion_tokens <= 0
-        || !Number.isInteger(usage.total_tokens)
-        || usage.total_tokens < usage.prompt_tokens + usage.completion_tokens
-        || !Number.isFinite(usage.actual_cost_usd)
-        || usage.actual_cost_usd <= 0
-        || !ALLOWED_USAGE_SOURCES.has(usage.usage_source)) issues.push(`ledger[${index}] origin_usage is not the bounded usage schema`);
-      if (!nonemptyString(item.origin_finish_reason)) issues.push(`ledger[${index}] origin_finish_reason is absent`);
-    }
-  });
-  const sensitive = forbiddenFieldPaths(ledger);
-  if (sensitive.length) issues.push(`ledger forbidden fields: ${sensitive.join(', ')}`);
-  const sentinels = internalSentinelPaths(ledger);
-  if (sentinels.length) issues.push(`ledger internal sentinels: ${sentinels.join(', ')}`);
-  return issues;
-}
-
-function coldLedgerContractViolations(audit, ledger) {
-  const issues = [...sanitizedLedgerViolations(ledger)];
-  if (!audit) return [...issues, 'cold orchestration audit is absent'];
-  const callIds = new Set(audit.agents.map(item => item.call_id));
-  const items = ledger.items.filter(item => callIds.has(item.call_id));
-  if (items.length !== REQUIRED_NEMOTRON_AGENT_IDS.length) issues.push('cold ledger does not contain exactly six bound calls');
-  const responseIds = items.map(item => item.response_id);
-  if (!responseIds.every(nonemptyString) || new Set(responseIds).size !== REQUIRED_NEMOTRON_AGENT_IDS.length) issues.push('cold response IDs are missing or duplicated');
-  for (const agent of audit.agents) {
-    const item = items.find(value => value.call_id === agent.call_id);
-    if (!item) continue;
-    if (item.orchestration_id !== audit.orchestration_id || item.agent_id !== agent.agent_id) issues.push(`${agent.agent_id}: ledger orchestration binding mismatch`);
-    if (item.parent_call_id !== agent.parent_call_id || item.delegation_id !== agent.delegation_id) issues.push(`${agent.agent_id}: ledger parent/delegation binding mismatch`);
-    if (agent.response_id !== item.response_id || agent.response_model !== item.response_model || agent.upstream_provider !== item.upstream_provider || agent.call_count !== item.call_count) issues.push(`${agent.agent_id}: run audit and ledger response binding mismatch`);
-    if (item.call_count !== 1 || !SUCCESSFUL_MODEL_OUTCOMES.has(item.outcome)) issues.push(`${agent.agent_id}: ledger is not a successful cold network call`);
-    if (item.provider !== 'openrouter' || item.provider_endpoint !== 'https://openrouter.ai/api/v1/chat/completions') issues.push(`${agent.agent_id}: provider identity mismatch`);
-    if (item.model !== REQUESTED_NEMOTRON_MODEL || !EXACT_NEMOTRON_RESPONSE_MODELS.has(item.response_model)) issues.push(`${agent.agent_id}: requested/returned model mismatch`);
-    if (!nonemptyString(item.response_id) || item.upstream_provider !== 'DeepInfra' || !nonemptyString(item.finish_reason)) issues.push(`${agent.agent_id}: complete exact provider identity is absent`);
-    if (!ALLOWED_USAGE_SOURCES.has(item.usage_source)) issues.push(`${agent.agent_id}: usage provenance is invalid`);
-    if (!Number.isFinite(item.actual_cost_usd) || item.actual_cost_usd <= 0) issues.push(`${agent.agent_id}: actual cost must be positive`);
-    if (!Number.isInteger(item.prompt_tokens) || item.prompt_tokens <= 0 || !Number.isInteger(item.completion_tokens) || item.completion_tokens <= 0 || !Number.isInteger(item.total_tokens) || item.total_tokens < item.prompt_tokens + item.completion_tokens) issues.push(`${agent.agent_id}: token accounting is invalid`);
-    const acceptedCount = agent.agent_id === 'canonical_facts' ? item.accepted_fact_count : item.accepted_item_count;
-    const rejectedCount = agent.agent_id === 'canonical_facts' ? item.rejected_fact_count : item.rejected_item_count;
-    if (acceptedCount !== agent.accepted_count || rejectedCount !== agent.rejected_count || item.deterministic_fallback_applied !== agent.deterministic_fallback_applied) issues.push(`${agent.agent_id}: ledger contribution diagnostics mismatch`);
-    if (agent.agent_id === 'canonical_facts'
-      && (item.source_reference_projection_count !== agent.source_reference_projection_count
-        || JSON.stringify(item.source_reference_projection_fact_ids) !== JSON.stringify(agent.source_reference_projection_fact_ids))) issues.push('canonical_facts: ledger source projection diagnostics mismatch');
-  }
-  return issues;
-}
-
-function warmLineageContractViolations(coldAudit, warmAudit, ledger) {
-  const issues = [];
-  if (!coldAudit || !warmAudit) return { issues: ['cold or warm orchestration audit is absent'], lineage: [] };
-  if (coldAudit.orchestration_id === warmAudit.orchestration_id) issues.push('cold and warm runs must have distinct orchestration IDs');
-  const coldByAgent = new Map(coldAudit.agents.map(item => [item.agent_id, item]));
-  const warmCallIds = new Set(warmAudit.agents.map(item => item.call_id));
-  const warmLedger = ledger.items.filter(item => warmCallIds.has(item.call_id));
-  if (warmLedger.length !== REQUIRED_NEMOTRON_AGENT_IDS.length) issues.push('warm ledger does not contain exactly six bound cache records');
-  const lineage = [];
-  for (const warm of warmAudit.agents) {
-    const cold = coldByAgent.get(warm.agent_id);
-    const item = warmLedger.find(value => value.call_id === warm.call_id);
-    if (!cold || !item) continue;
-    if (warm.call_id === cold.call_id || warm.origin_call_id !== cold.call_id || item.origin_call_id !== cold.call_id) issues.push(`${warm.agent_id}: warm origin does not bind to the cold call`);
-    if (item.orchestration_id !== warmAudit.orchestration_id || item.agent_id !== warm.agent_id) issues.push(`${warm.agent_id}: warm ledger orchestration binding mismatch`);
-    if (item.parent_call_id !== warm.parent_call_id || item.delegation_id !== warm.delegation_id) issues.push(`${warm.agent_id}: warm ledger parent/delegation binding mismatch`);
-    if (warm.response_id !== item.response_id || warm.response_model !== item.response_model || warm.upstream_provider !== item.upstream_provider || warm.call_count !== item.call_count) issues.push(`${warm.agent_id}: warm run audit and ledger response binding mismatch`);
-    if (item.call_count !== 0 || item.outcome !== 'cache_hit' || item.usage_source !== 'cache') issues.push(`${warm.agent_id}: warm record made or claims a provider call`);
-    const coldLedger = ledger.items.find(value => value.call_id === cold.call_id);
-    if (!coldLedger || item.response_id !== coldLedger.response_id || item.response_model !== coldLedger.response_model || item.upstream_provider !== 'DeepInfra' || coldLedger.upstream_provider !== 'DeepInfra') issues.push(`${warm.agent_id}: cached response identity/provider does not match the exact cold origin`);
-    const originUsage = item.origin_usage;
-    const expectedOriginUsage = coldLedger && {
-      prompt_tokens: coldLedger.prompt_tokens,
-      completion_tokens: coldLedger.completion_tokens,
-      total_tokens: coldLedger.total_tokens,
-      actual_cost_usd: coldLedger.actual_cost_usd,
-      usage_source: coldLedger.usage_source,
-    };
-    if (!originUsage
-      || !exactMembers(Object.keys(originUsage), ['prompt_tokens', 'completion_tokens', 'total_tokens', 'actual_cost_usd', 'usage_source'])
-      || JSON.stringify(originUsage) !== JSON.stringify(expectedOriginUsage)
-      || item.origin_finish_reason !== coldLedger?.finish_reason) issues.push(`${warm.agent_id}: bounded origin usage/finish provenance does not match the cold record`);
-    lineage.push({ agent_id: warm.agent_id, cold_call_id: cold.call_id, warm_call_id: warm.call_id, response_id: item.response_id, response_model: item.response_model });
-  }
-  return { issues, lineage };
-}
-
-function returnedReviewTransform(value) {
-  return value?.review_transform
-    || value?.review_response?.review_transform
-    || value?.result?.review_transform
-    || value?.result?.audit?.review_transform
-    || null;
-}
-
-function reviewTransformContractViolations(reviewed, persistedRun, preReviewRun) {
-  const issues = [];
-  const responseTransform = returnedReviewTransform(reviewed);
-  const persistedTransform = returnedReviewTransform(persistedRun);
-  if (!responseTransform || !persistedTransform) return ['review_transform is absent from the review response or persisted run'];
-  if (stableJson(responseTransform) !== stableJson(persistedTransform)) issues.push('review response and persisted run carry different review transforms');
-  const preAudit = orchestrationAudit(preReviewRun);
-  const hasModelAcceptance = preAudit?.model_assisted === true && Array.isArray(preAudit?.deterministic_gates);
-  const processGate = preAudit?.deterministic_gates?.find(item => item.agent_id === 'deterministic_process_gate');
-  const evidenceGate = preAudit?.deterministic_gates?.find(item => item.agent_id === 'deterministic_evidence_gate');
-  const expected = {
-    acceptance_scope: 'post_review_unverified_transform',
-    authority: 'unverified_demo_user',
-    qualification_status: 'not_verified',
-    input_run_id: preReviewRun?.run_id,
-    input_process_hash: processGate?.output_artifact_hash || dtoHash(preReviewRun?.result?.process),
-    input_checklist_hash: evidenceGate?.output_artifact_hash || dtoHash(preReviewRun?.result?.checklist),
-    output_process_hash: dtoHash(reviewed?.result?.process),
-    output_checklist_hash: dtoHash(reviewed?.result?.checklist),
-    model_acceptance_reused: false,
-  };
-  if (!exactMembers(Object.keys(responseTransform), Object.keys(expected))) issues.push('review response review_transform schema is not exact and bounded');
-  if (!exactMembers(Object.keys(persistedTransform), Object.keys(expected))) issues.push('persisted review_transform schema is not exact and bounded');
-  for (const [key, value] of Object.entries(expected)) {
-    if (responseTransform[key] !== value) issues.push(`review_transform.${key} mismatch`);
-  }
-  if (dtoHash(preReviewRun?.result?.process) !== expected.input_process_hash || dtoHash(preReviewRun?.result?.checklist) !== expected.input_checklist_hash) issues.push('review transform inputs do not match exact pre-review accepted DTO hashes');
-  if (dtoHash(persistedRun?.result?.process) !== expected.output_process_hash || dtoHash(persistedRun?.result?.checklist) !== expected.output_checklist_hash) issues.push('persisted post-review DTO hashes do not match the review response');
-  if (JSON.stringify(persistedRun?.result?.process) !== JSON.stringify(reviewed?.result?.process) || JSON.stringify(persistedRun?.result?.checklist) !== JSON.stringify(reviewed?.result?.checklist)) issues.push('persisted post-review DTOs differ from the applied response');
-  if (hasModelAcceptance) {
-    const postAudit = orchestrationAudit(persistedRun);
-    for (const gateId of REQUIRED_DETERMINISTIC_GATE_IDS) {
-      const before = preAudit.deterministic_gates?.find(item => item.agent_id === gateId);
-      const after = postAudit?.deterministic_gates?.find(item => item.agent_id === gateId);
-      if (!before || !after || after.acceptance_scope !== 'pre_review_model_output' || after.output_artifact_hash !== before.output_artifact_hash) issues.push(`${gateId}: original model-time acceptance was rewritten by the review transform`);
-    }
-  }
-  const numericHazards = [
-    ...nonIntegerNumberPaths(reviewed?.result?.process, '$.reviewed.process'),
-    ...nonIntegerNumberPaths(reviewed?.result?.checklist, '$.reviewed.checklist'),
-  ];
-  if (numericHazards.length) issues.push(`post-review transformed DTO contains non-integer numeric values at ${numericHazards.join(', ')}`);
-  const sensitive = forbiddenFieldPaths({ responseTransform, persistedTransform });
-  if (sensitive.length) issues.push(`review transform leaks forbidden fields: ${sensitive.join(', ')}`);
-  return issues;
-}
-
-function deterministicReferenceRunViolations(run, knowledgeMode) {
-  const issues = [];
-  const result = run?.result;
-  const resultAudit = result?.audit;
-  if (run?.status !== 'complete'
-    || run?.claim_id !== 'DEMO-MOULD-002'
-    || run?.knowledge_mode !== knowledgeMode
-    || run?.model_mode !== DETERMINISTIC_REFERENCE_MODE
-    || run?.model != null
-    || run?.profile !== DETERMINISTIC_REFERENCE_PROFILE) issues.push('top-level deterministic-reference identity is invalid');
-  if (!nonemptyString(run?.run_id)) issues.push('run_id is absent');
-  if (stableJson(run?.agent_orchestration) !== stableJson(DETERMINISTIC_REFERENCE_ORCHESTRATION)
-    || stableJson(result?.agent_orchestration) !== stableJson(DETERMINISTIC_REFERENCE_ORCHESTRATION)
-    || stableJson(resultAudit?.agent_orchestration) !== stableJson(DETERMINISTIC_REFERENCE_ORCHESTRATION)) issues.push('deterministic non-executed orchestration binding is not exact');
-  if (resultAudit?.profile !== DETERMINISTIC_REFERENCE_PROFILE
-    || resultAudit?.authority_mode !== DETERMINISTIC_REFERENCE_MODE
-    || stableJson(resultAudit?.canonicalization) !== stableJson(DETERMINISTIC_REFERENCE_CANONICALIZATION)) issues.push('deterministic-reference canonicalization authority is not explicit');
-  if (result?.next_action?.agent_brief_contribution !== null) issues.push('deterministic comparison retained a model-authored final brief');
-  if (!Array.isArray(run?.events)) issues.push('deterministic event stream is absent');
-
-  const forbiddenActivityFields = new Set([
-    'agents', 'deterministic_gates', 'execution_topology', 'specialist_artifacts',
-    'final_claim_brief', 'agent_contribution', 'call_id', 'response_id',
-    'response_model', 'requested_model', 'generation_model', 'upstream_provider',
-    'provider_endpoint', 'cache_hit', 'call_count', 'origin_call_id', 'origin_usage',
-    'origin_finish_reason', 'usage_source', 'orchestration_id', 'delegation_id',
-    'parent_call_id', 'prompt_tokens', 'completion_tokens', 'total_tokens',
-    'estimated_cost_usd', 'actual_cost_usd', 'latency_ms',
-  ]);
-  const activityPaths = [];
-  const visit = (value, currentPath) => {
-    if (Array.isArray(value)) {
-      value.forEach((item, index) => visit(item, `${currentPath}[${index}]`));
-      return;
-    }
-    if (!value || typeof value !== 'object') return;
-    for (const [key, child] of Object.entries(value)) {
-      const childPath = `${currentPath}.${key}`;
-      if (forbiddenActivityFields.has(key)
-        || (['model', 'provider'].includes(key) && child != null)
-        || (key === 'actor_type' && child === 'nemotron_agent')
-        || (key === 'implementation' && child === EXPECTED_RUNTIME.implementation)) activityPaths.push(childPath);
-      visit(child, childPath);
-    }
-  };
-  visit(run, '$');
-  if (activityPaths.length) issues.push(`model execution activity is present at ${activityPaths.join(', ')}`);
-  const sensitive = forbiddenFieldPaths(run);
-  if (sensitive.length) issues.push(`forbidden public fields are present at ${sensitive.join(', ')}`);
-  const sentinels = internalSentinelPaths(run);
-  if (sentinels.length) issues.push(`internal execution sentinels are present at ${sentinels.join(', ')}`);
-  return issues;
-}
-
-function productionOpeningContextViolations(captures) {
-  const issues = [];
-  const opening = Array.isArray(captures) ? captures[0] : null;
-  if (!opening) return ['production opening context was not captured'];
-  if (opening.actor_type !== 'deterministic_tool') issues.push('production opening setup is not visibly attributed to deterministic_tool');
-  if (opening.boundary_text !== EXPECTED_PRODUCTION_OPENING_BOUNDARY) issues.push('production opening boundary copy is not exact');
-  if (opening.nemotron_plan_visible !== false) issues.push('Nemotron plan was visible before its returned event');
-  if (/legacy deterministic reference/i.test(opening.boundary_text || '')) issues.push('production opening boundary incorrectly claims the legacy reference pipeline');
-  return issues;
-}
-
-function assertDeploymentAlignment(frontend, api) {
-  const localMode = isLocal(BASE) && isLocal(API);
-  const expected = process.env.CASEPATH_EXPECTED_SOURCE_COMMIT || '';
-  const qaCommit = deploymentIdentity.qa.source_commit;
-  check('Frontend, API, and QA use the canonical release identifier', frontend.release_id === RELEASE_ID && api.release_id === RELEASE_ID && deploymentIdentity.qa.release_id === RELEASE_ID, JSON.stringify(deploymentIdentity));
-  if (!localMode) {
-    check('Production deployment identities expose real source commits', validSourceCommit(frontend.source_commit) && validSourceCommit(api.source_commit) && validSourceCommit(qaCommit), JSON.stringify(deploymentIdentity));
-    check('Production deployment identities are internally conflict-free', frontend.alignment_eligible === true && api.source_commit_aligned === true && api.source_commit_conflict === false, JSON.stringify(deploymentIdentity));
-    check('Production frontend, API, and QA source commits are aligned', frontend.source_commit === api.source_commit && api.source_commit === qaCommit, JSON.stringify(deploymentIdentity));
-    return;
-  }
-  if (expected && expected !== 'local') {
-    check('Local expected source commit is a real Git identity', validSourceCommit(expected), expected);
-    check('Local frontend and API match the explicit expected source commit', frontend.source_commit === expected && api.source_commit === expected, JSON.stringify(deploymentIdentity));
-    if (qaCommit) check('Local QA build matches the explicit expected source commit', qaCommit === expected, JSON.stringify(deploymentIdentity));
-    return;
-  }
-  const localSentinels = new Set(['local', 'unknown']);
-  const bothExplicitlyLocal = localSentinels.has(frontend.source_commit) && localSentinels.has(api.source_commit);
-  const sameRealCommit = validSourceCommit(frontend.source_commit) && frontend.source_commit === api.source_commit;
-  check('Local alignment is either an identical commit or an explicit local sentinel', sameRealCommit || bothExplicitlyLocal, JSON.stringify(deploymentIdentity));
-  if (qaCommit && qaCommit !== 'local') check('Local QA build does not conflict with returned source identity', validSourceCommit(qaCommit) && (!sameRealCommit || qaCommit === frontend.source_commit), JSON.stringify(deploymentIdentity));
-  notes.push('Local-mode source identity accepted explicitly; production still requires one matching non-unknown 40-character commit across frontend, API, and QA.');
-}
-
-function assertReleaseRuntimeContract(releaseContract) {
-  const runtime = releaseContract?.agentic_runtime;
-  const runtimeAcceptance = releaseContract?.truth?.production_runtime_acceptance;
-  const dynamicEvidence = runtimeAcceptance?.dynamic_evidence;
-  check('Release uses the dynamic 2.2 contract without embedding a mutable verdict', releaseContract?.$schema === './release.schema.json' && releaseContract?.contract === 'casepath.release-contract/2.2.0' && releaseContract?.schema_version === '2.2.0' && releaseContract?.source_identity?.authority === 'dynamic_same_commit_qa_artifacts' && releaseContract?.source_identity?.source_contract_embeds_commit === false && releaseContract?.source_identity?.runtime_environment_variable === 'RENDER_GIT_COMMIT' && nonemptyString(releaseContract?.source_identity?.unknown_semantics), JSON.stringify({ contract: releaseContract?.contract, schema_version: releaseContract?.schema_version, source_identity: releaseContract?.source_identity }));
-  check('Release contract identifies the canonical v20 product, API 15.2, and QA gate', releaseContract?.release_id === RELEASE_ID && releaseContract?.components?.frontend?.version === PRODUCT_RELEASE && releaseContract?.components?.api?.version === API_RELEASE && releaseContract?.components?.pipeline?.version === API_RELEASE && releaseContract?.components?.qa?.version === PRODUCT_RELEASE, JSON.stringify(releaseContract?.components));
-  check('Release contract requests the pinned LangChain, LangGraph, and OpenRouter adapter versions', stableJson(runtime?.framework) === stableJson(EXPECTED_FRAMEWORK), JSON.stringify(runtime?.framework));
-  check('Release contract requests the exact six-agent Nemotron runtime', runtime?.runtime_profile === EXPECTED_RUNTIME.runtime_profile && runtime?.authority_mode === EXPECTED_RUNTIME.authority_mode && runtime?.implementation === EXPECTED_RUNTIME.implementation && runtime?.orchestration_schema === EXPECTED_RUNTIME.orchestration_schema && runtime?.model === REQUESTED_NEMOTRON_MODEL && exactMembers(runtime?.model_agents?.map(item => item.agent_id), REQUIRED_NEMOTRON_AGENT_IDS), JSON.stringify(runtime));
-  check('Release contract keeps logical specialist fan-out, three deterministic authority gates, physical provider single-flight, and disabled trace payload storage', stableJson(runtime?.parallel_groups) === stableJson(EXPECTED_EXECUTION_TOPOLOGY.parallel_groups) && exactMembers(runtime?.deterministic_gates?.map(item => item.gate_id), REQUIRED_DETERMINISTIC_GATE_IDS) && runtime?.safety?.deterministic_safety_authority === true && runtime?.safety?.provider_max_in_flight === 1 && runtime?.safety?.external_tracing === false && runtime?.safety?.prompt_storage === false && runtime?.safety?.raw_output_storage === false, JSON.stringify({ parallel_groups: runtime?.parallel_groups, safety: runtime?.safety }));
-  check('Release contract delegates the mutable production verdict to hash-bound same-commit QA artifacts', runtimeAcceptance?.verdict_authority === 'dynamic_same_commit_qa_artifacts' && runtimeAcceptance?.source_contract_embeds_runtime_verdict === false && exactMembers(Object.keys(dynamicEvidence || {}), ['qa_gate', 'report_path', 'evidence_manifest_path', 'evidence_manifest_contract', 'required_report_status', 'requires_release_id_match', 'requires_non_unknown_source_commit', 'requires_same_source_commit']) && dynamicEvidence?.qa_gate === 'focused-flagship-journey-v20' && dynamicEvidence?.report_path === 'report.json' && dynamicEvidence?.evidence_manifest_path === 'evidence-manifest.json' && dynamicEvidence?.evidence_manifest_contract === 'casepath.qa-evidence-manifest/1.0.0' && dynamicEvidence?.required_report_status === 'passed' && dynamicEvidence?.requires_release_id_match === true && dynamicEvidence?.requires_non_unknown_source_commit === true && dynamicEvidence?.requires_same_source_commit === true, JSON.stringify(runtimeAcceptance));
-  check('Dynamic production acceptance declares every exact paid-call, contribution, cold-run, gate, and fallback criterion', exactMembers(Object.keys(runtimeAcceptance || {}), ['verdict_authority', 'source_contract_embeds_runtime_verdict', 'dynamic_evidence', ...Object.keys(EXPECTED_RUNTIME_ACCEPTANCE_CRITERIA)]) && Object.entries(EXPECTED_RUNTIME_ACCEPTANCE_CRITERIA).every(([key, value]) => runtimeAcceptance?.[key] === value), JSON.stringify(runtimeAcceptance));
-  check('Release separates deterministic build proof and failed-closed history from current runtime acceptance', stableJson(releaseContract?.truth?.deterministic_build) === stableJson({ status: 'passed', execution_mode: 'deterministic_reference', model_calls: 0, model_backed: false }) && releaseContract?.truth?.historical_model_validation?.scope === 'failed_closed_history_only' && releaseContract?.truth?.historical_model_validation?.establishes_current_runtime_acceptance === false && stableJson(releaseContract?.truth?.historical_model_validation?.evidence_records) === stableJson(EXPECTED_FAILED_MODEL_ATTEMPT_RECORDS), JSON.stringify(releaseContract?.truth));
-  check('Release keeps unearned expert, legal, operational, and real-claim claims false', ['independent_expert_review', 'blind_review_completed', 'legal_approval', 'operational_validation', 'real_claims_approved'].every(key => releaseContract?.truth?.[key] === false) && releaseContract?.truth?.generated_data_only === true, JSON.stringify(releaseContract?.truth));
-  check('Release acceptance identity uses independent component versions but one release/source identity', releaseContract?.compatibility?.component_versions_are_independent === true && /same release_id/i.test(releaseContract?.compatibility?.acceptance_rule || '') && /same non-unknown source commit/i.test(releaseContract?.compatibility?.acceptance_rule || ''), JSON.stringify(releaseContract?.compatibility));
-}
-
-function providerSingleFlightContractViolations(releaseContract, health, readiness) {
-  const issues = [];
-  if (stableJson(releaseContract?.agentic_runtime?.parallel_groups) !== stableJson(EXPECTED_EXECUTION_TOPOLOGY.parallel_groups)) issues.push('logical fan-out topology changed');
-  if (releaseContract?.agentic_runtime?.safety?.provider_max_in_flight !== 1) issues.push('release safety cap is not one');
-  if (releaseContract?.truth?.production_runtime_acceptance?.required_provider_max_in_flight !== 1) issues.push('runtime acceptance cap is not one');
-  if (health?.agentic_runtime?.safety?.provider_max_in_flight !== 1) issues.push('health cap is not one');
-  if (readiness?.agentic_runtime?.safety?.provider_max_in_flight !== 1) issues.push('readiness cap is not one');
-  return issues;
-}
-
-function assertHealthRuntimeContract(health, releaseRuntime) {
-  const runtime = health.agentic_runtime;
-  if (!isProductionJourney()) {
-    check('Local health remains in deterministic reference mode without activating a model', health.model_mode === 'deterministic_reference' && health.model == null && health.runtime_profile === 'deterministic_reference' && runtime?.profile === 'deterministic_reference' && runtime?.execution_mode === 'deterministic_reference' && runtime?.authority_mode === 'deterministic_reference' && runtime?.implementation === 'deterministic_reference' && runtime?.schema == null && exactMembers(runtime?.required_agent_ids, []) && exactMembers(runtime?.deterministic_gate_ids, []), JSON.stringify({ model_mode: health.model_mode, model: health.model, runtime }));
-    check('Local deterministic health still reports the pinned inactive framework, provider single-flight cap, and trace-disabled safety posture', stableJson(runtime?.framework) === stableJson(EXPECTED_FRAMEWORK) && runtime?.safety?.provider_max_in_flight === 1 && runtime?.safety?.provider_max_in_flight === releaseRuntime?.safety?.provider_max_in_flight && runtime?.safety?.external_tracing === false && runtime?.safety?.prompt_storage === false && runtime?.safety?.raw_output_storage === false, JSON.stringify(runtime));
-    return;
-  }
-  check('Production health returns the active Nemotron LangGraph runtime profile and schema', health.runtime_profile === EXPECTED_RUNTIME.runtime_profile && runtime?.profile === EXPECTED_RUNTIME.runtime_profile && runtime?.execution_mode === 'nemotron_multi_agent' && runtime?.authority_mode === EXPECTED_RUNTIME.authority_mode && runtime?.implementation === EXPECTED_RUNTIME.implementation && runtime?.schema === EXPECTED_RUNTIME.orchestration_schema && health.model === REQUESTED_NEMOTRON_MODEL, JSON.stringify(runtime));
-  check('Production health returns the exact requested framework versions', stableJson(runtime?.framework) === stableJson(releaseRuntime.framework) && stableJson(runtime?.framework) === stableJson(EXPECTED_FRAMEWORK), JSON.stringify(runtime?.framework));
-  check('Production health returns the exact six model roles and three deterministic gates', exactMembers(runtime?.required_agent_ids, REQUIRED_NEMOTRON_AGENT_IDS) && exactMembers(runtime?.deterministic_gate_ids, REQUIRED_DETERMINISTIC_GATE_IDS), JSON.stringify(runtime));
-  check('Production health attests the exact private DeepInfra route, provider single-flight cap, and disabled tracing, storage, fallback, and inference retries', runtime?.safety?.deterministic_contract_authority === true && runtime?.safety?.provider_max_in_flight === 1 && runtime?.safety?.provider_max_in_flight === releaseRuntime?.safety?.provider_max_in_flight && runtime?.safety?.external_tracing === false && runtime?.safety?.prompt_storage === false && runtime?.safety?.raw_output_storage === false && runtime?.safety?.model_fallback === false && runtime?.safety?.automatic_inference_retry === false && stableJson(runtime?.safety?.provider_routing) === stableJson({ endpoint_tag: 'deepinfra/fp4', expected_upstream_provider: 'DeepInfra', allow_fallbacks: false, require_parameters: true, data_collection: 'deny' }), JSON.stringify(runtime?.safety));
-}
-
-function assertReadinessContract(readiness) {
-  const budgetCredential = readiness?.model_budget?.credential_configured;
-  const runtimeCredential = readiness?.agentic_runtime?.safety?.credential_configured;
-  check('Readiness safely exposes only matching boolean OpenRouter credential receipts', typeof budgetCredential === 'boolean' && typeof runtimeCredential === 'boolean' && budgetCredential === runtimeCredential, JSON.stringify({ budgetCredential, runtimeCredential }));
-  check('Readiness pins physical provider admission to exactly one in-flight send', readiness?.agentic_runtime?.safety?.provider_max_in_flight === 1, JSON.stringify(readiness?.agentic_runtime?.safety));
-  check('Readiness discloses the exact bounded budget and ephemeral-ledger posture', readiness?.model_budget?.budget_scope === 'instance_lifetime' && readiness?.model_budget?.ledger_persistence === 'ephemeral_instance' && readiness?.model_budget?.external_key_hard_limit_guard === 'configured', JSON.stringify(readiness?.model_budget));
-  check('Readiness receipt contains no credential material or internal execution sentinel', internalSentinelPaths(readiness).length === 0 && !/sk-or-v1-[A-Za-z0-9_-]{8,}/.test(JSON.stringify(readiness)), JSON.stringify({ sentinel_paths: internalSentinelPaths(readiness) }));
-  if (isProductionJourney()) {
-    check('Production is ready only with the OpenRouter credential configured', readiness?.status === 'ready' && budgetCredential === true && runtimeCredential === true, JSON.stringify({ status: readiness?.status, budgetCredential, runtimeCredential }));
-    return;
-  }
-  check('Local deterministic mode remains ready whether or not an inactive OpenRouter credential is configured', readiness?.status === 'ready', JSON.stringify({ status: readiness?.status, budgetCredential, runtimeCredential }));
-}
-
-async function getJsonForSession(url, sessionId, options = {}) {
-  const target = new URL(url);
-  const apiOrigin = new URL(API).origin;
-  const headers = target.origin === apiOrigin ? { 'X-CasePath-Session': sessionId, ...(options.headers || {}) } : options.headers;
-  const response = await fetch(url, { ...options, headers });
-  if (!response.ok) throw new Error(`${options.method || 'GET'} ${url}: ${response.status}`);
-  return response.json();
-}
-
-async function getJson(url, options = {}) {
-  return getJsonForSession(url, QA_SESSION_ID, options);
-}
-
-async function getText(url) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`GET ${url}: ${response.status}`);
-  return response.text();
-}
-
-async function resetDemo() {
-  const value = await getJson(`${API}/api/demo/reset`, { method: 'POST' });
-  demoMutated = true;
-  return value;
-}
-
-async function waitVisible(selector, timeout = 180000) {
-  await page.locator(selector).first().waitFor({ state: 'visible', timeout });
-}
-
-async function waitHidden(selector, timeout = 30000) {
-  await page.locator(selector).first().waitFor({ state: 'hidden', timeout });
-}
-
-async function waitText(selector, pattern, timeout = 180000) {
-  await page.waitForFunction(({ selector, source, flags }) => {
-    const node = document.querySelector(selector);
-    return node && new RegExp(source, flags).test(node.textContent || '');
-  }, { selector, source: pattern.source, flags: pattern.flags }, { timeout });
-}
-
-async function waitForValue(read, timeout = 180000) {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
-    const value = await read();
-    if (value) return value;
-    await sleep(100);
-  }
-  throw new Error('Timed out waiting for captured response');
-}
-
-async function screenshot(name, fullPage = false) {
-  await page.screenshot({ path: path.join(OUT, name), fullPage });
-}
-
-async function awaitRunForSession(runId, sessionId) {
-  const timeout = runTimeoutMs();
-  const deadline = Date.now() + timeout;
-  const pollInterval = isProductionJourney() ? 1000 : 250;
-  let latest = null;
-  while (Date.now() < deadline) {
-    const run = await getJsonForSession(`${API}/api/runs/${encodeURIComponent(runId)}`, sessionId);
-    latest = run;
-    if (run.status === 'complete') return run;
-    if (run.status === 'failed') {
-      const terminalIssues = terminalFailureContractViolations(run);
-      if (terminalIssues.length) throw new Error(`run ${runId} failed public-safety contract: ${JSON.stringify(terminalIssues)}`);
-      throw new Error(`run ${runId} failed: ${JSON.stringify(runProgressDiagnostic(run))}`);
-    }
-    await sleep(pollInterval);
-  }
-  throw new Error(`run ${runId} timed out after ${timeout}ms: ${JSON.stringify(runProgressDiagnostic(latest))}`);
-}
-
-async function awaitRun(runId) {
-  return awaitRunForSession(runId, QA_SESSION_ID);
-}
-
-function terminalRunFailureMessage(run) {
-  if (run?.status !== 'failed') return null;
-  const terminalIssues = terminalFailureContractViolations(run);
-  return terminalIssues.length
-    ? `run ${run.run_id || 'unknown'} failed public-safety contract: ${JSON.stringify(terminalIssues)}`
-    : `run ${run.run_id || 'unknown'} failed: ${JSON.stringify(runProgressDiagnostic(run))}`;
-}
-
-async function awaitLaterJourneyTerminalUi() {
-  const deadline = Date.now() + runTimeoutMs();
-  const latestRuns = new Map();
-  while (Date.now() < deadline) {
-    const ui = await page.evaluate(() => ({
-      moment: document.querySelector('#stageCanvas')?.dataset.casepathMoment || '',
-      next: document.querySelector('#journeyNext')?.textContent || '',
-    }));
-    if (ui.moment === 'failure') {
-      throw new Error('Later-claim comparison rendered the safe-failure boundary');
-    }
-    if (ui.moment === 'later-result' && /Restart the demo/i.test(ui.next)) return;
-
-    for (const runId of runIds.slice(1)) {
-      const run = await getJson(`${API}/api/runs/${encodeURIComponent(runId)}`);
-      latestRuns.set(runId, run);
-      const failure = terminalRunFailureMessage(run);
-      if (failure) throw new Error(failure);
-    }
-    await sleep(LATER_TERMINAL_POLL_INTERVAL_MS);
-  }
-  throw new Error(`Later-claim comparison timed out after ${runTimeoutMs()}ms: ${JSON.stringify([...latestRuns.values()].map(runProgressDiagnostic))}`);
-}
-
-async function waitJourneyUi(label, operation) {
-  try {
-    return await operation();
-  } catch (error) {
-    const diagnostics = [];
-    for (const runId of runIds.slice(-3)) {
-      try {
-        diagnostics.push(runProgressDiagnostic(await getJson(`${API}/api/runs/${encodeURIComponent(runId)}`)));
-      } catch (diagnosticError) {
-        diagnostics.push({ run_id: runId, diagnostic_error: String(diagnosticError) });
-      }
-    }
-    throw new Error(`${label}: ${error instanceof Error ? error.message : String(error)}; run diagnostics=${JSON.stringify(diagnostics)}`);
-  }
-}
-
-async function horizontalOverflow() {
-  return page.evaluate(() => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - innerWidth);
-}
-
-async function auditViewports(label, selector) {
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await sleep(120);
-  check(`${label} desktop retains its primary artifact`, await page.locator(selector).first().isVisible());
-  check(`${label} desktop keeps the source claim available`, await page.locator('.submission-pane').isVisible());
-  check(`${label} desktop has no page-level horizontal overflow`, await horizontalOverflow() <= 1, `overflow=${await horizontalOverflow()}`);
-  await runAxe(`${label} desktop`);
-  await screenshot(`${label}-desktop.png`, true);
-}
-
-async function settleFiniteAnimationsForAxe(label) {
-  const result = await page.evaluate(async ({ timeoutMs }) => {
-    const describeTarget = target => {
-      if (!(target instanceof Element)) return null;
-      if (target.id) return `#${CSS.escape(target.id)}`;
-      const classes = [...target.classList].slice(0, 4).map(value => `.${CSS.escape(value)}`).join('');
-      return `${target.tagName.toLowerCase()}${classes}`;
-    };
-    const describeAnimation = animation => {
-      const timing = animation.effect?.getComputedTiming?.() || {};
-      return {
-        type: animation.constructor?.name || 'Animation',
-        name: animation.animationName || animation.transitionProperty || null,
-        play_state: animation.playState,
-        target: describeTarget(animation.effect?.target),
-        current_time_ms: Number.isFinite(animation.currentTime) ? Math.round(animation.currentTime) : null,
-        end_time_ms: Number.isFinite(timing.endTime) ? Math.round(timing.endTime) : null,
-      };
-    };
-    const activeFiniteAnimations = () => document.getAnimations().filter(animation => {
-      const timing = animation.effect?.getComputedTiming?.();
-      return ['pending', 'running'].includes(animation.playState) && Number.isFinite(timing?.endTime);
-    });
-    const nextStablePaint = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    const deadline = performance.now() + timeoutMs;
-    let passes = 0;
-    while (passes < 8) {
-      let active = activeFiniteAnimations();
-      if (!active.length) {
-        await nextStablePaint();
-        active = activeFiniteAnimations();
-        if (!active.length) return { settled: true, passes, active: [] };
-      }
-      const remaining = deadline - performance.now();
-      if (remaining <= 0) break;
-      await new Promise(resolve => {
-        const timer = setTimeout(resolve, remaining);
-        Promise.allSettled(active.map(animation => animation.finished)).then(() => {
-          clearTimeout(timer);
-          resolve();
-        });
-      });
-      passes += 1;
-    }
-    return {
-      settled: false,
-      passes,
-      active: activeFiniteAnimations().slice(0, 12).map(describeAnimation),
-    };
-  }, { timeoutMs: AXE_ANIMATION_SETTLE_TIMEOUT_MS });
-  if (!result.settled) throw new Error(`${label} did not reach a stable finite-animation state before Axe: ${JSON.stringify(result)}`);
-}
-
-function axeViolationDiagnostics(violations) {
-  const safeDataFields = ['fgColor', 'bgColor', 'contrastRatio', 'expectedContrastRatio', 'fontSize', 'fontWeight'];
-  const safeAxeToken = value => {
-    const text = String(value || '').slice(0, 512);
-    return /^[a-z][a-z0-9_-]{0,79}$/i.test(text) ? text : `sha256:${sha256(text)}`;
-  };
-  const safeTargets = targets => (targets || []).slice(0, 4).map(target => {
-    if (Array.isArray(target)) return target.slice(0, 8).map(safeAxeToken);
-    return safeAxeToken(target);
-  });
-  const safeCheckData = data => {
-    if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
-    const safeValue = value => typeof value === 'string' ? value.slice(0, 120) : (typeof value === 'number' && Number.isFinite(value)) || typeof value === 'boolean' ? value : null;
-    return Object.fromEntries(safeDataFields.filter(field => Object.hasOwn(data, field)).map(field => [field, safeValue(data[field])]));
-  };
-  return violations.slice(0, 8).map(item => ({
-    id: safeAxeToken(item.id),
-    impact: ['minor', 'moderate', 'serious', 'critical'].includes(item.impact) ? item.impact : null,
-    node_count: (item.nodes || []).length,
-    omitted_node_count: Math.max(0, (item.nodes || []).length - 6),
-    nodes: (item.nodes || []).slice(0, 6).map(node => ({
-      target: safeTargets(node.target),
-      checks: [...(node.any || []), ...(node.all || []), ...(node.none || [])].slice(0, 8).map(check => ({
-        id: safeAxeToken(check.id),
-        impact: ['minor', 'moderate', 'serious', 'critical'].includes(check.impact) ? check.impact : null,
-        data: safeCheckData(check.data),
-      })),
-    })),
-  }));
-}
-
-async function runAxe(label) {
-  await settleFiniteAnimationsForAxe(label);
-  const { default: AxeBuilder } = await import('@axe-core/playwright');
-  const results = await new AxeBuilder({ page }).analyze();
-  const serious = results.violations.filter(item => ['serious', 'critical'].includes(item.impact));
-  const diagnostics = JSON.stringify(axeViolationDiagnostics(serious));
-  check(`${label} has no serious or critical axe violations`, serious.length === 0, diagnostics);
-}
-
-function sha256(value) {
-  return createHash('sha256').update(value).digest('hex');
-}
-
-async function retainEvidence() {
-  const required = [
-    'deployment-identity',
-    'release-contract',
-    'readiness-receipt',
-    'isolation-run',
-    'isolation-model-ledger',
-    'flagship-run',
-    'flagship-cold-model-ledger',
-    'demo-review',
-    'post-review-run',
-    'later-baseline-run',
-    'later-after-memory-run',
-    'learning-proof',
-    'model-ledger',
-  ];
-  if (isProductionJourney()) required.push('flagship-cache-lineage');
-  const missing = required.filter(name => retainedEvidence[name] == null);
-  if (report?.status === 'passed' && missing.length) throw new Error(`Passing journey did not retain required evidence: ${missing.join(', ')}`);
-
-  for (const [name, value] of Object.entries(retainedEvidence)) {
-    if (value == null) continue;
-    const filename = `${name}.json`;
-    const bytes = `${JSON.stringify(value, null, 2)}\n`;
-    await fs.writeFile(path.join(OUT, filename), bytes);
-    evidenceFiles.push({ path: filename, sha256: sha256(bytes), bytes: Buffer.byteLength(bytes) });
-  }
-
-  const gateBytes = await fs.readFile(new URL(import.meta.url));
-  const runtimeBytes = `${JSON.stringify(runtimeVersions, null, 2)}\n`;
-  await fs.writeFile(path.join(OUT, 'runtime-versions.json'), runtimeBytes);
-  evidenceFiles.push({ path: 'runtime-versions.json', sha256: sha256(runtimeBytes), bytes: Buffer.byteLength(runtimeBytes) });
-  report.evidence = {
-    contract: 'casepath.qa-evidence/1.0.0',
-    gate: { path: 'browser-focused-v20.mjs', sha256: sha256(gateBytes), bytes: gateBytes.length },
-    runtime: runtimeVersions,
-    retained_before_session_reset: true,
-    files: evidenceFiles,
-    missing,
-  };
-}
-
-async function finalizeEvidenceManifest() {
-  const entries = await fs.readdir(OUT, { withFileTypes: true });
-  const files = [];
-  for (const entry of entries) {
-    if (!entry.isFile() || ['report.json', 'evidence-manifest.json'].includes(entry.name)) continue;
-    const bytes = await fs.readFile(path.join(OUT, entry.name));
-    files.push({ path: entry.name, sha256: sha256(bytes), bytes: bytes.length });
-  }
-  files.sort((left, right) => left.path.localeCompare(right.path));
-  const retainedPaths = new Set(files.map(item => item.path));
-  const requiredVisualEvidence = [
-    '01-start-desktop.png',
-    '02-ready-process-desktop.png',
-    '03-lease-pdf-overview.png',
-    '03-lease-pdf-detail.png',
-    '03-lease-pdf-search.png',
-    '03-image-inspection.png',
-    '03-image-grounding-inspection.png',
-    '04-review-desktop.png',
-    '05-review-applied-desktop.png',
-    '06-learning-desktop.png',
-    '07-later-result-desktop.png',
-    'final-state.png',
-    'uninterrupted-focused-demo.webm',
-  ];
-  if (isProductionJourney()) requiredVisualEvidence.push('02-live-nemotron-agent.png', '03-deterministic-accepted-artifact.png');
-  const requiredJsonEvidence = [
-    'deployment-identity.json',
-    'release-contract.json',
-    'readiness-receipt.json',
-    'isolation-run.json',
-    'isolation-model-ledger.json',
-    'flagship-run.json',
-    'flagship-cold-model-ledger.json',
-    'demo-review.json',
-    'post-review-run.json',
-    'later-baseline-run.json',
-    'later-after-memory-run.json',
-    'learning-proof.json',
-    'model-ledger.json',
-    'runtime-versions.json',
-  ];
-  if (isProductionJourney()) requiredJsonEvidence.push('flagship-cache-lineage.json');
-  const missingRetainedArtifacts = [...requiredVisualEvidence, ...requiredJsonEvidence]
-    .filter(filename => !retainedPaths.has(filename));
-  const emptyRetainedArtifacts = files.filter(item => [...requiredVisualEvidence, ...requiredJsonEvidence].includes(item.path) && item.bytes <= 0).map(item => item.path);
-  if (report?.status === 'passed' && (missingRetainedArtifacts.length || emptyRetainedArtifacts.length)) {
-    throw new Error(`Passing journey lacks retained JSON/screenshot/video evidence: missing=${missingRetainedArtifacts.join(',')} empty=${emptyRetainedArtifacts.join(',')}`);
-  }
-  const manifest = {
-    contract: 'casepath.qa-evidence-manifest/1.0.0',
-    release_id: RELEASE_ID,
-    source_commit: deploymentIdentity.qa.source_commit,
-    gate: report.evidence.gate,
-    runtime: runtimeVersions,
-    retained_before_session_reset: true,
-    retained_media_contract: {
-      json: requiredJsonEvidence,
-      screenshots: requiredVisualEvidence.filter(item => item.endsWith('.png')),
-      video: 'uninterrupted-focused-demo.webm',
-      missing: missingRetainedArtifacts,
-      empty: emptyRetainedArtifacts,
-    },
-    files,
-  };
-  const manifestBytes = `${JSON.stringify(manifest, null, 2)}\n`;
-  await fs.writeFile(path.join(OUT, 'evidence-manifest.json'), manifestBytes);
-  report.evidence.files = files;
-  report.evidence.manifest = { path: 'evidence-manifest.json', sha256: sha256(manifestBytes), bytes: Buffer.byteLength(manifestBytes) };
-}
-
-async function cleanup() {
-  if (page) await page.screenshot({ path: path.join(OUT, 'final-state.png'), fullPage: true }).catch(() => null);
-  if (context) {
-    await context.close().catch(error => failures.cleanup.push(`context: ${error}`));
-    context = null;
-  }
-  if (video) {
-    try {
-      const videoPath = await video.path();
-      await fs.copyFile(videoPath, path.join(OUT, 'uninterrupted-focused-demo.webm'));
-    } catch (error) {
-      failures.cleanup.push(`video: ${error}`);
-    }
-  }
-  if (browser) {
-    await browser.close().catch(error => failures.cleanup.push(`browser: ${error}`));
-    browser = null;
-  }
-  await fs.rm(path.join(OUT, 'video-tmp'), { recursive: true, force: true }).catch(error => failures.cleanup.push(`video temp cleanup: ${error}`));
-  if (demoMutated) {
-    try {
-      const value = await getJson(`${API}/api/demo/reset`, { method: 'POST' });
-      if (value.active_playbook && value.active_playbook !== 'mould-playbook-v3') failures.cleanup.push(`reset returned ${JSON.stringify(value)}`);
-      demoMutated = false;
-    } catch (error) {
-      failures.cleanup.push(`reset: ${error}`);
-    }
-  }
-  if (isolationMutated) {
-    try {
-      await getJsonForSession(`${API}/api/demo/reset`, ISOLATION_SESSION_ID, { method: 'POST' });
-      isolationMutated = false;
-    } catch (error) {
-      failures.cleanup.push(`isolation reset: ${error}`);
-    }
-  }
-}
-
-async function execute() {
-  requireMutationAuthority();
-  await fs.rm(OUT, { recursive: true, force: true });
-  await fs.mkdir(path.join(OUT, 'video-tmp'), { recursive: true });
-
-  const [frontendDeployment, health, readiness, releaseContract, initialModelLedger] = await Promise.all([
-    getJson(`${BASE}/deployment.json`),
-    getJson(`${API}/healthz`),
-    getJson(`${API}/readyz`),
-    getJson(`${BASE}/release.json`),
-    getJson(`${API}/api/model-ledger`),
-  ]);
-  deploymentIdentity = { ...deploymentIdentity, frontend: frontendDeployment, api: health };
-  retainedEvidence['deployment-identity'] = deploymentIdentity;
-  retainedEvidence['release-contract'] = releaseContract;
-  retainedEvidence['readiness-receipt'] = readiness;
-  assertDeploymentAlignment(frontendDeployment, health);
-  assertReleaseRuntimeContract(releaseContract);
-  assertHealthRuntimeContract(health, releaseContract.agentic_runtime);
-  assertReadinessContract(readiness);
-  const initialLedgerIssues = initialLedgerAdmissionViolations(initialModelLedger);
-  check('QA admits a journey only from an exactly empty global model ledger', initialLedgerIssues.length === 0, JSON.stringify(initialLedgerIssues));
-  const providerCapIssues = providerSingleFlightContractViolations(releaseContract, health, readiness);
-  check('Release, health, and readiness agree on logical fan-out plus physical provider single-flight', providerCapIssues.length === 0, JSON.stringify(providerCapIssues));
-  check('API is healthy', health.status === 'ok', JSON.stringify(health));
-  check('API reports a pipeline release', typeof health.pipeline_release === 'string' && health.pipeline_release.length > 0, JSON.stringify(health));
-  check('API declares caller-session state isolation without treating the session as authority', health.session_isolation?.enabled === true && health.session_isolation?.header === 'X-CasePath-Session' && health.session_isolation?.session_reset_scope === 'caller_session_only', JSON.stringify(health.session_isolation));
-  if (isProductionJourney()) {
-    check('Production API runs the authorized OpenRouter Nemotron mode', health.model_mode === 'openrouter_nemotron' && health.model === REQUESTED_NEMOTRON_MODEL, JSON.stringify({ model_mode: health.model_mode, model: health.model }));
-  }
-  const reset = await resetDemo();
-  check('Demo starts from the unchanged shared v3 playbook with caller-only reset scope', reset.active_playbook === 'mould-playbook-v3' && reset.session_scope === 'caller_only', JSON.stringify(reset));
-  const demo = await getJson(`${API}/api/demo`);
-  let coldOrchestration = null;
-  let warmOrchestration = null;
-
-  const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined;
-  browser = await chromium.launch({ headless: true, executablePath, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
-  const packageMetadata = JSON.parse(await fs.readFile(new URL('./package.json', import.meta.url), 'utf8'));
-  runtimeVersions = { node: process.version, playwright: packageMetadata.dependencies?.playwright || null, chromium: browser.version() };
-  context = await browser.newContext({
-    viewport: { width: 1440, height: 900 },
-    deviceScaleFactor: 1,
-    recordVideo: { dir: path.join(OUT, 'video-tmp'), size: { width: 1440, height: 900 } },
-  });
-  page = await context.newPage();
-  video = page.video();
-
-  page.on('console', message => {
-    if (message.type() === 'error') failures.console.push(`${message.text()} @ ${message.location().url || ''}:${message.location().lineNumber || 0}`);
-  });
-  page.on('pageerror', error => failures.page.push(String(error)));
-  page.on('requestfailed', request => {
-    if (request.url().startsWith(BASE) || request.url().startsWith(API)) failures.request.push(`${request.failure()?.errorText || 'failed'} ${request.url()}`);
-  });
-  page.on('response', async response => {
-    try {
-      const url = new URL(response.url());
-      const method = response.request().method();
-      if (method === 'POST' && url.origin === new URL(API).origin && url.pathname === '/api/runs' && response.ok()) {
-        const value = await response.json();
-        if (value.run_id && !runIds.includes(value.run_id)) runIds.push(value.run_id);
-      }
-      if (method === 'POST' && /\/api\/runs\/[^/]+\/review$/.test(url.pathname) && response.ok()) reviewResponse = await response.json();
-      if (method === 'GET' && url.pathname === '/api/learning-proof' && response.ok()) proofResponse = await response.json();
-    } catch (_) {}
-  });
-
-  await page.addInitScript(sessionId => {
-    sessionStorage.setItem('casepath:demo-session', sessionId);
-    window.__casepathReleaseMutations = [];
-    window.__casepathMomentHistory = [];
-    window.__casepathVisibleAgentIds = [];
-    window.__casepathVisibleGateIds = [];
-    window.__casepathOpeningContexts = [];
-    window.addEventListener('casepath:render', event => {
-      if (event.detail?.moment !== 'opening') return;
-      const actorCard = document.querySelector('#orchestrationProof .orchestration-actor-card');
-      window.__casepathOpeningContexts.push({
-        boundary_text: document.querySelector('#stageCanvas[data-casepath-moment="opening"] .live-question strong')?.textContent || '',
-        actor_type: actorCard?.dataset.actorType || '',
-        nemotron_plan_visible: Boolean(document.querySelector('#orchestrationProof .orchestration-actor-card[data-actor-type="nemotron_agent"][data-actor-id="orchestrator_plan"]')),
-      });
-    });
-    const observeAttributes = () => {
-      const captureOrchestrationProof = () => {
-        document.querySelectorAll('.orchestration-actor-card[data-actor-type="nemotron_agent"][data-actor-id]').forEach(node => {
-          if (node.dataset.actorId && !window.__casepathVisibleAgentIds.includes(node.dataset.actorId)) window.__casepathVisibleAgentIds.push(node.dataset.actorId);
-        });
-        document.querySelectorAll('.orchestration-receipt.gate-receipt[data-actor-type="deterministic_gate"][data-gate-id]').forEach(node => {
-          if (node.dataset.gateId && !window.__casepathVisibleGateIds.includes(node.dataset.gateId)) window.__casepathVisibleGateIds.push(node.dataset.gateId);
-        });
-      };
-      new MutationObserver(records => {
-        for (const record of records) {
-          const target = record.target;
-          if (record.attributeName === 'data-casepath-release' || (record.attributeName === 'content' && target.matches?.('meta[name="casepath-release"]'))) {
-            window.__casepathReleaseMutations.push(`${target.nodeName}:${record.attributeName}`);
-          }
-          if (record.attributeName === 'data-casepath-moment' && target === document.body) {
-            window.__casepathMomentHistory.push(document.body.dataset.casepathMoment || '');
-          }
-        }
-      }).observe(document.documentElement, { attributes: true, subtree: true, attributeFilter: ['data-casepath-release', 'data-casepath-moment', 'content'] });
-      new MutationObserver(captureOrchestrationProof).observe(document.documentElement, { attributes: true, childList: true, subtree: true, attributeFilter: ['data-actor-id', 'data-gate-id', 'data-actor-type'] });
-      captureOrchestrationProof();
-    };
-    if (document.documentElement) observeAttributes();
-    else {
-      const parserObserver = new MutationObserver(() => {
-        if (!document.documentElement) return;
-        parserObserver.disconnect();
-        observeAttributes();
-      });
-      parserObserver.observe(document, { childList: true });
-    }
-  }, QA_SESSION_ID);
-
-  const response = await page.goto(`${BASE}/?api=${encodeURIComponent(API)}&qa=${Date.now()}`, { waitUntil: 'domcontentloaded', timeout: 120000 });
-  const sourceHtml = await response.text();
-  check('Product returns HTTP 200', response.status() === 200, `status=${response.status()}`);
-  check('HTML owns immutable v20 release identity', /<html[^>]*data-casepath-release=["']20\.0\.0["']/i.test(sourceHtml) && /<meta[^>]*name=["']casepath-release["'][^>]*content=["']20\.0\.0["']/i.test(sourceHtml));
-  check('First paint contains an intentional claim shell', sourceHtml.includes('v20-source-skeleton') && sourceHtml.includes('Opening claimâ€¦'));
-  const flagshipScriptPaths = [
-    'assets/live-v16.js',
-    'assets/live-v16-stability.js',
-    'assets/live-v18-insertion-guard.js',
-    'assets/live-v17.js',
-    'assets/live-v18.js',
-    'assets/live-v18-handoff.js',
-    'assets/live-v19-active-stage.js',
-    'assets/live-v20-focus.js',
-  ];
-  const flagshipScriptSources = await Promise.all(flagshipScriptPaths.map(async scriptPath => ({ scriptPath, source: await getText(`${BASE}/${scriptPath}`) })));
-  const loadedFlagshipSource = [sourceHtml, ...flagshipScriptSources.map(item => item.source)].join('\n');
-  const orchestrationRendererSource = flagshipScriptSources.find(item => item.scriptPath === 'assets/live-v16.js')?.source || '';
-  const runReadGuardSource = flagshipScriptSources.find(item => item.scriptPath === 'assets/live-v18-insertion-guard.js')?.source || '';
-  const staleQaService = /casepath-guided-(?:v13-smoke|evidence-v13)\.onrender\.com/i;
-  const falseReviewedV4Claim = /mould-playbook-v4|released playbook v4|after reviewed knowledge|reviewed playbook release/i;
-  const falseGroundingAuthority = /machine-visible image record|model interpretation|live retrieval/i;
-  const falseHeldOutNovelty = /\bunseen(?: related)? claim\b/i;
-  check('Loaded release contains no obsolete public QA-service destination', !staleQaService.test(loadedFlagshipSource));
-  check('Loaded release labels logical specialist topology as fan-out rather than physical parallel transport', loadedFlagshipSource.includes('<i>fan-out</i>') && !loadedFlagshipSource.includes('<i>parallel</i>'));
-  check('Loaded orchestration renderer never promotes a validator label to a deterministic gate ID', orchestrationRendererSource.includes("const gateId = returnedValue(event, 'gate_id', 'agent_id');") && orchestrationRendererSource.includes("const validator = returnedValue(event, 'validator');") && orchestrationRendererSource.includes('const gateIdentity = gateId ? ` data-gate-id=') && !orchestrationRendererSource.includes("returnedValue(event, 'gate_id', 'agent_id', 'validator', 'label')"));
-  check('Loaded run-read coalescing is session-scoped, in-flight-only, review-mutation-aware, and renders the authoritative review response', runReadGuardSource.includes("headers.get('X-CasePath-Session')") && runReadGuardSource.includes('runResourceKey(url, request, init)') && runReadGuardSource.includes('const pendingRunMutations = new Map();') && runReadGuardSource.includes("const isReviewMutation = method === 'POST'") && runReadGuardSource.includes('const activeMutation = pendingRunMutations.get(resourceKey);') && runReadGuardSource.includes('await activeMutation;') && !runReadGuardSource.includes('runReadWindowMs') && !runReadGuardSource.includes('window.setTimeout') && orchestrationRendererSource.includes('result: snapshot(state.review.result)'));
-  check('Current QA destination is guarded by exact live API identity and an atomic hash-bound report/manifest attestation', loadedFlagshipSource.includes("const qaEvidenceBase = 'https://casepath-guided-canonical-qa.onrender.com'") && loadedFlagshipSource.includes('function releaseEvidenceAttested(') && loadedFlagshipSource.includes("fetch(`${apiBase}/healthz`") && loadedFlagshipSource.includes("api?.source_commit === commit") && loadedFlagshipSource.includes('reportIdentities.every(value => value === commit)') && loadedFlagshipSource.includes('report?.failed === 0') && loadedFlagshipSource.includes('manifest?.source_commit === commit') && loadedFlagshipSource.includes('report.evidence.manifest.sha256 === manifestBinding.sha256') && loadedFlagshipSource.includes('report.evidence.manifest.bytes === manifestBinding.bytes') && loadedFlagshipSource.includes('retainedEvidenceComplete(report, manifest)') && loadedFlagshipSource.includes("link.dataset.evidenceState = 'attested'"));
-  check('Loaded release contains no false reviewed-v4 lifecycle claim', !falseReviewedV4Claim.test(loadedFlagshipSource));
-  check('Loaded release contains no false image-extraction, model-legal, or live-retrieval authority copy', !falseGroundingAuthority.test(loadedFlagshipSource));
-  check('Loaded release truthfully defines a deterministic post-learning held-out comparison without calling the fixture unseen or claiming another model run', !falseHeldOutNovelty.test(loadedFlagshipSource) && /held-out later demo claim/i.test(loadedFlagshipSource) && /excluded from the simulated review and memory construction/i.test(loadedFlagshipSource) && /after learning was frozen/i.test(loadedFlagshipSource) && /flagship above is the live six-agent nemotron analysis/i.test(loadedFlagshipSource) && /deterministic application layer/i.test(loadedFlagshipSource) && /without another model run/i.test(loadedFlagshipSource));
-  const evidenceControl = await page.locator('#browserEvidenceLink').evaluate(node => ({
-    tag: node.tagName,
-    state: node.dataset.evidenceState,
-    text: node.textContent.trim(),
-    href: node.getAttribute('href'),
-    role: node.getAttribute('role'),
-  }));
-  const evidenceControlIsPending = evidenceControl.tag === 'SPAN' && evidenceControl.state === 'pending' && evidenceControl.text === 'Current release evidence pending' && evidenceControl.href === null && evidenceControl.role === 'status';
-  const evidenceControlIsAttested = evidenceControl.tag === 'A' && evidenceControl.state === 'attested' && evidenceControl.href === 'https://casepath-guided-canonical-qa.onrender.com/report.json' && /^Current release evidence Â· [0-9a-f]{8}$/.test(evidenceControl.text);
-  check('Current-release evidence is either fail-closed pending or unlocked by exact attestation', evidenceControlIsPending || evidenceControlIsAttested, JSON.stringify(evidenceControl));
-  const attestationMatrix = await page.evaluate(() => {
-    const commit = 'a'.repeat(40);
-    const frontend = { source_commit: commit, release_id: 'casepath-v20-reference-20260811', alignment_eligible: true };
-    const api = { status: 'ok', release_id: frontend.release_id, source_commit: commit, source_commit_aligned: true, source_commit_conflict: false };
-    const files = [
-      { path: 'flagship-run.json', sha256: 'c'.repeat(64), bytes: 10 },
-      { path: 'final-state.png', sha256: 'd'.repeat(64), bytes: 20 },
-      { path: 'uninterrupted-focused-demo.webm', sha256: 'e'.repeat(64), bytes: 30 },
-    ];
-    const binding = { sha256: 'f'.repeat(64), bytes: 1234 };
-    const report = { status: 'passed', passed: 80, failed: 0, release_id: frontend.release_id, deployment: { frontend: { source_commit: commit }, api: { source_commit: commit }, qa: { source_commit: commit } }, evidence: { gate: { sha256: 'b'.repeat(64) }, retained_before_session_reset: true, missing: [], files, manifest: { path: 'evidence-manifest.json', ...binding } } };
-    const manifest = { contract: 'casepath.qa-evidence-manifest/1.0.0', release_id: frontend.release_id, source_commit: commit, gate: { sha256: 'b'.repeat(64) }, retained_before_session_reset: true, retained_media_contract: { json: ['flagship-run.json'], screenshots: ['final-state.png'], video: 'uninterrupted-focused-demo.webm', missing: [], empty: [] }, files };
-    const isAttested = window.__casepathEvidenceAttestation?.isAttested;
-    return {
-      valid: isAttested?.(frontend, api, report, manifest, binding) === true,
-      wrongReportCommit: isAttested?.(frontend, api, { ...report, deployment: { ...report.deployment, api: { source_commit: 'c'.repeat(40) } } }, manifest, binding) === false,
-      liveApiDrift: isAttested?.(frontend, { ...api, source_commit: 'c'.repeat(40) }, report, manifest, binding) === false,
-      missingMedia: isAttested?.(frontend, api, report, { ...manifest, retained_media_contract: { ...manifest.retained_media_contract, missing: ['final-state.png'] } }, binding) === false,
-      failedReport: isAttested?.(frontend, api, { ...report, status: 'failed' }, manifest, binding) === false,
-      failedCount: isAttested?.(frontend, api, { ...report, failed: 17 }, manifest, binding) === false,
-      notRetained: isAttested?.(frontend, api, { ...report, evidence: { ...report.evidence, retained_before_session_reset: false } }, manifest, binding) === false,
-      tamperedManifestBytes: isAttested?.(frontend, api, report, manifest, { ...binding, sha256: '0'.repeat(64) }) === false,
-      changedInventory: isAttested?.(frontend, api, report, { ...manifest, files: manifest.files.slice(1) }, binding) === false,
-    };
-  });
-  check('Evidence attestation accepts only a passed complete exact-commit report/manifest pair', Object.values(attestationMatrix).every(Boolean), JSON.stringify(attestationMatrix));
-  const checklistRendererSource = flagshipScriptSources.find(item => item.scriptPath === 'assets/live-v17.js')?.source || '';
-  const precedentRendererSource = flagshipScriptSources.find(item => item.scriptPath === 'assets/live-v16.js')?.source || '';
-  const reuseRendererSource = flagshipScriptSources.find(item => item.scriptPath === 'assets/live-v17.js')?.source || '';
-  const laterStageSource = flagshipScriptSources.find(item => item.scriptPath === 'assets/live-v18.js')?.source || '';
-  check('Precedent rendering accepts qualified_expert_reviewed while preserving explicit unverified memory copy', precedentRendererSource.includes("'qualified_expert_reviewed'") && precedentRendererSource.includes("'unverified_demo_memory'") && precedentRendererSource.includes('Unverified generated-demo review memory returned by the server') && precedentRendererSource.includes('Unverified demo review memory returned'));
-  check('Loaded later-result renderer distinguishes retrieval from receipt-bound use/application without asynchronous reuse enhancement', precedentRendererSource.includes('reviewed_memory_retrieved') && precedentRendererSource.includes('data-memory-retrieved-only=') && precedentRendererSource.includes('retrieved-not-applied') && precedentRendererSource.includes('Saving it does not mean later guidance was used or applied') && precedentRendererSource.includes('Not used or applied Â· no memory-driven DTO change') && precedentRendererSource.includes('function renderMemoryReuseProof') && !reuseRendererSource.includes('function enhanceReuse') && !laterStageSource.includes('function enhanceReuse'));
-  check('Document-checklist renderer fails closed on exact field units, reciprocal owners, and transformed acceptance', [
-    'const expectedUnits = [',
-    'new Set(ids).size === ids.length',
-    'Number.isInteger(value.confidence_basis_points)',
-    "value.attribution === expectedAttribution",
-    'data-accepted-contribution-ids=',
-    'post_review_unverified_transform',
-    'casepath.memory-application-receipt/1.0.0',
-    'data-node-ids=',
-    'data-current-path=',
-  ].every(fragment => checklistRendererSource.includes(fragment)));
-  const syntheticActorLabels = ['Agent complete', 'Attachment Parsing Agent', 'Document Requirements Agent'];
-  const syntheticActorSources = flagshipScriptSources.flatMap(({ scriptPath, source }) => syntheticActorLabels.filter(label => source.includes(label)).map(label => `${scriptPath}:${label}`));
-  check('Loaded flagship scripts never present deterministic stages or knowledge governance as extra model agents', syntheticActorSources.length === 0, JSON.stringify(syntheticActorSources));
-  const specialistFocusSource = flagshipScriptSources.find(item => item.scriptPath === 'assets/live-v20-focus.js')?.source || '';
-  check('Seven visible specialist stages retain explicit per-stage execution authority', ['Claim Understanding Agent', 'Legal Research Agent', 'Process Discovery Agent', 'Evidence / Document Agent', 'Historical Claims Agent', 'Verification Agent', 'Knowledge Agent', 'dataset.casepathSpecialist', 'dataset.workAuthority'].every(fragment => specialistFocusSource.includes(fragment)));
-
-  await page.waitForFunction(expected => document.querySelectorAll('.attachment-row').length === expected, demo.claim.artifacts.length, { timeout: 120000 });
-  await page.waitForFunction(() => !document.querySelector('#runCasePath')?.disabled, null, { timeout: 120000 });
-  await page.evaluate(() => {
-    const moment = document.body.dataset.casepathMoment;
-    if (moment && !window.__casepathMomentHistory.includes(moment)) window.__casepathMomentHistory.push(moment);
-    if (document.querySelector('meta[name="casepath-release"]')?.content !== '20.0.0') window.__casepathReleaseMutations.push('initial-meta-mismatch');
-  });
-  check('DOM and meta release markers agree', await page.evaluate(() => document.documentElement.dataset.casepathRelease === '20.0.0' && document.querySelector('meta[name="casepath-release"]')?.content === '20.0.0' && !document.body.hasAttribute('data-casepath-release')));
-  check('Claim source clears aria-busy after rendering', await page.locator('#customerEmail').getAttribute('aria-busy') === 'false');
-  const quietContrast = await page.evaluate(() => {
-    const values = getComputedStyle(document.querySelector('.quiet-label')).color.match(/[\d.]+/g).slice(0, 3).map(Number);
-    const luminance = rgb => rgb.map(value => { const channel = value / 255; return channel <= .03928 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4; }).reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0);
-    const foreground = luminance(values);
-    return (1.05) / (foreground + .05);
-  });
-  check('Quiet small-text color meets WCAG AA contrast on the white product surface', quietContrast >= 4.5, `contrast=${quietContrast.toFixed(2)}`);
-  await auditViewports('01-start', '#startState');
-
-  const pdf = demo.claim.artifacts.find(item => item.media_type === 'application/pdf');
-  const image = demo.claim.artifacts.find(item => item.media_type?.startsWith('image/'));
-  const email = demo.claim.artifacts.find(item => item.media_type === 'message/rfc822');
-  check('PDF, image, and email fixtures are available', Boolean(pdf && image && email), JSON.stringify(demo.claim.artifacts.map(item => ({ id: item.artifact_id, type: item.media_type }))));
-
-  const pdfRow = page.locator(`[data-artifact-id="${pdf.artifact_id}"]`);
-  await pdfRow.focus();
-  await page.keyboard.press('Enter');
-  await waitVisible('#sourceViewer[open]');
-  await page.waitForFunction(() => document.querySelector('#sourceViewer')?.getAttribute('aria-busy') === 'false');
-  check('Source dialog moves focus inside on open', await page.evaluate(() => document.querySelector('#sourceViewer')?.contains(document.activeElement)));
-  check('PDF original pages remain inspectable', await page.locator('.page-thumb').count() === pdf.page_count && await page.locator('#documentPage').isVisible());
-  check('Lease PDF viewer identifies and serves the selected original artifact', (await page.locator('#sourceViewerTitle').innerText()) === pdf.title && new URL(await page.locator('#openOriginal').getAttribute('href'), API).pathname === `/api/artifacts/${encodeURIComponent(pdf.artifact_id)}`);
-  await screenshot('03-lease-pdf-overview.png');
-  await page.locator('#zoomIn').click();
-  await page.waitForFunction(() => document.querySelector('#sourceViewer')?.getAttribute('aria-busy') === 'false' && document.querySelector('#zoomValue')?.textContent === '115%');
-  check('Lease PDF zoom control changes the rendered page, not just its label', await page.locator('#zoomValue').innerText() === '115%' && (await page.locator('#documentPage').getAttribute('style')).includes('scale(1.15)'));
-  const inspectedPdfPage = Math.max(1, pdf.page_count || 1);
-  if (inspectedPdfPage > 1) {
-    const inspectedThumb = page.locator(`.page-thumb[data-page="${inspectedPdfPage}"]`);
-    await inspectedThumb.focus();
-    await page.keyboard.press('Enter');
-    await page.waitForFunction(pageNumber => document.querySelector(`.page-thumb[data-page="${pageNumber}"]`)?.getAttribute('aria-current') === 'page' && document.querySelector('#documentPage')?.alt.endsWith(`page ${pageNumber}`), inspectedPdfPage);
-  }
-  check('Lease PDF thumbnail navigation renders the requested original page', await page.locator(`.page-thumb[data-page="${inspectedPdfPage}"]`).getAttribute('aria-current') === 'page' && (await page.locator('#documentPage').getAttribute('alt')).endsWith(`page ${inspectedPdfPage}`));
-  await screenshot('03-lease-pdf-detail.png');
-  await runAxe('Lease PDF original viewer');
-  check('Source tabs expose keyboard and panel semantics', await page.evaluate(() => [...document.querySelectorAll('[data-source-tab]')].every(tab => tab.getAttribute('role') === 'tab' && tab.getAttribute('aria-controls') === 'sourceStage') && document.querySelector('#sourceStage')?.getAttribute('role') === 'tabpanel'));
-  await page.locator('#sourceTabOriginal').focus();
-  await page.keyboard.press('ArrowRight');
-  check('Arrow key selects and focuses extraction tab', await page.locator('#sourceTabExtraction').getAttribute('aria-selected') === 'true' && await page.evaluate(() => document.activeElement?.id === 'sourceTabExtraction'));
-  const extraction = await getJson(`${API}/api/artifacts/${encodeURIComponent(pdf.artifact_id)}/extraction`);
-  const searchQuery = String(extraction.pages?.join(' ') || '').match(/[A-Za-z]{6,}/)?.[0] || 'Tenant';
-  await page.locator('#sourceSearch').fill(searchQuery);
-  await page.locator('#sourceSearchForm button[type="submit"]').click();
-  await waitText('#sourceSearchStatus', /matched/i);
-  check('PDF extracted-text search returns navigable page results', await page.locator('#sourceSearchResults [data-search-page]').count() > 0 && await page.locator('#sourceStage mark').count() > 0);
-  await screenshot('03-lease-pdf-search.png');
-  await page.locator('#sourceTabOriginal').click();
-  await waitVisible('#documentPage');
-  await page.keyboard.press('Escape');
-  await waitHidden('#sourceViewer');
-  await page.waitForFunction(artifactId => document.activeElement?.dataset.artifactId === artifactId, pdf.artifact_id);
-  check('Closing source dialog restores attachment focus', await page.evaluate(artifactId => document.activeElement?.dataset.artifactId === artifactId, pdf.artifact_id));
-
-  const imageRow = page.locator(`[data-artifact-id="${image.artifact_id}"]`);
-  await imageRow.focus();
-  await page.keyboard.press('Enter');
-  await waitVisible('#sourceImage');
-  await page.waitForFunction(() => { const image = document.querySelector('#sourceImage'); return image?.complete && image.naturalWidth > 0 && image.naturalHeight > 0; });
-  const renderedImage = await page.locator('#sourceImage').evaluate(node => ({ src: node.currentSrc, width: node.naturalWidth, height: node.naturalHeight, alt: node.alt }));
-  check('Image viewer decodes the selected original pixels with an accessible identity', new URL(renderedImage.src).pathname === `/api/artifacts/${encodeURIComponent(image.artifact_id)}` && renderedImage.width > 0 && renderedImage.height > 0 && renderedImage.alt === image.title, JSON.stringify(renderedImage));
-  const imageCount = demo.claim.artifacts.filter(item => item.media_type?.startsWith('image/')).length;
-  check('Image gallery controls appear only when useful', imageCount > 1 ? await page.locator('#sourceGalleryNav').isVisible() : await page.locator('#sourceGalleryNav').isHidden());
-  if (imageCount > 1) {
-    const firstImageTitle = await page.locator('#sourceViewerTitle').innerText();
-    await page.locator('#sourceNext').click();
-    check('Image next control opens the adjacent original image', (await page.locator('#sourceViewerTitle').innerText()) !== firstImageTitle);
-    await page.locator('#sourcePrevious').click();
-    check('Image previous control returns to the original image', (await page.locator('#sourceViewerTitle').innerText()) === firstImageTitle);
-  }
-  await page.locator('#zoomIn').click();
-  await page.waitForFunction(() => document.querySelector('#sourceViewer')?.getAttribute('aria-busy') === 'false' && document.querySelector('#zoomValue')?.textContent === '115%');
-  check('Image zoom control changes the rendered original image frame', await page.locator('#zoomValue').innerText() === '115%' && (await page.locator('.source-image-frame').getAttribute('style')).includes('scale(1.15)'));
-  await screenshot('03-image-inspection.png');
-  await runAxe('Original image viewer');
-  await page.keyboard.press('Escape');
-  await waitHidden('#sourceViewer');
-  await page.waitForFunction(artifactId => document.activeElement?.dataset.artifactId === artifactId, image.artifact_id);
-  check('Closing image viewer restores attachment focus', await page.evaluate(artifactId => document.activeElement?.dataset.artifactId === artifactId, image.artifact_id));
-
-  await page.locator(`[data-artifact-id="${email.artifact_id}"]`).click();
-  await waitVisible('#sourceViewer .email-document');
-  check('Email original and extraction representations remain inspectable', await page.locator('#sourceViewer .email-document').isVisible());
-  await page.locator('#sourceTabExtraction').click();
-  await waitVisible('#sourceStage .extraction-page');
-  await page.locator('#closeSourceViewer').click();
-
-  await page.locator('#runCasePath').click();
-  await waitVisible('#liveWorkspace');
-  await waitVisible('#v21AgentFocus');
-  const initialSpecialistFocus = await page.locator('#v21AgentFocus').evaluate(node => ({
-    specialist: node.dataset.casepathSpecialist,
-    authority: node.dataset.workAuthority,
-    cursor_count: node.querySelectorAll('#v21AgentCursor').length,
-    cursor_action: node.querySelector('#v21AgentCursor')?.dataset.action || '',
-    cursor_specialist: node.querySelector('#v21AgentCursor')?.dataset.casepathSpecialist || '',
-    title: node.querySelector('h2')?.textContent?.trim() || '',
-  }));
-  check('Flagship opens with one readable specialist and one truthful working cursor', initialSpecialistFocus.specialist === 'understand' && Boolean(initialSpecialistFocus.authority) && initialSpecialistFocus.cursor_count === 1 && initialSpecialistFocus.cursor_specialist === initialSpecialistFocus.specialist && Boolean(initialSpecialistFocus.cursor_action) && Boolean(initialSpecialistFocus.title), JSON.stringify(initialSpecialistFocus));
-  const flagshipRunId = await waitForValue(() => runIds[0]);
-  if (isProductionJourney()) {
-    await page.waitForFunction(() => window.__casepathOpeningContexts?.length > 0, null, { timeout: runTimeoutMs() });
-    const openingContexts = await page.evaluate(() => window.__casepathOpeningContexts);
-    const openingContextIssues = productionOpeningContextViolations(openingContexts);
-    check('First live production frame attributes shared-context setup to application code and waits for the returned Nemotron plan', openingContextIssues.length === 0, JSON.stringify({ openingContexts, openingContextIssues }));
-  }
-  const processRun = await waitJourneyUi('Visible flagship cold orchestration did not complete', () => awaitRun(flagshipRunId));
-  retainedEvidence['flagship-run'] = processRun;
-  const flagshipEvidenceIssues = evidenceRelationContractViolations(processRun.result?.process, processRun.result?.checklist);
-  check('Flagship evidence ownership is independently derived from ordered process requirements', flagshipEvidenceIssues.length === 0, JSON.stringify(flagshipEvidenceIssues));
-  const flagshipMemoryStateIssues = memoryRetrievalContractViolations(processRun.result);
-  check('Flagship result keeps retrieval separate from receipt-bound memory use', flagshipMemoryStateIssues.length === 0, JSON.stringify(flagshipMemoryStateIssues));
-  const flagshipLegalIssues = legalContextContractViolations(processRun.result?.legal_research, processRun.result?.process);
-  check('Flagship legal questions join exact official passages and deterministic proposals by ID', flagshipLegalIssues.length === 0, JSON.stringify(flagshipLegalIssues));
-  const flagshipVisualRefs = (processRun.result?.facts || []).flatMap(fact => (fact.source_refs || []).filter(reference => reference.locator_kind === 'visual_observation'));
-  const flagshipVisualIssues = flagshipVisualRefs.flatMap(reference => visualReferenceContractViolations(reference, demo.claim.artifacts.find(artifact => artifact.artifact_id === reference.artifact_id)).map(issue => `${reference.artifact_id}: ${issue}`));
-  check('Every flagship visual observation is an exact curated generated-demo annotation bound to public image bytes', flagshipVisualRefs.length > 0 && flagshipVisualIssues.length === 0, JSON.stringify(flagshipVisualIssues));
-  const flagshipRankingIssues = precedentRankingContractViolations(processRun.result);
-  check('Flagship returns exactly three hash-bound generated reference rankings', flagshipRankingIssues.length === 0, JSON.stringify(flagshipRankingIssues));
-  if (isProductionJourney()) {
-    const coldIssues = orchestrationContractViolations(processRun, 'cold', releaseContract.agentic_runtime.framework);
-    check('Visible flagship proves the exact cold six-agent LangGraph DAG and three deterministic accepted-artifact gates', coldIssues.length === 0, JSON.stringify(coldIssues));
-    coldOrchestration = orchestrationAudit(processRun);
-  }
-  const flagshipColdLedger = await getJson(`${API}/api/model-ledger`);
-  retainedEvidence['flagship-cold-model-ledger'] = flagshipColdLedger;
-  const flagshipLedgerIssues = sanitizedLedgerViolations(flagshipColdLedger);
-  check('Flagship cold ledger is public-safe and schema-bounded', flagshipLedgerIssues.length === 0, JSON.stringify(flagshipLedgerIssues));
-  if (isProductionJourney()) {
-    const coldLedgerIssues = coldLedgerContractViolations(coldOrchestration, flagshipColdLedger);
-    check('Visible flagship binds six distinct paid responses, positive usage, costs, contributions, and lineage to one orchestration', coldLedgerIssues.length === 0, JSON.stringify(coldLedgerIssues));
-  }
-  await waitJourneyUi('Flagship browser did not reach stable review readiness', async () => {
-    await page.waitForFunction(() => window.__casepathMomentHistory.includes('process'), null, { timeout: runTimeoutMs() });
-    await page.waitForFunction(() => window.__casepathMomentHistory.includes('evidence'), null, { timeout: runTimeoutMs() });
-    await waitText('#journeyNext', /Review the proposed playbook/i, runTimeoutMs());
-    await waitVisible('body[data-casepath-moment="ready"]', runTimeoutMs());
-    await waitVisible('.process-layout', runTimeoutMs());
-    await page.waitForFunction(() => document.querySelector('#v21AgentFocus')?.dataset.casepathSpecialist === 'verify', null, { timeout: runTimeoutMs() });
-  });
-  const terminalValidatorReceipt = await page.locator('.orchestration-receipt.gate-receipt').evaluate(node => ({
-    gate_id: node.getAttribute('data-gate-id'),
-    label: node.querySelector('small')?.textContent || '',
-    identity: node.querySelector('strong')?.textContent || '',
-  }));
-  check('Final pipeline validator remains visible without becoming a fourth orchestration gate ID', terminalValidatorReceipt.gate_id === null && /deterministic validator receipt/i.test(terminalValidatorReceipt.label) && terminalValidatorReceipt.identity === 'whole-playbook-validator/15.2', JSON.stringify(terminalValidatorReceipt));
-  if (isProductionJourney()) {
-    await page.locator('#openAudit').click();
-    await waitVisible('#auditDrawer[open] #orchestrationProof');
-    await screenshot('02-live-nemotron-agent.png');
-    const visibleProof = await page.evaluate(() => ({
-      agent_ids: window.__casepathVisibleAgentIds || [],
-      gate_ids: window.__casepathVisibleGateIds || [],
-      proof_visible: !document.querySelector('#orchestrationProof')?.hidden,
-      proof_boundary: document.querySelector('.orchestration-boundary')?.textContent || '',
-      orchestrator_label: document.querySelector('#orchestratorLabel')?.textContent || '',
-    }));
-    check('Cold flagship visibly presented every Nemotron role and deterministic gate', exactMembers(visibleProof.agent_ids, REQUIRED_NEMOTRON_AGENT_IDS) && exactMembers(visibleProof.gate_ids, REQUIRED_DETERMINISTIC_GATE_IDS) && visibleProof.proof_visible, JSON.stringify(visibleProof));
-    check('Flagship visibly distinguishes the Nemotron focus plan from deterministic LangGraph topology', visibleProof.orchestrator_label === 'Nemotron focus plan Â· deterministic LangGraph topology', visibleProof.orchestrator_label);
-    check('Visible orchestration proof retains the fictional-data, non-decision, unapproved-law, simulated-review, and quarantine boundary', /fictional claim/i.test(visibleProof.proof_boundary) && /no coverage or legal decision/i.test(visibleProof.proof_boundary) && /unapproved/i.test(visibleProof.proof_boundary) && /simulated review is not expert approval/i.test(visibleProof.proof_boundary) && /quarantined/i.test(visibleProof.proof_boundary), visibleProof.proof_boundary);
-    const returnedTeam = await page.locator('.orchestration-run-summary').evaluate(node => ({
-      role_count: node.dataset.nemotronRoleCount,
-      gate_count: node.dataset.deterministicGateCount,
-      role_ids: (node.dataset.nemotronRoleIds || '').split(',').filter(Boolean),
-      gate_ids: (node.dataset.deterministicGateIds || '').split(',').filter(Boolean),
-    }));
-    check('Stable flagship summary proves exactly six returned Nemotron roles and three returned deterministic gates', returnedTeam.role_count === '6' && returnedTeam.gate_count === '3' && exactMembers(returnedTeam.role_ids, REQUIRED_NEMOTRON_AGENT_IDS) && exactMembers(returnedTeam.gate_ids, REQUIRED_DETERMINISTIC_GATE_IDS), JSON.stringify(returnedTeam));
-    const parallelBranch = await page.locator('.orchestration-parallel-branch').evaluateAll(nodes => nodes.map(node => ({
-      role_ids: node.dataset.parallelRoleIds,
-      gate_id: node.dataset.parallelGateId,
-      labels: [...node.querySelectorAll('span,strong')].map(item => item.textContent.trim()),
-    })));
-    check('Stable flagship visibly proves the returned source/process fan-out and deterministic join gate', parallelBranch.length === 1 && stableJson(parallelBranch[0]) === stableJson({ role_ids: 'document_source_integrity,process_decision_mapping', gate_id: 'deterministic_process_gate', labels: ['Document and Source Integrity Agent', 'Process Decision Mapping Agent', 'Deterministic Process Contract Gate'] }), JSON.stringify(parallelBranch));
-    await page.locator('#teamTrace summary').click();
-    await screenshot('03-deterministic-accepted-artifact.png');
-    const traceProof = await page.locator('#teamTrace').evaluate(node => {
-      const modelRows = [...node.querySelectorAll('li[data-actor-type="nemotron_agent"][data-call-id]:not([data-call-id=""])')];
-      return {
-        model_call_ids: [...new Set(modelRows.map(item => item.dataset.callId))],
-        deterministic_gate_rows: node.querySelectorAll('li[data-actor-type="deterministic_gate"]').length,
-        warning_count: document.querySelectorAll('.orchestration-proof-warning').length,
-      };
-    });
-    check('Collapsed Team Trace expands to six distinct model calls and at least three deterministic receipts without missing-proof warnings', traceProof.model_call_ids.length === REQUIRED_NEMOTRON_AGENT_IDS.length && traceProof.deterministic_gate_rows >= REQUIRED_DETERMINISTIC_GATE_IDS.length && traceProof.warning_count === 0, JSON.stringify(traceProof));
-    await page.locator('#teamTrace summary').click();
-    await page.keyboard.press('Escape');
-    await waitHidden('#auditDrawer');
-  }
-  const isolatedRun = await getJsonForSession(`${API}/api/runs`, ISOLATION_SESSION_ID, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ claim_id: demo.demo_claim_id }) });
-  isolationMutated = true;
-  const isolatedRead = await awaitRunForSession(isolatedRun.run_id, ISOLATION_SESSION_ID);
-  retainedEvidence['isolation-run'] = isolatedRead;
-  const isolationLedger = await getJsonForSession(`${API}/api/model-ledger`, ISOLATION_SESSION_ID);
-  retainedEvidence['isolation-model-ledger'] = isolationLedger;
-  const isolationLedgerIssues = sanitizedLedgerViolations(isolationLedger);
-  check('Isolation cache ledger is public-safe and schema-bounded', isolationLedgerIssues.length === 0, JSON.stringify(isolationLedgerIssues));
-  if (isProductionJourney()) {
-    const warmIssues = orchestrationContractViolations(isolatedRead, 'warm', releaseContract.agentic_runtime.framework);
-    check('Post-flagship isolation run reuses all six accepted artifacts without a provider call', warmIssues.length === 0, JSON.stringify(warmIssues));
-    warmOrchestration = orchestrationAudit(isolatedRead);
-    const earlyLineage = warmLineageContractViolations(coldOrchestration, warmOrchestration, isolationLedger);
-    check('Isolation replay binds every warm call to the visible flagship cold origin', earlyLineage.issues.length === 0 && earlyLineage.lineage.length === REQUIRED_NEMOTRON_AGENT_IDS.length, JSON.stringify(earlyLineage));
-  }
-  const crossSessionRead = await fetch(`${API}/api/runs/${encodeURIComponent(isolatedRun.run_id)}`, { headers: { 'X-CasePath-Session': QA_SESSION_ID } });
-  check('Isolation run identifier is not readable from the browser session', crossSessionRead.status === 404, `status=${crossSessionRead.status}`);
-  const isolationReset = await getJsonForSession(`${API}/api/demo/reset`, ISOLATION_SESSION_ID, { method: 'POST' });
-  check('Isolation reset removes only its caller state and preserves the global model ledger', isolationReset.session_scope === 'caller_only' && isolationReset.removed?.runs >= 1 && isolationReset.model_ledger_preserved === true, JSON.stringify(isolationReset));
-  const isolationReadAfterReset = await fetch(`${API}/api/runs/${encodeURIComponent(isolatedRun.run_id)}`, { headers: { 'X-CasePath-Session': ISOLATION_SESSION_ID } });
-  const flagshipReadAfterIsolationReset = await getJson(`${API}/api/runs/${encodeURIComponent(flagshipRunId)}`);
-  check('Isolation reset removes its own run without disturbing the visible flagship', isolationReadAfterReset.status === 404 && flagshipReadAfterIsolationReset.run_id === flagshipRunId && flagshipReadAfterIsolationReset.status === 'complete', JSON.stringify({ isolation_status: isolationReadAfterReset.status, flagship: runProgressDiagnostic(flagshipReadAfterIsolationReset) }));
-  isolationMutated = false;
-  const processGraph = processRun.result?.process || processRun.process;
-  check('Uninterrupted journey rendered both process and evidence moments before stable review readiness', await page.evaluate(() => ['process', 'evidence', 'ready'].every(moment => window.__casepathMomentHistory.includes(moment))), JSON.stringify(await page.evaluate(() => window.__casepathMomentHistory)));
-  check('Main spine remains the dominant collapsed graph', await page.locator('.process-spine .process-node').count() === processGraph.main_spine.length && await page.locator('#processBranchGrid').isHidden());
-  await page.locator('#openAudit').click();
-  await waitVisible('#auditDrawer[open]');
-  check('Visible audit drawer exposes only pending or exactly attested current-release evidence', await page.locator('#browserEvidenceLink').isVisible() && await page.locator('#browserEvidenceLink').evaluate(node => (node.tagName === 'SPAN' && node.dataset.evidenceState === 'pending' && !node.hasAttribute('href')) || (node.tagName === 'A' && node.dataset.evidenceState === 'attested' && node.getAttribute('href') === 'https://casepath-guided-canonical-qa.onrender.com/report.json')));
-  check('No reachable product link targets an obsolete QA service', await page.locator('a').evaluateAll((links, pattern) => links.every(link => !new RegExp(pattern, 'i').test(link.href || '')), staleQaService.source));
-  await runAxe('Audit drawer with pending release evidence');
-  await page.keyboard.press('Escape');
-  await waitHidden('#auditDrawer');
-  if (isProductionJourney()) {
-    const expectedProcessContributions = processGraph.nodes.map(node => ({
-      node_id: node.node_id,
-      contribution: contributionDomProjection(node.agent_decision_contributions, PROCESS_CONTRIBUTION_ROLE),
-    })).filter(item => item.contribution);
-    const renderedProcessContributions = await page.locator('.process-map .process-node-button[data-node-id],.process-map .process-branch-node[data-node-id]').evaluateAll(nodes => nodes.flatMap(node => {
-      const badge = node.querySelector('.model-contribution-attribution');
-      return badge ? [{ node_id: node.dataset.nodeId, contribution: { authority: badge.dataset.contributionAuthority, accepted_count: badge.dataset.acceptedCount, fallback_count: badge.dataset.fallbackCount, accepted_ids: badge.dataset.acceptedContributionIds, fallback_ids: badge.dataset.fallbackContributionIds } }] : [];
-    }));
-    check('Every visible process contribution is exactly bound to returned Nemotron acceptance or deterministic fallback', stableJson(renderedProcessContributions.sort((a, b) => a.node_id.localeCompare(b.node_id))) === stableJson(expectedProcessContributions.sort((a, b) => a.node_id.localeCompare(b.node_id))) && renderedProcessContributions.some(item => Number(item.contribution.accepted_count) > 0), JSON.stringify({ expectedProcessContributions, renderedProcessContributions }));
-    const finalBrief = orchestrationAudit(processRun)?.final_claim_brief;
-    const finalProjection = contributionDomProjection(finalBrief?.field_contributions, FINAL_CONTRIBUTION_ROLE);
-    const expectedFinalFieldIds = (finalBrief?.field_contributions || []).map(item => item.contribution_id).join(',');
-    const currentNode = processGraph.nodes.find(item => item.node_id === finalBrief?.current_node_id);
-    const nextNode = processGraph.nodes.find(item => item.node_id === finalBrief?.next_action_node_id);
-    const renderedFinalHandoff = await page.locator('.v20-final-handoff').evaluate(node => ({
-      current_node_id: node.dataset.currentNodeId,
-      next_action_node_id: node.dataset.nextActionNodeId,
-      field_count: node.dataset.fieldCount,
-      field_ids: node.dataset.fieldIds,
-      accepted_count: node.dataset.acceptedCount,
-      fallback_count: node.dataset.fallbackCount,
-      accepted_ids: node.dataset.acceptedContributionIds,
-      fallback_ids: node.dataset.fallbackContributionIds,
-      copy: node.textContent,
-    }));
-    check('Ready view exposes one causally bound five-field final handoff with exact returned IDs and acceptance counts',
-      await page.locator('.v20-final-handoff').count() === 1
-        && finalProjection
-        && currentNode
-        && nextNode
-        && renderedFinalHandoff.current_node_id === finalBrief.current_node_id
-        && renderedFinalHandoff.next_action_node_id === finalBrief.next_action_node_id
-        && renderedFinalHandoff.field_count === String(FINAL_FIELD_CONTRACT.length)
-        && renderedFinalHandoff.field_ids === expectedFinalFieldIds
-        && renderedFinalHandoff.accepted_count === finalProjection.accepted_count
-        && renderedFinalHandoff.fallback_count === finalProjection.fallback_count
-        && renderedFinalHandoff.accepted_ids === finalProjection.accepted_ids
-        && renderedFinalHandoff.fallback_ids === finalProjection.fallback_ids
-        && renderedFinalHandoff.copy.includes('Final Claim Brief Agent')
-        && renderedFinalHandoff.copy.includes('Whole-Playbook Gate')
-        && renderedFinalHandoff.copy.includes(currentNode?.title || '')
-        && renderedFinalHandoff.copy.includes(nextNode?.title || '')
-        && /five independent fields/i.test(renderedFinalHandoff.copy),
-      JSON.stringify({ finalBrief, finalProjection, renderedFinalHandoff }));
-  }
-  const readyPrecedentProjection = await page.locator('.precedent-inline .precedent-mini').evaluateAll(nodes => nodes.map(node => ({
-    claim_id: node.querySelector('strong')?.textContent?.split(' Â· ')[0],
-    rank: Number(node.querySelector('.precedent-rank')?.dataset.rank),
-  })));
-  check('Ready workspace initially exposes all three ordered generated reference patterns', JSON.stringify(readyPrecedentProjection) === JSON.stringify(processRun.result.precedents.map(item => ({ claim_id: item.claim_id, rank: item.ranking.rank }))), JSON.stringify(readyPrecedentProjection));
-  await page.locator('[data-toggle-all-branches]').click();
-  const renderedNodeIds = await page.evaluate(() => [...new Set([...document.querySelectorAll('.process-node-button[data-node-id],.process-branch-node[data-node-id]')].map(node => node.dataset.nodeId))]);
-  const expectedNodeIds = processGraph.nodes.map(node => node.node_id);
-  check('Every backend process node is experienceable', expectedNodeIds.every(id => renderedNodeIds.includes(id)) && renderedNodeIds.length === expectedNodeIds.length, JSON.stringify({ expectedNodeIds, renderedNodeIds }));
-  await page.locator('.process-node-button[data-node-id="causation"],.process-branch-node[data-node-id="causation"]').first().click();
-  const officialLawMarker = page.locator('.decision-inspector .law-marker.official').first();
-  const deterministicLawMarker = page.locator('.decision-inspector .law-marker.interpretation').first();
-  check('Official passages and deterministic application proposals have distinct inspectable controls', await officialLawMarker.count() === 1 && await deterministicLawMarker.count() === 1);
-  const officialLawId = await officialLawMarker.getAttribute('data-law-id');
-  const officialLaw = processRun.result.legal_research.sources.find(source => source.source_id === officialLawId);
-  await officialLawMarker.click();
-  const officialLawDetail = page.locator(`.law-detail[data-law-detail="${officialLawId}"]:not([hidden]) .legal-authority.official`);
-  const officialLawProjection = await officialLawDetail.evaluate(node => ({ source_id: node.dataset.legalSourceId, passage_sha256: node.dataset.passageSha256, snapshot_sha256: node.dataset.snapshotSha256, snapshot_scope: node.dataset.snapshotScope, registry_version: node.dataset.registryVersion, text: node.innerText }));
-  check('Official legal detail shows the exact passage, version/location, passage hash, snapshot scope, and registry provenance pending qualified review', officialLawProjection.source_id === officialLaw.source_id && officialLawProjection.passage_sha256 === officialLaw.passage_sha256 && officialLawProjection.snapshot_sha256 === officialLaw.retrieval.snapshot_sha256 && officialLawProjection.snapshot_scope === officialLaw.retrieval.snapshot_scope && officialLawProjection.registry_version === officialLaw.retrieval.registry_version && officialLawProjection.text.includes(officialLaw.passage_text) && officialLawProjection.text.includes(officialLaw.version_date) && officialLawProjection.text.includes(officialLaw.location) && officialLawProjection.text.includes(officialLaw.retrieval.snapshot_scope) && /official registry source/i.test(officialLawProjection.text) && /qualified review pending/i.test(officialLawProjection.text) && !/model interpretation|live retrieval/i.test(officialLawProjection.text), JSON.stringify(officialLawProjection));
-  const deterministicLawId = await deterministicLawMarker.getAttribute('data-law-id');
-  await deterministicLawMarker.click();
-  const deterministicLaw = processRun.result.legal_research.handling_principles.find(source => source.source_id === deterministicLawId);
-  const deterministicLawProjection = await page.locator(`.law-detail[data-law-detail="${deterministicLawId}"]:not([hidden]) .legal-authority.deterministic`).evaluate(node => ({ source_id: node.dataset.legalSourceId, producer: node.dataset.producer, text: node.innerText }));
-  check('Handling principle is visibly a deterministic application proposal pending qualified review', deterministicLawProjection.source_id === deterministicLaw.source_id && deterministicLawProjection.producer === 'deterministic_application' && /deterministic application proposal/i.test(deterministicLawProjection.text) && /qualified review pending/i.test(deterministicLawProjection.text) && !/model interpretation|live retrieval/i.test(deterministicLawProjection.text), JSON.stringify(deterministicLawProjection));
-  const renderedPrecedents = await page.locator('.precedent-inline .precedent-mini').evaluateAll(nodes => nodes.map(node => { const ranking = node.querySelector('.precedent-rank'); return { claim_id: node.querySelector('strong')?.textContent?.split(' Â· ')[0], contract: ranking?.dataset.rankingContract, corpus_version: ranking?.dataset.corpusVersion, rank: Number(ranking?.dataset.rank), score_basis_points: Number(ranking?.dataset.scoreBasisPoints), context_hash: ranking?.dataset.contextHash, text: node.innerText }; }));
-  const expectedRenderedPrecedents = processRun.result.precedents.map(item => ({ claim_id: item.claim_id, contract: item.ranking.contract, corpus_version: item.ranking.corpus_version, rank: item.ranking.rank, score_basis_points: item.ranking.score_basis_points, context_hash: item.ranking.context_hash }));
-  check('Exactly three generated reference patterns expose ordered rank, score, factors, corpus, and context hash', renderedPrecedents.length === 3 && renderedPrecedents.every((item, index) => Object.entries(expectedRenderedPrecedents[index]).every(([key, value]) => item[key] === value) && /generated reference pattern/i.test(item.text)), JSON.stringify({ renderedPrecedents, expectedRenderedPrecedents }));
-  const rankingReceiptProjection = await page.locator('.precedent-ranking-receipt').first().evaluate(node => ({ contract: node.dataset.rankingContract, corpus_version: node.dataset.corpusVersion, context_hash: node.dataset.contextHash, result_hash: node.dataset.resultHash, selected_ids: node.dataset.selectedClaimIds, text: node.innerText }));
-  check('Rendered ranking receipt exposes the exact selected IDs, context, candidate scores, and result hash', rankingReceiptProjection.contract === processRun.result.precedent_ranking.contract && rankingReceiptProjection.corpus_version === processRun.result.precedent_ranking.corpus_version && rankingReceiptProjection.context_hash === processRun.result.precedent_ranking.context_hash && rankingReceiptProjection.result_hash === processRun.result.precedent_ranking.result_hash && rankingReceiptProjection.selected_ids === processRun.result.precedent_ranking.selected_claim_ids.join(',') && /candidate scores/i.test(rankingReceiptProjection.text) === false && processRun.result.precedent_ranking.candidate_scores.slice(0, 3).every(candidate => rankingReceiptProjection.text.includes(`${candidate.claim_id}: ${candidate.score_basis_points}`)), JSON.stringify(rankingReceiptProjection));
-  await page.locator('.precedent-inline .precedent-mini').first().click();
-  await waitVisible('#precedentViewer[open] .precedent-rank');
-  check('Precedent dialog preserves inspectable rank factors and ranking receipt', (await page.locator('#precedentViewer .precedent-rank').getAttribute('data-context-hash')) === processRun.result.precedents[0].ranking.context_hash && (await page.locator('#precedentViewer .precedent-ranking-receipt').getAttribute('data-result-hash')) === processRun.result.precedent_ranking.result_hash);
-  await page.locator('#closePrecedent').click();
-  const renderedEdges = await page.locator('.process-edge[data-edge-source][data-edge-target]').evaluateAll(edges => edges.map(edge => ({ source: edge.dataset.edgeSource, target: edge.dataset.edgeTarget, state: edge.dataset.edgeState })));
-  const expectedEdges = processGraph.edges.map(edge => ({ source: edge.source, target: edge.target, state: edge.state || '' }));
-  check('Every backend process edge is experienceable with structural endpoints and state', JSON.stringify(renderedEdges) === JSON.stringify(expectedEdges), JSON.stringify({ expectedEdges, renderedEdges }));
-  await page.locator('.process-edge-ledger summary').click();
-  check('Compact connection ledger is keyboard-actionable', await page.locator('.process-edge').first().isVisible());
-  const firstEdgeTarget = processGraph.edges[0].target;
-  await page.locator('.process-edge').first().focus();
-  await page.keyboard.press('Enter');
-  check('A graph connection is keyboard-routable to its destination decision', await page.locator(`.decision-inspector[data-inspector-node="${firstEdgeTarget}"]`).count() === 1);
-  const firstBranchId = processGraph.nodes.find(node => !processGraph.main_spine.includes(node.node_id)).node_id;
-  await page.locator(`.process-branch-node[data-node-id="${firstBranchId}"]`).focus();
-  await page.keyboard.press('Enter');
-  check('Branch expansion is keyboard-actionable', await page.locator(`.decision-inspector[data-inspector-node="${firstBranchId}"]`).count() === 1);
-  await auditViewports('02-ready-process', '.process-layout');
-
-  const facts = processRun.result?.facts || processRun.understanding?.facts || [];
-  const fact = selectProcessTextQuoteFact(facts, processGraph, 'fact_tenancy');
-  check('A process-owned text-quote fact is available', Boolean(fact), JSON.stringify(facts.map(item => ({ fact_id: item.fact_id, locator_kinds: item.source_refs?.map(ref => ref.locator_kind) }))));
-  const owningNode = processGraph.nodes.find(node => (node.fact_ids || []).includes(fact.fact_id));
-  await page.locator(`.process-node-button[data-node-id="${owningNode.node_id}"],.process-branch-node[data-node-id="${owningNode.node_id}"]`).first().click();
-  const factSelector = `.inspector-fact[data-fact-id="${fact.fact_id}"]`;
-  check('Fact-to-source grounding renders every exact reference', await page.locator(`${factSelector} .grounding-ref`).count() === fact.source_refs.length);
-  const renderedRefs = await page.locator(`${factSelector} .grounding-ref`).evaluateAll(buttons => buttons.map(button => ({ artifact_id: button.dataset.sourceRef, locator_kind: button.dataset.sourceLocatorKind, page: button.dataset.sourcePage, excerpt: button.dataset.sourceExcerpt, region: button.dataset.sourceRegion, observation: button.dataset.sourceObservation, field: button.dataset.sourceField, value: button.dataset.sourceValue, agent: button.dataset.sourceAgent, confidence: button.dataset.factConfidence, state: button.dataset.factState })));
-  const expectedRefs = fact.source_refs.map(ref => ({ artifact_id: ref.artifact_id, locator_kind: ref.locator_kind, page: ref.page == null ? '' : String(ref.page), excerpt: ref.excerpt || '', region: ref.region ? JSON.stringify(ref.region) : '', observation: ref.observation || '', field: ref.field || '', value: ref.value == null ? '' : String(ref.value), agent: ref.agent || '', confidence: fact.confidence == null ? '' : String(fact.confidence), state: fact.state || '' }));
-  check('Fact grounding retains exact typed locator, page, passage, agent, confidence, and state', JSON.stringify(renderedRefs) === JSON.stringify(expectedRefs), JSON.stringify({ expectedRefs, renderedRefs }));
-  check('Text locator is rendered as an exact quotation with a page', await page.locator(`${factSelector} .grounding-ref[data-source-locator-kind="text_quote"] q`).count() > 0 && Boolean(await page.locator(`${factSelector} .grounding-ref[data-source-locator-kind="text_quote"]`).first().getAttribute('data-source-page')));
-  const textLocatorChecks = await Promise.all(fact.source_refs.map(async ref => {
-    const sourceText = ref.artifact_id === 'message'
-      ? [demo.claim.message]
-      : (await getJson(`${API}/api/artifacts/${encodeURIComponent(ref.artifact_id)}/extraction`)).pages;
-    return Number.isInteger(ref.page) && ref.page >= 1 && typeof ref.excerpt === 'string' && exactNormalizedGroundingQuote(sourceText?.[ref.page - 1], ref.excerpt);
-  }));
-  check('Every text quote is an exact normalized substring of its returned source page', textLocatorChecks.every(Boolean), JSON.stringify(fact.source_refs));
-  await page.locator(`${factSelector} .grounding-ref`).first().click();
-  await waitVisible('#sourceViewer[open]');
-  await waitVisible(`.source-fact[data-fact-id="${fact.fact_id}"]`);
-  const sourceArtifactId = fact.source_refs[0].artifact_id;
-  const sourceRefs = fact.source_refs.filter(ref => ref.artifact_id === sourceArtifactId);
-  const renderedPassages = await page.locator(`.source-fact[data-fact-id="${fact.fact_id}"] .source-passage`).evaluateAll(passages => passages.map(passage => ({ locator_kind: passage.dataset.locatorKind, page: passage.dataset.sourcePage, excerpt: passage.dataset.sourceExcerpt, agent: passage.dataset.sourceAgent })));
-  const expectedPassages = sourceRefs.map(ref => ({ locator_kind: ref.locator_kind, page: ref.page == null ? '' : String(ref.page), excerpt: ref.excerpt || '', agent: ref.agent || '' }));
-  check('Source-to-fact grounding retains exact passages and owning-decision route', JSON.stringify(renderedPassages) === JSON.stringify(expectedPassages) && await page.locator(`.source-fact[data-fact-id="${fact.fact_id}"] [data-source-fact-node="${owningNode.node_id}"]`).count() === 1, JSON.stringify({ expectedPassages, renderedPassages }));
-  check('Desktop source viewer retains bidirectional grounding', await page.locator(`.source-fact[data-fact-id="${fact.fact_id}"]`).isVisible());
-  await page.locator(`.source-fact[data-fact-id="${fact.fact_id}"] [data-source-fact-node="${owningNode.node_id}"]`).click();
-  await waitHidden('#sourceViewer');
-  check('Source route returns focus to owning decision', await page.evaluate(nodeId => document.activeElement?.dataset.nodeId === nodeId, owningNode.node_id));
-
-  const visualFact = facts.find(item => item.source_refs?.some(ref => ref.locator_kind === 'visual_observation') && processGraph.nodes.some(node => (node.fact_ids || []).includes(item.fact_id)));
-  check('A process-owned visual-observation fact is available', Boolean(visualFact), JSON.stringify(facts.map(item => ({ fact_id: item.fact_id, locator_kinds: item.source_refs?.map(ref => ref.locator_kind) }))));
-  const visualRef = visualFact.source_refs.find(ref => ref.locator_kind === 'visual_observation');
-  const visualNode = processGraph.nodes.find(node => (node.fact_ids || []).includes(visualFact.fact_id));
-  await page.locator(`.process-node-button[data-node-id="${visualNode.node_id}"],.process-branch-node[data-node-id="${visualNode.node_id}"]`).first().click();
-  const visualButton = page.locator(`.inspector-fact[data-fact-id="${visualFact.fact_id}"] .grounding-ref[data-source-locator-kind="visual_observation"]`).first();
-  const visualButtonText = await visualButton.innerText();
-  check('Visual observation is rendered without quotation or model-extraction authority', await visualButton.locator('q').count() === 0 && /Hash-bound to these demo image bytes; not machine extraction, model output, or qualified review\./i.test(visualButtonText), visualButtonText);
-  await visualButton.click();
-  await waitVisible('#sourceViewer[open] .visual-region-highlight');
-  const highlightedRegion = await page.locator('.visual-region-highlight').evaluate(node => ({ region: JSON.parse(node.dataset.highlightRegion), left: parseFloat(node.style.left) / 100, top: parseFloat(node.style.top) / 100, width: parseFloat(node.style.width) / 100, height: parseFloat(node.style.height) / 100, label: node.getAttribute('aria-label'), producer: node.dataset.sourceProducer, authority: node.dataset.sourceAuthority, annotation_contract: node.dataset.annotationContract, annotation_version: node.dataset.annotationVersion, image_sha256: node.dataset.imageSha256, artifact_sha256: node.dataset.artifactSha256 }));
-  const visualRegionValid = Array.isArray(visualRef.region) && visualRef.region.length === 4 && visualRef.region.every(value => Number.isFinite(value) && value >= 0 && value <= 1) && visualRef.region[2] > 0 && visualRef.region[3] > 0 && visualRef.region[0] + visualRef.region[2] <= 1 && visualRef.region[1] + visualRef.region[3] <= 1;
-  const visualArtifact = demo.claim.artifacts.find(item => item.artifact_id === visualRef.artifact_id);
-  check('Opening a visual fact highlights the exact normalized image region and hash-bound generated-demo authority', visualRegionValid && visualArtifact?.media_type?.startsWith('image/') && JSON.stringify(highlightedRegion.region) === JSON.stringify(visualRef.region) && [highlightedRegion.left, highlightedRegion.top, highlightedRegion.width, highlightedRegion.height].every((value, index) => Math.abs(value - visualRef.region[index]) < 1e-9) && highlightedRegion.label.includes(visualRef.observation) && highlightedRegion.producer === visualRef.producer && highlightedRegion.authority === visualRef.authority && highlightedRegion.annotation_contract === visualRef.annotation_contract && highlightedRegion.annotation_version === visualRef.annotation_version && highlightedRegion.image_sha256 === visualRef.image_sha256 && highlightedRegion.artifact_sha256 === visualArtifact.sha256, JSON.stringify({ visualRef, visualArtifact, highlightedRegion }));
-  const visualPassage = await page.locator(`.source-fact[data-fact-id="${visualFact.fact_id}"] .source-passage[data-locator-kind="visual_observation"]`).evaluate(node => ({ region: node.dataset.sourceRegion, observation: node.dataset.sourceObservation, producer: node.dataset.sourceProducer, authority: node.dataset.sourceAuthority, annotation_contract: node.dataset.annotationContract, annotation_version: node.dataset.annotationVersion, image_sha256: node.dataset.imageSha256, hasQuote: Boolean(node.querySelector('q')), text: node.innerText }));
-  check('Visual source-to-fact grounding roundtrips the exact curated annotation without agent, extraction, or quotation authority', visualPassage.region === JSON.stringify(visualRef.region) && visualPassage.observation === visualRef.observation && visualPassage.producer === visualRef.producer && visualPassage.authority === visualRef.authority && visualPassage.annotation_contract === visualRef.annotation_contract && visualPassage.annotation_version === visualRef.annotation_version && visualPassage.image_sha256 === visualArtifact.sha256 && !visualPassage.hasQuote && !/machine extraction|agent observation|model output/i.test(visualPassage.text.replace('not machine extraction, model output', '')) && await page.locator('.opened-grounding q').count() === 0, JSON.stringify({ visualRef, visualPassage }));
-  check('Grounded image inspection retains decoded original pixels', await page.locator('#sourceImage').evaluate(node => node.complete && node.naturalWidth > 0 && node.naturalHeight > 0));
-  await screenshot('03-image-grounding-inspection.png');
-  await runAxe('Grounded image viewer');
-  await page.locator('#closeSourceViewer').click();
-
-  const metadataFact = facts.find(item => item.source_refs?.some(ref => ref.locator_kind === 'metadata_field'));
-  const metadataRef = metadataFact?.source_refs.find(ref => ref.locator_kind === 'metadata_field');
-  const metadataNodeId = processGraph.nodes.find(node => (node.fact_ids || []).includes(metadataFact?.fact_id))?.node_id || processRun.result.checklist.items.find(item => item.fact_id === metadataFact?.fact_id)?.node_id;
-  check('Metadata provenance remains structurally owned by a process decision', Boolean(metadataFact && metadataRef && metadataNodeId), JSON.stringify({ metadataFact, metadataNodeId }));
-  await page.locator(`.process-node-button[data-node-id="${metadataNodeId}"],.process-branch-node[data-node-id="${metadataNodeId}"]`).first().click();
-  const metadataButton = page.locator(`.inspector-fact[data-fact-id="${metadataFact.fact_id}"] .grounding-ref[data-source-locator-kind="metadata_field"]`).first();
-  check('Metadata field is rendered as observed field/value rather than a quote', await metadataButton.locator('q').count() === 0 && (await metadataButton.getAttribute('data-source-field')) === metadataRef.field && (await metadataButton.getAttribute('data-source-value')) === String(metadataRef.value));
-  const intakeFields = { claim_id: demo.claim.claim_id, subject: demo.claim.subject, received_at: demo.claim.received_at, customer_name: demo.claim.customer?.name || '', customer_address: demo.claim.customer?.address || '', policy_reference: demo.claim.customer?.policy || '' };
-  const metadataArtifact = demo.claim.artifacts.find(item => item.artifact_id === metadataRef.artifact_id);
-  const observedMetadata = metadataRef.artifact_id === 'intake' ? intakeFields : metadataArtifact;
-  check('Metadata locator matches the observed source field exactly', observedMetadata && Object.hasOwn(observedMetadata, metadataRef.field) && String(observedMetadata[metadataRef.field]) === String(metadataRef.value), JSON.stringify({ metadataRef, observedMetadata }));
-  await metadataButton.click();
-  await waitVisible('#sourceViewer[open] .opened-locator[data-locator-kind="metadata_field"]');
-  const metadataPassage = await page.locator(`.source-fact[data-fact-id="${metadataFact.fact_id}"] .source-passage[data-locator-kind="metadata_field"]`).evaluate(node => ({ field: node.dataset.sourceField, value: node.dataset.sourceValue, agent: node.dataset.sourceAgent, hasQuote: Boolean(node.querySelector('q')) }));
-  check('Metadata source retains exact field, value, and agent and routes back to its owning decision', metadataPassage.field === metadataRef.field && metadataPassage.value === String(metadataRef.value) && metadataPassage.agent === metadataRef.agent && !metadataPassage.hasQuote && await page.locator(`.source-fact[data-fact-id="${metadataFact.fact_id}"] [data-source-fact-node="${metadataNodeId}"]`).count() === 1, JSON.stringify({ metadataRef, metadataPassage }));
-  await page.locator('#closeSourceViewer').click();
-
-  await waitVisible('[data-v20-open-documents]');
-  await page.locator('[data-v20-open-documents]').click();
-  await waitVisible('#v20DocumentSheet[open]');
-  const neededItem = page.locator('.v20-document-body .v17-checklist-group[data-kind="needed"] .v17-checklist-item[data-node-id][data-node-ids][data-current-path][data-fact-id][data-item-id]').first();
-  check('Derived document items own structural primary, ordered-owner, current-path, fact, and item identifiers', await neededItem.count() === 1 && Boolean(await neededItem.getAttribute('data-node-id')) && Boolean(await neededItem.getAttribute('data-node-ids')) && ['true', 'false'].includes(await neededItem.getAttribute('data-current-path')) && Boolean(await neededItem.getAttribute('data-fact-id')) && Boolean(await neededItem.getAttribute('data-item-id')));
-  const multiOwnerItem = processRun.result.checklist.items.find(item => Array.isArray(item.node_ids) && item.node_ids.length > 1);
-  check('Flagship checklist contains an inspectable reciprocal multi-owner evidence item', Boolean(multiOwnerItem), JSON.stringify(processRun.result.checklist.items.map(item => ({ item_id: item.item_id, node_ids: item.node_ids }))));
-  const renderedMultiOwner = page.locator(`.v20-document-body .v17-checklist-item[data-item-id="${multiOwnerItem.item_id}"]`).first();
-  const collapsedOwnerGroup = renderedMultiOwner.locator('xpath=ancestor::details[not(@open)][1]');
-  if (await collapsedOwnerGroup.count()) await collapsedOwnerGroup.locator(':scope > summary').click();
-  await renderedMultiOwner.scrollIntoViewIfNeeded();
-  check('Multi-owner document item is visibly inspectable after expanding its group', await renderedMultiOwner.isVisible());
-  const multiOwnerProjection = await renderedMultiOwner.evaluate(node => ({ node_id: node.dataset.nodeId, node_ids: node.dataset.nodeIds, current_path: node.dataset.currentPath, text: node.innerText }));
-  check('Document sheet preserves exact owner order, primary owner, current-path state, and secondary relationships', multiOwnerProjection.node_id === multiOwnerItem.node_id && multiOwnerProjection.node_ids === multiOwnerItem.node_ids.join(',') && multiOwnerProjection.current_path === String(multiOwnerItem.current_path === true) && /Also required by/i.test(multiOwnerProjection.text), JSON.stringify({ multiOwnerItem, multiOwnerProjection }));
-  if (isProductionJourney()) {
-    const expectedChecklistContributions = processRun.result.checklist.items.map(item => ({
-      item_id: item.item_id,
-      contribution: contributionDomProjection(item.agent_contribution, EVIDENCE_CONTRIBUTION_ROLE),
-    })).filter(item => item.contribution);
-    const renderedChecklistContributions = await page.locator('.v20-document-body .v17-checklist-item[data-item-id]').evaluateAll(items => items.flatMap(item => {
-      const badge = item.querySelector('.model-contribution-attribution');
-      return badge ? [{ item_id: item.dataset.itemId, contribution: { authority: badge.dataset.contributionAuthority, accepted_count: badge.dataset.acceptedCount, fallback_count: badge.dataset.fallbackCount, accepted_ids: badge.dataset.acceptedContributionIds, fallback_ids: badge.dataset.fallbackContributionIds } }] : [];
-    }));
-    check('Every document need visibly preserves its exact Nemotron acceptance or deterministic fallback attribution', expectedChecklistContributions.length === processRun.result.checklist.items.length && stableJson(renderedChecklistContributions.sort((a, b) => a.item_id.localeCompare(b.item_id))) === stableJson(expectedChecklistContributions.sort((a, b) => a.item_id.localeCompare(b.item_id))) && renderedChecklistContributions.some(item => Number(item.contribution.accepted_count) > 0), JSON.stringify({ expectedChecklistContributions, renderedChecklistContributions }));
-  }
-  check('Document sheet is a labelled modal dialog with focus inside', await page.evaluate(() => { const sheet = document.querySelector('#v20DocumentSheet'); return sheet?.tagName === 'DIALOG' && sheet.getAttribute('aria-labelledby') === 'v20DocumentTitle' && sheet.contains(document.activeElement); }));
-  await page.keyboard.press('Escape');
-  await waitHidden('#v20DocumentSheet');
-  check('Closing document sheet restores trigger focus', await page.evaluate(() => document.activeElement?.hasAttribute('data-v20-open-documents')));
-  await page.locator('[data-v20-open-documents]').click();
-  const owningNodeId = await neededItem.getAttribute('data-node-id');
-  await neededItem.click();
-  await waitHidden('#v20DocumentSheet');
-  check('Document need routes by its own node identifier', await page.locator(`.decision-inspector[data-inspector-node="${owningNodeId}"]`).count() === 1);
-  const secondaryOwnerId = multiOwnerItem.node_ids.find(nodeId => nodeId !== multiOwnerItem.node_id);
-  await page.locator(`.process-node-button[data-node-id="${secondaryOwnerId}"],.process-branch-node[data-node-id="${secondaryOwnerId}"]`).first().click();
-  const secondaryOwnerEvidence = page.locator(`.decision-inspector[data-inspector-node="${secondaryOwnerId}"] .inspector-row[data-item-id="${multiOwnerItem.item_id}"][data-node-ids="${multiOwnerItem.node_ids.join(',')}"]`);
-  check('A secondary process owner renders the same reciprocal evidence item and names the additional relationship', await secondaryOwnerEvidence.count() === 1 && /Primary decision:|Also required by/i.test(await secondaryOwnerEvidence.innerText()), JSON.stringify({ item_id: multiOwnerItem.item_id, secondaryOwnerId }));
-  const flagshipBeforeReview = processRun;
-  await page.locator('#journeyNext').click();
-  await waitVisible('body[data-casepath-moment="review"]');
-  check('Review keeps one Verification focus and working cursor', await page.locator('#v21AgentFocus[data-casepath-specialist="verify"] #v21AgentCursor[data-casepath-specialist="verify"]').count() === 1);
-  await waitVisible('.v20-review-note');
-  const demoReviewCopy = await page.locator('#stageCanvas').innerText();
-  check('Simulated demo review remains beside the complete graph and disclaims qualified approval', await page.locator('.review-graph .process-layout').count() === 1 && await page.locator('.review-choice').count() === 2 && /simulated demo review/i.test(demoReviewCopy) && /not qualified expert approval/i.test(demoReviewCopy), demoReviewCopy);
-  await page.locator('.review-graph .process-node-button[data-node-id="causation"],.review-graph .process-branch-node[data-node-id="causation"]').first().click();
-  check('Review workspace preserves its declared no-precedent boundary after graph interaction', await page.locator('.review-graph .precedent-inline').count() === 0 && await page.locator('.review-graph .process-layout').getAttribute('data-precedents') === 'false');
-  await page.locator('input[value="required_now"]').check();
-  await waitVisible('.v19-review-branch-preview[data-mode="required_now"]');
-  await page.locator('input[value="conditional"]').check();
-  await waitVisible('.v19-review-branch-preview[data-mode="conditional"]');
-  await auditViewports('04-review', '#reviewForm');
-  await page.locator('#reviewForm button[type="submit"]').click();
-  await waitVisible('body[data-casepath-moment="review-applied"]');
-  await page.locator('.review-applied .process-node-button[data-node-id="causation"],.review-applied .process-branch-node[data-node-id="causation"]').first().click();
-  check('Applied-review workspace preserves its declared no-precedent boundary after graph interaction', await page.locator('.review-applied .precedent-inline').count() === 0 && await page.locator('.review-applied .process-layout').getAttribute('data-precedents') === 'false');
-  const reviewed = await waitForValue(() => reviewResponse);
-  retainedEvidence['demo-review'] = reviewed;
-  check('Demo review response is accepted, typed, and explicitly unverified', reviewed.accepted === true && reviewed.reviewer?.type === 'unverified_demo_user' && reviewed.reviewer?.qualification_status === 'not_verified' && reviewed.result?.process && reviewed.result?.checklist, JSON.stringify(reviewed));
-  const persistedReviewedRun = await getJson(`${API}/api/runs/${encodeURIComponent(flagshipRunId)}`);
-  retainedEvidence['post-review-run'] = persistedReviewedRun;
-  const reviewedEvidenceIssues = evidenceRelationContractViolations(reviewed.result?.process, reviewed.result?.checklist);
-  check('Applied-review checklist retains exact reciprocal process ownership', reviewedEvidenceIssues.length === 0, JSON.stringify(reviewedEvidenceIssues));
-  const reviewTransformIssues = reviewTransformContractViolations(reviewed, persistedReviewedRun, flagshipBeforeReview);
-  check(isProductionJourney() ? 'Review is an explicitly unverified post-model transform with exact pre/post hashes and preserved model-time acceptance receipts' : 'Local deterministic review is an explicitly unverified transform with exact pre/post hashes', reviewTransformIssues.length === 0, JSON.stringify(reviewTransformIssues));
-  const appliedReviewCopy = await page.locator('#stageCanvas').innerText();
-  check('Applied-review UI keeps the edit explicitly unverified', /unverified/i.test(appliedReviewCopy), appliedReviewCopy);
-  if (isProductionJourney()) check('Applied-review UI says model acceptance was not reused for the unverified edit', /model acceptance\b[^.]{0,120}\b(?:was|is)\s+not reused/i.test(appliedReviewCopy), appliedReviewCopy);
-  const appliedContributionBadgeCount = await page.locator('.review-applied .model-contribution-attribution').count();
-  const visibleContributionBadgeCount = await page.locator('.model-contribution-attribution:visible').count();
-  const visibleFinalHandoffCount = await page.locator('.v20-final-handoff:visible').count();
-  const postReviewContributionExpectations = [
-    ...reviewed.result.process.nodes.flatMap(node => (node.agent_decision_contributions || []).map(contribution => contributionExpectation(contribution, 'Process Decision Mapping Agent', reviewed.review_transform))),
-    ...reviewed.result.checklist.items.map(item => contributionExpectation(item.agent_contribution, 'Evidence and Checklist Agent', reviewed.review_transform)),
-    contributionExpectation(orchestrationAudit(flagshipBeforeReview)?.final_claim_brief?.field_contributions, FINAL_CONTRIBUTION_ROLE, reviewed.review_transform),
-  ];
-  check('Applied-review result globally suppresses every pre-review contribution badge and final handoff', reviewed.review_transform?.acceptance_scope === 'post_review_unverified_transform' && reviewed.review_transform?.model_acceptance_reused === false && postReviewContributionExpectations.every(value => value === null) && appliedContributionBadgeCount === 0 && visibleContributionBadgeCount === 0 && visibleFinalHandoffCount === 0, JSON.stringify({ review_transform: reviewed.review_transform, post_review_expectations: postReviewContributionExpectations, rendered_badge_count: appliedContributionBadgeCount, visible_badge_count: visibleContributionBadgeCount, visible_final_handoff_count: visibleFinalHandoffCount }));
-  const reviewedNodeIds = reviewed.result.process.nodes.map(node => node.node_id);
-  const appliedNodeIds = await page.evaluate(() => [...new Set([...document.querySelectorAll('.review-applied .process-node-button[data-node-id],.review-applied .process-branch-node[data-node-id]')].map(node => node.dataset.nodeId))]);
-  check('Applied view shows the actual server-returned reviewed graph', reviewedNodeIds.every(id => appliedNodeIds.includes(id)) && reviewedNodeIds.length === appliedNodeIds.length, JSON.stringify({ reviewedNodeIds, appliedNodeIds }));
-  const appliedEdges = await page.locator('.review-applied .process-edge[data-edge-source][data-edge-target]').evaluateAll(edges => edges.map(edge => ({ source: edge.dataset.edgeSource, target: edge.dataset.edgeTarget, state: edge.dataset.edgeState })));
-  const reviewedEdges = reviewed.result.process.edges.map(edge => ({ source: edge.source, target: edge.target, state: edge.state || '' }));
-  check('Applied view retains every server-returned reviewed graph connection', JSON.stringify(appliedEdges) === JSON.stringify(reviewedEdges), JSON.stringify({ reviewedEdges, appliedEdges }));
-  const reviewedChecklistProjection = await page.locator('.reviewed-checklist [data-item-id]').evaluateAll(nodes => nodes.map(node => ({ item_id: node.dataset.itemId, node_id: node.dataset.nodeId, node_ids: node.dataset.nodeIds, current_path: node.dataset.currentPath })));
-  check('Applied view shows the actual reviewed checklist with ordered owners and current-path state', reviewedChecklistProjection.length === reviewed.result.checklist.items.length && reviewedChecklistProjection.every((projection, index) => projection.item_id === reviewed.result.checklist.items[index].item_id && projection.node_id === reviewed.result.checklist.items[index].node_id && projection.node_ids === reviewed.result.checklist.items[index].node_ids.join(',') && projection.current_path === String(reviewed.result.checklist.items[index].current_path === true)), JSON.stringify(reviewedChecklistProjection));
-  const reviewedSelectedNode = reviewed.result.process.nodes.find(node => node.node_id === reviewed.result.process.current_overlay?.current_node_id);
-  const reviewedSelectedFacts = reviewed.result.facts.filter(fact => (reviewedSelectedNode?.fact_ids || []).includes(fact.fact_id)).slice(0, 2);
-  const reviewedFactChain = await page.locator('.review-applied .v17-evidence-chain').innerText();
-  check('Applied fact chain remains bound to the displayed reviewed run', reviewedSelectedFacts.length > 0 && reviewedSelectedFacts.every(fact => reviewedFactChain.includes(`${fact.label}: ${fact.value}`)), JSON.stringify({ reviewedSelectedFacts, reviewedFactChain }));
-  const beforeNodeIds = new Set(flagshipBeforeReview.result.process.nodes.map(node => node.node_id));
-  const computedAdded = reviewedNodeIds.filter(id => !beforeNodeIds.has(id));
-  check('Applied view presents a computed delta before consolidation', (await page.locator('.review-applied-delta article').first().innerText()).includes(String(computedAdded.length)));
-  await auditViewports('05-review-applied', '.review-applied');
-
-  await page.locator('#journeyNext').click();
-  await waitVisible('.v20-learning-summary');
-  check('Knowledge consolidation becomes the single visible workflow focus', await page.locator('#v21AgentFocus[data-casepath-specialist="knowledge"] #v21AgentCursor[data-casepath-specialist="knowledge"]').count() === 1);
-  const candidateCopy = await page.locator('[data-outcome="candidate"]').innerText();
-  check('Candidate is honestly quarantined with one unverified support record and zero qualified support', reviewed.candidate?.status === 'quarantined' && reviewed.candidate?.support_count === 1 && reviewed.candidate?.required_support === 3 && reviewed.candidate?.qualified_support_count === 0 && reviewed.candidate?.required_qualified_support === 3 && /1 of 3 unverified demo support records/i.test(candidateCopy) && /0 of 3 qualified support records/i.test(candidateCopy), candidateCopy);
-  check('Shared playbook is explicitly unchanged', reviewed.candidate?.shared_knowledge_changed === false && /shared playbook unchanged/i.test(await page.locator('.v20-learning-summary').innerText()) && /mould-playbook-v3/i.test(await page.locator('[data-outcome="shared-playbook"]').innerText()));
-  check('Passed deterministic gates remain distinct from missing qualified support and approval', reviewed.candidate?.target_tests?.status === 'passed' && reviewed.candidate?.protected_regression?.status === 'passed' && reviewed.candidate?.approval?.status === 'pending' && reviewed.candidate?.approval?.qualified_reviewer === false && /target tests: passed/i.test(candidateCopy) && /protected regression: passed/i.test(candidateCopy) && /qualified approval: pending/i.test(candidateCopy) && /does not supply the missing qualified support or approval/i.test(candidateCopy) && !/playbook released|qualified approval: approved/i.test(await page.locator('.v20-learning-summary').innerText()), candidateCopy);
-  const protectedOutputCase = reviewed.candidate?.protected_regression?.cases?.find(value => value.case_id === 'source_claim_full_playbook_unchanged');
-  check('Protected regression executes the real memory gate and independently binds unchanged full result, process, and checklist hashes', protectedOutputCase?.status === 'passed' && protectedOutputCase?.execution_contract === 'deterministic_case_specific_memory_gate/1.0.0' && protectedOutputCase?.gate_executed === true && protectedOutputCase?.expected_memory_application === false && protectedOutputCase?.actual_memory_application === false && protectedOutputCase?.output_unchanged === true && stableJson(protectedOutputCase?.before_hashes) === stableJson(protectedOutputCase?.after_hashes) && ['result_hash', 'process_hash', 'checklist_hash'].every(key => SHA256_PATTERN.test(protectedOutputCase?.before_hashes?.[key] || '')), JSON.stringify(protectedOutputCase));
-  await auditViewports('06-learning', '.v20-learning-summary');
-
-  await page.locator('#journeyNext').click();
-  await waitJourneyUi('Later-claim comparison did not reach its terminal UI state', async () => {
-    await awaitLaterJourneyTerminalUi();
-  });
-  const proof = await waitForValue(() => proofResponse, runTimeoutMs());
-  check('Held-out result retains one authority-labelled Knowledge workflow focus', await page.locator('#v21AgentFocus[data-casepath-specialist="knowledge"][data-work-authority] #v21AgentCursor[data-casepath-specialist="knowledge"][data-work-authority]').count() === 1);
-  retainedEvidence['learning-proof'] = proof;
-  check('Lifecycle produced flagship, baseline, and post-review runs', runIds.length === 3, JSON.stringify(runIds));
-  const baseline = await awaitRun(runIds[1]);
-  const later = await awaitRun(runIds[2]);
-  const laterClaim = await getJson(`${API}/api/claims/${encodeURIComponent(demo.later_claim_id)}`);
-  retainedEvidence['later-baseline-run'] = baseline;
-  retainedEvidence['later-after-memory-run'] = later;
-  if (!isLocal(BASE) || !isLocal(API)) {
-    const baselineReferenceIssues = deterministicReferenceRunViolations(baseline, 'baseline');
-    const laterReferenceIssues = deterministicReferenceRunViolations(later, 'current');
-    check('Held-out baseline and current comparisons explicitly disclose deterministic-reference authority with no executed model DAG or call activity', baselineReferenceIssues.length === 0 && laterReferenceIssues.length === 0, JSON.stringify({ baseline: baselineReferenceIssues, later: laterReferenceIssues }));
-  }
-  for (const [label, run, claim] of [['baseline', baseline, laterClaim], ['later', later, laterClaim]]) {
-    const relationIssues = evidenceRelationContractViolations(run.result?.process, run.result?.checklist);
-    check(`${label} later-claim run retains exact reciprocal evidence ownership`, relationIssues.length === 0, JSON.stringify(relationIssues));
-    const legalIssues = legalContextContractViolations(run.result?.legal_research, run.result?.process);
-    check(`${label} later-claim run retains exact ID-joined legal context`, legalIssues.length === 0, JSON.stringify(legalIssues));
-    const visualRefs = (run.result?.facts || []).flatMap(fact => (fact.source_refs || []).filter(reference => reference.locator_kind === 'visual_observation'));
-    const visualIssues = visualRefs.flatMap(reference => visualReferenceContractViolations(reference, claim.artifacts.find(artifact => artifact.artifact_id === reference.artifact_id)).map(issue => `${reference.artifact_id}: ${issue}`));
-    check(`${label} later-claim run binds every curated visual annotation to public image bytes`, visualRefs.length > 0 && visualIssues.length === 0, JSON.stringify(visualIssues));
-    const rankingIssues = precedentRankingContractViolations(run.result);
-    check(`${label} later-claim run recomputes an exact-three ranking receipt`, rankingIssues.length === 0, JSON.stringify(rankingIssues));
-    const memoryStateIssues = memoryRetrievalContractViolations(run.result);
-    check(`${label} later-claim run keeps retrieval separate from receipt-bound memory use`, memoryStateIssues.length === 0, JSON.stringify(memoryStateIssues));
-  }
-  const memoryIssues = memoryApplicationContractViolations(baseline, later, proof);
-  check('Later causal proof independently binds the exact memory receipt, retained pre-transform boundary, persisted completed event, DTO hashes, semantic eligibility, operations, delta, ten checks, pure replay, and unchanged v3', memoryIssues.length === 0, JSON.stringify(memoryIssues));
-  check('Computed proof names both completed later-claim runs', proof.before?.run_id === baseline.run_id && proof.after?.run_id === later.run_id);
-  check('Later claim keeps the shared v3 playbook and applies no shared rule', later.result?.playbook?.version === 'mould-playbook-v3' && later.result?.shared_rule_applied === false);
-  const laterProcess = later.result?.process || later.process;
-  const laterCurrentNodeId = laterProcess?.current_overlay?.current_node_id || laterProcess?.current_node;
-  const laterCurrentNode = laterProcess?.nodes?.find(node => node.node_id === laterCurrentNodeId);
-  check('Later claim remains in Swiss residential tenancy at unresolved causation with the evidence-gap next action', later.result?.category === 'Rental defect - mould and moisture' && later.result?.scope === 'Swiss residential tenancy' && laterCurrentNodeId === 'causation' && laterCurrentNode?.state === 'current' && laterCurrentNode?.answer === 'Unresolved' && laterProcess?.current_overlay?.next_action_node_id === 'evidence_gap' && laterProcess?.selected_path?.includes('evidence_gap'), JSON.stringify({ category: later.result?.category, scope: later.result?.scope, current_node_id: laterCurrentNodeId, current_node: laterCurrentNode, overlay: laterProcess?.current_overlay, selected_path: laterProcess?.selected_path }));
-  const laterCausation = page.locator('#laterResult .later-process-result .process-node.current .process-node-button[data-node-id="causation"]');
-  check('Later UI renders its own current unresolved causation decision', await laterCausation.count() === 1 && /Current decision/i.test(await laterCausation.innerText()) && /Causation assessment/i.test(await laterCausation.innerText()) && /Unresolved/i.test(await laterCausation.innerText()), await page.locator('#laterResult .later-process-result').innerText());
-  check('Later memory transform adds exactly the ventilation node, two bounded edges, and three evidence-item changes', stableJson(proof.causal_delta?.process?.added_node_ids) === stableJson(['ventilation_dispute']) && stableJson(proof.causal_delta?.process?.added_edges) === stableJson([{ source: 'evidence_gap', target: 'ventilation_dispute' }, { source: 'ventilation_dispute', target: 'causation' }]) && stableJson(proof.causal_delta?.evidence?.changed_item_ids) === stableJson(['building_envelope', 'management_position', 'use_evidence']) && laterProcess.nodes.some(node => node.node_id === 'ventilation_dispute'), JSON.stringify(proof.causal_delta));
-  const memoryUsed = later.result?.memory_application != null
-    && later.result?.memory_used === true
-    && later.result?.reviewed_memory_used === true
-    && later.result?.knowledge?.reviewed_memory_used === true
-    && later.result?.reviewed_memory_retrieved === true
-    && later.result?.knowledge?.reviewed_memory_retrieved === true
-    && later.result?.process?.memory_used === true
-    && later.result?.checklist?.memory_used === true
-    && proof.reviewed_memory_proof?.used === true
-    && memoryIssues.length === 0;
-  check('Later UI claims case-specific unverified guidance only when retrieval, every use flag, exact receipt, and computed proof all agree', memoryUsed && await page.locator('.v20-later-heading[data-memory-retrieved="true"][data-memory-used="true"][data-memory-retrieved-only="false"][data-causal-proof-ready="true"]').count() === 1 && /case-specific unverified guidance applied/i.test(await page.locator('.v20-later-heading').innerText()), await page.locator('.v20-later-heading').innerText());
-  check('Later ranking selects the unverified demo memory and remains exactly three ordered patterns', later.result.precedents.length === 3 && later.result.precedents[0]?.claim_id === 'DEF-027-E0-DEMO' && later.result.precedents[0]?.review_status === 'unverified_demo_memory' && later.result.precedent_ranking.selected_claim_ids[0] === 'DEF-027-E0-DEMO', JSON.stringify(later.result.precedents.map(item => ({ claim_id: item.claim_id, status: item.review_status, rank: item.ranking?.rank }))));
-  const transformedContributionValues = [
-    ...(later.result.process.nodes || []).flatMap(node => (node.agent_decision_contributions || []).map(contribution => contributionExpectation(contribution, PROCESS_CONTRIBUTION_ROLE, later.result.memory_application))),
-    ...(later.result.checklist.items || []).map(item => contributionExpectation(item.agent_contribution, EVIDENCE_CONTRIBUTION_ROLE, later.result.memory_application)),
-  ];
-  check('Post-memory DTOs and UI contain no pre-memory Nemotron acceptance attribution', transformedContributionValues.every(value => value === null) && await page.locator('#laterResult .model-contribution-attribution').count() === 0 && !Object.hasOwn(later.result.process, 'agent_contribution') && !later.result.process.nodes.some(node => Object.hasOwn(node, 'agent_decision_contributions')) && !Object.hasOwn(later.result.checklist, 'agent_contribution') && !later.result.checklist.items.some(item => Object.hasOwn(item, 'agent_contribution')) && later.result.next_action?.agent_brief_contribution === null, JSON.stringify(transformedContributionValues));
-  const returnedUnverifiedMemory = later.result?.precedents?.find(item => item.review_status === 'unverified_demo_memory' && item.memory_id);
-  if (memoryUsed && returnedUnverifiedMemory) {
-    const reuseThreadSelector = '#laterResult .v18-reuse-proof .v17-reuse-thread';
-    await waitVisible(reuseThreadSelector);
-    const laterReuseThreadCount = await page.locator('#laterResult .v17-reuse-thread').count();
-    const reuseProofCount = await page.locator('#laterResult .v18-reuse-proof').count();
-    const proofReuseThreadCount = await page.locator(reuseThreadSelector).count();
-    check('Later result renders exactly one receipt-bound memory-reuse proof and thread', laterReuseThreadCount === 1 && reuseProofCount === 1 && proofReuseThreadCount === 1, JSON.stringify({ later_reuse_threads: laterReuseThreadCount, reuse_proofs: reuseProofCount, proof_reuse_threads: proofReuseThreadCount }));
-    const reuseCopy = await page.locator(reuseThreadSelector).innerText();
-    check('Returned demo memory stays explicitly unverified wherever its precedent is rendered', /unverified demo review memory returned/i.test(reuseCopy) && !/qualified expert-reviewed memory returned/i.test(reuseCopy), reuseCopy);
-    const proofLayout = await page.locator(reuseThreadSelector).evaluate(node => {
-      const style = getComputedStyle(node);
-      const proofValues = [...node.querySelectorAll('strong,code')].map(value => getComputedStyle(value));
-      return {
-        display: style.display,
-        grid_template_columns: style.gridTemplateColumns,
-        client_width: node.clientWidth,
-        scroll_width: node.scrollWidth,
-        values_wrap: proofValues.every(value => value.overflowWrap === 'anywhere' && value.wordBreak === 'break-word'),
-      };
-    });
-    check('Final memory-proof layout uses responsive grid columns and wraps long receipt hashes without local overflow', proofLayout.display === 'grid' && proofLayout.grid_template_columns !== 'none' && proofLayout.scroll_width <= proofLayout.client_width + 1 && proofLayout.values_wrap, JSON.stringify(proofLayout));
-  }
-  const receiptProjection = await page.locator('.memory-application-receipt').evaluate(node => {
-    const eligibility = node.querySelector('.memory-semantic-eligibility');
-    return {
-      contract: node.dataset.memoryContract,
-      authority: node.dataset.memoryAuthority,
-      scope: node.dataset.memoryScope,
-      application_hash: node.dataset.applicationHash,
-      model_acceptance_reused: node.dataset.modelAcceptanceReused,
-      shared_rule_applied: node.dataset.sharedRuleApplied,
-      eligibility_contract: eligibility?.dataset.eligibilityContract,
-      eligibility_rule_id: eligibility?.dataset.eligibilityRuleId,
-      semantic_signature_hash: eligibility?.dataset.semanticSignatureHash,
-      semantic_role: eligibility?.dataset.semanticRole,
-      text: node.innerText,
-    };
-  });
-  const laterResultText = await page.locator('#laterResult').innerText();
-  check('Rendered receipt exposes exact unverified boundary, semantic eligibility, application hash, and every before/after DTO and semantic hash', receiptProjection.contract === later.result.memory_application.contract && receiptProjection.authority === 'unverified_demo' && receiptProjection.scope === 'case_specific_guidance_only' && receiptProjection.application_hash === later.result.memory_application.application_hash && receiptProjection.model_acceptance_reused === 'false' && receiptProjection.shared_rule_applied === 'false' && receiptProjection.eligibility_contract === later.result.memory_application.eligibility.contract && receiptProjection.eligibility_rule_id === later.result.memory_application.eligibility.rule_id && receiptProjection.semantic_signature_hash === later.result.memory_application.eligibility.semantic_signature_hash && receiptProjection.semantic_role === 'management_ventilation_allegation' && [...Object.values(later.result.memory_application.before), ...Object.values(later.result.memory_application.after)].every(hash => laterResultText.includes(hash)), JSON.stringify(receiptProjection));
-  const renderedDelta = await page.locator('.causal-delta').evaluate(node => ({ nonzero: node.dataset.causalNonzero, text: node.innerText }));
-  check('Rendered causal delta names the exact added node, two edges, and three changed evidence items', renderedDelta.nonzero === 'true' && ['ventilation_dispute', 'evidence_gap â†’ ventilation_dispute', 'ventilation_dispute â†’ causation', 'building_envelope', 'management_position', 'use_evidence'].every(value => renderedDelta.text.includes(value)), renderedDelta.text);
-  const renderedChecks = await page.locator('.memory-deterministic-checks [data-memory-check]').evaluateAll(nodes => nodes.map(node => ({ name: node.dataset.memoryCheck, status: node.dataset.checkStatus })));
-  check('Rendered causal proof shows all ten deterministic checks in order and passed', renderedChecks.length === 10 && stableJson(renderedChecks) === stableJson(proof.deterministic_checks.map(item => ({ name: item.name, status: item.status }))), JSON.stringify(renderedChecks));
-  const finalComparison = page.locator('#laterResult .final-proof');
-  const finalComparisonText = await finalComparison.innerText();
-  check('Before/after visibly exposes both returned result hashes and retains unchanged shared v3', await finalComparison.isVisible() && finalComparisonText.includes(proof.before.result_hash) && finalComparisonText.includes(proof.after.result_hash) && /Shared playbook v3 unchanged/i.test(laterResultText) && /mould-playbook-v3/i.test(laterResultText), JSON.stringify({ comparison: finalComparisonText, shared_playbook_visible: /Shared playbook v3 unchanged/i.test(laterResultText) }));
-  await auditViewports('07-later-result', '#laterResult .v18-reuse-proof');
-
-  check('Immutable release marker was never rewritten during the journey', await page.evaluate(() => window.__casepathReleaseMutations.length === 0), JSON.stringify(await page.evaluate(() => window.__casepathReleaseMutations)));
-  check('No lifecycle state exposes a false reviewed-v4 claim', !falseReviewedV4Claim.test(await page.locator('body').innerText()));
-  check('Skip link remains present', await page.locator('.skip-link').count() === 1);
-  await page.locator('.skip-link').focus();
-  check('Skip link is keyboard focusable', await page.evaluate(() => document.activeElement?.matches('.skip-link')));
-  check('Visible icon controls have accessible names', await page.evaluate(() => [...document.querySelectorAll('button.icon-button:not([hidden]),a.icon-button:not([hidden])')].every(node => node.getAttribute('aria-label') || node.textContent.trim())));
-  await runAxe('Final lifecycle state');
-  check('No browser console errors', failures.console.length === 0, JSON.stringify(failures.console));
-  check('No page errors', failures.page.length === 0, JSON.stringify(failures.page));
-  check('No product request failures', failures.request.length === 0, JSON.stringify(failures.request));
-
-  const modelLedger = await getJson(`${API}/api/model-ledger`);
-  const ledgerIssues = sanitizedLedgerViolations(modelLedger);
-  check('Public model ledger is sanitized and retains no prompt, raw output, reasoning, or canonical-output payload', ledgerIssues.length === 0, JSON.stringify(ledgerIssues));
-  const successfulNetworkCalls = modelLedger.items.filter(item => SUCCESSFUL_MODEL_OUTCOMES.has(item.outcome) && item.call_count === 1 && item.provider_endpoint === 'https://openrouter.ai/api/v1/chat/completions');
-  check('Successful network calls retain an exact unnormalized Nemotron alias or dated response identity and usage provenance', successfulNetworkCalls.every(item => item.provider === 'openrouter' && item.model === REQUESTED_NEMOTRON_MODEL && EXACT_NEMOTRON_RESPONSE_MODELS.has(item.response_model) && ALLOWED_USAGE_SOURCES.has(item.usage_source)) && (!isProductionJourney() || successfulNetworkCalls.length === REQUIRED_NEMOTRON_AGENT_IDS.length), JSON.stringify(successfulNetworkCalls));
-  if (isProductionJourney()) {
-    const finalColdIssues = coldLedgerContractViolations(coldOrchestration, modelLedger);
-    const finalSnapshotIssues = finalLedgerSnapshotViolations(isolationLedger, modelLedger);
-    check('Final ledger is the immutable 12-row flagship cold6 plus warm6 snapshot with no held-out model activity', finalColdIssues.length === 0 && finalSnapshotIssues.length === 0, JSON.stringify({ finalColdIssues, finalSnapshotIssues, finalSummary: modelLedger.summary, isolationSummary: isolationLedger.summary }));
-    const warmLineage = warmLineageContractViolations(coldOrchestration, warmOrchestration, modelLedger);
-    check('Post-flagship isolation replay made zero provider calls and binds every cache record to its visible cold origin', warmLineage.issues.length === 0 && warmLineage.lineage.length === REQUIRED_NEMOTRON_AGENT_IDS.length, JSON.stringify(warmLineage));
-    retainedEvidence['flagship-cache-lineage'] = {
-      contract: 'casepath.flagship-cache-lineage/1.0.0',
-      requested_model: REQUESTED_NEMOTRON_MODEL,
-      exact_response_models: [...EXACT_NEMOTRON_RESPONSE_MODELS],
-      framework: EXPECTED_FRAMEWORK,
-      cold_orchestration_id: coldOrchestration.orchestration_id,
-      warm_orchestration_id: warmOrchestration.orchestration_id,
-      cold_run_surface: 'visible_browser_flagship',
-      warm_run_surface: 'isolated_session_cache_replay',
-      cold_guarded_fallback_count: coldOrchestration.guarded_fallback_count,
-      warm_guarded_fallback_count: warmOrchestration.guarded_fallback_count,
-      lineage: warmLineage.lineage,
-      provider_calls_during_isolation_replay: 0,
-    };
-  }
-  retainedEvidence['model-ledger'] = modelLedger;
-
-  return { status: 'passed', release: PRODUCT_RELEASE, release_id: RELEASE_ID, checkedAt: new Date().toISOString(), baseUrl: BASE, apiUrl: API, deployment: deploymentIdentity, runtime: runtimeVersions, passed: checks.length, failed: 0, checks, notes, failures, runIds };
-}
-
-function mockOrchestration(cacheMode, coldRun = null) {
-  const facts = [
-    {
-      fact_id: 'fact_scope',
-      value: 'confirmed',
-      state: 'supported',
-      controls_process: true,
-      decision_key: 'tenancy_scope',
-      normalized_value: 'confirmed',
-      decision_value: 'confirmed',
-    },
-    {
-      fact_id: 'fact_context',
-      value: 'observed context',
-      state: 'known',
-      controls_process: false,
-      decision_key: null,
-      normalized_value: null,
-      decision_value: null,
-    },
-  ];
-  const sourceIntegrity = {
-    artifacts: [{
-      artifact_id: 'lease',
-      integrity_class: 'text_grounded',
-      source_ref_ids: ['source_scope'],
-      contribution_id: 'artifact:lease:integrity',
-      attribution: 'Document and Source Integrity Agent',
-      deterministic_fallback_applied: false,
-      confidence_basis_points: 9200,
-    }],
-  };
-  const processDecision = {
-    fact_id: 'fact_scope',
-    decision_key: 'tenancy_scope',
-    decision_value: 'confirmed',
-    state: 'supported',
-    normalized_value: 'confirmed',
-    source_ref_ids: ['source_scope'],
-    contribution_id: 'fact:fact_scope:decision_value',
-    contribution_scope: 'canonical_to_process_decision_mapping',
-    model_owned_fields: ['decision_value'],
-    confidence_basis_points: 9100,
-    attribution: PROCESS_CONTRIBUTION_ROLE,
-    deterministic_fallback_applied: false,
-  };
-  const processMapping = { decisions: [processDecision] };
-  const evidenceFieldContributions = [
-    {
-      contribution_id: 'item:lease:status',
-      field: 'status',
-      attribution: EVIDENCE_CONTRIBUTION_ROLE,
-      confidence_basis_points: 9000,
-      deterministic_fallback_applied: false,
-    },
-    {
-      contribution_id: 'item:lease:artifacts',
-      field: 'artifact_ids',
-      attribution: EVIDENCE_CONTRIBUTION_ROLE,
-      confidence_basis_points: 9000,
-      deterministic_fallback_applied: false,
-    },
-  ];
-  const contextEvidenceFieldContributions = [
-    {
-      contribution_id: 'item:context_note:status',
-      field: 'status',
-      attribution: EVIDENCE_CONTRIBUTION_ROLE,
-      confidence_basis_points: 8800,
-      deterministic_fallback_applied: false,
-    },
-    {
-      contribution_id: 'item:context_note:artifacts',
-      field: 'artifact_ids',
-      attribution: EVIDENCE_CONTRIBUTION_ROLE,
-      confidence_basis_points: 8800,
-      deterministic_fallback_applied: false,
-    },
-  ];
-  const evidenceChecklist = {
-    items: [
-      {
-        item_id: 'lease',
-        status: 'provided_sufficient',
-        artifact_ids: ['lease'],
-        source_ref_ids: ['source_scope'],
-        field_contributions: evidenceFieldContributions,
-        model_owned_fields: ['status', 'artifact_ids'],
-        confidence_basis_points: 9000,
-        attribution: EVIDENCE_CONTRIBUTION_ROLE,
-        deterministic_fallback_applied: false,
-      },
-      {
-        item_id: 'context_note',
-        status: 'provided_sufficient',
-        artifact_ids: ['lease'],
-        source_ref_ids: ['source_context'],
-        field_contributions: contextEvidenceFieldContributions,
-        model_owned_fields: ['status', 'artifact_ids'],
-        confidence_basis_points: 8800,
-        attribution: EVIDENCE_CONTRIBUTION_ROLE,
-        deterministic_fallback_applied: false,
-      },
-    ],
-  };
-  const finalFieldContributions = FINAL_FIELD_CONTRACT.map(({ field, contribution_id }) => ({
-    contribution_id,
-    field,
-    attribution: FINAL_CONTRIBUTION_ROLE,
-    confidence_basis_points: 8900,
-    deterministic_fallback_applied: false,
-  }));
-  const finalClaimBrief = {
-    current_node_id: 'scope',
-    next_action_node_id: 'notice',
-    supporting_fact_ids: ['fact_context', 'fact_scope'],
-    upstream_contribution_ids: [...FINAL_UPSTREAM_CONTRIBUTION_IDS],
-    audit_check_ids: [...FINAL_AUDIT_CHECK_IDS],
-    source_ref_ids: ['source_context', 'source_scope'],
-    input_contribution_ids: [...FINAL_UPSTREAM_CONTRIBUTION_IDS],
-    lineage_authority: 'hybrid_guarded_model_audit',
-    contribution_scope: 'independent_final_claim_brief_audit',
-    field_contributions: finalFieldContributions,
-    confidence_basis_points: 8900,
-    attribution: FINAL_CONTRIBUTION_ROLE,
-    deterministic_fallback_applied: false,
-  };
-  const process = {
-    contract: 'process-graph',
-    current_node: 'scope',
-    current_overlay: { current_node_id: 'scope', next_action_node_id: 'notice' },
-    nodes: [
-      { node_id: 'scope', title: 'Scope', fact_ids: ['fact_scope', 'fact_context'], agent_decision_contributions: [processDecision] },
-      { node_id: 'notice', title: 'Notice', fact_ids: [] },
-    ],
-    agent_contribution: {
-      artifact: processMapping,
-      source_integrity_artifact: sourceIntegrity,
-    },
-  };
-  const checklist = {
-    contract: 'evidence-model',
-    items: [
-      {
-        item_id: 'lease',
-        fact_id: 'fact_scope',
-        status: 'provided_sufficient',
-        artifact_ids: ['lease'],
-        agent_contribution: evidenceFieldContributions,
-      },
-      {
-        item_id: 'context_note',
-        fact_id: 'fact_context',
-        status: 'provided_sufficient',
-        artifact_ids: ['lease'],
-        agent_contribution: contextEvidenceFieldContributions,
-      },
-    ],
-    agent_contribution: { artifact: evidenceChecklist },
-  };
-  const orchestratorPlan = { focus_fact_ids: ['fact_scope'], priority_task_codes: ['source_integrity', 'process_decisions', 'evidence_gaps', 'final_brief'] };
-  const orchestrationId = cacheMode === 'cold' ? 'orch_cold_contract' : 'orch_warm_contract';
-  const coldAudit = orchestrationAudit(coldRun);
-  const coldByAgent = new Map((coldAudit?.agents || []).map(item => [item.agent_id, item]));
-  const callIdFor = agentId => `${cacheMode}_call_${agentId}`;
-  const canonicalCallId = callIdFor('canonical_facts');
-  const orchestratorCallId = callIdFor('orchestrator_plan');
-  const specialistArtifacts = {
-    orchestrator_plan: orchestratorPlan,
-    document_source_integrity: sourceIntegrity,
-    process_decision_mapping: processMapping,
-    evidence_checklist: evidenceChecklist,
-    final_claim_brief_audit: finalClaimBrief,
-  };
-  const acceptedIdsByAgent = {
-    canonical_facts: ['accepted_canonical_facts_1', 'accepted_canonical_facts_2'],
-    orchestrator_plan: ['accepted_orchestrator_plan_1', 'accepted_orchestrator_plan_2'],
-    document_source_integrity: ['artifact:lease:integrity'],
-    process_decision_mapping: [processDecision.contribution_id],
-    evidence_checklist: evidenceChecklist.items.flatMap(item => item.field_contributions.map(unit => unit.contribution_id)),
-    final_claim_brief_audit: finalFieldContributions.map(item => item.contribution_id),
-  };
-  const outputArtifactByAgent = {
-    canonical_facts: facts,
-    orchestrator_plan: orchestratorPlan,
-    document_source_integrity: sourceIntegrity,
-    process_decision_mapping: processMapping,
-    evidence_checklist: evidenceChecklist,
-    final_claim_brief_audit: finalClaimBrief,
-  };
-  const agents = REQUIRED_NEMOTRON_AGENT_IDS.map(agentId => {
-    const acceptedIds = acceptedIdsByAgent[agentId];
-    return {
-      agent_id: agentId,
-      role: REQUIRED_NEMOTRON_AGENT_ROLES[agentId],
-      actor_type: 'nemotron_agent',
-      acceptance_scope: 'pre_review_model_output',
-      model: REQUESTED_NEMOTRON_MODEL,
-      provider: 'openrouter',
-      requested_model: REQUESTED_NEMOTRON_MODEL,
-      call_count: cacheMode === 'cold' ? 1 : 0,
-      parent_call_id: agentId === 'canonical_facts' ? null : agentId === 'orchestrator_plan' ? canonicalCallId : orchestratorCallId,
-      delegation_id: agentId === 'canonical_facts' ? null : `${cacheMode}_delegation_${agentId}`,
-      call_id: callIdFor(agentId),
-      origin_call_id: cacheMode === 'cold' ? callIdFor(agentId) : coldByAgent.get(agentId)?.call_id,
-      cache_hit: cacheMode === 'warm',
-      outcome: cacheMode === 'warm' ? 'cache_hit' : 'succeeded',
-      response_id: cacheMode === 'cold' ? `response_${agentId}` : coldByAgent.get(agentId)?.response_id,
-      response_model: 'nvidia/nemotron-3-ultra-550b-a55b-20260604',
-      upstream_provider: 'DeepInfra',
-      usage_source: cacheMode === 'warm' ? 'cache' : 'response',
-      finish_reason: 'stop',
-      accepted_ids: acceptedIds,
-      accepted_count: acceptedIds.length,
-      rejected_count: 0,
-      source_reference_projection_fact_ids: agentId === 'canonical_facts' ? [] : undefined,
-      source_reference_projection_count: agentId === 'canonical_facts' ? 0 : undefined,
-      deterministic_fallback_applied: false,
-      input_artifact_hash: dtoHash({ agent_id: agentId, direction: 'input' }),
-      output_artifact_hash: dtoHash(outputArtifactByAgent[agentId]),
-    };
-  });
-  const byAgent = new Map(agents.map(item => [item.agent_id, item]));
-  const finalDtos = { deterministic_process_gate: process, deterministic_evidence_gate: checklist, whole_playbook_gate: finalClaimBrief };
-  const gates = REQUIRED_DETERMINISTIC_GATE_IDS.map(gateId => {
-    const contract = ACCEPTED_ARTIFACT_CONTRACT[gateId];
-    return {
-      agent_id: gateId,
-      role: REQUIRED_DETERMINISTIC_GATE_ROLES[gateId],
-      actor_type: 'deterministic_gate',
-      receipt_type: 'accepted_artifact',
-      acceptance_scope: 'pre_review_model_output',
-      model: null,
-      outcome: 'passed',
-      source_agent_id: contract.source_agent_id,
-      source_call_id: byAgent.get(contract.source_agent_id).call_id,
-      delegation_id: byAgent.get(contract.source_agent_id).delegation_id,
-      accepted_ids: byAgent.get(contract.source_agent_id).accepted_ids,
-      accepted_count: byAgent.get(contract.source_agent_id).accepted_count,
-      input_artifact_hash: gateId === 'deterministic_process_gate'
-        ? dtoHash({ source_integrity: sourceIntegrity, process_mapping: processMapping })
-        : gateId === 'deterministic_evidence_gate'
-          ? dtoHash(evidenceChecklist)
-          : dtoHash({ final_brief: finalClaimBrief, verification: { valid: true } }),
-      output_artifact: contract.output_artifact,
-      output_artifact_hash: dtoHash(finalDtos[gateId]),
-    };
-  });
-  const audit = {
-    schema_version: EXPECTED_RUNTIME.orchestration_schema,
-    implementation: EXPECTED_RUNTIME.implementation,
-    framework: EXPECTED_FRAMEWORK,
-    orchestration_id: orchestrationId,
-    model: REQUESTED_NEMOTRON_MODEL,
-    authority_mode: EXPECTED_RUNTIME.authority_mode,
-    model_assisted: true,
-    deterministic_safety_authority: true,
-    external_tracing: false,
-    prompt_storage: false,
-    raw_output_storage: false,
-    execution_topology: structuredClone(EXPECTED_EXECUTION_TOPOLOGY),
-    agents,
-    deterministic_gates: gates,
-    all_required_agents_contributed: true,
-    guarded_fallback_count: 0,
-    specialist_artifacts: specialistArtifacts,
-    final_claim_brief: finalClaimBrief,
-  };
-  const events = [
-    ...agents.map(item => ({
-      stage: item.agent_id === 'canonical_facts' ? 'understand' : 'agent_orchestration',
-      receipt_type: 'agent_completed',
-      agent_id: item.agent_id,
-      actor_type: item.actor_type,
-      acceptance_scope: item.acceptance_scope,
-      status: 'completed',
-      call_id: item.call_id,
-      parent_call_id: item.parent_call_id,
-      delegation_id: item.delegation_id,
-      response_id: item.response_id,
-      response_model: item.response_model,
-      accepted_ids: item.accepted_ids,
-      accepted_count: item.accepted_count,
-      rejected_count: item.rejected_count,
-      source_reference_projection_fact_ids: item.source_reference_projection_fact_ids,
-      source_reference_projection_count: item.source_reference_projection_count,
-      deterministic_fallback_applied: item.deterministic_fallback_applied,
-      output_artifact_hash: item.agent_id === 'canonical_facts' ? undefined : item.output_artifact_hash,
-    })),
-    ...gates.map(item => ({ stage: 'agent_orchestration', status: 'completed', ...item })),
-  ];
-  return {
-    run_id: `${cacheMode}_run`,
-    status: 'complete',
-    agent_orchestration: audit,
-    result: {
-      facts,
-      process,
-      checklist,
-      next_action: {
-        process_node_id: 'notice',
-        agent_brief_contribution: finalClaimBrief,
-      },
-      agent_orchestration: audit,
-      audit: { agent_orchestration: audit },
-    },
-    events,
-  };
-}
-
-function mockLedgerForRun(run, cacheMode, coldLedger = null) {
-  const audit = orchestrationAudit(run);
-  const coldByAgent = new Map((coldLedger?.items || []).map(item => [item.agent_id, item]));
-  const items = audit.agents.map(agent => ({
-      call_id: agent.call_id,
-      provider: 'openrouter',
-      provider_endpoint: 'https://openrouter.ai/api/v1/chat/completions',
-      upstream_provider: 'DeepInfra',
-      model: REQUESTED_NEMOTRON_MODEL,
-      implementation: agent.agent_id === 'canonical_facts' ? 'model_backed_openrouter_canonicalizer' : EXPECTED_RUNTIME.implementation,
-      orchestration_id: audit.orchestration_id,
-      agent_id: agent.agent_id,
-      agent_role: agent.role,
-      parent_call_id: agent.parent_call_id,
-      delegation_id: agent.delegation_id,
-      call_count: cacheMode === 'cold' ? 1 : 0,
-      prompt_tokens: cacheMode === 'cold' ? 100 : undefined,
-      completion_tokens: cacheMode === 'cold' ? 20 : undefined,
-      total_tokens: cacheMode === 'cold' ? 120 : undefined,
-      estimated_cost_usd: cacheMode === 'cold' ? 0.01 : 0,
-      actual_cost_usd: cacheMode === 'cold' ? 0.008 : undefined,
-      cache_key: `cache_${agent.agent_id}`,
-      purpose: `mock ${agent.agent_id}`,
-      outcome: agent.outcome,
-      accepted_fact_count: agent.agent_id === 'canonical_facts' ? agent.accepted_count : undefined,
-      rejected_fact_count: agent.agent_id === 'canonical_facts' ? agent.rejected_count : undefined,
-      source_reference_projection_fact_ids: agent.agent_id === 'canonical_facts' ? agent.source_reference_projection_fact_ids : undefined,
-      source_reference_projection_count: agent.agent_id === 'canonical_facts' ? agent.source_reference_projection_count : undefined,
-      accepted_item_count: agent.agent_id === 'canonical_facts' ? undefined : agent.accepted_count,
-      rejected_item_count: agent.agent_id === 'canonical_facts' ? undefined : agent.rejected_count,
-      deterministic_fallback_applied: false,
-      response_id: cacheMode === 'cold' ? `response_${agent.agent_id}` : coldByAgent.get(agent.agent_id)?.response_id,
-      origin_call_id: cacheMode === 'warm' ? coldByAgent.get(agent.agent_id)?.call_id : undefined,
-      origin_usage: cacheMode === 'warm' ? {
-        prompt_tokens: coldByAgent.get(agent.agent_id)?.prompt_tokens,
-        completion_tokens: coldByAgent.get(agent.agent_id)?.completion_tokens,
-        total_tokens: coldByAgent.get(agent.agent_id)?.total_tokens,
-        actual_cost_usd: coldByAgent.get(agent.agent_id)?.actual_cost_usd,
-        usage_source: coldByAgent.get(agent.agent_id)?.usage_source,
-      } : undefined,
-      origin_finish_reason: cacheMode === 'warm' ? coldByAgent.get(agent.agent_id)?.finish_reason : undefined,
-      response_model: 'nvidia/nemotron-3-ultra-550b-a55b-20260604',
-      usage_source: cacheMode === 'cold' ? 'response' : 'cache',
-      finish_reason: 'stop',
-      created_at: '2026-08-11T00:00:00Z',
-      updated_at: '2026-08-11T00:00:01Z',
-    })).map(item => Object.fromEntries(Object.entries(item).filter(([, value]) => value !== undefined)));
-  return {
-    scope: 'global_budget_ledger',
-    summary: ledgerSummary(items),
-    items,
-  };
-}
-
-async function assertRunReadSessionIsolation() {
-  const guardSource = await fs.readFile(new URL('../casepath/assets/live-v18-insertion-guard.js', import.meta.url), 'utf8');
-  class FakeNode {}
-  class FakeElement extends FakeNode {}
-  FakeNode.prototype.insertBefore = function insertBefore(node) { return node; };
-  FakeElement.prototype.insertAdjacentHTML = function insertAdjacentHTML() {};
-  class FakeResponse {
-    constructor(body) { this.body = body; }
-    clone() { return new FakeResponse(structuredClone(this.body)); }
-    async json() { return structuredClone(this.body); }
-  }
-  const calls = [];
-  const pending = [];
-  const nativeFetch = (input, init = {}) => {
-    const request = typeof input === 'string' || input instanceof URL ? null : input;
-    const headers = new Headers(init.headers !== undefined ? init.headers : request?.headers);
-    const session = (headers.get('X-CasePath-Session') || '').trim();
-    const method = String(init.method || request?.method || 'GET').toUpperCase();
-    calls.push({ session, method });
-    return new Promise(resolve => pending.push({ session, method, resolve: () => resolve(new FakeResponse({ session, method })) }));
-  };
-  const sandbox = {
-    window: { fetch: nativeFetch },
-    Node: FakeNode,
-    Element: FakeElement,
-    URL,
-    Headers,
-    Request,
-    location: { href: 'https://casepath.test/' },
-    document: { readyState: 'loading', addEventListener() {} },
-    structuredClone,
-  };
-  vm.runInNewContext(guardSource, sandbox, { filename: 'live-v18-insertion-guard.js' });
-  const runUrl = 'https://api.casepath.test/api/runs/run_shared';
-  const requestHeaders = session => ({ 'X-CasePath-Session': session });
-  const settlePending = entries => entries.forEach(entry => entry.resolve());
-
-  const differentSessionStart = calls.length;
-  const sessionA = sandbox.window.fetch(runUrl, { headers: requestHeaders('session-A') });
-  const sessionB = sandbox.window.fetch(runUrl, { headers: requestHeaders('session-B') });
-  if (calls.length - differentSessionStart !== 2) throw new Error('Different sessions shared one in-flight run read');
-  settlePending(pending.splice(0));
-  const [bodyA, bodyB] = await Promise.all((await Promise.all([sessionA, sessionB])).map(response => response.json()));
-  if (bodyA.session !== 'session-A' || bodyB.session !== 'session-B') throw new Error('A run-read response crossed the session boundary');
-
-  const sameSessionStart = calls.length;
-  const sameA1 = sandbox.window.fetch(runUrl, { headers: requestHeaders('session-A') });
-  const sameA2 = sandbox.window.fetch(runUrl, { headers: requestHeaders('session-A') });
-  if (calls.length - sameSessionStart !== 1) throw new Error('Same-session concurrent run reads were not coalesced');
-  settlePending(pending.splice(0));
-  const sameBodies = await Promise.all((await Promise.all([sameA1, sameA2])).map(response => response.json()));
-  if (!sameBodies.every(body => body.session === 'session-A')) throw new Error('Same-session cloned run reads diverged');
-
-  const requestWithA = new Request(runUrl, { headers: requestHeaders('session-A') });
-  const overrideStart = calls.length;
-  const overriddenToB = sandbox.window.fetch(requestWithA, { headers: requestHeaders('session-B') });
-  const sameB = sandbox.window.fetch(runUrl, { headers: requestHeaders('session-B') });
-  const separateA = sandbox.window.fetch(runUrl, { headers: requestHeaders('session-A') });
-  if (calls.length - overrideStart !== 2) throw new Error('Request/init header precedence did not preserve session isolation');
-  settlePending(pending.splice(0));
-  const [overrideBody, sameBBody, separateABody] = await Promise.all((await Promise.all([overriddenToB, sameB, separateA])).map(response => response.json()));
-  if (overrideBody.session !== 'session-B' || sameBBody.session !== 'session-B' || separateABody.session !== 'session-A') throw new Error('Effective session headers were not bound to the run-read key');
-
-  const mutationStart = calls.length;
-  const mutationA = sandbox.window.fetch(`${runUrl}/review`, { method: 'POST', headers: requestHeaders('session-A') });
-  const readB = sandbox.window.fetch(runUrl, { headers: requestHeaders('session-B') });
-  const readA = sandbox.window.fetch(runUrl, { headers: requestHeaders('session-A') });
-  if (calls.length - mutationStart !== 2) throw new Error('A review mutation blocked a different session or failed to block its own session');
-  const mutationEntry = pending.find(entry => entry.method === 'POST');
-  const readBEntry = pending.find(entry => entry.method === 'GET' && entry.session === 'session-B');
-  mutationEntry.resolve();
-  readBEntry.resolve();
-  pending.splice(0, pending.length);
-  await new Promise(resolve => setImmediate(resolve));
-  if (calls.length - mutationStart !== 3) throw new Error('Same-session run read did not resume with a fresh request after review mutation');
-  settlePending(pending.splice(0));
-  const [mutationBody, readBBody, readABody] = await Promise.all((await Promise.all([mutationA, readB, readA])).map(response => response.json()));
-  if (mutationBody.session !== 'session-A' || readBBody.session !== 'session-B' || readABody.session !== 'session-A') throw new Error('Review mutation/read coordination crossed a session boundary');
-}
-
-async function assertMemoryReuseRendererDeterminism() {
-  const [v16Source, v17Source, v18Source, browserGateSource] = await Promise.all([
-    fs.readFile(new URL('../casepath/assets/live-v16.js', import.meta.url), 'utf8'),
-    fs.readFile(new URL('../casepath/assets/live-v17.js', import.meta.url), 'utf8'),
-    fs.readFile(new URL('../casepath/assets/live-v18.js', import.meta.url), 'utf8'),
-    fs.readFile(new URL(import.meta.url), 'utf8'),
-  ]);
-  const start = v16Source.indexOf('  function renderMemoryReuseProof(');
-  const end = v16Source.indexOf('\n  function factsForNode', start);
-  if (start < 0 || end < 0) throw new Error('Could not extract the authoritative synchronous memory-reuse renderer');
-  const rendererSource = v16Source.slice(start, end).trim();
-  if (/\b(?:async|await)\b|\bcurrentRun\s*\(/.test(rendererSource)) throw new Error('The authoritative memory-reuse renderer regained an asynchronous run read');
-  for (const [label, source] of [['live-v17', v17Source], ['live-v18', v18Source]]) {
-    if (/\b(?:async\s+)?function\s+enhanceReuse\s*\(|\benhanceReuse\s*\(/.test(source)) throw new Error(`${label} regained a post-render memory-reuse enhancer`);
-  }
-  if (!browserGateSource.includes("const reuseThreadSelector = '#laterResult .v18-reuse-proof .v17-reuse-thread';")
-    || !browserGateSource.includes('laterReuseThreadCount === 1 && reuseProofCount === 1 && proofReuseThreadCount === 1')) throw new Error('The browser gate no longer requires one proof, one thread, and one nested thread');
-
-  const sandbox = {
-    esc: (value = '') => String(value).replace(/[&<>'"]/g, character => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
-    }[character])),
-  };
-  vm.runInNewContext(`globalThis.renderMemoryReuseProof = ${rendererSource};`, sandbox, { filename: 'live-v16-render-memory-reuse-proof.js' });
-  const receipt = {
-    contract: 'casepath.memory-application-receipt/1.0.0',
-    application_hash: 'a'.repeat(64),
-    authority: 'unverified_demo',
-    scope: 'case_specific_guidance_only',
-    shared_rule_applied: false,
-    model_acceptance_reused: false,
-  };
-  const precedent = {
-    claim_id: 'DEF-027-E0-DEMO',
-    memory_id: 'mem-unverified-demo',
-    review_status: 'unverified_demo_memory',
-  };
-  const result = { playbook: { version: 'mould-playbook-v3' } };
-  const proof = { causal_delta: { nonzero: true } };
-  const cases = [
-    {
-      label: 'applied',
-      input: { result, proof, memoryUsed: true, retrievedOnly: false, memoryState: { receipt, retrievedPrecedent: precedent } },
-    },
-    {
-      label: 'retrieved-only',
-      input: { result, proof: {}, memoryUsed: false, retrievedOnly: true, memoryState: { receipt: null, retrievedPrecedent: precedent } },
-    },
-    {
-      label: 'no-memory',
-      input: { result, proof: {}, memoryUsed: false, retrievedOnly: false, memoryState: { receipt, retrievedPrecedent: precedent } },
-    },
-  ];
-  const expected = new Map(cases.map(({ label, input }) => [label, sandbox.renderMemoryReuseProof(input)]));
-  for (let pass = 0; pass < 8; pass += 1) {
-    for (const { label, input } of cases) {
-      if (sandbox.renderMemoryReuseProof(input) !== expected.get(label)) throw new Error(`Synchronous memory-reuse markup changed across repeated ${label} renders`);
-    }
-  }
-
-  const exactTopology = markup => (markup.match(/class="v18-reuse-proof"/g) || []).length === 1
-    && (markup.match(/class="v17-reuse-thread(?: retrieved-only)?"/g) || []).length === 1
-    && (markup.match(/<section\b/g) || []).length === 2
-    && (markup.match(/<\/section>/g) || []).length === 2
-    && /^<section class="v18-reuse-proof">[\s\S]*<section class="v17-reuse-thread(?: retrieved-only)?"[\s\S]*<\/section><\/section>$/.test(markup);
-  const applied = expected.get('applied');
-  const appliedAttributes = [
-    'data-memory-retrieved="true"',
-    'data-memory-used="true"',
-    'data-application-receipt="true"',
-    `data-memory-contract="${receipt.contract}"`,
-    `data-application-hash="${receipt.application_hash}"`,
-    `data-memory-authority="${receipt.authority}"`,
-    `data-memory-scope="${receipt.scope}"`,
-  ];
-  if (!exactTopology(applied)
-    || appliedAttributes.some(attribute => !applied.includes(attribute))
-    || !applied.includes('Unverified demo memory returned with a valid application receipt')
-    || !applied.includes('Unverified demo review memory returned')
-    || !applied.includes('nonzero causal delta computed')
-    || applied.includes('Qualified expert-reviewed')) throw new Error('Applied memory markup lost its exact topology, receipt attributes, or unverified authority copy');
-
-  const retrievedOnly = expected.get('retrieved-only');
-  if (!exactTopology(retrievedOnly)
-    || !retrievedOnly.includes('class="v17-reuse-thread retrieved-only"')
-    || !retrievedOnly.includes('data-memory-used="false"')
-    || !retrievedOnly.includes('data-application-receipt="false"')
-    || !retrievedOnly.includes('Unverified demo memory retrieved and ranked only')
-    || !retrievedOnly.includes('Unverified demo review memory returned')
-    || !retrievedOnly.includes('Application receipt</small><strong>None returned')
-    || retrievedOnly.includes('data-memory-contract=')
-    || retrievedOnly.includes('valid application receipt')) throw new Error('Retrieved-only memory markup blurred retrieval, application, receipt, or authority state');
-
-  if (expected.get('no-memory') !== ''
-    || sandbox.renderMemoryReuseProof({ result, proof, memoryUsed: true, retrievedOnly: false, memoryState: { receipt: null, retrievedPrecedent: precedent } }) !== ''
-    || sandbox.renderMemoryReuseProof({ result, proof, memoryUsed: true, retrievedOnly: false, memoryState: { receipt, retrievedPrecedent: null } }) !== '') throw new Error('No-memory or incomplete applied-memory inputs emitted reuse proof markup');
-  const hostile = sandbox.renderMemoryReuseProof({
-    result: { playbook: { version: '<img src=x onerror=alert(1)>' } },
-    proof,
-    memoryUsed: true,
-    retrievedOnly: false,
-    memoryState: { receipt: { ...receipt, application_hash: '<script>bad()</script>' }, retrievedPrecedent: { ...precedent, claim_id: '<script>claim()</script>', memory_id: '" onfocus="bad()' } },
-  });
-  if (hostile.includes('<script>') || hostile.includes('<img ') || hostile.includes(' onfocus="bad()') || !hostile.includes('&lt;script&gt;claim()&lt;/script&gt;') || !hostile.includes('&quot; onfocus=&quot;bad()')) throw new Error('Synchronous memory-reuse renderer did not escape hostile server-returned values');
-}
-
-async function runContractSelfTest() {
-  const allowedOutputFixtures = [
-    path.join(QA_DIRECTORY, QA_OUTPUT_BASENAME),
-    path.join(QA_TEMP_ROOT, 'casepath-qa-preflight.A1b2C3', PREFLIGHT_OUTPUT_BASENAME),
-  ];
-  for (const candidate of allowedOutputFixtures) {
-    if (resolveSafeQaOutputPath(candidate) !== path.resolve(candidate)) {
-      throw new Error(`Safe QA output fixture did not resolve exactly: ${candidate}`);
-    }
-  }
-  const rejectedOutputFixtures = [
-    path.parse(REPOSITORY_ROOT).root,
-    REPOSITORY_ROOT,
-    QA_DIRECTORY,
-    path.join(QA_DIRECTORY, 'arbitrary-output'),
-    path.join(QA_TEMP_ROOT, 'arbitrary-writable-output'),
-    path.join(QA_TEMP_ROOT, 'casepath-qa-preflight.A1b2C3', 'arbitrary-output'),
-  ];
-  for (const candidate of rejectedOutputFixtures) {
-    try {
-      resolveSafeQaOutputPath(candidate);
-    } catch (_) {
-      continue;
-    }
-    throw new Error(`Unsafe QA output fixture was accepted: ${candidate}`);
-  }
-  const realPreflightParent = await fs.mkdtemp(path.join(QA_TEMP_ROOT, 'casepath-qa-preflight.'));
-  try {
-    const realPreflightOutput = path.join(realPreflightParent, PREFLIGHT_OUTPUT_BASENAME);
-    if (assertSafeQaOutputParent(realPreflightOutput) !== realPreflightOutput) {
-      throw new Error('Real preflight QA output fixture did not resolve exactly');
-    }
-  } finally {
-    await fs.rmdir(realPreflightParent);
-  }
-  const symlinkedPreflightParent = path.join(
-    QA_TEMP_ROOT,
-    `casepath-qa-preflight.${randomUUID().replaceAll('-', '').slice(0, 12)}`,
-  );
-  await fs.symlink(QA_DIRECTORY, symlinkedPreflightParent, 'dir');
-  let symlinkedParentRejected = false;
-  try {
-    try {
-      assertSafeQaOutputParent(path.join(symlinkedPreflightParent, PREFLIGHT_OUTPUT_BASENAME));
-    } catch (_) {
-      symlinkedParentRejected = true;
-    }
-  } finally {
-    await fs.unlink(symlinkedPreflightParent);
-  }
-  if (!symlinkedParentRejected) throw new Error('Symlinked QA output parent fixture was accepted');
-  await assertRunReadSessionIsolation();
-  await assertMemoryReuseRendererDeterminism();
-  if (dtoHash({ z: 'Ã¼', a: [{ k: 0.91 }, true, null] }) !== '3d745913ce5b8f5555065b544f018be38bd43e9e5bfe1eca86c1d4f25dda68dd') throw new Error('Compact sorted DTO hashing diverges from the Python release contract');
-  const splitLeaseSource = 'Tenant\nAlex Morgan, Feldbergstrasse 114, 4057 Basel';
-  if (!exactNormalizedGroundingQuote(splitLeaseSource, 'Tenant Alex Morgan, Feldbergstrasse 114, 4057 Basel')) throw new Error('Normalized grounding did not preserve the backend whitespace contract');
-  if (!exactNormalizedGroundingQuote('ï¼¡lex\nMorgan', 'Alex Morgan')) throw new Error('Normalized grounding did not preserve the backend NFKC contract');
-  if (!exactNormalizedGroundingQuote('Alex\u001cMorgan', 'Alex Morgan')) throw new Error('Normalized grounding omitted Python-only Unicode whitespace');
-  if (exactNormalizedGroundingQuote('Alex\ufeffMorgan', 'Alex Morgan')) throw new Error('Normalized grounding accepted non-Python whitespace');
-  if (exactNormalizedGroundingQuote(splitLeaseSource, 'Tenant Morgan, Feldbergstrasse 114, 4057 Basel')) throw new Error('Normalized grounding accepted a non-source quote');
-  const reorderedGroundingFacts = [
-    { fact_id: 'fact_dispute', source_refs: [{ locator_kind: 'text_quote', artifact_id: 'art_management_reply' }] },
-    { fact_id: 'fact_tenancy', source_refs: [{ locator_kind: 'text_quote', artifact_id: 'art_lease' }] },
-  ];
-  const reorderedGroundingProcess = { nodes: [{ node_id: 'scope', fact_ids: ['fact_tenancy'] }, { node_id: 'dispute', fact_ids: ['fact_dispute'] }] };
-  if (selectProcessTextQuoteFact(reorderedGroundingFacts, reorderedGroundingProcess, 'fact_tenancy')?.fact_id !== 'fact_tenancy') throw new Error('Text grounding selected a provider-order-dependent fact');
-  const providerCapRelease = {
-    agentic_runtime: {
-      parallel_groups: structuredClone(EXPECTED_EXECUTION_TOPOLOGY.parallel_groups),
-      safety: { provider_max_in_flight: 1 },
-    },
-    truth: { production_runtime_acceptance: { required_provider_max_in_flight: 1 } },
-  };
-  const providerCapHealth = { agentic_runtime: { safety: { provider_max_in_flight: 1 } } };
-  const providerCapReadiness = { agentic_runtime: { safety: { provider_max_in_flight: 1 } } };
-  if (providerSingleFlightContractViolations(providerCapRelease, providerCapHealth, providerCapReadiness).length) throw new Error('Positive provider single-flight surface fixture failed');
-  const missingReleaseProviderCap = structuredClone(providerCapRelease);
-  delete missingReleaseProviderCap.agentic_runtime.safety.provider_max_in_flight;
-  if (!providerSingleFlightContractViolations(missingReleaseProviderCap, providerCapHealth, providerCapReadiness).some(item => item.includes('release safety'))) throw new Error('Missing release provider-cap fixture was not rejected');
-  const wrongAcceptanceProviderCap = structuredClone(providerCapRelease);
-  wrongAcceptanceProviderCap.truth.production_runtime_acceptance.required_provider_max_in_flight = 2;
-  if (!providerSingleFlightContractViolations(wrongAcceptanceProviderCap, providerCapHealth, providerCapReadiness).some(item => item.includes('runtime acceptance'))) throw new Error('Wrong acceptance provider-cap fixture was not rejected');
-  const wrongHealthProviderCap = structuredClone(providerCapHealth);
-  wrongHealthProviderCap.agentic_runtime.safety.provider_max_in_flight = 0;
-  if (!providerSingleFlightContractViolations(providerCapRelease, wrongHealthProviderCap, providerCapReadiness).some(item => item.includes('health'))) throw new Error('Wrong health provider-cap fixture was not rejected');
-  const missingReadinessProviderCap = structuredClone(providerCapReadiness);
-  delete missingReadinessProviderCap.agentic_runtime.safety.provider_max_in_flight;
-  if (!providerSingleFlightContractViolations(providerCapRelease, providerCapHealth, missingReadinessProviderCap).some(item => item.includes('readiness'))) throw new Error('Missing readiness provider-cap fixture was not rejected');
-  const changedLogicalFanOut = structuredClone(providerCapRelease);
-  changedLogicalFanOut.agentic_runtime.parallel_groups = [];
-  if (!providerSingleFlightContractViolations(changedLogicalFanOut, providerCapHealth, providerCapReadiness).some(item => item.includes('logical fan-out'))) throw new Error('Changed logical fan-out fixture was not rejected');
-  const pythonFloatHashes = [
-    [{ value: 1.0 }, '3a7d647740ec6f86b72e0bf3948ab456551e07e9605e3a2785de1c66842ebb48'],
-    [{ value: -0.0 }, 'c848a4efa987f46ba3bfd46242333afcb1c68c3240e0f35ae9d269b1c980648b'],
-    [{ value: 1e-7 }, 'aece37dfda4992947222ea73b79996bba4aa181345a1fbb7f8c2b56b3fbd6a44'],
-  ];
-  if (pythonFloatHashes.some(([value, pythonHash]) => dtoHash(value) === pythonHash)) throw new Error('Float parity fixture unexpectedly became hash-compatible; update the shared numeric contract explicitly');
-  if (nonIntegerNumberPaths({ negative_zero: -0.0, exponent: 1e-7 }).length !== 2) throw new Error('Non-integer accepted-DTO guard missed -0.0 or exponent notation');
-  const acceptedProcessUnit = {
-    contribution_id: 'fact:fact_scope:decision_value',
-    fact_id: 'fact_scope',
-    model_owned_fields: ['decision_value'],
-    confidence_basis_points: 9100,
-    attribution: PROCESS_CONTRIBUTION_ROLE,
-    deterministic_fallback_applied: false,
-  };
-  const fallbackProcessUnit = {
-    ...acceptedProcessUnit,
-    confidence_basis_points: 10000,
-    attribution: DETERMINISTIC_CONTRIBUTION_ROLE,
-    deterministic_fallback_applied: true,
-  };
-  const acceptedContribution = contributionExpectation(acceptedProcessUnit, PROCESS_CONTRIBUTION_ROLE);
-  const fallbackContribution = contributionExpectation(fallbackProcessUnit, PROCESS_CONTRIBUTION_ROLE);
-  const mixedFieldContribution = contributionExpectation([
-    {
-      contribution_id: 'item:lease:status',
-      field: 'status',
-      confidence_basis_points: 9000,
-      attribution: EVIDENCE_CONTRIBUTION_ROLE,
-      deterministic_fallback_applied: false,
-    },
-    {
-      contribution_id: 'item:lease:artifacts',
-      field: 'artifact_ids',
-      confidence_basis_points: 10000,
-      attribution: DETERMINISTIC_CONTRIBUTION_ROLE,
-      deterministic_fallback_applied: true,
-    },
-  ], EVIDENCE_CONTRIBUTION_ROLE);
-  const postReviewContribution = contributionExpectation(
-    acceptedProcessUnit,
-    PROCESS_CONTRIBUTION_ROLE,
-    { acceptance_scope: 'post_review_unverified_transform', model_acceptance_reused: false },
-  );
-  const postMemoryContribution = contributionExpectation(
-    acceptedProcessUnit,
-    PROCESS_CONTRIBUTION_ROLE,
-    { contract: 'casepath.memory-application-receipt/1.0.0', authority: 'unverified_demo', scope: 'case_specific_guidance_only', model_acceptance_reused: false, applied: true },
-  );
-  if (stableJson(acceptedContribution) !== stableJson({ authority: 'nemotron-accepted', accepted_count: '1', fallback_count: '0' })
-    || stableJson(fallbackContribution) !== stableJson({ authority: 'deterministic-fallback', accepted_count: '0', fallback_count: '1' })
-    || stableJson(mixedFieldContribution) !== stableJson({ authority: 'mixed', accepted_count: '1', fallback_count: '1' })
-    || postReviewContribution !== null
-    || postMemoryContribution !== null
-    || contributionExpectation({ ...acceptedProcessUnit, deterministic_fallback_applied: undefined }, PROCESS_CONTRIBUTION_ROLE) !== null
-    || contributionExpectation({ ...acceptedProcessUnit, attribution: 'foreign_agent' }, PROCESS_CONTRIBUTION_ROLE) !== null
-    || contributionExpectation({ ...fallbackProcessUnit, attribution: 'foreign_agent' }, PROCESS_CONTRIBUTION_ROLE) !== null) throw new Error('Visible contribution attribution does not fail closed on authority or fallback state');
-
-  const relationProcess = {
-    selected_path: ['a'],
-    current_overlay: { next_action_node_id: 'b' },
-    nodes: [
-      { node_id: 'a', evidence_requirement_ids: ['one', 'shared'] },
-      { node_id: 'b', evidence_requirement_ids: ['shared'] },
-    ],
-  };
-  const relationChecklist = { items: [
-    { item_id: 'one', node_ids: ['a'], node_id: 'a', current_path: true },
-    { item_id: 'shared', node_ids: ['a', 'b'], node_id: 'a', current_path: true },
-  ] };
-  if (evidenceRelationContractViolations(relationProcess, relationChecklist).length) throw new Error('Positive reciprocal evidence fixture failed');
-  for (const [field, value] of [['node_ids', ['b', 'a']], ['node_id', 'b'], ['current_path', false]]) {
-    const tampered = structuredClone(relationChecklist);
-    tampered.items[1][field] = value;
-    if (!evidenceRelationContractViolations(relationProcess, tampered).some(issue => issue.includes(field))) throw new Error(`Tampered reciprocal evidence ${field} fixture was not rejected`);
-  }
-
-  const officialPassage = 'Versioned official passage.';
-  const legalProcess = { nodes: [{ node_id: 'scope' }] };
-  const legalFixture = {
-    contract: 'casepath.legal-context/2.0.0',
-    registry_version: 'ch-tenancy-official-snapshot/2026-08-12',
-    lookup_method: 'versioned_official_source_registry_lookup',
-    questions: [{ question_id: 'scope_question', text: 'What official rule applies?', source_ids: ['official'], interpretation_ids: ['principle'], process_node_ids: ['scope'], consequence: 'Keep authority and proposal distinct.' }],
-    sources: [{
-      source_id: 'official', title: 'Official source', url: 'https://example.test/official', source_type: 'official_statute', jurisdiction: 'CH', version_date: '2026-08-12', location: 'Article 1', passage_language: 'de', passage_text: officialPassage, passage_sha256: sha256(officialPassage), passage_summary: 'A bounded summary.', operational_interpretation: 'Deterministic reference proposal.', review_status: 'qualified_review_pending', role: 'Shapes scope.', approved: false,
-      retrieval: { method: 'versioned_official_source_registry_lookup', retrieved_at: '2026-08-12', registry_version: 'ch-tenancy-official-snapshot/2026-08-12', snapshot_url: 'https://example.test/snapshot.pdf', snapshot_sha256: sha256('official snapshot'), snapshot_scope: 'official_pdf_bytes' },
-    }],
-    handling_principles: [{ source_id: 'principle', title: 'Deterministic handling proposal', source_type: 'operational_interpretation', role: 'Preserve uncertainty.', validation_status: 'candidate_not_expert_approved', producer: 'deterministic_application' }],
-    node_links: { scope: ['official', 'principle'] },
-    review_status: 'Operational translation not yet approved by a qualified reviewer',
-  };
-  if (legalContextContractViolations(legalFixture, legalProcess).length) throw new Error(`Positive legal-context fixture failed: ${JSON.stringify(legalContextContractViolations(legalFixture, legalProcess))}`);
-  const tamperedPassage = structuredClone(legalFixture);
-  tamperedPassage.sources[0].passage_text = 'Changed passage';
-  if (!legalContextContractViolations(tamperedPassage, legalProcess).some(issue => issue.includes('passage hash'))) throw new Error('Tampered legal passage fixture was not rejected');
-  const unknownLegalJoin = structuredClone(legalFixture);
-  unknownLegalJoin.questions[0].source_ids = ['unknown'];
-  if (!legalContextContractViolations(unknownLegalJoin, legalProcess).some(issue => issue.includes('source join'))) throw new Error('Unknown legal source-ID join fixture was not rejected');
-  const modelOwnedPrinciple = structuredClone(legalFixture);
-  modelOwnedPrinciple.handling_principles[0].producer = 'model_agent';
-  if (!legalContextContractViolations(modelOwnedPrinciple, legalProcess).some(issue => issue.includes('producer'))) throw new Error('Model-owned legal principle fixture was not rejected');
-  const falseSnapshotScope = structuredClone(legalFixture);
-  falseSnapshotScope.sources[0].retrieval.snapshot_scope = 'dynamic_html_page';
-  if (!legalContextContractViolations(falseSnapshotScope, legalProcess).some(issue => issue.includes('retrieval receipt'))) throw new Error('False official snapshot-scope fixture was not rejected');
-
-  const imageArtifact = { artifact_id: 'image', media_type: 'image/png', sha256: sha256('image bytes') };
-  const visualFixture = { artifact_id: 'image', locator_kind: 'visual_observation', region: [0.1, 0.2, 0.3, 0.4], observation: 'Curated visible reference.', producer: 'deterministic_reference_annotation', authority: 'generated_demo_reference_only', annotation_contract: 'casepath.visual-reference-annotation/1.0.0', annotation_version: 'generated-demo-reference/2026-08-12', image_sha256: imageArtifact.sha256 };
-  if (visualReferenceContractViolations(visualFixture, imageArtifact).length) throw new Error('Positive visual-reference fixture failed');
-  const tamperedVisualHash = { ...visualFixture, image_sha256: sha256('other bytes') };
-  if (!visualReferenceContractViolations(tamperedVisualHash, imageArtifact).some(issue => issue.includes('public image bytes'))) throw new Error('Tampered visual image hash fixture was not rejected');
-  const tamperedVisualProducer = { ...visualFixture, producer: 'machine_vision_agent' };
-  if (!visualReferenceContractViolations(tamperedVisualProducer, imageArtifact).some(issue => issue.includes('authority contract'))) throw new Error('Tampered visual producer fixture was not rejected');
-
-  const rankingContext = { category: 'category', subcategory: 'subcategory', current_process_node_id: 'causation', next_action_node_id: 'evidence_gap', selected_path: ['causation', 'evidence_gap'], unresolved_fact_ids: ['cause'], current_evidence_need_ids: ['assessment'] };
-  const rankedPrecedents = [1, 2, 3].map(rank => ({ claim_id: `HIST-${rank}`, title: `Pattern ${rank}`, review_status: 'generated_reference', why_useful: 'Generated reference pattern.', provenance: 'generated_reference_not_qualified_review', final_process: ['causation'], evidence: ['assessment'], outcome: 'Reference only', ranking: { contract: 'casepath.precedent-ranking/1.0.0', corpus_version: 'generated-reference-patterns/2026-08-12', rank, score_basis_points: 40 - rank, factors: [{ factor: 'unresolved_fact', value: 'cause', weight: 40 - rank }], context_hash: dtoHash(rankingContext) } }));
-  const rankingResult = { precedents: rankedPrecedents, precedent_ranking: { contract: 'casepath.precedent-ranking/1.0.0', corpus_version: 'generated-reference-patterns/2026-08-12', context: rankingContext, context_hash: dtoHash(rankingContext), candidate_scores: rankedPrecedents.map(item => ({ claim_id: item.claim_id, score_basis_points: item.ranking.score_basis_points, factors: item.ranking.factors })), selected_claim_ids: rankedPrecedents.map(item => item.claim_id), result_hash: dtoHash(rankedPrecedents) } };
-  if (precedentRankingContractViolations(rankingResult).length) throw new Error(`Positive precedent-ranking fixture failed: ${JSON.stringify(precedentRankingContractViolations(rankingResult))}`);
-  const tamperedRank = structuredClone(rankingResult);
-  tamperedRank.precedents[0].ranking.rank = 2;
-  if (!precedentRankingContractViolations(tamperedRank).some(issue => issue.includes('per-item ranking'))) throw new Error('Tampered precedent rank fixture was not rejected');
-  const tamperedContextHash = structuredClone(rankingResult);
-  tamperedContextHash.precedent_ranking.context_hash = sha256('wrong context');
-  if (!precedentRankingContractViolations(tamperedContextHash).some(issue => issue.includes('context'))) throw new Error('Tampered precedent context-hash fixture was not rejected');
-  const tamperedResultHash = structuredClone(rankingResult);
-  tamperedResultHash.precedent_ranking.result_hash = sha256('wrong result');
-  if (!precedentRankingContractViolations(tamperedResultHash).some(issue => issue.includes('result hash'))) throw new Error('Tampered precedent result-hash fixture was not rejected');
-
-  const baselineProcess = {
-    contract: 'process-graph', selected_path: ['causation', 'evidence_gap'], current_overlay: { current_node_id: 'causation', next_action_node_id: 'evidence_gap' }, shared_rule_applied: false, memory_used: false,
-    nodes: [
-      { node_id: 'dispute', evidence_requirement_ids: ['management_position'] },
-      { node_id: 'causation', evidence_requirement_ids: ['building_envelope', 'use_evidence'] },
-      { node_id: 'mixed_cause', evidence_requirement_ids: ['building_envelope', 'use_evidence'] },
-      { node_id: 'tenant_use', evidence_requirement_ids: ['use_evidence'] },
-      { node_id: 'evidence_gap', evidence_requirement_ids: ['building_envelope'] },
-    ],
-    edges: [{ source: 'evidence_gap', target: 'causation', condition: 'assessment complete', state: 'loop' }],
-  };
-  const baselineChecklist = {
-    contract: 'evidence-model', shared_rule_applied: false, memory_used: false, required: ['before'], summary: { phase: 'before' },
-    items: [
-      { item_id: 'building_envelope', status: 'missing', node_ids: ['causation', 'mixed_cause', 'evidence_gap'], node_id: 'causation', current_path: true },
-      { item_id: 'management_position', status: 'provided_sufficient', node_ids: ['dispute'], node_id: 'dispute', current_path: false },
-      { item_id: 'use_evidence', status: 'conditional', node_ids: ['causation', 'mixed_cause', 'tenant_use'], node_id: 'causation', current_path: true },
-    ],
-  };
-  const laterProcessFixture = structuredClone(baselineProcess);
-  laterProcessFixture.nodes.find(node => node.node_id === 'causation').evidence_requirement_ids = ['building_envelope'];
-  laterProcessFixture.nodes.find(node => node.node_id === 'mixed_cause').evidence_requirement_ids = ['building_envelope'];
-  laterProcessFixture.nodes.find(node => node.node_id === 'tenant_use').evidence_requirement_ids = [];
-  const ventilationNode = { node_id: 'ventilation_dispute', evidence_requirement_ids: ['management_position', 'use_evidence'] };
-  laterProcessFixture.nodes.push(ventilationNode);
-  const memoryEdgeOne = { source: 'evidence_gap', target: 'ventilation_dispute', condition: 'plausible use factor', state: 'possible' };
-  const memoryEdgeTwo = { source: 'ventilation_dispute', target: 'causation', condition: 'allegation assessed', state: 'loop' };
-  laterProcessFixture.edges.push(memoryEdgeOne, memoryEdgeTwo);
-  laterProcessFixture.memory_used = true;
-  laterProcessFixture.case_specific_guidance_applied = true;
-  const laterChecklistFixture = structuredClone(baselineChecklist);
-  laterChecklistFixture.items = [
-    { item_id: 'building_envelope', status: 'conditional', node_ids: ['causation', 'mixed_cause', 'evidence_gap'], node_id: 'causation', current_path: true },
-    { item_id: 'management_position', status: 'provided_sufficient', node_ids: ['dispute', 'ventilation_dispute'], node_id: 'dispute', current_path: false },
-    { item_id: 'use_evidence', status: 'conditional', node_ids: ['ventilation_dispute'], node_id: 'ventilation_dispute', current_path: false },
-  ];
-  laterChecklistFixture.required = ['after'];
-  laterChecklistFixture.summary = { phase: 'after' };
-  laterChecklistFixture.memory_used = true;
-  laterChecklistFixture.case_specific_guidance_applied = true;
-  const decisionFacts = [
-    ['scope', 'in_scope'], ['dispute', 'dispute_present'], ['urgency', 'not_urgent'], ['notification', 'notified'], ['recurrence', 'recurrence_supported'], ['causation', 'cause_unresolved'],
-  ].map(([decision_key, decision_value]) => ({ fact_id: `fact_${decision_key}`, state: 'known', controls_process: true, decision_key, decision_value, semantic_role: null, source_refs: [] }));
-  const memoryFacts = [...decisionFacts, { fact_id: 'later_fact_ventilation_allegation', state: 'known', controls_process: false, decision_key: null, decision_value: null, semantic_role: 'management_ventilation_allegation', source_refs: [{ artifact_id: 'art_later_management_reply' }] }];
-  const observableHash = sha256('observable package');
-  const canonicalHash = dtoHash(memoryFacts);
-  const verificationHash = sha256('verification');
-  const baselineResultFixture = { category: 'Rental defect - mould and moisture', subcategory: 'Recurring moisture with disputed causation', facts: structuredClone(memoryFacts), process: baselineProcess, checklist: baselineChecklist, precedents: [], memory_application: null, memory_used: false, reviewed_memory_used: false, reviewed_memory_retrieved: false, knowledge: { reviewed_memory_used: false, reviewed_memory_retrieved: false }, verification: { whole_playbook_hash: sha256('baseline verification') }, audit: { observable_input_hash: observableHash, canonical_state_hash: canonicalHash }, playbook: { version: 'mould-playbook-v3' }, shared_rule_applied: false };
-  const laterResultFixture = { category: 'Rental defect - mould and moisture', subcategory: 'Recurring moisture with disputed causation', facts: structuredClone(memoryFacts), process: laterProcessFixture, checklist: laterChecklistFixture, next_action: { agent_brief_contribution: null }, precedents: [{ claim_id: 'DEF-027-E0-DEMO', review_status: 'unverified_demo_memory', memory_id: 'memory-1' }], memory_used: true, reviewed_memory_used: true, reviewed_memory_retrieved: true, knowledge: { reviewed_memory_used: true, reviewed_memory_retrieved: true }, verification: { whole_playbook_hash: verificationHash }, audit: { observable_input_hash: observableHash, canonical_state_hash: canonicalHash }, playbook: { version: 'mould-playbook-v3' }, shared_rule_applied: false };
-  const requiredDecisionsFixture = Object.fromEntries(decisionFacts.map(fact => [fact.decision_key, fact.decision_value]));
-  const semanticSignatureFixture = dtoHash({ category: 'Rental defect - mould and moisture', subcategory: 'Recurring moisture with disputed causation', required_decisions: requiredDecisionsFixture, required_fact_roles: { management_ventilation_allegation: { state: 'known', min_grounded_sources: 1 } } });
-  const eligibilityManifest = { rule_id: 'same_grounded_mould_signature_v2', contract: 'casepath.semantic-memory-eligibility/1.0.0', claim_id: 'DEMO-MOULD-002', semantic_signature_hash: semanticSignatureFixture, decisions: requiredDecisionsFixture, facts_hash: dtoHash(semanticFactSignature(laterResultFixture)), checks: { source_claim_excluded: true, category_matched: true, subcategory_matched: true, required_decisions_matched: true, ventilation_allegation_grounded: true, semantic_signature_bound: true, guidance_enabled: true } };
-  const receiptFixture = {
-    receipt_type: 'memory_application_receipt', contract: 'casepath.memory-application-receipt/1.0.0', authority: 'unverified_demo', scope: 'case_specific_guidance_only',
-    source_memory: { memory_id: 'memory-1', claim_id: 'DEF-027-E0-DEMO', review_id: 'review-1', content_hash: sha256('memory content'), review_status: 'unverified_demo_memory' },
-    target: { run_id: 'later-run', claim_id: 'DEMO-MOULD-002' }, observable_input_hash: observableHash, canonical_state_hash: canonicalHash,
-    eligibility: { ...eligibilityManifest, eligible: true, manifest_hash: dtoHash(eligibilityManifest) },
-    allowed_operation_ids: ['add_ventilation_dispute_node', 'add_evidence_gap_to_ventilation_edge', 'add_ventilation_to_causation_edge', 'condition_building_envelope', 'reassign_use_evidence_to_ventilation'],
-    applied_operation_ids: ['add_ventilation_dispute_node', 'add_evidence_gap_to_ventilation_edge', 'add_ventilation_to_causation_edge', 'condition_building_envelope', 'reassign_use_evidence_to_ventilation'],
-    process_operations: [
-      { operation_id: 'add_ventilation_dispute_node', operation: 'add_node', node_id: 'ventilation_dispute', evidence_requirement_ids: ['management_position', 'use_evidence'], after_hash: dtoHash(ventilationNode) },
-      { operation_id: 'add_evidence_gap_to_ventilation_edge', operation: 'add_edge', source: 'evidence_gap', target: 'ventilation_dispute', after_hash: dtoHash(memoryEdgeOne) },
-      { operation_id: 'add_ventilation_to_causation_edge', operation: 'add_edge', source: 'ventilation_dispute', target: 'causation', after_hash: dtoHash(memoryEdgeTwo) },
-    ],
-    evidence_operations: [
-      { operation_id: 'condition_building_envelope', operation: 'replace_item', item_id: 'building_envelope', before_hash: dtoHash(baselineChecklist.items[0]), after_hash: dtoHash(laterChecklistFixture.items[0]) },
-      { operation_id: 'reassign_use_evidence_to_ventilation', operation: 'reassign_item', item_id: 'use_evidence', removed_from_node_ids: ['causation', 'mixed_cause', 'tenant_use'], added_to_node_id: 'ventilation_dispute', before_hash: dtoHash(baselineChecklist.items[2]), after_hash: dtoHash(laterChecklistFixture.items[2]) },
-    ],
-    before: { process_dto_hash: dtoHash(baselineProcess), checklist_dto_hash: dtoHash(baselineChecklist), process_semantic_hash: dtoHash(semanticProcessDto(baselineProcess)), checklist_semantic_hash: dtoHash(semanticChecklistDto(baselineChecklist)) },
-    after: { process_dto_hash: dtoHash(laterProcessFixture), checklist_dto_hash: dtoHash(laterChecklistFixture), process_semantic_hash: dtoHash(semanticProcessDto(laterProcessFixture)), checklist_semantic_hash: dtoHash(semanticChecklistDto(laterChecklistFixture)) },
-    verification_hash: verificationHash, shared_playbook_version: 'mould-playbook-v3', shared_rule_applied: false, model_acceptance_reused: false, applied: true,
-  };
-  receiptFixture.application_hash = dtoHash(receiptFixture);
-  laterResultFixture.memory_application = receiptFixture;
-  const memoryBoundaryFixture = {
-    contract: 'casepath.memory-application-boundary/1.0.0',
-    target: structuredClone(receiptFixture.target),
-    source_memory: { memory_id: receiptFixture.source_memory.memory_id, content_hash: receiptFixture.source_memory.content_hash },
-    before: structuredClone(receiptFixture.before),
-  };
-  memoryBoundaryFixture.boundary_hash = dtoHash(memoryBoundaryFixture);
-  const memoryEventFixture = {
-    event_id: 'event-memory-application', ordinal: 1, created_at: '2026-08-12T00:00:00Z',
-    stage: 'memory_application', label: 'Bounded case-specific memory guidance applied', status: 'completed',
-    ...structuredClone(receiptFixture),
-  };
-  const causalDeltaFixture = computedCausalDelta(baselineResultFixture, laterResultFixture);
-  const memoryCheckNames = ['Same observable input', 'Same canonical state', 'Exact current memory receipt', 'Pure memory replay matches learned DTOs', 'Receipt before semantic hashes match baseline DTOs', 'Receipt after hashes match learned DTOs', 'Nonzero causal DTO delta', 'Only allowed causal operations changed', 'Deterministic target and protected checks passed', 'Shared v3 remains unchanged'];
-  const proofFixture = {
-    ready: true, computed: true, baseline_run_id: 'baseline-run', later_run_id: 'later-run',
-    before: { run_id: 'baseline-run', observable_input_hash: observableHash, canonical_state_hash: canonicalHash, process_semantic_hash: receiptFixture.before.process_semantic_hash, checklist_semantic_hash: receiptFixture.before.checklist_semantic_hash, playbook_version: 'mould-playbook-v3', verification_hash: baselineResultFixture.verification.whole_playbook_hash },
-    after: { run_id: 'later-run', observable_input_hash: observableHash, canonical_state_hash: canonicalHash, ...receiptFixture.after, playbook_version: 'mould-playbook-v3', verification_hash: verificationHash },
-    changes: { precedent_claim_ids_added: ['DEF-027-E0-DEMO'] }, reviewed_memory_proof: { used: true, memory_ids: ['memory-1'], present_in_baseline: false, present_in_later_run: true }, causal_delta: causalDeltaFixture,
-    memory_application_proof: { receipt_present: true, receipt_valid: true, source_memory_current: true, before_hashes_match: true, after_hashes_match: true, allowed_delta_exact: true, replay_exact: true, application_hash: receiptFixture.application_hash },
-    deterministic_checks: memoryCheckNames.map(name => ({ name, status: 'passed', detail: 'Computed from both DTOs.' })),
-    candidate: { candidate_id: 'candidate_disputed_ventilation_v4', status: 'quarantined', qualified_support_count: 0, target_tests: { status: 'passed' }, protected_regression: { status: 'passed' }, approval: { status: 'pending', qualified_reviewer: false } },
-    shared_rule: { applied: false, version_before: 'mould-playbook-v3', version_after: 'mould-playbook-v3', shared_knowledge_changed: false, candidate_status: 'quarantined' },
-  };
-  const frozenMemoryIdentity = { memory_id: 'memory-1', review_id: 'review-1', content_hash: receiptFixture.source_memory.content_hash, candidate_id: 'candidate_disputed_ventilation_v4', updated_at: '2026-08-12T00:00:00+00:00' };
-  const counterfactualFreezeFixture = { contract: 'casepath.counterfactual-learning-freeze/1.0.0', memory: frozenMemoryIdentity, identity_hash: dtoHash(frozenMemoryIdentity), application_suppressed: true };
-  proofFixture.counterfactual_learning_freeze = counterfactualFreezeFixture;
-  const baselineRunFixture = { run_id: 'baseline-run', claim_id: 'DEMO-MOULD-002', created_at: '2026-08-12T00:01:00+00:00', completed_at: Date.parse('2026-08-12T00:02:00+00:00') / 1000, counterfactual_learning_freeze: counterfactualFreezeFixture, result: baselineResultFixture };
-  const laterRunFixture = { run_id: 'later-run', claim_id: 'DEMO-MOULD-002', created_at: '2026-08-12T00:03:00+00:00', result: laterResultFixture, memory_application_boundary: memoryBoundaryFixture, events: [memoryEventFixture] };
-  const positiveMemoryIssues = memoryApplicationContractViolations(baselineRunFixture, laterRunFixture, proofFixture);
-  if (positiveMemoryIssues.length) throw new Error(`Positive memory-application fixture failed: ${JSON.stringify(positiveMemoryIssues)}`);
-  const tamperedCounterfactualFreezeRun = structuredClone(baselineRunFixture);
-  tamperedCounterfactualFreezeRun.counterfactual_learning_freeze.memory.content_hash = sha256('forged frozen memory');
-  tamperedCounterfactualFreezeRun.counterfactual_learning_freeze.identity_hash = dtoHash(tamperedCounterfactualFreezeRun.counterfactual_learning_freeze.memory);
-  if (!memoryApplicationContractViolations(tamperedCounterfactualFreezeRun, laterRunFixture, proofFixture).some(issue => issue.includes('frozen governed memory identity'))) throw new Error('Tampered counterfactual learning-freeze fixture was not rejected');
-  const preFreezeBaselineRun = structuredClone(baselineRunFixture);
-  preFreezeBaselineRun.created_at = '2026-08-11T23:59:00+00:00';
-  if (!memoryApplicationContractViolations(preFreezeBaselineRun, laterRunFixture, proofFixture).some(issue => issue.includes('ordered after the learning freeze'))) throw new Error('Pre-learning baseline fixture was not rejected');
-  const tamperedMemoryBoundaryHashRun = structuredClone(laterRunFixture);
-  tamperedMemoryBoundaryHashRun.memory_application_boundary.boundary_hash = sha256('tampered retained memory boundary');
-  if (!memoryApplicationContractViolations(baselineRunFixture, tamperedMemoryBoundaryHashRun, proofFixture).some(issue => issue.includes('boundary hash'))) throw new Error('Tampered retained memory-boundary hash fixture was not rejected');
-  const tamperedMemoryBoundarySourceRun = structuredClone(laterRunFixture);
-  tamperedMemoryBoundarySourceRun.memory_application_boundary.source_memory.content_hash = sha256('wrong retained source memory');
-  tamperedMemoryBoundarySourceRun.memory_application_boundary.boundary_hash = dtoHash(Object.fromEntries(Object.entries(tamperedMemoryBoundarySourceRun.memory_application_boundary).filter(([key]) => key !== 'boundary_hash')));
-  if (!memoryApplicationContractViolations(baselineRunFixture, tamperedMemoryBoundarySourceRun, proofFixture).some(issue => issue.includes('identity or source join'))) throw new Error('Tampered retained memory-boundary source fixture was not rejected');
-  const tamperedMemoryBoundaryBeforeRun = structuredClone(laterRunFixture);
-  tamperedMemoryBoundaryBeforeRun.memory_application_boundary.before.process_dto_hash = sha256('wrong independently retained before DTO');
-  tamperedMemoryBoundaryBeforeRun.memory_application_boundary.boundary_hash = dtoHash(Object.fromEntries(Object.entries(tamperedMemoryBoundaryBeforeRun.memory_application_boundary).filter(([key]) => key !== 'boundary_hash')));
-  if (!memoryApplicationContractViolations(baselineRunFixture, tamperedMemoryBoundaryBeforeRun, proofFixture).some(issue => issue.includes('before hashes do not equal'))) throw new Error('Retained memory-boundary to receipt.before join fixture was not rejected');
-  const missingMemoryEventRun = structuredClone(laterRunFixture);
-  missingMemoryEventRun.events = [];
-  if (!memoryApplicationContractViolations(baselineRunFixture, missingMemoryEventRun, proofFixture).some(issue => issue.includes('exactly one completed persisted'))) throw new Error('Missing persisted memory-application event fixture was not rejected');
-  const duplicateMemoryEventRun = structuredClone(laterRunFixture);
-  duplicateMemoryEventRun.events.push(structuredClone(memoryEventFixture));
-  if (!memoryApplicationContractViolations(baselineRunFixture, duplicateMemoryEventRun, proofFixture).some(issue => issue.includes('exactly one completed persisted'))) throw new Error('Duplicate persisted memory-application event fixture was not rejected');
-  const forgedResultAndBoundaryRun = structuredClone(laterRunFixture);
-  forgedResultAndBoundaryRun.result.memory_application.before.process_dto_hash = sha256('forged process DTO boundary');
-  forgedResultAndBoundaryRun.result.memory_application.before.checklist_dto_hash = sha256('forged checklist DTO boundary');
-  forgedResultAndBoundaryRun.result.memory_application.application_hash = dtoHash(Object.fromEntries(Object.entries(forgedResultAndBoundaryRun.result.memory_application).filter(([key]) => key !== 'application_hash')));
-  forgedResultAndBoundaryRun.memory_application_boundary.before = structuredClone(forgedResultAndBoundaryRun.result.memory_application.before);
-  forgedResultAndBoundaryRun.memory_application_boundary.boundary_hash = dtoHash(Object.fromEntries(Object.entries(forgedResultAndBoundaryRun.memory_application_boundary).filter(([key]) => key !== 'boundary_hash')));
-  const forgedResultAndBoundaryProof = structuredClone(proofFixture);
-  forgedResultAndBoundaryProof.memory_application_proof.application_hash = forgedResultAndBoundaryRun.result.memory_application.application_hash;
-  if (!memoryApplicationContractViolations(baselineRunFixture, forgedResultAndBoundaryRun, forgedResultAndBoundaryProof).some(issue => issue.includes('persisted memory-application event does not project'))) throw new Error('Joint result/boundary forgery without the persisted memory event was not rejected');
-  const dormantMemoryResult = structuredClone(baselineResultFixture);
-  dormantMemoryResult.precedents = [{ claim_id: 'DEF-027-E0-DEMO', review_status: 'unverified_demo_memory', memory_id: 'memory-1' }];
-  dormantMemoryResult.reviewed_memory_retrieved = true;
-  dormantMemoryResult.knowledge.reviewed_memory_retrieved = true;
-  const dormantMemoryIssues = memoryRetrievalContractViolations(dormantMemoryResult);
-  if (dormantMemoryIssues.length) throw new Error(`Dormant retrieved-memory fixture failed: ${JSON.stringify(dormantMemoryIssues)}`);
-  const falselyUsedDormantMemory = structuredClone(dormantMemoryResult);
-  falselyUsedDormantMemory.reviewed_memory_used = true;
-  if (!memoryRetrievalContractViolations(falselyUsedDormantMemory).some(issue => issue.includes('memory-use flags'))) throw new Error('Receipt-free memory-use flag was not rejected');
-  const falselyAppliedDormantMemory = structuredClone(dormantMemoryResult);
-  falselyAppliedDormantMemory.process.case_specific_guidance_applied = true;
-  if (!memoryRetrievalContractViolations(falselyAppliedDormantMemory).some(issue => issue.includes('falsely claims'))) throw new Error('Receipt-free guidance-application flag was not rejected');
-  const hiddenDormantRetrieval = structuredClone(dormantMemoryResult);
-  hiddenDormantRetrieval.reviewed_memory_retrieved = false;
-  if (!memoryRetrievalContractViolations(hiddenDormantRetrieval).some(issue => issue.includes('retrieval flags'))) throw new Error('Ranked memory with a false retrieval flag was not rejected');
-  const falselyTransformedDormantMemory = structuredClone(dormantMemoryResult);
-  falselyTransformedDormantMemory.checklist.memory_used = true;
-  if (!memoryRetrievalContractViolations(falselyTransformedDormantMemory).some(issue => issue.includes('process/checklist'))) throw new Error('Receipt-free checklist memory-use flag was not rejected');
-  const tamperedApplicationRun = structuredClone(laterRunFixture);
-  tamperedApplicationRun.result.memory_application.application_hash = sha256('tampered application');
-  if (!memoryApplicationContractViolations(baselineRunFixture, tamperedApplicationRun, proofFixture).some(issue => issue.includes('application hash'))) throw new Error('Tampered memory application-hash fixture was not rejected');
-  const tamperedBoundaryProof = structuredClone(proofFixture);
-  tamperedBoundaryProof.after.process_semantic_hash = sha256('tampered boundary');
-  if (!memoryApplicationContractViolations(baselineRunFixture, laterRunFixture, tamperedBoundaryProof).some(issue => issue.includes('after hashes'))) throw new Error('Tampered memory boundary-hash fixture was not rejected');
-  const tamperedDeltaProof = structuredClone(proofFixture);
-  tamperedDeltaProof.causal_delta.evidence.changed_item_ids = ['building_envelope'];
-  if (!memoryApplicationContractViolations(baselineRunFixture, laterRunFixture, tamperedDeltaProof).some(issue => issue.includes('causal delta'))) throw new Error('Tampered memory causal-delta fixture was not rejected');
-  const tamperedCheckProof = structuredClone(proofFixture);
-  tamperedCheckProof.deterministic_checks[0].status = 'failed';
-  if (!memoryApplicationContractViolations(baselineRunFixture, laterRunFixture, tamperedCheckProof).some(issue => issue.includes('checks'))) throw new Error('Failed memory deterministic-check fixture was not rejected');
-  const tamperedSemanticEligibilityRun = structuredClone(laterRunFixture);
-  tamperedSemanticEligibilityRun.result.memory_application.eligibility.semantic_signature_hash = sha256('wrong semantic signature');
-  tamperedSemanticEligibilityRun.result.memory_application.eligibility.manifest_hash = dtoHash(Object.fromEntries(['rule_id', 'contract', 'claim_id', 'semantic_signature_hash', 'decisions', 'facts_hash', 'checks'].map(key => [key, tamperedSemanticEligibilityRun.result.memory_application.eligibility[key]])));
-  tamperedSemanticEligibilityRun.result.memory_application.application_hash = dtoHash(Object.fromEntries(Object.entries(tamperedSemanticEligibilityRun.result.memory_application).filter(([key]) => key !== 'application_hash')));
-  if (!memoryApplicationContractViolations(baselineRunFixture, tamperedSemanticEligibilityRun, proofFixture).some(issue => issue.includes('semantic eligibility'))) throw new Error('Tampered semantic eligibility fixture was not rejected');
-  const tamperedReplayProof = structuredClone(proofFixture);
-  tamperedReplayProof.memory_application_proof.replay_exact = false;
-  if (!memoryApplicationContractViolations(baselineRunFixture, laterRunFixture, tamperedReplayProof).some(issue => issue.includes('pure replay'))) throw new Error('Failed pure-memory replay fixture was not rejected');
-  const coldRun = mockOrchestration('cold');
-  const coldLedger = mockLedgerForRun(coldRun, 'cold');
-  const warmRun = mockOrchestration('warm', coldRun);
-  const warmOnlyLedger = mockLedgerForRun(warmRun, 'warm', coldLedger);
-  const combinedItems = [...coldLedger.items, ...warmOnlyLedger.items];
-  const combinedLedger = { ...coldLedger, items: combinedItems, summary: ledgerSummary(combinedItems) };
-  const referenceRun = {
-    run_id: 'deterministic_reference_run',
-    claim_id: 'DEMO-MOULD-002',
-    status: 'complete',
-    profile: DETERMINISTIC_REFERENCE_PROFILE,
-    model_mode: DETERMINISTIC_REFERENCE_MODE,
-    model: null,
-    knowledge_mode: 'current',
-    agent_orchestration: structuredClone(DETERMINISTIC_REFERENCE_ORCHESTRATION),
-    events: [{ stage: 'orchestrator', actor_type: 'deterministic_tool', status: 'completed', implementation: 'deterministic_application_tool', model: null }],
-    result: {
-      next_action: { agent_brief_contribution: null },
-      agent_orchestration: structuredClone(DETERMINISTIC_REFERENCE_ORCHESTRATION),
-      audit: {
-        profile: DETERMINISTIC_REFERENCE_PROFILE,
-        authority_mode: DETERMINISTIC_REFERENCE_MODE,
-        canonicalization: structuredClone(DETERMINISTIC_REFERENCE_CANONICALIZATION),
-        agent_orchestration: structuredClone(DETERMINISTIC_REFERENCE_ORCHESTRATION),
-      },
-    },
-  };
-  if (deterministicReferenceRunViolations(referenceRun, 'current').length) throw new Error('Positive deterministic-reference held-out fixture failed');
-  const modelActiveReference = structuredClone(referenceRun);
-  modelActiveReference.events.push({ stage: 'agent_orchestration', actor_type: 'nemotron_agent', model: REQUESTED_NEMOTRON_MODEL, call_id: 'forbidden_later_call', call_count: 1 });
-  if (!deterministicReferenceRunViolations(modelActiveReference, 'current').some(item => item.includes('model execution activity'))) throw new Error('Held-out model-activity fixture was not rejected');
-  const executedReference = structuredClone(referenceRun);
-  const executedDag = { ...structuredClone(DETERMINISTIC_REFERENCE_ORCHESTRATION), executed: true, agents: [] };
-  executedReference.agent_orchestration = structuredClone(executedDag);
-  executedReference.result.agent_orchestration = structuredClone(executedDag);
-  executedReference.result.audit.agent_orchestration = structuredClone(executedDag);
-  if (!deterministicReferenceRunViolations(executedReference, 'current').some(item => item.includes('non-executed orchestration'))) throw new Error('Held-out executed-DAG fixture was not rejected');
-  if (finalLedgerSnapshotViolations(combinedLedger, structuredClone(combinedLedger)).length) throw new Error('Positive immutable 12-row final-ledger fixture failed');
-  const thirteenthRowLedger = structuredClone(combinedLedger);
-  thirteenthRowLedger.items.push({ ...structuredClone(thirteenthRowLedger.items.at(-1)), call_id: 'forbidden_thirteenth_row' });
-  thirteenthRowLedger.summary = ledgerSummary(thirteenthRowLedger.items);
-  if (!finalLedgerSnapshotViolations(combinedLedger, thirteenthRowLedger).length) throw new Error('Thirteenth final-ledger row fixture was not rejected');
-  const emptyInitialLedger = { scope: 'global_budget_ledger', items: [], summary: ledgerSummary([]) };
-  if (initialLedgerAdmissionViolations(emptyInitialLedger).length) throw new Error('Exact-empty initial ledger fixture was rejected');
-  if (!initialLedgerAdmissionViolations(coldLedger).some(item => item.includes('not exactly empty'))) throw new Error('Stale initial ledger fixture was not rejected');
-  const openingContextFixture = [{ boundary_text: EXPECTED_PRODUCTION_OPENING_BOUNDARY, actor_type: 'deterministic_tool', nemotron_plan_visible: false }];
-  if (productionOpeningContextViolations(openingContextFixture).length) throw new Error('Positive production opening-context fixture failed');
-  const legacyProductionOpening = structuredClone(openingContextFixture);
-  legacyProductionOpening[0].boundary_text = 'This run returned legacy deterministic reference orchestration; no Nemotron orchestrator is claimed.';
-  if (!productionOpeningContextViolations(legacyProductionOpening).some(item => item.includes('legacy reference'))) throw new Error('Legacy production opening-context fixture was not rejected');
-  const prematureNemotronPlan = structuredClone(openingContextFixture);
-  prematureNemotronPlan[0].nemotron_plan_visible = true;
-  if (!productionOpeningContextViolations(prematureNemotronPlan).some(item => item.includes('before its returned event'))) throw new Error('Premature Nemotron-plan fixture was not rejected');
-  const failures = [
-    ...orchestrationContractViolations(coldRun, 'cold'),
-    ...coldLedgerContractViolations(orchestrationAudit(coldRun), coldLedger),
-    ...orchestrationContractViolations(warmRun, 'warm'),
-    ...warmLineageContractViolations(orchestrationAudit(coldRun), orchestrationAudit(warmRun), combinedLedger).issues,
-  ];
-  if (failures.length) throw new Error(`Positive contract fixture failed: ${JSON.stringify(failures)}`);
-  const expectHybridIssue = (fixture, expectedIssue, label) => {
-    const issues = hybridCausalContractViolations(fixture);
-    if (!issues.some(item => item.includes(expectedIssue))) throw new Error(`${label} fixture was not rejected: ${JSON.stringify(issues)}`);
-    return issues;
-  };
-  const sourceArtifactHashRun = structuredClone(coldRun);
-  orchestrationAudit(sourceArtifactHashRun).specialist_artifacts.document_source_integrity.artifacts[0].integrity_class = 'changed_after_acceptance';
-  const sourceArtifactHashIssues = expectHybridIssue(sourceArtifactHashRun, 'document source specialist artifact hash', 'Changed source-specialist artifact hash');
-  if (!sourceArtifactHashIssues.some(item => item.includes('parallel specialist composite input hash'))) throw new Error(`Changed source-specialist artifact did not invalidate the process-gate composite: ${JSON.stringify(sourceArtifactHashIssues)}`);
-  const processArtifactHashRun = structuredClone(coldRun);
-  orchestrationAudit(processArtifactHashRun).specialist_artifacts.process_decision_mapping.decisions[0].decision_value = 'changed_after_acceptance';
-  const processArtifactHashIssues = expectHybridIssue(processArtifactHashRun, 'process specialist artifact hash', 'Changed process-specialist artifact hash');
-  if (!processArtifactHashIssues.some(item => item.includes('parallel specialist composite input hash'))) throw new Error(`Changed process-specialist artifact did not invalidate the process-gate composite: ${JSON.stringify(processArtifactHashIssues)}`);
-  const processFieldMembershipRun = structuredClone(coldRun);
-  orchestrationAudit(processFieldMembershipRun).specialist_artifacts.process_decision_mapping.decisions[0].model_owned_fields = ['decision_value', 'state'];
-  expectHybridIssue(processFieldMembershipRun, 'process decision field contributions violate membership or attribution', 'Foreign process model-owned field');
-  const processFieldAttributionRun = structuredClone(coldRun);
-  const processAttributionUnit = orchestrationAudit(processFieldAttributionRun).specialist_artifacts.process_decision_mapping.decisions[0];
-  processAttributionUnit.deterministic_fallback_applied = true;
-  processAttributionUnit.attribution = PROCESS_CONTRIBUTION_ROLE;
-  expectHybridIssue(processFieldAttributionRun, 'process decision field contributions violate membership or attribution', 'Forged process fallback attribution');
-  const processInheritedFieldRun = structuredClone(coldRun);
-  const processInheritedAudit = orchestrationAudit(processInheritedFieldRun);
-  processInheritedAudit.specialist_artifacts.process_decision_mapping.decisions[0].state = 'forged_inherited_state';
-  processInheritedAudit.agents.find(item => item.agent_id === 'process_decision_mapping').output_artifact_hash = dtoHash(processInheritedAudit.specialist_artifacts.process_decision_mapping);
-  processInheritedAudit.deterministic_gates.find(item => item.agent_id === 'deterministic_process_gate').input_artifact_hash = dtoHash({
-    source_integrity: processInheritedAudit.specialist_artifacts.document_source_integrity,
-    process_mapping: processInheritedAudit.specialist_artifacts.process_decision_mapping,
-  });
-  expectHybridIssue(processInheritedFieldRun, 'inherited canonical fields are not exact', 'Forged inherited process field with recomputed hashes');
-  const evidenceFieldMembershipRun = structuredClone(coldRun);
-  orchestrationAudit(evidenceFieldMembershipRun).specialist_artifacts.evidence_checklist.items[0].field_contributions[0].field = 'artifact_ids';
-  expectHybridIssue(evidenceFieldMembershipRun, 'does not contain the exact two field contributions', 'Foreign evidence field membership');
-  const evidenceFieldAttributionRun = structuredClone(coldRun);
-  const evidenceAttributionUnit = orchestrationAudit(evidenceFieldAttributionRun).specialist_artifacts.evidence_checklist.items[0].field_contributions[0];
-  evidenceAttributionUnit.deterministic_fallback_applied = true;
-  evidenceAttributionUnit.attribution = EVIDENCE_CONTRIBUTION_ROLE;
-  expectHybridIssue(evidenceFieldAttributionRun, 'does not contain the exact two field contributions', 'Forged evidence fallback attribution');
-  const evidenceSourceRefsRun = structuredClone(coldRun);
-  const evidenceSourceRefsAudit = orchestrationAudit(evidenceSourceRefsRun);
-  evidenceSourceRefsAudit.specialist_artifacts.evidence_checklist.items[0].source_ref_ids = ['source_scope', 'source_scope'];
-  evidenceSourceRefsAudit.agents.find(item => item.agent_id === 'evidence_checklist').output_artifact_hash = dtoHash(evidenceSourceRefsAudit.specialist_artifacts.evidence_checklist);
-  evidenceSourceRefsAudit.deterministic_gates.find(item => item.agent_id === 'deterministic_evidence_gate').input_artifact_hash = dtoHash(evidenceSourceRefsAudit.specialist_artifacts.evidence_checklist);
-  expectHybridIssue(evidenceSourceRefsRun, 'source reference IDs are not unique and sorted', 'Forged evidence source references with recomputed hashes');
-  const finalFieldMembershipRun = structuredClone(coldRun);
-  orchestrationAudit(finalFieldMembershipRun).final_claim_brief.field_contributions[0].contribution_id = 'final:foreign_current_node';
-  expectHybridIssue(finalFieldMembershipRun, 'exact five field contributions', 'Foreign final field membership');
-  const finalCurrentBindingRun = structuredClone(coldRun);
-  orchestrationAudit(finalCurrentBindingRun).final_claim_brief.current_node_id = 'notice';
-  expectHybridIssue(finalCurrentBindingRun, 'final current-node field', 'Final current-node binding');
-  const finalNextBindingRun = structuredClone(coldRun);
-  orchestrationAudit(finalNextBindingRun).final_claim_brief.next_action_node_id = 'scope';
-  expectHybridIssue(finalNextBindingRun, 'final next-action field', 'Final next-action binding');
-  const finalSupportingBindingRun = structuredClone(coldRun);
-  orchestrationAudit(finalSupportingBindingRun).final_claim_brief.supporting_fact_ids = ['fact_scope'];
-  expectHybridIssue(finalSupportingBindingRun, 'final supporting-facts field', 'Final supporting-facts binding');
-  const finalUpstreamBindingRun = structuredClone(coldRun);
-  orchestrationAudit(finalUpstreamBindingRun).final_claim_brief.upstream_contribution_ids = FINAL_UPSTREAM_CONTRIBUTION_IDS.slice(1);
-  expectHybridIssue(finalUpstreamBindingRun, 'final upstream-contribution field', 'Final upstream-contribution binding');
-  const finalAuditBindingRun = structuredClone(coldRun);
-  orchestrationAudit(finalAuditBindingRun).final_claim_brief.audit_check_ids = FINAL_AUDIT_CHECK_IDS.slice(1);
-  expectHybridIssue(finalAuditBindingRun, 'final audit-check field', 'Final audit-check binding');
-  const currentNode = coldRun.result.process.nodes.find(item => item.node_id === coldRun.result.process.current_node);
-  const nonControllingSupportingFacts = coldRun.result.facts.filter(item => item.controls_process === false && currentNode.fact_ids.includes(item.fact_id));
-  if (!nonControllingSupportingFacts.length || !orchestrationAudit(coldRun).final_claim_brief.source_ref_ids.includes('source_context')) throw new Error('Positive final-source fixture does not cover a non-controlling supporting fact');
-  const nonControllingSourceRun = structuredClone(coldRun);
-  orchestrationAudit(nonControllingSourceRun).final_claim_brief.source_ref_ids = ['source_scope'];
-  expectHybridIssue(nonControllingSourceRun, 'controlling and non-controlling supporting facts', 'Non-controlling final source-reference binding');
-  const forgedSummaryValues = {
-    records: 999,
-    network_calls: 0,
-    prompt_tokens: 0,
-    completion_tokens: 0,
-    total_tokens: 0,
-    actual_cost_usd: 0,
-    actual_cost_complete: false,
-    unknown_cost_call_count: 1,
-    outcomes: {},
-  };
-  for (const [field, value] of Object.entries(forgedSummaryValues)) {
-    const forgedSummaryLedger = structuredClone(coldLedger);
-    forgedSummaryLedger.summary[field] = value;
-    if (!sanitizedLedgerViolations(forgedSummaryLedger).some(item => item.includes('summary is inconsistent'))) throw new Error(`Forged ledger-summary ${field} fixture was not rejected`);
-  }
-  const wrongUpstreamRun = structuredClone(coldRun);
-  orchestrationAudit(wrongUpstreamRun).agents[0].upstream_provider = 'Together';
-  if (!orchestrationContractViolations(wrongUpstreamRun, 'cold').some(item => item.includes('provider provenance'))) throw new Error('Non-DeepInfra cold audit fixture was not rejected');
-  const wrongUpstreamLedger = structuredClone(coldLedger);
-  wrongUpstreamLedger.items[0].upstream_provider = 'Together';
-  if (!coldLedgerContractViolations(orchestrationAudit(coldRun), wrongUpstreamLedger).some(item => item.includes('provider'))) throw new Error('Non-DeepInfra cold ledger fixture was not rejected');
-  const wrongWarmLedger = structuredClone(combinedLedger);
-  wrongWarmLedger.items.find(item => item.call_count === 0).upstream_provider = 'Together';
-  if (!warmLineageContractViolations(orchestrationAudit(coldRun), orchestrationAudit(warmRun), wrongWarmLedger).issues.some(item => item.includes('provider'))) throw new Error('Non-DeepInfra warm cache fixture was not rejected');
-  const wrongAgentRoleRun = structuredClone(coldRun);
-  orchestrationAudit(wrongAgentRoleRun).agents.find(item => item.agent_id === 'document_source_integrity').role = 'Unbound Specialist Label';
-  if (!orchestrationContractViolations(wrongAgentRoleRun, 'cold').some(item => item.includes('document_source_integrity: role label is not exact'))) throw new Error('Tampered Nemotron agent-role fixture was not rejected');
-  const wrongGateRoleRun = structuredClone(coldRun);
-  orchestrationAudit(wrongGateRoleRun).deterministic_gates.find(item => item.agent_id === 'deterministic_evidence_gate').role = 'Unbound Gate Label';
-  if (!orchestrationContractViolations(wrongGateRoleRun, 'cold').some(item => item.includes('deterministic_evidence_gate: role label is not exact'))) throw new Error('Tampered deterministic gate-role fixture was not rejected');
-  const aliasResponseRun = structuredClone(coldRun);
-  const aliasResponseLedger = structuredClone(coldLedger);
-  orchestrationAudit(aliasResponseRun).agents.forEach(item => { item.response_model = REQUESTED_NEMOTRON_MODEL; });
-  aliasResponseRun.events.filter(item => item.actor_type === 'nemotron_agent' && item.receipt_type === 'agent_completed').forEach(item => { item.response_model = REQUESTED_NEMOTRON_MODEL; });
-  aliasResponseLedger.items.forEach(item => { item.response_model = REQUESTED_NEMOTRON_MODEL; });
-  if (orchestrationContractViolations(aliasResponseRun, 'cold').length || coldLedgerContractViolations(orchestrationAudit(aliasResponseRun), aliasResponseLedger).length) throw new Error('Exact raw alias response-model fixture was not accepted');
-  const normalizedMismatchLedger = structuredClone(aliasResponseLedger);
-  normalizedMismatchLedger.items[0].response_model = 'nvidia/nemotron-3-ultra-550b-a55b-20260604';
-  if (!coldLedgerContractViolations(orchestrationAudit(aliasResponseRun), normalizedMismatchLedger).some(item => item.includes('response binding'))) throw new Error('Alias-to-dated response-model normalization fixture was not rejected');
-  const foreignResponseRun = structuredClone(coldRun);
-  orchestrationAudit(foreignResponseRun).agents[0].response_model = 'nvidia/nemotron-3-ultra-550b-a55b-foreign';
-  if (!orchestrationContractViolations(foreignResponseRun, 'cold').some(item => item.includes('returned response identity'))) throw new Error('Foreign response-model fixture was not rejected');
-  const reviewedProcess = { contract: 'process-graph', nodes: [{ node_id: 'scope' }, { node_id: 'review_added' }] };
-  const reviewedChecklist = { contract: 'evidence-model', items: [{ item_id: 'lease' }, { item_id: 'review_added' }] };
-  const preAudit = orchestrationAudit(coldRun);
-  const reviewTransform = {
-    acceptance_scope: 'post_review_unverified_transform',
-    authority: 'unverified_demo_user',
-    qualification_status: 'not_verified',
-    input_run_id: coldRun.run_id,
-    input_process_hash: preAudit.deterministic_gates.find(item => item.agent_id === 'deterministic_process_gate').output_artifact_hash,
-    input_checklist_hash: preAudit.deterministic_gates.find(item => item.agent_id === 'deterministic_evidence_gate').output_artifact_hash,
-    output_process_hash: dtoHash(reviewedProcess),
-    output_checklist_hash: dtoHash(reviewedChecklist),
-    model_acceptance_reused: false,
-  };
-  const reviewedResponse = { review_transform: reviewTransform, result: { process: reviewedProcess, checklist: reviewedChecklist } };
-  const persistedReviewedRun = structuredClone(coldRun);
-  persistedReviewedRun.result.process = reviewedProcess;
-  persistedReviewedRun.result.checklist = reviewedChecklist;
-  persistedReviewedRun.review_transform = structuredClone(reviewTransform);
-  const reviewFailures = reviewTransformContractViolations(reviewedResponse, persistedReviewedRun, coldRun);
-  if (reviewFailures.length) throw new Error(`Positive review-transform fixture failed: ${JSON.stringify(reviewFailures)}`);
-  const deterministicPreReview = {
-    run_id: 'deterministic_pre_review',
-    result: {
-      process: { contract: 'process-graph', nodes: [{ node_id: 'scope' }] },
-      checklist: { contract: 'evidence-model', items: [{ item_id: 'lease' }] },
-      agent_orchestration: { executed: false, authority_mode: 'deterministic_reference' },
-    },
-  };
-  const deterministicReviewedProcess = { contract: 'process-graph', nodes: [{ node_id: 'scope' }, { node_id: 'deterministic_review_added' }] };
-  const deterministicReviewedChecklist = { contract: 'evidence-model', items: [{ item_id: 'lease' }, { item_id: 'deterministic_review_added' }] };
-  const deterministicReviewTransform = {
-    acceptance_scope: 'post_review_unverified_transform',
-    authority: 'unverified_demo_user',
-    qualification_status: 'not_verified',
-    input_run_id: deterministicPreReview.run_id,
-    input_process_hash: dtoHash(deterministicPreReview.result.process),
-    input_checklist_hash: dtoHash(deterministicPreReview.result.checklist),
-    output_process_hash: dtoHash(deterministicReviewedProcess),
-    output_checklist_hash: dtoHash(deterministicReviewedChecklist),
-    model_acceptance_reused: false,
-  };
-  const deterministicReviewResponse = { review_transform: deterministicReviewTransform, result: { process: deterministicReviewedProcess, checklist: deterministicReviewedChecklist } };
-  const deterministicPersistedReview = { ...structuredClone(deterministicPreReview), review_transform: structuredClone(deterministicReviewTransform) };
-  deterministicPersistedReview.result.process = deterministicReviewedProcess;
-  deterministicPersistedReview.result.checklist = deterministicReviewedChecklist;
-  const deterministicReviewFailures = reviewTransformContractViolations(deterministicReviewResponse, deterministicPersistedReview, deterministicPreReview);
-  if (deterministicReviewFailures.length) throw new Error(`Local deterministic review-transform fixture failed: ${JSON.stringify(deterministicReviewFailures)}`);
-  const falselyReacceptedReview = structuredClone(reviewedResponse);
-  falselyReacceptedReview.review_transform.model_acceptance_reused = true;
-  if (!reviewTransformContractViolations(falselyReacceptedReview, persistedReviewedRun, coldRun).some(item => item.includes('model_acceptance_reused'))) throw new Error('Model-reacceptance negative fixture was not rejected');
-  const unsafeRun = structuredClone(coldRun);
-  unsafeRun.result.audit.agent_orchestration.reasoning = 'must never be public';
-  if (!orchestrationContractViolations(unsafeRun, 'cold').some(item => item.includes('forbidden public fields'))) throw new Error('Sensitive-field negative fixture was not rejected');
-  const sentinelRun = structuredClone(coldRun);
-  sentinelRun.events.push({ stage: 'agent_orchestration', status: 'failed', detail: 'branch:to:__end__' });
-  if (!orchestrationContractViolations(sentinelRun, 'cold').some(item => item.includes('execution sentinels'))) throw new Error('Internal-sentinel negative fixture was not rejected');
-  const falselyModelOwnedTopology = structuredClone(coldRun);
-  falselyModelOwnedTopology.result.audit.agent_orchestration.execution_topology.authority = 'nemotron_agent';
-  if (!orchestrationContractViolations(falselyModelOwnedTopology, 'cold').some(item => item.includes('execution topology'))) throw new Error('Model-owned topology misattribution fixture was not rejected');
-  const brokenTopologyDependency = structuredClone(coldRun);
-  brokenTopologyDependency.result.audit.agent_orchestration.execution_topology.delegations.find(item => item.agent_id === 'evidence_checklist').dependencies = ['orchestrator_plan'];
-  if (!orchestrationContractViolations(brokenTopologyDependency, 'cold').some(item => item.includes('execution topology'))) throw new Error('Broken deterministic topology dependency fixture was not rejected');
-  const hiddenFinalAudit = structuredClone(coldRun);
-  delete hiddenFinalAudit.agent_orchestration;
-  if (!orchestrationContractViolations(hiddenFinalAudit, 'cold').some(item => item.includes('final payload binding'))) throw new Error('Missing final payload-visible audit fixture was not rejected');
-  const terminalFailure = { run_id: 'failed_run', status: 'failed', stage: 'agent_orchestration', error: 'branch:to:__end__' };
-  if (!terminalFailureContractViolations(terminalFailure).some(item => item.includes('execution sentinels'))) throw new Error('Terminal-failure sentinel negative fixture was not rejected');
-  if (JSON.stringify(runProgressDiagnostic(terminalFailure)).includes('__end__')) throw new Error('Safe terminal diagnostics leaked the internal sentinel value');
-  const failureAgent = orchestrationAudit(coldRun).agents.find(item => item.agent_id === 'evidence_checklist');
-  const failureAcceptedState = { canonical_state_prepared: true, process_candidate_prepared: true, evidence_candidate_prepared: true, final_playbook_accepted: false };
-  const safeTerminalFailure = {
-    run_id: 'safe_failed_run',
-    status: 'failed',
-    stage: 'failed',
-    failure_stage: failureAgent.agent_id,
-    accepted_state: failureAcceptedState,
-    error: 'AgentInvocationFailure: provider_invocation',
-    events: [
-      structuredClone(coldRun.events.find(item => item.agent_id === 'canonical_facts' && item.receipt_type === 'agent_completed')),
-      structuredClone(coldRun.events.find(item => item.agent_id === 'orchestrator_plan' && item.receipt_type === 'agent_completed')),
-      {
-        event_id: 'evt_agent_failed',
-        ordinal: 3,
-        created_at: '2026-08-11T00:00:00Z',
-        stage: 'agent_orchestration',
-        label: 'Evidence and Checklist Agent',
-        agent: 'Evidence and Checklist Agent',
-        agent_id: failureAgent.agent_id,
-        actor_type: 'nemotron_agent',
-        status: 'failed',
-        acceptance_scope: 'pre_review_model_output',
-        headline: 'Specialist stopped at the fail-closed boundary',
-        detail: 'Only bounded failure metadata was retained.',
-        implementation: EXPECTED_RUNTIME.implementation,
-        model: REQUESTED_NEMOTRON_MODEL,
-        orchestrator: 'CasePath Orchestrator',
-        validator: 'evidence_checklist-contract/1.0.0',
-        prompt_version: 'evidence_checklist/1.0.0',
-        receipt_type: 'agent_failed',
-        delegation_id: failureAgent.delegation_id,
-        parent_call_id: orchestrationAudit(coldRun).agents.find(item => item.agent_id === 'orchestrator_plan').call_id,
-        call_id: 'failed_call_evidence_checklist',
-        provider: 'openrouter',
-        requested_model: REQUESTED_NEMOTRON_MODEL,
-        call_count: 1,
-        outcome: 'failed',
-        handoff_from: 'deterministic_evidence_gate',
-        handoff_to: 'failure_boundary',
-        input_artifact_hash: dtoHash({ bounded: 'failure-input' }),
-        error_type: 'AgentInvocationFailure',
-        error_invariant: 'provider_invocation',
-        external_tracing: false,
-      },
-      {
-        event_id: 'evt_terminal_boundary',
-        ordinal: 4,
-        created_at: '2026-08-11T00:00:01Z',
-        stage: 'failed',
-        label: 'Analysis stopped safely',
-        agent: 'Failure boundary',
-        status: 'failed',
-        headline: 'No final playbook was accepted',
-        detail: 'Partial candidate artifacts may remain visible for audit, but the terminal acceptance boundary failed closed.',
-        implementation: 'deterministic',
-        model: null,
-        actor_type: 'deterministic_gate',
-        failure_stage: failureAgent.agent_id,
-        failure_invariant: 'provider_invocation',
-        accepted_state: failureAcceptedState,
-        validator: 'fail-closed/15.2',
-        prompt_version: null,
-      },
-    ],
-  };
-  const safeFailureIssues = terminalFailureContractViolations(safeTerminalFailure);
-  if (safeFailureIssues.length) throw new Error(`Safe terminal-failure fixture failed: ${JSON.stringify(safeFailureIssues)}`);
-  const terminalFailureMessage = terminalRunFailureMessage(safeTerminalFailure);
-  if (!terminalFailureMessage?.includes('safe_failed_run failed:')
-    || terminalFailureMessage.includes('provider_invocation')
-    || LATER_TERMINAL_POLL_INTERVAL_MS >= 5000) throw new Error('Later-journey terminal failure does not exit promptly with bounded diagnostics');
-  const providerConcurrencyFailure = structuredClone(safeTerminalFailure);
-  const providerConcurrencyReceipt = providerConcurrencyFailure.events.find(item => item.receipt_type === 'agent_failed');
-  Object.assign(providerConcurrencyReceipt, {
-    call_count: 0,
-    outcome: 'blocked_provider_concurrency',
-    error_type: 'AgentInvocationFailure',
-    error_invariant: 'provider_concurrency_timeout',
-  });
-  providerConcurrencyFailure.events.find(item => item.stage === 'failed').failure_invariant = 'provider_concurrency_timeout';
-  const providerConcurrencyIssues = terminalFailureContractViolations(providerConcurrencyFailure);
-  if (providerConcurrencyIssues.length) throw new Error(`Provider-concurrency zero-call receipt fixture failed: ${JSON.stringify(providerConcurrencyIssues)}`);
-  const forgedProviderConcurrencyCall = structuredClone(providerConcurrencyFailure);
-  forgedProviderConcurrencyCall.events.find(item => item.receipt_type === 'agent_failed').call_count = 1;
-  if (!terminalFailureContractViolations(forgedProviderConcurrencyCall).some(item => item.includes('zero-call') || item.includes('call_count'))) throw new Error('Provider-concurrency forged-call receipt fixture was not rejected');
-  const forgedProviderConcurrencyIdentity = structuredClone(providerConcurrencyFailure);
-  forgedProviderConcurrencyIdentity.events.find(item => item.receipt_type === 'agent_failed').response_id = 'gen-1786483159-hyYthqPv76o6PHXpGLzl';
-  if (!terminalFailureContractViolations(forgedProviderConcurrencyIdentity).some(item => item.includes('zero-call'))) throw new Error('Provider-concurrency forged response receipt fixture was not rejected');
-  const upstreamRejectionFailure = structuredClone(safeTerminalFailure);
-  const upstreamReceipt = upstreamRejectionFailure.events.find(item => item.receipt_type === 'agent_failed');
-  Object.assign(upstreamReceipt, {
-    error_invariant: 'provider_upstream_rejection',
-    response_id: 'gen-1786483159-hyYthqPv76o6PHXpGLzl',
-    provider_error_code: 429,
-    provider_boundary: EXPECTED_PROVIDER_BOUNDARY,
-    expected_upstream_provider: EXPECTED_UPSTREAM_PROVIDER,
-  });
-  upstreamRejectionFailure.events.find(item => item.stage === 'failed').failure_invariant = 'provider_upstream_rejection';
-  const upstreamFailureIssues = terminalFailureContractViolations(upstreamRejectionFailure);
-  if (upstreamFailureIssues.length) throw new Error(`Bounded upstream-rejection fixture failed: ${JSON.stringify(upstreamFailureIssues)}`);
-  const forgedUpstreamBoundaryFailure = structuredClone(upstreamRejectionFailure);
-  forgedUpstreamBoundaryFailure.events.find(item => item.receipt_type === 'agent_failed').expected_upstream_provider = 'Together';
-  if (!terminalFailureContractViolations(forgedUpstreamBoundaryFailure).some(item => item.includes('boundary attribution is forged'))) throw new Error('Forged upstream-rejection receipt attribution fixture was not rejected');
-  const missingUpstreamBoundaryFailure = structuredClone(upstreamRejectionFailure);
-  delete missingUpstreamBoundaryFailure.events.find(item => item.receipt_type === 'agent_failed').expected_upstream_provider;
-  if (!terminalFailureContractViolations(missingUpstreamBoundaryFailure).some(item => item.includes('attribution pair is incomplete'))) throw new Error('Missing upstream-rejection receipt attribution fixture was not rejected');
-  const outOfScopeUpstreamBoundaryFailure = structuredClone(safeTerminalFailure);
-  Object.assign(outOfScopeUpstreamBoundaryFailure.events.find(item => item.receipt_type === 'agent_failed'), {
-    provider_boundary: EXPECTED_PROVIDER_BOUNDARY,
-    expected_upstream_provider: EXPECTED_UPSTREAM_PROVIDER,
-  });
-  if (!terminalFailureContractViolations(outOfScopeUpstreamBoundaryFailure).some(item => item.includes('boundary attribution is out of scope'))) throw new Error('Out-of-scope upstream-rejection receipt attribution fixture was not rejected');
-  const unboundedUpstreamCodeFailure = structuredClone(upstreamRejectionFailure);
-  unboundedUpstreamCodeFailure.events.find(item => item.receipt_type === 'agent_failed').provider_error_code = 'RAW_PROVIDER_CODE';
-  if (!terminalFailureContractViolations(unboundedUpstreamCodeFailure).some(item => item.includes('error code'))) throw new Error('Unbounded upstream provider-code fixture was not rejected');
-  const claimBearingUpstreamIdFailure = structuredClone(upstreamRejectionFailure);
-  claimBearingUpstreamIdFailure.events.find(item => item.receipt_type === 'agent_failed').response_id = 'DEF-027-E0-DEMO';
-  if (!terminalFailureContractViolations(claimBearingUpstreamIdFailure).some(item => item.includes('exact OpenRouter generation ID'))) throw new Error('Claim-bearing upstream response-ID fixture was not rejected');
-  const unsafeFailureAllowlist = structuredClone(safeTerminalFailure);
-  unsafeFailureAllowlist.events.find(item => item.receipt_type === 'agent_failed').provider_payload = 'must never be retained';
-  if (!terminalFailureContractViolations(unsafeFailureAllowlist).some(item => item.includes('non-allowlisted fields'))) throw new Error('Failure-receipt allowlist negative fixture was not rejected');
-  const brokenFailureLineage = structuredClone(safeTerminalFailure);
-  brokenFailureLineage.events.find(item => item.receipt_type === 'agent_failed').parent_call_id = 'wrong_parent';
-  if (!terminalFailureContractViolations(brokenFailureLineage).some(item => item.includes('identity/lineage'))) throw new Error('Failure-receipt lineage negative fixture was not rejected');
-  const overrunFailure = structuredClone(safeTerminalFailure);
-  Object.assign(overrunFailure.events.find(item => item.receipt_type === 'agent_failed'), {
-    outcome: 'actual_cost_overrun',
-    error_invariant: 'actual_cost_overrun',
-    response_id: 'generation_charged_overrun',
-    response_model: REQUESTED_NEMOTRON_MODEL,
-    upstream_provider: 'DeepInfra',
-    usage_source: 'response',
-    finish_reason: 'stop',
-  });
-  if (terminalFailureContractViolations(overrunFailure).length) throw new Error('Charged-overrun failure fixture was not accepted');
-  const invalidModelProvenanceFailure = structuredClone(safeTerminalFailure);
-  Object.assign(invalidModelProvenanceFailure.events.find(item => item.receipt_type === 'agent_failed'), {
-    error_invariant: 'invalid_provenance',
-    response_id: 'generation_wrong_model',
-    response_model: null,
-    upstream_provider: 'DeepInfra',
-    usage_source: 'response',
-    finish_reason: 'stop',
-    invalid_provenance_field: 'response_model',
-    invalid_provenance_value_hash: '7'.repeat(64),
-  });
-  if (terminalFailureContractViolations(invalidModelProvenanceFailure).length) throw new Error('Hashed invalid-model provenance fixture was not accepted');
-  const rawForeignModelFailure = structuredClone(invalidModelProvenanceFailure);
-  Object.assign(rawForeignModelFailure.events.find(item => item.receipt_type === 'agent_failed'), {
-    error_invariant: 'response_model',
-    response_model: 'foreign/provider-model',
-    invalid_provenance_field: undefined,
-    invalid_provenance_value_hash: undefined,
-  });
-  if (!terminalFailureContractViolations(rawForeignModelFailure).some(item => item.includes('provider provenance'))) throw new Error('Raw foreign model provenance was not rejected');
-  const rawCredentialProvenance = structuredClone(safeTerminalFailure);
-  Object.assign(rawCredentialProvenance.events.find(item => item.receipt_type === 'agent_failed'), {
-    response_id: 'sk-or-v1-secretmaterial',
-    response_model: REQUESTED_NEMOTRON_MODEL,
-  });
-  if (!terminalFailureContractViolations(rawCredentialProvenance).some(item => item.includes('provider provenance'))) throw new Error('Credential-shaped provider provenance was not rejected');
-  const rawClaimTextProvenance = structuredClone(safeTerminalFailure);
-  rawClaimTextProvenance.events.find(item => item.receipt_type === 'agent_failed').upstream_provider = 'TenantClaim';
-  if (!terminalFailureContractViolations(rawClaimTextProvenance).some(item => item.includes('provider provenance'))) throw new Error('Claim-text provider provenance was not rejected');
-  const partialIdentityFailure = structuredClone(safeTerminalFailure);
-  Object.assign(partialIdentityFailure.events.find(item => item.receipt_type === 'agent_failed'), {
-    error_invariant: 'response_identity',
-    response_id: null,
-    response_model: REQUESTED_NEMOTRON_MODEL,
-  });
-  if (terminalFailureContractViolations(partialIdentityFailure).length) throw new Error('Explicit partial response-identity failure fixture was not accepted');
-  const rootAcceptedState = { canonical_state_prepared: false, process_candidate_prepared: false, evidence_candidate_prepared: false, final_playbook_accepted: false };
-  const canonicalFailure = {
-    run_id: 'canonical_failed_run',
-    status: 'failed',
-    stage: 'failed',
-    failure_stage: 'canonical_facts',
-    accepted_state: rootAcceptedState,
-    error: 'ModelConfigurationError: missing_credential',
-    events: [
-      {
-        event_id: 'evt_canonical_failed', ordinal: 1, created_at: '2026-08-11T00:00:00Z',
-        stage: 'understand', label: 'Canonical claim state', agent: 'Guarded Canonical Facts Agent',
-        agent_id: 'canonical_facts', actor_type: 'nemotron_agent', status: 'failed',
-        headline: 'Canonical facts were not accepted', detail: 'The bounded provider call failed a local invariant; no final playbook was accepted.',
-        implementation: 'hybrid_guarded_openrouter_canonicalizer', model: REQUESTED_NEMOTRON_MODEL,
-        orchestrator: 'casepath-langgraph-orchestrator/15.2', shared_context: 'claim-context:canonical_failed_run',
-        validator: 'understand-validator/15.2', prompt_version: 'understand/15.2', receipt_type: 'agent_failed',
-        failure_scope: 'root_canonical_facts', root_agent: true, acceptance_scope: 'pre_review_model_output',
-        input_artifact: 'observable_claim_package', input_artifact_hash: dtoHash({ bounded: 'canonical-input' }),
-        provider: 'openrouter', requested_model: REQUESTED_NEMOTRON_MODEL, call_count: 0,
-        orchestration_id: 'orchestration_canonical_failure', call_id: 'call_canonical_failure',
-        parent_call_id: null, delegation_id: null, response_id: null, response_model: null,
-        upstream_provider: null, usage_source: null, finish_reason: null,
-        outcome: 'blocked_missing_credential', error_type: 'ModelConfigurationError', error_invariant: 'missing_credential',
-        handoff_from: 'observable_claim_package', handoff_to: 'failure_boundary', external_tracing: false,
-      },
-      {
-        event_id: 'evt_canonical_terminal', ordinal: 2, created_at: '2026-08-11T00:00:01Z',
-        stage: 'failed', label: 'Analysis stopped safely', agent: 'Failure boundary', status: 'failed',
-        headline: 'No final playbook was accepted', detail: 'Partial candidate artifacts may remain visible for audit, but the terminal acceptance boundary failed closed.',
-        implementation: 'deterministic', model: null, actor_type: 'deterministic_gate', failure_stage: 'canonical_facts',
-        failure_invariant: 'missing_credential', accepted_state: rootAcceptedState, validator: 'fail-closed/15.2', prompt_version: null,
-      },
-    ],
-  };
-  const canonicalFailureIssues = terminalFailureContractViolations(canonicalFailure);
-  if (canonicalFailureIssues.length) throw new Error(`Canonical root-failure fixture failed: ${JSON.stringify(canonicalFailureIssues)}`);
-  const canonicalInvalidProvenanceFailure = structuredClone(canonicalFailure);
-  canonicalInvalidProvenanceFailure.error = 'ModelResponseError: invalid_provenance';
-  const canonicalInvalidReceipt = canonicalInvalidProvenanceFailure.events.find(item => item.receipt_type === 'agent_failed');
-  Object.assign(canonicalInvalidReceipt, {
-    call_count: 1,
-    outcome: 'failed',
-    error_type: 'ModelResponseError',
-    error_invariant: 'invalid_provenance',
-    response_id: 'gen-canonical-invalid-model',
-    response_model: null,
-    upstream_provider: 'DeepInfra',
-    usage_source: 'response',
-    finish_reason: 'stop',
-    invalid_provenance_field: 'response_model',
-    invalid_provenance_value_hash: '8'.repeat(64),
-  });
-  const canonicalInvalidTerminal = canonicalInvalidProvenanceFailure.events.find(item => item.stage === 'failed');
-  canonicalInvalidTerminal.failure_invariant = 'invalid_provenance';
-  const canonicalInvalidIssues = terminalFailureContractViolations(canonicalInvalidProvenanceFailure);
-  if (canonicalInvalidIssues.length) throw new Error(`Canonical invalid-provenance fixture failed: ${JSON.stringify(canonicalInvalidIssues)}`);
-  const claimBearingProvenanceLedger = structuredClone(coldLedger);
-  claimBearingProvenanceLedger.items[0].response_id = 'tenant-claim-identity';
-  if (!sanitizedLedgerViolations(claimBearingProvenanceLedger).some(item => item.includes('exact provider-provenance sanitizer'))) throw new Error('Claim-bearing ledger provenance fixture was not rejected');
-  const boundedInvalidProvenanceLedger = structuredClone(coldLedger);
-  Object.assign(boundedInvalidProvenanceLedger.items[0], {
-    outcome: 'failed',
-    error_invariant: 'invalid_provenance',
-    invalid_provenance_field: 'response_model',
-    invalid_provenance_value_hash: '9'.repeat(64),
-  });
-  delete boundedInvalidProvenanceLedger.items[0].response_model;
-  boundedInvalidProvenanceLedger.summary = ledgerSummary(boundedInvalidProvenanceLedger.items);
-  const boundedInvalidLedgerIssues = sanitizedLedgerViolations(boundedInvalidProvenanceLedger);
-  if (boundedInvalidLedgerIssues.length) throw new Error(`Bounded invalid-provenance ledger fixture failed: ${JSON.stringify(boundedInvalidLedgerIssues)}`);
-  const retainedInvalidProvenanceLedger = structuredClone(boundedInvalidProvenanceLedger);
-  retainedInvalidProvenanceLedger.items[0].response_model = 'foreign/model';
-  if (!sanitizedLedgerViolations(retainedInvalidProvenanceLedger).some(item => item.includes('retained the rejected value'))) throw new Error('Retained invalid-provenance value fixture was not rejected');
-  const foreignInvalidProvenanceFieldLedger = structuredClone(boundedInvalidProvenanceLedger);
-  foreignInvalidProvenanceFieldLedger.items[0].invalid_provenance_field = 'provider_payload';
-  if (!sanitizedLedgerViolations(foreignInvalidProvenanceFieldLedger).some(item => item.includes('unbounded'))) throw new Error('Foreign invalid-provenance field fixture was not rejected');
-  const boundedUpstreamRejectionLedger = structuredClone(coldLedger);
-  const boundedUpstreamLedgerItem = boundedUpstreamRejectionLedger.items[0];
-  Object.assign(boundedUpstreamLedgerItem, {
-    outcome: 'failed',
-    error_invariant: 'provider_upstream_rejection',
-    provider_error_code: 429,
-    provider_boundary: EXPECTED_PROVIDER_BOUNDARY,
-    expected_upstream_provider: EXPECTED_UPSTREAM_PROVIDER,
-    response_id: 'gen-1786483165-FFFFFFFFFFFFFFFFFFFF',
-    actual_cost_usd: null,
-  });
-  for (const field of ['prompt_tokens', 'completion_tokens', 'total_tokens', 'response_model', 'upstream_provider', 'usage_source', 'finish_reason']) delete boundedUpstreamLedgerItem[field];
-  boundedUpstreamRejectionLedger.summary = ledgerSummary(boundedUpstreamRejectionLedger.items);
-  const boundedUpstreamLedgerIssues = sanitizedLedgerViolations(boundedUpstreamRejectionLedger);
-  if (boundedUpstreamLedgerIssues.length) throw new Error(`Bounded upstream-rejection ledger fixture failed: ${JSON.stringify(boundedUpstreamLedgerIssues)}`);
-  const providerConcurrencyLedger = structuredClone(coldLedger);
-  const providerConcurrencyLedgerItem = providerConcurrencyLedger.items[0];
-  Object.assign(providerConcurrencyLedgerItem, {
-    call_count: 0,
-    actual_cost_usd: null,
-    outcome: 'blocked_provider_concurrency',
-    error_type: 'OpenRouterSendAdmissionTimeoutError',
-    error_invariant: 'provider_concurrency_timeout',
-  });
-  for (const field of ZERO_CALL_PROVIDER_RESULT_FIELDS) delete providerConcurrencyLedgerItem[field];
-  providerConcurrencyLedger.summary = ledgerSummary(providerConcurrencyLedger.items);
-  const providerConcurrencyLedgerIssues = sanitizedLedgerViolations(providerConcurrencyLedger);
-  if (providerConcurrencyLedgerIssues.length
-    || providerConcurrencyLedger.summary.network_calls !== coldLedger.summary.network_calls - 1
-    || providerConcurrencyLedger.summary.unknown_cost_call_count !== coldLedger.summary.unknown_cost_call_count) throw new Error(`Provider-concurrency zero-call ledger fixture failed: ${JSON.stringify(providerConcurrencyLedgerIssues)}`);
-  const forgedProviderConcurrencyLedgerCall = structuredClone(providerConcurrencyLedger);
-  forgedProviderConcurrencyLedgerCall.items[0].call_count = 1;
-  forgedProviderConcurrencyLedgerCall.summary = ledgerSummary(forgedProviderConcurrencyLedgerCall.items);
-  if (!sanitizedLedgerViolations(forgedProviderConcurrencyLedgerCall).some(item => item.includes('zero-call'))) throw new Error('Provider-concurrency forged-call ledger fixture was not rejected');
-  const forgedProviderConcurrencyLedgerCost = structuredClone(providerConcurrencyLedger);
-  forgedProviderConcurrencyLedgerCost.items[0].actual_cost_usd = 0.01;
-  forgedProviderConcurrencyLedgerCost.summary = ledgerSummary(forgedProviderConcurrencyLedgerCost.items);
-  if (!sanitizedLedgerViolations(forgedProviderConcurrencyLedgerCost).some(item => item.includes('zero-call'))) throw new Error('Provider-concurrency forged-cost ledger fixture was not rejected');
-  const forgedProviderConcurrencyLedgerIdentity = structuredClone(providerConcurrencyLedger);
-  forgedProviderConcurrencyLedgerIdentity.items[0].response_id = 'gen-1786483159-hyYthqPv76o6PHXpGLzl';
-  if (!sanitizedLedgerViolations(forgedProviderConcurrencyLedgerIdentity).some(item => item.includes('zero-call'))) throw new Error('Provider-concurrency forged-response ledger fixture was not rejected');
-  const forgedUpstreamBoundaryLedger = structuredClone(boundedUpstreamRejectionLedger);
-  forgedUpstreamBoundaryLedger.items[0].provider_boundary = 'OpenRouter';
-  if (!sanitizedLedgerViolations(forgedUpstreamBoundaryLedger).some(item => item.includes('boundary attribution is forged'))) throw new Error('Forged upstream-rejection ledger attribution fixture was not rejected');
-  const missingUpstreamBoundaryLedger = structuredClone(boundedUpstreamRejectionLedger);
-  delete missingUpstreamBoundaryLedger.items[0].expected_upstream_provider;
-  if (!sanitizedLedgerViolations(missingUpstreamBoundaryLedger).some(item => item.includes('attribution pair is incomplete'))) throw new Error('Missing upstream-rejection ledger attribution fixture was not rejected');
-  const outOfScopeUpstreamBoundaryLedger = structuredClone(coldLedger);
-  Object.assign(outOfScopeUpstreamBoundaryLedger.items[0], {
-    provider_boundary: EXPECTED_PROVIDER_BOUNDARY,
-    expected_upstream_provider: EXPECTED_UPSTREAM_PROVIDER,
-  });
-  if (!sanitizedLedgerViolations(outOfScopeUpstreamBoundaryLedger).some(item => item.includes('boundary attribution is out of scope'))) throw new Error('Out-of-scope upstream-rejection ledger attribution fixture was not rejected');
-  const claimBearingUpstreamIdLedger = structuredClone(coldLedger);
-  Object.assign(claimBearingUpstreamIdLedger.items[0], {
-    outcome: 'failed',
-    error_invariant: 'provider_upstream_rejection',
-    provider_error_code: 400,
-    provider_boundary: EXPECTED_PROVIDER_BOUNDARY,
-    expected_upstream_provider: EXPECTED_UPSTREAM_PROVIDER,
-    response_id: 'DEF-027-E0-DEMO',
-  });
-  claimBearingUpstreamIdLedger.summary = ledgerSummary(claimBearingUpstreamIdLedger.items);
-  if (!sanitizedLedgerViolations(claimBearingUpstreamIdLedger).some(item => item.includes('exact OpenRouter generation ID'))) throw new Error('Claim-bearing upstream ledger response-ID fixture was not rejected');
-  const minorityRun = structuredClone(coldRun);
-  minorityRun.result.audit.agent_orchestration.agents[0].rejected_count = 2;
-  minorityRun.result.audit.agent_orchestration.agents[0].deterministic_fallback_applied = true;
-  minorityRun.result.audit.agent_orchestration.guarded_fallback_count = 1;
-  if (!orchestrationContractViolations(minorityRun, 'cold').some(item => item.includes('strict majority'))) throw new Error('Accepted-minority negative fixture was not rejected');
-  const invalidProjectionRun = structuredClone(coldRun);
-  const invalidProjectionAgent = orchestrationAudit(invalidProjectionRun).agents.find(item => item.agent_id === 'canonical_facts');
-  invalidProjectionAgent.source_reference_projection_fact_ids = ['not_an_accepted_fact'];
-  invalidProjectionAgent.source_reference_projection_count = 1;
-  if (!orchestrationContractViolations(invalidProjectionRun, 'cold').some(item => item.includes('source projection'))) throw new Error('Invalid canonical source-projection disclosure was not rejected');
-  const wrongHashRun = structuredClone(coldRun);
-  wrongHashRun.result.audit.agent_orchestration.deterministic_gates[0].output_artifact_hash = dtoHash({ wrong: true });
-  if (!orchestrationContractViolations(wrongHashRun, 'cold').some(item => item.includes('final DTO'))) throw new Error('Wrong-artifact-hash negative fixture was not rejected');
-  const duplicateResponseLedger = structuredClone(coldLedger);
-  duplicateResponseLedger.items[1].response_id = duplicateResponseLedger.items[0].response_id;
-  if (!coldLedgerContractViolations(orchestrationAudit(coldRun), duplicateResponseLedger).some(item => item.includes('response IDs'))) throw new Error('Duplicate-response negative fixture was not rejected');
-  const brokenLineageLedger = structuredClone(combinedLedger);
-  brokenLineageLedger.items.find(item => item.call_id === orchestrationAudit(warmRun).agents[0].call_id).origin_call_id = 'wrong_origin';
-  if (!warmLineageContractViolations(orchestrationAudit(coldRun), orchestrationAudit(warmRun), brokenLineageLedger).issues.some(item => item.includes('warm origin'))) throw new Error('Broken-lineage negative fixture was not rejected');
-  const unsafeAxeTarget = `.v20-learning-row[data-customer="${'claim-bearing-'.repeat(700)}"] > span`;
-  const axeDiagnostics = axeViolationDiagnostics([{ id: 'color-contrast', impact: 'serious', help: 'Elements must meet minimum color contrast ratio thresholds', nodes: [{ target: [unsafeAxeTarget], html: '<span>claim-bearing text must not be logged</span>', failureSummary: 'Claim-bearing failure prose must not be logged', any: [{ id: 'color-contrast', impact: 'serious', message: 'Claim-bearing check prose must not be logged', data: { fgColor: '#147a56', bgColor: '#edf8f3', contrastRatio: 4.44, raw: 'must not be retained' } }], all: [], none: [] }] }]);
-  if (axeDiagnostics.length !== 1 || axeDiagnostics[0].node_count !== 1 || axeDiagnostics[0].omitted_node_count !== 0 || !/^sha256:[0-9a-f]{64}$/.test(axeDiagnostics[0].nodes[0].target[0]) || JSON.stringify(axeDiagnostics).includes('claim-bearing') || axeDiagnostics[0].nodes[0].checks[0].data.contrastRatio !== 4.44 || 'raw' in axeDiagnostics[0].nodes[0].checks[0].data || 'html' in axeDiagnostics[0].nodes[0] || 'message' in axeDiagnostics[0].nodes[0].checks[0] || 'failure_summary' in axeDiagnostics[0].nodes[0]) throw new Error(`Bounded Axe diagnostics fixture failed: ${JSON.stringify(axeDiagnostics)}`);
-  return { status: 'passed', fixtures: ['bounded_axe_node_diagnostics', 'session_scoped_run_read_coalescing', 'memory_reuse_renderer_determinism', 'stable_text_grounding_fact_selection', 'normalized_text_grounding', 'python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'fail_closed_model_contribution_badges', 'mixed_field_contribution_badge', 'post_memory_contribution_suppression', 'reciprocal_evidence_truth_and_tamper', 'structured_legal_truth_and_tamper', 'visual_reference_truth_and_tamper', 'precedent_ranking_truth_and_tamper', 'memory_application_truth_and_tamper', 'memory_boundary_event_cross_binding', 'dormant_memory_retrieval_not_application', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'parallel_source_artifact_hash_rejection', 'parallel_process_artifact_hash_rejection', 'process_field_membership_rejection', 'process_field_attribution_rejection', 'process_inherited_field_rejection_with_recomputed_hashes', 'evidence_field_membership_rejection', 'evidence_field_attribution_rejection', 'evidence_source_ref_rejection_with_recomputed_hashes', 'final_field_membership_rejection', 'final_current_node_binding_rejection', 'final_next_action_binding_rejection', 'final_supporting_facts_binding_rejection', 'final_upstream_contributions_binding_rejection', 'final_audit_checks_binding_rejection', 'noncontrolling_supporting_fact_source_binding', 'cold_upstream_provider_policy_rejection', 'warm_upstream_provider_policy_rejection', 'agent_role_label_rejection', 'gate_role_label_rejection', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'provider_concurrency_zero_call_receipt', 'provider_concurrency_receipt_call_rejection', 'provider_concurrency_receipt_identity_rejection', 'safe_upstream_rejection_receipt', 'forged_upstream_rejection_receipt_attribution_rejection', 'missing_upstream_rejection_receipt_attribution_rejection', 'out_of_scope_upstream_rejection_receipt_attribution_rejection', 'unbounded_upstream_error_code_rejection', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'safe_upstream_rejection_ledger', 'provider_concurrency_zero_call_ledger', 'provider_concurrency_ledger_call_rejection', 'provider_concurrency_ledger_cost_rejection', 'provider_concurrency_ledger_identity_rejection', 'forged_upstream_rejection_ledger_attribution_rejection', 'missing_upstream_rejection_ledger_attribution_rejection', 'out_of_scope_upstream_rejection_ledger_attribution_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
-}
-
-let report;
-if (process.env.CASEPATH_QA_CONTRACT_SELF_TEST === '1') {
-  console.log(JSON.stringify(await runContractSelfTest(), null, 2));
-} else {
-  try {
-    report = await execute();
-  } catch (error) {
-    report = {
-      status: 'failed', release: PRODUCT_RELEASE, release_id: RELEASE_ID, checkedAt: new Date().toISOString(), baseUrl: BASE, apiUrl: API, deployment: deploymentIdentity,
-      passed: checks.filter(item => item.passed).length, failed: 1, checks, notes, failures, runIds,
-      error: error instanceof Error ? error.stack : String(error),
-    };
-    process.exitCode = 1;
-  } finally {
-    await fs.mkdir(OUT, { recursive: true }).catch(() => null);
-    try {
-      await retainEvidence();
-    } catch (error) {
-      failures.cleanup.push(`evidence retention: ${error}`);
-    }
-    await cleanup();
-    try {
-      await finalizeEvidenceManifest();
-    } catch (error) {
-      failures.cleanup.push(`evidence manifest: ${error}`);
-    }
-    if (failures.cleanup.length) {
-      report.status = 'failed';
-      report.failed = Math.max(1, report.failed || 0);
-      report.error = `${report.error || ''}\nCleanup failed: ${failures.cleanup.join('; ')}`.trim();
-      process.exitCode = 1;
-    }
-    await fs.writeFile(path.join(OUT, 'report.json'), `${JSON.stringify(report, null, 2)}\n`);
-    if (report.status === 'passed') console.log(JSON.stringify(report, null, 2));
-    else console.error(report.error);
-  }
-}
+YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×n÷óÔèµ©hºÚn¶X§zÍZ[\ÜœÈœ›ÛH	Û›ÙN™œËÜ›ÛZ\Ù\ÉÎÂš[\ÜÈ™X[]Þ[˜ÈHœ›ÛH	Û›ÙN™œÉÎÂš[\ÜÜÈœ›ÛH	Û›ÙN›ÜÉÎÂš[\Ü]œ›ÛH	Û›ÙNœ]	ÎÂš[\ÜÈÜ™X]R\Ú˜[™ÛUURQHœ›ÛH	Û›ÙN˜Üž\ÉÎÂš[\ÜÈš[UT“Ô]Hœ›ÛH	Û›ÙN\›	ÎÂš[\Ü›Hœ›ÛH	Û›ÙN›IÎÂš[\ÜÈÚ›ÛZ][HHœ›ÛH	Ü^]ÜšYÚ	ÎÂ‚˜ÛÛœÝTÑHH
+›ØÙ\ÜË™[‹TÑWÕT“	Ú‹ËÌLËŒŒŒNMÌÉÊKœ™\XÙJ×ÉË	ÉÊNÂ˜ÛÛœÝTHH
+›ØÙ\ÜË™[‹TWÕT“	Ú‹ËÌLËŒŒŒNŽ	ÊKœ™\XÙJ×ÉË	ÉÊNÂ˜ÛÛœÝ‘SPTÑWÒQH	ØØ\Ù\]]ŒŒ\™Y™\™[˜ÙKLŒŒLIÎÂ˜ÛÛœÝ“ÑPÕÔ‘SPTÑHH	ÌŒŒŒ	ÎÂ˜ÛÛœÝTWÔ‘SPTÑHH	ÌMKŒ‹Œ	ÎÂ˜ÛÛœÝ‘TUQTÕQÓ‘SSÕ“Ó—ÓSÑSH	ÛšYXKÛ™[[Ý›Û‹LË][˜KMML‹XMMX‰ÎÂ˜ÛÛœÝVPÕQÔ“Õ’QT—Ð“ÕS‘T–HH	ÛÜ[œ›Ý]\‰ÎÂ˜ÛÛœÝVPÕQÕTÕ‘PSWÔ“Õ’QTˆH	ÑY\[™œ˜IÎÂ˜ÛÛœÝVPÕÓ‘SSÕ“Ó—Ô‘TÔÓ”ÑWÓSÑSÈH™]ÈÙ]
+Âˆ‘TUQTÕQÓ‘SSÕ“Ó—ÓSÑSˆ	ÛšYXKÛ™[[Ý›Û‹LË][˜KMML‹XMMX‹LŒŒŒ	Ë—JNÂ˜ÛÛœÝSÕÑQÕTÐQÑWÔÓÕTÑTÈH™]ÈÙ]
+ÉÜ™\ÜÛœÙIË	ÙÙ[™\˜][Û—ÛY]Y]I×JNÂ˜ÛÛœÝ‘TURT‘QÓ‘SSÕ“Ó—ÐQÑS•ÒQÈHØš™XÝ™œ™Y^™JÂˆ	ØØ[›ÛšXØ[Ù˜XÝÉËˆ	ÛÜ˜Ú\Ý˜]Ü—Ü[‰Ëˆ	ÙØÝ[Y[ÜÛÝ\˜ÙWÚ[YÜš]IËˆ	Ü›ØÙ\Ü×ÙXÚ\Ú[Û—ÛX\[™ÉËˆ	Ù]šY[˜ÙWØÚXÚÛ\Ý	Ëˆ	Ùš[˜[ØÛZ[WØœšYY—Ø]Y]	Ë—JNÂ˜ÛÛœÝ‘TURT‘QÓ‘SSÕ“Ó—ÐQÑS•Ô“ÓTÈHØš™XÝ™œ™Y^™JÂˆØ[›ÛšXØ[Ù˜XÝÎˆ	ÑÝX\™YØ[›ÛšXØ[˜XÝÈYÙ[	ËˆÜ˜Ú\Ý˜]Ü—Ü[Žˆ	Ó™[[Ý›ÛˆÜ˜Ú\Ý˜]Ü‰ËˆØÝ[Y[ÜÛÝ\˜ÙWÚ[YÜš]Nˆ	ÑØÝ[Y[[™ÛÝ\˜ÙH[YÜš]HYÙ[	Ëˆ›ØÙ\Ü×ÙXÚ\Ú[Û—ÛX\[™Îˆ	Ô›ØÙ\ÜÈXÚ\Ú[ÛˆX\[™ÈYÙ[	Ëˆ]šY[˜ÙWØÚXÚÛ\Ýˆ	Ñ]šY[˜ÙH[™ÚXÚÛ\ÝYÙ[	Ëˆš[˜[ØÛZ[WØœšYY—Ø]Y]ˆ	Ñš[˜[ÛZ[HœšYYˆYÙ[	ËŸJNÂ˜ÛÛœÝ‘TURT‘QÑUT“RS’TÕP×ÑÐUWÒQÈHØš™XÝ™œ™Y^™JÂˆ	Ù]\›Z[š\ÝX×Ü›ØÙ\Ü×ÙØ]IËˆ	Ù]\›Z[š\ÝX×Ù]šY[˜ÙWÙØ]IËˆ	ÝÚÛWÜ^X›ÛÚ×ÙØ]IË—JNÂ˜ÛÛœÝ‘TURT‘QÑUT“RS’TÕP×ÑÐUWÔ“ÓTÈHØš™XÝ™œ™Y^™JÂˆ]\›Z[š\ÝX×Ü›ØÙ\Ü×ÙØ]Nˆ	Ñ]\›Z[š\ÝXÈ›ØÙ\ÜÈÛÛ˜XÝØ]IËˆ]\›Z[š\ÝX×Ù]šY[˜ÙWÙØ]Nˆ	Ñ]\›Z[š\ÝXÈ]šY[˜ÙHÛÛ˜XÝØ]IËˆÚÛWÜ^X›ÛÚ×ÙØ]Nˆ	Ñ]\›Z[š\ÝXÈÚÛKT^X›ÛÚÈØ]IËŸJNÂ˜ÛÛœÝPÐÑTQÐT•QPÕÐÓÓ•PÕHØš™XÝ™œ™Y^™JÂˆ]\›Z[š\ÝX×Ü›ØÙ\Ü×ÙØ]NˆÈÝ]]Ø\Y˜XÝˆ	Ü›ØÙ\Ü×ÙÜ˜\	ËÛÝ\˜ÙWØYÙ[ÚYˆ	Ü›ØÙ\Ü×ÙXÚ\Ú[Û—ÛX\[™ÉÈKˆ]\›Z[š\ÝX×Ù]šY[˜ÙWÙØ]NˆÈÝ]]Ø\Y˜XÝˆ	Ù]šY[˜ÙWÛ[Ù[	ËÛÝ\˜ÙWØYÙ[ÚYˆ	Ù]šY[˜ÙWØÚXÚÛ\Ý	ÈKˆÚÛWÜ^X›ÛÚ×ÙØ]NˆÈÝ]]Ø\Y˜XÝˆ	Ùš[˜[ØÛZ[WØœšYY‰ËÛÝ\˜ÙWØYÙ[ÚYˆ	Ùš[˜[ØÛZ[WØœšYY—Ø]Y]	ÈKŸJNÂ˜ÛÛœÝ“ÐÑTÔ×ÐÓÓ•’P•USÓ—Ô“ÓHH	Ô›ØÙ\ÜÈXÚ\Ú[ÛˆX\[™ÈYÙ[	ÎÂ˜ÛÛœÝU’QSÑWÐÓÓ•’P•USÓ—Ô“ÓHH	Ñ]šY[˜ÙH[™ÚXÚÛ\ÝYÙ[	ÎÂ˜ÛÛœÝ’SSÐÓÓ•’P•USÓ—Ô“ÓHH	Ñš[˜[ÛZ[HœšYYˆYÙ[	ÎÂ˜ÛÛœÝUT“RS’TÕP×ÐÓÓ•’P•USÓ—Ô“ÓHH	Ù]\›Z[š\ÝX×Ø\XØ][Û‰ÎÂ˜ÛÛœÝ’SSÑ’QSÐÓÓ•PÕHØš™XÝ™œ™Y^™JÂˆÈšY[ˆ	ØÝ\œ™[Û›ÙWÚY	ËÛÛšX][Û—ÚYˆ	Ùš[˜[˜Ý\œ™[Û›ÙIÈKˆÈšY[ˆ	Û™^ØXÝ[Û—Û›ÙWÚY	ËÛÛšX][Û—ÚYˆ	Ùš[˜[›™^ØXÝ[Û‰ÈKˆÈšY[ˆ	ÜÝ\Ü[™×Ù˜XÝÚYÉËÛÛšX][Û—ÚYˆ	Ùš[˜[œÝ\Ü[™×Ù˜XÝÉÈKˆÈšY[ˆ	Ý\Ý™X[WØÛÛšX][Û—ÚYÉËÛÛšX][Û—ÚYˆ	Ùš[˜[\Ý™X[WØÛÛšX][ÛœÉÈKˆÈšY[ˆ	Ø]Y]ØÚXÚ×ÚYÉËÛÛšX][Û—ÚYˆ	Ùš[˜[˜]Y]ØÚXÚÜÉÈK—JNÂ˜ÛÛœÝ’SSÕTÕ‘PSWÐÓÓ•’P•USÓ—ÒQÈHØš™XÝ™œ™Y^™JÂˆ	ÙØÝ[Y[ÜÛÝ\˜ÙWÚ[YÜš]IËˆ	Ù]šY[˜ÙWØÚXÚÛ\Ý	Ëˆ	Ü›ØÙ\Ü×ÙXÚ\Ú[Û—ÛX\[™ÉË—JNÂ˜ÛÛœÝ’SSÐUQUÐÒPÒ×ÒQÈHØš™XÝ™œ™Y^™JÂˆ	ØÝ\œ™[Û›ÙWÜÝ\ÜYØžWØØ[›ÛšXØ[Ù˜XÝÉËˆ	Ù]šY[˜ÙWÚ][\×Ø›Ý[™Ý×Ü›ØÙ\Ü×Û›Ù\ÉËˆ	Û™^ØXÝ[Û—ØÛÛ›™XÝYÚ[—ÜÝ]X×ÝÜÛÙÞIËˆ	Ý\Ý™X[WØÛÛšX][Û—Û[™XYÙWØÛÛ\]IË—JNÂ˜ÛÛœÝVPÕQÑ”SQUÓÔ’ÈHØš™XÝ™œ™Y^™JÂˆ[™ØÚZ[Žˆ	ÌKŒËŒM	Ëˆ[™ÙÜ˜\ˆ	ÌKŒ‹ŽIËˆ[™ØÚZ[—ÛÜ[œ›Ý]\Žˆ	ÌŒ‹ÉËŸJNÂ˜ÛÛœÝVPÕQÔ•S•SQHHØš™XÝ™œ™Y^™JÂˆ[[YWÜ›Ùš[Nˆ	Û™[[Ý›Û—Û[™ÙÜ˜\Û][WØYÙ[ÚXœšYÙÝX\™Y	Ëˆ]]Üš]WÛ[ÙNˆ	Û][WØYÙ[ÚXœšYÙÝX\™Y	Ëˆ[\[Y[][ÛŽˆ	Û[™ÙÜ˜\ÜÝ]YÜ˜\Û[™ØÚZ[—ÛÜ[œ›Ý]\‰ËˆÜ˜Ú\Ý˜][Û—ÜØÚ[XNˆ	ØØ\Ù\]›™[[Ý›Û‹XYÙ[YYËÌKŒŒ	ËŸJNÂ˜ÛÛœÝUT“RS’TÕP×Ô‘Q‘T‘SÑWÓSÑHH	Ù]\›Z[š\ÝX×Ü™Y™\™[˜ÙIÎÂ˜ÛÛœÝUT“RS’TÕP×Ô‘Q‘T‘SÑWÔ“Ñ’SHH	Ù]\›Z[š\ÝXË\™Y™\™[˜ÙK\^X›ÛÚÉÎÂ˜ÛÛœÝUT“RS’TÕP×Ô‘Q‘T‘SÑWÓÔÒTÕUSÓˆHØš™XÝ™œ™Y^™JÂˆ^XÝ]Yˆ˜[ÙKˆ]]Üš]WÛ[ÙNˆUT“RS’TÕP×Ô‘Q‘T‘SÑWÓSÑKˆ[Ù[ˆ[ˆ^\›˜[Ý˜XÚ[™Îˆ˜[ÙKˆ]\›Z[š\ÝX×ÜØY™]WØ]]Üš]NˆYKŸJNÂ˜ÛÛœÝUT“RS’TÕP×Ô‘Q‘T‘SÑWÐÐS“Ó’PÐSVUSÓˆHØš™XÝ™œ™Y^™JÂˆ[\[Y[][ÛŽˆ	Ù]\›Z[š\ÝX×Ü™Y™\™[˜ÙWÛÜ˜XÛIËˆ[Ù[ˆ[ˆ›ÝšY\Žˆ[ˆ[ÙNˆUT“RS’TÕP×Ô‘Q‘T‘SÑWÓSÑKŸJNÂ˜ÛÛœÝVPÕQÑVPÕUSÓ—ÕÔÓÑÖHHØš™XÝ™œ™Y^™JÂˆ]]Üš]Nˆ	Ù]\›Z[š\ÝX×Ø\XØ][Û‰Ëˆ[\[Y[][ÛŽˆ	ØÛÛ\[YÛ[™ÙÜ˜\ÜÝ]YÜ˜\	Ëˆ[YØ][ÛœÎˆÂˆÈYÙ[ÚYˆ	ÙØÝ[Y[ÜÛÝ\˜ÙWÚ[YÜš]IË\[™[˜ÚY\ÎˆÉÛÜ˜Ú\Ý˜]Ü—Ü[‰×HKˆÈYÙ[ÚYˆ	Ü›ØÙ\Ü×ÙXÚ\Ú[Û—ÛX\[™ÉË\[™[˜ÚY\ÎˆÉÛÜ˜Ú\Ý˜]Ü—Ü[‰×HKˆÈYÙ[ÚYˆ	Ù]šY[˜ÙWØÚXÚÛ\Ý	Ë\[™[˜ÚY\ÎˆÉÙ]\›Z[š\ÝX×Ü›ØÙ\Ü×ÙØ]I×HKˆÈYÙ[ÚYˆ	Ùš[˜[ØÛZ[WØœšYY—Ø]Y]	Ë\[™[˜ÚY\ÎˆÉÙ]\›Z[š\ÝX×Ù]šY[˜ÙWÙØ]I×HKˆKˆ\˜[[ÙÜ›Ý\ÎˆÖÉÙØÝ[Y[ÜÛÝ\˜ÙWÚ[YÜš]IË	Ü›ØÙ\Ü×ÙXÚ\Ú[Û—ÛX\[™É×WKŸJNÂ˜ÛÛœÝÕPÐÑTÔÑ•SÓSÑSÓÕUÓÓQTÈH™]ÈÙ]
+ÉÜÝXØÙYYY	Ë	ÜÝXØÙYYYÝÚ]ÙÝX\™YÙ˜[˜XÚÉ×JNÂ˜ÛÛœÝÒLM—ÔUT“ˆH×–ÌNXKY—^ÍIÚNÂ˜ÛÛœÝÐÐSÔ•S—ÕSQSÕUÓTÈHNÂ˜ÛÛœÝ“ÑPÕSÓ—Ô•S—ÕSQSÕUÓTÈHMH
+ˆŒ
+ˆLÂ˜ÛÛœÝUT—ÕT“RSSÔÓÒS•T•SÓTÈHLÂ˜ÛÛœÝVWÐS’SPUSÓ—ÔÑUWÕSQSÕUÓTÈHLÂ˜ÛÛœÝ“Ô’QS—ÔP“P×Ñ’QSÈH™]ÈÙ]
+Âˆ	Ü›Û\	Ëˆ	ÜÞ\Ý[WÜ›Û\	Ëˆ	Ý\Ù\—Ü›Û\	Ëˆ	ÛY\ÜØYÙ\ÉËˆ	Ü˜]ÉËˆ	Ü˜]×ÛÝ]]	Ëˆ	Ü™X\ÛÛš[™ÉËˆ	ØÚZ[—ÛÙ—ÝÝYÚ	Ëˆ	ØÛÛ\][Û‰Ëˆ	Ü™\]Y\ÝØ›ÙIËˆ	Ü™\ÜÛœÙWØ›ÙIËˆ	ØØ[›ÛšXØ[ÛÝ]]	Ë—JNÂ˜ÛÛœÝS•T“SÔÑS•S‘SÔUT“ˆHÊÎ—×ÜÝ\×ß×Ù[™×ßœ˜[˜ÚÎŸ™YÙ[\Úß˜XÙX˜XÚÈ
+[ÜÝ™XÙ[Ø[\Ý
+_ÔS”“ÕUT—ÐTWÒÑV_]]Üš^˜][ÛŽ—Ê™X\™\ŠKÚNÂ˜ÛÛœÝSÕÑQÓQÑT—Ñ’QSÈH™]ÈÙ]
+Âˆ	ØØ[ÚY	Ë	Ü›ÝšY\‰Ë	Ü›ÝšY\—Ù[™Ú[	Ë	Ý\Ý™X[WÜ›ÝšY\‰Ë	Û[Ù[	Ë	Ú[\[Y[][Û‰Ëˆ	ÛÜ˜Ú\Ý˜][Û—ÚY	Ë	ØYÙ[ÚY	Ë	ØYÙ[Ü›ÛIË	Ü\™[ØØ[ÚY	Ë	Ù[YØ][Û—ÚY	Ë	ØØ[ØÛÝ[	Ëˆ	Ü›Û\ÝÚÙ[œÉË	ØÛÛ\][Û—ÝÚÙ[œÉË	ÝÝ[ÝÚÙ[œÉË	Ù\Ý[X]YØÛÜÝÝ\Ù	Ë	ØXÝX[ØÛÜÝÝ\Ù	Ëˆ	Û][˜ÞWÛ\ÉË	ØØXÚWÚÙ^IË	Ü\œÜÙIË	ÛÝ]ÛÛYIË	Ù\œ›Ü—Ý\IË	Ù\œ›Ü—ØYÙ[ÚY	Ë	Ù\œ›Ü—Ù˜XÝÚY	Ëˆ	Ù\œ›Ü—Ú[˜\šX[	Ë	Ü›ÝšY\—Ù\œ›Ü—ØÛÙIË	Ü›ÝšY\—Ø›Ý[™\žIË	Ù^XÝYÝ\Ý™X[WÜ›ÝšY\‰Ëˆ	Ú[˜[YÜ›Ý™[˜[˜ÙWÙšY[	Ë	Ú[˜[YÜ›Ý™[˜[˜ÙWÝ˜[YWÚ\Ú	Ëˆ	ÚYÛ›Ü™YÛ›Û˜ÛÛ›Û[™×Û›Ü›X[^™YÜ›ÜÜØ[ÉË	Ø]]Üš]WÛ[ÙIËˆ	ØXØÙ\YÙ˜XÝÚYÉË	ØXØÙ\YÙ˜XÝØÛÝ[	Ë	Ü™Z™XÝYÙ˜XÝÉË	Ü™Z™XÝYÙ˜XÝØÛÝ[	Ëˆ	ÜÛÝ\˜ÙWÜ™Y™\™[˜ÙWÜ›Ú™XÝ[Û—Ù˜XÝÚYÉË	ÜÛÝ\˜ÙWÜ™Y™\™[˜ÙWÜ›Ú™XÝ[Û—ØÛÝ[	Ëˆ	ØXØÙ\YÚ][WÚYÉË	ØXØÙ\YÚ][WØÛÝ[	Ë	Ü™Z™XÝYÚ][\ÉË	Ü™Z™XÝYÚ][WØÛÝ[	Ëˆ	ÚYÛ›Ü™YÜ›ÜÜØ[ØÛÝ[	Ë	Ù]\›Z[š\ÝX×Ù˜[˜XÚ×Ø\YY	Ë	Ü™\ÜÛœÙWÚY	Ë	ÛÜšYÚ[—ØØ[ÚY	Ëˆ	ÛÜšYÚ[—Ý\ØYÙIË	ÛÜšYÚ[—Ùš[š\ÚÜ™X\ÛÛ‰Ë	Ü™\ÜÛœÙWÛ[Ù[	Ë	ÙÙ[™\˜][Û—Û[Ù[	Ë	Ý\ØYÙWÜÛÝ\˜ÙIË	ÛY]Y]WÜÛØÛÝ[	Ë	ÛY]Y]WÛ][˜ÞWÛ\ÉËˆ	Ùš[š\ÚÜ™X\ÛÛ‰Ë	ØÜ™X]YØ]	Ë	Ý\]YØ]	Ë—JNÂ˜ÛÛœÝSÕÑQÓQÑT—ÔÕSSPT–WÑ’QSÈH™]ÈÙ]
+Âˆ	Ü™XÛÜ™ÉË	Û™]ÛÜš×ØØ[ÉË	Ü›Û\ÝÚÙ[œÉË	ØÛÛ\][Û—ÝÚÙ[œÉË	ÝÝ[ÝÚÙ[œÉËˆ	ØXÝX[ØÛÜÝÝ\Ù	Ë	ØXÝX[ØÛÜÝØÛÛ\]IË	Ý[šÛ›ÝÛ—ØÛÜÝØØ[ØÛÝ[	Ë	ÛÝ]ÛÛY\ÉË—JNÂ˜ÛÛœÝSÕÑQÐQÑS•ÑRST‘WÔ‘PÑRTÑ’QSÈH™]ÈÙ]
+Âˆ	Ù]™[ÚY	Ë	ÛÜ™[˜[	Ë	ØÜ™X]YØ]	Ë	ÜÝYÙIË	ÛX™[	Ë	ØYÙ[	Ë	ØYÙ[ÚY	Ë	ØXÝÜ—Ý\IË	ÜÝ]\ÉËˆ	ÚXY[™IË	Ù]Z[	Ë	Ú[\[Y[][Û‰Ë	Û[Ù[	Ë	ÛÜ˜Ú\Ý˜]Ü‰Ë	Ý˜[Y]Ü‰Ë	Ü›Û\Ý™\œÚ[Û‰Ëˆ	Ü™XÙZ\Ý\IË	ØXØÙ\[˜ÙWÜØÛÜIË	Ù˜Z[\™WÜØÛÜIË	Ü›ÛÝØYÙ[	Ë	ÜÚ\™YØÛÛ^	Ëˆ	Ù[YØ][Û—ÚY	Ë	Ü\™[ØØ[ÚY	Ë	ÛÜ˜Ú\Ý˜][Û—ÚY	Ë	ØØ[ÚY	Ë	Ü™\ÜÛœÙWÚY	Ë	ÛÝ]ÛÛYIËˆ	Ü›ÝšY\‰Ë	Ü™\]Y\ÝYÛ[Ù[	Ë	ØØ[ØÛÝ[	Ëˆ	Ü™\ÜÛœÙWÛ[Ù[	Ë	Ý\Ý™X[WÜ›ÝšY\‰Ë	Ý\ØYÙWÜÛÝ\˜ÙIË	Ú[™Ù™—Ùœ›ÛIË	Ú[™Ù™—ÝÉËˆ	Ú[œ]Ø\Y˜XÝ	Ë	Ú[œ]Ø\Y˜XÝÚ\Ú	Ë	Ùš[š\ÚÜ™X\ÛÛ‰Ë	Ù\œ›Ü—Ý\IË	Ù\œ›Ü—Ú[˜\šX[	Ë	Ü›ÝšY\—Ù\œ›Ü—ØÛÙIËˆ	Ü›ÝšY\—Ø›Ý[™\žIË	Ù^XÝYÝ\Ý™X[WÜ›ÝšY\‰Ëˆ	Ú[˜[YÜ›Ý™[˜[˜ÙWÙšY[	Ë	Ú[˜[YÜ›Ý™[˜[˜ÙWÝ˜[YWÚ\Ú	Ë	Ù^\›˜[Ý˜XÚ[™ÉË—JNÂ˜ÛÛœÝRST‘WÓÕUÓÓQTÈH™]ÈÙ]
+ÉÙ˜Z[Y	Ë	Ø›ØÚÙYØÛÜÝÙÝX\™	Ë	Ø›ØÚÙYÛZ\ÜÚ[™×ØÜ™Y[X[	Ë	Ø›ØÚÙYÜ›ÝšY\—ØÛÛ˜Ý\œ™[˜ÞIË	ØXÝX[ØÛÜÝÛÝ™\œ[‰×JNÂ˜ÛÛœÝ‘T“×ÐÐSÑRST‘WÓÕUÓÓQTÈH™]ÈÙ]
+ÉØ›ØÚÙYØÛÜÝÙÝX\™	Ë	Ø›ØÚÙYÛZ\ÜÚ[™×ØÜ™Y[X[	Ë	Ø›ØÚÙYÜ›ÝšY\—ØÛÛ˜Ý\œ™[˜ÞI×JNÂ˜ÛÛœÝ‘T“×ÐÐSÔ“Õ’QT—Ô‘TÕSÑ’QSÈHØš™XÝ™œ™Y^™JÂˆ	Ü™\ÜÛœÙWÚY	Ë	ÛÜšYÚ[—ØØ[ÚY	Ë	ÛÜšYÚ[—Ý\ØYÙIË	ÛÜšYÚ[—Ùš[š\ÚÜ™X\ÛÛ‰Ë	Ü™\ÜÛœÙWÛ[Ù[	Ëˆ	ÙÙ[™\˜][Û—Û[Ù[	Ë	Ý\Ý™X[WÜ›ÝšY\‰Ë	Ý\ØYÙWÜÛÝ\˜ÙIË	Ùš[š\ÚÜ™X\ÛÛ‰Ëˆ	ÛY]Y]WÜÛØÛÝ[	Ë	ÛY]Y]WÛ][˜ÞWÛ\ÉË	Ü›Û\ÝÚÙ[œÉË	ØÛÛ\][Û—ÝÚÙ[œÉËˆ	ÝÝ[ÝÚÙ[œÉË	Ü›ÝšY\—Ù\œ›Ü—ØÛÙIË	Ü›ÝšY\—Ø›Ý[™\žIËˆ	Ù^XÝYÝ\Ý™X[WÜ›ÝšY\‰Ë	Ú[˜[YÜ›Ý™[˜[˜ÙWÙšY[	Ë	Ú[˜[YÜ›Ý™[˜[˜ÙWÝ˜[YWÚ\Ú	Ëˆ	ÚYÛ›Ü™YÛ›Û˜ÛÛ›Û[™×Û›Ü›X[^™YÜ›ÜÜØ[ÉË	ØXØÙ\YÙ˜XÝÚYÉË	ØXØÙ\YÙ˜XÝØÛÝ[	Ëˆ	Ü™Z™XÝYÙ˜XÝÉË	Ü™Z™XÝYÙ˜XÝØÛÝ[	Ë	ÜÛÝ\˜ÙWÜ™Y™\™[˜ÙWÜ›Ú™XÝ[Û—Ù˜XÝÚYÉËˆ	ÜÛÝ\˜ÙWÜ™Y™\™[˜ÙWÜ›Ú™XÝ[Û—ØÛÝ[	Ë	ØXØÙ\YÚ][WÚYÉË	ØXØÙ\YÚ][WØÛÝ[	Ëˆ	Ü™Z™XÝYÚ][\ÉË	Ü™Z™XÝYÚ][WØÛÝ[	Ë	ÚYÛ›Ü™YÜ›ÜÜØ[ØÛÝ[	Ëˆ	Ù]\›Z[š\ÝX×Ù˜[˜XÚ×Ø\YY	Ë—JNÂ˜ÛÛœÝÐQ‘WÔ‘TÔÓ”ÑWÒQH×–ÐKV˜K^ŒNWVÐKV˜K^ŒNK—ËW^Ì‹MN_IÎÂ˜ÛÛœÝVPÕÓÔS”“ÕUT—ÑÑS‘TUSÓ—ÒQH×™Ù[‹VÌNW^ÌLKVÐKV˜K^ŒNW^ÌŒIÎÂ˜ÛÛœÝÐQ‘WÕTÕ‘PSWÔ“Õ’QTˆH×–ÐKV˜K^ŒNWVÐKV˜K^ŒNK—ËW^ÌKÎ_IÎÂ˜ÛÛœÝ“Ô’QS—Ô“Õ‘SSÑWÓPT’ÑT”ÈHØš™XÝ™œ™Y^™JÂˆ	Ø]]Üš^˜][Û‰Ë	Ø\WÚÙ^IË	Ø\ZÙ^IË	Ø™X\™\ˆ	Ë	ØÜ™Y[X[	Ë	ÜÚË[Ü‹IË	ÜÚËIË	ÜÙXÜ™]	Ë	ÜÙ[[™[	Ëˆ	ØÝ\ÝÛY\‰Ë	Û[™Ü™	Ë	ÛX\ÙIË	Û[Ý[	Ë	Û[Ú\Ý\™IË	Ý[˜[	Ë—JNÂ˜ÛÛœÝÐQ‘WÑ’S’TÒÔ‘PTÓÓ”ÈH™]ÈÙ]
+ÉÜÝÜ	Ë	Û[™Ý	Ë	ÝÛÛØØ[ÉË	ØÛÛ[Ùš[\‰Ë	Ù\œ›Ü‰Ë	ØØ[˜Ù[Y	×JNÂ˜ÛÛœÝ“Õ’QT—Ô“Õ‘SSÑWÑ’QSÈH™]ÈÙ]
+ÉÜ™\ÜÛœÙWÚY	Ë	Ü™\ÜÛœÙWÛ[Ù[	Ë	Ý\Ý™X[WÜ›ÝšY\‰Ë	Ùš[š\ÚÜ™X\ÛÛ‰×JNÂ˜ÛÛœÝVPÕQÔ•S•SQWÐPÐÑTSÑWÐÔ’UT’PHHØš™XÝ™œ™Y^™JÂˆ™\]Z\™YÛ[ÙNˆ	ÛÜ[œ›Ý]\—Û™[[Ý›Û‰Ëˆ™\]Z\™YÛ[Ù[ˆ‘TUQTÕQÓ‘SSÕ“Ó—ÓSÑSˆ[Ù[ØXØÙ\[˜ÙWÜØÛÜNˆ	Ýš\ÚX›WØœ›ÝÜÙ\—Ù›YÜÚ\	ËˆX\›š[™×ØÛÛ\\š\ÛÛ—Ø]]Üš]Nˆ	Ù]\›Z[š\ÝX×Ø\XØ][Û—ÝÛÛ	Ëˆ™\]Z\™\×ÛX\›š[™×ØÛÛ\\š\ÛÛ—Þ™\›×Û[Ù[ØXÝ]š]NˆYKˆ™\]Z\™YÙš[˜[Û[Ù[ÛYÙ\—Ü™XÛÜ™ÎˆL‹ˆ™\]Z\™YÙš[˜[Û[Ù[Û™]ÛÜš×ØØ[Îˆ‹ˆ™\]Z\™YÙš[˜[ØØXÚWÚ]Îˆ‹ˆ™\]Z\™YÜ›ÝšY\—ÛX^Ú[—Ù›YÚˆKˆ™\]Z\™YÜ[[YWÜ›Ùš[NˆVPÕQÔ•S•SQKœ[[YWÜ›Ùš[Kˆ™\]Z\™\×ÜÝXØÙ\ÜÙ[ØØ[Øš[™[™ÎˆYKˆ™\]Z\™\×ÜÜÚ]]™WØXÝX[ØÛÜÝˆYKˆ™\]Z\™\×ÜÜÚ]]™WÝÚÙ[—ØÛÝ[ÎˆYKˆ™\]Z\™\×ÜÚ[™ÛWÛÜ˜Ú\Ý˜][Û—Øš[™[™ÎˆYKˆ™\]Z\™\×ØÛÛ\]WÜ™\]Z\™YØYÙ[ÜÙ]ˆYKˆ™\]Z\™\×Ù\Ý[˜ÝØØ[ÚYÎˆYKˆ™\]Z\™\×Ù\Ý[˜ÝÜ™\ÜÛœÙWÚYÎˆYKˆ™\]Z\™\×ÜÜÚ]]™WØXØÙ\YØÛÛšX][Û—Ü\—ØYÙ[ˆYKˆ™\]Z\™\×ØXØÙ\YÛXZ›Üš]WÜ\—ØYÙ[ˆYKˆ™\]Z\™\×ØÛÛÛ™]ÛÜš×Ü[ŽˆYKˆ™\]Z\™\×Ù]\›Z[š\ÝX×ÙØ]WÜ\ÜÙ\ÎˆYKˆ™\]Z\™\×ÙÝX\™YÙ˜[˜XÚ×Ù\ØÛÜÝ\™NˆYKˆ™\]Z\™\×ÜÛÝ\˜ÙWÜ™Y™\™[˜ÙWÜ›Ú™XÝ[Û—Ù\ØÛÜÝ\™NˆYKˆ™\]Z\™\×ÙÜ›Ý[™YØØ]\Ø[Ø\Y˜XÝÜ™XÛÛ\]][ÛŽˆYKˆ™\]Z\™\×ÛX\›š[™×Ü™\^WÜ›ÛÙŽˆYKŸJNÂ˜ÛÛœÝVPÕQÑRSQÓSÑSÐUSTÔ‘PÓÔ‘ÈHØš™XÝ™œ™Y^™Jˆ\œ˜^K™œ›ÛJÈ[™ÝˆK
+Ë[™^
+HOˆØ\Ù\]Ü™[X\Ù\ËÛ[Ù[]˜[Y][Û‹X][\LŒŒLKIÔÝš[™Ê[™^
+ÈJKœYÝ\
+‹	Ì	Ê_KšœÛÛ˜
+KŠNÂ˜ÛÛœÝVPÕQÔ“ÑPÕSÓ—ÓÔS’S‘×Ð“ÕS‘T–HH	Ð\XØ][ÛˆÛÙHÜ[™YHÚ\™YÛÛ^È›È[Ù[Ø[\ÈÛZ[YY›Üˆ\ÈÙ]\Ý\ˆHØ[X›Ý[™™[[Ý›Ûˆ[ˆ\X\œÈÛ›HÚ[ˆ]È™]\›™Y]™[\œš]™\Ë‰ÎÂ˜ÛÛœÝPWÑT‘PÕÔ–HH]œ™\ÛÛ™Jš[UT“Ô]
+™]ÈT“
+	Ë‰Ë[\Ü›Y]K\›
+JJNÂ˜ÛÛœÝ‘TÔÒUÔ–WÔ“ÓÕH]™\›˜[YJPWÑT‘PÕÔ–JNÂ˜ÛÛœÝPWÓÕUUÐTÑSSQHH	ÙÝZYY]ŒLË\Û[ÚÙK[Ý]	ÎÂ˜ÛÛœÝ‘Q“QÒÓÕUUÐTÑSSQHH	Ù]šY[˜ÙIÎÂ˜ÛÛœÝ‘Q“QÒÔT‘S•ÔUT“ˆH×˜Ø\Ù\]\XK\™Y›YÚ–ÐKV˜K^ŒNW^Í‹IÎÂ˜ÛÛœÝPWÕSTÔ“ÓÕH]œ™\ÛÛ™JÜË\\Š
+JNÂ‚™[˜Ý[Ûˆ™\ÛÛ™TØY™TXSÝ]]]
+Ø[™Y]JHÂˆYˆ
+\[ÙˆØ[™Y]HOOH	ÜÝš[™ÉÈØ[™Y]Kš[J
+HOOH	ÉÊHÂˆ›ÝÈ™]È\œ›ÜŠ	ÐÐTÑTUÔPWÓÕU]\Ý˜[YHHYXØ]YPH]šY[˜ÙH\™XÝÜžK‰ÊNÂˆBˆÛÛœÝ™\ÛÛ™YH]œ™\ÛÛ™JØ[™Y]JNÂˆÛÛœÝYXØ]YXSÝ]]H]š›Ú[ŠPWÑT‘PÕÔ–KPWÓÕUUÐTÑSSQJNÂˆÛÛœÝ™Y›YÚ\™[H]™\›˜[YJ™\ÛÛ™Y
+NÂˆÛÛœÝYXØ]Y™Y›YÚÝ]]H
+ˆ]˜˜\Ù[˜[YJ™\ÛÛ™Y
+HOOH‘Q“QÒÓÕUUÐTÑSSQBˆ	‰ˆ]™\›˜[YJ™Y›YÚ\™[
+HOOHPWÕSTÔ“ÓÕˆ	‰ˆ‘Q“QÒÔT‘S•ÔUT“‹\Ý
+]˜˜\Ù[˜[YJ™Y›YÚ\™[
+JBˆ
+NÂˆYˆ
+™\ÛÛ™YOOH]œ\œÙJ™\ÛÛ™Y
+Kœ›ÛÝ™\ÛÛ™YOOH‘TÔÒUÔ–WÔ“ÓÕ™\ÛÛ™YOOHPWÑT‘PÕÔ–JHÂˆ›ÝÈ™]È\œ›ÜŠ™Y\Ú[™È[œØY™HÐTÑTUÔPWÓÕU]ˆ	Ü™\ÛÛ™YX
+NÂˆBˆYˆ
+™\ÛÛ™YOOHYXØ]YXSÝ]]	‰ˆYYXØ]Y™Y›YÚÝ]]
+HÂˆ›ÝÈ™]È\œ›ÜŠ™Y\Ú[™È[œØY™HÐTÑTUÔPWÓÕU]ˆ	Ü™\ÛÛ™YX
+NÂˆBˆ™]\›ˆ™\ÛÛ™YÂŸB‚™[˜Ý[Ûˆ\ÜÙ\ØY™TXSÝ]]\™[
+Ø[™Y]JHÂˆÛÛœÝ™\ÛÛ™YH™\ÛÛ™TØY™TXSÝ]]]
+Ø[™Y]JNÂˆÛÛœÝ\™[H]™\›˜[YJ™\ÛÛ™Y
+NÂˆ]™X[\™[ÂˆžHÂˆ™X[\™[H™X[]Þ[˜Ê\™[
+NÂˆHØ]Ú
+\œ›ÜŠHÂˆ›ÝÈ™]È\œ›ÜŠÐTÑTUÔPWÓÕU\™[]\Ý[™XYH^\Ýˆ	Ü\™[XÈØ]\ÙNˆ\œ›ÜˆJNÂˆBˆÛÛœÝYXØ]YXSÝ]]H]š›Ú[ŠPWÑT‘PÕÔ–KPWÓÕUUÐTÑSSQJNÂˆÛÛœÝ^XÝY\™[H™\ÛÛ™YOOHYXØ]YXSÝ]]ˆÈ™X[]Þ[˜ÊPWÑT‘PÕÔ–JBˆˆ™X[]Þ[˜ÊPWÕSTÔ“ÓÕ
+NÂˆÛÛœÝ\™[X]Ú\ÈH™\ÛÛ™YOOHYXØ]YXSÝ]]ˆÈ™X[\™[OOH^XÝY\™[ˆˆ]™\›˜[YJ™X[\™[
+HOOH^XÝY\™[ˆ	‰ˆ‘Q“QÒÔT‘S•ÔUT“‹\Ý
+]˜˜\Ù[˜[YJ™X[\™[
+JNÂˆYˆ
+\\™[X]Ú\ÊHÂˆ›ÝÈ™]È\œ›ÜŠ™Y\Ú[™ÈÞ[[[šÙYÜˆ[™^XÝYÐTÑTUÔPWÓÕU\™[ˆ	Ü\™[X
+NÂˆBˆ™]\›ˆ™\ÛÛ™YÂŸB‚˜ÛÛœÝPWÔÑTÔÒSÓ—ÒQHXKIÜ˜[™ÛUURQ
+
+_XÂ˜ÛÛœÝTÓÓUSÓ—ÔÑTÔÒSÓ—ÒQHXKZ\ÛÛ][Û‹IÜ˜[™ÛUURQ
+
+_XÂ˜ÛÛœÝSÕ×Ô“ÑPÕSÓ—ÓUUUSÓˆH›ØÙ\ÜË™[‹ÐTÑTUÐSÕ×Ô“ÑPÕSÓ—ÓUUUSÓˆOOH	ÌIÎÂ˜ÛÛœÝÕUH\ÜÙ\ØY™TXSÝ]]\™[
+ˆ›ØÙ\ÜË™[‹ÐTÑTUÔPWÓÕU]š›Ú[ŠPWÑT‘PÕÔ–KPWÓÕUUÐTÑSSQJKŠNÂ˜ÛÛœÝÚXÚÜÈH×NÂ˜ÛÛœÝ›Ý\ÈH×NÂ˜ÛÛœÝ˜Z[\™\ÈHÈÛÛœÛÛNˆ×KYÙNˆ×K™\]Y\Ýˆ×KÛX[\ˆ×HNÂ˜ÛÛœÝ[’YÈH×NÂ˜ÛÛœÝ™]Z[™Y]šY[˜ÙHHßNÂ˜ÛÛœÝ]šY[˜ÙQš[\ÈH×NÂ›]œ›ÝÜÙ\ŽÂ›]ÛÛ^Â›]YÙNÂ›]šY[ÎÂ›][[Ó]]]YH˜[ÙNÂ›]\ÛÛ][Û“]]]YH˜[ÙNÂ›]™]šY]Ô™\ÜÛœÙHH[Â›]›ÛÙ”™\ÜÛœÙHH[Â›]\Þ[Y[Y[]HHÈœ›Û[™ˆ[\Nˆ[XNˆÈ™[X\ÙWÚYˆ‘SPTÑWÒQÛÝ\˜ÙWØÛÛ[Z]ˆ›ØÙ\ÜË™[‹”‘S‘T—ÑÒUÐÓÓSRU[HNÂ›][[YU™\œÚ[ÛœÈHÈ›ÙNˆ›ØÙ\ÜË™\œÚ[Û‹^]ÜšYÚˆ[Ú›ÛZ][Nˆ[NÂ‚˜ÛÛœÝÛY\H\ÈOˆ™]È›ÛZ\ÙJ™\ÛÛ™HOˆÙ][Y[Ý]
+™\ÛÛ™K\ÊJNÂ‚™[˜Ý[ÛˆÚXÚÊ˜[YKÛÛ™][Û‹]Z[H	ÉÊHÂˆÛÛœÝ][HHÈ˜[YK\ÜÙYˆ›ÛÛX[ŠÛÛ™][ÛŠK]Z[NÂˆÚXÚÜËœ\Ú
+][JNÂˆYˆ
+Z][Kœ\ÜÙY
+H›ÝÈ™]È\œ›ÜŠ	Û˜[Y_Nˆ	Ù]Z[	Ù˜Z[Y	ßX
+NÂŸB‚™[˜Ý[Ûˆ\ÓØØ[
+\›˜[YJHÂˆÛÛœÝÜÝ˜[YHH™]ÈT“
+\›˜[YJKšÜÝ˜[YNÂˆ™]\›ˆÉÌLËŒŒŒIË	ÛØØ[ÜÝ	Ë	ÎŽŒI×Kš[˜ÛY\ÊÜÝ˜[YJNÂŸB‚™[˜Ý[Ûˆ™\]Z\™S]]][Û]]Üš]J
+HÂˆYˆ
+
+Z\ÓØØ[
+TÑJHZ\ÓØØ[
+TJJH	‰ˆPSÕ×Ô“ÑPÕSÓ—ÓUUUSÓŠHÂˆ›ÝÈ™]È\œ›ÜŠ	Ô›ÙXÝ[Ûˆ]]][Ûˆ\È\ØX›YˆÙ]ÐTÑTUÐSÕ×Ô“ÑPÕSÓ—ÓUUUSÓLHÈ[ˆH™\Ù]Ü™]šY]ÈY™XÞXÛHYØZ[œÝ›Û‹[ØØ[Ù\šXÙ\Ë‰ÊNÂˆBŸB‚™[˜Ý[Ûˆ˜[YÛÝ\˜ÙPÛÛ[Z]
+˜[YJHÂˆ™]\›ˆ×–ÌNXKY—^ÍIÚK\Ý
+˜[YH	ÉÊNÂŸB‚™[˜Ý[Ûˆ\Ô›ÙXÝ[Û’›Ý\›™^J
+HÂˆ™]\›ˆZ\ÓØØ[
+TÑJHZ\ÓØØ[
+TJNÂŸB‚™[˜Ý[Ûˆ[•[Y[Ý]\Ê
+HÂˆ™]\›ˆ\Ô›ÙXÝ[Û’›Ý\›™^J
+HÈ“ÑPÕSÓ—Ô•S—ÕSQSÕUÓTÈˆÐÐSÔ•S—ÕSQSÕUÓTÎÂŸB‚™[˜Ý[Ûˆ›Û™[\TÝš[™Ê˜[YJHÂˆ™]\›ˆ\[Ùˆ˜[YHOOH	ÜÝš[™ÉÈ	‰ˆ˜[YK›[™ÝˆÂŸB‚™[˜Ý[Ûˆ›Ü›X[^™YÜ›Ý[™[™Õ^
+˜[YJHÂˆ™]\›ˆ\[Ùˆ˜[YHOOH	ÜÝš[™ÉÂˆÈ˜[YK››Ü›X[^™J	Ó‘’ÐÉÊBˆœ™\XÙJÖ×LKWLLXËWLY—LŒLWLLLMŽLŒWLŒWLŒŽLŒŽWLŒ™—LŒY—LÌJËÙÝK	È	ÊBˆœ™\XÙJ×ˆ
+ß
+ÉÙÝK	ÉÊBˆˆ	ÉÎÂŸB‚™[˜Ý[Ûˆ^XÝ›Ü›X[^™YÜ›Ý[™[™Ô][ÝJÛÝ\˜ÙTYÙK^Ù\œ
+HÂˆÛÛœÝ›Ü›X[^™Y^Ù\œH›Ü›X[^™YÜ›Ý[™[™Õ^
+^Ù\œ
+NÂˆ™]\›ˆ›Ü›X[^™Y^Ù\œ›[™Ýˆˆ	‰ˆ›Ü›X[^™YÜ›Ý[™[™Õ^
+ÛÝ\˜ÙTYÙJKš[˜ÛY\Ê›Ü›X[^™Y^Ù\œ
+NÂŸB‚™[˜Ý[ÛˆÙ[XÝ›ØÙ\ÜÕ^][ÝQ˜XÝ
+˜XÝË›ØÙ\ÜÑÜ˜\˜XÝY
+HÂˆ™]\›ˆ˜XÝË™š[™
+][HOˆ][K™˜XÝÚYOOH˜XÝYˆ	‰ˆ][KœÛÝ\˜ÙWÜ™YœÏË›[™Ýˆ	‰ˆ][KœÛÝ\˜ÙWÜ™YœË™]™\žJ™YˆOˆ™Y‹›ØØ]Ü—ÚÚ[™OOH	Ý^Ü][ÝIÊBˆ	‰ˆ›ØÙ\ÜÑÜ˜\››Ù\ËœÛÛYJ›ÙHOˆ
+›ÙK™˜XÝÚYÈ×JKš[˜ÛY\Ê][K™˜XÝÚY
+JJNÂŸB‚™[˜Ý[ÛˆÛÛZ[œÑ›Ü˜šY[”›Ý™[˜[˜ÙSX\šÙ\Š˜[YJHÂˆYˆ
+\[Ùˆ˜[YHOOH	ÜÝš[™ÉÊH™]\›ˆ˜[ÙNÂˆÛÛœÝ›ÛYH˜[YKÓÝÙ\Ø\ÙJ
+NÂˆ™]\›ˆ“Ô’QS—Ô“Õ‘SSÑWÓPT’ÑT”ËœÛÛYJX\šÙ\ˆOˆ›ÛYš[˜ÛY\ÊX\šÙ\ŠJNÂŸB‚™[˜Ý[Ûˆ›ÝšY\”›Ý™[˜[˜ÙU˜[YR\ÔØY™JšY[˜[YJHÂˆYˆ
+˜[YHOH[
+H™]\›ˆYNÂˆYˆ
+[›Û™[\TÝš[™Ê˜[YJH˜[YHOOH˜[YKš[J
+HÛÛZ[œÑ›Ü˜šY[”›Ý™[˜[˜ÙSX\šÙ\Š˜[YJJH™]\›ˆ˜[ÙNÂˆYˆ
+šY[OOH	Ü™\ÜÛœÙWÚY	ÊH™]\›ˆÐQ‘WÔ‘TÔÓ”ÑWÒQ\Ý
+˜[YJNÂˆYˆ
+šY[OOH	Ü™\ÜÛœÙWÛ[Ù[	ÊH™]\›ˆVPÕÓ‘SSÕ“Ó—Ô‘TÔÓ”ÑWÓSÑSËš\Ê˜[YJNÂˆYˆ
+šY[OOH	Ý\Ý™X[WÜ›ÝšY\‰ÊH™]\›ˆÐQ‘WÕTÕ‘PSWÔ“Õ’QT‹\Ý
+˜[YJNÂˆYˆ
+šY[OOH	Ùš[š\ÚÜ™X\ÛÛ‰ÊH™]\›ˆÐQ‘WÑ’S’TÒÔ‘PTÓÓ”Ëš\Ê˜[YJNÂˆ™]\›ˆ˜[ÙNÂŸB‚™[˜Ý[Ûˆ›ÝšY\”™Z™XÝ[Û›Ý[™\žR\ÜÝYJ˜[YJHÂˆÛÛœÝ›Ý[™\žT™\Ù[HØš™XÝš\ÓÝÛŠ˜[YK	Ü›ÝšY\—Ø›Ý[™\žIÊNÂˆÛÛœÝ^XÝY›ÝšY\”™\Ù[HØš™XÝš\ÓÝÛŠ˜[YK	Ù^XÝYÝ\Ý™X[WÜ›ÝšY\‰ÊNÂˆYˆ
+˜[YK™\œ›Ü—Ú[˜\šX[OOH	Ü›ÝšY\—Ý\Ý™X[WÜ™Z™XÝ[Û‰ÊHÂˆ™]\›ˆ›Ý[™\žT™\Ù[^XÝY›ÝšY\”™\Ù[ˆÈ	Ü›ÝšY\ˆ™Z™XÝ[Ûˆ›Ý[™\žH]šX][Ûˆ\ÈÝ]ÙˆØÛÜIÂˆˆ[ÂˆBˆYˆ
+X›Ý[™\žT™\Ù[Y^XÝY›ÝšY\”™\Ù[
+H™]\›ˆ	Ü›ÝšY\ˆ™Z™XÝ[Ûˆ›Ý[™\žH]šX][ÛˆZ\ˆ\È[˜ÛÛ\]IÎÂˆYˆ
+˜[YKœ›ÝšY\—Ø›Ý[™\žHOOHVPÕQÔ“Õ’QT—Ð“ÕS‘T–Bˆ˜[YK™^XÝYÝ\Ý™X[WÜ›ÝšY\ˆOOHVPÕQÕTÕ‘PSWÔ“Õ’QTŠH™]\›ˆ	Ü›ÝšY\ˆ™Z™XÝ[Ûˆ›Ý[™\žH]šX][Ûˆ\È›Ü™ÙY	ÎÂˆ™]\›ˆ[ÂŸB‚™[˜Ý[Ûˆ^XÝY[X™\œÊ˜[Y\Ë^XÝY
+HÂˆ™]\›ˆ\œ˜^Kš\Ð\œ˜^J˜[Y\ÊBˆ	‰ˆ\œ˜^Kš\Ð\œ˜^J^XÝY
+Bˆ	‰ˆ˜[Y\Ë›[™ÝOOH^XÝY›[™Ýˆ	‰ˆ™]ÈÙ]
+˜[Y\ÊKœÚ^™HOOH˜[Y\Ë›[™Ýˆ	‰ˆ™]ÈÙ]
+^XÝY
+KœÚ^™HOOH^XÝY›[™Ýˆ	‰ˆ^XÝY™]™\žJ˜[YHOˆ˜[Y\Ëš[˜ÛY\Ê˜[YJJNÂŸB‚™[˜Ý[ÛˆÛÛšX][Û‘[šY\Ê˜[YK^XÝY]šX][ÛŠHÂˆÛÛœÝ[šY\ÈH
+\œ˜^Kš\Ð\œ˜^J˜[YJHÈ˜[YHˆ˜[YH	‰ˆ\[Ùˆ˜[YHOOH	ÛØš™XÝ	ÈÈÝ˜[YWHˆ×JBˆ™š[\Š][HOˆ][H	‰ˆ\[Ùˆ][HOOH	ÛØš™XÝ	ÊNÂˆYˆ
+Y[šY\Ë›[™Ý
+H™]\›ˆ[ÂˆÛÛœÝYÈH[šY\Ë›X\
+][HOˆ][K˜ÛÛšX][Û—ÚY
+NÂˆYˆ
+ZYË™]™\žJ›Û™[\TÝš[™ÊH™]ÈÙ]
+YÊKœÚ^™HOOHYË›[™Ý
+H™]\›ˆ[ÂˆÛÛœÝ˜[YH[šY\Ë™]™\žJ][HOˆÂˆYˆ
+\[Ùˆ][K™]\›Z[š\ÝX×Ù˜[˜XÚ×Ø\YYOOH	Ø›ÛÛX[‰ÂˆS[X™\‹š\Ò[YÙ\Š][K˜ÛÛ™šY[˜ÙWØ˜\Ú\×ÜÚ[ÊBˆ][K˜ÛÛ™šY[˜ÙWØ˜\Ú\×ÜÚ[Èˆ][K˜ÛÛ™šY[˜ÙWØ˜\Ú\×ÜÚ[ÈˆL
+H™]\›ˆ˜[ÙNÂˆÛÛœÝ^XÝY›ÛHH][K™]\›Z[š\ÝX×Ù˜[˜XÚ×Ø\YYˆÈUT“RS’TÕP×ÐÓÓ•’P•USÓ—Ô“ÓBˆˆ^XÝY]šX][ÛŽÂˆYˆ
+][K˜]šX][ÛˆOOH^XÝY›ÛJH™]\›ˆ˜[ÙNÂˆYˆ
+^XÝY]šX][ÛˆOOH“ÐÑTÔ×ÐÓÓ•’P•USÓ—Ô“ÓJHÂˆ™]\›ˆ×™˜XÝ–×Ž—JÎ™XÚ\Ú[Û—Ý˜[YIË\Ý
+][K˜ÛÛšX][Û—ÚY
+Bˆ	‰ˆ^XÝY[X™\œÊ][K›[Ù[ÛÝÛ™YÙšY[ËÉÙXÚ\Ú[Û—Ý˜[YI×JNÂˆBˆYˆ
+^XÝY]šX][ÛˆOOHU’QSÑWÐÓÓ•’P•USÓ—Ô“ÓJHÂˆÛÛœÝX]ÚH][K˜ÛÛšX][Û—ÚY›X]Ú
+×š][NŠŠÊNŠÝ]\ß\Y˜XÝÊIÊNÂˆYˆ
+[X]Ú
+H™]\›ˆ˜[ÙNÂˆÛÛœÝ^XÝYšY[HX]ÚÌ—HOOH	ÜÝ]\ÉÈÈ	ÜÝ]\ÉÈˆ	Ø\Y˜XÝÚYÉÎÂˆ™]\›ˆ][K™šY[OOH^XÝYšY[ÂˆBˆYˆ
+^XÝY]šX][ÛˆOOH’SSÐÓÓ•’P•USÓ—Ô“ÓJHÂˆÛÛœÝ^XÝYH’SSÑ’QSÐÓÓ•PÕ™š[™
+[š]Oˆ[š]˜ÛÛšX][Û—ÚYOOH][K˜ÛÛšX][Û—ÚY
+NÂˆ™]\›ˆ›ÛÛX[Š^XÝY	‰ˆ][K™šY[OOH^XÝY™šY[
+NÂˆBˆ™]\›ˆ˜[ÙNÂˆJNÂˆ™]\›ˆ˜[YÈ[šY\Èˆ[ÂŸB‚™[˜Ý[Ûˆ˜[œÙ›Ü›YYÛÛšX][Û”Ý\™\ÜÙY
+˜[œÙ›Ü›HH[
+HÂˆ™]\›ˆ˜[œÙ›Ü›OË˜XØÙ\[˜ÙWÜØÛÜHOOH	ÜÜÝÜ™]šY]×Ý[™\šYšYYÝ˜[œÙ›Ü›IÂˆ
+˜[œÙ›Ü›OË˜ÛÛ˜XÝOOH	ØØ\Ù\]›Y[[ÜžKX\XØ][Û‹\™XÙZ\ÌKŒŒ	Âˆ	‰ˆ˜[œÙ›Ü›K˜]]Üš]HOOH	Ý[™\šYšYYÙ[[ÉÂˆ	‰ˆ˜[œÙ›Ü›KœØÛÜHOOH	ØØ\ÙWÜÜXÚYšX×ÙÝZY[˜ÙWÛÛ›IÂˆ	‰ˆ˜[œÙ›Ü›K›[Ù[ØXØÙ\[˜ÙWÜ™]\ÙYOOH˜[ÙBˆ	‰ˆ˜[œÙ›Ü›K˜\YYOOHYJNÂŸB‚™[˜Ý[ÛˆÛÛšX][Û‘^XÝ][ÛŠ˜[YK^XÝY]šX][Û‹˜[œÙ›Ü›HH[
+HÂˆYˆ
+˜[œÙ›Ü›YYÛÛšX][Û”Ý\™\ÜÙY
+˜[œÙ›Ü›JJH™]\›ˆ[ÂˆÛÛœÝ[šY\ÈHÛÛšX][Û‘[šY\Ê˜[YK^XÝY]šX][ÛŠNÂˆYˆ
+Y[šY\ÊH™]\›ˆ[ÂˆÛÛœÝXØÙ\YÛÝ[H[šY\Ë™š[\Š][HOˆ][K™]\›Z[š\ÝX×Ù˜[˜XÚ×Ø\YYOOH˜[ÙH	‰ˆ][K˜]šX][ÛˆOOH^XÝY]šX][ÛŠK›[™ÝÂˆÛÛœÝ˜[˜XÚÐÛÝ[H[šY\Ë™š[\Š][HOˆ][K™]\›Z[š\ÝX×Ù˜[˜XÚ×Ø\YYOOHYH	‰ˆ][K˜]šX][ÛˆOOHUT“RS’TÕP×ÐÓÓ•’P•USÓ—Ô“ÓJK›[™ÝÂˆYˆ
+XXØÙ\YÛÝ[	‰ˆY˜[˜XÚÐÛÝ[
+H™]\›ˆ[Âˆ™]\›ˆÂˆ]]Üš]NˆXØÙ\YÛÝ[	‰ˆ˜[˜XÚÐÛÝ[È	ÛZ^Y	ÈˆXØÙ\YÛÝ[È	Û™[[Ý›Û‹XXØÙ\Y	Èˆ	Ù]\›Z[š\ÝXËY˜[˜XÚÉËˆXØÙ\YØÛÝ[ˆÝš[™ÊXØÙ\YÛÝ[
+Kˆ˜[˜XÚ×ØÛÝ[ˆÝš[™Ê˜[˜XÚÐÛÝ[
+KˆNÂŸB‚™[˜Ý[ÛˆÛÛšX][Û‘ÛT›Ú™XÝ[ÛŠ˜[YK^XÝY]šX][Û‹˜[œÙ›Ü›HH[
+HÂˆÛÛœÝÝ[[X\žHHÛÛšX][Û‘^XÝ][ÛŠ˜[YK^XÝY]šX][Û‹˜[œÙ›Ü›JNÂˆÛÛœÝ[šY\ÈH˜[œÙ›Ü›YYÛÛšX][Û”Ý\™\ÜÙY
+˜[œÙ›Ü›JBˆÈ[ˆˆÛÛšX][Û‘[šY\Ê˜[YK^XÝY]šX][ÛŠNÂˆYˆ
+\Ý[[X\žHY[šY\ÊH™]\›ˆ[Âˆ™]\›ˆÂˆ‹‹œÝ[[X\žKˆXØÙ\YÚYÎˆ[šY\Ë™š[\Š][HOˆ][K™]\›Z[š\ÝX×Ù˜[˜XÚ×Ø\YYOOH˜[ÙJK›X\
+][HOˆ][K˜ÛÛšX][Û—ÚY
+Kš›Ú[Š	Ë	ÊKˆ˜[˜XÚ×ÚYÎˆ[šY\Ë™š[\Š][HOˆ][K™]\›Z[š\ÝX×Ù˜[˜XÚ×Ø\YYOOHYJK›X\
+][HOˆ][K˜ÛÛšX][Û—ÚY
+Kš›Ú[Š	Ë	ÊKˆNÂŸB‚™[˜Ý[ÛˆÜ˜Ú\Ý˜][Û]Y]
+[ŠHÂˆ™]\›ˆ[Ëœ™\Ý[Ë˜]Y]Ë˜YÙ[ÛÜ˜Ú\Ý˜][Û‚ˆ[Ëœ™\Ý[Ë˜YÙ[ÛÜ˜Ú\Ý˜][Û‚ˆ[Ë˜YÙ[ÛÜ˜Ú\Ý˜][Û‚ˆ[ÂŸB‚™[˜Ý[Ûˆ›Ü˜šY[‘šY[]Ê˜[YKÝ\œ™[]H	É	Ë›Ý[™H×JHÂˆYˆ
+\œ˜^Kš\Ð\œ˜^J˜[YJJHÂˆ˜[YK™›Ü‘XXÚ
+
+][K[™^
+HOˆ›Ü˜šY[‘šY[]Ê][K	ØÝ\œ™[]VÉÚ[™^WX›Ý[™
+JNÂˆ™]\›ˆ›Ý[™ÂˆBˆYˆ
+]˜[YH\[Ùˆ˜[YHOOH	ÛØš™XÝ	ÊH™]\›ˆ›Ý[™Âˆ›Üˆ
+ÛÛœÝÚÙ^KÚ[HÙˆØš™XÝ™[šY\Ê˜[YJJHÂˆÛÛœÝÚ[]H	ØÝ\œ™[]K‰ÚÙ^_XÂˆYˆ
+“Ô’QS—ÔP“P×Ñ’QSËš\ÊÙ^JJH›Ý[™œ\Ú
+Ú[]
+NÂˆ›Ü˜šY[‘šY[]ÊÚ[Ú[]›Ý[™
+NÂˆBˆ™]\›ˆ›Ý[™ÂŸB‚™[˜Ý[ÛˆÝX›RœÛÛŠ˜[YJHÂˆYˆ
+\œ˜^Kš\Ð\œ˜^J˜[YJJH™]\›ˆÉÝ˜[YK›X\
+ÝX›RœÛÛŠKš›Ú[Š	Ë	Ê_WXÂˆYˆ
+˜[YH	‰ˆ\[Ùˆ˜[YHOOH	ÛØš™XÝ	ÊHÂˆ™]\›ˆÉÓØš™XÝšÙ^\Ê˜[YJKœÛÜ
+
+K›X\
+Ù^HOˆ	Ò”ÓÓ‹œÝš[™ÚYžJÙ^J_N‰ÜÝX›RœÛÛŠ˜[YVÚÙ^WJ_X
+Kš›Ú[Š	Ë	Ê__XÂˆBˆ™]\›ˆ”ÓÓ‹œÝš[™ÚYžJ˜[YJNÂŸB‚™[˜Ý[ÛˆÒ\Ú
+˜[YJHÂˆ™]\›ˆÚLMŠÝX›RœÛÛŠ˜[YJJNÂŸB‚™[˜Ý[ÛˆÙ[X[XÔ›ØÙ\ÜÑÊ›ØÙ\ÜÊHÂˆÛÛœÝ˜[YHHÝXÝ\™YÛÛ™J›ØÙ\ÜÈßJNÂˆ[]H˜[YK˜YÙ[ØÛÛšX][ÛŽÂˆ›Üˆ
+ÛÛœÝ›ÙHÙˆ˜[YK››Ù\È×JH[]H›ÙK˜YÙ[ÙXÚ\Ú[Û—ØÛÛšX][ÛœÎÂˆ™]\›ˆ˜[YNÂŸB‚™[˜Ý[ÛˆÙ[X[XÐÚXÚÛ\ÝÊÚXÚÛ\Ý
+HÂˆÛÛœÝ˜[YHHÝXÝ\™YÛÛ™JÚXÚÛ\ÝßJNÂˆ[]H˜[YK˜YÙ[ØÛÛšX][ÛŽÂˆ›Üˆ
+ÛÛœÝ][HÙˆ˜[YKš][\È×JH[]H][K˜YÙ[ØÛÛšX][ÛŽÂˆ™]\›ˆ˜[YNÂŸB‚™[˜Ý[Ûˆ]šY[˜ÙT™[][ÛÛÛ˜XÝš[Û][ÛœÊ›ØÙ\ÜËÚXÚÛ\Ý
+HÂˆÛÛœÝ\ÜÝY\ÈH×NÂˆYˆ
+\›ØÙ\ÜÈXÚXÚÛ\ÝP\œ˜^Kš\Ð\œ˜^J›ØÙ\ÜË››Ù\ÊHP\œ˜^Kš\Ð\œ˜^JÚXÚÛ\Ýš][\ÊJH™]\›ˆÉÜ›ØÙ\ÜÈ›Ù\ÈÜˆÚXÚÛ\Ý][\È\™HXœÙ[	×NÂˆÛÛœÝ][RYÈHÚXÚÛ\Ýš][\Ë›X\
+][HOˆ][OËš][WÚY
+NÂˆYˆ
+Z][RYË™]™\žJ›Û™[\TÝš[™ÊH™]ÈÙ]
+][RYÊKœÚ^™HOOH][RYË›[™Ý
+H™]\›ˆÉØÚXÚÛ\Ý][HQÈ\™HXœÙ[Üˆ\XØ]Y	×NÂˆÛÛœÝ][RYÙ]H™]ÈÙ]
+][RYÊNÂˆÛÛœÝÝÛ™\“X\H™]ÈX\
+][RYË›X\
+][RYOˆÚ][RY×WJJNÂˆÛÛœÝ›ÙRYÈH›ØÙ\ÜË››Ù\Ë›X\
+›ÙHOˆ›ÙOË››ÙWÚY
+NÂˆYˆ
+[›ÙRYË™]™\žJ›Û™[\TÝš[™ÊH™]ÈÙ]
+›ÙRYÊKœÚ^™HOOH›ÙRYË›[™Ý
+H™]\›ˆÉÜ›ØÙ\ÜÈ›ÙHQÈ\™HXœÙ[Üˆ\XØ]Y	×NÂˆ›Üˆ
+ÛÛœÝ›ÙHÙˆ›ØÙ\ÜË››Ù\ÊHÂˆÛÛœÝ™\]Z\™[Y[ÈH›ÙK™]šY[˜ÙWÜ™\]Z\™[Y[ÚYÎÂˆYˆ
+P\œ˜^Kš\Ð\œ˜^J™\]Z\™[Y[ÊH™\]Z\™[Y[ËœÛÛYJ][RYOˆZ][RYÙ]š\Ê][RY
+JH™]ÈÙ]
+™\]Z\™[Y[ÊKœÚ^™HOOH™\]Z\™[Y[Ë›[™Ý
+HÂˆ\ÜÝY\Ëœ\Ú
+	Û›ÙK››ÙWÚYNˆ]šY[˜ÙH™\]Z\™[Y[È\™H›ÝH[š\]YHÛ›ÝÛ‹Z][H\Ý
+NÂˆÛÛ[YNÂˆBˆ›Üˆ
+ÛÛœÝ][RYÙˆ™\]Z\™[Y[ÊHÝÛ™\“X\™Ù]
+][RY
+Kœ\Ú
+›ÙK››ÙWÚY
+NÂˆBˆÛÛœÝÙ[XÝY]H›ØÙ\ÜËœÙ[XÝYÜ]ÂˆÛÛœÝ™^XÝ[ÛˆH›ØÙ\ÜË˜Ý\œ™[ÛÝ™\›^OË›™^ØXÝ[Û—Û›ÙWÚYÂˆYˆ
+P\œ˜^Kš\Ð\œ˜^JÙ[XÝY]
+HÙ[XÝY]œÛÛYJ›ÙRYOˆ[›ÙRYËš[˜ÛY\Ê›ÙRY
+JJH\ÜÝY\Ëœ\Ú
+	ÜÙ[XÝY]\ÈXœÙ[ÜˆÛÛZ[œÈ[ˆ[šÛ›ÝÛˆ›ÙIÊNÂˆYˆ
+[›Û™[\TÝš[™Ê™^XÝ[ÛŠH[›ÙRYËš[˜ÛY\Ê™^XÝ[ÛŠJH\ÜÝY\Ëœ\Ú
+	Û™^XXÝ[Ûˆ›ÙH\ÈXœÙ[Üˆ[šÛ›ÝÛ‰ÊNÂˆÛÛœÝXÝ]™S›Ù\ÈH™]ÈÙ]
+Ë‹‹Š\œ˜^Kš\Ð\œ˜^JÙ[XÝY]
+HÈÙ[XÝY]ˆ×JK‹‹Š›Û™[\TÝš[™Ê™^XÝ[ÛŠHÈÛ™^XÝ[Û—Hˆ×JWJNÂˆ›Üˆ
+ÛÛœÝ][HÙˆÚXÚÛ\Ýš][\ÊHÂˆÛÛœÝÝÛ™\œÈHÝÛ™\“X\™Ù]
+][Kš][WÚY
+H×NÂˆYˆ
+[ÝÛ™\œË›[™Ý
+H\ÜÝY\Ëœ\Ú
+	Ú][Kš][WÚYNˆ›È›ØÙ\ÜÈÝÛ™\˜
+NÂˆYˆ
+”ÓÓ‹œÝš[™ÚYžJ][K››ÙWÚYÊHOOH”ÓÓ‹œÝš[™ÚYžJÝÛ™\œÊJH\ÜÝY\Ëœ\Ú
+	Ú][Kš][WÚYNˆ›ÙWÚYÈÈ›ÝX]ÚÜ™\™Y›ØÙ\ÜÈÝÛ™\œØ
+NÂˆYˆ
+][K››ÙWÚYOOHÝÛ™\œÖÌJH\ÜÝY\Ëœ\Ú
+	Ú][Kš][WÚYNˆ›ÙWÚY\È›ÝH\š]™Yš[X\žHÝÛ™\˜
+NÂˆYˆ
+][K˜Ý\œ™[Ü]OOHÝÛ™\œËœÛÛYJ›ÙRYOˆXÝ]™S›Ù\Ëš\Ê›ÙRY
+JJH\ÜÝY\Ëœ\Ú
+	Ú][Kš][WÚYNˆÝ\œ™[Ü]\È›Ý\š]™Yœ›ÛH]™\žHÝÛ™\˜
+NÂˆBˆ™]\›ˆ\ÜÝY\ÎÂŸB‚™[˜Ý[ÛˆYØ[ÛÛ^ÛÛ˜XÝš[Û][ÛœÊYØ[›ØÙ\ÜÊHÂˆÛÛœÝ\ÜÝY\ÈH×NÂˆYˆ
+[YØ[YØ[˜ÛÛ˜XÝOOH	ØØ\Ù\]›YØ[XÛÛ^Ì‹ŒŒ	ÊH™]\›ˆÉÛYØ[ÛÛ^ÛÛ˜XÝ\ÈXœÙ[ÜˆÜ›Û™É×NÂˆYˆ
+YØ[œ™YÚ\ÝžWÝ™\œÚ[ÛˆOOH	ØÚ][˜[˜ÞK[Ù™šXÚX[\Û˜\ÚÝÌŒ‹LLL‰ÈYØ[›ÛÚÝ\ÛY]ÙOOH	Ý™\œÚ[Û™YÛÙ™šXÚX[ÜÛÝ\˜ÙWÜ™YÚ\ÝžWÛÛÚÝ\	ÊH\ÜÝY\Ëœ\Ú
+	ÛYØ[™YÚ\ÝžHY[]H\ÈÜ›Û™ÉÊNÂˆYˆ
+P\œ˜^Kš\Ð\œ˜^JYØ[œ]Y\Ý[ÛœÊHP\œ˜^Kš\Ð\œ˜^JYØ[œÛÝ\˜Ù\ÊHP\œ˜^Kš\Ð\œ˜^JYØ[š[™[™×Üš[˜Ú\\ÊJH™]\›ˆË‹‹š\ÜÝY\Ë	ÛYØ[]Y\Ý[ÛœËÛÝ\˜Ù\ËÜˆ[™[™Èš[˜Ú\\È\™HXœÙ[	×NÂˆÛÛœÝ›ÙRYÈH™]ÈÙ]
+
+›ØÙ\ÜÏË››Ù\È×JK›X\
+›ÙHOˆ›ÙK››ÙWÚY
+JNÂˆÛÛœÝÙ™šXÚX[YÈHYØ[œÛÝ\˜Ù\Ë›X\
+ÛÝ\˜ÙHOˆÛÝ\˜ÙOËœÛÝ\˜ÙWÚY
+NÂˆÛÛœÝš[˜Ú\RYÈHYØ[š[™[™×Üš[˜Ú\\Ë›X\
+ÛÝ\˜ÙHOˆÛÝ\˜ÙOËœÛÝ\˜ÙWÚY
+NÂˆYˆ
+[Ù™šXÚX[YË™]™\žJ›Û™[\TÝš[™ÊH™]ÈÙ]
+Ù™šXÚX[YÊKœÚ^™HOOHÙ™šXÚX[YË›[™Ý
+H\ÜÝY\Ëœ\Ú
+	ÛÙ™šXÚX[YØ[ÛÝ\˜ÙHQÈ\™HXœÙ[Üˆ\XØ]Y	ÊNÂˆYˆ
+\š[˜Ú\RYË™]™\žJ›Û™[\TÝš[™ÊH™]ÈÙ]
+š[˜Ú\RYÊKœÚ^™HOOHš[˜Ú\RYË›[™Ý
+H\ÜÝY\Ëœ\Ú
+	Ú[™[™Ë\š[˜Ú\HQÈ\™HXœÙ[Üˆ\XØ]Y	ÊNÂˆÛÛœÝÙ™šXÚX[šY[ÈHÉÜÛÝ\˜ÙWÚY	Ë	Ý]IË	Ý\›	Ë	ÜÛÝ\˜ÙWÝ\IË	Ú\š\ÙXÝ[Û‰Ë	Ý™\œÚ[Û—Ù]IË	ÛØØ][Û‰Ë	Ü\ÜØYÙWÛ[™ÝXYÙIË	Ü\ÜØYÙWÝ^	Ë	Ü\ÜØYÙWÜÚLM‰Ë	Ü\ÜØYÙWÜÝ[[X\žIË	ÛÜ\˜][Û˜[Ú[\œ™]][Û‰Ë	Ü™]šY]×ÜÝ]\ÉË	Ü›ÛIË	Ø\›Ý™Y	Ë	Ü™]šY]˜[	×NÂˆ›Üˆ
+ÛÛœÝÛÝ\˜ÙHÙˆYØ[œÛÝ\˜Ù\ÊHÂˆYˆ
+Y^XÝY[X™\œÊØš™XÝšÙ^\ÊÛÝ\˜ÙHßJKÙ™šXÚX[šY[ÊJH\ÜÝY\Ëœ\Ú
+	ÜÛÝ\˜ÙOËœÛÝ\˜ÙWÚY	ÛÙ™šXÚX[ÛÝ\˜ÙIßNˆšY[È\™H›Ý^XÝ
+NÂˆYˆ
+[›Û™[\TÝš[™ÊÛÝ\˜ÙOËœ\ÜØYÙWÝ^
+HÛÝ\˜ÙKœ\ÜØYÙWÜÚLMˆOOHÚLMŠÛÝ\˜ÙKœ\ÜØYÙWÝ^
+JH\ÜÝY\Ëœ\Ú
+	ÜÛÝ\˜ÙOËœÛÝ\˜ÙWÚYNˆÙ™šXÚX[\ÜØYÙH\Ú\ÈÜ›Û™Ø
+NÂˆYˆ
+ÛÝ\˜ÙOËš\š\ÙXÝ[ÛˆOOH	ÐÒ	ÈÛÝ\˜ÙOËœ\ÜØYÙWÛ[™ÝXYÙHOOH	ÙIÈ[›Û™[\TÝš[™ÊÛÝ\˜ÙOË™\œÚ[Û—Ù]JH[›Û™[\TÝš[™ÊÛÝ\˜ÙOË›ØØ][ÛŠHÛÝ\˜ÙOËœ™]šY]×ÜÝ]\ÈOOH	Ü]X[YšYYÜ™]šY]×Ü[™[™ÉÈÛÝ\˜ÙOË˜\›Ý™YOOH˜[ÙJH\ÜÝY\Ëœ\Ú
+	ÜÛÝ\˜ÙOËœÛÝ\˜ÙWÚYNˆÙ™šXÚX[\ÜØYÙHÝ]\ËÜ›Ý™[˜[˜ÙH\È[˜ÛÛ\]X
+NÂˆÛÛœÝ™]šY]˜[HÛÝ\˜ÙOËœ™]šY]˜[ÂˆYˆ
+Y^XÝY[X™\œÊØš™XÝšÙ^\Ê™]šY]˜[ßJKÉÛY]Ù	Ë	Ü™]šY]™YØ]	Ë	Ü™YÚ\ÝžWÝ™\œÚ[Û‰Ë	ÜÛ˜\ÚÝÝ\›	Ë	ÜÛ˜\ÚÝÜÚLM‰Ë	ÜÛ˜\ÚÝÜØÛÜI×JBˆ™]šY]˜[Ë›Y]ÙOOH	Ý™\œÚ[Û™YÛÙ™šXÚX[ÜÛÝ\˜ÙWÜ™YÚ\ÝžWÛÛÚÝ\	Âˆ™]šY]˜[Ëœ™YÚ\ÝžWÝ™\œÚ[ÛˆOOHYØ[œ™YÚ\ÝžWÝ™\œÚ[Û‚ˆ[›Û™[\TÝš[™Ê™]šY]˜[Ëœ™]šY]™YØ]
+Bˆ[›Û™[\TÝš[™Ê™]šY]˜[ËœÛ˜\ÚÝÝ\›
+BˆTÒLM—ÔUT“‹\Ý
+™]šY]˜[ËœÛ˜\ÚÝÜÚLMˆ	ÉÊBˆVÉÛÙ™šXÚX[Ü—Øž]\ÉË	Û›Ü›X[^™YÛÙ™šXÚX[Ü\ÜØYÙWÝ]Ž	×Kš[˜ÛY\Ê™]šY]˜[ËœÛ˜\ÚÝÜØÛÜJJH\ÜÝY\Ëœ\Ú
+	ÜÛÝ\˜ÙOËœÛÝ\˜ÙWÚYNˆÙ™šXÚX[™]šY]˜[™XÙZ\\È[˜[Y
+NÂˆYˆ
+ÛÝ\˜ÙOËœÛÝ\˜ÙWÚYOOH	ØÛËXÛÛ˜Ú[X][Û‰È	‰ˆ
+™]šY]˜[ËœÛ˜\ÚÝÜØÛÜHOOH	Û›Ü›X[^™YÛÙ™šXÚX[Ü\ÜØYÙWÝ]Ž	È™]šY]˜[ËœÛ˜\ÚÝÜÚLMˆOOHÛÝ\˜ÙKœ\ÜØYÙWÜÚLMˆ™]šY]˜[œÛ˜\ÚÝÜÚLMˆOOH	ÌÍÌMY˜ŒLLŽNLÍŽŒØÍXLLXYY˜ŽMNL™™ÌØ™XÎÌ™ŒXÎØY‰ÊJH\ÜÝY\Ëœ\Ú
+	ÜÛÝ\˜ÙKœÛÝ\˜ÙWÚYNˆ›Ü›X[^™YÙ™šXÚX[\ÜØYÙHÛ˜\ÚÝ\È›Ý^XÝ
+NÂˆYˆ
+ÛÝ\˜ÙOËœÛÝ\˜ÙWÚYËœÝ\ÕÚ]
+	Ù™Y^IÊH	‰ˆ™]šY]˜[ËœÛ˜\ÚÝÜØÛÜHOOH	ÛÙ™šXÚX[Ü—Øž]\ÉÊH\ÜÝY\Ëœ\Ú
+	ÜÛÝ\˜ÙKœÛÝ\˜ÙWÚYNˆ™Y^Û˜\ÚÝØÛÜH\È›ÝÙ™šXÚX[ˆž]\Ø
+NÂˆBˆ›Üˆ
+ÛÛœÝš[˜Ú\HÙˆYØ[š[™[™×Üš[˜Ú\\ÊHÂˆYˆ
+Y^XÝY[X™\œÊØš™XÝšÙ^\Êš[˜Ú\HßJKÉÜÛÝ\˜ÙWÚY	Ë	Ý]IË	ÜÛÝ\˜ÙWÝ\IË	Ü›ÛIË	Ý˜[Y][Û—ÜÝ]\ÉË	Ü›ÙXÙ\‰×JHš[˜Ú\OËœ›ÙXÙ\ˆOOH	Ù]\›Z[š\ÝX×Ø\XØ][Û‰ÊH\ÜÝY\Ëœ\Ú
+	Üš[˜Ú\OËœÛÝ\˜ÙWÚY	Üš[˜Ú\IßNˆ]\›Z[š\ÝXÈ›ÙXÙ\ˆÛÛ˜XÝ\È[˜[Y
+NÂˆBˆÛÛœÝ]]Üš]RYÈH™]ÈÙ]
+Ë‹‹›Ù™šXÚX[YË‹‹œš[˜Ú\RY×JNÂˆÛÛœÝ\š]™Y›ÙS[šÜÈHßNÂˆÛÛœÝ]Y\Ý[Û’YÈH×NÂˆ›Üˆ
+ÛÛœÝ]Y\Ý[ÛˆÙˆYØ[œ]Y\Ý[ÛœÊHÂˆYˆ
+Y^XÝY[X™\œÊØš™XÝšÙ^\Ê]Y\Ý[ÛˆßJKÉÜ]Y\Ý[Û—ÚY	Ë	Ý^	Ë	ÜÛÝ\˜ÙWÚYÉË	Ú[\œ™]][Û—ÚYÉË	Ü›ØÙ\Ü×Û›ÙWÚYÉË	ØÛÛœÙ\]Y[˜ÙI×JJH\ÜÝY\Ëœ\Ú
+	Ü]Y\Ý[ÛËœ]Y\Ý[Û—ÚY	Ü]Y\Ý[Û‰ßNˆšY[È\™H›Ý^XÝ
+NÂˆYˆ
+[›Û™[\TÝš[™Ê]Y\Ý[ÛËœ]Y\Ý[Û—ÚY
+H]Y\Ý[Û’YËš[˜ÛY\Ê]Y\Ý[Û‹œ]Y\Ý[Û—ÚY
+JH\ÜÝY\Ëœ\Ú
+	ÛYØ[]Y\Ý[ÛˆQÈ\™HXœÙ[Üˆ\XØ]Y	ÊNÂˆ]Y\Ý[Û’YËœ\Ú
+]Y\Ý[ÛËœ]Y\Ý[Û—ÚY
+NÂˆYˆ
+[›Û™[\TÝš[™Ê]Y\Ý[ÛË^
+H[›Û™[\TÝš[™Ê]Y\Ý[ÛË˜ÛÛœÙ\]Y[˜ÙJJH\ÜÝY\Ëœ\Ú
+	Ü]Y\Ý[ÛËœ]Y\Ý[Û—ÚYNˆ]Y\Ý[Ûˆ^ÜˆÛÛœÙ\]Y[˜ÙH\ÈXœÙ[
+NÂˆYˆ
+J]Y\Ý[ÛËœÛÝ\˜ÙWÚYÈ×JK™]™\žJÛÝ\˜ÙRYOˆÙ™šXÚX[YËš[˜ÛY\ÊÛÝ\˜ÙRY
+JJH\ÜÝY\Ëœ\Ú
+	Ü]Y\Ý[ÛËœ]Y\Ý[Û—ÚYNˆÙ™šXÚX[ÛÝ\˜ÙH›Ú[ˆ\È[˜[Y
+NÂˆYˆ
+J]Y\Ý[ÛËš[\œ™]][Û—ÚYÈ×JK™]™\žJÛÝ\˜ÙRYOˆš[˜Ú\RYËš[˜ÛY\ÊÛÝ\˜ÙRY
+JJH\ÜÝY\Ëœ\Ú
+	Ü]Y\Ý[ÛËœ]Y\Ý[Û—ÚYNˆ[\œ™]][Ûˆ›Ú[ˆ\È[˜[Y
+NÂˆYˆ
+J]Y\Ý[ÛËœ›ØÙ\Ü×Û›ÙWÚYÈ×JK™]™\žJ›ÙRYOˆ›ÙRYËš\Ê›ÙRY
+JJH\ÜÝY\Ëœ\Ú
+	Ü]Y\Ý[ÛËœ]Y\Ý[Û—ÚYNˆ›ØÙ\ÜË[›ÙH›Ú[ˆ\È[˜[Y
+NÂˆ›Üˆ
+ÛÛœÝ›ÙRYÙˆ]Y\Ý[ÛËœ›ØÙ\Ü×Û›ÙWÚYÈ×JHÂˆÛÛœÝ™]Z[™YH\š]™Y›ÙS[šÜÖÛ›ÙRYHH×NÂˆ›Üˆ
+ÛÛœÝÛÝ\˜ÙRYÙˆË‹‹Š]Y\Ý[Û‹œÛÝ\˜ÙWÚYÈ×JK‹‹Š]Y\Ý[Û‹š[\œ™]][Û—ÚYÈ×JWJHYˆ
+\™]Z[™Yš[˜ÛY\ÊÛÝ\˜ÙRY
+JH™]Z[™Yœ\Ú
+ÛÝ\˜ÙRY
+NÂˆBˆBˆYˆ
+Øš™XÝ˜[Y\ÊYØ[››ÙWÛ[šÜÈßJK™›]
+
+KœÛÛYJÛÝ\˜ÙRYOˆX]]Üš]RYËš\ÊÛÝ\˜ÙRY
+JHÝX›RœÛÛŠYØ[››ÙWÛ[šÜÈßJHOOHÝX›RœÛÛŠ\š]™Y›ÙS[šÜÊJH\ÜÝY\Ëœ\Ú
+	ÛYØ[›ÙWÛ[šÜÈÈ›Ý\]X[HQZ›Ú[™Y]Y\Ý[ÛœÉÊNÂˆYˆ
+Û[Ù[[\œ™]][ÛŸ]™H™]šY]˜[ÚK\Ý
+ÝX›RœÛÛŠYØ[
+JJH\ÜÝY\Ëœ\Ú
+	ÛYØ[ÈÛÛZ[œÈ˜[ÙH[Ù[Üˆ]™K\™]šY]˜[]]Üš]HÛÜ™[™ÉÊNÂˆ™]\›ˆ\ÜÝY\ÎÂŸB‚™[˜Ý[Ûˆš\ÝX[™Y™\™[˜ÙPÛÛ˜XÝš[Û][ÛœÊ™Y™\™[˜ÙK\Y˜XÝ
+HÂˆÛÛœÝ\ÜÝY\ÈH×NÂˆÛÛœÝšY[ÈHÉØ\Y˜XÝÚY	Ë	ÛØØ]Ü—ÚÚ[™	Ë	Ü™YÚ[Û‰Ë	ÛØœÙ\˜][Û‰Ë	Ü›ÙXÙ\‰Ë	Ø]]Üš]IË	Ø[››Ý][Û—ØÛÛ˜XÝ	Ë	Ø[››Ý][Û—Ý™\œÚ[Û‰Ë	Ú[XYÙWÜÚLM‰×NÂˆYˆ
+Y^XÝY[X™\œÊØš™XÝšÙ^\Ê™Y™\™[˜ÙHßJKšY[ÊJH\ÜÝY\Ëœ\Ú
+	Ýš\ÝX[[››Ý][ÛˆšY[È\™H›Ý^XÝ	ÊNÂˆYˆ
+™Y™\™[˜ÙOË›ØØ]Ü—ÚÚ[™OOH	Ýš\ÝX[ÛØœÙ\˜][Û‰Âˆ™Y™\™[˜ÙOËœ›ÙXÙ\ˆOOH	Ù]\›Z[š\ÝX×Ü™Y™\™[˜ÙWØ[››Ý][Û‰Âˆ™Y™\™[˜ÙOË˜]]Üš]HOOH	ÙÙ[™\˜]YÙ[[×Ü™Y™\™[˜ÙWÛÛ›IÂˆ™Y™\™[˜ÙOË˜[››Ý][Û—ØÛÛ˜XÝOOH	ØØ\Ù\]š\ÝX[\™Y™\™[˜ÙKX[››Ý][Û‹ÌKŒŒ	Âˆ™Y™\™[˜ÙOË˜[››Ý][Û—Ý™\œÚ[ÛˆOOH	ÙÙ[™\˜]YY[[Ë\™Y™\™[˜ÙKÌŒ‹LLL‰ÊH\ÜÝY\Ëœ\Ú
+	Ýš\ÝX[[››Ý][Ûˆ]]Üš]HÛÛ˜XÝ\ÈÜ›Û™ÉÊNÂˆÛÛœÝ™YÚ[ÛˆH™Y™\™[˜ÙOËœ™YÚ[ÛŽÂˆYˆ
+P\œ˜^Kš\Ð\œ˜^J™YÚ[ÛŠH™YÚ[Û‹›[™ÝOOH™YÚ[Û‹œÛÛYJ˜[YHOˆ\[Ùˆ˜[YHOOH	Û[X™\‰ÈS[X™\‹š\Ñš[š]J˜[YJH˜[YH˜[YHˆJHJ™YÚ[Û–Ì—Hˆ
+HJ™YÚ[Û–Ì×Hˆ
+H™YÚ[Û–ÌH
+È™YÚ[Û–Ì—HˆH™YÚ[Û–ÌWH
+È™YÚ[Û–Ì×HˆJH\ÜÝY\Ëœ\Ú
+	Ýš\ÝX[[››Ý][Ûˆ™YÚ[Ûˆ\È[˜[Y	ÊNÂˆYˆ
+[›Û™[\TÝš[™Ê™Y™\™[˜ÙOË›ØœÙ\˜][ÛŠJH\ÜÝY\Ëœ\Ú
+	Ýš\ÝX[[››Ý][ÛˆØœÙ\˜][Ûˆ\ÈXœÙ[	ÊNÂˆYˆ
+X\Y˜XÝ™Y™\™[˜ÙOË˜\Y˜XÝÚYOOH\Y˜XÝ˜\Y˜XÝÚYX\Y˜XÝ›YYXWÝ\OËœÝ\ÕÚ]
+	Ú[XYÙKÉÊHTÒLM—ÔUT“‹\Ý
+\Y˜XÝœÚLMˆ	ÉÊH™Y™\™[˜ÙOËš[XYÙWÜÚLMˆOOH\Y˜XÝœÚLMŠH\ÜÝY\Ëœ\Ú
+	Ýš\ÝX[[››Ý][Ûˆ\È›Ý›Ý[™ÈX›XÈ[XYÙHž]\ÉÊNÂˆ™]\›ˆ\ÜÝY\ÎÂŸB‚™[˜Ý[Ûˆ™XÙY[˜[šÚ[™ÐÛÛ˜XÝš[Û][ÛœÊ™\Ý[
+HÂˆÛÛœÝ\ÜÝY\ÈH×NÂˆÛÛœÝ™XÙY[ÈH™\Ý[Ëœ™XÙY[ÎÂˆÛÛœÝ™XÙZ\H™\Ý[Ëœ™XÙY[Ü˜[šÚ[™ÎÂˆÛÛœÝÛÛ˜XÝH	ØØ\Ù\]œ™XÙY[\˜[šÚ[™ËÌKŒŒ	ÎÂˆÛÛœÝÛÜœ\ÈH	ÙÙ[™\˜]Y\™Y™\™[˜ÙK\]\›œËÌŒ‹LLL‰ÎÂˆYˆ
+P\œ˜^Kš\Ð\œ˜^J™XÙY[ÊH™XÙY[Ë›[™ÝOOHÈ\™XÙZ\
+H™]\›ˆÉÙ^XÝ]™YH™XÙY[ÈÜˆ˜[šÚ[™È™XÙZ\\™HXœÙ[	×NÂˆYˆ
+Y^XÝY[X™\œÊØš™XÝšÙ^\Ê™XÙZ\
+KÉØÛÛ˜XÝ	Ë	ØÛÜœ\×Ý™\œÚ[Û‰Ë	ØÛÛ^	Ë	ØÛÛ^Ú\Ú	Ë	ØØ[™Y]WÜØÛÜ™\ÉË	ÜÙ[XÝYØÛZ[WÚYÉË	Ü™\Ý[Ú\Ú	×JJH\ÜÝY\Ëœ\Ú
+	Ü™XÙY[˜[šÚ[™È™XÙZ\šY[È\™H›Ý^XÝ	ÊNÂˆYˆ
+™XÙZ\˜ÛÛ˜XÝOOHÛÛ˜XÝ™XÙZ\˜ÛÜœ\×Ý™\œÚ[ÛˆOOHÛÜœ\ÊH\ÜÝY\Ëœ\Ú
+	Ü™XÙY[˜[šÚ[™ÈY[]H\ÈÜ›Û™ÉÊNÂˆYˆ
+Y^XÝY[X™\œÊØš™XÝšÙ^\Ê™XÙZ\˜ÛÛ^ßJKÉØØ]YÛÜžIË	ÜÝX˜Ø]YÛÜžIË	ØÝ\œ™[Ü›ØÙ\Ü×Û›ÙWÚY	Ë	Û™^ØXÝ[Û—Û›ÙWÚY	Ë	ÜÙ[XÝYÜ]	Ë	Ý[œ™\ÛÛ™YÙ˜XÝÚYÉË	ØÝ\œ™[Ù]šY[˜ÙWÛ™YYÚYÉ×JH™XÙZ\˜ÛÛ^Ú\ÚOOHÒ\Ú
+™XÙZ\˜ÛÛ^
+JH\ÜÝY\Ëœ\Ú
+	Ü™XÙY[˜[šÚ[™ÈÛÛ^\È›Ý^XÝÜˆ\ÚX›Ý[™	ÊNÂˆÛÛœÝÙ[XÝYYÈH™XÙY[Ë›X\
+][HOˆ][K˜ÛZ[WÚY
+NÂˆYˆ
+”ÓÓ‹œÝš[™ÚYžJ™XÙZ\œÙ[XÝYØÛZ[WÚYÊHOOH”ÓÓ‹œÝš[™ÚYžJÙ[XÝYYÊH™XÙZ\œ™\Ý[Ú\ÚOOHÒ\Ú
+™XÙY[ÊJH\ÜÝY\Ëœ\Ú
+	Ü™XÙY[Ù[XÝYQÈÜˆ™\Ý[\Ú\™HÜ›Û™ÉÊNÂˆYˆ
+P\œ˜^Kš\Ð\œ˜^J™XÙZ\˜Ø[™Y]WÜØÛÜ™\ÊH™XÙZ\˜Ø[™Y]WÜØÛÜ™\Ë›[™ÝÈ™]ÈÙ]
+™XÙZ\˜Ø[™Y]WÜØÛÜ™\Ë›X\
+][HOˆ][K˜ÛZ[WÚY
+JKœÚ^™HOOH™XÙZ\˜Ø[™Y]WÜØÛÜ™\Ë›[™Ý”ÓÓ‹œÝš[™ÚYžJ™XÙZ\˜Ø[™Y]WÜØÛÜ™\ËœÛXÙJÊK›X\
+][HOˆ][K˜ÛZ[WÚY
+JHOOH”ÓÓ‹œÝš[™ÚYžJÙ[XÝYYÊJH\ÜÝY\Ëœ\Ú
+	ØØ[™Y]HØÛÜ™\ÈÈ›Ý™]Z[ˆH˜[šÙYÙ[XÝ[ÛˆÜ™\‰ÊNÂˆ›Üˆ
+ÛÛœÝØ[™Y]HÙˆ™XÙZ\˜Ø[™Y]WÜØÛÜ™\È×JHÂˆYˆ
+Y^XÝY[X™\œÊØš™XÝšÙ^\ÊØ[™Y]HßJKÉØÛZ[WÚY	Ë	ÜØÛÜ™WØ˜\Ú\×ÜÚ[ÉË	Ù˜XÝÜœÉ×JH[›Û™[\TÝš[™ÊØ[™Y]K˜ÛZ[WÚY
+HS[X™\‹š\Ò[YÙ\ŠØ[™Y]KœØÛÜ™WØ˜\Ú\×ÜÚ[ÊHP\œ˜^Kš\Ð\œ˜^JØ[™Y]K™˜XÝÜœÊHØ[™Y]K™˜XÝÜœËœÛÛYJ˜XÝÜˆOˆY^XÝY[X™\œÊØš™XÝšÙ^\Ê˜XÝÜˆßJKÉÙ˜XÝÜ‰Ë	Ý˜[YIË	ÝÙZYÚ	×JH[›Û™[\TÝš[™Ê˜XÝÜ‹™˜XÝÜŠH[›Û™[\TÝš[™Ê˜XÝÜ‹˜[YJHS[X™\‹š\Ò[YÙ\Š˜XÝÜ‹ÙZYÚ
+JHØ[™Y]KœØÛÜ™WØ˜\Ú\×ÜÚ[ÈOOHØ[™Y]K™˜XÝÜœËœ™YXÙJ
+Ý[K˜XÝÜŠHOˆÝ[H
+È˜XÝÜ‹ÙZYÚ
+JH\ÜÝY\Ëœ\Ú
+	ØØ[™Y]OË˜ÛZ[WÚY	ØØ[™Y]IßNˆØ[™Y]HØÛÜ™H™XÙZ\\È[˜[Y
+NÂˆBˆÛÛœÝ[ÝÙYÝ]\Ù\ÈH™]ÈÙ]
+ÉÙÙ[™\˜]YÜ™Y™\™[˜ÙIË	Ý[™\šYšYYÙ[[×ÛY[[ÜžIË	Ü]X[YšYYÙ^\Ü™]šY]ÙY	×JNÂˆ™XÙY[Ë™›Ü‘XXÚ
+
+™XÙY[[™^
+HOˆÂˆÛÛœÝ˜[šÚ[™ÈH™XÙY[Ëœ˜[šÚ[™ÎÂˆYˆ
+X[ÝÙYÝ]\Ù\Ëš\Ê™XÙY[Ëœ™]šY]×ÜÝ]\ÊJH\ÜÝY\Ëœ\Ú
+	Ü™XÙY[Ë˜ÛZ[WÚYNˆ™]šY]ÈÝ]\È\È[˜[Y
+NÂˆYˆ
+Y^XÝY[X™\œÊØš™XÝšÙ^\Ê˜[šÚ[™ÈßJKÉØÛÛ˜XÝ	Ë	ØÛÜœ\×Ý™\œÚ[Û‰Ë	Ü˜[šÉË	ÜØÛÜ™WØ˜\Ú\×ÜÚ[ÉË	Ù˜XÝÜœÉË	ØÛÛ^Ú\Ú	×JH˜[šÚ[™ÏË˜ÛÛ˜XÝOOHÛÛ˜XÝ˜[šÚ[™ÏË˜ÛÜœ\×Ý™\œÚ[ÛˆOOHÛÜœ\È˜[šÚ[™ÏËœ˜[šÈOOH[™^
+ÈH˜[šÚ[™ÏË˜ÛÛ^Ú\ÚOOH™XÙZ\˜ÛÛ^Ú\Ú
+H\ÜÝY\Ëœ\Ú
+	Ü™XÙY[Ë˜ÛZ[WÚYNˆ\‹Z][H˜[šÚ[™È\È[˜[Y
+NÂˆYˆ
+P\œ˜^Kš\Ð\œ˜^J˜[šÚ[™ÏË™˜XÝÜœÊH˜[šÚ[™Ë™˜XÝÜœËœÛÛYJ˜XÝÜˆOˆY^XÝY[X™\œÊØš™XÝšÙ^\Ê˜XÝÜˆßJKÉÙ˜XÝÜ‰Ë	Ý˜[YIË	ÝÙZYÚ	×JHS[X™\‹š\Ò[YÙ\Š˜XÝÜ‹ÙZYÚ
+JH˜[šÚ[™ÏËœØÛÜ™WØ˜\Ú\×ÜÚ[ÈOOH
+˜[šÚ[™ÏË™˜XÝÜœÈ×JKœ™YXÙJ
+Ý[K˜XÝÜŠHOˆÝ[H
+È˜XÝÜ‹ÙZYÚ
+JH\ÜÝY\Ëœ\Ú
+	Ü™XÙY[Ë˜ÛZ[WÚYNˆ˜[šÚ[™È˜XÝÜœÈÈ›ÝÝ[HÈHØÛÜ™X
+NÂˆÛÛœÝØ[™Y]HH™XÙZ\˜Ø[™Y]WÜØÛÜ™\ÏË™š[™
+][HOˆ][K˜ÛZ[WÚYOOH™XÙY[˜ÛZ[WÚY
+NÂˆYˆ
+XØ[™Y]HØ[™Y]KœØÛÜ™WØ˜\Ú\×ÜÚ[ÈOOH˜[šÚ[™ÏËœØÛÜ™WØ˜\Ú\×ÜÚ[ÈÝX›RœÛÛŠØ[™Y]K™˜XÝÜœÊHOOHÝX›RœÛÛŠ˜[šÚ[™ÏË™˜XÝÜœÊJH\ÜÝY\Ëœ\Ú
+	Ü™XÙY[Ë˜ÛZ[WÚYNˆØ[™Y]H[™Ù[XÝY˜[šÚ[™ÈY™™\˜
+NÂˆJNÂˆ™]\›ˆ\ÜÝY\ÎÂŸB‚™[˜Ý[ÛˆY[[ÜžT™]šY]˜[ÛÛ˜XÝš[Û][ÛœÊ™\Ý[
+HÂˆÛÛœÝ\ÜÝY\ÈH×NÂˆYˆ
+\™\Ý[\[Ùˆ™\Ý[OOH	ÛØš™XÝ	ÊH™]\›ˆÉÙš[˜[™\Ý[\ÈXœÙ[	×NÂˆÛÛœÝY[[ÜžT™XÙY[ÈH
+™\Ý[œ™XÙY[È×JK™š[\Š][HOˆ][OËœ™]šY]×ÜÝ]\ÈOOH	Ý[™\šYšYYÙ[[×ÛY[[ÜžIÈ	‰ˆ›Û™[\TÝš[™Ê][OË›Y[[ÜžWÚY
+JNÂˆÛÛœÝ^XÝY™]šY]™YHY[[ÜžT™XÙY[Ë›[™ÝˆÂˆÛÛœÝ™XÙZ\™\Ù[H™\Ý[›Y[[ÜžWØ\XØ][ÛˆOH[ÂˆÛÛœÝ™XÙZ\˜[YH\™XÙZ\™\Ù[
+™\Ý[›Y[[ÜžWØ\XØ][ÛË˜ÛÛ˜XÝOOH	ØØ\Ù\]›Y[[ÜžKX\XØ][Û‹\™XÙZ\ÌKŒŒ	Âˆ	‰ˆ™\Ý[›Y[[ÜžWØ\XØ][ÛË˜]]Üš]HOOH	Ý[™\šYšYYÙ[[ÉÂˆ	‰ˆ™\Ý[›Y[[ÜžWØ\XØ][ÛËœØÛÜHOOH	ØØ\ÙWÜÜXÚYšX×ÙÝZY[˜ÙWÛÛ›IÂˆ	‰ˆ™\Ý[›Y[[ÜžWØ\XØ][ÛË˜\YYOOHYBˆ	‰ˆÒLM—ÔUT“‹\Ý
+™\Ý[›Y[[ÜžWØ\XØ][ÛË˜\XØ][Û—Ú\Ú	ÉÊJNÂˆÛÛœÝÛ›ÝÛYÙHH™\Ý[šÛ›ÝÛYÙHßNÂˆÛÛœÝ›ØÙ\ÜÕ\ÙYH™\Ý[œ›ØÙ\ÜÏË›Y[[ÜžWÝ\ÙYÂˆÛÛœÝÚXÚÛ\Ý\ÙYH™\Ý[˜ÚXÚÛ\ÝË›Y[[ÜžWÝ\ÙYÂˆÛÛœÝ›ÛÝ\ÙQ›YÜÈHÜ™\Ý[›Y[[ÜžWÝ\ÙY™\Ý[œ™]šY]ÙYÛY[[ÜžWÝ\ÙYÛ›ÝÛYÙKœ™]šY]ÙYÛY[[ÜžWÝ\ÙYNÂˆÛÛœÝ™]šY]˜[›YÜÈHÜ™\Ý[œ™]šY]ÙYÛY[[ÜžWÜ™]šY]™YÛ›ÝÛYÙKœ™]šY]ÙYÛY[[ÜžWÜ™]šY]™YNÂˆYˆ
+\™]šY]˜[›YÜË™]™\žJ˜[YHOˆ\[Ùˆ˜[YHOOH	Ø›ÛÛX[‰ÊH™]šY]˜[›YÜËœÛÛYJ˜[YHOˆ˜[YHOOH^XÝY™]šY]™Y
+JH\ÜÝY\Ëœ\Ú
+	Ü™]šY]ÙY[Y[[ÜžH™]šY]˜[›YÜÈÈ›Ý\]X[˜[šÙY[™\šYšYYY[[ÜžH™\Ù[˜ÙIÊNÂˆYˆ
+\™XÙZ\˜[Y
+H\ÜÝY\Ëœ\Ú
+	ÛY[[ÜžK]\ÙH›YÜÈÚ[][ˆ[˜[Y\XØ][Ûˆ™XÙZ\	ÊNÂˆYˆ
+\›ÛÝ\ÙQ›YÜË™]™\žJ˜[YHOˆ\[Ùˆ˜[YHOOH	Ø›ÛÛX[‰ÊH›ÛÝ\ÙQ›YÜËœÛÛYJ˜[YHOˆ˜[YHOOH™XÙZ\™\Ù[
+JH\ÜÝY\Ëœ\Ú
+	Ü›ÛÝÚÛ›ÝÛYÙHY[[ÜžK]\ÙH›YÜÈÈ›Ý\]X[\XØ][Û‹\™XÙZ\™\Ù[˜ÙIÊNÂˆYˆ
+›ØÙ\ÜÕ\ÙYOOH™XÙZ\™\Ù[ÚXÚÛ\Ý\ÙYOOH™XÙZ\™\Ù[
+H\ÜÝY\Ëœ\Ú
+	Ü›ØÙ\ÜËØÚXÚÛ\ÝY[[ÜžWÝ\ÙYÙ\È›Ý\]X[\XØ][Û‹\™XÙZ\™\Ù[˜ÙIÊNÂˆYˆ
+™XÙZ\™\Ù[	‰ˆ
+Y^XÝY™]šY]™Y™\Ý[›Y[[ÜžWØ\XØ][ÛË˜\YYOOHYH™\Ý[œ›ØÙ\ÜÏË˜Ø\ÙWÜÜXÚYšX×ÙÝZY[˜ÙWØ\YYOOHYH™\Ý[˜ÚXÚÛ\ÝË˜Ø\ÙWÜÜXÚYšX×ÙÝZY[˜ÙWØ\YYOOHYJJH\ÜÝY\Ëœ\Ú
+	Ø\XØ][Ûˆ™XÙZ\\È›Ý›Ý[™È™]šY]™YY[[ÜžH[™˜[œÙ›Ü›YYÈ›YÜÉÊNÂˆYˆ
+\™XÙZ\™\Ù[	‰ˆ
+™\Ý[œ›ØÙ\ÜÏË˜Ø\ÙWÜÜXÚYšX×ÙÝZY[˜ÙWØ\YYOOHYH™\Ý[˜ÚXÚÛ\ÝË˜Ø\ÙWÜÜXÚYšX×ÙÝZY[˜ÙWØ\YYOOHYJJH\ÜÝY\Ëœ\Ú
+	Ü™XÙZ\Yœ™YH™\Ý[˜[Ù[HÛZ[\ÈØ\ÙK\ÜXÚYšXÈÝZY[˜ÙH\XØ][Û‰ÊNÂˆYˆ
+Y[[ÜžT™XÙY[Ë›[™ÝˆJH\ÜÝY\Ëœ\Ú
+	Û[Ü™H[ˆÛ™H[™\šYšYYY[[ÜžHØ\È˜[šÙY[ÈH^XÝ]™YH™\Ý[	ÊNÂˆ™]\›ˆ\ÜÝY\ÎÂŸB‚™[˜Ý[ÛˆÙ[X[XÑ˜XÝÚYÛ˜]\™J™\Ý[
+HÂˆÛÛœÝ›Û\ÈHßNÂˆ›Üˆ
+ÛÛœÝ˜XÝÙˆ™\Ý[Ë™˜XÝÈ×JHÂˆYˆ
+˜XÝËœÙ[X[X×Ü›ÛHOH[
+HÛÛ[YNÂˆ›Û\ÖÙ˜XÝœÙ[X[X×Ü›ÛWHHÂˆ˜XÝÚYˆ˜XÝ™˜XÝÚYˆÝ]Nˆ˜XÝœÝ]KˆÜ›Ý[™YÜÛÝ\˜ÙWØÛÝ[ˆ\œ˜^Kš\Ð\œ˜^J˜XÝœÛÝ\˜ÙWÜ™YœÊHÈ˜XÝœÛÝ\˜ÙWÜ™YœË›[™ÝˆˆNÂˆBˆ™]\›ˆ›Û\ÎÂŸB‚™[˜Ý[ÛˆÙ[X[XÑ˜XÝ›ÛUš[Û][ÛœÊ™\Ý[
+HÂˆÛÛœÝ˜XÝÈH™\Ý[Ë™˜XÝÎÂˆYˆ
+P\œ˜^Kš\Ð\œ˜^J˜XÝÊJH™]\›ˆÉØØ[›ÛšXØ[˜XÝÈ\™HXœÙ[	×NÂˆÛÛœÝ\ÜÝY\ÈH×NÂˆÛÛœÝÜ[]YH×NÂˆ›Üˆ
+ÛÛœÝ˜XÝÙˆ˜XÝÊHÂˆYˆ
+SØš™XÝš\ÓÝÛŠ˜XÝßK	ÜÙ[X[X×Ü›ÛIÊJH\ÜÝY\Ëœ\Ú
+	Ù˜XÝË™˜XÝÚY	Ù˜XÝ	ßNˆ[X›HÙ[X[X×Ü›ÛH\ÈXœÙ[
+NÂˆYˆ
+˜XÝËœÙ[X[X×Ü›ÛHOH[	‰ˆ˜XÝœÙ[X[X×Ü›ÛHOOH	ÛX[˜YÙ[Y[Ý™[[][Û—Ø[YØ][Û‰ÊH\ÜÝY\Ëœ\Ú
+	Ù˜XÝË™˜XÝÚY	Ù˜XÝ	ßNˆÙ[X[X×Ü›ÛH\È[œÝ\ÜY
+NÂˆYˆ
+˜XÝËœÙ[X[X×Ü›ÛHOH[
+HÜ[]Yœ\Ú
+˜XÝœÙ[X[X×Ü›ÛJNÂˆBˆYˆ
+”ÓÓ‹œÝš[™ÚYžJÜ[]Y
+HOOH”ÓÓ‹œÝš[™ÚYžJÉÛX[˜YÙ[Y[Ý™[[][Û—Ø[YØ][Û‰×JJH\ÜÝY\Ëœ\Ú
+	Ù^XÝHÛ™HX[˜YÙ[Y[Ý™[[][Û—Ø[YØ][ÛˆÙ[X[XÈ›ÛH\È™\]Z\™Y	ÊNÂˆ™]\›ˆ\ÜÝY\ÎÂŸB‚™[˜Ý[ÛˆÛÛ\]YØ]\Ø[[J™Y›Ü™T™\Ý[Y\”™\Ý[
+HÂˆÛÛœÝ™Y›Ü™T›ØÙ\ÜÈHÙ[X[XÔ›ØÙ\ÜÑÊ™Y›Ü™T™\Ý[Ëœ›ØÙ\ÜÊNÂˆÛÛœÝY\”›ØÙ\ÜÈHÙ[X[XÔ›ØÙ\ÜÑÊY\”™\Ý[Ëœ›ØÙ\ÜÊNÂˆÛÛœÝ™Y›Ü™PÚXÚÛ\ÝHÙ[X[XÐÚXÚÛ\ÝÊ™Y›Ü™T™\Ý[Ë˜ÚXÚÛ\Ý
+NÂˆÛÛœÝY\ÚXÚÛ\ÝHÙ[X[XÐÚXÚÛ\ÝÊY\”™\Ý[Ë˜ÚXÚÛ\Ý
+NÂˆÛÛœÝÙ^YYH
+˜[Y\ËÙ^JHOˆ™]ÈX\
+
+˜[Y\È×JK›X\
+˜[YHOˆÚÙ^J˜[YJK˜[YWJJNÂˆÛÛœÝ™Y›Ü™S›Ù\ÈHÙ^YY
+™Y›Ü™T›ØÙ\ÜË››Ù\Ë˜[YHOˆ˜[YK››ÙWÚY
+NÂˆÛÛœÝY\“›Ù\ÈHÙ^YY
+Y\”›ØÙ\ÜË››Ù\Ë˜[YHOˆ˜[YK››ÙWÚY
+NÂˆÛÛœÝYÙRÙ^HH˜[YHOˆ	Ý˜[YKœÛÝ\˜Ù_WL	Ý˜[YK\™Ù]XÂˆÛÛœÝ™Y›Ü™QYÙ\ÈHÙ^YY
+™Y›Ü™T›ØÙ\ÜË™YÙ\ËYÙRÙ^JNÂˆÛÛœÝY\‘YÙ\ÈHÙ^YY
+Y\”›ØÙ\ÜË™YÙ\ËYÙRÙ^JNÂˆÛÛœÝ™Y›Ü™R][\ÈHÙ^YY
+™Y›Ü™PÚXÚÛ\Ýš][\Ë˜[YHOˆ˜[YKš][WÚY
+NÂˆÛÛœÝY\’][\ÈHÙ^YY
+Y\ÚXÚÛ\Ýš][\Ë˜[YHOˆ˜[YKš][WÚY
+NÂˆÛÛœÝY™™\™[˜ÙHH
+YšYÚ
+HOˆË‹‹›YšÙ^\Ê
+WK™š[\ŠÙ^HOˆ\šYÚš\ÊÙ^JJKœÛÜ
+
+NÂˆÛÛœÝÚ[™ÙYH
+YšYÚ
+HOˆË‹‹›YšÙ^\Ê
+WK™š[\ŠÙ^HOˆšYÚš\ÊÙ^JH	‰ˆÝX›RœÛÛŠY™Ù]
+Ù^JJHOOHÝX›RœÛÛŠšYÚ™Ù]
+Ù^JJJKœÛÜ
+
+NÂˆÛÛœÝYÙT›Ú™XÝ[ÛˆHÙ^\ÈOˆÙ^\Ë›X\
+Ù^HOˆÈÛÛœÝÜÛÝ\˜ÙK\™Ù]HHÙ^KœÜ]
+	×L	ÊNÈ™]\›ˆÈÛÝ\˜ÙK\™Ù]NÈJNÂˆÛÛœÝ›ÛÝÚ[™Ù\ÈH
+™Y›Ü™KY\‹^ÛYY
+HOˆË‹‹›™]ÈÙ]
+Ë‹‹“Øš™XÝšÙ^\Ê™Y›Ü™JK‹‹“Øš™XÝšÙ^\ÊY\ŠWJWK™š[\ŠÙ^HOˆY^ÛYYš\ÊÙ^JH	‰ˆÝX›RœÛÛŠ™Y›Ü™VÚÙ^WJHOOHÝX›RœÛÛŠY\–ÚÙ^WJJKœÛÜ
+
+NÂˆÛÛœÝYY›ÙRYÈHY™™\™[˜ÙJY\“›Ù\Ë™Y›Ü™S›Ù\ÊNÂˆÛÛœÝ™[[Ý™Y›ÙRYÈHY™™\™[˜ÙJ™Y›Ü™S›Ù\ËY\“›Ù\ÊNÂˆÛÛœÝÚ[™ÙY›ÙRYÈHÚ[™ÙY
+™Y›Ü™S›Ù\ËY\“›Ù\ÊNÂˆÛÛœÝYYYÙ\ÈHYÙT›Ú™XÝ[ÛŠY™™\™[˜ÙJY\‘YÙ\Ë™Y›Ü™QYÙ\ÊJNÂˆÛÛœÝ™[[Ý™YYÙ\ÈHYÙT›Ú™XÝ[ÛŠY™™\™[˜ÙJ™Y›Ü™QYÙ\ËY\‘YÙ\ÊJNÂˆÛÛœÝÚ[™ÙYYÙ\ÈHYÙT›Ú™XÝ[ÛŠÚ[™ÙY
+™Y›Ü™QYÙ\ËY\‘YÙ\ÊJNÂˆÛÛœÝYY][RYÈHY™™\™[˜ÙJY\’][\Ë™Y›Ü™R][\ÊNÂˆÛÛœÝ™[[Ý™Y][RYÈHY™™\™[˜ÙJ™Y›Ü™R][\ËY\’][\ÊNÂˆÛÛœÝÚ[™ÙY][RYÈHÚ[™ÙY
+™Y›Ü™R][\ËY\’][\ÊNÂˆ™]\›ˆÂˆ›Ûž™\›Îˆ›ÛÛX[ŠYY›ÙRYË›[™Ý™[[Ý™Y›ÙRYË›[™ÝÚ[™ÙY›ÙRYË›[™ÝYYYÙ\Ë›[™Ý™[[Ý™YYÙ\Ë›[™ÝÚ[™ÙYYÙ\Ë›[™ÝYY][RYË›[™Ý™[[Ý™Y][RYË›[™ÝÚ[™ÙY][RYË›[™Ý
+Kˆ›ØÙ\ÜÎˆÈYYÛ›ÙWÚYÎˆYY›ÙRYË™[[Ý™YÛ›ÙWÚYÎˆ™[[Ý™Y›ÙRYËÚ[™ÙYÛ›ÙWÚYÎˆÚ[™ÙY›ÙRYËYYÙYÙ\ÎˆYYYÙ\Ë™[[Ý™YÙYÙ\Îˆ™[[Ý™YYÙ\ËÚ[™ÙYÙYÙ\ÎˆÚ[™ÙYYÙ\ËÚ[™ÙYÜ›ÛÝÚÙ^\Îˆ›ÛÝÚ[™Ù\Ê™Y›Ü™T›ØÙ\ÜËY\”›ØÙ\ÜË™]ÈÙ]
+ÉÛ›Ù\ÉË	ÙYÙ\É×JJHKˆ]šY[˜ÙNˆÈYYÚ][WÚYÎˆYY][RYË™[[Ý™YÚ][WÚYÎˆ™[[Ý™Y][RYËÚ[™ÙYÚ][WÚYÎˆÚ[™ÙY][RYËÚ[™ÙYÜ›ÛÝÚÙ^\Îˆ›ÛÝÚ[™Ù\Ê™Y›Ü™PÚXÚÛ\ÝY\ÚXÚÛ\Ý™]ÈÙ]
+ÉÚ][\É×JJHKˆNÂŸB‚™[˜Ý[ÛˆY[[ÜžP\XØ][ÛÛÛ˜XÝš[Û][ÛœÊ˜\Ù[[™T[‹]\”[‹›ÛÙŠHÂˆÛÛœÝ\ÜÝY\ÈH×NÂˆÛÛœÝ˜\Ù[[™HH˜\Ù[[™T[Ëœ™\Ý[ÂˆÛÛœÝ]\ˆH]\”[Ëœ™\Ý[ÂˆÛÛœÝ™XÙZ\H]\Ë›Y[[ÜžWØ\XØ][ÛŽÂˆÛÛœÝœ™Y^™HH˜\Ù[[™T[Ë˜ÛÝ[\™˜XÝX[ÛX\›š[™×Ùœ™Y^™NÂˆÛÛœÝ™XÙZ\šY[ÈHÉÜ™XÙZ\Ý\IË	ØÛÛ˜XÝ	Ë	Ø]]Üš]IË	ÜØÛÜIË	ÜÛÝ\˜ÙWÛY[[ÜžIË	Ý\™Ù]	Ë	ÛØœÙ\˜X›WÚ[œ]Ú\Ú	Ë	ØØ[›ÛšXØ[ÜÝ]WÚ\Ú	Ë	Ù[YÚXš[]IË	Ø[ÝÙYÛÜ\˜][Û—ÚYÉË	Ø\YYÛÜ\˜][Û—ÚYÉË	Ü›ØÙ\Ü×ÛÜ\˜][ÛœÉË	Ù]šY[˜ÙWÛÜ\˜][ÛœÉË	Ø™Y›Ü™IË	ØY\‰Ë	Ý™\šYšXØ][Û—Ú\Ú	Ë	ÜÚ\™YÜ^X›ÛÚ×Ý™\œÚ[Û‰Ë	ÜÚ\™YÜ[WØ\YY	Ë	Û[Ù[ØXØÙ\[˜ÙWÜ™]\ÙY	Ë	Ø\YY	Ë	Ø\XØ][Û—Ú\Ú	×NÂˆÛÛœÝ›Ý[™\žQšY[ÈHÉÜ›ØÙ\Ü×Ù×Ú\Ú	Ë	ØÚXÚÛ\ÝÙ×Ú\Ú	Ë	Ü›ØÙ\Ü×ÜÙ[X[X×Ú\Ú	Ë	ØÚXÚÛ\ÝÜÙ[X[X×Ú\Ú	×NÂˆYˆ
+X˜\Ù[[™H[]\ˆ\™XÙZ\\›ÛÙŠH™]\›ˆÉØ˜\Ù[[™K]\ˆ™\Ý[™XÙZ\Üˆ›ÛÙˆ\ÈXœÙ[	×NÂˆ\ÜÝY\Ëœ\Ú
+‹‹›Y[[ÜžT™]šY]˜[ÛÛ˜XÝš[Û][ÛœÊ˜\Ù[[™JK›X\
+\ÜÝYHOˆ˜\Ù[[™H	Ú\ÜÝY_X
+JNÂˆ\ÜÝY\Ëœ\Ú
+‹‹›Y[[ÜžT™]šY]˜[ÛÛ˜XÝš[Û][ÛœÊ]\ŠK›X\
+\ÜÝYHOˆ]\ˆ	Ú\ÜÝY_X
+JNÂˆYˆ
+Y^XÝY[X™\œÊØš™XÝšÙ^\Ê™XÙZ\
+K™XÙZ\šY[ÊJH\ÜÝY\Ëœ\Ú
+	ÛY[[ÜžH™XÙZ\šY[È\™H›Ý^XÝ	ÊNÂˆYˆ
+™XÙZ\œ™XÙZ\Ý\HOOH	ÛY[[ÜžWØ\XØ][Û—Ü™XÙZ\	È™XÙZ\˜ÛÛ˜XÝOOH	ØØ\Ù\]›Y[[ÜžKX\XØ][Û‹\™XÙZ\ÌKŒŒ	È™XÙZ\˜]]Üš]HOOH	Ý[™\šYšYYÙ[[ÉÈ™XÙZ\œØÛÜHOOH	ØØ\ÙWÜÜXÚYšX×ÙÝZY[˜ÙWÛÛ›IÈ™XÙZ\œÚ\™YÜ^X›ÛÚ×Ý™\œÚ[ÛˆOOH	Û[Ý[\^X›ÛÚË]ŒÉÈ™XÙZ\œÚ\™YÜ[WØ\YYOOH˜[ÙH™XÙZ\›[Ù[ØXØÙ\[˜ÙWÜ™]\ÙYOOH˜[ÙH™XÙZ\˜\YYOOHYJH\ÜÝY\Ëœ\Ú
+	ÛY[[ÜžH™XÙZ\]]Üš]H›Ý[™\žH\ÈÜ›Û™ÉÊNÂˆYˆ
+Y^XÝY[X™\œÊØš™XÝšÙ^\Ê™XÙZ\œÛÝ\˜ÙWÛY[[ÜžHßJKÉÛY[[ÜžWÚY	Ë	ØÛZ[WÚY	Ë	Ü™]šY]×ÚY	Ë	ØÛÛ[Ú\Ú	Ë	Ü™]šY]×ÜÝ]\É×JH™XÙZ\œÛÝ\˜ÙWÛY[[ÜžK˜ÛZ[WÚYOOH	ÑQ‹LËQLQSSÉÈ™XÙZ\œÛÝ\˜ÙWÛY[[ÜžKœ™]šY]×ÜÝ]\ÈOOH	Ý[™\šYšYYÙ[[×ÛY[[ÜžIÊH\ÜÝY\Ëœ\Ú
+	ÜÛÝ\˜ÙHY[[ÜžHš[™[™È\ÈÜ›Û™ÉÊNÂˆÛÛœÝœ™Y^™RY[]HHœ™Y^™OË›Y[[ÜžHßNÂˆYˆ
+Yœ™Y^™HÝX›RœÛÛŠ›ÛÙ‹˜ÛÝ[\™˜XÝX[ÛX\›š[™×Ùœ™Y^™JHOOHÝX›RœÛÛŠœ™Y^™JBˆY^XÝY[X™\œÊØš™XÝšÙ^\Êœ™Y^™JKÉØÛÛ˜XÝ	Ë	ÛY[[ÜžIË	ÚY[]WÚ\Ú	Ë	Ø\XØ][Û—ÜÝ\™\ÜÙY	×JBˆœ™Y^™K˜ÛÛ˜XÝOOH	ØØ\Ù\]˜ÛÝ[\™˜XÝX[[X\›š[™ËYœ™Y^™KÌKŒŒ	Âˆœ™Y^™K˜\XØ][Û—ÜÝ\™\ÜÙYOOHYBˆY^XÝY[X™\œÊØš™XÝšÙ^\Êœ™Y^™RY[]JKÉÛY[[ÜžWÚY	Ë	Ü™]šY]×ÚY	Ë	ØÛÛ[Ú\Ú	Ë	ØØ[™Y]WÚY	Ë	Ý\]YØ]	×JBˆœ™Y^™RY[]K›Y[[ÜžWÚYOOH™XÙZ\œÛÝ\˜ÙWÛY[[ÜžK›Y[[ÜžWÚYˆœ™Y^™RY[]Kœ™]šY]×ÚYOOH™XÙZ\œÛÝ\˜ÙWÛY[[ÜžKœ™]šY]×ÚYˆœ™Y^™RY[]K˜ÛÛ[Ú\ÚOOH™XÙZ\œÛÝ\˜ÙWÛY[[ÜžK˜ÛÛ[Ú\Úˆœ™Y^™RY[]K˜Ø[™Y]WÚYOOH›ÛÙ‹˜Ø[™Y]OË˜Ø[™Y]WÚYˆS[X™\‹š\Ñš[š]J]Kœ\œÙJœ™Y^™RY[]K\]YØ]	ÉÊJBˆœ™Y^™KšY[]WÚ\ÚOOHÒ\Ú
+œ™Y^™RY[]JJH\ÜÝY\Ëœ\Ú
+	ØÛÝ[\™˜XÝX[˜\Ù[[™H\È›Ý›Ý[™ÈHœ›Þ™[ˆÛÝ™\›™YY[[ÜžHY[]IÊNÂˆÛÛœÝœ™Y^™U[YHH]Kœ\œÙJœ™Y^™RY[]K\]YØ]	ÉÊNÂˆÛÛœÝ˜\Ù[[™PÜ™X]YH]Kœ\œÙJ˜\Ù[[™T[Ë˜Ü™X]YØ]	ÉÊNÂˆÛÛœÝ˜\Ù[[™PÛÛ\]YH[X™\Š˜\Ù[[™T[Ë˜ÛÛ\]YØ]
+H
+ˆLÂˆÛÛœÝ]\Ü™X]YH]Kœ\œÙJ]\”[Ë˜Ü™X]YØ]	ÉÊNÂˆYˆ
+VÙœ™Y^™U[YK˜\Ù[[™PÜ™X]Y˜\Ù[[™PÛÛ\]Y]\Ü™X]YK™]™\žJ[X™\‹š\Ñš[š]JBˆJœ™Y^™U[YHH˜\Ù[[™PÜ™X]Y	‰ˆ˜\Ù[[™PÜ™X]YH˜\Ù[[™PÛÛ\]Y	‰ˆ˜\Ù[[™PÛÛ\]YH]\Ü™X]Y
+JH\ÜÝY\Ëœ\Ú
+	ØÛÝ[\™˜XÝX[˜\Ù[[™KØÝ\œ™[[œÈ\™H›ÝÜ™\™YY\ˆHX\›š[™Èœ™Y^™IÊNÂˆYˆ
+Y^XÝY[X™\œÊØš™XÝšÙ^\Ê™XÙZ\\™Ù]ßJKÉÜ[—ÚY	Ë	ØÛZ[WÚY	×JH™XÙZ\\™Ù]œ[—ÚYOOH]\”[‹œ[—ÚY™XÙZ\\™Ù]˜ÛZ[WÚYOOH]\”[‹˜ÛZ[WÚY
+H\ÜÝY\Ëœ\Ú
+	ÛY[[ÜžH™XÙZ\\™Ù]\È›ÝH]\ˆ[‰ÊNÂˆÛÛœÝ™]Z[™Y›Ý[™\žHH]\”[‹›Y[[ÜžWØ\XØ][Û—Ø›Ý[™\žNÂˆÛÛœÝ™]Z[™Y›Ý[™\žT›Ú™XÝ[ÛˆH™]Z[™Y›Ý[™\žH	‰ˆ\[Ùˆ™]Z[™Y›Ý[™\žHOOH	ÛØš™XÝ	È	‰ˆP\œ˜^Kš\Ð\œ˜^J™]Z[™Y›Ý[™\žJBˆÈØš™XÝ™œ›ÛQ[šY\ÊØš™XÝ™[šY\Ê™]Z[™Y›Ý[™\žJK™š[\Š
+ÚÙ^WJHOˆÙ^HOOH	Ø›Ý[™\žWÚ\Ú	ÊJBˆˆ[ÂˆYˆ
+Y^XÝY[X™\œÊØš™XÝšÙ^\Ê™]Z[™Y›Ý[™\žHßJKÉØÛÛ˜XÝ	Ë	Ý\™Ù]	Ë	ÜÛÝ\˜ÙWÛY[[ÜžIË	Ø™Y›Ü™IË	Ø›Ý[™\žWÚ\Ú	×JJH\ÜÝY\Ëœ\Ú
+	ÛY[[ÜžH\XØ][Ûˆ›Ý[™\žHšY[È\™H›Ý^XÝ	ÊNÂˆYˆ
+™]Z[™Y›Ý[™\žOË˜ÛÛ˜XÝOOH	ØØ\Ù\]›Y[[ÜžKX\XØ][Û‹X›Ý[™\žKÌKŒŒ	ÂˆY^XÝY[X™\œÊØš™XÝšÙ^\Ê™]Z[™Y›Ý[™\žOË\™Ù]ßJKÉÜ[—ÚY	Ë	ØÛZ[WÚY	×JBˆÝX›RœÛÛŠ™]Z[™Y›Ý[™\žOË\™Ù]
+HOOHÝX›RœÛÛŠ™XÙZ\\™Ù]
+BˆY^XÝY[X™\œÊØš™XÝšÙ^\Ê™]Z[™Y›Ý[™\žOËœÛÝ\˜ÙWÛY[[ÜžHßJKÉÛY[[ÜžWÚY	Ë	ØÛÛ[Ú\Ú	×JBˆ™]Z[™Y›Ý[™\žOËœÛÝ\˜ÙWÛY[[ÜžOË›Y[[ÜžWÚYOOH™XÙZ\œÛÝ\˜ÙWÛY[[ÜžOË›Y[[ÜžWÚYˆ™]Z[™Y›Ý[™\žOËœÛÝ\˜ÙWÛY[[ÜžOË˜ÛÛ[Ú\ÚOOH™XÙZ\œÛÝ\˜ÙWÛY[[ÜžOË˜ÛÛ[Ú\Ú
+H\ÜÝY\Ëœ\Ú
+	ÛY[[ÜžH\XØ][Ûˆ›Ý[™\žHY[]HÜˆÛÝ\˜ÙH›Ú[ˆ\ÈÜ›Û™ÉÊNÂˆYˆ
+Y^XÝY[X™\œÊØš™XÝšÙ^\Ê™]Z[™Y›Ý[™\žOË˜™Y›Ü™HßJK›Ý[™\žQšY[ÊBˆSØš™XÝ˜[Y\Ê™]Z[™Y›Ý[™\žOË˜™Y›Ü™HßJK™]™\žJ˜[YHOˆÒLM—ÔUT“‹\Ý
+˜[YH	ÉÊJBˆÝX›RœÛÛŠ™]Z[™Y›Ý[™\žOË˜™Y›Ü™JHOOHÝX›RœÛÛŠ™XÙZ\˜™Y›Ü™JJH\ÜÝY\Ëœ\Ú
+	ÛY[[ÜžH\XØ][Ûˆ›Ý[™\žH™Y›Ü™H\Ú\ÈÈ›Ý\]X[™XÙZ\˜™Y›Ü™IÊNÂˆYˆ
+TÒLM—ÔUT“‹\Ý
+™]Z[™Y›Ý[™\žOË˜›Ý[™\žWÚ\Ú	ÉÊBˆ™]Z[™Y›Ý[™\žOË˜›Ý[™\žWÚ\ÚOOHÒ\Ú
+™]Z[™Y›Ý[™\žT›Ú™XÝ[ÛŠJH\ÜÝY\Ëœ\Ú
+	ÛY[[ÜžH\XØ][Ûˆ›Ý[™\žH\Ú\ÈÜ›Û™ÉÊNÂˆÛÛœÝÛÛ\]YY[[ÜžQ]™[ÈH
+]\”[‹™]™[È×JK™š[\Š]™[Oˆ]™[ËœÝYÙHOOH	ÛY[[ÜžWØ\XØ][Û‰Âˆ	‰ˆ]™[Ëœ™XÙZ\Ý\HOOH	ÛY[[ÜžWØ\XØ][Û—Ü™XÙZ\	Âˆ	‰ˆ]™[ËœÝ]\ÈOOH	ØÛÛ\]Y	ÊNÂˆYˆ
+ÛÛ\]YY[[ÜžQ]™[Ë›[™ÝOOHJH\ÜÝY\Ëœ\Ú
+	Ù^XÝHÛ™HÛÛ\]Y\œÚ\ÝYY[[ÜžKX\XØ][Ûˆ]™[\È™\]Z\™Y	ÊNÂˆYˆ
+ÛÛ\]YY[[ÜžQ]™[Ë›[™ÝOOHJHÂˆÛÛœÝ]™[HÛÛ\]YY[[ÜžQ]™[ÖÌNÂˆÛÛœÝ]™[\Ô™XÙZ\šY[ÈH™XÙZ\šY[Ë™]™\žJÙ^HOˆØš™XÝš\ÓÝÛŠ]™[Ù^JJNÂˆÛÛœÝ]™[™XÙZ\›Ú™XÝ[ÛˆH]™[\Ô™XÙZ\šY[ÈÈØš™XÝ™œ›ÛQ[šY\Ê™XÙZ\šY[Ë›X\
+Ù^HOˆÚÙ^K]™[ÚÙ^WWJJHˆ[ÂˆYˆ
+Y]™[\Ô™XÙZ\šY[ÈÝX›RœÛÛŠ]™[™XÙZ\›Ú™XÝ[ÛŠHOOHÝX›RœÛÛŠ™XÙZ\
+JH\ÜÝY\Ëœ\Ú
+	Ü\œÚ\ÝYY[[ÜžKX\XØ][Ûˆ]™[Ù\È›Ý›Ú™XÝH™\Ý[™XÙZ\	ÊNÂˆBˆYˆ
+™XÙZ\›ØœÙ\˜X›WÚ[œ]Ú\ÚOOH]\‹˜]Y]Ë›ØœÙ\˜X›WÚ[œ]Ú\Ú™XÙZ\›ØœÙ\˜X›WÚ[œ]Ú\ÚOOH˜\Ù[[™K˜]Y]Ë›ØœÙ\˜X›WÚ[œ]Ú\Ú™XÙZ\›ØœÙ\˜X›WÚ[œ]Ú\ÚOOH›ÛÙ‹˜™Y›Ü™OË›ØœÙ\˜X›WÚ[œ]Ú\Ú™XÙZ\›ØœÙ\˜X›WÚ[œ]Ú\ÚOOH›ÛÙ‹˜Y\Ë›ØœÙ\˜X›WÚ[œ]Ú\Ú
+H\ÜÝY\Ëœ\Ú
+	ÛØœÙ\˜X›H[œ]\Ú\È›Ý›Ý[™XÜ›ÜÜÈ›Ý[œÉÊNÂˆËÈØ[›ÛšXØ[˜XÝÈ[[[Û˜[HÛÛZ[ˆ”ÓÓˆ›Ø]È
+[˜ÛY[™È[YÜ˜[KŒ˜[Y\ÊK‚ˆËÈHœ›ÝÜÙ\ˆ”ÓÓˆ›Ý[™š\\˜\Ù\È]^XØ[\Ý[˜Ý[Û‹ÛÈ”È]\Ý›Ý›Ü™ÙHBˆËÈ]Ûˆ\Úœ›ÛHH\œÙYØš™XÝˆš[™H[˜Ú[™ÙY™]\›™YÈÈHÛÂˆËÈÙ\™\‹XÛÛ\]Y[ˆ]Y]\Ú\È[™H[™\[™[H™XÛÛ\]Y›ÛÙˆ[œÝXY‚ˆYˆ
+ÝX›RœÛÛŠ˜\Ù[[™K™˜XÝÊHOOHÝX›RœÛÛŠ]\‹™˜XÝÊBˆ™XÙZ\˜Ø[›ÛšXØ[ÜÝ]WÚ\ÚOOH]\‹˜]Y]Ë˜Ø[›ÛšXØ[ÜÝ]WÚ\Úˆ™XÙZ\˜Ø[›ÛšXØ[ÜÝ]WÚ\ÚOOH˜\Ù[[™K˜]Y]Ë˜Ø[›ÛšXØ[ÜÝ]WÚ\Úˆ™XÙZ\˜Ø[›ÛšXØ[ÜÝ]WÚ\ÚOOH›ÛÙ‹˜™Y›Ü™OË˜Ø[›ÛšXØ[ÜÝ]WÚ\Úˆ™XÙZ\˜Ø[›ÛšXØ[ÜÝ]WÚ\ÚOOH›ÛÙ‹˜Y\Ë˜Ø[›ÛšXØ[ÜÝ]WÚ\Ú
+H\ÜÝY\Ëœ\Ú
+	ØØ[›ÛšXØ[\Ý]H\Ú\È›Ý›Ý[™XÜ›ÜÜÈ›Ý[˜Ú[™ÙY[œÉÊNÂˆ\ÜÝY\Ëœ\Ú
+‹‹œÙ[X[XÑ˜XÝ›ÛUš[Û][ÛœÊ˜\Ù[[™JK›X\
+\ÜÝYHOˆ˜\Ù[[™H	Ú\ÜÝY_X
+JNÂˆ\ÜÝY\Ëœ\Ú
+‹‹œÙ[X[XÑ˜XÝ›ÛUš[Û][ÛœÊ]\ŠK›X\
+\ÜÝYHOˆ]\ˆ	Ú\ÜÝY_X
+JNÂˆÛÛœÝ[YÚXš[]HH™XÙZ\™[YÚXš[]HßNÂˆÛÛœÝ™\]Z\™YXÚ\Ú[ÛœÈHÂˆØÛÜNˆ	Ú[—ÜØÛÜIË\Ü]Nˆ	Ù\Ü]WÜ™\Ù[	Ë\™Ù[˜ÞNˆ	Û›ÝÝ\™Ù[	Ë›ÝYšXØ][ÛŽˆ	Û›ÝYšYY	Ë™XÝ\œ™[˜ÙNˆ	Ü™XÝ\œ™[˜ÙWÜÝ\ÜY	ËØ]\Ø][ÛŽˆ	ØØ]\ÙWÝ[œ™\ÛÛ™Y	ËˆNÂˆÛÛœÝ™\]Z\™Y˜XÝ›Û\ÈHÂˆX[˜YÙ[Y[Ý™[[][Û—Ø[YØ][ÛŽˆÈÝ]Nˆ	ÚÛ›ÝÛ‰ËZ[—ÙÜ›Ý[™YÜÛÝ\˜Ù\ÎˆHKˆNÂˆÛÛœÝÙ[X[XÔÚYÛ˜]\™R\ÚHÒ\Ú
+ÂˆØ]YÛÜžNˆ	Ô™[[Y™XÝH[Ý[[™[Ú\Ý\™IËˆÝX˜Ø]YÛÜžNˆ	Ô™XÝ\œš[™È[Ú\Ý\™HÚ]\Ü]YØ]\Ø][Û‰Ëˆ™\]Z\™YÙXÚ\Ú[ÛœÎˆ™\]Z\™YXÚ\Ú[ÛœËˆ™\]Z\™YÙ˜XÝÜ›Û\Îˆ™\]Z\™Y˜XÝ›Û\ËˆJNÂˆÛÛœÝ^XÝYXÚ\Ú[ÛœÈHØš™XÝ™œ›ÛQ[šY\Ê
+]\‹™˜XÝÈ×JK™š[\Š˜XÝOˆ˜XÝ˜ÛÛ›Û×Ü›ØÙ\ÜÈOOHYJK›X\
+˜XÝOˆÙ˜XÝ™XÚ\Ú[Û—ÚÙ^K˜XÝ™XÚ\Ú[Û—Ý˜[YWJJNÂˆÛÛœÝ^XÝYÚXÚÜÈHÂˆÛÝ\˜ÙWØÛZ[WÙ^ÛYYˆ™XÙZ\œÛÝ\˜ÙWÛY[[ÜžOË˜ÛZ[WÚYOOH]\”[‹˜ÛZ[WÚYˆØ]YÛÜžWÛX]ÚYˆ]\‹˜Ø]YÛÜžHOOH	Ô™[[Y™XÝH[Ý[[™[Ú\Ý\™IËˆÝX˜Ø]YÛÜžWÛX]ÚYˆ]\‹œÝX˜Ø]YÛÜžHOOH	Ô™XÝ\œš[™È[Ú\Ý\™HÚ]\Ü]YØ]\Ø][Û‰Ëˆ™\]Z\™YÙXÚ\Ú[Ûœ×ÛX]ÚYˆÝX›RœÛÛŠ^XÝYXÚ\Ú[ÛœÊHOOHÝX›RœÛÛŠ™\]Z\™YXÚ\Ú[ÛœÊKˆ™[[][Û—Ø[YØ][Û—ÙÜ›Ý[™YˆÙ[X[XÑ˜XÝÚYÛ˜]\™J]\ŠK›X[˜YÙ[Y[Ý™[[][Û—Ø[YØ][ÛËœÝ]HOOH	ÚÛ›ÝÛ‰Âˆ	‰ˆÙ[X[XÑ˜XÝÚYÛ˜]\™J]\ŠK›X[˜YÙ[Y[Ý™[[][Û—Ø[YØ][ÛË™Ü›Ý[™YÜÛÝ\˜ÙWØÛÝ[HKˆÙ[X[X×ÜÚYÛ˜]\™WØ›Ý[™ˆ[YÚXš[]KœÙ[X[X×ÜÚYÛ˜]\™WÚ\ÚOOHÙ[X[XÔÚYÛ˜]\™R\ÚˆÝZY[˜ÙWÙ[˜X›YˆYKˆNÂˆÛÛœÝ[YÚXš[]SX[šY™\ÝHØš™XÝ™œ›ÛQ[šY\ÊÉÜ[WÚY	Ë	ØÛÛ˜XÝ	Ë	ØÛZ[WÚY	Ë	ÜÙ[X[X×ÜÚYÛ˜]\™WÚ\Ú	Ë	ÙXÚ\Ú[ÛœÉË	Ù˜XÝ×Ú\Ú	Ë	ØÚXÚÜÉ×K›X\
+Ù^HOˆÚÙ^K[YÚXš[]VÚÙ^WWJJNÂˆYˆ
+Y^XÝY[X™\œÊØš™XÝšÙ^\Ê[YÚXš[]JKÉÜ[WÚY	Ë	ØÛÛ˜XÝ	Ë	ØÛZ[WÚY	Ë	ÜÙ[X[X×ÜÚYÛ˜]\™WÚ\Ú	Ë	ÙXÚ\Ú[ÛœÉË	Ù˜XÝ×Ú\Ú	Ë	ØÚXÚÜÉË	Ù[YÚX›IË	ÛX[šY™\ÝÚ\Ú	×JBˆ[YÚXš[]Kœ[WÚYOOH	ÜØ[YWÙÜ›Ý[™YÛ[Ý[ÜÚYÛ˜]\™WÝŒ‰Âˆ[YÚXš[]K˜ÛÛ˜XÝOOH	ØØ\Ù\]œÙ[X[XË[Y[[ÜžKY[YÚXš[]KÌKŒŒ	Âˆ[YÚXš[]K˜ÛZ[WÚYOOH]\”[‹˜ÛZ[WÚYˆ[YÚXš[]KœÙ[X[X×ÜÚYÛ˜]\™WÚ\ÚOOHÙ[X[XÔÚYÛ˜]\™R\ÚˆÝX›RœÛÛŠ[YÚXš[]K™XÚ\Ú[ÛœÊHOOHÝX›RœÛÛŠ™\]Z\™YXÚ\Ú[ÛœÊBˆÝX›RœÛÛŠ^XÝYXÚ\Ú[ÛœÊHOOHÝX›RœÛÛŠ™\]Z\™YXÚ\Ú[ÛœÊBˆ[YÚXš[]K™˜XÝ×Ú\ÚOOHÒ\Ú
+Ù[X[XÑ˜XÝÚYÛ˜]\™J]\ŠJBˆÝX›RœÛÛŠ[YÚXš[]K˜ÚXÚÜÊHOOHÝX›RœÛÛŠ^XÝYÚXÚÜÊBˆ[YÚXš[]K™[YÚX›HOOHYBˆ[YÚXš[]K›X[šY™\ÝÚ\ÚOOHÒ\Ú
+[YÚXš[]SX[šY™\Ý
+JH\ÜÝY\Ëœ\Ú
+	ÜÙ[X[XÈ[YÚXš[]HX[šY™\Ý\È›Ý^XÝ[™\ÚX›Ý[™	ÊNÂˆYˆ
+Y^XÝY[X™\œÊØš™XÝšÙ^\Ê™XÙZ\˜™Y›Ü™HßJK›Ý[™\žQšY[ÊHY^XÝY[X™\œÊØš™XÝšÙ^\Ê™XÙZ\˜Y\ˆßJK›Ý[™\žQšY[ÊHVË‹‹“Øš™XÝ˜[Y\Ê™XÙZ\˜™Y›Ü™HßJK‹‹“Øš™XÝ˜[Y\Ê™XÙZ\˜Y\ˆßJWK™]™\žJ˜[YHOˆÒLM—ÔUT“‹\Ý
+˜[YH	ÉÊJJH\ÜÝY\Ëœ\Ú
+	ÛY[[ÜžH™Y›Ü™KØY\ˆ›Ý[™\žH\Ú\È\™H›Ý^XÝ	ÊNÂˆYˆ
+™XÙZ\˜™Y›Ü™OËœ›ØÙ\Ü×ÜÙ[X[X×Ú\ÚOOHÒ\Ú
+Ù[X[XÔ›ØÙ\ÜÑÊ˜\Ù[[™Kœ›ØÙ\ÜÊJH™XÙZ\˜™Y›Ü™OË˜ÚXÚÛ\ÝÜÙ[X[X×Ú\ÚOOHÒ\Ú
+Ù[X[XÐÚXÚÛ\ÝÊ˜\Ù[[™K˜ÚXÚÛ\Ý
+JJH\ÜÝY\Ëœ\Ú
+	Ü™XÙZ\™Y›Ü™HÙ[X[XÈ\Ú\ÈÈ›Ýš[™H˜\Ù[[™HÜÉÊNÂˆÛÛœÝ^XÝY\ˆHÈ›ØÙ\Ü×Ù×Ú\ÚˆÒ\Ú
+]\‹œ›ØÙ\ÜÊKÚXÚÛ\ÝÙ×Ú\ÚˆÒ\Ú
+]\‹˜ÚXÚÛ\Ý
+K›ØÙ\Ü×ÜÙ[X[X×Ú\ÚˆÒ\Ú
+Ù[X[XÔ›ØÙ\ÜÑÊ]\‹œ›ØÙ\ÜÊJKÚXÚÛ\ÝÜÙ[X[X×Ú\ÚˆÒ\Ú
+Ù[X[XÐÚXÚÛ\ÝÊ]\‹˜ÚXÚÛ\Ý
+JHNÂˆYˆ
+ÝX›RœÛÛŠ™XÙZ\˜Y\ŠHOOHÝX›RœÛÛŠ^XÝY\ŠH›Ý[™\žQšY[ËœÛÛYJÙ^HOˆ›ÛÙ‹˜Y\Ë–ÚÙ^WHOOH^XÝY\–ÚÙ^WJJH\ÜÝY\Ëœ\Ú
+	Ü™XÙZ\Ü›ÛÙˆY\ˆ\Ú\ÈÈ›Ýš[™H]\ˆÜÉÊNÂˆYˆ
+›Ý[™\žQšY[ËœÛÛYJÙ^HOˆ™XÙZ\˜™Y›Ü™OË–ÚÙ^WHOOH™XÙZ\˜Y\Ë–ÚÙ^WJJH\ÜÝY\Ëœ\Ú
+	ÛY[[ÜžH™XÙZ\™\ÜÈH™\›ÈÈÜˆÙ[X[XÈ[IÊNÂˆYˆ
+™XÙZ\™\šYšXØ][Û—Ú\ÚOOH]\‹™\šYšXØ][ÛËÚÛWÜ^X›ÛÚ×Ú\Ú™XÙZ\™\šYšXØ][Û—Ú\ÚOOH›ÛÙ‹˜Y\Ë™\šYšXØ][Û—Ú\Ú
+H\ÜÝY\Ëœ\Ú
+	ÛY[[ÜžH™XÙZ\™\šYšXØ][Ûˆ\Ú\È›Ý›Ý[™ÈH]\ˆ™\Ý[	ÊNÂˆÛÛœÝÜ\˜][Û’YÈHÉØYÝ™[[][Û—Ù\Ü]WÛ›ÙIË	ØYÙ]šY[˜ÙWÙØ\Ý×Ý™[[][Û—ÙYÙIË	ØYÝ™[[][Û—Ý×ØØ]\Ø][Û—ÙYÙIË	ØÛÛ™][Û—ØZ[[™×Ù[™[ÜIË	Ü™X\ÜÚYÛ—Ý\ÙWÙ]šY[˜ÙWÝ×Ý™[[][Û‰×NÂˆYˆ
+”ÓÓ‹œÝš[™ÚYžJ™XÙZ\˜[ÝÙYÛÜ\˜][Û—ÚYÊHOOH”ÓÓ‹œÝš[™ÚYžJÜ\˜][Û’YÊH”ÓÓ‹œÝš[™ÚYžJ™XÙZ\˜\YYÛÜ\˜][Û—ÚYÊHOOH”ÓÓ‹œÝš[™ÚYžJÜ\˜][Û’YÊH”ÓÓ‹œÝš[™ÚYžJË‹‹Š™XÙZ\œ›ØÙ\Ü×ÛÜ\˜][ÛœÈ×JK‹‹Š™XÙZ\™]šY[˜ÙWÛÜ\˜][ÛœÈ×JWK›X\
+˜[YHOˆ˜[YK›Ü\˜][Û—ÚY
+JHOOH”ÓÓ‹œÝš[™ÚYžJÜ\˜][Û’YÊJH\ÜÝY\Ëœ\Ú
+	ÛY[[ÜžHÜ\˜][ÛˆY[X™\œÚ\ÜˆÜ™\ˆ\ÈÜ›Û™ÉÊNÂˆÛÛœÝ›ØÙ\ÜÓÜ\˜][Û‘šY[ÈHÖÉÛÜ\˜][Û—ÚY	Ë	ÛÜ\˜][Û‰Ë	Û›ÙWÚY	Ë	Ù]šY[˜ÙWÜ™\]Z\™[Y[ÚYÉË	ØY\—Ú\Ú	×KÉÛÜ\˜][Û—ÚY	Ë	ÛÜ\˜][Û‰Ë	ÜÛÝ\˜ÙIË	Ý\™Ù]	Ë	ØY\—Ú\Ú	×KÉÛÜ\˜][Û—ÚY	Ë	ÛÜ\˜][Û‰Ë	ÜÛÝ\˜ÙIË	Ý\™Ù]	Ë	ØY\—Ú\Ú	×WNÂˆÛÛœÝ]šY[˜ÙSÜ\˜][Û‘šY[ÈHÖÉÛÜ\˜][Û—ÚY	Ë	ÛÜ\˜][Û‰Ë	Ú][WÚY	Ë	Ø™Y›Ü™WÚ\Ú	Ë	ØY\—Ú\Ú	×KÉÛÜ\˜][Û—ÚY	Ë	ÛÜ\˜][Û‰Ë	Ú][WÚY	Ë	Ü™[[Ý™YÙœ›ÛWÛ›ÙWÚYÉË	ØYYÝ×Û›ÙWÚY	Ë	Ø™Y›Ü™WÚ\Ú	Ë	ØY\—Ú\Ú	×WNÂˆYˆ
+
+™XÙZ\œ›ØÙ\Ü×ÛÜ\˜][ÛœÈ×JK›[™ÝOOHÈ
+™XÙZ\™]šY[˜ÙWÛÜ\˜][ÛœÈ×JK›[™ÝOOHˆ
+™XÙZ\œ›ØÙ\Ü×ÛÜ\˜][ÛœÈ×JKœÛÛYJ
+Ü\˜][Û‹[™^
+HOˆY^XÝY[X™\œÊØš™XÝšÙ^\ÊÜ\˜][ÛˆßJK›ØÙ\ÜÓÜ\˜][Û‘šY[ÖÚ[™^JJH
+™XÙZ\™]šY[˜ÙWÛÜ\˜][ÛœÈ×JKœÛÛYJ
+Ü\˜][Û‹[™^
+HOˆY^XÝY[X™\œÊØš™XÝšÙ^\ÊÜ\˜][ÛˆßJK]šY[˜ÙSÜ\˜][Û‘šY[ÖÚ[™^JJJH\ÜÝY\Ëœ\Ú
+	ÛY[[ÜžHÜ\˜][ÛˆšY[È\™H›Ý^XÝ	ÊNÂˆÛÛœÝ™XÙZ\\Ú\ÈHÜ™XÙZ\›ØœÙ\˜X›WÚ[œ]Ú\Ú™XÙZ\˜Ø[›ÛšXØ[ÜÝ]WÚ\Ú™XÙZ\™\šYšXØ][Û—Ú\Ú™XÙZ\˜\XØ][Û—Ú\Ú™XÙZ\œÛÝ\˜ÙWÛY[[ÜžOË˜ÛÛ[Ú\Ú‹‹“Øš™XÝ˜[Y\Ê™XÙZ\˜™Y›Ü™HßJK‹‹“Øš™XÝ˜[Y\Ê™XÙZ\˜Y\ˆßJK‹‹Š™XÙZ\œ›ØÙ\Ü×ÛÜ\˜][ÛœÈ×JK›X\
+Ü\˜][ÛˆOˆÜ\˜][Û‹˜Y\—Ú\Ú
+K‹‹Š™XÙZ\™]šY[˜ÙWÛÜ\˜][ÛœÈ×JK™›]X\
+Ü\˜][ÛˆOˆÛÜ\˜][Û‹˜™Y›Ü™WÚ\ÚÜ\˜][Û‹˜Y\—Ú\ÚJWNÂˆYˆ
+\™XÙZ\\Ú\Ë™]™\žJ˜[YHOˆÒLM—ÔUT“‹\Ý
+˜[YH	ÉÊJJH\ÜÝY\Ëœ\Ú
+	ÛY[[ÜžH™XÙZ\ÛÛZ[œÈ[ˆ[˜[YÒKLMˆ˜[YIÊNÂˆÛÛœÝYY›ÙHH]\‹œ›ØÙ\ÜÏË››Ù\ÏË™š[™
+›ÙHOˆ›ÙK››ÙWÚYOOH	Ý™[[][Û—Ù\Ü]IÊNÂˆÛÛœÝš\œÝYÙHH]\‹œ›ØÙ\ÜÏË™YÙ\ÏË™š[™
+YÙHOˆYÙKœÛÝ\˜ÙHOOH	Ù]šY[˜ÙWÙØ\	È	‰ˆYÙK\™Ù]OOH	Ý™[[][Û—Ù\Ü]IÊNÂˆÛÛœÝÙXÛÛ™YÙHH]\‹œ›ØÙ\ÜÏË™YÙ\ÏË™š[™
+YÙHOˆYÙKœÛÝ\˜ÙHOOH	Ý™[[][Û—Ù\Ü]IÈ	‰ˆYÙK\™Ù]OOH	ØØ]\Ø][Û‰ÊNÂˆÛÛœÝZ[[™Ñ[™[ÜHH]\‹˜ÚXÚÛ\ÝËš][\ÏË™š[™
+][HOˆ][Kš][WÚYOOH	ØZ[[™×Ù[™[ÜIÊNÂˆÛÛœÝ\ÙQ]šY[˜ÙHH]\‹˜ÚXÚÛ\ÝËš][\ÏË™š[™
+][HOˆ][Kš][WÚYOOH	Ý\ÙWÙ]šY[˜ÙIÊNÂˆYˆ
+XYY›ÙH™XÙZ\œ›ØÙ\Ü×ÛÜ\˜][ÛœÏË–ÌOË››ÙWÚYOOH	Ý™[[][Û—Ù\Ü]IÈ”ÓÓ‹œÝš[™ÚYžJ™XÙZ\œ›ØÙ\Ü×ÛÜ\˜][ÛœÏË–ÌOË™]šY[˜ÙWÜ™\]Z\™[Y[ÚYÊHOOH”ÓÓ‹œÝš[™ÚYžJÉÛX[˜YÙ[Y[ÜÜÚ][Û‰Ë	Ý\ÙWÙ]šY[˜ÙI×JH™XÙZ\œ›ØÙ\Ü×ÛÜ\˜][ÛœÏË–ÌOË˜Y\—Ú\ÚOOHÒ\Ú
+YY›ÙJJH\ÜÝY\Ëœ\Ú
+	ØYY™[[][Ûˆ›ÙHÜ\˜][Ûˆ\È›Ý\ÚX›Ý[™	ÊNÂˆYˆ
+Yš\œÝYÙH\ÙXÛÛ™YÙH™XÙZ\œ›ØÙ\Ü×ÛÜ\˜][ÛœÏË–ÌWOË˜Y\—Ú\ÚOOHÒ\Ú
+š\œÝYÙJH™XÙZ\œ›ØÙ\Ü×ÛÜ\˜][ÛœÏË–Ì—OË˜Y\—Ú\ÚOOHÒ\Ú
+ÙXÛÛ™YÙJJH\ÜÝY\Ëœ\Ú
+	ØYYYÙHÜ\˜][ÛœÈ\™H›Ý\ÚX›Ý[™	ÊNÂˆYˆ
+XZ[[™Ñ[™[ÜHZ[[™Ñ[™[ÜKœÝ]\ÈOOH	ØÛÛ™][Û˜[	ÈZ[[™Ñ[™[ÜK˜Ý\œ™[Ü]OOHYH™XÙZ\™]šY[˜ÙWÛÜ\˜][ÛœÏË–ÌOËš][WÚYOOH	ØZ[[™×Ù[™[ÜIÈ™XÙZ\™]šY[˜ÙWÛÜ\˜][ÛœÏË–ÌOË˜Y\—Ú\ÚOOHÒ\Ú
+Z[[™Ñ[™[ÜJJH\ÜÝY\Ëœ\Ú
+	ØZ[[™ËY[™[ÜH™\XÙ[Y[\È›Ý\ÚX›Ý[™	ÊNÂˆYˆ
+]\ÙQ]šY[˜ÙH\ÙQ]šY[˜ÙK››ÙWÚYOOH	Ý™[[][Û—Ù\Ü]IÈ™XÙZ\™]šY[˜ÙWÛÜ\˜][ÛœÏË–ÌWOËš][WÚYOOH	Ý\ÙWÙ]šY[˜ÙIÈ™XÙZ\™]šY[˜ÙWÛÜ\˜][ÛœÏË–ÌWOË˜YYÝ×Û›ÙWÚYOOH	Ý™[[][Û—Ù\Ü]IÈ™XÙZ\™]šY[˜ÙWÛÜ\˜][ÛœÏË–ÌWOË˜Y\—Ú\ÚOOHÒ\Ú
+\ÙQ]šY[˜ÙJJH\ÜÝY\Ëœ\Ú
+	Ý\ÙKY]šY[˜ÙH™X\ÜÚYÛ›Y[\È›Ý\ÚX›Ý[™	ÊNÂˆYˆ
+™XÙZ\œ›ØÙ\Ü×ÛÜ\˜][ÛœÏË–ÌOË›Ü\˜][ÛˆOOH	ØYÛ›ÙIÈ™XÙZ\œ›ØÙ\Ü×ÛÜ\˜][ÛœÏËœÛXÙJJKœÛÛYJÜ\˜][ÛˆOˆÜ\˜][Û‹›Ü\˜][ÛˆOOH	ØYÙYÙIÊH™XÙZ\™]šY[˜ÙWÛÜ\˜][ÛœÏË–ÌOË›Ü\˜][ÛˆOOH	Ü™\XÙWÚ][IÈ™XÙZ\™]šY[˜ÙWÛÜ\˜][ÛœÏË–ÌWOË›Ü\˜][ÛˆOOH	Ü™X\ÜÚYÛ—Ú][IÈÝX›RœÛÛŠ™XÙZ\™]šY[˜ÙWÛÜ\˜][ÛœÏË–ÌWOËœ™[[Ý™YÙœ›ÛWÛ›ÙWÚYÊHOOHÝX›RœÛÛŠÉØØ]\Ø][Û‰Ë	ÛZ^YØØ]\ÙIË	Ý[˜[Ý\ÙI×JJH\ÜÝY\Ëœ\Ú
+	ÛY[[ÜžHÜ\˜][ÛˆÙ[X[XÜÈ\™HÜ›Û™ÉÊNÂˆYˆ
+™XÙZ\˜\XØ][Û—Ú\ÚOOHÒ\Ú
+Øš™XÝ™œ›ÛQ[šY\ÊØš™XÝ™[šY\Ê™XÙZ\
+K™š[\Š
+ÚÙ^WJHOˆÙ^HOOH	Ø\XØ][Û—Ú\Ú	ÊJJJH\ÜÝY\Ëœ\Ú
+	ÛY[[ÜžH\XØ][Ûˆ\Ú\ÈÜ›Û™ÉÊNÂˆÛÛœÝ^XÝY[HHÛÛ\]YØ]\Ø[[J˜\Ù[[™K]\ŠNÂˆYˆ
+ÝX›RœÛÛŠ›ÛÙ‹˜Ø]\Ø[Ù[JHOOHÝX›RœÛÛŠ^XÝY[JJH\ÜÝY\Ëœ\Ú
+	ÛX\›š[™È›ÛÙˆØ]\Ø[[H\È›Ý™XÛÛ\]Yœ›ÛH›ÝÜÉÊNÂˆYˆ
+ÝX›RœÛÛŠ›ÛÙ‹˜Ø]\Ø[Ù[OËœ›ØÙ\ÜÏË˜YYÛ›ÙWÚYÊHOOHÝX›RœÛÛŠÉÝ™[[][Û—Ù\Ü]I×JHÝX›RœÛÛŠ›ÛÙ‹˜Ø]\Ø[Ù[OËœ›ØÙ\ÜÏË˜YYÙYÙ\ÊHOOHÝX›RœÛÛŠÞÈÛÝ\˜ÙNˆ	Ù]šY[˜ÙWÙØ\	Ë\™Ù]ˆ	Ý™[[][Û—Ù\Ü]IÈKÈÛÝ\˜ÙNˆ	Ý™[[][Û—Ù\Ü]IË\™Ù]ˆ	ØØ]\Ø][Û‰ÈWJHÝX›RœÛÛŠ›ÛÙ‹˜Ø]\Ø[Ù[OË™]šY[˜ÙOË˜Ú[™ÙYÚ][WÚYÊHOOHÝX›RœÛÛŠÉØZ[[™×Ù[™[ÜIË	ÛX[˜YÙ[Y[ÜÜÚ][Û‰Ë	Ý\ÙWÙ]šY[˜ÙI×JJH\ÜÝY\Ëœ\Ú
+	ØØ]\Ø[[H\ÈÝ]ÚYHH^XÝØ\ÙK\ÜXÚYšXÈ˜[œÙ›Ü›IÊNÂˆÛÛœÝ^XÝYÚXÚÓ˜[Y\ÈHÉÔØ[YHØœÙ\˜X›H[œ]	Ë	ÔØ[YHØ[›ÛšXØ[Ý]IË	Ñ^XÝÝ\œ™[Y[[ÜžH™XÙZ\	Ë	Ô\™HY[[ÜžH™\^HX]Ú\ÈX\›™YÜÉË	Ô™XÙZ\™Y›Ü™HÙ[X[XÈ\Ú\ÈX]Ú˜\Ù[[™HÜÉË	Ô™XÙZ\Y\ˆ\Ú\ÈX]ÚX\›™YÜÉË	Ó›Ûž™\›ÈØ]\Ø[È[IË	ÓÛ›H[ÝÙYØ]\Ø[Ü\˜][ÛœÈÚ[™ÙY	Ë	Ñ]\›Z[š\ÝXÈ\™Ù][™›ÝXÝYÚXÚÜÈ\ÜÙY	Ë	ÔÚ\™YŒÈ™[XZ[œÈ[˜Ú[™ÙY	×NÂˆYˆ
+›ÛÙ‹œ™XYHOOHYH›ÛÙ‹˜ÛÛ\]YOOHYH›ÛÙ‹˜˜\Ù[[™WÜ[—ÚYOOH˜\Ù[[™T[‹œ[—ÚY›ÛÙ‹›]\—Ü[—ÚYOOH]\”[‹œ[—ÚY”ÓÓ‹œÝš[™ÚYžJ
+›ÛÙ‹™]\›Z[š\ÝX×ØÚXÚÜÈ×JK›X\
+ÚXÚÈOˆÚXÚË›˜[YJJHOOH”ÓÓ‹œÝš[™ÚYžJ^XÝYÚXÚÓ˜[Y\ÊHJ›ÛÙ‹™]\›Z[š\ÝX×ØÚXÚÜÈ×JK™]™\žJÚXÚÈOˆÚXÚËœÝ]\ÈOOH	Ü\ÜÙY	ÊJH\ÜÝY\Ëœ\Ú
+	ÛX\›š[™È›ÛÙˆÚXÚÜÈ\™HXœÙ[™[Ü™\™YÜˆ˜Z[Y	ÊNÂˆYˆ
+›ÛÙ‹œ™]šY]ÙYÛY[[ÜžWÜ›ÛÙË\ÙYOOHYH›ÛÙ‹œ™]šY]ÙYÛY[[ÜžWÜ›ÛÙËœ™\Ù[Ú[—Ø˜\Ù[[™HOOH˜[ÙH›ÛÙ‹œ™]šY]ÙYÛY[[ÜžWÜ›ÛÙËœ™\Ù[Ú[—Û]\—Ü[ˆOOHYH\›ÛÙ‹œ™]šY]ÙYÛY[[ÜžWÜ›ÛÙË›Y[[ÜžWÚYÏËš[˜ÛY\Ê™XÙZ\œÛÝ\˜ÙWÛY[[ÜžK›Y[[ÜžWÚY
+HÝX›RœÛÛŠ›ÛÙ‹˜Ú[™Ù\ÏËœ™XÙY[ØÛZ[WÚY×ØYY
+HOOHÝX›RœÛÛŠÉÑQ‹LËQLQSSÉ×JJH\ÜÝY\Ëœ\Ú
+	ÛX\›š[™È›ÛÙˆÙ\È›Ýš[™HÙ[XÝY[™\šYšYYY[[ÜžIÊNÂˆYˆ
+›ÛÙ‹˜Ø[™Y]OËœÝ]\ÈOOH	Ü]X\˜[[™Y	È›ÛÙ‹˜Ø[™Y]OË\™Ù]Ý\ÝÏËœÝ]\ÈOOH	Ü\ÜÙY	È›ÛÙ‹˜Ø[™Y]OËœ›ÝXÝYÜ™YÜ™\ÜÚ[ÛËœÝ]\ÈOOH	Ü\ÜÙY	È›ÛÙ‹˜Ø[™Y]OËœ]X[YšYYÜÝ\ÜØÛÝ[OOH›ÛÙ‹˜Ø[™Y]OË˜\›Ý˜[ËœÝ]\ÈOOH	Ü[™[™ÉÈ›ÛÙ‹˜Ø[™Y]OË˜\›Ý˜[Ëœ]X[YšYYÜ™]šY]Ù\ˆOOH˜[ÙJH\ÜÝY\Ëœ\Ú
+	ØØ[™Y]H\™Ù]Ü›ÝXÝYÚXÚÜÈÜˆ]X[YšYY\™[X\ÙH›Ý[™\žH\ÈÜ›Û™ÉÊNÂˆÛÛœÝ™XÙZ\›ÛÙˆH›ÛÙ‹›Y[[ÜžWØ\XØ][Û—Ü›ÛÙˆßNÂˆYˆ
+Y^XÝY[X™\œÊØš™XÝšÙ^\Ê™XÙZ\›ÛÙŠKÉÜ™XÙZ\Ü™\Ù[	Ë	Ü™XÙZ\Ý˜[Y	Ë	ÜÛÝ\˜ÙWÛY[[ÜžWØÝ\œ™[	Ë	Ø™Y›Ü™WÚ\Ú\×ÛX]Ú	Ë	ØY\—Ú\Ú\×ÛX]Ú	Ë	Ø[ÝÙYÙ[WÙ^XÝ	Ë	Ü™\^WÙ^XÝ	Ë	Ø\XØ][Û—Ú\Ú	×JBˆVÉÜ™XÙZ\Ü™\Ù[	Ë	Ü™XÙZ\Ý˜[Y	Ë	ÜÛÝ\˜ÙWÛY[[ÜžWØÝ\œ™[	Ë	Ø™Y›Ü™WÚ\Ú\×ÛX]Ú	Ë	ØY\—Ú\Ú\×ÛX]Ú	Ë	Ø[ÝÙYÙ[WÙ^XÝ	Ë	Ü™\^WÙ^XÝ	×K™]™\žJÙ^HOˆ™XÙZ\›ÛÙ–ÚÙ^WHOOHYJBˆ™XÙZ\›ÛÙ‹˜\XØ][Û—Ú\ÚOOH™XÙZ\˜\XØ][Û—Ú\Ú
+H\ÜÝY\Ëœ\Ú
+	ÛY[[ÜžH\XØ][Ûˆ›ÛÙˆÙ\È›Ý˜[Y]HHÝ\œ™[™XÙZ\[™\™H™\^IÊNÂˆYˆ
+]\‹œ^X›ÛÚÏË™\œÚ[ÛˆOOH	Û[Ý[\^X›ÛÚË]ŒÉÈ]\‹œÚ\™YÜ[WØ\YYOOH˜[ÙH›ÛÙ‹œÚ\™YÜ[OË™\œÚ[Û—Ø™Y›Ü™HOOH	Û[Ý[\^X›ÛÚË]ŒÉÈ›ÛÙ‹œÚ\™YÜ[OË™\œÚ[Û—ØY\ˆOOH	Û[Ý[\^X›ÛÚË]ŒÉÈ›ÛÙ‹œÚ\™YÜ[OË˜\YYOOH˜[ÙH›ÛÙ‹œÚ\™YÜ[OËœÚ\™YÚÛ›ÝÛYÙWØÚ[™ÙYOOH˜[ÙJH\ÜÝY\Ëœ\Ú
+	ÜÚ\™YŒÈ›Ý[™\žH\È›Ý[˜Ú[™ÙY	ÊNÂˆYˆ
+Øš™XÝš\ÓÝÛŠ]\‹œ›ØÙ\ÜÈßK	ØYÙ[ØÛÛšX][Û‰ÊH
+]\‹œ›ØÙ\ÜÏË››Ù\È×JKœÛÛYJ›ÙHOˆØš™XÝš\ÓÝÛŠ›ÙK	ØYÙ[ÙXÚ\Ú[Û—ØÛÛšX][ÛœÉÊJHØš™XÝš\ÓÝÛŠ]\‹˜ÚXÚÛ\ÝßK	ØYÙ[ØÛÛšX][Û‰ÊH
+]\‹˜ÚXÚÛ\ÝËš][\È×JKœÛÛYJ][HOˆØš™XÝš\ÓÝÛŠ][K	ØYÙ[ØÛÛšX][Û‰ÊJH]\‹›™^ØXÝ[ÛË˜YÙ[ØœšYY—ØÛÛšX][ÛˆOOH[
+H\ÜÝY\Ëœ\Ú
+	ÜÜÝ[Y[[ÜžHÜÈ™]Z[ˆ™K[Y[[ÜžH[Ù[ÛÛšX][ÛˆšY[ÈÜˆ™^XXÝ[Ûˆ]šX][Û‰ÊNÂˆ™]\›ˆ\ÜÝY\ÎÂŸB‚™[˜Ý[ÛˆXœšYØ]\Ø[ÛÛ˜XÝš[Û][ÛœÊ[ŠHÂˆÛÛœÝ\ÜÝY\ÈH×NÂˆÛÛœÝ]Y]HÜ˜Ú\Ý˜][Û]Y]
+[ŠNÂˆÛÛœÝ™\Ý[H[Ëœ™\Ý[ÂˆÛÛœÝ\Y˜XÝÈH]Y]ËœÜXÚX[\ÝØ\Y˜XÝÎÂˆYˆ
+X]Y]\™\Ý[X\Y˜XÝÈ\[Ùˆ\Y˜XÝÈOOH	ÛØš™XÝ	È\œ˜^Kš\Ð\œ˜^J\Y˜XÝÊJHÂˆ™]\›ˆÉÚXœšYÜXÚX[\Ý\Y˜XÝÈÜˆš[˜[™\Ý[\™HXœÙ[	×NÂˆBˆÛÛœÝYÙ[ÈH™]ÈX\
+
+]Y]˜YÙ[È×JK›X\
+][HOˆÚ][K˜YÙ[ÚY][WJJNÂˆÛÛœÝØ]\ÈH™]ÈX\
+
+]Y]™]\›Z[š\ÝX×ÙØ]\È×JK›X\
+][HOˆÚ][K˜YÙ[ÚY][WJJNÂˆÛÛœÝÛÝ\˜ÙP\Y˜XÝH\Y˜XÝË™ØÝ[Y[ÜÛÝ\˜ÙWÚ[YÜš]NÂˆÛÛœÝ›ØÙ\ÜÐ\Y˜XÝH\Y˜XÝËœ›ØÙ\Ü×ÙXÚ\Ú[Û—ÛX\[™ÎÂˆÛÛœÝ]šY[˜ÙP\Y˜XÝH\Y˜XÝË™]šY[˜ÙWØÚXÚÛ\ÝÂˆÛÛœÝš[˜[\Y˜XÝH\Y˜XÝË™š[˜[ØÛZ[WØœšYY—Ø]Y]ÂˆYˆ
+VÜÛÝ\˜ÙP\Y˜XÝ›ØÙ\ÜÐ\Y˜XÝ]šY[˜ÙP\Y˜XÝš[˜[\Y˜XÝK™]™\žJ˜[YHOˆ˜[YH	‰ˆ\[Ùˆ˜[YHOOH	ÛØš™XÝ	È	‰ˆP\œ˜^Kš\Ð\œ˜^J˜[YJJJHÂˆ™]\›ˆÉÛÛ™HÜˆ[Ü™HØ]\Ø[ÜXÚX[\Ý\Y˜XÝÈ\™HXœÙ[	×NÂˆB‚ˆÛÛœÝÛÝ\˜ÙPYÙ[HYÙ[Ë™Ù]
+	ÙØÝ[Y[ÜÛÝ\˜ÙWÚ[YÜš]IÊNÂˆÛÛœÝ›ØÙ\ÜÐYÙ[HYÙ[Ë™Ù]
+	Ü›ØÙ\Ü×ÙXÚ\Ú[Û—ÛX\[™ÉÊNÂˆÛÛœÝ]šY[˜ÙPYÙ[HYÙ[Ë™Ù]
+	Ù]šY[˜ÙWØÚXÚÛ\Ý	ÊNÂˆÛÛœÝš[˜[YÙ[HYÙ[Ë™Ù]
+	Ùš[˜[ØÛZ[WØœšYY—Ø]Y]	ÊNÂˆYˆ
+ÛÝ\˜ÙPYÙ[Ë›Ý]]Ø\Y˜XÝÚ\ÚOOHÒ\Ú
+ÛÝ\˜ÙP\Y˜XÝ
+JH\ÜÝY\Ëœ\Ú
+	ÙØÝ[Y[ÛÝ\˜ÙHÜXÚX[\Ý\Y˜XÝ\Ú\È›Ý^XÝ	ÊNÂˆYˆ
+›ØÙ\ÜÐYÙ[Ë›Ý]]Ø\Y˜XÝÚ\ÚOOHÒ\Ú
+›ØÙ\ÜÐ\Y˜XÝ
+JH\ÜÝY\Ëœ\Ú
+	Ü›ØÙ\ÜÈÜXÚX[\Ý\Y˜XÝ\Ú\È›Ý^XÝ	ÊNÂˆYˆ
+]šY[˜ÙPYÙ[Ë›Ý]]Ø\Y˜XÝÚ\ÚOOHÒ\Ú
+]šY[˜ÙP\Y˜XÝ
+JH\ÜÝY\Ëœ\Ú
+	Ù]šY[˜ÙHÜXÚX[\Ý\Y˜XÝ\Ú\È›Ý^XÝ	ÊNÂˆYˆ
+š[˜[YÙ[Ë›Ý]]Ø\Y˜XÝÚ\ÚOOHÒ\Ú
+š[˜[\Y˜XÝ
+JH\ÜÝY\Ëœ\Ú
+	Ùš[˜[ÜXÚX[\Ý\Y˜XÝ\Ú\È›Ý^XÝ	ÊNÂ‚ˆÛÛœÝ›ØÙ\ÜÑØ]HHØ]\Ë™Ù]
+	Ù]\›Z[š\ÝX×Ü›ØÙ\Ü×ÙØ]IÊNÂˆÛÛœÝ^XÝY\˜[[[œ]\ÚHÒ\Ú
+ÂˆÛÝ\˜ÙWÚ[YÜš]NˆÛÝ\˜ÙP\Y˜XÝˆ›ØÙ\Ü×ÛX\[™Îˆ›ØÙ\ÜÐ\Y˜XÝˆJNÂˆYˆ
+›ØÙ\ÜÑØ]OËš[œ]Ø\Y˜XÝÚ\ÚOOH^XÝY\˜[[[œ]\Ú
+H\ÜÝY\Ëœ\Ú
+	Ü›ØÙ\ÜÈØ]H\˜[[ÜXÚX[\ÝÛÛ\ÜÚ]H[œ]\Ú\È›Ý^XÝ	ÊNÂˆÛÛœÝ]šY[˜ÙQØ]HHØ]\Ë™Ù]
+	Ù]\›Z[š\ÝX×Ù]šY[˜ÙWÙØ]IÊNÂˆYˆ
+]šY[˜ÙQØ]OËš[œ]Ø\Y˜XÝÚ\ÚOOHÒ\Ú
+]šY[˜ÙP\Y˜XÝ
+JH\ÜÝY\Ëœ\Ú
+	Ù]šY[˜ÙHØ]HÜXÚX[\Ý[œ]\Ú\È›Ý^XÝ	ÊNÂ‚ˆÛÛœÝ›ØÙ\ÜÈH™\Ý[œ›ØÙ\ÜÎÂˆÛÛœÝÚXÚÛ\ÝH™\Ý[˜ÚXÚÛ\ÝÂˆYˆ
+\›ØÙ\ÜÈXÚXÚÛ\Ý
+H™]\›ˆË‹‹š\ÜÝY\Ë	ÚXœšY›ØÙ\ÜÈÜˆÚXÚÛ\ÝÈ\ÈXœÙ[	×NÂˆYˆ
+ÝX›RœÛÛŠ›ØÙ\ÜË˜YÙ[ØÛÛšX][ÛËœÛÝ\˜ÙWÚ[YÜš]WØ\Y˜XÝ
+HOOHÝX›RœÛÛŠÛÝ\˜ÙP\Y˜XÝ
+JH\ÜÝY\Ëœ\Ú
+	Ùš[˜[›ØÙ\ÜÈÙ\È›Ý™]Z[ˆH^XÝÛÝ\˜ÙHÜXÚX[\Ý\Y˜XÝ	ÊNÂˆYˆ
+ÝX›RœÛÛŠ›ØÙ\ÜË˜YÙ[ØÛÛšX][ÛË˜\Y˜XÝ
+HOOHÝX›RœÛÛŠ›ØÙ\ÜÐ\Y˜XÝ
+JH\ÜÝY\Ëœ\Ú
+	Ùš[˜[›ØÙ\ÜÈÙ\È›Ý™]Z[ˆH^XÝ›ØÙ\ÜÈÜXÚX[\Ý\Y˜XÝ	ÊNÂ‚ˆÛÛœÝXÚ\Ú[ÛœÈH\œ˜^Kš\Ð\œ˜^J›ØÙ\ÜÐ\Y˜XÝ™XÚ\Ú[ÛœÊHÈ›ØÙ\ÜÐ\Y˜XÝ™XÚ\Ú[ÛœÈˆ×NÂˆÛÛœÝ˜[YXÚ\Ú[ÛœÈHÛÛšX][Û‘[šY\ÊXÚ\Ú[ÛœË“ÐÑTÔ×ÐÓÓ•’P•USÓ—Ô“ÓJNÂˆYˆ
+]˜[YXÚ\Ú[ÛœÊH\ÜÝY\Ëœ\Ú
+	Ü›ØÙ\ÜÈXÚ\Ú[ÛˆšY[ÛÛšX][ÛœÈš[Û]HY[X™\œÚ\Üˆ]šX][Û‰ÊNÂˆÛÛœÝÛÛ›Û[™Ñ˜XÝÈH
+™\Ý[™˜XÝÈ×JK™š[\Š][HOˆ][OË˜ÛÛ›Û×Ü›ØÙ\ÜÈOOHYJNÂˆÛÛœÝÛÛ›Û[™Ñ˜XÝYÈHÛÛ›Û[™Ñ˜XÝË›X\
+][HOˆ][K™˜XÝÚY
+NÂˆÛÛœÝÛÛ›Û[™ÐžRYH™]ÈX\
+ÛÛ›Û[™Ñ˜XÝË›X\
+][HOˆÚ][K™˜XÝÚY][WJJNÂˆYˆ
+Y^XÝY[X™\œÊXÚ\Ú[ÛœË›X\
+][HOˆ][OË™˜XÝÚY
+KÛÛ›Û[™Ñ˜XÝYÊJH\ÜÝY\Ëœ\Ú
+	Ü›ØÙ\ÜÈXÚ\Ú[Ûˆ˜XÝY[X™\œÚ\\È›Ý^XÝ	ÊNÂˆÛÛœÝXÚ\Ú[ÛœÐžQ˜XÝH™]ÈX\
+
+NÂˆ›Üˆ
+ÛÛœÝXÚ\Ú[ÛˆÙˆXÚ\Ú[ÛœÊHÂˆYˆ
+YXÚ\Ú[Ûˆ\[ÙˆXÚ\Ú[ÛˆOOH	ÛØš™XÝ	È[›Û™[\TÝš[™ÊXÚ\Ú[Û‹™˜XÝÚY
+JHÛÛ[YNÂˆYˆ
+XÚ\Ú[Û‹˜ÛÛšX][Û—ÚYOOH˜XÝ‰ÙXÚ\Ú[Û‹™˜XÝÚYN™XÚ\Ú[Û—Ý˜[YX
+H\ÜÝY\Ëœ\Ú
+›ØÙ\ÜÈXÚ\Ú[Ûˆ	ÙXÚ\Ú[Û‹™˜XÝÚYHÛÛšX][ÛˆQ\È›Ý^XÝ
+NÂˆYˆ
+XÚ\Ú[ÛœÐžQ˜XÝš\ÊXÚ\Ú[Û‹™˜XÝÚY
+JH\ÜÝY\Ëœ\Ú
+›ØÙ\ÜÈXÚ\Ú[Ûˆ	ÙXÚ\Ú[Û‹™˜XÝÚYH\È\XØ]Y
+NÂˆÛÛœÝØ[›ÛšXØ[˜XÝHÛÛ›Û[™ÐžRY™Ù]
+XÚ\Ú[Û‹™˜XÝÚY
+NÂˆYˆ
+XØ[›ÛšXØ[˜XÝˆXÚ\Ú[Û‹™XÚ\Ú[Û—ÚÙ^HOOHØ[›ÛšXØ[˜XÝ™XÚ\Ú[Û—ÚÙ^BˆXÚ\Ú[Û‹™XÚ\Ú[Û—Ý˜[YHOOHØ[›ÛšXØ[˜XÝ™XÚ\Ú[Û—Ý˜[YBˆXÚ\Ú[Û‹œÝ]HOOHØ[›ÛšXØ[˜XÝœÝ]BˆXÚ\Ú[Û‹››Ü›X[^™YÝ˜[YHOOHØ[›ÛšXØ[˜XÝ››Ü›X[^™YÝ˜[YJH\ÜÝY\Ëœ\Ú
+›ØÙ\ÜÈXÚ\Ú[Ûˆ	ÙXÚ\Ú[Û‹™˜XÝÚYH[š\š]YØ[›ÛšXØ[šY[È\™H›Ý^XÝ
+NÂˆÛÛœÝÛÝ\˜ÙT™Y’YÈHXÚ\Ú[Û‹œÛÝ\˜ÙWÜ™Y—ÚYÎÂˆYˆ
+P\œ˜^Kš\Ð\œ˜^JÛÝ\˜ÙT™Y’YÊBˆÛÝ\˜ÙT™Y’YËœÛÛYJ][HOˆ[›Û™[\TÝš[™Ê][JJBˆ™]ÈÙ]
+ÛÝ\˜ÙT™Y’YÊKœÚ^™HOOHÛÝ\˜ÙT™Y’YË›[™Ýˆ”ÓÓ‹œÝš[™ÚYžJÛÝ\˜ÙT™Y’YÊHOOH”ÓÓ‹œÝš[™ÚYžJË‹‹œÛÝ\˜ÙT™Y’Y×KœÛÜ
+
+JJH\ÜÝY\Ëœ\Ú
+›ØÙ\ÜÈXÚ\Ú[Ûˆ	ÙXÚ\Ú[Û‹™˜XÝÚYHÛÝ\˜ÙH™Y™\™[˜ÙHQÈ\™H›Ý[š\]YH[™ÛÜY
+NÂˆXÚ\Ú[ÛœÐžQ˜XÝœÙ]
+XÚ\Ú[Û‹™˜XÝÚYXÚ\Ú[ÛŠNÂˆBˆYˆ
+˜[YXÚ\Ú[ÛœÈ	‰ˆ›ØÙ\ÜÐYÙ[
+HÂˆÛÛœÝXØÙ\YYÈH˜[YXÚ\Ú[ÛœË™š[\Š][HOˆ][K™]\›Z[š\ÝX×Ù˜[˜XÚ×Ø\YYOOH˜[ÙJK›X\
+][HOˆ][K˜ÛÛšX][Û—ÚY
+NÂˆÛÛœÝ˜[˜XÚÐÛÝ[H˜[YXÚ\Ú[ÛœË›[™ÝHXØÙ\YYË›[™ÝÂˆYˆ
+”ÓÓ‹œÝš[™ÚYžJ›ØÙ\ÜÐYÙ[˜XØÙ\YÚYÊHOOH”ÓÓ‹œÝš[™ÚYžJXØÙ\YYÊBˆ›ØÙ\ÜÐYÙ[˜XØÙ\YØÛÝ[OOHXØÙ\YYË›[™Ýˆ›ØÙ\ÜÐYÙ[œ™Z™XÝYØÛÝ[OOH˜[˜XÚÐÛÝ[ˆ›ØÙ\ÜÐYÙ[™]\›Z[š\ÝX×Ù˜[˜XÚ×Ø\YYOOH
+˜[˜XÚÐÛÝ[ˆ
+JH\ÜÝY\Ëœ\Ú
+	Ü›ØÙ\ÜÈYÙ[XØÙ\YÙ˜[˜XÚÈšY[XYÛ›ÜÝXÜÈ\™H›Ý^XÝ	ÊNÂˆBˆ›Üˆ
+ÛÛœÝ›ÙHÙˆ›ØÙ\ÜË››Ù\È×JHÂˆÛÛœÝ^XÝYH
+›ÙK™˜XÝÚYÈ×JK™›]X\
+˜XÝYOˆXÚ\Ú[ÛœÐžQ˜XÝš\Ê˜XÝY
+HÈÙXÚ\Ú[ÛœÐžQ˜XÝ™Ù]
+˜XÝY
+WHˆ×JNÂˆÛÛœÝXÝX[H\œ˜^Kš\Ð\œ˜^J›ÙK˜YÙ[ÙXÚ\Ú[Û—ØÛÛšX][ÛœÊHÈ›ÙK˜YÙ[ÙXÚ\Ú[Û—ØÛÛšX][ÛœÈˆ×NÂˆYˆ
+ÝX›RœÛÛŠXÝX[
+HOOHÝX›RœÛÛŠ^XÝY
+JH\ÜÝY\Ëœ\Ú
+›ØÙ\ÜÈ›ÙH	Û›ÙK››ÙWÚY	Ý[šÛ›ÝÛ‰ßHšY[]šX][Ûˆ\È›Ý›Ú™XÝYœ›ÛHHÜXÚX[\Ý\Y˜XÝ
+NÂˆB‚ˆYˆ
+ÝX›RœÛÛŠÚXÚÛ\Ý˜YÙ[ØÛÛšX][ÛË˜\Y˜XÝ
+HOOHÝX›RœÛÛŠ]šY[˜ÙP\Y˜XÝ
+JH\ÜÝY\Ëœ\Ú
+	Ùš[˜[ÚXÚÛ\ÝÙ\È›Ý™]Z[ˆH^XÝ]šY[˜ÙHÜXÚX[\Ý\Y˜XÝ	ÊNÂˆÛÛœÝ\Y˜XÝ][\ÈH\œ˜^Kš\Ð\œ˜^J]šY[˜ÙP\Y˜XÝš][\ÊHÈ]šY[˜ÙP\Y˜XÝš][\Èˆ×NÂˆÛÛœÝÚXÚÛ\Ý][\ÈH\œ˜^Kš\Ð\œ˜^JÚXÚÛ\Ýš][\ÊHÈÚXÚÛ\Ýš][\Èˆ×NÂˆYˆ
+Y^XÝY[X™\œÊ\Y˜XÝ][\Ë›X\
+][HOˆ][OËš][WÚY
+KÚXÚÛ\Ý][\Ë›X\
+][HOˆ][OËš][WÚY
+JJH\ÜÝY\Ëœ\Ú
+	Ù]šY[˜ÙHÜXÚX[\Ý][HY[X™\œÚ\\È›Ý^XÝ	ÊNÂˆÛÛœÝÚXÚÛ\ÝžRYH™]ÈX\
+ÚXÚÛ\Ý][\Ë›X\
+][HOˆÚ][Kš][WÚY][WJJNÂˆÛÛœÝ]šY[˜ÙU[š]ÈH×NÂˆ›Üˆ
+ÛÛœÝ\Y˜XÝ][HÙˆ\Y˜XÝ][\ÊHÂˆÛÛœÝ][RYH\Y˜XÝ][OËš][WÚYÂˆÛÛœÝÛÝ\˜ÙT™Y’YÈH\Y˜XÝ][OËœÛÝ\˜ÙWÜ™Y—ÚYÎÂˆYˆ
+P\œ˜^Kš\Ð\œ˜^JÛÝ\˜ÙT™Y’YÊBˆÛÝ\˜ÙT™Y’YËœÛÛYJ][HOˆ[›Û™[\TÝš[™Ê][JJBˆ™]ÈÙ]
+ÛÝ\˜ÙT™Y’YÊKœÚ^™HOOHÛÝ\˜ÙT™Y’YË›[™Ýˆ”ÓÓ‹œÝš[™ÚYžJÛÝ\˜ÙT™Y’YÊHOOH”ÓÓ‹œÝš[™ÚYžJË‹‹œÛÝ\˜ÙT™Y’Y×KœÛÜ
+
+JJH\ÜÝY\Ëœ\Ú
+]šY[˜ÙH][H	Ú][RY	Ý[šÛ›ÝÛ‰ßHÛÝ\˜ÙH™Y™\™[˜ÙHQÈ\™H›Ý[š\]YH[™ÛÜY
+NÂˆÛÛœÝ[š]ÈHÛÛšX][Û‘[šY\Ê\Y˜XÝ][OË™šY[ØÛÛšX][ÛœËU’QSÑWÐÓÓ•’P•USÓ—Ô“ÓJNÂˆÛÛœÝ^XÝY[š]ÈHÂˆÈÛÛšX][Û—ÚYˆ][N‰Ú][RYNœÝ]\ØšY[ˆ	ÜÝ]\ÉÈKˆÈÛÛšX][Û—ÚYˆ][N‰Ú][RYN˜\Y˜XÝØšY[ˆ	Ø\Y˜XÝÚYÉÈKˆNÂˆYˆ
+][š]È[š]Ë›[™ÝOOHˆÝX›RœÛÛŠ[š]Ë›X\
+][HOˆ
+ÈÛÛšX][Û—ÚYˆ][K˜ÛÛšX][Û—ÚYšY[ˆ][K™šY[JJJHOOHÝX›RœÛÛŠ^XÝY[š]ÊJHÂˆ\ÜÝY\Ëœ\Ú
+]šY[˜ÙH][H	Ú][RY	Ý[šÛ›ÝÛ‰ßHÙ\È›ÝÛÛZ[ˆH^XÝÛÈšY[ÛÛšX][ÛœØ
+NÂˆÛÛ[YNÂˆBˆ]šY[˜ÙU[š]Ëœ\Ú
+‹‹[š]ÊNÂˆÛÛœÝš[˜[][HHÚXÚÛ\ÝžRY™Ù]
+][RY
+NÂˆYˆ
+Yš[˜[][JHÛÛ[YNÂˆYˆ
+š[˜[][KœÝ]\ÈOOH\Y˜XÝ][KœÝ]\ÊH\ÜÝY\Ëœ\Ú
+]šY[˜ÙH][H	Ú][RYHÝ]\È\È›Ý›Ú™XÝYœ›ÛHHÜXÚX[\Ý\Y˜XÝ
+NÂˆYˆ
+Y^XÝY[X™\œÊš[˜[][K˜\Y˜XÝÚYË\Y˜XÝ][K˜\Y˜XÝÚYÊJH\ÜÝY\Ëœ\Ú
+]šY[˜ÙH][H	Ú][RYH\Y˜XÝÙ]\È›Ý›Ú™XÝYœ›ÛHHÜXÚX[\Ý\Y˜XÝ
+NÂˆYˆ
+ÝX›RœÛÛŠš[˜[][K˜YÙ[ØÛÛšX][ÛŠHOOHÝX›RœÛÛŠ[š]ÊJH\ÜÝY\Ëœ\Ú
+]šY[˜ÙH][H	Ú][RYHšY[]šX][Ûˆ\È›Ý›Ú™XÝYœ›ÛHHÜXÚX[\Ý\Y˜XÝ
+NÂˆBˆYˆ
+]šY[˜ÙU[š]Ë›[™Ý	‰ˆ]šY[˜ÙPYÙ[
+HÂˆÛÛœÝXØÙ\YYÈH]šY[˜ÙU[š]Ë™š[\Š][HOˆ][K™]\›Z[š\ÝX×Ù˜[˜XÚ×Ø\YYOOH˜[ÙJK›X\
+][HOˆ][K˜ÛÛšX][Û—ÚY
+NÂˆÛÛœÝ˜[˜XÚÐÛÝ[H]šY[˜ÙU[š]Ë›[™ÝHXØÙ\YYË›[™ÝÂˆYˆ
+”ÓÓ‹œÝš[™ÚYžJ]šY[˜ÙPYÙ[˜XØÙ\YÚYÊHOOH”ÓÓ‹œÝš[™ÚYžJXØÙ\YYÊBˆ]šY[˜ÙPYÙ[˜XØÙ\YØÛÝ[OOHXØÙ\YYË›[™Ýˆ]šY[˜ÙPYÙ[œ™Z™XÝYØÛÝ[OOH˜[˜XÚÐÛÝ[ˆ]šY[˜ÙPYÙ[™]\›Z[š\ÝX×Ù˜[˜XÚ×Ø\YYOOH
+˜[˜XÚÐÛÝ[ˆ
+JH\ÜÝY\Ëœ\Ú
+	Ù]šY[˜ÙHYÙ[XØÙ\YÙ˜[˜XÚÈšY[XYÛ›ÜÝXÜÈ\™H›Ý^XÝ	ÊNÂˆB‚ˆÛÛœÝš[˜[œšYYˆH]Y]™š[˜[ØÛZ[WØœšYYŽÂˆYˆ
+ÝX›RœÛÛŠš[˜[\Y˜XÝ
+HOOHÝX›RœÛÛŠš[˜[œšYYŠJH\ÜÝY\Ëœ\Ú
+	Ùš[˜[ÜXÚX[\Ý\Y˜XÝ[™]]Üš]]]™Hš[˜[ÛZ[HœšYYˆY™™\‰ÊNÂˆÛÛœÝš[˜[[š]ÈHÛÛšX][Û‘[šY\Êš[˜[œšYYË™šY[ØÛÛšX][ÛœË’SSÐÓÓ•’P•USÓ—Ô“ÓJNÂˆYˆ
+Yš[˜[[š]Âˆš[˜[[š]Ë›[™ÝOOH’SSÑ’QSÐÓÓ•PÕ›[™ÝˆÝX›RœÛÛŠš[˜[[š]Ë›X\
+][HOˆ
+ÈšY[ˆ][K™šY[ÛÛšX][Û—ÚYˆ][K˜ÛÛšX][Û—ÚYJJJHOOHÝX›RœÛÛŠ’SSÑ’QSÐÓÓ•PÕ
+JH\ÜÝY\Ëœ\Ú
+	Ùš[˜[ÛZ[HœšYYˆÙ\È›ÝÛÛZ[ˆH^XÝš]™HšY[ÛÛšX][ÛœÉÊNÂˆYˆ
+š[˜[[š]È	‰ˆš[˜[YÙ[
+HÂˆÛÛœÝXØÙ\YYÈHš[˜[[š]Ë™š[\Š][HOˆ][K™]\›Z[š\ÝX×Ù˜[˜XÚ×Ø\YYOOH˜[ÙJK›X\
+][HOˆ][K˜ÛÛšX][Û—ÚY
+NÂˆÛÛœÝ˜[˜XÚÐÛÝ[Hš[˜[[š]Ë›[™ÝHXØÙ\YYË›[™ÝÂˆYˆ
+”ÓÓ‹œÝš[™ÚYžJš[˜[YÙ[˜XØÙ\YÚYÊHOOH”ÓÓ‹œÝš[™ÚYžJXØÙ\YYÊBˆš[˜[YÙ[˜XØÙ\YØÛÝ[OOHXØÙ\YYË›[™Ýˆš[˜[YÙ[œ™Z™XÝYØÛÝ[OOH˜[˜XÚÐÛÝ[ˆš[˜[YÙ[™]\›Z[š\ÝX×Ù˜[˜XÚ×Ø\YYOOH
+˜[˜XÚÐÛÝ[ˆ
+JH\ÜÝY\Ëœ\Ú
+	Ùš[˜[YÙ[XØÙ\YÙ˜[˜XÚÈšY[XYÛ›ÜÝXÜÈ\™H›Ý^XÝ	ÊNÂˆÛÛœÝ^XÝY]šX][ÛˆH˜[˜XÚÐÛÝ[OOHÈ’SSÐÓÓ•’P•USÓ—Ô“ÓHˆXØÙ\YYË›[™ÝÈ	ÛZ^YÛ[Ù[Ø[™Ù]\›Z[š\ÝXÉÈˆUT“RS’TÕP×ÐÓÓ•’P•USÓ—Ô“ÓNÂˆYˆ
+š[˜[œšYY‹˜]šX][ÛˆOOH^XÝY]šX][Ûˆš[˜[œšYY‹™]\›Z[š\ÝX×Ù˜[˜XÚ×Ø\YYOOH
+˜[˜XÚÐÛÝ[ˆ
+JH\ÜÝY\Ëœ\Ú
+	Ùš[˜[ÛZ[HœšYYˆYÙÜ™YØ]H]šX][Ûˆ\È›Ý^XÝ	ÊNÂˆÛÛœÝ\Ý™X[U[š]Hš[˜[[š]Ë™š[™
+][HOˆ][K™šY[OOH	Ý\Ý™X[WØÛÛšX][Û—ÚYÉÊNÂˆÛÛœÝ^XÝY[™XYÙP]]Üš]HH\Ý™X[U[š]Ë™]\›Z[š\ÝX×Ù˜[˜XÚ×Ø\YYOOH˜[ÙHÈ	ÚXœšYÙÝX\™YÛ[Ù[Ø]Y]	ÈˆUT“RS’TÕP×ÐÓÓ•’P•USÓ—Ô“ÓNÂˆYˆ
+š[˜[œšYY‹›[™XYÙWØ]]Üš]HOOH^XÝY[™XYÙP]]Üš]JH\ÜÝY\Ëœ\Ú
+	Ùš[˜[ÛZ[HœšYYˆ[™XYÙH]]Üš]H\È›Ý^XÝ	ÊNÂˆBˆYˆ
+š[˜[œšYYË˜ÛÛšX][Û—ÜØÛÜHOOH	Ú[™\[™[Ùš[˜[ØÛZ[WØœšYY—Ø]Y]	ÊH\ÜÝY\Ëœ\Ú
+	Ùš[˜[ÛZ[HœšYYˆÛÛšX][ÛˆØÛÜH\È›Ý^XÝ	ÊNÂ‚ˆÛÛœÝÝ™\›^HH›ØÙ\ÜË˜Ý\œ™[ÛÝ™\›^HßNÂˆYˆ
+š[˜[œšYYË˜Ý\œ™[Û›ÙWÚYOOH›ØÙ\ÜË˜Ý\œ™[Û›ÙHš[˜[œšYYË˜Ý\œ™[Û›ÙWÚYOOHÝ™\›^K˜Ý\œ™[Û›ÙWÚY
+H\ÜÝY\Ëœ\Ú
+	Ùš[˜[Ý\œ™[[›ÙHšY[\È›ÝØ]\Ø[H›Ý[™ÈH›ØÙ\ÜÈÝ™\›^IÊNÂˆYˆ
+š[˜[œšYYË›™^ØXÝ[Û—Û›ÙWÚYOOHÝ™\›^K›™^ØXÝ[Û—Û›ÙWÚYš[˜[œšYYË›™^ØXÝ[Û—Û›ÙWÚYOOH™\Ý[›™^ØXÝ[ÛËœ›ØÙ\Ü×Û›ÙWÚY
+H\ÜÝY\Ëœ\Ú
+	Ùš[˜[™^XXÝ[ÛˆšY[\È›ÝØ]\Ø[H›Ý[™ÈH™\Ý[	ÊNÂˆYˆ
+ÝX›RœÛÛŠ™\Ý[›™^ØXÝ[ÛË˜YÙ[ØœšYY—ØÛÛšX][ÛŠHOOHÝX›RœÛÛŠš[˜[œšYYŠJH\ÜÝY\Ëœ\Ú
+	Ü™\Ý[™^XÝ[ÛˆÙ\È›Ý™]Z[ˆH^XÝš[˜[ÛZ[HœšYY‰ÊNÂˆÛÛœÝÝ\œ™[›ÙHH
+›ØÙ\ÜË››Ù\È×JK™š[™
+][HOˆ][K››ÙWÚYOOHš[˜[œšYYË˜Ý\œ™[Û›ÙWÚY
+NÂˆÛÛœÝ^XÝYÝ\Ü[™Ñ˜XÝÈHË‹‹ŠÝ\œ™[›ÙOË™˜XÝÚYÈ×JWKœÛÜ
+
+NÂˆYˆ
+”ÓÓ‹œÝš[™ÚYžJš[˜[œšYYËœÝ\Ü[™×Ù˜XÝÚYÊHOOH”ÓÓ‹œÝš[™ÚYžJ^XÝYÝ\Ü[™Ñ˜XÝÊJH\ÜÝY\Ëœ\Ú
+	Ùš[˜[Ý\Ü[™ËY˜XÝÈšY[\È›Ý›Ý[™ÈHÝ\œ™[›ØÙ\ÜÈ›ÙIÊNÂˆYˆ
+”ÓÓ‹œÝš[™ÚYžJš[˜[œšYYË\Ý™X[WØÛÛšX][Û—ÚYÊHOOH”ÓÓ‹œÝš[™ÚYžJ’SSÕTÕ‘PSWÐÓÓ•’P•USÓ—ÒQÊBˆ”ÓÓ‹œÝš[™ÚYžJš[˜[œšYYËš[œ]ØÛÛšX][Û—ÚYÊHOOH”ÓÓ‹œÝš[™ÚYžJ’SSÕTÕ‘PSWÐÓÓ•’P•USÓ—ÒQÊJH\ÜÝY\Ëœ\Ú
+	Ùš[˜[\Ý™X[KXÛÛšX][ÛˆšY[\È›ÝÛÛ\]H[™^XÝ	ÊNÂˆYˆ
+”ÓÓ‹œÝš[™ÚYžJš[˜[œšYYË˜]Y]ØÚXÚ×ÚYÊHOOH”ÓÓ‹œÝš[™ÚYžJ’SSÐUQUÐÒPÒ×ÒQÊJH\ÜÝY\Ëœ\Ú
+	Ùš[˜[]Y]XÚXÚÈšY[\È›ÝÛÛ\]H[™^XÝ	ÊNÂˆÛÛœÝÝ\Ü[™Ñ˜XÝÙ]H™]ÈÙ]
+^XÝYÝ\Ü[™Ñ˜XÝÊNÂˆÛÛœÝ^XÝYÛÝ\˜ÙT™YœÈHË‹‹›™]ÈÙ]
+Âˆ‹‹™XÚ\Ú[ÛœË™š[\Š][HOˆÝ\Ü[™Ñ˜XÝÙ]š\Ê][K™˜XÝÚY
+JK™›]X\
+][HOˆ][KœÛÝ\˜ÙWÜ™Y—ÚYÈ×JKˆ‹‹˜\Y˜XÝ][\Ë™š[\Š][HOˆÝ\Ü[™Ñ˜XÝÙ]š\ÊÚXÚÛ\ÝžRY™Ù]
+][Kš][WÚY
+OË™˜XÝÚY
+JK™›]X\
+][HOˆ][KœÛÝ\˜ÙWÜ™Y—ÚYÈ×JKˆJWKœÛÜ
+
+NÂˆYˆ
+”ÓÓ‹œÝš[™ÚYžJš[˜[œšYYËœÛÝ\˜ÙWÜ™Y—ÚYÊHOOH”ÓÓ‹œÝš[™ÚYžJ^XÝYÛÝ\˜ÙT™YœÊJH\ÜÝY\Ëœ\Ú
+	Ùš[˜[ÛÝ\˜ÙK\™Y™\™[˜ÙHšY[\È›Ý\š]™Yœ›ÛHÛÛ›Û[™È[™›Û‹XÛÛ›Û[™ÈÝ\Ü[™È˜XÝÉÊNÂˆ™]\›ˆ\ÜÝY\ÎÂŸB‚™[˜Ý[Ûˆ[\›˜[Ù[[™[]Ê˜[YKÝ\œ™[]H	É	Ë›Ý[™H×JHÂˆYˆ
+\œ˜^Kš\Ð\œ˜^J˜[YJJHÂˆ˜[YK™›Ü‘XXÚ
+
+][K[™^
+HOˆ[\›˜[Ù[[™[]Ê][K	ØÝ\œ™[]VÉÚ[™^WX›Ý[™
+JNÂˆ™]\›ˆ›Ý[™ÂˆBˆYˆ
+˜[YH	‰ˆ\[Ùˆ˜[YHOOH	ÛØš™XÝ	ÊHÂˆØš™XÝ™[šY\Ê˜[YJK™›Ü‘XXÚ
+
+ÚÙ^KÚ[JHOˆ[\›˜[Ù[[™[]ÊÚ[	ØÝ\œ™[]K‰ÚÙ^_X›Ý[™
+JNÂˆ™]\›ˆ›Ý[™ÂˆBˆYˆ
+\[Ùˆ˜[YHOOH	ÜÝš[™ÉÈ	‰ˆS•T“SÔÑS•S‘SÔUT“‹\Ý
+˜[YJJH›Ý[™œ\Ú
+Ý\œ™[]
+NÂˆ™]\›ˆ›Ý[™ÂŸB‚™[˜Ý[Ûˆ›Û’[YÙ\“[X™\”]Ê˜[YKÝ\œ™[]H	É	Ë›Ý[™H×JHÂˆYˆ
+\œ˜^Kš\Ð\œ˜^J˜[YJJHÂˆ˜[YK™›Ü‘XXÚ
+
+][K[™^
+HOˆ›Û’[YÙ\“[X™\”]Ê][K	ØÝ\œ™[]VÉÚ[™^WX›Ý[™
+JNÂˆ™]\›ˆ›Ý[™ÂˆBˆYˆ
+˜[YH	‰ˆ\[Ùˆ˜[YHOOH	ÛØš™XÝ	ÊHÂˆØš™XÝ™[šY\Ê˜[YJK™›Ü‘XXÚ
+
+ÚÙ^KÚ[JHOˆ›Û’[YÙ\“[X™\”]ÊÚ[	ØÝ\œ™[]K‰ÚÙ^_X›Ý[™
+JNÂˆ™]\›ˆ›Ý[™ÂˆBˆYˆ
+\[Ùˆ˜[YHOOH	Û[X™\‰È	‰ˆ
+S[X™\‹š\Ò[YÙ\Š˜[YJHØš™XÝš\Ê˜[YKL
+JJH›Ý[™œ\Ú
+Ý\œ™[]
+NÂˆ™]\›ˆ›Ý[™ÂŸB‚™[˜Ý[Ûˆ[”›ÙÜ™\ÜÑXYÛ›ÜÝXÊ[ŠHÂˆÛÛœÝØY™Q]™[ÈH\œ˜^Kš\Ð\œ˜^J[Ë™]™[ÊBˆÈ[‹™]™[Âˆ™š[\Š][HOˆ][OËœÝYÙHOOH	ØYÙ[ÛÜ˜Ú\Ý˜][Û‰ÊBˆœÛXÙJLLŠBˆ›X\
+][HOˆ
+ÂˆÜ™[˜[ˆ][K›Ü™[˜[ˆYÙ[ÚYˆ][K˜YÙ[ÚYˆXÝÜ—Ý\Nˆ][K˜XÝÜ—Ý\KˆÝ]\Îˆ][KœÝ]\Ëˆ™XÙZ\Ý\Nˆ][Kœ™XÙZ\Ý\KˆÝ]ÛÛYNˆ][K›Ý]ÛÛYKˆ[™Ù™—ÝÎˆ][Kš[™Ù™—ÝËˆJJBˆˆ×NÂˆ™]\›ˆÂˆ[—ÚYˆ[Ëœ[—ÚY[ˆÝ]\Îˆ[ËœÝ]\È	Û›ÝÙ›Ý[™	ËˆÝYÙNˆ[ËœÝYÙH[ˆ\œ›Ü—Ü™\Ù[ˆ›Û™[\TÝš[™Ê[Ë™\œ›ÜŠKˆ™XÙ[ØYÙ[Ü™XÙZ\ÎˆØY™Q]™[ËˆNÂŸB‚™[˜Ý[Ûˆ\›Z[˜[˜Z[\™PÛÛ˜XÝš[Û][ÛœÊ[ŠHÂˆYˆ
+[ËœÝ]\ÈOOH	Ù˜Z[Y	ÊH™]\›ˆ×NÂˆÛÛœÝ\ÜÝY\ÈH×NÂˆÛÛœÝÙ[[™[XZÜÈH[\›˜[Ù[[™[]Ê[ŠNÂˆYˆ
+Ù[[™[XZÜË›[™Ý
+H\ÜÝY\Ëœ\Ú
+\›Z[˜[˜Z[\™HXZÜÈ[\›˜[^XÝ][ÛˆÙ[[™[È]	ÜÙ[[™[XZÜËš›Ú[Š	Ë	Ê_X
+NÂˆÛÛœÝÙ[œÚ]]™HH›Ü˜šY[‘šY[]Ê[ŠNÂˆYˆ
+Ù[œÚ]]™K›[™Ý
+H\ÜÝY\Ëœ\Ú
+\›Z[˜[˜Z[\™HXZÜÈ›Ü˜šY[ˆšY[È]	ÜÙ[œÚ]]™Kš›Ú[Š	Ë	Ê_X
+NÂˆÛÛœÝ]™[ÈH\œ˜^Kš\Ð\œ˜^J[Ë™]™[ÊHÈ[‹™]™[Èˆ×NÂˆÛÛœÝÛÛ\]YžPYÙ[H™]ÈX\
+]™[Âˆ™š[\Š][HOˆ][OË˜XÝÜ—Ý\HOOH	Û™[[Ý›Û—ØYÙ[	È	‰ˆ][OËœ™XÙZ\Ý\HOOH	ØYÙ[ØÛÛ\]Y	È	‰ˆ][OËœÝ]\ÈOOH	ØÛÛ\]Y	ÊBˆ›X\
+][HOˆÚ][K˜YÙ[ÚY][WJJNÂˆÛÛœÝ˜Z[\™T™XÙZ\ÈH]™[Ë™š[\Š][HOˆ][OËœ™XÙZ\Ý\HOOH	ØYÙ[Ù˜Z[Y	ÊNÂˆ›Üˆ
+ÛÛœÝ™XÙZ\Ùˆ˜Z[\™T™XÙZ\ÊHÂˆÛÛœÝ[™^XÝYHØš™XÝšÙ^\Ê™XÙZ\
+K™š[\ŠÙ^HOˆPSÕÑQÐQÑS•ÑRST‘WÔ‘PÑRTÑ’QSËš\ÊÙ^JJNÂˆYˆ
+[™^XÝY›[™Ý
+H\ÜÝY\Ëœ\Ú
+	Ü™XÙZ\˜YÙ[ÚY	Ý[šÛ›ÝÛ‰ßH˜Z[\™H™XÙZ\\È›Û‹X[ÝÛ\ÝYšY[Îˆ	Ý[™^XÝYš›Ú[Š	Ë	Ê_X
+NÂˆÛÛœÝ\ÐØ[›ÛšXØ[›ÛÝH™XÙZ\˜YÙ[ÚYOOH	ØØ[›ÛšXØ[Ù˜XÝÉÎÂˆÛÛœÝ^XÝY\™[H\ÐØ[›ÛšXØ[›ÛÝˆÈ[ˆˆ™XÙZ\˜YÙ[ÚYOOH	ÛÜ˜Ú\Ý˜]Ü—Ü[‰ÂˆÈÛÛ\]YžPYÙ[™Ù]
+	ØØ[›ÛšXØ[Ù˜XÝÉÊOË˜Ø[ÚYˆˆÛÛ\]YžPYÙ[™Ù]
+	ÛÜ˜Ú\Ý˜]Ü—Ü[‰ÊOË˜Ø[ÚYÂˆÛÛœÝ›ÛÝ[™XYÙU˜[YHZ\ÐØ[›ÛšXØ[›ÛÝ
+ˆ™XÙZ\™˜Z[\™WÜØÛÜHOOH	Ü›ÛÝØØ[›ÛšXØ[Ù˜XÝÉÂˆ	‰ˆ™XÙZ\œ›ÛÝØYÙ[OOHYBˆ	‰ˆ™XÙZ\œ\™[ØØ[ÚYOH[ˆ	‰ˆ™XÙZ\™[YØ][Û—ÚYOH[ˆ	‰ˆ™XÙZ\š[œ]Ø\Y˜XÝOOH	ÛØœÙ\˜X›WØÛZ[WÜXÚØYÙIÂˆ	‰ˆ™XÙZ\œ›ÝšY\ˆOOH	ÛÜ[œ›Ý]\‰Âˆ	‰ˆ™XÙZ\œ™\]Y\ÝYÛ[Ù[OOH‘TUQTÕQÓ‘SSÕ“Ó—ÓSÑSˆ	‰ˆ›Û™[\TÝš[™Ê™XÙZ\›Ü˜Ú\Ý˜][Û—ÚY
+Bˆ	‰ˆ™XÙZ\œÚ\™YØÛÛ^OOHÛZ[KXÛÛ^‰Ü[‹œ[—ÚYXˆ	‰ˆ[X™\‹š\Ò[YÙ\Š™XÙZ\˜Ø[ØÛÝ[
+Bˆ	‰ˆ™XÙZ\˜Ø[ØÛÝ[OOH
+‘T“×ÐÐSÑRST‘WÓÕUÓÓQTËš\Ê™XÙZ\›Ý]ÛÛYJHÈˆJBˆ
+NÂˆÛÛœÝ[YØ]Y[™XYÙU˜[YH\ÐØ[›ÛšXØ[›ÛÝ
+ˆ›Û™[\TÝš[™Ê™XÙZ\™[YØ][Û—ÚY
+Bˆ	‰ˆ›Û™[\TÝš[™Ê^XÝY\™[
+Bˆ	‰ˆ™XÙZ\œ\™[ØØ[ÚYOOH^XÝY\™[ˆ
+NÂˆYˆ
+T‘TURT‘QÓ‘SSÕ“Ó—ÐQÑS•ÒQËš[˜ÛY\Ê™XÙZ\˜YÙ[ÚY
+Bˆ™XÙZ\˜XÝÜ—Ý\HOOH	Û™[[Ý›Û—ØYÙ[	Âˆ™XÙZ\œÝ]\ÈOOH	Ù˜Z[Y	Âˆ™XÙZ\˜XØÙ\[˜ÙWÜØÛÜHOOH	Ü™WÜ™]šY]×Û[Ù[ÛÝ]]	Âˆ[›Û™[\TÝš[™Ê™XÙZ\˜Ø[ÚY
+Bˆ\›ÛÝ[™XYÙU˜[YˆY[YØ]Y[™XYÙU˜[YˆTÒLM—ÔUT“‹\Ý
+™XÙZ\š[œ]Ø\Y˜XÝÚ\Ú	ÉÊBˆ[›Û™[\TÝš[™Ê™XÙZ\™\œ›Ü—Ý\JBˆ[›Û™[\TÝš[™Ê™XÙZ\™\œ›Ü—Ú[˜\šX[
+BˆQRST‘WÓÕUÓÓQTËš\Ê™XÙZ\›Ý]ÛÛYJBˆ™XÙZ\š[™Ù™—ÝÈOOH	Ù˜Z[\™WØ›Ý[™\žIÂˆ™XÙZ\™^\›˜[Ý˜XÚ[™ÈOOH˜[ÙBˆ™XÙZ\›[Ù[OOH‘TUQTÕQÓ‘SSÕ“Ó—ÓSÑS
+H\ÜÝY\Ëœ\Ú
+	Ü™XÙZ\˜YÙ[ÚY	Ý[šÛ›ÝÛ‰ßH˜Z[\™H™XÙZ\Y[]KÛ[™XYÙH\È[˜[Y
+NÂˆÛÛœÝ^XÝYØ[ÛÝ[H‘T“×ÐÐSÑRST‘WÓÕUÓÓQTËš\Ê™XÙZ\›Ý]ÛÛYJHÈˆNÂˆYˆ
+S[X™\‹š\Ò[YÙ\Š™XÙZ\˜Ø[ØÛÝ[
+H™XÙZ\˜Ø[ØÛÝ[OOH^XÝYØ[ÛÝ[
+H\ÜÝY\Ëœ\Ú
+	Ü™XÙZ\˜YÙ[ÚY	Ý[šÛ›ÝÛ‰ßH˜Z[\™H™XÙZ\Ø[ØÛÝ[Ù\È›ÝX]Ú]È^XÝ›ÝšY\‹XØ[Ý]ÛÛYX
+NÂˆYˆ
+™XÙZ\›Ý]ÛÛYHOOH	Ø›ØÚÙYÜ›ÝšY\—ØÛÛ˜Ý\œ™[˜ÞIÈ™XÙZ\™\œ›Ü—Ú[˜\šX[OOH	Ü›ÝšY\—ØÛÛ˜Ý\œ™[˜ÞWÝ[Y[Ý]	ÊHÂˆÛÛœÝ™]Z[™Y›ÝšY\”™\Ý[šY[ÈH‘T“×ÐÐSÔ“Õ’QT—Ô‘TÕSÑ’QSË™š[\ŠšY[Oˆ™XÙZ\ÙšY[HOH[
+NÂˆYˆ
+™XÙZ\›Ý]ÛÛYHOOH	Ø›ØÚÙYÜ›ÝšY\—ØÛÛ˜Ý\œ™[˜ÞIÂˆ™XÙZ\™\œ›Ü—Ú[˜\šX[OOH	Ü›ÝšY\—ØÛÛ˜Ý\œ™[˜ÞWÝ[Y[Ý]	Âˆ™XÙZ\˜Ø[ØÛÝ[OOHˆ™]Z[™Y›ÝšY\”™\Ý[šY[Ë›[™Ý
+H\ÜÝY\Ëœ\Ú
+	Ü™XÙZ\˜YÙ[ÚY	Ý[šÛ›ÝÛ‰ßH›ØÚÙY›ÝšY\ˆÛÛ˜Ý\œ™[˜ÞH\È›Ý[ˆ^XÝ™\›ËXØ[™XÙZ\
+NÂˆBˆÛÛœÝ™\ÜÛœÙRY™\Ù[H›Û™[\TÝš[™Ê™XÙZ\œ™\ÜÛœÙWÚY
+NÂˆÛÛœÝ™\ÜÛœÙS[Ù[™\Ù[H›Û™[\TÝš[™Ê™XÙZ\œ™\ÜÛœÙWÛ[Ù[
+NÂˆÛÛœÝ™\ÜÛœÙRY›Ý[™YH›ÝšY\”›Ý™[˜[˜ÙU˜[YR\ÔØY™J	Ü™\ÜÛœÙWÚY	Ë™XÙZ\œ™\ÜÛœÙWÚY
+NÂˆÛÛœÝ™\ÜÛœÙS[Ù[›Ý[™YH›ÝšY\”›Ý™[˜[˜ÙU˜[YR\ÔØY™J	Ü™\ÜÛœÙWÛ[Ù[	Ë™XÙZ\œ™\ÜÛœÙWÛ[Ù[
+NÂˆÛÛœÝ\Ý™X[P›Ý[™YH›ÝšY\”›Ý™[˜[˜ÙU˜[YR\ÔØY™J	Ý\Ý™X[WÜ›ÝšY\‰Ë™XÙZ\\Ý™X[WÜ›ÝšY\ŠNÂˆÛÛœÝš[š\Ú™X\ÛÛ›Ý[™YH›ÝšY\”›Ý™[˜[˜ÙU˜[YR\ÔØY™J	Ùš[š\ÚÜ™X\ÛÛ‰Ë™XÙZ\™š[š\ÚÜ™X\ÛÛŠNÂˆYˆ
+\™\ÜÛœÙRY›Ý[™Y\™\ÜÛœÙS[Ù[›Ý[™Y]\Ý™X[P›Ý[™YYš[š\Ú™X\ÛÛ›Ý[™Y
+H\ÜÝY\Ëœ\Ú
+	Ü™XÙZ\˜YÙ[ÚY	Ý[šÛ›ÝÛ‰ßH˜Z[\™H›ÝšY\ˆ›Ý™[˜[˜ÙH\È›Ý›Ý[™Y
+NÂˆYˆ
+™XÙZ\™\œ›Ü—Ú[˜\šX[OOH	Ü™\ÜÛœÙWÚY[]IÊHÂˆYˆ
+™\ÜÛœÙRY™\Ù[	‰ˆ™\ÜÛœÙS[Ù[™\Ù[
+H\ÜÝY\Ëœ\Ú
+	Ü™XÙZ\˜YÙ[ÚY	Ý[šÛ›ÝÛ‰ßH™\ÜÛœÙKZY[]H˜Z[\™H\È[™^XÝYHÛÛ\]X
+NÂˆH[ÙHYˆ
+™XÙZ\™\œ›Ü—Ú[˜\šX[OOH	Ú[˜[YÜ›Ý™[˜[˜ÙIÊHÂˆYˆ
+T“Õ’QT—Ô“Õ‘SSÑWÑ’QSËš\Ê™XÙZ\š[˜[YÜ›Ý™[˜[˜ÙWÙšY[
+BˆTÒLM—ÔUT“‹\Ý
+™XÙZ\š[˜[YÜ›Ý™[˜[˜ÙWÝ˜[YWÚ\Ú	ÉÊBˆ™XÙZ\Ü™XÙZ\š[˜[YÜ›Ý™[˜[˜ÙWÙšY[HOH[
+H\ÜÝY\Ëœ\Ú
+	Ü™XÙZ\˜YÙ[ÚY	Ý[šÛ›ÝÛ‰ßH[˜[Y\›Ý™[˜[˜ÙH˜Z[\™HXÚÜÈ]ÈØY™HšY[Ú\ÚXYÛ›ÜÝXÈÜˆ™]Z[™YH™Z™XÝY˜[YX
+NÂˆH[ÙHYˆ
+™XÙZ\™\œ›Ü—Ú[˜\šX[OOH	Ü›ÝšY\—Ý\Ý™X[WÜ™Z™XÝ[Û‰ÊHÂˆYˆ
+™XÙZ\œ™\ÜÛœÙWÛ[Ù[OH[™XÙZ\\Ý™X[WÜ›ÝšY\ˆOH[™XÙZ\\ØYÙWÜÛÝ\˜ÙHOH[™XÙZ\™š[š\ÚÜ™X\ÛÛˆOH[
+H\ÜÝY\Ëœ\Ú
+	Ü™XÙZ\˜YÙ[ÚY	Ý[šÛ›ÝÛ‰ßH\Ý™X[H™Z™XÝ[ÛˆÛZ[\È[˜]˜Z[X›H›ÝšY\ˆÝXØÙ\ÜÈY]Y]X
+NÂˆYˆ
+™XÙZ\œ›ÝšY\—Ù\œ›Ü—ØÛÙHOH[	‰ˆ
+S[X™\‹š\Ò[YÙ\Š™XÙZ\œ›ÝšY\—Ù\œ›Ü—ØÛÙJH™XÙZ\œ›ÝšY\—Ù\œ›Ü—ØÛÙH™XÙZ\œ›ÝšY\—Ù\œ›Ü—ØÛÙHˆNNNJJH\ÜÝY\Ëœ\Ú
+	Ü™XÙZ\˜YÙ[ÚY	Ý[šÛ›ÝÛ‰ßH\Ý™X[H™Z™XÝ[Ûˆ\œ›ÜˆÛÙH\È[˜›Ý[™Y
+NÂˆYˆ
+™\ÜÛœÙRY™\Ù[	‰ˆQVPÕÓÔS”“ÕUT—ÑÑS‘TUSÓ—ÒQ\Ý
+™XÙZ\œ™\ÜÛœÙWÚY
+JH\ÜÝY\Ëœ\Ú
+	Ü™XÙZ\˜YÙ[ÚY	Ý[šÛ›ÝÛ‰ßH\Ý™X[H™Z™XÝ[Ûˆ™\ÜÛœÙHQ\È›Ý[ˆ^XÝÜ[”›Ý]\ˆÙ[™\˜][ÛˆQ
+NÂˆH[ÙHYˆ
+
+™\ÜÛœÙRY™\Ù[™\ÜÛœÙS[Ù[™\Ù[
+H	‰ˆ
+ˆ\™\ÜÛœÙRY™\Ù[ˆ\™\ÜÛœÙS[Ù[™\Ù[ˆQVPÕÓ‘SSÕ“Ó—Ô‘TÔÓ”ÑWÓSÑSËš\Ê™XÙZ\œ™\ÜÛœÙWÛ[Ù[
+Bˆ
+JHÂˆ\ÜÝY\Ëœ\Ú
+	Ü™XÙZ\˜YÙ[ÚY	Ý[šÛ›ÝÛ‰ßH˜Z[\™H™\ÜÛœÙHY[]H\È\X[Üˆ[˜]]Üš^™Y
+NÂˆBˆYˆ
+™XÙZ\™\œ›Ü—Ú[˜\šX[OOH	Ú[˜[YÜ›Ý™[˜[˜ÙIÂˆ	‰ˆ
+™XÙZ\š[˜[YÜ›Ý™[˜[˜ÙWÙšY[OH[™XÙZ\š[˜[YÜ›Ý™[˜[˜ÙWÝ˜[YWÚ\ÚOH[
+JH\ÜÝY\Ëœ\Ú
+	Ü™XÙZ\˜YÙ[ÚY	Ý[šÛ›ÝÛ‰ßH˜Z[\™HØ\œšY\È[ˆÝ][Ù‹\ØÛÜH[˜[Y\›Ý™[˜[˜ÙHXYÛ›ÜÝXØ
+NÂˆYˆ
+™XÙZ\™\œ›Ü—Ú[˜\šX[OOH	Ü›ÝšY\—Ý\Ý™X[WÜ™Z™XÝ[Û‰È	‰ˆ™XÙZ\œ›ÝšY\—Ù\œ›Ü—ØÛÙHOH[
+H\ÜÝY\Ëœ\Ú
+	Ü™XÙZ\˜YÙ[ÚY	Ý[šÛ›ÝÛ‰ßH˜Z[\™HØ\œšY\È[ˆÝ][Ù‹\ØÛÜH›ÝšY\ˆ\œ›ÜˆÛÙX
+NÂˆÛÛœÝ›Ý[™\žR\ÜÝYHH›ÝšY\”™Z™XÝ[Û›Ý[™\žR\ÜÝYJ™XÙZ\
+NÂˆYˆ
+›Ý[™\žR\ÜÝYJH\ÜÝY\Ëœ\Ú
+	Ü™XÙZ\˜YÙ[ÚY	Ý[šÛ›ÝÛ‰ßH˜Z[\™H	Ø›Ý[™\žR\ÜÝY_X
+NÂˆYˆ
+™XÙZ\›Ý]ÛÛYHOOH	ØXÝX[ØÛÜÝÛÝ™\œ[‰È	‰ˆ
+ˆ\™\ÜÛœÙRY™\Ù[ˆ\™\ÜÛœÙS[Ù[™\Ù[ˆQVPÕÓ‘SSÕ“Ó—Ô‘TÔÓ”ÑWÓSÑSËš\Ê™XÙZ\œ™\ÜÛœÙWÛ[Ù[
+BˆPSÕÑQÕTÐQÑWÔÓÕTÑTËš\Ê™XÙZ\\ØYÙWÜÛÝ\˜ÙJBˆ
+JH\ÜÝY\Ëœ\Ú
+	Ü™XÙZ\˜YÙ[ÚY	Ý[šÛ›ÝÛ‰ßHÚ\™ÙYÝ™\œ[ˆXÚÜÈÛÛ\]H›ÝšY\ˆ[™XYÙX
+NÂˆYˆ
+™XÙZ\\ØYÙWÜÛÝ\˜ÙHOH[	‰ˆPSÕÑQÕTÐQÑWÔÓÕTÑTËš\Ê™XÙZ\\ØYÙWÜÛÝ\˜ÙJJH\ÜÝY\Ëœ\Ú
+	Ü™XÙZ\˜YÙ[ÚY	Ý[šÛ›ÝÛ‰ßH˜Z[\™H\ØYÙH›Ý™[˜[˜ÙH\È[˜[Y
+NÂˆBˆÛÛœÝ\›Z[˜[›Ý[™\šY\ÈH]™[Ë™š[\Š][HOˆ][OËœÝYÙHOOH	Ù˜Z[Y	È	‰ˆ][OËœÝ]\ÈOOH	Ù˜Z[Y	È	‰ˆ][OË˜XÝÜ—Ý\HOOH	Ù]\›Z[š\ÝX×ÙØ]IÊNÂˆYˆ
+\›Z[˜[›Ý[™\šY\Ë›[™ÝOOHJHÂˆ\ÜÝY\Ëœ\Ú
+	Ý\›Z[˜[]\›Z[š\ÝXÈ˜Z[\™H›Ý[™\žH\ÈXœÙ[Üˆ\XØ]Y	ÊNÂˆH[ÙHÂˆÛÛœÝ\›Z[˜[H\›Z[˜[›Ý[™\šY\ÖÌNÂˆYˆ
+\›Z[˜[›X™[OOH	Ð[˜[\Ú\ÈÝÜYØY™[IÂˆ\›Z[˜[˜YÙ[OOH	Ñ˜Z[\™H›Ý[™\žIÂˆ\›Z[˜[šXY[™HOOH	Ó›Èš[˜[^X›ÛÚÈØ\ÈXØÙ\Y	Âˆ\›Z[˜[›[Ù[OH[ˆ\›Z[˜[™˜Z[\™WÜÝYÙHOOH[‹™˜Z[\™WÜÝYÙBˆ\›Z[˜[˜XØÙ\YÜÝ]OË™š[˜[Ü^X›ÛÚ×ØXØÙ\YOOH˜[ÙBˆÝX›RœÛÛŠ\›Z[˜[˜XØÙ\YÜÝ]JHOOHÝX›RœÛÛŠ[‹˜XØÙ\YÜÝ]JJH\ÜÝY\Ëœ\Ú
+	Ý\›Z[˜[]\›Z[š\ÝXÈ˜Z[\™HX™[ËÜÝ]H\™H[˜[Y	ÊNÂˆBˆYˆ
+‘TURT‘QÓ‘SSÕ“Ó—ÐQÑS•ÒQËš[˜ÛY\Ê[‹™˜Z[\™WÜÝYÙJBˆ	‰ˆ˜Z[\™T™XÙZ\Ë™š[\Š][HOˆ][K˜YÙ[ÚYOOH[‹™˜Z[\™WÜÝYÙJK›[™ÝOOHJH\ÜÝY\Ëœ\Ú
+	Ý\›Z[˜[[Ù[˜Z[\™H\È›Ý›Ý[™È^XÝHÛ™HÜXÚX[\Ý˜Z[\™H™XÙZ\	ÊNÂˆ™]\›ˆ\ÜÝY\ÎÂŸB‚™[˜Ý[ÛˆÜ˜Ú\Ý˜][ÛÛÛ˜XÝš[Û][ÛœÊ[‹ØXÚS[ÙK^XÝYœ˜[Y]ÛÜšÈHVPÕQÑ”SQUÓÔ’ÊHÂˆÛÛœÝ\ÜÝY\ÈH×NÂˆÛÛœÝ]Y]HÜ˜Ú\Ý˜][Û]Y]
+[ŠNÂˆYˆ
+X]Y]\[Ùˆ]Y]OOH	ÛØš™XÝ	ÊH™]\›ˆÉØYÙ[ÛÜ˜Ú\Ý˜][Ûˆ]Y]\ÈXœÙ[	×NÂˆYˆ
+]Y]œØÚ[XWÝ™\œÚ[ÛˆOOHVPÕQÔ•S•SQK›Ü˜Ú\Ý˜][Û—ÜØÚ[XJH\ÜÝY\Ëœ\Ú
+	ÛÜ˜Ú\Ý˜][ÛˆØÚ[XHZ\ÛX]Ú	ÊNÂˆYˆ
+]Y]š[\[Y[][ÛˆOOHVPÕQÔ•S•SQKš[\[Y[][ÛŠH\ÜÝY\Ëœ\Ú
+	Ú[\[Y[][ÛˆZ\ÛX]Ú	ÊNÂˆYˆ
+]Y]˜]]Üš]WÛ[ÙHOOHVPÕQÔ•S•SQK˜]]Üš]WÛ[ÙJH\ÜÝY\Ëœ\Ú
+	Ø]]Üš]H[ÙHZ\ÛX]Ú	ÊNÂˆYˆ
+]Y]›[Ù[OOH‘TUQTÕQÓ‘SSÕ“Ó—ÓSÑS
+H\ÜÝY\Ëœ\Ú
+	Ü™\]Y\ÝY[Ù[Z\ÛX]Ú	ÊNÂˆYˆ
+ÝX›RœÛÛŠ]Y]™œ˜[Y]ÛÜšÊHOOHÝX›RœÛÛŠ^XÝYœ˜[Y]ÛÜšÊJH\ÜÝY\Ëœ\Ú
+	Ùœ˜[Y]ÛÜšÈ™\œÚ[ÛœÈZ\ÛX]Ú	ÊNÂˆYˆ
+[›Û™[\TÝš[™Ê]Y]›Ü˜Ú\Ý˜][Û—ÚY
+JH\ÜÝY\Ëœ\Ú
+	ÛÜ˜Ú\Ý˜][Û—ÚY\ÈXœÙ[	ÊNÂˆYˆ
+\[Ëœ™\Ý[Ë˜YÙ[ÛÜ˜Ú\Ý˜][Û‚ˆ\[Ëœ™\Ý[Ë˜]Y]Ë˜YÙ[ÛÜ˜Ú\Ý˜][Û‚ˆ\[Ë˜YÙ[ÛÜ˜Ú\Ý˜][Û‚ˆÝX›RœÛÛŠ[‹œ™\Ý[˜YÙ[ÛÜ˜Ú\Ý˜][ÛŠHOOHÝX›RœÛÛŠ]Y]
+BˆÝX›RœÛÛŠ[‹œ™\Ý[˜]Y]˜YÙ[ÛÜ˜Ú\Ý˜][ÛŠHOOHÝX›RœÛÛŠ]Y]
+BˆÝX›RœÛÛŠ[‹˜YÙ[ÛÜ˜Ú\Ý˜][ÛŠHOOHÝX›RœÛÛŠ]Y]
+JH\ÜÝY\Ëœ\Ú
+	Ø]]Üš]]]™HÜ˜Ú\Ý˜][Ûˆ]Y]\È›ÝY[XØ[Hš\ÚX›H[ˆ]™\žHš[˜[^[ØYš[™[™ÉÊNÂˆYˆ
+]Y]›[Ù[Ø\ÜÚ\ÝYOOHYH]Y]™]\›Z[š\ÝX×ÜØY™]WØ]]Üš]HOOHYJH\ÜÝY\Ëœ\Ú
+	ÚXœšY]]Üš]H›YÜÈ\™H[˜[Y	ÊNÂˆYˆ
+]Y]™^\›˜[Ý˜XÚ[™ÈOOH˜[ÙH]Y]œ›Û\ÜÝÜ˜YÙHOOH˜[ÙH]Y]œ˜]×ÛÝ]]ÜÝÜ˜YÙHOOH˜[ÙJH\ÜÝY\Ëœ\Ú
+	Üš]˜XÞH›YÜÈ\™H[˜[Y	ÊNÂˆYˆ
+]Y]˜[Ü™\]Z\™YØYÙ[×ØÛÛšX]YOOHYJH\ÜÝY\Ëœ\Ú
+	Ü™\]Z\™YXYÙ[ÛÛ\][Ûˆ›YÈ\È˜[ÙIÊNÂˆYˆ
+ÝX›RœÛÛŠ]Y]™^XÝ][Û—ÝÜÛÙÞJHOOHÝX›RœÛÛŠVPÕQÑVPÕUSÓ—ÕÔÓÑÖJJH\ÜÝY\Ëœ\Ú
+	Ù]\›Z[š\ÝXÈ^XÝ][ÛˆÜÛÙÞH]]Üš]HÜˆÝXÝ\™HZ\ÛX]Ú	ÊNÂ‚ˆÛÛœÝYÙ[ÈH\œ˜^Kš\Ð\œ˜^J]Y]˜YÙ[ÊHÈ]Y]˜YÙ[Èˆ×NÂˆÛÛœÝØ]\ÈH\œ˜^Kš\Ð\œ˜^J]Y]™]\›Z[š\ÝX×ÙØ]\ÊHÈ]Y]™]\›Z[š\ÝX×ÙØ]\Èˆ×NÂˆYˆ
+Y^XÝY[X™\œÊYÙ[Ë›X\
+][HOˆ][OË˜YÙ[ÚY
+K‘TURT‘QÓ‘SSÕ“Ó—ÐQÑS•ÒQÊJH\ÜÝY\Ëœ\Ú
+	Ü™\]Z\™Y™[[Ý›ÛˆYÙ[Ù]\È›Ý^XÝ	ÊNÂˆYˆ
+Y^XÝY[X™\œÊØ]\Ë›X\
+][HOˆ][OË˜YÙ[ÚY
+K‘TURT‘QÑUT“RS’TÕP×ÑÐUWÒQÊJH\ÜÝY\Ëœ\Ú
+	Ù]\›Z[š\ÝXÈØ]HÙ]\È›Ý^XÝ	ÊNÂ‚ˆÛÛœÝžPYÙ[H™]ÈX\
+YÙ[Ë›X\
+][HOˆÚ][K˜YÙ[ÚY][WJJNÂˆÛÛœÝØ[YÈHYÙ[Ë›X\
+][HOˆ][OË˜Ø[ÚY
+NÂˆÛÛœÝ[YØ]YYÙ[ÈHYÙ[Ë™š[\Š][HOˆ][OË˜YÙ[ÚYOOH	ØØ[›ÛšXØ[Ù˜XÝÉÊNÂˆÛÛœÝ[YØ][Û’YÈH[YØ]YYÙ[Ë›X\
+][HOˆ][OË™[YØ][Û—ÚY
+NÂˆYˆ
+XØ[YË™]™\žJ›Û™[\TÝš[™ÊH™]ÈÙ]
+Ø[YÊKœÚ^™HOOH‘TURT‘QÓ‘SSÕ“Ó—ÐQÑS•ÒQË›[™Ý
+H\ÜÝY\Ëœ\Ú
+	ØYÙ[Ø[QÈ\™HZ\ÜÚ[™ÈÜˆ\XØ]Y	ÊNÂˆYˆ
+Y[YØ][Û’YË™]™\žJ›Û™[\TÝš[™ÊH™]ÈÙ]
+[YØ][Û’YÊKœÚ^™HOOH‘TURT‘QÓ‘SSÕ“Ó—ÐQÑS•ÒQË›[™ÝHJH\ÜÝY\Ëœ\Ú
+	Ù[YØ]YYÙ[QÈ\™HZ\ÜÚ[™ÈÜˆ\XØ]Y	ÊNÂˆ›Üˆ
+ÛÛœÝYÙ[YÙˆ‘TURT‘QÓ‘SSÕ“Ó—ÐQÑS•ÒQÊHÂˆÛÛœÝ][HHžPYÙ[™Ù]
+YÙ[Y
+NÂˆYˆ
+Z][JHÛÛ[YNÂˆYˆ
+][Kœ›ÛHOOH‘TURT‘QÓ‘SSÕ“Ó—ÐQÑS•Ô“ÓTÖØYÙ[YJH\ÜÝY\Ëœ\Ú
+	ØYÙ[YNˆ›ÛHX™[\È›Ý^XÝ
+NÂˆYˆ
+][K˜XÝÜ—Ý\HOOH	Û™[[Ý›Û—ØYÙ[	ÊH\ÜÝY\Ëœ\Ú
+	ØYÙ[YNˆXÝÜ—Ý\H]\Ý™H™[[Ý›Û—ØYÙ[
+NÂˆYˆ
+][K˜XØÙ\[˜ÙWÜØÛÜHOOH	Ü™WÜ™]šY]×Û[Ù[ÛÝ]]	ÊH\ÜÝY\Ëœ\Ú
+	ØYÙ[YNˆXØÙ\[˜ÙWÜØÛÜH]\Ý™[XZ[ˆ™WÜ™]šY]×Û[Ù[ÛÝ]]
+NÂˆYˆ
+][K›[Ù[OOH‘TUQTÕQÓ‘SSÕ“Ó—ÓSÑS][Kœ™\]Y\ÝYÛ[Ù[OOH‘TUQTÕQÓ‘SSÕ“Ó—ÓSÑS][Kœ›ÝšY\ˆOOH	ÛÜ[œ›Ý]\‰ÊH\ÜÝY\Ëœ\Ú
+	ØYÙ[YNˆ™\]Y\ÝY[Ù[Ü›ÝšY\ˆZ\ÛX]Ú
+NÂˆYˆ
+[›Û™[\TÝš[™Ê][Kœ™\ÜÛœÙWÚY
+HQVPÕÓ‘SSÕ“Ó—Ô‘TÔÓ”ÑWÓSÑSËš\Ê][Kœ™\ÜÛœÙWÛ[Ù[
+JH\ÜÝY\Ëœ\Ú
+	ØYÙ[YNˆ™]\›™Y™\ÜÛœÙHY[]H\È[˜[Y
+NÂˆYˆ
+\›ÝšY\”›Ý™[˜[˜ÙU˜[YR\ÔØY™J	Ü™\ÜÛœÙWÚY	Ë][Kœ™\ÜÛœÙWÚY
+Bˆ\›ÝšY\”›Ý™[˜[˜ÙU˜[YR\ÔØY™J	Ü™\ÜÛœÙWÛ[Ù[	Ë][Kœ™\ÜÛœÙWÛ[Ù[
+Bˆ][K\Ý™X[WÜ›ÝšY\ˆOOH	ÑY\[™œ˜IÂˆ\›ÝšY\”›Ý™[˜[˜ÙU˜[YR\ÔØY™J	Ý\Ý™X[WÜ›ÝšY\‰Ë][K\Ý™X[WÜ›ÝšY\ŠBˆ[›Û™[\TÝš[™Ê][K™š[š\ÚÜ™X\ÛÛŠBˆ\›ÝšY\”›Ý™[˜[˜ÙU˜[YR\ÔØY™J	Ùš[š\ÚÜ™X\ÛÛ‰Ë][K™š[š\ÚÜ™X\ÛÛŠBˆ
+ØXÚS[ÙHOOH	ØÛÛ	ÈÈPSÕÑQÕTÐQÑWÔÓÕTÑTËš\Ê][K\ØYÙWÜÛÝ\˜ÙJHˆ][K\ØYÙWÜÛÝ\˜ÙHOOH	ØØXÚIÊJH\ÜÝY\Ëœ\Ú
+	ØYÙ[YNˆ›Ý[™Y›ÝšY\ˆ›Ý™[˜[˜ÙKÝ\ØYÙH\È[˜[Y
+NÂˆYˆ
+S[X™\‹š\Ò[YÙ\Š][K˜XØÙ\YØÛÝ[
+H][K˜XØÙ\YØÛÝ[JH\ÜÝY\Ëœ\Ú
+	ØYÙ[YNˆXØÙ\YØÛÝ[]\Ý™HÜÚ]]™X
+NÂˆYˆ
+S[X™\‹š\Ò[YÙ\Š][Kœ™Z™XÝYØÛÝ[
+H][Kœ™Z™XÝYØÛÝ[
+H\ÜÝY\Ëœ\Ú
+	ØYÙ[YNˆ™Z™XÝYØÛÝ[]\Ý™H›Û›™YØ]]™X
+NÂˆYˆ
+[X™\‹š\Ò[YÙ\Š][K˜XØÙ\YØÛÝ[
+H	‰ˆ[X™\‹š\Ò[YÙ\Š][Kœ™Z™XÝYØÛÝ[
+H	‰ˆ][K˜XØÙ\YØÛÝ[H][Kœ™Z™XÝYØÛÝ[
+H\ÜÝY\Ëœ\Ú
+	ØYÙ[YNˆXØÙ\YÛÛšX][ÛœÈ\™H›ÝHÝšXÝXZ›Üš]X
+NÂˆYˆ
+\[Ùˆ][K™]\›Z[š\ÝX×Ù˜[˜XÚ×Ø\YYOOH	Ø›ÛÛX[‰È][K™]\›Z[š\ÝX×Ù˜[˜XÚ×Ø\YYOOH
+][Kœ™Z™XÝYØÛÝ[ˆ
+JH\ÜÝY\Ëœ\Ú
+	ØYÙ[YNˆÝX\™Y˜[˜XÚÈ\ØÛÜÝ\™H\È[˜ÛÛœÚ\Ý[
+NÂˆYˆ
+TÒLM—ÔUT“‹\Ý
+][Kš[œ]Ø\Y˜XÝÚ\Ú	ÉÊHTÒLM—ÔUT“‹\Ý
+][K›Ý]]Ø\Y˜XÝÚ\Ú	ÉÊJH\ÜÝY\Ëœ\Ú
+	ØYÙ[YNˆ\Y˜XÝ\Ú\È\™HXœÙ[Üˆ[˜[Y
+NÂˆYˆ
+[›Û™[\TÝš[™Ê][K›ÜšYÚ[—ØØ[ÚY
+JH\ÜÝY\Ëœ\Ú
+	ØYÙ[YNˆÜšYÚ[—ØØ[ÚY\ÈXœÙ[
+NÂˆYˆ
+ØXÚS[ÙHOOH	ØÛÛ	È	‰ˆ
+][K˜ØXÚWÚ]OOH˜[ÙHTÕPÐÑTÔÑ•SÓSÑSÓÕUÓÓQTËš\Ê][K›Ý]ÛÛYJH][K›ÜšYÚ[—ØØ[ÚYOOH][K˜Ø[ÚY
+JH\ÜÝY\Ëœ\Ú
+	ØYÙ[YNˆÛÛ™]ÛÜšÈ[™XYÙH\È[˜[Y
+NÂˆYˆ
+ØXÚS[ÙHOOH	ÝØ\›IÈ	‰ˆ
+][K˜ØXÚWÚ]OOHYH][K›Ý]ÛÛYHOOH	ØØXÚWÚ]	ÊJH\ÜÝY\Ëœ\Ú
+	ØYÙ[YNˆØ\›HØXÚHÝ]H\È[˜[Y
+NÂˆBˆÛÛœÝØ[›ÛšXØ[HžPYÙ[™Ù]
+	ØØ[›ÛšXØ[Ù˜XÝÉÊNÂˆÛÛœÝÜ˜Ú\Ý˜]ÜˆHžPYÙ[™Ù]
+	ÛÜ˜Ú\Ý˜]Ü—Ü[‰ÊNÂˆYˆ
+Ø[›ÛšXØ[
+HÂˆÛÛœÝ›Ú™XÝYHØ[›ÛšXØ[œÛÝ\˜ÙWÜ™Y™\™[˜ÙWÜ›Ú™XÝ[Û—Ù˜XÝÚYÎÂˆYˆ
+P\œ˜^Kš\Ð\œ˜^J›Ú™XÝY
+BˆS[X™\‹š\Ò[YÙ\ŠØ[›ÛšXØ[œÛÝ\˜ÙWÜ™Y™\™[˜ÙWÜ›Ú™XÝ[Û—ØÛÝ[
+BˆØ[›ÛšXØ[œÛÝ\˜ÙWÜ™Y™\™[˜ÙWÜ›Ú™XÝ[Û—ØÛÝ[OOH›Ú™XÝY›[™Ýˆ™]ÈÙ]
+›Ú™XÝY
+KœÚ^™HOOH›Ú™XÝY›[™Ýˆ›Ú™XÝYœÛÛYJ˜XÝYOˆXØ[›ÛšXØ[˜XØÙ\YÚYËš[˜ÛY\Ê˜XÝY
+JJH\ÜÝY\Ëœ\Ú
+	ØØ[›ÛšXØ[Ù˜XÝÎˆ]\›Z[š\ÝXÈÛÝ\˜ÙH›Ú™XÝ[Ûˆ\ØÛÜÝ\™H\È[˜[Y	ÊNÂˆBˆYˆ
+Ø[›ÛšXØ[	‰ˆ
+Ø[›ÛšXØ[œ\™[ØØ[ÚYOH[Ø[›ÛšXØ[™[YØ][Û—ÚYOH[
+JH\ÜÝY\Ëœ\Ú
+	ØØ[›ÛšXØ[Ù˜XÝÎˆ›ÛÝ\™[ØØ[ÚY[™[YØ][Û—ÚY]\Ý™H[	ÊNÂˆYˆ
+Ø[›ÛšXØ[	‰ˆÜ˜Ú\Ý˜]Üˆ	‰ˆÜ˜Ú\Ý˜]Ü‹œ\™[ØØ[ÚYOOHØ[›ÛšXØ[˜Ø[ÚY
+H\ÜÝY\Ëœ\Ú
+	ÛÜ˜Ú\Ý˜]Ü—Ü[Žˆ\™[]\Ý™HØ[›ÛšXØ[Ù˜XÝÈØ[	ÊNÂˆ›Üˆ
+ÛÛœÝYÙ[YÙˆ‘TURT‘QÓ‘SSÕ“Ó—ÐQÑS•ÒQËœÛXÙJŠJHÂˆYˆ
+žPYÙ[™Ù]
+YÙ[Y
+OËœ\™[ØØ[ÚYOOHÜ˜Ú\Ý˜]ÜË˜Ø[ÚY
+H\ÜÝY\Ëœ\Ú
+	ØYÙ[YNˆ\™[]\Ý™HÜ˜Ú\Ý˜]Ü—Ü[ˆØ[
+NÂˆBˆÛÛœÝ\ØÛÜÙY˜[˜XÚÜÈHYÙ[Ë™š[\Š][HOˆ][OË™]\›Z[š\ÝX×Ù˜[˜XÚ×Ø\YYOOHYJK›[™ÝÂˆYˆ
+S[X™\‹š\Ò[YÙ\Š]Y]™ÝX\™YÙ˜[˜XÚ×ØÛÝ[
+H]Y]™ÝX\™YÙ˜[˜XÚ×ØÛÝ[OOH\ØÛÜÙY˜[˜XÚÜÊH\ÜÝY\Ëœ\Ú
+	ÙÝX\™YÙ˜[˜XÚ×ØÛÝ[Ù\È›ÝX]ÚYÙ[™XÙZ\ÉÊNÂˆ›Üˆ
+ÛÛœÝØ]RYÙˆ‘TURT‘QÑUT“RS’TÕP×ÑÐUWÒQÊHÂˆÛÛœÝØ]HHØ]\Ë™š[™
+][HOˆ][OË˜YÙ[ÚYOOHØ]RY
+NÂˆYˆ
+YØ]JHÛÛ[YNÂˆYˆ
+Ø]Kœ›ÛHOOH‘TURT‘QÑUT“RS’TÕP×ÑÐUWÔ“ÓTÖÙØ]RYJH\ÜÝY\Ëœ\Ú
+	ÙØ]RYNˆ›ÛHX™[\È›Ý^XÝ
+NÂˆÛÛœÝ\Y˜XÝÛÛ˜XÝHPÐÑTQÐT•QPÕÐÓÓ•PÕÙØ]RYNÂˆÛÛœÝÛÝ\˜ÙPYÙ[HžPYÙ[™Ù]
+\Y˜XÝÛÛ˜XÝœÛÝ\˜ÙWØYÙ[ÚY
+NÂˆYˆ
+Ø]K˜XÝÜ—Ý\HOOH	Ù]\›Z[š\ÝX×ÙØ]IÈØ]K›[Ù[OH[Ø]K›Ý]ÛÛYHOOH	Ü\ÜÙY	ÈØ]Kœ™XÙZ\Ý\HOOH	ØXØÙ\YØ\Y˜XÝ	ÈØ]K˜XØÙ\[˜ÙWÜØÛÜHOOH	Ü™WÜ™]šY]×Û[Ù[ÛÝ]]	ÊH\ÜÝY\Ëœ\Ú
+	ÙØ]RYNˆ]\›Z[š\ÝXÈØ]HY[]KÜØÛÜH\È[˜[Y
+NÂˆYˆ
+Ø]K›Ý]]Ø\Y˜XÝOOH\Y˜XÝÛÛ˜XÝ›Ý]]Ø\Y˜XÝˆØ]KœÛÝ\˜ÙWØYÙ[ÚYOOH\Y˜XÝÛÛ˜XÝœÛÝ\˜ÙWØYÙ[ÚYˆØ]KœÛÝ\˜ÙWØØ[ÚYOOHÛÝ\˜ÙPYÙ[Ë˜Ø[ÚYˆØ]K™[YØ][Û—ÚYOOHÛÝ\˜ÙPYÙ[Ë™[YØ][Û—ÚYˆØ]K˜XØÙ\YØÛÝ[OOHÛÝ\˜ÙPYÙ[Ë˜XØÙ\YØÛÝ[ˆP\œ˜^Kš\Ð\œ˜^JØ]K˜XØÙ\YÚYÊBˆØ]K˜XØÙ\YÚYË›[™ÝOOHØ]K˜XØÙ\YØÛÝ[ˆ™]ÈÙ]
+Ø]K˜XØÙ\YÚYÊKœÚ^™HOOHØ]K˜XØÙ\YÚYË›[™Ýˆ”ÓÓ‹œÝš[™ÚYžJØ]K˜XØÙ\YÚYÊHOOH”ÓÓ‹œÝš[™ÚYžJÛÝ\˜ÙPYÙ[Ë˜XØÙ\YÚYÊJH\ÜÝY\Ëœ\Ú
+	ÙØ]RYNˆXØÙ\Y\Y˜XÝQËÜÛÝ\˜ÙHš[™[™È\È[˜[Y
+NÂˆYˆ
+TÒLM—ÔUT“‹\Ý
+Ø]Kš[œ]Ø\Y˜XÝÚ\Ú	ÉÊHTÒLM—ÔUT“‹\Ý
+Ø]K›Ý]]Ø\Y˜XÝÚ\Ú	ÉÊJH\ÜÝY\Ëœ\Ú
+	ÙØ]RYNˆ\Y˜XÝ\Ú\È\™HXœÙ[Üˆ[˜[Y
+NÂˆBˆÛÛœÝ^XÝØ]SÝ]]ÈHÂˆ]\›Z[š\ÝX×Ü›ØÙ\Ü×ÙØ]Nˆ[Ëœ™\Ý[Ëœ›ØÙ\ÜËˆ]\›Z[š\ÝX×Ù]šY[˜ÙWÙØ]Nˆ[Ëœ™\Ý[Ë˜ÚXÚÛ\ÝˆÚÛWÜ^X›ÛÚ×ÙØ]Nˆ]Y]™š[˜[ØÛZ[WØœšYY‹ˆNÂˆ›Üˆ
+ÛÛœÝÙØ]RY×HÙˆØš™XÝ™[šY\Ê^XÝØ]SÝ]]ÊJHÂˆÛÛœÝØ]HHØ]\Ë™š[™
+][HOˆ][OË˜YÙ[ÚYOOHØ]RY
+NÂˆYˆ
+YÈØ]OË›Ý]]Ø\Y˜XÝÚ\ÚOOHÒ\Ú
+ÊJH\ÜÝY\Ëœ\Ú
+	ÙØ]RYNˆÝ]]\Ú\È›Ý›Ý[™ÈH™]\›™Yš[˜[Ø
+NÂˆÛÛœÝ[Y\šXÒ^˜\™ÈH›Û’[YÙ\“[X™\”]ÊÊNÂˆYˆ
+[Y\šXÒ^˜\™Ë›[™Ý
+H\ÜÝY\Ëœ\Ú
+	ÙØ]RYNˆXØÙ\YÈÛÛZ[œÈ›Û‹Z[YÙ\ˆ[Y\šXÈ˜[Y\È]	Û[Y\šXÒ^˜\™Ëš›Ú[Š	Ë	Ê_X
+NÂˆBˆÛÛœÝ[]™[ÈH\œ˜^Kš\Ð\œ˜^J[Ë™]™[ÊHÈ[‹™]™[Èˆ×NÂˆÛÛœÝ]™[ÈH[]™[Ë™š[\Š][HOˆ][OËœÝYÙHOOH	ØYÙ[ÛÜ˜Ú\Ý˜][Û‰ÊNÂˆYˆ
+[]™[ËœÛÛYJ][HOˆ][OËœ™XÙZ\Ý\HOOH	ØYÙ[Ù˜Z[Y	È
+][OËœÝYÙHOOH	Ù˜Z[Y	È	‰ˆ][OËœÝ]\ÈOOH	Ù˜Z[Y	ÊJJH\ÜÝY\Ëœ\Ú
+	ØÛÛ\]YÜ˜Ú\Ý˜][Ûˆ™]Z[™YH˜Z[\™H™XÙZ\Üˆ\›Z[˜[˜Z[\™H›Ý[™\žIÊNÂˆ›Üˆ
+ÛÛœÝYÙ[YÙˆ‘TURT‘QÓ‘SSÕ“Ó—ÐQÑS•ÒQÊHÂˆÛÛœÝYÙ[HžPYÙ[™Ù]
+YÙ[Y
+NÂˆÛÛœÝÛÛ\]YH[]™[Ë™š[\Š][HOˆ][K˜YÙ[ÚYOOHYÙ[Y	‰ˆ][K˜XÝÜ—Ý\HOOH	Û™[[Ý›Û—ØYÙ[	È	‰ˆ][Kœ™XÙZ\Ý\HOOH	ØYÙ[ØÛÛ\]Y	È	‰ˆ][KœÝ]\ÈOOH	ØÛÛ\]Y	ÊNÂˆYˆ
+ÛÛ\]Y›[™ÝOOHJHÂˆ\ÜÝY\Ëœ\Ú
+	ØYÙ[YNˆ^XÝÛÛ\]Yš\ÚX›H™K\™]šY]È™XÙZ\\ÈXœÙ[Üˆ\XØ]Y
+NÂˆÛÛ[YNÂˆBˆÛÛœÝ™XÙZ\HÛÛ\]YÌNÂˆYˆ
+™XÙZ\˜XØÙ\[˜ÙWÜØÛÜHOOH	Ü™WÜ™]šY]×Û[Ù[ÛÝ]]	Âˆ™XÙZ\˜Ø[ÚYOOHYÙ[Ë˜Ø[ÚYˆ™XÙZ\œ\™[ØØ[ÚYOOHYÙ[Ëœ\™[ØØ[ÚYˆ™XÙZ\™[YØ][Û—ÚYOOHYÙ[Ë™[YØ][Û—ÚYˆ™XÙZ\œ™\ÜÛœÙWÚYOOHYÙ[Ëœ™\ÜÛœÙWÚYˆ™XÙZ\œ™\ÜÛœÙWÛ[Ù[OOHYÙ[Ëœ™\ÜÛœÙWÛ[Ù[ˆ™XÙZ\˜XØÙ\YØÛÝ[OOHYÙ[Ë˜XØÙ\YØÛÝ[ˆ™XÙZ\œ™Z™XÝYØÛÝ[OOHYÙ[Ëœ™Z™XÝYØÛÝ[ˆ™XÙZ\™]\›Z[š\ÝX×Ù˜[˜XÚ×Ø\YYOOHYÙ[Ë™]\›Z[š\ÝX×Ù˜[˜XÚ×Ø\YYˆ
+YÙ[YOOH	ØØ[›ÛšXØ[Ù˜XÝÉÂˆ	‰ˆ
+™XÙZ\œÛÝ\˜ÙWÜ™Y™\™[˜ÙWÜ›Ú™XÝ[Û—ØÛÝ[OOHYÙ[ËœÛÝ\˜ÙWÜ™Y™\™[˜ÙWÜ›Ú™XÝ[Û—ØÛÝ[ˆ”ÓÓ‹œÝš[™ÚYžJ™XÙZ\œÛÝ\˜ÙWÜ™Y™\™[˜ÙWÜ›Ú™XÝ[Û—Ù˜XÝÚYÊHOOH”ÓÓ‹œÝš[™ÚYžJYÙ[ËœÛÝ\˜ÙWÜ™Y™\™[˜ÙWÜ›Ú™XÝ[Û—Ù˜XÝÚYÊJJBˆ”ÓÓ‹œÝš[™ÚYžJ™XÙZ\˜XØÙ\YÚYÊHOOH”ÓÓ‹œÝš[™ÚYžJYÙ[Ë˜XØÙ\YÚYÊJH\ÜÝY\Ëœ\Ú
+	ØYÙ[YNˆÛÛ\]Yš\ÚX›H™XÙZ\\È›Ý›Ý[™ÈH]]Üš]]]™HYÙ[]Y]
+NÂˆYˆ
+YÙ[YOOH	ØØ[›ÛšXØ[Ù˜XÝÉÈ	‰ˆ™XÙZ\›Ý]]Ø\Y˜XÝÚ\ÚOOHYÙ[Ë›Ý]]Ø\Y˜XÝÚ\Ú
+H\ÜÝY\Ëœ\Ú
+	ØYÙ[YNˆÛÛ\]Yš\ÚX›H™XÙZ\Ý]]\Ú\È›Ý›Ý[™ÈH]]Üš]]]™HYÙ[]Y]
+NÂˆBˆ›Üˆ
+ÛÛœÝØ]RYÙˆ‘TURT‘QÑUT“RS’TÕP×ÑÐUWÒQÊHÂˆÛÛœÝÛÛ˜XÝHPÐÑTQÐT•QPÕÐÓÓ•PÕÙØ]RYNÂˆÛÛœÝÛÝ\˜ÙPØ[YHžPYÙ[™Ù]
+ÛÛ˜XÝœÛÝ\˜ÙWØYÙ[ÚY
+OË˜Ø[ÚYÂˆYˆ
+Y]™[ËœÛÛYJ][HOˆ][K˜YÙ[ÚYOOHØ]RYˆ	‰ˆ][K˜XÝÜ—Ý\HOOH	Ù]\›Z[š\ÝX×ÙØ]IÂˆ	‰ˆ][Kœ™XÙZ\Ý\HOOH	ØXØÙ\YØ\Y˜XÝ	Âˆ	‰ˆ][K˜XØÙ\[˜ÙWÜØÛÜHOOH	Ü™WÜ™]šY]×Û[Ù[ÛÝ]]	Âˆ	‰ˆ][KœÝ]\ÈOOH	ØÛÛ\]Y	Âˆ	‰ˆ][K›Ý]]Ø\Y˜XÝOOHÛÛ˜XÝ›Ý]]Ø\Y˜XÝˆ	‰ˆ][KœÛÝ\˜ÙWØYÙ[ÚYOOHÛÛ˜XÝœÛÝ\˜ÙWØYÙ[ÚYˆ	‰ˆ][KœÛÝ\˜ÙWØØ[ÚYOOHÛÝ\˜ÙPØ[Yˆ	‰ˆ][K™[YØ][Û—ÚYOOHžPYÙ[™Ù]
+ÛÛ˜XÝœÛÝ\˜ÙWØYÙ[ÚY
+OË™[YØ][Û—ÚYˆ	‰ˆ][K˜XØÙ\YØÛÝ[OOHžPYÙ[™Ù]
+ÛÛ˜XÝœÛÝ\˜ÙWØYÙ[ÚY
+OË˜XØÙ\YØÛÝ[ˆ	‰ˆ”ÓÓ‹œÝš[™ÚYžJ][K˜XØÙ\YÚYÊHOOH”ÓÓ‹œÝš[™ÚYžJžPYÙ[™Ù]
+ÛÛ˜XÝœÛÝ\˜ÙWØYÙ[ÚY
+OË˜XØÙ\YÚYÊBˆ	‰ˆÒLM—ÔUT“‹\Ý
+][K›Ý]]Ø\Y˜XÝÚ\Ú	ÉÊJJH\ÜÝY\Ëœ\Ú
+	ÙØ]RYNˆÛÛ\]YXØÙ\YX\Y˜XÝ™XÙZ\\ÈXœÙ[Üˆ[˜›Ý[™
+NÂˆBˆ\ÜÝY\Ëœ\Ú
+‹‹šXœšYØ]\Ø[ÛÛ˜XÝš[Û][ÛœÊ[ŠJNÂˆÛÛœÝÙ[œÚ]]™HH›Ü˜šY[‘šY[]Ê[ŠNÂˆYˆ
+Ù[œÚ]]™K›[™Ý
+H\ÜÝY\Ëœ\Ú
+›Ü˜šY[ˆX›XÈšY[Îˆ	ÜÙ[œÚ]]™Kš›Ú[Š	Ë	Ê_X
+NÂˆÛÛœÝÙ[[™[XZÜÈH[\›˜[Ù[[™[]Ê[ŠNÂˆYˆ
+Ù[[™[XZÜË›[™Ý
+H\ÜÝY\Ëœ\Ú
+[\›˜[^XÝ][ÛˆÙ[[™[ÈXZÙYˆ	ÜÙ[[™[XZÜËš›Ú[Š	Ë	Ê_X
+NÂˆ™]\›ˆ\ÜÝY\ÎÂŸB‚™[˜Ý[ÛˆYÙ\”Ý[[X\žJ][\ÊHÂˆÛÛœÝ[šÛ›ÝÛÛÜÝØ[ÛÝ[H][\Ë™š[\Š][HOˆ][K˜Ø[ØÛÝ[ˆ	‰ˆ][K˜XÝX[ØÛÜÝÝ\ÙOH[
+K›[™ÝÂˆÛÛœÝÝ]ÛÛY\ÈHØš™XÝ™œ›ÛQ[šY\ÊË‹‹›™]ÈÙ]
+][\Ë›X\
+][HOˆ][K›Ý]ÛÛYJJWBˆœÛÜ
+
+Bˆ›X\
+Ý]ÛÛYHOˆÛÝ]ÛÛYK][\Ë™š[\Š][HOˆ][K›Ý]ÛÛYHOOHÝ]ÛÛYJK›[™ÝJJNÂˆ™]\›ˆÂˆ™XÛÜ™Îˆ][\Ë›[™Ýˆ™]ÛÜš×ØØ[Îˆ][\Ëœ™YXÙJ
+Ý[][JHOˆÝ[
+È][K˜Ø[ØÛÝ[
+Kˆ›Û\ÝÚÙ[œÎˆ][\Ëœ™YXÙJ
+Ý[][JHOˆÝ[
+È
+][Kœ›Û\ÝÚÙ[œÈÏÈ
+K
+KˆÛÛ\][Û—ÝÚÙ[œÎˆ][\Ëœ™YXÙJ
+Ý[][JHOˆÝ[
+È
+][K˜ÛÛ\][Û—ÝÚÙ[œÈÏÈ
+K
+KˆÝ[ÝÚÙ[œÎˆ][\Ëœ™YXÙJ
+Ý[][JHOˆÝ[
+È
+][KÝ[ÝÚÙ[œÈÏÈ
+K
+KˆXÝX[ØÛÜÝÝ\Ùˆ[X™\Š][\Ëœ™YXÙJ
+Ý[][JHOˆÝ[
+È
+][K˜XÝX[ØÛÜÝÝ\ÙÏÈ
+K
+KÑš^Y
+
+JKˆXÝX[ØÛÜÝØÛÛ\]Nˆ[šÛ›ÝÛÛÜÝØ[ÛÝ[OOHˆ[šÛ›ÝÛ—ØÛÜÝØØ[ØÛÝ[ˆ[šÛ›ÝÛÛÜÝØ[ÛÝ[ˆÝ]ÛÛY\ËˆNÂŸB‚™[˜Ý[Ûˆ[š]X[YÙ\YZ\ÜÚ[Û•š[Û][ÛœÊYÙ\ŠHÂˆÛÛœÝ\ÜÝY\ÈHØ[š]^™YYÙ\•š[Û][ÛœÊYÙ\ŠNÂˆYˆ
+\ÜÝY\Ë›[™Ý
+H™]\›ˆ\ÜÝY\ÎÂˆÛÛœÝ^XÝYHYÙ\”Ý[[X\žJ×JNÂˆYˆ
+ÝX›RœÛÛŠYÙ\‹œÝ[[X\žJHOOHÝX›RœÛÛŠ^XÝY
+JHÂˆ\ÜÝY\Ëœ\Ú
+	Ú[š]X[ÛØ˜[[Ù[YÙ\ˆ\È›Ý^XÝH[\IÊNÂˆBˆYˆ
+YÙ\‹š][\Ë›[™ÝOOH
+H\ÜÝY\Ëœ\Ú
+	Ú[š]X[ÛØ˜[[Ù[YÙ\ˆÛÛZ[œÈ›ÝÜÉÊNÂˆ™]\›ˆ\ÜÝY\ÎÂŸB‚™[˜Ý[Ûˆš[˜[YÙ\”Û˜\ÚÝš[Û][ÛœÊ\ÛÛ][Û“YÙ\‹š[˜[YÙ\ŠHÂˆÛÛœÝ\ÜÝY\ÈH×NÂˆYˆ
+ÝX›RœÛÛŠš[˜[YÙ\ŠHOOHÝX›RœÛÛŠ\ÛÛ][Û“YÙ\ŠJHÂˆ\ÜÝY\Ëœ\Ú
+	Ùš[˜[YÙ\ˆÚ[™ÙYY\ˆH›YÜÚ\Ø\›H™\^IÊNÂˆBˆÛÛœÝÝ[[X\žHHš[˜[YÙ\ËœÝ[[X\žNÂˆYˆ
+P\œ˜^Kš\Ð\œ˜^Jš[˜[YÙ\Ëš][\ÊBˆš[˜[YÙ\‹š][\Ë›[™ÝOOHL‚ˆÝ[[X\žOËœ™XÛÜ™ÈOOHL‚ˆÝ[[X\žOË›™]ÛÜš×ØØ[ÈOOH‚ˆÝ[[X\žOË›Ý]ÛÛY\ÏË˜ØXÚWÚ]OOH‚ˆÝ[[X\žOË[šÛ›ÝÛ—ØÛÜÝØØ[ØÛÝ[OOHˆÝ[[X\žOË˜XÝX[ØÛÜÝØÛÛ\]HOOHYJHÂˆ\ÜÝY\Ëœ\Ú
+	Ùš[˜[YÙ\ˆ\È›Ý^XÝÛÛˆ\ÈØ\›MˆXØÛÝ[[™ÉÊNÂˆBˆ™]\›ˆ\ÜÝY\ÎÂŸB‚™[˜Ý[ÛˆØ[š]^™YYÙ\•š[Û][ÛœÊYÙ\ŠHÂˆÛÛœÝ\ÜÝY\ÈH×NÂˆYˆ
+YÙ\ËœØÛÜHOOH	ÙÛØ˜[ØYÙ]ÛYÙ\‰ÈP\œ˜^Kš\Ð\œ˜^JYÙ\Ëš][\ÊJH™]\›ˆÉÙÛØ˜[Ø[š]^™YYÙ\ˆ\ÈXœÙ[	×NÂˆÛÛœÝÝ[[X\žHHYÙ\ËœÝ[[X\žNÂˆYˆ
+\Ý[[X\žH\[ÙˆÝ[[X\žHOOH	ÛØš™XÝ	ÈY^XÝY[X™\œÊØš™XÝšÙ^\ÊÝ[[X\žJKË‹‹SÕÑQÓQÑT—ÔÕSSPT–WÑ’QS×JJHÂˆ\ÜÝY\Ëœ\Ú
+	ÛYÙ\ˆÝ[[X\žHš[Û]\ÈH^XÝX›XÈØÚ[XIÊNÂˆH[ÙHÂˆÛÛœÝÛÝ\˜ÙT›ÝÜÕ˜[YHYÙ\‹š][\Ë™]™\žJ][HOˆ[X™\‹š\Ò[YÙ\Š][OË˜Ø[ØÛÝ[
+Bˆ	‰ˆ][K˜Ø[ØÛÝ[Hˆ	‰ˆÉÜ›Û\ÝÚÙ[œÉË	ØÛÛ\][Û—ÝÚÙ[œÉË	ÝÝ[ÝÚÙ[œÉ×K™]™\žJšY[OˆSØš™XÝš\ÓÝÛŠ][KšY[
+H
+[X™\‹š\Ò[YÙ\Š][VÙšY[JH	‰ˆ][VÙšY[HH
+JBˆ	‰ˆ
+][K˜XÝX[ØÛÜÝÝ\ÙOH[
+[X™\‹š\Ñš[š]J][K˜XÝX[ØÛÜÝÝ\Ù
+H	‰ˆ][K˜XÝX[ØÛÜÝÝ\ÙH
+JBˆ	‰ˆ›Û™[\TÝš[™Ê][K›Ý]ÛÛYJJNÂˆYˆ
+\ÛÝ\˜ÙT›ÝÜÕ˜[Y
+HÂˆ\ÜÝY\Ëœ\Ú
+	ÛYÙ\ˆÝ[[X\žHÛÝ\˜ÙH›ÝÜÈÛÛZ[ˆ[˜[YXØÛÝ[[™ÈšY[ÉÊNÂˆH[ÙHÂˆYˆ
+ÝX›RœÛÛŠÝ[[X\žJHOOHÝX›RœÛÛŠYÙ\”Ý[[X\žJYÙ\‹š][\ÊJJH\ÜÝY\Ëœ\Ú
+	ÛYÙ\ˆÝ[[X\žH\È[˜ÛÛœÚ\Ý[Ú]]È™]ÛÜšÈ›ÝÜÉÊNÂˆBˆBˆÛÛœÝØ[YÈHYÙ\‹š][\Ë›X\
+][HOˆ][OË˜Ø[ÚY
+NÂˆYˆ
+XØ[YË™]™\žJ›Û™[\TÝš[™ÊH™]ÈÙ]
+Ø[YÊKœÚ^™HOOHØ[YË›[™Ý
+H\ÜÝY\Ëœ\Ú
+	ÛYÙ\ˆØ[QÈ\™HXœÙ[Üˆ\XØ]Y	ÊNÂˆYÙ\‹š][\Ë™›Ü‘XXÚ
+
+][K[™^
+HOˆÂˆÛÛœÝ[™^XÝYHØš™XÝšÙ^\Ê][JK™š[\ŠÙ^HOˆPSÕÑQÓQÑT—Ñ’QSËš\ÊÙ^JJNÂˆYˆ
+[™^XÝY›[™Ý
+H\ÜÝY\Ëœ\Ú
+YÙ\–ÉÚ[™^WH[™^XÝYšY[Îˆ	Ý[™^XÝYš›Ú[Š	Ë	Ê_X
+NÂˆ›Üˆ
+ÛÛœÝšY[Ùˆ“Õ’QT—Ô“Õ‘SSÑWÑ’QSÊHÂˆYˆ
+Øš™XÝš\ÓÝÛŠ][KšY[
+H	‰ˆ\›ÝšY\”›Ý™[˜[˜ÙU˜[YR\ÔØY™JšY[][VÙšY[JJH\ÜÝY\Ëœ\Ú
+YÙ\–ÉÚ[™^WK‰ÙšY[Hš[Û]\ÈH^XÝ›ÝšY\‹\›Ý™[˜[˜ÙHØ[š]^™\˜
+NÂˆBˆYˆ
+Øš™XÝš\ÓÝÛŠ][K	ÙÙ[™\˜][Û—Û[Ù[	ÊH	‰ˆ\›ÝšY\”›Ý™[˜[˜ÙU˜[YR\ÔØY™J	Ü™\ÜÛœÙWÛ[Ù[	Ë][K™Ù[™\˜][Û—Û[Ù[
+JH\ÜÝY\Ëœ\Ú
+YÙ\–ÉÚ[™^WK™Ù[™\˜][Û—Û[Ù[š[Û]\ÈH^XÝ™\ÜÛœÙK[[Ù[Ø[š]^™\˜
+NÂˆYˆ
+Øš™XÝš\ÓÝÛŠ][K	ÛÜšYÚ[—Ùš[š\ÚÜ™X\ÛÛ‰ÊH	‰ˆ\›ÝšY\”›Ý™[˜[˜ÙU˜[YR\ÔØY™J	Ùš[š\ÚÜ™X\ÛÛ‰Ë][K›ÜšYÚ[—Ùš[š\ÚÜ™X\ÛÛŠJH\ÜÝY\Ëœ\Ú
+YÙ\–ÉÚ[™^WK›ÜšYÚ[—Ùš[š\ÚÜ™X\ÛÛˆš[Û]\ÈH^XÝš[š\Ú\™X\ÛÛˆØ[š]^™\˜
+NÂˆYˆ
+][K™\œ›Ü—Ú[˜\šX[OOH	Ú[˜[YÜ›Ý™[˜[˜ÙIÊHÂˆYˆ
+T“Õ’QT—Ô“Õ‘SSÑWÑ’QSËš\Ê][Kš[˜[YÜ›Ý™[˜[˜ÙWÙšY[
+BˆTÒLM—ÔUT“‹\Ý
+][Kš[˜[YÜ›Ý™[˜[˜ÙWÝ˜[YWÚ\Ú	ÉÊBˆ][VÚ][Kš[˜[YÜ›Ý™[˜[˜ÙWÙšY[HOH[
+H\ÜÝY\Ëœ\Ú
+YÙ\–ÉÚ[™^WH[˜[Y\›Ý™[˜[˜ÙHXYÛ›ÜÝXÈ\È[˜›Ý[™YÜˆ™]Z[™YH™Z™XÝY˜[YX
+NÂˆH[ÙHYˆ
+][Kš[˜[YÜ›Ý™[˜[˜ÙWÙšY[OH[][Kš[˜[YÜ›Ý™[˜[˜ÙWÝ˜[YWÚ\ÚOH[
+HÂˆ\ÜÝY\Ëœ\Ú
+YÙ\–ÉÚ[™^WHØ\œšY\È[ˆÝ][Ù‹\ØÛÜH[˜[Y\›Ý™[˜[˜ÙHXYÛ›ÜÝXØ
+NÂˆBˆYˆ
+][Kœ›ÝšY\—Ù\œ›Ü—ØÛÙHOH[	‰ˆ
+][K™\œ›Ü—Ú[˜\šX[OOH	Ü›ÝšY\—Ý\Ý™X[WÜ™Z™XÝ[Û‰ÈS[X™\‹š\Ò[YÙ\Š][Kœ›ÝšY\—Ù\œ›Ü—ØÛÙJH][Kœ›ÝšY\—Ù\œ›Ü—ØÛÙH][Kœ›ÝšY\—Ù\œ›Ü—ØÛÙHˆNNNJJH\ÜÝY\Ëœ\Ú
+YÙ\–ÉÚ[™^WH›ÝšY\ˆ\œ›ÜˆÛÙH\È[˜›Ý[™YÜˆÝ]ÙˆØÛÜX
+NÂˆYˆ
+][K™\œ›Ü—Ú[˜\šX[OOH	Ü›ÝšY\—Ý\Ý™X[WÜ™Z™XÝ[Û‰È	‰ˆ][Kœ™\ÜÛœÙWÚYOH[	‰ˆQVPÕÓÔS”“ÕUT—ÑÑS‘TUSÓ—ÒQ\Ý
+][Kœ™\ÜÛœÙWÚY
+JH\ÜÝY\Ëœ\Ú
+YÙ\–ÉÚ[™^WH™\ÜÛœÙHQ\È›Ý[ˆ^XÝÜ[”›Ý]\ˆÙ[™\˜][ÛˆQ
+NÂˆYˆ
+][K›Ý]ÛÛYHOOH	Ø›ØÚÙYÜ›ÝšY\—ØÛÛ˜Ý\œ™[˜ÞIÈ][K™\œ›Ü—Ú[˜\šX[OOH	Ü›ÝšY\—ØÛÛ˜Ý\œ™[˜ÞWÝ[Y[Ý]	ÊHÂˆÛÛœÝ™]Z[™Y›ÝšY\”™\Ý[šY[ÈH‘T“×ÐÐSÔ“Õ’QT—Ô‘TÕSÑ’QSË™š[\ŠšY[OˆØš™XÝš\ÓÝÛŠ][KšY[
+JNÂˆYˆ
+][K›Ý]ÛÛYHOOH	Ø›ØÚÙYÜ›ÝšY\—ØÛÛ˜Ý\œ™[˜ÞIÂˆ][K™\œ›Ü—Ú[˜\šX[OOH	Ü›ÝšY\—ØÛÛ˜Ý\œ™[˜ÞWÝ[Y[Ý]	Âˆ][K˜Ø[ØÛÝ[OOHˆ][K˜XÝX[ØÛÜÝÝ\ÙOOH[ˆ™]Z[™Y›ÝšY\”™\Ý[šY[Ë›[™Ý
+H\ÜÝY\Ëœ\Ú
+YÙ\–ÉÚ[™^WH›ØÚÙY›ÝšY\ˆÛÛ˜Ý\œ™[˜ÞH\È›Ý[ˆ^XÝ™\›ËXØ[›ÝØ
+NÂˆBˆÛÛœÝ›Ý[™\žR\ÜÝYHH›ÝšY\”™Z™XÝ[Û›Ý[™\žR\ÜÝYJ][JNÂˆYˆ
+›Ý[™\žR\ÜÝYJH\ÜÝY\Ëœ\Ú
+YÙ\–ÉÚ[™^WH	Ø›Ý[™\žR\ÜÝY_X
+NÂˆYˆ
+Øš™XÝš\ÓÝÛŠ][K	ÛÜšYÚ[—Ý\ØYÙIÊJHÂˆÛÛœÝ\ØYÙHH][K›ÜšYÚ[—Ý\ØYÙNÂˆYˆ
+]\ØYÙBˆ\[Ùˆ\ØYÙHOOH	ÛØš™XÝ	ÂˆY^XÝY[X™\œÊØš™XÝšÙ^\Ê\ØYÙJKÉÜ›Û\ÝÚÙ[œÉË	ØÛÛ\][Û—ÝÚÙ[œÉË	ÝÝ[ÝÚÙ[œÉË	ØXÝX[ØÛÜÝÝ\Ù	Ë	Ý\ØYÙWÜÛÝ\˜ÙI×JBˆS[X™\‹š\Ò[YÙ\Š\ØYÙKœ›Û\ÝÚÙ[œÊBˆ\ØYÙKœ›Û\ÝÚÙ[œÈHˆS[X™\‹š\Ò[YÙ\Š\ØYÙK˜ÛÛ\][Û—ÝÚÙ[œÊBˆ\ØYÙK˜ÛÛ\][Û—ÝÚÙ[œÈHˆS[X™\‹š\Ò[YÙ\Š\ØYÙKÝ[ÝÚÙ[œÊBˆ\ØYÙKÝ[ÝÚÙ[œÈ\ØYÙKœ›Û\ÝÚÙ[œÈ
+È\ØYÙK˜ÛÛ\][Û—ÝÚÙ[œÂˆS[X™\‹š\Ñš[š]J\ØYÙK˜XÝX[ØÛÜÝÝ\Ù
+Bˆ\ØYÙK˜XÝX[ØÛÜÝÝ\ÙHˆPSÕÑQÕTÐQÑWÔÓÕTÑTËš\Ê\ØYÙK\ØYÙWÜÛÝ\˜ÙJJH\ÜÝY\Ëœ\Ú
+YÙ\–ÉÚ[™^WHÜšYÚ[—Ý\ØYÙH\È›ÝH›Ý[™Y\ØYÙHØÚ[XX
+NÂˆYˆ
+[›Û™[\TÝš[™Ê][K›ÜšYÚ[—Ùš[š\ÚÜ™X\ÛÛŠJH\ÜÝY\Ëœ\Ú
+YÙ\–ÉÚ[™^WHÜšYÚ[—Ùš[š\ÚÜ™X\ÛÛˆ\ÈXœÙ[
+NÂˆBˆJNÂˆÛÛœÝÙ[œÚ]]™HH›Ü˜šY[‘šY[]ÊYÙ\ŠNÂˆYˆ
+Ù[œÚ]]™K›[™Ý
+H\ÜÝY\Ëœ\Ú
+YÙ\ˆ›Ü˜šY[ˆšY[Îˆ	ÜÙ[œÚ]]™Kš›Ú[Š	Ë	Ê_X
+NÂˆÛÛœÝÙ[[™[ÈH[\›˜[Ù[[™[]ÊYÙ\ŠNÂˆYˆ
+Ù[[™[Ë›[™Ý
+H\ÜÝY\Ëœ\Ú
+YÙ\ˆ[\›˜[Ù[[™[Îˆ	ÜÙ[[™[Ëš›Ú[Š	Ë	Ê_X
+NÂˆ™]\›ˆ\ÜÝY\ÎÂŸB‚™[˜Ý[ÛˆÛÛYÙ\ÛÛ˜XÝš[Û][ÛœÊ]Y]YÙ\ŠHÂˆÛÛœÝ\ÜÝY\ÈHË‹‹œØ[š]^™YYÙ\•š[Û][ÛœÊYÙ\ŠWNÂˆYˆ
+X]Y]
+H™]\›ˆË‹‹š\ÜÝY\Ë	ØÛÛÜ˜Ú\Ý˜][Ûˆ]Y]\ÈXœÙ[	×NÂˆÛÛœÝØ[YÈH™]ÈÙ]
+]Y]˜YÙ[Ë›X\
+][HOˆ][K˜Ø[ÚY
+JNÂˆÛÛœÝ][\ÈHYÙ\‹š][\Ë™š[\Š][HOˆØ[YËš\Ê][K˜Ø[ÚY
+JNÂˆYˆ
+][\Ë›[™ÝOOH‘TURT‘QÓ‘SSÕ“Ó—ÐQÑS•ÒQË›[™Ý
+H\ÜÝY\Ëœ\Ú
+	ØÛÛYÙ\ˆÙ\È›ÝÛÛZ[ˆ^XÝHÚ^›Ý[™Ø[ÉÊNÂˆÛÛœÝ™\ÜÛœÙRYÈH][\Ë›X\
+][HOˆ][Kœ™\ÜÛœÙWÚY
+NÂˆYˆ
+\™\ÜÛœÙRYË™]™\žJ›Û™[\TÝš[™ÊH™]ÈÙ]
+™\ÜÛœÙRYÊKœÚ^™HOOH‘TURT‘QÓ‘SSÕ“Ó—ÐQÑS•ÒQË›[™Ý
+H\ÜÝY\Ëœ\Ú
+	ØÛÛ™\ÜÛœÙHQÈ\™HZ\ÜÚ[™ÈÜˆ\XØ]Y	ÊNÂˆ›Üˆ
+ÛÛœÝYÙ[Ùˆ]Y]˜YÙ[ÊHÂˆÛÛœÝ][HH][\Ë™š[™
+˜[YHOˆ˜[YK˜Ø[ÚYOOHYÙ[˜Ø[ÚY
+NÂˆYˆ
+Z][JHÛÛ[YNÂˆYˆ
+][K›Ü˜Ú\Ý˜][Û—ÚYOOH]Y]›Ü˜Ú\Ý˜][Û—ÚY][K˜YÙ[ÚYOOHYÙ[˜YÙ[ÚY
+H\ÜÝY\Ëœ\Ú
+	ØYÙ[˜YÙ[ÚYNˆYÙ\ˆÜ˜Ú\Ý˜][Ûˆš[™[™ÈZ\ÛX]Ú
+NÂˆYˆ
+][Kœ\™[ØØ[ÚYOOHYÙ[œ\™[ØØ[ÚY][K™[YØ][Û—ÚYOOHYÙ[™[YØ][Û—ÚY
+H\ÜÝY\Ëœ\Ú
+	ØYÙ[˜YÙ[ÚYNˆYÙ\ˆ\™[Ù[YØ][Ûˆš[™[™ÈZ\ÛX]Ú
+NÂˆYˆ
+YÙ[œ™\ÜÛœÙWÚYOOH][Kœ™\ÜÛœÙWÚYYÙ[œ™\ÜÛœÙWÛ[Ù[OOH][Kœ™\ÜÛœÙWÛ[Ù[YÙ[\Ý™X[WÜ›ÝšY\ˆOOH][K\Ý™X[WÜ›ÝšY\ˆYÙ[˜Ø[ØÛÝ[OOH][K˜Ø[ØÛÝ[
+H\ÜÝY\Ëœ\Ú
+	ØYÙ[˜YÙ[ÚYNˆ[ˆ]Y][™YÙ\ˆ™\ÜÛœÙHš[™[™ÈZ\ÛX]Ú
+NÂˆYˆ
+][K˜Ø[ØÛÝ[OOHHTÕPÐÑTÔÑ•SÓSÑSÓÕUÓÓQTËš\Ê][K›Ý]ÛÛYJJH\ÜÝY\Ëœ\Ú
+	ØYÙ[˜YÙ[ÚYNˆYÙ\ˆ\È›ÝHÝXØÙ\ÜÙ[ÛÛ™]ÛÜšÈØ[
+NÂˆYˆ
+][Kœ›ÝšY\ˆOOH	ÛÜ[œ›Ý]\‰È][Kœ›ÝšY\—Ù[™Ú[OOH	ÚÎ‹ËÛÜ[œ›Ý]\‹˜ZKØ\KÝŒKØÚ]ØÛÛ\][ÛœÉÊH\ÜÝY\Ëœ\Ú
+	ØYÙ[˜YÙ[ÚYNˆ›ÝšY\ˆY[]HZ\ÛX]Ú
+NÂˆYˆ
+][K›[Ù[OOH‘TUQTÕQÓ‘SSÕ“Ó—ÓSÑSQVPÕÓ‘SSÕ“Ó—Ô‘TÔÓ”ÑWÓSÑSËš\Ê][Kœ™\ÜÛœÙWÛ[Ù[
+JH\ÜÝY\Ëœ\Ú
+	ØYÙ[˜YÙ[ÚYNˆ™\]Y\ÝYÜ™]\›™Y[Ù[Z\ÛX]Ú
+NÂˆYˆ
+[›Û™[\TÝš[™Ê][Kœ™\ÜÛœÙWÚY
+H][K\Ý™X[WÜ›ÝšY\ˆOOH	ÑY\[™œ˜IÈ[›Û™[\TÝš[™Ê][K™š[š\ÚÜ™X\ÛÛŠJH\ÜÝY\Ëœ\Ú
+	ØYÙ[˜YÙ[ÚYNˆÛÛ\]H^XÝ›ÝšY\ˆY[]H\ÈXœÙ[
+NÂˆYˆ
+PSÕÑQÕTÐQÑWÔÓÕTÑTËš\Ê][K\ØYÙWÜÛÝ\˜ÙJJH\ÜÝY\Ëœ\Ú
+	ØYÙ[˜YÙ[ÚYNˆ\ØYÙH›Ý™[˜[˜ÙH\È[˜[Y
+NÂˆYˆ
+S[X™\‹š\Ñš[š]J][K˜XÝX[ØÛÜÝÝ\Ù
+H][K˜XÝX[ØÛÜÝÝ\ÙH
+H\ÜÝY\Ëœ\Ú
+	ØYÙ[˜YÙ[ÚYNˆXÝX[ÛÜÝ]\Ý™HÜÚ]]™X
+NÂˆYˆ
+S[X™\‹š\Ò[YÙ\Š][Kœ›Û\ÝÚÙ[œÊH][Kœ›Û\ÝÚÙ[œÈHS[X™\‹š\Ò[YÙ\Š][K˜ÛÛ\][Û—ÝÚÙ[œÊH][K˜ÛÛ\][Û—ÝÚÙ[œÈHS[X™\‹š\Ò[YÙ\Š][KÝ[ÝÚÙ[œÊH][KÝ[ÝÚÙ[œÈ][Kœ›Û\ÝÚÙ[œÈ
+È][K˜ÛÛ\][Û—ÝÚÙ[œÊH\ÜÝY\Ëœ\Ú
+	ØYÙ[˜YÙ[ÚYNˆÚÙ[ˆXØÛÝ[[™È\È[˜[Y
+NÂˆÛÛœÝXØÙ\YÛÝ[HYÙ[˜YÙ[ÚYOOH	ØØ[›ÛšXØ[Ù˜XÝÉÈÈ][K˜XØÙ\YÙ˜XÝØÛÝ[ˆ][K˜XØÙ\YÚ][WØÛÝ[ÂˆÛÛœÝ™Z™XÝYÛÝ[HYÙ[˜YÙ[ÚYOOH	ØØ[›ÛšXØ[Ù˜XÝÉÈÈ][Kœ™Z™XÝYÙ˜XÝØÛÝ[ˆ][Kœ™Z™XÝYÚ][WØÛÝ[ÂˆYˆ
+XØÙ\YÛÝ[OOHYÙ[˜XØÙ\YØÛÝ[™Z™XÝYÛÝ[OOHYÙ[œ™Z™XÝYØÛÝ[][K™]\›Z[š\ÝX×Ù˜[˜XÚ×Ø\YYOOHYÙ[™]\›Z[š\ÝX×Ù˜[˜XÚ×Ø\YY
+H\ÜÝY\Ëœ\Ú
+	ØYÙ[˜YÙ[ÚYNˆYÙ\ˆÛÛšX][ÛˆXYÛ›ÜÝXÜÈZ\ÛX]Ú
+NÂˆYˆ
+YÙ[˜YÙ[ÚYOOH	ØØ[›ÛšXØ[Ù˜XÝÉÂˆ	‰ˆ
+][KœÛÝ\˜ÙWÜ™Y™\™[˜ÙWÜ›Ú™XÝ[Û—ØÛÝ[OOHYÙ[œÛÝ\˜ÙWÜ™Y™\™[˜ÙWÜ›Ú™XÝ[Û—ØÛÝ[ˆ”ÓÓ‹œÝš[™ÚYžJ][KœÛÝ\˜ÙWÜ™Y™\™[˜ÙWÜ›Ú™XÝ[Û—Ù˜XÝÚYÊHOOH”ÓÓ‹œÝš[™ÚYžJYÙ[œÛÝ\˜ÙWÜ™Y™\™[˜ÙWÜ›Ú™XÝ[Û—Ù˜XÝÚYÊJJH\ÜÝY\Ëœ\Ú
+	ØØ[›ÛšXØ[Ù˜XÝÎˆYÙ\ˆÛÝ\˜ÙH›Ú™XÝ[ÛˆXYÛ›ÜÝXÜÈZ\ÛX]Ú	ÊNÂˆBˆ™]\›ˆ\ÜÝY\ÎÂŸB‚™[˜Ý[ÛˆØ\›S[™XYÙPÛÛ˜XÝš[Û][ÛœÊÛÛ]Y]Ø\›P]Y]YÙ\ŠHÂˆÛÛœÝ\ÜÝY\ÈH×NÂˆYˆ
+XÛÛ]Y]]Ø\›P]Y]
+H™]\›ˆÈ\ÜÝY\ÎˆÉØÛÛÜˆØ\›HÜ˜Ú\Ý˜][Ûˆ]Y]\ÈXœÙ[	×K[™XYÙNˆ×HNÂˆYˆ
+ÛÛ]Y]›Ü˜Ú\Ý˜][Û—ÚYOOHØ\›P]Y]›Ü˜Ú\Ý˜][Û—ÚY
+H\ÜÝY\Ëœ\Ú
+	ØÛÛ[™Ø\›H[œÈ]\Ý]™H\Ý[˜ÝÜ˜Ú\Ý˜][ÛˆQÉÊNÂˆÛÛœÝÛÛžPYÙ[H™]ÈX\
+ÛÛ]Y]˜YÙ[Ë›X\
+][HOˆÚ][K˜YÙ[ÚY][WJJNÂˆÛÛœÝØ\›PØ[YÈH™]ÈÙ]
+Ø\›P]Y]˜YÙ[Ë›X\
+][HOˆ][K˜Ø[ÚY
+JNÂˆÛÛœÝØ\›SYÙ\ˆHYÙ\‹š][\Ë™š[\Š][HOˆØ\›PØ[YËš\Ê][K˜Ø[ÚY
+JNÂˆYˆ
+Ø\›SYÙ\‹›[™ÝOOH‘TURT‘QÓ‘SSÕ“Ó—ÐQÑS•ÒQË›[™Ý
+H\ÜÝY\Ëœ\Ú
+	ÝØ\›HYÙ\ˆÙ\È›ÝÛÛZ[ˆ^XÝHÚ^›Ý[™ØXÚH™XÛÜ™ÉÊNÂˆÛÛœÝ[™XYÙHH×NÂˆ›Üˆ
+ÛÛœÝØ\›HÙˆØ\›P]Y]˜YÙ[ÊHÂˆÛÛœÝÛÛHÛÛžPYÙ[™Ù]
+Ø\›K˜YÙ[ÚY
+NÂˆÛÛœÝ][HHØ\›SYÙ\‹™š[™
+˜[YHOˆ˜[YK˜Ø[ÚYOOHØ\›K˜Ø[ÚY
+NÂˆYˆ
+XÛÛZ][JHÛÛ[YNÂˆYˆ
+Ø\›K˜Ø[ÚYOOHÛÛ˜Ø[ÚYØ\›K›ÜšYÚ[—ØØ[ÚYOOHÛÛ˜Ø[ÚY][K›ÜšYÚ[—ØØ[ÚYOOHÛÛ˜Ø[ÚY
+H\ÜÝY\Ëœ\Ú
+	ÝØ\›K˜YÙ[ÚYNˆØ\›HÜšYÚ[ˆÙ\È›Ýš[™ÈHÛÛØ[
+NÂˆYˆ
+][K›Ü˜Ú\Ý˜][Û—ÚYOOHØ\›P]Y]›Ü˜Ú\Ý˜][Û—ÚY][K˜YÙ[ÚYOOHØ\›K˜YÙ[ÚY
+H\ÜÝY\Ëœ\Ú
+	ÝØ\›K˜YÙ[ÚYNˆØ\›HYÙ\ˆÜ˜Ú\Ý˜][Ûˆš[™[™ÈZ\ÛX]Ú
+NÂˆYˆ
+][Kœ\™[ØØ[ÚYOOHØ\›Kœ\™[ØØ[ÚY][K™[YØ][Û—ÚYOOHØ\›K™[YØ][Û—ÚY
+H\ÜÝY\Ëœ\Ú
+	ÝØ\›K˜YÙ[ÚYNˆØ\›HYÙ\ˆ\™[Ù[YØ][Ûˆš[™[™ÈZ\ÛX]Ú
+NÂˆYˆ
+Ø\›Kœ™\ÜÛœÙWÚYOOH][Kœ™\ÜÛœÙWÚYØ\›Kœ™\ÜÛœÙWÛ[Ù[OOH][Kœ™\ÜÛœÙWÛ[Ù[Ø\›K\Ý™X[WÜ›ÝšY\ˆOOH][K\Ý™X[WÜ›ÝšY\ˆØ\›K˜Ø[ØÛÝ[OOH][K˜Ø[ØÛÝ[
+H\ÜÝY\Ëœ\Ú
+	ÝØ\›K˜YÙ[ÚYNˆØ\›H[ˆ]Y][™YÙ\ˆ™\ÜÛœÙHš[™[™ÈZ\ÛX]Ú
+NÂˆYˆ
+][K˜Ø[ØÛÝ[OOH][K›Ý]ÛÛYHOOH	ØØXÚWÚ]	È][K\ØYÙWÜÛÝ\˜ÙHOOH	ØØXÚIÊH\ÜÝY\Ëœ\Ú
+	ÝØ\›K˜YÙ[ÚYNˆØ\›H™XÛÜ™XYHÜˆÛZ[\ÈH›ÝšY\ˆØ[
+NÂˆÛÛœÝÛÛYÙ\ˆHYÙ\‹š][\Ë™š[™
+˜[YHOˆ˜[YK˜Ø[ÚYOOHÛÛ˜Ø[ÚY
+NÂˆYˆ
+XÛÛYÙ\ˆ][Kœ™\ÜÛœÙWÚYOOHÛÛYÙ\‹œ™\ÜÛœÙWÚY][Kœ™\ÜÛœÙWÛ[Ù[OOHÛÛYÙ\‹œ™\ÜÛœÙWÛ[Ù[][K\Ý™X[WÜ›ÝšY\ˆOOH	ÑY\[™œ˜IÈÛÛYÙ\‹\Ý™X[WÜ›ÝšY\ˆOOH	ÑY\[™œ˜IÊH\ÜÝY\Ëœ\Ú
+	ÝØ\›K˜YÙ[ÚYNˆØXÚY™\ÜÛœÙHY[]KÜ›ÝšY\ˆÙ\È›ÝX]ÚH^XÝÛÛÜšYÚ[˜
+NÂˆÛÛœÝÜšYÚ[•\ØYÙHH][K›ÜšYÚ[—Ý\ØYÙNÂˆÛÛœÝ^XÝYÜšYÚ[•\ØYÙHHÛÛYÙ\ˆ	‰ˆÂˆ›Û\ÝÚÙ[œÎˆÛÛYÙ\‹œ›Û\ÝÚÙ[œËˆÛÛ\][Û—ÝÚÙ[œÎˆÛÛYÙ\‹˜ÛÛ\][Û—ÝÚÙ[œËˆÝ[ÝÚÙ[œÎˆÛÛYÙ\‹Ý[ÝÚÙ[œËˆXÝX[ØÛÜÝÝ\ÙˆÛÛYÙ\‹˜XÝX[ØÛÜÝÝ\Ùˆ\ØYÙWÜÛÝ\˜ÙNˆÛÛYÙ\‹\ØYÙWÜÛÝ\˜ÙKˆNÂˆYˆ
+[ÜšYÚ[•\ØYÙBˆY^XÝY[X™\œÊØš™XÝšÙ^\ÊÜšYÚ[•\ØYÙJKÉÜ›Û\ÝÚÙ[œÉË	ØÛÛ\][Û—ÝÚÙ[œÉË	ÝÝ[ÝÚÙ[œÉË	ØXÝX[ØÛÜÝÝ\Ù	Ë	Ý\ØYÙWÜÛÝ\˜ÙI×JBˆ”ÓÓ‹œÝš[™ÚYžJÜšYÚ[•\ØYÙJHOOH”ÓÓ‹œÝš[™ÚYžJ^XÝYÜšYÚ[•\ØYÙJBˆ][K›ÜšYÚ[—Ùš[š\ÚÜ™X\ÛÛˆOOHÛÛYÙ\Ë™š[š\ÚÜ™X\ÛÛŠH\ÜÝY\Ëœ\Ú
+	ÝØ\›K˜YÙ[ÚYNˆ›Ý[™YÜšYÚ[ˆ\ØYÙKÙš[š\Ú›Ý™[˜[˜ÙHÙ\È›ÝX]ÚHÛÛ™XÛÜ™
+NÂˆ[™XYÙKœ\Ú
+ÈYÙ[ÚYˆØ\›K˜YÙ[ÚYÛÛØØ[ÚYˆÛÛ˜Ø[ÚYØ\›WØØ[ÚYˆØ\›K˜Ø[ÚY™\ÜÛœÙWÚYˆ][Kœ™\ÜÛœÙWÚY™\ÜÛœÙWÛ[Ù[ˆ][Kœ™\ÜÛœÙWÛ[Ù[JNÂˆBˆ™]\›ˆÈ\ÜÝY\Ë[™XYÙHNÂŸB‚™[˜Ý[Ûˆ™]\›™Y™]šY]Õ˜[œÙ›Ü›J˜[YJHÂˆ™]\›ˆ˜[YOËœ™]šY]×Ý˜[œÙ›Ü›Bˆ˜[YOËœ™]šY]×Ü™\ÜÛœÙOËœ™]šY]×Ý˜[œÙ›Ü›Bˆ˜[YOËœ™\Ý[Ëœ™]šY]×Ý˜[œÙ›Ü›Bˆ˜[YOËœ™\Ý[Ë˜]Y]Ëœ™]šY]×Ý˜[œÙ›Ü›Bˆ[ÂŸB‚™[˜Ý[Ûˆ™]šY]Õ˜[œÙ›Ü›PÛÛ˜XÝš[Û][ÛœÊ™]šY]ÙY\œÚ\ÝY[‹™T™]šY]Ô[ŠHÂˆÛÛœÝ\ÜÝY\ÈH×NÂˆÛÛœÝ™\ÜÛœÙU˜[œÙ›Ü›HH™]\›™Y™]šY]Õ˜[œÙ›Ü›J™]šY]ÙY
+NÂˆÛÛœÝ\œÚ\ÝY˜[œÙ›Ü›HH™]\›™Y™]šY]Õ˜[œÙ›Ü›J\œÚ\ÝY[ŠNÂˆYˆ
+\™\ÜÛœÙU˜[œÙ›Ü›H\\œÚ\ÝY˜[œÙ›Ü›JH™]\›ˆÉÜ™]šY]×Ý˜[œÙ›Ü›H\ÈXœÙ[œ›ÛHH™]šY]È™\ÜÛœÙHÜˆ\œÚ\ÝY[‰×NÂˆYˆ
+ÝX›RœÛÛŠ™\ÜÛœÙU˜[œÙ›Ü›JHOOHÝX›RœÛÛŠ\œÚ\ÝY˜[œÙ›Ü›JJH\ÜÝY\Ëœ\Ú
+	Ü™]šY]È™\ÜÛœÙH[™\œÚ\ÝY[ˆØ\œžHY™™\™[™]šY]È˜[œÙ›Ü›\ÉÊNÂˆÛÛœÝ™P]Y]HÜ˜Ú\Ý˜][Û]Y]
+™T™]šY]Ô[ŠNÂˆÛÛœÝ\Ó[Ù[XØÙ\[˜ÙHH™P]Y]Ë›[Ù[Ø\ÜÚ\ÝYOOHYH	‰ˆ\œ˜^Kš\Ð\œ˜^J™P]Y]Ë™]\›Z[š\ÝX×ÙØ]\ÊNÂˆÛÛœÝ›ØÙ\ÜÑØ]HH™P]Y]Ë™]\›Z[š\ÝX×ÙØ]\ÏË™š[™
+][HOˆ][K˜YÙ[ÚYOOH	Ù]\›Z[š\ÝX×Ü›ØÙ\Ü×ÙØ]IÊNÂˆÛÛœÝ]šY[˜ÙQØ]HH™P]Y]Ë™]\›Z[š\ÝX×ÙØ]\ÏË™š[™
+][HOˆ][K˜YÙ[ÚYOOH	Ù]\›Z[š\ÝX×Ù]šY[˜ÙWÙØ]IÊNÂˆÛÛœÝ^XÝYHÂˆXØÙ\[˜ÙWÜØÛÜNˆ	ÜÜÝÜ™]šY]×Ý[™\šYšYYÝ˜[œÙ›Ü›IËˆ]]Üš]Nˆ	Ý[™\šYšYYÙ[[×Ý\Ù\‰Ëˆ]X[YšXØ][Û—ÜÝ]\Îˆ	Û›ÝÝ™\šYšYY	Ëˆ[œ]Ü[—ÚYˆ™T™]šY]Ô[Ëœ[—ÚYˆ[œ]Ü›ØÙ\Ü×Ú\Úˆ›ØÙ\ÜÑØ]OË›Ý]]Ø\Y˜XÝÚ\ÚÒ\Ú
+™T™]šY]Ô[Ëœ™\Ý[Ëœ›ØÙ\ÜÊKˆ[œ]ØÚXÚÛ\ÝÚ\Úˆ]šY[˜ÙQØ]OË›Ý]]Ø\Y˜XÝÚ\ÚÒ\Ú
+™T™]šY]Ô[Ëœ™\Ý[Ë˜ÚXÚÛ\Ý
+KˆÝ]]Ü›ØÙ\Ü×Ú\ÚˆÒ\Ú
+™]šY]ÙYËœ™\Ý[Ëœ›ØÙ\ÜÊKˆÝ]]ØÚXÚÛ\ÝÚ\ÚˆÒ\Ú
+™]šY]ÙYËœ™\Ý[Ë˜ÚXÚÛ\Ý
+Kˆ[Ù[ØXØÙ\[˜ÙWÜ™]\ÙYˆ˜[ÙKˆNÂˆYˆ
+Y^XÝY[X™\œÊØš™XÝšÙ^\Ê™\ÜÛœÙU˜[œÙ›Ü›JKØš™XÝšÙ^\Ê^XÝY
+JJH\ÜÝY\Ëœ\Ú
+	Ü™]šY]È™\ÜÛœÙH™]šY]×Ý˜[œÙ›Ü›HØÚ[XH\È›Ý^XÝ[™›Ý[™Y	ÊNÂˆYˆ
+Y^XÝY[X™\œÊØš™XÝšÙ^\Ê\œÚ\ÝY˜[œÙ›Ü›JKØš™XÝšÙ^\Ê^XÝY
+JJH\ÜÝY\Ëœ\Ú
+	Ü\œÚ\ÝY™]šY]×Ý˜[œÙ›Ü›HØÚ[XH\È›Ý^XÝ[™›Ý[™Y	ÊNÂˆ›Üˆ
+ÛÛœÝÚÙ^K˜[YWHÙˆØš™XÝ™[šY\Ê^XÝY
+JHÂˆYˆ
+™\ÜÛœÙU˜[œÙ›Ü›VÚÙ^WHOOH˜[YJH\ÜÝY\Ëœ\Ú
+™]šY]×Ý˜[œÙ›Ü›K‰ÚÙ^_HZ\ÛX]Ú
+NÂˆBˆYˆ
+Ò\Ú
+™T™]šY]Ô[Ëœ™\Ý[Ëœ›ØÙ\ÜÊHOOH^XÝYš[œ]Ü›ØÙ\Ü×Ú\ÚÒ\Ú
+™T™]šY]Ô[Ëœ™\Ý[Ë˜ÚXÚÛ\Ý
+HOOH^XÝYš[œ]ØÚXÚÛ\ÝÚ\Ú
+H\ÜÝY\Ëœ\Ú
+	Ü™]šY]È˜[œÙ›Ü›H[œ]ÈÈ›ÝX]Ú^XÝ™K\™]šY]ÈXØÙ\YÈ\Ú\ÉÊNÂˆYˆ
+Ò\Ú
+\œÚ\ÝY[Ëœ™\Ý[Ëœ›ØÙ\ÜÊHOOH^XÝY›Ý]]Ü›ØÙ\Ü×Ú\ÚÒ\Ú
+\œÚ\ÝY[Ëœ™\Ý[Ë˜ÚXÚÛ\Ý
+HOOH^XÝY›Ý]]ØÚXÚÛ\ÝÚ\Ú
+H\ÜÝY\Ëœ\Ú
+	Ü\œÚ\ÝYÜÝ\™]šY]ÈÈ\Ú\ÈÈ›ÝX]ÚH™]šY]È™\ÜÛœÙIÊNÂˆYˆ
+”ÓÓ‹œÝš[™ÚYžJ\œÚ\ÝY[Ëœ™\Ý[Ëœ›ØÙ\ÜÊHOOH”ÓÓ‹œÝš[™ÚYžJ™]šY]ÙYËœ™\Ý[Ëœ›ØÙ\ÜÊH”ÓÓ‹œÝš[™ÚYžJ\œÚ\ÝY[Ëœ™\Ý[Ë˜ÚXÚÛ\Ý
+HOOH”ÓÓ‹œÝš[™ÚYžJ™]šY]ÙYËœ™\Ý[Ë˜ÚXÚÛ\Ý
+JH\ÜÝY\Ëœ\Ú
+	Ü\œÚ\ÝYÜÝ\™]šY]ÈÜÈY™™\ˆœ›ÛHH\YY™\ÜÛœÙIÊNÂˆYˆ
+\Ó[Ù[XØÙ\[˜ÙJHÂˆÛÛœÝÜÝ]Y]HÜ˜Ú\Ý˜][Û]Y]
+\œÚ\ÝY[ŠNÂˆ›Üˆ
+ÛÛœÝØ]RYÙˆ‘TURT‘QÑUT“RS’TÕP×ÑÐUWÒQÊHÂˆÛÛœÝ™Y›Ü™HH™P]Y]™]\›Z[š\ÝX×ÙØ]\ÏË™š[™
+][HOˆ][K˜YÙ[ÚYOOHØ]RY
+NÂˆÛÛœÝY\ˆHÜÝ]Y]Ë™]\›Z[š\ÝX×ÙØ]\ÏË™š[™
+][HOˆ][K˜YÙ[ÚYOOHØ]RY
+NÂˆYˆ
+X™Y›Ü™HXY\ˆY\‹˜XØÙ\[˜ÙWÜØÛÜHOOH	Ü™WÜ™]šY]×Û[Ù[ÛÝ]]	ÈY\‹›Ý]]Ø\Y˜XÝÚ\ÚOOH™Y›Ü™K›Ý]]Ø\Y˜XÝÚ\Ú
+H\ÜÝY\Ëœ\Ú
+	ÙØ]RYNˆÜšYÚ[˜[[Ù[][YHXØÙ\[˜ÙHØ\È™]Üš][ˆžHH™]šY]È˜[œÙ›Ü›X
+NÂˆBˆBˆÛÛœÝ[Y\šXÒ^˜\™ÈHÂˆ‹‹››Û’[YÙ\“[X™\”]Ê™]šY]ÙYËœ™\Ý[Ëœ›ØÙ\ÜË	Éœ™]šY]ÙYœ›ØÙ\ÜÉÊKˆ‹‹››Û’[YÙ\“[X™\”]Ê™]šY]ÙYËœ™\Ý[Ë˜ÚXÚÛ\Ý	Éœ™]šY]ÙY˜ÚXÚÛ\Ý	ÊKˆNÂˆYˆ
+[Y\šXÒ^˜\™Ë›[™Ý
+H\ÜÝY\Ëœ\Ú
+ÜÝ\™]šY]È˜[œÙ›Ü›YYÈÛÛZ[œÈ›Û‹Z[YÙ\ˆ[Y\šXÈ˜[Y\È]	Û[Y\šXÒ^˜\™Ëš›Ú[Š	Ë	Ê_X
+NÂˆÛÛœÝÙ[œÚ]]™HH›Ü˜šY[‘šY[]ÊÈ™\ÜÛœÙU˜[œÙ›Ü›K\œÚ\ÝY˜[œÙ›Ü›HJNÂˆYˆ
+Ù[œÚ]]™K›[™Ý
+H\ÜÝY\Ëœ\Ú
+™]šY]È˜[œÙ›Ü›HXZÜÈ›Ü˜šY[ˆšY[Îˆ	ÜÙ[œÚ]]™Kš›Ú[Š	Ë	Ê_X
+NÂˆ™]\›ˆ\ÜÝY\ÎÂŸB‚™[˜Ý[Ûˆ]\›Z[š\ÝXÔ™Y™\™[˜ÙT[•š[Û][ÛœÊ[‹Û›ÝÛYÙS[ÙJHÂˆÛÛœÝ\ÜÝY\ÈH×NÂˆÛÛœÝ™\Ý[H[Ëœ™\Ý[ÂˆÛÛœÝ™\Ý[]Y]H™\Ý[Ë˜]Y]ÂˆYˆ
+[ËœÝ]\ÈOOH	ØÛÛ\]IÂˆ[Ë˜ÛZ[WÚYOOH	ÑSSËSSÕSL‰Âˆ[ËšÛ›ÝÛYÙWÛ[ÙHOOHÛ›ÝÛYÙS[ÙBˆ[Ë›[Ù[Û[ÙHOOHUT“RS’TÕP×Ô‘Q‘T‘SÑWÓSÑBˆ[Ë›[Ù[OH[ˆ[Ëœ›Ùš[HOOHUT“RS’TÕP×Ô‘Q‘T‘SÑWÔ“Ñ’SJH\ÜÝY\Ëœ\Ú
+	ÝÜ[]™[]\›Z[š\ÝXË\™Y™\™[˜ÙHY[]H\È[˜[Y	ÊNÂˆYˆ
+[›Û™[\TÝš[™Ê[Ëœ[—ÚY
+JH\ÜÝY\Ëœ\Ú
+	Ü[—ÚY\ÈXœÙ[	ÊNÂˆYˆ
+ÝX›RœÛÛŠ[Ë˜YÙ[ÛÜ˜Ú\Ý˜][ÛŠHOOHÝX›RœÛÛŠUT“RS’TÕP×Ô‘Q‘T‘SÑWÓÔÒTÕUSÓŠBˆÝX›RœÛÛŠ™\Ý[Ë˜YÙ[ÛÜ˜Ú\Ý˜][ÛŠHOOHÝX›RœÛÛŠUT“RS’TÕP×Ô‘Q‘T‘SÑWÓÔÒTÕUSÓŠBˆÝX›RœÛÛŠ™\Ý[]Y]Ë˜YÙ[ÛÜ˜Ú\Ý˜][ÛŠHOOHÝX›RœÛÛŠUT“RS’TÕP×Ô‘Q‘T‘SÑWÓÔÒTÕUSÓŠJH\ÜÝY\Ëœ\Ú
+	Ù]\›Z[š\ÝXÈ›Û‹Y^XÝ]YÜ˜Ú\Ý˜][Ûˆš[™[™È\È›Ý^XÝ	ÊNÂˆYˆ
+™\Ý[]Y]Ëœ›Ùš[HOOHUT“RS’TÕP×Ô‘Q‘T‘SÑWÔ“Ñ’SBˆ™\Ý[]Y]Ë˜]]Üš]WÛ[ÙHOOHUT“RS’TÕP×Ô‘Q‘T‘SÑWÓSÑBˆÝX›RœÛÛŠ™\Ý[]Y]Ë˜Ø[›ÛšXØ[^˜][ÛŠHOOHÝX›RœÛÛŠUT“RS’TÕP×Ô‘Q‘T‘SÑWÐÐS“Ó’PÐSVUSÓŠJH\ÜÝY\Ëœ\Ú
+	Ù]\›Z[š\ÝXË\™Y™\™[˜ÙHØ[›ÛšXØ[^˜][Ûˆ]]Üš]H\È›Ý^XÚ]	ÊNÂˆYˆ
+™\Ý[Ë›™^ØXÝ[ÛË˜YÙ[ØœšYY—ØÛÛšX][ÛˆOOH[
+H\ÜÝY\Ëœ\Ú
+	Ù]\›Z[š\ÝXÈÛÛ\\š\ÛÛˆ™]Z[™YH[Ù[X]]Ü™Yš[˜[œšYY‰ÊNÂˆYˆ
+P\œ˜^Kš\Ð\œ˜^J[Ë™]™[ÊJH\ÜÝY\Ëœ\Ú
+	Ù]\›Z[š\ÝXÈ]™[Ý™X[H\ÈXœÙ[	ÊNÂ‚ˆÛÛœÝ›Ü˜šY[XÝ]š]QšY[ÈH™]ÈÙ]
+Âˆ	ØYÙ[ÉË	Ù]\›Z[š\ÝX×ÙØ]\ÉË	Ù^XÝ][Û—ÝÜÛÙÞIË	ÜÜXÚX[\ÝØ\Y˜XÝÉËˆ	Ùš[˜[ØÛZ[WØœšYY‰Ë	ØYÙ[ØÛÛšX][Û‰Ë	ØØ[ÚY	Ë	Ü™\ÜÛœÙWÚY	Ëˆ	Ü™\ÜÛœÙWÛ[Ù[	Ë	Ü™\]Y\ÝYÛ[Ù[	Ë	ÙÙ[™\˜][Û—Û[Ù[	Ë	Ý\Ý™X[WÜ›ÝšY\‰Ëˆ	Ü›ÝšY\—Ù[™Ú[	Ë	ØØXÚWÚ]	Ë	ØØ[ØÛÝ[	Ë	ÛÜšYÚ[—ØØ[ÚY	Ë	ÛÜšYÚ[—Ý\ØYÙIËˆ	ÛÜšYÚ[—Ùš[š\ÚÜ™X\ÛÛ‰Ë	Ý\ØYÙWÜÛÝ\˜ÙIË	ÛÜ˜Ú\Ý˜][Û—ÚY	Ë	Ù[YØ][Û—ÚY	Ëˆ	Ü\™[ØØ[ÚY	Ë	Ü›Û\ÝÚÙ[œÉË	ØÛÛ\][Û—ÝÚÙ[œÉË	ÝÝ[ÝÚÙ[œÉËˆ	Ù\Ý[X]YØÛÜÝÝ\Ù	Ë	ØXÝX[ØÛÜÝÝ\Ù	Ë	Û][˜ÞWÛ\ÉËˆJNÂˆÛÛœÝXÝ]š]T]ÈH×NÂˆÛÛœÝš\Ú]H
+˜[YKÝ\œ™[]
+HOˆÂˆYˆ
+\œ˜^Kš\Ð\œ˜^J˜[YJJHÂˆ˜[YK™›Ü‘XXÚ
+
+][K[™^
+HOˆš\Ú]
+][K	ØÝ\œ™[]VÉÚ[™^WX
+JNÂˆ™]\›ŽÂˆBˆYˆ
+]˜[YH\[Ùˆ˜[YHOOH	ÛØš™XÝ	ÊH™]\›ŽÂˆ›Üˆ
+ÛÛœÝÚÙ^KÚ[HÙˆØš™XÝ™[šY\Ê˜[YJJHÂˆÛÛœÝÚ[]H	ØÝ\œ™[]K‰ÚÙ^_XÂˆYˆ
+›Ü˜šY[XÝ]š]QšY[Ëš\ÊÙ^JBˆ
+ÉÛ[Ù[	Ë	Ü›ÝšY\‰×Kš[˜ÛY\ÊÙ^JH	‰ˆÚ[OH[
+Bˆ
+Ù^HOOH	ØXÝÜ—Ý\IÈ	‰ˆÚ[OOH	Û™[[Ý›Û—ØYÙ[	ÊBˆ
+Ù^HOOH	Ú[\[Y[][Û‰È	‰ˆÚ[OOHVPÕQÔ•S•SQKš[\[Y[][ÛŠJHXÝ]š]T]Ëœ\Ú
+Ú[]
+NÂˆš\Ú]
+Ú[Ú[]
+NÂˆBˆNÂˆš\Ú]
+[‹	É	ÊNÂˆYˆ
+XÝ]š]T]Ë›[™Ý
+H\ÜÝY\Ëœ\Ú
+[Ù[^XÝ][ÛˆXÝ]š]H\È™\Ù[]	ØXÝ]š]T]Ëš›Ú[Š	Ë	Ê_X
+NÂˆÛÛœÝÙ[œÚ]]™HH›Ü˜šY[‘šY[]Ê[ŠNÂˆYˆ
+Ù[œÚ]]™K›[™Ý
+H\ÜÝY\Ëœ\Ú
+›Ü˜šY[ˆX›XÈšY[È\™H™\Ù[]	ÜÙ[œÚ]]™Kš›Ú[Š	Ë	Ê_X
+NÂˆÛÛœÝÙ[[™[ÈH[\›˜[Ù[[™[]Ê[ŠNÂˆYˆ
+Ù[[™[Ë›[™Ý
+H\ÜÝY\Ëœ\Ú
+[\›˜[^XÝ][ÛˆÙ[[™[È\™H™\Ù[]	ÜÙ[[™[Ëš›Ú[Š	Ë	Ê_X
+NÂˆ™]\›ˆ\ÜÝY\ÎÂŸB‚™[˜Ý[Ûˆ›ÙXÝ[Û“Ü[š[™ÐÛÛ^š[Û][ÛœÊØ\\™\ÊHÂˆÛÛœÝ\ÜÝY\ÈH×NÂˆÛÛœÝÜ[š[™ÈH\œ˜^Kš\Ð\œ˜^JØ\\™\ÊHÈØ\\™\ÖÌHˆ[ÂˆYˆ
+[Ü[š[™ÊH™]\›ˆÉÜ›ÙXÝ[ÛˆÜ[š[™ÈÛÛ^Ø\È›ÝØ\\™Y	×NÂˆYˆ
+Ü[š[™Ë˜XÝÜ—Ý\HOOH	Ù]\›Z[š\ÝX×ÝÛÛ	ÊH\ÜÝY\Ëœ\Ú
+	Ü›ÙXÝ[ÛˆÜ[š[™ÈÙ]\\È›Ýš\ÚX›H]šX]YÈ]\›Z[š\ÝX×ÝÛÛ	ÊNÂˆYˆ
+Ü[š[™Ë˜›Ý[™\žWÝ^OOHVPÕQÔ“ÑPÕSÓ—ÓÔS’S‘×Ð“ÕS‘T–JH\ÜÝY\Ëœ\Ú
+	Ü›ÙXÝ[ÛˆÜ[š[™È›Ý[™\žHÛÜH\È›Ý^XÝ	ÊNÂˆYˆ
+Ü[š[™Ë›™[[Ý›Û—Ü[—Ýš\ÚX›HOOH˜[ÙJH\ÜÝY\Ëœ\Ú
+	Ó™[[Ý›Ûˆ[ˆØ\Èš\ÚX›H™Y›Ü™H]È™]\›™Y]™[	ÊNÂˆYˆ
+ÛYØXÞH]\›Z[š\ÝXÈ™Y™\™[˜ÙKÚK\Ý
+Ü[š[™Ë˜›Ý[™\žWÝ^	ÉÊJH\ÜÝY\Ëœ\Ú
+	Ü›ÙXÝ[ÛˆÜ[š[™È›Ý[™\žH[˜ÛÜœ™XÝHÛZ[\ÈHYØXÞH™Y™\™[˜ÙH\[[™IÊNÂˆ™]\›ˆ\ÜÝY\ÎÂŸB‚™[˜Ý[Ûˆ\ÜÙ\\Þ[Y[[YÛ›Y[
+œ›Û[™\JHÂˆÛÛœÝØØ[[ÙHH\ÓØØ[
+TÑJH	‰ˆ\ÓØØ[
+TJNÂˆÛÛœÝ^XÝYH›ØÙ\ÜË™[‹ÐTÑTUÑVPÕQÔÓÕTÑWÐÓÓSRU	ÉÎÂˆÛÛœÝXPÛÛ[Z]H\Þ[Y[Y[]KœXKœÛÝ\˜ÙWØÛÛ[Z]ÂˆÚXÚÊ	Ñœ›Û[™TK[™PH\ÙHHØ[›ÛšXØ[™[X\ÙHY[YšY\‰Ëœ›Û[™œ™[X\ÙWÚYOOH‘SPTÑWÒQ	‰ˆ\Kœ™[X\ÙWÚYOOH‘SPTÑWÒQ	‰ˆ\Þ[Y[Y[]KœXKœ™[X\ÙWÚYOOH‘SPTÑWÒQ”ÓÓ‹œÝš[™ÚYžJ\Þ[Y[Y[]JJNÂˆYˆ
+[ØØ[[ÙJHÂˆÚXÚÊ	Ô›ÙXÝ[Ûˆ\Þ[Y[Y[]Y\È^ÜÙH™X[ÛÝ\˜ÙHÛÛ[Z]ÉË˜[YÛÝ\˜ÙPÛÛ[Z]
+œ›Û[™œÛÝ\˜ÙWØÛÛ[Z]
+H	‰ˆ˜[YÛÝ\˜ÙPÛÛ[Z]
+\KœÛÝ\˜ÙWØÛÛ[Z]
+H	‰ˆ˜[YÛÝ\˜ÙPÛÛ[Z]
+XPÛÛ[Z]
+K”ÓÓ‹œÝš[™ÚYžJ\Þ[Y[Y[]JJNÂˆÚXÚÊ	Ô›ÙXÝ[Ûˆ\Þ[Y[Y[]Y\È\™H[\›˜[HÛÛ™›XÝYœ™YIËœ›Û[™˜[YÛ›Y[Ù[YÚX›HOOHYH	‰ˆ\KœÛÝ\˜ÙWØÛÛ[Z]Ø[YÛ™YOOHYH	‰ˆ\KœÛÝ\˜ÙWØÛÛ[Z]ØÛÛ™›XÝOOH˜[ÙK”ÓÓ‹œÝš[™ÚYžJ\Þ[Y[Y[]JJNÂˆÚXÚÊ	Ô›ÙXÝ[Ûˆœ›Û[™TK[™PHÛÝ\˜ÙHÛÛ[Z]È\™H[YÛ™Y	Ëœ›Û[™œÛÝ\˜ÙWØÛÛ[Z]OOH\KœÛÝ\˜ÙWØÛÛ[Z]	‰ˆ\KœÛÝ\˜ÙWØÛÛ[Z]OOHXPÛÛ[Z]”ÓÓ‹œÝš[™ÚYžJ\Þ[Y[Y[]JJNÂˆ™]\›ŽÂˆBˆYˆ
+^XÝY	‰ˆ^XÝYOOH	ÛØØ[	ÊHÂˆÚXÚÊ	ÓØØ[^XÝYÛÝ\˜ÙHÛÛ[Z]\ÈH™X[Ú]Y[]IË˜[YÛÝ\˜ÙPÛÛ[Z]
+^XÝY
+K^XÝY
+NÂˆÚXÚÊ	ÓØØ[œ›Û[™[™THX]ÚH^XÚ]^XÝYÛÝ\˜ÙHÛÛ[Z]	Ëœ›Û[™œÛÝ\˜ÙWØÛÛ[Z]OOH^XÝY	‰ˆ\KœÛÝ\˜ÙWØÛÛ[Z]OOH^XÝY”ÓÓ‹œÝš[™ÚYžJ\Þ[Y[Y[]JJNÂˆYˆ
+XPÛÛ[Z]
+HÚXÚÊ	ÓØØ[PHZ[X]Ú\ÈH^XÚ]^XÝYÛÝ\˜ÙHÛÛ[Z]	ËXPÛÛ[Z]OOH^XÝY”ÓÓ‹œÝš[™ÚYžJ\Þ[Y[Y[]JJNÂˆ™]\›ŽÂˆBˆÛÛœÝØØ[Ù[[™[ÈH™]ÈÙ]
+ÉÛØØ[	Ë	Ý[šÛ›ÝÛ‰×JNÂˆÛÛœÝ›Ý^XÚ]SØØ[HØØ[Ù[[™[Ëš\Êœ›Û[™œÛÝ\˜ÙWØÛÛ[Z]
+H	‰ˆØØ[Ù[[™[Ëš\Ê\KœÛÝ\˜ÙWØÛÛ[Z]
+NÂˆÛÛœÝØ[YT™X[ÛÛ[Z]H˜[YÛÝ\˜ÙPÛÛ[Z]
+œ›Û[™œÛÝ\˜ÙWØÛÛ[Z]
+H	‰ˆœ›Û[™œÛÝ\˜ÙWØÛÛ[Z]OOH\KœÛÝ\˜ÙWØÛÛ[Z]ÂˆÚXÚÊ	ÓØØ[[YÛ›Y[\ÈZ]\ˆ[ˆY[XØ[ÛÛ[Z]Üˆ[ˆ^XÚ]ØØ[Ù[[™[	ËØ[YT™X[ÛÛ[Z]›Ý^XÚ]SØØ[”ÓÓ‹œÝš[™ÚYžJ\Þ[Y[Y[]JJNÂˆYˆ
+XPÛÛ[Z]	‰ˆXPÛÛ[Z]OOH	ÛØØ[	ÊHÚXÚÊ	ÓØØ[PHZ[Ù\È›ÝÛÛ™›XÝÚ]™]\›™YÛÝ\˜ÙHY[]IË˜[YÛÝ\˜ÙPÛÛ[Z]
+XPÛÛ[Z]
+H	‰ˆ
+\Ø[YT™X[ÛÛ[Z]XPÛÛ[Z]OOHœ›Û[™œÛÝ\˜ÙWØÛÛ[Z]
+K”ÓÓ‹œÝš[™ÚYžJ\Þ[Y[Y[]JJNÂˆ›Ý\Ëœ\Ú
+	ÓØØ[[[ÙHÛÝ\˜ÙHY[]HXØÙ\Y^XÚ]NÈ›ÙXÝ[ÛˆÝ[™\]Z\™\ÈÛ™HX]Ú[™È›Û‹][šÛ›ÝÛˆXÚ\˜XÝ\ˆÛÛ[Z]XÜ›ÜÜÈœ›Û[™TK[™PK‰ÊNÂŸB‚™[˜Ý[Ûˆ\ÜÙ\™[X\ÙT[[YPÛÛ˜XÝ
+™[X\ÙPÛÛ˜XÝ
+HÂˆÛÛœÝ[[YHH™[X\ÙPÛÛ˜XÝË˜YÙ[X×Ü[[YNÂˆÛÛœÝ[[YPXØÙ\[˜ÙHH™[X\ÙPÛÛ˜XÝË]Ëœ›ÙXÝ[Û—Ü[[YWØXØÙ\[˜ÙNÂˆÛÛœÝ[˜[ZXÑ]šY[˜ÙHH[[YPXØÙ\[˜ÙOË™[˜[ZX×Ù]šY[˜ÙNÂˆÚXÚÊ	Ô™[X\ÙH\Ù\ÈH[˜[ZXÈ‹ŒˆÛÛ˜XÝÚ]Ý][X™Y[™ÈH]]X›H™\™XÝ	Ë™[X\ÙPÛÛ˜XÝË‰ØÚ[XHOOH	Ë‹Ü™[X\ÙKœØÚ[XKšœÛÛ‰È	‰ˆ™[X\ÙPÛÛ˜XÝË˜ÛÛ˜XÝOOH	ØØ\Ù\]œ™[X\ÙKXÛÛ˜XÝÌ‹Œ‹Œ	È	‰ˆ™[X\ÙPÛÛ˜XÝËœØÚ[XWÝ™\œÚ[ÛˆOOH	Ì‹Œ‹Œ	È	‰ˆ™[X\ÙPÛÛ˜XÝËœÛÝ\˜ÙWÚY[]OË˜]]Üš]HOOH	Ù[˜[ZX×ÜØ[YWØÛÛ[Z]ÜXWØ\Y˜XÝÉÈ	‰ˆ™[X\ÙPÛÛ˜XÝËœÛÝ\˜ÙWÚY[]OËœÛÝ\˜ÙWØÛÛ˜XÝÙ[X™Y×ØÛÛ[Z]OOH˜[ÙH	‰ˆ™[X\ÙPÛÛ˜XÝËœÛÝ\˜ÙWÚY[]OËœ[[YWÙ[š\›Û›Y[Ý˜\šXX›HOOH	Ô‘S‘T—ÑÒUÐÓÓSRU	È	‰ˆ›Û™[\TÝš[™Ê™[X\ÙPÛÛ˜XÝËœÛÝ\˜ÙWÚY[]OË[šÛ›ÝÛ—ÜÙ[X[XÜÊK”ÓÓ‹œÝš[™ÚYžJÈÛÛ˜XÝˆ™[X\ÙPÛÛ˜XÝË˜ÛÛ˜XÝØÚ[XWÝ™\œÚ[ÛŽˆ™[X\ÙPÛÛ˜XÝËœØÚ[XWÝ™\œÚ[Û‹ÛÝ\˜ÙWÚY[]Nˆ™[X\ÙPÛÛ˜XÝËœÛÝ\˜ÙWÚY[]HJJNÂˆÚXÚÊ	Ô™[X\ÙHÛÛ˜XÝY[YšY\ÈHØ[›ÛšXØ[ŒŒ›ÙXÝTHMKŒ‹[™PHØ]IË™[X\ÙPÛÛ˜XÝËœ™[X\ÙWÚYOOH‘SPTÑWÒQ	‰ˆ™[X\ÙPÛÛ˜XÝË˜ÛÛ\Û™[ÏË™œ›Û[™Ë™\œÚ[ÛˆOOH“ÑPÕÔ‘SPTÑH	‰ˆ™[X\ÙPÛÛ˜XÝË˜ÛÛ\Û™[ÏË˜\OË™\œÚ[ÛˆOOHTWÔ‘SPTÑH	‰ˆ™[X\ÙPÛÛ˜XÝË˜ÛÛ\Û™[ÏËœ\[[™OË™\œÚ[ÛˆOOHTWÔ‘SPTÑH	‰ˆ™[X\ÙPÛÛ˜XÝË˜ÛÛ\Û™[ÏËœXOË™\œÚ[ÛˆOOH“ÑPÕÔ‘SPTÑK”ÓÓ‹œÝš[™ÚYžJ™[X\ÙPÛÛ˜XÝË˜ÛÛ\Û™[ÊJNÂˆÚXÚÊ	Ô™[X\ÙHÛÛ˜XÝ™\]Y\ÝÈH[›™Y[™ÐÚZ[‹[™ÑÜ˜\[™Ü[”›Ý]\ˆY\\ˆ™\œÚ[ÛœÉËÝX›RœÛÛŠ[[YOË™œ˜[Y]ÛÜšÊHOOHÝX›RœÛÛŠVPÕQÑ”SQUÓÔ’ÊK”ÓÓ‹œÝš[™ÚYžJ[[YOË™œ˜[Y]ÛÜšÊJNÂˆÚXÚÊ	Ô™[X\ÙHÛÛ˜XÝ™\]Y\ÝÈH^XÝÚ^XYÙ[™[[Ý›Ûˆ[[YIË[[YOËœ[[YWÜ›Ùš[HOOHVPÕQÔ•S•SQKœ[[YWÜ›Ùš[H	‰ˆ[[YOË˜]]Üš]WÛ[ÙHOOHVPÕQÔ•S•SQK˜]]Üš]WÛ[ÙH	‰ˆ[[YOËš[\[Y[][ÛˆOOHVPÕQÔ•S•SQKš[\[Y[][Ûˆ	‰ˆ[[YOË›Ü˜Ú\Ý˜][Û—ÜØÚ[XHOOHVPÕQÔ•S•SQK›Ü˜Ú\Ý˜][Û—ÜØÚ[XH	‰ˆ[[YOË›[Ù[OOH‘TUQTÕQÓ‘SSÕ“Ó—ÓSÑS	‰ˆ^XÝY[X™\œÊ[[YOË›[Ù[ØYÙ[ÏË›X\
+][HOˆ][K˜YÙ[ÚY
+K‘TURT‘QÓ‘SSÕ“Ó—ÐQÑS•ÒQÊK”ÓÓ‹œÝš[™ÚYžJ[[YJJNÂˆÚXÚÊ	Ô™[X\ÙHÛÛ˜XÝÙY\ÈÙÚXØ[ÜXÚX[\Ý˜[‹[Ý]™YH]\›Z[š\ÝXÈ]]Üš]HØ]\Ë\ÚXØ[›ÝšY\ˆÚ[™ÛKY›YÚ[™\ØX›Y˜XÙH^[ØYÝÜ˜YÙIËÝX›RœÛÛŠ[[YOËœ\˜[[ÙÜ›Ý\ÊHOOHÝX›RœÛÛŠVPÕQÑVPÕUSÓ—ÕÔÓÑÖKœ\˜[[ÙÜ›Ý\ÊH	‰ˆ^XÝY[X™\œÊ[[YOË™]\›Z[š\ÝX×ÙØ]\ÏË›X\
+][HOˆ][K™Ø]WÚY
+K‘TURT‘QÑUT“RS’TÕP×ÑÐUWÒQÊH	‰ˆ[[YOËœØY™]OË™]\›Z[š\ÝX×ÜØY™]WØ]]Üš]HOOHYH	‰ˆ[[YOËœØY™]OËœ›ÝšY\—ÛX^Ú[—Ù›YÚOOHH	‰ˆ[[YOËœØY™]OË™^\›˜[Ý˜XÚ[™ÈOOH˜[ÙH	‰ˆ[[YOËœØY™]OËœ›Û\ÜÝÜ˜YÙHOOH˜[ÙH	‰ˆ[[YOËœØY™]OËœ˜]×ÛÝ]]ÜÝÜ˜YÙHOOH˜[ÙK”ÓÓ‹œÝš[™ÚYžJÈ\˜[[ÙÜ›Ý\Îˆ[[YOËœ\˜[[ÙÜ›Ý\ËØY™]Nˆ[[YOËœØY™]HJJNÂˆÚXÚÊ	Ô™[X\ÙHÛÛ˜XÝ[YØ]\ÈH]]X›H›ÙXÝ[Ûˆ™\™XÝÈ\ÚX›Ý[™Ø[YKXÛÛ[Z]PH\Y˜XÝÉË[[YPXØÙ\[˜ÙOË™\™XÝØ]]Üš]HOOH	Ù[˜[ZX×ÜØ[YWØÛÛ[Z]ÜXWØ\Y˜XÝÉÈ	‰ˆ[[YPXØÙ\[˜ÙOËœÛÝ\˜ÙWØÛÛ˜XÝÙ[X™Y×Ü[[YWÝ™\™XÝOOH˜[ÙH	‰ˆ^XÝY[X™\œÊØš™XÝšÙ^\Ê[˜[ZXÑ]šY[˜ÙHßJKÉÜXWÙØ]IË	Ü™\ÜÜ]	Ë	Ù]šY[˜ÙWÛX[šY™\ÝÜ]	Ë	Ù]šY[˜ÙWÛX[šY™\ÝØÛÛ˜XÝ	Ë	Ü™\]Z\™YÜ™\ÜÜÝ]\ÉË	Ü™\]Z\™\×Ü™[X\ÙWÚYÛX]Ú	Ë	Ü™\]Z\™\×Û›Û—Ý[šÛ›ÝÛ—ÜÛÝ\˜ÙWØÛÛ[Z]	Ë	Ü™\]Z\™\×ÜØ[YWÜÛÝ\˜ÙWØÛÛ[Z]	×JH	‰ˆ[˜[ZXÑ]šY[˜ÙOËœXWÙØ]HOOH	Ù›ØÝ\ÙYY›YÜÚ\Z›Ý\›™^K]ŒŒ	È	‰ˆ[˜[ZXÑ]šY[˜ÙOËœ™\ÜÜ]OOH	Ü™\ÜšœÛÛ‰È	‰ˆ[˜[ZXÑ]šY[˜ÙOË™]šY[˜ÙWÛX[šY™\ÝÜ]OOH	Ù]šY[˜ÙK[X[šY™\ÝšœÛÛ‰È	‰ˆ[˜[ZXÑ]šY[˜ÙOË™]šY[˜ÙWÛX[šY™\ÝØÛÛ˜XÝOOH	ØØ\Ù\]œXKY]šY[˜ÙK[X[šY™\ÝÌKŒŒ	È	‰ˆ[˜[ZXÑ]šY[˜ÙOËœ™\]Z\™YÜ™\ÜÜÝ]\ÈOOH	Ü\ÜÙY	È	‰ˆ[˜[ZXÑ]šY[˜ÙOËœ™\]Z\™\×Ü™[X\ÙWÚYÛX]ÚOOHYH	‰ˆ[˜[ZXÑ]šY[˜ÙOËœ™\]Z\™\×Û›Û—Ý[šÛ›ÝÛ—ÜÛÝ\˜ÙWØÛÛ[Z]OOHYH	‰ˆ[˜[ZXÑ]šY[˜ÙOËœ™\]Z\™\×ÜØ[YWÜÛÝ\˜ÙWØÛÛ[Z]OOHYK”ÓÓ‹œÝš[™ÚYžJ[[YPXØÙ\[˜ÙJJNÂˆÚXÚÊ	Ñ[˜[ZXÈ›ÙXÝ[ÛˆXØÙ\[˜ÙHXÛ\™\È]™\žH^XÝZYXØ[ÛÛšX][Û‹ÛÛ\[‹Ø]K[™˜[˜XÚÈÜš]\š[Û‰Ë^XÝY[X™\œÊØš™XÝšÙ^\Ê[[YPXØÙ\[˜ÙHßJKÉÝ™\™XÝØ]]Üš]IË	ÜÛÝ\˜ÙWØÛÛ˜XÝÙ[X™Y×Ü[[YWÝ™\™XÝ	Ë	Ù[˜[ZX×Ù]šY[˜ÙIË‹‹“Øš™XÝšÙ^\ÊVPÕQÔ•S•SQWÐPÐÑTSÑWÐÔ’UT’PJWJH	‰ˆØš™XÝ™[šY\ÊVPÕQÔ•S•SQWÐPÐÑTSÑWÐÔ’UT’PJK™]™\žJ
+ÚÙ^K˜[YWJHOˆ[[YPXØÙ\[˜ÙOË–ÚÙ^WHOOH˜[YJK”ÓÓ‹œÝš[™ÚYžJ[[YPXØÙ\[˜ÙJJNÂˆÚXÚÊ	Ô™[X\ÙHÙ\\˜]\È]\›Z[š\ÝXÈZ[›ÛÙˆ[™˜Z[YXÛÜÙY\ÝÜžHœ›ÛHÝ\œ™[[[YHXØÙ\[˜ÙIËÝX›RœÛÛŠ™[X\ÙPÛÛ˜XÝË]Ë™]\›Z[š\ÝX×ØZ[
+HOOHÝX›RœÛÛŠÈÝ]\Îˆ	Ü\ÜÙY	Ë^XÝ][Û—Û[ÙNˆ	Ù]\›Z[š\ÝX×Ü™Y™\™[˜ÙIË[Ù[ØØ[Îˆ[Ù[Ø˜XÚÙYˆ˜[ÙHJH	‰ˆ™[X\ÙPÛÛ˜XÝË]Ëš\ÝÜšXØ[Û[Ù[Ý˜[Y][ÛËœØÛÜHOOH	Ù˜Z[YØÛÜÙYÚ\ÝÜžWÛÛ›IÈ	‰ˆ™[X\ÙPÛÛ˜XÝË]Ëš\ÝÜšXØ[Û[Ù[Ý˜[Y][ÛË™\ÝX›\Ú\×ØÝ\œ™[Ü[[YWØXØÙ\[˜ÙHOOH˜[ÙH	‰ˆÝX›RœÛÛŠ™[X\ÙPÛÛ˜XÝË]Ëš\ÝÜšXØ[Û[Ù[Ý˜[Y][ÛË™]šY[˜ÙWÜ™XÛÜ™ÊHOOHÝX›RœÛÛŠVPÕQÑRSQÓSÑSÐUSTÔ‘PÓÔ‘ÊK”ÓÓ‹œÝš[™ÚYžJ™[X\ÙPÛÛ˜XÝË]
+JNÂˆÚXÚÊ	Ô™[X\ÙHÙY\È[™X\›™Y^\YØ[Ü\˜][Û˜[[™™X[XÛZ[HÛZ[\È˜[ÙIËÉÚ[™\[™[Ù^\Ü™]šY]ÉË	Ø›[™Ü™]šY]×ØÛÛ\]Y	Ë	ÛYØ[Ø\›Ý˜[	Ë	ÛÜ\˜][Û˜[Ý˜[Y][Û‰Ë	Ü™X[ØÛZ[\×Ø\›Ý™Y	×K™]™\žJÙ^HOˆ™[X\ÙPÛÛ˜XÝË]Ë–ÚÙ^WHOOH˜[ÙJH	‰ˆ™[X\ÙPÛÛ˜XÝË]Ë™Ù[™\˜]YÙ]WÛÛ›HOOHYK”ÓÓ‹œÝš[™ÚYžJ™[X\ÙPÛÛ˜XÝË]
+JNÂˆÚXÚÊ	Ô™[X\ÙHXØÙ\[˜ÙHY[]H\Ù\È[™\[™[ÛÛ\Û™[™\œÚ[ÛœÈ]Û™H™[X\ÙKÜÛÝ\˜ÙHY[]IË™[X\ÙPÛÛ˜XÝË˜ÛÛ\]Xš[]OË˜ÛÛ\Û™[Ý™\œÚ[Ûœ×Ø\™WÚ[™\[™[OOHYH	‰ˆÜØ[YH™[X\ÙWÚYÚK\Ý
+™[X\ÙPÛÛ˜XÝË˜ÛÛ\]Xš[]OË˜XØÙ\[˜ÙWÜ[H	ÉÊH	‰ˆÜØ[YH›Û‹][šÛ›ÝÛˆÛÝ\˜ÙHÛÛ[Z]ÚK\Ý
+™[X\ÙPÛÛ˜XÝË˜ÛÛ\]Xš[]OË˜XØÙ\[˜ÙWÜ[H	ÉÊK”ÓÓ‹œÝš[™ÚYžJ™[X\ÙPÛÛ˜XÝË˜ÛÛ\]Xš[]JJNÂŸB‚™[˜Ý[Ûˆ›ÝšY\”Ú[™ÛQ›YÚÛÛ˜XÝš[Û][ÛœÊ™[X\ÙPÛÛ˜XÝX[™XY[™\ÜÊHÂˆÛÛœÝ\ÜÝY\ÈH×NÂˆYˆ
+ÝX›RœÛÛŠ™[X\ÙPÛÛ˜XÝË˜YÙ[X×Ü[[YOËœ\˜[[ÙÜ›Ý\ÊHOOHÝX›RœÛÛŠVPÕQÑVPÕUSÓ—ÕÔÓÑÖKœ\˜[[ÙÜ›Ý\ÊJH\ÜÝY\Ëœ\Ú
+	ÛÙÚXØ[˜[‹[Ý]ÜÛÙÞHÚ[™ÙY	ÊNÂˆYˆ
+™[X\ÙPÛÛ˜XÝË˜YÙ[X×Ü[[YOËœØY™]OËœ›ÝšY\—ÛX^Ú[—Ù›YÚOOHJH\ÜÝY\Ëœ\Ú
+	Ü™[X\ÙHØY™]HØ\\È›ÝÛ™IÊNÂˆYˆ
+™[X\ÙPÛÛ˜XÝË]Ëœ›ÙXÝ[Û—Ü[[YWØXØÙ\[˜ÙOËœ™\]Z\™YÜ›ÝšY\—ÛX^Ú[—Ù›YÚOOHJH\ÜÝY\Ëœ\Ú
+	Ü[[YHXØÙ\[˜ÙHØ\\È›ÝÛ™IÊNÂˆYˆ
+X[Ë˜YÙ[X×Ü[[YOËœØY™]OËœ›ÝšY\—ÛX^Ú[—Ù›YÚOOHJH\ÜÝY\Ëœ\Ú
+	ÚX[Ø\\È›ÝÛ™IÊNÂˆYˆ
+™XY[™\ÜÏË˜YÙ[X×Ü[[YOËœØY™]OËœ›ÝšY\—ÛX^Ú[—Ù›YÚOOHJH\ÜÝY\Ëœ\Ú
+	Ü™XY[™\ÜÈØ\\È›ÝÛ™IÊNÂˆ™]\›ˆ\ÜÝY\ÎÂŸB‚™[˜Ý[Ûˆ\ÜÙ\X[[[YPÛÛ˜XÝ
+X[™[X\ÙT[[YJHÂˆÛÛœÝ[[YHHX[˜YÙ[X×Ü[[YNÂˆYˆ
+Z\Ô›ÙXÝ[Û’›Ý\›™^J
+JHÂˆÚXÚÊ	ÓØØ[X[™[XZ[œÈ[ˆ]\›Z[š\ÝXÈ™Y™\™[˜ÙH[ÙHÚ]Ý]XÝ]˜][™ÈH[Ù[	ËX[›[Ù[Û[ÙHOOH	Ù]\›Z[š\ÝX×Ü™Y™\™[˜ÙIÈ	‰ˆX[›[Ù[OH[	‰ˆX[œ[[YWÜ›Ùš[HOOH	Ù]\›Z[š\ÝX×Ü™Y™\™[˜ÙIÈ	‰ˆ[[YOËœ›Ùš[HOOH	Ù]\›Z[š\ÝX×Ü™Y™\™[˜ÙIÈ	‰ˆ[[YOË™^XÝ][Û—Û[ÙHOOH	Ù]\›Z[š\ÝX×Ü™Y™\™[˜ÙIÈ	‰ˆ[[YOË˜]]Üš]WÛ[ÙHOOH	Ù]\›Z[š\ÝX×Ü™Y™\™[˜ÙIÈ	‰ˆ[[YOËš[\[Y[][ÛˆOOH	Ù]\›Z[š\ÝX×Ü™Y™\™[˜ÙIÈ	‰ˆ[[YOËœØÚ[XHOH[	‰ˆ^XÝY[X™\œÊ[[YOËœ™\]Z\™YØYÙ[ÚYË×JH	‰ˆ^XÝY[X™\œÊ[[YOË™]\›Z[š\ÝX×ÙØ]WÚYË×JK”ÓÓ‹œÝš[™ÚYžJÈ[Ù[Û[ÙNˆX[›[Ù[Û[ÙK[Ù[ˆX[›[Ù[[[YHJJNÂˆÚXÚÊ	ÓØØ[]\›Z[š\ÝXÈX[Ý[™\ÜÈH[›™Y[˜XÝ]™Hœ˜[Y]ÛÜšË›ÝšY\ˆÚ[™ÛKY›YÚØ\[™˜XÙKY\ØX›YØY™]HÜÝ\™IËÝX›RœÛÛŠ[[YOË™œ˜[Y]ÛÜšÊHOOHÝX›RœÛÛŠVPÕQÑ”SQUÓÔ’ÊH	‰ˆ[[YOËœØY™]OËœ›ÝšY\—ÛX^Ú[—Ù›YÚOOHH	‰ˆ[[YOËœØY™]OËœ›ÝšY\—ÛX^Ú[—Ù›YÚOOH™[X\ÙT[[YOËœØY™]OËœ›ÝšY\—ÛX^Ú[—Ù›YÚ	‰ˆ[[YOËœØY™]OË™^\›˜[Ý˜XÚ[™ÈOOH˜[ÙH	‰ˆ[[YOËœØY™]OËœ›Û\ÜÝÜ˜YÙHOOH˜[ÙH	‰ˆ[[YOËœØY™]OËœ˜]×ÛÝ]]ÜÝÜ˜YÙHOOH˜[ÙK”ÓÓ‹œÝš[™ÚYžJ[[YJJNÂˆ™]\›ŽÂˆBˆÚXÚÊ	Ô›ÙXÝ[ÛˆX[™]\›œÈHXÝ]™H™[[Ý›Ûˆ[™ÑÜ˜\[[YH›Ùš[H[™ØÚ[XIËX[œ[[YWÜ›Ùš[HOOHVPÕQÔ•S•SQKœ[[YWÜ›Ùš[H	‰ˆ[[YOËœ›Ùš[HOOHVPÕQÔ•S•SQKœ[[YWÜ›Ùš[H	‰ˆ[[YOË™^XÝ][Û—Û[ÙHOOH	Û™[[Ý›Û—Û][WØYÙ[	È	‰ˆ[[YOË˜]]Üš]WÛ[ÙHOOHVPÕQÔ•S•SQK˜]]Üš]WÛ[ÙH	‰ˆ[[YOËš[\[Y[][ÛˆOOHVPÕQÔ•S•SQKš[\[Y[][Ûˆ	‰ˆ[[YOËœØÚ[XHOOHVPÕQÔ•S•SQK›Ü˜Ú\Ý˜][Û—ÜØÚ[XH	‰ˆX[›[Ù[OOH‘TUQTÕQÓ‘SSÕ“Ó—ÓSÑS”ÓÓ‹œÝš[™ÚYžJ[[YJJNÂˆÚXÚÊ	Ô›ÙXÝ[ÛˆX[™]\›œÈH^XÝ™\]Y\ÝYœ˜[Y]ÛÜšÈ™\œÚ[ÛœÉËÝX›RœÛÛŠ[[YOË™œ˜[Y]ÛÜšÊHOOHÝX›RœÛÛŠ™[X\ÙT[[YK™œ˜[Y]ÛÜšÊH	‰ˆÝX›RœÛÛŠ[[YOË™œ˜[Y]ÛÜšÊHOOHÝX›RœÛÛŠVPÕQÑ”SQUÓÔ’ÊK”ÓÓ‹œÝš[™ÚYžJ[[YOË™œ˜[Y]ÛÜšÊJNÂˆÚXÚÊ	Ô›ÙXÝ[ÛˆX[™]\›œÈH^XÝÚ^[Ù[›Û\È[™™YH]\›Z[š\ÝXÈØ]\ÉË^XÝY[X™\œÊ[[YOËœ™\]Z\™YØYÙ[ÚYË‘TURT‘QÓ‘SSÕ“Ó—ÐQÑS•ÒQÊH	‰ˆ^XÝY[X™\œÊ[[YOË™]\›Z[š\ÝX×ÙØ]WÚYË‘TURT‘QÑUT“RS’TÕP×ÑÐUWÒQÊK”ÓÓ‹œÝš[™ÚYžJ[[YJJNÂˆÚXÚÊ	Ô›ÙXÝ[ÛˆX[]\ÝÈH^XÝš]˜]HY\[™œ˜H›Ý]K›ÝšY\ˆÚ[™ÛKY›YÚØ\[™\ØX›Y˜XÚ[™ËÝÜ˜YÙK˜[˜XÚË[™[™™\™[˜ÙH™]šY\ÉË[[YOËœØY™]OË™]\›Z[š\ÝX×ØÛÛ˜XÝØ]]Üš]HOOHYH	‰ˆ[[YOËœØY™]OËœ›ÝšY\—ÛX^Ú[—Ù›YÚOOHH	‰ˆ[[YOËœØY™]OËœ›ÝšY\—ÛX^Ú[—Ù›YÚOOH™[X\ÙT[[YOËœØY™]OËœ›ÝšY\—ÛX^Ú[—Ù›YÚ	‰ˆ[[YOËœØY™]OË™^\›˜[Ý˜XÚ[™ÈOOH˜[ÙH	‰ˆ[[YOËœØY™]OËœ›Û\ÜÝÜ˜YÙHOOH˜[ÙH	‰ˆ[[YOËœØY™]OËœ˜]×ÛÝ]]ÜÝÜ˜YÙHOOH˜[ÙH	‰ˆ[[YOËœØY™]OË›[Ù[Ù˜[˜XÚÈOOH˜[ÙH	‰ˆ[[YOËœØY™]OË˜]]ÛX]X×Ú[™™\™[˜ÙWÜ™]žHOOH˜[ÙH	‰ˆÝX›RœÛÛŠ[[YOËœØY™]OËœ›ÝšY\—Ü›Ý][™ÊHOOHÝX›RœÛÛŠÈ[™Ú[ÝYÎˆ	ÙY\[™œ˜KÙœ	Ë^XÝYÝ\Ý™X[WÜ›ÝšY\Žˆ	ÑY\[™œ˜IË[Ý×Ù˜[˜XÚÜÎˆ˜[ÙK™\]Z\™WÜ\˜[Y]\œÎˆYK]WØÛÛXÝ[ÛŽˆ	Ù[žIÈJK”ÓÓ‹œÝš[™ÚYžJ[[YOËœØY™]JJNÂŸB‚™[˜Ý[Ûˆ\ÜÙ\™XY[™\ÜÐÛÛ˜XÝ
+™XY[™\ÜÊHÂˆÛÛœÝYÙ]Ü™Y[X[H™XY[™\ÜÏË›[Ù[ØYÙ]Ë˜Ü™Y[X[ØÛÛ™šYÝ\™YÂˆÛÛœÝ[[YPÜ™Y[X[H™XY[™\ÜÏË˜YÙ[X×Ü[[YOËœØY™]OË˜Ü™Y[X[ØÛÛ™šYÝ\™YÂˆÚXÚÊ	Ô™XY[™\ÜÈØY™[H^ÜÙ\ÈÛ›HX]Ú[™È›ÛÛX[ˆÜ[”›Ý]\ˆÜ™Y[X[™XÙZ\ÉË\[ÙˆYÙ]Ü™Y[X[OOH	Ø›ÛÛX[‰È	‰ˆ\[Ùˆ[[YPÜ™Y[X[OOH	Ø›ÛÛX[‰È	‰ˆYÙ]Ü™Y[X[OOH[[YPÜ™Y[X[”ÓÓ‹œÝš[™ÚYžJÈYÙ]Ü™Y[X[[[YPÜ™Y[X[JJNÂˆÚXÚÊ	Ô™XY[™\ÜÈ[œÈ\ÚXØ[›ÝšY\ˆYZ\ÜÚ[ÛˆÈ^XÝHÛ™H[‹Y›YÚÙ[™	Ë™XY[™\ÜÏË˜YÙ[X×Ü[[YOËœØY™]OËœ›ÝšY\—ÛX^Ú[—Ù›YÚOOHK”ÓÓ‹œÝš[™ÚYžJ™XY[™\ÜÏË˜YÙ[X×Ü[[YOËœØY™]JJNÂˆÚXÚÊ	Ô™XY[™\ÜÈ\ØÛÜÙ\ÈH^XÝ›Ý[™YYÙ][™\[Y\˜[[YÙ\ˆÜÝ\™IË™XY[™\ÜÏË›[Ù[ØYÙ]Ë˜YÙ]ÜØÛÜHOOH	Ú[œÝ[˜ÙWÛY™][YIÈ	‰ˆ™XY[™\ÜÏË›[Ù[ØYÙ]Ë›YÙ\—Ü\œÚ\Ý[˜ÙHOOH	Ù\[Y\˜[Ú[œÝ[˜ÙIÈ	‰ˆ™XY[™\ÜÏË›[Ù[ØYÙ]Ë™^\›˜[ÚÙ^WÚ\™Û[Z]ÙÝX\™OOH	ØÛÛ™šYÝ\™Y	Ë”ÓÓ‹œÝš[™ÚYžJ™XY[™\ÜÏË›[Ù[ØYÙ]
+JNÂˆÚXÚÊ	Ô™XY[™\ÜÈ™XÙZ\ÛÛZ[œÈ›ÈÜ™Y[X[X]\šX[Üˆ[\›˜[^XÝ][ÛˆÙ[[™[	Ë[\›˜[Ù[[™[]Ê™XY[™\ÜÊK›[™ÝOOH	‰ˆKÜÚË[Ü‹]ŒKVÐKV˜K^ŒNWËW^ÎKË\Ý
+”ÓÓ‹œÝš[™ÚYžJ™XY[™\ÜÊJK”ÓÓ‹œÝš[™ÚYžJÈÙ[[™[Ü]Îˆ[\›˜[Ù[[™[]Ê™XY[™\ÜÊHJJNÂˆYˆ
+\Ô›ÙXÝ[Û’›Ý\›™^J
+JHÂˆÚXÚÊ	Ô›ÙXÝ[Ûˆ\È™XYHÛ›HÚ]HÜ[”›Ý]\ˆÜ™Y[X[ÛÛ™šYÝ\™Y	Ë™XY[™\ÜÏËœÝ]\ÈOOH	Ü™XYIÈ	‰ˆYÙ]Ü™Y[X[OOHYH	‰ˆ[[YPÜ™Y[X[OOHYK”ÓÓ‹œÝš[™ÚYžJÈÝ]\Îˆ™XY[™\ÜÏËœÝ]\ËYÙ]Ü™Y[X[[[YPÜ™Y[X[JJNÂˆ™]\›ŽÂˆBˆÚXÚÊ	ÓØØ[]\›Z[š\ÝXÈ[ÙH™[XZ[œÈ™XYHÚ]\ˆÜˆ›Ý[ˆ[˜XÝ]™HÜ[”›Ý]\ˆÜ™Y[X[\ÈÛÛ™šYÝ\™Y	Ë™XY[™\ÜÏËœÝ]\ÈOOH	Ü™XYIË”ÓÓ‹œÝš[™ÚYžJÈÝ]\Îˆ™XY[™\ÜÏËœÝ]\ËYÙ]Ü™Y[X[[[YPÜ™Y[X[JJNÂŸB‚˜\Þ[˜È[˜Ý[ÛˆÙ]œÛÛ‘›Ü”Ù\ÜÚ[ÛŠ\›Ù\ÜÚ[Û’YÜ[ÛœÈHßJHÂˆÛÛœÝ\™Ù]H™]ÈT“
+\›
+NÂˆÛÛœÝ\SÜšYÚ[ˆH™]ÈT“
+TJK›ÜšYÚ[ŽÂˆÛÛœÝXY\œÈH\™Ù]›ÜšYÚ[ˆOOH\SÜšYÚ[ˆÈÈ	ÖPØ\ÙT]TÙ\ÜÚ[Û‰ÎˆÙ\ÜÚ[Û’Y‹‹ŠÜ[ÛœËšXY\œÈßJHHˆÜ[ÛœËšXY\œÎÂˆÛÛœÝ™\ÜÛœÙHH]ØZ]™]Ú
+\›È‹‹›Ü[ÛœËXY\œÈJNÂˆYˆ
+\™\ÜÛœÙK›ÚÊH›ÝÈ™]È\œ›ÜŠ	ÛÜ[ÛœË›Y]Ù	ÑÑU	ßH	Ý\›Nˆ	Ü™\ÜÛœÙKœÝ]\ßX
+NÂˆ™]\›ˆ™\ÜÛœÙKšœÛÛŠ
+NÂŸB‚˜\Þ[˜È[˜Ý[ÛˆÙ]œÛÛŠ\›Ü[ÛœÈHßJHÂˆ™]\›ˆÙ]œÛÛ‘›Ü”Ù\ÜÚ[ÛŠ\›PWÔÑTÔÒSÓ—ÒQÜ[ÛœÊNÂŸB‚˜\Þ[˜È[˜Ý[ÛˆÙ]^
+\›
+HÂˆÛÛœÝ™\ÜÛœÙHH]ØZ]™]Ú
+\›
+NÂˆYˆ
+\™\ÜÛœÙK›ÚÊH›ÝÈ™]È\œ›ÜŠÑU	Ý\›Nˆ	Ü™\ÜÛœÙKœÝ]\ßX
+NÂˆ™]\›ˆ™\ÜÛœÙK^
+
+NÂŸB‚˜\Þ[˜È[˜Ý[Ûˆ™\Ù][[Ê
+HÂˆÛÛœÝ˜[YHH]ØZ]Ù]œÛÛŠ	ÐT_KØ\KÙ[[ËÜ™\Ù]ÈY]Ùˆ	ÔÔÕ	ÈJNÂˆ[[Ó]]]YHYNÂˆ™]\›ˆ˜[YNÂŸB‚˜\Þ[˜È[˜Ý[ÛˆØZ]š\ÚX›JÙ[XÝÜ‹[Y[Ý]HN
+HÂˆ]ØZ]YÙK›ØØ]ÜŠÙ[XÝÜŠK™š\œÝ
+
+KØZ]›ÜŠÈÝ]Nˆ	Ýš\ÚX›IË[Y[Ý]JNÂŸB‚˜\Þ[˜È[˜Ý[ÛˆØZ]Y[ŠÙ[XÝÜ‹[Y[Ý]HÌ
+HÂˆ]ØZ]YÙK›ØØ]ÜŠÙ[XÝÜŠK™š\œÝ
+
+KØZ]›ÜŠÈÝ]Nˆ	ÚY[‰Ë[Y[Ý]JNÂŸB‚˜\Þ[˜È[˜Ý[ÛˆØZ]^
+Ù[XÝÜ‹]\›‹[Y[Ý]HN
+HÂˆ]ØZ]YÙKØZ]›Ü‘[˜Ý[ÛŠ
+ÈÙ[XÝÜ‹ÛÝ\˜ÙK›YÜÈJHOˆÂˆÛÛœÝ›ÙHHØÝ[Y[œ]Y\žTÙ[XÝÜŠÙ[XÝÜŠNÂˆ™]\›ˆ›ÙH	‰ˆ™]È™YÑ^
+ÛÝ\˜ÙK›YÜÊK\Ý
+›ÙK^ÛÛ[	ÉÊNÂˆKÈÙ[XÝÜ‹ÛÝ\˜ÙNˆ]\›‹œÛÝ\˜ÙK›YÜÎˆ]\›‹™›YÜÈKÈ[Y[Ý]JNÂŸB‚˜\Þ[˜È[˜Ý[ÛˆØZ]›Ü•˜[YJ™XY[Y[Ý]HN
+HÂˆÛÛœÝXY[™HH]K››ÝÊ
+H
+È[Y[Ý]ÂˆÚ[H
+]K››ÝÊ
+HXY[™JHÂˆÛÛœÝ˜[YHH]ØZ]™XY
+
+NÂˆYˆ
+˜[YJH™]\›ˆ˜[YNÂˆ]ØZ]ÛY\
+L
+NÂˆBˆ›ÝÈ™]È\œ›ÜŠ	Õ[YYÝ]ØZ][™È›ÜˆØ\\™Y™\ÜÛœÙIÊNÂŸB‚˜\Þ[˜È[˜Ý[ÛˆØÜ™Y[œÚÝ
+˜[YK[YÙHH˜[ÙJHÂˆ]ØZ]YÙKœØÜ™Y[œÚÝ
+È]ˆ]š›Ú[ŠÕU˜[YJK[YÙHJNÂŸB‚˜\Þ[˜È[˜Ý[Ûˆ]ØZ][‘›Ü”Ù\ÜÚ[ÛŠ[’YÙ\ÜÚ[Û’Y
+HÂˆÛÛœÝ[Y[Ý]H[•[Y[Ý]\Ê
+NÂˆÛÛœÝXY[™HH]K››ÝÊ
+H
+È[Y[Ý]ÂˆÛÛœÝÛ[\˜[H\Ô›ÙXÝ[Û’›Ý\›™^J
+HÈLˆLÂˆ]]\ÝH[ÂˆÚ[H
+]K››ÝÊ
+HXY[™JHÂˆÛÛœÝ[ˆH]ØZ]Ù]œÛÛ‘›Ü”Ù\ÜÚ[ÛŠ	ÐT_KØ\KÜ[œËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+[’Y
+_XÙ\ÜÚ[Û’Y
+NÂˆ]\ÝH[ŽÂˆYˆ
+[‹œÝ]\ÈOOH	ØÛÛ\]IÊH™]\›ˆ[ŽÂˆYˆ
+[‹œÝ]\ÈOOH	Ù˜Z[Y	ÊHÂˆÛÛœÝ\›Z[˜[\ÜÝY\ÈH\›Z[˜[˜Z[\™PÛÛ˜XÝš[Û][ÛœÊ[ŠNÂˆYˆ
+\›Z[˜[\ÜÝY\Ë›[™Ý
+H›ÝÈ™]È\œ›ÜŠ[ˆ	Ü[’YH˜Z[YX›XË\ØY™]HÛÛ˜XÝˆ	Ò”ÓÓ‹œÝš[™ÚYžJ\›Z[˜[\ÜÝY\Ê_X
+NÂˆ›ÝÈ™]È\œ›ÜŠ[ˆ	Ü[’YH˜Z[Yˆ	Ò”ÓÓ‹œÝš[™ÚYžJ[”›ÙÜ™\ÜÑXYÛ›ÜÝXÊ[ŠJ_X
+NÂˆBˆ]ØZ]ÛY\
+Û[\˜[
+NÂˆBˆ›ÝÈ™]È\œ›ÜŠ[ˆ	Ü[’YH[YYÝ]Y\ˆ	Ý[Y[Ý][\Îˆ	Ò”ÓÓ‹œÝš[™ÚYžJ[”›ÙÜ™\ÜÑXYÛ›ÜÝXÊ]\Ý
+J_X
+NÂŸB‚˜\Þ[˜È[˜Ý[Ûˆ]ØZ][Š[’Y
+HÂˆ™]\›ˆ]ØZ][‘›Ü”Ù\ÜÚ[ÛŠ[’YPWÔÑTÔÒSÓ—ÒQ
+NÂŸB‚™[˜Ý[Ûˆ\›Z[˜[[‘˜Z[\™SY\ÜØYÙJ[ŠHÂˆYˆ
+[ËœÝ]\ÈOOH	Ù˜Z[Y	ÊH™]\›ˆ[ÂˆÛÛœÝ\›Z[˜[\ÜÝY\ÈH\›Z[˜[˜Z[\™PÛÛ˜XÝš[Û][ÛœÊ[ŠNÂˆ™]\›ˆ\›Z[˜[\ÜÝY\Ë›[™ÝˆÈ[ˆ	Ü[‹œ[—ÚY	Ý[šÛ›ÝÛ‰ßH˜Z[YX›XË\ØY™]HÛÛ˜XÝˆ	Ò”ÓÓ‹œÝš[™ÚYžJ\›Z[˜[\ÜÝY\Ê_Xˆˆ[ˆ	Ü[‹œ[—ÚY	Ý[šÛ›ÝÛ‰ßH˜Z[Yˆ	Ò”ÓÓ‹œÝš[™ÚYžJ[”›ÙÜ™\ÜÑXYÛ›ÜÝXÊ[ŠJ_XÂŸB‚˜\Þ[˜È[˜Ý[Ûˆ]ØZ]]\’›Ý\›™^U\›Z[˜[ZJ
+HÂˆÛÛœÝXY[™HH]K››ÝÊ
+H
+È[•[Y[Ý]\Ê
+NÂˆÛÛœÝ]\Ý[œÈH™]ÈX\
+
+NÂˆÚ[H
+]K››ÝÊ
+HXY[™JHÂˆÛÛœÝZHH]ØZ]YÙK™]˜[X]J
+
+HOˆ
+Âˆ[ÛY[ˆØÝ[Y[œ]Y\žTÙ[XÝÜŠ	ÈÜÝYÙPØ[˜\ÉÊOË™]\Ù]˜Ø\Ù\][ÛY[	ÉËˆ™^ˆØÝ[Y[œ]Y\žTÙ[XÝÜŠ	ÈÚ›Ý\›™^S™^	ÊOË^ÛÛ[	ÉËˆJJNÂˆYˆ
+ZK›[ÛY[OOH	Ù˜Z[\™IÊHÂˆ›ÝÈ™]È\œ›ÜŠ	Ó]\‹XÛZ[HÛÛ\\š\ÛÛˆ™[™\™YHØY™KY˜Z[\™H›Ý[™\žIÊNÂˆBˆYˆ
+ZK›[ÛY[OOH	Û]\‹\™\Ý[	È	‰ˆÔ™\Ý\H[[ËÚK\Ý
+ZK›™^
+JH™]\›ŽÂ‚ˆ›Üˆ
+ÛÛœÝ[’YÙˆ[’YËœÛXÙJJJHÂˆÛÛœÝ[ˆH]ØZ]Ù]œÛÛŠ	ÐT_KØ\KÜ[œËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+[’Y
+_X
+NÂˆ]\Ý[œËœÙ]
+[’Y[ŠNÂˆÛÛœÝ˜Z[\™HH\›Z[˜[[‘˜Z[\™SY\ÜØYÙJ[ŠNÂˆYˆ
+˜Z[\™JH›ÝÈ™]È\œ›ÜŠ˜Z[\™JNÂˆBˆ]ØZ]ÛY\
+UT—ÕT“RSSÔÓÒS•T•SÓTÊNÂˆBˆ›ÝÈ™]È\œ›ÜŠ]\‹XÛZ[HÛÛ\\š\ÛÛˆ[YYÝ]Y\ˆ	Ü[•[Y[Ý]\Ê
+_[\Îˆ	Ò”ÓÓ‹œÝš[™ÚYžJË‹‹›]\Ý[œË˜[Y\Ê
+WK›X\
+[”›ÙÜ™\ÜÑXYÛ›ÜÝXÊJ_X
+NÂŸB‚˜\Þ[˜È[˜Ý[ÛˆØZ]›Ý\›™^UZJX™[Ü\˜][ÛŠHÂˆžHÂˆ™]\›ˆ]ØZ]Ü\˜][ÛŠ
+NÂˆHØ]Ú
+\œ›ÜŠHÂˆÛÛœÝXYÛ›ÜÝXÜÈH×NÂˆ›Üˆ
+ÛÛœÝ[’YÙˆ[’YËœÛXÙJLÊJHÂˆžHÂˆXYÛ›ÜÝXÜËœ\Ú
+[”›ÙÜ™\ÜÑXYÛ›ÜÝXÊ]ØZ]Ù]œÛÛŠ	ÐT_KØ\KÜ[œËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+[’Y
+_X
+JJNÂˆHØ]Ú
+XYÛ›ÜÝXÑ\œ›ÜŠHÂˆXYÛ›ÜÝXÜËœ\Ú
+È[—ÚYˆ[’YXYÛ›ÜÝX×Ù\œ›ÜŽˆÝš[™ÊXYÛ›ÜÝXÑ\œ›ÜŠHJNÂˆBˆBˆ›ÝÈ™]È\œ›ÜŠ	ÛX™[Nˆ	Ù\œ›Üˆ[œÝ[˜Ù[Ùˆ\œ›ÜˆÈ\œ›Ü‹›Y\ÜØYÙHˆÝš[™Ê\œ›ÜŠ_NÈ[ˆXYÛ›ÜÝXÜÏIÒ”ÓÓ‹œÝš[™ÚYžJXYÛ›ÜÝXÜÊ_X
+NÂˆBŸB‚˜\Þ[˜È[˜Ý[ÛˆÜš^›Û[Ý™\™›ÝÊ
+HÂˆ™]\›ˆYÙK™]˜[X]J
+
+HOˆX]›X^
+ØÝ[Y[™ØÝ[Y[[[Y[œØÜ›ÛÚYØÝ[Y[˜›ÙKœØÜ›ÛÚY
+HH[›™\•ÚY
+NÂŸB‚˜\Þ[˜È[˜Ý[Ûˆ]Y]šY]ÜÜÊX™[Ù[XÝÜŠHÂˆ]ØZ]YÙKœÙ]šY]ÜÜÚ^™JÈÚYˆMZYÚˆLJNÂˆ]ØZ]ÛY\
+LŒ
+NÂˆÚXÚÊ	ÛX™[H\ÚÝÜ™]Z[œÈ]Èš[X\žH\Y˜XÝ]ØZ]YÙK›ØØ]ÜŠÙ[XÝÜŠK™š\œÝ
+
+Kš\Õš\ÚX›J
+JNÂˆÚXÚÊ	ÛX™[H\ÚÝÜÙY\ÈHÛÝ\˜ÙHÛZ[H]˜Z[X›X]ØZ]YÙK›ØØ]ÜŠ	ËœÝX›Z\ÜÚ[Û‹\[™IÊKš\Õš\ÚX›J
+JNÂˆÚXÚÊ	ÛX™[H\ÚÝÜ\È›ÈYÙK[]™[Üš^›Û[Ý™\™›ÝØ]ØZ]Üš^›Û[Ý™\™›ÝÊ
+HHKÝ™\™›ÝÏIØ]ØZ]Üš^›Û[Ý™\™›ÝÊ
+_X
+NÂˆ]ØZ][^J	ÛX™[H\ÚÝÜ
+NÂˆ]ØZ]ØÜ™Y[œÚÝ
+	ÛX™[KY\ÚÝÜœ™ØYJNÂŸB‚˜\Þ[˜È[˜Ý[ÛˆÙ]Qš[š]P[š[X][ÛœÑ›Ü^JX™[
+HÂˆÛÛœÝ™\Ý[H]ØZ]YÙK™]˜[X]J\Þ[˜È
+È[Y[Ý]\ÈJHOˆÂˆÛÛœÝ\ØÜšX™U\™Ù]H\™Ù]OˆÂˆYˆ
+J\™Ù][œÝ[˜Ù[Ùˆ[[Y[
+JH™]\›ˆ[ÂˆYˆ
+\™Ù]šY
+H™]\›ˆÉÐÔÔË™\ØØ\J\™Ù]šY
+_XÂˆÛÛœÝÛ\ÜÙ\ÈHË‹‹\™Ù]˜Û\ÜÓ\ÝKœÛXÙJ
+K›X\
+˜[YHOˆ‰ÐÔÔË™\ØØ\J˜[YJ_X
+Kš›Ú[Š	ÉÊNÂˆ™]\›ˆ	Ý\™Ù]YÓ˜[YKÓÝÙ\Ø\ÙJ
+_IØÛ\ÜÙ\ßXÂˆNÂˆÛÛœÝ\ØÜšX™P[š[X][ÛˆH[š[X][ÛˆOˆÂˆÛÛœÝ[Z[™ÈH[š[X][Û‹™Y™™XÝË™Ù]ÛÛ\]Y[Z[™ÏËŠ
+HßNÂˆ™]\›ˆÂˆ\Nˆ[š[X][Û‹˜ÛÛœÝXÝÜË›˜[YH	Ð[š[X][Û‰Ëˆ˜[YNˆ[š[X][Û‹˜[š[X][Û“˜[YH[š[X][Û‹˜[œÚ][Û”›Ü\H[ˆ^WÜÝ]Nˆ[š[X][Û‹œ^TÝ]Kˆ\™Ù]ˆ\ØÜšX™U\™Ù]
+[š[X][Û‹™Y™™XÝË\™Ù]
+KˆÝ\œ™[Ý[YWÛ\Îˆ[X™\‹š\Ñš[š]J[š[X][Û‹˜Ý\œ™[[YJHÈX]œ›Ý[™
+[š[X][Û‹˜Ý\œ™[[YJHˆ[ˆ[™Ý[YWÛ\Îˆ[X™\‹š\Ñš[š]J[Z[™Ë™[™[YJHÈX]œ›Ý[™
+[Z[™Ë™[™[YJHˆ[ˆNÂˆNÂˆÛÛœÝXÝ]™Qš[š]P[š[X][ÛœÈH
+
+HOˆØÝ[Y[™Ù][š[X][ÛœÊ
+K™š[\Š[š[X][ÛˆOˆÂˆÛÛœÝ[Z[™ÈH[š[X][Û‹™Y™™XÝË™Ù]ÛÛ\]Y[Z[™ÏËŠ
+NÂˆ™]\›ˆÉÜ[™[™ÉË	Ü[›š[™É×Kš[˜ÛY\Ê[š[X][Û‹œ^TÝ]JH	‰ˆ[X™\‹š\Ñš[š]J[Z[™ÏË™[™[YJNÂˆJNÂˆÛÛœÝ™^ÝX›TZ[H
+
+HOˆ™]È›ÛZ\ÙJ™\ÛÛ™HOˆ™\]Y\Ý[š[X][Û‘œ˜[YJ
+
+HOˆ™\]Y\Ý[š[X][Û‘œ˜[YJ™\ÛÛ™JJJNÂˆÛÛœÝXY[™HH\™›Ü›X[˜ÙK››ÝÊ
+H
+È[Y[Ý]\ÎÂˆ]\ÜÙ\ÈHÂˆÚ[H
+\ÜÙ\È
+HÂˆ]XÝ]™HHXÝ]™Qš[š]P[š[X][ÛœÊ
+NÂˆYˆ
+XXÝ]™K›[™Ý
+HÂˆ]ØZ]™^ÝX›TZ[
+
+NÂˆXÝ]™HHXÝ]™Qš[š]P[š[X][ÛœÊ
+NÂˆYˆ
+XXÝ]™K›[™Ý
+H™]\›ˆÈÙ]YˆYK\ÜÙ\ËXÝ]™Nˆ×HNÂˆBˆÛÛœÝ™[XZ[š[™ÈHXY[™HH\™›Ü›X[˜ÙK››ÝÊ
+NÂˆYˆ
+™[XZ[š[™ÈH
+Hœ™XZÎÂˆ]ØZ]™]È›ÛZ\ÙJ™\ÛÛ™HOˆÂˆÛÛœÝ[Y\ˆHÙ][Y[Ý]
+™\ÛÛ™K™[XZ[š[™ÊNÂˆ›ÛZ\ÙK˜[Ù]Y
+XÝ]™K›X\
+[š[X][ÛˆOˆ[š[X][Û‹™š[š\ÚY
+JK[Š
+
+HOˆÂˆÛX\•[Y[Ý]
+[Y\ŠNÂˆ™\ÛÛ™J
+NÂˆJNÂˆJNÂˆ\ÜÙ\È
+ÏHNÂˆBˆ™]\›ˆÂˆÙ]Yˆ˜[ÙKˆ\ÜÙ\ËˆXÝ]™NˆXÝ]™Qš[š]P[š[X][ÛœÊ
+KœÛXÙJLŠK›X\
+\ØÜšX™P[š[X][ÛŠKˆNÂˆKÈ[Y[Ý]\ÎˆVWÐS’SPUSÓ—ÔÑUWÕSQSÕUÓTÈJNÂˆYˆ
+\™\Ý[œÙ]Y
+H›ÝÈ™]È\œ›ÜŠ	ÛX™[HY›Ý™XXÚHÝX›Hš[š]KX[š[X][ÛˆÝ]H™Y›Ü™H^Nˆ	Ò”ÓÓ‹œÝš[™ÚYžJ™\Ý[
+_X
+NÂŸB‚™[˜Ý[Ûˆ^Uš[Û][Û‘XYÛ›ÜÝXÜÊš[Û][ÛœÊHÂˆÛÛœÝØY™Q]QšY[ÈHÉÙ™ÐÛÛÜ‰Ë	Ø™ÐÛÛÜ‰Ë	ØÛÛ˜\Ý˜][ÉË	Ù^XÝYÛÛ˜\Ý˜][ÉË	Ù›ÛÚ^™IË	Ù›ÛÙZYÚ	×NÂˆÛÛœÝØY™P^UÚÙ[ˆH˜[YHOˆÂˆÛÛœÝ^HÝš[™Ê˜[YH	ÉÊKœÛXÙJLLŠNÂˆ™]\›ˆ×–ØK^—VØK^ŒNWËW^ÌÎ_IÚK\Ý
+^
+HÈ^ˆÚLMŽ‰ÜÚLMŠ^
+_XÂˆNÂˆÛÛœÝØY™U\™Ù]ÈH\™Ù]ÈOˆ
+\™Ù]È×JKœÛXÙJ
+K›X\
+\™Ù]OˆÂˆYˆ
+\œ˜^Kš\Ð\œ˜^J\™Ù]
+JH™]\›ˆ\™Ù]œÛXÙJ
+K›X\
+ØY™P^UÚÙ[ŠNÂˆ™]\›ˆØY™P^UÚÙ[Š\™Ù]
+NÂˆJNÂˆÛÛœÝØY™PÚXÚÑ]HH]HOˆÂˆYˆ
+Y]H\[Ùˆ]HOOH	ÛØš™XÝ	È\œ˜^Kš\Ð\œ˜^J]JJH™]\›ˆ[ÂˆÛÛœÝØY™U˜[YHH˜[YHOˆ\[Ùˆ˜[YHOOH	ÜÝš[™ÉÈÈ˜[YKœÛXÙJLŒ
+Hˆ
+\[Ùˆ˜[YHOOH	Û[X™\‰È	‰ˆ[X™\‹š\Ñš[š]J˜[YJJH\[Ùˆ˜[YHOOH	Ø›ÛÛX[‰ÈÈ˜[YHˆ[Âˆ™]\›ˆØš™XÝ™œ›ÛQ[šY\ÊØY™Q]QšY[Ë™š[\ŠšY[OˆØš™XÝš\ÓÝÛŠ]KšY[
+JK›X\
+šY[OˆÙšY[ØY™U˜[YJ]VÙšY[JWJJNÂˆNÂˆ™]\›ˆš[Û][ÛœËœÛXÙJ
+K›X\
+][HOˆ
+ÂˆYˆØY™P^UÚÙ[Š][KšY
+Kˆ[\XÝˆÉÛZ[›Ü‰Ë	Û[Ù\˜]IË	ÜÙ\š[Ý\ÉË	ØÜš]XØ[	×Kš[˜ÛY\Ê][Kš[\XÝ
+HÈ][Kš[\XÝˆ[ˆ›ÙWØÛÝ[ˆ
+][K››Ù\È×JK›[™ÝˆÛZ]YÛ›ÙWØÛÝ[ˆX]›X^
+
+][K››Ù\È×JK›[™ÝHŠKˆ›Ù\Îˆ
+][K››Ù\È×JKœÛXÙJŠK›X\
+›ÙHOˆ
+Âˆ\™Ù]ˆØY™U\™Ù]Ê›ÙK\™Ù]
+KˆÚXÚÜÎˆË‹‹Š›ÙK˜[žH×JK‹‹Š›ÙK˜[×JK‹‹Š›ÙK››Û™H×JWKœÛXÙJ
+K›X\
+ÚXÚÈOˆ
+ÂˆYˆØY™P^UÚÙ[ŠÚXÚËšY
+Kˆ[\XÝˆÉÛZ[›Ü‰Ë	Û[Ù\˜]IË	ÜÙ\š[Ý\ÉË	ØÜš]XØ[	×Kš[˜ÛY\ÊÚXÚËš[\XÝ
+HÈÚXÚËš[\XÝˆ[ˆ]NˆØY™PÚXÚÑ]JÚXÚË™]JKˆJJKˆJJKˆJJNÂŸB‚˜\Þ[˜È[˜Ý[Ûˆ[^JX™[
+HÂˆ]ØZ]Ù]Qš[š]P[š[X][ÛœÑ›Ü^JX™[
+NÂˆÛÛœÝÈY˜][ˆ^PZ[\ˆHH]ØZ][\Ü
+	Ð^KXÛÜ™KÜ^]ÜšYÚ	ÊNÂˆÛÛœÝ™\Ý[ÈH]ØZ]™]È^PZ[\ŠÈYÙHJK˜[˜[^™J
+NÂˆÛÛœÝÙ\š[Ý\ÈH™\Ý[Ëš[Û][ÛœË™š[\Š][HOˆÉÜÙ\š[Ý\ÉË	ØÜš]XØ[	×Kš[˜ÛY\Ê][Kš[\XÝ
+JNÂˆÛÛœÝXYÛ›ÜÝXÜÈH”ÓÓ‹œÝš[™ÚYžJ^Uš[Û][Û‘XYÛ›ÜÝXÜÊÙ\š[Ý\ÊJNÂˆÚXÚÊ	ÛX™[H\È›ÈÙ\š[Ý\ÈÜˆÜš]XØ[^Hš[Û][ÛœØÙ\š[Ý\Ë›[™ÝOOHXYÛ›ÜÝXÜÊNÂŸB‚™[˜Ý[ÛˆÚLMŠ˜[YJHÂˆ™]\›ˆÜ™X]R\Ú
+	ÜÚLM‰ÊK\]J˜[YJK™YÙ\Ý
+	Ú^	ÊNÂŸB‚˜\Þ[˜È[˜Ý[Ûˆ™]Z[‘]šY[˜ÙJ
+HÂˆÛÛœÝ™\]Z\™YHÂˆ	Ù\Þ[Y[ZY[]IËˆ	Ü™[X\ÙKXÛÛ˜XÝ	Ëˆ	Ü™XY[™\ÜË\™XÙZ\	Ëˆ	Ú\ÛÛ][Û‹\[‰Ëˆ	Ú\ÛÛ][Û‹[[Ù[[YÙ\‰Ëˆ	Ù›YÜÚ\\[‰Ëˆ	Ù›YÜÚ\XÛÛ[[Ù[[YÙ\‰Ëˆ	Ù[[Ë\™]šY]ÉËˆ	ÜÜÝ\™]šY]Ë\[‰Ëˆ	Û]\‹X˜\Ù[[™K\[‰Ëˆ	Û]\‹XY\‹[Y[[ÜžK\[‰Ëˆ	ÛX\›š[™Ë\›ÛÙ‰Ëˆ	Û[Ù[[YÙ\‰ËˆNÂˆYˆ
+\Ô›ÙXÝ[Û’›Ý\›™^J
+JH™\]Z\™Yœ\Ú
+	Ù›YÜÚ\XØXÚK[[™XYÙIÊNÂˆÛÛœÝZ\ÜÚ[™ÈH™\]Z\™Y™š[\Š˜[YHOˆ™]Z[™Y]šY[˜ÙVÛ˜[YWHOH[
+NÂˆYˆ
+™\ÜËœÝ]\ÈOOH	Ü\ÜÙY	È	‰ˆZ\ÜÚ[™Ë›[™Ý
+H›ÝÈ™]È\œ›ÜŠ\ÜÚ[™È›Ý\›™^HY›Ý™]Z[ˆ™\]Z\™Y]šY[˜ÙNˆ	ÛZ\ÜÚ[™Ëš›Ú[Š	Ë	Ê_X
+NÂ‚ˆ›Üˆ
+ÛÛœÝÛ˜[YK˜[YWHÙˆØš™XÝ™[šY\Ê™]Z[™Y]šY[˜ÙJJHÂˆYˆ
+˜[YHOH[
+HÛÛ[YNÂˆÛÛœÝš[[˜[YHH	Û˜[Y_KšœÛÛ˜ÂˆÛÛœÝž]\ÈH	Ò”ÓÓ‹œÝš[™ÚYžJ˜[YK[Š_W˜Âˆ]ØZ]œËÜš]Qš[J]š›Ú[ŠÕUš[[˜[YJKž]\ÊNÂˆ]šY[˜ÙQš[\Ëœ\Ú
+È]ˆš[[˜[YKÚLMŽˆÚLMŠž]\ÊKž]\ÎˆY™™\‹˜ž]S[™Ý
+ž]\ÊHJNÂˆB‚ˆÛÛœÝØ]Pž]\ÈH]ØZ]œËœ™XYš[J™]ÈT“
+[\Ü›Y]K\›
+JNÂˆÛÛœÝ[[YPž]\ÈH	Ò”ÓÓ‹œÝš[™ÚYžJ[[YU™\œÚ[ÛœË[Š_W˜Âˆ]ØZ]œËÜš]Qš[J]š›Ú[ŠÕU	Ü[[YK]™\œÚ[ÛœËšœÛÛ‰ÊK[[YPž]\ÊNÂˆ]šY[˜ÙQš[\Ëœ\Ú
+È]ˆ	Ü[[YK]™\œÚ[ÛœËšœÛÛ‰ËÚLMŽˆÚLMŠ[[YPž]\ÊKž]\ÎˆY™™\‹˜ž]S[™Ý
+[[YPž]\ÊHJNÂˆ™\Ü™]šY[˜ÙHHÂˆÛÛ˜XÝˆ	ØØ\Ù\]œXKY]šY[˜ÙKÌKŒŒ	ËˆØ]NˆÈ]ˆ	Øœ›ÝÜÙ\‹Y›ØÝ\ÙY]ŒŒ›ZœÉËÚLMŽˆÚLMŠØ]Pž]\ÊKž]\ÎˆØ]Pž]\Ë›[™ÝKˆ[[YNˆ[[YU™\œÚ[ÛœËˆ™]Z[™YØ™Y›Ü™WÜÙ\ÜÚ[Û—Ü™\Ù]ˆYKˆš[\Îˆ]šY[˜ÙQš[\ËˆZ\ÜÚ[™ËˆNÂŸB‚˜\Þ[˜È[˜Ý[Ûˆš[˜[^™Q]šY[˜ÙSX[šY™\Ý
+
+HÂˆÛÛœÝ[šY\ÈH]ØZ]œËœ™XY\ŠÕUÈÚ]š[U\\ÎˆYHJNÂˆÛÛœÝš[\ÈH×NÂˆ›Üˆ
+ÛÛœÝ[žHÙˆ[šY\ÊHÂˆYˆ
+Y[žKš\Ñš[J
+HÉÜ™\ÜšœÛÛ‰Ë	Ù]šY[˜ÙK[X[šY™\ÝšœÛÛ‰×Kš[˜ÛY\Ê[žK›˜[YJJHÛÛ[YNÂˆÛÛœÝž]\ÈH]ØZ]œËœ™XYš[J]š›Ú[ŠÕU[žK›˜[YJJNÂˆš[\Ëœ\Ú
+È]ˆ[žK›˜[YKÚLMŽˆÚLMŠž]\ÊKž]\Îˆž]\Ë›[™ÝJNÂˆBˆš[\ËœÛÜ
+
+YšYÚ
+HOˆYœ]›ØØ[PÛÛ\\™JšYÚœ]
+JNÂˆÛÛœÝ™]Z[™Y]ÈH™]ÈÙ]
+š[\Ë›X\
+][HOˆ][Kœ]
+JNÂˆÛÛœÝ™\]Z\™Yš\ÝX[]šY[˜ÙHHÂˆ	ÌK\Ý\Y\ÚÝÜœ™ÉËˆ	Ì‹\™XYK\›ØÙ\ÜËY\ÚÝÜœ™ÉËˆ	ÌË[X\ÙK\‹[Ý™\šY]Ëœ™ÉËˆ	ÌË[X\ÙK\‹Y]Z[œ™ÉËˆ	ÌË[X\ÙK\‹\ÙX\˜Úœ™ÉËˆ	ÌËZ[XYÙKZ[œÜXÝ[Û‹œ™ÉËˆ	ÌËZ[XYÙKYÜ›Ý[™[™ËZ[œÜXÝ[Û‹œ™ÉËˆ	Ì\™]šY]ËY\ÚÝÜœ™ÉËˆ	ÌK\™]šY]ËX\YYY\ÚÝÜœ™ÉËˆ	Ì‹[X\›š[™ËY\ÚÝÜœ™ÉËˆ	ÌË[]\‹\™\Ý[Y\ÚÝÜœ™ÉËˆ	Ùš[˜[\Ý]Kœ™ÉËˆ	Ý[š[\œ\YY›ØÝ\ÙYY[[ËÙX›IËˆNÂˆYˆ
+\Ô›ÙXÝ[Û’›Ý\›™^J
+JH™\]Z\™Yš\ÝX[]šY[˜ÙKœ\Ú
+	Ì‹[]™K[™[[Ý›Û‹XYÙ[œ™ÉË	ÌËY]\›Z[š\ÝXËXXØÙ\YX\Y˜XÝœ™ÉÊNÂˆÛÛœÝ™\]Z\™YœÛÛ‘]šY[˜ÙHHÂˆ	Ù\Þ[Y[ZY[]KšœÛÛ‰Ëˆ	Ü™[X\ÙKXÛÛ˜XÝšœÛÛ‰Ëˆ	Ü™XY[™\ÜË\™XÙZ\šœÛÛ‰Ëˆ	Ú\ÛÛ][Û‹\[‹šœÛÛ‰Ëˆ	Ú\ÛÛ][Û‹[[Ù[[YÙ\‹šœÛÛ‰Ëˆ	Ù›YÜÚ\\[‹šœÛÛ‰Ëˆ	Ù›YÜÚ\XÛÛ[[Ù[[YÙ\‹šœÛÛ‰Ëˆ	Ù[[Ë\™]šY]ËšœÛÛ‰Ëˆ	ÜÜÝ\™]šY]Ë\[‹šœÛÛ‰Ëˆ	Û]\‹X˜\Ù[[™K\[‹šœÛÛ‰Ëˆ	Û]\‹XY\‹[Y[[ÜžK\[‹šœÛÛ‰Ëˆ	ÛX\›š[™Ë\›ÛÙ‹šœÛÛ‰Ëˆ	Û[Ù[[YÙ\‹šœÛÛ‰Ëˆ	Ü[[YK]™\œÚ[ÛœËšœÛÛ‰ËˆNÂˆYˆ
+\Ô›ÙXÝ[Û’›Ý\›™^J
+JH™\]Z\™YœÛÛ‘]šY[˜ÙKœ\Ú
+	Ù›YÜÚ\XØXÚK[[™XYÙKšœÛÛ‰ÊNÂˆÛÛœÝZ\ÜÚ[™Ô™]Z[™Y\Y˜XÝÈHË‹‹œ™\]Z\™Yš\ÝX[]šY[˜ÙK‹‹œ™\]Z\™YœÛÛ‘]šY[˜ÙWBˆ™š[\Šš[[˜[YHOˆ\™]Z[™Y]Ëš\Êš[[˜[YJJNÂˆÛÛœÝ[\T™]Z[™Y\Y˜XÝÈHš[\Ë™š[\Š][HOˆË‹‹œ™\]Z\™Yš\ÝX[]šY[˜ÙK‹‹œ™\]Z\™YœÛÛ‘]šY[˜ÙWKš[˜ÛY\Ê][Kœ]
+H	‰ˆ][K˜ž]\ÈH
+K›X\
+][HOˆ][Kœ]
+NÂˆYˆ
+™\ÜËœÝ]\ÈOOH	Ü\ÜÙY	È	‰ˆ
+Z\ÜÚ[™Ô™]Z[™Y\Y˜XÝË›[™Ý[\T™]Z[™Y\Y˜XÝË›[™Ý
+JHÂˆ›ÝÈ™]È\œ›ÜŠ\ÜÚ[™È›Ý\›™^HXÚÜÈ™]Z[™Y”ÓÓ‹ÜØÜ™Y[œÚÝÝšY[È]šY[˜ÙNˆZ\ÜÚ[™ÏIÛZ\ÜÚ[™Ô™]Z[™Y\Y˜XÝËš›Ú[Š	Ë	Ê_H[\OIÙ[\T™]Z[™Y\Y˜XÝËš›Ú[Š	Ë	Ê_X
+NÂˆBˆÛÛœÝX[šY™\ÝHÂˆÛÛ˜XÝˆ	ØØ\Ù\]œXKY]šY[˜ÙK[X[šY™\ÝÌKŒŒ	Ëˆ™[X\ÙWÚYˆ‘SPTÑWÒQˆÛÝ\˜ÙWØÛÛ[Z]ˆ\Þ[Y[Y[]KœXKœÛÝ\˜ÙWØÛÛ[Z]ˆØ]Nˆ™\Ü™]šY[˜Ùvï=¶‰žËkºwµçFæB&W6W'fVBÖöFVÂ×F–ÖR66WFæ6R&V6V—G2r¢tÆö6ÂFWFW&Ö–æ—7F–2&Wf–Wr—2âW‡Æ–6—FÇ’VçfW&–f–VBG&ç6f÷&Òv—F‚W†7B&R÷÷7B†6†W2rÂ&Wf–WuG&ç6f÷&Ô—77VW2æÆVæwF‚ÓÓÒÂ¥4ôâç7G&–æv–g’‡&Wf–WuG&ç6f÷&Ô—77VW2’“°¢6öç7BÆ–VE&Wf–Wt6÷’Òv—BvRæÆö6F÷"‚r77FvT6çf2r’æ–ææW%FW‡B‚“°¢6†V6²‚tÆ–VB×&Wf–WrT’¶VW2F†RVF—BW‡Æ–6—FÇ’VçfW&–f–VBrÂ÷VçfW&–f–VBö’çFW7B†Æ–VE&Wf–Wt6÷’’ÂÆ–VE&Wf–Wt6÷’“°¢–b†—5&öGV7F–öä¦÷W&æW’‚’’6†V6²‚tÆ–VB×&Wf–WrT’6—2ÖöFVÂ66WFæ6Rv2æ÷B&WW6VBf÷"F†RVçfW&–f–VBVF—BrÂöÖöFVÂ66WFæ6UÆ%µâå×³Ã#ÕÆ"ƒó§v7Æ—2•Ç2¶æ÷B&WW6VBö’çFW7B†Æ–VE&Wf–Wt6÷’’ÂÆ–VE&Wf–Wt6÷’“°¢6öç7BÆ–VD6öçG&–'WF–öä&FvT6÷VçBÒv—BvRæÆö6F÷"‚rç&Wf–WrÖÆ–VBæÖöFVÂÖ6öçG&–'WF–öâÖGG&–'WF–öâr’æ6÷VçB‚“°¢6öç7Bf—6–&ÆT6öçG&–'WF–öä&FvT6÷VçBÒv—BvRæÆö6F÷"‚ræÖöFVÂÖ6öçG&–'WF–öâÖGG&–'WF–öã§f—6–&ÆRr’æ6÷VçB‚“°¢6öç7Bf—6–&ÆTf–æÄ†æFöfd6÷VçBÒv—BvRæÆö6F÷"‚rçc#Öf–æÂÖ†æFöfc§f—6–&ÆRr’æ6÷VçB‚“°¢6öç7B÷7E&Wf–Wt6öçG&–'WF–öäW‡V7FF–öç2Ò°¢ââç&Wf–WvVBç&W7VÇBç&ö6W72ææöFW2æfÆDÖ†æöFRÓâ†æöFRævVçEöFV6—6–öåö6öçG&–'WF–öç2ÇÂµÒ’æÖ†6öçG&–'WF–öâÓâ6öçG&–'WF–öäW‡V7FF–öâ†6öçG&–'WF–öâÂu&ö6W72FV6—6–öâÖ–ærvVçBrÂ&Wf–WvVBç&Wf–Wu÷G&ç6f÷&Ò’’’À¢ââç&Wf–WvVBç&W7VÇBæ6†V6¶Æ—7Bæ—FV×2æÖ†—FVÒÓâ6öçG&–'WF–öäW‡V7FF–öâ†—FVÒævVçEö6öçG&–'WF–öâÂtWf–FVæ6RæB6†V6¶Æ—7BvVçBrÂ&Wf–WvVBç&Wf–Wu÷G&ç6f÷&Ò’’À¢6öçG&–'WF–öäW‡V7FF–öâ†÷&6†W7G&F–öäVF—B†fÆw6†—&Vf÷&U&Wf–Wr“òæf–æÅö6Æ–Õö'&–Vcòæf–VÆEö6öçG&–'WF–öç2Âd”äÅô4ôåE$”%UD”ôåõ$ôÄRÂ&Wf–WvVBç&Wf–Wu÷G&ç6f÷&Ò’À¢Ó°¢6†V6²‚tÆ–VB×&Wf–Wr&W7VÇBvÆö&ÆÇ’7W&W76W2WfW'’&R×&Wf–Wr6öçG&–'WF–öâ&FvRæBf–æÂ†æFöfbrÂ&Wf–WvVBç&Wf–Wu÷G&ç6f÷&Óòæ66WFæ6U÷66÷RÓÓÒw÷7E÷&Wf–Wu÷VçfW&–f–VE÷G&ç6f÷&Òrbb&Wf–WvVBç&Wf–Wu÷G&ç6f÷&ÓòæÖöFVÅö66WFæ6U÷&WW6VBÓÓÒfÇ6Rbb÷7E&Wf–Wt6öçG&–'WF–öäW‡V7FF–öç2æWfW'’‡fÇVRÓâfÇVRÓÓÒçVÆÂ’bbÆ–VD6öçG&–'WF–öä&FvT6÷VçBÓÓÒbbf—6–&ÆT6öçG&–'WF–öä&FvT6÷VçBÓÓÒbbf—6–&ÆTf–æÄ†æFöfd6÷VçBÓÓÒÂ¥4ôâç7G&–æv–g’‡²&Wf–Wu÷G&ç6f÷&Ó¢&Wf–WvVBç&Wf–Wu÷G&ç6f÷&ÒÂ÷7E÷&Wf–WuöW‡V7FF–öç3¢÷7E&Wf–Wt6öçG&–'WF–öäW‡V7FF–öç2Â&VæFW&VEö&FvUö6÷VçC¢Æ–VD6öçG&–'WF–öä&FvT6÷VçBÂf—6–&ÆUö&FvUö6÷VçC¢f—6–&ÆT6öçG&–'WF–öä&FvT6÷VçBÂf—6–&ÆUöf–æÅö†æFöfeö6÷VçC¢f—6–&ÆTf–æÄ†æFöfd6÷VçBÒ’“°¢6öç7B&Wf–WvVDæöFT–G2Ò&Wf–WvVBç&W7VÇBç&ö6W72ææöFW2æÖ†æöFRÓâæöFRææöFUö–B“°¢6öç7BÆ–VDæöFT–G2Òv—BvRæWfÇVFR‚‚’Óâ²ââææWr6WB…²ââæFö7VÖVçBçVW'•6VÆV7F÷$ÆÂ‚rç&Wf–WrÖÆ–VBç&ö6W72ÖæöFRÖ'WGFöå¶FFÖæöFRÖ–EÒÂç&Wf–WrÖÆ–VBç&ö6W72Ö'&æ6‚ÖæöFU¶FFÖæöFRÖ–EÒr•ÒæÖ†æöFRÓâæöFRæFF6WBææöFT–B’•Ò“°¢6†V6²‚tÆ–VBf–Wr6†÷w2F†R7GVÂ6W'fW"×&WGW&æVB&Wf–WvVBw&‚rÂ&Wf–WvVDæöFT–G2æWfW'’†–BÓâÆ–VDæöFT–G2æ–æ6ÇVFW2†–B’’bb&Wf–WvVDæöFT–G2æÆVæwF‚ÓÓÒÆ–VDæöFT–G2æÆVæwF‚Â¥4ôâç7G&–æv–g’‡²&Wf–WvVDæöFT–G2ÂÆ–VDæöFT–G2Ò’“°¢6öç7BÆ–VDVFvW2Òv—BvRæÆö6F÷"‚rç&Wf–WrÖÆ–VBç&ö6W72ÖVFvU¶FFÖVFvR×6÷W&6UÕ¶FFÖVFvR×F&vWEÒr’æWfÇVFTÆÂ†VFvW2ÓâVFvW2æÖ†VFvRÓâ‡²6÷W&6S¢VFvRæFF6WBæVFvU6÷W&6RÂF&vWC¢VFvRæFF6WBæVFvUF&vWBÂ7FFS¢VFvRæFF6WBæVFvU7FFRÒ’’“°¢6öç7B&Wf–WvVDVFvW2Ò&Wf–WvVBç&W7VÇBç&ö6W72æVFvW2æÖ†VFvRÓâ‡²6÷W&6S¢VFvRç6÷W&6RÂF&vWC¢VFvRçF&vWBÂ7FFS¢VFvRç7FFRÇÂrrÒ’“°¢6†V6²‚tÆ–VBf–Wr&WF–ç2WfW'’6W'fW"×&WGW&æVB&Wf–WvVBw&‚6öææV7F–öârÂ¥4ôâç7G&–æv–g’†Æ–VDVFvW2’ÓÓÒ¥4ôâç7G&–æv–g’‡&Wf–WvVDVFvW2’Â¥4ôâç7G&–æv–g’‡²&Wf–WvVDVFvW2ÂÆ–VDVFvW2Ò’“°¢6öç7B&Wf–WvVD6†V6¶Æ—7E&ö¦V7F–öâÒv—BvRæÆö6F÷"‚rç&Wf–WvVBÖ6†V6¶Æ—7B¶FFÖ—FVÒÖ–EÒr’æWfÇVFTÆÂ†æöFW2ÓâæöFW2æÖ†æöFRÓâ‡²—FVÕö–C¢æöFRæFF6WBæ—FVÔ–BÂæöFUö–C¢æöFRæFF6WBææöFT–BÂæöFUö–G3¢æöFRæFF6WBææöFT–G2Â7W'&VçE÷Fƒ¢æöFRæFF6WBæ7W'&VçEF‚Ò’’“°¢6†V6²‚tÆ–VBf–Wr6†÷w2F†R7GVÂ&Wf–WvVB6†V6¶Æ—7Bv—F‚÷&FW&VB÷væW'2æB7W'&VçB×F‚7FFRrÂ&Wf–WvVD6†V6¶Æ—7E&ö¦V7F–öâæÆVæwF‚ÓÓÒ&Wf–WvVBç&W7VÇBæ6†V6¶Æ—7Bæ—FV×2æÆVæwF‚bb&Wf–WvVD6†V6¶Æ—7E&ö¦V7F–öâæWfW'’‚‡&ö¦V7F–öâÂ–æFW‚’Óâ&ö¦V7F–öâæ—FVÕö–BÓÓÒ&Wf–WvVBç&W7VÇBæ6†V6¶Æ—7Bæ—FV×5¶–æFW…Òæ—FVÕö–Bbb&ö¦V7F–öâææöFUö–BÓÓÒ&Wf–WvVBç&W7VÇBæ6†V6¶Æ—7Bæ—FV×5¶–æFW…ÒææöFUö–Bbb&ö¦V7F–öâææöFUö–G2ÓÓÒ&Wf–WvVBç&W7VÇBæ6†V6¶Æ—7Bæ—FV×5¶–æFW…ÒææöFUö–G2æ¦ö–â‚rÂr’bb&ö¦V7F–öâæ7W'&VçE÷F‚ÓÓÒ7G&–ær‡&Wf–WvVBç&W7VÇBæ6†V6¶Æ—7Bæ—FV×5¶–æFW…Òæ7W'&VçE÷F‚ÓÓÒG'VR’’Â¥4ôâç7G&–æv–g’‡&Wf–WvVD6†V6¶Æ—7E&ö¦V7F–öâ’“°¢6öç7B&Wf–WvVE6VÆV7FVDæöFRÒ&Wf–WvVBç&W7VÇBç&ö6W72ææöFW2æf–æB†æöFRÓâæöFRææöFUö–BÓÓÒ&Wf–WvVBç&W7VÇBç&ö6W72æ7W'&VçEö÷fW&Æ“òæ7W'&VçEöæöFUö–B“°¢6öç7B&Wf–WvVE6VÆV7FVDf7G2Ò&Wf–WvVBç&W7VÇBæf7G2æf–ÇFW"†f7BÓâ‡&Wf–WvVE6VÆV7FVDæöFSòæf7Eö–G2ÇÂµÒ’æ–æ6ÇVFW2†f7Bæf7Eö–B’’ç6Æ–6RƒÂ"“°¢6öç7B&Wf–WvVDf7D6†–âÒv—BvRæÆö6F÷"‚rç&Wf–WrÖÆ–VBçcrÖWf–FVæ6RÖ6†–âr’æ–ææW%FW‡B‚“°¢6†V6²‚tÆ–VBf7B6†–â&VÖ–ç2&÷VæBFòF†RF—7Æ–VB&Wf–WvVB'VârÂ&Wf–WvVE6VÆV7FVDf7G2æÆVæwF‚âbb&Wf–WvVE6VÆV7FVDf7G2æWfW'’†f7BÓâ&Wf–WvVDf7D6†–âæ–æ6ÇVFW2†G¶f7BæÆ&VÇÓ¢G¶f7BçfÇVWÖ’’Â¥4ôâç7G&–æv–g’‡²&Wf–WvVE6VÆV7FVDf7G2Â&Wf–WvVDf7D6†–âÒ’“°¢6öç7B&Vf÷&TæöFT–G2ÒæWr6WB†fÆw6†—&Vf÷&U&Wf–Wrç&W7VÇBç&ö6W72ææöFW2æÖ†æöFRÓâæöFRææöFUö–B’“°¢6öç7B6ö×WFVDFFVBÒ&Wf–WvVDæöFT–G2æf–ÇFW"†–BÓâ&Vf÷&TæöFT–G2æ†2†–B’“°¢6†V6²‚tÆ–VBf–Wr&W6VçG26ö×WFVBFVÇF&Vf÷&R6öç6öÆ–FF–öârÂ†v—BvRæÆö6F÷"‚rç&Wf–WrÖÆ–VBÖFVÇF'F–6ÆRr’æf—'7B‚’æ–ææW%FW‡B‚’’æ–æ6ÇVFW2…7G&–ær†6ö×WFVDFFVBæÆVæwF‚’’“°¢v—BVF—Ef–Ww÷'G2‚sR×&Wf–WrÖÆ–VBrÂrç&Wf–WrÖÆ–VBr“° ¢v—BvRæÆö6F÷"‚r6¦÷W&æW”æW‡Br’æ6Æ–6²‚“°¢v—Bv—Ef—6–&ÆR‚rçc#ÖÆV&æ–ær×7VÖÖ'’r“°¢6†V6²‚t¶æ÷vÆVFvR6öç6öÆ–FF–öâ&V6öÖW2F†R6–ævÆRf—6–&ÆRv÷&¶fÆ÷rfö7W2rÂv—BvRæÆö6F÷"‚r7c#vVçDfö7W5¶FFÖ66WF‚×7V6–Æ—7CÒ&¶æ÷vÆVFvR%Ò7c#vVçD7W'6÷%¶FFÖ66WF‚×7V6–Æ—7CÒ&¶æ÷vÆVFvR%Òr’æ6÷VçB‚’ÓÓÒ“°¢6öç7B6æF–FFT6÷’Òv—BvRæÆö6F÷"‚u¶FFÖ÷WF6öÖSÒ&6æF–FFR%Òr’æ–ææW%FW‡B‚“°¢6†V6²‚t6æF–FFR—2†öæW7FÇ’V&çF–æVBv—F‚öæRVçfW&–f–VB7W÷'B&V6÷&BæB¦W&òVÆ–f–VB7W÷'BrÂ&Wf–WvVBæ6æF–FFSòç7FGW2ÓÓÒwV&çF–æVBrbb&Wf–WvVBæ6æF–FFSòç7W÷'Eö6÷VçBÓÓÒbb&Wf–WvVBæ6æF–FFSòç&WV—&VE÷7W÷'BÓÓÒ2bb&Wf–WvVBæ6æF–FFSòçVÆ–f–VE÷7W÷'Eö6÷VçBÓÓÒbb&Wf–WvVBæ6æF–FFSòç&WV—&VE÷VÆ–f–VE÷7W÷'BÓÓÒ2bbóöb2VçfW&–f–VBFVÖò7W÷'B&V6÷&G2ö’çFW7B†6æF–FFT6÷’’bbóöb2VÆ–f–VB7W÷'B&V6÷&G2ö’çFW7B†6æF–FFT6÷’’Â6æF–FFT6÷’“°¢6†V6²‚u6†&VBÆ–&öö²—2W‡Æ–6—FÇ’Væ6†ævVBrÂ&Wf–WvVBæ6æF–FFSòç6†&VEö¶æ÷vÆVFvUö6†ævVBÓÓÒfÇ6Rbb÷6†&VBÆ–&öö²Væ6†ævVBö’çFW7B†v—BvRæÆö6F÷"‚rçc#ÖÆV&æ–ær×7VÖÖ'’r’æ–ææW%FW‡B‚’’bböÖ÷VÆB×Æ–&öö²×c2ö’çFW7B†v—BvRæÆö6F÷"‚u¶FFÖ÷WF6öÖSÒ'6†&VB×Æ–&öö²%Òr’æ–ææW%FW‡B‚’’“°¢6†V6²‚u76VBFWFW&Ö–æ—7F–2vFW2&VÖ–âF—7F–æ7Bg&öÒÖ—76–ærVÆ–f–VB7W÷'BæB&÷fÂrÂ&Wf–WvVBæ6æF–FFSòçF&vWE÷FW7G3òç7FGW2ÓÓÒw76VBrbb&Wf–WvVBæ6æF–FFSòç&÷FV7FVE÷&Vw&W76–öãòç7FGW2ÓÓÒw76VBrbb&Wf–WvVBæ6æF–FFSòæ&÷fÃòç7FGW2ÓÓÒwVæF–ærrbb&Wf–WvVBæ6æF–FFSòæ&÷fÃòçVÆ–f–VE÷&Wf–WvW"ÓÓÒfÇ6Rbb÷F&vWBFW7G3¢76VBö’çFW7B†6æF–FFT6÷’’bb÷&÷FV7FVB&Vw&W76–öã¢76VBö’çFW7B†6æF–FFT6÷’’bb÷VÆ–f–VB&÷fÃ¢VæF–ærö’çFW7B†6æF–FFT6÷’’bböFöW2æ÷B7WÇ’F†RÖ—76–ærVÆ–f–VB7W÷'B÷"&÷fÂö’çFW7B†6æF–FFT6÷’’bb÷Æ–&öö²&VÆV6VGÇVÆ–f–VB&÷fÃ¢&÷fVBö’çFW7B†v—BvRæÆö6F÷"‚rçc#ÖÆV&æ–ær×7VÖÖ'’r’æ–ææW%FW‡B‚’’Â6æF–FFT6÷’“°¢6öç7B&÷FV7FVD÷WGWD66RÒ&Wf–WvVBæ6æF–FFSòç&÷FV7FVE÷&Vw&W76–öãòæ66W3òæf–æB‡fÇVRÓâfÇVRæ66Uö–BÓÓÒw6÷W&6Uö6Æ–ÕögVÆÅ÷Æ–&ööµ÷Væ6†ævVBr“°¢6†V6²‚u&÷FV7FVB&Vw&W76–öâW†V7WFW2F†R&VÂÖVÖ÷'’vFRæB–æFWVæFVçFÇ’&–æG2Væ6†ævVBgVÆÂ&W7VÇBÂ&ö6W72ÂæB6†V6¶Æ—7B†6†W2rÂ&÷FV7FVD÷WGWD66Sòç7FGW2ÓÓÒw76VBrbb&÷FV7FVD÷WGWD66SòæW†V7WF–öåö6öçG&7BÓÓÒvFWFW&Ö–æ—7F–5ö66U÷7V6–f–5öÖVÖ÷'•övFRóããrbb&÷FV7FVD÷WGWD66SòævFUöW†V7WFVBÓÓÒG'VRbb&÷FV7FVD÷WGWD66SòæW‡V7FVEöÖVÖ÷'•öÆ–6F–öâÓÓÒfÇ6Rbb&÷FV7FVD÷WGWD66Sòæ7GVÅöÖVÖ÷'•öÆ–6F–öâÓÓÒfÇ6Rbb&÷FV7FVD÷WGWD66Sòæ÷WGWE÷Væ6†ævVBÓÓÒG'VRbb7F&ÆT§6öâ‡&÷FV7FVD÷WGWD66Sòæ&Vf÷&Uö†6†W2’ÓÓÒ7F&ÆT§6öâ‡&÷FV7FVD÷WGWD66SòægFW%ö†6†W2’bb²w&W7VÇEö†6‚rÂw&ö6W75ö†6‚rÂv6†V6¶Æ—7Eö†6‚uÒæWfW'’†¶W’Óâ4„#SeõEDU$âçFW7B‡&÷FV7FVD÷WGWD66Sòæ&Vf÷&Uö†6†W3òå¶¶W•ÒÇÂrr’’Â¥4ôâç7G&–æv–g’‡&÷FV7FVD÷WGWD66R’“°¢v—BVF—Ef–Ww÷'G2‚sbÖÆV&æ–ærrÂrçc#ÖÆV&æ–ær×7VÖÖ'’r“° ¢v—BvRæÆö6F÷"‚r6¦÷W&æW”æW‡Br’æ6Æ–6²‚“°¢v—Bv—D¦÷W&æW•V’‚tÆFW"Ö6Æ–Ò6ö×&—6öâF–Bæ÷B&V6‚—G2FW&Ö–æÂT’7FFRrÂ7–æ2‚’Óâ°¢v—Bv—DÆFW$¦÷W&æW•FW&Ö–æÅV’‚“°¢Ò“°¢6öç7B&ööbÒv—Bv—Df÷%fÇVR‚‚’Óâ&ööe&W7öç6RÂ'VåF–ÖV÷WD×2‚’“°¢6†V6²‚t†VÆBÖ÷WB&W7VÇB&WF–ç2öæRWF†÷&—G’ÖÆ&VÆÆVB¶æ÷vÆVFvRv÷&¶fÆ÷rfö7W2rÂv—BvRæÆö6F÷"‚r7c#vVçDfö7W5¶FFÖ66WF‚×7V6–Æ—7CÒ&¶æ÷vÆVFvR%Õ¶FF×v÷&²ÖWF†÷&—G•Ò7c#vVçD7W'6÷%¶FFÖ66WF‚×7V6–Æ—7CÒ&¶æ÷vÆVFvR%Õ¶FF×v÷&²ÖWF†÷&—G•Òr’æ6÷VçB‚’ÓÓÒ“°¢&WF–æVDWf–FVæ6U²vÆV&æ–ær×&ööbuÒÒ&ööc°¢6†V6²‚tÆ–fV7–6ÆR&öGV6VBfÆw6†—Â&6VÆ–æRÂæB÷7B×&Wf–Wr'Vç2rÂ'Vä–G2æÆVæwF‚ÓÓÒ2Â¥4ôâç7G&–æv–g’‡'Vä–G2’“°¢6öç7B&6VÆ–æRÒv—Bv—E'Vâ‡'Vä–G5³Ò“°¢6öç7BÆFW"Òv—Bv—E'Vâ‡'Vä–G5³%Ò“°¢6öç7BÆFW$6Æ–ÒÒv—BvWD§6öâ†G´—Òö’ö6Æ–×2òG¶Væ6öFUU$”6ö×öæVçB†FVÖòæÆFW%ö6Æ–Õö–B—Ö“°¢&WF–æVDWf–FVæ6U²vÆFW"Ö&6VÆ–æR×'VâuÒÒ&6VÆ–æS°¢&WF–æVDWf–FVæ6U²vÆFW"ÖgFW"ÖÖVÖ÷'’×'VâuÒÒÆFW#°¢–b‚—4Æö6Â„$4R’ÇÂ—4Æö6Â„’’’°¢6öç7B&6VÆ–æU&VfW&Væ6T—77VW2ÒFWFW&Ö–æ—7F–5&VfW&Væ6U'Våf–öÆF–öç2†&6VÆ–æRÂv&6VÆ–æRr“°¢6öç7BÆFW%&VfW&Væ6T—77VW2ÒFWFW&Ö–æ—7F–5&VfW&Væ6U'Våf–öÆF–öç2†ÆFW"Âv7W'&VçBr“°¢6†V6²‚t†VÆBÖ÷WB&6VÆ–æRæB7W'&VçB6ö×&—6öç2W‡Æ–6—FÇ’F—66Æ÷6RFWFW&Ö–æ—7F–2×&VfW&Væ6RWF†÷&—G’v—F‚æòW†V7WFVBÖöFVÂDr÷"6ÆÂ7F—f—G’rÂ&6VÆ–æU&VfW&Væ6T—77VW2æÆVæwF‚ÓÓÒbbÆFW%&VfW&Væ6T—77VW2æÆVæwF‚ÓÓÒÂ¥4ôâç7G&–æv–g’‡²&6VÆ–æS¢&6VÆ–æU&VfW&Væ6T—77VW2ÂÆFW#¢ÆFW%&VfW&Væ6T—77VW2Ò’“°¢Ð¢f÷"†6öç7B¶Æ&VÂÂ'VâÂ6Æ–ÕÒöbµ²v&6VÆ–æRrÂ&6VÆ–æRÂÆFW$6Æ–ÕÒÂ²vÆFW"rÂÆFW"ÂÆFW$6Æ–ÕÕÒ’°¢6öç7B&VÆF–öä—77VW2ÒWf–FVæ6U&VÆF–öä6öçG&7Ef–öÆF–öç2‡'Vâç&W7VÇCòç&ö6W72Â'Vâç&W7VÇCòæ6†V6¶Æ—7B“°¢6†V6²†G¶Æ&VÇÒÆFW"Ö6Æ–Ò'Vâ&WF–ç2W†7B&V6—&ö6ÂWf–FVæ6R÷væW'6†—Â&VÆF–öä—77VW2æÆVæwF‚ÓÓÒÂ¥4ôâç7G&–æv–g’‡&VÆF–öä—77VW2’“°¢6öç7BÆVvÄ—77VW2ÒÆVvÄ6öçFW‡D6öçG&7Ef–öÆF–öç2‡'Vâç&W7VÇCòæÆVvÅ÷&W6V&6‚Â'Vâç&W7VÇCòç&ö6W72“°¢6†V6²†G¶Æ&VÇÒÆFW"Ö6Æ–Ò'Vâ&WF–ç2W†7B”BÖ¦ö–æVBÆVvÂ6öçFW‡FÂÆVvÄ—77VW2æÆVæwF‚ÓÓÒÂ¥4ôâç7G&–æv–g’†ÆVvÄ—77VW2’“°¢6öç7Bf—7VÅ&Vg2Ò‡'Vâç&W7VÇCòæf7G2ÇÂµÒ’æfÆDÖ†f7BÓâ†f7Bç6÷W&6U÷&Vg2ÇÂµÒ’æf–ÇFW"‡&VfW&Væ6RÓâ&VfW&Væ6RæÆö6F÷%ö¶–æBÓÓÒwf—7VÅöö'6W'fF–öâr’“°¢6öç7Bf—7VÄ—77VW2Òf—7VÅ&Vg2æfÆDÖ‡&VfW&Væ6RÓâf—7VÅ&VfW&Væ6T6öçG&7Ef–öÆF–öç2‡&VfW&Væ6RÂ6Æ–Òæ'F–f7G2æf–æB†'F–f7BÓâ'F–f7Bæ'F–f7Eö–BÓÓÒ&VfW&Væ6Ræ'F–f7Eö–B’’æÖ†—77VRÓâG·&VfW&Væ6Ræ'F–f7Eö–GÓ¢G¶—77VWÖ’“°¢6†V6²†G¶Æ&VÇÒÆFW"Ö6Æ–Ò'Vâ&–æG2WfW'’7W&FVBf—7VÂææ÷FF–öâFòV&Æ–2–ÖvR'—FW6Âf—7VÅ&Vg2æÆVæwF‚âbbf—7VÄ—77VW2æÆVæwF‚ÓÓÒÂ¥4ôâç7G&–æv–g’‡f—7VÄ—77VW2’“°¢6öç7B&æ¶–æt—77VW2Ò&V6VFVçE&æ¶–æt6öçG&7Ef–öÆF–öç2‡'Vâç&W7VÇB“°¢6†V6²†G¶Æ&VÇÒÆFW"Ö6Æ–Ò'Vâ&V6ö×WFW2âW†7B×F‡&VR&æ¶–ær&V6V—FÂ&æ¶–æt—77VW2æÆVæwF‚ÓÓÒÂ¥4ôâç7G&–æv–g’‡&æ¶–æt—77VW2’“°¢6öç7BÖVÖ÷'•7FFT—77VW2ÒÖVÖ÷'•&WG&–WfÄ6öçG&7Ef–öÆF–öç2‡'Vâç&W7VÇB“°¢6†V6²†G¶Æ&VÇÒÆFW"Ö6Æ–Ò'Vâ¶VW2&WG&–WfÂ6W&FRg&öÒ&V6V—BÖ&÷VæBÖVÖ÷'’W6VÂÖVÖ÷'•7FFT—77VW2æÆVæwF‚ÓÓÒÂ¥4ôâç7G&–æv–g’†ÖVÖ÷'•7FFT—77VW2’“°¢Ð¢6öç7BÖVÖ÷'”—77VW2ÒÖVÖ÷'”Æ–6F–öä6öçG&7Ef–öÆF–öç2†&6VÆ–æRÂÆFW"Â&ööb“°¢6†V6²‚tÆFW"6W6Â&ööb–æFWVæFVçFÇ’&–æG2F†RW†7BÖVÖ÷'’&V6V—BÂ&WF–æVB&R×G&ç6f÷&Ò&÷VæF'’ÂW'6—7FVB6ö×ÆWFVBWfVçBÂEDò†6†W2Â6VÖçF–2VÆ–v–&–Æ—G’Â÷W&F–öç2ÂFVÇFÂFVâ6†V6·2ÂW&R&WÆ’ÂæBVæ6†ævVBc2rÂÖVÖ÷'”—77VW2æÆVæwF‚ÓÓÒÂ¥4ôâç7G&–æv–g’†ÖVÖ÷'”—77VW2’“°¢6†V6²‚t6ö×WFVB&ööbæÖW2&÷F‚6ö×ÆWFVBÆFW"Ö6Æ–Ò'Vç2rÂ&ööbæ&Vf÷&Sòç'Våö–BÓÓÒ&6VÆ–æRç'Våö–Bbb&ööbægFW#òç'Våö–BÓÓÒÆFW"ç'Våö–B“°¢6†V6²‚tÆFW"6Æ–Ò¶VW2F†R6†&VBc2Æ–&öö²æBÆ–W2æò6†&VB'VÆRrÂÆFW"ç&W7VÇCòçÆ–&öö³òçfW'6–öâÓÓÒvÖ÷VÆB×Æ–&öö²×c2rbbÆFW"ç&W7VÇCòç6†&VE÷'VÆUöÆ–VBÓÓÒfÇ6R“°¢6öç7BÆFW%&ö6W72ÒÆFW"ç&W7VÇCòç&ö6W72ÇÂÆFW"ç&ö6W73°¢6öç7BÆFW$7W'&VçDæöFT–BÒÆFW%&ö6W73òæ7W'&VçEö÷fW&Æ“òæ7W'&VçEöæöFUö–BÇÂÆFW%&ö6W73òæ7W'&VçEöæöFS°¢6öç7BÆFW$7W'&VçDæöFRÒÆFW%&ö6W73òææöFW3òæf–æB†æöFRÓâæöFRææöFUö–BÓÓÒÆFW$7W'&VçDæöFT–B“°¢6†V6²‚tÆFW"6Æ–Ò&VÖ–ç2–â7v—72&W6–FVçF–ÂFVææ7’BVç&W6öÇfVB6W6F–öâv—F‚F†RWf–FVæ6RÖvæW‡B7F–öârÂÆFW"ç&W7VÇCòæ6FVv÷'’ÓÓÒu&VçFÂFVfV7BÒÖ÷VÆBæBÖö—7GW&RrbbÆFW"ç&W7VÇCòç66÷RÓÓÒu7v—72&W6–FVçF–ÂFVææ7’rbbÆFW$7W'&VçDæöFT–BÓÓÒv6W6F–öârbbÆFW$7W'&VçDæöFSòç7FFRÓÓÒv7W'&VçBrbbÆFW$7W'&VçDæöFSòæç7vW"ÓÓÒuVç&W6öÇfVBrbbÆFW%&ö6W73òæ7W'&VçEö÷fW&Æ“òææW‡Eö7F–öåöæöFUö–BÓÓÒvWf–FVæ6UövrbbÆFW%&ö6W73òç6VÆV7FVE÷Fƒòæ–æ6ÇVFW2‚vWf–FVæ6Uövr’Â¥4ôâç7G&–æv–g’‡²6FVv÷'“¢ÆFW"ç&W7VÇCòæ6FVv÷'’Â66÷S¢ÆFW"ç&W7VÇCòç66÷RÂ7W'&VçEöæöFUö–C¢ÆFW$7W'&VçDæöFT–BÂ7W'&VçEöæöFS¢ÆFW$7W'&VçDæöFRÂ÷fW&Æ“¢ÆFW%&ö6W73òæ7W'&VçEö÷fW&Æ’Â6VÆV7FVE÷Fƒ¢ÆFW%&ö6W73òç6VÆV7FVE÷F‚Ò’“°¢6öç7BÆFW$6W6F–öâÒvRæÆö6F÷"‚r6ÆFW%&W7VÇBæÆFW"×&ö6W72×&W7VÇBç&ö6W72ÖæöFRæ7W'&VçBç&ö6W72ÖæöFRÖ'WGFöå¶FFÖæöFRÖ–CÒ&6W6F–öâ%Òr“°¢6†V6²‚tÆFW"T’&VæFW'2—G2÷vâ7W'&VçBVç&W6öÇfVB6W6F–öâFV6—6–öârÂv—BÆFW$6W6F–öâæ6÷VçB‚’ÓÓÒbbô7W'&VçBFV6—6–öâö’çFW7B†v—BÆFW$6W6F–öâæ–ææW%FW‡B‚’’bbô6W6F–öâ76W76ÖVçBö’çFW7B†v—BÆFW$6W6F–öâæ–ææW%FW‡B‚’’bbõVç&W6öÇfVBö’çFW7B†v—BÆFW$6W6F–öâæ–ææW%FW‡B‚’’Âv—BvRæÆö6F÷"‚r6ÆFW%&W7VÇBæÆFW"×&ö6W72×&W7VÇBr’æ–ææW%FW‡B‚’“°¢6†V6²‚tÆFW"ÖVÖ÷'’G&ç6f÷&ÒFG2W†7FÇ’F†RfVçF–ÆF–öâæöFRÂGvò&÷VæFVBVFvW2ÂæBF‡&VRWf–FVæ6RÖ—FVÒ6†ævW2rÂ7F&ÆT§6öâ‡&ööbæ6W6ÅöFVÇFòç&ö6W73òæFFVEöæöFUö–G2’ÓÓÒ7F&ÆT§6öâ…²wfVçF–ÆF–öåöF—7WFRuÒ’bb7F&ÆT§6öâ‡&ööbæ6W6ÅöFVÇFòç&ö6W73òæFFVEöVFvW2’ÓÓÒ7F&ÆT§6öâ…·²6÷W&6S¢vWf–FVæ6UövrÂF&vWC¢wfVçF–ÆF–öåöF—7WFRrÒÂ²6÷W&6S¢wfVçF–ÆF–öåöF—7WFRrÂF&vWC¢v6W6F–öârÕÒ’bb7F&ÆT§6öâ‡&ööbæ6W6ÅöFVÇFòæWf–FVæ6Sòæ6†ævVEö—FVÕö–G2’ÓÓÒ7F&ÆT§6öâ…²v'V–ÆF–æuöVçfVÆ÷RrÂvÖævVÖVçE÷÷6—F–öârÂwW6UöWf–FVæ6RuÒ’bbÆFW%&ö6W72ææöFW2ç6öÖR†æöFRÓâæöFRææöFUö–BÓÓÒwfVçF–ÆF–öåöF—7WFRr’Â¥4ôâç7G&–æv–g’‡&ööbæ6W6ÅöFVÇF’“°¢6öç7BÖVÖ÷'•W6VBÒÆFW"ç&W7VÇCòæÖVÖ÷'•öÆ–6F–öâÒçVÆÀ¢bbÆFW"ç&W7VÇCòæÖVÖ÷'•÷W6VBÓÓÒG'VP¢bbÆFW"ç&W7VÇCòç&Wf–WvVEöÖVÖ÷'•÷W6VBÓÓÒG'VP¢bbÆFW"ç&W7VÇCòæ¶æ÷vÆVFvSòç&Wf–WvVEöÖVÖ÷'•÷W6VBÓÓÒG'VP¢bbÆFW"ç&W7VÇCòç&Wf–WvVEöÖVÖ÷'•÷&WG&–WfVBÓÓÒG'VP¢bbÆFW"ç&W7VÇCòæ¶æ÷vÆVFvSòç&Wf–WvVEöÖVÖ÷'•÷&WG&–WfVBÓÓÒG'VP¢bbÆFW"ç&W7VÇCòç&ö6W73òæÖVÖ÷'•÷W6VBÓÓÒG'VP¢bbÆFW"ç&W7VÇCòæ6†V6¶Æ—7CòæÖVÖ÷'•÷W6VBÓÓÒG'VP¢bb&ööbç&Wf–WvVEöÖVÖ÷'•÷&ööcòçW6VBÓÓÒG'VP¢bbÖVÖ÷'”—77VW2æÆVæwF‚ÓÓÒ°¢6†V6²‚tÆFW"T’6Æ–×266R×7V6–f–2VçfW&–f–VBwV–Fæ6RöæÇ’v†Vâ&WG&–WfÂÂWfW'’W6RfÆrÂW†7B&V6V—BÂæB6ö×WFVB&ööbÆÂw&VRrÂÖVÖ÷'•W6VBbbv—BvRæÆö6F÷"‚rçc#ÖÆFW"Ö†VF–æu¶FFÖÖVÖ÷'’×&WG&–WfVCÒ'G'VR%Õ¶FFÖÖVÖ÷'’×W6VCÒ'G'VR%Õ¶FFÖÖVÖ÷'’×&WG&–WfVBÖöæÇ“Ò&fÇ6R%Õ¶FFÖ6W6Â×&ööb×&VG“Ò'G'VR%Òr’æ6÷VçB‚’ÓÓÒbbö66R×7V6–f–2VçfW&–f–VBwV–Fæ6RÆ–VBö’çFW7B†v—BvRæÆö6F÷"‚rçc#ÖÆFW"Ö†VF–ærr’æ–ææW%FW‡B‚’’Âv—BvRæÆö6F÷"‚rçc#ÖÆFW"Ö†VF–ærr’æ–ææW%FW‡B‚’“°¢6†V6²‚tÆFW"&æ¶–ær6VÆV7G2F†RVçfW&–f–VBFVÖòÖVÖ÷'’æB&VÖ–ç2W†7FÇ’F‡&VR÷&FW&VBGFW&ç2rÂÆFW"ç&W7VÇBç&V6VFVçG2æÆVæwF‚ÓÓÒ2bbÆFW"ç&W7VÇBç&V6VFVçG5³Óòæ6Æ–Õö–BÓÓÒtDTbÓ#rÔSÔDTÔòrbbÆFW"ç&W7VÇBç&V6VFVçG5³Óòç&Wf–Wu÷7FGW2ÓÓÒwVçfW&–f–VEöFVÖõöÖVÖ÷'’rbbÆFW"ç&W7VÇBç&V6VFVçE÷&æ¶–ærç6VÆV7FVEö6Æ–Õö–G5³ÒÓÓÒtDTbÓ#rÔSÔDTÔòrÂ¥4ôâç7G&–æv–g’†ÆFW"ç&W7VÇBç&V6VFVçG2æÖ†—FVÒÓâ‡²6Æ–Õö–C¢—FVÒæ6Æ–Õö–BÂ7FGW3¢—FVÒç&Wf–Wu÷7FGW2Â&æ³¢—FVÒç&æ¶–æsòç&æ²Ò’’’“°¢6öç7BG&ç6f÷&ÖVD6öçG&–'WF–öåfÇVW2Ò°¢âââ†ÆFW"ç&W7VÇBç&ö6W72ææöFW2ÇÂµÒ’æfÆDÖ†æöFRÓâ†æöFRævVçEöFV6—6–öåö6öçG&–'WF–öç2ÇÂµÒ’æÖ†6öçG&–'WF–öâÓâ6öçG&–'WF–öäW‡V7FF–öâ†6öçG&–'WF–öâÂ$ô4U55ô4ôåE$”%UD”ôåõ$ôÄRÂÆFW"ç&W7VÇBæÖVÖ÷'•öÆ–6F–öâ’’’À¢âââ†ÆFW"ç&W7VÇBæ6†V6¶Æ—7Bæ—FV×2ÇÂµÒ’æÖ†—FVÒÓâ6öçG&–'WF–öäW‡V7FF–öâ†—FVÒævVçEö6öçG&–'WF–öâÂUd”DTä4Uô4ôåE$”%UD”ôåõ$ôÄRÂÆFW"ç&W7VÇBæÖVÖ÷'•öÆ–6F–öâ’’À¢Ó°¢6†V6²‚u÷7BÖÖVÖ÷'’ED÷2æBT’6öçF–âæò&RÖÖVÖ÷'’æVÖ÷G&öâ66WFæ6RGG&–'WF–öârÂG&ç6f÷&ÖVD6öçG&–'WF–öåfÇVW2æWfW'’‡fÇVRÓâfÇVRÓÓÒçVÆÂ’bbv—BvRæÆö6F÷"‚r6ÆFW%&W7VÇBæÖöFVÂÖ6öçG&–'WF–öâÖGG&–'WF–öâr’æ6÷VçB‚’ÓÓÒbbö&¦V7Bæ†4÷vâ†ÆFW"ç&W7VÇBç&ö6W72ÂvvVçEö6öçG&–'WF–öâr’bbÆFW"ç&W7VÇBç&ö6W72ææöFW2ç6öÖR†æöFRÓâö&¦V7Bæ†4÷vâ†æöFRÂvvVçEöFV6—6–öåö6öçG&–'WF–öç2r’’bbö&¦V7Bæ†4÷vâ†ÆFW"ç&W7VÇBæ6†V6¶Æ—7BÂvvVçEö6öçG&–'WF–öâr’bbÆFW"ç&W7VÇBæ6†V6¶Æ—7Bæ—FV×2ç6öÖR†—FVÒÓâö&¦V7Bæ†4÷vâ†—FVÒÂvvVçEö6öçG&–'WF–öâr’’bbÆFW"ç&W7VÇBææW‡Eö7F–öãòævVçEö'&–Veö6öçG&–'WF–öâÓÓÒçVÆÂÂ¥4ôâç7G&–æv–g’‡G&ç6f÷&ÖVD6öçG&–'WF–öåfÇVW2’“°¢6öç7B&WGW&æVEVçfW&–f–VDÖVÖ÷'’ÒÆFW"ç&W7VÇCòç&V6VFVçG3òæf–æB†—FVÒÓâ—FVÒç&Wf–Wu÷7FGW2ÓÓÒwVçfW&–f–VEöFVÖõöÖVÖ÷'’rbb—FVÒæÖVÖ÷'•ö–B“°¢–b†ÖVÖ÷'•W6VBbb&WGW&æVEVçfW&–f–VDÖVÖ÷'’’°¢6öç7B&WW6UF‡&VE6VÆV7F÷"Òr6ÆFW%&W7VÇBçc‚×&WW6R×&ööbçcr×&WW6R×F‡&VBs°¢v—Bv—Ef—6–&ÆR‡&WW6UF‡&VE6VÆV7F÷"“°¢6öç7BÆFW%&WW6UF‡&VD6÷VçBÒv—BvRæÆö6F÷"‚r6ÆFW%&W7VÇBçcr×&WW6R×F‡&VBr’æ6÷VçB‚“°¢6öç7B&WW6U&ööd6÷VçBÒv—BvRæÆö6F÷"‚r6ÆFW%&W7VÇBçc‚×&WW6R×&ööbr’æ6÷VçB‚“°¢6öç7B&ööe&WW6UF‡&VD6÷VçBÒv—BvRæÆö6F÷"‡&WW6UF‡&VE6VÆV7F÷"’æ6÷VçB‚“°¢6†V6²‚tÆFW"&W7VÇB&VæFW'2W†7FÇ’öæR&V6V—BÖ&÷VæBÖVÖ÷'’×&WW6R&ööbæBF‡&VBrÂÆFW%&WW6UF‡&VD6÷VçBÓÓÒbb&WW6U&ööd6÷VçBÓÓÒbb&ööe&WW6UF‡&VD6÷VçBÓÓÒÂ¥4ôâç7G&–æv–g’‡²ÆFW%÷&WW6U÷F‡&VG3¢ÆFW%&WW6UF‡&VD6÷VçBÂ&WW6U÷&öög3¢&WW6U&ööd6÷VçBÂ&ööe÷&WW6U÷F‡&VG3¢&ööe&WW6UF‡&VD6÷VçBÒ’“°¢6öç7B&WW6T6÷’Òv—BvRæÆö6F÷"‡&WW6UF‡&VE6VÆV7F÷"’æ–ææW%FW‡B‚“°¢6†V6²‚u&WGW&æVBFVÖòÖVÖ÷'’7F—2W‡Æ–6—FÇ’VçfW&–f–VBv†W&WfW"—G2&V6VFVçB—2&VæFW&VBrÂ÷VçfW&–f–VBFVÖò&Wf–WrÖVÖ÷'’&WGW&æVBö’çFW7B‡&WW6T6÷’’bb÷VÆ–f–VBW‡W'B×&Wf–WvVBÖVÖ÷'’&WGW&æVBö’çFW7B‡&WW6T6÷’’Â&WW6T6÷’“°¢6öç7B&öödÆ–÷WBÒv—BvRæÆö6F÷"‡&WW6UF‡&VE6VÆV7F÷"’æWfÇVFR†æöFRÓâ°¢6öç7B7G–ÆRÒvWD6ö×WFVE7G–ÆR†æöFR“°¢6öç7B&ööefÇVW2Ò²ââææöFRçVW'•6VÆV7F÷$ÆÂ‚w7G&öærÆ6öFRr•ÒæÖ‡fÇVRÓâvWD6ö×WFVE7G–ÆR‡fÇVR’“°¢&WGW&â°¢F—7Æ“¢7G–ÆRæF—7Æ’À¢w&–E÷FV×ÆFUö6öÇVÖç3¢7G–ÆRæw&–EFV×ÆFT6öÇVÖç2À¢6Æ–VçE÷v–GFƒ¢æöFRæ6Æ–VçEv–GF‚À¢67&öÆÅ÷v–GFƒ¢æöFRç67&öÆÅv–GF‚À¢fÇVW5÷w&¢&ööefÇVW2æWfW'’‡fÇVRÓâfÇVRæ÷fW&fÆ÷uw&ÓÓÒvç—v†W&RrbbfÇVRçv÷&D'&V²ÓÓÒv'&V²×v÷&Br’À¢Ó°¢Ò“°¢6†V6²‚tf–æÂÖVÖ÷'’×&ööbÆ–÷WBW6W2&W7öç6—fRw&–B6öÇVÖç2æBw&2Æöær&V6V—B†6†W2v—F†÷WBÆö6Â÷fW&fÆ÷rrÂ&öödÆ–÷WBæF—7Æ’ÓÓÒvw&–Brbb&öödÆ–÷WBæw&–E÷FV×ÆFUö6öÇVÖç2ÓÒvæöæRrbb&öödÆ–÷WBç67&öÆÅ÷v–GF‚ÃÒ&öödÆ–÷WBæ6Æ–VçE÷v–GF‚²bb&öödÆ–÷WBçfÇVW5÷w&Â¥4ôâç7G&–æv–g’‡&öödÆ–÷WB’“°¢Ð¢6öç7B&V6V—E&ö¦V7F–öâÒv—BvRæÆö6F÷"‚ræÖVÖ÷'’ÖÆ–6F–öâ×&V6V—Br’æWfÇVFR†æöFRÓâ°¢6öç7BVÆ–v–&–Æ—G’ÒæöFRçVW'•6VÆV7F÷"‚ræÖVÖ÷'’×6VÖçF–2ÖVÆ–v–&–Æ—G’r“°¢&WGW&â°¢6öçG&7C¢æöFRæFF6WBæÖVÖ÷'”6öçG&7BÀ¢WF†÷&—G“¢æöFRæFF6WBæÖVÖ÷'”WF†÷&—G’À¢66÷S¢æöFRæFF6WBæÖVÖ÷'•66÷RÀ¢Æ–6F–öåö†6ƒ¢æöFRæFF6WBæÆ–6F–öä†6‚À¢ÖöFVÅö66WFæ6U÷&WW6VC¢æöFRæFF6WBæÖöFVÄ66WFæ6U&WW6VBÀ¢6†&VE÷'VÆUöÆ–VC¢æöFRæFF6WBç6†&VE'VÆTÆ–VBÀ¢VÆ–v–&–Æ—G•ö6öçG&7C¢VÆ–v–&–Æ—G“òæFF6WBæVÆ–v–&–Æ—G”6öçG&7BÀ¢VÆ–v–&–Æ—G•÷'VÆUö–C¢VÆ–v–&–Æ—G“òæFF6WBæVÆ–v–&–Æ—G•'VÆT–BÀ¢6VÖçF–5÷6–væGW&Uö†6ƒ¢VÆ–v–&–Æ—G“òæFF6WBç6VÖçF–56–væGW&T†6‚À¢6VÖçF–5÷&öÆS¢VÆ–v–&–Æ—G“òæFF6WBç6VÖçF–5&öÆRÀ¢FW‡C¢æöFRæ–ææW%FW‡BÀ¢Ó°¢Ò“°¢6öç7BÆFW%&W7VÇEFW‡BÒv—BvRæÆö6F÷"‚r6ÆFW%&W7VÇBr’æ–ææW%FW‡B‚“°¢6†V6²‚u&VæFW&VB&V6V—BW‡÷6W2W†7BVçfW&–f–VB&÷VæF'’Â6VÖçF–2VÆ–v–&–Æ—G’ÂÆ–6F–öâ†6‚ÂæBWfW'’&Vf÷&RögFW"EDòæB6VÖçF–2†6‚rÂ&V6V—E&ö¦V7F–öâæ6öçG&7BÓÓÒÆFW"ç&W7VÇBæÖVÖ÷'•öÆ–6F–öâæ6öçG&7Bbb&V6V—E&ö¦V7F–öâæWF†÷&—G’ÓÓÒwVçfW&–f–VEöFVÖòrbb&V6V—E&ö¦V7F–öâç66÷RÓÓÒv66U÷7V6–f–5öwV–Fæ6UööæÇ’rbb&V6V—E&ö¦V7F–öâæÆ–6F–öåö†6‚ÓÓÒÆFW"ç&W7VÇBæÖVÖ÷'•öÆ–6F–öâæÆ–6F–öåö†6‚bb&V6V—E&ö¦V7F–öâæÖöFVÅö66WFæ6U÷&WW6VBÓÓÒvfÇ6Rrbb&V6V—E&ö¦V7F–öâç6†&VE÷'VÆUöÆ–VBÓÓÒvfÇ6Rrbb&V6V—E&ö¦V7F–öâæVÆ–v–&–Æ—G•ö6öçG&7BÓÓÒÆFW"ç&W7VÇBæÖVÖ÷'•öÆ–6F–öâæVÆ–v–&–Æ—G’æ6öçG&7Bbb&V6V—E&ö¦V7F–öâæVÆ–v–&–Æ—G•÷'VÆUö–BÓÓÒÆFW"ç&W7VÇBæÖVÖ÷'•öÆ–6F–öâæVÆ–v–&–Æ—G’ç'VÆUö–Bbb&V6V—E&ö¦V7F–öâç6VÖçF–5÷6–væGW&Uö†6‚ÓÓÒÆFW"ç&W7VÇBæÖVÖ÷'•öÆ–6F–öâæVÆ–v–&–Æ—G’ç6VÖçF–5÷6–væGW&Uö†6‚bb&V6V—E&ö¦V7F–öâç6VÖçF–5÷&öÆRÓÓÒvÖævVÖVçE÷fVçF–ÆF–öåöÆÆVvF–öârbb²ââäö&¦V7BçfÇVW2†ÆFW"ç&W7VÇBæÖVÖ÷'•öÆ–6F–öâæ&Vf÷&R’Âââäö&¦V7BçfÇVW2†ÆFW"ç&W7VÇBæÖVÖ÷'•öÆ–6F–öâægFW"•ÒæWfW'’††6‚ÓâÆFW%&W7VÇEFW‡Bæ–æ6ÇVFW2††6‚’’Â¥4ôâç7G&–æv–g’‡&V6V—E&ö¦V7F–öâ’“°¢6öç7B&VæFW&VDFVÇFÒv—BvRæÆö6F÷"‚ræ6W6ÂÖFVÇFr’æWfÇVFR†æöFRÓâ‡²æöç¦W&ó¢æöFRæFF6WBæ6W6Äæöç¦W&òÂFW‡C¢æöFRæ–ææW%FW‡BÒ’“°¢6†V6²‚u&VæFW&VB6W6ÂFVÇFæÖW2F†RW†7BFFVBæöFRÂGvòVFvW2ÂæBF‡&VR6†ævVBWf–FVæ6R—FV×2rÂ&VæFW&VDFVÇFææöç¦W&òÓÓÒwG'VRrbb²wfVçF–ÆF–öåöF—7WFRrÂvWf–FVæ6Uöv(i"fVçF–ÆF–öåöF—7WFRrÂwfVçF–ÆF–öåöF—7WFR(i"6W6F–öârÂv'V–ÆF–æuöVçfVÆ÷RrÂvÖævVÖVçE÷÷6—F–öârÂwW6UöWf–FVæ6RuÒæWfW'’‡fÇVRÓâ&VæFW&VDFVÇFçFW‡Bæ–æ6ÇVFW2‡fÇVR’’Â&VæFW&VDFVÇFçFW‡B“°¢6öç7B&VæFW&VD6†V6·2Òv—BvRæÆö6F÷"‚ræÖVÖ÷'’ÖFWFW&Ö–æ—7F–2Ö6†V6·2¶FFÖÖVÖ÷'’Ö6†V6µÒr’æWfÇVFTÆÂ†æöFW2ÓâæöFW2æÖ†æöFRÓâ‡²æÖS¢æöFRæFF6WBæÖVÖ÷'”6†V6²Â7FGW3¢æöFRæFF6WBæ6†V6µ7FGW2Ò’’“°¢6†V6²‚u&VæFW&VB6W6Â&ööb6†÷w2ÆÂFVâFWFW&Ö–æ—7F–26†V6·2–â÷&FW"æB76VBrÂ&VæFW&VD6†V6·2æÆVæwF‚ÓÓÒbb7F&ÆT§6öâ‡&VæFW&VD6†V6·2’ÓÓÒ7F&ÆT§6öâ‡&ööbæFWFW&Ö–æ—7F–5ö6†V6·2æÖ†—FVÒÓâ‡²æÖS¢—FVÒææÖRÂ7FGW3¢—FVÒç7FGW2Ò’’’Â¥4ôâç7G&–æv–g’‡&VæFW&VD6†V6·2’“°¢6öç7Bf–æÄ6ö×&—6öâÒvRæÆö6F÷"‚r6ÆFW%&W7VÇBæf–æÂ×&ööbr“°¢6öç7Bf–æÄ6ö×&—6öåFW‡BÒv—Bf–æÄ6ö×&—6öâæ–ææW%FW‡B‚“°¢6†V6²‚t&Vf÷&RögFW"f—6–&Ç’W‡÷6W2&÷F‚&WGW&æVB&W7VÇB†6†W2æB&WF–ç2Væ6†ævVB6†&VBc2rÂv—Bf–æÄ6ö×&—6öâæ—5f—6–&ÆR‚’bbf–æÄ6ö×&—6öåFW‡Bæ–æ6ÇVFW2‡&ööbæ&Vf÷&Rç&W7VÇEö†6‚’bbf–æÄ6ö×&—6öåFW‡Bæ–æ6ÇVFW2‡&ööbægFW"ç&W7VÇEö†6‚’bbõ6†&VBÆ–&öö²c2Væ6†ævVBö’çFW7B†ÆFW%&W7VÇEFW‡B’bböÖ÷VÆB×Æ–&öö²×c2ö’çFW7B†ÆFW%&W7VÇEFW‡B’Â¥4ôâç7G&–æv–g’‡²6ö×&—6öã¢f–æÄ6ö×&—6öåFW‡BÂ6†&VE÷Æ–&ööµ÷f—6–&ÆS¢õ6†&VBÆ–&öö²c2Væ6†ævVBö’çFW7B†ÆFW%&W7VÇEFW‡B’Ò’“°¢v—BVF—Ef–Ww÷'G2‚srÖÆFW"×&W7VÇBrÂr6ÆFW%&W7VÇBçc‚×&WW6R×&ööbr“° ¢6†V6²‚t–Ö×WF&ÆR&VÆV6RÖ&¶W"v2æWfW"&Ww&—GFVâGW&–ærF†R¦÷W&æW’rÂv—BvRæWfÇVFR‚‚’Óâv–æF÷råõö66WF…&VÆV6T×WFF–öç2æÆVæwF‚ÓÓÒ’Â¥4ôâç7G&–æv–g’†v—BvRæWfÇVFR‚‚’Óâv–æF÷råõö66WF…&VÆV6T×WFF–öç2’’“°¢6†V6²‚tæòÆ–fV7–6ÆR7FFRW‡÷6W2fÇ6R&Wf–WvVB×cB6Æ–ÒrÂfÇ6U&Wf–WvVEcD6Æ–ÒçFW7B†v—BvRæÆö6F÷"‚v&öG’r’æ–ææW%FW‡B‚’’“°¢6†V6²‚u6¶—Æ–æ²&VÖ–ç2&W6VçBrÂv—BvRæÆö6F÷"‚rç6¶—ÖÆ–æ²r’æ6÷VçB‚’ÓÓÒ“°¢v—BvRæÆö6F÷"‚rç6¶—ÖÆ–æ²r’æfö7W2‚“°¢6†V6²‚u6¶—Æ–æ²—2¶W–&ö&Bfö7W6&ÆRrÂv—BvRæWfÇVFR‚‚’ÓâFö7VÖVçBæ7F—fTVÆVÖVçCòæÖF6†W2‚rç6¶—ÖÆ–æ²r’’“°¢6†V6²‚uf—6–&ÆR–6öâ6öçG&öÇ2†fR66W76–&ÆRæÖW2rÂv—BvRæWfÇVFR‚‚’Óâ²ââæFö7VÖVçBçVW'•6VÆV7F÷$ÆÂ‚v'WGFöâæ–6öâÖ'WGFöã¦æ÷B…¶†–FFVåÒ’Ææ–6öâÖ'WGFöã¦æ÷B…¶†–FFVåÒ’r•ÒæWfW'’†æöFRÓâæöFRævWDGG&–'WFR‚v&–ÖÆ&VÂr’ÇÂæöFRçFW‡D6öçFVçBçG&–Ò‚’’’“°¢v—B'Vä†R‚tf–æÂÆ–fV7–6ÆR7FFRr“°¢6†V6²‚tæò'&÷w6W"6öç6öÆRW'&÷'2rÂf–ÇW&W2æ6öç6öÆRæÆVæwF‚ÓÓÒÂ¥4ôâç7G&–æv–g’†f–ÇW&W2æ6öç6öÆR’“°¢6†V6²‚tæòvRW'&÷'2rÂf–ÇW&W2çvRæÆVæwF‚ÓÓÒÂ¥4ôâç7G&–æv–g’†f–ÇW&W2çvR’“°¢6†V6²‚tæò&öGV7B&WVW7Bf–ÇW&W2rÂf–ÇW&W2ç&WVW7BæÆVæwF‚ÓÓÒÂ¥4ôâç7G&–æv–g’†f–ÇW&W2ç&WVW7B’“° ¢6öç7BÖöFVÄÆVFvW"Òv—BvWD§6öâ†G´—Òö’öÖöFVÂÖÆVFvW&“°¢6öç7BÆVFvW$—77VW2Ò6æ—F—¦VDÆVFvW%f–öÆF–öç2†ÖöFVÄÆVFvW"“°¢6†V6²‚uV&Æ–2ÖöFVÂÆVFvW"—26æ—F—¦VBæB&WF–ç2æò&ö×BÂ&r÷WGWBÂ&V6öæ–ærÂ÷"6æöæ–6ÂÖ÷WGWB–ÆöBrÂÆVFvW$—77VW2æÆVæwF‚ÓÓÒÂ¥4ôâç7G&–æv–g’†ÆVFvW$—77VW2’“°¢6öç7B7V66W76gVÄæWGv÷&´6ÆÇ2ÒÖöFVÄÆVFvW"æ—FV×2æf–ÇFW"†—FVÒÓâ5T44U54eTÅôÔôDTÅôõUD4ôÔU2æ†2†—FVÒæ÷WF6öÖR’bb—FVÒæ6ÆÅö6÷VçBÓÓÒbb—FVÒç&÷f–FW%öVæGö–çBÓÓÒv‡GG3¢òö÷Vç&÷WFW"æ’ö’÷cö6†Bö6ö×ÆWF–öç2r“°¢6†V6²‚u7V66W76gVÂæWGv÷&²6ÆÇ2&WF–ââW†7BVææ÷&ÖÆ—¦VBæVÖ÷G&öâÆ–2÷"FFVB&W7öç6R–FVçF—G’æBW6vR&÷fVææ6RrÂ7V66W76gVÄæWGv÷&´6ÆÇ2æWfW'’†—FVÒÓâ—FVÒç&÷f–FW"ÓÓÒv÷Vç&÷WFW"rbb—FVÒæÖöFVÂÓÓÒ$UTU5DTEôäTÔõE$ôåôÔôDTÂbbU„5EôäTÔõE$ôåõ$U5ôå4UôÔôDTÅ2æ†2†—FVÒç&W7öç6UöÖöFVÂ’bbÄÄõtTEõU4tUõ4õU$4U2æ†2†—FVÒçW6vU÷6÷W&6R’’bb‚—5&öGV7F–öä¦÷W&æW’‚’ÇÂ7V66W76gVÄæWGv÷&´6ÆÇ2æÆVæwF‚ÓÓÒ$UT•$TEôäTÔõE$ôåôtTåEô”E2æÆVæwF‚’Â¥4ôâç7G&–æv–g’‡7V66W76gVÄæWGv÷&´6ÆÇ2’“°¢–b†—5&öGV7F–öä¦÷W&æW’‚’’°¢6öç7Bf–æÄ6öÆD—77VW2Ò6öÆDÆVFvW$6öçG&7Ef–öÆF–öç2†6öÆD÷&6†W7G&F–öâÂÖöFVÄÆVFvW"“°¢6öç7Bf–æÅ6æ6†÷D—77VW2Òf–æÄÆVFvW%6æ6†÷Ef–öÆF–öç2†—6öÆF–öäÆVFvW"ÂÖöFVÄÆVFvW"“°¢6†V6²‚tf–æÂÆVFvW"—2F†R–Ö×WF&ÆR"×&÷rfÆw6†—6öÆCbÇW2v&Ób6æ6†÷Bv—F‚æò†VÆBÖ÷WBÖöFVÂ7F—f—G’rÂf–æÄ6öÆD—77VW2æÆVæwF‚ÓÓÒbbf–æÅ6æ6†÷D—77VW2æÆVæwF‚ÓÓÒÂ¥4ôâç7G&–æv–g’‡²f–æÄ6öÆD—77VW2Âf–æÅ6æ6†÷D—77VW2Âf–æÅ7VÖÖ'“¢ÖöFVÄÆVFvW"ç7VÖÖ'’Â—6öÆF–öå7VÖÖ'“¢—6öÆF–öäÆVFvW"ç7VÖÖ'’Ò’“°¢6öç7Bv&ÔÆ–æVvRÒv&ÔÆ–æVvT6öçG&7Ef–öÆF–öç2†6öÆD÷&6†W7G&F–öâÂv&Ô÷&6†W7G&F–öâÂÖöFVÄÆVFvW"“°¢6†V6²‚u÷7BÖfÆw6†——6öÆF–öâ&WÆ’ÖFR¦W&ò&÷f–FW"6ÆÇ2æB&–æG2WfW'’66†R&V6÷&BFò—G2f—6–&ÆR6öÆB÷&–v–ârÂv&ÔÆ–æVvRæ—77VW2æÆVæwF‚ÓÓÒbbv&ÔÆ–æVvRæÆ–æVvRæÆVæwF‚ÓÓÒ$UT•$TEôäTÔõE$ôåôtTåEô”E2æÆVæwF‚Â¥4ôâç7G&–æv–g’‡v&ÔÆ–æVvR’“°¢&WF–æVDWf–FVæ6U²vfÆw6†—Ö66†RÖÆ–æVvRuÒÒ°¢6öçG&7C¢v66WF‚æfÆw6†—Ö66†RÖÆ–æVvRóããrÀ¢&WVW7FVEöÖöFVÃ¢$UTU5DTEôäTÔõE$ôåôÔôDTÂÀ¢W†7E÷&W7öç6UöÖöFVÇ3¢²ââäU„5EôäTÔõE$ôåõ$U5ôå4UôÔôDTÅ5ÒÀ¢g&ÖWv÷&³¢U…T5DTEôe$ÔUtõ$²À¢6öÆEö÷&6†W7G&F–öåö–C¢6öÆD÷&6†W7G&F–öâæ÷&6†W7G&F–öåö–BÀ¢v&Õö÷&6†W7G&F–öåö–C¢v&Ô÷&6†W7G&F–öâæ÷&6†W7G&F–öåö–BÀ¢6öÆE÷'Vå÷7W&f6S¢wf—6–&ÆUö'&÷w6W%öfÆw6†—rÀ¢v&Õ÷'Vå÷7W&f6S¢v—6öÆFVE÷6W76–öåö66†U÷&WÆ’rÀ¢6öÆEöwV&FVEöfÆÆ&6µö6÷VçC¢6öÆD÷&6†W7G&F–öâæwV&FVEöfÆÆ&6µö6÷VçBÀ¢v&ÕöwV&FVEöfÆÆ&6µö6÷VçC¢v&Ô÷&6†W7G&F–öâæwV&FVEöfÆÆ&6µö6÷VçBÀ¢Æ–æVvS¢v&ÔÆ–æVvRæÆ–æVvRÀ¢&÷f–FW%ö6ÆÇ5öGW&–æuö—6öÆF–öå÷&WÆ“¢À¢Ó°¢Ð¢&WF–æVDWf–FVæ6U²vÖöFVÂÖÆVFvW"uÒÒÖöFVÄÆVFvW#° ¢&WGW&â²7FGW3¢w76VBrÂ&VÆV6S¢$ôET5Eõ$TÄT4RÂ&VÆV6Uö–C¢$TÄT4Uô”BÂ6†V6¶VDC¢æWrFFR‚’çFô•4õ7G&–ær‚’Â&6UW&Ã¢$4RÂ•W&Ã¢’ÂFWÆ÷–ÖVçC¢FWÆ÷–ÖVçD–FVçF—G’Â'VçF–ÖS¢'VçF–ÖUfW'6–öç2Â76VC¢6†V6·2æÆVæwF‚Âf–ÆVC¢Â6†V6·2Âæ÷FW2Âf–ÇW&W2Â'Vä–G2Ó°§Ð ¦gVæ7F–öâÖö6´÷&6†W7G&F–öâ†66†TÖöFRÂ6öÆE'VâÒçVÆÂ’°¢6öç7Bf7G2Ò°¢°¢f7Eö–C¢vf7E÷66÷RrÀ¢fÇVS¢v6öæf—&ÖVBrÀ¢7FFS¢w7W÷'FVBrÀ¢6öçG&öÇ5÷&ö6W73¢G'VRÀ¢FV6—6–öåö¶W“¢wFVææ7•÷66÷RrÀ¢æ÷&ÖÆ—¦VE÷fÇVS¢v6öæf—&ÖVBrÀ¢FV6—6–öå÷fÇVS¢v6öæf—&ÖVBrÀ¢ÒÀ¢°¢f7Eö–C¢vf7Eö6öçFW‡BrÀ¢fÇVS¢vö'6W'fVB6öçFW‡BrÀ¢7FFS¢v¶æ÷vârÀ¢6öçG&öÇ5÷&ö6W73¢fÇ6RÀ¢FV6—6–öåö¶W“¢çVÆÂÀ¢æ÷&ÖÆ—¦VE÷fÇVS¢çVÆÂÀ¢FV6—6–öå÷fÇVS¢çVÆÂÀ¢ÒÀ¢Ó°¢6öç7B6÷W&6T–çFVw&—G’Ò°¢'F–f7G3¢·°¢'F–f7Eö–C¢vÆV6RrÀ¢–çFVw&—G•ö6Æ73¢wFW‡Eöw&÷VæFVBrÀ¢6÷W&6U÷&Veö–G3¢²w6÷W&6U÷66÷RuÒÀ¢6öçG&–'WF–öåö–C¢v'F–f7C¦ÆV6S¦–çFVw&—G’rÀ¢GG&–'WF–öã¢tFö7VÖVçBæB6÷W&6R–çFVw&—G’vVçBrÀ¢FWFW&Ö–æ—7F–5öfÆÆ&6µöÆ–VC¢fÇ6RÀ¢6öæf–FVæ6Uö&6—5÷ö–çG3¢“#À¢ÕÒÀ¢Ó°¢6öç7B&ö6W74FV6—6–öâÒ°¢f7Eö–C¢vf7E÷66÷RrÀ¢FV6—6–öåö¶W“¢wFVææ7•÷66÷RrÀ¢FV6—6–öå÷fÇVS¢v6öæf—&ÖVBrÀ¢7FFS¢w7W÷'FVBrÀ¢æ÷&ÖÆ—¦VE÷fÇVS¢v6öæf—&ÖVBrÀ¢6÷W&6U÷&Veö–G3¢²w6÷W&6U÷66÷RuÒÀ¢6öçG&–'WF–öåö–C¢vf7C¦f7E÷66÷S¦FV6—6–öå÷fÇVRrÀ¢6öçG&–'WF–öå÷66÷S¢v6æöæ–6Å÷Fõ÷&ö6W75öFV6—6–öåöÖ–ærrÀ¢ÖöFVÅö÷væVEöf–VÆG3¢²vFV6—6–öå÷fÇVRuÒÀ¢6öæf–FVæ6Uö&6—5÷ö–çG3¢“À¢GG&–'WF–öã¢$ô4U55ô4ôåE$”%UD”ôåõ$ôÄRÀ¢FWFW&Ö–æ—7F–5öfÆÆ&6µöÆ–VC¢fÇ6RÀ¢Ó°¢6öç7B&ö6W74Ö–ærÒ²FV6—6–öç3¢·&ö6W74FV6—6–öåÒÓ°¢6öç7BWf–FVæ6Tf–VÆD6öçG&–'WF–öç2Ò°¢°¢6öçG&–'WF–öåö–C¢v—FVÓ¦ÆV6S§7FGW2rÀ¢f–VÆC¢w7FGW2rÀ¢GG&–'WF–öã¢Ud”DTä4Uô4ôåE$”%UD”ôåõ$ôÄRÀ¢6öæf–FVæ6Uö&6—5÷ö–çG3¢“À¢FWFW&Ö–æ—7F–5öfÆÆ&6µöÆ–VC¢fÇ6RÀ¢ÒÀ¢°¢6öçG&–'WF–öåö–C¢v—FVÓ¦ÆV6S¦'F–f7G2rÀ¢f–VÆC¢v'F–f7Eö–G2rÀ¢GG&–'WF–öã¢Ud”DTä4Uô4ôåE$”%UD”ôåõ$ôÄRÀ¢6öæf–FVæ6Uö&6—5÷ö–çG3¢“À¢FWFW&Ö–æ—7F–5öfÆÆ&6µöÆ–VC¢fÇ6RÀ¢ÒÀ¢Ó°¢6öç7B6öçFW‡DWf–FVæ6Tf–VÆD6öçG&–'WF–öç2Ò°¢°¢6öçG&–'WF–öåö–C¢v—FVÓ¦6öçFW‡Eöæ÷FS§7FGW2rÀ¢f–VÆC¢w7FGW2rÀ¢GG&–'WF–öã¢Ud”DTä4Uô4ôåE$”%UD”ôåõ$ôÄRÀ¢6öæf–FVæ6Uö&6—5÷ö–çG3¢ƒƒÀ¢FWFW&Ö–æ—7F–5öfÆÆ&6µöÆ–VC¢fÇ6RÀ¢ÒÀ¢°¢6öçG&–'WF–öåö–C¢v—FVÓ¦6öçFW‡Eöæ÷FS¦'F–f7G2rÀ¢f–VÆC¢v'F–f7Eö–G2rÀ¢GG&–'WF–öã¢Ud”DTä4Uô4ôåE$”%UD”ôåõ$ôÄRÀ¢6öæf–FVæ6Uö&6—5÷ö–çG3¢ƒƒÀ¢FWFW&Ö–æ—7F–5öfÆÆ&6µöÆ–VC¢fÇ6RÀ¢ÒÀ¢Ó°¢6öç7BWf–FVæ6T6†V6¶Æ—7BÒ°¢—FV×3¢°¢°¢—FVÕö–C¢vÆV6RrÀ¢7FGW3¢w&÷f–FVE÷7Vff–6–VçBrÀ¢'F–f7Eö–G3¢²vÆV6RuÒÀ¢6÷W&6U÷&Veö–G3¢²w6÷W&6U÷66÷RuÒÀ¢f–VÆEö6öçG&–'WF–öç3¢Wf–FVæ6Tf–VÆD6öçG&–'WF–öç2À¢ÖöFVÅö÷væVEöf–VÆG3¢²w7FGW2rÂv'F–f7Eö–G2uÒÀ¢6öæf–FVæ6Uö&6—5÷ö–çG3¢“À¢GG&–'WF–öã¢Ud”DTä4Uô4ôåE$”%UD”ôåõ$ôÄRÀ¢FWFW&Ö–æ—7F–5öfÆÆ&6µöÆ–VC¢fÇ6RÀ¢ÒÀ¢°¢—FVÕö–C¢v6öçFW‡Eöæ÷FRrÀ¢7FGW3¢w&÷f–FVE÷7Vff–6–VçBrÀ¢'F–f7Eö–G3¢²vÆV6RuÒÀ¢6÷W&6U÷&Veö–G3¢²w6÷W&6Uö6öçFW‡BuÒÀ¢f–VÆEö6öçG&–'WF–öç3¢6öçFW‡DWf–FVæ6Tf–VÆD6öçG&–'WF–öç2À¢ÖöFVÅö÷væVEöf–VÆG3¢²w7FGW2rÂv'F–f7Eö–G2uÒÀ¢6öæf–FVæ6Uö&6—5÷ö–çG3¢ƒƒÀ¢GG&–'WF–öã¢Ud”DTä4Uô4ôåE$”%UD”ôåõ$ôÄRÀ¢FWFW&Ö–æ—7F–5öfÆÆ&6µöÆ–VC¢fÇ6RÀ¢ÒÀ¢ÒÀ¢Ó°¢6öç7Bf–æÄf–VÆD6öçG&–'WF–öç2Òd”äÅôd”TÄEô4ôåE$5BæÖ‚‡²f–VÆBÂ6öçG&–'WF–öåö–BÒ’Óâ‡°¢6öçG&–'WF–öåö–BÀ¢f–VÆBÀ¢GG&–'WF–öã¢d”äÅô4ôåE$”%UD”ôåõ$ôÄRÀ¢6öæf–FVæ6Uö&6—5÷ö–çG3¢ƒ“À¢FWFW&Ö–æ—7F–5öfÆÆ&6µöÆ–VC¢fÇ6RÀ¢Ò’“°¢6öç7Bf–æÄ6Æ–Ô'&–VbÒ°¢7W'&VçEöæöFUö–C¢w66÷RrÀ¢æW‡Eö7F–öåöæöFUö–C¢væ÷F–6RrÀ¢7W÷'F–æuöf7Eö–G3¢²vf7Eö6öçFW‡BrÂvf7E÷66÷RuÒÀ¢W7G&VÕö6öçG&–'WF–öåö–G3¢²ââäd”äÅõU5E$TÕô4ôåE$”%UD”ôåô”E5ÒÀ¢VF—Eö6†V6µö–G3¢²ââäd”äÅôTD•Eô4„T4µô”E5ÒÀ¢6÷W&6U÷&Veö–G3¢²w6÷W&6Uö6öçFW‡BrÂw6÷W&6U÷66÷RuÒÀ¢–çWEö6öçG&–'WF–öåö–G3¢²ââäd”äÅõU5E$TÕô4ôåE$”%UD”ôåô”E5ÒÀ¢Æ–æVvUöWF†÷&—G“¢v‡–'&–EöwV&FVEöÖöFVÅöVF—BrÀ¢6öçG&–'WF–öå÷66÷S¢v–æFWVæFVçEöf–æÅö6Æ–Õö'&–VeöVF—BrÀ¢f–VÆEö6öçG&–'WF–öç3¢f–æÄf–VÆD6öçG&–'WF–öç2À¢6öæf–FVæ6Uö&6—5÷ö–çG3¢ƒ“À¢GG&–'WF–öã¢d”äÅô4ôåE$”%UD”ôåõ$ôÄRÀ¢FWFW&Ö–æ—7F–5öfÆÆ&6µöÆ–VC¢fÇ6RÀ¢Ó°¢6öç7B&ö6W72Ò°¢6öçG&7C¢w&ö6W72Öw&‚rÀ¢7W'&VçEöæöFS¢w66÷RrÀ¢7W'&VçEö÷fW&Æ“¢²7W'&VçEöæöFUö–C¢w66÷RrÂæW‡Eö7F–öåöæöFUö–C¢væ÷F–6RrÒÀ¢æöFW3¢°¢²æöFUö–C¢w66÷RrÂF—FÆS¢u66÷RrÂf7Eö–G3¢²vf7E÷66÷RrÂvf7Eö6öçFW‡BuÒÂvVçEöFV6—6–öåö6öçG&–'WF–öç3¢·&ö6W74FV6—6–öåÒÒÀ¢²æöFUö–C¢væ÷F–6RrÂF—FÆS¢tæ÷F–6RrÂf7Eö–G3¢µÒÒÀ¢ÒÀ¢vVçEö6öçG&–'WF–öã¢°¢'F–f7C¢&ö6W74Ö–ærÀ¢6÷W&6Uö–çFVw&—G•ö'F–f7C¢6÷W&6T–çFVw&—G’À¢ÒÀ¢Ó°¢6öç7B6†V6¶Æ—7BÒ°¢6öçG&7C¢vWf–FVæ6RÖÖöFVÂrÀ¢—FV×3¢°¢°¢—FVÕö–C¢vÆV6RrÀ¢f7Eö–C¢vf7E÷66÷RrÀ¢7FGW3¢w&÷f–FVE÷7Vff–6–VçBrÀ¢'F–f7Eö–G3¢²vÆV6RuÒÀ¢vVçEö6öçG&–'WF–öã¢Wf–FVæ6Tf–VÆD6öçG&–'WF–öç2À¢ÒÀ¢°¢—FVÕö–C¢v6öçFW‡Eöæ÷FRrÀ¢f7Eö–C¢vf7Eö6öçFW‡BrÀ¢7FGW3¢w&÷f–FVE÷7Vff–6–VçBrÀ¢'F–f7Eö–G3¢²vÆV6RuÒÀ¢vVçEö6öçG&–'WF–öã¢6öçFW‡DWf–FVæ6Tf–VÆD6öçG&–'WF–öç2À¢ÒÀ¢ÒÀ¢vVçEö6öçG&–'WF–öã¢²'F–f7C¢Wf–FVæ6T6†V6¶Æ—7BÒÀ¢Ó°¢6öç7B÷&6†W7G&F÷%ÆâÒ²fö7W5öf7Eö–G3¢²vf7E÷66÷RuÒÂ&–÷&—G•÷F6µö6öFW3¢²w6÷W&6Uö–çFVw&—G’rÂw&ö6W75öFV6—6–öç2rÂvWf–FVæ6Uöv2rÂvf–æÅö'&–VbuÒÓ°¢6öç7B÷&6†W7G&F–öä–BÒ66†TÖöFRÓÓÒv6öÆBròv÷&6…ö6öÆEö6öçG&7Br¢v÷&6…÷v&Õö6öçG&7Bs°¢6öç7B6öÆDVF—BÒ÷&6†W7G&F–öäVF—B†6öÆE'Vâ“°¢6öç7B6öÆD'”vVçBÒæWrÖ‚†6öÆDVF—CòævVçG2ÇÂµÒ’æÖ†—FVÒÓâ¶—FVÒævVçEö–BÂ—FVÕÒ’“°¢6öç7B6ÆÄ–Df÷"ÒvVçD–BÓâG¶66†TÖöFWÕö6ÆÅòG¶vVçD–GÖ°¢6öç7B6æöæ–6Ä6ÆÄ–BÒ6ÆÄ–Df÷"‚v6æöæ–6Åöf7G2r“°¢6öç7B÷&6†W7G&F÷$6ÆÄ–BÒ6ÆÄ–Df÷"‚v÷&6†W7G&F÷%÷Æâr“°¢6öç7B7V6–Æ—7D'F–f7G2Ò°¢÷&6†W7G&F÷%÷Æã¢÷&6†W7G&F÷%ÆâÀ¢Fö7VÖVçE÷6÷W&6Uö–çFVw&—G“¢6÷W&6T–çFVw&—G’À¢&ö6W75öFV6—6–öåöÖ–æs¢&ö6W74Ö–ærÀ¢Wf–FVæ6Uö6†V6¶Æ—7C¢Wf–FVæ6T6†V6¶Æ—7BÀ¢f–æÅö6Æ–Õö'&–VeöVF—C¢f–æÄ6Æ–Ô'&–VbÀ¢Ó°¢6öç7B66WFVD–G4'”vVçBÒ°¢6æöæ–6Åöf7G3¢²v66WFVEö6æöæ–6Åöf7G5órÂv66WFVEö6æöæ–6Åöf7G5ó"uÒÀ¢÷&6†W7G&F÷%÷Æã¢²v66WFVEö÷&6†W7G&F÷%÷ÆåórÂv66WFVEö÷&6†W7G&F÷%÷Æåó"uÒÀ¢Fö7VÖVçE÷6÷W&6Uö–çFVw&—G“¢²v'F–f7C¦ÆV6S¦–çFVw&—G’uÒÀ¢&ö6W75öFV6—6–öåöÖ–æs¢·&ö6W74FV6—6–öâæ6öçG&–'WF–öåö–EÒÀ¢Wf–FVæ6Uö6†V6¶Æ—7C¢Wf–FVæ6T6†V6¶Æ—7Bæ—FV×2æfÆDÖ†—FVÒÓâ—FVÒæf–VÆEö6öçG&–'WF–öç2æÖ‡Væ—BÓâVæ—Bæ6öçG&–'WF–öåö–B’’À¢f–æÅö6Æ–Õö'&–VeöVF—C¢f–æÄf–VÆD6öçG&–'WF–öç2æÖ†—FVÒÓâ—FVÒæ6öçG&–'WF–öåö–B’À¢Ó°¢6öç7B÷WGWD'F–f7D'”vVçBÒ°¢6æöæ–6Åöf7G3¢f7G2À¢÷&6†W7G&F÷%÷Æã¢÷&6†W7G&F÷%ÆâÀ¢Fö7VÖVçE÷6÷W&6Uö–çFVw&—G“¢6÷W&6T–çFVw&—G’À¢&ö6W75öFV6—6–öåöÖ–æs¢&ö6W74Ö–ærÀ¢Wf–FVæ6Uö6†V6¶Æ—7C¢Wf–FVæ6T6†V6¶Æ—7BÀ¢f–æÅö6Æ–Õö'&–VeöVF—C¢f–æÄ6Æ–Ô'&–VbÀ¢Ó°¢6öç7BvVçG2Ò$UT•$TEôäTÔõE$ôåôtTåEô”E2æÖ†vVçD–BÓâ°¢6öç7B66WFVD–G2Ò66WFVD–G4'”vVçE¶vVçD–EÓ°¢&WGW&â°¢vVçEö–C¢vVçD–BÀ¢&öÆS¢$UT•$TEôäTÔõE$ôåôtTåEõ$ôÄU5¶vVçD–EÒÀ¢7F÷%÷G—S¢væVÖ÷G&öåövVçBrÀ¢66WFæ6U÷66÷S¢w&U÷&Wf–WuöÖöFVÅö÷WGWBrÀ¢ÖöFVÃ¢$UTU5DTEôäTÔõE$ôåôÔôDTÂÀ¢&÷f–FW#¢v÷Vç&÷WFW"rÀ¢&WVW7FVEöÖöFVÃ¢$UTU5DTEôäTÔõE$ôåôÔôDTÂÀ¢6ÆÅö6÷VçC¢66†TÖöFRÓÓÒv6öÆBrò¢À¢&VçEö6ÆÅö–C¢vVçD–BÓÓÒv6æöæ–6Åöf7G2ròçVÆÂ¢vVçD–BÓÓÒv÷&6†W7G&F÷%÷Æârò6æöæ–6Ä6ÆÄ–B¢÷&6†W7G&F÷$6ÆÄ–BÀ¢FVÆVvF–öåö–C¢vVçD–BÓÓÒv6æöæ–6Åöf7G2ròçVÆÂ¢G¶66†TÖöFWÕöFVÆVvF–öåòG¶vVçD–GÖÀ¢6ÆÅö–C¢6ÆÄ–Df÷"†vVçD–B’À¢÷&–v–åö6ÆÅö–C¢66†TÖöFRÓÓÒv6öÆBrò6ÆÄ–Df÷"†vVçD–B’¢6öÆD'”vVçBævWB†vVçD–B“òæ6ÆÅö–BÀ¢66†Uö†—C¢66†TÖöFRÓÓÒwv&ÒrÀ¢÷WF6öÖS¢66†TÖöFRÓÓÒwv&Òròv66†Uö†—Br¢w7V66VVFVBrÀ¢&W7öç6Uö–C¢66†TÖöFRÓÓÒv6öÆBrò&W7öç6UòG¶vVçD–GÖ¢6öÆD'”vVçBævWB†vVçD–B“òç&W7öç6Uö–BÀ¢&W7öç6UöÖöFVÃ¢vçf–F–öæVÖ÷G&öâÓ2×VÇG&ÓSS"ÖSV"Ó##ccBrÀ¢W7G&VÕ÷&÷f–FW#¢tFVW–æg&rÀ¢W6vU÷6÷W&6S¢66†TÖöFRÓÓÒwv&Òròv66†Rr¢w&W7öç6RrÀ¢f–æ—6…÷&V6öã¢w7F÷rÀ¢66WFVEö–G3¢66WFVD–G2À¢66WFVEö6÷VçC¢66WFVD–G2æÆVæwF‚À¢&V¦V7FVEö6÷VçC¢À¢6÷W&6U÷&VfW&Væ6U÷&ö¦V7F–öåöf7Eö–G3¢vVçD–BÓÓÒv6æöæ–6Åöf7G2ròµÒ¢VæFVf–æVBÀ¢6÷W&6U÷&VfW&Væ6U÷&ö¦V7F–öåö6÷VçC¢vVçD–BÓÓÒv6æöæ–6Åöf7G2rò¢VæFVf–æVBÀ¢FWFW&Ö–æ—7F–5öfÆÆ&6µöÆ–VC¢fÇ6RÀ¢–çWEö'F–f7Eö†6ƒ¢GFô†6‚‡²vVçEö–C¢vVçD–BÂF—&V7F–öã¢v–çWBrÒ’À¢÷WGWEö'F–f7Eö†6ƒ¢GFô†6‚†÷WGWD'F–f7D'”vVçE¶vVçD–EÒ’À¢Ó°¢Ò“°¢6öç7B'”vVçBÒæWrÖ†vVçG2æÖ†—FVÒÓâ¶—FVÒævVçEö–BÂ—FVÕÒ’“°¢6öç7Bf–æÄGF÷2Ò²FWFW&Ö–æ—7F–5÷&ö6W75övFS¢&ö6W72ÂFWFW&Ö–æ—7F–5öWf–FVæ6UövFS¢6†V6¶Æ—7BÂv†öÆU÷Æ–&ööµövFS¢f–æÄ6Æ–Ô'&–VbÓ°¢6öç7BvFW2Ò$UT•$TEôDUDU$Ô”ä•5D”5ôtDUô”E2æÖ†vFT–BÓâ°¢6öç7B6öçG&7BÒ44UDTEô%D”d5Eô4ôåE$5E¶vFT–EÓ°¢&WGW&â°¢vVçEö–C¢vFT–BÀ¢&öÆS¢$UT•$TEôDUDU$Ô”ä•5D”5ôtDUõ$ôÄU5¶vFT–EÒÀ¢7F÷%÷G—S¢vFWFW&Ö–æ—7F–5övFRrÀ¢&V6V—E÷G—S¢v66WFVEö'F–f7BrÀ¢66WFæ6U÷66÷S¢w&U÷&Wf–WuöÖöFVÅö÷WGWBrÀ¢ÖöFVÃ¢çVÆÂÀ¢÷WF6öÖS¢w76VBrÀ¢6÷W&6UövVçEö–C¢6öçG&7Bç6÷W&6UövVçEö–BÀ¢6÷W&6Uö6ÆÅö–C¢'”vVçBævWB†6öçG&7Bç6÷W&6UövVçEö–B’æ6ÆÅö–BÀ¢FVÆVvF–öåö–C¢'”vVçBævWB†6öçG&7Bç6÷W&6UövVçEö–B’æFVÆVvF–öåö–BÀ¢66WFVEö–G3¢'”vVçBævWB†6öçG&7Bç6÷W&6UövVçEö–B’æ66WFVEö–G2À¢66WFVEö6÷VçC¢'”vVçBævWB†6öçG&7Bç6÷W&6UövVçEö–B’æ66WFVEö6÷VçBÀ¢–çWEö'F–f7Eö†6ƒ¢vFT–BÓÓÒvFWFW&Ö–æ—7F–5÷&ö6W75övFRp¢òGFô†6‚‡²6÷W&6Uö–çFVw&—G“¢6÷W&6T–çFVw&—G’Â&ö6W75öÖ–æs¢&ö6W74Ö–ærÒ¢¢vFT–BÓÓÒvFWFW&Ö–æ—7F–5öWf–FVæ6UövFRp¢òGFô†6‚†Wf–FVæ6T6†V6¶Æ—7B¢¢GFô†6‚‡²f–æÅö'&–Vc¢f–æÄ6Æ–Ô'&–VbÂfW&–f–6F–öã¢²fÆ–C¢G'VRÒÒ’À¢÷WGWEö'F–f7C¢6öçG&7Bæ÷WGWEö'F–f7BÀ¢÷WGWEö'F–f7Eö†6ƒ¢GFô†6‚†f–æÄGF÷5¶vFT–EÒ’À¢Ó°¢Ò“°¢6öç7BVF—BÒ°¢66†VÖ÷fW'6–öã¢U…T5DTEõ%TåD”ÔRæ÷&6†W7G&F–öå÷66†VÖÀ¢–×ÆVÖVçFF–öã¢U…T5DTEõ%TåD”ÔRæ–×ÆVÖVçFF–öâÀ¢g&ÖWv÷&³¢U…T5DTEôe$ÔUtõ$²À¢÷&6†W7G&F–öåö–C¢÷&6†W7G&F–öä–BÀ¢ÖöFVÃ¢$UTU5DTEôäTÔõE$ôåôÔôDTÂÀ¢WF†÷&—G•öÖöFS¢U…T5DTEõ%TåD”ÔRæWF†÷&—G•öÖöFRÀ¢ÖöFVÅö76—7FVC¢G'VRÀ¢FWFW&Ö–æ—7F–5÷6fWG•öWF†÷&—G“¢G'VRÀ¢W‡FW&æÅ÷G&6–æs¢fÇ6RÀ¢&ö×E÷7F÷&vS¢fÇ6RÀ¢&uö÷WGWE÷7F÷&vS¢fÇ6RÀ¢W†V7WF–öå÷F÷öÆöw“¢7G'V7GW&VD6ÆöæR„U…T5DTEôU„T5UD”ôåõDõôÄôu’’À¢vVçG2À¢FWFW&Ö–æ—7F–5övFW3¢vFW2À¢ÆÅ÷&WV—&VEövVçG5ö6öçG&–'WFVC¢G'VRÀ¢wV&FVEöfÆÆ&6µö6÷VçC¢À¢7V6–Æ—7Eö'F–f7G3¢7V6–Æ—7D'F–f7G2À¢f–æÅö6Æ–Õö'&–Vc¢f–æÄ6Æ–Ô'&–VbÀ¢Ó°¢6öç7BWfVçG2Ò°¢ââævVçG2æÖ†—FVÒÓâ‡°¢7FvS¢—FVÒævVçEö–BÓÓÒv6æöæ–6Åöf7G2ròwVæFW'7FæBr¢vvVçEö÷&6†W7G&F–öârÀ¢&V6V—E÷G—S¢vvVçEö6ö×ÆWFVBrÀ¢vVçEö–C¢—FVÒævVçEö–BÀ¢7F÷%÷G—S¢—FVÒæ7F÷%÷G—RÀ¢66WFæ6U÷66÷S¢—FVÒæ66WFæ6U÷66÷RÀ¢7FGW3¢v6ö×ÆWFVBrÀ¢6ÆÅö–C¢—FVÒæ6ÆÅö–BÀ¢&VçEö6ÆÅö–C¢—FVÒç&VçEö6ÆÅö–BÀ¢FVÆVvF–öåö–C¢—FVÒæFVÆVvF–öåö–BÀ¢&W7öç6Uö–C¢—FVÒç&W7öç6Uö–BÀ¢&W7öç6UöÖöFVÃ¢—FVÒç&W7öç6UöÖöFVÂÀ¢66WFVEö–G3¢—FVÒæ66WFVEö–G2À¢66WFVEö6÷VçC¢—FVÒæ66WFVEö6÷VçBÀ¢&V¦V7FVEö6÷VçC¢—FVÒç&V¦V7FVEö6÷VçBÀ¢6÷W&6U÷&VfW&Væ6U÷&ö¦V7F–öåöf7Eö–G3¢—FVÒç6÷W&6U÷&VfW&Væ6U÷&ö¦V7F–öåöf7Eö–G2À¢6÷W&6U÷&VfW&Væ6U÷&ö¦V7F–öåö6÷VçC¢—FVÒç6÷W&6U÷&VfW&Væ6U÷&ö¦V7F–öåö6÷VçBÀ¢FWFW&Ö–æ—7F–5öfÆÆ&6µöÆ–VC¢—FVÒæFWFW&Ö–æ—7F–5öfÆÆ&6µöÆ–VBÀ¢÷WGWEö'F–f7Eö†6ƒ¢—FVÒævVçEö–BÓÓÒv6æöæ–6Åöf7G2ròVæFVf–æVB¢—FVÒæ÷WGWEö'F–f7Eö†6‚À¢Ò’’À¢ââævFW2æÖ†—FVÒÓâ‡²7FvS¢vvVçEö÷&6†W7G&F–öârÂ7FGW3¢v6ö×ÆWFVBrÂââæ—FVÒÒ’’À¢Ó°¢&WGW&â°¢'Våö–C¢G¶66†TÖöFWÕ÷'VæÀ¢7FGW3¢v6ö×ÆWFRrÀ¢vVçEö÷&6†W7G&F–öã¢VF—BÀ¢&W7VÇC¢°¢f7G2À¢&ö6W72À¢6†V6¶Æ—7BÀ¢æW‡Eö7F–öã¢°¢&ö6W75öæöFUö–C¢væ÷F–6RrÀ¢vVçEö'&–Veö6öçG&–'WF–öã¢f–æÄ6Æ–Ô'&–VbÀ¢ÒÀ¢vVçEö÷&6†W7G&F–öã¢VF—BÀ¢VF—C¢²vVçEö÷&6†W7G&F–öã¢VF—BÒÀ¢ÒÀ¢WfVçG2À¢Ó°§Ð ¦gVæ7F–öâÖö6´ÆVFvW$f÷%'Vâ‡'VâÂ66†TÖöFRÂ6öÆDÆVFvW"ÒçVÆÂ’°¢6öç7BVF—BÒ÷&6†W7G&F–öäVF—B‡'Vâ“°¢6öç7B6öÆD'”vVçBÒæWrÖ‚†6öÆDÆVFvW#òæ—FV×2ÇÂµÒ’æÖ†—FVÒÓâ¶—FVÒævVçEö–BÂ—FVÕÒ’“°¢6öç7B—FV×2ÒVF—BævVçG2æÖ†vVçBÓâ‡°¢6ÆÅö–C¢vVçBæ6ÆÅö–BÀ¢&÷f–FW#¢v÷Vç&÷WFW"rÀ¢&÷f–FW%öVæGö–çC¢v‡GG3¢òö÷Vç&÷WFW"æ’ö’÷cö6†Bö6ö×ÆWF–öç2rÀ¢W7G&VÕ÷&÷f–FW#¢tFVW–æg&rÀ¢ÖöFVÃ¢$UTU5DTEôäTÔõE$ôåôÔôDTÂÀ¢–×ÆVÖVçFF–öã¢vVçBævVçEö–BÓÓÒv6æöæ–6Åöf7G2ròvÖöFVÅö&6¶VEö÷Vç&÷WFW%ö6æöæ–6Æ—¦W"r¢U…T5DTEõ%TåD”ÔRæ–×ÆVÖVçFF–öâÀ¢÷&6†W7G&F–öåö–C¢VF—Bæ÷&6†W7G&F–öåö–BÀ¢vVçEö–C¢vVçBævVçEö–BÀ¢vVçE÷&öÆS¢vVçBç&öÆRÀ¢&VçEö6ÆÅö–C¢vVçBç&VçEö6ÆÅö–BÀ¢FVÆVvF–öåö–C¢vVçBæFVÆVvF–öåö–BÀ¢6ÆÅö6÷VçC¢66†TÖöFRÓÓÒv6öÆBrò¢À¢&ö×E÷Fö¶Vç3¢66†TÖöFRÓÓÒv6öÆBrò¢VæFVf–æVBÀ¢6ö×ÆWF–öå÷Fö¶Vç3¢66†TÖöFRÓÓÒv6öÆBrò#¢VæFVf–æVBÀ¢F÷FÅ÷Fö¶Vç3¢66†TÖöFRÓÓÒv6öÆBrò#¢VæFVf–æVBÀ¢W7F–ÖFVEö6÷7E÷W6C¢66†TÖöFRÓÓÒv6öÆBròã¢À¢7GVÅö6÷7E÷W6C¢66†TÖöFRÓÓÒv6öÆBròã‚¢VæFVf–æVBÀ¢66†Uö¶W“¢66†UòG¶vVçBævVçEö–GÖÀ¢W'÷6S¢Öö6²G¶vVçBævVçEö–GÖÀ¢÷WF6öÖS¢vVçBæ÷WF6öÖRÀ¢66WFVEöf7Eö6÷VçC¢vVçBævVçEö–BÓÓÒv6æöæ–6Åöf7G2ròvVçBæ66WFVEö6÷VçB¢VæFVf–æVBÀ¢&V¦V7FVEöf7Eö6÷VçC¢vVçBævVçEö–BÓÓÒv6æöæ–6Åöf7G2ròvVçBç&V¦V7FVEö6÷VçB¢VæFVf–æVBÀ¢6÷W&6U÷&VfW&Væ6U÷&ö¦V7F–öåöf7Eö–G3¢vVçBævVçEö–BÓÓÒv6æöæ–6Åöf7G2ròvVçBç6÷W&6U÷&VfW&Væ6U÷&ö¦V7F–öåöf7Eö–G2¢VæFVf–æVBÀ¢6÷W&6U÷&VfW&Væ6U÷&ö¦V7F–öåö6÷VçC¢vVçBævVçEö–BÓÓÒv6æöæ–6Åöf7G2ròvVçBç6÷W&6U÷&VfW&Væ6U÷&ö¦V7F–öåö6÷VçB¢VæFVf–æVBÀ¢66WFVEö—FVÕö6÷VçC¢vVçBævVçEö–BÓÓÒv6æöæ–6Åöf7G2ròVæFVf–æVB¢vVçBæ66WFVEö6÷VçBÀ¢&V¦V7FVEö—FVÕö6÷VçC¢vVçBævVçEö–BÓÓÒv6æöæ–6Åöf7G2ròVæFVf–æVB¢vVçBç&V¦V7FVEö6÷VçBÀ¢FWFW&Ö–æ—7F–5öfÆÆ&6µöÆ–VC¢fÇ6RÀ¢&W7öç6Uö–C¢66†TÖöFRÓÓÒv6öÆBrò&W7öç6UòG¶vVçBævVçEö–GÖ¢6öÆD'”vVçBævWB†vVçBævVçEö–B“òç&W7öç6Uö–BÀ¢÷&–v–åö6ÆÅö–C¢66†TÖöFRÓÓÒwv&Òrò6öÆD'”vVçBævWB†vVçBævVçEö–B“òæ6ÆÅö–B¢VæFVf–æVBÀ¢÷&–v–å÷W6vS¢66†TÖöFRÓÓÒwv&Òrò°¢&ö×E÷Fö¶Vç3¢6öÆD'”vVçBævWB†vVçBævVçEö–B“òç&ö×E÷Fö¶Vç2À¢6ö×ÆWF–öå÷Fö¶Vç3¢6öÆD'”vVçBævWB†vVçBævVçEö–B“òæ6ö×ÆWF–öå÷Fö¶Vç2À¢F÷FÅ÷Fö¶Vç3¢6öÆD'”vVçBævWB†vVçBævVçEö–B“òçF÷FÅ÷Fö¶Vç2À¢7GVÅö6÷7E÷W6C¢6öÆD'”vVçBævWB†vVçBævVçEö–B“òæ7GVÅö6÷7E÷W6BÀ¢W6vU÷6÷W&6S¢6öÆD'”vVçBævWB†vVçBævVçEö–B“òçW6vU÷6÷W&6RÀ¢Ò¢VæFVf–æVBÀ¢÷&–v–åöf–æ—6…÷&V6öã¢66†TÖöFRÓÓÒwv&Òrò6öÆD'”vVçBævWB†vVçBævVçEö–B“òæf–æ—6…÷&V6öâ¢VæFVf–æVBÀ¢&W7öç6UöÖöFVÃ¢vçf–F–öæVÖ÷G&öâÓ2×VÇG&ÓSS"ÖSV"Ó##ccBrÀ¢W6vU÷6÷W&6S¢66†TÖöFRÓÓÒv6öÆBròw&W7öç6Rr¢v66†RrÀ¢f–æ—6…÷&V6öã¢w7F÷rÀ¢7&VFVEöC¢s##bÓ‚ÓC££¢rÀ¢WFFVEöC¢s##bÓ‚ÓC££¢rÀ¢Ò’’æÖ†—FVÒÓâö&¦V7Bæg&öÔVçG&–W2„ö&¦V7BæVçG&–W2†—FVÒ’æf–ÇFW"‚…²ÂfÇVUÒ’ÓâfÇVRÓÒVæFVf–æVB’’“°¢&WGW&â°¢66÷S¢vvÆö&Åö'VFvWEöÆVFvW"rÀ¢7VÖÖ'“¢ÆVFvW%7VÖÖ'’†—FV×2’À¢—FV×2À¢Ó°§Ð ¦7–æ2gVæ7F–öâ76W'E'Vå&VE6W76–öä—6öÆF–öâ‚’°¢6öç7BwV&E6÷W&6RÒv—Bg2ç&VDf–ÆR†æWrU$Â‚rââö66WF‚ö76WG2öÆ—fR×c‚Ö–ç6W'F–öâÖwV&Bæ§2rÂ–×÷'BæÖWFçW&Â’ÂwWFc‚r“°¢6Æ72f¶TæöFR·Ð¢6Æ72f¶TVÆVÖVçBW‡FVæG2f¶TæöFR·Ð¢f¶TæöFRç&÷F÷G—Ræ–ç6W'D&Vf÷&RÒgVæ7F–öâ–ç6W'D&Vf÷&R†æöFR’²&WGW&âæöFS²Ó°¢f¶TVÆVÖVçBç&÷F÷G—Ræ–ç6W'DF¦6VçD…DÔÂÒgVæ7F–öâ–ç6W'DF¦6VçD…DÔÂ‚’·Ó°¢6Æ72f¶U&W7öç6R°¢6öç7G'V7F÷"†&öG’’²F†—2æ&öG’Ò&öG“²Ð¢6ÆöæR‚’²&WGW&âæWrf¶U&W7öç6R‡7G'V7GW&VD6ÆöæR‡F†—2æ&öG’’“²Ð¢7–æ2§6öâ‚’²&WGW&â7G'V7GW&VD6ÆöæR‡F†—2æ&öG’“²Ð¢Ð¢6öç7B6ÆÇ2ÒµÓ°¢6öç7BVæF–ærÒµÓ°¢6öç7BæF—fTfWF6‚Ò†–çWBÂ–æ—BÒ·Ò’Óâ°¢6öç7B&WVW7BÒG—Vöb–çWBÓÓÒw7G&–ærrÇÂ–çWB–ç7Fæ6VöbU$ÂòçVÆÂ¢–çWC°¢6öç7B†VFW'2ÒæWr†VFW'2†–æ—Bæ†VFW'2ÓÒVæFVf–æVBò–æ—Bæ†VFW'2¢&WVW7Còæ†VFW'2“°¢6öç7B6W76–öâÒ††VFW'2ævWB‚u‚Ô66UF‚Õ6W76–öâr’ÇÂrr’çG&–Ò‚“°¢6öç7BÖWF†öBÒ7G&–ær†–æ—BæÖWF†öBÇÂ&WVW7CòæÖWF†öBÇÂttUBr’çFõWW$66R‚“°¢6ÆÇ2çW6‚‡²6W76–öâÂÖWF†öBÒ“°¢&WGW&âæWr&öÖ—6R‡&W6öÇfRÓâVæF–ærçW6‚‡²6W76–öâÂÖWF†öBÂ&W6öÇfS¢‚’Óâ&W6öÇfR†æWrf¶U&W7öç6R‡²6W76–öâÂÖWF†öBÒ’’Ò’“°¢Ó°¢6öç7B6æF&÷‚Ò°¢v–æF÷s¢²fWF6ƒ¢æF—fTfWF6‚ÒÀ¢æöFS¢f¶TæöFRÀ¢VÆVÖVçC¢f¶TVÆVÖVçBÀ¢U$ÂÀ¢†VFW'2À¢&WVW7BÀ¢Æö6F–öã¢²‡&Vc¢v‡GG3¢òö66WF‚çFW7BòrÒÀ¢Fö7VÖVçC¢²&VG•7FFS¢vÆöF–ærrÂFDWfVçDÆ—7FVæW"‚’·ÒÒÀ¢7G'V7GW&VD6ÆöæRÀ¢Ó°¢fÒç'Vä–äæWt6öçFW‡B†wV&E6÷W&6RÂ6æF&÷‚Â²f–ÆVæÖS¢vÆ—fR×c‚Ö–ç6W'F–öâÖwV&Bæ§2rÒ“°¢6öç7B'VåW&ÂÒv‡GG3¢òö’æ66WF‚çFW7Bö’÷'Vç2÷'Vå÷6†&VBs°¢6öç7B&WVW7D†VFW'2Ò6W76–öâÓâ‡²u‚Ô66UF‚Õ6W76–öâs¢6W76–öâÒ“°¢6öç7B6WGFÆUVæF–ærÒVçG&–W2ÓâVçG&–W2æf÷$V6‚†VçG'’ÓâVçG'’ç&W6öÇfR‚’“° ¢6öç7BF–ffW&VçE6W76–öå7F'BÒ6ÆÇ2æÆVæwFƒ°¢6öç7B6W76–öäÒ6æF&÷‚çv–æF÷ræfWF6‚‡'VåW&ÂÂ²†VFW'3¢&WVW7D†VFW'2‚w6W76–öâÔr’Ò“°¢6öç7B6W76–öä"Ò6æF&÷‚çv–æF÷ræfWF6‚‡'VåW&ÂÂ²†VFW'3¢&WVW7D†VFW'2‚w6W76–öâÔ"r’Ò“°¢–b†6ÆÇ2æÆVæwF‚ÒF–ffW&VçE6W76–öå7F'BÓÒ"’F‡&÷ræWrW'&÷"‚tF–ffW&VçB6W76–öç26†&VBöæR–âÖfÆ–v‡B'Vâ&VBr“°¢6WGFÆUVæF–ær‡VæF–ærç7Æ–6Rƒ’“°¢6öç7B¶&öG”Â&öG”%ÒÒv—B&öÖ—6RæÆÂ‚†v—B&öÖ—6RæÆÂ…·6W76–öäÂ6W76–öä%Ò’’æÖ‡&W7öç6RÓâ&W7öç6Ræ§6öâ‚’’“°¢–b†&öG”ç6W76–öâÓÒw6W76–öâÔrÇÂ&öG”"ç6W76–öâÓÒw6W76–öâÔ"r’F‡&÷ræWrW'&÷"‚t'Vâ×&VB&W7öç6R7&÷76VBF†R6W76–öâ&÷VæF'’r“° ¢6öç7B6ÖU6W76–öå7F'BÒ6ÆÇ2æÆVæwFƒ°¢6öç7B6ÖTÒ6æF&÷‚çv–æF÷ræfWF6‚‡'VåW&ÂÂ²†VFW'3¢&WVW7D†VFW'2‚w6W76–öâÔr’Ò“°¢6öç7B6ÖT"Ò6æF&÷‚çv–æF÷ræfWF6‚‡'VåW&ÂÂ²†VFW'3¢&WVW7D†VFW'2‚w6W76–öâÔr’Ò“°¢–b†6ÆÇ2æÆVæwF‚Ò6ÖU6W76–öå7F'BÓÒ’F‡&÷ræWrW'&÷"‚u6ÖR×6W76–öâ6öæ7W'&VçB'Vâ&VG2vW&Ræ÷B6öÆW66VBr“°¢6WGFÆUVæF–ær‡VæF–ærç7Æ–6Rƒ’“°¢6öç7B6ÖT&öF–W2Òv—B&öÖ—6RæÆÂ‚†v—B&öÖ—6RæÆÂ…·6ÖTÂ6ÖT%Ò’’æÖ‡&W7öç6RÓâ&W7öç6Ræ§6öâ‚’’“°¢–b‚6ÖT&öF–W2æWfW'’†&öG’Óâ&öG’ç6W76–öâÓÓÒw6W76–öâÔr’’F‡&÷ræWrW'&÷"‚u6ÖR×6W76–öâ6ÆöæVB'Vâ&VG2F—fW&vVBr“° ¢6öç7B&WVW7Ev—F„ÒæWr&WVW7B‡'VåW&ÂÂ²†VFW'3¢&WVW7D†VFW'2‚w6W76–öâÔr’Ò“°¢6öç7B÷fW'&–FU7F'BÒ6ÆÇ2æÆVæwFƒ°¢6öç7B÷fW'&–FFVåFô"Ò6æF&÷‚çv–æF÷ræfWF6‚‡&WVW7Ev—F„Â²†VFW'3¢&WVW7D†VFW'2‚w6W76–öâÔ"r’Ò“°¢6öç7B6ÖT"Ò6æF&÷‚çv–æF÷ræfWF6‚‡'VåW&ÂÂ²†VFW'3¢&WVW7D†VFW'2‚w6W76–öâÔ"r’Ò“°¢6öç7B6W&FTÒ6æF&÷‚çv–æF÷ræfWF6‚‡'VåW&ÂÂ²†VFW'3¢&WVW7D†VFW'2‚w6W76–öâÔr’Ò“°¢–b†6ÆÇ2æÆVæwF‚Ò÷fW'&–FU7F'BÓÒ"’F‡&÷ræWrW'&÷"‚u&WVW7Bö–æ—B†VFW"&V6VFVæ6RF–Bæ÷B&W6W'fR6W76–öâ—6öÆF–öâr“°¢6WGFÆUVæF–ær‡VæF–ærç7Æ–6Rƒ’“°¢6öç7B¶÷fW'&–FT&öG’Â6ÖT$&öG’Â6W&FT&öG•ÒÒv—B&öÖ—6RæÆÂ‚†v—B&öÖ—6RæÆÂ…¶÷fW'&–FFVåFô"Â6ÖT"Â6W&FTÒ’’æÖ‡&W7öç6RÓâ&W7öç6Ræ§6öâ‚’’“°¢–b†÷fW'&–FT&öG’ç6W76–öâÓÒw6W76–öâÔ"rÇÂ6ÖT$&öG’ç6W76–öâÓÒw6W76–öâÔ"rÇÂ6W&FT&öG’ç6W76–öâÓÒw6W76–öâÔr’F‡&÷ræWrW'&÷"‚tVffV7F—fR6W76–öâ†VFW'2vW&Ræ÷B&÷VæBFòF†R'Vâ×&VB¶W’r“° ¢6öç7B×WFF–öå7F'BÒ6ÆÇ2æÆVæwFƒ°¢6öç7B×WFF–öäÒ6æF&÷‚çv–æF÷ræfWF6‚†G·'VåW&ÇÒ÷&Wf–WvÂ²ÖWF†öC¢uõ5BrÂ†VFW'3¢&WVW7D†VFW'2‚w6W76–öâÔr’Ò“°¢6öç7B&VD"Ò6æF&÷‚çv–æF÷ræfWF6‚‡'VåW&ÂÂ²†VFW'3¢&WVW7D†VFW'2‚w6W76–öâÔ"r’Ò“°¢6öç7B&VDÒ6æF&÷‚çv–æF÷ræfWF6‚‡'VåW&ÂÂ²†VFW'3¢&WVW7D†VFW'2‚w6W76–öâÔr’Ò“°¢–b†6ÆÇ2æÆVæwF‚Ò×WFF–öå7F'BÓÒ"’F‡&÷ræWrW'&÷"‚t&Wf–Wr×WFF–öâ&Æö6¶VBF–ffW&VçB6W76–öâ÷"f–ÆVBFò&Æö6²—G2÷vâ6W76–öâr“°¢6öç7B×WFF–öäVçG'’ÒVæF–æræf–æB†VçG'’ÓâVçG'’æÖWF†öBÓÓÒuõ5Br“°¢6öç7B&VD$VçG'’ÒVæF–æræf–æB†VçG'’ÓâVçG'’æÖWF†öBÓÓÒttUBrbbVçG'’ç6W76–öâÓÓÒw6W76–öâÔ"r“°¢×WFF–öäVçG'’ç&W6öÇfR‚“°¢&VD$VçG'’ç&W6öÇfR‚“°¢VæF–ærç7Æ–6RƒÂVæF–æræÆVæwF‚“°¢v—BæWr&öÖ—6R‡&W6öÇfRÓâ6WD–ÖÖVF–FR‡&W6öÇfR’“°¢–b†6ÆÇ2æÆVæwF‚Ò×WFF–öå7F'BÓÒ2’F‡&÷ræWrW'&÷"‚u6ÖR×6W76–öâ'Vâ&VBF–Bæ÷B&W7VÖRv—F‚g&W6‚&WVW7BgFW"&Wf–Wr×WFF–öâr“°¢6WGFÆUVæF–ær‡VæF–ærç7Æ–6Rƒ’“°¢6öç7B¶×WFF–öä&öG’Â&VD$&öG’Â&VD&öG•ÒÒv—B&öÖ—6RæÆÂ‚†v—B&öÖ—6RæÆÂ…¶×WFF–öäÂ&VD"Â&VDÒ’’æÖ‡&W7öç6RÓâ&W7öç6Ræ§6öâ‚’’“°¢–b†×WFF–öä&öG’ç6W76–öâÓÒw6W76–öâÔrÇÂ&VD$&öG’ç6W76–öâÓÒw6W76–öâÔ"rÇÂ&VD&öG’ç6W76–öâÓÒw6W76–öâÔr’F‡&÷ræWrW'&÷"‚u&Wf–Wr×WFF–öâ÷&VB6ö÷&F–æF–öâ7&÷76VB6W76–öâ&÷VæF'’r“°§Ð ¦7–æ2gVæ7F–öâ76W'DÖVÖ÷'•&WW6U&VæFW&W$FWFW&Ö–æ—6Ò‚’°¢6öç7B·ce6÷W&6RÂcu6÷W&6RÂc…6÷W&6RÂ'&÷w6W$vFU6÷W&6UÒÒv—B&öÖ—6RæÆÂ…°¢g2ç&VDf–ÆR†æWrU$Â‚rââö66WF‚ö76WG2öÆ—fR×cbæ§2rÂ–×÷'BæÖWFçW&Â’ÂwWFc‚r’À¢g2ç&VDf–ÆR†æWrU$Â‚rââö66WF‚ö76WG2öÆ—fR×cræ§2rÂ–×÷'BæÖWFçW&Â’ÂwWFc‚r’À¢g2ç&VDf–ÆR†æWrU$Â‚rââö66WF‚ö76WG2öÆ—fR×c‚æ§2rÂ–×÷'BæÖWFçW&Â’ÂwWFc‚r’À¢g2ç&VDf–ÆR†æWrU$Â†–×÷'BæÖWFçW&Â’ÂwWFc‚r’À¢Ò“°¢6öç7B7F'BÒce6÷W&6Ræ–æFW„öb‚rgVæ7F–öâ&VæFW$ÖVÖ÷'•&WW6U&ööb‚r“°¢6öç7BVæBÒce6÷W&6Ræ–æFW„öb‚uÆâgVæ7F–öâf7G4f÷$æöFRrÂ7F'B“°¢–b‡7F'BÂÇÂVæBÂ’F‡&÷ræWrW'&÷"‚t6÷VÆBæ÷BW‡G&7BF†RWF†÷&—FF—fR7–æ6‡&öæ÷W2ÖVÖ÷'’×&WW6R&VæFW&W"r“°¢6öç7B&VæFW&W%6÷W&6RÒce6÷W&6Rç6Æ–6R‡7F'BÂVæB’çG&–Ò‚“°¢–b‚õÆ"ƒó¦7–æ7Æv—B•Æ'ÅÆ&7W'&VçE'VåÇ2¥Â‚òçFW7B‡&VæFW&W%6÷W&6R’’F‡&÷ræWrW'&÷"‚uF†RWF†÷&—FF—fRÖVÖ÷'’×&WW6R&VæFW&W"&Vv–æVBâ7–æ6‡&öæ÷W2'Vâ&VBr“°¢f÷"†6öç7B¶Æ&VÂÂ6÷W&6UÒöbµ²vÆ—fR×crrÂcu6÷W&6UÒÂ²vÆ—fR×c‚rÂc…6÷W&6UÕÒ’°¢–b‚õÆ"ƒó¦7–æ5Ç2²“ögVæ7F–öåÇ2¶Væ†æ6U&WW6UÇ2¥Â‡ÅÆ&Væ†æ6U&WW6UÇ2¥Â‚òçFW7B‡6÷W&6R’’F‡&÷ræWrW'&÷"†G¶Æ&VÇÒ&Vv–æVB÷7B×&VæFW"ÖVÖ÷'’×&WW6RVæ†æ6W&“°¢Ð¢–b‚'&÷w6W$vFU6÷W&6Ræ–æ6ÇVFW2‚&6öç7B&WW6UF‡&VE6VÆV7F÷"Òr6ÆFW%&W7VÇBçc‚×&WW6R×&ööbçcr×&WW6R×F‡&VBs²"¢ÇÂ'&÷w6W$vFU6÷W&6Ræ–æ6ÇVFW2‚vÆFW%&WW6UF‡&VD6÷VçBÓÓÒbb&WW6U&ööd6÷VçBÓÓÒbb&ööe&WW6UF‡&VD6÷VçBÓÓÒr’’F‡&÷ræWrW'&÷"‚uF†R'&÷w6W"vFRæòÆöævW"&WV—&W2öæR&ööbÂöæRF‡&VBÂæBöæRæW7FVBF‡&VBr“° ¢6öç7B6æF&÷‚Ò°¢W63¢‡fÇVRÒrr’Óâ7G&–ær‡fÇVR’ç&WÆ6R‚õ²cÃâr%ÒörÂ6†&7FW"Óâ‡°¢rbs¢rf×²rÂsÂs¢rfÇC²rÂsâs¢rfwC²rÂ"r#¢rb33“²rÂr"s¢rgV÷C²p¢Õ¶6†&7FW%Ò’’À¢Ó°¢fÒç'Vä–äæWt6öçFW‡B†vÆö&ÅF†—2ç&VæFW$ÖVÖ÷'•&WW6U&ööbÒG·&VæFW&W%6÷W&6WÓ¶Â6æF&÷‚Â²f–ÆVæÖS¢vÆ—fR×cb×&VæFW"ÖÖVÖ÷'’×&WW6R×&ööbæ§2rÒ“°¢6öç7B&V6V—BÒ°¢6öçG&7C¢v66WF‚æÖVÖ÷'’ÖÆ–6F–öâ×&V6V—BóããrÀ¢Æ–6F–öåö†6ƒ¢vrç&WVBƒcB’À¢WF†÷&—G“¢wVçfW&–f–VEöFVÖòrÀ¢66÷S¢v66U÷7V6–f–5öwV–Fæ6UööæÇ’rÀ¢6†&VE÷'VÆUöÆ–VC¢fÇ6RÀ¢ÖöFVÅö66WFæ6U÷&WW6VC¢fÇ6RÀ¢Ó°¢6öç7B&V6VFVçBÒ°¢6Æ–Õö–C¢tDTbÓ#rÔSÔDTÔòrÀ¢ÖVÖ÷'•ö–C¢vÖVÒ×VçfW&–f–VBÖFVÖòrÀ¢&Wf–Wu÷7FGW3¢wVçfW&–f–VEöFVÖõöÖVÖ÷'’rÀ¢Ó°¢6öç7B&W7VÇBÒ²Æ–&öö³¢²fW'6–öã¢vÖ÷VÆB×Æ–&öö²×c2rÒÓ°¢6öç7B&ööbÒ²6W6ÅöFVÇF¢²æöç¦W&ó¢G'VRÒÓ°¢6öç7B66W2Ò°¢°¢Æ&VÃ¢vÆ–VBrÀ¢–çWC¢²&W7VÇBÂ&ööbÂÖVÖ÷'•W6VC¢G'VRÂ&WG&–WfVDöæÇ“¢fÇ6RÂÖVÖ÷'•7FFS¢²&V6V—BÂ&WG&–WfVE&V6VFVçC¢&V6VFVçBÒÒÀ¢ÒÀ¢°¢Æ&VÃ¢w&WG&–WfVBÖöæÇ’rÀ¢–çWC¢²&W7VÇBÂ&ööc¢·ÒÂÖVÖ÷'•W6VC¢fÇ6RÂ&WG&–WfVDöæÇ“¢G'VRÂÖVÖ÷'•7FFS¢²&V6V—C¢çVÆÂÂ&WG&–WfVE&V6VFVçC¢&V6VFVçBÒÒÀ¢ÒÀ¢°¢Æ&VÃ¢væòÖÖVÖ÷'’rÀ¢–çWC¢²&W7VÇBÂ&ööc¢·ÒÂÖVÖ÷'•W6VC¢fÇ6RÂ&WG&–WfVDöæÇ“¢fÇ6RÂÖVÖ÷'•7FFS¢²&V6V—BÂ&WG&–WfVE&V6VFVçC¢&V6VFVçBÒÒÀ¢ÒÀ¢Ó°¢6öç7BW‡V7FVBÒæWrÖ†66W2æÖ‚‡²Æ&VÂÂ–çWBÒ’Óâ¶Æ&VÂÂ6æF&÷‚ç&VæFW$ÖVÖ÷'•&WW6U&ööb†–çWB•Ò’“°¢f÷"†ÆWB72Ò²72Âƒ²72³Ò’°¢f÷"†6öç7B²Æ&VÂÂ–çWBÒöb66W2’°¢–b‡6æF&÷‚ç&VæFW$ÖVÖ÷'•&WW6U&ööb†–çWB’ÓÒW‡V7FVBævWB†Æ&VÂ’’F‡&÷ræWrW'&÷"†7–æ6‡&öæ÷W2ÖVÖ÷'’×&WW6RÖ&·W6†ævVB7&÷72&WVFVBG¶Æ&VÇÒ&VæFW'6“°¢Ð¢Ð ¢6öç7BW†7EF÷öÆöw’ÒÖ&·WÓâ†Ö&·WæÖF6‚‚ö6Æ73Ò'c‚×&WW6R×&ööb"ör’ÇÂµÒ’æÆVæwF‚ÓÓÒ¢bb†Ö&·WæÖF6‚‚ö6Æ73Ò'cr×&WW6R×F‡&VBƒó¢&WG&–WfVBÖöæÇ’“ò"ör’ÇÂµÒ’æÆVæwF‚ÓÓÒ¢bb†Ö&·WæÖF6‚‚óÇ6V7F–öåÆ"ör’ÇÂµÒ’æÆVæwF‚ÓÓÒ ¢bb†Ö&·WæÖF6‚‚óÅÂ÷6V7F–öãâör’ÇÂµÒ’æÆVæwF‚ÓÓÒ ¢bbõãÇ6V7F–öâ6Æ73Ò'c‚×&WW6R×&ööb#åµÇ5Å5Ò£Ç6V7F–öâ6Æ73Ò'cr×&WW6R×F‡&VBƒó¢&WG&–WfVBÖöæÇ’“ò%µÇ5Å5Ò£ÅÂ÷6V7F–öããÅÂ÷6V7F–öãâBòçFW7B†Ö&·W“°¢6öç7BÆ–VBÒW‡V7FVBævWB‚vÆ–VBr“°¢6öç7BÆ–VDGG&–'WFW2Ò°¢vFFÖÖVÖ÷'’×&WG&–WfVCÒ'G'VR"rÀ¢vFFÖÖVÖ÷'’×W6VCÒ'G'VR"rÀ¢vFFÖÆ–6F–öâ×&V6V—CÒ'G'VR"rÀ¢FFÖÖVÖ÷'’Ö6öçG&7CÒ"G·&V6V—Bæ6öçG&7GÒ&À¢FFÖÆ–6F–öâÖ†6ƒÒ"G·&V6V—BæÆ–6F–öåö†6‡Ò&À¢FFÖÖVÖ÷'’ÖWF†÷&—G“Ò"G·&V6V—BæWF†÷&—G—Ò&À¢FFÖÖVÖ÷'’×66÷SÒ"G·&V6V—Bç66÷WÒ&À¢Ó°¢–b‚W†7EF÷öÆöw’†Æ–VB¢ÇÂÆ–VDGG&–'WFW2ç6öÖR†GG&–'WFRÓâÆ–VBæ–æ6ÇVFW2†GG&–'WFR’¢ÇÂÆ–VBæ–æ6ÇVFW2‚uVçfW&–f–VBFVÖòÖVÖ÷'’&WGW&æVBv—F‚fÆ–BÆ–6F–öâ&V6V—Br¢ÇÂÆ–VBæ–æ6ÇVFW2‚uVçfW&–f–VBFVÖò&Wf–WrÖVÖ÷'’&WGW&æVBr¢ÇÂÆ–VBæ–æ6ÇVFW2‚væöç¦W&ò6W6ÂFVÇF6ö×WFVBr¢ÇÂÆ–VBæ–æ6ÇVFW2‚uVÆ–f–VBW‡W'B×&Wf–WvVBr’’F‡&÷ræWrW'&÷"‚tÆ–VBÖVÖ÷'’Ö&·WÆ÷7B—G2W†7BF÷öÆöw’Â&V6V—BGG&–'WFW2Â÷"VçfW&–f–VBWF†÷&—G’6÷’r“° ¢6öç7B&WG&–WfVDöæÇ’ÒW‡V7FVBævWB‚w&WG&–WfVBÖöæÇ’r“°¢–b‚W†7EF÷öÆöw’‡&WG&–WfVDöæÇ’¢ÇÂ&WG&–WfVDöæÇ’æ–æ6ÇVFW2‚v6Æ73Ò'cr×&WW6R×F‡&VB&WG&–WfVBÖöæÇ’"r¢ÇÂ&WG&–WfVDöæÇ’æ–æ6ÇVFW2‚vFFÖÖVÖ÷'’×W6VCÒ&fÇ6R"r¢ÇÂ&WG&–WfVDöæÇ’æ–æ6ÇVFW2‚vFFÖÆ–6F–öâ×&V6V—CÒ&fÇ6R"r¢ÇÂ&WG&–WfVDöæÇ’æ–æ6ÇVFW2‚uVçfW&–f–VBFVÖòÖVÖ÷'’&WG&–WfVBæB&æ¶VBöæÇ’r¢ÇÂ&WG&–WfVDöæÇ’æ–æ6ÇVFW2‚uVçfW&–f–VBFVÖò&Wf–WrÖVÖ÷'’&WGW&æVBr¢ÇÂ&WG&–WfVDöæÇ’æ–æ6ÇVFW2‚tÆ–6F–öâ&V6V—CÂ÷6ÖÆÃãÇ7G&öæsäæöæR&WGW&æVBr¢ÇÂ&WG&–WfVDöæÇ’æ–æ6ÇVFW2‚vFFÖÖVÖ÷'’Ö6öçG&7CÒr¢ÇÂ&WG&–WfVDöæÇ’æ–æ6ÇVFW2‚wfÆ–BÆ–6F–öâ&V6V—Br’’F‡&÷ræWrW'&÷"‚u&WG&–WfVBÖöæÇ’ÖVÖ÷'’Ö&·W&ÇW'&VB&WG&–WfÂÂÆ–6F–öâÂ&V6V—BÂ÷"WF†÷&—G’7FFRr“° ¢–b†W‡V7FVBævWB‚væòÖÖVÖ÷'’r’ÓÒrp¢ÇÂ6æF&÷‚ç&VæFW$ÖVÖ÷'•&WW6U&ööb‡²&W7VÇBÂ&ööbÂÖVÖ÷'•W6VC¢G'VRÂ&WG&–WfVDöæÇ“¢fÇ6RÂÖVÖ÷'•7FFS¢²&V6V—C¢çVÆÂÂ&WG&–WfVE&V6VFVçC¢&V6VFVçBÒÒ’ÓÒrp¢ÇÂ6æF&÷‚ç&VæFW$ÖVÖ÷'•&WW6U&ööb‡²&W7VÇBÂ&ööbÂÖVÖ÷'•W6VC¢G'VRÂ&WG&–WfVDöæÇ“¢fÇ6RÂÖVÖ÷'•7FFS¢²&V6V—BÂ&WG&–WfVE&V6VFVçC¢çVÆÂÒÒ’ÓÒrr’F‡&÷ræWrW'&÷"‚tæòÖÖVÖ÷'’÷"–æ6ö×ÆWFRÆ–VBÖÖVÖ÷'’–çWG2VÖ—GFVB&WW6R&ööbÖ&·Wr“°¢6öç7B†÷7F–ÆRÒ6æF&÷‚ç&VæFW$ÖVÖ÷'•&WW6U&ööb‡°¢&W7VÇC¢²Æ–&öö³¢²fW'6–öã¢sÆ–Ör7&3×‚öæW'&÷#ÖÆW'Bƒ“ârÒÒÀ¢&ööbÀ¢ÖVÖ÷'•W6VC¢G'VRÀ¢&WG&–WfVDöæÇ“¢fÇ6RÀ¢ÖVÖ÷'•7FFS¢²&V6V—C¢²ââç&V6V—BÂÆ–6F–öåö†6ƒ¢sÇ67&—Cæ&B‚“Â÷67&—CârÒÂ&WG&–WfVE&V6VFVçC¢²ââç&V6VFVçBÂ6Æ–Õö–C¢sÇ67&—Cæ6Æ–Ò‚“Â÷67&—CârÂÖVÖ÷'•ö–C¢r"öæfö7W3Ò&&B‚’rÒÒÀ¢Ò“°¢–b††÷7F–ÆRæ–æ6ÇVFW2‚sÇ67&—Câr’ÇÂ†÷7F–ÆRæ–æ6ÇVFW2‚sÆ–Örr’ÇÂ†÷7F–ÆRæ–æ6ÇVFW2‚röæfö7W3Ò&&B‚’r’ÇÂ†÷7F–ÆRæ–æ6ÇVFW2‚rfÇC·67&—BfwC¶6Æ–Ò‚’fÇC²÷67&—BfwC²r’ÇÂ†÷7F–ÆRæ–æ6ÇVFW2‚rgV÷C²öæfö7W3ÒgV÷C¶&B‚’r’’F‡&÷ræWrW'&÷"‚u7–æ6‡&öæ÷W2ÖVÖ÷'’×&WW6R&VæFW&W"F–Bæ÷BW66R†÷7F–ÆR6W'fW"×&WGW&æVBfÇVW2r“°§Ð ¦7–æ2gVæ7F–öâ'Vä6öçG&7E6VÆeFW7B‚’°¢6öç7BÆÆ÷vVD÷WGWDf—‡GW&W2Ò°¢F‚æ¦ö–â…ôD•$T5Dõ%’ÂôõUEUEô$4TäÔR’À¢F‚æ¦ö–â…õDTÕõ$ôõBÂv66WF‚××&VfÆ–v‡Bä#$32rÂ$TdÄ”t…EôõUEUEô$4TäÔR’À¢Ó°¢f÷"†6öç7B6æF–FFRöbÆÆ÷vVD÷WGWDf—‡GW&W2’°¢–b‡&W6öÇfU6fU÷WGWEF‚†6æF–FFR’ÓÒF‚ç&W6öÇfR†6æF–FFR’’°¢F‡&÷ræWrW'&÷"†6fR÷WGWBf—‡GW&RF–Bæ÷B&W6öÇfRW†7FÇ“¢G¶6æF–FFWÖ“°¢Ð¢Ð¢6öç7B&V¦V7FVD÷WGWDf—‡GW&W2Ò°¢F‚ç'6R…$Uõ4•Dõ%•õ$ôõB’ç&ö÷BÀ¢$Uõ4•Dõ%•õ$ôõBÀ¢ôD•$T5Dõ%’À¢F‚æ¦ö–â…ôD•$T5Dõ%’Âv&&—G&'’Ö÷WGWBr’À¢F‚æ¦ö–â…õDTÕõ$ôõBÂv&&—G&'’×w&—F&ÆRÖ÷WGWBr’À¢F‚æ¦ö–â…õDTÕõ$ôõBÂv66WF‚××&VfÆ–v‡Bä#$32rÂv&&—G&'’Ö÷WGWBr’À¢Ó°¢f÷"†6öç7B6æF–FFRöb&V¦V7FVD÷WGWDf—‡GW&W2’°¢G'’°¢&W6öÇfU6fU÷WGWEF‚†6æF–FFR“°¢Ò6F6‚…ò’°¢6öçF–çVS°¢Ð¢F‡&÷ræWrW'&÷"†Vç6fR÷WGWBf—‡GW&Rv266WFVC¢G¶6æF–FFWÖ“°¢Ð¢6öç7B&VÅ&VfÆ–v‡E&VçBÒv—Bg2æÖ¶GFV×‡F‚æ¦ö–â…õDTÕõ$ôõBÂv66WF‚××&VfÆ–v‡Bâr’“°¢G'’°¢6öç7B&VÅ&VfÆ–v‡D÷WGWBÒF‚æ¦ö–â‡&VÅ&VfÆ–v‡E&VçBÂ$TdÄ”t…EôõUEUEô$4TäÔR“°¢–b†76W'E6fU÷WGWE&VçB‡&VÅ&VfÆ–v‡D÷WGWB’ÓÒ&VÅ&VfÆ–v‡D÷WGWB’°¢F‡&÷ræWrW'&÷"‚u&VÂ&VfÆ–v‡B÷WGWBf—‡GW&RF–Bæ÷B&W6öÇfRW†7FÇ’r“°¢Ð¢Òf–æÆÇ’°¢v—Bg2ç&ÖF—"‡&VÅ&VfÆ–v‡E&VçB“°¢Ð¢6öç7B7–ÖÆ–æ¶VE&VfÆ–v‡E&VçBÒF‚æ¦ö–â€¢õDTÕõ$ôõBÀ¢66WF‚××&VfÆ–v‡BâG·&æFöÕUT”B‚’ç&WÆ6TÆÂ‚rÒrÂrr’ç6Æ–6RƒÂ"—ÖÀ¢“°¢v—Bg2ç7–ÖÆ–æ²…ôD•$T5Dõ%’Â7–ÖÆ–æ¶VE&VfÆ–v‡E&VçBÂvF—"r“°¢ÆWB7–ÖÆ–æ¶VE&VçE&V¦V7FVBÒfÇ6S°¢G'’°¢G'’°¢76W'E6fU÷WGWE&VçB‡F‚æ¦ö–â‡7–ÖÆ–æ¶VE&VfÆ–v‡E&VçBÂ$TdÄ”t…EôõUEUEô$4TäÔR’“°¢Ò6F6‚…ò’°¢7–ÖÆ–æ¶VE&VçE&V¦V7FVBÒG'VS°¢Ð¢Òf–æÆÇ’°¢v—Bg2çVæÆ–æ²‡7–ÖÆ–æ¶VE&VfÆ–v‡E&VçB“°¢Ð¢–b‚7–ÖÆ–æ¶VE&VçE&V¦V7FVB’F‡&÷ræWrW'&÷"‚u7–ÖÆ–æ¶VB÷WGWB&VçBf—‡GW&Rv266WFVBr“°¢v—B76W'E'Vå&VE6W76–öä—6öÆF–öâ‚“°¢v—B76W'DÖVÖ÷'•&WW6U&VæFW&W$FWFW&Ö–æ—6Ò‚“°¢–b†GFô†6‚‡²£¢|;ÂrÂ¢·²³¢ã“ÒÂG'VRÂçVÆÅÒÒ’ÓÒs6CsCS“66SV#†cSSSScV#SCFc†&S3†&CC6S–SV&fSV6ƒf3CFc#VFFc†FBr’F‡&÷ræWrW'&÷"‚t6ö×7B6÷'FVBEDò†6†–ærF—fW&vW2g&öÒF†R—F†öâ&VÆV6R6öçG&7Br“°¢6öç7B7Æ—DÆV6U6÷W&6RÒuFVæçEÆäÆW‚Ö÷&vâÂfVÆF&W&w7G&76RBÂCSr&6VÂs°¢–b‚W†7Dæ÷&ÖÆ—¦VDw&÷VæF–æuV÷FR‡7Æ—DÆV6U6÷W&6RÂuFVæçBÆW‚Ö÷&vâÂfVÆF&W&w7G&76RBÂCSr&6VÂr’’F‡&÷ræWrW'&÷"‚tæ÷&ÖÆ—¦VBw&÷VæF–ærF–Bæ÷B&W6W'fRF†R&6¶VæBv†—FW76R6öçG&7Br“°¢–b‚W†7Dæ÷&ÖÆ—¦VDw&÷VæF–æuV÷FR‚~ûÊÆW…ÆäÖ÷&vârÂtÆW‚Ö÷&vâr’’F‡&÷ræWrW'&÷"‚tæ÷&ÖÆ—¦VBw&÷VæF–ærF–Bæ÷B&W6W'fRF†R&6¶VæBäd´26öçG&7Br“°¢–b‚W†7Dæ÷&ÖÆ—¦VDw&÷VæF–æuV÷FR‚tÆW…ÇS4Ö÷&vârÂtÆW‚Ö÷&vâr’’F‡&÷ræWrW'&÷"‚tæ÷&ÖÆ—¦VBw&÷VæF–æröÖ—GFVB—F†öâÖöæÇ’Væ–6öFRv†—FW76Rr“°¢–b†W†7Dæ÷&ÖÆ—¦VDw&÷VæF–æuV÷FR‚tÆW…ÇVfVfdÖ÷&vârÂtÆW‚Ö÷&vâr’’F‡&÷ræWrW'&÷"‚tæ÷&ÖÆ—¦VBw&÷VæF–ær66WFVBæöâÕ—F†öâv†—FW76Rr“°¢–b†W†7Dæ÷&ÖÆ—¦VDw&÷VæF–æuV÷FR‡7Æ—DÆV6U6÷W&6RÂuFVæçBÖ÷&vâÂfVÆF&W&w7G&76RBÂCSr&6VÂr’’F‡&÷ræWrW'&÷"‚tæ÷&ÖÆ—¦VBw&÷VæF–ær66WFVBæöâ×6÷W&6RV÷FRr“°¢6öç7B&V÷&FW&VDw&÷VæF–ætf7G2Ò°¢²f7Eö–C¢vf7EöF—7WFRrÂ6÷W&6U÷&Vg3¢·²Æö6F÷%ö¶–æC¢wFW‡E÷V÷FRrÂ'F–f7Eö–C¢v'EöÖævVÖVçE÷&WÇ’rÕÒÒÀ¢²f7Eö–C¢vf7E÷FVææ7’rÂ6÷W&6U÷&Vg3¢·²Æö6F÷%ö¶–æC¢wFW‡E÷V÷FRrÂ'F–f7Eö–C¢v'EöÆV6RrÕÒÒÀ¢Ó°¢6öç7B&V÷&FW&VDw&÷VæF–æu&ö6W72Ò²æöFW3¢·²æöFUö–C¢w66÷RrÂf7Eö–G3¢²vf7E÷FVææ7’uÒÒÂ²æöFUö–C¢vF—7WFRrÂf7Eö–G3¢²vf7EöF—7WFRuÒÕÒÓ°¢–b‡6VÆV7E&ö6W75FW‡EV÷FTf7B‡&V÷&FW&VDw&÷VæF–ætf7G2Â&V÷&FW&VDw&÷VæF–æu&ö6W72Âvf7E÷FVææ7’r“òæf7Eö–BÓÒvf7E÷FVææ7’r’F‡&÷ræWrW'&÷"‚uFW‡Bw&÷VæF–ær6VÆV7FVB&÷f–FW"Ö÷&FW"ÖFWVæFVçBf7Br“°¢6öç7B&÷f–FW$6&VÆV6RÒ°¢vVçF–5÷'VçF–ÖS¢°¢&ÆÆVÅöw&÷W3¢7G'V7GW&VD6ÆöæR„U…T5DTEôU„T5UD”ôåõDõôÄôu’ç&ÆÆVÅöw&÷W2’À¢6fWG“¢²&÷f–FW%öÖ…ö–åöfÆ–v‡C¢ÒÀ¢ÒÀ¢G'WFƒ¢²&öGV7F–öå÷'VçF–ÖUö66WFæ6S¢²&WV—&VE÷&÷f–FW%öÖ…ö–åöfÆ–v‡C¢ÒÒÀ¢Ó°¢6öç7B&÷f–FW$6†VÇF‚Ò²vVçF–5÷'VçF–ÖS¢²6fWG“¢²&÷f–FW%öÖ…ö–åöfÆ–v‡C¢ÒÒÓ°¢6öç7B&÷f–FW$6&VF–æW72Ò²vVçF–5÷'VçF–ÖS¢²6fWG“¢²&÷f–FW%öÖ…ö–åöfÆ–v‡C¢ÒÒÓ°¢–b‡&÷f–FW%6–ævÆTfÆ–v‡D6öçG&7Ef–öÆF–öç2‡&÷f–FW$6&VÆV6RÂ&÷f–FW$6†VÇF‚Â&÷f–FW$6&VF–æW72’æÆVæwF‚’F‡&÷ræWrW'&÷"‚u÷6—F—fR&÷f–FW"6–ævÆRÖfÆ–v‡B7W&f6Rf—‡GW&Rf–ÆVBr“°¢6öç7BÖ—76–æu&VÆV6U&÷f–FW$6Ò7G'V7GW&VD6ÆöæR‡&÷f–FW$6&VÆV6R“°¢FVÆWFRÖ—76–æu&VÆV6U&÷f–FW$6ævVçF–5÷'VçF–ÖRç6fWG’ç&÷f–FW%öÖ…ö–åöfÆ–v‡C°¢–b‚&÷f–FW%6–ævÆTfÆ–v‡D6öçG&7Ef–öÆF–öç2†Ö—76–æu&VÆV6U&÷f–FW$6Â&÷f–FW$6†VÇF‚Â&÷f–FW$6&VF–æW72’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚w&VÆV6R6fWG’r’’’F‡&÷ræWrW'&÷"‚tÖ—76–ær&VÆV6R&÷f–FW"Ö6f—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7Bw&öæt66WFæ6U&÷f–FW$6Ò7G'V7GW&VD6ÆöæR‡&÷f–FW$6&VÆV6R“°¢w&öæt66WFæ6U&÷f–FW$6çG'WF‚ç&öGV7F–öå÷'VçF–ÖUö66WFæ6Rç&WV—&VE÷&÷f–FW%öÖ…ö–åöfÆ–v‡BÒ#°¢–b‚&÷f–FW%6–ævÆTfÆ–v‡D6öçG&7Ef–öÆF–öç2‡w&öæt66WFæ6U&÷f–FW$6Â&÷f–FW$6†VÇF‚Â&÷f–FW$6&VF–æW72’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚w'VçF–ÖR66WFæ6Rr’’’F‡&÷ræWrW'&÷"‚uw&öær66WFæ6R&÷f–FW"Ö6f—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7Bw&öæt†VÇF…&÷f–FW$6Ò7G'V7GW&VD6ÆöæR‡&÷f–FW$6†VÇF‚“°¢w&öæt†VÇF…&÷f–FW$6ævVçF–5÷'VçF–ÖRç6fWG’ç&÷f–FW%öÖ…ö–åöfÆ–v‡BÒ°¢–b‚&÷f–FW%6–ævÆTfÆ–v‡D6öçG&7Ef–öÆF–öç2‡&÷f–FW$6&VÆV6RÂw&öæt†VÇF…&÷f–FW$6Â&÷f–FW$6&VF–æW72’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚v†VÇF‚r’’’F‡&÷ræWrW'&÷"‚uw&öær†VÇF‚&÷f–FW"Ö6f—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BÖ—76–æu&VF–æW75&÷f–FW$6Ò7G'V7GW&VD6ÆöæR‡&÷f–FW$6&VF–æW72“°¢FVÆWFRÖ—76–æu&VF–æW75&÷f–FW$6ævVçF–5÷'VçF–ÖRç6fWG’ç&÷f–FW%öÖ…ö–åöfÆ–v‡C°¢–b‚&÷f–FW%6–ævÆTfÆ–v‡D6öçG&7Ef–öÆF–öç2‡&÷f–FW$6&VÆV6RÂ&÷f–FW$6†VÇF‚ÂÖ—76–æu&VF–æW75&÷f–FW$6’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚w&VF–æW72r’’’F‡&÷ræWrW'&÷"‚tÖ—76–ær&VF–æW72&÷f–FW"Ö6f—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7B6†ævVDÆöv–6Äfä÷WBÒ7G'V7GW&VD6ÆöæR‡&÷f–FW$6&VÆV6R“°¢6†ævVDÆöv–6Äfä÷WBævVçF–5÷'VçF–ÖRç&ÆÆVÅöw&÷W2ÒµÓ°¢–b‚&÷f–FW%6–ævÆTfÆ–v‡D6öçG&7Ef–öÆF–öç2†6†ævVDÆöv–6Äfä÷WBÂ&÷f–FW$6†VÇF‚Â&÷f–FW$6&VF–æW72’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚vÆöv–6ÂfâÖ÷WBr’’’F‡&÷ræWrW'&÷"‚t6†ævVBÆöv–6ÂfâÖ÷WBf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7B—F†öäfÆöD†6†W2Ò°¢·²fÇVS¢ãÒÂs6vCcCssCV3fcƒf#s&S&c3“C†#CScSSSvS“cVS6#sƒVFS3ccƒC&V&#C‚uÒÀ¢·²fÇVS¢ÓãÒÂv3ƒC†FVf“ƒvcCf&6&fCCc#C#336f6#3c†33#CSc3VS–C#c–#3“ƒcC†"uÒÀ¢·²fÇVS¢RÓrÒÂvV6S3vFfFC““#“Cs##&Vs6#s“““f&&Fƒ3CVf&#vc†3&#Sf#6f&CfCBuÒÀ¢Ó°¢–b‡—F†öäfÆöD†6†W2ç6öÖR‚…·fÇVRÂ—F†öä†6…Ò’ÓâGFô†6‚‡fÇVR’ÓÓÒ—F†öä†6‚’’F‡&÷ræWrW'&÷"‚tfÆöB&—G’f—‡GW&RVæW‡V7FVFÇ’&V6ÖR†6‚Ö6ö×F–&ÆS²WFFRF†R6†&VBçVÖW&–26öçG&7BW‡Æ–6—FÇ’r“°¢–b†æöä–çFVvW$çVÖ&W%F‡2‡²æVvF—fU÷¦W&ó¢ÓãÂW‡öæVçC¢RÓrÒ’æÆVæwF‚ÓÒ"’F‡&÷ræWrW'&÷"‚tæöâÖ–çFVvW"66WFVBÔEDòwV&BÖ—76VBÓã÷"W‡öæVçBæ÷FF–öâr“°¢6öç7B66WFVE&ö6W75Væ—BÒ°¢6öçG&–'WF–öåö–C¢vf7C¦f7E÷66÷S¦FV6—6–öå÷fÇVRrÀ¢f7Eö–C¢vf7E÷66÷RrÀ¢ÖöFVÅö÷væVEöf–VÆG3¢²vFV6—6–öå÷fÇVRuÒÀ¢6öæf–FVæ6Uö&6—5÷ö–çG3¢“À¢GG&–'WF–öã¢$ô4U55ô4ôåE$”%UD”ôåõ$ôÄRÀ¢FWFW&Ö–æ—7F–5öfÆÆ&6µöÆ–VC¢fÇ6RÀ¢Ó°¢6öç7BfÆÆ&6µ&ö6W75Væ—BÒ°¢ââæ66WFVE&ö6W75Væ—BÀ¢6öæf–FVæ6Uö&6—5÷ö–çG3¢À¢GG&–'WF–öã¢DUDU$Ô”ä•5D”5ô4ôåE$”%UD”ôåõ$ôÄRÀ¢FWFW&Ö–æ—7F–5öfÆÆ&6µöÆ–VC¢G'VRÀ¢Ó°¢6öç7B66WFVD6öçG&–'WF–öâÒ6öçG&–'WF–öäW‡V7FF–öâ†66WFVE&ö6W75Væ—BÂ$ô4U55ô4ôåE$”%UD”ôåõ$ôÄR“°¢6öç7BfÆÆ&6´6öçG&–'WF–öâÒ6öçG&–'WF–öäW‡V7FF–öâ†fÆÆ&6µ&ö6W75Væ—BÂ$ô4U55ô4ôåE$”%UD”ôåõ$ôÄR“°¢6öç7BÖ—†VDf–VÆD6öçG&–'WF–öâÒ6öçG&–'WF–öäW‡V7FF–öâ…°¢°¢6öçG&–'WF–öåö–C¢v—FVÓ¦ÆV6S§7FGW2rÀ¢f–VÆC¢w7FGW2rÀ¢6öæf–FVæ6Uö&6—5÷ö–çG3¢“À¢GG&–'WF–öã¢Ud”DTä4Uô4ôåE$”%UD”ôåõ$ôÄRÀ¢FWFW&Ö–æ—7F–5öfÆÆ&6µöÆ–VC¢fÇ6RÀ¢ÒÀ¢°¢6öçG&–'WF–öåö–C¢v—FVÓ¦ÆV6S¦'F–f7G2rÀ¢f–VÆC¢v'F–f7Eö–G2rÀ¢6öæf–FVæ6Uö&6—5÷ö–çG3¢À¢GG&–'WF–öã¢DUDU$Ô”ä•5D”5ô4ôåE$”%UD”ôåõ$ôÄRÀ¢FWFW&Ö–æ—7F–5öfÆÆ&6µöÆ–VC¢G'VRÀ¢ÒÀ¢ÒÂUd”DTä4Uô4ôåE$”%UD”ôåõ$ôÄR“°¢6öç7B÷7E&Wf–Wt6öçG&–'WF–öâÒ6öçG&–'WF–öäW‡V7FF–öâ€¢66WFVE&ö6W75Væ—BÀ¢$ô4U55ô4ôåE$”%UD”ôåõ$ôÄRÀ¢²66WFæ6U÷66÷S¢w÷7E÷&Wf–Wu÷VçfW&–f–VE÷G&ç6f÷&ÒrÂÖöFVÅö66WFæ6U÷&WW6VC¢fÇ6RÒÀ¢“°¢6öç7B÷7DÖVÖ÷'”6öçG&–'WF–öâÒ6öçG&–'WF–öäW‡V7FF–öâ€¢66WFVE&ö6W75Væ—BÀ¢$ô4U55ô4ôåE$”%UD”ôåõ$ôÄRÀ¢²6öçG&7C¢v66WF‚æÖVÖ÷'’ÖÆ–6F–öâ×&V6V—BóããrÂWF†÷&—G“¢wVçfW&–f–VEöFVÖòrÂ66÷S¢v66U÷7V6–f–5öwV–Fæ6UööæÇ’rÂÖöFVÅö66WFæ6U÷&WW6VC¢fÇ6RÂÆ–VC¢G'VRÒÀ¢“°¢–b‡7F&ÆT§6öâ†66WFVD6öçG&–'WF–öâ’ÓÒ7F&ÆT§6öâ‡²WF†÷&—G“¢væVÖ÷G&öâÖ66WFVBrÂ66WFVEö6÷VçC¢srÂfÆÆ&6µö6÷VçC¢srÒ¢ÇÂ7F&ÆT§6öâ†fÆÆ&6´6öçG&–'WF–öâ’ÓÒ7F&ÆT§6öâ‡²WF†÷&—G“¢vFWFW&Ö–æ—7F–2ÖfÆÆ&6²rÂ66WFVEö6÷VçC¢srÂfÆÆ&6µö6÷VçC¢srÒ¢ÇÂ7F&ÆT§6öâ†Ö—†VDf–VÆD6öçG&–'WF–öâ’ÓÒ7F&ÆT§6öâ‡²WF†÷&—G“¢vÖ—†VBrÂ66WFVEö6÷VçC¢srÂfÆÆ&6µö6÷VçC¢srÒ¢ÇÂ÷7E&Wf–Wt6öçG&–'WF–öâÓÒçVÆÀ¢ÇÂ÷7DÖVÖ÷'”6öçG&–'WF–öâÓÒçVÆÀ¢ÇÂ6öçG&–'WF–öäW‡V7FF–öâ‡²ââæ66WFVE&ö6W75Væ—BÂFWFW&Ö–æ—7F–5öfÆÆ&6µöÆ–VC¢VæFVf–æVBÒÂ$ô4U55ô4ôåE$”%UD”ôåõ$ôÄR’ÓÒçVÆÀ¢ÇÂ6öçG&–'WF–öäW‡V7FF–öâ‡²ââæ66WFVE&ö6W75Væ—BÂGG&–'WF–öã¢vf÷&V–våövVçBrÒÂ$ô4U55ô4ôåE$”%UD”ôåõ$ôÄR’ÓÒçVÆÀ¢ÇÂ6öçG&–'WF–öäW‡V7FF–öâ‡²ââæfÆÆ&6µ&ö6W75Væ—BÂGG&–'WF–öã¢vf÷&V–våövVçBrÒÂ$ô4U55ô4ôåE$”%UD”ôåõ$ôÄR’ÓÒçVÆÂ’F‡&÷ræWrW'&÷"‚uf—6–&ÆR6öçG&–'WF–öâGG&–'WF–öâFöW2æ÷Bf–Â6Æ÷6VBöâWF†÷&—G’÷"fÆÆ&6²7FFRr“° ¢6öç7B&VÆF–öå&ö6W72Ò°¢6VÆV7FVE÷Fƒ¢²vuÒÀ¢7W'&VçEö÷fW&Æ“¢²æW‡Eö7F–öåöæöFUö–C¢v"rÒÀ¢æöFW3¢°¢²æöFUö–C¢vrÂWf–FVæ6U÷&WV—&VÖVçEö–G3¢²vöæRrÂw6†&VBuÒÒÀ¢²æöFUö–C¢v"rÂWf–FVæ6U÷&WV—&VÖVçEö–G3¢²w6†&VBuÒÒÀ¢ÒÀ¢Ó°¢6öç7B&VÆF–öä6†V6¶Æ—7BÒ²—FV×3¢°¢²—FVÕö–C¢vöæRrÂæöFUö–G3¢²vuÒÂæöFUö–C¢vrÂ7W'&VçE÷Fƒ¢G'VRÒÀ¢²—FVÕö–C¢w6†&VBrÂæöFUö–G3¢²vrÂv"uÒÂæöFUö–C¢vrÂ7W'&VçE÷Fƒ¢G'VRÒÀ¢ÒÓ°¢–b†Wf–FVæ6U&VÆF–öä6öçG&7Ef–öÆF–öç2‡&VÆF–öå&ö6W72Â&VÆF–öä6†V6¶Æ—7B’æÆVæwF‚’F‡&÷ræWrW'&÷"‚u÷6—F—fR&V6—&ö6ÂWf–FVæ6Rf—‡GW&Rf–ÆVBr“°¢f÷"†6öç7B¶f–VÆBÂfÇVUÒöbµ²væöFUö–G2rÂ²v"rÂvuÕÒÂ²væöFUö–BrÂv"uÒÂ²v7W'&VçE÷F‚rÂfÇ6UÕÒ’°¢6öç7BF×W&VBÒ7G'V7GW&VD6ÆöæR‡&VÆF–öä6†V6¶Æ—7B“°¢F×W&VBæ—FV×5³Õ¶f–VÆEÒÒfÇVS°¢–b‚Wf–FVæ6U&VÆF–öä6öçG&7Ef–öÆF–öç2‡&VÆF–öå&ö6W72ÂF×W&VB’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2†f–VÆB’’’F‡&÷ræWrW'&÷"†F×W&VB&V6—&ö6ÂWf–FVæ6RG¶f–VÆGÒf—‡GW&Rv2æ÷B&V¦V7FVF“°¢Ð ¢6öç7Böff–6–Å76vRÒufW'6–öæVBöff–6–Â76vRâs°¢6öç7BÆVvÅ&ö6W72Ò²æöFW3¢·²æöFUö–C¢w66÷RrÕÒÓ°¢6öç7BÆVvÄf—‡GW&RÒ°¢6öçG&7C¢v66WF‚æÆVvÂÖ6öçFW‡Bó"ããrÀ¢&Vv—7G'•÷fW'6–öã¢v6‚×FVææ7’Ööff–6–Â×6æ6†÷Bó##bÓ‚Ó"rÀ¢Æöö·WöÖWF†öC¢wfW'6–öæVEööff–6–Å÷6÷W&6U÷&Vv—7G'•öÆöö·WrÀ¢VW7F–öç3¢·²VW7F–öåö–C¢w66÷U÷VW7F–öârÂFW‡C¢uv†Böff–6–Â'VÆRÆ–W3òrÂ6÷W&6Uö–G3¢²vöff–6–ÂuÒÂ–çFW'&WFF–öåö–G3¢²w&–æ6—ÆRuÒÂ&ö6W75öæöFUö–G3¢²w66÷RuÒÂ6öç6WVVæ6S¢t¶VWWF†÷&—G’æB&÷÷6ÂF—7F–æ7BârÕÒÀ¢6÷W&6W3¢·°¢6÷W&6Uö–C¢vöff–6–ÂrÂF—FÆS¢töff–6–Â6÷W&6RrÂW&Ã¢v‡GG3¢òöW†×ÆRçFW7Bööff–6–ÂrÂ6÷W&6U÷G—S¢vöff–6–Å÷7FGWFRrÂ§W&—6F–7F–öã¢t4‚rÂfW'6–öåöFFS¢s##bÓ‚Ó"rÂÆö6F–öã¢t'F–6ÆRrÂ76vUöÆæwVvS¢vFRrÂ76vU÷FW‡C¢öff–6–Å76vRÂ76vU÷6†#Sc¢6†#Sb†öff–6–Å76vR’Â76vU÷7VÖÖ'“¢t&÷VæFVB7VÖÖ'’ârÂ÷W&F–öæÅö–çFW'&WFF–öã¢tFWFW&Ö–æ—7F–2&VfW&Væ6R&÷÷6ÂârÂ&Wf–Wu÷7FGW3¢wVÆ–f–VE÷&Wf–Wu÷VæF–ærrÂ&öÆS¢u6†W266÷RârÂ&÷fVC¢fÇ6RÀ¢&WG&–WfÃ¢²ÖWF†öC¢wfW'6–öæVEööff–6–Å÷6÷W&6U÷&Vv—7G'•öÆöö·WrÂ&WG&–WfVEöC¢s##bÓ‚Ó"rÂ&Vv—7G'•÷fW'6–öã¢v6‚×FVææ7’Ööff–6–Â×6æ6†÷Bó##bÓ‚Ó"rÂ6æ6†÷E÷W&Ã¢v‡GG3¢òöW†×ÆRçFW7B÷6æ6†÷BçFbrÂ6æ6†÷E÷6†#Sc¢6†#Sb‚vöff–6–Â6æ6†÷Br’Â6æ6†÷E÷66÷S¢vöff–6–Å÷Feö'—FW2rÒÀ¢ÕÒÀ¢†æFÆ–æu÷&–æ6—ÆW3¢·²6÷W&6Uö–C¢w&–æ6—ÆRrÂF—FÆS¢tFWFW&Ö–æ—7F–2†æFÆ–ær&÷÷6ÂrÂ6÷W&6U÷G—S¢v÷W&F–öæÅö–çFW'&WFF–öârÂ&öÆS¢u&W6W'fRVæ6W'F–çG’ârÂfÆ–FF–öå÷7FGW3¢v6æF–FFUöæ÷EöW‡W'Eö&÷fVBrÂ&öGV6W#¢vFWFW&Ö–æ—7F–5öÆ–6F–öârÕÒÀ¢æöFUöÆ–æ·3¢²66÷S¢²vöff–6–ÂrÂw&–æ6—ÆRuÒÒÀ¢&Wf–Wu÷7FGW3¢t÷W&F–öæÂG&ç6ÆF–öâæ÷B–WB&÷fVB'’VÆ–f–VB&Wf–WvW"rÀ¢Ó°¢–b†ÆVvÄ6öçFW‡D6öçG&7Ef–öÆF–öç2†ÆVvÄf—‡GW&RÂÆVvÅ&ö6W72’æÆVæwF‚’F‡&÷ræWrW'&÷"†÷6—F—fRÆVvÂÖ6öçFW‡Bf—‡GW&Rf–ÆVC¢G´¥4ôâç7G&–æv–g’†ÆVvÄ6öçFW‡D6öçG&7Ef–öÆF–öç2†ÆVvÄf—‡GW&RÂÆVvÅ&ö6W72’—Ö“°¢6öç7BF×W&VE76vRÒ7G'V7GW&VD6ÆöæR†ÆVvÄf—‡GW&R“°¢F×W&VE76vRç6÷W&6W5³Òç76vU÷FW‡BÒt6†ævVB76vRs°¢–b‚ÆVvÄ6öçFW‡D6öçG&7Ef–öÆF–öç2‡F×W&VE76vRÂÆVvÅ&ö6W72’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚w76vR†6‚r’’’F‡&÷ræWrW'&÷"‚uF×W&VBÆVvÂ76vRf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BVæ¶æ÷väÆVvÄ¦ö–âÒ7G'V7GW&VD6ÆöæR†ÆVvÄf—‡GW&R“°¢Væ¶æ÷väÆVvÄ¦ö–âçVW7F–öç5³Òç6÷W&6Uö–G2Ò²wVæ¶æ÷vâuÓ°¢–b‚ÆVvÄ6öçFW‡D6öçG&7Ef–öÆF–öç2‡Væ¶æ÷väÆVvÄ¦ö–âÂÆVvÅ&ö6W72’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚w6÷W&6R¦ö–âr’’’F‡&÷ræWrW'&÷"‚uVæ¶æ÷vâÆVvÂ6÷W&6RÔ”B¦ö–âf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BÖöFVÄ÷væVE&–æ6—ÆRÒ7G'V7GW&VD6ÆöæR†ÆVvÄf—‡GW&R“°¢ÖöFVÄ÷væVE&–æ6—ÆRæ†æFÆ–æu÷&–æ6—ÆW5³Òç&öGV6W"ÒvÖöFVÅövVçBs°¢–b‚ÆVvÄ6öçFW‡D6öçG&7Ef–öÆF–öç2†ÖöFVÄ÷væVE&–æ6—ÆRÂÆVvÅ&ö6W72’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚w&öGV6W"r’’’F‡&÷ræWrW'&÷"‚tÖöFVÂÖ÷væVBÆVvÂ&–æ6—ÆRf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BfÇ6U6æ6†÷E66÷RÒ7G'V7GW&VD6ÆöæR†ÆVvÄf—‡GW&R“°¢fÇ6U6æ6†÷E66÷Rç6÷W&6W5³Òç&WG&–WfÂç6æ6†÷E÷66÷RÒvG–æÖ–5ö‡FÖÅ÷vRs°¢–b‚ÆVvÄ6öçFW‡D6öçG&7Ef–öÆF–öç2†fÇ6U6æ6†÷E66÷RÂÆVvÅ&ö6W72’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚w&WG&–WfÂ&V6V—Br’’’F‡&÷ræWrW'&÷"‚tfÇ6Röff–6–Â6æ6†÷B×66÷Rf—‡GW&Rv2æ÷B&V¦V7FVBr“° ¢6öç7B–ÖvT'F–f7BÒ²'F–f7Eö–C¢v–ÖvRrÂÖVF–÷G—S¢v–ÖvR÷ærrÂ6†#Sc¢6†#Sb‚v–ÖvR'—FW2r’Ó°¢6öç7Bf—7VÄf—‡GW&RÒ²'F–f7Eö–C¢v–ÖvRrÂÆö6F÷%ö¶–æC¢wf—7VÅöö'6W'fF–öârÂ&Vv–öã¢³ãÂã"Âã2ÂãEÒÂö'6W'fF–öã¢t7W&FVBf—6–&ÆR&VfW&Væ6RârÂ&öGV6W#¢vFWFW&Ö–æ—7F–5÷&VfW&Væ6Uöææ÷FF–öârÂWF†÷&—G“¢vvVæW&FVEöFVÖõ÷&VfW&Væ6UööæÇ’rÂææ÷FF–öåö6öçG&7C¢v66WF‚çf—7VÂ×&VfW&Væ6RÖææ÷FF–öâóããrÂææ÷FF–öå÷fW'6–öã¢vvVæW&FVBÖFVÖò×&VfW&Væ6Ró##bÓ‚Ó"rÂ–ÖvU÷6†#Sc¢–ÖvT'F–f7Bç6†#SbÓ°¢–b‡f—7VÅ&VfW&Væ6T6öçG&7Ef–öÆF–öç2‡f—7VÄf—‡GW&RÂ–ÖvT'F–f7B’æÆVæwF‚’F‡&÷ræWrW'&÷"‚u÷6—F—fRf—7VÂ×&VfW&Væ6Rf—‡GW&Rf–ÆVBr“°¢6öç7BF×W&VEf—7VÄ†6‚Ò²ââçf—7VÄf—‡GW&RÂ–ÖvU÷6†#Sc¢6†#Sb‚v÷F†W"'—FW2r’Ó°¢–b‚f—7VÅ&VfW&Væ6T6öçG&7Ef–öÆF–öç2‡F×W&VEf—7VÄ†6‚Â–ÖvT'F–f7B’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚wV&Æ–2–ÖvR'—FW2r’’’F‡&÷ræWrW'&÷"‚uF×W&VBf—7VÂ–ÖvR†6‚f—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BF×W&VEf—7VÅ&öGV6W"Ò²ââçf—7VÄf—‡GW&RÂ&öGV6W#¢vÖ6†–æU÷f—6–öåövVçBrÓ°¢–b‚f—7VÅ&VfW&Væ6T6öçG&7Ef–öÆF–öç2‡F×W&VEf—7VÅ&öGV6W"Â–ÖvT'F–f7B’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚vWF†÷&—G’6öçG&7Br’’’F‡&÷ræWrW'&÷"‚uF×W&VBf—7VÂ&öGV6W"f—‡GW&Rv2æ÷B&V¦V7FVBr“° ¢6öç7B&æ¶–æt6öçFW‡BÒ²6FVv÷'“¢v6FVv÷'’rÂ7V&6FVv÷'“¢w7V&6FVv÷'’rÂ7W'&VçE÷&ö6W75öæöFUö–C¢v6W6F–öârÂæW‡Eö7F–öåöæöFUö–C¢vWf–FVæ6UövrÂ6VÆV7FVE÷Fƒ¢²v6W6F–öârÂvWf–FVæ6UövuÒÂVç&W6öÇfVEöf7Eö–G3¢²v6W6RuÒÂ7W'&VçEöWf–FVæ6UöæVVEö–G3¢²v76W76ÖVçBuÒÓ°¢6öç7B&æ¶VE&V6VFVçG2Ò³Â"Â5ÒæÖ‡&æ²Óâ‡²6Æ–Õö–C¢„•5BÒG·&æ·ÖÂF—FÆS¢GFW&âG·&æ·ÖÂ&Wf–Wu÷7FGW3¢vvVæW&FVE÷&VfW&Væ6RrÂv‡•÷W6VgVÃ¢tvVæW&FVB&VfW&Væ6RGFW&âârÂ&÷fVææ6S¢vvVæW&FVE÷&VfW&Væ6Uöæ÷E÷VÆ–f–VE÷&Wf–WrrÂf–æÅ÷&ö6W73¢²v6W6F–öâuÒÂWf–FVæ6S¢²v76W76ÖVçBuÒÂ÷WF6öÖS¢u&VfW&Væ6RöæÇ’rÂ&æ¶–æs¢²6öçG&7C¢v66WF‚ç&V6VFVçB×&æ¶–æróããrÂ6÷'W5÷fW'6–öã¢vvVæW&FVB×&VfW&Væ6R×GFW&ç2ó##bÓ‚Ó"rÂ&æ²Â66÷&Uö&6—5÷ö–çG3¢CÒ&æ²Âf7F÷'3¢·²f7F÷#¢wVç&W6öÇfVEöf7BrÂfÇVS¢v6W6RrÂvV–v‡C¢CÒ&æ²ÕÒÂ6öçFW‡Eö†6ƒ¢GFô†6‚‡&æ¶–æt6öçFW‡B’ÒÒ’“°¢6öç7B&æ¶–æu&W7VÇBÒ²&V6VFVçG3¢&æ¶VE&V6VFVçG2Â&V6VFVçE÷&æ¶–æs¢²6öçG&7C¢v66WF‚ç&V6VFVçB×&æ¶–æróããrÂ6÷'W5÷fW'6–öã¢vvVæW&FVB×&VfW&Væ6R×GFW&ç2ó##bÓ‚Ó"rÂ6öçFW‡C¢&æ¶–æt6öçFW‡BÂ6öçFW‡Eö†6ƒ¢GFô†6‚‡&æ¶–æt6öçFW‡B’Â6æF–FFU÷66÷&W3¢&æ¶VE&V6VFVçG2æÖ†—FVÒÓâ‡²6Æ–Õö–C¢—FVÒæ6Æ–Õö–BÂ66÷&Uö&6—5÷ö–çG3¢—FVÒç&æ¶–ærç66÷&Uö&6—5÷ö–çG2Âf7F÷'3¢—FVÒç&æ¶–æræf7F÷'2Ò’’Â6VÆV7FVEö6Æ–Õö–G3¢&æ¶VE&V6VFVçG2æÖ†—FVÒÓâ—FVÒæ6Æ–Õö–B’Â&W7VÇEö†6ƒ¢GFô†6‚‡&æ¶VE&V6VFVçG2’ÒÓ°¢–b‡&V6VFVçE&æ¶–æt6öçG&7Ef–öÆF–öç2‡&æ¶–æu&W7VÇB’æÆVæwF‚’F‡&÷ræWrW'&÷"†÷6—F—fR&V6VFVçB×&æ¶–ærf—‡GW&Rf–ÆVC¢G´¥4ôâç7G&–æv–g’‡&V6VFVçE&æ¶–æt6öçG&7Ef–öÆF–öç2‡&æ¶–æu&W7VÇB’—Ö“°¢6öç7BF×W&VE&æ²Ò7G'V7GW&VD6ÆöæR‡&æ¶–æu&W7VÇB“°¢F×W&VE&æ²ç&V6VFVçG5³Òç&æ¶–ærç&æ²Ò#°¢–b‚&V6VFVçE&æ¶–æt6öçG&7Ef–öÆF–öç2‡F×W&VE&æ²’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚wW"Ö—FVÒ&æ¶–ærr’’’F‡&÷ræWrW'&÷"‚uF×W&VB&V6VFVçB&æ²f—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BF×W&VD6öçFW‡D†6‚Ò7G'V7GW&VD6ÆöæR‡&æ¶–æu&W7VÇB“°¢F×W&VD6öçFW‡D†6‚ç&V6VFVçE÷&æ¶–æræ6öçFW‡Eö†6‚Ò6†#Sb‚ww&öær6öçFW‡Br“°¢–b‚&V6VFVçE&æ¶–æt6öçG&7Ef–öÆF–öç2‡F×W&VD6öçFW‡D†6‚’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚v6öçFW‡Br’’’F‡&÷ræWrW'&÷"‚uF×W&VB&V6VFVçB6öçFW‡BÖ†6‚f—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BF×W&VE&W7VÇD†6‚Ò7G'V7GW&VD6ÆöæR‡&æ¶–æu&W7VÇB“°¢F×W&VE&W7VÇD†6‚ç&V6VFVçE÷&æ¶–ærç&W7VÇEö†6‚Ò6†#Sb‚ww&öær&W7VÇBr“°¢–b‚&V6VFVçE&æ¶–æt6öçG&7Ef–öÆF–öç2‡F×W&VE&W7VÇD†6‚’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚w&W7VÇB†6‚r’’’F‡&÷ræWrW'&÷"‚uF×W&VB&V6VFVçB&W7VÇBÖ†6‚f—‡GW&Rv2æ÷B&V¦V7FVBr“° ¢6öç7B&6VÆ–æU&ö6W72Ò°¢6öçG&7C¢w&ö6W72Öw&‚rÂ6VÆV7FVE÷Fƒ¢²v6W6F–öârÂvWf–FVæ6UövuÒÂ7W'&VçEö÷fW&Æ“¢²7W'&VçEöæöFUö–C¢v6W6F–öârÂæW‡Eö7F–öåöæöFUö–C¢vWf–FVæ6UövrÒÂ6†&VE÷'VÆUöÆ–VC¢fÇ6RÂÖVÖ÷'•÷W6VC¢fÇ6RÀ¢æöFW3¢°¢²æöFUö–C¢vF—7WFRrÂWf–FVæ6U÷&WV—&VÖVçEö–G3¢²vÖævVÖVçE÷÷6—F–öâuÒÒÀ¢²æöFUö–C¢v6W6F–öârÂWf–FVæ6U÷&WV—&VÖVçEö–G3¢²v'V–ÆF–æuöVçfVÆ÷RrÂwW6UöWf–FVæ6RuÒÒÀ¢²æöFUö–C¢vÖ—†VEö6W6RrÂWf–FVæ6U÷&WV—&VÖVçEö–G3¢²v'V–ÆF–æuöVçfVÆ÷RrÂwW6UöWf–FVæ6RuÒÒÀ¢²æöFUö–C¢wFVæçE÷W6RrÂWf–FVæ6U÷&WV—&VÖVçEö–G3¢²wW6UöWf–FVæ6RuÒÒÀ¢²æöFUö–C¢vWf–FVæ6UövrÂWf–FVæ6U÷&WV—&VÖVçEö–G3¢²v'V–ÆF–æuöVçfVÆ÷RuÒÒÀ¢ÒÀ¢VFvW3¢·²6÷W&6S¢vWf–FVæ6UövrÂF&vWC¢v6W6F–öârÂ6öæF—F–öã¢v76W76ÖVçB6ö×ÆWFRrÂ7FFS¢vÆö÷rÕÒÀ¢Ó°¢6öç7B&6VÆ–æT6†V6¶Æ—7BÒ°¢6öçG&7C¢vWf–FVæ6RÖÖöFVÂrÂ6†&VE÷'VÆUöÆ–VC¢fÇ6RÂÖVÖ÷'•÷W6VC¢fÇ6RÂ&WV—&VC¢²v&Vf÷&RuÒÂ7VÖÖ'“¢²†6S¢v&Vf÷&RrÒÀ¢—FV×3¢°¢²—FVÕö–C¢v'V–ÆF–æuöVçfVÆ÷RrÂ7FGW3¢vÖ—76–ærrÂæöFUö–G3¢²v6W6F–öârÂvÖ—†VEö6W6RrÂvWf–FVæ6UövuÒÂæöFUö–C¢v6W6F–öârÂ7W'&VçE÷Fƒ¢G'VRÒÀ¢²—FVÕö–C¢vÖævVÖVçE÷÷6—F–öârÂ7FGW3¢w&÷f–FVE÷7Vff–6–VçBrÂæöFUö–G3¢²vF—7WFRuÒÂæöFUö–C¢vF—7WFRrÂ7W'&VçE÷Fƒ¢fÇ6RÒÀ¢²—FVÕö–C¢wW6UöWf–FVæ6RrÂ7FGW3¢v6öæF—F–öæÂrÂæöFUö–G3¢²v6W6F–öârÂvÖ—†VEö6W6RrÂwFVæçE÷W6RuÒÂæöFUö–C¢v6W6F–öârÂ7W'&VçE÷Fƒ¢G'VRÒÀ¢ÒÀ¢Ó°¢6öç7BÆFW%&ö6W74f—‡GW&RÒ7G'V7GW&VD6ÆöæR†&6VÆ–æU&ö6W72“°¢ÆFW%&ö6W74f—‡GW&RææöFW2æf–æB†æöFRÓâæöFRææöFUö–BÓÓÒv6W6F–öâr’æWf–FVæ6U÷&WV—&VÖVçEö–G2Ò²v'V–ÆF–æuöVçfVÆ÷RuÓ°¢ÆFW%&ö6W74f—‡GW&RææöFW2æf–æB†æöFRÓâæöFRææöFUö–BÓÓÒvÖ—†VEö6W6Rr’æWf–FVæ6U÷&WV—&VÖVçEö–G2Ò²v'V–ÆF–æuöVçfVÆ÷RuÓ°¢ÆFW%&ö6W74f—‡GW&RææöFW2æf–æB†æöFRÓâæöFRææöFUö–BÓÓÒwFVæçE÷W6Rr’æWf–FVæ6U÷&WV—&VÖVçEö–G2ÒµÓ°¢6öç7BfVçF–ÆF–öäæöFRÒ²æöFUö–C¢wfVçF–ÆF–öåöF—7WFRrÂWf–FVæ6U÷&WV—&VÖVçEö–G3¢²vÖævVÖVçE÷÷6—F–öârÂwW6UöWf–FVæ6RuÒÓ°¢ÆFW%&ö6W74f—‡GW&RææöFW2çW6‚‡fVçF–ÆF–öäæöFR“°¢6öç7BÖVÖ÷'”VFvTöæRÒ²6÷W&6S¢vWf–FVæ6UövrÂF&vWC¢wfVçF–ÆF–öåöF—7WFRrÂ6öæF—F–öã¢wÆW6–&ÆRW6Rf7F÷"rÂ7FFS¢w÷76–&ÆRrÓ°¢6öç7BÖVÖ÷'”VFvUGvòÒ²6÷W&6S¢wfVçF–ÆF–öåöF—7WFRrÂF&vWC¢v6W6F–öârÂ6öæF—F–öã¢vÆÆVvF–öâ76W76VBrÂ7FFS¢vÆö÷rÓ°¢ÆFW%&ö6W74f—‡GW&RæVFvW2çW6‚†ÖVÖ÷'”VFvTöæRÂÖVÖ÷'”VFvUGvò“°¢ÆFW%&ö6W74f—‡GW&RæÖVÖ÷'•÷W6VBÒG'VS°¢ÆFW%&ö6W74f—‡GW&Ræ66U÷7V6–f–5öwV–Fæ6UöÆ–VBÒG'VS°¢6öç7BÆFW$6†V6¶Æ—7Df—‡GW&RÒ7G'V7GW&VD6ÆöæR†&6VÆ–æT6†V6¶Æ—7B“°¢ÆFW$6†V6¶Æ—7Df—‡GW&Ræ—FV×2Ò°¢²—FVÕö–C¢v'V–ÆF–æuöVçfVÆ÷RrÂ7FGW3¢v6öæF—F–öæÂrÂæöFUö–G3¢²v6W6F–öârÂvÖ—†VEö6W6RrÂvWf–FVæ6UövuÒÂæöFUö–C¢v6W6F–öârÂ7W'&VçE÷Fƒ¢G'VRÒÀ¢²—FVÕö–C¢vÖævVÖVçE÷÷6—F–öârÂ7FGW3¢w&÷f–FVE÷7Vff–6–VçBrÂæöFUö–G3¢²vF—7WFRrÂwfVçF–ÆF–öåöF—7WFRuÒÂæöFUö–C¢vF—7WFRrÂ7W'&VçE÷Fƒ¢fÇ6RÒÀ¢²—FVÕö–C¢wW6UöWf–FVæ6RrÂ7FGW3¢v6öæF—F–öæÂrÂæöFUö–G3¢²wfVçF–ÆF–öåöF—7WFRuÒÂæöFUö–C¢wfVçF–ÆF–öåöF—7WFRrÂ7W'&VçE÷Fƒ¢fÇ6RÒÀ¢Ó°¢ÆFW$6†V6¶Æ—7Df—‡GW&Rç&WV—&VBÒ²vgFW"uÓ°¢ÆFW$6†V6¶Æ—7Df—‡GW&Rç7VÖÖ'’Ò²†6S¢vgFW"rÓ°¢ÆFW$6†V6¶Æ—7Df—‡GW&RæÖVÖ÷'•÷W6VBÒG'VS°¢ÆFW$6†V6¶Æ—7Df—‡GW&Ræ66U÷7V6–f–5öwV–Fæ6UöÆ–VBÒG'VS°¢6öç7BFV6—6–öäf7G2Ò°¢²w66÷RrÂv–å÷66÷RuÒÂ²vF—7WFRrÂvF—7WFU÷&W6VçBuÒÂ²wW&vVæ7’rÂvæ÷E÷W&vVçBuÒÂ²væ÷F–f–6F–öârÂvæ÷F–f–VBuÒÂ²w&V7W'&Væ6RrÂw&V7W'&Væ6U÷7W÷'FVBuÒÂ²v6W6F–öârÂv6W6U÷Vç&W6öÇfVBuÒÀ¢ÒæÖ‚…¶FV6—6–öåö¶W’ÂFV6—6–öå÷fÇVUÒ’Óâ‡²f7Eö–C¢f7EòG¶FV6—6–öåö¶W—ÖÂ7FFS¢v¶æ÷vârÂ6öçG&öÇ5÷&ö6W73¢G'VRÂFV6—6–öåö¶W’ÂFV6—6–öå÷fÇVRÂ6VÖçF–5÷&öÆS¢çVÆÂÂ6÷W&6U÷&Vg3¢µÒÒ’“°¢6öç7BÖVÖ÷'”f7G2Ò²ââæFV6—6–öäf7G2Â²f7Eö–C¢vÆFW%öf7E÷fVçF–ÆF–öåöÆÆVvF–öârÂ7FFS¢v¶æ÷vârÂ6öçG&öÇ5÷&ö6W73¢fÇ6RÂFV6—6–öåö¶W“¢çVÆÂÂFV6—6–öå÷fÇVS¢çVÆÂÂ6VÖçF–5÷&öÆS¢vÖævVÖVçE÷fVçF–ÆF–öåöÆÆVvF–öârÂ6÷W&6U÷&Vg3¢·²'F–f7Eö–C¢v'EöÆFW%öÖævVÖVçE÷&WÇ’rÕÒÕÓ°¢6öç7Bö'6W'f&ÆT†6‚Ò6†#Sb‚vö'6W'f&ÆR6¶vRr“°¢6öç7B6æöæ–6Ä†6‚ÒGFô†6‚†ÖVÖ÷'”f7G2“°¢6öç7BfW&–f–6F–öä†6‚Ò6†#Sb‚wfW&–f–6F–öâr“°¢6öç7B&6VÆ–æU&W7VÇDf—‡GW&RÒ²6FVv÷'“¢u&VçFÂFVfV7BÒÖ÷VÆBæBÖö—7GW&RrÂ7V&6FVv÷'“¢u&V7W'&–ærÖö—7GW&Rv—F‚F—7WFVB6W6F–öârÂf7G3¢7G'V7GW&VD6ÆöæR†ÖVÖ÷'”f7G2’Â&ö6W73¢&6VÆ–æU&ö6W72Â6†V6¶Æ—7C¢&6VÆ–æT6†V6¶Æ—7BÂ&V6VFVçG3¢µÒÂÖVÖ÷'•öÆ–6F–öã¢çVÆÂÂÖVÖ÷'•÷W6VC¢fÇ6RÂ&Wf–WvVEöÖVÖ÷'•÷W6VC¢fÇ6RÂ&Wf–WvVEöÖVÖ÷'•÷&WG&–WfVC¢fÇ6RÂ¶æ÷vÆVFvS¢²&Wf–WvVEöÖVÖ÷'•÷W6VC¢fÇ6RÂ&Wf–WvVEöÖVÖ÷'•÷&WG&–WfVC¢fÇ6RÒÂfW&–f–6F–öã¢²v†öÆU÷Æ–&ööµö†6ƒ¢6†#Sb‚v&6VÆ–æRfW&–f–6F–öâr’ÒÂVF—C¢²ö'6W'f&ÆUö–çWEö†6ƒ¢ö'6W'f&ÆT†6‚Â6æöæ–6Å÷7FFUö†6ƒ¢6æöæ–6Ä†6‚ÒÂÆ–&öö³¢²fW'6–öã¢vÖ÷VÆB×Æ–&öö²×c2rÒÂ6†&VE÷'VÆUöÆ–VC¢fÇ6RÓ°¢6öç7BÆFW%&W7VÇDf—‡GW&RÒ²6FVv÷'“¢u&VçFÂFVfV7BÒÖ÷VÆBæBÖö—7GW&RrÂ7V&6FVv÷'“¢u&V7W'&–ærÖö—7GW&Rv—F‚F—7WFVB6W6F–öârÂf7G3¢7G'V7GW&VD6ÆöæR†ÖVÖ÷'”f7G2’Â&ö6W73¢ÆFW%&ö6W74f—‡GW&RÂ6†V6¶Æ—7C¢ÆFW$6†V6¶Æ—7Df—‡GW&RÂæW‡Eö7F–öã¢²vVçEö'&–Veö6öçG&–'WF–öã¢çVÆÂÒÂ&V6VFVçG3¢·²6Æ–Õö–C¢tDTbÓ#rÔSÔDTÔòrÂ&Wf–Wu÷7FGW3¢wVçfW&–f–VEöFVÖõöÖVÖ÷'’rÂÖVÖ÷'•ö–C¢vÖVÖ÷'’ÓrÕÒÂÖVÖ÷'•÷W6VC¢G'VRÂ&Wf–WvVEöÖVÖ÷'•÷W6VC¢G'VRÂ&Wf–WvVEöÖVÖ÷'•÷&WG&–WfVC¢G'VRÂ¶æ÷vÆVFvS¢²&Wf–WvVEöÖVÖ÷'•÷W6VC¢G'VRÂ&Wf–WvVEöÖVÖ÷'•÷&WG&–WfVC¢G'VRÒÂfW&–f–6F–öã¢²v†öÆU÷Æ–&ööµö†6ƒ¢fW&–f–6F–öä†6‚ÒÂVF—C¢²ö'6W'f&ÆUö–çWEö†6ƒ¢ö'6W'f&ÆT†6‚Â6æöæ–6Å÷7FFUö†6ƒ¢6æöæ–6Ä†6‚ÒÂÆ–&öö³¢²fW'6–öã¢vÖ÷VÆB×Æ–&öö²×c2rÒÂ6†&VE÷'VÆUöÆ–VC¢fÇ6RÓ°¢6öç7B&WV—&VDFV6—6–öç4f—‡GW&RÒö&¦V7Bæg&öÔVçG&–W2†FV6—6–öäf7G2æÖ†f7BÓâ¶f7BæFV6—6–öåö¶W’Âf7BæFV6—6–öå÷fÇVUÒ’“°¢6öç7B6VÖçF–56–væGW&Tf—‡GW&RÒGFô†6‚‡²6FVv÷'“¢u&VçFÂFVfV7BÒÖ÷VÆBæBÖö—7GW&RrÂ7V&6FVv÷'“¢u&V7W'&–ærÖö—7GW&Rv—F‚F—7WFVB6W6F–öârÂ&WV—&VEöFV6—6–öç3¢&WV—&VDFV6—6–öç4f—‡GW&RÂ&WV—&VEöf7E÷&öÆW3¢²ÖævVÖVçE÷fVçF–ÆF–öåöÆÆVvF–öã¢²7FFS¢v¶æ÷vârÂÖ–åöw&÷VæFVE÷6÷W&6W3¢ÒÒÒ“°¢6öç7BVÆ–v–&–Æ—G”Öæ–fW7BÒ²'VÆUö–C¢w6ÖUöw&÷VæFVEöÖ÷VÆE÷6–væGW&U÷c"rÂ6öçG&7C¢v66WF‚ç6VÖçF–2ÖÖVÖ÷'’ÖVÆ–v–&–Æ—G’óããrÂ6Æ–Õö–C¢tDTÔòÔÔõTÄBÓ"rÂ6VÖçF–5÷6–væGW&Uö†6ƒ¢6VÖçF–56–væGW&Tf—‡GW&RÂFV6—6–öç3¢&WV—&VDFV6—6–öç4f—‡GW&RÂf7G5ö†6ƒ¢GFô†6‚‡6VÖçF–4f7E6–væGW&R†ÆFW%&W7VÇDf—‡GW&R’’Â6†V6·3¢²6÷W&6Uö6Æ–ÕöW†6ÇVFVC¢G'VRÂ6FVv÷'•öÖF6†VC¢G'VRÂ7V&6FVv÷'•öÖF6†VC¢G'VRÂ&WV—&VEöFV6—6–öç5öÖF6†VC¢G'VRÂfVçF–ÆF–öåöÆÆVvF–öåöw&÷VæFVC¢G'VRÂ6VÖçF–5÷6–væGW&Uö&÷VæC¢G'VRÂwV–Fæ6UöVæ&ÆVC¢G'VRÒÓ°¢6öç7B&V6V—Df—‡GW&RÒ°¢&V6V—E÷G—S¢vÖVÖ÷'•öÆ–6F–öå÷&V6V—BrÂ6öçG&7C¢v66WF‚æÖVÖ÷'’ÖÆ–6F–öâ×&V6V—BóããrÂWF†÷&—G“¢wVçfW&–f–VEöFVÖòrÂ66÷S¢v66U÷7V6–f–5öwV–Fæ6UööæÇ’rÀ¢6÷W&6UöÖVÖ÷'“¢²ÖVÖ÷'•ö–C¢vÖVÖ÷'’ÓrÂ6Æ–Õö–C¢tDTbÓ#rÔSÔDTÔòrÂ&Wf–Wuö–C¢w&Wf–WrÓrÂ6öçFVçEö†6ƒ¢6†#Sb‚vÖVÖ÷'’6öçFVçBr’Â&Wf–Wu÷7FGW3¢wVçfW&–f–VEöFVÖõöÖVÖ÷'’rÒÀ¢F&vWC¢²'Våö–C¢vÆFW"×'VârÂ6Æ–Õö–C¢tDTÔòÔÔõTÄBÓ"rÒÂö'6W'f&ÆUö–çWEö†6ƒ¢ö'6W'f&ÆT†6‚Â6æöæ–6Å÷7FFUö†6ƒ¢6æöæ–6Ä†6‚À¢VÆ–v–&–Æ—G“¢²ââæVÆ–v–&–Æ—G”Öæ–fW7BÂVÆ–v–&ÆS¢G'VRÂÖæ–fW7Eö†6ƒ¢GFô†6‚†VÆ–v–&–Æ—G”Öæ–fW7B’ÒÀ¢ÆÆ÷vVEö÷W&F–öåö–G3¢²vFE÷fVçF–ÆF–öåöF—7WFUöæöFRrÂvFEöWf–FVæ6Uöv÷Fõ÷fVçF–ÆF–öåöVFvRrÂvFE÷fVçF–ÆF–öå÷Fõö6W6F–öåöVFvRrÂv6öæF—F–öåö'V–ÆF–æuöVçfVÆ÷RrÂw&V76–vå÷W6UöWf–FVæ6U÷Fõ÷fVçF–ÆF–öâuÒÀ¢Æ–VEö÷W&F–öåö–G3¢²vFE÷fVçF–ÆF–öåöF—7WFUöæöFRrÂvFEöWf–FVæ6Uöv÷Fõ÷fVçF–ÆF–öåöVFvRrÂvFE÷fVçF–ÆF–öå÷Fõö6W6F–öåöVFvRrÂv6öæF—F–öåö'V–ÆF–æuöVçfVÆ÷RrÂw&V76–vå÷W6UöWf–FVæ6U÷Fõ÷fVçF–ÆF–öâuÒÀ¢&ö6W75ö÷W&F–öç3¢°¢²÷W&F–öåö–C¢vFE÷fVçF–ÆF–öåöF—7WFUöæöFRrÂ÷W&F–öã¢vFEöæöFRrÂæöFUö–C¢wfVçF–ÆF–öåöF—7WFRrÂWf–FVæ6U÷&WV—&VÖVçEö–G3¢²vÖævVÖVçE÷÷6—F–öârÂwW6UöWf–FVæ6RuÒÂgFW%ö†6ƒ¢GFô†6‚‡fVçF–ÆF–öäæöFR’ÒÀ¢²÷W&F–öåö–C¢vFEöWf–FVæ6Uöv÷Fõ÷fVçF–ÆF–öåöVFvRrÂ÷W&F–öã¢vFEöVFvRrÂ6÷W&6S¢vWf–FVæ6UövrÂF&vWC¢wfVçF–ÆF–öåöF—7WFRrÂgFW%ö†6ƒ¢GFô†6‚†ÖVÖ÷'”VFvTöæR’ÒÀ¢²÷W&F–öåö–C¢vFE÷fVçF–ÆF–öå÷Fõö6W6F–öåöVFvRrÂ÷W&F–öã¢vFEöVFvRrÂ6÷W&6S¢wfVçF–ÆF–öåöF—7WFRrÂF&vWC¢v6W6F–öârÂgFW%ö†6ƒ¢GFô†6‚†ÖVÖ÷'”VFvUGvò’ÒÀ¢ÒÀ¢Wf–FVæ6Uö÷W&F–öç3¢°¢²÷W&F–öåö–C¢v6öæF—F–öåö'V–ÆF–æuöVçfVÆ÷RrÂ÷W&F–öã¢w&WÆ6Uö—FVÒrÂ—FVÕö–C¢v'V–ÆF–æuöVçfVÆ÷RrÂ&Vf÷&Uö†6ƒ¢GFô†6‚†&6VÆ–æT6†V6¶Æ—7Bæ—FV×5³Ò’ÂgFW%ö†6ƒ¢GFô†6‚†ÆFW$6†V6¶Æ—7Df—‡GW&Ræ—FV×5³Ò’ÒÀ¢²÷W&F–öåö–C¢w&V76–vå÷W6UöWf–FVæ6U÷Fõ÷fVçF–ÆF–öârÂ÷W&F–öã¢w&V76–våö—FVÒrÂ—FVÕö–C¢wW6UöWf–FVæ6RrÂ&VÖ÷fVEög&öÕöæöFUö–G3¢²v6W6F–öârÂvÖ—†VEö6W6RrÂwFVæçE÷W6RuÒÂFFVE÷FõöæöFUö–C¢wfVçF–ÆF–öåöF—7WFRrÂ&Vf÷&Uö†6ƒ¢GFô†6‚†&6VÆ–æT6†V6¶Æ—7Bæ—FV×5³%Ò’ÂgFW%ö†6ƒ¢GFô†6‚†ÆFW$6†V6¶Æ—7Df—‡GW&Ræ—FV×5³%Ò’ÒÀ¢ÒÀ¢&Vf÷&S¢²&ö6W75öGFõö†6ƒ¢GFô†6‚†&6VÆ–æU&ö6W72’Â6†V6¶Æ—7EöGFõö†6ƒ¢GFô†6‚†&6VÆ–æT6†V6¶Æ—7B’Â&ö6W75÷6VÖçF–5ö†6ƒ¢GFô†6‚‡6VÖçF–5&ö6W74GFò†&6VÆ–æU&ö6W72’’Â6†V6¶Æ—7E÷6VÖçF–5ö†6ƒ¢GFô†6‚‡6VÖçF–46†V6¶Æ—7DGFò†&6VÆ–æT6†V6¶Æ—7B’’ÒÀ¢gFW#¢²&ö6W75öGFõö†6ƒ¢GFô†6‚†ÆFW%&ö6W74f—‡GW&R’Â6†V6¶Æ—7EöGFõö†6ƒ¢GFô†6‚†ÆFW$6†V6¶Æ—7Df—‡GW&R’Â&ö6W75÷6VÖçF–5ö†6ƒ¢GFô†6‚‡6VÖçF–5&ö6W74GFò†ÆFW%&ö6W74f—‡GW&R’’Â6†V6¶Æ—7E÷6VÖçF–5ö†6ƒ¢GFô†6‚‡6VÖçF–46†V6¶Æ—7DGFò†ÆFW$6†V6¶Æ—7Df—‡GW&R’’ÒÀ¢fW&–f–6F–öåö†6ƒ¢fW&–f–6F–öä†6‚Â6†&VE÷Æ–&ööµ÷fW'6–öã¢vÖ÷VÆB×Æ–&öö²×c2rÂ6†&VE÷'VÆUöÆ–VC¢fÇ6RÂÖöFVÅö66WFæ6U÷&WW6VC¢fÇ6RÂÆ–VC¢G'VRÀ¢Ó°¢&V6V—Df—‡GW&RæÆ–6F–öåö†6‚ÒGFô†6‚‡&V6V—Df—‡GW&R“°¢ÆFW%&W7VÇDf—‡GW&RæÖVÖ÷'•öÆ–6F–öâÒ&V6V—Df—‡GW&S°¢6öç7BÖVÖ÷'”&÷VæF'”f—‡GW&RÒ°¢6öçG&7C¢v66WF‚æÖVÖ÷'’ÖÆ–6F–öâÖ&÷VæF'’óããrÀ¢F&vWC¢7G'V7GW&VD6ÆöæR‡&V6V—Df—‡GW&RçF&vWB’À¢6÷W&6UöÖVÖ÷'“¢²ÖVÖ÷'•ö–C¢&V6V—Df—‡GW&Rç6÷W&6UöÖVÖ÷'’æÖVÖ÷'•ö–BÂ6öçFVçEö†6ƒ¢&V6V—Df—‡GW&Rç6÷W&6UöÖVÖ÷'’æ6öçFVçEö†6‚ÒÀ¢&Vf÷&S¢7G'V7GW&VD6ÆöæR‡&V6V—Df—‡GW&Ræ&Vf÷&R’À¢Ó°¢ÖVÖ÷'”&÷VæF'”f—‡GW&Ræ&÷VæF'•ö†6‚ÒGFô†6‚†ÖVÖ÷'”&÷VæF'”f—‡GW&R“°¢6öç7BÖVÖ÷'”WfVçDf—‡GW&RÒ°¢WfVçEö–C¢vWfVçBÖÖVÖ÷'’ÖÆ–6F–öârÂ÷&F–æÃ¢Â7&VFVEöC¢s##bÓ‚Ó%C££¢rÀ¢7FvS¢vÖVÖ÷'•öÆ–6F–öârÂÆ&VÃ¢t&÷VæFVB66R×7V6–f–2ÖVÖ÷'’wV–Fæ6RÆ–VBrÂ7FGW3¢v6ö×ÆWFVBrÀ¢ââç7G'V7GW&VD6ÆöæR‡&V6V—Df—‡GW&R’À¢Ó°¢6öç7B6W6ÄFVÇFf—‡GW&RÒ6ö×WFVD6W6ÄFVÇF†&6VÆ–æU&W7VÇDf—‡GW&RÂÆFW%&W7VÇDf—‡GW&R“°¢6öç7BÖVÖ÷'”6†V6´æÖW2Ò²u6ÖRö'6W'f&ÆR–çWBrÂu6ÖR6æöæ–6Â7FFRrÂtW†7B7W'&VçBÖVÖ÷'’&V6V—BrÂuW&RÖVÖ÷'’&WÆ’ÖF6†W2ÆV&æVBED÷2rÂu&V6V—B&Vf÷&R6VÖçF–2†6†W2ÖF6‚&6VÆ–æRED÷2rÂu&V6V—BgFW"†6†W2ÖF6‚ÆV&æVBED÷2rÂtæöç¦W&ò6W6ÂEDòFVÇFrÂtöæÇ’ÆÆ÷vVB6W6Â÷W&F–öç26†ævVBrÂtFWFW&Ö–æ—7F–2F&vWBæB&÷FV7FVB6†V6·276VBrÂu6†&VBc2&VÖ–ç2Væ6†ævVBuÓ°¢6öç7B&öödf—‡GW&RÒ°¢&VG“¢G'VRÂ6ö×WFVC¢G'VRÂ&6VÆ–æU÷'Våö–C¢v&6VÆ–æR×'VârÂÆFW%÷'Våö–C¢vÆFW"×'VârÀ¢&Vf÷&S¢²'Våö–C¢v&6VÆ–æR×'VârÂö'6W'f&ÆUö–çWEö†6ƒ¢ö'6W'f&ÆT†6‚Â6æöæ–6Å÷7FFUö†6ƒ¢6æöæ–6Ä†6‚Â&ö6W75÷6VÖçF–5ö†6ƒ¢&V6V—Df—‡GW&Ræ&Vf÷&Rç&ö6W75÷6VÖçF–5ö†6‚Â6†V6¶Æ—7E÷6VÖçF–5ö†6ƒ¢&V6V—Df—‡GW&Ræ&Vf÷&Ræ6†V6¶Æ—7E÷6VÖçF–5ö†6‚ÂÆ–&ööµ÷fW'6–öã¢vÖ÷VÆB×Æ–&öö²×c2rÂfW&–f–6F–öåö†6ƒ¢&6VÆ–æU&W7VÇDf—‡GW&RçfW&–f–6F–öâçv†öÆU÷Æ–&ööµö†6‚ÒÀ¢gFW#¢²'Våö–C¢vÆFW"×'VârÂö'6W'f&ÆUö–çWEö†6ƒ¢ö'6W'f&ÆT†6‚Â6æöæ–6Å÷7FFUö†6ƒ¢6æöæ–6Ä†6‚Âââç&V6V—Df—‡GW&RægFW"ÂÆ–&ööµ÷fW'6–öã¢vÖ÷VÆB×Æ–&öö²×c2rÂfW&–f–6F–öåö†6ƒ¢fW&–f–6F–öä†6‚ÒÀ¢6†ævW3¢²&V6VFVçEö6Æ–Õö–G5öFFVC¢²tDTbÓ#rÔSÔDTÔòuÒÒÂ&Wf–WvVEöÖVÖ÷'•÷&ööc¢²W6VC¢G'VRÂÖVÖ÷'•ö–G3¢²vÖVÖ÷'’ÓuÒÂ&W6VçEö–åö&6VÆ–æS¢fÇ6RÂ&W6VçEö–åöÆFW%÷'Vã¢G'VRÒÂ6W6ÅöFVÇF¢6W6ÄFVÇFf—‡GW&RÀ¢ÖVÖ÷'•öÆ–6F–öå÷&ööc¢²&V6V—E÷&W6VçC¢G'VRÂ&V6V—E÷fÆ–C¢G'VRÂ6÷W&6UöÖVÖ÷'•ö7W'&VçC¢G'VRÂ&Vf÷&Uö†6†W5öÖF6ƒ¢G'VRÂgFW%ö†6†W5öÖF6ƒ¢G'VRÂÆÆ÷vVEöFVÇFöW†7C¢G'VRÂ&WÆ•öW†7C¢G'VRÂÆ–6F–öåö†6ƒ¢&V6V—Df—‡GW&RæÆ–6F–öåö†6‚ÒÀ¢FWFW&Ö–æ—7F–5ö6†V6·3¢ÖVÖ÷'”6†V6´æÖW2æÖ†æÖRÓâ‡²æÖRÂ7FGW3¢w76VBrÂFWF–Ã¢t6ö×WFVBg&öÒ&÷F‚ED÷2ârÒ’’À¢6æF–FFS¢²6æF–FFUö–C¢v6æF–FFUöF—7WFVE÷fVçF–ÆF–öå÷cBrÂ7FGW3¢wV&çF–æVBrÂVÆ–f–VE÷7W÷'Eö6÷VçC¢ÂF&vWE÷FW7G3¢²7FGW3¢w76VBrÒÂ&÷FV7FVE÷&Vw&W76–öã¢²7FGW3¢w76VBrÒÂ&÷fÃ¢²7FGW3¢wVæF–ærrÂVÆ–f–VE÷&Wf–WvW#¢fÇ6RÒÒÀ¢6†&VE÷'VÆS¢²Æ–VC¢fÇ6RÂfW'6–öåö&Vf÷&S¢vÖ÷VÆB×Æ–&öö²×c2rÂfW'6–öåögFW#¢vÖ÷VÆB×Æ–&öö²×c2rÂ6†&VEö¶æ÷vÆVFvUö6†ævVC¢fÇ6RÂ6æF–FFU÷7FGW3¢wV&çF–æVBrÒÀ¢Ó°¢6öç7Bg&÷¦VäÖVÖ÷'”–FVçF—G’Ò²ÖVÖ÷'•ö–C¢vÖVÖ÷'’ÓrÂ&Wf–Wuö–C¢w&Wf–WrÓrÂ6öçFVçEö†6ƒ¢&V6V—Df—‡GW&Rç6÷W&6UöÖVÖ÷'’æ6öçFVçEö†6‚Â6æF–FFUö–C¢v6æF–FFUöF—7WFVE÷fVçF–ÆF–öå÷cBrÂWFFVEöC¢s##bÓ‚Ó%C££³£rÓ°¢6öç7B6÷VçFW&f7GVÄg&VW¦Tf—‡GW&RÒ²6öçG&7C¢v66WF‚æ6÷VçFW&f7GVÂÖÆV&æ–ærÖg&VW¦RóããrÂÖVÖ÷'“¢g&÷¦VäÖVÖ÷'”–FVçF—G’Â–FVçF—G•ö†6ƒ¢GFô†6‚†g&÷¦VäÖVÖ÷'”–FVçF—G’’ÂÆ–6F–öå÷7W&W76VC¢G'VRÓ°¢&öödf—‡GW&Ræ6÷VçFW&f7GVÅöÆV&æ–æuög&VW¦RÒ6÷VçFW&f7GVÄg&VW¦Tf—‡GW&S°¢6öç7B&6VÆ–æU'Väf—‡GW&RÒ²'Våö–C¢v&6VÆ–æR×'VârÂ6Æ–Õö–C¢tDTÔòÔÔõTÄBÓ"rÂ7&VFVEöC¢s##bÓ‚Ó%C££³£rÂ6ö×ÆWFVEöC¢FFRç'6R‚s##bÓ‚Ó%C£#£³£r’òÂ6÷VçFW&f7GVÅöÆV&æ–æuög&VW¦S¢6÷VçFW&f7GVÄg&VW¦Tf—‡GW&RÂ&W7VÇC¢&6VÆ–æU&W7VÇDf—‡GW&RÓ°¢6öç7BÆFW%'Väf—‡GW&RÒ²'Våö–C¢vÆFW"×'VârÂ6Æ–Õö–C¢tDTÔòÔÔõTÄBÓ"rÂ7&VFVEöC¢s##bÓ‚Ó%C£3£³£rÂ&W7VÇC¢ÆFW%&W7VÇDf—‡GW&RÂÖVÖ÷'•öÆ–6F–öåö&÷VæF'“¢ÖVÖ÷'”&÷VæF'”f—‡GW&RÂWfVçG3¢¶ÖVÖ÷'”WfVçDf—‡GW&UÒÓ°¢6öç7B÷6—F—fTÖVÖ÷'”—77VW2ÒÖVÖ÷'”Æ–6F–öä6öçG&7Ef–öÆF–öç2†&6VÆ–æU'Väf—‡GW&RÂÆFW%'Väf—‡GW&RÂ&öödf—‡GW&R“°¢–b‡÷6—F—fTÖVÖ÷'”—77VW2æÆVæwF‚’F‡&÷ræWrW'&÷"†÷6—F—fRÖVÖ÷'’ÖÆ–6F–öâf—‡GW&Rf–ÆVC¢G´¥4ôâç7G&–æv–g’‡÷6—F—fTÖVÖ÷'”—77VW2—Ö“°¢6öç7BF×W&VD6÷VçFW&f7GVÄg&VW¦U'VâÒ7G'V7GW&VD6ÆöæR†&6VÆ–æU'Väf—‡GW&R“°¢F×W&VD6÷VçFW&f7GVÄg&VW¦U'Vâæ6÷VçFW&f7GVÅöÆV&æ–æuög&VW¦RæÖVÖ÷'’æ6öçFVçEö†6‚Ò6†#Sb‚vf÷&vVBg&÷¦VâÖVÖ÷'’r“°¢F×W&VD6÷VçFW&f7GVÄg&VW¦U'Vâæ6÷VçFW&f7GVÅöÆV&æ–æuög&VW¦Ræ–FVçF—G•ö†6‚ÒGFô†6‚‡F×W&VD6÷VçFW&f7GVÄg&VW¦U'Vâæ6÷VçFW&f7GVÅöÆV&æ–æuög&VW¦RæÖVÖ÷'’“°¢–b‚ÖVÖ÷'”Æ–6F–öä6öçG&7Ef–öÆF–öç2‡F×W&VD6÷VçFW&f7GVÄg&VW¦U'VâÂÆFW%'Väf—‡GW&RÂ&öödf—‡GW&R’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚vg&÷¦Vâv÷fW&æVBÖVÖ÷'’–FVçF—G’r’’’F‡&÷ræWrW'&÷"‚uF×W&VB6÷VçFW&f7GVÂÆV&æ–ærÖg&VW¦Rf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7B&Tg&VW¦T&6VÆ–æU'VâÒ7G'V7GW&VD6ÆöæR†&6VÆ–æU'Väf—‡GW&R“°¢&Tg&VW¦T&6VÆ–æU'Vâæ7&VFVEöBÒs##bÓ‚ÓC#3£S“£³£s°¢–b‚ÖVÖ÷'”Æ–6F–öä6öçG&7Ef–öÆF–öç2‡&Tg&VW¦T&6VÆ–æU'VâÂÆFW%'Väf—‡GW&RÂ&öödf—‡GW&R’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚v÷&FW&VBgFW"F†RÆV&æ–ærg&VW¦Rr’’’F‡&÷ræWrW'&÷"‚u&RÖÆV&æ–ær&6VÆ–æRf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BF×W&VDÖVÖ÷'”&÷VæF'”†6…'VâÒ7G'V7GW&VD6ÆöæR†ÆFW%'Väf—‡GW&R“°¢F×W&VDÖVÖ÷'”&÷VæF'”†6…'VâæÖVÖ÷'•öÆ–6F–öåö&÷VæF'’æ&÷VæF'•ö†6‚Ò6†#Sb‚wF×W&VB&WF–æVBÖVÖ÷'’&÷VæF'’r“°¢–b‚ÖVÖ÷'”Æ–6F–öä6öçG&7Ef–öÆF–öç2†&6VÆ–æU'Väf—‡GW&RÂF×W&VDÖVÖ÷'”&÷VæF'”†6…'VâÂ&öödf—‡GW&R’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚v&÷VæF'’†6‚r’’’F‡&÷ræWrW'&÷"‚uF×W&VB&WF–æVBÖVÖ÷'’Ö&÷VæF'’†6‚f—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BF×W&VDÖVÖ÷'”&÷VæF'•6÷W&6U'VâÒ7G'V7GW&VD6ÆöæR†ÆFW%'Väf—‡GW&R“°¢F×W&VDÖVÖ÷'”&÷VæF'•6÷W&6U'VâæÖVÖ÷'•öÆ–6F–öåö&÷VæF'’ç6÷W&6UöÖVÖ÷'’æ6öçFVçEö†6‚Ò6†#Sb‚ww&öær&WF–æVB6÷W&6RÖVÖ÷'’r“°¢F×W&VDÖVÖ÷'”&÷VæF'•6÷W&6U'VâæÖVÖ÷'•öÆ–6F–öåö&÷VæF'’æ&÷VæF'•ö†6‚ÒGFô†6‚„ö&¦V7Bæg&öÔVçG&–W2„ö&¦V7BæVçG&–W2‡F×W&VDÖVÖ÷'”&÷VæF'•6÷W&6U'VâæÖVÖ÷'•öÆ–6F–öåö&÷VæF'’’æf–ÇFW"‚…¶¶W•Ò’Óâ¶W’ÓÒv&÷VæF'•ö†6‚r’’“°¢–b‚ÖVÖ÷'”Æ–6F–öä6öçG&7Ef–öÆF–öç2†&6VÆ–æU'Väf—‡GW&RÂF×W&VDÖVÖ÷'”&÷VæF'•6÷W&6U'VâÂ&öödf—‡GW&R’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚v–FVçF—G’÷"6÷W&6R¦ö–âr’’’F‡&÷ræWrW'&÷"‚uF×W&VB&WF–æVBÖVÖ÷'’Ö&÷VæF'’6÷W&6Rf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BF×W&VDÖVÖ÷'”&÷VæF'”&Vf÷&U'VâÒ7G'V7GW&VD6ÆöæR†ÆFW%'Väf—‡GW&R“°¢F×W&VDÖVÖ÷'”&÷VæF'”&Vf÷&U'VâæÖVÖ÷'•öÆ–6F–öåö&÷VæF'’æ&Vf÷&Rç&ö6W75öGFõö†6‚Ò6†#Sb‚ww&öær–æFWVæFVçFÇ’&WF–æVB&Vf÷&REDòr“°¢F×W&VDÖVÖ÷'”&÷VæF'”&Vf÷&U'VâæÖVÖ÷'•öÆ–6F–öåö&÷VæF'’æ&÷VæF'•ö†6‚ÒGFô†6‚„ö&¦V7Bæg&öÔVçG&–W2„ö&¦V7BæVçG&–W2‡F×W&VDÖVÖ÷'”&÷VæF'”&Vf÷&U'VâæÖVÖ÷'•öÆ–6F–öåö&÷VæF'’’æf–ÇFW"‚…¶¶W•Ò’Óâ¶W’ÓÒv&÷VæF'•ö†6‚r’’“°¢–b‚ÖVÖ÷'”Æ–6F–öä6öçG&7Ef–öÆF–öç2†&6VÆ–æU'Väf—‡GW&RÂF×W&VDÖVÖ÷'”&÷VæF'”&Vf÷&U'VâÂ&öödf—‡GW&R’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚v&Vf÷&R†6†W2Fòæ÷BWVÂr’’’F‡&÷ræWrW'&÷"‚u&WF–æVBÖVÖ÷'’Ö&÷VæF'’Fò&V6V—Bæ&Vf÷&R¦ö–âf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BÖ—76–ætÖVÖ÷'”WfVçE'VâÒ7G'V7GW&VD6ÆöæR†ÆFW%'Väf—‡GW&R“°¢Ö—76–ætÖVÖ÷'”WfVçE'VâæWfVçG2ÒµÓ°¢–b‚ÖVÖ÷'”Æ–6F–öä6öçG&7Ef–öÆF–öç2†&6VÆ–æU'Väf—‡GW&RÂÖ—76–ætÖVÖ÷'”WfVçE'VâÂ&öödf—‡GW&R’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚vW†7FÇ’öæR6ö×ÆWFVBW'6—7FVBr’’’F‡&÷ræWrW'&÷"‚tÖ—76–ærW'6—7FVBÖVÖ÷'’ÖÆ–6F–öâWfVçBf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BGWÆ–6FTÖVÖ÷'”WfVçE'VâÒ7G'V7GW&VD6ÆöæR†ÆFW%'Väf—‡GW&R“°¢GWÆ–6FTÖVÖ÷'”WfVçE'VâæWfVçG2çW6‚‡7G'V7GW&VD6ÆöæR†ÖVÖ÷'”WfVçDf—‡GW&R’“°¢–b‚ÖVÖ÷'”Æ–6F–öä6öçG&7Ef–öÆF–öç2†&6VÆ–æU'Väf—‡GW&RÂGWÆ–6FTÖVÖ÷'”WfVçE'VâÂ&öödf—‡GW&R’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚vW†7FÇ’öæR6ö×ÆWFVBW'6—7FVBr’’’F‡&÷ræWrW'&÷"‚tGWÆ–6FRW'6—7FVBÖVÖ÷'’ÖÆ–6F–öâWfVçBf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7Bf÷&vVE&W7VÇDæD&÷VæF'•'VâÒ7G'V7GW&VD6ÆöæR†ÆFW%'Väf—‡GW&R“°¢f÷&vVE&W7VÇDæD&÷VæF'•'Vâç&W7VÇBæÖVÖ÷'•öÆ–6F–öâæ&Vf÷&Rç&ö6W75öGFõö†6‚Ò6†#Sb‚vf÷&vVB&ö6W72EDò&÷VæF'’r“°¢f÷&vVE&W7VÇDæD&÷VæF'•'Vâç&W7VÇBæÖVÖ÷'•öÆ–6F–öâæ&Vf÷&Ræ6†V6¶Æ—7EöGFõö†6‚Ò6†#Sb‚vf÷&vVB6†V6¶Æ—7BEDò&÷VæF'’r“°¢f÷&vVE&W7VÇDæD&÷VæF'•'Vâç&W7VÇBæÖVÖ÷'•öÆ–6F–öâæÆ–6F–öåö†6‚ÒGFô†6‚„ö&¦V7Bæg&öÔVçG&–W2„ö&¦V7BæVçG&–W2†f÷&vVE&W7VÇDæD&÷VæF'•'Vâç&W7VÇBæÖVÖ÷'•öÆ–6F–öâ’æf–ÇFW"‚…¶¶W•Ò’Óâ¶W’ÓÒvÆ–6F–öåö†6‚r’’“°¢f÷&vVE&W7VÇDæD&÷VæF'•'VâæÖVÖ÷'•öÆ–6F–öåö&÷VæF'’æ&Vf÷&RÒ7G'V7GW&VD6ÆöæR†f÷&vVE&W7VÇDæD&÷VæF'•'Vâç&W7VÇBæÖVÖ÷'•öÆ–6F–öâæ&Vf÷&R“°¢f÷&vVE&W7VÇDæD&÷VæF'•'VâæÖVÖ÷'•öÆ–6F–öåö&÷VæF'’æ&÷VæF'•ö†6‚ÒGFô†6‚„ö&¦V7Bæg&öÔVçG&–W2„ö&¦V7BæVçG&–W2†f÷&vVE&W7VÇDæD&÷VæF'•'VâæÖVÖ÷'•öÆ–6F–öåö&÷VæF'’’æf–ÇFW"‚…¶¶W•Ò’Óâ¶W’ÓÒv&÷VæF'•ö†6‚r’’“°¢6öç7Bf÷&vVE&W7VÇDæD&÷VæF'•&ööbÒ7G'V7GW&VD6ÆöæR‡&öödf—‡GW&R“°¢f÷&vVE&W7VÇDæD&÷VæF'•&ööbæÖVÖ÷'•öÆ–6F–öå÷&ööbæÆ–6F–öåö†6‚Òf÷&vVE&W7VÇDæD&÷VæF'•'Vâç&W7VÇBæÖVÖ÷'•öÆ–6F–öâæÆ–6F–öåö†6ƒ°¢–b‚ÖVÖ÷'”Æ–6F–öä6öçG&7Ef–öÆF–öç2†&6VÆ–æU'Väf—‡GW&RÂf÷&vVE&W7VÇDæD&÷VæF'•'VâÂf÷&vVE&W7VÇDæD&÷VæF'•&ööb’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚wW'6—7FVBÖVÖ÷'’ÖÆ–6F–öâWfVçBFöW2æ÷B&ö¦V7Br’’’F‡&÷ræWrW'&÷"‚t¦ö–çB&W7VÇBö&÷VæF'’f÷&vW'’v—F†÷WBF†RW'6—7FVBÖVÖ÷'’WfVçBv2æ÷B&V¦V7FVBr“°¢6öç7BF÷&ÖçDÖVÖ÷'•&W7VÇBÒ7G'V7GW&VD6ÆöæR†&6VÆ–æU&W7VÇDf—‡GW&R“°¢F÷&ÖçDÖVÖ÷'•&W7VÇBç&V6VFVçG2Ò·²6Æ–Õö–C¢tDTbÓ#rÔSÔDTÔòrÂ&Wf–Wu÷7FGW3¢wVçfW&–f–VEöFVÖõöÖVÖ÷'’rÂÖVÖ÷'•ö–C¢vÖVÖ÷'’ÓrÕÓ°¢F÷&ÖçDÖVÖ÷'•&W7VÇBç&Wf–WvVEöÖVÖ÷'•÷&WG&–WfVBÒG'VS°¢F÷&ÖçDÖVÖ÷'•&W7VÇBæ¶æ÷vÆVFvRç&Wf–WvVEöÖVÖ÷'•÷&WG&–WfVBÒG'VS°¢6öç7BF÷&ÖçDÖVÖ÷'”—77VW2ÒÖVÖ÷'•&WG&–WfÄ6öçG&7Ef–öÆF–öç2†F÷&ÖçDÖVÖ÷'•&W7VÇB“°¢–b†F÷&ÖçDÖVÖ÷'”—77VW2æÆVæwF‚’F‡&÷ræWrW'&÷"†F÷&ÖçB&WG&–WfVBÖÖVÖ÷'’f—‡GW&Rf–ÆVC¢G´¥4ôâç7G&–æv–g’†F÷&ÖçDÖVÖ÷'”—77VW2—Ö“°¢6öç7BfÇ6VÇ•W6VDF÷&ÖçDÖVÖ÷'’Ò7G'V7GW&VD6ÆöæR†F÷&ÖçDÖVÖ÷'•&W7VÇB“°¢fÇ6VÇ•W6VDF÷&ÖçDÖVÖ÷'’ç&Wf–WvVEöÖVÖ÷'•÷W6VBÒG'VS°¢–b‚ÖVÖ÷'•&WG&–WfÄ6öçG&7Ef–öÆF–öç2†fÇ6VÇ•W6VDF÷&ÖçDÖVÖ÷'’’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚vÖVÖ÷'’×W6RfÆw2r’’’F‡&÷ræWrW'&÷"‚u&V6V—BÖg&VRÖVÖ÷'’×W6RfÆrv2æ÷B&V¦V7FVBr“°¢6öç7BfÇ6VÇ”Æ–VDF÷&ÖçDÖVÖ÷'’Ò7G'V7GW&VD6ÆöæR†F÷&ÖçDÖVÖ÷'•&W7VÇB“°¢fÇ6VÇ”Æ–VDF÷&ÖçDÖVÖ÷'’ç&ö6W72æ66U÷7V6–f–5öwV–Fæ6UöÆ–VBÒG'VS°¢–b‚ÖVÖ÷'•&WG&–WfÄ6öçG&7Ef–öÆF–öç2†fÇ6VÇ”Æ–VDF÷&ÖçDÖVÖ÷'’’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚vfÇ6VÇ’6Æ–×2r’’’F‡&÷ræWrW'&÷"‚u&V6V—BÖg&VRwV–Fæ6RÖÆ–6F–öâfÆrv2æ÷B&V¦V7FVBr“°¢6öç7B†–FFVäF÷&ÖçE&WG&–WfÂÒ7G'V7GW&VD6ÆöæR†F÷&ÖçDÖVÖ÷'•&W7VÇB“°¢†–FFVäF÷&ÖçE&WG&–WfÂç&Wf–WvVEöÖVÖ÷'•÷&WG&–WfVBÒfÇ6S°¢–b‚ÖVÖ÷'•&WG&–WfÄ6öçG&7Ef–öÆF–öç2††–FFVäF÷&ÖçE&WG&–WfÂ’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚w&WG&–WfÂfÆw2r’’’F‡&÷ræWrW'&÷"‚u&æ¶VBÖVÖ÷'’v—F‚fÇ6R&WG&–WfÂfÆrv2æ÷B&V¦V7FVBr“°¢6öç7BfÇ6VÇ•G&ç6f÷&ÖVDF÷&ÖçDÖVÖ÷'’Ò7G'V7GW&VD6ÆöæR†F÷&ÖçDÖVÖ÷'•&W7VÇB“°¢fÇ6VÇ•G&ç6f÷&ÖVDF÷&ÖçDÖVÖ÷'’æ6†V6¶Æ—7BæÖVÖ÷'•÷W6VBÒG'VS°¢–b‚ÖVÖ÷'•&WG&–WfÄ6öçG&7Ef–öÆF–öç2†fÇ6VÇ•G&ç6f÷&ÖVDF÷&ÖçDÖVÖ÷'’’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚w&ö6W72ö6†V6¶Æ—7Br’’’F‡&÷ræWrW'&÷"‚u&V6V—BÖg&VR6†V6¶Æ—7BÖVÖ÷'’×W6RfÆrv2æ÷B&V¦V7FVBr“°¢6öç7BF×W&VDÆ–6F–öå'VâÒ7G'V7GW&VD6ÆöæR†ÆFW%'Väf—‡GW&R“°¢F×W&VDÆ–6F–öå'Vâç&W7VÇBæÖVÖ÷'•öÆ–6F–öâæÆ–6F–öåö†6‚Ò6†#Sb‚wF×W&VBÆ–6F–öâr“°¢–b‚ÖVÖ÷'”Æ–6F–öä6öçG&7Ef–öÆF–öç2†&6VÆ–æU'Väf—‡GW&RÂF×W&VDÆ–6F–öå'VâÂ&öödf—‡GW&R’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚vÆ–6F–öâ†6‚r’’’F‡&÷ræWrW'&÷"‚uF×W&VBÖVÖ÷'’Æ–6F–öâÖ†6‚f—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BF×W&VD&÷VæF'•&ööbÒ7G'V7GW&VD6ÆöæR‡&öödf—‡GW&R“°¢F×W&VD&÷VæF'•&ööbægFW"ç&ö6W75÷6VÖçF–5ö†6‚Ò6†#Sb‚wF×W&VB&÷VæF'’r“°¢–b‚ÖVÖ÷'”Æ–6F–öä6öçG&7Ef–öÆF–öç2†&6VÆ–æU'Väf—‡GW&RÂÆFW%'Väf—‡GW&RÂF×W&VD&÷VæF'•&ööb’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚vgFW"†6†W2r’’’F‡&÷ræWrW'&÷"‚uF×W&VBÖVÖ÷'’&÷VæF'’Ö†6‚f—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BF×W&VDFVÇF&ööbÒ7G'V7GW&VD6ÆöæR‡&öödf—‡GW&R“°¢F×W&VDFVÇF&ööbæ6W6ÅöFVÇFæWf–FVæ6Ræ6†ævVEö—FVÕö–G2Ò²v'V–ÆF–æuöVçfVÆ÷RuÓ°¢–b‚ÖVÖ÷'”Æ–6F–öä6öçG&7Ef–öÆF–öç2†&6VÆ–æU'Väf—‡GW&RÂÆFW%'Väf—‡GW&RÂF×W&VDFVÇF&ööb’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚v6W6ÂFVÇFr’’’F‡&÷ræWrW'&÷"‚uF×W&VBÖVÖ÷'’6W6ÂÖFVÇFf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BF×W&VD6†V6µ&ööbÒ7G'V7GW&VD6ÆöæR‡&öödf—‡GW&R“°¢F×W&VD6†V6µ&ööbæFWFW&Ö–æ—7F–5ö6†V6·5³Òç7FGW2Òvf–ÆVBs°¢–b‚ÖVÖ÷'”Æ–6F–öä6öçG&7Ef–öÆF–öç2†&6VÆ–æU'Väf—‡GW&RÂÆFW%'Väf—‡GW&RÂF×W&VD6†V6µ&ööb’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚v6†V6·2r’’’F‡&÷ræWrW'&÷"‚tf–ÆVBÖVÖ÷'’FWFW&Ö–æ—7F–2Ö6†V6²f—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BF×W&VE6VÖçF–4VÆ–v–&–Æ—G•'VâÒ7G'V7GW&VD6ÆöæR†ÆFW%'Väf—‡GW&R“°¢F×W&VE6VÖçF–4VÆ–v–&–Æ—G•'Vâç&W7VÇBæÖVÖ÷'•öÆ–6F–öâæVÆ–v–&–Æ—G’ç6VÖçF–5÷6–væGW&Uö†6‚Ò6†#Sb‚ww&öær6VÖçF–26–væGW&Rr“°¢F×W&VE6VÖçF–4VÆ–v–&–Æ—G•'Vâç&W7VÇBæÖVÖ÷'•öÆ–6F–öâæVÆ–v–&–Æ—G’æÖæ–fW7Eö†6‚ÒGFô†6‚„ö&¦V7Bæg&öÔVçG&–W2…²w'VÆUö–BrÂv6öçG&7BrÂv6Æ–Õö–BrÂw6VÖçF–5÷6–væGW&Uö†6‚rÂvFV6—6–öç2rÂvf7G5ö†6‚rÂv6†V6·2uÒæÖ†¶W’Óâ¶¶W’ÂF×W&VE6VÖçF–4VÆ–v–&–Æ—G•'Vâç&W7VÇBæÖVÖ÷'•öÆ–6F–öâæVÆ–v–&–Æ—G•¶¶W•ÕÒ’’“°¢F×W&VE6VÖçF–4VÆ–v–&–Æ—G•'Vâç&W7VÇBæÖVÖ÷'•öÆ–6F–öâæÆ–6F–öåö†6‚ÒGFô†6‚„ö&¦V7Bæg&öÔVçG&–W2„ö&¦V7BæVçG&–W2‡F×W&VE6VÖçF–4VÆ–v–&–Æ—G•'Vâç&W7VÇBæÖVÖ÷'•öÆ–6F–öâ’æf–ÇFW"‚…¶¶W•Ò’Óâ¶W’ÓÒvÆ–6F–öåö†6‚r’’“°¢–b‚ÖVÖ÷'”Æ–6F–öä6öçG&7Ef–öÆF–öç2†&6VÆ–æU'Väf—‡GW&RÂF×W&VE6VÖçF–4VÆ–v–&–Æ—G•'VâÂ&öödf—‡GW&R’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚w6VÖçF–2VÆ–v–&–Æ—G’r’’’F‡&÷ræWrW'&÷"‚uF×W&VB6VÖçF–2VÆ–v–&–Æ—G’f—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BF×W&VE&WÆ•&ööbÒ7G'V7GW&VD6ÆöæR‡&öödf—‡GW&R“°¢F×W&VE&WÆ•&ööbæÖVÖ÷'•öÆ–6F–öå÷&ööbç&WÆ•öW†7BÒfÇ6S°¢–b‚ÖVÖ÷'”Æ–6F–öä6öçG&7Ef–öÆF–öç2†&6VÆ–æU'Väf—‡GW&RÂÆFW%'Väf—‡GW&RÂF×W&VE&WÆ•&ööb’ç6öÖR†—77VRÓâ—77VRæ–æ6ÇVFW2‚wW&R&WÆ’r’’’F‡&÷ræWrW'&÷"‚tf–ÆVBW&RÖÖVÖ÷'’&WÆ’f—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7B6öÆE'VâÒÖö6´÷&6†W7G&F–öâ‚v6öÆBr“°¢6öç7B6öÆDÆVFvW"ÒÖö6´ÆVFvW$f÷%'Vâ†6öÆE'VâÂv6öÆBr“°¢6öç7Bv&Õ'VâÒÖö6´÷&6†W7G&F–öâ‚wv&ÒrÂ6öÆE'Vâ“°¢6öç7Bv&ÔöæÇ”ÆVFvW"ÒÖö6´ÆVFvW$f÷%'Vâ‡v&Õ'VâÂwv&ÒrÂ6öÆDÆVFvW"“°¢6öç7B6öÖ&–æVD—FV×2Ò²ââæ6öÆDÆVFvW"æ—FV×2Âââçv&ÔöæÇ”ÆVFvW"æ—FV×5Ó°¢6öç7B6öÖ&–æVDÆVFvW"Ò²ââæ6öÆDÆVFvW"Â—FV×3¢6öÖ&–æVD—FV×2Â7VÖÖ'“¢ÆVFvW%7VÖÖ'’†6öÖ&–æVD—FV×2’Ó°¢6öç7B&VfW&Væ6U'VâÒ°¢'Våö–C¢vFWFW&Ö–æ—7F–5÷&VfW&Væ6U÷'VârÀ¢6Æ–Õö–C¢tDTÔòÔÔõTÄBÓ"rÀ¢7FGW3¢v6ö×ÆWFRrÀ¢&öf–ÆS¢DUDU$Ô”ä•5D”5õ$TdU$Tä4Uõ$ôd”ÄRÀ¢ÖöFVÅöÖöFS¢DUDU$Ô”ä•5D”5õ$TdU$Tä4UôÔôDRÀ¢ÖöFVÃ¢çVÆÂÀ¢¶æ÷vÆVFvUöÖöFS¢v7W'&VçBrÀ¢vVçEö÷&6†W7G&F–öã¢7G'V7GW&VD6ÆöæR„DUDU$Ô”ä•5D”5õ$TdU$Tä4Uôõ$4„U5E$D”ôâ’À¢WfVçG3¢·²7FvS¢v÷&6†W7G&F÷"rÂ7F÷%÷G—S¢vFWFW&Ö–æ—7F–5÷FööÂrÂ7FGW3¢v6ö×ÆWFVBrÂ–×ÆVÖVçFF–öã¢vFWFW&Ö–æ—7F–5öÆ–6F–öå÷FööÂrÂÖöFVÃ¢çVÆÂÕÒÀ¢&W7VÇC¢°¢æW‡Eö7F–öã¢²vVçEö'&–Veö6öçG&–'WF–öã¢çVÆÂÒÀ¢vVçEö÷&6†W7G&F–öã¢7G'V7GW&VD6ÆöæR„DUDU$Ô”ä•5D”5õ$TdU$Tä4Uôõ$4„U5E$D”ôâ’À¢VF—C¢°¢&öf–ÆS¢DUDU$Ô”ä•5D”5õ$TdU$Tä4Uõ$ôd”ÄRÀ¢WF†÷&—G•öÖöFS¢DUDU$Ô”ä•5D”5õ$TdU$Tä4UôÔôDRÀ¢6æöæ–6Æ—¦F–öã¢7G'V7GW&VD6ÆöæR„DUDU$Ô”ä•5D”5õ$TdU$Tä4Uô4äôä”4Ä•¤D”ôâ’À¢vVçEö÷&6†W7G&F–öã¢7G'V7GW&VD6ÆöæR„DUDU$Ô”ä•5D”5õ$TdU$Tä4Uôõ$4„U5E$D”ôâ’À¢ÒÀ¢ÒÀ¢Ó°¢–b†FWFW&Ö–æ—7F–5&VfW&Væ6U'Våf–öÆF–öç2‡&VfW&Væ6U'VâÂv7W'&VçBr’æÆVæwF‚’F‡&÷ræWrW'&÷"‚u÷6—F—fRFWFW&Ö–æ—7F–2×&VfW&Væ6R†VÆBÖ÷WBf—‡GW&Rf–ÆVBr“°¢6öç7BÖöFVÄ7F—fU&VfW&Væ6RÒ7G'V7GW&VD6ÆöæR‡&VfW&Væ6U'Vâ“°¢ÖöFVÄ7F—fU&VfW&Væ6RæWfVçG2çW6‚‡²7FvS¢vvVçEö÷&6†W7G&F–öârÂ7F÷%÷G—S¢væVÖ÷G&öåövVçBrÂÖöFVÃ¢$UTU5DTEôäTÔõE$ôåôÔôDTÂÂ6ÆÅö–C¢vf÷&&–FFVåöÆFW%ö6ÆÂrÂ6ÆÅö6÷VçC¢Ò“°¢–b‚FWFW&Ö–æ—7F–5&VfW&Væ6U'Våf–öÆF–öç2†ÖöFVÄ7F—fU&VfW&Væ6RÂv7W'&VçBr’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚vÖöFVÂW†V7WF–öâ7F—f—G’r’’’F‡&÷ræWrW'&÷"‚t†VÆBÖ÷WBÖöFVÂÖ7F—f—G’f—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BW†V7WFVE&VfW&Væ6RÒ7G'V7GW&VD6ÆöæR‡&VfW&Væ6U'Vâ“°¢6öç7BW†V7WFVDFrÒ²ââç7G'V7GW&VD6ÆöæR„DUDU$Ô”ä•5D”5õ$TdU$Tä4Uôõ$4„U5E$D”ôâ’ÂW†V7WFVC¢G'VRÂvVçG3¢µÒÓ°¢W†V7WFVE&VfW&Væ6RævVçEö÷&6†W7G&F–öâÒ7G'V7GW&VD6ÆöæR†W†V7WFVDFr“°¢W†V7WFVE&VfW&Væ6Rç&W7VÇBævVçEö÷&6†W7G&F–öâÒ7G'V7GW&VD6ÆöæR†W†V7WFVDFr“°¢W†V7WFVE&VfW&Væ6Rç&W7VÇBæVF—BævVçEö÷&6†W7G&F–öâÒ7G'V7GW&VD6ÆöæR†W†V7WFVDFr“°¢–b‚FWFW&Ö–æ—7F–5&VfW&Væ6U'Våf–öÆF–öç2†W†V7WFVE&VfW&Væ6RÂv7W'&VçBr’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚væöâÖW†V7WFVB÷&6†W7G&F–öâr’’’F‡&÷ræWrW'&÷"‚t†VÆBÖ÷WBW†V7WFVBÔDrf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢–b†f–æÄÆVFvW%6æ6†÷Ef–öÆF–öç2†6öÖ&–æVDÆVFvW"Â7G'V7GW&VD6ÆöæR†6öÖ&–æVDÆVFvW"’’æÆVæwF‚’F‡&÷ræWrW'&÷"‚u÷6—F—fR–Ö×WF&ÆR"×&÷rf–æÂÖÆVFvW"f—‡GW&Rf–ÆVBr“°¢6öç7BF†—'FVVçF…&÷tÆVFvW"Ò7G'V7GW&VD6ÆöæR†6öÖ&–æVDÆVFvW"“°¢F†—'FVVçF…&÷tÆVFvW"æ—FV×2çW6‚‡²ââç7G'V7GW&VD6ÆöæR‡F†—'FVVçF…&÷tÆVFvW"æ—FV×2æB‚Ó’’Â6ÆÅö–C¢vf÷&&–FFVå÷F†—'FVVçF…÷&÷rrÒ“°¢F†—'FVVçF…&÷tÆVFvW"ç7VÖÖ'’ÒÆVFvW%7VÖÖ'’‡F†—'FVVçF…&÷tÆVFvW"æ—FV×2“°¢–b‚f–æÄÆVFvW%6æ6†÷Ef–öÆF–öç2†6öÖ&–æVDÆVFvW"ÂF†—'FVVçF…&÷tÆVFvW"’æÆVæwF‚’F‡&÷ræWrW'&÷"‚uF†—'FVVçF‚f–æÂÖÆVFvW"&÷rf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BV×G”–æ—F–ÄÆVFvW"Ò²66÷S¢vvÆö&Åö'VFvWEöÆVFvW"rÂ—FV×3¢µÒÂ7VÖÖ'“¢ÆVFvW%7VÖÖ'’…µÒ’Ó°¢–b†–æ—F–ÄÆVFvW$FÖ—76–öåf–öÆF–öç2†V×G”–æ—F–ÄÆVFvW"’æÆVæwF‚’F‡&÷ræWrW'&÷"‚tW†7BÖV×G’–æ—F–ÂÆVFvW"f—‡GW&Rv2&V¦V7FVBr“°¢–b‚–æ—F–ÄÆVFvW$FÖ—76–öåf–öÆF–öç2†6öÆDÆVFvW"’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚væ÷BW†7FÇ’V×G’r’’’F‡&÷ræWrW'&÷"‚u7FÆR–æ—F–ÂÆVFvW"f—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7B÷Væ–æt6öçFW‡Df—‡GW&RÒ·²&÷VæF'•÷FW‡C¢U…T5DTEõ$ôET5D”ôåôõTä”äuô$õTäD%’Â7F÷%÷G—S¢vFWFW&Ö–æ—7F–5÷FööÂrÂæVÖ÷G&öå÷Æå÷f—6–&ÆS¢fÇ6RÕÓ°¢–b‡&öGV7F–öä÷Væ–æt6öçFW‡Ef–öÆF–öç2†÷Væ–æt6öçFW‡Df—‡GW&R’æÆVæwF‚’F‡&÷ræWrW'&÷"‚u÷6—F—fR&öGV7F–öâ÷Væ–ærÖ6öçFW‡Bf—‡GW&Rf–ÆVBr“°¢6öç7BÆVv7•&öGV7F–öä÷Væ–ærÒ7G'V7GW&VD6ÆöæR†÷Væ–æt6öçFW‡Df—‡GW&R“°¢ÆVv7•&öGV7F–öä÷Væ–æu³Òæ&÷VæF'•÷FW‡BÒuF†—2'Vâ&WGW&æVBÆVv7’FWFW&Ö–æ—7F–2&VfW&Væ6R÷&6†W7G&F–öã²æòæVÖ÷G&öâ÷&6†W7G&F÷"—26Æ–ÖVBâs°¢–b‚&öGV7F–öä÷Væ–æt6öçFW‡Ef–öÆF–öç2†ÆVv7•&öGV7F–öä÷Væ–ær’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚vÆVv7’&VfW&Væ6Rr’’’F‡&÷ræWrW'&÷"‚tÆVv7’&öGV7F–öâ÷Væ–ærÖ6öçFW‡Bf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7B&VÖGW&TæVÖ÷G&öåÆâÒ7G'V7GW&VD6ÆöæR†÷Væ–æt6öçFW‡Df—‡GW&R“°¢&VÖGW&TæVÖ÷G&öåÆå³ÒææVÖ÷G&öå÷Æå÷f—6–&ÆRÒG'VS°¢–b‚&öGV7F–öä÷Væ–æt6öçFW‡Ef–öÆF–öç2‡&VÖGW&TæVÖ÷G&öåÆâ’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚v&Vf÷&R—G2&WGW&æVBWfVçBr’’’F‡&÷ræWrW'&÷"‚u&VÖGW&RæVÖ÷G&öâ×Æâf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7Bf–ÇW&W2Ò°¢ââæ÷&6†W7G&F–öä6öçG&7Ef–öÆF–öç2†6öÆE'VâÂv6öÆBr’À¢ââæ6öÆDÆVFvW$6öçG&7Ef–öÆF–öç2†÷&6†W7G&F–öäVF—B†6öÆE'Vâ’Â6öÆDÆVFvW"’À¢ââæ÷&6†W7G&F–öä6öçG&7Ef–öÆF–öç2‡v&Õ'VâÂwv&Òr’À¢ââçv&ÔÆ–æVvT6öçG&7Ef–öÆF–öç2†÷&6†W7G&F–öäVF—B†6öÆE'Vâ’Â÷&6†W7G&F–öäVF—B‡v&Õ'Vâ’Â6öÖ&–æVDÆVFvW"’æ—77VW2À¢Ó°¢–b†f–ÇW&W2æÆVæwF‚’F‡&÷ræWrW'&÷"†÷6—F—fR6öçG&7Bf—‡GW&Rf–ÆVC¢G´¥4ôâç7G&–æv–g’†f–ÇW&W2—Ö“°¢6öç7BW‡V7D‡–'&–D—77VRÒ†f—‡GW&RÂW‡V7FVD—77VRÂÆ&VÂ’Óâ°¢6öç7B—77VW2Ò‡–'&–D6W6Ä6öçG&7Ef–öÆF–öç2†f—‡GW&R“°¢–b‚—77VW2ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2†W‡V7FVD—77VR’’’F‡&÷ræWrW'&÷"†G¶Æ&VÇÒf—‡GW&Rv2æ÷B&V¦V7FVC¢G´¥4ôâç7G&–æv–g’†—77VW2—Ö“°¢&WGW&â—77VW3°¢Ó°¢6öç7B6÷W&6T'F–f7D†6…'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢÷&6†W7G&F–öäVF—B‡6÷W&6T'F–f7D†6…'Vâ’ç7V6–Æ—7Eö'F–f7G2æFö7VÖVçE÷6÷W&6Uö–çFVw&—G’æ'F–f7G5³Òæ–çFVw&—G•ö6Æ72Òv6†ævVEögFW%ö66WFæ6Rs°¢6öç7B6÷W&6T'F–f7D†6„—77VW2ÒW‡V7D‡–'&–D—77VR‡6÷W&6T'F–f7D†6…'VâÂvFö7VÖVçB6÷W&6R7V6–Æ—7B'F–f7B†6‚rÂt6†ævVB6÷W&6R×7V6–Æ—7B'F–f7B†6‚r“°¢–b‚6÷W&6T'F–f7D†6„—77VW2ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚w&ÆÆVÂ7V6–Æ—7B6ö×÷6—FR–çWB†6‚r’’’F‡&÷ræWrW'&÷"†6†ævVB6÷W&6R×7V6–Æ—7B'F–f7BF–Bæ÷B–çfÆ–FFRF†R&ö6W72ÖvFR6ö×÷6—FS¢G´¥4ôâç7G&–æv–g’‡6÷W&6T'F–f7D†6„—77VW2—Ö“°¢6öç7B&ö6W74'F–f7D†6…'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢÷&6†W7G&F–öäVF—B‡&ö6W74'F–f7D†6…'Vâ’ç7V6–Æ—7Eö'F–f7G2ç&ö6W75öFV6—6–öåöÖ–æræFV6—6–öç5³ÒæFV6—6–öå÷fÇVRÒv6†ævVEögFW%ö66WFæ6Rs°¢6öç7B&ö6W74'F–f7D†6„—77VW2ÒW‡V7D‡–'&–D—77VR‡&ö6W74'F–f7D†6…'VâÂw&ö6W727V6–Æ—7B'F–f7B†6‚rÂt6†ævVB&ö6W72×7V6–Æ—7B'F–f7B†6‚r“°¢–b‚&ö6W74'F–f7D†6„—77VW2ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚w&ÆÆVÂ7V6–Æ—7B6ö×÷6—FR–çWB†6‚r’’’F‡&÷ræWrW'&÷"†6†ævVB&ö6W72×7V6–Æ—7B'F–f7BF–Bæ÷B–çfÆ–FFRF†R&ö6W72ÖvFR6ö×÷6—FS¢G´¥4ôâç7G&–æv–g’‡&ö6W74'F–f7D†6„—77VW2—Ö“°¢6öç7B&ö6W74f–VÆDÖVÖ&W'6†—'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢÷&6†W7G&F–öäVF—B‡&ö6W74f–VÆDÖVÖ&W'6†—'Vâ’ç7V6–Æ—7Eö'F–f7G2ç&ö6W75öFV6—6–öåöÖ–æræFV6—6–öç5³ÒæÖöFVÅö÷væVEöf–VÆG2Ò²vFV6—6–öå÷fÇVRrÂw7FFRuÓ°¢W‡V7D‡–'&–D—77VR‡&ö6W74f–VÆDÖVÖ&W'6†—'VâÂw&ö6W72FV6—6–öâf–VÆB6öçG&–'WF–öç2f–öÆFRÖVÖ&W'6†—÷"GG&–'WF–öârÂtf÷&V–vâ&ö6W72ÖöFVÂÖ÷væVBf–VÆBr“°¢6öç7B&ö6W74f–VÆDGG&–'WF–öå'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢6öç7B&ö6W74GG&–'WF–öåVæ—BÒ÷&6†W7G&F–öäVF—B‡&ö6W74f–VÆDGG&–'WF–öå'Vâ’ç7V6–Æ—7Eö'F–f7G2ç&ö6W75öFV6—6–öåöÖ–æræFV6—6–öç5³Ó°¢&ö6W74GG&–'WF–öåVæ—BæFWFW&Ö–æ—7F–5öfÆÆ&6µöÆ–VBÒG'VS°¢&ö6W74GG&–'WF–öåVæ—BæGG&–'WF–öâÒ$ô4U55ô4ôåE$”%UD”ôåõ$ôÄS°¢W‡V7D‡–'&–D—77VR‡&ö6W74f–VÆDGG&–'WF–öå'VâÂw&ö6W72FV6—6–öâf–VÆB6öçG&–'WF–öç2f–öÆFRÖVÖ&W'6†—÷"GG&–'WF–öârÂtf÷&vVB&ö6W72fÆÆ&6²GG&–'WF–öâr“°¢6öç7B&ö6W74–æ†W&—FVDf–VÆE'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢6öç7B&ö6W74–æ†W&—FVDVF—BÒ÷&6†W7G&F–öäVF—B‡&ö6W74–æ†W&—FVDf–VÆE'Vâ“°¢&ö6W74–æ†W&—FVDVF—Bç7V6–Æ—7Eö'F–f7G2ç&ö6W75öFV6—6–öåöÖ–æræFV6—6–öç5³Òç7FFRÒvf÷&vVEö–æ†W&—FVE÷7FFRs°¢&ö6W74–æ†W&—FVDVF—BævVçG2æf–æB†—FVÒÓâ—FVÒævVçEö–BÓÓÒw&ö6W75öFV6—6–öåöÖ–ærr’æ÷WGWEö'F–f7Eö†6‚ÒGFô†6‚‡&ö6W74–æ†W&—FVDVF—Bç7V6–Æ—7Eö'F–f7G2ç&ö6W75öFV6—6–öåöÖ–ær“°¢&ö6W74–æ†W&—FVDVF—BæFWFW&Ö–æ—7F–5övFW2æf–æB†—FVÒÓâ—FVÒævVçEö–BÓÓÒvFWFW&Ö–æ—7F–5÷&ö6W75övFRr’æ–çWEö'F–f7Eö†6‚ÒGFô†6‚‡°¢6÷W&6Uö–çFVw&—G“¢&ö6W74–æ†W&—FVDVF—Bç7V6–Æ—7Eö'F–f7G2æFö7VÖVçE÷6÷W&6Uö–çFVw&—G’À¢&ö6W75öÖ–æs¢&ö6W74–æ†W&—FVDVF—Bç7V6–Æ—7Eö'F–f7G2ç&ö6W75öFV6—6–öåöÖ–ærÀ¢Ò“°¢W‡V7D‡–'&–D—77VR‡&ö6W74–æ†W&—FVDf–VÆE'VâÂv–æ†W&—FVB6æöæ–6Âf–VÆG2&Ræ÷BW†7BrÂtf÷&vVB–æ†W&—FVB&ö6W72f–VÆBv—F‚&V6ö×WFVB†6†W2r“°¢6öç7BWf–FVæ6Tf–VÆDÖVÖ&W'6†—'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢÷&6†W7G&F–öäVF—B†Wf–FVæ6Tf–VÆDÖVÖ&W'6†—'Vâ’ç7V6–Æ—7Eö'F–f7G2æWf–FVæ6Uö6†V6¶Æ—7Bæ—FV×5³Òæf–VÆEö6öçG&–'WF–öç5³Òæf–VÆBÒv'F–f7Eö–G2s°¢W‡V7D‡–'&–D—77VR†Wf–FVæ6Tf–VÆDÖVÖ&W'6†—'VâÂvFöW2æ÷B6öçF–âF†RW†7BGvòf–VÆB6öçG&–'WF–öç2rÂtf÷&V–vâWf–FVæ6Rf–VÆBÖVÖ&W'6†—r“°¢6öç7BWf–FVæ6Tf–VÆDGG&–'WF–öå'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢6öç7BWf–FVæ6TGG&–'WF–öåVæ—BÒ÷&6†W7G&F–öäVF—B†Wf–FVæ6Tf–VÆDGG&–'WF–öå'Vâ’ç7V6–Æ—7Eö'F–f7G2æWf–FVæ6Uö6†V6¶Æ—7Bæ—FV×5³Òæf–VÆEö6öçG&–'WF–öç5³Ó°¢Wf–FVæ6TGG&–'WF–öåVæ—BæFWFW&Ö–æ—7F–5öfÆÆ&6µöÆ–VBÒG'VS°¢Wf–FVæ6TGG&–'WF–öåVæ—BæGG&–'WF–öâÒUd”DTä4Uô4ôåE$”%UD”ôåõ$ôÄS°¢W‡V7D‡–'&–D—77VR†Wf–FVæ6Tf–VÆDGG&–'WF–öå'VâÂvFöW2æ÷B6öçF–âF†RW†7BGvòf–VÆB6öçG&–'WF–öç2rÂtf÷&vVBWf–FVæ6RfÆÆ&6²GG&–'WF–öâr“°¢6öç7BWf–FVæ6U6÷W&6U&Vg5'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢6öç7BWf–FVæ6U6÷W&6U&Vg4VF—BÒ÷&6†W7G&F–öäVF—B†Wf–FVæ6U6÷W&6U&Vg5'Vâ“°¢Wf–FVæ6U6÷W&6U&Vg4VF—Bç7V6–Æ—7Eö'F–f7G2æWf–FVæ6Uö6†V6¶Æ—7Bæ—FV×5³Òç6÷W&6U÷&Veö–G2Ò²w6÷W&6U÷66÷RrÂw6÷W&6U÷66÷RuÓ°¢Wf–FVæ6U6÷W&6U&Vg4VF—BævVçG2æf–æB†—FVÒÓâ—FVÒævVçEö–BÓÓÒvWf–FVæ6Uö6†V6¶Æ—7Br’æ÷WGWEö'F–f7Eö†6‚ÒGFô†6‚†Wf–FVæ6U6÷W&6U&Vg4VF—Bç7V6–Æ—7Eö'F–f7G2æWf–FVæ6Uö6†V6¶Æ—7B“°¢Wf–FVæ6U6÷W&6U&Vg4VF—BæFWFW&Ö–æ—7F–5övFW2æf–æB†—FVÒÓâ—FVÒævVçEö–BÓÓÒvFWFW&Ö–æ—7F–5öWf–FVæ6UövFRr’æ–çWEö'F–f7Eö†6‚ÒGFô†6‚†Wf–FVæ6U6÷W&6U&Vg4VF—Bç7V6–Æ—7Eö'F–f7G2æWf–FVæ6Uö6†V6¶Æ—7B“°¢W‡V7D‡–'&–D—77VR†Wf–FVæ6U6÷W&6U&Vg5'VâÂw6÷W&6R&VfW&Væ6R”G2&Ræ÷BVæ—VRæB6÷'FVBrÂtf÷&vVBWf–FVæ6R6÷W&6R&VfW&Væ6W2v—F‚&V6ö×WFVB†6†W2r“°¢6öç7Bf–æÄf–VÆDÖVÖ&W'6†—'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢÷&6†W7G&F–öäVF—B†f–æÄf–VÆDÖVÖ&W'6†—'Vâ’æf–æÅö6Æ–Õö'&–Vbæf–VÆEö6öçG&–'WF–öç5³Òæ6öçG&–'WF–öåö–BÒvf–æÃ¦f÷&V–våö7W'&VçEöæöFRs°¢W‡V7D‡–'&–D—77VR†f–æÄf–VÆDÖVÖ&W'6†—'VâÂvW†7Bf—fRf–VÆB6öçG&–'WF–öç2rÂtf÷&V–vâf–æÂf–VÆBÖVÖ&W'6†—r“°¢6öç7Bf–æÄ7W'&VçD&–æF–æu'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢÷&6†W7G&F–öäVF—B†f–æÄ7W'&VçD&–æF–æu'Vâ’æf–æÅö6Æ–Õö'&–Vbæ7W'&VçEöæöFUö–BÒvæ÷F–6Rs°¢W‡V7D‡–'&–D—77VR†f–æÄ7W'&VçD&–æF–æu'VâÂvf–æÂ7W'&VçBÖæöFRf–VÆBrÂtf–æÂ7W'&VçBÖæöFR&–æF–ærr“°¢6öç7Bf–æÄæW‡D&–æF–æu'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢÷&6†W7G&F–öäVF—B†f–æÄæW‡D&–æF–æu'Vâ’æf–æÅö6Æ–Õö'&–VbææW‡Eö7F–öåöæöFUö–BÒw66÷Rs°¢W‡V7D‡–'&–D—77VR†f–æÄæW‡D&–æF–æu'VâÂvf–æÂæW‡BÖ7F–öâf–VÆBrÂtf–æÂæW‡BÖ7F–öâ&–æF–ærr“°¢6öç7Bf–æÅ7W÷'F–æt&–æF–æu'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢÷&6†W7G&F–öäVF—B†f–æÅ7W÷'F–æt&–æF–æu'Vâ’æf–æÅö6Æ–Õö'&–Vbç7W÷'F–æuöf7Eö–G2Ò²vf7E÷66÷RuÓ°¢W‡V7D‡–'&–D—77VR†f–æÅ7W÷'F–æt&–æF–æu'VâÂvf–æÂ7W÷'F–ærÖf7G2f–VÆBrÂtf–æÂ7W÷'F–ærÖf7G2&–æF–ærr“°¢6öç7Bf–æÅW7G&VÔ&–æF–æu'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢÷&6†W7G&F–öäVF—B†f–æÅW7G&VÔ&–æF–æu'Vâ’æf–æÅö6Æ–Õö'&–VbçW7G&VÕö6öçG&–'WF–öåö–G2Òd”äÅõU5E$TÕô4ôåE$”%UD”ôåô”E2ç6Æ–6Rƒ“°¢W‡V7D‡–'&–D—77VR†f–æÅW7G&VÔ&–æF–æu'VâÂvf–æÂW7G&VÒÖ6öçG&–'WF–öâf–VÆBrÂtf–æÂW7G&VÒÖ6öçG&–'WF–öâ&–æF–ærr“°¢6öç7Bf–æÄVF—D&–æF–æu'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢÷&6†W7G&F–öäVF—B†f–æÄVF—D&–æF–æu'Vâ’æf–æÅö6Æ–Õö'&–VbæVF—Eö6†V6µö–G2Òd”äÅôTD•Eô4„T4µô”E2ç6Æ–6Rƒ“°¢W‡V7D‡–'&–D—77VR†f–æÄVF—D&–æF–æu'VâÂvf–æÂVF—BÖ6†V6²f–VÆBrÂtf–æÂVF—BÖ6†V6²&–æF–ærr“°¢6öç7B7W'&VçDæöFRÒ6öÆE'Vâç&W7VÇBç&ö6W72ææöFW2æf–æB†—FVÒÓâ—FVÒææöFUö–BÓÓÒ6öÆE'Vâç&W7VÇBç&ö6W72æ7W'&VçEöæöFR“°¢6öç7Bæöä6öçG&öÆÆ–æu7W÷'F–ætf7G2Ò6öÆE'Vâç&W7VÇBæf7G2æf–ÇFW"†—FVÒÓâ—FVÒæ6öçG&öÇ5÷&ö6W72ÓÓÒfÇ6Rbb7W'&VçDæöFRæf7Eö–G2æ–æ6ÇVFW2†—FVÒæf7Eö–B’“°¢–b‚æöä6öçG&öÆÆ–æu7W÷'F–ætf7G2æÆVæwF‚ÇÂ÷&6†W7G&F–öäVF—B†6öÆE'Vâ’æf–æÅö6Æ–Õö'&–Vbç6÷W&6U÷&Veö–G2æ–æ6ÇVFW2‚w6÷W&6Uö6öçFW‡Br’’F‡&÷ræWrW'&÷"‚u÷6—F—fRf–æÂ×6÷W&6Rf—‡GW&RFöW2æ÷B6÷fW"æöâÖ6öçG&öÆÆ–ær7W÷'F–ærf7Br“°¢6öç7Bæöä6öçG&öÆÆ–æu6÷W&6U'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢÷&6†W7G&F–öäVF—B†æöä6öçG&öÆÆ–æu6÷W&6U'Vâ’æf–æÅö6Æ–Õö'&–Vbç6÷W&6U÷&Veö–G2Ò²w6÷W&6U÷66÷RuÓ°¢W‡V7D‡–'&–D—77VR†æöä6öçG&öÆÆ–æu6÷W&6U'VâÂv6öçG&öÆÆ–æræBæöâÖ6öçG&öÆÆ–ær7W÷'F–ærf7G2rÂtæöâÖ6öçG&öÆÆ–ærf–æÂ6÷W&6R×&VfW&Væ6R&–æF–ærr“°¢6öç7Bf÷&vVE7VÖÖ'•fÇVW2Ò°¢&V6÷&G3¢““’À¢æWGv÷&µö6ÆÇ3¢À¢&ö×E÷Fö¶Vç3¢À¢6ö×ÆWF–öå÷Fö¶Vç3¢À¢F÷FÅ÷Fö¶Vç3¢À¢7GVÅö6÷7E÷W6C¢À¢7GVÅö6÷7Eö6ö×ÆWFS¢fÇ6RÀ¢Væ¶æ÷våö6÷7Eö6ÆÅö6÷VçC¢À¢÷WF6öÖW3¢·ÒÀ¢Ó°¢f÷"†6öç7B¶f–VÆBÂfÇVUÒöbö&¦V7BæVçG&–W2†f÷&vVE7VÖÖ'•fÇVW2’’°¢6öç7Bf÷&vVE7VÖÖ'”ÆVFvW"Ò7G'V7GW&VD6ÆöæR†6öÆDÆVFvW"“°¢f÷&vVE7VÖÖ'”ÆVFvW"ç7VÖÖ'•¶f–VÆEÒÒfÇVS°¢–b‚6æ—F—¦VDÆVFvW%f–öÆF–öç2†f÷&vVE7VÖÖ'”ÆVFvW"’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚w7VÖÖ'’—2–æ6öç6—7FVçBr’’’F‡&÷ræWrW'&÷"†f÷&vVBÆVFvW"×7VÖÖ'’G¶f–VÆGÒf—‡GW&Rv2æ÷B&V¦V7FVF“°¢Ð¢6öç7Bw&öæuW7G&VÕ'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢÷&6†W7G&F–öäVF—B‡w&öæuW7G&VÕ'Vâ’ævVçG5³ÒçW7G&VÕ÷&÷f–FW"ÒuFövWF†W"s°¢–b‚÷&6†W7G&F–öä6öçG&7Ef–öÆF–öç2‡w&öæuW7G&VÕ'VâÂv6öÆBr’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚w&÷f–FW"&÷fVææ6Rr’’’F‡&÷ræWrW'&÷"‚tæöâÔFVW–æg&6öÆBVF—Bf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7Bw&öæuW7G&VÔÆVFvW"Ò7G'V7GW&VD6ÆöæR†6öÆDÆVFvW"“°¢w&öæuW7G&VÔÆVFvW"æ—FV×5³ÒçW7G&VÕ÷&÷f–FW"ÒuFövWF†W"s°¢–b‚6öÆDÆVFvW$6öçG&7Ef–öÆF–öç2†÷&6†W7G&F–öäVF—B†6öÆE'Vâ’Âw&öæuW7G&VÔÆVFvW"’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚w&÷f–FW"r’’’F‡&÷ræWrW'&÷"‚tæöâÔFVW–æg&6öÆBÆVFvW"f—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7Bw&öæuv&ÔÆVFvW"Ò7G'V7GW&VD6ÆöæR†6öÖ&–æVDÆVFvW"“°¢w&öæuv&ÔÆVFvW"æ—FV×2æf–æB†—FVÒÓâ—FVÒæ6ÆÅö6÷VçBÓÓÒ’çW7G&VÕ÷&÷f–FW"ÒuFövWF†W"s°¢–b‚v&ÔÆ–æVvT6öçG&7Ef–öÆF–öç2†÷&6†W7G&F–öäVF—B†6öÆE'Vâ’Â÷&6†W7G&F–öäVF—B‡v&Õ'Vâ’Âw&öæuv&ÔÆVFvW"’æ—77VW2ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚w&÷f–FW"r’’’F‡&÷ræWrW'&÷"‚tæöâÔFVW–æg&v&Ò66†Rf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7Bw&öætvVçE&öÆU'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢÷&6†W7G&F–öäVF—B‡w&öætvVçE&öÆU'Vâ’ævVçG2æf–æB†—FVÒÓâ—FVÒævVçEö–BÓÓÒvFö7VÖVçE÷6÷W&6Uö–çFVw&—G’r’ç&öÆRÒuVæ&÷VæB7V6–Æ—7BÆ&VÂs°¢–b‚÷&6†W7G&F–öä6öçG&7Ef–öÆF–öç2‡w&öætvVçE&öÆU'VâÂv6öÆBr’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚vFö7VÖVçE÷6÷W&6Uö–çFVw&—G“¢&öÆRÆ&VÂ—2æ÷BW†7Br’’’F‡&÷ræWrW'&÷"‚uF×W&VBæVÖ÷G&öâvVçB×&öÆRf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7Bw&öætvFU&öÆU'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢÷&6†W7G&F–öäVF—B‡w&öætvFU&öÆU'Vâ’æFWFW&Ö–æ—7F–5övFW2æf–æB†—FVÒÓâ—FVÒævVçEö–BÓÓÒvFWFW&Ö–æ—7F–5öWf–FVæ6UövFRr’ç&öÆRÒuVæ&÷VæBvFRÆ&VÂs°¢–b‚÷&6†W7G&F–öä6öçG&7Ef–öÆF–öç2‡w&öætvFU&öÆU'VâÂv6öÆBr’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚vFWFW&Ö–æ—7F–5öWf–FVæ6UövFS¢&öÆRÆ&VÂ—2æ÷BW†7Br’’’F‡&÷ræWrW'&÷"‚uF×W&VBFWFW&Ö–æ—7F–2vFR×&öÆRf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BÆ–5&W7öç6U'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢6öç7BÆ–5&W7öç6TÆVFvW"Ò7G'V7GW&VD6ÆöæR†6öÆDÆVFvW"“°¢÷&6†W7G&F–öäVF—B†Æ–5&W7öç6U'Vâ’ævVçG2æf÷$V6‚†—FVÒÓâ²—FVÒç&W7öç6UöÖöFVÂÒ$UTU5DTEôäTÔõE$ôåôÔôDTÃ²Ò“°¢Æ–5&W7öç6U'VâæWfVçG2æf–ÇFW"†—FVÒÓâ—FVÒæ7F÷%÷G—RÓÓÒvæVÖ÷G&öåövVçBrbb—FVÒç&V6V—E÷G—RÓÓÒvvVçEö6ö×ÆWFVBr’æf÷$V6‚†—FVÒÓâ²—FVÒç&W7öç6UöÖöFVÂÒ$UTU5DTEôäTÔõE$ôåôÔôDTÃ²Ò“°¢Æ–5&W7öç6TÆVFvW"æ—FV×2æf÷$V6‚†—FVÒÓâ²—FVÒç&W7öç6UöÖöFVÂÒ$UTU5DTEôäTÔõE$ôåôÔôDTÃ²Ò“°¢–b†÷&6†W7G&F–öä6öçG&7Ef–öÆF–öç2†Æ–5&W7öç6U'VâÂv6öÆBr’æÆVæwF‚ÇÂ6öÆDÆVFvW$6öçG&7Ef–öÆF–öç2†÷&6†W7G&F–öäVF—B†Æ–5&W7öç6U'Vâ’ÂÆ–5&W7öç6TÆVFvW"’æÆVæwF‚’F‡&÷ræWrW'&÷"‚tW†7B&rÆ–2&W7öç6RÖÖöFVÂf—‡GW&Rv2æ÷B66WFVBr“°¢6öç7Bæ÷&ÖÆ—¦VDÖ—6ÖF6„ÆVFvW"Ò7G'V7GW&VD6ÆöæR†Æ–5&W7öç6TÆVFvW"“°¢æ÷&ÖÆ—¦VDÖ—6ÖF6„ÆVFvW"æ—FV×5³Òç&W7öç6UöÖöFVÂÒvçf–F–öæVÖ÷G&öâÓ2×VÇG&ÓSS"ÖSV"Ó##ccBs°¢–b‚6öÆDÆVFvW$6öçG&7Ef–öÆF–öç2†÷&6†W7G&F–öäVF—B†Æ–5&W7öç6U'Vâ’Âæ÷&ÖÆ—¦VDÖ—6ÖF6„ÆVFvW"’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚w&W7öç6R&–æF–ærr’’’F‡&÷ræWrW'&÷"‚tÆ–2×FòÖFFVB&W7öç6RÖÖöFVÂæ÷&ÖÆ—¦F–öâf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7Bf÷&V–vå&W7öç6U'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢÷&6†W7G&F–öäVF—B†f÷&V–vå&W7öç6U'Vâ’ævVçG5³Òç&W7öç6UöÖöFVÂÒvçf–F–öæVÖ÷G&öâÓ2×VÇG&ÓSS"ÖSV"Öf÷&V–vâs°¢–b‚÷&6†W7G&F–öä6öçG&7Ef–öÆF–öç2†f÷&V–vå&W7öç6U'VâÂv6öÆBr’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚w&WGW&æVB&W7öç6R–FVçF—G’r’’’F‡&÷ræWrW'&÷"‚tf÷&V–vâ&W7öç6RÖÖöFVÂf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7B&Wf–WvVE&ö6W72Ò²6öçG&7C¢w&ö6W72Öw&‚rÂæöFW3¢·²æöFUö–C¢w66÷RrÒÂ²æöFUö–C¢w&Wf–WuöFFVBrÕÒÓ°¢6öç7B&Wf–WvVD6†V6¶Æ—7BÒ²6öçG&7C¢vWf–FVæ6RÖÖöFVÂrÂ—FV×3¢·²—FVÕö–C¢vÆV6RrÒÂ²—FVÕö–C¢w&Wf–WuöFFVBrÕÒÓ°¢6öç7B&TVF—BÒ÷&6†W7G&F–öäVF—B†6öÆE'Vâ“°¢6öç7B&Wf–WuG&ç6f÷&ÒÒ°¢66WFæ6U÷66÷S¢w÷7E÷&Wf–Wu÷VçfW&–f–VE÷G&ç6f÷&ÒrÀ¢WF†÷&—G“¢wVçfW&–f–VEöFVÖõ÷W6W"rÀ¢VÆ–f–6F–öå÷7FGW3¢væ÷E÷fW&–f–VBrÀ¢–çWE÷'Våö–C¢6öÆE'Vâç'Våö–BÀ¢–çWE÷&ö6W75ö†6ƒ¢&TVF—BæFWFW&Ö–æ—7F–5övFW2æf–æB†—FVÒÓâ—FVÒævVçEö–BÓÓÒvFWFW&Ö–æ—7F–5÷&ö6W75övFRr’æ÷WGWEö'F–f7Eö†6‚À¢–çWEö6†V6¶Æ—7Eö†6ƒ¢&TVF—BæFWFW&Ö–æ—7F–5övFW2æf–æB†—FVÒÓâ—FVÒævVçEö–BÓÓÒvFWFW&Ö–æ—7F–5öWf–FVæ6UövFRr’æ÷WGWEö'F–f7Eö†6‚À¢÷WGWE÷&ö6W75ö†6ƒ¢GFô†6‚‡&Wf–WvVE&ö6W72’À¢÷WGWEö6†V6¶Æ—7Eö†6ƒ¢GFô†6‚‡&Wf–WvVD6†V6¶Æ—7B’À¢ÖöFVÅö66WFæ6U÷&WW6VC¢fÇ6RÀ¢Ó°¢6öç7B&Wf–WvVE&W7öç6RÒ²&Wf–Wu÷G&ç6f÷&Ó¢&Wf–WuG&ç6f÷&ÒÂ&W7VÇC¢²&ö6W73¢&Wf–WvVE&ö6W72Â6†V6¶Æ—7C¢&Wf–WvVD6†V6¶Æ—7BÒÓ°¢6öç7BW'6—7FVE&Wf–WvVE'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢W'6—7FVE&Wf–WvVE'Vâç&W7VÇBç&ö6W72Ò&Wf–WvVE&ö6W73°¢W'6—7FVE&Wf–WvVE'Vâç&W7VÇBæ6†V6¶Æ—7BÒ&Wf–WvVD6†V6¶Æ—7C°¢W'6—7FVE&Wf–WvVE'Vâç&Wf–Wu÷G&ç6f÷&ÒÒ7G'V7GW&VD6ÆöæR‡&Wf–WuG&ç6f÷&Ò“°¢6öç7B&Wf–Wtf–ÇW&W2Ò&Wf–WuG&ç6f÷&Ô6öçG&7Ef–öÆF–öç2‡&Wf–WvVE&W7öç6RÂW'6—7FVE&Wf–WvVE'VâÂ6öÆE'Vâ“°¢–b‡&Wf–Wtf–ÇW&W2æÆVæwF‚’F‡&÷ræWrW'&÷"†÷6—F—fR&Wf–Wr×G&ç6f÷&Òf—‡GW&Rf–ÆVC¢G´¥4ôâç7G&–æv–g’‡&Wf–Wtf–ÇW&W2—Ö“°¢6öç7BFWFW&Ö–æ—7F–5&U&Wf–WrÒ°¢'Våö–C¢vFWFW&Ö–æ—7F–5÷&U÷&Wf–WrrÀ¢&W7VÇC¢°¢&ö6W73¢²6öçG&7C¢w&ö6W72Öw&‚rÂæöFW3¢·²æöFUö–C¢w66÷RrÕÒÒÀ¢6†V6¶Æ—7C¢²6öçG&7C¢vWf–FVæ6RÖÖöFVÂrÂ—FV×3¢·²—FVÕö–C¢vÆV6RrÕÒÒÀ¢vVçEö÷&6†W7G&F–öã¢²W†V7WFVC¢fÇ6RÂWF†÷&—G•öÖöFS¢vFWFW&Ö–æ—7F–5÷&VfW&Væ6RrÒÀ¢ÒÀ¢Ó°¢6öç7BFWFW&Ö–æ—7F–5&Wf–WvVE&ö6W72Ò²6öçG&7C¢w&ö6W72Öw&‚rÂæöFW3¢·²æöFUö–C¢w66÷RrÒÂ²æöFUö–C¢vFWFW&Ö–æ—7F–5÷&Wf–WuöFFVBrÕÒÓ°¢6öç7BFWFW&Ö–æ—7F–5&Wf–WvVD6†V6¶Æ—7BÒ²6öçG&7C¢vWf–FVæ6RÖÖöFVÂrÂ—FV×3¢·²—FVÕö–C¢vÆV6RrÒÂ²—FVÕö–C¢vFWFW&Ö–æ—7F–5÷&Wf–WuöFFVBrÕÒÓ°¢6öç7BFWFW&Ö–æ—7F–5&Wf–WuG&ç6f÷&ÒÒ°¢66WFæ6U÷66÷S¢w÷7E÷&Wf–Wu÷VçfW&–f–VE÷G&ç6f÷&ÒrÀ¢WF†÷&—G“¢wVçfW&–f–VEöFVÖõ÷W6W"rÀ¢VÆ–f–6F–öå÷7FGW3¢væ÷E÷fW&–f–VBrÀ¢–çWE÷'Våö–C¢FWFW&Ö–æ—7F–5&U&Wf–Wrç'Våö–BÀ¢–çWE÷&ö6W75ö†6ƒ¢GFô†6‚†FWFW&Ö–æ—7F–5&U&Wf–Wrç&W7VÇBç&ö6W72’À¢–çWEö6†V6¶Æ—7Eö†6ƒ¢GFô†6‚†FWFW&Ö–æ—7F–5&U&Wf–Wrç&W7VÇBæ6†V6¶Æ—7B’À¢÷WGWE÷&ö6W75ö†6ƒ¢GFô†6‚†FWFW&Ö–æ—7F–5&Wf–WvVE&ö6W72’À¢÷WGWEö6†V6¶Æ—7Eö†6ƒ¢GFô†6‚†FWFW&Ö–æ—7F–5&Wf–WvVD6†V6¶Æ—7B’À¢ÖöFVÅö66WFæ6U÷&WW6VC¢fÇ6RÀ¢Ó°¢6öç7BFWFW&Ö–æ—7F–5&Wf–Wu&W7öç6RÒ²&Wf–Wu÷G&ç6f÷&Ó¢FWFW&Ö–æ—7F–5&Wf–WuG&ç6f÷&ÒÂ&W7VÇC¢²&ö6W73¢FWFW&Ö–æ—7F–5&Wf–WvVE&ö6W72Â6†V6¶Æ—7C¢FWFW&Ö–æ—7F–5&Wf–WvVD6†V6¶Æ—7BÒÓ°¢6öç7BFWFW&Ö–æ—7F–5W'6—7FVE&Wf–WrÒ²ââç7G'V7GW&VD6ÆöæR†FWFW&Ö–æ—7F–5&U&Wf–Wr’Â&Wf–Wu÷G&ç6f÷&Ó¢7G'V7GW&VD6ÆöæR†FWFW&Ö–æ—7F–5&Wf–WuG&ç6f÷&Ò’Ó°¢FWFW&Ö–æ—7F–5W'6—7FVE&Wf–Wrç&W7VÇBç&ö6W72ÒFWFW&Ö–æ—7F–5&Wf–WvVE&ö6W73°¢FWFW&Ö–æ—7F–5W'6—7FVE&Wf–Wrç&W7VÇBæ6†V6¶Æ—7BÒFWFW&Ö–æ—7F–5&Wf–WvVD6†V6¶Æ—7C°¢6öç7BFWFW&Ö–æ—7F–5&Wf–Wtf–ÇW&W2Ò&Wf–WuG&ç6f÷&Ô6öçG&7Ef–öÆF–öç2†FWFW&Ö–æ—7F–5&Wf–Wu&W7öç6RÂFWFW&Ö–æ—7F–5W'6—7FVE&Wf–WrÂFWFW&Ö–æ—7F–5&U&Wf–Wr“°¢–b†FWFW&Ö–æ—7F–5&Wf–Wtf–ÇW&W2æÆVæwF‚’F‡&÷ræWrW'&÷"†Æö6ÂFWFW&Ö–æ—7F–2&Wf–Wr×G&ç6f÷&Òf—‡GW&Rf–ÆVC¢G´¥4ôâç7G&–æv–g’†FWFW&Ö–æ—7F–5&Wf–Wtf–ÇW&W2—Ö“°¢6öç7BfÇ6VÇ•&V66WFVE&Wf–WrÒ7G'V7GW&VD6ÆöæR‡&Wf–WvVE&W7öç6R“°¢fÇ6VÇ•&V66WFVE&Wf–Wrç&Wf–Wu÷G&ç6f÷&ÒæÖöFVÅö66WFæ6U÷&WW6VBÒG'VS°¢–b‚&Wf–WuG&ç6f÷&Ô6öçG&7Ef–öÆF–öç2†fÇ6VÇ•&V66WFVE&Wf–WrÂW'6—7FVE&Wf–WvVE'VâÂ6öÆE'Vâ’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚vÖöFVÅö66WFæ6U÷&WW6VBr’’’F‡&÷ræWrW'&÷"‚tÖöFVÂ×&V66WFæ6RæVvF—fRf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BVç6fU'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢Vç6fU'Vâç&W7VÇBæVF—BævVçEö÷&6†W7G&F–öâç&V6öæ–ærÒv×W7BæWfW"&RV&Æ–2s°¢–b‚÷&6†W7G&F–öä6öçG&7Ef–öÆF–öç2‡Vç6fU'VâÂv6öÆBr’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚vf÷&&–FFVâV&Æ–2f–VÆG2r’’’F‡&÷ræWrW'&÷"‚u6Vç6—F—fRÖf–VÆBæVvF—fRf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7B6VçF–æVÅ'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢6VçF–æVÅ'VâæWfVçG2çW6‚‡²7FvS¢vvVçEö÷&6†W7G&F–öârÂ7FGW3¢vf–ÆVBrÂFWF–Ã¢v'&æ6ƒ§Fó¥õöVæEõòrÒ“°¢–b‚÷&6†W7G&F–öä6öçG&7Ef–öÆF–öç2‡6VçF–æVÅ'VâÂv6öÆBr’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚vW†V7WF–öâ6VçF–æVÇ2r’’’F‡&÷ræWrW'&÷"‚t–çFW&æÂ×6VçF–æVÂæVvF—fRf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BfÇ6VÇ”ÖöFVÄ÷væVEF÷öÆöw’Ò7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢fÇ6VÇ”ÖöFVÄ÷væVEF÷öÆöw’ç&W7VÇBæVF—BævVçEö÷&6†W7G&F–öâæW†V7WF–öå÷F÷öÆöw’æWF†÷&—G’ÒvæVÖ÷G&öåövVçBs°¢–b‚÷&6†W7G&F–öä6öçG&7Ef–öÆF–öç2†fÇ6VÇ”ÖöFVÄ÷væVEF÷öÆöw’Âv6öÆBr’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚vW†V7WF–öâF÷öÆöw’r’’’F‡&÷ræWrW'&÷"‚tÖöFVÂÖ÷væVBF÷öÆöw’Ö—6GG&–'WF–öâf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7B'&ö¶VåF÷öÆöw”FWVæFVæ7’Ò7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢'&ö¶VåF÷öÆöw”FWVæFVæ7’ç&W7VÇBæVF—BævVçEö÷&6†W7G&F–öâæW†V7WF–öå÷F÷öÆöw’æFVÆVvF–öç2æf–æB†—FVÒÓâ—FVÒævVçEö–BÓÓÒvWf–FVæ6Uö6†V6¶Æ—7Br’æFWVæFVæ6–W2Ò²v÷&6†W7G&F÷%÷ÆâuÓ°¢–b‚÷&6†W7G&F–öä6öçG&7Ef–öÆF–öç2†'&ö¶VåF÷öÆöw”FWVæFVæ7’Âv6öÆBr’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚vW†V7WF–öâF÷öÆöw’r’’’F‡&÷ræWrW'&÷"‚t'&ö¶VâFWFW&Ö–æ—7F–2F÷öÆöw’FWVæFVæ7’f—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7B†–FFVäf–æÄVF—BÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢FVÆWFR†–FFVäf–æÄVF—BævVçEö÷&6†W7G&F–öã°¢–b‚÷&6†W7G&F–öä6öçG&7Ef–öÆF–öç2††–FFVäf–æÄVF—BÂv6öÆBr’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚vf–æÂ–ÆöB&–æF–ærr’’’F‡&÷ræWrW'&÷"‚tÖ—76–ærf–æÂ–ÆöB×f—6–&ÆRVF—Bf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BFW&Ö–æÄf–ÇW&RÒ²'Våö–C¢vf–ÆVE÷'VârÂ7FGW3¢vf–ÆVBrÂ7FvS¢vvVçEö÷&6†W7G&F–öârÂW'&÷#¢v'&æ6ƒ§Fó¥õöVæEõòrÓ°¢–b‚FW&Ö–æÄf–ÇW&T6öçG&7Ef–öÆF–öç2‡FW&Ö–æÄf–ÇW&R’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚vW†V7WF–öâ6VçF–æVÇ2r’’’F‡&÷ræWrW'&÷"‚uFW&Ö–æÂÖf–ÇW&R6VçF–æVÂæVvF—fRf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢–b„¥4ôâç7G&–æv–g’‡'Vå&öw&W74F–væ÷7F–2‡FW&Ö–æÄf–ÇW&R’’æ–æ6ÇVFW2‚uõöVæEõòr’’F‡&÷ræWrW'&÷"‚u6fRFW&Ö–æÂF–væ÷7F–72ÆV¶VBF†R–çFW&æÂ6VçF–æVÂfÇVRr“°¢6öç7Bf–ÇW&TvVçBÒ÷&6†W7G&F–öäVF—B†6öÆE'Vâ’ævVçG2æf–æB†—FVÒÓâ—FVÒævVçEö–BÓÓÒvWf–FVæ6Uö6†V6¶Æ—7Br“°¢6öç7Bf–ÇW&T66WFVE7FFRÒ²6æöæ–6Å÷7FFU÷&W&VC¢G'VRÂ&ö6W75ö6æF–FFU÷&W&VC¢G'VRÂWf–FVæ6Uö6æF–FFU÷&W&VC¢G'VRÂf–æÅ÷Æ–&ööµö66WFVC¢fÇ6RÓ°¢6öç7B6fUFW&Ö–æÄf–ÇW&RÒ°¢'Våö–C¢w6fUöf–ÆVE÷'VârÀ¢7FGW3¢vf–ÆVBrÀ¢7FvS¢vf–ÆVBrÀ¢f–ÇW&U÷7FvS¢f–ÇW&TvVçBævVçEö–BÀ¢66WFVE÷7FFS¢f–ÇW&T66WFVE7FFRÀ¢W'&÷#¢tvVçD–çfö6F–öäf–ÇW&S¢&÷f–FW%ö–çfö6F–öârÀ¢WfVçG3¢°¢7G'V7GW&VD6ÆöæR†6öÆE'VâæWfVçG2æf–æB†—FVÒÓâ—FVÒævVçEö–BÓÓÒv6æöæ–6Åöf7G2rbb—FVÒç&V6V—E÷G—RÓÓÒvvVçEö6ö×ÆWFVBr’’À¢7G'V7GW&VD6ÆöæR†6öÆE'VâæWfVçG2æf–æB†—FVÒÓâ—FVÒævVçEö–BÓÓÒv÷&6†W7G&F÷%÷Æârbb—FVÒç&V6V—E÷G—RÓÓÒvvVçEö6ö×ÆWFVBr’’À¢°¢WfVçEö–C¢vWgEövVçEöf–ÆVBrÀ¢÷&F–æÃ¢2À¢7&VFVEöC¢s##bÓ‚ÓC££¢rÀ¢7FvS¢vvVçEö÷&6†W7G&F–öârÀ¢Æ&VÃ¢tWf–FVæ6RæB6†V6¶Æ—7BvVçBrÀ¢vVçC¢tWf–FVæ6RæB6†V6¶Æ—7BvVçBrÀ¢vVçEö–C¢f–ÇW&TvVçBævVçEö–BÀ¢7F÷%÷G—S¢væVÖ÷G&öåövVçBrÀ¢7FGW3¢vf–ÆVBrÀ¢66WFæ6U÷66÷S¢w&U÷&Wf–WuöÖöFVÅö÷WGWBrÀ¢†VFÆ–æS¢u7V6–Æ—7B7F÷VBBF†Rf–ÂÖ6Æ÷6VB&÷VæF'’rÀ¢FWF–Ã¢töæÇ’&÷VæFVBf–ÇW&RÖWFFFv2&WF–æVBârÀ¢–×ÆVÖVçFF–öã¢U…T5DTEõ%TåD”ÔRæ–×ÆVÖVçFF–öâÀ¢ÖöFVÃ¢$UTU5DTEôäTÔõE$ôåôÔôDTÂÀ¢÷&6†W7G&F÷#¢t66UF‚÷&6†W7G&F÷"rÀ¢fÆ–FF÷#¢vWf–FVæ6Uö6†V6¶Æ—7BÖ6öçG&7BóããrÀ¢&ö×E÷fW'6–öã¢vWf–FVæ6Uö6†V6¶Æ—7BóããrÀ¢&V6V—E÷G—S¢vvVçEöf–ÆVBrÀ¢FVÆVvF–öåö–C¢f–ÇW&TvVçBæFVÆVvF–öåö–BÀ¢&VçEö6ÆÅö–C¢÷&6†W7G&F–öäVF—B†6öÆE'Vâ’ævVçG2æf–æB†—FVÒÓâ—FVÒævVçEö–BÓÓÒv÷&6†W7G&F÷%÷Æâr’æ6ÆÅö–BÀ¢6ÆÅö–C¢vf–ÆVEö6ÆÅöWf–FVæ6Uö6†V6¶Æ—7BrÀ¢&÷f–FW#¢v÷Vç&÷WFW"rÀ¢&WVW7FVEöÖöFVÃ¢$UTU5DTEôäTÔõE$ôåôÔôDTÂÀ¢6ÆÅö6÷VçC¢À¢÷WF6öÖS¢vf–ÆVBrÀ¢†æFöfeög&öÓ¢vFWFW&Ö–æ—7F–5öWf–FVæ6UövFRrÀ¢†æFöfe÷Fó¢vf–ÇW&Uö&÷VæF'’rÀ¢–çWEö'F–f7Eö†6ƒ¢GFô†6‚‡²&÷VæFVC¢vf–ÇW&RÖ–çWBrÒ’À¢W'&÷%÷G—S¢tvVçD–çfö6F–öäf–ÇW&RrÀ¢W'&÷%ö–çf&–çC¢w&÷f–FW%ö–çfö6F–öârÀ¢W‡FW&æÅ÷G&6–æs¢fÇ6RÀ¢ÒÀ¢°¢WfVçEö–C¢vWgE÷FW&Ö–æÅö&÷VæF'’rÀ¢÷&F–æÃ¢BÀ¢7&VFVEöC¢s##bÓ‚ÓC££¢rÀ¢7FvS¢vf–ÆVBrÀ¢Æ&VÃ¢tæÇ—6—27F÷VB6fVÇ’rÀ¢vVçC¢tf–ÇW&R&÷VæF'’rÀ¢7FGW3¢vf–ÆVBrÀ¢†VFÆ–æS¢tæòf–æÂÆ–&öö²v266WFVBrÀ¢FWF–Ã¢u'F–Â6æF–FFR'F–f7G2Ö’&VÖ–âf—6–&ÆRf÷"VF—BÂ'WBF†RFW&Ö–æÂ66WFæ6R&÷VæF'’f–ÆVB6Æ÷6VBârÀ¢–×ÆVÖVçFF–öã¢vFWFW&Ö–æ—7F–2rÀ¢ÖöFVÃ¢çVÆÂÀ¢7F÷%÷G—S¢vFWFW&Ö–æ—7F–5övFRrÀ¢f–ÇW&U÷7FvS¢f–ÇW&TvVçBævVçEö–BÀ¢f–ÇW&Uö–çf&–çC¢w&÷f–FW%ö–çfö6F–öârÀ¢66WFVE÷7FFS¢f–ÇW&T66WFVE7FFRÀ¢fÆ–FF÷#¢vf–ÂÖ6Æ÷6VBóRã"rÀ¢&ö×E÷fW'6–öã¢çVÆÂÀ¢ÒÀ¢ÒÀ¢Ó°¢6öç7B6fTf–ÇW&T—77VW2ÒFW&Ö–æÄf–ÇW&T6öçG&7Ef–öÆF–öç2‡6fUFW&Ö–æÄf–ÇW&R“°¢–b‡6fTf–ÇW&T—77VW2æÆVæwF‚’F‡&÷ræWrW'&÷"†6fRFW&Ö–æÂÖf–ÇW&Rf—‡GW&Rf–ÆVC¢G´¥4ôâç7G&–æv–g’‡6fTf–ÇW&T—77VW2—Ö“°¢6öç7BFW&Ö–æÄf–ÇW&TÖW76vRÒFW&Ö–æÅ'Väf–ÇW&TÖW76vR‡6fUFW&Ö–æÄf–ÇW&R“°¢–b‚FW&Ö–æÄf–ÇW&TÖW76vSòæ–æ6ÇVFW2‚w6fUöf–ÆVE÷'Vâf–ÆVC¢r¢ÇÂFW&Ö–æÄf–ÇW&TÖW76vRæ–æ6ÇVFW2‚w&÷f–FW%ö–çfö6F–öâr¢ÇÂÄDU%õDU$Ô”äÅõôÄÅô”åDU%dÅôÕ2ãÒS’F‡&÷ræWrW'&÷"‚tÆFW"Ö¦÷W&æW’FW&Ö–æÂf–ÇW&RFöW2æ÷BW†—B&ö×FÇ’v—F‚&÷VæFVBF–væ÷7F–72r“°¢6öç7B&÷f–FW$6öæ7W'&Væ7”f–ÇW&RÒ7G'V7GW&VD6ÆöæR‡6fUFW&Ö–æÄf–ÇW&R“°¢6öç7B&÷f–FW$6öæ7W'&Væ7•&V6V—BÒ&÷f–FW$6öæ7W'&Væ7”f–ÇW&RæWfVçG2æf–æB†—FVÒÓâ—FVÒç&V6V—E÷G—RÓÓÒvvVçEöf–ÆVBr“°¢ö&¦V7Bæ76–vâ‡&÷f–FW$6öæ7W'&Væ7•&V6V—BÂ°¢6ÆÅö6÷VçC¢À¢÷WF6öÖS¢v&Æö6¶VE÷&÷f–FW%ö6öæ7W'&Væ7’rÀ¢W'&÷%÷G—S¢tvVçD–çfö6F–öäf–ÇW&RrÀ¢W'&÷%ö–çf&–çC¢w&÷f–FW%ö6öæ7W'&Væ7•÷F–ÖV÷WBrÀ¢Ò“°¢&÷f–FW$6öæ7W'&Væ7”f–ÇW&RæWfVçG2æf–æB†—FVÒÓâ—FVÒç7FvRÓÓÒvf–ÆVBr’æf–ÇW&Uö–çf&–çBÒw&÷f–FW%ö6öæ7W'&Væ7•÷F–ÖV÷WBs°¢6öç7B&÷f–FW$6öæ7W'&Væ7”—77VW2ÒFW&Ö–æÄf–ÇW&T6öçG&7Ef–öÆF–öç2‡&÷f–FW$6öæ7W'&Væ7”f–ÇW&R“°¢–b‡&÷f–FW$6öæ7W'&Væ7”—77VW2æÆVæwF‚’F‡&÷ræWrW'&÷"†&÷f–FW"Ö6öæ7W'&Væ7’¦W&òÖ6ÆÂ&V6V—Bf—‡GW&Rf–ÆVC¢G´¥4ôâç7G&–æv–g’‡&÷f–FW$6öæ7W'&Væ7”—77VW2—Ö“°¢6öç7Bf÷&vVE&÷f–FW$6öæ7W'&Væ7”6ÆÂÒ7G'V7GW&VD6ÆöæR‡&÷f–FW$6öæ7W'&Væ7”f–ÇW&R“°¢f÷&vVE&÷f–FW$6öæ7W'&Væ7”6ÆÂæWfVçG2æf–æB†—FVÒÓâ—FVÒç&V6V—E÷G—RÓÓÒvvVçEöf–ÆVBr’æ6ÆÅö6÷VçBÒ°¢–b‚FW&Ö–æÄf–ÇW&T6öçG&7Ef–öÆF–öç2†f÷&vVE&÷f–FW$6öæ7W'&Væ7”6ÆÂ’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚w¦W&òÖ6ÆÂr’ÇÂ—FVÒæ–æ6ÇVFW2‚v6ÆÅö6÷VçBr’’’F‡&÷ræWrW'&÷"‚u&÷f–FW"Ö6öæ7W'&Væ7’f÷&vVBÖ6ÆÂ&V6V—Bf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7Bf÷&vVE&÷f–FW$6öæ7W'&Væ7”–FVçF—G’Ò7G'V7GW&VD6ÆöæR‡&÷f–FW$6öæ7W'&Væ7”f–ÇW&R“°¢f÷&vVE&÷f–FW$6öæ7W'&Væ7”–FVçF—G’æWfVçG2æf–æB†—FVÒÓâ—FVÒç&V6V—E÷G—RÓÓÒvvVçEöf–ÆVBr’ç&W7öç6Uö–BÒvvVâÓsƒcCƒ3S’Ö‡•—F‡csfóe…‡tÇ¦Âs°¢–b‚FW&Ö–æÄf–ÇW&T6öçG&7Ef–öÆF–öç2†f÷&vVE&÷f–FW$6öæ7W'&Væ7”–FVçF—G’’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚w¦W&òÖ6ÆÂr’’’F‡&÷ræWrW'&÷"‚u&÷f–FW"Ö6öæ7W'&Væ7’f÷&vVB&W7öç6R&V6V—Bf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BW7G&VÕ&V¦V7F–öäf–ÇW&RÒ7G'V7GW&VD6ÆöæR‡6fUFW&Ö–æÄf–ÇW&R“°¢6öç7BW7G&VÕ&V6V—BÒW7G&VÕ&V¦V7F–öäf–ÇW&RæWfVçG2æf–æB†—FVÒÓâ—FVÒç&V6V—E÷G—RÓÓÒvvVçEöf–ÆVBr“°¢ö&¦V7Bæ76–vâ‡W7G&VÕ&V6V—BÂ°¢W'&÷%ö–çf&–çC¢w&÷f–FW%÷W7G&VÕ÷&V¦V7F–öârÀ¢&W7öç6Uö–C¢vvVâÓsƒcCƒ3S’Ö‡•—F‡csfóe…‡tÇ¦ÂrÀ¢&÷f–FW%öW'&÷%ö6öFS¢C#’À¢&÷f–FW%ö&÷VæF'“¢U…T5DTEõ$õd”DU%ô$õTäD%’À¢W‡V7FVE÷W7G&VÕ÷&÷f–FW#¢U…T5DTEõU5E$TÕõ$õd”DU"À¢Ò“°¢W7G&VÕ&V¦V7F–öäf–ÇW&RæWfVçG2æf–æB†—FVÒÓâ—FVÒç7FvRÓÓÒvf–ÆVBr’æf–ÇW&Uö–çf&–çBÒw&÷f–FW%÷W7G&VÕ÷&V¦V7F–öâs°¢6öç7BW7G&VÔf–ÇW&T—77VW2ÒFW&Ö–æÄf–ÇW&T6öçG&7Ef–öÆF–öç2‡W7G&VÕ&V¦V7F–öäf–ÇW&R“°¢–b‡W7G&VÔf–ÇW&T—77VW2æÆVæwF‚’F‡&÷ræWrW'&÷"†&÷VæFVBW7G&VÒ×&V¦V7F–öâf—‡GW&Rf–ÆVC¢G´¥4ôâç7G&–æv–g’‡W7G&VÔf–ÇW&T—77VW2—Ö“°¢6öç7Bf÷&vVEW7G&VÔ&÷VæF'”f–ÇW&RÒ7G'V7GW&VD6ÆöæR‡W7G&VÕ&V¦V7F–öäf–ÇW&R“°¢f÷&vVEW7G&VÔ&÷VæF'”f–ÇW&RæWfVçG2æf–æB†—FVÒÓâ—FVÒç&V6V—E÷G—RÓÓÒvvVçEöf–ÆVBr’æW‡V7FVE÷W7G&VÕ÷&÷f–FW"ÒuFövWF†W"s°¢–b‚FW&Ö–æÄf–ÇW&T6öçG&7Ef–öÆF–öç2†f÷&vVEW7G&VÔ&÷VæF'”f–ÇW&R’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚v&÷VæF'’GG&–'WF–öâ—2f÷&vVBr’’’F‡&÷ræWrW'&÷"‚tf÷&vVBW7G&VÒ×&V¦V7F–öâ&V6V—BGG&–'WF–öâf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BÖ—76–æuW7G&VÔ&÷VæF'”f–ÇW&RÒ7G'V7GW&VD6ÆöæR‡W7G&VÕ&V¦V7F–öäf–ÇW&R“°¢FVÆWFRÖ—76–æuW7G&VÔ&÷VæF'”f–ÇW&RæWfVçG2æf–æB†—FVÒÓâ—FVÒç&V6V—E÷G—RÓÓÒvvVçEöf–ÆVBr’æW‡V7FVE÷W7G&VÕ÷&÷f–FW#°¢–b‚FW&Ö–æÄf–ÇW&T6öçG&7Ef–öÆF–öç2†Ö—76–æuW7G&VÔ&÷VæF'”f–ÇW&R’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚vGG&–'WF–öâ—"—2–æ6ö×ÆWFRr’’’F‡&÷ræWrW'&÷"‚tÖ—76–ærW7G&VÒ×&V¦V7F–öâ&V6V—BGG&–'WF–öâf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7B÷WDöe66÷UW7G&VÔ&÷VæF'”f–ÇW&RÒ7G'V7GW&VD6ÆöæR‡6fUFW&Ö–æÄf–ÇW&R“°¢ö&¦V7Bæ76–vâ†÷WDöe66÷UW7G&VÔ&÷VæF'”f–ÇW&RæWfVçG2æf–æB†—FVÒÓâ—FVÒç&V6V—E÷G—RÓÓÒvvVçEöf–ÆVBr’Â°¢&÷f–FW%ö&÷VæF'“¢U…T5DTEõ$õd”DU%ô$õTäD%’À¢W‡V7FVE÷W7G&VÕ÷&÷f–FW#¢U…T5DTEõU5E$TÕõ$õd”DU"À¢Ò“°¢–b‚FW&Ö–æÄf–ÇW&T6öçG&7Ef–öÆF–öç2†÷WDöe66÷UW7G&VÔ&÷VæF'”f–ÇW&R’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚v&÷VæF'’GG&–'WF–öâ—2÷WBöb66÷Rr’’’F‡&÷ræWrW'&÷"‚t÷WBÖöb×66÷RW7G&VÒ×&V¦V7F–öâ&V6V—BGG&–'WF–öâf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BVæ&÷VæFVEW7G&VÔ6öFTf–ÇW&RÒ7G'V7GW&VD6ÆöæR‡W7G&VÕ&V¦V7F–öäf–ÇW&R“°¢Væ&÷VæFVEW7G&VÔ6öFTf–ÇW&RæWfVçG2æf–æB†—FVÒÓâ—FVÒç&V6V—E÷G—RÓÓÒvvVçEöf–ÆVBr’ç&÷f–FW%öW'&÷%ö6öFRÒu$uõ$õd”DU%ô4ôDRs°¢–b‚FW&Ö–æÄf–ÇW&T6öçG&7Ef–öÆF–öç2‡Væ&÷VæFVEW7G&VÔ6öFTf–ÇW&R’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚vW'&÷"6öFRr’’’F‡&÷ræWrW'&÷"‚uVæ&÷VæFVBW7G&VÒ&÷f–FW"Ö6öFRf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7B6Æ–Ô&V&–æuW7G&VÔ–Df–ÇW&RÒ7G'V7GW&VD6ÆöæR‡W7G&VÕ&V¦V7F–öäf–ÇW&R“°¢6Æ–Ô&V&–æuW7G&VÔ–Df–ÇW&RæWfVçG2æf–æB†—FVÒÓâ—FVÒç&V6V—E÷G—RÓÓÒvvVçEöf–ÆVBr’ç&W7öç6Uö–BÒtDTbÓ#rÔSÔDTÔòs°¢–b‚FW&Ö–æÄf–ÇW&T6öçG&7Ef–öÆF–öç2†6Æ–Ô&V&–æuW7G&VÔ–Df–ÇW&R’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚vW†7B÷Vå&÷WFW"vVæW&F–öâ”Br’’’F‡&÷ræWrW'&÷"‚t6Æ–ÒÖ&V&–ærW7G&VÒ&W7öç6RÔ”Bf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BVç6fTf–ÇW&TÆÆ÷vÆ—7BÒ7G'V7GW&VD6ÆöæR‡6fUFW&Ö–æÄf–ÇW&R“°¢Vç6fTf–ÇW&TÆÆ÷vÆ—7BæWfVçG2æf–æB†—FVÒÓâ—FVÒç&V6V—E÷G—RÓÓÒvvVçEöf–ÆVBr’ç&÷f–FW%÷–ÆöBÒv×W7BæWfW"&R&WF–æVBs°¢–b‚FW&Ö–æÄf–ÇW&T6öçG&7Ef–öÆF–öç2‡Vç6fTf–ÇW&TÆÆ÷vÆ—7B’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚væöâÖÆÆ÷vÆ—7FVBf–VÆG2r’’’F‡&÷ræWrW'&÷"‚tf–ÇW&R×&V6V—BÆÆ÷vÆ—7BæVvF—fRf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7B'&ö¶Väf–ÇW&TÆ–æVvRÒ7G'V7GW&VD6ÆöæR‡6fUFW&Ö–æÄf–ÇW&R“°¢'&ö¶Väf–ÇW&TÆ–æVvRæWfVçG2æf–æB†—FVÒÓâ—FVÒç&V6V—E÷G—RÓÓÒvvVçEöf–ÆVBr’ç&VçEö6ÆÅö–BÒww&öæu÷&VçBs°¢–b‚FW&Ö–æÄf–ÇW&T6öçG&7Ef–öÆF–öç2†'&ö¶Väf–ÇW&TÆ–æVvR’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚v–FVçF—G’öÆ–æVvRr’’’F‡&÷ræWrW'&÷"‚tf–ÇW&R×&V6V—BÆ–æVvRæVvF—fRf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7B÷fW''Väf–ÇW&RÒ7G'V7GW&VD6ÆöæR‡6fUFW&Ö–æÄf–ÇW&R“°¢ö&¦V7Bæ76–vâ†÷fW''Väf–ÇW&RæWfVçG2æf–æB†—FVÒÓâ—FVÒç&V6V—E÷G—RÓÓÒvvVçEöf–ÆVBr’Â°¢÷WF6öÖS¢v7GVÅö6÷7Eö÷fW''VârÀ¢W'&÷%ö–çf&–çC¢v7GVÅö6÷7Eö÷fW''VârÀ¢&W7öç6Uö–C¢vvVæW&F–öåö6†&vVEö÷fW''VârÀ¢&W7öç6UöÖöFVÃ¢$UTU5DTEôäTÔõE$ôåôÔôDTÂÀ¢W7G&VÕ÷&÷f–FW#¢tFVW–æg&rÀ¢W6vU÷6÷W&6S¢w&W7öç6RrÀ¢f–æ—6…÷&V6öã¢w7F÷rÀ¢Ò“°¢–b‡FW&Ö–æÄf–ÇW&T6öçG&7Ef–öÆF–öç2†÷fW''Väf–ÇW&R’æÆVæwF‚’F‡&÷ræWrW'&÷"‚t6†&vVBÖ÷fW''Vâf–ÇW&Rf—‡GW&Rv2æ÷B66WFVBr“°¢6öç7B–çfÆ–DÖöFVÅ&÷fVææ6Tf–ÇW&RÒ7G'V7GW&VD6ÆöæR‡6fUFW&Ö–æÄf–ÇW&R“°¢ö&¦V7Bæ76–vâ†–çfÆ–DÖöFVÅ&÷fVææ6Tf–ÇW&RæWfVçG2æf–æB†—FVÒÓâ—FVÒç&V6V—E÷G—RÓÓÒvvVçEöf–ÆVBr’Â°¢W'&÷%ö–çf&–çC¢v–çfÆ–E÷&÷fVææ6RrÀ¢&W7öç6Uö–C¢vvVæW&F–öå÷w&öæuöÖöFVÂrÀ¢&W7öç6UöÖöFVÃ¢çVÆÂÀ¢W7G&VÕ÷&÷f–FW#¢tFVW–æg&rÀ¢W6vU÷6÷W&6S¢w&W7öç6RrÀ¢f–æ—6…÷&V6öã¢w7F÷rÀ¢–çfÆ–E÷&÷fVææ6Uöf–VÆC¢w&W7öç6UöÖöFVÂrÀ¢–çfÆ–E÷&÷fVææ6U÷fÇVUö†6ƒ¢srrç&WVBƒcB’À¢Ò“°¢–b‡FW&Ö–æÄf–ÇW&T6öçG&7Ef–öÆF–öç2†–çfÆ–DÖöFVÅ&÷fVææ6Tf–ÇW&R’æÆVæwF‚’F‡&÷ræWrW'&÷"‚t†6†VB–çfÆ–BÖÖöFVÂ&÷fVææ6Rf—‡GW&Rv2æ÷B66WFVBr“°¢6öç7B&tf÷&V–väÖöFVÄf–ÇW&RÒ7G'V7GW&VD6ÆöæR†–çfÆ–DÖöFVÅ&÷fVææ6Tf–ÇW&R“°¢ö&¦V7Bæ76–vâ‡&tf÷&V–väÖöFVÄf–ÇW&RæWfVçG2æf–æB†—FVÒÓâ—FVÒç&V6V—E÷G—RÓÓÒvvVçEöf–ÆVBr’Â°¢W'&÷%ö–çf&–çC¢w&W7öç6UöÖöFVÂrÀ¢&W7öç6UöÖöFVÃ¢vf÷&V–vâ÷&÷f–FW"ÖÖöFVÂrÀ¢–çfÆ–E÷&÷fVææ6Uöf–VÆC¢VæFVf–æVBÀ¢–çfÆ–E÷&÷fVææ6U÷fÇVUö†6ƒ¢VæFVf–æVBÀ¢Ò“°¢–b‚FW&Ö–æÄf–ÇW&T6öçG&7Ef–öÆF–öç2‡&tf÷&V–väÖöFVÄf–ÇW&R’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚w&÷f–FW"&÷fVææ6Rr’’’F‡&÷ræWrW'&÷"‚u&rf÷&V–vâÖöFVÂ&÷fVææ6Rv2æ÷B&V¦V7FVBr“°¢6öç7B&t7&VFVçF–Å&÷fVææ6RÒ7G'V7GW&VD6ÆöæR‡6fUFW&Ö–æÄf–ÇW&R“°¢ö&¦V7Bæ76–vâ‡&t7&VFVçF–Å&÷fVææ6RæWfVçG2æf–æB†—FVÒÓâ—FVÒç&V6V—E÷G—RÓÓÒvvVçEöf–ÆVBr’Â°¢&W7öç6Uö–C¢w6²Ö÷"×c×6V7&WFÖFW&–ÂrÀ¢&W7öç6UöÖöFVÃ¢$UTU5DTEôäTÔõE$ôåôÔôDTÂÀ¢Ò“°¢–b‚FW&Ö–æÄf–ÇW&T6öçG&7Ef–öÆF–öç2‡&t7&VFVçF–Å&÷fVææ6R’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚w&÷f–FW"&÷fVææ6Rr’’’F‡&÷ræWrW'&÷"‚t7&VFVçF–Â×6†VB&÷f–FW"&÷fVææ6Rv2æ÷B&V¦V7FVBr“°¢6öç7B&t6Æ–ÕFW‡E&÷fVææ6RÒ7G'V7GW&VD6ÆöæR‡6fUFW&Ö–æÄf–ÇW&R“°¢&t6Æ–ÕFW‡E&÷fVææ6RæWfVçG2æf–æB†—FVÒÓâ—FVÒç&V6V—E÷G—RÓÓÒvvVçEöf–ÆVBr’çW7G&VÕ÷&÷f–FW"ÒuFVæçD6Æ–Òs°¢–b‚FW&Ö–æÄf–ÇW&T6öçG&7Ef–öÆF–öç2‡&t6Æ–ÕFW‡E&÷fVææ6R’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚w&÷f–FW"&÷fVææ6Rr’’’F‡&÷ræWrW'&÷"‚t6Æ–Ò×FW‡B&÷f–FW"&÷fVææ6Rv2æ÷B&V¦V7FVBr“°¢6öç7B'F–Ä–FVçF—G”f–ÇW&RÒ7G'V7GW&VD6ÆöæR‡6fUFW&Ö–æÄf–ÇW&R“°¢ö&¦V7Bæ76–vâ‡'F–Ä–FVçF—G”f–ÇW&RæWfVçG2æf–æB†—FVÒÓâ—FVÒç&V6V—E÷G—RÓÓÒvvVçEöf–ÆVBr’Â°¢W'&÷%ö–çf&–çC¢w&W7öç6Uö–FVçF—G’rÀ¢&W7öç6Uö–C¢çVÆÂÀ¢&W7öç6UöÖöFVÃ¢$UTU5DTEôäTÔõE$ôåôÔôDTÂÀ¢Ò“°¢–b‡FW&Ö–æÄf–ÇW&T6öçG&7Ef–öÆF–öç2‡'F–Ä–FVçF—G”f–ÇW&R’æÆVæwF‚’F‡&÷ræWrW'&÷"‚tW‡Æ–6—B'F–Â&W7öç6RÖ–FVçF—G’f–ÇW&Rf—‡GW&Rv2æ÷B66WFVBr“°¢6öç7B&ö÷D66WFVE7FFRÒ²6æöæ–6Å÷7FFU÷&W&VC¢fÇ6RÂ&ö6W75ö6æF–FFU÷&W&VC¢fÇ6RÂWf–FVæ6Uö6æF–FFU÷&W&VC¢fÇ6RÂf–æÅ÷Æ–&ööµö66WFVC¢fÇ6RÓ°¢6öç7B6æöæ–6Äf–ÇW&RÒ°¢'Våö–C¢v6æöæ–6Åöf–ÆVE÷'VârÀ¢7FGW3¢vf–ÆVBrÀ¢7FvS¢vf–ÆVBrÀ¢f–ÇW&U÷7FvS¢v6æöæ–6Åöf7G2rÀ¢66WFVE÷7FFS¢&ö÷D66WFVE7FFRÀ¢W'&÷#¢tÖöFVÄ6öæf–wW&F–öäW'&÷#¢Ö—76–æuö7&VFVçF–ÂrÀ¢WfVçG3¢°¢°¢WfVçEö–C¢vWgEö6æöæ–6Åöf–ÆVBrÂ÷&F–æÃ¢Â7&VFVEöC¢s##bÓ‚ÓC££¢rÀ¢7FvS¢wVæFW'7FæBrÂÆ&VÃ¢t6æöæ–6Â6Æ–Ò7FFRrÂvVçC¢twV&FVB6æöæ–6Âf7G2vVçBrÀ¢vVçEö–C¢v6æöæ–6Åöf7G2rÂ7F÷%÷G—S¢væVÖ÷G&öåövVçBrÂ7FGW3¢vf–ÆVBrÀ¢†VFÆ–æS¢t6æöæ–6Âf7G2vW&Ræ÷B66WFVBrÂFWF–Ã¢uF†R&÷VæFVB&÷f–FW"6ÆÂf–ÆVBÆö6Â–çf&–çC²æòf–æÂÆ–&öö²v266WFVBârÀ¢–×ÆVÖVçFF–öã¢v‡–'&–EöwV&FVEö÷Vç&÷WFW%ö6æöæ–6Æ—¦W"rÂÖöFVÃ¢$UTU5DTEôäTÔõE$ôåôÔôDTÂÀ¢÷&6†W7G&F÷#¢v66WF‚ÖÆævw&‚Ö÷&6†W7G&F÷"óRã"rÂ6†&VEö6öçFW‡C¢v6Æ–ÒÖ6öçFW‡C¦6æöæ–6Åöf–ÆVE÷'VârÀ¢fÆ–FF÷#¢wVæFW'7FæB×fÆ–FF÷"óRã"rÂ&ö×E÷fW'6–öã¢wVæFW'7FæBóRã"rÂ&V6V—E÷G—S¢vvVçEöf–ÆVBrÀ¢f–ÇW&U÷66÷S¢w&ö÷Eö6æöæ–6Åöf7G2rÂ&ö÷EövVçC¢G'VRÂ66WFæ6U÷66÷S¢w&U÷&Wf–WuöÖöFVÅö÷WGWBrÀ¢–çWEö'F–f7C¢vö'6W'f&ÆUö6Æ–Õ÷6¶vRrÂ–çWEö'F–f7Eö†6ƒ¢GFô†6‚‡²&÷VæFVC¢v6æöæ–6ÂÖ–çWBrÒ’À¢&÷f–FW#¢v÷Vç&÷WFW"rÂ&WVW7FVEöÖöFVÃ¢$UTU5DTEôäTÔõE$ôåôÔôDTÂÂ6ÆÅö6÷VçC¢À¢÷&6†W7G&F–öåö–C¢v÷&6†W7G&F–öåö6æöæ–6Åöf–ÇW&RrÂ6ÆÅö–C¢v6ÆÅö6æöæ–6Åöf–ÇW&RrÀ¢&VçEö6ÆÅö–C¢çVÆÂÂFVÆVvF–öåö–C¢çVÆÂÂ&W7öç6Uö–C¢çVÆÂÂ&W7öç6UöÖöFVÃ¢çVÆÂÀ¢W7G&VÕ÷&÷f–FW#¢çVÆÂÂW6vU÷6÷W&6S¢çVÆÂÂf–æ—6…÷&V6öã¢çVÆÂÀ¢÷WF6öÖS¢v&Æö6¶VEöÖ—76–æuö7&VFVçF–ÂrÂW'&÷%÷G—S¢tÖöFVÄ6öæf–wW&F–öäW'&÷"rÂW'&÷%ö–çf&–çC¢vÖ—76–æuö7&VFVçF–ÂrÀ¢†æFöfeög&öÓ¢vö'6W'f&ÆUö6Æ–Õ÷6¶vRrÂ†æFöfe÷Fó¢vf–ÇW&Uö&÷VæF'’rÂW‡FW&æÅ÷G&6–æs¢fÇ6RÀ¢ÒÀ¢°¢WfVçEö–C¢vWgEö6æöæ–6Å÷FW&Ö–æÂrÂ÷&F–æÃ¢"Â7&VFVEöC¢s##bÓ‚ÓC££¢rÀ¢7FvS¢vf–ÆVBrÂÆ&VÃ¢tæÇ—6—27F÷VB6fVÇ’rÂvVçC¢tf–ÇW&R&÷VæF'’rÂ7FGW3¢vf–ÆVBrÀ¢†VFÆ–æS¢tæòf–æÂÆ–&öö²v266WFVBrÂFWF–Ã¢u'F–Â6æF–FFR'F–f7G2Ö’&VÖ–âf—6–&ÆRf÷"VF—BÂ'WBF†RFW&Ö–æÂ66WFæ6R&÷VæF'’f–ÆVB6Æ÷6VBârÀ¢–×ÆVÖVçFF–öã¢vFWFW&Ö–æ—7F–2rÂÖöFVÃ¢çVÆÂÂ7F÷%÷G—S¢vFWFW&Ö–æ—7F–5övFRrÂf–ÇW&U÷7FvS¢v6æöæ–6Åöf7G2rÀ¢f–ÇW&Uö–çf&–çC¢vÖ—76–æuö7&VFVçF–ÂrÂ66WFVE÷7FFS¢&ö÷D66WFVE7FFRÂfÆ–FF÷#¢vf–ÂÖ6Æ÷6VBóRã"rÂ&ö×E÷fW'6–öã¢çVÆÂÀ¢ÒÀ¢ÒÀ¢Ó°¢6öç7B6æöæ–6Äf–ÇW&T—77VW2ÒFW&Ö–æÄf–ÇW&T6öçG&7Ef–öÆF–öç2†6æöæ–6Äf–ÇW&R“°¢–b†6æöæ–6Äf–ÇW&T—77VW2æÆVæwF‚’F‡&÷ræWrW'&÷"†6æöæ–6Â&ö÷BÖf–ÇW&Rf—‡GW&Rf–ÆVC¢G´¥4ôâç7G&–æv–g’†6æöæ–6Äf–ÇW&T—77VW2—Ö“°¢6öç7B6æöæ–6Ä–çfÆ–E&÷fVææ6Tf–ÇW&RÒ7G'V7GW&VD6ÆöæR†6æöæ–6Äf–ÇW&R“°¢6æöæ–6Ä–çfÆ–E&÷fVææ6Tf–ÇW&RæW'&÷"ÒtÖöFVÅ&W7öç6TW'&÷#¢–çfÆ–E÷&÷fVææ6Rs°¢6öç7B6æöæ–6Ä–çfÆ–E&V6V—BÒ6æöæ–6Ä–çfÆ–E&÷fVææ6Tf–ÇW&RæWfVçG2æf–æB†—FVÒÓâ—FVÒç&V6V—E÷G—RÓÓÒvvVçEöf–ÆVBr“°¢ö&¦V7Bæ76–vâ†6æöæ–6Ä–çfÆ–E&V6V—BÂ°¢6ÆÅö6÷VçC¢À¢÷WF6öÖS¢vf–ÆVBrÀ¢W'&÷%÷G—S¢tÖöFVÅ&W7öç6TW'&÷"rÀ¢W'&÷%ö–çf&–çC¢v–çfÆ–E÷&÷fVææ6RrÀ¢&W7öç6Uö–C¢vvVâÖ6æöæ–6ÂÖ–çfÆ–BÖÖöFVÂrÀ¢&W7öç6UöÖöFVÃ¢çVÆÂÀ¢W7G&VÕ÷&÷f–FW#¢tFVW–æg&rÀ¢W6vU÷6÷W&6S¢w&W7öç6RrÀ¢f–æ—6…÷&V6öã¢w7F÷rÀ¢–çfÆ–E÷&÷fVææ6Uöf–VÆC¢w&W7öç6UöÖöFVÂrÀ¢–çfÆ–E÷&÷fVææ6U÷fÇVUö†6ƒ¢s‚rç&WVBƒcB’À¢Ò“°¢6öç7B6æöæ–6Ä–çfÆ–EFW&Ö–æÂÒ6æöæ–6Ä–çfÆ–E&÷fVææ6Tf–ÇW&RæWfVçG2æf–æB†—FVÒÓâ—FVÒç7FvRÓÓÒvf–ÆVBr“°¢6æöæ–6Ä–çfÆ–EFW&Ö–æÂæf–ÇW&Uö–çf&–çBÒv–çfÆ–E÷&÷fVææ6Rs°¢6öç7B6æöæ–6Ä–çfÆ–D—77VW2ÒFW&Ö–æÄf–ÇW&T6öçG&7Ef–öÆF–öç2†6æöæ–6Ä–çfÆ–E&÷fVææ6Tf–ÇW&R“°¢–b†6æöæ–6Ä–çfÆ–D—77VW2æÆVæwF‚’F‡&÷ræWrW'&÷"†6æöæ–6Â–çfÆ–B×&÷fVææ6Rf—‡GW&Rf–ÆVC¢G´¥4ôâç7G&–æv–g’†6æöæ–6Ä–çfÆ–D—77VW2—Ö“°¢6öç7B6Æ–Ô&V&–æu&÷fVææ6TÆVFvW"Ò7G'V7GW&VD6ÆöæR†6öÆDÆVFvW"“°¢6Æ–Ô&V&–æu&÷fVææ6TÆVFvW"æ—FV×5³Òç&W7öç6Uö–BÒwFVæçBÖ6Æ–ÒÖ–FVçF—G’s°¢–b‚6æ—F—¦VDÆVFvW%f–öÆF–öç2†6Æ–Ô&V&–æu&÷fVææ6TÆVFvW"’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚vW†7B&÷f–FW"×&÷fVææ6R6æ—F—¦W"r’’’F‡&÷ræWrW'&÷"‚t6Æ–ÒÖ&V&–ærÆVFvW"&÷fVææ6Rf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7B&÷VæFVD–çfÆ–E&÷fVææ6TÆVFvW"Ò7G'V7GW&VD6ÆöæR†6öÆDÆVFvW"“°¢ö&¦V7Bæ76–vâ†&÷VæFVD–çfÆ–E&÷fVææ6TÆVFvW"æ—FV×5³ÒÂ°¢÷WF6öÖS¢vf–ÆVBrÀ¢W'&÷%ö–çf&–çC¢v–çfÆ–E÷&÷fVææ6RrÀ¢–çfÆ–E÷&÷fVææ6Uöf–VÆC¢w&W7öç6UöÖöFVÂrÀ¢–çfÆ–E÷&÷fVææ6U÷fÇVUö†6ƒ¢s’rç&WVBƒcB’À¢Ò“°¢FVÆWFR&÷VæFVD–çfÆ–E&÷fVææ6TÆVFvW"æ—FV×5³Òç&W7öç6UöÖöFVÃ°¢&÷VæFVD–çfÆ–E&÷fVææ6TÆVFvW"ç7VÖÖ'’ÒÆVFvW%7VÖÖ'’†&÷VæFVD–çfÆ–E&÷fVææ6TÆVFvW"æ—FV×2“°¢6öç7B&÷VæFVD–çfÆ–DÆVFvW$—77VW2Ò6æ—F—¦VDÆVFvW%f–öÆF–öç2†&÷VæFVD–çfÆ–E&÷fVææ6TÆVFvW"“°¢–b†&÷VæFVD–çfÆ–DÆVFvW$—77VW2æÆVæwF‚’F‡&÷ræWrW'&÷"†&÷VæFVB–çfÆ–B×&÷fVææ6RÆVFvW"f—‡GW&Rf–ÆVC¢G´¥4ôâç7G&–æv–g’†&÷VæFVD–çfÆ–DÆVFvW$—77VW2—Ö“°¢6öç7B&WF–æVD–çfÆ–E&÷fVææ6TÆVFvW"Ò7G'V7GW&VD6ÆöæR†&÷VæFVD–çfÆ–E&÷fVææ6TÆVFvW"“°¢&WF–æVD–çfÆ–E&÷fVææ6TÆVFvW"æ—FV×5³Òç&W7öç6UöÖöFVÂÒvf÷&V–vâöÖöFVÂs°¢–b‚6æ—F—¦VDÆVFvW%f–öÆF–öç2‡&WF–æVD–çfÆ–E&÷fVææ6TÆVFvW"’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚w&WF–æVBF†R&V¦V7FVBfÇVRr’’’F‡&÷ræWrW'&÷"‚u&WF–æVB–çfÆ–B×&÷fVææ6RfÇVRf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7Bf÷&V–vä–çfÆ–E&÷fVææ6Tf–VÆDÆVFvW"Ò7G'V7GW&VD6ÆöæR†&÷VæFVD–çfÆ–E&÷fVææ6TÆVFvW"“°¢f÷&V–vä–çfÆ–E&÷fVææ6Tf–VÆDÆVFvW"æ—FV×5³Òæ–çfÆ–E÷&÷fVææ6Uöf–VÆBÒw&÷f–FW%÷–ÆöBs°¢–b‚6æ—F—¦VDÆVFvW%f–öÆF–öç2†f÷&V–vä–çfÆ–E&÷fVææ6Tf–VÆDÆVFvW"’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚wVæ&÷VæFVBr’’’F‡&÷ræWrW'&÷"‚tf÷&V–vâ–çfÆ–B×&÷fVææ6Rf–VÆBf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7B&÷VæFVEW7G&VÕ&V¦V7F–öäÆVFvW"Ò7G'V7GW&VD6ÆöæR†6öÆDÆVFvW"“°¢6öç7B&÷VæFVEW7G&VÔÆVFvW$—FVÒÒ&÷VæFVEW7G&VÕ&V¦V7F–öäÆVFvW"æ—FV×5³Ó°¢ö&¦V7Bæ76–vâ†&÷VæFVEW7G&VÔÆVFvW$—FVÒÂ°¢÷WF6öÖS¢vf–ÆVBrÀ¢W'&÷%ö–çf&–çC¢w&÷f–FW%÷W7G&VÕ÷&V¦V7F–öârÀ¢&÷f–FW%öW'&÷%ö6öFS¢C#’À¢&÷f–FW%ö&÷VæF'“¢U…T5DTEõ$õd”DU%ô$õTäD%’À¢W‡V7FVE÷W7G&VÕ÷&÷f–FW#¢U…T5DTEõU5E$TÕõ$õd”DU"À¢&W7öç6Uö–C¢vvVâÓsƒcCƒ3cRÔdddddddddddddddddddbrÀ¢7GVÅö6÷7E÷W6C¢çVÆÂÀ¢Ò“°¢f÷"†6öç7Bf–VÆBöb²w&ö×E÷Fö¶Vç2rÂv6ö×ÆWF–öå÷Fö¶Vç2rÂwF÷FÅ÷Fö¶Vç2rÂw&W7öç6UöÖöFVÂrÂwW7G&VÕ÷&÷f–FW"rÂwW6vU÷6÷W&6RrÂvf–æ—6…÷&V6öâuÒ’FVÆWFR&÷VæFVEW7G&VÔÆVFvW$—FVÕ¶f–VÆEÓ°¢&÷VæFVEW7G&VÕ&V¦V7F–öäÆVFvW"ç7VÖÖ'’ÒÆVFvW%7VÖÖ'’†&÷VæFVEW7G&VÕ&V¦V7F–öäÆVFvW"æ—FV×2“°¢6öç7B&÷VæFVEW7G&VÔÆVFvW$—77VW2Ò6æ—F—¦VDÆVFvW%f–öÆF–öç2†&÷VæFVEW7G&VÕ&V¦V7F–öäÆVFvW"“°¢–b†&÷VæFVEW7G&VÔÆVFvW$—77VW2æÆVæwF‚’F‡&÷ræWrW'&÷"†&÷VæFVBW7G&VÒ×&V¦V7F–öâÆVFvW"f—‡GW&Rf–ÆVC¢G´¥4ôâç7G&–æv–g’†&÷VæFVEW7G&VÔÆVFvW$—77VW2—Ö“°¢6öç7B&÷f–FW$6öæ7W'&Væ7”ÆVFvW"Ò7G'V7GW&VD6ÆöæR†6öÆDÆVFvW"“°¢6öç7B&÷f–FW$6öæ7W'&Væ7”ÆVFvW$—FVÒÒ&÷f–FW$6öæ7W'&Væ7”ÆVFvW"æ—FV×5³Ó°¢ö&¦V7Bæ76–vâ‡&÷f–FW$6öæ7W'&Væ7”ÆVFvW$—FVÒÂ°¢6ÆÅö6÷VçC¢À¢7GVÅö6÷7E÷W6C¢çVÆÂÀ¢÷WF6öÖS¢v&Æö6¶VE÷&÷f–FW%ö6öæ7W'&Væ7’rÀ¢W'&÷%÷G—S¢t÷Vå&÷WFW%6VæDFÖ—76–öåF–ÖV÷WDW'&÷"rÀ¢W'&÷%ö–çf&–çC¢w&÷f–FW%ö6öæ7W'&Væ7•÷F–ÖV÷WBrÀ¢Ò“°¢f÷"†6öç7Bf–VÆBöb¤U$õô4ÄÅõ$õd”DU%õ$U5TÅEôd”TÄE2’FVÆWFR&÷f–FW$6öæ7W'&Væ7”ÆVFvW$—FVÕ¶f–VÆEÓ°¢&÷f–FW$6öæ7W'&Væ7”ÆVFvW"ç7VÖÖ'’ÒÆVFvW%7VÖÖ'’‡&÷f–FW$6öæ7W'&Væ7”ÆVFvW"æ—FV×2“°¢6öç7B&÷f–FW$6öæ7W'&Væ7”ÆVFvW$—77VW2Ò6æ—F—¦VDÆVFvW%f–öÆF–öç2‡&÷f–FW$6öæ7W'&Væ7”ÆVFvW"“°¢–b‡&÷f–FW$6öæ7W'&Væ7”ÆVFvW$—77VW2æÆVæwF€¢ÇÂ&÷f–FW$6öæ7W'&Væ7”ÆVFvW"ç7VÖÖ'’ææWGv÷&µö6ÆÇ2ÓÒ6öÆDÆVFvW"ç7VÖÖ'’ææWGv÷&µö6ÆÇ2Ò¢ÇÂ&÷f–FW$6öæ7W'&Væ7”ÆVFvW"ç7VÖÖ'’çVæ¶æ÷våö6÷7Eö6ÆÅö6÷VçBÓÒ6öÆDÆVFvW"ç7VÖÖ'’çVæ¶æ÷våö6÷7Eö6ÆÅö6÷VçB’F‡&÷ræWrW'&÷"†&÷f–FW"Ö6öæ7W'&Væ7’¦W&òÖ6ÆÂÆVFvW"f—‡GW&Rf–ÆVC¢G´¥4ôâç7G&–æv–g’‡&÷f–FW$6öæ7W'&Væ7”ÆVFvW$—77VW2—Ö“°¢6öç7Bf÷&vVE&÷f–FW$6öæ7W'&Væ7”ÆVFvW$6ÆÂÒ7G'V7GW&VD6ÆöæR‡&÷f–FW$6öæ7W'&Væ7”ÆVFvW"“°¢f÷&vVE&÷f–FW$6öæ7W'&Væ7”ÆVFvW$6ÆÂæ—FV×5³Òæ6ÆÅö6÷VçBÒ°¢f÷&vVE&÷f–FW$6öæ7W'&Væ7”ÆVFvW$6ÆÂç7VÖÖ'’ÒÆVFvW%7VÖÖ'’†f÷&vVE&÷f–FW$6öæ7W'&Væ7”ÆVFvW$6ÆÂæ—FV×2“°¢–b‚6æ—F—¦VDÆVFvW%f–öÆF–öç2†f÷&vVE&÷f–FW$6öæ7W'&Væ7”ÆVFvW$6ÆÂ’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚w¦W&òÖ6ÆÂr’’’F‡&÷ræWrW'&÷"‚u&÷f–FW"Ö6öæ7W'&Væ7’f÷&vVBÖ6ÆÂÆVFvW"f—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7Bf÷&vVE&÷f–FW$6öæ7W'&Væ7”ÆVFvW$6÷7BÒ7G'V7GW&VD6ÆöæR‡&÷f–FW$6öæ7W'&Væ7”ÆVFvW"“°¢f÷&vVE&÷f–FW$6öæ7W'&Væ7”ÆVFvW$6÷7Bæ—FV×5³Òæ7GVÅö6÷7E÷W6BÒã°¢f÷&vVE&÷f–FW$6öæ7W'&Væ7”ÆVFvW$6÷7Bç7VÖÖ'’ÒÆVFvW%7VÖÖ'’†f÷&vVE&÷f–FW$6öæ7W'&Væ7”ÆVFvW$6÷7Bæ—FV×2“°¢–b‚6æ—F—¦VDÆVFvW%f–öÆF–öç2†f÷&vVE&÷f–FW$6öæ7W'&Væ7”ÆVFvW$6÷7B’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚w¦W&òÖ6ÆÂr’’’F‡&÷ræWrW'&÷"‚u&÷f–FW"Ö6öæ7W'&Væ7’f÷&vVBÖ6÷7BÆVFvW"f—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7Bf÷&vVE&÷f–FW$6öæ7W'&Væ7”ÆVFvW$–FVçF—G’Ò7G'V7GW&VD6ÆöæR‡&÷f–FW$6öæ7W'&Væ7”ÆVFvW"“°¢f÷&vVE&÷f–FW$6öæ7W'&Væ7”ÆVFvW$–FVçF—G’æ—FV×5³Òç&W7öç6Uö–BÒvvVâÓsƒcCƒ3S’Ö‡•—F‡csfóe…‡tÇ¦Âs°¢–b‚6æ—F—¦VDÆVFvW%f–öÆF–öç2†f÷&vVE&÷f–FW$6öæ7W'&Væ7”ÆVFvW$–FVçF—G’’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚w¦W&òÖ6ÆÂr’’’F‡&÷ræWrW'&÷"‚u&÷f–FW"Ö6öæ7W'&Væ7’f÷&vVB×&W7öç6RÆVFvW"f—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7Bf÷&vVEW7G&VÔ&÷VæF'”ÆVFvW"Ò7G'V7GW&VD6ÆöæR†&÷VæFVEW7G&VÕ&V¦V7F–öäÆVFvW"“°¢f÷&vVEW7G&VÔ&÷VæF'”ÆVFvW"æ—FV×5³Òç&÷f–FW%ö&÷VæF'’Òt÷Vå&÷WFW"s°¢–b‚6æ—F—¦VDÆVFvW%f–öÆF–öç2†f÷&vVEW7G&VÔ&÷VæF'”ÆVFvW"’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚v&÷VæF'’GG&–'WF–öâ—2f÷&vVBr’’’F‡&÷ræWrW'&÷"‚tf÷&vVBW7G&VÒ×&V¦V7F–öâÆVFvW"GG&–'WF–öâf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BÖ—76–æuW7G&VÔ&÷VæF'”ÆVFvW"Ò7G'V7GW&VD6ÆöæR†&÷VæFVEW7G&VÕ&V¦V7F–öäÆVFvW"“°¢FVÆWFRÖ—76–æuW7G&VÔ&÷VæF'”ÆVFvW"æ—FV×5³ÒæW‡V7FVE÷W7G&VÕ÷&÷f–FW#°¢–b‚6æ—F—¦VDÆVFvW%f–öÆF–öç2†Ö—76–æuW7G&VÔ&÷VæF'”ÆVFvW"’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚vGG&–'WF–öâ—"—2–æ6ö×ÆWFRr’’’F‡&÷ræWrW'&÷"‚tÖ—76–ærW7G&VÒ×&V¦V7F–öâÆVFvW"GG&–'WF–öâf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7B÷WDöe66÷UW7G&VÔ&÷VæF'”ÆVFvW"Ò7G'V7GW&VD6ÆöæR†6öÆDÆVFvW"“°¢ö&¦V7Bæ76–vâ†÷WDöe66÷UW7G&VÔ&÷VæF'”ÆVFvW"æ—FV×5³ÒÂ°¢&÷f–FW%ö&÷VæF'“¢U…T5DTEõ$õd”DU%ô$õTäD%’À¢W‡V7FVE÷W7G&VÕ÷&÷f–FW#¢U…T5DTEõU5E$TÕõ$õd”DU"À¢Ò“°¢–b‚6æ—F—¦VDÆVFvW%f–öÆF–öç2†÷WDöe66÷UW7G&VÔ&÷VæF'”ÆVFvW"’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚v&÷VæF'’GG&–'WF–öâ—2÷WBöb66÷Rr’’’F‡&÷ræWrW'&÷"‚t÷WBÖöb×66÷RW7G&VÒ×&V¦V7F–öâÆVFvW"GG&–'WF–öâf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7B6Æ–Ô&V&–æuW7G&VÔ–DÆVFvW"Ò7G'V7GW&VD6ÆöæR†6öÆDÆVFvW"“°¢ö&¦V7Bæ76–vâ†6Æ–Ô&V&–æuW7G&VÔ–DÆVFvW"æ—FV×5³ÒÂ°¢÷WF6öÖS¢vf–ÆVBrÀ¢W'&÷%ö–çf&–çC¢w&÷f–FW%÷W7G&VÕ÷&V¦V7F–öârÀ¢&÷f–FW%öW'&÷%ö6öFS¢CÀ¢&÷f–FW%ö&÷VæF'“¢U…T5DTEõ$õd”DU%ô$õTäD%’À¢W‡V7FVE÷W7G&VÕ÷&÷f–FW#¢U…T5DTEõU5E$TÕõ$õd”DU"À¢&W7öç6Uö–C¢tDTbÓ#rÔSÔDTÔòrÀ¢Ò“°¢6Æ–Ô&V&–æuW7G&VÔ–DÆVFvW"ç7VÖÖ'’ÒÆVFvW%7VÖÖ'’†6Æ–Ô&V&–æuW7G&VÔ–DÆVFvW"æ—FV×2“°¢–b‚6æ—F—¦VDÆVFvW%f–öÆF–öç2†6Æ–Ô&V&–æuW7G&VÔ–DÆVFvW"’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚vW†7B÷Vå&÷WFW"vVæW&F–öâ”Br’’’F‡&÷ræWrW'&÷"‚t6Æ–ÒÖ&V&–ærW7G&VÒÆVFvW"&W7öç6RÔ”Bf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BÖ–æ÷&—G•'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢Ö–æ÷&—G•'Vâç&W7VÇBæVF—BævVçEö÷&6†W7G&F–öâævVçG5³Òç&V¦V7FVEö6÷VçBÒ#°¢Ö–æ÷&—G•'Vâç&W7VÇBæVF—BævVçEö÷&6†W7G&F–öâævVçG5³ÒæFWFW&Ö–æ—7F–5öfÆÆ&6µöÆ–VBÒG'VS°¢Ö–æ÷&—G•'Vâç&W7VÇBæVF—BævVçEö÷&6†W7G&F–öâæwV&FVEöfÆÆ&6µö6÷VçBÒ°¢–b‚÷&6†W7G&F–öä6öçG&7Ef–öÆF–öç2†Ö–æ÷&—G•'VâÂv6öÆBr’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚w7G&–7BÖ¦÷&—G’r’’’F‡&÷ræWrW'&÷"‚t66WFVBÖÖ–æ÷&—G’æVvF—fRf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7B–çfÆ–E&ö¦V7F–öå'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢6öç7B–çfÆ–E&ö¦V7F–öävVçBÒ÷&6†W7G&F–öäVF—B†–çfÆ–E&ö¦V7F–öå'Vâ’ævVçG2æf–æB†—FVÒÓâ—FVÒævVçEö–BÓÓÒv6æöæ–6Åöf7G2r“°¢–çfÆ–E&ö¦V7F–öävVçBç6÷W&6U÷&VfW&Væ6U÷&ö¦V7F–öåöf7Eö–G2Ò²væ÷Eöåö66WFVEöf7BuÓ°¢–çfÆ–E&ö¦V7F–öävVçBç6÷W&6U÷&VfW&Væ6U÷&ö¦V7F–öåö6÷VçBÒ°¢–b‚÷&6†W7G&F–öä6öçG&7Ef–öÆF–öç2†–çfÆ–E&ö¦V7F–öå'VâÂv6öÆBr’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚w6÷W&6R&ö¦V7F–öâr’’’F‡&÷ræWrW'&÷"‚t–çfÆ–B6æöæ–6Â6÷W&6R×&ö¦V7F–öâF—66Æ÷7W&Rv2æ÷B&V¦V7FVBr“°¢6öç7Bw&öæt†6…'VâÒ7G'V7GW&VD6ÆöæR†6öÆE'Vâ“°¢w&öæt†6…'Vâç&W7VÇBæVF—BævVçEö÷&6†W7G&F–öâæFWFW&Ö–æ—7F–5övFW5³Òæ÷WGWEö'F–f7Eö†6‚ÒGFô†6‚‡²w&öæs¢G'VRÒ“°¢–b‚÷&6†W7G&F–öä6öçG&7Ef–öÆF–öç2‡w&öæt†6…'VâÂv6öÆBr’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚vf–æÂEDòr’’’F‡&÷ræWrW'&÷"‚uw&öærÖ'F–f7BÖ†6‚æVvF—fRf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BGWÆ–6FU&W7öç6TÆVFvW"Ò7G'V7GW&VD6ÆöæR†6öÆDÆVFvW"“°¢GWÆ–6FU&W7öç6TÆVFvW"æ—FV×5³Òç&W7öç6Uö–BÒGWÆ–6FU&W7öç6TÆVFvW"æ—FV×5³Òç&W7öç6Uö–C°¢–b‚6öÆDÆVFvW$6öçG&7Ef–öÆF–öç2†÷&6†W7G&F–öäVF—B†6öÆE'Vâ’ÂGWÆ–6FU&W7öç6TÆVFvW"’ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚w&W7öç6R”G2r’’’F‡&÷ræWrW'&÷"‚tGWÆ–6FR×&W7öç6RæVvF—fRf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7B'&ö¶VäÆ–æVvTÆVFvW"Ò7G'V7GW&VD6ÆöæR†6öÖ&–æVDÆVFvW"“°¢'&ö¶VäÆ–æVvTÆVFvW"æ—FV×2æf–æB†—FVÒÓâ—FVÒæ6ÆÅö–BÓÓÒ÷&6†W7G&F–öäVF—B‡v&Õ'Vâ’ævVçG5³Òæ6ÆÅö–B’æ÷&–v–åö6ÆÅö–BÒww&öæuö÷&–v–âs°¢–b‚v&ÔÆ–æVvT6öçG&7Ef–öÆF–öç2†÷&6†W7G&F–öäVF—B†6öÆE'Vâ’Â÷&6†W7G&F–öäVF—B‡v&Õ'Vâ’Â'&ö¶VäÆ–æVvTÆVFvW"’æ—77VW2ç6öÖR†—FVÒÓâ—FVÒæ–æ6ÇVFW2‚wv&Ò÷&–v–âr’’’F‡&÷ræWrW'&÷"‚t'&ö¶VâÖÆ–æVvRæVvF—fRf—‡GW&Rv2æ÷B&V¦V7FVBr“°¢6öç7BVç6fT†UF&vWBÒçc#ÖÆV&æ–ær×&÷u¶FFÖ7W7FöÖW#Ò"G²v6Æ–ÒÖ&V&–ærÒrç&WVBƒs—Ò%Òâ7æ°¢6öç7B†TF–væ÷7F–72Ò†Uf–öÆF–öäF–væ÷7F–72…·²–C¢v6öÆ÷"Ö6öçG&7BrÂ–×7C¢w6W&–÷W2rÂ†VÇ¢tVÆVÖVçG2×W7BÖVWBÖ–æ–×VÒ6öÆ÷"6öçG&7B&F–òF‡&W6†öÆG2rÂæöFW3¢·²F&vWC¢·Vç6fT†UF&vWEÒÂ‡FÖÃ¢sÇ7ãæ6Æ–ÒÖ&V&–ærFW‡B×W7Bæ÷B&RÆövvVCÂ÷7ãârÂf–ÇW&U7VÖÖ'“¢t6Æ–ÒÖ&V&–ærf–ÇW&R&÷6R×W7Bæ÷B&RÆövvVBrÂç“¢·²–C¢v6öÆ÷"Ö6öçG&7BrÂ–×7C¢w6W&–÷W2rÂÖW76vS¢t6Æ–ÒÖ&V&–ær6†V6²&÷6R×W7Bæ÷B&RÆövvVBrÂFF¢²ft6öÆ÷#¢r3CvSbrÂ&t6öÆ÷#¢r6VFc†c2rÂ6öçG&7E&F–ó¢BãCBÂ&s¢v×W7Bæ÷B&R&WF–æVBrÒÕÒÂÆÃ¢µÒÂæöæS¢µÒÕÒÕÒ“°¢–b††TF–væ÷7F–72æÆVæwF‚ÓÒÇÂ†TF–væ÷7F–75³ÒææöFUö6÷VçBÓÒÇÂ†TF–væ÷7F–75³ÒæöÖ—GFVEöæöFUö6÷VçBÓÒÇÂõç6†#Sc¥³Ó–Öe×³cGÒBòçFW7B††TF–væ÷7F–75³ÒææöFW5³ÒçF&vWE³Ò’ÇÂ¥4ôâç7G&–æv–g’††TF–væ÷7F–72’æ–æ6ÇVFW2‚v6Æ–ÒÖ&V&–ærr’ÇÂ†TF–væ÷7F–75³ÒææöFW5³Òæ6†V6·5³ÒæFFæ6öçG&7E&F–òÓÒBãCBÇÂw&rr–â†TF–væ÷7F–75³ÒææöFW5³Òæ6†V6·5³ÒæFFÇÂv‡FÖÂr–â†TF–væ÷7F–75³ÒææöFW5³ÒÇÂvÖW76vRr–â†TF–væ÷7F–75³ÒææöFW5³Òæ6†V6·5³ÒÇÂvf–ÇW&U÷7VÖÖ'’r–â†TF–væ÷7F–75³ÒææöFW5³Ò’F‡&÷ræWrW'&÷"†&÷VæFVB†RF–væ÷7F–72f—‡GW&Rf–ÆVC¢G´¥4ôâç7G&–æv–g’††TF–væ÷7F–72—Ö“°¢&WGW&â²7FGW3¢w76VBrÂf—‡GW&W3¢²v&÷VæFVEö†UöæöFUöF–væ÷7F–72rÂw6W76–öå÷66÷VE÷'Vå÷&VEö6öÆW66–ærrÂvÖVÖ÷'•÷&WW6U÷&VæFW&W%öFWFW&Ö–æ—6ÒrÂw7F&ÆU÷FW‡Eöw&÷VæF–æuöf7E÷6VÆV7F–öârÂvæ÷&ÖÆ—¦VE÷FW‡Eöw&÷VæF–ærrÂw—F†öåö6ö×F–&ÆUöGFõö†6‚rÂvfÆöEö†6…öF—fW&vVæ6Uöf–Åö6Æ÷6VBrÂvf–Åö6Æ÷6VEöÖöFVÅö6öçG&–'WF–öåö&FvW2rÂvÖ—†VEöf–VÆEö6öçG&–'WF–öåö&FvRrÂw÷7EöÖVÖ÷'•ö6öçG&–'WF–öå÷7W&W76–öârÂw&V6—&ö6ÅöWf–FVæ6U÷G'WF…öæE÷F×W"rÂw7G'V7GW&VEöÆVvÅ÷G'WF…öæE÷F×W"rÂwf—7VÅ÷&VfW&Væ6U÷G'WF…öæE÷F×W"rÂw&V6VFVçE÷&æ¶–æu÷G'WF…öæE÷F×W"rÂvÖVÖ÷'•öÆ–6F–öå÷G'WF…öæE÷F×W"rÂvÖVÖ÷'•ö&÷VæF'•öWfVçEö7&÷75ö&–æF–ærrÂvF÷&ÖçEöÖVÖ÷'•÷&WG&–WfÅöæ÷EöÆ–6F–öârÂw&öGV7F–öåö÷Væ–æuö6öçFW‡BrÂvÆVv7•÷&öGV7F–öåö÷Væ–æu÷&V¦V7F–öârÂw&VÖGW&UöæVÖ÷G&öå÷Æå÷&V¦V7F–öârÂv6öÆEöæWGv÷&²rÂw&ÆÆVÅ÷6÷W&6Uö'F–f7Eö†6…÷&V¦V7F–öârÂw&ÆÆVÅ÷&ö6W75ö'F–f7Eö†6…÷&V¦V7F–öârÂw&ö6W75öf–VÆEöÖVÖ&W'6†—÷&V¦V7F–öârÂw&ö6W75öf–VÆEöGG&–'WF–öå÷&V¦V7F–öârÂw&ö6W75ö–æ†W&—FVEöf–VÆE÷&V¦V7F–öå÷v—F…÷&V6ö×WFVEö†6†W2rÂvWf–FVæ6Uöf–VÆEöÖVÖ&W'6†—÷&V¦V7F–öârÂvWf–FVæ6Uöf–VÆEöGG&–'WF–öå÷&V¦V7F–öârÂvWf–FVæ6U÷6÷W&6U÷&Ve÷&V¦V7F–öå÷v—F…÷&V6ö×WFVEö†6†W2rÂvf–æÅöf–VÆEöÖVÖ&W'6†—÷&V¦V7F–öârÂvf–æÅö7W'&VçEöæöFUö&–æF–æu÷&V¦V7F–öârÂvf–æÅöæW‡Eö7F–öåö&–æF–æu÷&V¦V7F–öârÂvf–æÅ÷7W÷'F–æuöf7G5ö&–æF–æu÷&V¦V7F–öârÂvf–æÅ÷W7G&VÕö6öçG&–'WF–öç5ö&–æF–æu÷&V¦V7F–öârÂvf–æÅöVF—Eö6†V6·5ö&–æF–æu÷&V¦V7F–öârÂvæöæ6öçG&öÆÆ–æu÷7W÷'F–æuöf7E÷6÷W&6Uö&–æF–ærrÂv6öÆE÷W7G&VÕ÷&÷f–FW%÷öÆ–7•÷&V¦V7F–öârÂwv&Õ÷W7G&VÕ÷&÷f–FW%÷öÆ–7•÷&V¦V7F–öârÂvvVçE÷&öÆUöÆ&VÅ÷&V¦V7F–öârÂvvFU÷&öÆUöÆ&VÅ÷&V¦V7F–öârÂw&uöÆ–5÷&W7öç6UöÖöFVÂrÂw&W7öç6UöÖöFVÅöæ÷&ÖÆ—¦F–öå÷&V¦V7F–öârÂvf÷&V–vå÷&W7öç6UöÖöFVÅ÷&V¦V7F–öârÂwv&ÕöÆ–æVvRrÂw&Wf–Wu÷G&ç6f÷&Õ÷G'WF‚rÂvFWFW&Ö–æ—7F–5÷&Wf–Wu÷G&ç6f÷&Õ÷G'WF‚rÂw&Wf–WuöÖöFVÅ÷&V66WFæ6U÷&V¦V7F–öârÂw6Vç6—F—fUöf–VÆE÷&V¦V7F–öârÂv–çFW&æÅ÷6VçF–æVÅ÷&V¦V7F–öârÂwF÷öÆöw•öWF†÷&—G•öÖ—6GG&–'WF–öå÷&V¦V7F–öârÂwF÷öÆöw•öFWVæFVæ7•÷&V¦V7F–öârÂvf–æÅ÷–ÆöEöVF—Eö&–æF–æu÷&V¦V7F–öârÂwFW&Ö–æÅöf–ÇW&U÷6VçF–æVÅ÷&V¦V7F–öârÂw6fU÷FW&Ö–æÅöF–væ÷7F–72rÂw6fUöf–ÇW&U÷&V6V—BrÂw&÷f–FW%ö6öæ7W'&Væ7•÷¦W&õö6ÆÅ÷&V6V—BrÂw&÷f–FW%ö6öæ7W'&Væ7•÷&V6V—Eö6ÆÅ÷&V¦V7F–öârÂw&÷f–FW%ö6öæ7W'&Væ7•÷&V6V—Eö–FVçF—G•÷&V¦V7F–öârÂw6fU÷W7G&VÕ÷&V¦V7F–öå÷&V6V—BrÂvf÷&vVE÷W7G&VÕ÷&V¦V7F–öå÷&V6V—EöGG&–'WF–öå÷&V¦V7F–öârÂvÖ—76–æu÷W7G&VÕ÷&V¦V7F–öå÷&V6V—EöGG&–'WF–öå÷&V¦V7F–öârÂv÷WEööe÷66÷U÷W7G&VÕ÷&V¦V7F–öå÷&V6V—EöGG&–'WF–öå÷&V¦V7F–öârÂwVæ&÷VæFVE÷W7G&VÕöW'&÷%ö6öFU÷&V¦V7F–öârÂvf–ÇW&U÷&V6V—EöÆÆ÷vÆ—7E÷&V¦V7F–öârÂvf–ÇW&U÷&V6V—EöÆ–æVvU÷&V¦V7F–öârÂv6†&vVEö÷fW''Våöf–ÇW&RrÂv†6†VEö–çfÆ–EöÖöFVÅ÷&÷fVææ6RrÂw&uöf÷&V–våöÖöFVÅ÷&V¦V7F–öârÂv7&VFVçF–Å÷&÷fVææ6U÷&V¦V7F–öârÂv6Æ–Õ÷FW‡E÷&÷fVææ6U÷&V¦V7F–öârÂw'F–Å÷&W7öç6Uö–FVçF—G•öf–ÇW&RrÂv6æöæ–6Å÷&ö÷Eöf–ÇW&RrÂv6æöæ–6Åö–çfÆ–E÷&÷fVææ6Uöf–ÇW&RrÂv6Æ–Õö&V&–æuöÆVFvW%÷&÷fVææ6U÷&V¦V7F–öârÂv&÷VæFVEö–çfÆ–E÷&÷fVææ6UöÆVFvW"rÂw&WF–æVEö–çfÆ–E÷&÷fVææ6U÷&V¦V7F–öârÂvf÷&V–våö–çfÆ–E÷&÷fVææ6Uöf–VÆE÷&V¦V7F–öârÂw6fU÷W7G&VÕ÷&V¦V7F–öåöÆVFvW"rÂw&÷f–FW%ö6öæ7W'&Væ7•÷¦W&õö6ÆÅöÆVFvW"rÂw&÷f–FW%ö6öæ7W'&Væ7•öÆVFvW%ö6ÆÅ÷&V¦V7F–öârÂw&÷f–FW%ö6öæ7W'&Væ7•öÆVFvW%ö6÷7E÷&V¦V7F–öârÂw&÷f–FW%ö6öæ7W'&Væ7•öÆVFvW%ö–FVçF—G•÷&V¦V7F–öârÂvf÷&vVE÷W7G&VÕ÷&V¦V7F–öåöÆVFvW%öGG&–'WF–öå÷&V¦V7F–öârÂvÖ—76–æu÷W7G&VÕ÷&V¦V7F–öåöÆVFvW%öGG&–'WF–öå÷&V¦V7F–öârÂv÷WEööe÷66÷U÷W7G&VÕ÷&V¦V7F–öåöÆVFvW%öGG&–'WF–öå÷&V¦V7F–öârÂv66WFVEöÖ–æ÷&—G•÷&V¦V7F–öârÂv–çfÆ–E÷6÷W&6U÷&ö¦V7F–öå÷&V¦V7F–öârÂww&öæuö'F–f7Eö†6…÷&V¦V7F–öârÂvGWÆ–6FU÷&W7öç6U÷&V¦V7F–öârÂv'&ö¶VåöÆ–æVvU÷&V¦V7F–öâuÒÂvVçG3¢$UT•$TEôäTÔõE$ôåôtTåEô”E2ÂvFW3¢$UT•$TEôDUDU$Ô”ä•5D”5ôtDUô”E2Ó°§Ð ¦ÆWB&W÷'C°¦–b‡&ö6W72æVçbä44UD…õô4ôåE$5Eõ4TÄeõDU5BÓÓÒsr’°¢6öç6öÆRæÆör„¥4ôâç7G&–æv–g’†v—B'Vä6öçG&7E6VÆeFW7B‚’ÂçVÆÂÂ"’“°§ÒVÇ6R°¢G'’°¢&W÷'BÒv—BW†V7WFR‚“°¢Ò6F6‚†W'&÷"’°¢&W÷'BÒ°¢7FGW3¢vf–ÆVBrÂ&VÆV6S¢$ôET5Eõ$TÄT4RÂ&VÆV6Uö–C¢$TÄT4Uô”BÂ6†V6¶VDC¢æWrFFR‚’çFô•4õ7G&–ær‚’Â&6UW&Ã¢$4RÂ•W&Ã¢’ÂFWÆ÷–ÖVçC¢FWÆ÷–ÖVçD–FVçF—G’À¢76VC¢6†V6·2æf–ÇFW"†—FVÒÓâ—FVÒç76VB’æÆVæwF‚Âf–ÆVC¢Â6†V6·2Âæ÷FW2Âf–ÇW&W2Â'Vä–G2À¢W'&÷#¢W'&÷"–ç7Fæ6VöbW'&÷"òW'&÷"ç7F6²¢7G&–ær†W'&÷"’À¢Ó°¢&ö6W72æW†—D6öFRÒ°¢Òf–æÆÇ’°¢v—Bg2æÖ¶F—"„õUBÂ²&V7W'6—fS¢G'VRÒ’æ6F6‚‚‚’ÓâçVÆÂ“°¢G'’°¢v—B&WF–äWf–FVæ6R‚“°¢Ò6F6‚†W'&÷"’°¢f–ÇW&W2æ6ÆVçWçW6‚†Wf–FVæ6R&WFVçF–öã¢G¶W'&÷'Ö“°¢Ð¢v—B6ÆVçW‚“°¢G'’°¢v—Bf–æÆ—¦TWf–FVæ6TÖæ–fW7B‚“°¢Ò6F6‚†W'&÷"’°¢f–ÇW&W2æ6ÆVçWçW6‚†Wf–FVæ6RÖæ–fW7C¢G¶W'&÷'Ö“°¢Ð¢–b†f–ÇW&W2æ6ÆVçWæÆVæwF‚’°¢&W÷'Bç7FGW2Òvf–ÆVBs°¢&W÷'Bæf–ÆVBÒÖF‚æÖ‚ƒÂ&W÷'Bæf–ÆVBÇÂ“°¢&W÷'BæW'&÷"ÒG·&W÷'BæW'&÷"ÇÂrwÕÆä6ÆVçWf–ÆVC¢G¶f–ÇW&W2æ6ÆVçWæ¦ö–â‚s²r—ÖçG&–Ò‚“°¢&ö6W72æW†—D6öFRÒ°¢Ð¢v—Bg2çw&—FTf–ÆR‡F‚æ¦ö–â„õUBÂw&W÷'Bæ§6öâr’ÂG´¥4ôâç7G&–æv–g’‡&W÷'BÂçVÆÂÂ"—ÕÆæ“°¢–b‡&W÷'Bç7FGW2ÓÓÒw76VBr’6öç6öÆRæÆör„¥4ôâç7G&–æv–g’‡&W÷'BÂçVÆÂÂ"’“°¢VÇ6R6öç6öÆRæW'&÷"‡&W÷'BæW'&÷"“°¢Ð§Ð
