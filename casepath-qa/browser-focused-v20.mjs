@@ -185,13 +185,13 @@ const EXPECTED_RUNTIME_ACCEPTANCE_CRITERIA = Object.freeze({
   requires_learning_replay_proof: true,
 });
 const EXPECTED_FAILED_MODEL_ATTEMPT_RECORDS = Object.freeze(
-  Array.from({ length: 20 }, (_, index) => `casepath/releases/model-validation-attempt-20260811-${String(index + 1).padStart(2, '0')}.json`),
+  Array.from({ length: 21 }, (_, index) => `casepath/releases/model-validation-attempt-20260811-${String(index + 1).padStart(2, '0')}.json`),
 );
 const EXPECTED_PRODUCTION_OPENING_BOUNDARY = 'Application code opened the shared context; no model call is claimed for this setup step. The call-bound Nemotron plan appears only when its returned event arrives.';
 const QA_SESSION_ID = `qa-${randomUUID()}`;
 const ISOLATION_SESSION_ID = `qa-isolation-${randomUUID()}`;
 const ALLOW_PRODUCTION_MUTATION = process.env.CASEPATH_ALLOW_PRODUCTION_MUTATION === '1';
-const OUT = path.resolve('guided-v13-smoke-out');
+const OUT = path.resolve(process.env.CASEPATH_QA_OUT || 'guided-v13-smoke-out');
 const checks = [];
 const notes = [];
 const failures = { console: [], page: [], request: [], cleanup: [] };
@@ -1276,6 +1276,17 @@ function ledgerSummary(items) {
   };
 }
 
+function initialLedgerAdmissionViolations(ledger) {
+  const issues = sanitizedLedgerViolations(ledger);
+  if (issues.length) return issues;
+  const expected = ledgerSummary([]);
+  if (stableJson(ledger.summary) !== stableJson(expected)) {
+    issues.push('initial global model ledger is not exactly empty');
+  }
+  if (ledger.items.length !== 0) issues.push('initial global model ledger contains rows');
+  return issues;
+}
+
 function sanitizedLedgerViolations(ledger) {
   const issues = [];
   if (ledger?.scope !== 'global_budget_ledger' || !Array.isArray(ledger?.items)) return ['global sanitized ledger is absent'];
@@ -1851,11 +1862,12 @@ async function execute() {
   await fs.rm(OUT, { recursive: true, force: true });
   await fs.mkdir(path.join(OUT, 'video-tmp'), { recursive: true });
 
-  const [frontendDeployment, health, readiness, releaseContract] = await Promise.all([
+  const [frontendDeployment, health, readiness, releaseContract, initialModelLedger] = await Promise.all([
     getJson(`${BASE}/deployment.json`),
     getJson(`${API}/healthz`),
     getJson(`${API}/readyz`),
     getJson(`${BASE}/release.json`),
+    getJson(`${API}/api/model-ledger`),
   ]);
   deploymentIdentity = { ...deploymentIdentity, frontend: frontendDeployment, api: health };
   retainedEvidence['deployment-identity'] = deploymentIdentity;
@@ -1865,6 +1877,8 @@ async function execute() {
   assertReleaseRuntimeContract(releaseContract);
   assertHealthRuntimeContract(health, releaseContract.agentic_runtime);
   assertReadinessContract(readiness);
+  const initialLedgerIssues = initialLedgerAdmissionViolations(initialModelLedger);
+  check('QA admits a journey only from an exactly empty global model ledger', initialLedgerIssues.length === 0, JSON.stringify(initialLedgerIssues));
   const providerCapIssues = providerSingleFlightContractViolations(releaseContract, health, readiness);
   check('Release, health, and readiness agree on logical fan-out plus physical provider single-flight', providerCapIssues.length === 0, JSON.stringify(providerCapIssues));
   check('API is healthy', health.status === 'ok', JSON.stringify(health));
@@ -2451,6 +2465,10 @@ async function execute() {
   const multiOwnerItem = processRun.result.checklist.items.find(item => Array.isArray(item.node_ids) && item.node_ids.length > 1);
   check('Flagship checklist contains an inspectable reciprocal multi-owner evidence item', Boolean(multiOwnerItem), JSON.stringify(processRun.result.checklist.items.map(item => ({ item_id: item.item_id, node_ids: item.node_ids }))));
   const renderedMultiOwner = page.locator(`.v20-document-body .v17-checklist-item[data-item-id="${multiOwnerItem.item_id}"]`).first();
+  const collapsedOwnerGroup = renderedMultiOwner.locator('xpath=ancestor::details[not(@open)][1]');
+  if (await collapsedOwnerGroup.count()) await collapsedOwnerGroup.locator(':scope > summary').click();
+  await renderedMultiOwner.scrollIntoViewIfNeeded();
+  check('Multi-owner document item is visibly inspectable after expanding its group', await renderedMultiOwner.isVisible());
   const multiOwnerProjection = await renderedMultiOwner.evaluate(node => ({ node_id: node.dataset.nodeId, node_ids: node.dataset.nodeIds, current_path: node.dataset.currentPath, text: node.innerText }));
   check('Document sheet preserves exact owner order, primary owner, current-path state, and secondary relationships', multiOwnerProjection.node_id === multiOwnerItem.node_id && multiOwnerProjection.node_ids === multiOwnerItem.node_ids.join(',') && multiOwnerProjection.current_path === String(multiOwnerItem.current_path === true) && /Also required by/i.test(multiOwnerProjection.text), JSON.stringify({ multiOwnerItem, multiOwnerProjection }));
   if (isProductionJourney()) {
@@ -2480,6 +2498,7 @@ async function execute() {
   const flagshipBeforeReview = processRun;
   await page.locator('#journeyNext').click();
   await waitVisible('body[data-casepath-moment="review"]');
+  await waitVisible('.v20-review-note');
   const demoReviewCopy = await page.locator('#stageCanvas').innerText();
   check('Simulated demo review remains beside the complete graph and disclaims qualified approval', await page.locator('.review-graph .process-layout').count() === 1 && await page.locator('.review-choice').count() === 2 && /simulated demo review/i.test(demoReviewCopy) && /not qualified expert approval/i.test(demoReviewCopy), demoReviewCopy);
   await page.locator('.review-graph .process-node-button[data-node-id="causation"],.review-graph .process-branch-node[data-node-id="causation"]').first().click();
@@ -3396,6 +3415,9 @@ function runContractSelfTest() {
   const warmOnlyLedger = mockLedgerForRun(warmRun, 'warm', coldLedger);
   const combinedItems = [...coldLedger.items, ...warmOnlyLedger.items];
   const combinedLedger = { ...coldLedger, items: combinedItems, summary: ledgerSummary(combinedItems) };
+  const emptyInitialLedger = { scope: 'global_budget_ledger', items: [], summary: ledgerSummary([]) };
+  if (initialLedgerAdmissionViolations(emptyInitialLedger).length) throw new Error('Exact-empty initial ledger fixture was rejected');
+  if (!initialLedgerAdmissionViolations(coldLedger).some(item => item.includes('not exactly empty'))) throw new Error('Stale initial ledger fixture was not rejected');
   const openingContextFixture = [{ boundary_text: EXPECTED_PRODUCTION_OPENING_BOUNDARY, actor_type: 'deterministic_tool', nemotron_plan_visible: false }];
   if (productionOpeningContextViolations(openingContextFixture).length) throw new Error('Positive production opening-context fixture failed');
   const legacyProductionOpening = structuredClone(openingContextFixture);

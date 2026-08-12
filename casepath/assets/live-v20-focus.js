@@ -205,7 +205,7 @@
     if (!form.querySelector('.v20-review-note')) {
       const note = document.createElement('p');
       note.className = 'v20-review-note';
-      note.textContent = 'Choose the evidence order. CasePath updates the downstream process and document needs immediately.';
+      note.textContent = 'Simulated demo review only; this is not qualified expert approval. Choose the evidence order and CasePath updates the downstream process and document needs immediately.';
       form.querySelector('h3')?.after(note);
     }
   }
