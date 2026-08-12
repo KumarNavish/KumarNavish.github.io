@@ -3705,7 +3705,15 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         "gate": gate,
         "runtime": runtime_versions,
         "retained_before_session_reset": True,
-        "retained_media_contract": {"missing": [], "empty": []},
+        "retained_media_contract": {
+            "json": list(release_tool.REQUIRED_QA_JSON_EVIDENCE_FILES),
+            "screenshots": list(
+                release_tool.REQUIRED_QA_SCREENSHOT_EVIDENCE_FILES
+            ),
+            "video": release_tool.REQUIRED_QA_VIDEO_EVIDENCE_FILE,
+            "missing": [],
+            "empty": [],
+        },
         "files": files,
     }
     manifest_bytes = f"{json.dumps(manifest, indent=2)}\n".encode()
@@ -5169,6 +5177,85 @@ def test_dynamic_runtime_evidence_paths_verify_the_atomic_artifact_pair(
     assert result["source_commit"] == "a" * 40
 
 
+def test_dynamic_runtime_acceptance_requires_exact_retained_media_inventory() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, _ = successful_dynamic_qa_evidence(contract)
+
+    assert len(release_tool.REQUIRED_QA_JSON_EVIDENCE_FILES) == 15
+    assert len(release_tool.REQUIRED_QA_SCREENSHOT_EVIDENCE_FILES) == 14
+    assert (
+        "03-lease-pdf-search.png"
+        in release_tool.REQUIRED_QA_SCREENSHOT_EVIDENCE_FILES
+    )
+    assert release_tool.REQUIRED_QA_EVIDENCE_FILES == frozenset(
+        (
+            *release_tool.REQUIRED_QA_JSON_EVIDENCE_FILES,
+            *release_tool.REQUIRED_QA_SCREENSHOT_EVIDENCE_FILES,
+            release_tool.REQUIRED_QA_VIDEO_EVIDENCE_FILE,
+        )
+    )
+
+    invalid_contracts = (
+        (
+            {
+                **manifest["retained_media_contract"],
+                "json": list(release_tool.REQUIRED_QA_JSON_EVIDENCE_FILES[:-1]),
+            },
+            "retained JSON inventory is not exact",
+        ),
+        (
+            {
+                **manifest["retained_media_contract"],
+                "screenshots": list(
+                    release_tool.REQUIRED_QA_SCREENSHOT_EVIDENCE_FILES[:-1]
+                ),
+            },
+            "retained screenshot inventory is not exact",
+        ),
+        (
+            {
+                **manifest["retained_media_contract"],
+                "screenshots": list(
+                    reversed(release_tool.REQUIRED_QA_SCREENSHOT_EVIDENCE_FILES)
+                ),
+            },
+            "retained screenshot inventory is not exact",
+        ),
+        (
+            {
+                **manifest["retained_media_contract"],
+                "video": "replacement.webm",
+            },
+            "retained video inventory is not exact",
+        ),
+        (
+            {
+                **manifest["retained_media_contract"],
+                "unexpected": [],
+            },
+            "retained-media contract fields are not exact",
+        ),
+    )
+    for retained_media_contract, message in invalid_contracts:
+        invalid_manifest = deepcopy(manifest)
+        invalid_manifest["retained_media_contract"] = retained_media_contract
+        invalid_manifest_bytes = f"{json.dumps(invalid_manifest, indent=2)}\n".encode()
+        invalid_report = deepcopy(report)
+        invalid_report["evidence"]["manifest"] = {
+            "path": "evidence-manifest.json",
+            "sha256": hashlib.sha256(invalid_manifest_bytes).hexdigest(),
+            "bytes": len(invalid_manifest_bytes),
+        }
+        with pytest.raises(release_tool.VerificationError, match=message):
+            release_tool.verify_dynamic_runtime_acceptance(
+                contract,
+                invalid_report,
+                invalid_manifest,
+                retained,
+                evidence_manifest_bytes=invalid_manifest_bytes,
+            )
+
+
 def test_dynamic_runtime_acceptance_rejects_weak_or_unbound_proof() -> None:
     contract = release_tool.load_json(release_tool.RELEASE_PATH)
     report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
@@ -5503,6 +5590,81 @@ def test_accessibility_audit_waits_for_stable_animations_and_keeps_diagnostics()
     assert "failure_summary:" not in browser_gate
     assert "message: String(check.message" not in browser_gate
     assert "axeViolationDiagnostics(serious)" in browser_gate
+    viewport_start = browser_gate.index("async function auditViewports(label, selector)")
+    viewport_end = browser_gate.index(
+        "\nasync function settleFiniteAnimationsForAxe", viewport_start
+    )
+    viewport_source = browser_gate[viewport_start:viewport_end]
+    assert viewport_source.index("1440, height: 900") < viewport_source.index(
+        "runAxe(`${label} desktop`)"
+    )
+    assert "runAxe(`${label} desktop`)" in viewport_source
+    assert "width: 390" not in viewport_source
+    assert "width: 320" not in viewport_source
+    assert "observeDeferredMobile" not in viewport_source
+    assert "screenshot(`${label}-desktop.png`, true)" in viewport_source
+    assert "03-lease-pdf-mobile.png" not in browser_gate
+    search_check = browser_gate.index(
+        "PDF extracted-text search returns navigable page results"
+    )
+    search_capture = browser_gate.index(
+        "await screenshot('03-lease-pdf-search.png');"
+    )
+    original_tab_return = browser_gate.index(
+        "await page.locator('#sourceTabOriginal').click();", search_capture
+    )
+    assert search_check < search_capture < original_tab_return
+    assert browser_gate.count("'03-lease-pdf-search.png'") == 2
+    required_visual_start = browser_gate.index("const requiredVisualEvidence = [")
+    required_visual_end = browser_gate.index("];", required_visual_start)
+    required_visual_source = browser_gate[
+        required_visual_start:required_visual_end
+    ]
+    assert required_visual_source.count(".png'") == 12
+    assert "requiredVisualEvidence.push('02-live-nemotron-agent.png', '03-deterministic-accepted-artifact.png')" in browser_gate
+    assert "setViewportSize({ width: 390" not in browser_gate
+    assert "setViewportSize({ width: 320" not in browser_gate
+
+
+def test_handoff_continuity_uses_structured_moments_without_translucent_text() -> None:
+    continuity_renderer = (
+        release_tool.REPOSITORY / "casepath/assets/live-v17.js"
+    ).read_text(encoding="utf-8")
+    continuity_css = (
+        release_tool.REPOSITORY / "casepath/assets/live-v17-continuity.css"
+    ).read_text(encoding="utf-8")
+    runtime_css = (
+        release_tool.REPOSITORY / "casepath/assets/live-v16.css"
+    ).read_text(encoding="utf-8")
+    function_start = continuity_renderer.index(
+        "function preserveProcessDuringHandoff(canvas)"
+    )
+    function_end = continuity_renderer.index(
+        "\n  async function enhanceLaw(canvas)", function_start
+    )
+    function_source = continuity_renderer[function_start:function_end]
+    assert "const continuityByMoment" in function_source
+    assert "canvas.dataset.casepathMoment" in function_source
+    assert all(
+        f"{moment}: {{" in function_source
+        for moment in ("evidence", "experience", "verify")
+    )
+    assert "canvas.querySelector('.v17-continuity')?.remove();" in function_source
+    assert "canvas.textContent" not in function_source
+    assert "/verif" not in function_source
+    process_block_start = continuity_css.index(".v17-continuity .process-layout")
+    process_block_end = continuity_css.index("}", process_block_start)
+    process_block = continuity_css[process_block_start : process_block_end + 1]
+    assert "opacity" not in process_block
+    assert ".v17-continuity .decision-inspector" not in continuity_css
+    assert ".process-node.future{opacity:" not in runtime_css
+    assert ".before-after section:first-child{opacity:" not in runtime_css
+    index = (release_tool.REPOSITORY / "casepath/index.html").read_text(
+        encoding="utf-8"
+    )
+    assert 'assets/live-v17-continuity.css?v=20.0.0' in index
+    assert 'assets/live-v17.js?v=20.0.0' in index
+    assert 'assets/live-v16.css?v=20.0.0' in index
 
 
 @pytest.mark.parametrize(
