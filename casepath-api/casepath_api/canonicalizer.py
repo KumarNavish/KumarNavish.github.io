@@ -20,6 +20,7 @@ from .langchain_runtime import (
     OPENROUTER_EXPECTED_UPSTREAM_PROVIDER,
     OPENROUTER_REASONING,
     OpenRouterProtocolError,
+    OpenRouterSendAdmissionTimeoutError,
     OpenRouterUpstreamRejectionError,
     assert_external_tracing_disabled,
     openrouter_provider_policy,
@@ -178,10 +179,19 @@ def _default_structured_invoker(
             [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)],
             config={"callbacks": []},
         )
-    except (OpenRouterProtocolError, OpenRouterUpstreamRejectionError) as exc:
+    except (
+        OpenRouterProtocolError,
+        OpenRouterSendAdmissionTimeoutError,
+        OpenRouterUpstreamRejectionError,
+    ) as exc:
         protocol_invariant = exc.invariant
         if isinstance(exc, OpenRouterUpstreamRejectionError):
             protocol_safe_context = exc.safe_context
+        elif isinstance(exc, OpenRouterSendAdmissionTimeoutError):
+            protocol_safe_context = {
+                "call_count": 0,
+                "outcome": "blocked_provider_concurrency",
+            }
     if protocol_invariant is not None:
         raise ModelResponseError(
             f"{protocol_invariant} invariant failed",
@@ -1485,11 +1495,17 @@ class OpenRouterNemotronCanonicalizer:
                     if key in exc.safe_context:
                         provider_ledger_patch[key] = exc.safe_context[key]
             if not ledger_finished:
+                concurrency_blocked = (
+                    isinstance(exc, ModelResponseError)
+                    and exc.invariant == "provider_concurrency_timeout"
+                )
                 failure_patch = {
                     **provider_ledger_patch,
                     "latency_ms": provider_ledger_patch.get("latency_ms", latency_ms),
                     "error_type": type(exc).__name__,
                 }
+                if concurrency_blocked:
+                    failure_patch["call_count"] = 0
                 if isinstance(exc, ModelResponseError):
                     if exc.fact_id is not None:
                         failure_patch["error_fact_id"] = exc.fact_id
@@ -1499,7 +1515,11 @@ class OpenRouterNemotronCanonicalizer:
                         failure_patch.update(exc.diagnostics)
                 self.storage.finish_model_call(
                     call_id,
-                    outcome="failed",
+                    outcome=(
+                        "blocked_provider_concurrency"
+                        if concurrency_blocked
+                        else "failed"
+                    ),
                     **failure_patch,
                 )
             if isinstance(exc, CanonicalizerError):

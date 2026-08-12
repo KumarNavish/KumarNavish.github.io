@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from hashlib import sha256
 import json
 import math
 import os
 import re
+import threading
 from typing import Any
 
 from langchain_openrouter import ChatOpenRouter as _LangChainChatOpenRouter
@@ -30,6 +31,8 @@ OPENROUTER_PROVIDER_POLICY = {
 }
 OPENROUTER_REASONING = {"effort": "medium"}
 OPENROUTER_TIMEOUT_MILLISECONDS = 180_000
+OPENROUTER_PROVIDER_MAX_IN_FLIGHT = 1
+OPENROUTER_SEND_ADMISSION_TIMEOUT_SECONDS = 190.0
 OPENROUTER_RESPONSE_BODY_LIMIT_BYTES = 1_000_000
 OPENROUTER_RESPONSE_TEXT_PART_LIMIT = 64
 OPENROUTER_PROVIDER_ERROR_CODE_MAX = 9_999
@@ -86,6 +89,54 @@ class OpenRouterProtocolError(RuntimeError):
 
     def __init__(self) -> None:
         super().__init__("OpenRouter returned an incompatible response envelope")
+
+
+class OpenRouterSendAdmissionTimeoutError(RuntimeError):
+    """Bounded failure raised before any provider request is sent."""
+
+    invariant = "provider_concurrency_timeout"
+
+    def __init__(self) -> None:
+        super().__init__("OpenRouter send admission timed out")
+
+
+class _OpenRouterSendLimiter:
+    """Process-wide admission gate for exact-once OpenRouter inference sends."""
+
+    def __init__(
+        self,
+        *,
+        max_in_flight: int = OPENROUTER_PROVIDER_MAX_IN_FLIGHT,
+        admission_timeout_seconds: float = OPENROUTER_SEND_ADMISSION_TIMEOUT_SECONDS,
+    ) -> None:
+        if (
+            not isinstance(max_in_flight, int)
+            or isinstance(max_in_flight, bool)
+            or max_in_flight < 1
+        ):
+            raise ValueError("max_in_flight must be a positive integer")
+        if (
+            not isinstance(admission_timeout_seconds, (int, float))
+            or isinstance(admission_timeout_seconds, bool)
+            or not math.isfinite(float(admission_timeout_seconds))
+            or float(admission_timeout_seconds) <= 0
+        ):
+            raise ValueError("admission_timeout_seconds must be finite and positive")
+        self.max_in_flight = max_in_flight
+        self.admission_timeout_seconds = float(admission_timeout_seconds)
+        self._semaphore = threading.BoundedSemaphore(max_in_flight)
+
+    def send(self, operation: Callable[..., Any], /, **kwargs: Any) -> Any:
+        admitted = self._semaphore.acquire(timeout=self.admission_timeout_seconds)
+        if not admitted:
+            raise OpenRouterSendAdmissionTimeoutError()
+        try:
+            return operation(**kwargs)
+        finally:
+            self._semaphore.release()
+
+
+_OPENROUTER_SEND_LIMITER = _OpenRouterSendLimiter()
 
 
 class OpenRouterUpstreamRejectionError(RuntimeError):
@@ -416,16 +467,22 @@ def _recover_openrouter_response(
 
 
 class _ChatSendBridge:
-    """Delegate exactly once and recover only bounded SDK response-schema drift."""
+    """Serialize exact-once sends and recover bounded SDK response-schema drift."""
 
-    def __init__(self, chat: Any) -> None:
+    def __init__(
+        self,
+        chat: Any,
+        *,
+        send_limiter: _OpenRouterSendLimiter = _OPENROUTER_SEND_LIMITER,
+    ) -> None:
         self._chat = chat
+        self._send_limiter = send_limiter
 
     def send(self, **kwargs: Any) -> Any:
         recovered: dict[str, Any] | OpenRouterUpstreamRejectionError | None = None
         kwargs["x_open_router_metadata"] = "enabled"
         try:
-            return self._chat.send(**kwargs)
+            return self._send_limiter.send(self._chat.send, **kwargs)
         except ResponseValidationError as error:
             recovered = _recover_openrouter_response(error)
         except TooManyRequestsResponseError as error:
@@ -444,8 +501,13 @@ class _ChatSendBridge:
 class _OpenRouterClientBridge:
     """Minimal client facade required by ``ChatOpenRouter``."""
 
-    def __init__(self, client: Any) -> None:
-        self.chat = _ChatSendBridge(client.chat)
+    def __init__(
+        self,
+        client: Any,
+        *,
+        send_limiter: _OpenRouterSendLimiter = _OPENROUTER_SEND_LIMITER,
+    ) -> None:
+        self.chat = _ChatSendBridge(client.chat, send_limiter=send_limiter)
 
 
 class ChatOpenRouter(_LangChainChatOpenRouter):
@@ -603,12 +665,14 @@ __all__ = [
     "OPENROUTER_EXPECTED_UPSTREAM_PROVIDER",
     "OPENROUTER_PROVIDER_BOUNDARY",
     "OPENROUTER_PROVIDER_ERROR_CODE_MAX",
+    "OPENROUTER_PROVIDER_MAX_IN_FLIGHT",
     "OPENROUTER_PROVIDER_POLICY",
     "OPENROUTER_REASONING",
     "OPENROUTER_RESPONSE_BODY_LIMIT_BYTES",
     "OPENROUTER_RESPONSE_TEXT_PART_LIMIT",
     "OPENROUTER_TIMEOUT_MILLISECONDS",
     "OpenRouterProtocolError",
+    "OpenRouterSendAdmissionTimeoutError",
     "OpenRouterUpstreamRejectionError",
     "assert_external_tracing_disabled",
     "external_tracing_environment_disabled",

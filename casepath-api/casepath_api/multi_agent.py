@@ -47,6 +47,7 @@ from .projections import (
 from .langchain_runtime import (
     OPENROUTER_EXPECTED_UPSTREAM_PROVIDER,
     OpenRouterProtocolError,
+    OpenRouterSendAdmissionTimeoutError,
     OpenRouterUpstreamRejectionError,
     assert_external_tracing_disabled,
     sanitize_provider_provenance,
@@ -1330,6 +1331,9 @@ class InstrumentedStructuredAgent:
                 },
             }
         except Exception as exc:
+            concurrency_blocked = isinstance(
+                exc, OpenRouterSendAdmissionTimeoutError
+            )
             if isinstance(exc, ModelResponseError):
                 for key in (
                     "latency_ms",
@@ -1363,17 +1367,28 @@ class InstrumentedStructuredAgent:
                     "error_type": type(exc).__name__,
                     "error_agent_id": agent_id,
                 }
+                if concurrency_blocked:
+                    patch["call_count"] = 0
                 if isinstance(
                     exc,
                     (
                         AgentBoundaryError,
                         ModelResponseError,
                         OpenRouterProtocolError,
+                        OpenRouterSendAdmissionTimeoutError,
                         OpenRouterUpstreamRejectionError,
                     ),
                 ):
                     patch["error_invariant"] = exc.invariant
-                self.storage.finish_model_call(call_id, outcome="failed", **patch)
+                self.storage.finish_model_call(
+                    call_id,
+                    outcome=(
+                        "blocked_provider_concurrency"
+                        if concurrency_blocked
+                        else "failed"
+                    ),
+                    **patch,
+                )
             if isinstance(exc, (ModelCostGuardError, AgentInvocationFailure)):
                 raise
             invariant = (
@@ -1384,6 +1399,7 @@ class InstrumentedStructuredAgent:
                         AgentBoundaryError,
                         ModelResponseError,
                         OpenRouterProtocolError,
+                        OpenRouterSendAdmissionTimeoutError,
                         OpenRouterUpstreamRejectionError,
                     ),
                 )
@@ -1393,7 +1409,11 @@ class InstrumentedStructuredAgent:
                 "call_id": call_id,
                 "parent_call_id": parent_call_id,
                 "delegation_id": delegation_id,
-                "outcome": "failed",
+                "outcome": (
+                    "blocked_provider_concurrency"
+                    if concurrency_blocked
+                    else "failed"
+                ),
                 **{
                     key: provider_patch[key]
                     for key in (
@@ -1717,6 +1737,7 @@ class NemotronMultiAgentOrchestrator:
                 if isinstance(exc, AgentInvocationFailure)
                 else {}
             )
+            failure_outcome = safe_context.get("outcome", "failed")
             writer(
                 {
                     "receipt_type": "agent_failed",
@@ -1724,10 +1745,24 @@ class NemotronMultiAgentOrchestrator:
                     "agent_id": agent_id,
                     "role": ROLE_LABELS[agent_id],
                     "actor_type": "nemotron_agent",
+                    "model": OPENROUTER_MODEL,
+                    "provider": OPENROUTER_PROVIDER,
+                    "requested_model": OPENROUTER_MODEL,
+                    "call_count": (
+                        0
+                        if failure_outcome
+                        in {
+                            "blocked_cost_guard",
+                            "blocked_missing_credential",
+                            "blocked_provider_concurrency",
+                        }
+                        else 1
+                    ),
                     "delegation_id": delegation_id,
                     "status": "failed",
                     "error_type": type(exc).__name__,
                     "error_invariant": getattr(exc, "invariant", None),
+                    "outcome": failure_outcome,
                     **{
                         key: safe_context[key]
                         for key in (

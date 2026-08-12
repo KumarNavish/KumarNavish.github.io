@@ -82,6 +82,7 @@ def test_health_and_release_metadata_expose_semantic_identity(client: TestClient
     assert value["agentic_runtime"]["safety"]["ledger_persistence"] == (
         "ephemeral_instance"
     )
+    assert value["agentic_runtime"]["safety"]["provider_max_in_flight"] == 1
     assert value["configured_model_identity"] == OPENROUTER_MODEL
     assert value["components"] == COMPONENT_VERSIONS
     deployment = client.get("/deployment-health").json()
@@ -92,6 +93,7 @@ def test_health_and_release_metadata_expose_semantic_identity(client: TestClient
     demo = client.get("/api/demo", headers=headers()).json()
     assert demo["release_id"] == "casepath-v20-reference-20260811"
     ready = client.get("/readyz").json()
+    assert ready["agentic_runtime"]["safety"]["provider_max_in_flight"] == 1
     assert ready["model_budget"]["cumulative_usd_cap"] == 25.0
     assert ready["model_budget"]["network_calls"] == 0
     assert ready["model_budget"]["actual_cost_complete"] is True

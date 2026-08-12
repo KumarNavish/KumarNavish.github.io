@@ -2026,6 +2026,7 @@ class ClaimPipeline:
                     or {
                         "blocked_missing_credential": "missing_credential",
                         "blocked_cost_guard": "cost_guard",
+                        "blocked_provider_concurrency": "provider_concurrency_timeout",
                         "actual_cost_overrun": "actual_cost_overrun",
                     }.get(outcome)
                     or "canonicalization_failed"
@@ -2055,7 +2056,11 @@ class ClaimPipeline:
                     call_count=(
                         0
                         if outcome
-                        in {"blocked_missing_credential", "blocked_cost_guard"}
+                        in {
+                            "blocked_missing_credential",
+                            "blocked_cost_guard",
+                            "blocked_provider_concurrency",
+                        }
                         else 1
                     ),
                     parent_call_id=None,
@@ -3141,6 +3146,9 @@ class ClaimPipeline:
                             "call_id",
                             "response_id",
                             "outcome",
+                            "provider",
+                            "requested_model",
+                            "call_count",
                             "response_model",
                             "upstream_provider",
                             "usage_source",

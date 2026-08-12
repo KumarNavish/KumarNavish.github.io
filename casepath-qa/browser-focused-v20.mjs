@@ -140,7 +140,20 @@ const ALLOWED_AGENT_FAILURE_RECEIPT_FIELDS = new Set([
   'provider_boundary', 'expected_upstream_provider',
   'invalid_provenance_field', 'invalid_provenance_value_hash', 'external_tracing',
 ]);
-const FAILURE_OUTCOMES = new Set(['failed', 'blocked_cost_guard', 'blocked_missing_credential', 'actual_cost_overrun']);
+const FAILURE_OUTCOMES = new Set(['failed', 'blocked_cost_guard', 'blocked_missing_credential', 'blocked_provider_concurrency', 'actual_cost_overrun']);
+const ZERO_CALL_FAILURE_OUTCOMES = new Set(['blocked_cost_guard', 'blocked_missing_credential', 'blocked_provider_concurrency']);
+const ZERO_CALL_PROVIDER_RESULT_FIELDS = Object.freeze([
+  'response_id', 'origin_call_id', 'origin_usage', 'origin_finish_reason', 'response_model',
+  'generation_model', 'upstream_provider', 'usage_source', 'finish_reason',
+  'metadata_poll_count', 'metadata_latency_ms', 'prompt_tokens', 'completion_tokens',
+  'total_tokens', 'provider_error_code', 'provider_boundary',
+  'expected_upstream_provider', 'invalid_provenance_field', 'invalid_provenance_value_hash',
+  'ignored_noncontrolling_normalized_proposals', 'accepted_fact_ids', 'accepted_fact_count',
+  'rejected_facts', 'rejected_fact_count', 'source_reference_projection_fact_ids',
+  'source_reference_projection_count', 'accepted_item_ids', 'accepted_item_count',
+  'rejected_items', 'rejected_item_count', 'ignored_proposal_count',
+  'deterministic_fallback_applied',
+]);
 const SAFE_RESPONSE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{2,159}$/;
 const EXACT_OPENROUTER_GENERATION_ID = /^gen-[0-9]{10}-[A-Za-z0-9]{20}$/;
 const SAFE_UPSTREAM_PROVIDER = /^[A-Za-z0-9][A-Za-z0-9._-]{1,79}$/;
@@ -153,6 +166,7 @@ const PROVIDER_PROVENANCE_FIELDS = new Set(['response_id', 'response_model', 'up
 const EXPECTED_RUNTIME_ACCEPTANCE_CRITERIA = Object.freeze({
   required_mode: 'openrouter_nemotron',
   required_model: REQUESTED_NEMOTRON_MODEL,
+  required_provider_max_in_flight: 1,
   required_runtime_profile: EXPECTED_RUNTIME.runtime_profile,
   requires_successful_call_binding: true,
   requires_positive_actual_cost: true,
@@ -171,7 +185,7 @@ const EXPECTED_RUNTIME_ACCEPTANCE_CRITERIA = Object.freeze({
   requires_learning_replay_proof: true,
 });
 const EXPECTED_FAILED_MODEL_ATTEMPT_RECORDS = Object.freeze(
-  Array.from({ length: 13 }, (_, index) => `casepath/releases/model-validation-attempt-20260811-${String(index + 1).padStart(2, '0')}.json`),
+  Array.from({ length: 14 }, (_, index) => `casepath/releases/model-validation-attempt-20260811-${String(index + 1).padStart(2, '0')}.json`),
 );
 const EXPECTED_PRODUCTION_OPENING_BOUNDARY = 'Application code opened the shared context; no model call is claimed for this setup step. The call-bound Nemotron plan appears only when its returned event arrives.';
 const QA_SESSION_ID = `qa-${randomUUID()}`;
@@ -986,7 +1000,7 @@ function terminalFailureContractViolations(run) {
       && nonemptyString(receipt.orchestration_id)
       && receipt.shared_context === `claim-context:${run.run_id}`
       && Number.isInteger(receipt.call_count)
-      && receipt.call_count === (['blocked_cost_guard', 'blocked_missing_credential'].includes(receipt.outcome) ? 0 : 1)
+      && receipt.call_count === (ZERO_CALL_FAILURE_OUTCOMES.has(receipt.outcome) ? 0 : 1)
     );
     const delegatedLineageValid = isCanonicalRoot || (
       nonemptyString(receipt.delegation_id)
@@ -1007,6 +1021,15 @@ function terminalFailureContractViolations(run) {
       || receipt.handoff_to !== 'failure_boundary'
       || receipt.external_tracing !== false
       || receipt.model !== REQUESTED_NEMOTRON_MODEL) issues.push(`${receipt.agent_id || 'unknown'} failure receipt identity/lineage is invalid`);
+    const expectedCallCount = ZERO_CALL_FAILURE_OUTCOMES.has(receipt.outcome) ? 0 : 1;
+    if (!Number.isInteger(receipt.call_count) || receipt.call_count !== expectedCallCount) issues.push(`${receipt.agent_id || 'unknown'} failure receipt call_count does not match its exact provider-call outcome`);
+    if (receipt.outcome === 'blocked_provider_concurrency' || receipt.error_invariant === 'provider_concurrency_timeout') {
+      const retainedProviderResultFields = ZERO_CALL_PROVIDER_RESULT_FIELDS.filter(field => receipt[field] != null);
+      if (receipt.outcome !== 'blocked_provider_concurrency'
+        || receipt.error_invariant !== 'provider_concurrency_timeout'
+        || receipt.call_count !== 0
+        || retainedProviderResultFields.length) issues.push(`${receipt.agent_id || 'unknown'} blocked provider concurrency is not an exact zero-call receipt`);
+    }
     const responseIdPresent = nonemptyString(receipt.response_id);
     const responseModelPresent = nonemptyString(receipt.response_model);
     const responseIdBounded = providerProvenanceValueIsSafe('response_id', receipt.response_id);
@@ -1269,6 +1292,14 @@ function sanitizedLedgerViolations(ledger) {
     }
     if (item.provider_error_code != null && (item.error_invariant !== 'provider_upstream_rejection' || !Number.isInteger(item.provider_error_code) || item.provider_error_code < 0 || item.provider_error_code > 9999)) issues.push(`ledger[${index}] provider error code is unbounded or out of scope`);
     if (item.error_invariant === 'provider_upstream_rejection' && item.response_id != null && !EXACT_OPENROUTER_GENERATION_ID.test(item.response_id)) issues.push(`ledger[${index}] response ID is not an exact OpenRouter generation ID`);
+    if (item.outcome === 'blocked_provider_concurrency' || item.error_invariant === 'provider_concurrency_timeout') {
+      const retainedProviderResultFields = ZERO_CALL_PROVIDER_RESULT_FIELDS.filter(field => Object.hasOwn(item, field));
+      if (item.outcome !== 'blocked_provider_concurrency'
+        || item.error_invariant !== 'provider_concurrency_timeout'
+        || item.call_count !== 0
+        || item.actual_cost_usd !== null
+        || retainedProviderResultFields.length) issues.push(`ledger[${index}] blocked provider concurrency is not an exact zero-call row`);
+    }
     const boundaryIssue = providerRejectionBoundaryIssue(item);
     if (boundaryIssue) issues.push(`ledger[${index}] ${boundaryIssue}`);
     if (Object.hasOwn(item, 'origin_usage')) {
@@ -1470,7 +1501,7 @@ function assertReleaseRuntimeContract(releaseContract) {
   check('Release contract identifies the canonical v20 product, API 15.2, and QA gate', releaseContract?.release_id === RELEASE_ID && releaseContract?.components?.frontend?.version === PRODUCT_RELEASE && releaseContract?.components?.api?.version === API_RELEASE && releaseContract?.components?.pipeline?.version === API_RELEASE && releaseContract?.components?.qa?.version === PRODUCT_RELEASE, JSON.stringify(releaseContract?.components));
   check('Release contract requests the pinned LangChain, LangGraph, and OpenRouter adapter versions', stableJson(runtime?.framework) === stableJson(EXPECTED_FRAMEWORK), JSON.stringify(runtime?.framework));
   check('Release contract requests the exact six-agent Nemotron runtime', runtime?.runtime_profile === EXPECTED_RUNTIME.runtime_profile && runtime?.authority_mode === EXPECTED_RUNTIME.authority_mode && runtime?.implementation === EXPECTED_RUNTIME.implementation && runtime?.orchestration_schema === EXPECTED_RUNTIME.orchestration_schema && runtime?.model === REQUESTED_NEMOTRON_MODEL && exactMembers(runtime?.model_agents?.map(item => item.agent_id), REQUIRED_NEMOTRON_AGENT_IDS), JSON.stringify(runtime));
-  check('Release contract keeps three deterministic authority gates and disables external trace payload storage', exactMembers(runtime?.deterministic_gates?.map(item => item.gate_id), REQUIRED_DETERMINISTIC_GATE_IDS) && runtime?.safety?.deterministic_safety_authority === true && runtime?.safety?.external_tracing === false && runtime?.safety?.prompt_storage === false && runtime?.safety?.raw_output_storage === false, JSON.stringify(runtime?.safety));
+  check('Release contract keeps logical specialist fan-out, three deterministic authority gates, physical provider single-flight, and disabled trace payload storage', stableJson(runtime?.parallel_groups) === stableJson(EXPECTED_EXECUTION_TOPOLOGY.parallel_groups) && exactMembers(runtime?.deterministic_gates?.map(item => item.gate_id), REQUIRED_DETERMINISTIC_GATE_IDS) && runtime?.safety?.deterministic_safety_authority === true && runtime?.safety?.provider_max_in_flight === 1 && runtime?.safety?.external_tracing === false && runtime?.safety?.prompt_storage === false && runtime?.safety?.raw_output_storage === false, JSON.stringify({ parallel_groups: runtime?.parallel_groups, safety: runtime?.safety }));
   check('Release contract delegates the mutable production verdict to hash-bound same-commit QA artifacts', runtimeAcceptance?.verdict_authority === 'dynamic_same_commit_qa_artifacts' && runtimeAcceptance?.source_contract_embeds_runtime_verdict === false && exactMembers(Object.keys(dynamicEvidence || {}), ['qa_gate', 'report_path', 'evidence_manifest_path', 'evidence_manifest_contract', 'required_report_status', 'requires_release_id_match', 'requires_non_unknown_source_commit', 'requires_same_source_commit']) && dynamicEvidence?.qa_gate === 'focused-flagship-journey-v20' && dynamicEvidence?.report_path === 'report.json' && dynamicEvidence?.evidence_manifest_path === 'evidence-manifest.json' && dynamicEvidence?.evidence_manifest_contract === 'casepath.qa-evidence-manifest/1.0.0' && dynamicEvidence?.required_report_status === 'passed' && dynamicEvidence?.requires_release_id_match === true && dynamicEvidence?.requires_non_unknown_source_commit === true && dynamicEvidence?.requires_same_source_commit === true, JSON.stringify(runtimeAcceptance));
   check('Dynamic production acceptance declares every exact paid-call, contribution, cold-run, gate, and fallback criterion', exactMembers(Object.keys(runtimeAcceptance || {}), ['verdict_authority', 'source_contract_embeds_runtime_verdict', 'dynamic_evidence', ...Object.keys(EXPECTED_RUNTIME_ACCEPTANCE_CRITERIA)]) && Object.entries(EXPECTED_RUNTIME_ACCEPTANCE_CRITERIA).every(([key, value]) => runtimeAcceptance?.[key] === value), JSON.stringify(runtimeAcceptance));
   check('Release separates deterministic build proof and failed-closed history from current runtime acceptance', stableJson(releaseContract?.truth?.deterministic_build) === stableJson({ status: 'passed', execution_mode: 'deterministic_reference', model_calls: 0, model_backed: false }) && releaseContract?.truth?.historical_model_validation?.scope === 'failed_closed_history_only' && releaseContract?.truth?.historical_model_validation?.establishes_current_runtime_acceptance === false && stableJson(releaseContract?.truth?.historical_model_validation?.evidence_records) === stableJson(EXPECTED_FAILED_MODEL_ATTEMPT_RECORDS), JSON.stringify(releaseContract?.truth));
@@ -1478,23 +1509,34 @@ function assertReleaseRuntimeContract(releaseContract) {
   check('Release acceptance identity uses independent component versions but one release/source identity', releaseContract?.compatibility?.component_versions_are_independent === true && /same release_id/i.test(releaseContract?.compatibility?.acceptance_rule || '') && /same non-unknown source commit/i.test(releaseContract?.compatibility?.acceptance_rule || ''), JSON.stringify(releaseContract?.compatibility));
 }
 
+function providerSingleFlightContractViolations(releaseContract, health, readiness) {
+  const issues = [];
+  if (stableJson(releaseContract?.agentic_runtime?.parallel_groups) !== stableJson(EXPECTED_EXECUTION_TOPOLOGY.parallel_groups)) issues.push('logical fan-out topology changed');
+  if (releaseContract?.agentic_runtime?.safety?.provider_max_in_flight !== 1) issues.push('release safety cap is not one');
+  if (releaseContract?.truth?.production_runtime_acceptance?.required_provider_max_in_flight !== 1) issues.push('runtime acceptance cap is not one');
+  if (health?.agentic_runtime?.safety?.provider_max_in_flight !== 1) issues.push('health cap is not one');
+  if (readiness?.agentic_runtime?.safety?.provider_max_in_flight !== 1) issues.push('readiness cap is not one');
+  return issues;
+}
+
 function assertHealthRuntimeContract(health, releaseRuntime) {
   const runtime = health.agentic_runtime;
   if (!isProductionJourney()) {
     check('Local health remains in deterministic reference mode without activating a model', health.model_mode === 'deterministic_reference' && health.model == null && health.runtime_profile === 'deterministic_reference' && runtime?.profile === 'deterministic_reference' && runtime?.execution_mode === 'deterministic_reference' && runtime?.authority_mode === 'deterministic_reference' && runtime?.implementation === 'deterministic_reference' && runtime?.schema == null && exactMembers(runtime?.required_agent_ids, []) && exactMembers(runtime?.deterministic_gate_ids, []), JSON.stringify({ model_mode: health.model_mode, model: health.model, runtime }));
-    check('Local deterministic health still reports the pinned inactive framework and trace-disabled safety posture', stableJson(runtime?.framework) === stableJson(EXPECTED_FRAMEWORK) && runtime?.safety?.external_tracing === false && runtime?.safety?.prompt_storage === false && runtime?.safety?.raw_output_storage === false, JSON.stringify(runtime));
+    check('Local deterministic health still reports the pinned inactive framework, provider single-flight cap, and trace-disabled safety posture', stableJson(runtime?.framework) === stableJson(EXPECTED_FRAMEWORK) && runtime?.safety?.provider_max_in_flight === 1 && runtime?.safety?.provider_max_in_flight === releaseRuntime?.safety?.provider_max_in_flight && runtime?.safety?.external_tracing === false && runtime?.safety?.prompt_storage === false && runtime?.safety?.raw_output_storage === false, JSON.stringify(runtime));
     return;
   }
   check('Production health returns the active Nemotron LangGraph runtime profile and schema', health.runtime_profile === EXPECTED_RUNTIME.runtime_profile && runtime?.profile === EXPECTED_RUNTIME.runtime_profile && runtime?.execution_mode === 'nemotron_multi_agent' && runtime?.authority_mode === EXPECTED_RUNTIME.authority_mode && runtime?.implementation === EXPECTED_RUNTIME.implementation && runtime?.schema === EXPECTED_RUNTIME.orchestration_schema && health.model === REQUESTED_NEMOTRON_MODEL, JSON.stringify(runtime));
   check('Production health returns the exact requested framework versions', stableJson(runtime?.framework) === stableJson(releaseRuntime.framework) && stableJson(runtime?.framework) === stableJson(EXPECTED_FRAMEWORK), JSON.stringify(runtime?.framework));
   check('Production health returns the exact six model roles and three deterministic gates', exactMembers(runtime?.required_agent_ids, REQUIRED_NEMOTRON_AGENT_IDS) && exactMembers(runtime?.deterministic_gate_ids, REQUIRED_DETERMINISTIC_GATE_IDS), JSON.stringify(runtime));
-  check('Production health attests the exact private DeepInfra route and disables tracing, storage, fallback, and inference retries', runtime?.safety?.deterministic_contract_authority === true && runtime?.safety?.external_tracing === false && runtime?.safety?.prompt_storage === false && runtime?.safety?.raw_output_storage === false && runtime?.safety?.model_fallback === false && runtime?.safety?.automatic_inference_retry === false && stableJson(runtime?.safety?.provider_routing) === stableJson({ endpoint_tag: 'deepinfra/fp4', expected_upstream_provider: 'DeepInfra', allow_fallbacks: false, require_parameters: true, data_collection: 'deny' }), JSON.stringify(runtime?.safety));
+  check('Production health attests the exact private DeepInfra route, provider single-flight cap, and disabled tracing, storage, fallback, and inference retries', runtime?.safety?.deterministic_contract_authority === true && runtime?.safety?.provider_max_in_flight === 1 && runtime?.safety?.provider_max_in_flight === releaseRuntime?.safety?.provider_max_in_flight && runtime?.safety?.external_tracing === false && runtime?.safety?.prompt_storage === false && runtime?.safety?.raw_output_storage === false && runtime?.safety?.model_fallback === false && runtime?.safety?.automatic_inference_retry === false && stableJson(runtime?.safety?.provider_routing) === stableJson({ endpoint_tag: 'deepinfra/fp4', expected_upstream_provider: 'DeepInfra', allow_fallbacks: false, require_parameters: true, data_collection: 'deny' }), JSON.stringify(runtime?.safety));
 }
 
 function assertReadinessContract(readiness) {
   const budgetCredential = readiness?.model_budget?.credential_configured;
   const runtimeCredential = readiness?.agentic_runtime?.safety?.credential_configured;
   check('Readiness safely exposes only matching boolean OpenRouter credential receipts', typeof budgetCredential === 'boolean' && typeof runtimeCredential === 'boolean' && budgetCredential === runtimeCredential, JSON.stringify({ budgetCredential, runtimeCredential }));
+  check('Readiness pins physical provider admission to exactly one in-flight send', readiness?.agentic_runtime?.safety?.provider_max_in_flight === 1, JSON.stringify(readiness?.agentic_runtime?.safety));
   check('Readiness discloses the exact bounded budget and ephemeral-ledger posture', readiness?.model_budget?.budget_scope === 'instance_lifetime' && readiness?.model_budget?.ledger_persistence === 'ephemeral_instance' && readiness?.model_budget?.external_key_hard_limit_guard === 'configured', JSON.stringify(readiness?.model_budget));
   check('Readiness receipt contains no credential material or internal execution sentinel', internalSentinelPaths(readiness).length === 0 && !/sk-or-v1-[A-Za-z0-9_-]{8,}/.test(JSON.stringify(readiness)), JSON.stringify({ sentinel_paths: internalSentinelPaths(readiness) }));
   if (isProductionJourney()) {
@@ -1802,6 +1844,8 @@ async function execute() {
   assertReleaseRuntimeContract(releaseContract);
   assertHealthRuntimeContract(health, releaseContract.agentic_runtime);
   assertReadinessContract(readiness);
+  const providerCapIssues = providerSingleFlightContractViolations(releaseContract, health, readiness);
+  check('Release, health, and readiness agree on logical fan-out plus physical provider single-flight', providerCapIssues.length === 0, JSON.stringify(providerCapIssues));
   check('API is healthy', health.status === 'ok', JSON.stringify(health));
   check('API reports a pipeline release', typeof health.pipeline_release === 'string' && health.pipeline_release.length > 0, JSON.stringify(health));
   check('API declares caller-session state isolation without treating the session as authority', health.session_isolation?.enabled === true && health.session_isolation?.header === 'X-CasePath-Session' && health.session_isolation?.session_reset_scope === 'caller_session_only', JSON.stringify(health.session_isolation));
@@ -1918,6 +1962,7 @@ async function execute() {
   const falseGroundingAuthority = /machine-visible image record|model interpretation|live retrieval/i;
   const falseHeldOutNovelty = /\bunseen(?: related)? claim\b/i;
   check('Loaded release contains no obsolete public QA-service destination', !staleQaService.test(loadedFlagshipSource));
+  check('Loaded release labels logical specialist topology as fan-out rather than physical parallel transport', loadedFlagshipSource.includes('<i>fan-out</i>') && !loadedFlagshipSource.includes('<i>parallel</i>'));
   check('Current QA destination is guarded by exact live API identity and an atomic hash-bound report/manifest attestation', loadedFlagshipSource.includes("const qaEvidenceBase = 'https://casepath-guided-canonical-qa.onrender.com'") && loadedFlagshipSource.includes('function releaseEvidenceAttested(') && loadedFlagshipSource.includes("fetch(`${apiBase}/healthz`") && loadedFlagshipSource.includes("api?.source_commit === commit") && loadedFlagshipSource.includes('reportIdentities.every(value => value === commit)') && loadedFlagshipSource.includes('report?.failed === 0') && loadedFlagshipSource.includes('manifest?.source_commit === commit') && loadedFlagshipSource.includes('report.evidence.manifest.sha256 === manifestBinding.sha256') && loadedFlagshipSource.includes('report.evidence.manifest.bytes === manifestBinding.bytes') && loadedFlagshipSource.includes('retainedEvidenceComplete(report, manifest)') && loadedFlagshipSource.includes("link.dataset.evidenceState = 'attested'"));
   check('Loaded release contains no false reviewed-v4 lifecycle claim', !falseReviewedV4Claim.test(loadedFlagshipSource));
   check('Loaded release contains no false image-extraction, model-legal, or live-retrieval authority copy', !falseGroundingAuthority.test(loadedFlagshipSource));
@@ -2965,6 +3010,31 @@ function mockLedgerForRun(run, cacheMode, coldLedger = null) {
 
 function runContractSelfTest() {
   if (dtoHash({ z: 'ü', a: [{ k: 0.91 }, true, null] }) !== '3d745913ce5b8f5555065b544f018be38bd43e9e5bfe1eca86c1d4f25dda68dd') throw new Error('Compact sorted DTO hashing diverges from the Python release contract');
+  const providerCapRelease = {
+    agentic_runtime: {
+      parallel_groups: structuredClone(EXPECTED_EXECUTION_TOPOLOGY.parallel_groups),
+      safety: { provider_max_in_flight: 1 },
+    },
+    truth: { production_runtime_acceptance: { required_provider_max_in_flight: 1 } },
+  };
+  const providerCapHealth = { agentic_runtime: { safety: { provider_max_in_flight: 1 } } };
+  const providerCapReadiness = { agentic_runtime: { safety: { provider_max_in_flight: 1 } } };
+  if (providerSingleFlightContractViolations(providerCapRelease, providerCapHealth, providerCapReadiness).length) throw new Error('Positive provider single-flight surface fixture failed');
+  const missingReleaseProviderCap = structuredClone(providerCapRelease);
+  delete missingReleaseProviderCap.agentic_runtime.safety.provider_max_in_flight;
+  if (!providerSingleFlightContractViolations(missingReleaseProviderCap, providerCapHealth, providerCapReadiness).some(item => item.includes('release safety'))) throw new Error('Missing release provider-cap fixture was not rejected');
+  const wrongAcceptanceProviderCap = structuredClone(providerCapRelease);
+  wrongAcceptanceProviderCap.truth.production_runtime_acceptance.required_provider_max_in_flight = 2;
+  if (!providerSingleFlightContractViolations(wrongAcceptanceProviderCap, providerCapHealth, providerCapReadiness).some(item => item.includes('runtime acceptance'))) throw new Error('Wrong acceptance provider-cap fixture was not rejected');
+  const wrongHealthProviderCap = structuredClone(providerCapHealth);
+  wrongHealthProviderCap.agentic_runtime.safety.provider_max_in_flight = 0;
+  if (!providerSingleFlightContractViolations(providerCapRelease, wrongHealthProviderCap, providerCapReadiness).some(item => item.includes('health'))) throw new Error('Wrong health provider-cap fixture was not rejected');
+  const missingReadinessProviderCap = structuredClone(providerCapReadiness);
+  delete missingReadinessProviderCap.agentic_runtime.safety.provider_max_in_flight;
+  if (!providerSingleFlightContractViolations(providerCapRelease, providerCapHealth, missingReadinessProviderCap).some(item => item.includes('readiness'))) throw new Error('Missing readiness provider-cap fixture was not rejected');
+  const changedLogicalFanOut = structuredClone(providerCapRelease);
+  changedLogicalFanOut.agentic_runtime.parallel_groups = [];
+  if (!providerSingleFlightContractViolations(changedLogicalFanOut, providerCapHealth, providerCapReadiness).some(item => item.includes('logical fan-out'))) throw new Error('Changed logical fan-out fixture was not rejected');
   const pythonFloatHashes = [
     [{ value: 1.0 }, '3a7d647740ec6f86b72e0bf3948ab456551e07e9605e3a2785de1c66842ebb48'],
     [{ value: -0.0 }, 'c848a4efa987f46ba3bfd46242333afcb1c68c3240e0f35ae9d269b1c980648b'],
@@ -3504,6 +3574,9 @@ function runContractSelfTest() {
         delegation_id: failureAgent.delegation_id,
         parent_call_id: orchestrationAudit(coldRun).agents.find(item => item.agent_id === 'orchestrator_plan').call_id,
         call_id: 'failed_call_evidence_checklist',
+        provider: 'openrouter',
+        requested_model: REQUESTED_NEMOTRON_MODEL,
+        call_count: 1,
         outcome: 'failed',
         handoff_from: 'deterministic_evidence_gate',
         handoff_to: 'failure_boundary',
@@ -3535,6 +3608,23 @@ function runContractSelfTest() {
   };
   const safeFailureIssues = terminalFailureContractViolations(safeTerminalFailure);
   if (safeFailureIssues.length) throw new Error(`Safe terminal-failure fixture failed: ${JSON.stringify(safeFailureIssues)}`);
+  const providerConcurrencyFailure = structuredClone(safeTerminalFailure);
+  const providerConcurrencyReceipt = providerConcurrencyFailure.events.find(item => item.receipt_type === 'agent_failed');
+  Object.assign(providerConcurrencyReceipt, {
+    call_count: 0,
+    outcome: 'blocked_provider_concurrency',
+    error_type: 'AgentInvocationFailure',
+    error_invariant: 'provider_concurrency_timeout',
+  });
+  providerConcurrencyFailure.events.find(item => item.stage === 'failed').failure_invariant = 'provider_concurrency_timeout';
+  const providerConcurrencyIssues = terminalFailureContractViolations(providerConcurrencyFailure);
+  if (providerConcurrencyIssues.length) throw new Error(`Provider-concurrency zero-call receipt fixture failed: ${JSON.stringify(providerConcurrencyIssues)}`);
+  const forgedProviderConcurrencyCall = structuredClone(providerConcurrencyFailure);
+  forgedProviderConcurrencyCall.events.find(item => item.receipt_type === 'agent_failed').call_count = 1;
+  if (!terminalFailureContractViolations(forgedProviderConcurrencyCall).some(item => item.includes('zero-call') || item.includes('call_count'))) throw new Error('Provider-concurrency forged-call receipt fixture was not rejected');
+  const forgedProviderConcurrencyIdentity = structuredClone(providerConcurrencyFailure);
+  forgedProviderConcurrencyIdentity.events.find(item => item.receipt_type === 'agent_failed').response_id = 'gen-1786483159-hyYthqPv76o6PHXpGLzl';
+  if (!terminalFailureContractViolations(forgedProviderConcurrencyIdentity).some(item => item.includes('zero-call'))) throw new Error('Provider-concurrency forged response receipt fixture was not rejected');
   const upstreamRejectionFailure = structuredClone(safeTerminalFailure);
   const upstreamReceipt = upstreamRejectionFailure.events.find(item => item.receipt_type === 'agent_failed');
   Object.assign(upstreamReceipt, {
@@ -3710,6 +3800,32 @@ function runContractSelfTest() {
   boundedUpstreamRejectionLedger.summary = ledgerSummary(boundedUpstreamRejectionLedger.items);
   const boundedUpstreamLedgerIssues = sanitizedLedgerViolations(boundedUpstreamRejectionLedger);
   if (boundedUpstreamLedgerIssues.length) throw new Error(`Bounded upstream-rejection ledger fixture failed: ${JSON.stringify(boundedUpstreamLedgerIssues)}`);
+  const providerConcurrencyLedger = structuredClone(coldLedger);
+  const providerConcurrencyLedgerItem = providerConcurrencyLedger.items[0];
+  Object.assign(providerConcurrencyLedgerItem, {
+    call_count: 0,
+    actual_cost_usd: null,
+    outcome: 'blocked_provider_concurrency',
+    error_type: 'OpenRouterSendAdmissionTimeoutError',
+    error_invariant: 'provider_concurrency_timeout',
+  });
+  for (const field of ZERO_CALL_PROVIDER_RESULT_FIELDS) delete providerConcurrencyLedgerItem[field];
+  providerConcurrencyLedger.summary = ledgerSummary(providerConcurrencyLedger.items);
+  const providerConcurrencyLedgerIssues = sanitizedLedgerViolations(providerConcurrencyLedger);
+  if (providerConcurrencyLedgerIssues.length
+    || providerConcurrencyLedger.summary.network_calls !== coldLedger.summary.network_calls - 1
+    || providerConcurrencyLedger.summary.unknown_cost_call_count !== coldLedger.summary.unknown_cost_call_count) throw new Error(`Provider-concurrency zero-call ledger fixture failed: ${JSON.stringify(providerConcurrencyLedgerIssues)}`);
+  const forgedProviderConcurrencyLedgerCall = structuredClone(providerConcurrencyLedger);
+  forgedProviderConcurrencyLedgerCall.items[0].call_count = 1;
+  forgedProviderConcurrencyLedgerCall.summary = ledgerSummary(forgedProviderConcurrencyLedgerCall.items);
+  if (!sanitizedLedgerViolations(forgedProviderConcurrencyLedgerCall).some(item => item.includes('zero-call'))) throw new Error('Provider-concurrency forged-call ledger fixture was not rejected');
+  const forgedProviderConcurrencyLedgerCost = structuredClone(providerConcurrencyLedger);
+  forgedProviderConcurrencyLedgerCost.items[0].actual_cost_usd = 0.01;
+  forgedProviderConcurrencyLedgerCost.summary = ledgerSummary(forgedProviderConcurrencyLedgerCost.items);
+  if (!sanitizedLedgerViolations(forgedProviderConcurrencyLedgerCost).some(item => item.includes('zero-call'))) throw new Error('Provider-concurrency forged-cost ledger fixture was not rejected');
+  const forgedProviderConcurrencyLedgerIdentity = structuredClone(providerConcurrencyLedger);
+  forgedProviderConcurrencyLedgerIdentity.items[0].response_id = 'gen-1786483159-hyYthqPv76o6PHXpGLzl';
+  if (!sanitizedLedgerViolations(forgedProviderConcurrencyLedgerIdentity).some(item => item.includes('zero-call'))) throw new Error('Provider-concurrency forged-response ledger fixture was not rejected');
   const forgedUpstreamBoundaryLedger = structuredClone(boundedUpstreamRejectionLedger);
   forgedUpstreamBoundaryLedger.items[0].provider_boundary = 'OpenRouter';
   if (!sanitizedLedgerViolations(forgedUpstreamBoundaryLedger).some(item => item.includes('boundary attribution is forged'))) throw new Error('Forged upstream-rejection ledger attribution fixture was not rejected');
@@ -3752,7 +3868,7 @@ function runContractSelfTest() {
   const brokenLineageLedger = structuredClone(combinedLedger);
   brokenLineageLedger.items.find(item => item.call_id === orchestrationAudit(warmRun).agents[0].call_id).origin_call_id = 'wrong_origin';
   if (!warmLineageContractViolations(orchestrationAudit(coldRun), orchestrationAudit(warmRun), brokenLineageLedger).issues.some(item => item.includes('warm origin'))) throw new Error('Broken-lineage negative fixture was not rejected');
-  return { status: 'passed', fixtures: ['python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'fail_closed_model_contribution_badges', 'mixed_field_contribution_badge', 'post_memory_contribution_suppression', 'reciprocal_evidence_truth_and_tamper', 'structured_legal_truth_and_tamper', 'visual_reference_truth_and_tamper', 'precedent_ranking_truth_and_tamper', 'memory_application_truth_and_tamper', 'memory_boundary_event_cross_binding', 'dormant_memory_retrieval_not_application', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'parallel_source_artifact_hash_rejection', 'parallel_process_artifact_hash_rejection', 'process_field_membership_rejection', 'process_field_attribution_rejection', 'process_inherited_field_rejection_with_recomputed_hashes', 'evidence_field_membership_rejection', 'evidence_field_attribution_rejection', 'evidence_source_ref_rejection_with_recomputed_hashes', 'final_field_membership_rejection', 'final_current_node_binding_rejection', 'final_next_action_binding_rejection', 'final_supporting_facts_binding_rejection', 'final_upstream_contributions_binding_rejection', 'final_audit_checks_binding_rejection', 'noncontrolling_supporting_fact_source_binding', 'cold_upstream_provider_policy_rejection', 'warm_upstream_provider_policy_rejection', 'agent_role_label_rejection', 'gate_role_label_rejection', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'safe_upstream_rejection_receipt', 'forged_upstream_rejection_receipt_attribution_rejection', 'missing_upstream_rejection_receipt_attribution_rejection', 'out_of_scope_upstream_rejection_receipt_attribution_rejection', 'unbounded_upstream_error_code_rejection', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'safe_upstream_rejection_ledger', 'forged_upstream_rejection_ledger_attribution_rejection', 'missing_upstream_rejection_ledger_attribution_rejection', 'out_of_scope_upstream_rejection_ledger_attribution_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
+  return { status: 'passed', fixtures: ['python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'fail_closed_model_contribution_badges', 'mixed_field_contribution_badge', 'post_memory_contribution_suppression', 'reciprocal_evidence_truth_and_tamper', 'structured_legal_truth_and_tamper', 'visual_reference_truth_and_tamper', 'precedent_ranking_truth_and_tamper', 'memory_application_truth_and_tamper', 'memory_boundary_event_cross_binding', 'dormant_memory_retrieval_not_application', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'parallel_source_artifact_hash_rejection', 'parallel_process_artifact_hash_rejection', 'process_field_membership_rejection', 'process_field_attribution_rejection', 'process_inherited_field_rejection_with_recomputed_hashes', 'evidence_field_membership_rejection', 'evidence_field_attribution_rejection', 'evidence_source_ref_rejection_with_recomputed_hashes', 'final_field_membership_rejection', 'final_current_node_binding_rejection', 'final_next_action_binding_rejection', 'final_supporting_facts_binding_rejection', 'final_upstream_contributions_binding_rejection', 'final_audit_checks_binding_rejection', 'noncontrolling_supporting_fact_source_binding', 'cold_upstream_provider_policy_rejection', 'warm_upstream_provider_policy_rejection', 'agent_role_label_rejection', 'gate_role_label_rejection', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'provider_concurrency_zero_call_receipt', 'provider_concurrency_receipt_call_rejection', 'provider_concurrency_receipt_identity_rejection', 'safe_upstream_rejection_receipt', 'forged_upstream_rejection_receipt_attribution_rejection', 'missing_upstream_rejection_receipt_attribution_rejection', 'out_of_scope_upstream_rejection_receipt_attribution_rejection', 'unbounded_upstream_error_code_rejection', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'safe_upstream_rejection_ledger', 'provider_concurrency_zero_call_ledger', 'provider_concurrency_ledger_call_rejection', 'provider_concurrency_ledger_cost_rejection', 'provider_concurrency_ledger_identity_rejection', 'forged_upstream_rejection_ledger_attribution_rejection', 'missing_upstream_rejection_ledger_attribution_rejection', 'out_of_scope_upstream_rejection_ledger_attribution_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
 }
 
 let report;

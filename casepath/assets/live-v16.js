@@ -339,7 +339,7 @@
     if (!roles.size && !gates.size) return '';
     const roleIds = [...roles.keys()];
     const gateIds = [...gates.keys()];
-    const parallel = parallelReturned ? `<div class="orchestration-parallel-branch" data-parallel-role-ids="${esc(parallelIds.join(','))}" data-parallel-gate-id="deterministic_process_gate"><span>${esc(roles.get(parallelIds[0]))}</span><i>parallel</i><span>${esc(roles.get(parallelIds[1]))}</span><b aria-hidden="true">→</b><strong>${esc(gates.get('deterministic_process_gate'))}</strong></div>` : '';
+    const parallel = parallelReturned ? `<div class="orchestration-parallel-branch" data-parallel-role-ids="${esc(parallelIds.join(','))}" data-parallel-gate-id="deterministic_process_gate"><span>${esc(roles.get(parallelIds[0]))}</span><i>fan-out</i><span>${esc(roles.get(parallelIds[1]))}</span><b aria-hidden="true">→</b><strong>${esc(gates.get('deterministic_process_gate'))}</strong></div>` : '';
     return `<section class="orchestration-run-summary" aria-label="Returned orchestration team" data-nemotron-role-count="${roles.size}" data-deterministic-gate-count="${gates.size}" data-nemotron-role-ids="${esc(roleIds.join(','))}" data-deterministic-gate-ids="${esc(gateIds.join(','))}"><div><small>Returned orchestration</small><strong>${roles.size} unique Nemotron role${roles.size === 1 ? '' : 's'} · ${gates.size} unique deterministic gate${gates.size === 1 ? '' : 's'}</strong></div>${parallel}</section>`;
   }
 
