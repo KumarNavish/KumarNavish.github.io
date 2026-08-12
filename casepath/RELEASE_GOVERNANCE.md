@@ -554,6 +554,20 @@ combining a pre-review graph with a post-review checklist while retaining safe
 deduplication for genuinely concurrent read-only consumers without ever sharing
 a session-scoped response.
 
+Hosted zero-provider QA on commit
+`350e834f709ff82e1b79c9f2b9573970c0197ba3` proved both boundaries above: it
+passed the reviewed-graph transition, stopped later inside the 390 px learning
+accessibility scan, never emitted the production marker, and left the public
+model ledger at exactly zero records, network calls, and cost. The remaining
+failure was a transient contrast defect: a 220 ms opacity entrance animation
+was sampled at 120 ms, temporarily compositing an otherwise compliant green
+badge from 4.894:1 to about 4.44:1. The entrance is now transform-only. Before
+every Axe scan, QA waits for all finite document animations plus two stable
+paint frames, fails closed on a bounded settle timeout, and logs capped element
+counts, hashed selectors, rule IDs, and allowlisted contrast fields without
+retaining rendered claim or free-form failure text. This repair remains
+hosted-preflight pending.
+
 The canonical QA service explicitly sets
 `CASEPATH_ALLOW_PRODUCTION_MUTATION=1` because its reset-and-review journey
 mutates only the in-scope evaluation service. That opt-in is required authority
