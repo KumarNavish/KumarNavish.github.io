@@ -266,7 +266,7 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
             release_tool.REPOSITORY
             / f"casepath/releases/model-validation-attempt-20260811-{number:02d}.json"
         )
-        for number in range(1, 19)
+        for number in range(1, 20)
     }
     (
         attempt_1,
@@ -287,7 +287,8 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         attempt_16,
         attempt_17,
         attempt_18,
-    ) = (attempts[number] for number in range(1, 19))
+        attempt_19,
+    ) = (attempts[number] for number in range(1, 20))
     for evidence in attempts.values():
         assert evidence["status"] == "failed_closed"
         assert evidence["acceptance_passed"] is False
@@ -1338,11 +1339,42 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
     assert attempt_18["capture_provenance"]["public_qa_origin"]["classification"] == (
         "stale_previous_deploy_not_attempt_18"
     )
+    assert {
+        section: release_tool._historical_json_sha256(attempt_19[section])
+        for section in release_tool._HISTORICAL_ATTEMPT_19_SECTION_SHA256
+    } == release_tool._HISTORICAL_ATTEMPT_19_SECTION_SHA256
+    attempt_19_calls = attempt_19["provider_observation"]["calls"]
+    attempt_19_warm_calls = attempt_19["warm_cache_result"]["calls"]
+    assert attempt_19["execution_observation"]["source_commit"] == (
+        "72b2527b05e2fc4e25c3b8655d4fe9f2da266580"
+    )
+    assert attempt_19["execution_observation"]["deterministic_gate_ids"] == [
+        "deterministic_process_gate",
+        "deterministic_evidence_gate",
+        "whole_playbook_gate",
+    ]
+    assert len(attempt_19_calls) == len(attempt_19_warm_calls) == 6
+    assert [call["origin_call_id"] for call in attempt_19_warm_calls] == [
+        call["call_id"] for call in attempt_19_calls
+    ]
+    assert [call["response_id"] for call in attempt_19_warm_calls] == [
+        call["response_id"] for call in attempt_19_calls
+    ]
+    assert attempt_19["provider_observation"]["actual_cost_usd"] == pytest.approx(
+        0.0256894
+    )
+    assert attempt_19["qa_result"]["failure_type"] == (
+        "normalized_grounding_text_quote_not_exact_substring"
+    )
+    assert attempt_19["qa_result"]["failed_source_line"] == 2371
+    assert attempt_19["capture_provenance"]["public_qa_origin"]["classification"] == (
+        "stale_previous_deploy_not_attempt_19"
+    )
     assert sum(
         attempt["provider_observation"]["actual_cost_usd"]
         for attempt in attempts.values()
         if "actual_cost_usd" in attempt["provider_observation"]
-    ) == pytest.approx(0.2765156)
+    ) == pytest.approx(0.3022050)
     assert "actual_cost_usd" not in attempt_3["provider_observation"]
     assert "prompt_tokens" not in attempt_3["provider_observation"]
     assert attempt_3["provider_observation"]["charge_status"] == "unknown_unconfirmed"
@@ -1881,6 +1913,42 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         message = str(caught.value)
         assert "gen-1786532401-OHjtmk6aiCms72NZ62rn" not in message
         assert "modelcall_4abdccd0ab5d8d6f" not in message
+
+    forged_attempt_19_records = []
+    for section, mutate in (
+        ("execution_observation", lambda item: item.__setitem__("network_call_count", 7)),
+        (
+            "provider_observation",
+            lambda item: item["calls"][0].__setitem__("accepted_fact_count", 17),
+        ),
+        (
+            "application_result",
+            lambda item: item.__setitem__("runtime_acceptance_established", True),
+        ),
+        (
+            "warm_cache_result",
+            lambda item: item["calls"][0].__setitem__(
+                "origin_call_id", "modelcall_0000000000000000"
+            ),
+        ),
+        ("qa_result", lambda item: item.__setitem__("failed_source_line", 2372)),
+        (
+            "capture_provenance",
+            lambda item: item["public_api_model_ledger"].__setitem__(
+                "response_sha256", "0" * 64
+            ),
+        ),
+    ):
+        forged_attempt = deepcopy(attempt_19)
+        mutate(forged_attempt[section])
+        forged_attempt_19_records.append(forged_attempt)
+
+    for forged_attempt in forged_attempt_19_records:
+        with pytest.raises(
+            release_tool.VerificationError,
+            match="exact bounded schema",
+        ):
+            release_tool.verify_failed_model_attempt_evidence(contract, forged_attempt)
 
 
 def _ledger_summary(items: list[dict]) -> dict:
