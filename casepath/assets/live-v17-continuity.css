@@ -41,12 +41,7 @@
 
 .v17-continuity .process-layout{
   margin-top:0;
-  opacity:.82;
   pointer-events:none;
-}
-
-.v17-continuity .decision-inspector{
-  opacity:.72;
 }
 
 @media(prefers-reduced-motion:reduce){
