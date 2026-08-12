@@ -620,6 +620,7 @@ def structured_nemotron_runnable(
     api_key: str,
     orchestration_id: str,
     max_tokens: int,
+    reasoning: Mapping[str, Any] | None = None,
 ):
     """Create one exact-model, provider-native, non-retrying structured runnable.
 
@@ -647,7 +648,7 @@ def structured_nemotron_runnable(
         timeout=OPENROUTER_TIMEOUT_MILLISECONDS,
         max_retries=0,
         openrouter_provider=openrouter_provider_policy(),
-        reasoning=dict(OPENROUTER_REASONING),
+        reasoning=dict(OPENROUTER_REASONING if reasoning is None else reasoning),
         app_title="CasePath",
         session_id=orchestration_id,
     )
