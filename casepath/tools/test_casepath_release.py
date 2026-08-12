@@ -356,6 +356,12 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
     assert runtime["verdict_authority"] == "dynamic_same_commit_qa_artifacts"
     assert runtime["source_contract_embeds_runtime_verdict"] is False
     assert runtime["required_provider_max_in_flight"] == 1
+    assert runtime["model_acceptance_scope"] == "visible_browser_flagship"
+    assert runtime["learning_comparison_authority"] == "deterministic_application_tool"
+    assert runtime["requires_learning_comparison_zero_model_activity"] is True
+    assert runtime["required_final_model_ledger_records"] == 12
+    assert runtime["required_final_model_network_calls"] == 6
+    assert runtime["required_final_cache_hits"] == 6
     assert runtime["dynamic_evidence"] == {
         "qa_gate": "focused-flagship-journey-v20",
         "report_path": "report.json",
@@ -378,7 +384,7 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
             release_tool.REPOSITORY
             / f"casepath/releases/model-validation-attempt-20260811-{number:02d}.json"
         )
-        for number in range(1, 24)
+        for number in range(1, 25)
     }
     (
         attempt_1,
@@ -404,7 +410,8 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         attempt_21,
         attempt_22,
         attempt_23,
-    ) = (attempts[number] for number in range(1, 24))
+        attempt_24,
+    ) = (attempts[number] for number in range(1, 25))
     for evidence in attempts.values():
         assert evidence["status"] == "failed_closed"
         assert evidence["acceptance_passed"] is False
@@ -1638,11 +1645,54 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
     assert attempt_23["capture_provenance"]["public_qa_atomic_state"][
         "classification"
     ] == "unchanged_attempt_22_exact_bundle"
+    assert {
+        section: release_tool._historical_json_sha256(attempt_24[section])
+        for section in release_tool._HISTORICAL_ATTEMPT_24_SECTION_SHA256
+    } == release_tool._HISTORICAL_ATTEMPT_24_SECTION_SHA256
+    assert attempt_24["execution_observation"]["qa_deploy_id"] == (
+        "dep-d9uclg7lk1mc73eh3ehg"
+    )
+    assert attempt_24["execution_observation"]["flagship_cold_run_id"] == (
+        "run_ee90220be9719ea4"
+    )
+    assert attempt_24["execution_observation"]["flagship_warm_run_id"] == (
+        "run_13f7827167f7c7f1"
+    )
+    assert attempt_24["execution_observation"]["later_cold_run_id"] == (
+        "run_2a4e9d56700e7549"
+    )
+    assert attempt_24["capture_provenance"]["public_model_ledger"] == {
+        "bytes": 24882,
+        "sha256": "d91b9fac36f05aafa92aa83a996fbaee798289a8c0c368fb2ed109017271c386",
+        "records": 14,
+        "network_calls": 8,
+        "prompt_tokens": 46747,
+        "completion_tokens": 4676,
+        "total_tokens": 51423,
+        "actual_cost_usd": 0.0336607,
+        "actual_cost_complete": False,
+        "unknown_cost_call_count": 1,
+        "outcomes": {
+            "cache_hit": 6,
+            "failed": 1,
+            "succeeded": 6,
+            "succeeded_with_guarded_fallback": 1,
+        },
+    }
+    failed_attempt_24_call = attempt_24["provider_observation"]["calls"][-1]
+    assert failed_attempt_24_call["call_id"] == "modelcall_b5cbda5d8b277ba3"
+    assert failed_attempt_24_call["actual_cost_usd"] is None
+    assert failed_attempt_24_call["provider_error_code"] == 429
+    assert "response_id" not in failed_attempt_24_call
+    assert "prompt_tokens" not in failed_attempt_24_call
+    assert attempt_24["capture_provenance"]["public_qa_atomic_state"][
+        "classification"
+    ] == "unchanged_attempt_22_exact_bundle_after_attempt_24_failure"
     assert sum(
         attempt["provider_observation"]["actual_cost_usd"]
         for attempt in attempts.values()
         if "actual_cost_usd" in attempt["provider_observation"]
-    ) == pytest.approx(0.4292561)
+    ) == pytest.approx(0.4629168)
     assert "actual_cost_usd" not in attempt_3["provider_observation"]
     assert "prompt_tokens" not in attempt_3["provider_observation"]
     assert attempt_3["provider_observation"]["charge_status"] == "unknown_unconfirmed"
@@ -2310,6 +2360,25 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         ),
         (
             attempt_23,
+            "capture_provenance",
+            lambda item: item["public_qa_atomic_state"].__setitem__(
+                "served_source_commit", "0" * 40
+            ),
+        ),
+        (
+            attempt_24,
+            "provider_observation",
+            lambda item: item["calls"][7].__setitem__(
+                "origin_call_id", "modelcall_0000000000000000"
+            ),
+        ),
+        (
+            attempt_24,
+            "provider_observation",
+            lambda item: item["calls"][-1].__setitem__("actual_cost_usd", 0),
+        ),
+        (
+            attempt_24,
             "capture_provenance",
             lambda item: item["public_qa_atomic_state"].__setitem__(
                 "served_source_commit", "0" * 40
@@ -3488,7 +3557,7 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         "memory_application": None,
         "shared_rule_applied": False,
         "playbook": {"version": "mould-playbook-v3"},
-        "next_action": {"agent_brief_contribution": final_claim_brief},
+        "next_action": {"agent_brief_contribution": None},
     }
     later_process = release_tool._semantic_process_dto(baseline_process)
     later_checklist = release_tool._semantic_checklist_dto(baseline_checklist)
@@ -3702,19 +3771,32 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         "run_id": "baseline-run",
         "claim_id": "DEMO-MOULD-002",
         "status": "complete",
-        "model_mode": release_tool.REQUIRED_PRODUCTION_MODE,
-        "model": release_tool.REQUIRED_PRODUCTION_MODEL,
+        "profile": release_tool.DETERMINISTIC_REFERENCE_PROFILE,
+        "model_mode": release_tool.DETERMINISTIC_REFERENCE_MODE,
+        "model": None,
         "knowledge_mode": "baseline",
         "created_at": "2026-08-12T00:01:00+00:00",
         "completed_at": 1786492920.0,
+        "events": [
+            {
+                "stage": "orchestrator",
+                "label": "Deterministic reference comparison opened",
+                "agent": "Claim Context Initialization Tool",
+                "actor_type": "deterministic_tool",
+                "status": "completed",
+                "implementation": "deterministic_application_tool",
+                "model": None,
+            }
+        ],
         "result": baseline_result,
     }
     later_run = {
         "run_id": "later-run",
         "claim_id": "DEMO-MOULD-002",
         "status": "complete",
-        "model_mode": release_tool.REQUIRED_PRODUCTION_MODE,
-        "model": release_tool.REQUIRED_PRODUCTION_MODEL,
+        "profile": release_tool.DETERMINISTIC_REFERENCE_PROFILE,
+        "model_mode": release_tool.DETERMINISTIC_REFERENCE_MODE,
+        "model": None,
         "knowledge_mode": "current",
         "created_at": "2026-08-12T00:03:00+00:00",
         "completed_at": 1786493100.0,
@@ -3745,92 +3827,6 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         "application_suppressed": True,
     }
     baseline_run["counterfactual_learning_freeze"] = counterfactual_freeze
-
-    def clone_cold_audit(
-        source_audit: dict,
-        *,
-        target_orchestration_id: str,
-        namespace: str,
-    ) -> dict:
-        cloned = deepcopy(source_audit)
-        cloned["orchestration_id"] = target_orchestration_id
-        source_agents = source_audit["agents"]
-        cloned_agents = cloned["agents"]
-        call_id_by_agent = {
-            source_agent["agent_id"]: f"modelcall_{namespace}_{index:02d}"
-            for index, source_agent in enumerate(source_agents, start=1)
-        }
-        for index, (source_agent, cloned_agent) in enumerate(
-            zip(source_agents, cloned_agents, strict=True),
-            start=1,
-        ):
-            agent_id = source_agent["agent_id"]
-            parent_agent_id = next(
-                (
-                    candidate["agent_id"]
-                    for candidate in source_agents
-                    if candidate["call_id"] == source_agent["parent_call_id"]
-                ),
-                None,
-            )
-            cloned_agent.update(
-                {
-                    "call_id": call_id_by_agent[agent_id],
-                    "origin_call_id": call_id_by_agent[agent_id],
-                    "response_id": f"generation_{namespace}_proof_{index:02d}",
-                    "parent_call_id": (
-                        call_id_by_agent[parent_agent_id]
-                        if parent_agent_id is not None
-                        else None
-                    ),
-                    "delegation_id": (
-                        None
-                        if source_agent["delegation_id"] is None
-                        else f"delegation_{namespace}_{index:02d}"
-                    ),
-                    "call_count": 1,
-                    "cache_hit": False,
-                    "usage_source": "response",
-                }
-            )
-        cloned_by_agent = {
-            item["agent_id"]: item for item in cloned_agents
-        }
-        for gate in cloned["deterministic_gates"]:
-            source_agent = cloned_by_agent[gate["source_agent_id"]]
-            gate["source_call_id"] = source_agent["call_id"]
-            gate["delegation_id"] = source_agent["delegation_id"]
-        return cloned
-
-    def cold_ledger_items_for_audit(
-        target_audit: dict,
-        source_items: list[dict],
-    ) -> list[dict]:
-        source_by_agent = {item["agent_id"]: item for item in source_items}
-        return [
-            {
-                **deepcopy(source_by_agent[agent["agent_id"]]),
-                "call_id": agent["call_id"],
-                "orchestration_id": target_audit["orchestration_id"],
-                "parent_call_id": agent["parent_call_id"],
-                "delegation_id": agent["delegation_id"],
-                "cache_key": hashlib.sha256(
-                    (
-                        f"{target_audit['orchestration_id']}:"
-                        f"{agent['agent_id']}"
-                    ).encode()
-                ).hexdigest(),
-                "call_count": 1,
-                "response_id": agent["response_id"],
-                "response_model": agent["response_model"],
-                "outcome": agent["outcome"],
-                "usage_source": "response",
-                "actual_cost_usd": source_by_agent[agent["agent_id"]][
-                    "actual_cost_usd"
-                ],
-            }
-            for agent in target_audit["agents"]
-        ]
 
     def clone_warm_audit_and_ledger(
         cold_audit: dict,
@@ -3947,42 +3943,36 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
     }
     isolation_ledger["summary"] = _ledger_summary(isolation_ledger["items"])
 
-    baseline_audit = clone_cold_audit(
-        audit,
-        target_orchestration_id="orch_release_acceptance_baseline",
-        namespace="baseline",
-    )
-    baseline_cold_items = cold_ledger_items_for_audit(
-        baseline_audit,
-        ledger["items"],
-    )
-    later_audit, later_warm_items = clone_warm_audit_and_ledger(
-        baseline_audit,
-        baseline_cold_items,
-        target_orchestration_id="orch_release_acceptance_later",
-        namespace="later",
-    )
-    baseline_run["agent_orchestration"] = baseline_audit
-    baseline_result["agent_orchestration"] = baseline_audit
-    baseline_result["audit"]["agent_orchestration"] = baseline_audit
-    later_run["agent_orchestration"] = later_audit
-    later_result["agent_orchestration"] = later_audit
-    later_result["audit"]["agent_orchestration"] = later_audit
+    deterministic_orchestration = {
+        "executed": False,
+        "authority_mode": release_tool.DETERMINISTIC_REFERENCE_MODE,
+        "model": None,
+        "external_tracing": False,
+        "deterministic_safety_authority": True,
+    }
+    deterministic_canonicalization = {
+        "implementation": "deterministic_reference_oracle",
+        "model": None,
+        "provider": None,
+        "mode": release_tool.DETERMINISTIC_REFERENCE_MODE,
+    }
+    for run, result in (
+        (baseline_run, baseline_result),
+        (later_run, later_result),
+    ):
+        run["agent_orchestration"] = deepcopy(deterministic_orchestration)
+        result["agent_orchestration"] = deepcopy(deterministic_orchestration)
+        result["audit"].update(
+            {
+                "profile": release_tool.DETERMINISTIC_REFERENCE_PROFILE,
+                "authority_mode": release_tool.DETERMINISTIC_REFERENCE_MODE,
+                "canonicalization": deepcopy(deterministic_canonicalization),
+                "agent_orchestration": deepcopy(deterministic_orchestration),
+            }
+        )
     causal_delta = release_tool._keyed_dto_delta(baseline_result, later_result)
 
-    final_model_ledger = {
-        "scope": "global_budget_ledger",
-        "budget_scope": "instance_lifetime",
-        "ledger_persistence": "ephemeral_instance",
-        "items": [
-            *deepcopy(isolation_ledger["items"]),
-            *baseline_cold_items,
-            *later_warm_items,
-        ],
-    }
-    final_model_ledger["summary"] = _ledger_summary(
-        final_model_ledger["items"]
-    )
+    final_model_ledger = deepcopy(isolation_ledger)
     cache_lineage = {
         "contract": "casepath.flagship-cache-lineage/1.0.0",
         "requested_model": release_tool.REQUIRED_PRODUCTION_MODEL,
@@ -6174,10 +6164,26 @@ def test_successful_dynamic_evidence_fixture_matches_production_bundle_shape() -
     assert isolation["summary"]["records"] == 12
     assert isolation["summary"]["network_calls"] == 6
     assert isolation["summary"]["outcomes"]["cache_hit"] == 6
-    assert final["summary"]["records"] == 24
-    assert final["summary"]["network_calls"] == 12
-    assert final["summary"]["outcomes"]["cache_hit"] == 12
+    assert final == isolation
+    assert final["summary"]["records"] == 12
+    assert final["summary"]["network_calls"] == 6
+    assert final["summary"]["outcomes"]["cache_hit"] == 6
     assert final["summary"]["actual_cost_complete"] is True
+    for filename, knowledge_mode in (
+        ("later-baseline-run.json", "baseline"),
+        ("later-after-memory-run.json", "current"),
+    ):
+        run = retained[filename]
+        assert run["knowledge_mode"] == knowledge_mode
+        assert run["model_mode"] == release_tool.DETERMINISTIC_REFERENCE_MODE
+        assert run["model"] is None
+        assert run["agent_orchestration"]["executed"] is False
+        assert run["result"]["audit"]["canonicalization"] == {
+            "implementation": "deterministic_reference_oracle",
+            "model": None,
+            "provider": None,
+            "mode": release_tool.DETERMINISTIC_REFERENCE_MODE,
+        }
 
 
 def test_dynamic_runtime_evidence_paths_reject_extra_manifest_file(
@@ -6322,6 +6328,91 @@ def test_dynamic_runtime_acceptance_rejects_cache_lineage_tamper() -> None:
     ] = "modelcall_forged_warm_lineage"
 
     with pytest.raises(release_tool.VerificationError, match="cache-lineage receipt"):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+def test_dynamic_runtime_acceptance_rejects_thirteenth_final_ledger_row() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    final_ledger = retained["model-ledger.json"]
+    extra = deepcopy(final_ledger["items"][-1])
+    extra.update(
+        {
+            "call_id": "modelcall_forbidden_later_row",
+            "orchestration_id": "orch_forbidden_later_activity",
+        }
+    )
+    final_ledger["items"].append(extra)
+    final_ledger["summary"] = _ledger_summary(final_ledger["items"])
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match="exact immutable ordered 6/12/12 snapshots",
+    ):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+@pytest.mark.parametrize(
+    "activity",
+    ["model_mode", "canonicalizer", "executed_dag", "model_event"],
+)
+def test_dynamic_runtime_acceptance_rejects_later_model_activity(
+    activity: str,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    run = retained["later-after-memory-run.json"]
+    if activity == "model_mode":
+        run["model_mode"] = release_tool.REQUIRED_PRODUCTION_MODE
+        run["model"] = release_tool.REQUIRED_PRODUCTION_MODEL
+    elif activity == "canonicalizer":
+        run["result"]["audit"]["canonicalization"] = {
+            "implementation": "model_backed_openrouter_canonicalizer",
+            "model": release_tool.REQUIRED_PRODUCTION_MODEL,
+            "provider": "openrouter",
+            "mode": release_tool.REQUIRED_PRODUCTION_MODE,
+        }
+    elif activity == "executed_dag":
+        forged = {
+            **run["agent_orchestration"],
+            "executed": True,
+            "agents": [],
+        }
+        run["agent_orchestration"] = deepcopy(forged)
+        run["result"]["agent_orchestration"] = deepcopy(forged)
+        run["result"]["audit"]["agent_orchestration"] = deepcopy(forged)
+    else:
+        run["events"].append(
+            {
+                "stage": "agent_orchestration",
+                "actor_type": "nemotron_agent",
+                "status": "completed",
+                "model": release_tool.REQUIRED_PRODUCTION_MODEL,
+                "call_id": "modelcall_forbidden_later_event",
+                "call_count": 1,
+            }
+        )
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match="deterministic-reference comparison run|model execution activity",
+    ):
         release_tool.verify_dynamic_runtime_acceptance(
             contract,
             report,
@@ -6622,6 +6713,27 @@ def test_provider_single_flight_acceptance_criterion_rejects_tampering(value) ->
         release_tool.verify_static_runtime_acceptance_contract(contract)
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("model_acceptance_scope", "all_journey_runs"),
+        ("learning_comparison_authority", "model_dag"),
+        ("requires_learning_comparison_zero_model_activity", False),
+        ("required_final_model_ledger_records", 24),
+        ("required_final_model_network_calls", 12),
+        ("required_final_cache_hits", 12),
+    ],
+)
+def test_flagship_only_model_acceptance_contract_rejects_tampering(
+    field: str,
+    value,
+) -> None:
+    contract = deepcopy(release_tool.load_json(release_tool.RELEASE_PATH))
+    contract["truth"]["production_runtime_acceptance"][field] = value
+    with pytest.raises(release_tool.VerificationError, match=field):
+        release_tool.verify_static_runtime_acceptance_contract(contract)
+
+
 def test_render_uses_curated_frontend_and_model_aware_readiness_probe() -> None:
     contract = release_tool.load_json(release_tool.RELEASE_PATH)
     release_tool.verify_render_runtime_contract(contract)
@@ -6841,7 +6953,7 @@ def test_handoff_continuity_uses_structured_moments_without_translucent_text() -
         encoding="utf-8"
     )
     assert 'assets/live-v17-continuity.css?v=20.0.0' in index
-    assert 'assets/live-v16.js?v=20.0.1' in index
+    assert 'assets/live-v16.js?v=20.0.2' in index
     assert 'assets/live-v17.js?v=20.0.1' in index
     assert 'assets/live-v18.js?v=20.0.1' in index
     assert 'assets/live-v16.css?v=20.0.0' in index

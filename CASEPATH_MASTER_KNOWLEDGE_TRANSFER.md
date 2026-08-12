@@ -5385,8 +5385,9 @@ and one WebM. After the one production journey,
 15 JSON, 14 PNG, and one WebM. It parses and sanitizes every JSON document;
 checks hash, byte size, media type, and PNG/WebM magic; binds deployment,
 release, runtime, and readiness identity; validates exact flagship cold-six and
-warm-six origin lineage; validates the later cold-six and warm-six pair; and
-reconciles the immutable final 24-row, 12-network, 12-cache ledger. Production
+warm-six origin lineage; proves both held-out comparisons use deterministic
+application authority with zero model activity; and reconciles the immutable
+final 12-row, 6-network, 6-cache ledger. Production
 evidence is published only after that full verifier succeeds.
 
 The correction status is `fixed_unverified` until a new hosted run has
@@ -5405,12 +5406,32 @@ the cumulative known actual cost through Attempt 23 is USD 0.4292561. Public QA
 remained the exact atomic Attempt 22 bundle. Immutable history now spans
 `model-validation-attempt-20260811-01.json` through `-23.json`.
 
-CP-047 is `fixed_unverified`. Canonicalizer `1.7.0`, prompt contract `1.6`, and
+Attempt 24 on exact commit `a1cc21e77f5c5fb8e1e993044c199eca2655f0f1`
+passed the 197/0 zero-provider preflight and causal verifier. Flagship run
+`run_ee90220be9719ea4` completed six paid roles and all three deterministic
+gates, and isolation run `run_13f7827167f7c7f1` produced six exact zero-call
+cache hits. The held-out baseline then started an unnecessary second paid DAG:
+its canonical call accepted 16/16 facts, while orchestrator call
+`modelcall_b5cbda5d8b277ba3` failed with OpenRouter HTTP 429 and retained no
+response identity, usage, or cost. QA waited 900,000 ms before surfacing the
+terminal. The immutable boundary is 14 ledger rows, eight network calls, six
+cache hits, USD 0.0336607 known cost, and one unknown-cost call. Cumulative
+known actual cost through Attempt 24 is USD 0.4629168. Public report and
+manifest bytes remained the exact atomic Attempt 22 bundle. Immutable history
+now spans `model-validation-attempt-20260811-01.json` through `-24.json`.
+
+CP-047 is closed by Attempt 24's exact 18/18 flagship and 16/16 held-out
+canonical acceptance. Canonicalizer `1.7.0`, prompt contract `1.6`, and
 canonical schema `1.5` remove deterministic-owned label, state, normalized
 value, prose, and process fields from provider judgment. The provider now
 contributes only exact `fact_id`, `source_ref_ids`, and `confidence` for the
 exact required count and IDs, while strict majority remains bound to real model
-contributions. A new aligned hosted journey must verify the correction.
+contributions. CP-048 tracks the separate unnecessary second paid DAG and slow
+terminal timeout. The release contract now limits model acceptance to the
+visible flagship, makes the learning comparison deterministic with zero model
+activity, pins the final ledger to six cold plus six warm rows, and makes QA
+surface a later terminal run failure promptly. This remains `fixed_unverified`
+until a new aligned hosted journey passes.
 
 The global sanitized ledger is intentionally immutable for one API instance.
 Caller reset preserves it and must never be expanded to erase release history.

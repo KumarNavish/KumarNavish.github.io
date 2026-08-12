@@ -8,9 +8,14 @@ from fastapi.testclient import TestClient
 import pytest
 
 import casepath_api.app as app_module
-from casepath_api.canonicalizer import OPENROUTER_MODEL
+from casepath_api.canonicalizer import (
+    MODEL_MODE_OPENROUTER,
+    MODEL_MODE_REFERENCE,
+    OPENROUTER_MODEL,
+    ModelResponseError,
+)
 from casepath_api.multi_agent import MULTI_AGENT_VERSION
-from casepath_api.pipeline_v15 import COMPONENT_VERSIONS, ClaimPipeline, digest
+from casepath_api.pipeline_v15 import COMPONENT_VERSIONS, PROFILE, ClaimPipeline, digest
 from casepath_api.storage import ActiveRunResetError, Storage
 
 SESSION_A = "session-a-12345678"
@@ -25,8 +30,14 @@ def headers(session_id: str = SESSION_A) -> dict[str, str]:
 def client(tmp_path: Path, monkeypatch) -> TestClient:
     storage = Storage(str(tmp_path / "api.db"))
     pipeline = ClaimPipeline(storage, pace_seconds=0)
+    held_out_pipeline = ClaimPipeline(
+        storage,
+        model_mode=MODEL_MODE_REFERENCE,
+        pace_seconds=0,
+    )
     monkeypatch.setattr(app_module, "storage", storage)
     monkeypatch.setattr(app_module, "pipeline", pipeline)
+    monkeypatch.setattr(app_module, "held_out_pipeline", held_out_pipeline)
     return TestClient(app_module.app)
 
 
@@ -239,6 +250,193 @@ def test_learning_proof_requires_explicit_bound_run_ids(client: TestClient):
     assert value["reviewed_memory_proof"]["used"] is True
     assert value["shared_rule"]["applied"] is False
     assert value["shared_rule"]["version_after"] == "mould-playbook-v3"
+
+
+def test_held_out_routing_is_zero_model_and_preserves_cross_pipeline_learning(
+    tmp_path: Path,
+    monkeypatch,
+):
+    class ExplodingCanonicalizer:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def canonicalize(self, *args, **kwargs):
+            self.calls += 1
+            raise ModelResponseError(
+                "The model provider must not be called by a held-out run",
+                invariant="test_exploding_provider",
+            )
+
+    class ExplodingAgentOrchestrator:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def invoke(self, *args, **kwargs):
+            self.calls += 1
+            raise AssertionError(
+                "The agent provider must not be called by a held-out run"
+            )
+
+    storage = Storage(str(tmp_path / "held-out-routing.db"))
+    exploding_canonicalizer = ExplodingCanonicalizer()
+    exploding_orchestrator = ExplodingAgentOrchestrator()
+    flagship_pipeline = ClaimPipeline(
+        storage,
+        model_mode=MODEL_MODE_OPENROUTER,
+        canonicalizer=exploding_canonicalizer,
+        agent_orchestrator=exploding_orchestrator,
+        pace_seconds=0,
+    )
+    held_out_pipeline = ClaimPipeline(
+        storage,
+        model_mode=MODEL_MODE_REFERENCE,
+        pace_seconds=0,
+    )
+    source_pipeline = ClaimPipeline(
+        storage,
+        model_mode=MODEL_MODE_REFERENCE,
+        pace_seconds=0,
+    )
+    monkeypatch.setattr(app_module, "storage", storage)
+    monkeypatch.setattr(app_module, "pipeline", flagship_pipeline)
+    monkeypatch.setattr(app_module, "held_out_pipeline", held_out_pipeline)
+    client = TestClient(app_module.app)
+
+    assert app_module.run_pipeline_for_claim("DEF-027-E0-DEMO") is flagship_pipeline
+    assert app_module.run_pipeline_for_claim("DEMO-MOULD-002") is held_out_pipeline
+    assert app_module.run_pipeline_for_claim("DEMO-MOULD-002-shadow") is flagship_pipeline
+
+    source_run_id = source_pipeline.create(
+        "DEF-027-E0-DEMO",
+        session_id=SESSION_A,
+    )
+    source = wait(client, source_run_id)
+    assert source["status"] == "complete"
+    review = client.post(
+        f"/api/runs/{source_run_id}/review",
+        json={
+            "decision": "approve_with_edit",
+            "building_envelope_mode": "conditional",
+            "confidence": 0.9,
+            "justification": "Generated-demo edit, not qualified review.",
+        },
+        headers=headers(),
+    )
+    assert review.status_code == 200, review.text
+
+    ledger_before = storage.sanitized_model_ledger()
+    summary_before = storage.model_call_summary()
+    baseline_response = client.post(
+        "/api/runs",
+        json={"claim_id": "DEMO-MOULD-002", "knowledge_mode": "baseline"},
+        headers=headers(),
+    )
+    assert baseline_response.status_code == 202, baseline_response.text
+    assert baseline_response.json()["model_mode"] == MODEL_MODE_REFERENCE
+    baseline = wait(client, baseline_response.json()["run_id"])
+    later_response = client.post(
+        "/api/runs",
+        json={"claim_id": "DEMO-MOULD-002", "knowledge_mode": "current"},
+        headers=headers(),
+    )
+    assert later_response.status_code == 202, later_response.text
+    assert later_response.json()["model_mode"] == MODEL_MODE_REFERENCE
+    later = wait(client, later_response.json()["run_id"])
+
+    expected_orchestration = {
+        "executed": False,
+        "authority_mode": MODEL_MODE_REFERENCE,
+        "model": None,
+        "external_tracing": False,
+        "deterministic_safety_authority": True,
+    }
+    expected_canonicalization = {
+        "implementation": "deterministic_reference_oracle",
+        "model": None,
+        "provider": None,
+        "mode": MODEL_MODE_REFERENCE,
+    }
+    for run in (baseline, later):
+        assert run["status"] == "complete"
+        assert run["model_mode"] == MODEL_MODE_REFERENCE
+        assert run["model"] is None
+        assert run["agent_orchestration"] == expected_orchestration
+        assert run["result"]["agent_orchestration"] == expected_orchestration
+        assert run["result"]["audit"]["agent_orchestration"] == expected_orchestration
+        assert run["result"]["audit"]["canonicalization"] == expected_canonicalization
+        assert run["result"]["audit"]["authority_mode"] == MODEL_MODE_REFERENCE
+        assert all(event.get("actor_type") != "nemotron_agent" for event in run["events"])
+        assert all(event.get("model") is None for event in run["events"])
+        assert all(
+            not ({"call_id", "response_id", "cache_hit", "call_count"} & set(event))
+            for event in run["events"]
+        )
+
+    assert baseline["result"]["memory_application"] is None
+    assert later["result"]["memory_application"]["model_acceptance_reused"] is False
+    assert exploding_canonicalizer.calls == 0
+    assert exploding_orchestrator.calls == 0
+    assert storage.sanitized_model_ledger() == ledger_before
+    assert storage.model_call_summary() == summary_before
+
+    proof = client.get(
+        "/api/learning-proof",
+        params={
+            "baseline_run_id": baseline["run_id"],
+            "later_run_id": later["run_id"],
+        },
+        headers=headers(),
+    )
+    assert proof.status_code == 200, proof.text
+    proof_value = proof.json()
+    assert proof_value["ready"] is True
+    assert proof_value["computed"] is True
+    assert len(proof_value["deterministic_checks"]) == 10
+    assert {value["status"] for value in proof_value["deterministic_checks"]} == {
+        "passed"
+    }
+    assert proof_value["reviewed_memory_proof"]["used"] is True
+    assert isinstance(
+        proof_value["memory_application_proof"]["application_hash"],
+        str,
+    )
+    for field in (
+        "receipt_present",
+        "receipt_valid",
+        "source_memory_current",
+        "before_hashes_match",
+        "after_hashes_match",
+        "allowed_delta_exact",
+        "replay_exact",
+    ):
+        assert proof_value["memory_application_proof"][field] is True
+    assert storage.sanitized_model_ledger() == ledger_before
+    assert storage.model_call_summary() == summary_before
+
+    client_controlled_mode = client.post(
+        "/api/runs",
+        json={
+            "claim_id": "DEMO-MOULD-002",
+            "knowledge_mode": "baseline",
+            "model_mode": MODEL_MODE_OPENROUTER,
+        },
+        headers=headers(),
+    )
+    assert client_controlled_mode.status_code == 422
+
+    flagship_response = client.post(
+        "/api/runs",
+        json={"claim_id": "DEF-027-E0-DEMO", "knowledge_mode": "baseline"},
+        headers=headers(),
+    )
+    assert flagship_response.status_code == 202, flagship_response.text
+    assert flagship_response.json()["model_mode"] == MODEL_MODE_OPENROUTER
+    assert flagship_response.json()["profile"] == PROFILE
+    failed_flagship = wait(client, flagship_response.json()["run_id"])
+    assert failed_flagship["status"] == "failed"
+    assert failed_flagship["failure_stage"] == "deterministic_failure_boundary"
+    assert exploding_canonicalizer.calls == 1
+    assert exploding_orchestrator.calls == 0
 
 
 def test_public_knowledge_projects_private_review_state(client: TestClient):

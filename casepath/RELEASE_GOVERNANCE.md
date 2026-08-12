@@ -408,6 +408,19 @@ Twenty-three authorized model attempts failed closed at the release gate:
   `hybrid_model_contribution`. No downstream model role, deterministic gate, or
   warm replay started. The failed build did not replace public QA: its atomic
   state remained the exact Attempt 22 `0db743a` bundle.
+- Attempt 24 ran from QA deploy `dep-d9uclg7lk1mc73eh3ehg` against aligned
+  source commit `a1cc21e77f5c5fb8e1e993044c199eca2655f0f1`. The 197/0
+  zero-provider preflight and causal verifier passed. Flagship run
+  `run_ee90220be9719ea4` completed all six paid roles and three deterministic
+  gates under `orch_703e1b34aa5d9582`; isolation run
+  `run_13f7827167f7c7f1` then produced six exact zero-call cache hits under
+  `orch_1fd149fd4a5ec494`. The later baseline unnecessarily started a second
+  paid DAG: canonical facts accepted all 16 contributions, but orchestration
+  call `modelcall_b5cbda5d8b277ba3` failed at OpenRouter with HTTP 429 and no
+  retained response, usage, or cost. QA then waited the full 900,000 ms UI
+  timeout before failing. The frozen ledger has 14 rows, eight network calls,
+  six cache hits, USD 0.0336607 known cost, and one unknown-cost call. Public
+  QA remained the exact atomic Attempt 22 bundle.
 
 The repaired agent-graph implementation is version `1.2.2`. The document,
 process, and evidence coverage roles now require exact `6`, `6`, and `21`
@@ -454,19 +467,20 @@ three passed deterministic gates.
 Known aggregate provider charges for attempts 1, 2, 4, 5, 6, 8, 10, 11, 12,
 the two cost-known calls in attempt 14, all six calls in attempts 15, 16, 19,
 20, and 21, all five calls in attempt 17, all four calls in attempt 18, all
-twelve calls in attempt 22, and the one call in attempt 23 are USD 0.4292561.
+twelve calls in attempt 22, the one call in attempt 23, and the seven
+cost-known calls in attempt 24 are USD 0.4629168.
 Attempts 3, 7, 9, and 13,
 plus the two failed calls in attempt 14,
-are unknown and excluded rather than treated as zero. Attempts 7 and 9 each retain a USD 0.027645 estimated
+plus the failed orchestration call in attempt 24 are unknown and excluded
+rather than treated as zero. Attempts 7 and 9 each retain a USD 0.027645 estimated
 reservation, neither of which is included as an actual charge. The attempts
-remain failed-closed release history; Attempts 15, 16, 19, 20, 21, and 22
+remain failed-closed release history; Attempts 15, 16, 19, 20, 21, 22, and 24
 contain successful application-orchestration evidence, and Attempts 16, 19, 20,
-21, and 22 additionally contain accepted zero-network-call cache replays, but
-none is accepted model-backed release evidence. Attempt 23 failed at its first
-model role. No raw prompt, raw output, credential, or private reference is
-retained.
+21, 22, and 24 additionally contain accepted zero-network-call cache replays,
+but none is accepted model-backed release evidence. No raw prompt, raw output,
+credential, or private reference is retained.
 
-The twenty-three records above are listed under `historical_model_validation` with
+The twenty-four records above are listed under `historical_model_validation` with
 `scope: failed_closed_history_only`; they can never establish current runtime
 acceptance. At this source-history freeze, no passing dynamic QA artifact pair
 had been verified. A later same-commit passing pair may supersede that
@@ -576,8 +590,9 @@ WebM) before the production marker. After the single provider-backed journey,
 the full verifier requires the exact 30-file inventory above, parses and
 sanitizes every JSON document, checks file size, SHA-256, media type and media
 magic, binds deployment/release/runtime/readiness identity, proves the exact
-flagship cold-six and warm-six origin lineage, proves the later cold-six and
-warm-six lineage, and reconciles the final exact 24-row ledger. The production
+flagship cold-six and warm-six origin lineage, proves that both held-out
+learning comparisons use deterministic application authority with zero model
+activity, and reconciles the final exact 12-row/6-network/6-cache ledger. The production
 artifacts cannot be published merely because the browser report says `passed`;
 this exact full verification is the final build predecessor.
 
@@ -598,7 +613,15 @@ closed. Its USD 0.0220558 charge raises the cumulative known actual total
 through Attempt 23 to USD 0.4292561. Public QA remained the exact atomic
 Attempt 22 bundle.
 
-CP-047 isolates the canonical failure. The canonical provider schema allowed
+Attempt 24 then proved the canonical repair: flagship facts accepted 18/18 and
+the held-out baseline accepted 16/16. The flagship completed all six roles,
+three gates, and six exact warm cache hits. Its obsolete second paid DAG failed
+at the later orchestrator with OpenRouter HTTP 429; QA surfaced that terminal
+only after 900,000 ms. The immutable 14-row ledger has eight network calls, six
+cache hits, USD 0.0336607 known cost, and one unknown-cost call, raising the
+cumulative known total to USD 0.4629168. Public QA remained Attempt 22.
+
+CP-047 isolated the canonical failure. The canonical provider schema allowed
 the model to propose state and normalized values while the bounded prompt
 catalog withheld the expected deterministic answers. The resulting response
 therefore retained only 1 of 18 fact contributions. Canonicalizer `1.7.0`,
@@ -606,9 +629,11 @@ prompt contract `1.6`, and canonical response schema `1.5` make label, state,
 normalized value, prose, and process projection deterministic-owned. The
 provider now contributes only the exact `fact_id`, `source_ref_ids`, and
 `confidence` fields for the exact required count and IDs; strict majority is
-still computed over those real model contributions. This correction is
-`fixed_unverified` until a new aligned hosted candidate passes both verifier
-stages and the full production journey.
+still computed over those real model contributions. Attempt 24 closes CP-047.
+CP-048 tracks the unnecessary second paid DAG and slow timeout; the source now
+scopes model acceptance to the visible flagship, requires deterministic
+zero-model learning comparisons, pins the final ledger to 12/6/6, and polls
+later terminal failures promptly. That structural repair is `fixed_unverified`.
 
 The global model ledger is immutable for the life of an API instance. Caller
 reset intentionally does not erase it and must never be changed to do so. Each
