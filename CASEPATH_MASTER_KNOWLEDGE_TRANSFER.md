@@ -5214,7 +5214,11 @@ The frozen local implementation now provides:
   `X-CasePath-Session` is part of every coalescing key, review POSTs purge
   pre-review reads and wait out same-run read races, and the applied view
   hydrates every reviewed artifact from the same authoritative response instead
-  of mixing a cached pre-review graph with a post-review checklist.
+  of mixing a cached pre-review graph with a post-review checklist; and
+- a stable accessibility boundary: v20 entrance motion is transform-only, Axe
+  waits for all finite document animations and two stable paint frames, and a
+  bounded failure retains rule IDs, hashed targets, and allowlisted contrast
+  diagnostics without rendered claim or free-form failure text.
 
 The local rendered journey completed from flagship analysis through simulated
 review, quarantined memory, held-out later claim, visible five-operation receipt,
@@ -5236,10 +5240,10 @@ Exact local freeze gates:
 
 ```text
 backend_tests: 291 passed
-release_contract_tests: 109 passed
+release_contract_tests: 110 passed
 deployment_and_static_publish_tests: 8 passed
-release_tests_total: 117 passed
-browser_contract_self_test: 88 fixtures passed
+release_tests_total: 118 passed
+browser_contract_self_test: 89 fixtures passed
 source_manifest_files: 137
 release_artifact_files: 25
 model_visible_artifact_files: 24
@@ -5250,6 +5254,15 @@ python_compileall: passed
 javascript_syntax: passed
 git_diff_check: passed
 ```
+
+Hosted QA deploy `dep-d9u8a32jobas73ein0kg` on exact commit
+`350e834f709ff82e1b79c9f2b9573970c0197ba3` then proved the mandatory
+zero-provider boundary and the reviewed-state race repair: it reached the
+learning view, failed there inside the 390 px Axe scan, never emitted the
+production marker, and left the public ledger at exactly zero records, network
+calls, and cost. The failure was the now-repaired transient opacity/contrast
+boundary, not a provider or application-orchestration failure. Its replacement
+remains hosted-preflight pending.
 
 The static source and artifact contract is therefore locally verified. At this
 source-history freeze, dynamic production acceptance remained unestablished:
