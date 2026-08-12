@@ -4890,7 +4890,7 @@ no current report or evidence manifest; the read-only capture at
 
 The immutable sanitized record is
 `casepath/releases/model-validation-attempt-20260811-18.json`. Known aggregate
-actual charges are now USD 0.2765156. Attempts 3, 7, 9, and 13 plus the two
+actual charges through Attempt 18 are USD 0.2765156. Attempts 3, 7, 9, and 13 plus the two
 failed calls in attempt 14 remain unknown rather than zero. Agent-graph `1.2.2`
 now gives the document/source role a request-specific finite schema: artifact
 IDs are limited to the exact six candidates, source references to at most one
@@ -4901,6 +4901,37 @@ binds the prompt, total limit, and reasoning policy. This repair is locally
 verified but remains `fixed_unverified` until a new aligned
 production journey establishes the dynamic release artifact pair.
 
+## Production attempt 19 and normalized-grounding boundary
+
+Attempt 19 ran against aligned source commit
+`72b2527b05e2fc4e25c3b8655d4fe9f2da266580`. QA deploy
+`dep-d9u5nhnqj5pc739018eg` accepted cold run `run_7c0b2cd27469bf2e`
+with orchestration `orch_8c0994a363e6700c`. All six required model roles
+completed through DeepInfra, followed by the deterministic process, evidence,
+and whole-playbook gates. Warm run `run_88f6be268fee9a44`, orchestration
+`orch_5bb4e7cc4231442d`, then reproduced all six role results through exact
+cache-origin bindings and made zero provider calls.
+
+The six cold calls used 35,274 prompt and 3,730 completion tokens, 39,004 total,
+and cost USD 0.0256894 with complete billing. Five calls succeeded directly and
+the evidence call disclosed guarded deterministic fallback. Focused QA reached
+its terminal grounding check, then rejected the journey because the returned
+page separated `Tenant` and `Alex Morgan` with a newline while the checked quote
+used a space. The values are equivalent after NFKC normalization and whitespace
+collapse, but the assertion compared the unnormalized strings.
+
+The browser assertion now applies the shared NFKC and whitespace-collapse
+boundary, with focused self-test coverage for newline/space equivalence. The
+failed QA build retained neither a current report nor an evidence manifest; its
+public origin continued serving the stale 57-check report from source commit
+`7be18c72f353366930cd5dcace637884e06e63a7` and returned 404 for the manifest.
+Attempt 19 therefore preserves complete cold and warm application evidence but
+establishes no dynamic release acceptance. The immutable sanitized record is
+`casepath/releases/model-validation-attempt-20260811-19.json`; cumulative known
+actual provider charges are USD 0.3022050. CP-037 remains `fixed_unverified`
+until a new aligned production journey verifies the normalized-grounding repair
+and retains the current report/evidence-manifest pair.
+
 ## Exact dynamic release evidence not yet observed by this record
 
 These point-in-time fields must be supplied by the sanitized ledger and retained
@@ -4910,7 +4941,7 @@ not fields to write back into the static release contract:
 ```text
 dynamic_runtime_acceptance_verdict: NOT_ESTABLISHED_BY_THIS_RECORD
 historical_model_validation_scope: failed_closed_history_only
-failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -18.json
+failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -19.json
 failed_attempt_id: authorized-smoke-20260811-01
 failed_attempt_application_outcome: rejected
 failed_attempt_failure_type: exact_private_reference_mismatch
@@ -4923,42 +4954,42 @@ provider_observed_prompt_tokens: 3629
 provider_observed_completion_tokens: 2625
 provider_observed_total_tokens: 6254
 provider_observed_finish_reason: stop
-latest_failed_attempt_id: production-flagship-20260812-18
-latest_failed_attempt_source_commit: df4db4872e0854af7dbe97e5c86833ab827a1c1b
+latest_failed_attempt_id: production-flagship-20260812-19
+latest_failed_attempt_source_commit: 72b2527b05e2fc4e25c3b8655d4fe9f2da266580
 latest_failed_attempt_qa_service_id: srv-d9se2bh42hec73c54sjg
-latest_failed_attempt_qa_deploy_id: dep-d9u53vjm8hqs73ei6nk0
+latest_failed_attempt_qa_deploy_id: dep-d9u5nhnqj5pc739018eg
 latest_failed_attempt_qa_deploy_outcome: build_failed
-latest_failed_attempt_qa_deploy_created_at: 2026-08-12T10:59:10.712962Z
-latest_failed_attempt_qa_deploy_started_at: 2026-08-12T10:59:10.681698Z
-latest_failed_attempt_qa_deploy_finished_at: 2026-08-12T11:00:37.355224Z
-latest_failed_attempt_run_id: run_b7e02e168c3217ac
-latest_failed_attempt_orchestration_id: orch_2ca291c7f62ef75a
-latest_failed_attempt_application_outcome: rejected
-latest_failed_attempt_failure_type: document_source_integrity_truncated_at_output_limit
-latest_failed_attempt_error_type: AgentBoundaryError
-latest_failed_attempt_error_invariant: provider_finish_reason
-latest_failed_attempt_full_orchestration_accepted: false
-latest_failed_attempt_deterministic_process_gate_started: false
-latest_failed_attempt_evidence_checklist_started: false
-latest_failed_attempt_final_model_role_started: false
-latest_failed_attempt_whole_playbook_gate_started: false
-latest_failed_attempt_warm_replay_started: false
-latest_failed_attempt_provider_outcome: three_successes_one_document_length_rejected
+latest_failed_attempt_qa_deploy_created_at: 2026-08-12T11:40:54.331311Z
+latest_failed_attempt_qa_deploy_started_at: 2026-08-12T11:40:54.301747Z
+latest_failed_attempt_qa_deploy_finished_at: 2026-08-12T11:43:34.867679Z
+latest_failed_attempt_run_id: run_7c0b2cd27469bf2e
+latest_failed_attempt_orchestration_id: orch_8c0994a363e6700c
+latest_failed_attempt_application_outcome: accepted
+latest_failed_attempt_failure_type: normalized_grounding_text_quote_not_exact_substring
+latest_failed_attempt_error_type: Error
+latest_failed_attempt_error_invariant: normalized_grounding_text_quote_not_exact_substring
+latest_failed_attempt_full_orchestration_accepted: true
+latest_failed_attempt_deterministic_process_gate_started: true
+latest_failed_attempt_evidence_checklist_started: true
+latest_failed_attempt_final_model_role_started: true
+latest_failed_attempt_whole_playbook_gate_started: true
+latest_failed_attempt_warm_replay_started: true
+latest_failed_attempt_provider_outcome: six_roles_succeeded
 latest_failed_attempt_successful_upstream_provider: DeepInfra
-latest_failed_attempt_network_call_count: 4
-latest_failed_attempt_guarded_fallback_call_count: 0
-latest_failed_attempt_prompt_tokens: 25551
-latest_failed_attempt_completion_tokens: 6683
-latest_failed_attempt_total_tokens: 32234
-latest_failed_attempt_actual_cost_usd: 0.0273757
+latest_failed_attempt_network_call_count: 6
+latest_failed_attempt_guarded_fallback_call_count: 1
+latest_failed_attempt_prompt_tokens: 35274
+latest_failed_attempt_completion_tokens: 3730
+latest_failed_attempt_total_tokens: 39004
+latest_failed_attempt_actual_cost_usd: 0.0256894
 latest_failed_attempt_actual_cost_complete: true
 latest_failed_attempt_unknown_cost_call_count: 0
 latest_failed_attempt_current_report_retained: false
 latest_failed_attempt_current_evidence_manifest_retained: false
-known_failed_attempt_cost_usd_excluding_attempts_03_07_09_13_and_attempt_14_unknown_calls: 0.2765156
+known_failed_attempt_cost_usd_excluding_attempts_03_07_09_13_and_attempt_14_unknown_calls: 0.3022050
 logical_specialist_topology: fan_out_and_join
 physical_provider_max_in_flight: 1
-accepted_retry_status: APPLICATION_REJECTED_AT_DOCUMENT_OUTPUT_BOUNDARY_ON_ATTEMPT_18
+accepted_retry_status: APPLICATION_ACCEPTED_BUT_QA_REJECTED_AT_NORMALIZED_GROUNDING_BOUNDARY_ON_ATTEMPT_19
 candidate_source_commit: PENDING
 release_id: casepath-v20-reference-20260811
 provider: openrouter
@@ -5086,8 +5117,8 @@ backend_tests: 291 passed
 release_contract_tests: 100 passed
 deployment_and_static_publish_tests: 8 passed
 release_tests_total: 108 passed
-browser_contract_self_test: 85 fixtures passed
-source_manifest_files: 133
+browser_contract_self_test: 86 fixtures passed
+source_manifest_files: 134
 release_artifact_files: 25
 model_visible_artifact_files: 24
 curated_frontend_publish_files: 20
@@ -5100,7 +5131,7 @@ git_diff_check: passed
 
 The static source and artifact contract is therefore locally verified. At this
 source-history freeze, dynamic production acceptance remained unestablished:
-attempts 01–18 are failed-closed release history. Attempt 16 accepted the
+attempts 01–19 are failed-closed release history. Attempt 16 accepted the
 same-commit six-role, three-gate cold application orchestration and exact
 zero-call warm cache replay, but retained no passing current report and
 evidence-manifest pair because its process interaction removed the three ranked
@@ -5109,9 +5140,13 @@ deterministic process gate but rejected all 42 evidence fields before the
 remaining roles, gates, or warm replay could start. Attempt 18 then completed
 canonical facts and planning but rejected the document/source role at its exact
 4,096-token ceiling before any deterministic gate; its already-started process
-sibling completed without a corresponding completion receipt. A later
-authoritative same-commit QA artifact pair may supersede that point-in-time
-verdict without modifying this historical record.
+sibling completed without a corresponding completion receipt. Attempt 19
+completed all six cold roles and all three deterministic gates, then
+replayed all six roles through exact zero-call warm cache lineage before the
+terminal browser assertion rejected newline/space-equivalent grounding text.
+The shared NFKC and whitespace-collapse repair remains production-unverified.
+A later authoritative same-commit QA artifact pair may supersede that
+point-in-time verdict without modifying this historical record.
 
 The following evidence remains external to this local freeze and must not be
 inferred from it: qualified expert approval, qualified Swiss-law approval,

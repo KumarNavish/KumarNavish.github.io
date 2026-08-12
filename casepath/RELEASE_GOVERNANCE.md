@@ -118,7 +118,7 @@ bound identically across the run audit and sanitized ledger. A paid provider
 response, a cache replay, or a weak/unbound role
 record does not satisfy that gate.
 
-Eighteen authorized model attempts failed closed at the release gate:
+Nineteen authorized model attempts failed closed at the release gate:
 
 - Attempt 1 reached DeepInfra through OpenRouter and returned the provider's
   dated canonical model ID. It charged USD 0.00756 for 3,629 prompt and 2,625
@@ -329,6 +329,21 @@ Eighteen authorized model attempts failed closed at the release gate:
   final audit, all deterministic gates, and warm replay never started. The
   failed build published no current report or evidence manifest and remained
   failed-closed history.
+- Attempt 19 ran from QA deploy `dep-d9u5nhnqj5pc739018eg` against aligned
+  source commit `72b2527b05e2fc4e25c3b8655d4fe9f2da266580`. Cold run
+  `run_7c0b2cd27469bf2e` bound orchestration
+  `orch_8c0994a363e6700c`, accepted all six required model roles, and completed
+  the deterministic process, evidence, and whole-playbook gates. Warm run
+  `run_88f6be268fee9a44` then reproduced all six role results through exact
+  cache-origin bindings with zero provider calls. The six DeepInfra calls cost
+  USD 0.0256894 for 35,274 prompt and 3,730 completion tokens. Focused QA then
+  failed its terminal exact-source-quote assertion because the returned page
+  separated `Tenant` and `Alex Morgan` with a newline while the checked quote
+  used a space. The normalized text was semantically identical, but the
+  comparison had not applied the shared NFKC and whitespace-collapse boundary.
+  The failed build retained neither a current report nor an evidence manifest,
+  so the complete cold and warm orchestration remains failed-closed history
+  rather than dynamic release acceptance.
 
 The repaired agent-graph implementation is version `1.2.2`. The document,
 process, and evidence coverage roles now require exact `6`, `6`, and `21`
@@ -373,9 +388,9 @@ requires a new same-commit cold production journey with all six bound calls and
 three passed deterministic gates.
 
 Known aggregate provider charges for attempts 1, 2, 4, 5, 6, 8, 10, 11, 12,
-the two cost-known calls in attempt 14, all six calls in attempts 15 and 16,
-all five calls in attempt 17, and all four calls in attempt 18 are USD
-0.2765156. Attempts 3, 7, 9, and 13,
+the two cost-known calls in attempt 14, all six calls in attempts 15, 16, and
+19, all five calls in attempt 17, and all four calls in attempt 18 are USD
+0.3022050. Attempts 3, 7, 9, and 13,
 plus the two failed calls in attempt 14,
 are unknown and excluded rather than treated as zero. Attempts 7 and 9 each retain a USD 0.027645 estimated
 reservation, neither of which is included as an actual charge. The attempts
@@ -385,7 +400,7 @@ accepted zero-network-call cache replay, but none is accepted model-backed
 release evidence. No raw prompt, raw output, credential, or private reference
 is retained.
 
-The eighteen records above are listed under `historical_model_validation` with
+The nineteen records above are listed under `historical_model_validation` with
 `scope: failed_closed_history_only`; they can never establish current runtime
 acceptance. At this source-history freeze, no passing dynamic QA artifact pair
 had been verified. A later same-commit passing pair may supersede that
