@@ -5209,7 +5209,12 @@ The frozen local implementation now provides:
   commit and an isolated deterministic-reference API must complete the full
   browser lifecycle with a passed temporary report and an empty model ledger
   before the one production browser journey can start. The temporary artifacts
-  are deleted and cannot be mistaken for production acceptance evidence.
+  are deleted and cannot be mistaken for production acceptance evidence; and
+- a session-scoped, mutation-aware run-read boundary: the effective
+  `X-CasePath-Session` is part of every coalescing key, review POSTs purge
+  pre-review reads and wait out same-run read races, and the applied view
+  hydrates every reviewed artifact from the same authoritative response instead
+  of mixing a cached pre-review graph with a post-review checklist.
 
 The local rendered journey completed from flagship analysis through simulated
 review, quarantined memory, held-out later claim, visible five-operation receipt,
@@ -5231,10 +5236,10 @@ Exact local freeze gates:
 
 ```text
 backend_tests: 291 passed
-release_contract_tests: 108 passed
+release_contract_tests: 109 passed
 deployment_and_static_publish_tests: 8 passed
-release_tests_total: 116 passed
-browser_contract_self_test: 87 fixtures passed
+release_tests_total: 117 passed
+browser_contract_self_test: 88 fixtures passed
 source_manifest_files: 137
 release_artifact_files: 25
 model_visible_artifact_files: 24

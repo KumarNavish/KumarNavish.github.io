@@ -1214,6 +1214,16 @@
     state.journey = 'review-applied';
     state.stageMode = 'experience';
     const result = state.review?.result || state.run?.result || {};
+    if (state.review?.result && state.run) {
+      state.run = {
+        ...state.run,
+        result: snapshot(state.review.result),
+        review_transform: snapshot(state.review.review_transform),
+        candidate: snapshot(state.review.candidate),
+        review_response: snapshot(state.review),
+      };
+      state.flagshipRun = state.run;
+    }
     const delta = computedReviewDelta(state.reviewBefore, result);
     const reviewer = state.review?.reviewer || {};
     renderCanvas(`<div class="stage-shell review-applied"><header class="review-applied-heading"><span class="quiet-label">Server-confirmed simulated-review result</span><h2>The demo-corrected graph and checklist are now visible.</h2><p>This is the result returned after the simulated review—not a preview or qualified approval. The reviewer is recorded as ${esc(reviewer.type || 'type not returned')} with qualification ${esc(reviewer.qualification_status || 'not returned')}. This outcome is unverified, and the model acceptance from the pre-review result is not reused.</p></header><div class="review-applied-delta"><article><small>Process nodes added</small><strong>${delta.nodesAdded.length}</strong><p>${delta.nodesAdded.length ? delta.nodesAdded.map(id => esc(id)).join(', ') : 'None'}</p></article><article><small>Process nodes removed / changed</small><strong>${delta.nodesRemoved.length} / ${delta.nodesChanged.length}</strong><p>${delta.nodesRemoved.concat(delta.nodesChanged).length ? delta.nodesRemoved.concat(delta.nodesChanged).map(id => esc(id)).join(', ') : 'None'}</p></article><article><small>Connections added / removed / changed</small><strong>${delta.edgesAdded.length} / ${delta.edgesRemoved.length} / ${delta.edgesChanged.length}</strong><p>Computed from every returned graph edge.</p></article><article><small>Evidence relationships changed</small><strong>${delta.evidenceChanged.length}</strong><p>${delta.evidenceChanged.length ? delta.evidenceChanged.map(item => esc(item.item_id)).join(', ') : 'None'}</p></article></div><div class="review-applied-layout"><section><h3>Returned demo-corrected process graph</h3>${renderProcessWorkspace({ evidence: true, precedents: false })}</section><section>${renderReviewedChecklist(result.checklist?.items || [])}</section></div></div>`, 'review-applied');
