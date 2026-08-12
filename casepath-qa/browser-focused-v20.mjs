@@ -22,16 +22,51 @@ const REQUIRED_NEMOTRON_AGENT_IDS = Object.freeze([
   'evidence_checklist',
   'final_claim_brief_audit',
 ]);
+const REQUIRED_NEMOTRON_AGENT_ROLES = Object.freeze({
+  canonical_facts: 'Guarded Canonical Facts Agent',
+  orchestrator_plan: 'Nemotron Orchestrator',
+  document_source_integrity: 'Document and Source Integrity Agent',
+  process_decision_mapping: 'Process Decision Mapping Agent',
+  evidence_checklist: 'Evidence and Checklist Agent',
+  final_claim_brief_audit: 'Final Claim Brief Agent',
+});
 const REQUIRED_DETERMINISTIC_GATE_IDS = Object.freeze([
   'deterministic_process_gate',
   'deterministic_evidence_gate',
   'whole_playbook_gate',
 ]);
+const REQUIRED_DETERMINISTIC_GATE_ROLES = Object.freeze({
+  deterministic_process_gate: 'Deterministic Process Contract Gate',
+  deterministic_evidence_gate: 'Deterministic Evidence Contract Gate',
+  whole_playbook_gate: 'Deterministic Whole-Playbook Gate',
+});
 const ACCEPTED_ARTIFACT_CONTRACT = Object.freeze({
   deterministic_process_gate: { output_artifact: 'process_graph', source_agent_id: 'process_decision_mapping' },
   deterministic_evidence_gate: { output_artifact: 'evidence_model', source_agent_id: 'evidence_checklist' },
   whole_playbook_gate: { output_artifact: 'final_claim_brief', source_agent_id: 'final_claim_brief_audit' },
 });
+const PROCESS_CONTRIBUTION_ROLE = 'Process Decision Mapping Agent';
+const EVIDENCE_CONTRIBUTION_ROLE = 'Evidence and Checklist Agent';
+const FINAL_CONTRIBUTION_ROLE = 'Final Claim Brief Agent';
+const DETERMINISTIC_CONTRIBUTION_ROLE = 'deterministic_application';
+const FINAL_FIELD_CONTRACT = Object.freeze([
+  { field: 'current_node_id', contribution_id: 'final:current_node' },
+  { field: 'next_action_node_id', contribution_id: 'final:next_action' },
+  { field: 'supporting_fact_ids', contribution_id: 'final:supporting_facts' },
+  { field: 'upstream_contribution_ids', contribution_id: 'final:upstream_contributions' },
+  { field: 'audit_check_ids', contribution_id: 'final:audit_checks' },
+]);
+const FINAL_UPSTREAM_CONTRIBUTION_IDS = Object.freeze([
+  'document_source_integrity',
+  'evidence_checklist',
+  'process_decision_mapping',
+]);
+const FINAL_AUDIT_CHECK_IDS = Object.freeze([
+  'current_node_supported_by_canonical_facts',
+  'evidence_items_bound_to_process_nodes',
+  'next_action_connected_in_static_topology',
+  'upstream_contribution_lineage_complete',
+]);
 const EXPECTED_FRAMEWORK = Object.freeze({
   langchain: '1.3.14',
   langgraph: '1.2.9',
@@ -130,7 +165,7 @@ const EXPECTED_RUNTIME_ACCEPTANCE_CRITERIA = Object.freeze({
   requires_source_reference_projection_disclosure: true,
 });
 const EXPECTED_FAILED_MODEL_ATTEMPT_RECORDS = Object.freeze(
-  Array.from({ length: 11 }, (_, index) => `casepath/releases/model-validation-attempt-20260811-${String(index + 1).padStart(2, '0')}.json`),
+  Array.from({ length: 12 }, (_, index) => `casepath/releases/model-validation-attempt-20260811-${String(index + 1).padStart(2, '0')}.json`),
 );
 const EXPECTED_PRODUCTION_OPENING_BOUNDARY = 'Application code opened the shared context; no model call is claimed for this setup step. The call-bound Nemotron plan appears only when its returned event arrives.';
 const QA_SESSION_ID = `qa-${randomUUID()}`;
@@ -207,22 +242,71 @@ function providerProvenanceValueIsSafe(field, value) {
 
 function exactMembers(values, expected) {
   return Array.isArray(values)
+    && Array.isArray(expected)
     && values.length === expected.length
     && new Set(values).size === values.length
+    && new Set(expected).size === expected.length
     && expected.every(value => values.includes(value));
+}
+
+function contributionEntries(value, expectedAttribution) {
+  const entries = (Array.isArray(value) ? value : value && typeof value === 'object' ? [value] : [])
+    .filter(item => item && typeof item === 'object');
+  if (!entries.length) return null;
+  const ids = entries.map(item => item.contribution_id);
+  if (!ids.every(nonemptyString) || new Set(ids).size !== ids.length) return null;
+  const valid = entries.every(item => {
+    if (typeof item.deterministic_fallback_applied !== 'boolean'
+      || !Number.isInteger(item.confidence_basis_points)
+      || item.confidence_basis_points < 0
+      || item.confidence_basis_points > 10000) return false;
+    const expectedRole = item.deterministic_fallback_applied
+      ? DETERMINISTIC_CONTRIBUTION_ROLE
+      : expectedAttribution;
+    if (item.attribution !== expectedRole) return false;
+    if (expectedAttribution === PROCESS_CONTRIBUTION_ROLE) {
+      return /^fact:[^:]+:decision_value$/.test(item.contribution_id)
+        && exactMembers(item.model_owned_fields, ['decision_value']);
+    }
+    if (expectedAttribution === EVIDENCE_CONTRIBUTION_ROLE) {
+      const match = item.contribution_id.match(/^item:(.+):(status|artifacts)$/);
+      if (!match) return false;
+      const expectedField = match[2] === 'status' ? 'status' : 'artifact_ids';
+      return item.field === expectedField;
+    }
+    if (expectedAttribution === FINAL_CONTRIBUTION_ROLE) {
+      const expected = FINAL_FIELD_CONTRACT.find(unit => unit.contribution_id === item.contribution_id);
+      return Boolean(expected && item.field === expected.field);
+    }
+    return false;
+  });
+  return valid ? entries : null;
 }
 
 function contributionExpectation(value, expectedAttribution, reviewTransform = null) {
   if (reviewTransform?.acceptance_scope === 'post_review_unverified_transform') return null;
-  const entries = (Array.isArray(value) ? value : value && typeof value === 'object' ? [value] : [])
-    .filter(item => item && typeof item === 'object');
+  const entries = contributionEntries(value, expectedAttribution);
+  if (!entries) return null;
   const acceptedCount = entries.filter(item => item.deterministic_fallback_applied === false && item.attribution === expectedAttribution).length;
-  const fallbackCount = entries.filter(item => item.deterministic_fallback_applied === true).length;
+  const fallbackCount = entries.filter(item => item.deterministic_fallback_applied === true && item.attribution === DETERMINISTIC_CONTRIBUTION_ROLE).length;
   if (!acceptedCount && !fallbackCount) return null;
   return {
     authority: acceptedCount && fallbackCount ? 'mixed' : acceptedCount ? 'nemotron-accepted' : 'deterministic-fallback',
     accepted_count: String(acceptedCount),
     fallback_count: String(fallbackCount),
+  };
+}
+
+function contributionDomProjection(value, expectedAttribution, reviewTransform = null) {
+  const summary = contributionExpectation(value, expectedAttribution, reviewTransform);
+  const entries = reviewTransform?.acceptance_scope === 'post_review_unverified_transform'
+    ? null
+    : contributionEntries(value, expectedAttribution);
+  if (!summary || !entries) return null;
+  return {
+    ...summary,
+    accepted_ids: entries.filter(item => item.deterministic_fallback_applied === false).map(item => item.contribution_id).join(','),
+    fallback_ids: entries.filter(item => item.deterministic_fallback_applied === true).map(item => item.contribution_id).join(','),
   };
 }
 
@@ -257,6 +341,165 @@ function stableJson(value) {
 
 function dtoHash(value) {
   return sha256(stableJson(value));
+}
+
+function hybridCausalContractViolations(run) {
+  const issues = [];
+  const audit = orchestrationAudit(run);
+  const result = run?.result;
+  const artifacts = audit?.specialist_artifacts;
+  if (!audit || !result || !artifacts || typeof artifacts !== 'object' || Array.isArray(artifacts)) {
+    return ['hybrid specialist artifacts or final result are absent'];
+  }
+  const agents = new Map((audit.agents || []).map(item => [item.agent_id, item]));
+  const gates = new Map((audit.deterministic_gates || []).map(item => [item.agent_id, item]));
+  const sourceArtifact = artifacts.document_source_integrity;
+  const processArtifact = artifacts.process_decision_mapping;
+  const evidenceArtifact = artifacts.evidence_checklist;
+  const finalArtifact = artifacts.final_claim_brief_audit;
+  if (![sourceArtifact, processArtifact, evidenceArtifact, finalArtifact].every(value => value && typeof value === 'object' && !Array.isArray(value))) {
+    return ['one or more causal specialist artifacts are absent'];
+  }
+
+  const sourceAgent = agents.get('document_source_integrity');
+  const processAgent = agents.get('process_decision_mapping');
+  const evidenceAgent = agents.get('evidence_checklist');
+  const finalAgent = agents.get('final_claim_brief_audit');
+  if (sourceAgent?.output_artifact_hash !== dtoHash(sourceArtifact)) issues.push('document source specialist artifact hash is not exact');
+  if (processAgent?.output_artifact_hash !== dtoHash(processArtifact)) issues.push('process specialist artifact hash is not exact');
+  if (evidenceAgent?.output_artifact_hash !== dtoHash(evidenceArtifact)) issues.push('evidence specialist artifact hash is not exact');
+  if (finalAgent?.output_artifact_hash !== dtoHash(finalArtifact)) issues.push('final specialist artifact hash is not exact');
+
+  const processGate = gates.get('deterministic_process_gate');
+  const expectedParallelInputHash = dtoHash({
+    source_integrity: sourceArtifact,
+    process_mapping: processArtifact,
+  });
+  if (processGate?.input_artifact_hash !== expectedParallelInputHash) issues.push('process gate parallel specialist composite input hash is not exact');
+  const evidenceGate = gates.get('deterministic_evidence_gate');
+  if (evidenceGate?.input_artifact_hash !== dtoHash(evidenceArtifact)) issues.push('evidence gate specialist input hash is not exact');
+
+  const process = result.process;
+  const checklist = result.checklist;
+  if (!process || !checklist) return [...issues, 'hybrid process or checklist DTO is absent'];
+  if (stableJson(process.agent_contribution?.source_integrity_artifact) !== stableJson(sourceArtifact)) issues.push('final process does not retain the exact source specialist artifact');
+  if (stableJson(process.agent_contribution?.artifact) !== stableJson(processArtifact)) issues.push('final process does not retain the exact process specialist artifact');
+
+  const decisions = Array.isArray(processArtifact.decisions) ? processArtifact.decisions : [];
+  const validDecisions = contributionEntries(decisions, PROCESS_CONTRIBUTION_ROLE);
+  if (!validDecisions) issues.push('process decision field contributions violate membership or attribution');
+  const controllingFacts = (result.facts || []).filter(item => item?.controls_process === true);
+  const controllingFactIds = controllingFacts.map(item => item.fact_id);
+  const controllingById = new Map(controllingFacts.map(item => [item.fact_id, item]));
+  if (!exactMembers(decisions.map(item => item?.fact_id), controllingFactIds)) issues.push('process decision fact membership is not exact');
+  const decisionsByFact = new Map();
+  for (const decision of decisions) {
+    if (!decision || typeof decision !== 'object' || !nonemptyString(decision.fact_id)) continue;
+    if (decision.contribution_id !== `fact:${decision.fact_id}:decision_value`) issues.push(`process decision ${decision.fact_id} contribution ID is not exact`);
+    if (decisionsByFact.has(decision.fact_id)) issues.push(`process decision ${decision.fact_id} is duplicated`);
+    const canonicalFact = controllingById.get(decision.fact_id);
+    if (!canonicalFact
+      || decision.decision_key !== canonicalFact.decision_key
+      || decision.decision_value !== canonicalFact.decision_value
+      || decision.state !== canonicalFact.state
+      || decision.normalized_value !== canonicalFact.normalized_value) issues.push(`process decision ${decision.fact_id} inherited canonical fields are not exact`);
+    const sourceRefIds = decision.source_ref_ids;
+    if (!Array.isArray(sourceRefIds)
+      || sourceRefIds.some(item => !nonemptyString(item))
+      || new Set(sourceRefIds).size !== sourceRefIds.length
+      || JSON.stringify(sourceRefIds) !== JSON.stringify([...sourceRefIds].sort())) issues.push(`process decision ${decision.fact_id} source reference IDs are not unique and sorted`);
+    decisionsByFact.set(decision.fact_id, decision);
+  }
+  if (validDecisions && processAgent) {
+    const acceptedIds = validDecisions.filter(item => item.deterministic_fallback_applied === false).map(item => item.contribution_id);
+    const fallbackCount = validDecisions.length - acceptedIds.length;
+    if (JSON.stringify(processAgent.accepted_ids) !== JSON.stringify(acceptedIds)
+      || processAgent.accepted_count !== acceptedIds.length
+      || processAgent.rejected_count !== fallbackCount
+      || processAgent.deterministic_fallback_applied !== (fallbackCount > 0)) issues.push('process agent accepted/fallback field diagnostics are not exact');
+  }
+  for (const node of process.nodes || []) {
+    const expected = (node.fact_ids || []).flatMap(factId => decisionsByFact.has(factId) ? [decisionsByFact.get(factId)] : []);
+    const actual = Array.isArray(node.agent_decision_contributions) ? node.agent_decision_contributions : [];
+    if (stableJson(actual) !== stableJson(expected)) issues.push(`process node ${node.node_id || 'unknown'} field attribution is not projected from the specialist artifact`);
+  }
+
+  if (stableJson(checklist.agent_contribution?.artifact) !== stableJson(evidenceArtifact)) issues.push('final checklist does not retain the exact evidence specialist artifact');
+  const artifactItems = Array.isArray(evidenceArtifact.items) ? evidenceArtifact.items : [];
+  const checklistItems = Array.isArray(checklist.items) ? checklist.items : [];
+  if (!exactMembers(artifactItems.map(item => item?.item_id), checklistItems.map(item => item?.item_id))) issues.push('evidence specialist item membership is not exact');
+  const checklistById = new Map(checklistItems.map(item => [item.item_id, item]));
+  const evidenceUnits = [];
+  for (const artifactItem of artifactItems) {
+    const itemId = artifactItem?.item_id;
+    const sourceRefIds = artifactItem?.source_ref_ids;
+    if (!Array.isArray(sourceRefIds)
+      || sourceRefIds.some(item => !nonemptyString(item))
+      || new Set(sourceRefIds).size !== sourceRefIds.length
+      || JSON.stringify(sourceRefIds) !== JSON.stringify([...sourceRefIds].sort())) issues.push(`evidence item ${itemId || 'unknown'} source reference IDs are not unique and sorted`);
+    const units = contributionEntries(artifactItem?.field_contributions, EVIDENCE_CONTRIBUTION_ROLE);
+    const expectedUnits = [
+      { contribution_id: `item:${itemId}:status`, field: 'status' },
+      { contribution_id: `item:${itemId}:artifacts`, field: 'artifact_ids' },
+    ];
+    if (!units || units.length !== 2 || stableJson(units.map(item => ({ contribution_id: item.contribution_id, field: item.field }))) !== stableJson(expectedUnits)) {
+      issues.push(`evidence item ${itemId || 'unknown'} does not contain the exact two field contributions`);
+      continue;
+    }
+    evidenceUnits.push(...units);
+    const finalItem = checklistById.get(itemId);
+    if (!finalItem) continue;
+    if (finalItem.status !== artifactItem.status) issues.push(`evidence item ${itemId} status is not projected from the specialist artifact`);
+    if (!exactMembers(finalItem.artifact_ids, artifactItem.artifact_ids)) issues.push(`evidence item ${itemId} artifact set is not projected from the specialist artifact`);
+    if (stableJson(finalItem.agent_contribution) !== stableJson(units)) issues.push(`evidence item ${itemId} field attribution is not projected from the specialist artifact`);
+  }
+  if (evidenceUnits.length && evidenceAgent) {
+    const acceptedIds = evidenceUnits.filter(item => item.deterministic_fallback_applied === false).map(item => item.contribution_id);
+    const fallbackCount = evidenceUnits.length - acceptedIds.length;
+    if (JSON.stringify(evidenceAgent.accepted_ids) !== JSON.stringify(acceptedIds)
+      || evidenceAgent.accepted_count !== acceptedIds.length
+      || evidenceAgent.rejected_count !== fallbackCount
+      || evidenceAgent.deterministic_fallback_applied !== (fallbackCount > 0)) issues.push('evidence agent accepted/fallback field diagnostics are not exact');
+  }
+
+  const finalBrief = audit.final_claim_brief;
+  if (stableJson(finalArtifact) !== stableJson(finalBrief)) issues.push('final specialist artifact and authoritative final claim brief differ');
+  const finalUnits = contributionEntries(finalBrief?.field_contributions, FINAL_CONTRIBUTION_ROLE);
+  if (!finalUnits
+    || finalUnits.length !== FINAL_FIELD_CONTRACT.length
+    || stableJson(finalUnits.map(item => ({ field: item.field, contribution_id: item.contribution_id }))) !== stableJson(FINAL_FIELD_CONTRACT)) issues.push('final claim brief does not contain the exact five field contributions');
+  if (finalUnits && finalAgent) {
+    const acceptedIds = finalUnits.filter(item => item.deterministic_fallback_applied === false).map(item => item.contribution_id);
+    const fallbackCount = finalUnits.length - acceptedIds.length;
+    if (JSON.stringify(finalAgent.accepted_ids) !== JSON.stringify(acceptedIds)
+      || finalAgent.accepted_count !== acceptedIds.length
+      || finalAgent.rejected_count !== fallbackCount
+      || finalAgent.deterministic_fallback_applied !== (fallbackCount > 0)) issues.push('final agent accepted/fallback field diagnostics are not exact');
+    const expectedAttribution = fallbackCount === 0 ? FINAL_CONTRIBUTION_ROLE : acceptedIds.length ? 'mixed_model_and_deterministic' : DETERMINISTIC_CONTRIBUTION_ROLE;
+    if (finalBrief.attribution !== expectedAttribution || finalBrief.deterministic_fallback_applied !== (fallbackCount > 0)) issues.push('final claim brief aggregate attribution is not exact');
+    const upstreamUnit = finalUnits.find(item => item.field === 'upstream_contribution_ids');
+    const expectedLineageAuthority = upstreamUnit?.deterministic_fallback_applied === false ? 'hybrid_guarded_model_audit' : DETERMINISTIC_CONTRIBUTION_ROLE;
+    if (finalBrief.lineage_authority !== expectedLineageAuthority) issues.push('final claim brief lineage authority is not exact');
+  }
+  if (finalBrief?.contribution_scope !== 'independent_final_claim_brief_audit') issues.push('final claim brief contribution scope is not exact');
+
+  const overlay = process.current_overlay || {};
+  if (finalBrief?.current_node_id !== process.current_node || finalBrief?.current_node_id !== overlay.current_node_id) issues.push('final current-node field is not causally bound to the process overlay');
+  if (finalBrief?.next_action_node_id !== overlay.next_action_node_id || finalBrief?.next_action_node_id !== result.next_action?.process_node_id) issues.push('final next-action field is not causally bound to the result');
+  if (stableJson(result.next_action?.agent_brief_contribution) !== stableJson(finalBrief)) issues.push('result next action does not retain the exact final claim brief');
+  const currentNode = (process.nodes || []).find(item => item.node_id === finalBrief?.current_node_id);
+  const expectedSupportingFacts = [...(currentNode?.fact_ids || [])].sort();
+  if (JSON.stringify(finalBrief?.supporting_fact_ids) !== JSON.stringify(expectedSupportingFacts)) issues.push('final supporting-facts field is not bound to the current process node');
+  if (JSON.stringify(finalBrief?.upstream_contribution_ids) !== JSON.stringify(FINAL_UPSTREAM_CONTRIBUTION_IDS)
+    || JSON.stringify(finalBrief?.input_contribution_ids) !== JSON.stringify(FINAL_UPSTREAM_CONTRIBUTION_IDS)) issues.push('final upstream-contribution field is not complete and exact');
+  if (JSON.stringify(finalBrief?.audit_check_ids) !== JSON.stringify(FINAL_AUDIT_CHECK_IDS)) issues.push('final audit-check field is not complete and exact');
+  const supportingFactSet = new Set(expectedSupportingFacts);
+  const expectedSourceRefs = [...new Set([
+    ...decisions.filter(item => supportingFactSet.has(item.fact_id)).flatMap(item => item.source_ref_ids || []),
+    ...artifactItems.filter(item => supportingFactSet.has(checklistById.get(item.item_id)?.fact_id)).flatMap(item => item.source_ref_ids || []),
+  ])].sort();
+  if (JSON.stringify(finalBrief?.source_ref_ids) !== JSON.stringify(expectedSourceRefs)) issues.push('final source-reference field is not derived from controlling and non-controlling supporting facts');
+  return issues;
 }
 
 function internalSentinelPaths(value, currentPath = '$', found = []) {
@@ -450,6 +693,7 @@ function orchestrationContractViolations(run, cacheMode, expectedFramework = EXP
   for (const agentId of REQUIRED_NEMOTRON_AGENT_IDS) {
     const item = byAgent.get(agentId);
     if (!item) continue;
+    if (item.role !== REQUIRED_NEMOTRON_AGENT_ROLES[agentId]) issues.push(`${agentId}: role label is not exact`);
     if (item.actor_type !== 'nemotron_agent') issues.push(`${agentId}: actor_type must be nemotron_agent`);
     if (item.acceptance_scope !== 'pre_review_model_output') issues.push(`${agentId}: acceptance_scope must remain pre_review_model_output`);
     if (item.model !== REQUESTED_NEMOTRON_MODEL || item.requested_model !== REQUESTED_NEMOTRON_MODEL || item.provider !== 'openrouter') issues.push(`${agentId}: requested model/provider mismatch`);
@@ -490,6 +734,7 @@ function orchestrationContractViolations(run, cacheMode, expectedFramework = EXP
   for (const gateId of REQUIRED_DETERMINISTIC_GATE_IDS) {
     const gate = gates.find(item => item?.agent_id === gateId);
     if (!gate) continue;
+    if (gate.role !== REQUIRED_DETERMINISTIC_GATE_ROLES[gateId]) issues.push(`${gateId}: role label is not exact`);
     const artifactContract = ACCEPTED_ARTIFACT_CONTRACT[gateId];
     const sourceAgent = byAgent.get(artifactContract.source_agent_id);
     if (gate.actor_type !== 'deterministic_gate' || gate.model != null || gate.outcome !== 'passed' || gate.receipt_type !== 'accepted_artifact' || gate.acceptance_scope !== 'pre_review_model_output') issues.push(`${gateId}: deterministic gate identity/scope is invalid`);
@@ -557,6 +802,7 @@ function orchestrationContractViolations(run, cacheMode, expectedFramework = EXP
       && JSON.stringify(item.accepted_ids) === JSON.stringify(byAgent.get(contract.source_agent_id)?.accepted_ids)
       && SHA256_PATTERN.test(item.output_artifact_hash || ''))) issues.push(`${gateId}: completed accepted-artifact receipt is absent or unbound`);
   }
+  issues.push(...hybridCausalContractViolations(run));
   const sensitive = forbiddenFieldPaths(run);
   if (sensitive.length) issues.push(`forbidden public fields: ${sensitive.join(', ')}`);
   const sentinelLeaks = internalSentinelPaths(run);
@@ -1244,6 +1490,15 @@ async function execute() {
   check('First paint contains an intentional claim shell', sourceHtml.includes('v20-source-skeleton') && sourceHtml.includes('Opening claim…'));
   const flagshipScriptPaths = ['assets/live-v16.js', 'assets/live-v17.js', 'assets/live-v18.js', 'assets/live-v18-handoff.js', 'assets/live-v20-focus.js'];
   const flagshipScriptSources = await Promise.all(flagshipScriptPaths.map(async scriptPath => ({ scriptPath, source: await getText(`${BASE}/${scriptPath}`) })));
+  const checklistRendererSource = flagshipScriptSources.find(item => item.scriptPath === 'assets/live-v17.js')?.source || '';
+  check('Document-checklist renderer fails closed on the exact two returned field units and suppresses pre-review acceptance after review', [
+    'const expectedUnits = [',
+    'new Set(ids).size === ids.length',
+    'Number.isInteger(value.confidence_basis_points)',
+    "value.attribution === expectedAttribution",
+    'data-accepted-contribution-ids=',
+    'post_review_unverified_transform',
+  ].every(fragment => checklistRendererSource.includes(fragment)));
   const syntheticActorLabels = ['Agent complete', 'Attachment Parsing Agent', 'Claim Understanding Agent', 'Legal Research Agent', 'Process Discovery Agent', 'Document Requirements Agent', 'Historical Claims Agent', 'Verification Agent', 'Knowledge Agent'];
   const syntheticActorSources = flagshipScriptSources.flatMap(({ scriptPath, source }) => syntheticActorLabels.filter(label => source.includes(label)).map(label => `${scriptPath}:${label}`));
   check('Loaded flagship scripts never present deterministic stages or knowledge governance as extra model agents', syntheticActorSources.length === 0, JSON.stringify(syntheticActorSources));
@@ -1421,13 +1676,48 @@ async function execute() {
   if (isProductionJourney()) {
     const expectedProcessContributions = processGraph.nodes.map(node => ({
       node_id: node.node_id,
-      contribution: contributionExpectation(node.agent_decision_contributions, 'Process Decision Mapping Agent'),
+      contribution: contributionDomProjection(node.agent_decision_contributions, PROCESS_CONTRIBUTION_ROLE),
     })).filter(item => item.contribution);
     const renderedProcessContributions = await page.locator('.process-map .process-node-button[data-node-id],.process-map .process-branch-node[data-node-id]').evaluateAll(nodes => nodes.flatMap(node => {
       const badge = node.querySelector('.model-contribution-attribution');
-      return badge ? [{ node_id: node.dataset.nodeId, contribution: { authority: badge.dataset.contributionAuthority, accepted_count: badge.dataset.acceptedCount, fallback_count: badge.dataset.fallbackCount } }] : [];
+      return badge ? [{ node_id: node.dataset.nodeId, contribution: { authority: badge.dataset.contributionAuthority, accepted_count: badge.dataset.acceptedCount, fallback_count: badge.dataset.fallbackCount, accepted_ids: badge.dataset.acceptedContributionIds, fallback_ids: badge.dataset.fallbackContributionIds } }] : [];
     }));
     check('Every visible process contribution is exactly bound to returned Nemotron acceptance or deterministic fallback', stableJson(renderedProcessContributions.sort((a, b) => a.node_id.localeCompare(b.node_id))) === stableJson(expectedProcessContributions.sort((a, b) => a.node_id.localeCompare(b.node_id))) && renderedProcessContributions.some(item => Number(item.contribution.accepted_count) > 0), JSON.stringify({ expectedProcessContributions, renderedProcessContributions }));
+    const finalBrief = orchestrationAudit(processRun)?.final_claim_brief;
+    const finalProjection = contributionDomProjection(finalBrief?.field_contributions, FINAL_CONTRIBUTION_ROLE);
+    const expectedFinalFieldIds = (finalBrief?.field_contributions || []).map(item => item.contribution_id).join(',');
+    const currentNode = processGraph.nodes.find(item => item.node_id === finalBrief?.current_node_id);
+    const nextNode = processGraph.nodes.find(item => item.node_id === finalBrief?.next_action_node_id);
+    const renderedFinalHandoff = await page.locator('.v20-final-handoff').evaluate(node => ({
+      current_node_id: node.dataset.currentNodeId,
+      next_action_node_id: node.dataset.nextActionNodeId,
+      field_count: node.dataset.fieldCount,
+      field_ids: node.dataset.fieldIds,
+      accepted_count: node.dataset.acceptedCount,
+      fallback_count: node.dataset.fallbackCount,
+      accepted_ids: node.dataset.acceptedContributionIds,
+      fallback_ids: node.dataset.fallbackContributionIds,
+      copy: node.textContent,
+    }));
+    check('Ready view exposes one causally bound five-field final handoff with exact returned IDs and acceptance counts',
+      await page.locator('.v20-final-handoff').count() === 1
+        && finalProjection
+        && currentNode
+        && nextNode
+        && renderedFinalHandoff.current_node_id === finalBrief.current_node_id
+        && renderedFinalHandoff.next_action_node_id === finalBrief.next_action_node_id
+        && renderedFinalHandoff.field_count === String(FINAL_FIELD_CONTRACT.length)
+        && renderedFinalHandoff.field_ids === expectedFinalFieldIds
+        && renderedFinalHandoff.accepted_count === finalProjection.accepted_count
+        && renderedFinalHandoff.fallback_count === finalProjection.fallback_count
+        && renderedFinalHandoff.accepted_ids === finalProjection.accepted_ids
+        && renderedFinalHandoff.fallback_ids === finalProjection.fallback_ids
+        && renderedFinalHandoff.copy.includes('Final Claim Brief Agent')
+        && renderedFinalHandoff.copy.includes('Whole-Playbook Gate')
+        && renderedFinalHandoff.copy.includes(currentNode?.title || '')
+        && renderedFinalHandoff.copy.includes(nextNode?.title || '')
+        && /five independent fields/i.test(renderedFinalHandoff.copy),
+      JSON.stringify({ finalBrief, finalProjection, renderedFinalHandoff }));
   }
   await page.locator('[data-toggle-all-branches]').click();
   const renderedNodeIds = await page.evaluate(() => [...new Set([...document.querySelectorAll('.process-node-button[data-node-id],.process-branch-node[data-node-id]')].map(node => node.dataset.nodeId))]);
@@ -1522,11 +1812,11 @@ async function execute() {
   if (isProductionJourney()) {
     const expectedChecklistContributions = processRun.result.checklist.items.map(item => ({
       item_id: item.item_id,
-      contribution: contributionExpectation(item.agent_contribution, 'Evidence and Checklist Agent'),
+      contribution: contributionDomProjection(item.agent_contribution, EVIDENCE_CONTRIBUTION_ROLE),
     })).filter(item => item.contribution);
     const renderedChecklistContributions = await page.locator('.v20-document-body .v17-checklist-item[data-item-id]').evaluateAll(items => items.flatMap(item => {
       const badge = item.querySelector('.model-contribution-attribution');
-      return badge ? [{ item_id: item.dataset.itemId, contribution: { authority: badge.dataset.contributionAuthority, accepted_count: badge.dataset.acceptedCount, fallback_count: badge.dataset.fallbackCount } }] : [];
+      return badge ? [{ item_id: item.dataset.itemId, contribution: { authority: badge.dataset.contributionAuthority, accepted_count: badge.dataset.acceptedCount, fallback_count: badge.dataset.fallbackCount, accepted_ids: badge.dataset.acceptedContributionIds, fallback_ids: badge.dataset.fallbackContributionIds } }] : [];
     }));
     check('Every document need visibly preserves its exact Nemotron acceptance or deterministic fallback attribution', expectedChecklistContributions.length === processRun.result.checklist.items.length && stableJson(renderedChecklistContributions.sort((a, b) => a.item_id.localeCompare(b.item_id))) === stableJson(expectedChecklistContributions.sort((a, b) => a.item_id.localeCompare(b.item_id))) && renderedChecklistContributions.some(item => Number(item.contribution.accepted_count) > 0), JSON.stringify({ expectedChecklistContributions, renderedChecklistContributions }));
   }
@@ -1562,11 +1852,14 @@ async function execute() {
   check('Applied-review UI keeps the edit explicitly unverified', /unverified/i.test(appliedReviewCopy), appliedReviewCopy);
   if (isProductionJourney()) check('Applied-review UI says model acceptance was not reused for the unverified edit', /model acceptance\b[^.]{0,120}\b(?:was|is)\s+not reused/i.test(appliedReviewCopy), appliedReviewCopy);
   const appliedContributionBadgeCount = await page.locator('.review-applied .model-contribution-attribution').count();
+  const visibleContributionBadgeCount = await page.locator('.model-contribution-attribution:visible').count();
+  const visibleFinalHandoffCount = await page.locator('.v20-final-handoff:visible').count();
   const postReviewContributionExpectations = [
     ...reviewed.result.process.nodes.flatMap(node => (node.agent_decision_contributions || []).map(contribution => contributionExpectation(contribution, 'Process Decision Mapping Agent', reviewed.review_transform))),
     ...reviewed.result.checklist.items.map(item => contributionExpectation(item.agent_contribution, 'Evidence and Checklist Agent', reviewed.review_transform)),
+    contributionExpectation(orchestrationAudit(flagshipBeforeReview)?.final_claim_brief?.field_contributions, FINAL_CONTRIBUTION_ROLE, reviewed.review_transform),
   ];
-  check('Applied-review result fails closed on every pre-review model contribution badge', reviewed.review_transform?.acceptance_scope === 'post_review_unverified_transform' && reviewed.review_transform?.model_acceptance_reused === false && postReviewContributionExpectations.every(value => value === null) && appliedContributionBadgeCount === 0, JSON.stringify({ review_transform: reviewed.review_transform, post_review_expectations: postReviewContributionExpectations, rendered_badge_count: appliedContributionBadgeCount }));
+  check('Applied-review result globally suppresses every pre-review contribution badge and final handoff', reviewed.review_transform?.acceptance_scope === 'post_review_unverified_transform' && reviewed.review_transform?.model_acceptance_reused === false && postReviewContributionExpectations.every(value => value === null) && appliedContributionBadgeCount === 0 && visibleContributionBadgeCount === 0 && visibleFinalHandoffCount === 0, JSON.stringify({ review_transform: reviewed.review_transform, post_review_expectations: postReviewContributionExpectations, rendered_badge_count: appliedContributionBadgeCount, visible_badge_count: visibleContributionBadgeCount, visible_final_handoff_count: visibleFinalHandoffCount }));
   const reviewedNodeIds = reviewed.result.process.nodes.map(node => node.node_id);
   const appliedNodeIds = await page.evaluate(() => [...new Set([...document.querySelectorAll('.review-applied .process-node-button[data-node-id],.review-applied .process-branch-node[data-node-id]')].map(node => node.dataset.nodeId))]);
   check('Applied view shows the actual server-returned reviewed graph', reviewedNodeIds.every(id => appliedNodeIds.includes(id)) && reviewedNodeIds.length === appliedNodeIds.length);
@@ -1661,51 +1954,234 @@ async function execute() {
 }
 
 function mockOrchestration(cacheMode, coldRun = null) {
-  const process = { contract: 'process-graph', nodes: [{ node_id: 'scope' }] };
-  const checklist = { contract: 'evidence-model', items: [{ item_id: 'lease' }] };
-  const finalClaimBrief = { current_node_id: 'scope', next_action_node_id: 'notice' };
+  const facts = [
+    {
+      fact_id: 'fact_scope',
+      value: 'confirmed',
+      state: 'supported',
+      controls_process: true,
+      decision_key: 'tenancy_scope',
+      normalized_value: 'confirmed',
+      decision_value: 'confirmed',
+    },
+    {
+      fact_id: 'fact_context',
+      value: 'observed context',
+      state: 'known',
+      controls_process: false,
+      decision_key: null,
+      normalized_value: null,
+      decision_value: null,
+    },
+  ];
+  const sourceIntegrity = {
+    artifacts: [{
+      artifact_id: 'lease',
+      integrity_class: 'text_grounded',
+      source_ref_ids: ['source_scope'],
+      contribution_id: 'artifact:lease:integrity',
+      attribution: 'Document and Source Integrity Agent',
+      deterministic_fallback_applied: false,
+      confidence_basis_points: 9200,
+    }],
+  };
+  const processDecision = {
+    fact_id: 'fact_scope',
+    decision_key: 'tenancy_scope',
+    decision_value: 'confirmed',
+    state: 'supported',
+    normalized_value: 'confirmed',
+    source_ref_ids: ['source_scope'],
+    contribution_id: 'fact:fact_scope:decision_value',
+    contribution_scope: 'canonical_to_process_decision_mapping',
+    model_owned_fields: ['decision_value'],
+    confidence_basis_points: 9100,
+    attribution: PROCESS_CONTRIBUTION_ROLE,
+    deterministic_fallback_applied: false,
+  };
+  const processMapping = { decisions: [processDecision] };
+  const evidenceFieldContributions = [
+    {
+      contribution_id: 'item:lease:status',
+      field: 'status',
+      attribution: EVIDENCE_CONTRIBUTION_ROLE,
+      confidence_basis_points: 9000,
+      deterministic_fallback_applied: false,
+    },
+    {
+      contribution_id: 'item:lease:artifacts',
+      field: 'artifact_ids',
+      attribution: EVIDENCE_CONTRIBUTION_ROLE,
+      confidence_basis_points: 9000,
+      deterministic_fallback_applied: false,
+    },
+  ];
+  const contextEvidenceFieldContributions = [
+    {
+      contribution_id: 'item:context_note:status',
+      field: 'status',
+      attribution: EVIDENCE_CONTRIBUTION_ROLE,
+      confidence_basis_points: 8800,
+      deterministic_fallback_applied: false,
+    },
+    {
+      contribution_id: 'item:context_note:artifacts',
+      field: 'artifact_ids',
+      attribution: EVIDENCE_CONTRIBUTION_ROLE,
+      confidence_basis_points: 8800,
+      deterministic_fallback_applied: false,
+    },
+  ];
+  const evidenceChecklist = {
+    items: [
+      {
+        item_id: 'lease',
+        status: 'provided_sufficient',
+        artifact_ids: ['lease'],
+        source_ref_ids: ['source_scope'],
+        field_contributions: evidenceFieldContributions,
+        model_owned_fields: ['status', 'artifact_ids'],
+        confidence_basis_points: 9000,
+        attribution: EVIDENCE_CONTRIBUTION_ROLE,
+        deterministic_fallback_applied: false,
+      },
+      {
+        item_id: 'context_note',
+        status: 'provided_sufficient',
+        artifact_ids: ['lease'],
+        source_ref_ids: ['source_context'],
+        field_contributions: contextEvidenceFieldContributions,
+        model_owned_fields: ['status', 'artifact_ids'],
+        confidence_basis_points: 8800,
+        attribution: EVIDENCE_CONTRIBUTION_ROLE,
+        deterministic_fallback_applied: false,
+      },
+    ],
+  };
+  const finalFieldContributions = FINAL_FIELD_CONTRACT.map(({ field, contribution_id }) => ({
+    contribution_id,
+    field,
+    attribution: FINAL_CONTRIBUTION_ROLE,
+    confidence_basis_points: 8900,
+    deterministic_fallback_applied: false,
+  }));
+  const finalClaimBrief = {
+    current_node_id: 'scope',
+    next_action_node_id: 'notice',
+    supporting_fact_ids: ['fact_context', 'fact_scope'],
+    upstream_contribution_ids: [...FINAL_UPSTREAM_CONTRIBUTION_IDS],
+    audit_check_ids: [...FINAL_AUDIT_CHECK_IDS],
+    source_ref_ids: ['source_context', 'source_scope'],
+    input_contribution_ids: [...FINAL_UPSTREAM_CONTRIBUTION_IDS],
+    lineage_authority: 'hybrid_guarded_model_audit',
+    contribution_scope: 'independent_final_claim_brief_audit',
+    field_contributions: finalFieldContributions,
+    confidence_basis_points: 8900,
+    attribution: FINAL_CONTRIBUTION_ROLE,
+    deterministic_fallback_applied: false,
+  };
+  const process = {
+    contract: 'process-graph',
+    current_node: 'scope',
+    current_overlay: { current_node_id: 'scope', next_action_node_id: 'notice' },
+    nodes: [
+      { node_id: 'scope', title: 'Scope', fact_ids: ['fact_scope', 'fact_context'], agent_decision_contributions: [processDecision] },
+      { node_id: 'notice', title: 'Notice', fact_ids: [] },
+    ],
+    agent_contribution: {
+      artifact: processMapping,
+      source_integrity_artifact: sourceIntegrity,
+    },
+  };
+  const checklist = {
+    contract: 'evidence-model',
+    items: [
+      {
+        item_id: 'lease',
+        fact_id: 'fact_scope',
+        status: 'provided_sufficient',
+        artifact_ids: ['lease'],
+        agent_contribution: evidenceFieldContributions,
+      },
+      {
+        item_id: 'context_note',
+        fact_id: 'fact_context',
+        status: 'provided_sufficient',
+        artifact_ids: ['lease'],
+        agent_contribution: contextEvidenceFieldContributions,
+      },
+    ],
+    agent_contribution: { artifact: evidenceChecklist },
+  };
+  const orchestratorPlan = { focus_fact_ids: ['fact_scope'], priority_task_codes: ['source_integrity', 'process_decisions', 'evidence_gaps', 'final_brief'] };
   const orchestrationId = cacheMode === 'cold' ? 'orch_cold_contract' : 'orch_warm_contract';
   const coldAudit = orchestrationAudit(coldRun);
   const coldByAgent = new Map((coldAudit?.agents || []).map(item => [item.agent_id, item]));
   const callIdFor = agentId => `${cacheMode}_call_${agentId}`;
   const canonicalCallId = callIdFor('canonical_facts');
   const orchestratorCallId = callIdFor('orchestrator_plan');
-  const agents = REQUIRED_NEMOTRON_AGENT_IDS.map(agentId => ({
-    agent_id: agentId,
-    role: `Mock ${agentId}`,
-    actor_type: 'nemotron_agent',
-    acceptance_scope: 'pre_review_model_output',
-    model: REQUESTED_NEMOTRON_MODEL,
-    provider: 'openrouter',
-    requested_model: REQUESTED_NEMOTRON_MODEL,
-    call_count: cacheMode === 'cold' ? 1 : 0,
-    parent_call_id: agentId === 'canonical_facts' ? null : agentId === 'orchestrator_plan' ? canonicalCallId : orchestratorCallId,
-    delegation_id: agentId === 'canonical_facts' ? null : `${cacheMode}_delegation_${agentId}`,
-    call_id: callIdFor(agentId),
-    origin_call_id: cacheMode === 'cold' ? callIdFor(agentId) : coldByAgent.get(agentId)?.call_id,
-    cache_hit: cacheMode === 'warm',
-    outcome: cacheMode === 'warm' ? 'cache_hit' : 'succeeded',
-    response_id: cacheMode === 'cold' ? `response_${agentId}` : coldByAgent.get(agentId)?.response_id,
-    response_model: 'nvidia/nemotron-3-ultra-550b-a55b-20260604',
-    upstream_provider: 'DeepInfra',
-    usage_source: cacheMode === 'warm' ? 'cache' : 'response',
-    finish_reason: 'stop',
-    accepted_ids: [`accepted_${agentId}_1`, `accepted_${agentId}_2`],
-    accepted_count: 2,
-    rejected_count: 0,
-    source_reference_projection_fact_ids: agentId === 'canonical_facts' ? [] : undefined,
-    source_reference_projection_count: agentId === 'canonical_facts' ? 0 : undefined,
-    deterministic_fallback_applied: false,
-    input_artifact_hash: dtoHash({ agent_id: agentId, direction: 'input' }),
-    output_artifact_hash: dtoHash({ agent_id: agentId, direction: 'output' }),
-  }));
+  const specialistArtifacts = {
+    orchestrator_plan: orchestratorPlan,
+    document_source_integrity: sourceIntegrity,
+    process_decision_mapping: processMapping,
+    evidence_checklist: evidenceChecklist,
+    final_claim_brief_audit: finalClaimBrief,
+  };
+  const acceptedIdsByAgent = {
+    canonical_facts: ['accepted_canonical_facts_1', 'accepted_canonical_facts_2'],
+    orchestrator_plan: ['accepted_orchestrator_plan_1', 'accepted_orchestrator_plan_2'],
+    document_source_integrity: ['artifact:lease:integrity'],
+    process_decision_mapping: [processDecision.contribution_id],
+    evidence_checklist: evidenceChecklist.items.flatMap(item => item.field_contributions.map(unit => unit.contribution_id)),
+    final_claim_brief_audit: finalFieldContributions.map(item => item.contribution_id),
+  };
+  const outputArtifactByAgent = {
+    canonical_facts: facts,
+    orchestrator_plan: orchestratorPlan,
+    document_source_integrity: sourceIntegrity,
+    process_decision_mapping: processMapping,
+    evidence_checklist: evidenceChecklist,
+    final_claim_brief_audit: finalClaimBrief,
+  };
+  const agents = REQUIRED_NEMOTRON_AGENT_IDS.map(agentId => {
+    const acceptedIds = acceptedIdsByAgent[agentId];
+    return {
+      agent_id: agentId,
+      role: REQUIRED_NEMOTRON_AGENT_ROLES[agentId],
+      actor_type: 'nemotron_agent',
+      acceptance_scope: 'pre_review_model_output',
+      model: REQUESTED_NEMOTRON_MODEL,
+      provider: 'openrouter',
+      requested_model: REQUESTED_NEMOTRON_MODEL,
+      call_count: cacheMode === 'cold' ? 1 : 0,
+      parent_call_id: agentId === 'canonical_facts' ? null : agentId === 'orchestrator_plan' ? canonicalCallId : orchestratorCallId,
+      delegation_id: agentId === 'canonical_facts' ? null : `${cacheMode}_delegation_${agentId}`,
+      call_id: callIdFor(agentId),
+      origin_call_id: cacheMode === 'cold' ? callIdFor(agentId) : coldByAgent.get(agentId)?.call_id,
+      cache_hit: cacheMode === 'warm',
+      outcome: cacheMode === 'warm' ? 'cache_hit' : 'succeeded',
+      response_id: cacheMode === 'cold' ? `response_${agentId}` : coldByAgent.get(agentId)?.response_id,
+      response_model: 'nvidia/nemotron-3-ultra-550b-a55b-20260604',
+      upstream_provider: 'DeepInfra',
+      usage_source: cacheMode === 'warm' ? 'cache' : 'response',
+      finish_reason: 'stop',
+      accepted_ids: acceptedIds,
+      accepted_count: acceptedIds.length,
+      rejected_count: 0,
+      source_reference_projection_fact_ids: agentId === 'canonical_facts' ? [] : undefined,
+      source_reference_projection_count: agentId === 'canonical_facts' ? 0 : undefined,
+      deterministic_fallback_applied: false,
+      input_artifact_hash: dtoHash({ agent_id: agentId, direction: 'input' }),
+      output_artifact_hash: dtoHash(outputArtifactByAgent[agentId]),
+    };
+  });
   const byAgent = new Map(agents.map(item => [item.agent_id, item]));
   const finalDtos = { deterministic_process_gate: process, deterministic_evidence_gate: checklist, whole_playbook_gate: finalClaimBrief };
   const gates = REQUIRED_DETERMINISTIC_GATE_IDS.map(gateId => {
     const contract = ACCEPTED_ARTIFACT_CONTRACT[gateId];
     return {
       agent_id: gateId,
-      role: `Mock ${gateId}`,
+      role: REQUIRED_DETERMINISTIC_GATE_ROLES[gateId],
       actor_type: 'deterministic_gate',
       receipt_type: 'accepted_artifact',
       acceptance_scope: 'pre_review_model_output',
@@ -1716,7 +2192,11 @@ function mockOrchestration(cacheMode, coldRun = null) {
       delegation_id: byAgent.get(contract.source_agent_id).delegation_id,
       accepted_ids: byAgent.get(contract.source_agent_id).accepted_ids,
       accepted_count: byAgent.get(contract.source_agent_id).accepted_count,
-      input_artifact_hash: dtoHash({ gate_id: gateId, direction: 'input' }),
+      input_artifact_hash: gateId === 'deterministic_process_gate'
+        ? dtoHash({ source_integrity: sourceIntegrity, process_mapping: processMapping })
+        : gateId === 'deterministic_evidence_gate'
+          ? dtoHash(evidenceChecklist)
+          : dtoHash({ final_brief: finalClaimBrief, verification: { valid: true } }),
       output_artifact: contract.output_artifact,
       output_artifact_hash: dtoHash(finalDtos[gateId]),
     };
@@ -1738,6 +2218,7 @@ function mockOrchestration(cacheMode, coldRun = null) {
     deterministic_gates: gates,
     all_required_agents_contributed: true,
     guarded_fallback_count: 0,
+    specialist_artifacts: specialistArtifacts,
     final_claim_brief: finalClaimBrief,
   };
   const events = [
@@ -1763,7 +2244,23 @@ function mockOrchestration(cacheMode, coldRun = null) {
     })),
     ...gates.map(item => ({ stage: 'agent_orchestration', status: 'completed', ...item })),
   ];
-  return { run_id: `${cacheMode}_run`, status: 'complete', agent_orchestration: audit, result: { process, checklist, agent_orchestration: audit, audit: { agent_orchestration: audit } }, events };
+  return {
+    run_id: `${cacheMode}_run`,
+    status: 'complete',
+    agent_orchestration: audit,
+    result: {
+      facts,
+      process,
+      checklist,
+      next_action: {
+        process_node_id: 'notice',
+        agent_brief_contribution: finalClaimBrief,
+      },
+      agent_orchestration: audit,
+      audit: { agent_orchestration: audit },
+    },
+    events,
+  };
 }
 
 function mockLedgerForRun(run, cacheMode, coldLedger = null) {
@@ -1829,18 +2326,50 @@ function runContractSelfTest() {
   ];
   if (pythonFloatHashes.some(([value, pythonHash]) => dtoHash(value) === pythonHash)) throw new Error('Float parity fixture unexpectedly became hash-compatible; update the shared numeric contract explicitly');
   if (nonIntegerNumberPaths({ negative_zero: -0.0, exponent: 1e-7 }).length !== 2) throw new Error('Non-integer accepted-DTO guard missed -0.0 or exponent notation');
-  const acceptedContribution = contributionExpectation({ attribution: 'Process Decision Mapping Agent', deterministic_fallback_applied: false }, 'Process Decision Mapping Agent');
-  const fallbackContribution = contributionExpectation({ attribution: 'deterministic_application', deterministic_fallback_applied: true }, 'Process Decision Mapping Agent');
+  const acceptedProcessUnit = {
+    contribution_id: 'fact:fact_scope:decision_value',
+    fact_id: 'fact_scope',
+    model_owned_fields: ['decision_value'],
+    confidence_basis_points: 9100,
+    attribution: PROCESS_CONTRIBUTION_ROLE,
+    deterministic_fallback_applied: false,
+  };
+  const fallbackProcessUnit = {
+    ...acceptedProcessUnit,
+    confidence_basis_points: 10000,
+    attribution: DETERMINISTIC_CONTRIBUTION_ROLE,
+    deterministic_fallback_applied: true,
+  };
+  const acceptedContribution = contributionExpectation(acceptedProcessUnit, PROCESS_CONTRIBUTION_ROLE);
+  const fallbackContribution = contributionExpectation(fallbackProcessUnit, PROCESS_CONTRIBUTION_ROLE);
+  const mixedFieldContribution = contributionExpectation([
+    {
+      contribution_id: 'item:lease:status',
+      field: 'status',
+      confidence_basis_points: 9000,
+      attribution: EVIDENCE_CONTRIBUTION_ROLE,
+      deterministic_fallback_applied: false,
+    },
+    {
+      contribution_id: 'item:lease:artifacts',
+      field: 'artifact_ids',
+      confidence_basis_points: 10000,
+      attribution: DETERMINISTIC_CONTRIBUTION_ROLE,
+      deterministic_fallback_applied: true,
+    },
+  ], EVIDENCE_CONTRIBUTION_ROLE);
   const postReviewContribution = contributionExpectation(
-    { attribution: 'Process Decision Mapping Agent', deterministic_fallback_applied: false },
-    'Process Decision Mapping Agent',
+    acceptedProcessUnit,
+    PROCESS_CONTRIBUTION_ROLE,
     { acceptance_scope: 'post_review_unverified_transform', model_acceptance_reused: false },
   );
   if (stableJson(acceptedContribution) !== stableJson({ authority: 'nemotron-accepted', accepted_count: '1', fallback_count: '0' })
     || stableJson(fallbackContribution) !== stableJson({ authority: 'deterministic-fallback', accepted_count: '0', fallback_count: '1' })
+    || stableJson(mixedFieldContribution) !== stableJson({ authority: 'mixed', accepted_count: '1', fallback_count: '1' })
     || postReviewContribution !== null
-    || contributionExpectation({ attribution: 'Process Decision Mapping Agent' }, 'Process Decision Mapping Agent') !== null
-    || contributionExpectation({ attribution: 'foreign_agent', deterministic_fallback_applied: false }, 'Process Decision Mapping Agent') !== null) throw new Error('Visible contribution attribution does not fail closed on authority or fallback state');
+    || contributionExpectation({ ...acceptedProcessUnit, deterministic_fallback_applied: undefined }, PROCESS_CONTRIBUTION_ROLE) !== null
+    || contributionExpectation({ ...acceptedProcessUnit, attribution: 'foreign_agent' }, PROCESS_CONTRIBUTION_ROLE) !== null
+    || contributionExpectation({ ...fallbackProcessUnit, attribution: 'foreign_agent' }, PROCESS_CONTRIBUTION_ROLE) !== null) throw new Error('Visible contribution attribution does not fail closed on authority or fallback state');
   const coldRun = mockOrchestration('cold');
   const coldLedger = mockLedgerForRun(coldRun, 'cold');
   const warmRun = mockOrchestration('warm', coldRun);
@@ -1862,6 +2391,74 @@ function runContractSelfTest() {
     ...warmLineageContractViolations(orchestrationAudit(coldRun), orchestrationAudit(warmRun), combinedLedger).issues,
   ];
   if (failures.length) throw new Error(`Positive contract fixture failed: ${JSON.stringify(failures)}`);
+  const expectHybridIssue = (fixture, expectedIssue, label) => {
+    const issues = hybridCausalContractViolations(fixture);
+    if (!issues.some(item => item.includes(expectedIssue))) throw new Error(`${label} fixture was not rejected: ${JSON.stringify(issues)}`);
+    return issues;
+  };
+  const sourceArtifactHashRun = structuredClone(coldRun);
+  orchestrationAudit(sourceArtifactHashRun).specialist_artifacts.document_source_integrity.artifacts[0].integrity_class = 'changed_after_acceptance';
+  const sourceArtifactHashIssues = expectHybridIssue(sourceArtifactHashRun, 'document source specialist artifact hash', 'Changed source-specialist artifact hash');
+  if (!sourceArtifactHashIssues.some(item => item.includes('parallel specialist composite input hash'))) throw new Error(`Changed source-specialist artifact did not invalidate the process-gate composite: ${JSON.stringify(sourceArtifactHashIssues)}`);
+  const processArtifactHashRun = structuredClone(coldRun);
+  orchestrationAudit(processArtifactHashRun).specialist_artifacts.process_decision_mapping.decisions[0].decision_value = 'changed_after_acceptance';
+  const processArtifactHashIssues = expectHybridIssue(processArtifactHashRun, 'process specialist artifact hash', 'Changed process-specialist artifact hash');
+  if (!processArtifactHashIssues.some(item => item.includes('parallel specialist composite input hash'))) throw new Error(`Changed process-specialist artifact did not invalidate the process-gate composite: ${JSON.stringify(processArtifactHashIssues)}`);
+  const processFieldMembershipRun = structuredClone(coldRun);
+  orchestrationAudit(processFieldMembershipRun).specialist_artifacts.process_decision_mapping.decisions[0].model_owned_fields = ['decision_value', 'state'];
+  expectHybridIssue(processFieldMembershipRun, 'process decision field contributions violate membership or attribution', 'Foreign process model-owned field');
+  const processFieldAttributionRun = structuredClone(coldRun);
+  const processAttributionUnit = orchestrationAudit(processFieldAttributionRun).specialist_artifacts.process_decision_mapping.decisions[0];
+  processAttributionUnit.deterministic_fallback_applied = true;
+  processAttributionUnit.attribution = PROCESS_CONTRIBUTION_ROLE;
+  expectHybridIssue(processFieldAttributionRun, 'process decision field contributions violate membership or attribution', 'Forged process fallback attribution');
+  const processInheritedFieldRun = structuredClone(coldRun);
+  const processInheritedAudit = orchestrationAudit(processInheritedFieldRun);
+  processInheritedAudit.specialist_artifacts.process_decision_mapping.decisions[0].state = 'forged_inherited_state';
+  processInheritedAudit.agents.find(item => item.agent_id === 'process_decision_mapping').output_artifact_hash = dtoHash(processInheritedAudit.specialist_artifacts.process_decision_mapping);
+  processInheritedAudit.deterministic_gates.find(item => item.agent_id === 'deterministic_process_gate').input_artifact_hash = dtoHash({
+    source_integrity: processInheritedAudit.specialist_artifacts.document_source_integrity,
+    process_mapping: processInheritedAudit.specialist_artifacts.process_decision_mapping,
+  });
+  expectHybridIssue(processInheritedFieldRun, 'inherited canonical fields are not exact', 'Forged inherited process field with recomputed hashes');
+  const evidenceFieldMembershipRun = structuredClone(coldRun);
+  orchestrationAudit(evidenceFieldMembershipRun).specialist_artifacts.evidence_checklist.items[0].field_contributions[0].field = 'artifact_ids';
+  expectHybridIssue(evidenceFieldMembershipRun, 'does not contain the exact two field contributions', 'Foreign evidence field membership');
+  const evidenceFieldAttributionRun = structuredClone(coldRun);
+  const evidenceAttributionUnit = orchestrationAudit(evidenceFieldAttributionRun).specialist_artifacts.evidence_checklist.items[0].field_contributions[0];
+  evidenceAttributionUnit.deterministic_fallback_applied = true;
+  evidenceAttributionUnit.attribution = EVIDENCE_CONTRIBUTION_ROLE;
+  expectHybridIssue(evidenceFieldAttributionRun, 'does not contain the exact two field contributions', 'Forged evidence fallback attribution');
+  const evidenceSourceRefsRun = structuredClone(coldRun);
+  const evidenceSourceRefsAudit = orchestrationAudit(evidenceSourceRefsRun);
+  evidenceSourceRefsAudit.specialist_artifacts.evidence_checklist.items[0].source_ref_ids = ['source_scope', 'source_scope'];
+  evidenceSourceRefsAudit.agents.find(item => item.agent_id === 'evidence_checklist').output_artifact_hash = dtoHash(evidenceSourceRefsAudit.specialist_artifacts.evidence_checklist);
+  evidenceSourceRefsAudit.deterministic_gates.find(item => item.agent_id === 'deterministic_evidence_gate').input_artifact_hash = dtoHash(evidenceSourceRefsAudit.specialist_artifacts.evidence_checklist);
+  expectHybridIssue(evidenceSourceRefsRun, 'source reference IDs are not unique and sorted', 'Forged evidence source references with recomputed hashes');
+  const finalFieldMembershipRun = structuredClone(coldRun);
+  orchestrationAudit(finalFieldMembershipRun).final_claim_brief.field_contributions[0].contribution_id = 'final:foreign_current_node';
+  expectHybridIssue(finalFieldMembershipRun, 'exact five field contributions', 'Foreign final field membership');
+  const finalCurrentBindingRun = structuredClone(coldRun);
+  orchestrationAudit(finalCurrentBindingRun).final_claim_brief.current_node_id = 'notice';
+  expectHybridIssue(finalCurrentBindingRun, 'final current-node field', 'Final current-node binding');
+  const finalNextBindingRun = structuredClone(coldRun);
+  orchestrationAudit(finalNextBindingRun).final_claim_brief.next_action_node_id = 'scope';
+  expectHybridIssue(finalNextBindingRun, 'final next-action field', 'Final next-action binding');
+  const finalSupportingBindingRun = structuredClone(coldRun);
+  orchestrationAudit(finalSupportingBindingRun).final_claim_brief.supporting_fact_ids = ['fact_scope'];
+  expectHybridIssue(finalSupportingBindingRun, 'final supporting-facts field', 'Final supporting-facts binding');
+  const finalUpstreamBindingRun = structuredClone(coldRun);
+  orchestrationAudit(finalUpstreamBindingRun).final_claim_brief.upstream_contribution_ids = FINAL_UPSTREAM_CONTRIBUTION_IDS.slice(1);
+  expectHybridIssue(finalUpstreamBindingRun, 'final upstream-contribution field', 'Final upstream-contribution binding');
+  const finalAuditBindingRun = structuredClone(coldRun);
+  orchestrationAudit(finalAuditBindingRun).final_claim_brief.audit_check_ids = FINAL_AUDIT_CHECK_IDS.slice(1);
+  expectHybridIssue(finalAuditBindingRun, 'final audit-check field', 'Final audit-check binding');
+  const currentNode = coldRun.result.process.nodes.find(item => item.node_id === coldRun.result.process.current_node);
+  const nonControllingSupportingFacts = coldRun.result.facts.filter(item => item.controls_process === false && currentNode.fact_ids.includes(item.fact_id));
+  if (!nonControllingSupportingFacts.length || !orchestrationAudit(coldRun).final_claim_brief.source_ref_ids.includes('source_context')) throw new Error('Positive final-source fixture does not cover a non-controlling supporting fact');
+  const nonControllingSourceRun = structuredClone(coldRun);
+  orchestrationAudit(nonControllingSourceRun).final_claim_brief.source_ref_ids = ['source_scope'];
+  expectHybridIssue(nonControllingSourceRun, 'controlling and non-controlling supporting facts', 'Non-controlling final source-reference binding');
   const forgedSummaryValues = {
     records: 999,
     network_calls: 0,
@@ -1887,6 +2484,12 @@ function runContractSelfTest() {
   const wrongWarmLedger = structuredClone(combinedLedger);
   wrongWarmLedger.items.find(item => item.call_count === 0).upstream_provider = 'Together';
   if (!warmLineageContractViolations(orchestrationAudit(coldRun), orchestrationAudit(warmRun), wrongWarmLedger).issues.some(item => item.includes('provider'))) throw new Error('Non-DeepInfra warm cache fixture was not rejected');
+  const wrongAgentRoleRun = structuredClone(coldRun);
+  orchestrationAudit(wrongAgentRoleRun).agents.find(item => item.agent_id === 'document_source_integrity').role = 'Unbound Specialist Label';
+  if (!orchestrationContractViolations(wrongAgentRoleRun, 'cold').some(item => item.includes('document_source_integrity: role label is not exact'))) throw new Error('Tampered Nemotron agent-role fixture was not rejected');
+  const wrongGateRoleRun = structuredClone(coldRun);
+  orchestrationAudit(wrongGateRoleRun).deterministic_gates.find(item => item.agent_id === 'deterministic_evidence_gate').role = 'Unbound Gate Label';
+  if (!orchestrationContractViolations(wrongGateRoleRun, 'cold').some(item => item.includes('deterministic_evidence_gate: role label is not exact'))) throw new Error('Tampered deterministic gate-role fixture was not rejected');
   const aliasResponseRun = structuredClone(coldRun);
   const aliasResponseLedger = structuredClone(coldLedger);
   orchestrationAudit(aliasResponseRun).agents.forEach(item => { item.response_model = REQUESTED_NEMOTRON_MODEL; });
@@ -2207,7 +2810,7 @@ function runContractSelfTest() {
   const brokenLineageLedger = structuredClone(combinedLedger);
   brokenLineageLedger.items.find(item => item.call_id === orchestrationAudit(warmRun).agents[0].call_id).origin_call_id = 'wrong_origin';
   if (!warmLineageContractViolations(orchestrationAudit(coldRun), orchestrationAudit(warmRun), brokenLineageLedger).issues.some(item => item.includes('warm origin'))) throw new Error('Broken-lineage negative fixture was not rejected');
-  return { status: 'passed', fixtures: ['python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'fail_closed_model_contribution_badges', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'cold_upstream_provider_policy_rejection', 'warm_upstream_provider_policy_rejection', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'safe_upstream_rejection_receipt', 'unbounded_upstream_error_code_rejection', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
+  return { status: 'passed', fixtures: ['python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'fail_closed_model_contribution_badges', 'mixed_field_contribution_badge', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'parallel_source_artifact_hash_rejection', 'parallel_process_artifact_hash_rejection', 'process_field_membership_rejection', 'process_field_attribution_rejection', 'process_inherited_field_rejection_with_recomputed_hashes', 'evidence_field_membership_rejection', 'evidence_field_attribution_rejection', 'evidence_source_ref_rejection_with_recomputed_hashes', 'final_field_membership_rejection', 'final_current_node_binding_rejection', 'final_next_action_binding_rejection', 'final_supporting_facts_binding_rejection', 'final_upstream_contributions_binding_rejection', 'final_audit_checks_binding_rejection', 'noncontrolling_supporting_fact_source_binding', 'cold_upstream_provider_policy_rejection', 'warm_upstream_provider_policy_rejection', 'agent_role_label_rejection', 'gate_role_label_rejection', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'safe_upstream_rejection_receipt', 'unbounded_upstream_error_code_rejection', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
 }
 
 let report;

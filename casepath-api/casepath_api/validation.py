@@ -1,9 +1,17 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 import re
 from typing import Any, Iterable
 import unicodedata
+
+from .projections import (
+    PROCESS_DECISION_KEYS,
+    apply_process_projection,
+    checklist_derived_sections,
+    decision_projection,
+)
 
 
 FACT_STATES = {"known", "unknown", "conflicting", "not_applicable"}
@@ -301,6 +309,9 @@ def validate_process_graph(
     fact_ids: set[str],
     legal_source_ids: set[str],
     evidence_item_ids: set[str] | None = None,
+    facts_by_id: dict[str, dict[str, Any]] | None = None,
+    allowed_extension_node_ids: set[str] | None = None,
+    allowed_extension_edge_pairs: set[tuple[str, str]] | None = None,
 ) -> list[dict[str, str]]:
     contract = "process_graph"
     issues: list[ContractIssue] = []
@@ -310,6 +321,8 @@ def validate_process_graph(
     _require(isinstance(edges, list), contract, "edges", "must be a list", issues)
     node_values = nodes if isinstance(nodes, list) else []
     edge_values = edges if isinstance(edges, list) else []
+    extension_node_ids = allowed_extension_node_ids or set()
+    extension_edge_pairs = allowed_extension_edge_pairs or set()
     node_ids = _unique_ids(node_values, "node_id", contract, "nodes", issues)
     current_nodes = [node.get("node_id") for node in node_values if node.get("state") == "current"]
     _require(len(current_nodes) == 1, contract, "nodes", "must contain exactly one current node", issues)
@@ -365,6 +378,120 @@ def validate_process_graph(
     for index in range(max(0, len(process.get("selected_path", [])) - 1)):
         source, target = process["selected_path"][index : index + 2]
         _require((source, target) in edge_pairs, contract, f"selected_path[{index}:{index + 2}]", f"missing selected edge {source!r} -> {target!r}", issues)
+    if facts_by_id is not None:
+        controlling_facts = [
+            value
+            for value in facts_by_id.values()
+            if value.get("controls_process") is True
+        ]
+        try:
+            canonical_projection = decision_projection(controlling_facts)
+        except (KeyError, TypeError, ValueError) as exc:
+            issues.append(
+                ContractIssue(
+                    contract,
+                    "current_overlay.decisions",
+                    f"canonical controlling facts cannot be projected: {exc}",
+                )
+            )
+        else:
+            expected_overlay = apply_process_projection(
+                deepcopy(node_values),
+                deepcopy(edge_values),
+                canonical_projection,
+                list(process.get("main_spine", [])),
+            )
+            _require(
+                process.get("current_node") == canonical_projection["current_node"],
+                contract,
+                "current_node",
+                "must be projected from canonical controlling facts",
+                issues,
+            )
+            _require(
+                process.get("selected_path") == canonical_projection["selected_path"],
+                contract,
+                "selected_path",
+                "must be projected from canonical controlling facts",
+                issues,
+            )
+            if isinstance(overlay, dict):
+                for key in (
+                    "completed_node_ids",
+                    "current_node_id",
+                    "selected_branch_id",
+                    "blocked_node_ids",
+                    "inactive_branch_ids",
+                    "next_action_node_id",
+                    "decisions",
+                ):
+                    _require(
+                        overlay.get(key) == expected_overlay[key],
+                        contract,
+                        f"current_overlay.{key}",
+                        "must be projected from canonical controlling facts",
+                        issues,
+                    )
+                _require(
+                    set(overlay.get("decisions", {})) == set(PROCESS_DECISION_KEYS),
+                    contract,
+                    "current_overlay.decisions",
+                    "must contain exactly the six canonical decision keys",
+                    issues,
+                )
+
+            expected_nodes = deepcopy(node_values)
+            expected_edges = deepcopy(edge_values)
+            apply_process_projection(
+                expected_nodes,
+                expected_edges,
+                canonical_projection,
+                list(process.get("main_spine", [])),
+            )
+            expected_nodes_by_id = {
+                value.get("node_id"): value for value in expected_nodes
+            }
+            for node_index, node in enumerate(node_values):
+                if node.get("node_id") in extension_node_ids:
+                    continue
+                expected_node = expected_nodes_by_id.get(node.get("node_id"), {})
+                for key in ("state", "answer"):
+                    _require(
+                        node.get(key) == expected_node.get(key),
+                        contract,
+                        f"nodes[{node_index}].{key}",
+                        "must match the canonical process projection",
+                        issues,
+                    )
+                expected_branch_states = {
+                    branch.get("branch_id"): branch.get("state")
+                    for branch in expected_node.get("branches", [])
+                }
+                for branch_index, branch in enumerate(node.get("branches", [])):
+                    _require(
+                        branch.get("state")
+                        == expected_branch_states.get(branch.get("branch_id")),
+                        contract,
+                        f"nodes[{node_index}].branches[{branch_index}].state",
+                        "must match the canonical process projection",
+                        issues,
+                    )
+            expected_edge_states = {
+                (value.get("source"), value.get("target")): value.get("state")
+                for value in expected_edges
+            }
+            for edge_index, edge in enumerate(edge_values):
+                edge_pair = (edge.get("source"), edge.get("target"))
+                if edge_pair in extension_edge_pairs:
+                    continue
+                _require(
+                    edge.get("state")
+                    == expected_edge_states.get(edge_pair),
+                    contract,
+                    f"edges[{edge_index}].state",
+                    "must match the canonical process projection",
+                    issues,
+                )
     if issues:
         raise ContractValidationError(issues)
     return [{"name": "Graph integrity", "status": "passed", "detail": f"{len(node_ids)} nodes and {len(edge_pairs)} edges are referentially valid."}]
@@ -423,6 +550,56 @@ def validate_evidence_model(
     }
     _require(present_ids == expected_present, contract, "present", "must be a projection of provided evidence items", issues)
     _require(required_ids == expected_required, contract, "required", "must be a projection of missing and conditional evidence items", issues)
+    try:
+        derived = checklist_derived_sections(item_values)
+    except (AttributeError, KeyError, TypeError) as exc:
+        issues.append(
+            ContractIssue(
+                contract,
+                "present/required/summary",
+                f"cannot derive checklist projections: {exc}",
+            )
+        )
+    else:
+        _require(
+            checklist.get("present") == derived["present"],
+            contract,
+            "present",
+            "must exactly match the authoritative item projection",
+            issues,
+        )
+        _require(
+            checklist.get("required") == derived["required"],
+            contract,
+            "required",
+            "must exactly match the authoritative item projection",
+            issues,
+        )
+        summary = checklist.get("summary")
+        _require(
+            isinstance(summary, dict)
+            and set(summary) == set(derived["summary"]),
+            contract,
+            "summary",
+            "must contain exactly the checklist status counts and process-node coverage",
+            issues,
+        )
+        if isinstance(summary, dict):
+            for key, value in summary.items():
+                _require(
+                    type(value) is int and value >= 0,
+                    contract,
+                    f"summary.{key}",
+                    "must be a non-negative integer",
+                    issues,
+                )
+        _require(
+            summary == derived["summary"],
+            contract,
+            "summary",
+            "must exactly match the authoritative item counts",
+            issues,
+        )
     if issues:
         raise ContractValidationError(issues)
     return [{"name": "Process-to-evidence linkage", "status": "passed", "detail": f"{len(item_ids)} evidence items resolve to valid process nodes, facts, authorities, and sources."}]
@@ -519,6 +696,8 @@ def validate_playbook(
     artifact_page_counts: dict[str, int],
     artifact_media_types: dict[str, str],
     observable_package: dict[str, Any],
+    allowed_process_extension_node_ids: set[str] | None = None,
+    allowed_process_extension_edge_pairs: set[tuple[str, str]] | None = None,
 ) -> list[dict[str, str]]:
     checks = validate_claim_state(
         understanding,
@@ -533,7 +712,17 @@ def validate_playbook(
     node_ids = {node["node_id"] for node in process["nodes"]}
     item_ids = {item["item_id"] for item in checklist["items"]}
     checks.extend(legal_checks)
-    checks.extend(validate_process_graph(process, fact_ids=fact_ids, legal_source_ids=legal_ids, evidence_item_ids=item_ids))
+    checks.extend(
+        validate_process_graph(
+            process,
+            fact_ids=fact_ids,
+            legal_source_ids=legal_ids,
+            evidence_item_ids=item_ids,
+            facts_by_id=facts_by_id,
+            allowed_extension_node_ids=allowed_process_extension_node_ids,
+            allowed_extension_edge_pairs=allowed_process_extension_edge_pairs,
+        )
+    )
     checks.extend(
         validate_evidence_model(
             checklist,
