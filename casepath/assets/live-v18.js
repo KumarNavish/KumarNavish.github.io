@@ -389,19 +389,6 @@
     flow.parentNode.insertBefore(boundary, flow);
   }
 
-  async function enhanceReuse(canvas) {
-    const thread = canvas.querySelector('.v17-reuse-thread');
-    if (!thread || thread.closest('.v18-reuse-proof')) return;
-    const applied = thread.dataset.memoryUsed === 'true' && thread.dataset.applicationReceipt === 'true';
-    const wrapper = document.createElement('section');
-    wrapper.className = 'v18-reuse-proof';
-    wrapper.innerHTML = applied
-      ? '<header><small>Unverified demo memory returned with a valid application receipt</small><strong>Bounded guidance was applied; this implies neither qualified review nor release of the quarantined shared-rule candidate.</strong></header>'
-      : '<header><small>Unverified demo memory retrieved and ranked only</small><strong>No application receipt or memory-driven DTO change was returned; this implies neither qualified review nor shared-rule release.</strong></header>';
-    thread.parentNode.insertBefore(wrapper, thread);
-    wrapper.append(thread);
-  }
-
   function markLawAsBacked(canvas) {
     const map = canvas.querySelector('.v17-law-map:not([data-v18-backed="true"])');
     if (!map) return;
@@ -419,7 +406,6 @@
     await enhanceReady(canvas);
     enhanceReview(canvas);
     await enhanceKnowledge(canvas);
-    await enhanceReuse(canvas);
   }
 
   function queueEnhancement() {

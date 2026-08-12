@@ -2124,8 +2124,8 @@ async function execute() {
   const precedentRendererSource = flagshipScriptSources.find(item => item.scriptPath === 'assets/live-v16.js')?.source || '';
   const reuseRendererSource = flagshipScriptSources.find(item => item.scriptPath === 'assets/live-v17.js')?.source || '';
   const laterStageSource = flagshipScriptSources.find(item => item.scriptPath === 'assets/live-v18.js')?.source || '';
-  check('Precedent rendering accepts qualified_expert_reviewed while preserving explicit unverified memory copy', [precedentRendererSource, reuseRendererSource].every(source => source.includes("'qualified_expert_reviewed'") && source.includes("'unverified_demo_memory'")) && precedentRendererSource.includes('Unverified generated-demo review memory returned by the server') && reuseRendererSource.includes('Unverified demo review memory returned'));
-  check('Loaded later-result renderers distinguish retrieval from receipt-bound use/application', precedentRendererSource.includes('reviewed_memory_retrieved') && precedentRendererSource.includes('data-memory-retrieved-only=') && precedentRendererSource.includes('retrieved-not-applied') && precedentRendererSource.includes('Saving it does not mean later guidance was used or applied') && reuseRendererSource.includes('reviewed_memory_retrieved') && reuseRendererSource.includes('Not used or applied · no memory-driven DTO change') && laterStageSource.includes('memoryRetrievedOnly') && laterStageSource.includes('No application receipt or memory-driven DTO change was returned'));
+  check('Precedent rendering accepts qualified_expert_reviewed while preserving explicit unverified memory copy', precedentRendererSource.includes("'qualified_expert_reviewed'") && precedentRendererSource.includes("'unverified_demo_memory'") && precedentRendererSource.includes('Unverified generated-demo review memory returned by the server') && precedentRendererSource.includes('Unverified demo review memory returned'));
+  check('Loaded later-result renderer distinguishes retrieval from receipt-bound use/application without asynchronous reuse enhancement', precedentRendererSource.includes('reviewed_memory_retrieved') && precedentRendererSource.includes('data-memory-retrieved-only=') && precedentRendererSource.includes('retrieved-not-applied') && precedentRendererSource.includes('Saving it does not mean later guidance was used or applied') && precedentRendererSource.includes('Not used or applied · no memory-driven DTO change') && precedentRendererSource.includes('function renderMemoryReuseProof') && !reuseRendererSource.includes('function enhanceReuse') && !laterStageSource.includes('function enhanceReuse'));
   check('Document-checklist renderer fails closed on exact field units, reciprocal owners, and transformed acceptance', [
     'const expectedUnits = [',
     'new Set(ids).size === ids.length',
@@ -2692,11 +2692,15 @@ async function execute() {
   check('Post-memory DTOs and UI contain no pre-memory Nemotron acceptance attribution', transformedContributionValues.every(value => value === null) && await page.locator('#laterResult .model-contribution-attribution').count() === 0 && !Object.hasOwn(later.result.process, 'agent_contribution') && !later.result.process.nodes.some(node => Object.hasOwn(node, 'agent_decision_contributions')) && !Object.hasOwn(later.result.checklist, 'agent_contribution') && !later.result.checklist.items.some(item => Object.hasOwn(item, 'agent_contribution')) && later.result.next_action?.agent_brief_contribution === null, JSON.stringify(transformedContributionValues));
   const returnedUnverifiedMemory = later.result?.precedents?.find(item => item.review_status === 'unverified_demo_memory' && item.memory_id);
   if (memoryUsed && returnedUnverifiedMemory) {
-    await waitVisible('.v17-reuse-thread');
-    await waitVisible('.v18-reuse-proof .v17-reuse-thread');
-    const reuseCopy = await page.locator('.v17-reuse-thread').innerText();
+    const reuseThreadSelector = '#laterResult .v18-reuse-proof .v17-reuse-thread';
+    await waitVisible(reuseThreadSelector);
+    const laterReuseThreadCount = await page.locator('#laterResult .v17-reuse-thread').count();
+    const reuseProofCount = await page.locator('#laterResult .v18-reuse-proof').count();
+    const proofReuseThreadCount = await page.locator(reuseThreadSelector).count();
+    check('Later result renders exactly one receipt-bound memory-reuse proof and thread', laterReuseThreadCount === 1 && reuseProofCount === 1 && proofReuseThreadCount === 1, JSON.stringify({ later_reuse_threads: laterReuseThreadCount, reuse_proofs: reuseProofCount, proof_reuse_threads: proofReuseThreadCount }));
+    const reuseCopy = await page.locator(reuseThreadSelector).innerText();
     check('Returned demo memory stays explicitly unverified wherever its precedent is rendered', /unverified demo review memory returned/i.test(reuseCopy) && !/qualified expert-reviewed memory returned/i.test(reuseCopy), reuseCopy);
-    const proofLayout = await page.locator('.v18-reuse-proof .v17-reuse-thread').evaluate(node => {
+    const proofLayout = await page.locator(reuseThreadSelector).evaluate(node => {
       const style = getComputedStyle(node);
       const proofValues = [...node.querySelectorAll('strong,code')].map(value => getComputedStyle(value));
       return {
@@ -3219,8 +3223,115 @@ async function assertRunReadSessionIsolation() {
   if (mutationBody.session !== 'session-A' || readBBody.session !== 'session-B' || readABody.session !== 'session-A') throw new Error('Review mutation/read coordination crossed a session boundary');
 }
 
+async function assertMemoryReuseRendererDeterminism() {
+  const [v16Source, v17Source, v18Source, browserGateSource] = await Promise.all([
+    fs.readFile(new URL('../casepath/assets/live-v16.js', import.meta.url), 'utf8'),
+    fs.readFile(new URL('../casepath/assets/live-v17.js', import.meta.url), 'utf8'),
+    fs.readFile(new URL('../casepath/assets/live-v18.js', import.meta.url), 'utf8'),
+    fs.readFile(new URL(import.meta.url), 'utf8'),
+  ]);
+  const start = v16Source.indexOf('  function renderMemoryReuseProof(');
+  const end = v16Source.indexOf('\n  function factsForNode', start);
+  if (start < 0 || end < 0) throw new Error('Could not extract the authoritative synchronous memory-reuse renderer');
+  const rendererSource = v16Source.slice(start, end).trim();
+  if (/\b(?:async|await)\b|\bcurrentRun\s*\(/.test(rendererSource)) throw new Error('The authoritative memory-reuse renderer regained an asynchronous run read');
+  for (const [label, source] of [['live-v17', v17Source], ['live-v18', v18Source]]) {
+    if (/\b(?:async\s+)?function\s+enhanceReuse\s*\(|\benhanceReuse\s*\(/.test(source)) throw new Error(`${label} regained a post-render memory-reuse enhancer`);
+  }
+  if (!browserGateSource.includes("const reuseThreadSelector = '#laterResult .v18-reuse-proof .v17-reuse-thread';")
+    || !browserGateSource.includes('laterReuseThreadCount === 1 && reuseProofCount === 1 && proofReuseThreadCount === 1')) throw new Error('The browser gate no longer requires one proof, one thread, and one nested thread');
+
+  const sandbox = {
+    esc: (value = '') => String(value).replace(/[&<>'"]/g, character => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    }[character])),
+  };
+  vm.runInNewContext(`globalThis.renderMemoryReuseProof = ${rendererSource};`, sandbox, { filename: 'live-v16-render-memory-reuse-proof.js' });
+  const receipt = {
+    contract: 'casepath.memory-application-receipt/1.0.0',
+    application_hash: 'a'.repeat(64),
+    authority: 'unverified_demo',
+    scope: 'case_specific_guidance_only',
+    shared_rule_applied: false,
+    model_acceptance_reused: false,
+  };
+  const precedent = {
+    claim_id: 'DEF-027-E0-DEMO',
+    memory_id: 'mem-unverified-demo',
+    review_status: 'unverified_demo_memory',
+  };
+  const result = { playbook: { version: 'mould-playbook-v3' } };
+  const proof = { causal_delta: { nonzero: true } };
+  const cases = [
+    {
+      label: 'applied',
+      input: { result, proof, memoryUsed: true, retrievedOnly: false, memoryState: { receipt, retrievedPrecedent: precedent } },
+    },
+    {
+      label: 'retrieved-only',
+      input: { result, proof: {}, memoryUsed: false, retrievedOnly: true, memoryState: { receipt: null, retrievedPrecedent: precedent } },
+    },
+    {
+      label: 'no-memory',
+      input: { result, proof: {}, memoryUsed: false, retrievedOnly: false, memoryState: { receipt, retrievedPrecedent: precedent } },
+    },
+  ];
+  const expected = new Map(cases.map(({ label, input }) => [label, sandbox.renderMemoryReuseProof(input)]));
+  for (let pass = 0; pass < 8; pass += 1) {
+    for (const { label, input } of cases) {
+      if (sandbox.renderMemoryReuseProof(input) !== expected.get(label)) throw new Error(`Synchronous memory-reuse markup changed across repeated ${label} renders`);
+    }
+  }
+
+  const exactTopology = markup => (markup.match(/class="v18-reuse-proof"/g) || []).length === 1
+    && (markup.match(/class="v17-reuse-thread(?: retrieved-only)?"/g) || []).length === 1
+    && (markup.match(/<section\b/g) || []).length === 2
+    && (markup.match(/<\/section>/g) || []).length === 2
+    && /^<section class="v18-reuse-proof">[\s\S]*<section class="v17-reuse-thread(?: retrieved-only)?"[\s\S]*<\/section><\/section>$/.test(markup);
+  const applied = expected.get('applied');
+  const appliedAttributes = [
+    'data-memory-retrieved="true"',
+    'data-memory-used="true"',
+    'data-application-receipt="true"',
+    `data-memory-contract="${receipt.contract}"`,
+    `data-application-hash="${receipt.application_hash}"`,
+    `data-memory-authority="${receipt.authority}"`,
+    `data-memory-scope="${receipt.scope}"`,
+  ];
+  if (!exactTopology(applied)
+    || appliedAttributes.some(attribute => !applied.includes(attribute))
+    || !applied.includes('Unverified demo memory returned with a valid application receipt')
+    || !applied.includes('Unverified demo review memory returned')
+    || !applied.includes('nonzero causal delta computed')
+    || applied.includes('Qualified expert-reviewed')) throw new Error('Applied memory markup lost its exact topology, receipt attributes, or unverified authority copy');
+
+  const retrievedOnly = expected.get('retrieved-only');
+  if (!exactTopology(retrievedOnly)
+    || !retrievedOnly.includes('class="v17-reuse-thread retrieved-only"')
+    || !retrievedOnly.includes('data-memory-used="false"')
+    || !retrievedOnly.includes('data-application-receipt="false"')
+    || !retrievedOnly.includes('Unverified demo memory retrieved and ranked only')
+    || !retrievedOnly.includes('Unverified demo review memory returned')
+    || !retrievedOnly.includes('Application receipt</small><strong>None returned')
+    || retrievedOnly.includes('data-memory-contract=')
+    || retrievedOnly.includes('valid application receipt')) throw new Error('Retrieved-only memory markup blurred retrieval, application, receipt, or authority state');
+
+  if (expected.get('no-memory') !== ''
+    || sandbox.renderMemoryReuseProof({ result, proof, memoryUsed: true, retrievedOnly: false, memoryState: { receipt: null, retrievedPrecedent: precedent } }) !== ''
+    || sandbox.renderMemoryReuseProof({ result, proof, memoryUsed: true, retrievedOnly: false, memoryState: { receipt, retrievedPrecedent: null } }) !== '') throw new Error('No-memory or incomplete applied-memory inputs emitted reuse proof markup');
+  const hostile = sandbox.renderMemoryReuseProof({
+    result: { playbook: { version: '<img src=x onerror=alert(1)>' } },
+    proof,
+    memoryUsed: true,
+    retrievedOnly: false,
+    memoryState: { receipt: { ...receipt, application_hash: '<script>bad()</script>' }, retrievedPrecedent: { ...precedent, claim_id: '<script>claim()</script>', memory_id: '" onfocus="bad()' } },
+  });
+  if (hostile.includes('<script>') || hostile.includes('<img ') || hostile.includes(' onfocus="bad()') || !hostile.includes('&lt;script&gt;claim()&lt;/script&gt;') || !hostile.includes('&quot; onfocus=&quot;bad()')) throw new Error('Synchronous memory-reuse renderer did not escape hostile server-returned values');
+}
+
 async function runContractSelfTest() {
   await assertRunReadSessionIsolation();
+  await assertMemoryReuseRendererDeterminism();
   if (dtoHash({ z: 'ü', a: [{ k: 0.91 }, true, null] }) !== '3d745913ce5b8f5555065b544f018be38bd43e9e5bfe1eca86c1d4f25dda68dd') throw new Error('Compact sorted DTO hashing diverges from the Python release contract');
   const splitLeaseSource = 'Tenant\nAlex Morgan, Feldbergstrasse 114, 4057 Basel';
   if (!exactNormalizedGroundingQuote(splitLeaseSource, 'Tenant Alex Morgan, Feldbergstrasse 114, 4057 Basel')) throw new Error('Normalized grounding did not preserve the backend whitespace contract');
@@ -4098,7 +4209,7 @@ async function runContractSelfTest() {
   const unsafeAxeTarget = `.v20-learning-row[data-customer="${'claim-bearing-'.repeat(700)}"] > span`;
   const axeDiagnostics = axeViolationDiagnostics([{ id: 'color-contrast', impact: 'serious', help: 'Elements must meet minimum color contrast ratio thresholds', nodes: [{ target: [unsafeAxeTarget], html: '<span>claim-bearing text must not be logged</span>', failureSummary: 'Claim-bearing failure prose must not be logged', any: [{ id: 'color-contrast', impact: 'serious', message: 'Claim-bearing check prose must not be logged', data: { fgColor: '#147a56', bgColor: '#edf8f3', contrastRatio: 4.44, raw: 'must not be retained' } }], all: [], none: [] }] }]);
   if (axeDiagnostics.length !== 1 || axeDiagnostics[0].node_count !== 1 || axeDiagnostics[0].omitted_node_count !== 0 || !/^sha256:[0-9a-f]{64}$/.test(axeDiagnostics[0].nodes[0].target[0]) || JSON.stringify(axeDiagnostics).includes('claim-bearing') || axeDiagnostics[0].nodes[0].checks[0].data.contrastRatio !== 4.44 || 'raw' in axeDiagnostics[0].nodes[0].checks[0].data || 'html' in axeDiagnostics[0].nodes[0] || 'message' in axeDiagnostics[0].nodes[0].checks[0] || 'failure_summary' in axeDiagnostics[0].nodes[0]) throw new Error(`Bounded Axe diagnostics fixture failed: ${JSON.stringify(axeDiagnostics)}`);
-  return { status: 'passed', fixtures: ['bounded_axe_node_diagnostics', 'session_scoped_run_read_coalescing', 'stable_text_grounding_fact_selection', 'normalized_text_grounding', 'python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'fail_closed_model_contribution_badges', 'mixed_field_contribution_badge', 'post_memory_contribution_suppression', 'reciprocal_evidence_truth_and_tamper', 'structured_legal_truth_and_tamper', 'visual_reference_truth_and_tamper', 'precedent_ranking_truth_and_tamper', 'memory_application_truth_and_tamper', 'memory_boundary_event_cross_binding', 'dormant_memory_retrieval_not_application', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'parallel_source_artifact_hash_rejection', 'parallel_process_artifact_hash_rejection', 'process_field_membership_rejection', 'process_field_attribution_rejection', 'process_inherited_field_rejection_with_recomputed_hashes', 'evidence_field_membership_rejection', 'evidence_field_attribution_rejection', 'evidence_source_ref_rejection_with_recomputed_hashes', 'final_field_membership_rejection', 'final_current_node_binding_rejection', 'final_next_action_binding_rejection', 'final_supporting_facts_binding_rejection', 'final_upstream_contributions_binding_rejection', 'final_audit_checks_binding_rejection', 'noncontrolling_supporting_fact_source_binding', 'cold_upstream_provider_policy_rejection', 'warm_upstream_provider_policy_rejection', 'agent_role_label_rejection', 'gate_role_label_rejection', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'provider_concurrency_zero_call_receipt', 'provider_concurrency_receipt_call_rejection', 'provider_concurrency_receipt_identity_rejection', 'safe_upstream_rejection_receipt', 'forged_upstream_rejection_receipt_attribution_rejection', 'missing_upstream_rejection_receipt_attribution_rejection', 'out_of_scope_upstream_rejection_receipt_attribution_rejection', 'unbounded_upstream_error_code_rejection', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'safe_upstream_rejection_ledger', 'provider_concurrency_zero_call_ledger', 'provider_concurrency_ledger_call_rejection', 'provider_concurrency_ledger_cost_rejection', 'provider_concurrency_ledger_identity_rejection', 'forged_upstream_rejection_ledger_attribution_rejection', 'missing_upstream_rejection_ledger_attribution_rejection', 'out_of_scope_upstream_rejection_ledger_attribution_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
+  return { status: 'passed', fixtures: ['bounded_axe_node_diagnostics', 'session_scoped_run_read_coalescing', 'memory_reuse_renderer_determinism', 'stable_text_grounding_fact_selection', 'normalized_text_grounding', 'python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'fail_closed_model_contribution_badges', 'mixed_field_contribution_badge', 'post_memory_contribution_suppression', 'reciprocal_evidence_truth_and_tamper', 'structured_legal_truth_and_tamper', 'visual_reference_truth_and_tamper', 'precedent_ranking_truth_and_tamper', 'memory_application_truth_and_tamper', 'memory_boundary_event_cross_binding', 'dormant_memory_retrieval_not_application', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'parallel_source_artifact_hash_rejection', 'parallel_process_artifact_hash_rejection', 'process_field_membership_rejection', 'process_field_attribution_rejection', 'process_inherited_field_rejection_with_recomputed_hashes', 'evidence_field_membership_rejection', 'evidence_field_attribution_rejection', 'evidence_source_ref_rejection_with_recomputed_hashes', 'final_field_membership_rejection', 'final_current_node_binding_rejection', 'final_next_action_binding_rejection', 'final_supporting_facts_binding_rejection', 'final_upstream_contributions_binding_rejection', 'final_audit_checks_binding_rejection', 'noncontrolling_supporting_fact_source_binding', 'cold_upstream_provider_policy_rejection', 'warm_upstream_provider_policy_rejection', 'agent_role_label_rejection', 'gate_role_label_rejection', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'provider_concurrency_zero_call_receipt', 'provider_concurrency_receipt_call_rejection', 'provider_concurrency_receipt_identity_rejection', 'safe_upstream_rejection_receipt', 'forged_upstream_rejection_receipt_attribution_rejection', 'missing_upstream_rejection_receipt_attribution_rejection', 'out_of_scope_upstream_rejection_receipt_attribution_rejection', 'unbounded_upstream_error_code_rejection', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'safe_upstream_rejection_ledger', 'provider_concurrency_zero_call_ledger', 'provider_concurrency_ledger_call_rejection', 'provider_concurrency_ledger_cost_rejection', 'provider_concurrency_ledger_identity_rejection', 'forged_upstream_rejection_ledger_attribution_rejection', 'missing_upstream_rejection_ledger_attribution_rejection', 'out_of_scope_upstream_rejection_ledger_attribution_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
 }
 
 let report;

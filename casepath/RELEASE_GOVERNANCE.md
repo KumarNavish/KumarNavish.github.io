@@ -583,7 +583,21 @@ stopped on a separate stale continuity graph, still before the production
 marker and with an exactly empty public ledger. That graph was injected because
 copy matching read `unverified` as `verify`; continuity now uses only structured
 canvas moments and keeps text-bearing retained content fully opaque. The
-continuity repair remains hosted-preflight pending.
+replacement frontend and API were aligned on exact commit
+`53d1838b072d0a80899d8a6cb724aa704a3f9b1e`; zero-provider QA deploy
+`dep-d9u9m9p42hec739t8pfg` passed the continuity boundary and reached the
+later-result memory proof. It then stopped before the production marker because
+two memory-reuse threads were present, while the public model ledger remained
+exactly empty.
+
+The later-result renderer now owns that proof structurally. It emits exactly
+one `.v18-reuse-proof > .v17-reuse-thread` synchronously from the same validated
+result, application receipt, and causal proof used by the rest of the view.
+Legacy asynchronous creation and reparenting are removed, so a delayed run read,
+MutationObserver overlap, or wrapper move cannot create a second proof. The
+browser gate requires exactly one wrapper, one thread, and one nested thread;
+the provider-free contract self-test covers applied, retrieved-only, incomplete,
+and repeated-render states. This repair remains hosted-preflight pending.
 
 The canonical QA service explicitly sets
 `CASEPATH_ALLOW_PRODUCTION_MUTATION=1` because its reset-and-review journey
