@@ -185,7 +185,7 @@ const EXPECTED_RUNTIME_ACCEPTANCE_CRITERIA = Object.freeze({
   requires_learning_replay_proof: true,
 });
 const EXPECTED_FAILED_MODEL_ATTEMPT_RECORDS = Object.freeze(
-  Array.from({ length: 15 }, (_, index) => `casepath/releases/model-validation-attempt-20260811-${String(index + 1).padStart(2, '0')}.json`),
+  Array.from({ length: 16 }, (_, index) => `casepath/releases/model-validation-attempt-20260811-${String(index + 1).padStart(2, '0')}.json`),
 );
 const EXPECTED_PRODUCTION_OPENING_BOUNDARY = 'Application code opened the shared context; no model call is claimed for this setup step. The call-bound Nemotron plan appears only when its returned event arrives.';
 const QA_SESSION_ID = `qa-${randomUUID()}`;
@@ -2303,6 +2303,11 @@ async function execute() {
         && /five independent fields/i.test(renderedFinalHandoff.copy),
       JSON.stringify({ finalBrief, finalProjection, renderedFinalHandoff }));
   }
+  const readyPrecedentProjection = await page.locator('.precedent-inline .precedent-mini').evaluateAll(nodes => nodes.map(node => ({
+    claim_id: node.querySelector('strong')?.textContent?.split(' · ')[0],
+    rank: Number(node.querySelector('.precedent-rank')?.dataset.rank),
+  })));
+  check('Ready workspace initially exposes all three ordered generated reference patterns', JSON.stringify(readyPrecedentProjection) === JSON.stringify(processRun.result.precedents.map(item => ({ claim_id: item.claim_id, rank: item.ranking.rank }))), JSON.stringify(readyPrecedentProjection));
   await page.locator('[data-toggle-all-branches]').click();
   const renderedNodeIds = await page.evaluate(() => [...new Set([...document.querySelectorAll('.process-node-button[data-node-id],.process-branch-node[data-node-id]')].map(node => node.dataset.nodeId))]);
   const expectedNodeIds = processGraph.nodes.map(node => node.node_id);
@@ -2455,6 +2460,8 @@ async function execute() {
   await waitVisible('body[data-casepath-moment="review"]');
   const demoReviewCopy = await page.locator('#stageCanvas').innerText();
   check('Simulated demo review remains beside the complete graph and disclaims qualified approval', await page.locator('.review-graph .process-layout').count() === 1 && await page.locator('.review-choice').count() === 2 && /simulated demo review/i.test(demoReviewCopy) && /not qualified expert approval/i.test(demoReviewCopy), demoReviewCopy);
+  await page.locator('.review-graph .process-node-button[data-node-id="causation"],.review-graph .process-branch-node[data-node-id="causation"]').first().click();
+  check('Review workspace preserves its declared no-precedent boundary after graph interaction', await page.locator('.review-graph .precedent-inline').count() === 0 && await page.locator('.review-graph .process-layout').getAttribute('data-precedents') === 'false');
   await page.locator('input[value="required_now"]').check();
   await waitVisible('.v19-review-branch-preview[data-mode="required_now"]');
   await page.locator('input[value="conditional"]').check();
@@ -2462,6 +2469,8 @@ async function execute() {
   await auditViewports('04-review', '#reviewForm');
   await page.locator('#reviewForm button[type="submit"]').click();
   await waitVisible('body[data-casepath-moment="review-applied"]');
+  await page.locator('.review-applied .process-node-button[data-node-id="causation"],.review-applied .process-branch-node[data-node-id="causation"]').first().click();
+  check('Applied-review workspace preserves its declared no-precedent boundary after graph interaction', await page.locator('.review-applied .precedent-inline').count() === 0 && await page.locator('.review-applied .process-layout').getAttribute('data-precedents') === 'false');
   const reviewed = await waitForValue(() => reviewResponse);
   retainedEvidence['demo-review'] = reviewed;
   check('Demo review response is accepted, typed, and explicitly unverified', reviewed.accepted === true && reviewed.reviewer?.type === 'unverified_demo_user' && reviewed.reviewer?.qualification_status === 'not_verified' && reviewed.result?.process && reviewed.result?.checklist, JSON.stringify(reviewed));

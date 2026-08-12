@@ -93,6 +93,21 @@ def test_loaded_orchestration_renderer_keeps_validator_identity_out_of_gate_ids(
     )
 
 
+def test_process_workspace_interactions_preserve_declared_capabilities() -> None:
+    source = (
+        release_tool.REPOSITORY / "casepath" / "assets" / "live-v16.js"
+    ).read_text(encoding="utf-8")
+    assert (
+        '<div class="process-layout" data-evidence="${esc(String(evidence))}" '
+        'data-precedents="${esc(String(precedents))}">' in source
+    )
+    assert "const layout = button.closest('.process-layout');" in source
+    assert "if (!layout) return;" in source
+    assert "evidence: layout.dataset.evidence === 'true'" in source
+    assert "precedents: layout.dataset.precedents === 'true'" in source
+    assert "precedents: state.stageMode === 'experience'" not in source
+
+
 def test_every_observable_claim_artifact_is_model_visible_and_scanned() -> None:
     api_root = release_tool.REPOSITORY / "casepath-api"
     if str(api_root) not in sys.path:
@@ -251,7 +266,7 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
             release_tool.REPOSITORY
             / f"casepath/releases/model-validation-attempt-20260811-{number:02d}.json"
         )
-        for number in range(1, 16)
+        for number in range(1, 17)
     }
     (
         attempt_1,
@@ -269,7 +284,8 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         attempt_13,
         attempt_14,
         attempt_15,
-    ) = (attempts[number] for number in range(1, 16))
+        attempt_16,
+    ) = (attempts[number] for number in range(1, 17))
     for evidence in attempts.values():
         assert evidence["status"] == "failed_closed"
         assert evidence["acceptance_passed"] is False
@@ -1114,11 +1130,76 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
     assert attempt_15["capture_provenance"]["public_qa_origin"]["classification"] == (
         "stale_previous_deploy_not_attempt_15"
     )
+    assert {
+        section: release_tool._historical_json_sha256(attempt_16[section])
+        for section in release_tool._HISTORICAL_ATTEMPT_16_SECTION_SHA256
+    } == release_tool._HISTORICAL_ATTEMPT_16_SECTION_SHA256
+    assert attempt_16["execution_observation"]["source_commit"] == (
+        "c325c8a0ec27fe0e3fcec5c24407d7b578df2356"
+    )
+    assert attempt_16["execution_observation"]["cold_run_id"] == (
+        "run_67fa8a8b0607c476"
+    )
+    assert attempt_16["execution_observation"]["warm_run_id"] == (
+        "run_5b434ab92b9fe4a6"
+    )
+    attempt_16_calls = attempt_16["provider_observation"]["calls"]
+    warm_calls = attempt_16["warm_cache_result"]["calls"]
+    assert [call["agent_id"] for call in attempt_16_calls] == [
+        "canonical_facts",
+        "orchestrator_plan",
+        "process_decision_mapping",
+        "document_source_integrity",
+        "evidence_checklist",
+        "final_claim_brief_audit",
+    ]
+    assert attempt_16["provider_observation"]["actual_cost_usd"] == pytest.approx(
+        0.0236984
+    )
+    assert attempt_16["provider_observation"]["actual_cost_complete"] is True
+    assert attempt_16["application_result"]["full_orchestration_accepted"] is True
+    assert attempt_16["warm_cache_result"]["full_orchestration_accepted"] is True
+    assert attempt_16["warm_cache_result"]["provider_network_call_count"] == 0
+    assert all(call["outcome"] == "cache_hit" for call in warm_calls)
+    assert all(call["cache_hit"] is True for call in warm_calls)
+    assert all(call["call_count"] == 0 for call in warm_calls)
+    assert [call["orchestration_id"] for call in warm_calls] == [
+        attempt_16["execution_observation"]["warm_orchestration_id"]
+    ] * 6
+    assert [call["origin_call_id"] for call in warm_calls] == [
+        call["call_id"] for call in attempt_16_calls
+    ]
+    assert [call["response_id"] for call in warm_calls] == [
+        call["response_id"] for call in attempt_16_calls
+    ]
+    assert [call["origin_finish_reason"] for call in warm_calls] == [
+        call["finish_reason"] for call in attempt_16_calls
+    ]
+    assert [call["origin_usage"] for call in warm_calls] == [
+        {
+            "prompt_tokens": call["prompt_tokens"],
+            "completion_tokens": call["completion_tokens"],
+            "total_tokens": call["total_tokens"],
+            "actual_cost_usd": call["actual_cost_usd"],
+            "usage_source": call["usage_source"],
+        }
+        for call in attempt_16_calls
+    ]
+    assert attempt_16["qa_result"]["initial_precedent_cards_exact"] is True
+    assert attempt_16["qa_result"]["rendered_precedents_after_interaction"] == []
+    assert (
+        attempt_16["qa_result"]["terminal_validator_excluded_from_gate_identity"]
+        is True
+    )
+    assert attempt_16["qa_result"]["runtime_acceptance_established"] is False
+    assert attempt_16["capture_provenance"]["public_qa_origin"]["classification"] == (
+        "stale_previous_deploy_not_attempt_16"
+    )
     assert sum(
         attempt["provider_observation"]["actual_cost_usd"]
         for attempt in attempts.values()
         if "actual_cost_usd" in attempt["provider_observation"]
-    ) == pytest.approx(0.2052442)
+    ) == pytest.approx(0.2289426)
     assert "actual_cost_usd" not in attempt_3["provider_observation"]
     assert "prompt_tokens" not in attempt_3["provider_observation"]
     assert attempt_3["provider_observation"]["charge_status"] == "unknown_unconfirmed"
@@ -1544,6 +1625,51 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         message = str(caught.value)
         assert "gen-1786523198-A8vhBZHdAYRjUqqokm6I" not in message
         assert "modelcall_164106a7469fa643" not in message
+
+    forged_attempt_16_records = []
+    forged_attempt_16_warm_call = deepcopy(attempt_16)
+    forged_attempt_16_warm_call["warm_cache_result"]["calls"][0]["call_count"] = 1
+    forged_attempt_16_records.append(forged_attempt_16_warm_call)
+
+    forged_attempt_16_origin = deepcopy(attempt_16)
+    forged_attempt_16_origin["warm_cache_result"]["calls"][2]["origin_call_id"] = (
+        "modelcall_0000000000000000"
+    )
+    forged_attempt_16_records.append(forged_attempt_16_origin)
+
+    forged_attempt_16_origin_usage = deepcopy(attempt_16)
+    forged_attempt_16_origin_usage["warm_cache_result"]["calls"][2][
+        "origin_usage"
+    ]["total_tokens"] += 1
+    forged_attempt_16_records.append(forged_attempt_16_origin_usage)
+
+    forged_attempt_16_orchestration = deepcopy(attempt_16)
+    forged_attempt_16_orchestration["warm_cache_result"]["calls"][2][
+        "orchestration_id"
+    ] = "orch_0000000000000000"
+    forged_attempt_16_records.append(forged_attempt_16_orchestration)
+
+    forged_attempt_16_qa = deepcopy(attempt_16)
+    forged_attempt_16_qa["qa_result"]["rendered_precedents_after_interaction"] = [
+        {"claim_id": "HIST-MOULD-014", "rank": 1, "score": 146}
+    ]
+    forged_attempt_16_records.append(forged_attempt_16_qa)
+
+    forged_attempt_16_runtime = deepcopy(attempt_16)
+    forged_attempt_16_runtime["warm_cache_result"]["runtime_acceptance_established"] = (
+        True
+    )
+    forged_attempt_16_records.append(forged_attempt_16_runtime)
+
+    for forged_attempt in forged_attempt_16_records:
+        with pytest.raises(
+            release_tool.VerificationError,
+            match="exact bounded schema",
+        ) as caught:
+            release_tool.verify_failed_model_attempt_evidence(contract, forged_attempt)
+        message = str(caught.value)
+        assert "gen-1786526081-TnJHzHHIomfoMLN0kUMr" not in message
+        assert "modelcall_9f92e9bc170b700f" not in message
 
 
 def _ledger_summary(items: list[dict]) -> dict:

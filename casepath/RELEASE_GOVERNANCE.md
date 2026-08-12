@@ -284,6 +284,22 @@ Fifteen authorized model attempts failed closed at the release gate:
   exposed its stale previous-deploy report and returned 404 for the manifest.
   Application-orchestration acceptance is therefore retained as history, but
   Attempt 15 itself established no dynamic release acceptance.
+- Attempt 16 ran from QA deploy `dep-d9u3iinlk1mc73fgfcqg` against aligned
+  source commit `c325c8a0ec27fe0e3fcec5c24407d7b578df2356`. Cold run
+  `run_67fa8a8b0607c476` bound orchestration `orch_b3474368efacacda`, accepted
+  all six required model roles and all three deterministic gates, and proved
+  that the terminal validator no longer received a fourth gate identity. The
+  six DeepInfra responses cost USD 0.0236984 for 34,988 prompt and 2,890
+  completion tokens; four succeeded directly and two used disclosed guarded
+  fallback. Warm run `run_5b434ab92b9fe4a6` then accepted the same six roles
+  with six exact cache-origin bindings and zero provider calls. The browser
+  initially rendered all three generated reference patterns in exact ranked
+  order, but a process-node interaction removed all three cards because the
+  rerender derived capabilities from stale global stage state. The focused QA
+  check therefore failed closed, and the failed build published neither a
+  current report nor an evidence manifest. Cold and warm application
+  acceptance remain immutable history; Attempt 16 established no dynamic
+  release acceptance.
 
 The current source pins OpenRouter to the exact `deepinfra/fp4` endpoint tag,
 sets `allow_fallbacks: false`, keeps `require_parameters: true`, and denies
@@ -312,16 +328,17 @@ requires a new same-commit cold production journey with all six bound calls and
 three passed deterministic gates.
 
 Known aggregate provider charges for attempts 1, 2, 4, 5, 6, 8, 10, 11, 12,
-the two cost-known calls in attempt 14, and all six calls in attempt 15 are USD
-0.2052442. Attempts 3, 7, 9, and 13, plus the two failed calls in attempt 14,
+the two cost-known calls in attempt 14, and all six calls in attempts 15 and 16
+are USD 0.2289426. Attempts 3, 7, 9, and 13, plus the two failed calls in attempt 14,
 are unknown and excluded rather than treated as zero. Attempts 7 and 9 each retain a USD 0.027645 estimated
 reservation, neither of which is included as an actual charge. The attempts
-remain failed-closed release history; Attempt 15 does contain successful
-application-orchestration evidence, but none is accepted model-backed release
-evidence. No raw prompt, raw output, credential, or private reference is
-retained.
+remain failed-closed release history; Attempts 15 and 16 contain successful
+application-orchestration evidence, and Attempt 16 additionally contains an
+accepted zero-network-call cache replay, but none is accepted model-backed
+release evidence. No raw prompt, raw output, credential, or private reference
+is retained.
 
-The fifteen records above are listed under `historical_model_validation` with
+The sixteen records above are listed under `historical_model_validation` with
 `scope: failed_closed_history_only`; they can never establish current runtime
 acceptance. At this source-history freeze, no passing dynamic QA artifact pair
 had been verified. A later same-commit passing pair may supersede that
