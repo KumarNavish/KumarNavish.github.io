@@ -213,7 +213,7 @@ def test_later_result_keeps_returned_comparison_hashes_visible() -> None:
         and "display:none!important" in line
     )
     assert ".final-proof" not in hidden_later_result_rule
-    assert 'assets/live-v20-focus.css?v=20.0.1' in index
+    assert 'assets/live-v20-focus.css?v=20.0.2' in index
     assert "const finalComparison = page.locator('#laterResult .final-proof');" in browser_gate
     assert "await finalComparison.isVisible()" in browser_gate
     assert "finalComparisonText.includes(proof.before.result_hash)" in browser_gate

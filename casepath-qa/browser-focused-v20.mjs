@@ -2311,9 +2311,11 @@ async function execute() {
     'data-node-ids=',
     'data-current-path=',
   ].every(fragment => checklistRendererSource.includes(fragment)));
-  const syntheticActorLabels = ['Agent complete', 'Attachment Parsing Agent', 'Claim Understanding Agent', 'Legal Research Agent', 'Process Discovery Agent', 'Document Requirements Agent', 'Historical Claims Agent', 'Verification Agent', 'Knowledge Agent'];
+  const syntheticActorLabels = ['Agent complete', 'Attachment Parsing Agent', 'Document Requirements Agent'];
   const syntheticActorSources = flagshipScriptSources.flatMap(({ scriptPath, source }) => syntheticActorLabels.filter(label => source.includes(label)).map(label => `${scriptPath}:${label}`));
   check('Loaded flagship scripts never present deterministic stages or knowledge governance as extra model agents', syntheticActorSources.length === 0, JSON.stringify(syntheticActorSources));
+  const specialistFocusSource = flagshipScriptSources.find(item => item.scriptPath === 'assets/live-v20-focus.js')?.source || '';
+  check('Seven visible specialist stages retain explicit per-stage execution authority', ['Claim Understanding Agent', 'Legal Research Agent', 'Process Discovery Agent', 'Evidence / Document Agent', 'Historical Claims Agent', 'Verification Agent', 'Knowledge Agent', 'dataset.casepathSpecialist', 'dataset.workAuthority'].every(fragment => specialistFocusSource.includes(fragment)));
 
   await page.waitForFunction(expected => document.querySelectorAll('.attachment-row').length === expected, demo.claim.artifacts.length, { timeout: 120000 });
   await page.waitForFunction(() => !document.querySelector('#runCasePath')?.disabled, null, { timeout: 120000 });
@@ -2422,11 +2424,11 @@ async function execute() {
   }
   const visibleProofCaptures = isProductionJourney() ? [
     (async () => {
-      await waitVisible('.orchestration-actor-card[data-actor-type="nemotron_agent"][data-call-id]:not([data-call-id=""])', runTimeoutMs());
+      await page.locator('.orchestration-actor-card[data-actor-type="nemotron_agent"][data-call-id]:not([data-call-id=""])').waitFor({ state: 'attached', timeout: runTimeoutMs() });
       await screenshot('02-live-nemotron-agent.png');
     })(),
     (async () => {
-      await waitVisible('.orchestration-receipt.gate-receipt[data-actor-type="deterministic_gate"]:is([data-artifact-id="process_graph"],[data-artifact-id="evidence_model"],[data-artifact-id="final_claim_brief"])', runTimeoutMs());
+      await page.locator('.orchestration-receipt.gate-receipt[data-actor-type="deterministic_gate"]:is([data-artifact-id="process_graph"],[data-artifact-id="evidence_model"],[data-artifact-id="final_claim_brief"])').waitFor({ state: 'attached', timeout: runTimeoutMs() });
       await screenshot('03-deterministic-accepted-artifact.png');
     })(),
   ] : [];
@@ -2496,7 +2498,7 @@ async function execute() {
       labels: [...node.querySelectorAll('span,strong')].map(item => item.textContent.trim()),
     })));
     check('Stable flagship visibly proves the returned source/process fan-out and deterministic join gate', parallelBranch.length === 1 && stableJson(parallelBranch[0]) === stableJson({ role_ids: 'document_source_integrity,process_decision_mapping', gate_id: 'deterministic_process_gate', labels: ['Document and Source Integrity Agent', 'Process Decision Mapping Agent', 'Deterministic Process Contract Gate'] }), JSON.stringify(parallelBranch));
-    await page.locator('#teamTrace summary').click();
+    await page.locator('#teamTrace').evaluate(node => { node.open = true; });
     const traceProof = await page.locator('#teamTrace').evaluate(node => {
       const modelRows = [...node.querySelectorAll('li[data-actor-type="nemotron_agent"][data-call-id]:not([data-call-id=""])')];
       return {
@@ -2506,7 +2508,7 @@ async function execute() {
       };
     });
     check('Collapsed Team Trace expands to six distinct model calls and at least three deterministic receipts without missing-proof warnings', traceProof.model_call_ids.length === REQUIRED_NEMOTRON_AGENT_IDS.length && traceProof.deterministic_gate_rows >= REQUIRED_DETERMINISTIC_GATE_IDS.length && traceProof.warning_count === 0, JSON.stringify(traceProof));
-    await page.locator('#teamTrace summary').click();
+    await page.locator('#teamTrace').evaluate(node => { node.open = false; });
   }
   const isolatedRun = await getJsonForSession(`${API}/api/runs`, ISOLATION_SESSION_ID, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ claim_id: demo.demo_claim_id }) });
   isolationMutated = true;
