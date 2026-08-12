@@ -2415,6 +2415,14 @@ async function execute() {
 
   await page.locator('#runCasePath').click();
   await waitVisible('#liveWorkspace');
+  await waitVisible('#v21AgentFocus');
+  const initialSpecialistFocus = await page.locator('#v21AgentFocus').evaluate(node => ({
+    specialist: node.dataset.casepathSpecialist,
+    authority: node.dataset.workAuthority,
+    active_steps: node.querySelectorAll('.v21-stage-rail [data-state="active"]').length,
+    title: node.querySelector('h2')?.textContent?.trim() || '',
+  }));
+  check('Flagship opens with exactly one readable, authority-labelled specialist focus', initialSpecialistFocus.specialist === 'understand' && Boolean(initialSpecialistFocus.authority) && initialSpecialistFocus.active_steps === 1 && Boolean(initialSpecialistFocus.title), JSON.stringify(initialSpecialistFocus));
   const flagshipRunId = await waitForValue(() => runIds[0]);
   if (isProductionJourney()) {
     await page.waitForFunction(() => window.__casepathOpeningContexts?.length > 0, null, { timeout: runTimeoutMs() });
@@ -2424,11 +2432,11 @@ async function execute() {
   }
   const visibleProofCaptures = isProductionJourney() ? [
     (async () => {
-      await page.locator('.orchestration-actor-card[data-actor-type="nemotron_agent"][data-call-id]:not([data-call-id=""])').waitFor({ state: 'attached', timeout: runTimeoutMs() });
+      await waitVisible('.orchestration-actor-card[data-actor-type="nemotron_agent"][data-call-id]:not([data-call-id=""])', runTimeoutMs());
       await screenshot('02-live-nemotron-agent.png');
     })(),
     (async () => {
-      await page.locator('.orchestration-receipt.gate-receipt[data-actor-type="deterministic_gate"]:is([data-artifact-id="process_graph"],[data-artifact-id="evidence_model"],[data-artifact-id="final_claim_brief"])').waitFor({ state: 'attached', timeout: runTimeoutMs() });
+      await waitVisible('.orchestration-receipt.gate-receipt[data-actor-type="deterministic_gate"]:is([data-artifact-id="process_graph"],[data-artifact-id="evidence_model"],[data-artifact-id="final_claim_brief"])', runTimeoutMs());
       await screenshot('03-deterministic-accepted-artifact.png');
     })(),
   ] : [];
@@ -2467,6 +2475,7 @@ async function execute() {
     await waitText('#journeyNext', /Review the proposed playbook/i, runTimeoutMs());
     await waitVisible('body[data-casepath-moment="ready"]', runTimeoutMs());
     await waitVisible('.process-layout', runTimeoutMs());
+    await page.waitForFunction(() => document.querySelector('#v21AgentFocus')?.dataset.casepathSpecialist === 'verify', null, { timeout: runTimeoutMs() });
   });
   const terminalValidatorReceipt = await page.locator('.orchestration-receipt.gate-receipt').evaluate(node => ({
     gate_id: node.getAttribute('data-gate-id'),
@@ -2498,7 +2507,7 @@ async function execute() {
       labels: [...node.querySelectorAll('span,strong')].map(item => item.textContent.trim()),
     })));
     check('Stable flagship visibly proves the returned source/process fan-out and deterministic join gate', parallelBranch.length === 1 && stableJson(parallelBranch[0]) === stableJson({ role_ids: 'document_source_integrity,process_decision_mapping', gate_id: 'deterministic_process_gate', labels: ['Document and Source Integrity Agent', 'Process Decision Mapping Agent', 'Deterministic Process Contract Gate'] }), JSON.stringify(parallelBranch));
-    await page.locator('#teamTrace').evaluate(node => { node.open = true; });
+    await page.locator('#teamTrace summary').click();
     const traceProof = await page.locator('#teamTrace').evaluate(node => {
       const modelRows = [...node.querySelectorAll('li[data-actor-type="nemotron_agent"][data-call-id]:not([data-call-id=""])')];
       return {
@@ -2508,7 +2517,7 @@ async function execute() {
       };
     });
     check('Collapsed Team Trace expands to six distinct model calls and at least three deterministic receipts without missing-proof warnings', traceProof.model_call_ids.length === REQUIRED_NEMOTRON_AGENT_IDS.length && traceProof.deterministic_gate_rows >= REQUIRED_DETERMINISTIC_GATE_IDS.length && traceProof.warning_count === 0, JSON.stringify(traceProof));
-    await page.locator('#teamTrace').evaluate(node => { node.open = false; });
+    await page.locator('#teamTrace summary').click();
   }
   const isolatedRun = await getJsonForSession(`${API}/api/runs`, ISOLATION_SESSION_ID, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ claim_id: demo.demo_claim_id }) });
   isolationMutated = true;
@@ -2747,6 +2756,7 @@ async function execute() {
   const flagshipBeforeReview = processRun;
   await page.locator('#journeyNext').click();
   await waitVisible('body[data-casepath-moment="review"]');
+  check('Review keeps Verification Agent as the single visible workflow focus', await page.locator('#v21AgentFocus[data-casepath-specialist="verify"] .v21-stage-rail [data-state="active"]').count() === 1);
   await waitVisible('.v20-review-note');
   const demoReviewCopy = await page.locator('#stageCanvas').innerText();
   check('Simulated demo review remains beside the complete graph and disclaims qualified approval', await page.locator('.review-graph .process-layout').count() === 1 && await page.locator('.review-choice').count() === 2 && /simulated demo review/i.test(demoReviewCopy) && /not qualified expert approval/i.test(demoReviewCopy), demoReviewCopy);
@@ -2801,6 +2811,7 @@ async function execute() {
 
   await page.locator('#journeyNext').click();
   await waitVisible('.v20-learning-summary');
+  check('Knowledge consolidation becomes the single visible workflow focus', await page.locator('#v21AgentFocus[data-casepath-specialist="knowledge"] .v21-stage-rail [data-state="active"]').count() === 1);
   const candidateCopy = await page.locator('[data-outcome="candidate"]').innerText();
   check('Candidate is honestly quarantined with one unverified support record and zero qualified support', reviewed.candidate?.status === 'quarantined' && reviewed.candidate?.support_count === 1 && reviewed.candidate?.required_support === 3 && reviewed.candidate?.qualified_support_count === 0 && reviewed.candidate?.required_qualified_support === 3 && /1 of 3 unverified demo support records/i.test(candidateCopy) && /0 of 3 qualified support records/i.test(candidateCopy), candidateCopy);
   check('Shared playbook is explicitly unchanged', reviewed.candidate?.shared_knowledge_changed === false && /shared playbook unchanged/i.test(await page.locator('.v20-learning-summary').innerText()) && /mould-playbook-v3/i.test(await page.locator('[data-outcome="shared-playbook"]').innerText()));
@@ -2814,6 +2825,7 @@ async function execute() {
     await awaitLaterJourneyTerminalUi();
   });
   const proof = await waitForValue(() => proofResponse, runTimeoutMs());
+  check('Held-out result retains one authority-labelled Knowledge workflow focus', await page.locator('#v21AgentFocus[data-casepath-specialist="knowledge"][data-work-authority] .v21-stage-rail [data-state="active"]').count() === 1);
   retainedEvidence['learning-proof'] = proof;
   check('Lifecycle produced flagship, baseline, and post-review runs', runIds.length === 3, JSON.stringify(runIds));
   const baseline = await awaitRun(runIds[1]);
