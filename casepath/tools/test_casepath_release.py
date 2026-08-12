@@ -45,12 +45,14 @@ def test_release_contract_and_manifests_are_current() -> None:
 
 
 def test_root_knowledge_transfer_is_inventoried_as_release_source() -> None:
+    assert ".gitignore" in release_tool.EXTRA_SOURCE_FILES
     assert "CASEPATH_MASTER_KNOWLEDGE_TRANSFER.md" in (
         release_tool.EXTRA_SOURCE_FILES
     )
     inventoried_paths = {
         item["path"] for item in release_tool.source_manifest_payload()["files"]
     }
+    assert ".gitignore" in inventoried_paths
     assert "CASEPATH_MASTER_KNOWLEDGE_TRANSFER.md" in inventoried_paths
 
 
@@ -213,6 +215,7 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
     assert "model_backed_accepted" not in runtime
     assert runtime["verdict_authority"] == "dynamic_same_commit_qa_artifacts"
     assert runtime["source_contract_embeds_runtime_verdict"] is False
+    assert runtime["required_provider_max_in_flight"] == 1
     assert runtime["dynamic_evidence"] == {
         "qa_gate": "focused-flagship-journey-v20",
         "report_path": "report.json",
@@ -235,7 +238,7 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
             release_tool.REPOSITORY
             / f"casepath/releases/model-validation-attempt-20260811-{number:02d}.json"
         )
-        for number in range(1, 14)
+        for number in range(1, 15)
     }
     (
         attempt_1,
@@ -251,7 +254,8 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         attempt_11,
         attempt_12,
         attempt_13,
-    ) = (attempts[number] for number in range(1, 14))
+        attempt_14,
+    ) = (attempts[number] for number in range(1, 15))
     for evidence in attempts.values():
         assert evidence["status"] == "failed_closed"
         assert evidence["acceptance_passed"] is False
@@ -959,11 +963,72 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         "deterministic_gates_started": False,
         "external_cause_detail": "unknown",
     }
+    assert {
+        section: release_tool._historical_json_sha256(attempt_14[section])
+        for section in release_tool._HISTORICAL_ATTEMPT_14_SECTION_SHA256
+    } == release_tool._HISTORICAL_ATTEMPT_14_SECTION_SHA256
+    assert attempt_14["execution_observation"]["source_commit"] == (
+        "765c610378e7acdc224e200c0e7bbbc65c697c6b"
+    )
+    assert attempt_14["execution_observation"]["qa_deploy_id"] == (
+        "dep-d9u0jnbm8hqs73e7kj3g"
+    )
+    assert attempt_14["execution_observation"]["qa_run_id"] == (
+        "run_3010703608cef786"
+    )
+    assert attempt_14["execution_observation"]["orchestration_id"] == (
+        "orch_5c8e411d9ccf1b05"
+    )
+    assert attempt_14["execution_observation"]["failed_agent_ids"] == [
+        "process_decision_mapping",
+        "document_source_integrity",
+    ]
+    attempt_14_calls = attempt_14["provider_observation"]["calls"]
+    assert [item["call_id"] for item in attempt_14_calls] == [
+        "modelcall_b5582c002c6f20bb",
+        "modelcall_47529c6d5a49d7cc",
+        "modelcall_509e1d20d5f03da7",
+        "modelcall_17477d1f8a445c6f",
+    ]
+    assert [item["outcome"] for item in attempt_14_calls] == [
+        "succeeded",
+        "succeeded",
+        "failed",
+        "failed",
+    ]
+    assert all(
+        item["upstream_provider"] == "DeepInfra" for item in attempt_14_calls[:2]
+    )
+    assert all(
+        item["expected_upstream_provider"] == "DeepInfra"
+        and item["upstream_provider_retained"] is False
+        for item in attempt_14_calls[2:]
+    )
+    assert attempt_14["provider_observation"]["actual_cost_usd"] == pytest.approx(
+        0.016428
+    )
+    assert attempt_14["provider_observation"]["actual_cost_complete"] is False
+    assert attempt_14["provider_observation"]["unknown_cost_call_count"] == 2
+    assert attempt_14["application_result"]["runtime_acceptance_established"] is False
+    assert attempt_14["application_result"][
+        "failed_call_upstream_identity_retained"
+    ] is False
+    assert attempt_14["capture_provenance"]["public_api_model_ledger"] == {
+        "path": "/api/model-ledger",
+        "http_status": 200,
+        "response_bytes": 5577,
+        "response_sha256": (
+            "37980deb2c5408af9801a1b464a868c3c4b122addff275fc1e159df7d14a7aec"
+        ),
+    }
+    assert attempt_14["capture_provenance"]["public_qa_origin"]["classification"] == (
+        "stale_previous_deploy_not_attempt_14"
+    )
     assert sum(
         attempt["provider_observation"]["actual_cost_usd"]
         for attempt in attempts.values()
         if "actual_cost_usd" in attempt["provider_observation"]
-    ) == pytest.approx(0.1634040)
+    ) == pytest.approx(0.1798320)
     assert "actual_cost_usd" not in attempt_3["provider_observation"]
     assert "prompt_tokens" not in attempt_3["provider_observation"]
     assert attempt_3["provider_observation"]["charge_status"] == "unknown_unconfirmed"
@@ -988,6 +1053,8 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
     assert "prompt_tokens" not in attempt_13["provider_observation"]
     assert attempt_13["provider_observation"]["actual_cost_complete"] is False
     assert attempt_13["provider_observation"]["unknown_cost_call_count"] == 1
+    assert attempt_14["provider_observation"]["known_cost_included_in_aggregate"] is True
+    assert attempt_14["provider_observation"]["unknown_cost_excluded_from_aggregate"] is True
     for attempt in attempts.values():
         release_tool.verify_failed_model_attempt_evidence(contract, attempt)
 
@@ -1229,6 +1296,77 @@ def test_model_truth_is_scoped_and_failed_attempt_history_is_not_accepted() -> N
         message = str(caught.value)
         assert "gen-1786495797-wwTpDFx93vAismEWwWvY" not in message
         assert "modelcall_f97afa2a05079468" not in message
+
+    forged_attempt_14_records = []
+    wrong_attempt_14_commit = deepcopy(attempt_14)
+    wrong_attempt_14_commit["execution_observation"]["source_commit"] = "0" * 40
+    forged_attempt_14_records.append(wrong_attempt_14_commit)
+
+    wrong_attempt_14_deploy = deepcopy(attempt_14)
+    wrong_attempt_14_deploy["execution_observation"]["qa_deploy_id"] = (
+        "dep-d9u0jnbm8hqs73e7kj3h"
+    )
+    forged_attempt_14_records.append(wrong_attempt_14_deploy)
+
+    wrong_attempt_14_failure_order = deepcopy(attempt_14)
+    wrong_attempt_14_failure_order["execution_observation"]["failed_agent_ids"].reverse()
+    forged_attempt_14_records.append(wrong_attempt_14_failure_order)
+
+    wrong_attempt_14_call = deepcopy(attempt_14)
+    wrong_attempt_14_call["provider_observation"]["calls"][2]["call_id"] = (
+        "modelcall_0000000000000000"
+    )
+    forged_attempt_14_records.append(wrong_attempt_14_call)
+
+    wrong_attempt_14_lineage = deepcopy(attempt_14)
+    wrong_attempt_14_lineage["provider_observation"]["calls"][3]["parent_call_id"] = (
+        "modelcall_b5582c002c6f20bb"
+    )
+    forged_attempt_14_records.append(wrong_attempt_14_lineage)
+
+    forged_attempt_14_failed_upstream = deepcopy(attempt_14)
+    forged_attempt_14_failed_upstream["provider_observation"]["calls"][2][
+        "upstream_provider"
+    ] = "DeepInfra"
+    forged_attempt_14_records.append(forged_attempt_14_failed_upstream)
+
+    wrong_attempt_14_error = deepcopy(attempt_14)
+    wrong_attempt_14_error["provider_observation"]["calls"][2][
+        "provider_error_code"
+    ] = 500
+    forged_attempt_14_records.append(wrong_attempt_14_error)
+
+    wrong_attempt_14_cost = deepcopy(attempt_14)
+    wrong_attempt_14_cost["provider_observation"]["actual_cost_complete"] = True
+    forged_attempt_14_records.append(wrong_attempt_14_cost)
+
+    forged_attempt_14_runtime = deepcopy(attempt_14)
+    forged_attempt_14_runtime["application_result"][
+        "runtime_acceptance_established"
+    ] = True
+    forged_attempt_14_records.append(forged_attempt_14_runtime)
+
+    wrong_attempt_14_capture_hash = deepcopy(attempt_14)
+    wrong_attempt_14_capture_hash["capture_provenance"]["public_api_model_ledger"][
+        "response_sha256"
+    ] = "0" * 64
+    forged_attempt_14_records.append(wrong_attempt_14_capture_hash)
+
+    forged_attempt_14_current_report = deepcopy(attempt_14)
+    forged_attempt_14_current_report["capture_provenance"]["public_qa_origin"][
+        "classification"
+    ] = "current_attempt_14_acceptance"
+    forged_attempt_14_records.append(forged_attempt_14_current_report)
+
+    for forged_attempt in forged_attempt_14_records:
+        with pytest.raises(
+            release_tool.VerificationError,
+            match="exact bounded schema",
+        ) as caught:
+            release_tool.verify_failed_model_attempt_evidence(contract, forged_attempt)
+        message = str(caught.value)
+        assert "gen-1786513914-oQ9RsMSIInmknRyHgohy" not in message
+        assert "modelcall_509e1d20d5f03da7" not in message
 
 
 def _ledger_summary(items: list[dict]) -> dict:
@@ -4394,6 +4532,13 @@ def test_agentic_runtime_contract_is_exact_and_tracing_is_disabled() -> None:
         "langchain_openrouter": "0.2.7",
     }
     assert runtime["safety"]["external_tracing"] is False
+    assert runtime["safety"]["provider_max_in_flight"] == 1
+    assert runtime["parallel_groups"] == [
+        ["document_source_integrity", "process_decision_mapping"]
+    ]
+    assert contract["truth"]["production_runtime_acceptance"][
+        "required_provider_max_in_flight"
+    ] == 1
     assert [item["agent_id"] for item in runtime["model_agents"]] == [
         "canonical_facts",
         "orchestrator_plan",
@@ -4404,15 +4549,83 @@ def test_agentic_runtime_contract_is_exact_and_tracing_is_disabled() -> None:
     ]
 
 
-def test_render_uses_model_aware_readiness_probe() -> None:
+@pytest.mark.parametrize("value", [None, 0, 2])
+def test_provider_single_flight_release_contract_rejects_tampering(value) -> None:
+    contract = deepcopy(release_tool.load_json(release_tool.RELEASE_PATH))
+    if value is None:
+        del contract["agentic_runtime"]["safety"]["provider_max_in_flight"]
+    else:
+        contract["agentic_runtime"]["safety"]["provider_max_in_flight"] = value
+    with pytest.raises(release_tool.VerificationError, match="Agentic runtime"):
+        release_tool.verify_static_runtime_acceptance_contract(contract)
+
+
+@pytest.mark.parametrize("value", [None, 0, 2])
+def test_provider_single_flight_acceptance_criterion_rejects_tampering(value) -> None:
+    contract = deepcopy(release_tool.load_json(release_tool.RELEASE_PATH))
+    runtime_acceptance = contract["truth"]["production_runtime_acceptance"]
+    if value is None:
+        del runtime_acceptance["required_provider_max_in_flight"]
+    else:
+        runtime_acceptance["required_provider_max_in_flight"] = value
+    with pytest.raises(
+        release_tool.VerificationError,
+        match="required_provider_max_in_flight",
+    ):
+        release_tool.verify_static_runtime_acceptance_contract(contract)
+
+
+def test_render_uses_curated_frontend_and_model_aware_readiness_probe() -> None:
     contract = release_tool.load_json(release_tool.RELEASE_PATH)
     release_tool.verify_render_runtime_contract(contract)
     blueprint = release_tool.yaml.safe_load(
         (release_tool.REPOSITORY / "render.yaml").read_text(encoding="utf-8")
     )
+    frontend_service = next(
+        item
+        for item in blueprint["services"]
+        if item.get("name") == "casepath-swiss-claim-lab"
+    )
+    assert frontend_service["buildCommand"] == (
+        "python3 casepath/tools/build_static_site.py --require-known-commit"
+    )
+    assert frontend_service["staticPublishPath"] == "casepath-public"
     api_service = next(
         item
         for item in blueprint["services"]
         if item.get("name") == "casepath-agentic-api"
     )
     assert api_service["healthCheckPath"] == "/readyz"
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("buildCommand", "echo unsafe", "curated static builder"),
+        ("staticPublishPath", "casepath", "curated static output"),
+    ],
+)
+def test_render_curated_frontend_contract_rejects_tampering(
+    field,
+    value,
+    message,
+    monkeypatch,
+    tmp_path,
+) -> None:
+    blueprint = release_tool.yaml.safe_load(
+        (release_tool.REPOSITORY / "render.yaml").read_text(encoding="utf-8")
+    )
+    frontend_service = next(
+        item
+        for item in blueprint["services"]
+        if item.get("name") == "casepath-swiss-claim-lab"
+    )
+    frontend_service[field] = value
+    (tmp_path / "render.yaml").write_text(
+        release_tool.yaml.safe_dump(blueprint),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(release_tool, "REPOSITORY", tmp_path)
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    with pytest.raises(release_tool.VerificationError, match=message):
+        release_tool.verify_render_runtime_contract(contract)

@@ -95,6 +95,7 @@
     "safety": {
       "deterministic_safety_authority": true,
       "external_tracing": false,
+      "provider_max_in_flight": 1,
       "prompt_storage": false,
       "raw_output_storage": false
     }
@@ -128,6 +129,7 @@
       },
       "required_mode": "openrouter_nemotron",
       "required_model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "required_provider_max_in_flight": 1,
       "required_runtime_profile": "nemotron_langgraph_multi_agent_hybrid_guarded",
       "requires_successful_call_binding": true,
       "requires_positive_actual_cost": true,
@@ -160,7 +162,8 @@
         "casepath/releases/model-validation-attempt-20260811-10.json",
         "casepath/releases/model-validation-attempt-20260811-11.json",
         "casepath/releases/model-validation-attempt-20260811-12.json",
-        "casepath/releases/model-validation-attempt-20260811-13.json"
+        "casepath/releases/model-validation-attempt-20260811-13.json",
+        "casepath/releases/model-validation-attempt-20260811-14.json"
       ],
       "establishes_current_runtime_acceptance": false
     },

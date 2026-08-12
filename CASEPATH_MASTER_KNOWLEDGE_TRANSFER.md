@@ -4195,13 +4195,13 @@ with all six successful paid OpenRouter/Nemotron ledger records bound to the
 journey, including exact response models, distinct response and call IDs,
 positive token counts, positive actual cost, strict accepted majorities, and
 all three passed deterministic gates. This record does not contain a passing
-production QA artifact pair; the thirteen retained attempts remain
+production QA artifact pair; the fourteen retained attempts remain
 failed-closed history and do not satisfy the production condition.
 
 ## Release and artifact behavior
 
 `casepath/release.json` remains the static release criteria contract. Contract
-2.1 deliberately embeds neither a source commit nor a mutable production
+2.2 deliberately embeds neither a source commit nor a mutable production
 runtime verdict: recording a post-QA `passed` result in source would create a
 new commit that the QA run did not test. Current runtime truth is decided only
 from one atomic, same-commit `report.json` and `evidence-manifest.json` pair.
@@ -4216,10 +4216,12 @@ deterministic_build.model_backed: false
 production_runtime_acceptance.verdict_authority: dynamic_same_commit_qa_artifacts
 production_runtime_acceptance.source_contract_embeds_runtime_verdict: false
 production_runtime_acceptance.required_mode: openrouter_nemotron
+production_runtime_acceptance.required_provider_max_in_flight: 1
 production_runtime_acceptance.dynamic_evidence.report_path: report.json
 production_runtime_acceptance.dynamic_evidence.evidence_manifest_path: evidence-manifest.json
 historical_model_validation.scope: failed_closed_history_only
 historical_model_validation.establishes_current_runtime_acceptance: false
+agentic_runtime.safety.provider_max_in_flight: 1
 independent_expert_review: false
 blind_review_completed: false
 legal_approval: false
@@ -4637,6 +4639,56 @@ acceptance. The immutable sanitized record is retained at
 `casepath/releases/model-validation-attempt-20260811-13.json`; CP-025 tracks
 the external provider availability boundary.
 
+## Production attempt 14, partial known cost, and provider admission boundary
+
+Attempt 14 ran against aligned source commit
+`765c610378e7acdc224e200c0e7bbbc65c697c6b`. Frontend deploy
+`dep-d9u0ihe417fc73fescgg` and API deploy
+`dep-d9u0ihh42hec7398pnm0` were live before QA deploy
+`dep-d9u0jnbm8hqs73e7kj3g` accepted run `run_3010703608cef786` at
+2026-08-12T05:51:50.213421033Z. The run bound orchestration
+`orch_5c8e411d9ccf1b05` and created four network-call ledger records.
+
+Canonical-facts call `modelcall_b5582c002c6f20bb`, response
+`gen-1786513914-oQ9RsMSIInmknRyHgohy`, completed with `stop` through DeepInfra.
+It retained 18 accepted facts, zero rejected facts, 12 source-reference
+projections, 23,188 prompt and 2,050 completion tokens, and USD 0.0160784
+actual cost. Orchestrator-plan call `modelcall_47529c6d5a49d7cc`, response
+`gen-1786513974-UDX9yxmzmSgZf0S3irqg`, also completed with `stop` through
+DeepInfra. It retained one accepted item, no rejected or ignored proposal, 438
+prompt and 71 completion tokens, and USD 0.0003496 actual cost.
+
+The logical specialist fan-out then created process-decision call
+`modelcall_509e1d20d5f03da7` and document/source-integrity call
+`modelcall_17477d1f8a445c6f` 4.051 ms apart. Both failed with
+`OpenRouterUpstreamRejectionError` / `provider_upstream_rejection` and provider
+error code 429 at the OpenRouter boundary. The route expected DeepInfra, but
+neither failed call retained an actual upstream-provider identity, response
+identity, usage, or actual cost. It is therefore incorrect to attribute the
+failed calls themselves to a proven DeepInfra execution. It is also incorrect
+to infer that their close start times caused the 429s; the evidence establishes
+only that application-side provider-send overlap was possible.
+
+Known attempt cost is USD 0.016428 for 23,626 prompt and 2,121 completion
+tokens. The two failed-call costs remain unknown and excluded. Known aggregate
+charges are now USD 0.1798320; attempts 3, 7, 9, and 13 plus the two failed
+calls in attempt 14 remain unknown rather than zero. No later model role or
+deterministic gate ran. The public QA origin still served a stale prior report
+and returned 404 for `evidence-manifest.json`; it supplies no attempt-14
+acceptance evidence. The immutable sanitized record and read-only capture
+hashes are retained at
+`casepath/releases/model-validation-attempt-20260811-14.json`.
+
+The source retains the two specialist entries in `parallel_groups` as logical
+DAG fan-out and deterministic join semantics, while physical OpenRouter sends
+are now admitted through a process-wide single-flight gate. Both the static
+safety contract and dynamic acceptance criteria require
+`provider_max_in_flight: 1`. A bounded admission timeout occurs before network
+transport and must fail closed as `blocked_provider_concurrency` with
+`call_count: 0`, null actual cost, no provider result metadata, and no cacheable
+output. This mitigation does not resolve or explain the external 429 condition;
+same-commit production acceptance remains pending.
+
 ## Exact dynamic model evidence not yet observed by this record
 
 These point-in-time fields must be supplied by the sanitized ledger and retained
@@ -4646,7 +4698,7 @@ not fields to write back into the static release contract:
 ```text
 dynamic_runtime_acceptance_verdict: NOT_ESTABLISHED_BY_THIS_RECORD
 historical_model_validation_scope: failed_closed_history_only
-failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -13.json
+failed_attempt_evidence_records: casepath/releases/model-validation-attempt-20260811-01.json through -14.json
 failed_attempt_id: authorized-smoke-20260811-01
 failed_attempt_application_outcome: rejected
 failed_attempt_failure_type: exact_private_reference_mismatch
@@ -4659,35 +4711,44 @@ provider_observed_prompt_tokens: 3629
 provider_observed_completion_tokens: 2625
 provider_observed_total_tokens: 6254
 provider_observed_finish_reason: stop
-latest_failed_attempt_id: production-flagship-20260812-13
-latest_failed_attempt_source_commit: 690f99e63a6eab4120ad75b83671cffe0f9e62af
+latest_failed_attempt_id: production-flagship-20260812-14
+latest_failed_attempt_source_commit: 765c610378e7acdc224e200c0e7bbbc65c697c6b
 latest_failed_attempt_qa_service_id: srv-d9se2bh42hec73c54sjg
-latest_failed_attempt_qa_deploy_id: dep-d9ts68ht0dsc73c0nj5g
+latest_failed_attempt_qa_deploy_id: dep-d9u0jnbm8hqs73e7kj3g
 latest_failed_attempt_qa_deploy_outcome: build_failed
-latest_failed_attempt_qa_deploy_created_at: 2026-08-12T00:49:39.049742Z
-latest_failed_attempt_qa_deploy_started_at: 2026-08-12T00:49:39.025093Z
-latest_failed_attempt_qa_deploy_finished_at: 2026-08-12T00:50:00.690848Z
-latest_failed_attempt_application_outcome: external_deepinfra_http_429
-latest_failed_attempt_error_type: TooManyRequestsResponseError
-latest_failed_attempt_error_invariant: NOT_RETAINED
-latest_failed_attempt_fact_counts: NONE_ACCEPTED
-latest_failed_attempt_source_projection_count: NONE
-latest_failed_attempt_provider_outcome: deepinfra_http_429
-latest_failed_attempt_upstream_provider: DeepInfra
-latest_failed_attempt_network_call_count: 1
-latest_failed_attempt_canonical_call_id: modelcall_f97afa2a05079468
-latest_failed_attempt_orchestrator_call_id: NONE
-latest_failed_attempt_document_source_call_id: NONE
-latest_failed_attempt_failed_call_id: modelcall_f97afa2a05079468
-latest_failed_attempt_failed_agent_id: canonical_facts
-latest_failed_attempt_finish_reason: NOT_RETAINED
-latest_failed_attempt_prompt_tokens: NOT_RETAINED
-latest_failed_attempt_completion_tokens: NOT_RETAINED
-latest_failed_attempt_total_tokens: NOT_RETAINED
-latest_failed_attempt_actual_cost_usd: UNKNOWN_EXCLUDED
+latest_failed_attempt_qa_deploy_created_at: 2026-08-12T05:51:25.689876Z
+latest_failed_attempt_qa_deploy_started_at: 2026-08-12T05:51:25.662198Z
+latest_failed_attempt_qa_deploy_finished_at: 2026-08-12T05:53:05.203502Z
+latest_failed_attempt_run_id: run_3010703608cef786
+latest_failed_attempt_orchestration_id: orch_5c8e411d9ccf1b05
+latest_failed_attempt_application_outcome: parallel_specialist_provider_upstream_rejection
+latest_failed_attempt_error_type: OpenRouterUpstreamRejectionError
+latest_failed_attempt_error_invariant: provider_upstream_rejection
+latest_failed_attempt_fact_counts: canonical_18_accepted_0_rejected
+latest_failed_attempt_source_projection_count: 12
+latest_failed_attempt_provider_outcome: two_successes_then_parallel_upstream_429
+latest_failed_attempt_successful_upstream_provider: DeepInfra
+latest_failed_attempt_failed_call_expected_upstream_provider: DeepInfra
+latest_failed_attempt_failed_call_actual_upstream_provider: NOT_RETAINED
+latest_failed_attempt_network_call_count: 4
+latest_failed_attempt_canonical_call_id: modelcall_b5582c002c6f20bb
+latest_failed_attempt_orchestrator_call_id: modelcall_47529c6d5a49d7cc
+latest_failed_attempt_process_call_id: modelcall_509e1d20d5f03da7
+latest_failed_attempt_document_source_call_id: modelcall_17477d1f8a445c6f
+latest_failed_attempt_failed_call_ids: modelcall_509e1d20d5f03da7,modelcall_17477d1f8a445c6f
+latest_failed_attempt_failed_agent_ids: process_decision_mapping,document_source_integrity
+latest_failed_attempt_successful_finish_reasons: stop,stop
+latest_failed_attempt_failed_finish_reasons: NOT_RETAINED
+latest_failed_attempt_prompt_tokens_known: 23626
+latest_failed_attempt_completion_tokens_known: 2121
+latest_failed_attempt_total_tokens_known: 25747
+latest_failed_attempt_actual_cost_usd_known_partial: 0.016428
 latest_failed_attempt_actual_cost_complete: false
-known_failed_attempt_cost_usd_excluding_attempts_03_07_09_and_13: 0.1634040
-accepted_retry_status: PENDING_NOT_RUN_AFTER_ATTEMPT_13
+latest_failed_attempt_unknown_cost_call_count: 2
+known_failed_attempt_cost_usd_excluding_attempts_03_07_09_13_and_attempt_14_unknown_calls: 0.1798320
+logical_specialist_topology: fan_out_and_join
+physical_provider_max_in_flight: 1
+accepted_retry_status: PENDING_NOT_RUN_AFTER_ATTEMPT_14
 candidate_source_commit: PENDING
 release_id: casepath-v20-reference-20260811
 provider: openrouter
@@ -4797,7 +4858,11 @@ The frozen local implementation now provides:
 - an atomic current-release evidence attestation that joins the live frontend
   identity, live API health identity, passed QA report, exact evidence-manifest
   bytes, retained file inventory, screenshots, and video before enabling the
-  public evidence link.
+  public evidence link; and
+- a curated 20-file static publish tree containing only the active v20 shell,
+  its direct and recursively injected runtime assets, `_headers`, the release
+  contract, and a known-commit deployment identity—never legacy executable
+  bundles, tools, documentation, release history, or the source manifest.
 
 The local rendered journey completed from flagship analysis through simulated
 review, quarantined memory, held-out later claim, visible five-operation receipt,
@@ -4807,12 +4872,15 @@ evidence, not qualified review or production model acceptance.
 Exact local freeze gates:
 
 ```text
-backend_tests: 274 passed
-release_tests: 92 passed
-browser_contract_self_test: 78 fixtures passed
-source_manifest_files: 126
+backend_tests: 280 passed
+release_contract_tests: 98 passed
+deployment_and_static_publish_tests: 8 passed
+release_tests_total: 106 passed
+browser_contract_self_test: 85 fixtures passed
+source_manifest_files: 129
 release_artifact_files: 25
 model_visible_artifact_files: 24
+curated_frontend_publish_files: 20
 release_leakage_scan: passed
 ruff: passed
 python_compileall: passed
@@ -4821,7 +4889,7 @@ git_diff_check: passed
 ```
 
 The static source and artifact contract is therefore locally verified. Dynamic
-production acceptance remains deliberately pending: attempts 01–13 are
+production acceptance remains deliberately pending: attempts 01–14 are
 failed-closed history, no same-commit six-role cold QA report is retained for
 this candidate, and no new provider call or deployment is asserted here.
 

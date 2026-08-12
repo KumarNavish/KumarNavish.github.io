@@ -2284,6 +2284,55 @@ def test_canonical_root_blocked_receipt_has_explicit_safe_invariant(tmp_path: Pa
     assert run["error"].endswith(": missing_credential")
 
 
+def test_canonical_provider_concurrency_block_is_truthful_zero_call_receipt(
+    tmp_path: Path,
+):
+    def blocked_invoker(*_args):
+        raise ModelResponseError(
+            "provider_concurrency_timeout invariant failed",
+            invariant="provider_concurrency_timeout",
+            safe_context={
+                "call_count": 0,
+                "outcome": "blocked_provider_concurrency",
+            },
+        )
+
+    storage = Storage(str(tmp_path / "canonical-provider-concurrency.db"))
+    pipeline = ClaimPipeline(
+        storage,
+        model_mode=MODEL_MODE_OPENROUTER,
+        canonicalizer=OpenRouterNemotronCanonicalizer(
+            storage,
+            structured_invoker=blocked_invoker,
+            api_key_provider=lambda: "runtime-only-test-value",
+        ),
+        agent_orchestrator=StubAgentOrchestrator(),
+        pace_seconds=0,
+    )
+
+    run = wait(storage, pipeline.create("DEF-027-E0-DEMO"))
+
+    assert run["status"] == "failed"
+    receipt = next(
+        item
+        for item in run["events"]
+        if item.get("failure_scope") == "root_canonical_facts"
+    )
+    assert receipt["error_invariant"] == "provider_concurrency_timeout"
+    assert receipt["outcome"] == "blocked_provider_concurrency"
+    assert receipt["call_count"] == 0
+    assert receipt["response_id"] is None
+    ledger = storage.model_calls()[0]
+    assert ledger["outcome"] == "blocked_provider_concurrency"
+    assert ledger["call_count"] == 0
+    assert ledger["actual_cost_usd"] is None
+    assert storage.model_call_summary()["network_calls"] == 0
+    assert storage.model_call_summary()["unknown_cost_call_count"] == 0
+    assert storage.model_cost_committed_or_reserved() == 0
+    assert run["failure_stage"] == "canonical_facts"
+    assert run["error"].endswith(": provider_concurrency_timeout")
+
+
 def test_flagship_fact_contract_fits_single_bounded_model_response(runtime):
     storage, pipeline = runtime
     run = wait(storage, pipeline.create("DEF-027-E0-DEMO"))

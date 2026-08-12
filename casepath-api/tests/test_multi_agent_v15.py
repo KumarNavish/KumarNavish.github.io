@@ -490,6 +490,53 @@ def test_compiled_langgraph_fanout_join_and_bounded_payloads(tmp_path: Path):
     assert all(item["actual_cost_usd"] == 0.001 for item in calls)
 
 
+def test_specialist_concurrency_block_emits_truthful_zero_call_receipt(tmp_path: Path):
+    (
+        orchestrator,
+        storage,
+        _captures,
+        _responses,
+        package,
+        canonicalization,
+        result,
+    ) = graph_fixture(tmp_path)
+
+    class Runnable:
+        def invoke(self, *_args, **_kwargs):
+            raise langchain_runtime.OpenRouterSendAdmissionTimeoutError()
+
+    assert orchestrator.agent_runner is not None
+    orchestrator.agent_runner.runnable_factory = lambda *_args: Runnable()
+    receipts: list[dict[str, Any]] = []
+
+    with pytest.raises(
+        AgentInvocationFailure,
+        match="provider_concurrency_timeout",
+    ):
+        orchestrator.invoke(
+            run_id="run-concurrency-blocked-receipt",
+            orchestration_id="orch-concurrency-blocked-receipt",
+            observable_package=package,
+            canonicalization=canonicalization,
+            facts=result["facts"],
+            process=result["process"],
+            checklist=result["checklist"],
+            verification=result["verification"],
+            progress_sink=receipts.append,
+        )
+
+    failed = next(
+        item for item in receipts if item.get("receipt_type") == "agent_failed"
+    )
+    assert failed["agent_id"] == "orchestrator_plan"
+    assert failed["provider"] == "openrouter"
+    assert failed["requested_model"] == OPENROUTER_MODEL
+    assert failed["call_count"] == 0
+    assert failed["outcome"] == "blocked_provider_concurrency"
+    assert failed["error_invariant"] == "provider_concurrency_timeout"
+    assert storage.model_call_summary()["network_calls"] == 0
+
+
 def _replace_process_decisions_with_valid_alternatives(
     responses: dict[str, dict[str, Any]],
     facts: list[dict[str, Any]],
@@ -1244,6 +1291,11 @@ def test_shared_langchain_adapter_has_exact_nonretrying_private_configuration(mo
     }
     assert isinstance(chat_kwargs["client"], langchain_runtime._OpenRouterClientBridge)
     assert chat_kwargs["client"].chat._chat.__class__ is object
+    assert (
+        chat_kwargs["client"].chat._send_limiter
+        is langchain_runtime._OPENROUTER_SEND_LIMITER
+    )
+    assert langchain_runtime.OPENROUTER_PROVIDER_MAX_IN_FLIGHT == 1
     assert "trace" not in chat_kwargs
     assert structured_kwargs == {
         "schema": schema,
@@ -1251,6 +1303,139 @@ def test_shared_langchain_adapter_has_exact_nonretrying_private_configuration(mo
         "strict": True,
         "include_raw": True,
     }
+
+
+def test_shared_send_bridge_serializes_physical_sends_across_clients():
+    limiter = langchain_runtime._OpenRouterSendLimiter(
+        max_in_flight=1,
+        admission_timeout_seconds=1,
+    )
+    state_lock = threading.Lock()
+    release_first = threading.Event()
+    first_entered = threading.Event()
+    start = threading.Barrier(3)
+    calls = 0
+    active = 0
+    peak_active = 0
+    results: list[dict[str, Any]] = []
+
+    class Chat:
+        def send(self, **_kwargs):
+            nonlocal calls, active, peak_active
+            with state_lock:
+                calls += 1
+                ordinal = calls
+                active += 1
+                peak_active = max(peak_active, active)
+            if ordinal == 1:
+                first_entered.set()
+                assert release_first.wait(timeout=1)
+            with state_lock:
+                active -= 1
+            return {"ordinal": ordinal}
+
+    bridges = [
+        langchain_runtime._ChatSendBridge(Chat(), send_limiter=limiter),
+        langchain_runtime._ChatSendBridge(Chat(), send_limiter=limiter),
+    ]
+
+    def invoke(bridge):
+        start.wait(timeout=1)
+        results.append(bridge.send(messages=[]))
+
+    workers = [threading.Thread(target=invoke, args=(bridge,)) for bridge in bridges]
+    for worker in workers:
+        worker.start()
+    start.wait(timeout=1)
+    assert first_entered.wait(timeout=1)
+    time.sleep(0.02)
+    with state_lock:
+        assert calls == 1
+        assert active == 1
+    release_first.set()
+    for worker in workers:
+        worker.join(timeout=1)
+        assert not worker.is_alive()
+
+    assert calls == 2
+    assert peak_active == 1
+    assert sorted(item["ordinal"] for item in results) == [1, 2]
+
+
+def test_shared_send_bridge_admission_timeout_never_calls_waiting_client():
+    limiter = langchain_runtime._OpenRouterSendLimiter(
+        max_in_flight=1,
+        admission_timeout_seconds=0.02,
+    )
+    first_entered = threading.Event()
+    release_first = threading.Event()
+    waiting_calls = 0
+
+    class BlockingChat:
+        def send(self, **_kwargs):
+            first_entered.set()
+            assert release_first.wait(timeout=1)
+            return {"status": "complete"}
+
+    class WaitingChat:
+        def send(self, **_kwargs):
+            nonlocal waiting_calls
+            waiting_calls += 1
+            return {"status": "unexpected"}
+
+    holding_bridge = langchain_runtime._ChatSendBridge(
+        BlockingChat(), send_limiter=limiter
+    )
+    waiting_bridge = langchain_runtime._ChatSendBridge(
+        WaitingChat(), send_limiter=limiter
+    )
+    worker = threading.Thread(target=lambda: holding_bridge.send(messages=[]))
+    worker.start()
+    assert first_entered.wait(timeout=1)
+
+    with pytest.raises(
+        langchain_runtime.OpenRouterSendAdmissionTimeoutError,
+        match="admission timed out",
+    ) as captured:
+        waiting_bridge.send(messages=[])
+
+    assert captured.value.invariant == "provider_concurrency_timeout"
+    assert waiting_calls == 0
+    release_first.set()
+    worker.join(timeout=1)
+    assert not worker.is_alive()
+
+
+def test_specialist_admission_timeout_is_zero_call_noncacheable_ledger_record(
+    tmp_path: Path,
+):
+    class Runnable:
+        def invoke(self, *_args, **_kwargs):
+            raise langchain_runtime.OpenRouterSendAdmissionTimeoutError()
+
+    storage = Storage(str(tmp_path / "provider-concurrency-timeout.db"))
+    runner = InstrumentedStructuredAgent(
+        storage,
+        runnable_factory=lambda *_args: Runnable(),
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+
+    with pytest.raises(
+        AgentInvocationFailure,
+        match="provider_concurrency_timeout",
+    ) as captured:
+        _invoke_plan(runner, run_id="run-provider-concurrency-timeout")
+
+    assert captured.value.safe_context["outcome"] == "blocked_provider_concurrency"
+    ledger = storage.model_calls()[0]
+    assert ledger["call_count"] == 0
+    assert ledger["outcome"] == "blocked_provider_concurrency"
+    assert ledger["actual_cost_usd"] is None
+    assert ledger["error_invariant"] == "provider_concurrency_timeout"
+    assert storage.model_call_summary()["network_calls"] == 0
+    assert storage.model_call_summary()["unknown_cost_call_count"] == 0
+    assert storage.model_cost_committed_or_reserved() == 0
+    assert storage.cached_model_output(ledger["cache_key"]) is None
 
 
 def test_shared_runnable_forwards_exact_private_route_in_one_sdk_send(monkeypatch):

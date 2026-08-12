@@ -8,8 +8,8 @@ services:
     runtime: static
     repo: https://github.com/KumarNavish/KumarNavish.github.io
     branch: master
-    buildCommand: python3 casepath/tools/build_deployment_identity.py --require-known-commit && echo "Publishing CasePath static release"
-    staticPublishPath: casepath
+    buildCommand: python3 casepath/tools/build_static_site.py --require-known-commit
+    staticPublishPath: casepath-public
     autoDeployTrigger: commit
 
   # Existing service ID: srv-d9r4v4e417fc73bda92g
