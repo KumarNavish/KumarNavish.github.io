@@ -32,6 +32,7 @@ from casepath_api.canonicalizer import (
     validate_exact_source_excerpts,
 )
 from casepath_api.storage import Storage
+from casepath_api.visual_annotations import visual_annotation_ref
 
 
 def package() -> dict:
@@ -166,6 +167,7 @@ def catalog(*, bounded_enrichments: list[dict] | None = None) -> list[dict]:
             "expected_state": "known",
             "canonical_value": "Recurring mark reported",
             "canonical_explanation": "The message directly reports recurrence.",
+            "semantic_role": None,
             "deterministic_confidence": 0.82,
             "admissible_text_refs": [
                 text_reference()
@@ -1621,13 +1623,12 @@ def test_process_owned_visual_enrichment_survives_model_merge(tmp_path: Path):
             "binary_source_available": True,
         }
     )
-    visual_ref = {
-        "artifact_id": "observable_image",
-        "locator_kind": "visual_observation",
-        "region": [0.1, 0.2, 0.3, 0.4],
-        "observation": "Visible localized dark spotting.",
-        "agent": "Visual Evidence Agent",
-    }
+    visual_ref = visual_annotation_ref(
+        artifact_id="observable_image",
+        image_sha256="2" * 64,
+        region=[0.1, 0.2, 0.3, 0.4],
+        observation="Visible localized dark spotting.",
+    )
     requests: list[dict] = []
 
     def transport(_url, _headers, payload, _timeout):

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 
@@ -8,7 +9,7 @@ import pytest
 
 import casepath_api.app as app_module
 from casepath_api.canonicalizer import OPENROUTER_MODEL
-from casepath_api.pipeline_v15 import COMPONENT_VERSIONS, ClaimPipeline
+from casepath_api.pipeline_v15 import COMPONENT_VERSIONS, ClaimPipeline, digest
 from casepath_api.storage import ActiveRunResetError, Storage
 
 SESSION_A = "session-a-12345678"
@@ -210,7 +211,6 @@ def test_run_and_review_requests_are_typed_and_reject_unknown_values(client: Tes
 
 def test_learning_proof_requires_explicit_bound_run_ids(client: TestClient):
     assert client.get("/api/learning-proof", headers=headers()).status_code == 422
-    baseline = create_and_wait(client, "DEMO-MOULD-002", knowledge_mode="baseline")
     flagship = create_and_wait(client, "DEF-027-E0-DEMO")
     review = client.post(
         f"/api/runs/{flagship['run_id']}/review",
@@ -223,6 +223,7 @@ def test_learning_proof_requires_explicit_bound_run_ids(client: TestClient):
         headers=headers(),
     )
     assert review.status_code == 200, review.text
+    baseline = create_and_wait(client, "DEMO-MOULD-002", knowledge_mode="baseline")
     later = create_and_wait(client, "DEMO-MOULD-002", knowledge_mode="current")
     proof = client.get(
         "/api/learning-proof",
@@ -234,6 +235,114 @@ def test_learning_proof_requires_explicit_bound_run_ids(client: TestClient):
     assert value["reviewed_memory_proof"]["used"] is True
     assert value["shared_rule"]["applied"] is False
     assert value["shared_rule"]["version_after"] == "mould-playbook-v3"
+
+
+def test_public_knowledge_projects_private_review_state(client: TestClient):
+    sentinel = "PRIVATE_REVIEW_NOTE account=internal-only"
+    run = create_and_wait(client, "DEF-027-E0-DEMO")
+    review = client.post(
+        f"/api/runs/{run['run_id']}/review",
+        json={
+            "decision": "approve_with_edit",
+            "building_envelope_mode": "conditional",
+            "confidence": 0.9,
+            "justification": sentinel,
+        },
+        headers=headers(),
+    )
+    assert review.status_code == 200, review.text
+
+    knowledge = client.get("/api/knowledge", headers=headers()).json()
+    demo_knowledge = client.get("/api/demo", headers=headers()).json()["knowledge"]
+    for public_value in (knowledge, demo_knowledge):
+        serialized = str(public_value)
+        assert sentinel not in serialized
+        assert "canonical_facts" not in serialized
+        assert "reviewed_process" not in serialized
+        assert "reviewed_checklist" not in serialized
+        assert "reviewer_explanation" not in serialized
+        assert set(public_value["memories"][0]) == {
+            "memory_id",
+            "title",
+            "memory_contract",
+            "authority",
+            "scope",
+            "review_status",
+            "reviewer_qualification_status",
+            "category",
+            "playbook_version",
+            "shared_rule_authority",
+            "candidate_id",
+            "guidance",
+            "updated_at",
+        }
+
+    assert sentinel in str(app_module.storage.memories(session_id=SESSION_A)[0])
+
+
+@pytest.mark.parametrize("target", ["memory", "candidate"])
+def test_public_knowledge_fails_closed_on_rehashed_authority_forgery(
+    client: TestClient, target
+):
+    run = create_and_wait(client, "DEF-027-E0-DEMO")
+    review = client.post(
+        f"/api/runs/{run['run_id']}/review",
+        json={
+            "decision": "approve_with_edit",
+            "building_envelope_mode": "conditional",
+            "confidence": 0.9,
+            "justification": "Generated-demo edit only.",
+        },
+        headers=headers(),
+    )
+    assert review.status_code == 200, review.text
+
+    with app_module.storage.connect() as connection:
+        if target == "memory":
+            row = connection.execute(
+                "SELECT memory_id, payload FROM memories WHERE session_id=?",
+                (SESSION_A,),
+            ).fetchone()
+            payload = json.loads(row["payload"])
+            payload["authority"] = "qualified_expert"
+            payload["review_status"] = "qualified_expert_reviewed"
+            payload["reviewer"]["qualification_status"] = "verified"
+            payload["content_hash"] = digest(
+                {
+                    key: value
+                    for key, value in payload.items()
+                    if key
+                    not in {"content_hash", "memory_id", "claim_id", "updated_at"}
+                }
+            )
+            connection.execute(
+                "UPDATE memories SET payload=? WHERE memory_id=?",
+                (json.dumps(payload), row["memory_id"]),
+            )
+        else:
+            row = connection.execute(
+                "SELECT candidate_id, payload FROM candidates WHERE session_id=?",
+                (SESSION_A,),
+            ).fetchone()
+            payload = json.loads(row["payload"])
+            payload["status"] = "approved"
+            payload["qualified_support_count"] = 99
+            payload["approval"] = {
+                "status": "approved",
+                "qualified_reviewer": True,
+            }
+            payload["shared_knowledge_changed"] = True
+            connection.execute(
+                "UPDATE candidates SET payload=? WHERE candidate_id=?",
+                (json.dumps(payload), row["candidate_id"]),
+            )
+
+    for path in ("/api/knowledge", "/api/demo"):
+        response = client.get(path, headers=headers())
+        assert response.status_code == 409
+        assert response.json() == {"detail": "knowledge integrity boundary"}
+        assert "qualified_expert" not in response.text
+        assert "approved" not in response.text
 
 
 def test_public_artifact_extraction_does_not_expose_reference_fact_ids(client: TestClient):
