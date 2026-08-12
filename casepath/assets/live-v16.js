@@ -296,12 +296,16 @@
 
   function renderGateReceipt(event) {
     if (!event) return '';
-    const gateName = returnedValue(event, 'gate_id', 'agent_id', 'validator', 'label');
+    const gateId = returnedValue(event, 'gate_id', 'agent_id');
+    const validator = returnedValue(event, 'validator');
+    const gateName = gateId || validator || returnedValue(event, 'label');
     const artifact = eventArtifacts(event).join(', ');
     const outcome = eventState(event);
     const gateMark = eventSucceeded(event) ? '✓' : /fail|reject/i.test(outcome) ? '×' : '◇';
-    return `<article class="orchestration-receipt gate-receipt" data-receipt-type="gate" data-actor-type="${esc(eventKind(event))}" data-gate-id="${esc(gateName)}" data-gate-outcome="${esc(outcome)}" data-artifact-id="${esc(artifact)}">
-      <span class="receipt-mark" aria-hidden="true">${gateMark}</span><div><small>Deterministic gate receipt${outcome ? ` · ${esc(outcome)}` : ''}</small><strong>${esc(gateName || 'Gate identity not returned')}</strong>${artifact ? `<code>${esc(artifact)}</code>` : ''}</div>
+    const gateIdentity = gateId ? ` data-gate-id="${esc(gateId)}"` : '';
+    const receiptLabel = gateId ? 'Deterministic gate receipt' : validator ? 'Deterministic validator receipt' : 'Deterministic receipt';
+    return `<article class="orchestration-receipt gate-receipt" data-receipt-type="gate" data-actor-type="${esc(eventKind(event))}"${gateIdentity} data-gate-outcome="${esc(outcome)}" data-artifact-id="${esc(artifact)}">
+      <span class="receipt-mark" aria-hidden="true">${gateMark}</span><div><small>${receiptLabel}${outcome ? ` · ${esc(outcome)}` : ''}</small><strong>${esc(gateName || 'Deterministic identity not returned')}</strong>${artifact ? `<code>${esc(artifact)}</code>` : ''}</div>
     </article>`;
   }
 
