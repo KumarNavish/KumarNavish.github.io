@@ -11,6 +11,7 @@
   const ARTIFACT_FRAME_MS = 5600;
   const RESEARCH_ARTIFACT_FRAME_MS = 9000;
   const PROCESS_ARTIFACT_FRAME_MS = 35000;
+  const PROCESS_STORY_TIMEOUT_MS = 120000;
   const BACKGROUND_BEAT_MS = reduceMotion ? 20 : 120;
   const KNOWLEDGE_BEAT_MS = 1800;
   const SESSION_STORAGE_KEY = 'casepath:demo-session';
@@ -818,6 +819,30 @@
     } }));
   }
 
+  function waitForProcessStory() {
+    const complete = () => document.querySelectorAll('#artifactProcessGraph[data-process-construction-state="complete"] [data-process-build-state="built"]').length >= 10;
+    if (complete()) return Promise.resolve();
+    return new Promise(resolve => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        window.removeEventListener('casepath:artifact-process-complete', onComplete);
+        window.clearTimeout(timeout);
+        resolve();
+      };
+      const onComplete = () => { if (complete()) finish(); };
+      const timeout = window.setTimeout(finish, PROCESS_STORY_TIMEOUT_MS);
+      window.addEventListener('casepath:artifact-process-complete', onComplete, { once: true });
+    });
+  }
+
+  function waitsForCompletedProcess(event) {
+    if (['evidence', 'experience', 'verify'].includes(event?.stage)) return true;
+    if (event?.stage !== 'agent_orchestration') return false;
+    return ['evidence_checklist', 'final_claim_brief_audit'].includes(returnedValue(event, 'agent_id', 'actor_id'));
+  }
+
   async function presentQueuedEvents(later) {
     if (state.presenting) return;
     state.presenting = true;
@@ -827,6 +852,7 @@
         state.eventQueue.push(entry);
         break;
       }
+      if (!later && waitsForCompletedProcess(entry.event)) await waitForProcessStory();
       let phase = 'background';
       if (later) {
         appendLaterEvent(entry.event);
@@ -844,6 +870,7 @@
             ? ARTIFACT_FRAME_MS
             : BACKGROUND_BEAT_MS;
       await wait(frameMs);
+      if (phase === 'artifact' && entry.event.stage === 'process') await waitForProcessStory();
     }
     state.presenting = false;
     const run = later ? state.laterRun : state.run;

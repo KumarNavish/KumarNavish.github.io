@@ -10,7 +10,7 @@
   const PROCESS_ARTIFACT_IDS = new Set(['process_graph', 'accepted_process_graph']);
   const GRAPH_NODE_DWELL_MS = 2400;
   const GRAPH_SOURCE_DWELL_MS = 1200;
-  const GRAPH_MOMENTS = new Set(['process', 'evidence', 'experience', 'verify', 'ready', 'review-applied']);
+  const GRAPH_MOMENTS = new Set(['process', 'ready', 'review-applied']);
   const SIMPLIFIED_SPINE_IDS = [
     'intake',
     'scope',
@@ -259,6 +259,7 @@
     visibleBranchIds: new Set(),
     graphDwell: false,
     graphInspecting: false,
+    groundingOpen: false,
     cursorCommit: null,
     lastCursorKey: '',
     lastCursorChangeId: '',
@@ -511,8 +512,8 @@
     if (exact) return exact;
     if (kind === 'agent_output') return state.agentLineage.get(String(entityId || '')) || null;
     if (kind === 'verification') {
-      return state.agentLineage.get('final_claim_brief_audit')
-        || state.entityLineage.get(entityLineageKey('verification', 'whole_playbook_verification'))
+      return state.entityLineage.get(entityLineageKey('verification', 'whole_playbook_verification'))
+        || state.agentLineage.get('final_claim_brief_audit')
         || null;
     }
     return null;
@@ -803,6 +804,10 @@
     state.selectedNodeId = state.process?.current_overlay?.current_node_id || state.process?.current_node || 'causation';
     state.activeChainKind = 'source';
     render();
+    window.dispatchEvent(new CustomEvent('casepath:artifact-process-complete', { detail: {
+      processId: state.process?.process_id || '',
+      nodeCount: simplifiedNodes().length,
+    } }));
   }
 
   function startBranchReveal() {
@@ -1041,6 +1046,10 @@
         </section>
         <section class="ac-focal" aria-live="polite" aria-atomic="false" data-ac-focal data-artifact-focus="true" data-casepath-primary-artifact="true" data-casepath-focal="true"></section>
       </main>
+      <dialog class="ac-law-viewer" data-ac-law-viewer aria-labelledby="artifactLawViewerTitle">
+        <header><span data-ac-law-authority></span><button type="button" data-ac-action="close-law" aria-label="Close Swiss-law detail">×</button></header>
+        <article data-ac-law-detail></article>
+      </dialog>
       <footer class="ac-authority-line">
         <span data-ac-authority>Application source parser</span>
         <span data-ac-proof>Only returned, contract-bound work is shown.</span>
@@ -1198,21 +1207,28 @@
   function spatialGroundingMarkup(node) {
     const fact = relevantFact(factsForNode(node));
     const ref = asArray(fact?.source_refs)[0];
-    const law = relevantLaw(lawsForNode(node));
+    const nodeLaws = lawsForNode(node);
+    const laws = [nodeLaws.find(isOfficialLaw), nodeLaws.find(item => !isOfficialLaw(item))].filter(Boolean);
     const evidence = relevantEvidence(evidenceForNode(node.node_id));
+    const nodePrecedents = precedentsForNode(node.node_id);
+    const precedent = nodePrecedents.find(item => Number(item.ranking?.rank) === 1)
+      || relevantPrecedent(nodePrecedents);
     const items = [];
     if (fact && ref) {
       const found = ref.excerpt || ref.observation || `${fact.label}: ${fact.value}`;
-      items.push(`<button type="button" data-ac-action="open-source" data-node-id="${esc(node.node_id)}" data-fact-id="${esc(fact.fact_id)}" data-source-id="${esc(ref.artifact_id)}" data-locator-kind="${esc(ref.locator_kind || '')}" data-source-page="${esc(ref.page || '')}" data-source-excerpt="${esc(ref.excerpt || '')}" data-source-region="${esc(asArray(ref.region).length === 4 ? JSON.stringify(ref.region) : '')}" data-source-authority="customer_submission" data-source-locator-id="${esc(sourceLocatorId(ref))}"><span>Claim source</span><strong>${esc(found)}</strong></button>`);
+      items.push(`<button type="button" data-node-attachment-kind="fact" ${lineageAttributes('fact', fact.fact_id)} data-ac-action="open-source" data-node-id="${esc(node.node_id)}" data-fact-id="${esc(fact.fact_id)}" data-source-id="${esc(ref.artifact_id)}" data-locator-kind="${esc(ref.locator_kind || '')}" data-source-page="${esc(ref.page || '')}" data-source-excerpt="${esc(ref.excerpt || '')}" data-source-region="${esc(asArray(ref.region).length === 4 ? JSON.stringify(ref.region) : '')}" data-source-authority="customer_submission" data-source-locator-id="${esc(sourceLocatorId(ref))}"><span>Claim source</span><strong>${esc(found)}</strong></button>`);
     }
-    if (law) {
-      items.push(`<button type="button" data-ac-action="open-law" data-node-id="${esc(node.node_id)}" data-law-id="${esc(law.source_id)}" data-source-authority="${isOfficialLaw(law) ? 'official_registry' : 'deterministic_principle'}" data-source-locator-id="${esc(lawLocatorId(law))}"><span>${isOfficialLaw(law) ? 'Swiss law' : 'Handling principle'} · ${esc(law.location || '')}</span><strong>${esc(law.passage_text || law.passage_summary || law.role || law.title)}</strong></button>`);
-    }
+    laws.forEach(law => {
+      items.push(`<button type="button" data-node-attachment-kind="law" ${lineageAttributes('law', law.source_id)} data-ac-action="open-law" data-node-id="${esc(node.node_id)}" data-law-id="${esc(law.source_id)}" data-source-authority="${isOfficialLaw(law) ? 'official_registry' : 'deterministic_principle'}" data-source-locator-id="${esc(lawLocatorId(law))}"><span>${isOfficialLaw(law) ? 'Swiss law' : 'Handling principle'} · ${esc(law.location || '')}</span><strong>${esc(law.passage_text || law.passage_summary || law.role || law.title)}</strong></button>`);
+    });
     if (evidence) {
-      items.push(`<button type="button" data-ac-action="inspect-evidence" data-node-id="${esc(node.node_id)}" data-evidence-id="${esc(evidence.item_id)}"><span>Evidence needed</span><strong>${esc(evidence.title)}</strong></button>`);
+      items.push(`<button type="button" data-node-attachment-kind="evidence" ${lineageAttributes('evidence', evidence.item_id)} data-ac-action="inspect-evidence" data-node-id="${esc(node.node_id)}" data-evidence-id="${esc(evidence.item_id)}" data-fact-id="${esc(evidence.fact_id || '')}"><span>Evidence needed</span><strong>${esc(evidence.title)}</strong></button>`);
+    }
+    if (precedent) {
+      items.push(`<button type="button" data-node-attachment-kind="precedent" ${lineageAttributes('precedent', precedent.claim_id)} data-ac-action="open-reference" data-node-id="${esc(node.node_id)}" data-precedent-id="${esc(precedent.claim_id)}" data-reference-status="${esc(precedent.review_status || '')}" data-source-authority="generated_reference" data-source-locator-id="reference:${esc(precedent.claim_id)}"><span>${esc(provenanceLabel(precedent))}</span><strong>${esc(precedent.title)}</strong></button>`);
     }
     if (!items.length) return '';
-    return `<details class="ac-grounding-disclosure"><summary>View grounding</summary><div>${items.join('')}</div></details>`;
+    return `<div class="ac-grounding-disclosure" data-grounding-open="${String(state.groundingOpen)}"><button type="button" class="ac-grounding-toggle" data-ac-action="toggle-grounding" aria-expanded="${String(state.groundingOpen)}">View grounding</button><div ${state.groundingOpen ? '' : 'hidden'}>${items.join('')}</div></div>`;
   }
 
   function nodeInspectionMarkup(node) {
@@ -1248,7 +1264,7 @@
     const detail = state.root?.querySelector('[data-ac-spatial-detail]');
     const status = state.root?.querySelector('[data-ac-process-status]');
     if (!processRegion || !track || !buildTarget || !edgeLayer || !satellites || !detail || !status) return;
-    const graphVisible = state.processAccepted && GRAPH_MOMENTS.has(state.moment);
+    const graphVisible = state.processAccepted && (state.graphRevealRunning || GRAPH_MOMENTS.has(state.moment));
     processRegion.hidden = !graphVisible;
     state.root.dataset.graphVisible = String(graphVisible);
     const focalRegion = state.root.querySelector('[data-ac-focal]');
@@ -1357,6 +1373,8 @@
   function stageFocalMarkup() {
     const copy = MOMENT_COPY[state.moment] || MOMENT_COPY.opening;
     if (state.moment === 'research') return lawStageMarkup(copy);
+    if (state.moment === 'evidence') return evidenceStageMarkup(copy);
+    if (state.moment === 'experience') return referenceStageMarkup(copy);
     if (['knowledge', 'later-work', 'later-result'].includes(state.moment)) return learningMarkup(copy);
     if (['review', 'review-applied'].includes(state.moment)) return reviewMarkup(copy);
     const event = state.currentEvent || {};
@@ -1374,6 +1392,32 @@
     </article>`;
   }
 
+  function evidenceStageMarkup(copy) {
+    const item = asArray(state.checklist?.items).find(candidate => candidate.item_id === 'technical_assessment')
+      || priorityEvidence(asArray(state.checklist?.items))[0];
+    if (!item) return `<article class="ac-stage-focus" data-ac-focal-object="evidence" data-ac-cursor-target="true"><span>${esc(copy.authority)}</span><h3>${esc(copy.title)}</h3><p>${esc(copy.detail)}</p></article>`;
+    return `<article class="ac-stage-focus ac-evidence-focus" data-ac-focal-object="evidence" data-node-attachment-kind="evidence" ${lineageAttributes('evidence', item.item_id)} data-evidence-id="${esc(item.item_id)}" data-evidence-status="${esc(item.status || '')}" data-fact-id="${esc(item.fact_id || '')}" data-ac-cursor-target="true">
+      <span>${esc(copy.authority)} · ${esc(statusLabel(item.status))}</span>
+      <h3>${esc(item.title)}</h3>
+      <p>${esc(item.why || copy.detail)}</p>
+      <strong>Required because · ${esc(evidenceOwnerIds(item).map(nodeId => SPATIAL_NODE_LABELS[nodeId] || nodeById(nodeId)?.title || nodeId).join(' · '))}</strong>
+    </article>`;
+  }
+
+  function referenceStageMarkup(copy) {
+    const precedent = state.precedents.find(item => Number(item.ranking?.rank) === 1)
+      || state.precedents[0];
+    if (!precedent) return `<article class="ac-stage-focus" data-ac-focal-object="reference" data-ac-cursor-target="true"><span>${esc(copy.authority)}</span><h3>${esc(copy.title)}</h3><p>${esc(copy.detail)}</p></article>`;
+    const ranking = precedent.ranking || {};
+    return `<article class="ac-stage-focus ac-reference-focus" data-ac-focal-object="reference" data-node-attachment-kind="precedent" ${lineageAttributes('precedent', precedent.claim_id)} data-precedent-id="${esc(precedent.claim_id)}" data-reference-status="${esc(precedent.review_status || '')}" data-source-authority="generated_reference" data-source-locator-id="reference:${esc(precedent.claim_id)}" data-ac-cursor-target="true">
+      <span>${esc(copy.authority)} · ${esc(provenanceLabel(precedent))}</span>
+      <h3>${esc(precedent.title)}</h3>
+      <p>${esc(precedent.why_useful || copy.detail)}</p>
+      <strong>Rank ${esc(ranking.rank ?? 'not returned')} · ${esc(ranking.score_basis_points ?? 'score not returned')} points</strong>
+      <button type="button" data-ac-action="open-reference" data-precedent-id="${esc(precedent.claim_id)}" data-reference-status="${esc(precedent.review_status || '')}" data-source-authority="generated_reference" data-source-locator-id="reference:${esc(precedent.claim_id)}" data-casepath-primary-action="true">Inspect this generated pattern</button>
+    </article>`;
+  }
+
   function agentArtifactMarkup() {
     const event = state.currentEvent || {};
     const agentId = eventAgentId(event);
@@ -1382,7 +1426,7 @@
     const returnedOutput = eventOutputArtifacts(event)[0] || '';
     const artifactLabel = AGENT_ARTIFACT_LABELS[agentId] || returnedOutput.replaceAll('_', ' ') || 'Bounded specialist contribution';
     const finalLineage = agentId === 'final_claim_brief_audit'
-      ? `data-node-attachment-kind="verification" ${lineageAttributes('verification', returnedOutput || agentId)}`
+      ? `data-node-attachment-kind="verification" ${lineageAttributes('verification', 'whole_playbook_verification')}`
       : '';
     return `<article class="ac-stage-focus ac-agent-artifact" data-ac-focal-object="agent-artifact" data-agent-id="${esc(agentId)}" data-call-id="${esc(valueFrom(event, 'call_id', 'callId'))}" data-output-artifact="${esc(returnedOutput)}" ${finalLineage} data-ac-cursor-target="true">
       <span>Specialist ${agent.order} of 6 · ${esc(agent.label)}</span>
@@ -1568,10 +1612,13 @@
     const focal = state.root?.querySelector('[data-ac-focal]');
     if (!focal) return;
     const specialMoment = ['verify', 'review', 'review-applied', 'knowledge', 'later-work', 'later-result', 'failure'].includes(state.moment);
+    const semanticArtifactMoment = ['evidence', 'experience'].includes(state.moment);
     const node = nodeById(state.selectedNodeId);
     const modelArtifact = eventActorType(state.currentEvent) === 'nemotron_agent' && AGENTS[eventAgentId(state.currentEvent)];
     const markup = state.graphRevealRunning && node
       ? graphBuildFocalMarkup(node)
+      : semanticArtifactMoment
+        ? stageFocalMarkup()
       : modelArtifact
         ? agentArtifactMarkup()
       : state.processAccepted && GRAPH_MOMENTS.has(state.moment) && node && !specialMoment && !state.graphRevealRunning
@@ -1736,7 +1783,28 @@
       document.dispatchEvent(new CustomEvent('casepath:continue-journey'));
     } else if (action === 'open-law') {
       setActiveSourceLocator(button.dataset.sourceLocatorId || '');
+      openLawDetail(button.dataset.lawId || '', button.dataset.sourceLocatorId || '');
     }
+  }
+
+  function openLawDetail(lawId, locatorId) {
+    const dialog = state.root?.querySelector('[data-ac-law-viewer]');
+    const detail = dialog?.querySelector('[data-ac-law-detail]');
+    const law = [...asArray(state.legal?.sources), ...asArray(state.legal?.handling_principles)]
+      .find(item => item.source_id === lawId);
+    if (!dialog || !detail || !law) return;
+    const official = isOfficialLaw(law);
+    dialog.dataset.lawId = law.source_id;
+    dialog.dataset.sourceAuthority = official ? 'official_registry' : 'deterministic_principle';
+    dialog.dataset.sourceLocatorId = locatorId || lawLocatorId(law);
+    dialog.querySelector('[data-ac-law-authority]').textContent = official
+      ? 'Cached official Swiss-law passage · qualified review pending'
+      : 'Deterministic handling principle · not expert approved';
+    detail.innerHTML = `<h3 id="artifactLawViewerTitle">${esc(law.title || law.source_id)}</h3>
+      <p>${esc(law.location || '')}${law.version_date ? ` · ${esc(law.version_date)}` : ''}</p>
+      <blockquote lang="${esc(law.passage_language || '')}">${esc(law.passage_text || law.passage_summary || law.role || 'No passage returned.')}</blockquote>
+      ${official && law.url ? `<a href="${esc(law.url)}" target="_blank" rel="noopener noreferrer">Verify on the official source</a>` : '<small>Operational interpretation remains separate from official source text.</small>'}`;
+    if (!dialog.open) dialog.showModal();
   }
 
   function setActiveSourceLocator(locatorId) {
@@ -1753,9 +1821,26 @@
     const button = event.target.closest?.('[data-ac-action]');
     if (!button || !state.root?.contains(button)) return;
     const action = button.dataset.acAction;
+    if (action === 'toggle-grounding') {
+      event.preventDefault();
+      state.groundingOpen = !state.groundingOpen;
+      const disclosure = button.closest('.ac-grounding-disclosure');
+      if (disclosure) {
+        disclosure.dataset.groundingOpen = String(state.groundingOpen);
+        button.setAttribute('aria-expanded', String(state.groundingOpen));
+        const panel = disclosure.querySelector(':scope > div');
+        if (panel) panel.hidden = !state.groundingOpen;
+      }
+      return;
+    }
+    if (action === 'close-law') {
+      state.root.querySelector('[data-ac-law-viewer]')?.close();
+      return;
+    }
     if (action === 'select-node') {
       state.selectedNodeId = button.dataset.nodeId;
       state.activeChainKind = 'source';
+      state.groundingOpen = false;
       emitInteraction(action, button);
       render();
       return;
