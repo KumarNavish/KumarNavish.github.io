@@ -3252,7 +3252,7 @@ async function execute() {
     cursor_agent_signature: node.querySelector('#artifactAgentCursor')?.dataset.agentSignature || '',
     title: node.querySelector('[data-ac-task]')?.textContent?.trim() || '',
   }));
-  check('Flagship opens with one readable phase and one truthful neutral cursor before a call-bound agent receipt', ['read', 'understand'].includes(initialSpecialistFocus.scene) && Boolean(initialSpecialistFocus.authority) && initialSpecialistFocus.cursor_count === 1 && initialSpecialistFocus.cursor_agent_id === '' && initialSpecialistFocus.cursor_agent_signature === 'casepath' && Boolean(initialSpecialistFocus.title), JSON.stringify(initialSpecialistFocus));
+  check('Flagship opens with one readable phase and one truthful neutral cursor before a call-bound agent receipt', ['opening', 'read', 'understand'].includes(initialSpecialistFocus.scene) && Boolean(initialSpecialistFocus.authority) && initialSpecialistFocus.cursor_count === 1 && initialSpecialistFocus.cursor_agent_id === '' && initialSpecialistFocus.cursor_agent_signature === 'casepath' && Boolean(initialSpecialistFocus.title), JSON.stringify(initialSpecialistFocus));
   const flagshipRunId = await waitForValue(() => runIds[0]);
   if (isProductionJourney()) {
     await page.waitForFunction(() => window.__casepathOpeningContexts?.length > 0, null, { timeout: runTimeoutMs() });

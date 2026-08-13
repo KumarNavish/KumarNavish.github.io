@@ -341,8 +341,8 @@
     {
       "executable": false,
       "path": "casepath-qa/browser-focused-v20.mjs",
-      "sha256": "8cb58bc508ae33ec475c22ef7da0d526f3cea89356bd5a1bcf2b8182ecf5f045",
-      "size_bytes": 483733
+      "sha256": "2fff2d61487b0176121014d9811b9ad21541cb92b8f441d72586545c88948743",
+      "size_bytes": 483744
     },
     {
       "executable": false,
@@ -985,7 +985,7 @@
   "gates": [
     {
       "path": "casepath-qa/browser-focused-v20.mjs",
-      "sha256": "8cb58bc508ae33ec475c22ef7da0d526f3cea89356bd5a1bcf2b8182ecf5f045"
+      "sha256": "2fff2d61487b0176121014d9811b9ad21541cb92b8f441d72586545c88948743"
     },
     {
       "path": "casepath-qa/browser-guided-v13-smoke.mjs",
