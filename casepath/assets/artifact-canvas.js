@@ -10,6 +10,7 @@
   const PROCESS_ARTIFACT_IDS = new Set(['process_graph', 'accepted_process_graph']);
   const GRAPH_NODE_DWELL_MS = 2400;
   const GRAPH_SOURCE_DWELL_MS = 1200;
+  const OFFICIAL_LAW_DWELL_MS = 1900;
   const GRAPH_MOMENTS = new Set(['process', 'ready', 'review-applied']);
   const SIMPLIFIED_SPINE_IDS = [
     'intake',
@@ -248,6 +249,11 @@
     focusFactId: '',
     focusLawId: '',
     pendingLawId: '',
+    officialLawTourTimer: 0,
+    officialLawTourRunning: false,
+    officialLawTourComplete: false,
+    officialLawTourIndex: 0,
+    officialLawTourVisitedIds: new Set(),
     focusEvidenceId: '',
     focusPrecedentId: '',
     visibleNodeIds: new Set(),
@@ -580,6 +586,7 @@
       return;
     }
     if (source === 'law-step' && detail?.sourceId) {
+      if (detail.tourOwner === CONTRACT || state.officialLawTourRunning) return;
       const desiredLawId = String(detail.sourceId);
       const lineage = lineageFor('law', desiredLawId);
       state.moment = 'research';
@@ -624,6 +631,7 @@
     if (state.moment === 'experience' && state.precedents.length && !state.focusPrecedentId) {
       state.focusPrecedentId = state.precedents[0]?.claim_id || '';
     }
+    if (source === 'render' && state.moment === 'research') startOfficialLawTour();
     render();
   }
 
@@ -933,6 +941,86 @@
 
   function isOfficialLaw(law) {
     return ['official_statute', 'official_guidance'].includes(law?.source_type);
+  }
+
+  function mirrorOfficialLawSource(source) {
+    const browser = document.querySelector('.official-source-browser');
+    if (!browser || !source) return;
+    browser.querySelectorAll('.official-source-tab').forEach(button => {
+      button.setAttribute('aria-selected', String(button.dataset.officialSourceTab === source.source_id));
+    });
+    browser.querySelectorAll('.official-source-passage').forEach(panel => {
+      panel.hidden = panel.dataset.officialSourcePanel !== source.source_id;
+    });
+    const url = browser.querySelector('[data-official-browser-url]');
+    const host = browser.querySelector('[data-official-browser-host]');
+    if (url) url.textContent = source.url || '';
+    if (host) {
+      try { host.textContent = new URL(String(source.url || '')).host; } catch (_) { host.textContent = 'official source'; }
+    }
+  }
+
+  function finishOfficialLawTour(sources) {
+    state.officialLawTourRunning = false;
+    state.officialLawTourComplete = true;
+    if (state.root) state.root.dataset.officialLawTourState = 'complete';
+    window.dispatchEvent(new CustomEvent('casepath:official-source-tour-complete', { detail: {
+      contract: CONTRACT,
+      sourceIds: sources.map(source => source.source_id),
+    } }));
+  }
+
+  function beginOfficialLawStep(sources, index) {
+    if (!state.officialLawTourRunning || state.moment !== 'research') return;
+    const source = sources[index];
+    if (!source) return finishOfficialLawTour(sources);
+    const sourceId = String(source.source_id);
+    const lineage = lineageFor('law', sourceId);
+    state.officialLawTourIndex = index;
+    state.pendingLawId = sourceId;
+    state.lastCursorChangeId = visibleChangeId('law', sourceId, lineage);
+    state.lastCursorEventId = lineage?.eventId || '';
+    state.lastCursorAgentId = lineage?.agentId || 'official_law_registry';
+    if (state.root) {
+      state.root.dataset.officialLawTourState = 'running';
+      state.root.dataset.officialLawTourSourceId = sourceId;
+    }
+    state.cursorCommit = () => {
+      if (!state.officialLawTourRunning || state.pendingLawId !== sourceId) return;
+      state.pendingLawId = '';
+      state.focusLawId = sourceId;
+      state.officialLawTourVisitedIds.add(sourceId);
+      setActiveSourceLocator(lawLocatorId(source));
+      mirrorOfficialLawSource(source);
+      render();
+      window.dispatchEvent(new CustomEvent('casepath:official-source-step', { detail: {
+        tourOwner: CONTRACT,
+        sourceId,
+        location: source.location || source.title || '',
+        url: source.url || '',
+        retrievalMethod: source.retrieval?.method || 'versioned_official_source_registry_lookup',
+        registryVersion: source.retrieval?.registry_version || state.legal?.registry_version || '',
+        cachePurpose: 'reliable_same-source_reuse',
+      } }));
+      window.clearTimeout(state.officialLawTourTimer);
+      state.officialLawTourTimer = window.setTimeout(() => {
+        if (index + 1 < sources.length) beginOfficialLawStep(sources, index + 1);
+        else finishOfficialLawTour(sources);
+      }, OFFICIAL_LAW_DWELL_MS);
+    };
+    render();
+  }
+
+  function startOfficialLawTour() {
+    if (state.officialLawTourRunning || state.officialLawTourComplete) return;
+    if (!document.querySelector('.official-source-browser')) return;
+    const sources = asArray(state.legal?.sources).filter(isOfficialLaw);
+    if (!sources.length) return;
+    state.officialLawTourRunning = true;
+    state.officialLawTourIndex = 0;
+    state.officialLawTourVisitedIds.clear();
+    state.focusLawId = sources[0].source_id;
+    beginOfficialLawStep(sources, 0);
   }
 
   function relevantEvidence(items) {
