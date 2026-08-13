@@ -561,7 +561,7 @@ body[data-casepath-moment="review"] .review-graph,
 body[data-casepath-moment="review"] .review-impact,
 body[data-casepath-moment="review"] .v19-review-branch-preview,
 body[data-casepath-moment="review"] .review-panel>.quiet-label,
-body[data-casepath-moment="review"] .review-panel>p,
+body[data-casepath-moment="review"] .review-panel>p:not(.v20-review-note),
 body[data-casepath-moment="review"] .review-choice p,
 body[data-casepath-moment="review"] .review-note{display:none!important}
 body[data-casepath-moment="review"] .review-panel{
@@ -579,6 +579,7 @@ body[data-casepath-moment="review"] .stage-shell>.stage-intro{
 }
 body[data-casepath-moment="review"] .review-panel h3{margin:0 0 14px;font-size:17px}
 body[data-casepath-moment="review"] .v20-review-note{
+  display:block!important;
   margin:0 0 18px;
   color:var(--quiet);
   font-size:9px;
@@ -624,6 +625,8 @@ body[data-casepath-moment="knowledge"] .v20-learning-row{display:none!important}
 .v21-knowledge-outcome small{display:block;color:var(--green);font-size:8px;font-weight:780;letter-spacing:.08em;text-transform:uppercase}
 .v21-knowledge-outcome strong{display:block;margin-top:5px;font-size:17px;line-height:1.4;letter-spacing:-.015em}
 
+body[data-casepath-moment="later-work"] .later-source-banner,
+body[data-casepath-moment="later-work"] .later-agent-stream{display:none!important}
 body[data-casepath-moment="later-result"] .v20-later-heading{display:none!important}
 body[data-casepath-moment="later-result"] .causal-delta{
   max-width:680px;
@@ -635,8 +638,13 @@ body[data-casepath-moment="later-result"] .causal-delta{
   border-radius:0;
 }
 body[data-casepath-moment="later-result"] .causal-delta>div{display:none}
-body[data-casepath-moment="later-result"] .causal-delta h3{font-size:13px}
+body[data-casepath-moment="later-result"] .causal-delta h3{font-size:15px;line-height:1.4;letter-spacing:-.01em;text-transform:none}
 body[data-casepath-moment="later-result"] .v21-proof-details{max-width:680px;margin-left:0;margin-right:0}
+body[data-casepath-moment="later-result"] .v21-causal-proof{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:18px}
+body[data-casepath-moment="later-result"] .v21-causal-proof article{padding:10px;border:1px solid var(--line);border-radius:5px}
+body[data-casepath-moment="later-result"] .v21-causal-proof small,body[data-casepath-moment="later-result"] .v21-causal-proof strong{display:block}
+body[data-casepath-moment="later-result"] .v21-causal-proof small{color:var(--quiet);font-size:7px;text-transform:uppercase}
+body[data-casepath-moment="later-result"] .v21-causal-proof strong{margin-top:4px;font-size:9px;overflow-wrap:anywhere}
 body[data-casepath-moment="later-result"] .v21-proof-details .later-process-result,
 body[data-casepath-moment="later-result"] .v21-proof-details .memory-application-receipt,
 body[data-casepath-moment="later-result"] .v21-proof-details .memory-deterministic-checks{margin-top:14px}
