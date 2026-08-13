@@ -215,6 +215,7 @@ def test_north_star_review_and_learning_remain_graph_native() -> None:
     assert "Unverified demo correction · model acceptance not reused" in canvas
     assert "function reviewAppliedMarkup()" in canvas
     assert "function laterMemoryDeltaMarkup()" in canvas
+    assert "casepathLearningReady === 'true'" in browser_gate
     assert 'data-memory-effect="node-added"' in canvas
     assert 'data-memory-effect="edge-added"' in canvas
     assert 'data-memory-effect="evidence-changed"' in canvas

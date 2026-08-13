@@ -4030,6 +4030,7 @@ async function execute() {
 
   await page.locator('#journeyNext').click();
   await waitVisible('body[data-casepath-moment="knowledge"]');
+  await page.waitForFunction(() => document.body.dataset.casepathLearningReady === 'true', null, { timeout: 30000 });
   const knowledgeCanvas = await artifactCanvasSnapshot();
   const candidateCopy = await page.locator('#artifactCanvas [data-artifact-focus="true"]').innerText();
   check('Knowledge consolidation becomes one visible unverified-memory outcome', focusedArtifactCanvasViolations(knowledgeCanvas).length === 0 && knowledgeCanvas.action_count === 1 && /unverified demo memory/i.test(candidateCopy), JSON.stringify({ knowledgeCanvas, candidateCopy }));
