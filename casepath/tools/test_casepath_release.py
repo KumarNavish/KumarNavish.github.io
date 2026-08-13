@@ -490,6 +490,8 @@ def test_later_result_keeps_returned_comparison_hashes_visible() -> None:
     assert "Future-claim result visibly explains the exact bounded improvement in one concise line" in browser_gate
     assert "Exact causal operations remain available behind Inspect proof" in browser_gate
     assert "await page.locator('.v21-proof-details > summary').click();" in browser_gate
+    assert "await page.locator('.v21-progressive-details > summary').click();" in browser_gate
+    assert "await page.locator('.v21-progressive-details summary').click();" not in browser_gate
 
 
 def test_every_observable_claim_artifact_is_model_visible_and_scanned() -> None:

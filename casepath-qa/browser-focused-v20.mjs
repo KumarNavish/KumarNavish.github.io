@@ -3093,7 +3093,7 @@ async function execute() {
   await auditViewports('04-review', '#reviewForm');
   await page.locator('#reviewForm button[type="submit"]').click();
   await waitVisible('body[data-casepath-moment="review-applied"]');
-  await page.locator('.v21-progressive-details summary').click();
+  await page.locator('.v21-progressive-details > summary').click();
   await waitVisible('.v21-progressive-details[open] .review-applied-layout');
   await page.locator('.review-applied .process-node-button[data-node-id="causation"],.review-applied .process-branch-node[data-node-id="causation"]').first().click();
   check('Applied-review workspace preserves its declared no-precedent boundary after graph interaction', await page.locator('.review-applied .precedent-inline').count() === 0 && await page.locator('.review-applied .process-layout').getAttribute('data-precedents') === 'false');
@@ -3133,7 +3133,7 @@ async function execute() {
   const beforeNodeIds = new Set(flagshipBeforeReview.result.process.nodes.map(node => node.node_id));
   const computedAdded = reviewedNodeIds.filter(id => !beforeNodeIds.has(id));
   check('Applied view presents a computed delta before consolidation', (await page.locator('.review-applied-delta article').first().innerText()).includes(String(computedAdded.length)));
-  await page.locator('.v21-progressive-details summary').click();
+  await page.locator('.v21-progressive-details > summary').click();
   const compactApplied = await minimalSurfaceSnapshot();
   check('Applied review recedes to one change summary after inspection', compactApplied.focus_count === 1 && compactApplied.artifact_count === 1 && compactApplied.action_count === 1 && await page.locator('.review-applied-layout').isHidden(), JSON.stringify(compactApplied));
   await auditViewports('05-review-applied', '.review-applied');
