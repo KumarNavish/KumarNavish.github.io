@@ -4588,6 +4588,18 @@ def _runtime_result_and_audit(retained: dict) -> tuple[dict, dict]:
     return result, result["audit"]["agent_orchestration"]
 
 
+def _swap_parallel_agent_records(records: list[dict]) -> None:
+    """Reproduce the valid nondeterministic completion order of the fan-out."""
+
+    positions = {item["agent_id"]: index for index, item in enumerate(records)}
+    document_index = positions["document_source_integrity"]
+    process_index = positions["process_decision_mapping"]
+    records[document_index], records[process_index] = (
+        records[process_index],
+        records[document_index],
+    )
+
+
 def _refresh_causal_artifact_hashes(retained: dict) -> None:
     """Re-sign fixture joins so a negative reaches the intended invariant."""
 
@@ -6544,6 +6556,157 @@ def test_dynamic_runtime_acceptance_rejects_extra_flagship_cold_row() -> None:
             manifest,
             retained,
             evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+@pytest.mark.parametrize(
+    "permuted_surfaces",
+    [
+        ("ledger",),
+        ("audit", "lineage"),
+        ("audit", "ledger", "lineage"),
+    ],
+)
+def test_dynamic_runtime_acceptance_allows_parallel_warm_completion_order_swap(
+    permuted_surfaces: tuple[str, ...],
+) -> None:
+    """A valid cache replay may finish the two independent fan-out agents either way."""
+
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    warm_run = retained["isolation-run.json"]
+    if "audit" in permuted_surfaces:
+        _swap_parallel_agent_records(warm_run["agent_orchestration"]["agents"])
+    if "ledger" in permuted_surfaces:
+        for ledger_name in (
+            "isolation-model-ledger.json",
+            "model-ledger.json",
+        ):
+            warm_items = retained[ledger_name]["items"][6:]
+            _swap_parallel_agent_records(warm_items)
+            retained[ledger_name]["items"][6:] = warm_items
+    if "lineage" in permuted_surfaces:
+        _swap_parallel_agent_records(
+            retained["flagship-cache-lineage.json"]["lineage"]
+        )
+
+    release_tool.verify_dynamic_runtime_acceptance(
+        contract,
+        report,
+        manifest,
+        retained,
+        evidence_manifest_bytes=manifest_bytes,
+    )
+
+
+@pytest.mark.parametrize("surface", ["warm_audit", "warm_ledger", "cache_lineage"])
+@pytest.mark.parametrize("mutation", ["duplicate", "missing", "foreign"])
+def test_dynamic_runtime_acceptance_rejects_non_exact_warm_agent_membership(
+    surface: str,
+    mutation: str,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    warm_run = retained["isolation-run.json"]
+    collections = {
+        "warm_audit": warm_run["agent_orchestration"]["agents"],
+        "warm_ledger": retained["isolation-model-ledger.json"]["items"][6:],
+        "cache_lineage": retained["flagship-cache-lineage.json"]["lineage"],
+    }
+    records = collections[surface]
+    process_index = next(
+        index
+        for index, item in enumerate(records)
+        if item["agent_id"] == "process_decision_mapping"
+    )
+    if mutation == "duplicate":
+        records[process_index]["agent_id"] = "document_source_integrity"
+    elif mutation == "missing":
+        records.pop(process_index)
+    else:
+        records[process_index]["agent_id"] = "foreign_agent"
+
+    if surface == "cache_lineage":
+        with pytest.raises(
+            release_tool.VerificationError,
+            match="cache-lineage receipt",
+        ):
+            release_tool.verify_dynamic_runtime_acceptance(
+                contract,
+                report,
+                manifest,
+                retained,
+                evidence_manifest_bytes=manifest_bytes,
+            )
+    else:
+        with pytest.raises(
+            release_tool.VerificationError,
+            match=(
+                rf"{surface.replace('_', ' ')} "
+                r"(?:does not contain exactly six agents|agent membership is not exact)"
+            ),
+        ):
+            release_tool._verify_cold_warm_model_pair(
+                cold_run=retained["flagship-run.json"],
+                warm_run=warm_run,
+                cold_items=retained["flagship-cold-model-ledger.json"]["items"],
+                warm_items=(
+                    records
+                    if surface == "warm_ledger"
+                    else retained["isolation-model-ledger.json"]["items"][6:]
+                ),
+                label="Adversarial cache pair",
+            )
+
+
+@pytest.mark.parametrize("surface", ["audit_origin", "ledger_origin", "ledger_call"])
+def test_cold_warm_pair_rejects_cross_agent_lineage_bindings(
+    surface: str,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    _, _, retained, _ = successful_dynamic_qa_evidence(contract)
+    cold_run = retained["flagship-run.json"]
+    warm_run = retained["isolation-run.json"]
+    cold_agents = {
+        item["agent_id"]: item for item in cold_run["agent_orchestration"]["agents"]
+    }
+    warm_agents = {
+        item["agent_id"]: item for item in warm_run["agent_orchestration"]["agents"]
+    }
+    warm_items = retained["isolation-model-ledger.json"]["items"][6:]
+    warm_items_by_agent = {item["agent_id"]: item for item in warm_items}
+    process_agent = warm_agents["process_decision_mapping"]
+    process_item = warm_items_by_agent["process_decision_mapping"]
+    if surface == "audit_origin":
+        process_agent["origin_call_id"] = cold_agents[
+            "document_source_integrity"
+        ]["call_id"]
+    elif surface == "ledger_origin":
+        process_item["origin_call_id"] = cold_agents[
+            "document_source_integrity"
+        ]["call_id"]
+    else:
+        process_item["call_id"] = warm_agents[
+            "document_source_integrity"
+        ]["call_id"]
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=(
+            r"process_decision_mapping warm "
+            r"(?:agent lineage|ledger lineage) is invalid"
+        ),
+    ):
+        release_tool._verify_cold_warm_model_pair(
+            cold_run=cold_run,
+            warm_run=warm_run,
+            cold_items=retained["flagship-cold-model-ledger.json"]["items"],
+            warm_items=warm_items,
+            label="Adversarial cache pair",
         )
 
 
