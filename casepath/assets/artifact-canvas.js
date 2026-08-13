@@ -1447,6 +1447,17 @@
     return `<div class="ac-spatial-node-detail" data-spatial-role="active-detail" data-spatial-path="active" data-active-focal-path="true" data-node-id="${esc(node.node_id)}" data-basis-fact-ids="${esc(facts.join(','))}" data-basis-law-ids="${esc(laws.join(','))}" data-basis-evidence-requirement-ids="${esc(evidence.join(','))}"><span>${nodeState(node) === 'current' ? 'Current decision' : 'Grounded decision'}</span><strong>${esc(node.question || node.title)}</strong><p>${esc(node.why || node.answer || '')}</p>${spatialGroundingMarkup(node)}</div>`;
   }
 
+  function emitGraphContextualArtifact(detail) {
+    if (state.graphRevealRunning || !['evidence', 'experience'].includes(state.moment)) return;
+    const attachment = detail?.querySelector('.ac-graph-local-object[data-node-attachment-kind]');
+    const kind = attachment?.dataset.nodeAttachmentKind || '';
+    const entityId = kind === 'evidence'
+      ? attachment?.dataset.evidenceId
+      : kind === 'precedent' ? attachment?.dataset.precedentId : '';
+    if (!entityId) return;
+    emitArtifactChange(kind, entityId);
+  }
+
   function spatialGroundingMarkup(node) {
     const fact = relevantFact(factsForNode(node));
     const ref = asArray(fact?.source_refs)[0];
@@ -1651,6 +1662,7 @@
     edgeLayer.innerHTML = spatialEdgesMarkup(nodes);
     satellites.innerHTML = spatialSatellitesMarkup();
     detail.innerHTML = spatialDetailMarkup(nodeById(state.selectedNodeId));
+    emitGraphContextualArtifact(detail);
   }
 
   function stageFocalMarkup() {
