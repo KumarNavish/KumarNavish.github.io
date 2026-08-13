@@ -114,7 +114,10 @@
     const displayedRunId = document.body.dataset.casepathActiveRunId;
     const runId = displayedRunId || ids.at(-1);
     if (!runId) return null;
+    const shared = window.CasePathRunStore?.get?.(runId);
+    if (shared) return shared;
     const cached = runCache.get(runId);
+    if (window.CasePathRunStore) return cached?.value || null;
     if (!fresh && cached && Date.now() - cached.fetchedAt < 350) return cached.value;
     try {
       const value = await fetchJson(`/api/runs/${encodeURIComponent(runId)}`);

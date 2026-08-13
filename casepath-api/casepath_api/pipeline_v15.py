@@ -23,6 +23,12 @@ from .data import ARTIFACTS, CLAIMS, HISTORICAL_CASES, observable_claim_package
 from .evidence_relations import apply_evidence_relations, validate_evidence_item_order
 from .fact_relations import SEMANTIC_FACT_ID_BY_CLAIM
 from .law_registry import LAW_SOURCES, legal_context
+from .live_events import (
+    accepted_artifact_events,
+    fact_events,
+    legal_source_events,
+    precedent_events,
+)
 from .multi_agent import (
     AGENT_RUNTIME_PROFILE,
     AgentBoundaryError,
@@ -1547,6 +1553,22 @@ class ClaimPipeline:
             )
             if memory_verification is not None:
                 verification = memory_verification
+            self.storage.patch_run(
+                run_id,
+                patch={
+                    "process": process,
+                    "checklist": checklist,
+                    "verification": verification,
+                    "agent_orchestration": agent_orchestration,
+                },
+                stream_events=accepted_artifact_events(
+                    understanding,
+                    process,
+                    checklist,
+                    agent_orchestration,
+                    verification,
+                ),
+            )
             result = self._final_result(
                 claim,
                 parsed,
@@ -2140,7 +2162,11 @@ class ClaimPipeline:
             "observable_only": True,
             "canonicalization": canonicalization,
         }
-        self.storage.patch_run(run_id, patch={"understanding": understanding})
+        self.storage.patch_run(
+            run_id,
+            patch={"understanding": understanding},
+            stream_events=fact_events(understanding),
+        )
         unknowns = sum(item["state"] == "unknown" for item in facts)
         conflicts = sum(item["state"] == "conflicting" for item in facts)
         completed_actor = (
@@ -2239,7 +2265,11 @@ class ClaimPipeline:
             handoff_to="Process Projection Tool",
         )
         self.pause(.4)
-        self.storage.patch_run(run_id, patch={"legal_research": legal})
+        self.storage.patch_run(
+            run_id,
+            patch={"legal_research": legal},
+            stream_events=legal_source_events(legal),
+        )
         self.emit(
             run_id,
             stage,
@@ -2616,6 +2646,7 @@ class ClaimPipeline:
                 "precedents": results,
                 "precedent_ranking": ranking_receipt,
             },
+            stream_events=precedent_events(results, ranking_receipt),
         )
         self.emit(
             run_id,

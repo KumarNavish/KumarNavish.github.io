@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 from enum import Enum
 import os
 import re
 from typing import Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from . import __version__
@@ -39,6 +40,7 @@ from .multi_agent import (
     MULTI_AGENT_SCHEMA_VERSION,
 )
 from .storage import ActiveRunResetError, Storage
+from .live_events import TERMINAL_RUN_STATUSES, encode_sse
 from .langchain_runtime import (
     OPENROUTER_ENDPOINT_TAG,
     OPENROUTER_EXPECTED_UPSTREAM_PROVIDER,
@@ -387,6 +389,65 @@ def get_run(run_id: str, session_id: str = Depends(require_session)):
     if not run:
         raise HTTPException(404, "run not found")
     return run
+
+
+@app.get("/api/runs/{run_id}/events")
+async def stream_run_events(
+    run_id: str,
+    request: Request,
+    after: int = Query(default=0, ge=0),
+    session_id: str = Depends(require_session),
+):
+    if storage.run_stream_state(run_id, session_id=session_id) is None:
+        raise HTTPException(404, "run not found")
+
+    async def generate():
+        cursor = after
+        yield "retry: 1500\n\n"
+        while True:
+            revision = storage.stream_revision(run_id)
+            events = storage.stream_events(
+                run_id,
+                session_id=session_id,
+                after=cursor,
+            )
+            for event in events:
+                cursor = event["sequence"]
+                yield encode_sse(event)
+            state = storage.run_stream_state(run_id, session_id=session_id)
+            if state is None or state["status"] in TERMINAL_RUN_STATUSES:
+                # Status and terminal outbox row commit together. Re-read once to
+                # close the narrow race where that commit lands between the first
+                # event query and this status query.
+                terminal_events = storage.stream_events(
+                    run_id,
+                    session_id=session_id,
+                    after=cursor,
+                )
+                for event in terminal_events:
+                    cursor = event["sequence"]
+                    yield encode_sse(event)
+                return
+            if await request.is_disconnected():
+                return
+            changed_revision = await asyncio.to_thread(
+                storage.wait_for_stream_change,
+                run_id,
+                revision,
+                15.0,
+            )
+            if changed_revision == revision:
+                yield ": keepalive\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.post("/api/runs/{run_id}/review")

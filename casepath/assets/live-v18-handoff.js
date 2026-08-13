@@ -55,6 +55,9 @@
     const ids = discoveredRunIds();
     const runId = first ? ids[0] : ids.at(-1);
     if (!runId) return null;
+    const shared = window.CasePathRunStore?.get?.(runId);
+    if (shared) return shared;
+    if (window.CasePathRunStore) return cachedRunId === runId ? cachedRun : null;
     if (!fresh && cachedRunId === runId && cachedRun && Date.now() - cachedAt < 400) return cachedRun;
     try {
       const response = await fetch(`${API}/api/runs/${encodeURIComponent(runId)}`, { headers: { Accept: 'application/json' } });

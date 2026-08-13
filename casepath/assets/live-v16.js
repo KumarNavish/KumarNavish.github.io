@@ -76,9 +76,48 @@
     presenting: false,
     polling: false,
     runComplete: false,
+    streamConnections: 0,
+    terminalHydrations: 0,
     journey: 'start',
     viewer: { artifact: null, extraction: null, page: 1, zoom: 1, tab: 'original', context: null, searchMatches: [] },
   };
+
+  // One browser-owned run store is the shared source of truth for every
+  // presentation layer.  Legacy enhancers may read it, but only this module
+  // writes it from the authenticated run stream or the terminal hydration.
+  const runStoreValues = new Map();
+  const runStoreSubscribers = new Set();
+  const runStore = Object.freeze({
+    get(runId = document.body.dataset.casepathActiveRunId || '') {
+      return runStoreValues.get(runId)
+        || (state.run?.run_id === runId ? state.run : null)
+        || (state.flagshipRun?.run_id === runId ? state.flagshipRun : null)
+        || (state.baselineLaterRun?.run_id === runId ? state.baselineLaterRun : null)
+        || (state.laterRun?.run_id === runId ? state.laterRun : null)
+        || null;
+    },
+    subscribe(callback) {
+      if (typeof callback !== 'function') return () => {};
+      runStoreSubscribers.add(callback);
+      return () => runStoreSubscribers.delete(callback);
+    },
+  });
+  window.CasePathRunStore = runStore;
+
+  function publishRunSnapshot(run, { later = false, terminal = false } = {}) {
+    if (!run?.run_id) return;
+    runStoreValues.set(run.run_id, run);
+    document.body.dataset.runStoreReady = 'true';
+    document.body.dataset.runStoreActiveId = run.run_id;
+    document.body.dataset.runStoreStatus = run.status || '';
+    document.body.dataset.runStoreEventCount = String(run.events?.length || 0);
+    for (const subscriber of runStoreSubscribers) {
+      try { subscriber(run, { later, terminal }); } catch (_) {}
+    }
+    window.dispatchEvent(new CustomEvent('casepath:run-snapshot', {
+      detail: { run, runId: run.run_id, later, terminal },
+    }));
+  }
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -542,6 +581,11 @@
       renderClaim(state.claim);
       renderProgress();
       bindGlobalInteractions();
+      window.dispatchEvent(new CustomEvent('casepath:demo-ready', { detail: {
+        claim: state.flagshipClaim,
+        laterClaimId: state.demo?.later_claim_id || '',
+        demoClaimId: state.demo?.demo_claim_id || '',
+      } }));
     } catch (error) {
       $('#startState').innerHTML = `<div class="start-copy"><span class="quiet-label">CasePath could not open</span><h2>The claim workspace is unavailable.</h2><p>${esc(error.message)}</p></div><button class="primary-button" type="button" onclick="location.reload()">Retry</button>`;
     }
@@ -576,6 +620,10 @@
           <span class="attachment-open">Open</span>
         </button>`;
     }).join('');
+    window.dispatchEvent(new CustomEvent('casepath:claim-rendered', { detail: {
+      claim,
+      journey: state.journey,
+    } }));
   }
 
   function renderProgress(activeId = null) {
@@ -617,6 +665,9 @@
       state.queuedEventIds.clear();
       state.presentedEvents = [];
       state.runComplete = false;
+      state.run = { run_id: created.run_id, events: [], status: created.status || 'queued', ...created };
+      state.flagshipRun = state.run;
+      publishRunSnapshot(state.run);
       $('#startState').hidden = true;
       $('#liveWorkspace').hidden = false;
       $('#openAudit').disabled = false;
@@ -624,7 +675,7 @@
       setOrchestrator('Opening one shared claim context');
       renderProgress();
       state.polling = true;
-      pollRun(state.runId, false);
+      streamRun(state.runId, false).catch(() => {});
     } catch (error) {
       button.disabled = false;
       button.querySelector('span').textContent = 'Watch CasePath handle this claim';
@@ -632,27 +683,121 @@
     }
   }
 
-  async function pollRun(runId, later) {
-    try {
-      const run = await api(`/api/runs/${encodeURIComponent(runId)}`);
-      if (later) {
-        state.laterRun = run;
-      } else {
-        state.run = run;
-        state.flagshipRun = run;
-      }
+  function parseSseFrames(buffer, onFrame) {
+    const normalized = buffer.replaceAll('\r\n', '\n');
+    const frames = normalized.split('\n\n');
+    const remainder = frames.pop() || '';
+    for (const frame of frames) {
+      const data = frame.split('\n')
+        .filter(line => line.startsWith('data:'))
+        .map(line => line.slice(5).trimStart())
+        .join('\n');
+      if (!data) continue;
+      try { onFrame(JSON.parse(data)); } catch (_) {}
+    }
+    return remainder;
+  }
+
+  function mergeStreamEnvelope(runId, envelope, later) {
+    const existing = (later ? state.laterRun : state.run)
+      || runStore.get(runId)
+      || { run_id: runId, events: [], status: 'running' };
+    const patch = envelope.run_patch && typeof envelope.run_patch === 'object'
+      ? envelope.run_patch
+      : {};
+    const auditEvent = envelope.audit_event && typeof envelope.audit_event === 'object'
+      ? envelope.audit_event
+      : null;
+    const events = Array.isArray(existing.events) ? [...existing.events] : [];
+    if (auditEvent && !events.some(event => event.event_id === auditEvent.event_id)) events.push(auditEvent);
+    const run = { ...existing, ...patch, run_id: runId, events };
+    if (later) state.laterRun = run;
+    else {
+      state.run = run;
+      state.flagshipRun = run;
+    }
+    publishRunSnapshot(run, { later });
+    if (auditEvent) {
       enqueueNewEvents(run, later);
-      if (!state.presenting) presentQueuedEvents(later);
-      if (run.status === 'failed') throw new Error(run.error || 'The run stopped safely.');
-      if (run.status === 'complete') {
-        if (!later) state.runComplete = true;
-        if (later) state.laterRunComplete = true;
-      } else {
-        setTimeout(() => pollRun(runId, later), 250);
+      window.dispatchEvent(new CustomEvent('casepath:run-event', {
+        detail: { event: auditEvent, envelope, run, runId, later },
+      }));
+    }
+    if (envelope.type && envelope.type !== 'run.activity') {
+      window.dispatchEvent(new CustomEvent('casepath:semantic-event', {
+        detail: { ...envelope, runId, later },
+      }));
+    }
+    if (!state.presenting) presentQueuedEvents(later);
+  }
+
+  async function hydrateTerminalRun(runId, later) {
+    state.terminalHydrations += 1;
+    document.body.dataset.terminalHydrations = String(state.terminalHydrations);
+    const run = await api(`/api/runs/${encodeURIComponent(runId)}`);
+    if (later) state.laterRun = run;
+    else {
+      state.run = run;
+      state.flagshipRun = run;
+    }
+    publishRunSnapshot(run, { later, terminal: true });
+    enqueueNewEvents(run, later);
+    if (run.status === 'failed') throw new Error(run.error || 'The run stopped safely.');
+    if (run.status !== 'complete') throw new Error('The live run stream closed before a terminal result was available.');
+    if (later) state.laterRunComplete = true;
+    else state.runComplete = true;
+    state.polling = false;
+    if (!state.presenting) presentQueuedEvents(later);
+    return run;
+  }
+
+  async function streamRun(runId, later, { present = true } = {}) {
+    let after = 0;
+    let retries = 0;
+    try {
+      while (true) {
+        state.streamConnections += 1;
+        document.body.dataset.runTransport = 'fetch-sse';
+        document.body.dataset.streamConnections = String(state.streamConnections);
+        document.body.dataset.activeRunPolls = '0';
+        const response = await fetch(`${API}/api/runs/${encodeURIComponent(runId)}/events?after=${after}`, {
+          headers: {
+            Accept: 'text/event-stream',
+            'X-CasePath-Session': SESSION_ID,
+          },
+        });
+        if (!response.ok || !response.body) throw new Error(`Live run stream unavailable (${response.status}).`);
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let terminal = false;
+        while (true) {
+          const { value, done } = await reader.read();
+          buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+          buffer = parseSseFrames(buffer, envelope => {
+            const sequence = Number(envelope.sequence);
+            if (Number.isInteger(sequence) && sequence > after) after = sequence;
+            if (present) mergeStreamEnvelope(runId, envelope, later);
+            if (envelope.type === 'run.completed' || envelope.type === 'run.failed' || envelope.terminal === true) terminal = true;
+          });
+          if (done || terminal) break;
+        }
+        if (terminal) {
+          if (present) return hydrateTerminalRun(runId, later);
+          const run = await api(`/api/runs/${encodeURIComponent(runId)}`);
+          if (run.status === 'failed') throw new Error(run.error || 'Comparison run failed.');
+          if (run.status !== 'complete') throw new Error('The comparison stream closed before completion.');
+          publishRunSnapshot(run, { later: false, terminal: true });
+          return run;
+        }
+        retries += 1;
+        if (retries > 3) throw new Error('The live run stream ended before completion.');
+        await wait(Math.min(2000, 250 * (2 ** retries)));
       }
     } catch (error) {
       state.polling = false;
-      renderFailure(error.message);
+      if (present) renderFailure(error.message);
+      throw error;
     }
   }
 
@@ -1374,12 +1519,7 @@
   }
 
   async function awaitCompletedRun(runId) {
-    while (true) {
-      const run = await api(`/api/runs/${encodeURIComponent(runId)}`);
-      if (run.status === 'complete') return run;
-      if (run.status === 'failed') throw new Error(run.error || 'Comparison run failed.');
-      await wait(250);
-    }
+    return streamRun(runId, false, { present: false });
   }
 
   async function ensureBaselineLaterRun() {
@@ -1455,7 +1595,13 @@
       });
       state.run = await api(`/api/runs/${encodeURIComponent(state.runId)}`);
       state.flagshipRun = state.run;
+      publishRunSnapshot(state.run, { terminal: true });
       showReviewApplied();
+      window.dispatchEvent(new CustomEvent('casepath:review-saved', { detail: {
+        review: state.review,
+        result: state.review?.result || state.run?.result || null,
+        moment: 'review-applied',
+      } }));
     } catch (error) {
       button.disabled = false;
       button.querySelector('span').textContent = 'Apply demo correction';
@@ -1515,7 +1661,7 @@
       state.queuedEventIds.clear();
       renderCanvas(`<div class="stage-shell later-run"><div class="later-source-banner"><div><span class="quiet-label">Deterministic held-out memory comparison</span><h3>${esc(state.laterClaim.subject)}</h3><p>This claim was excluded from the simulated review and memory construction. The flagship above is the live six-agent Nemotron analysis. After learning was frozen, CasePath's deterministic application layer computed one no-memory counterfactual and now evaluates the same observable package with the explicitly unverified demo memory available—without another model run. Semantic eligibility does not depend on target claim, fact, or artifact IDs; the quarantined candidate must not change the shared ${esc(state.review?.knowledge?.shared_playbook_version || 'playbook')}.</p></div><span class="new-knowledge">Deterministic comparison · unverified memory</span></div><div class="later-agent-stream" id="laterAgentStream"></div><div id="laterResult"></div></div>`, 'later-work');
       renderProgress();
-      pollRun(created.run_id, true);
+      streamRun(created.run_id, true).catch(() => {});
     } catch (error) {
       renderFailure(error.message);
     }
@@ -2042,6 +2188,32 @@
     $('#sourceEvidence').addEventListener('click', event => {
       const button = event.target.closest('[data-source-fact-node]');
       if (button) focusOwningDecision(button.dataset.sourceFactNode);
+    });
+    document.addEventListener('casepath:open-source', event => {
+      const detail = event.detail || {};
+      if (!detail.artifactId) return;
+      openSource(detail.artifactId, Number(detail.page) || 1, detail.context || null);
+    });
+    document.addEventListener('casepath:open-precedent', event => {
+      const index = Number(event.detail?.index);
+      if (Number.isInteger(index) && index >= 0) openPrecedent(index);
+    });
+    document.addEventListener('casepath:begin-review', () => {
+      if (state.journey === 'ready') showReview();
+    });
+    document.addEventListener('casepath:submit-review', event => {
+      if (state.journey === 'ready') showReview();
+      const form = $('#reviewForm');
+      if (!form) return;
+      const mode = event.detail?.buildingEnvelopeMode || 'conditional';
+      const input = $(`input[name="building_envelope_mode"][value="${CSS.escape(mode)}"]`, form);
+      if (input) input.checked = true;
+      const note = $('textarea[name="justification"]', form);
+      if (note && typeof event.detail?.justification === 'string') note.value = event.detail.justification;
+      form.requestSubmit();
+    });
+    document.addEventListener('casepath:continue-journey', () => {
+      if (!$('#journeyNext').hidden && !$('#journeyNext').disabled) $('#journeyNext').click();
     });
     $('#zoomIn').addEventListener('click', () => { state.viewer.zoom = Math.min(2, state.viewer.zoom + .15); renderSourceViewer(); });
     $('#zoomOut').addEventListener('click', () => { state.viewer.zoom = Math.max(.55, state.viewer.zoom - .15); renderSourceViewer(); });
