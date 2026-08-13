@@ -1735,7 +1735,10 @@
       || focal.firstElementChild?.dataset.memoryId
       || ownedAgentId
       || focal.dataset.focalKind;
-    if (focal.dataset.artifactFocus === 'true' && !state.graphRevealRunning && !state.pendingLawId) {
+    const tourBoundLaw = kind !== 'law'
+      || state.moment !== 'research'
+      || state.officialLawTourVisitedIds.has(String(entityId || ''));
+    if (tourBoundLaw && focal.dataset.artifactFocus === 'true' && !state.graphRevealRunning && !state.pendingLawId) {
       emitArtifactChange(kind, entityId);
     }
   }
