@@ -559,7 +559,7 @@ body[data-casepath-moment="review"] .review-layout{
 }
 body[data-casepath-moment="review"] .review-graph,
 body[data-casepath-moment="review"] .review-impact,
-body[data-casepath-moment="review"] .v20-review-note,
+body[data-casepath-moment="review"] .v19-review-branch-preview,
 body[data-casepath-moment="review"] .review-panel>.quiet-label,
 body[data-casepath-moment="review"] .review-panel>p,
 body[data-casepath-moment="review"] .review-choice p,
@@ -578,6 +578,12 @@ body[data-casepath-moment="review"] .stage-shell>.stage-intro{
   font-size:9px;
 }
 body[data-casepath-moment="review"] .review-panel h3{margin:0 0 14px;font-size:17px}
+body[data-casepath-moment="review"] .v20-review-note{
+  margin:0 0 18px;
+  color:var(--quiet);
+  font-size:9px;
+  line-height:1.45;
+}
 body[data-casepath-moment="review"] .review-choice{padding:13px 0}
 body[data-casepath-moment="review"] .review-choice strong{margin:0;font-size:12px}
 body[data-casepath-moment="review"] .review-submit{margin-top:22px}

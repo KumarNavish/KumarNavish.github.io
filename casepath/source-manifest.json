@@ -677,8 +677,8 @@
     {
       "executable": false,
       "path": "casepath/assets/live-v20-focus.css",
-      "sha256": "ec69e9c31a1a282ffb90e702759700028e5caddf8db4d5b5cc7339c4fe8ef598",
-      "size_bytes": 67997
+      "sha256": "750b5c1b0d82bc7265f701af738eded7262923bfcffba41399534de5e4befe09",
+      "size_bytes": 68141
     },
     {
       "executable": false,
@@ -731,7 +731,7 @@
     {
       "executable": false,
       "path": "casepath/index.html",
-      "sha256": "b9e1305530c1df9b424ae39ad55d5d20e34fb0ff962713169c20763ed6650ee1",
+      "sha256": "4c5ae1348315de4690feff50c8744cc38be4ca7a3bb28c4fc10686512c3b58d8",
       "size_bytes": 10470
     },
     {
@@ -935,8 +935,8 @@
     {
       "executable": false,
       "path": "casepath/tools/test_casepath_release.py",
-      "sha256": "584411522e4f6de6bcbce210be087d115297527f146e88371237eae02803ccbb",
-      "size_bytes": 300560
+      "sha256": "743c3af35c925c4a743073962508c204057dd75c051f5511c2961e4865addbe2",
+      "size_bytes": 300630
     },
     {
       "executable": false,

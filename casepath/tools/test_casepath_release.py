@@ -188,7 +188,8 @@ def test_v20_review_keeps_the_unverified_authority_disclosure_visible() -> None:
     ).read_text(encoding="utf-8")
     assert "Simulated demo review only; this is not qualified expert approval." in focus
     assert '.review-panel>p:not(.v20-review-note)' in focus_css
-    assert 'body[data-casepath-moment="review"] .review-note{display:none!important}' in focus_css
+    assert 'body[data-casepath-moment="review"] .v20-review-note{' in focus_css
+    assert 'body[data-casepath-moment="review"] .v19-review-branch-preview' in focus_css
     assert "await waitVisible('.v20-review-note');" not in browser_gate
     assert "await page.locator('.review-graph').isHidden()" in browser_gate
     assert "/simulated demo review/i" in browser_gate
@@ -470,7 +471,7 @@ def test_later_result_keeps_returned_comparison_hashes_visible() -> None:
         and "display:none!important" in line
     )
     assert ".final-proof" not in hidden_later_result_rule
-    assert 'assets/live-v20-focus.css?v=20.0.8' in index
+    assert 'assets/live-v20-focus.css?v=20.0.9' in index
     assert 'id="stageCanvas" aria-busy="false" tabindex="0" aria-label="CasePath work canvas"' in index
     assert '.stage-canvas:focus-visible' in focus_css
     assert 'v20-artifact-header:has([data-v20-open-documents])' in focus_css
