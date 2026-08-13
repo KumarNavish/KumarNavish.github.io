@@ -136,6 +136,7 @@
   };
 
   const PRODUCED_EVENT_STATES = new Set(['accepted', 'cache_hit', 'candidate_prepared', 'completed', 'passed', 'succeeded', 'succeeded_with_guarded_fallback', 'success']);
+  const CURSOR_TARGET_MIN_HOLD_MS = 220;
 
   const OWNED_ARTIFACT_COPY = Object.freeze({
     canonical_facts: {
@@ -174,7 +175,7 @@
   let lastMoment = '';
   const cursorMotion = {
     activationKey: '', cursor: null, target: null, x: null, y: null,
-    clickTimer: 0, targetTimer: 0,
+    clickTimer: 0, targetTimer: 0, holdTimer: 0, activatedAt: 0,
   };
 
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -426,6 +427,13 @@
     if (!cursor || !target) return;
     requestAnimationFrame(() => {
       if (!cursor.isConnected || !target.isConnected) return;
+      const activationKey = `${cursor.dataset.eventId || moment}:${cursor.dataset.agentId || 'casepath'}:${cursorTargetKey(target)}`;
+      const elapsed = performance.now() - cursorMotion.activatedAt;
+      if (cursorMotion.activationKey && cursorMotion.activationKey !== activationKey && elapsed < CURSOR_TARGET_MIN_HOLD_MS) {
+        window.clearTimeout(cursorMotion.holdTimer);
+        cursorMotion.holdTimer = window.setTimeout(queueEnhance, Math.ceil(CURSOR_TARGET_MIN_HOLD_MS - elapsed));
+        return;
+      }
       const targetBox = target.getBoundingClientRect();
       const cursorBox = cursor.getBoundingClientRect();
       const cursorWidth = cursorBox.width || 238;
@@ -446,10 +454,10 @@
         cursorMotion.y = y;
       }
 
-      const activationKey = `${cursor.dataset.eventId || moment}:${cursor.dataset.agentId || 'casepath'}:${cursorTargetKey(target)}`;
       settleCursorTarget(target);
       if (cursorMotion.activationKey === activationKey) return;
       cursorMotion.activationKey = activationKey;
+      cursorMotion.activatedAt = performance.now();
       window.dispatchEvent(new CustomEvent('casepath:cursor-step', { detail: {
         activationKey,
         moment,
