@@ -188,10 +188,43 @@ def test_v20_review_keeps_the_unverified_authority_disclosure_visible() -> None:
     ).read_text(encoding="utf-8")
     assert "Simulated demo review only; this is not qualified expert approval." in focus
     assert '.review-panel>p:not(.v20-review-note)' in focus_css
-    assert '.review-panel>p,body[data-casepath-moment="review"] .review-note' not in focus_css
-    assert "await waitVisible('.v20-review-note');" in browser_gate
+    assert 'body[data-casepath-moment="review"] .review-note{display:none!important}' in focus_css
+    assert "await waitVisible('.v20-review-note');" not in browser_gate
+    assert "await page.locator('.review-graph').isHidden()" in browser_gate
     assert "/simulated demo review/i" in browser_gate
     assert "/not qualified expert approval/i" in browser_gate
+
+
+def test_flagship_surface_is_compact_by_default_and_explicitly_disclosable() -> None:
+    assets = release_tool.REPOSITORY / "casepath" / "assets"
+    focus = (assets / "live-v20-focus.js").read_text(encoding="utf-8")
+    focus_css = (assets / "live-v20-focus.css").read_text(encoding="utf-8")
+    process = (assets / "process-story.js").read_text(encoding="utf-8")
+    process_css = (assets / "process-story.css").read_text(encoding="utf-8")
+    browser_gate = (
+        release_tool.REPOSITORY / "casepath-qa" / "browser-focused-v20.mjs"
+    ).read_text(encoding="utf-8")
+
+    assert "pane.classList.add('collapsed')" in focus
+    assert "v21-source-summary-toggle" in focus
+    assert "dataset.casepathFocal" in focus
+    assert "dataset.casepathPrimaryArtifact" in focus
+    assert "dataset.casepathPrimaryAction" in focus
+    assert "data-v21-ready-explore" in focus
+    assert "v21-progressive-details" in focus
+    assert "v21-knowledge-outcome" in focus
+    assert '.submission-pane.collapsed .submission-scroll{display:none!important}' in focus_css
+    assert ':not([data-v21-ready-expanded="true"]) .stage-canvas{display:none!important}' in focus_css
+    assert 'body[data-casepath-moment="review"] .review-graph' in focus_css
+    assert 'body[data-casepath-moment="knowledge"] .v20-learning-row{display:none!important}' in focus_css
+    assert 'body[data-casepath-moment="later-result"] .v20-later-heading{display:none!important}' in focus_css
+    assert "Explore full path" in process
+    assert "dataset.processStoryExpanded" in process
+    assert '[data-process-construction-state="complete"] .process-node{\n  display:none;' in process_css
+    assert '[data-process-story-expanded="true"] .process-node{\n  display:block;' in process_css
+    assert "After launch the customer package recedes to one expandable summary" in browser_gate
+    assert "Ready state keeps one focus, at most one artifact, one next action" in browser_gate
+    assert "Future-claim view recedes to one causal outcome with proof behind disclosure" in browser_gate
 
 
 def test_flagship_presentation_holds_work_and_artifacts_for_clarity() -> None:
@@ -282,12 +315,13 @@ def test_process_story_builds_grounded_nodes_at_a_readable_rate() -> None:
     assert 'aria-live="off" data-process-build-focus' in renderer
     assert 'aria-live="polite" aria-atomic="true" data-process-build-announcement' in renderer
     assert "Decision ${index + 1} of ${total}: ${title}." in controller
-    assert "display:block;\n  opacity:.46;" in styles
+    assert '[data-process-construction-state="complete"] .process-node{\n  display:none;' in styles
+    assert '[data-process-story-expanded="true"] .process-node{\n  display:block;' in styles
     assert '[data-process-construction-state="complete"] .process-node.current .process-node-button' in styles
     assert '[data-process-construction-state="complete"] .process-selected-branch[data-process-build-state="built"]' in styles
     assert 'data-process-build-state="building"' in styles
-    assert "assets/process-story.css?v=1.0.0" in index
-    assert "assets/process-story.js?v=1.0.0" in index
+    assert "assets/process-story.css?v=1.0.1" in index
+    assert "assets/process-story.js?v=1.0.1" in index
 
 
 def test_cursor_exposes_exact_six_call_bound_agents_without_synthetic_seven() -> None:
@@ -396,8 +430,9 @@ def test_browser_gate_observes_single_focus_graph_steps_and_official_url_truth()
     assert "provenance kinds absent or invalid" in browser_gate
     assert "process rationale absent" in browser_gate
     assert "process artifact hold" in browser_gate
-    assert "completed graph does not visibly retain the full returned spine" in browser_gate
-    assert "completed graph spine is not fully interactive" in browser_gate
+    assert "completed graph does not recede to the current decision" in browser_gate
+    assert "completed compact graph exposes more than the current decision" in browser_gate
+    assert "The complete process appears only after explicit exploration" in browser_gate
     assert "completed graph does not emphasize only the current node" in browser_gate
     assert "detailed provenance floods the live region" in browser_gate
     assert "source, tab, passage, address, and verify-URL truth" in browser_gate
@@ -435,12 +470,12 @@ def test_later_result_keeps_returned_comparison_hashes_visible() -> None:
         and "display:none!important" in line
     )
     assert ".final-proof" not in hidden_later_result_rule
-    assert 'assets/live-v20-focus.css?v=20.0.7' in index
+    assert 'assets/live-v20-focus.css?v=20.0.8' in index
     assert 'id="stageCanvas" aria-busy="false" tabindex="0" aria-label="CasePath work canvas"' in index
     assert '.stage-canvas:focus-visible' in focus_css
     assert 'v20-artifact-header:has([data-v20-open-documents])' in focus_css
     assert 'justify-content:flex-end' in focus_css
-    assert 'assets/live-v20-focus.js?v=20.0.6' in index
+    assert 'assets/live-v20-focus.js?v=20.0.7' in index
     assert "const CURSOR_TARGET_MIN_HOLD_MS = 220;" in focus_js
     assert "elapsed < CURSOR_TARGET_MIN_HOLD_MS" in focus_js
     assert "const finalComparison = page.locator('#laterResult .final-proof');" in browser_gate

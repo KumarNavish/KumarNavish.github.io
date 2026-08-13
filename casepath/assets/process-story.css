@@ -16,13 +16,13 @@ body[data-casepath-moment="process"] .process-layout[data-process-story] .v19-la
 }
 
 .process-build-focus{
-  display:grid;
-  grid-template-columns:132px minmax(0,1fr);
-  align-items:start;
-  gap:18px;
-  min-height:76px;
-  margin:0 0 12px;
-  padding:0 0 13px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  min-height:34px;
+  margin:0 0 22px;
+  padding:0 0 10px;
   border-bottom:1px solid var(--line);
 }
 
@@ -60,24 +60,7 @@ body[data-casepath-moment="process"] .process-layout[data-process-story] .v19-la
   letter-spacing:.055em;
   text-transform:uppercase;
 }
-.process-build-focus strong{
-  display:block;
-  margin-top:2px;
-  font-size:15px;
-  line-height:1.25;
-  letter-spacing:-.015em;
-}
-.process-build-focus p{
-  display:-webkit-box;
-  max-width:560px;
-  margin:3px 0 0;
-  overflow:hidden;
-  color:var(--muted);
-  font-size:9px;
-  line-height:1.4;
-  -webkit-box-orient:vertical;
-  -webkit-line-clamp:2;
-}
+.process-build-focus strong,.process-build-focus p{display:none}
 
 body[data-casepath-moment="process"] .process-layout[data-process-story] .process-spine{
   padding:0;
@@ -151,7 +134,8 @@ body[data-casepath-moment="process"] .process-layout[data-process-story] .proces
 }
 
 body[data-casepath-moment="process"] .process-layout[data-process-story][data-process-construction-state="building"] .process-node[data-process-build-state="pending"],
-body[data-casepath-moment="process"] .process-layout[data-process-story][data-process-construction-state="building"] .process-node[data-process-build-state="receded"]{
+body[data-casepath-moment="process"] .process-layout[data-process-story][data-process-construction-state="building"] .process-node[data-process-build-state="receded"],
+body[data-casepath-moment="process"] .process-layout[data-process-story][data-process-construction-state="building"] .process-node[data-process-build-state="built"]{
   display:none;
 }
 
@@ -172,11 +156,11 @@ body[data-casepath-moment="process"] .process-layout[data-process-story] .proces
 }
 
 body[data-casepath-moment="process"] .process-layout[data-process-story][data-process-construction-state="complete"] .process-node{
-  display:block;
-  opacity:.46;
+  display:none;
 }
 
 body[data-casepath-moment="process"] .process-layout[data-process-story][data-process-construction-state="complete"] .process-node.current{
+  display:block;
   opacity:1;
 }
 
@@ -252,8 +236,7 @@ body[data-casepath-moment="process"] .process-layout[data-process-story] .branch
   text-transform:uppercase;
 }
 .process-selected-branch strong{display:block;margin-top:1px;font-size:10px}
-.process-selected-branch p{margin:2px 0 0;color:var(--muted);font-size:8px;line-height:1.35}
-.process-selected-branch div>span{display:block;margin-top:3px;color:var(--quiet);font-size:7px}
+.process-selected-branch small,.process-selected-branch p,.process-selected-branch div>span{display:none}
 
 body[data-casepath-moment="process"] .process-selected-branch[data-process-build-state="building"],
 body[data-casepath-moment="process"] .process-selected-branch[data-process-build-state="built"]{
@@ -269,6 +252,41 @@ body[data-casepath-moment="process"] .process-selected-branch[data-process-build
 body[data-casepath-moment="process"] .process-layout[data-process-story][data-process-construction-state="complete"] .process-selected-branch[data-process-build-state="built"]{
   border-color:rgba(39,95,154,.28);
   background:var(--blue-soft);
+}
+
+.process-story-explore{
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  margin:18px 0 0 34px;
+  padding:7px 0;
+  border:0;
+  border-bottom:1px solid var(--line-strong);
+  background:transparent;
+  color:var(--muted);
+  font-size:9px;
+  font-weight:720;
+  cursor:pointer;
+}
+.process-story-explore:hover{color:var(--ink);border-color:var(--ink)}
+.process-story-explore svg{
+  width:13px;
+  height:13px;
+  fill:none;
+  stroke:currentColor;
+  stroke-width:1.8;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+  transition:transform .18s ease;
+}
+.process-story-explore[aria-expanded="true"] svg{transform:rotate(180deg)}
+
+body[data-casepath-moment="process"] .process-layout[data-process-story][data-process-construction-state="complete"][data-process-story-expanded="true"] .process-node{
+  display:block;
+  opacity:.46;
+}
+body[data-casepath-moment="process"] .process-layout[data-process-story][data-process-construction-state="complete"][data-process-story-expanded="true"] .process-node.current{
+  opacity:1;
 }
 
 @media(prefers-reduced-motion:reduce){

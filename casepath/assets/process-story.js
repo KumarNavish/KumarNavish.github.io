@@ -40,6 +40,20 @@
     };
   }
 
+  function ensureExploreControl(layout) {
+    let control = layout.querySelector('[data-process-story-explore]');
+    if (control) return control;
+    control = document.createElement('button');
+    control.type = 'button';
+    control.className = 'process-story-explore';
+    control.dataset.processStoryExplore = 'true';
+    control.setAttribute('aria-expanded', 'false');
+    control.innerHTML = '<span>Explore full path</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+    const map = layout.querySelector('.process-map');
+    map?.append(control);
+    return control;
+  }
+
   function setNarration(layout, { count, basis, title, detail, announcement }) {
     const controls = buildControls(layout);
     if (controls.count) controls.count.textContent = count;
@@ -78,9 +92,9 @@
     setNarration(layout, {
       count: `${layout.dataset.processNodeCount || 'All'} decisions connected`,
       basis: 'Returned process graph',
-      title: 'The complete handling path is visible',
-      detail: `${currentTitle} remains current. The graph selects ${branchTitle} before downstream responsibility and remedy.`,
-      announcement: `Process graph complete. ${currentTitle} remains current.`,
+      title: currentTitle,
+      detail: `Current decision. The full returned path is ready to explore; its next selected branch is ${branchTitle}.`,
+      announcement: `Process graph complete. ${currentTitle} is the current decision.`,
     });
   }
 
@@ -91,6 +105,9 @@
     }
     if (branch) branch.dataset.processBuildState = 'built';
     layout.dataset.processConstructionState = 'complete';
+    if (!layout.dataset.processStoryExpanded) layout.dataset.processStoryExpanded = 'false';
+    const explore = ensureExploreControl(layout);
+    if (explore) explore.hidden = false;
     finalNarration(layout, branch);
     enableGraph(layout);
     completedStories.add(key);
@@ -174,6 +191,9 @@
     if (layout.dataset.processStoryRuntime === 'bound') return;
     layout.dataset.processStoryRuntime = 'bound';
     layout.dataset.laterExpanded = 'true';
+    layout.dataset.processStoryExpanded = 'false';
+    const explore = ensureExploreControl(layout);
+    if (explore) explore.hidden = true;
     const nodes = [...layout.querySelectorAll('.process-spine > .process-node')];
     const branch = layout.querySelector('[data-process-selected-branch]');
     if (!nodes.length) return;
@@ -220,10 +240,23 @@
     window.requestAnimationFrame(synchronize);
   }
 
+  function toggleFullPath(event) {
+    const control = event.target.closest?.('[data-process-story-explore]');
+    if (!control) return;
+    const layout = control.closest('.process-layout[data-process-story="grounded-node-sequence/1.0.0"]');
+    if (!layout) return;
+    const expanded = layout.dataset.processStoryExpanded === 'true';
+    layout.dataset.processStoryExpanded = String(!expanded);
+    control.setAttribute('aria-expanded', String(!expanded));
+    const label = control.querySelector('span');
+    if (label) label.textContent = expanded ? 'Explore full path' : 'Hide full path';
+  }
+
   function boot() {
     const canvas = document.querySelector('#stageCanvas');
     if (!canvas) return;
     new MutationObserver(queue).observe(canvas, { childList: true, subtree: true });
+    canvas.addEventListener('click', toggleFullPath);
     window.addEventListener('casepath:render', queue);
     queue();
   }

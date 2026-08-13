@@ -241,12 +241,38 @@
     start.dataset.v20Ready = 'true';
   }
 
-  function normalizeSourceRail() {
+  function normalizeSourceRail(moment) {
     const pane = $('.submission-pane');
     if (!pane) return;
     pane.dataset.v21SourceRail = 'true';
     const label = pane.querySelector('.submission-head .quiet-label');
     if (label && label.textContent !== 'Customer claim') label.textContent = 'Customer claim';
+    const toggle = $('#toggleSource', pane);
+    if (!toggle) return;
+    if (!toggle.classList.contains('v21-source-summary-toggle')) {
+      toggle.classList.add('v21-source-summary-toggle');
+      toggle.innerHTML = `
+        <span class="v21-source-summary-copy"><strong>Customer claim</strong><small>Opening source package…</small></span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`;
+      toggle.setAttribute('aria-controls', 'submissionContent');
+      toggle.setAttribute('aria-label', 'Show or hide the customer claim source package');
+    }
+    const subject = pane.querySelector('.email-subject')?.textContent?.trim() || 'Customer claim';
+    const sourceCount = $('#attachmentCount')?.textContent?.trim() || 'Opening source package…';
+    const summaryTitle = toggle.querySelector('.v21-source-summary-copy strong');
+    const summaryMeta = toggle.querySelector('.v21-source-summary-copy small');
+    if (summaryTitle && summaryTitle.textContent !== subject) summaryTitle.textContent = subject;
+    if (summaryMeta && summaryMeta.textContent !== sourceCount) summaryMeta.textContent = sourceCount;
+
+    if (moment === 'start') {
+      pane.classList.remove('collapsed');
+      toggle.setAttribute('aria-expanded', 'true');
+      delete pane.dataset.v21AutoCollapsed;
+    } else if (pane.dataset.v21AutoCollapsed !== 'true') {
+      pane.classList.add('collapsed');
+      toggle.setAttribute('aria-expanded', 'false');
+      pane.dataset.v21AutoCollapsed = 'true';
+    }
   }
 
   function ensureFlagshipFocus(canvas, moment) {
@@ -284,7 +310,8 @@
     // that visible artifact; every other event must match the visible moment.
     const eventIsCurrent = Boolean(currentEvent.eventId && (
       eventMoment === moment
-      || (currentEvent.stage === 'agent_orchestration' && nemotronIdentity)
+      || (currentEvent.stage === 'agent_orchestration' && nemotronIdentity
+        && !['review', 'review-applied', 'knowledge', 'later-work', 'later-result'].includes(moment))
     ));
     if (!eventIsCurrent) Object.keys(currentEvent).forEach(key => { currentEvent[key] = ''; });
     const currentIdentity = eventIsCurrent ? nemotronIdentity : null;
@@ -326,6 +353,7 @@
     const cursorStatus = currentIdentity
       ? cursorPhase === 'artifact' ? 'Returned Nemotron specialist' : 'Nemotron specialist working'
       : cursorRole;
+    const readyExpanded = document.body.dataset.v21ReadyExpanded === 'true';
     surface.dataset.signature = signature;
     surface.dataset.casepathSpecialist = role.id;
     surface.dataset.nemotronAgentId = currentIdentity ? currentEvent.actorId : '';
@@ -344,9 +372,19 @@
             <small><strong>${esc(cursorStatus)}</strong></small>
           </div>
         </div>
-        ${ownedArtifact || `<div class="v21-focus-artifact"><span>${currentIdentity || !outputProduced ? 'Output taking shape' : 'Produced'}</span><strong>${esc(visibleOutput)}</strong></div>`}
+        ${ownedArtifact || (outputProduced ? `<div class="v21-focus-artifact" data-casepath-primary-artifact="true"><strong>${esc(visibleOutput)}</strong></div>` : '')}
+        ${moment === 'ready' ? `<button type="button" class="v21-ready-explore" data-v21-ready-explore aria-expanded="${readyExpanded}">${readyExpanded ? 'Hide full path' : 'Explore full path'}</button>` : ''}
       </div>
     `;
+    surface.dataset.casepathFocal = 'true';
+    const primaryArtifact = surface.querySelector('.v21-owned-artifact');
+    if (primaryArtifact) primaryArtifact.dataset.casepathPrimaryArtifact = 'true';
+    surface.querySelector('[data-v21-ready-explore]')?.addEventListener('click', event => {
+      const expanded = document.body.dataset.v21ReadyExpanded === 'true';
+      document.body.dataset.v21ReadyExpanded = String(!expanded);
+      event.currentTarget.setAttribute('aria-expanded', String(!expanded));
+      event.currentTarget.textContent = expanded ? 'Explore full path' : 'Hide full path';
+    });
     positionAgentCursor(surface, canvas, moment);
   }
 
@@ -616,8 +654,43 @@
     }
   }
 
+  function focusReviewApplied(canvas) {
+    const root = canvas?.querySelector('.review-applied');
+    const delta = root?.querySelector('.review-applied-delta');
+    const layout = root?.querySelector('.review-applied-layout');
+    if (!root || !delta || root.dataset.v21Progressive === 'true') return;
+    root.dataset.v21Progressive = 'true';
+    const articles = [...delta.querySelectorAll(':scope > article')];
+    const processCount = articles.slice(0, 3).reduce((total, article) => {
+      const values = article.querySelector('strong')?.textContent?.match(/\d+/g) || [];
+      return total + values.reduce((sum, value) => sum + Number(value), 0);
+    }, 0);
+    const evidenceCount = Number(articles[3]?.querySelector('strong')?.textContent?.match(/\d+/)?.[0] || 0);
+    const summary = document.createElement('section');
+    summary.className = 'v21-review-change';
+    summary.innerHTML = `<small>Unverified demo correction applied · model acceptance not reused</small><strong>${processCount} process change${processCount === 1 ? '' : 's'} · ${evidenceCount} evidence relationship${evidenceCount === 1 ? '' : 's'} updated</strong>`;
+    root.querySelector('.review-applied-heading')?.after(summary);
+    if (layout) {
+      const details = document.createElement('details');
+      details.className = 'v21-progressive-details';
+      details.innerHTML = '<summary>Explore corrected process</summary><div></div>';
+      details.querySelector('div').append(delta, layout);
+      root.append(details);
+    }
+  }
+
   function focusKnowledge(canvas) {
-    if (canvas?.querySelector('.v20-learning-summary') && document.body.dataset.casepathLearningReady !== 'true') {
+    const result = canvas?.querySelector('.v20-learning-summary');
+    if (result && !result.querySelector('.v21-knowledge-outcome')) {
+      const memoryReady = Boolean(result.querySelector('[data-outcome="reviewed-memory"] strong')?.textContent?.match(/saved/i));
+      const sharedVersion = result.querySelector('[data-outcome="shared-playbook"] strong')?.textContent?.trim() || 'Shared playbook unchanged';
+      const outcome = document.createElement('section');
+      outcome.className = 'v21-knowledge-outcome';
+      outcome.dataset.casepathPrimaryArtifact = 'true';
+      outcome.innerHTML = `<small>Governed knowledge result</small><strong>${memoryReady ? 'Unverified memory saved' : 'No memory promoted'} · candidate quarantined · ${esc(sharedVersion)}</strong>`;
+      result.prepend(outcome);
+    }
+    if (result && document.body.dataset.casepathLearningReady !== 'true') {
       document.body.dataset.casepathLearningReady = 'true';
     }
   }
@@ -626,6 +699,17 @@
     const result = canvas?.querySelector('#laterResult');
     if (!result?.querySelector('.before-after')) return;
     result.dataset.v20LaterReady = 'true';
+    if (result.dataset.v21Progressive === 'true') return;
+    result.dataset.v21Progressive = 'true';
+    const heading = result.querySelector('.v20-later-heading');
+    const causal = result.querySelector('.causal-delta');
+    if (causal) causal.dataset.casepathPrimaryArtifact = 'true';
+    const details = document.createElement('details');
+    details.className = 'v21-progressive-details v21-proof-details';
+    details.innerHTML = '<summary>Inspect proof</summary><div></div>';
+    const body = details.querySelector('div');
+    [...result.children].filter(child => child !== heading && child !== causal).forEach(child => body.append(child));
+    result.append(details);
   }
 
   function setMoment(moment) {
@@ -635,21 +719,50 @@
     if (moment !== 'knowledge') delete document.body.dataset.casepathLearningReady;
   }
 
+  function markPrimaryArtifact(canvas, moment) {
+    document.querySelectorAll('[data-casepath-primary-artifact]').forEach(node => node.removeAttribute('data-casepath-primary-artifact'));
+    const owned = $('#v21AgentFocus .v21-owned-artifact');
+    if (owned) {
+      owned.dataset.casepathPrimaryArtifact = 'true';
+      return;
+    }
+    const selectors = {
+      read: '.event-list', understand: '.fact-stream', research: '.official-source-browser,.legal-research',
+      process: '.process-layout[data-process-story]', evidence: '.process-layout', experience: '.process-layout',
+      verify: '.process-layout,.v20-final-handoff', ready: '.v20-final-handoff,.process-layout', review: '#reviewForm',
+      'review-applied': '.v21-review-change', knowledge: '.v21-knowledge-outcome',
+      'later-result': '.causal-delta', failure: '.failure-state',
+    };
+    const selector = selectors[moment];
+    const target = selector ? canvas?.querySelector(selector) : null;
+    if (target) target.dataset.casepathPrimaryArtifact = 'true';
+  }
+
+  function markPrimaryAction(canvas, moment) {
+    document.querySelectorAll('[data-casepath-primary-action]').forEach(node => node.removeAttribute('data-casepath-primary-action'));
+    const action = moment === 'review' ? canvas?.querySelector('#reviewForm button[type="submit"]') : $('#journeyNext');
+    if (action && !action.hidden) action.dataset.casepathPrimaryAction = 'true';
+  }
+
   function enhance() {
     normalizeStart();
-    normalizeSourceRail();
     updateClaimReadiness();
     const canvas = $('#stageCanvas');
     const moment = currentMoment();
     setMoment(moment);
+    if (moment !== 'ready') delete document.body.dataset.v21ReadyExpanded;
+    normalizeSourceRail(moment);
     if (!canvas) return;
     ensureFlagshipFocus(canvas, moment);
     directInspectorCopy(canvas);
     ensureArtifactHeader(canvas, moment);
     ensureDocumentSheet(canvas);
     focusReview(canvas);
+    focusReviewApplied(canvas);
     focusKnowledge(canvas);
     focusLater(canvas);
+    markPrimaryArtifact(canvas, moment);
+    markPrimaryAction(canvas, moment);
     positionAgentCursor($('#v21AgentFocus'), canvas, moment);
   }
 
