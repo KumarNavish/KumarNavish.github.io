@@ -194,6 +194,7 @@ def test_v20_review_keeps_the_unverified_authority_disclosure_visible() -> None:
     assert "await page.locator('.review-graph').isHidden()" in browser_gate
     assert "/simulated demo review/i" in browser_gate
     assert "/not qualified expert approval/i" in browser_gate
+    assert "(?:(?:was|is)\\s+)?not reused" in browser_gate
 
 
 def test_flagship_surface_is_compact_by_default_and_explicitly_disclosable() -> None:
