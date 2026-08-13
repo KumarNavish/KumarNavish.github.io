@@ -1449,7 +1449,9 @@
       focus.textContent = nodeById(state.selectedNodeId)?.title || DEFAULT_NODE_COPY[state.selectedNodeId]?.[0] || 'Grounded decision';
       status.textContent = `Decision ${Math.min(state.graphRevealIndex + (state.graphDwell ? 0 : 1), nodes.length)} of ${nodes.length}: ${focus.textContent}`;
     } else {
-      count.textContent = `${nodes.length} accepted decisions · complete path available`;
+      count.textContent = state.moment === 'review-applied'
+        ? `Unverified demo correction · ${nodes.length} accepted decisions`
+        : `${nodes.length} accepted decisions · complete path available`;
       focus.textContent = nodeById(state.selectedNodeId)?.title || 'Select one decision';
       status.textContent = `${nodes.length} accepted decisions. Current decision: ${focus.textContent}.`;
     }
@@ -1555,14 +1557,14 @@
     const applied = state.moment === 'review-applied';
     const reviewHeadline = applied
       ? 'One new decision now protects the causal sequence.'
-      : 'Should broader building testing happen now?';
+      : 'Use one neutral assessment first.';
     return `<article class="ac-stage-focus ac-review-focus" data-ac-focal-object="review" data-review-state="${applied ? 'applied' : 'pending'}" data-review-edit-state="${applied ? 'applied' : 'pending'}" data-review-node-id="causation" data-ac-cursor-target="true">
       <span>${esc(copy.authority)}</span>
       <h3>${esc(reviewHeadline)}</h3>
       <p>${esc(copy.detail)}</p>
       ${applied
         ? `<strong>${changedNodes.length ? `${changedNodes.length} returned process decision${changedNodes.length === 1 ? '' : 's'} changed` : 'Returned graph and evidence relationships recomputed'}</strong>`
-        : `<div class="ac-review-decision"><small>Proposed correction</small><strong>Use one neutral assessment first. Keep broader building testing conditional.</strong><p>Causation remains unresolved until competent evidence supports the next branch.</p></div><button type="button" data-ac-action="submit-review" data-review-mode="conditional" data-casepath-primary-action="true">Apply demo correction</button>`}
+        : `<div class="ac-review-decision"><small>Process consequence</small><strong>Keep broader building testing conditional.</strong><p>Causation remains unresolved until competent evidence supports the next branch.</p></div><button type="button" data-ac-action="submit-review" data-review-mode="conditional" data-casepath-primary-action="true">Apply demo correction</button>`}
     </article>`;
   }
 
@@ -1594,10 +1596,15 @@
     const receipt = memory.contract === 'casepath.memory-application-receipt/1.0.0';
     const sharedChanged = later.shared_rule_applied === true || result.shared_rule_applied === true;
     const headline = state.moment === 'later-result' && receipt
-      ? 'Eligible case-specific guidance returned with a bounded receipt.'
+      ? 'Case-specific memory changed the next step.'
       : memoryId
-        ? 'One unverified demo memory is available for governed reuse.'
+        ? 'Case memory saved for governed reuse.'
         : copy.title;
+    const detail = state.moment === 'later-result' && receipt
+      ? 'The later claim now asks for one neutral assessment before broader building tests.'
+      : memoryId
+        ? 'It remains unverified and does not change the shared playbook.'
+        : copy.detail;
     const memoryEffects = state.moment === 'later-result' && memoryOriginId ? `
       <ol class="ac-memory-effects" aria-label="Receipt-bound case-specific changes">
         <li data-memory-effect="node-added" data-memory-origin-id="${esc(memoryOriginId)}">One decision node added</li>
@@ -1610,7 +1617,7 @@
     return `<article class="ac-stage-focus ac-learning-focus" data-ac-focal-object="knowledge" data-memory-id="${esc(memoryId)}" data-memory-origin-id="${esc(memoryOriginId)}" data-memory-status="${esc(memoryId ? 'unverified_demo_memory' : 'not-returned')}" data-memory-receipt="${esc(String(receipt))}" data-shared-rule-applied="${esc(String(sharedChanged))}" data-ac-cursor-target="true">
       <span>${esc(copy.authority)}</span>
       <h3>${esc(headline)}</h3>
-      <p>${esc(copy.detail)}</p>
+      <p>${esc(detail)}</p>
       <div class="ac-learning-outcome"><strong>${memoryId ? `Memory ${esc(memoryId)}` : 'No memory identifier returned'}</strong><small>Shared playbook ${sharedChanged ? 'changed by an explicit released result' : 'unchanged'}${candidate.status ? ` · candidate ${esc(candidate.status)}` : ''}</small></div>
       ${memoryEffects}
     </article>`;
