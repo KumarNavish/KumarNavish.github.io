@@ -212,6 +212,7 @@ def test_north_star_review_and_learning_remain_graph_native() -> None:
     assert 'class="ac-review-graph-edit"' in canvas
     assert 'data-review-node-id="causation"' in canvas
     assert 'data-ac-action="submit-review"' in canvas
+    assert "Unverified demo correction · model acceptance not reused" in canvas
     assert "function reviewAppliedMarkup()" in canvas
     assert "function laterMemoryDeltaMarkup()" in canvas
     assert 'data-memory-effect="node-added"' in canvas
