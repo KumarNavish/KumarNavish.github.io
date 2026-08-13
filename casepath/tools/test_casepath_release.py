@@ -276,6 +276,14 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "casepath:source-inspection" in canvas
     assert "casepath:branch-visualized" in canvas
     assert "ac-grounding-disclosure" in canvas
+    assert "data-ac-action=\"toggle-grounding\"" in canvas
+    assert "data-grounding-open" in canvas
+    assert "data-ac-law-viewer" in canvas
+    assert "Cached official Swiss-law passage · qualified review pending" in canvas
+    assert ".ac-law-viewer" in canvas_css
+    assert "if (state.moment === 'experience') return referenceStageMarkup(copy);" in canvas
+    assert "Inspect this generated pattern" in canvas
+    assert "const GRAPH_MOMENTS = new Set(['process', 'ready', 'review-applied']);" in canvas
     assert "['official_statute', 'official_guidance'].includes(law?.source_type)" in canvas
     assert canvas.count("REDUCED_MOTION ? 0 : 560") == 1
     assert ".ac-spatial-viewport" in canvas_css
@@ -302,8 +310,18 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "Valid claim-source inspection fixture was rejected" in browser_gate
     assert "Factless claim-source inspection fixture was accepted" in browser_gate
     assert "Cross-node evidence-derived claim-source inspection was accepted" in browser_gate
+    assert "Source-free process inspection fixture was accepted" in browser_gate
     assert "Fabricated source-inspection fixture was accepted" in browser_gate
     assert "Cursor-unbound source-inspection fixture was accepted" in browser_gate
+    assert "node.dataset.artifactChangeId === detail.changeId" in browser_gate
+    assert "for (const kind of ['law', 'evidence', 'precedent', 'verification'])" in browser_gate
+    assert "casepath:artifact-process-complete" in canvas
+    assert "function evidenceStageMarkup(copy)" in canvas
+    assert "Number(item.ranking?.rank) === 1" in canvas
+    assert canvas.count("Number(item.ranking?.rank) === 1") >= 2
+    assert "data-node-attachment-kind=\"precedent\"" in canvas
+    assert "Active decision offers its ${kind} grounding on demand" in browser_gate
+    assert "#artifactProcessGraph .ac-grounding-disclosure" in browser_gate
     assert "Valid spatial process geometry fixture was rejected" in browser_gate
     assert "Vertical-list spatial graph fixture was accepted" in browser_gate
     assert "Invented spatial process edge fixture was accepted" in browser_gate
@@ -313,6 +331,12 @@ def test_flagship_presentation_holds_work_and_artifacts_for_clarity() -> None:
     renderer = (
         release_tool.REPOSITORY / "casepath" / "assets" / "live-v16.js"
     ).read_text(encoding="utf-8")
+    assert "const PROCESS_STORY_TIMEOUT_MS = 120000;" in renderer
+    assert "function waitForProcessStory()" in renderer
+    assert "[data-process-build-state=\"built\"]').length >= 10" in renderer
+    assert "function waitsForCompletedProcess(event)" in renderer
+    assert "if (!later && waitsForCompletedProcess(entry.event)) await waitForProcessStory();" in renderer
+    assert "entry.event.stage === 'process') await waitForProcessStory()" in renderer
     focus = (
         release_tool.REPOSITORY / "casepath" / "assets" / "live-v20-focus.js"
     ).read_text(encoding="utf-8")

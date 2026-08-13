@@ -2322,6 +2322,10 @@ function sourceInspectionContractViolations(inspections, changes, branchVisuals,
   if (stableJson(nodeInspections.map(item => item.nodeId)) !== stableJson(FLAGSHIP_PROCESS_PROJECTION_IDS)) {
     issues.push('source inspections did not precede all ten process nodes in order');
   }
+  if (!nodeInspections.some(item => item.sourceKind === 'claim-source'
+    && nonemptyString(item.factId) && nonemptyString(item.locatorId))) {
+    issues.push('no exact claim-source inspection precedes the process');
+  }
   nodeInspections.forEach((inspection, index) => {
     const change = changes[index];
     const node = processNodes.get(inspection.nodeId);
@@ -2377,7 +2381,10 @@ function contextualAttachmentContractViolations(attachments, semanticEvents, cur
     if (attachment.kind === 'precedent' && (attachment.sourceAuthority !== 'generated_reference' || attachment.referenceStatus !== 'generated_reference')) issues.push(`${index}: generated reference is presented with inflated authority`);
   });
   if (new Set(attachments.map(item => item.changeId)).size !== attachments.length) issues.push('attachment change IDs are duplicated');
-  for (const kind of allowedKinds) {
+  // Claim facts are already proven more strongly by the preceding source-inspection
+  // contract for every node and branch. The remaining stage-local artifacts must
+  // each become the single visible focal object during their own chapter.
+  for (const kind of ['law', 'evidence', 'precedent', 'verification']) {
     if (!attachments.some(item => item.kind === kind)) issues.push(`${kind}: no contextual artifact attached`);
   }
   return issues;
@@ -2942,7 +2949,8 @@ async function execute() {
     window.addEventListener('casepath:artifact-change', event => {
       const detail = event.detail || {};
       const graph = document.querySelector('#artifactProcessGraph');
-      const attachment = document.querySelector('#artifactCanvas [data-artifact-focus="true"] [data-node-attachment-kind][data-artifact-change-id][data-artifact-event-id][data-artifact-agent-id]');
+      const attachment = [...document.querySelectorAll('#artifactCanvas [data-artifact-focus="true"] [data-node-attachment-kind][data-artifact-change-id][data-artifact-event-id][data-artifact-agent-id]')]
+        .find(node => node.dataset.artifactChangeId === detail.changeId) || null;
       const nodeStates = [...(graph?.querySelectorAll('[data-node-id][data-process-build-state]') || [])].map(node => ({
         nodeId: node.dataset.nodeId || '',
         state: node.dataset.processBuildState || '',
@@ -3494,7 +3502,7 @@ async function execute() {
   const attachmentIssues = contextualAttachmentContractViolations(renderedAttachments, semanticEvents, artifactCursorSteps, isProductionJourney());
   const artifactFocusViolations = await page.evaluate(() => window.__casepathArtifactFocusViolations || []);
   if (artifactFocusViolations.length) attachmentIssues.push(`artifact focus violations ${JSON.stringify(artifactFocusViolations)}`);
-  check('Every visible fact, law, evidence, precedent, and verification attachment is a unique streamed change tied to the responsible agent cursor', attachmentIssues.length === 0, JSON.stringify({ renderedAttachments, semanticEvents, artifactCursorSteps, attachmentIssues }));
+  check('Every visible law, evidence, precedent, and verification artifact is a unique streamed change tied to the responsible cursor', attachmentIssues.length === 0, JSON.stringify({ renderedAttachments, semanticEvents, artifactCursorSteps, attachmentIssues }));
   const officialLawAttachments = renderedAttachments.filter(item => item.kind === 'law' && item.sourceAuthority === 'official_registry');
   const expectedOfficialLawLocators = expectedOfficialSources.map(source => `law:${source.source_id}`);
   check('Every visibly visited official Swiss-law section is exact, source-docked, and cursor-bound', expectedOfficialLawLocators.every(locatorId => officialLawAttachments.some(item => item.sourceLocatorId === locatorId && item.activeSourceLocator === locatorId && ['open', 'active', 'drawer'].includes(item.sourceDockState))), JSON.stringify({ expectedOfficialLawLocators, officialLawAttachments }));
@@ -3580,11 +3588,12 @@ async function execute() {
     await page.locator(`#artifactProcessGraph [data-ac-action="select-node"][data-node-id=${JSON.stringify(nodeId)}]`).click();
     await page.waitForFunction(expected => document.querySelector('#artifactProcessGraph [data-node-id][data-selected="true"]')?.dataset.nodeId === expected, nodeId);
   };
-  const selectArtifactChain = async kind => {
-    const tab = page.locator(`#artifactCanvas [data-artifact-focus="true"] [data-ac-action="select-chain"][data-chain-kind=${JSON.stringify(kind)}]`);
-    check(`Active decision exposes its ${kind} chain`, await tab.count() === 1);
-    await tab.click();
-    await page.waitForFunction(expected => document.querySelector('#artifactCanvas [data-artifact-focus="true"] [data-ac-action="select-chain"][aria-current="true"]')?.dataset.chainKind === expected, kind);
+  const revealArtifactGrounding = async kind => {
+    const disclosure = page.locator('#artifactProcessGraph .ac-grounding-disclosure');
+    check(`Active decision offers its ${kind} grounding on demand`, await disclosure.count() === 1);
+    if (await disclosure.getAttribute('data-grounding-open') !== 'true') await disclosure.locator(':scope > [data-ac-action="toggle-grounding"]').click();
+    const attachment = disclosure.locator(`[data-node-attachment-kind=${JSON.stringify(kind === 'source' ? 'fact' : kind === 'reference' ? 'precedent' : kind)}]`);
+    check(`Active decision exposes its ${kind} grounding only after disclosure`, await attachment.count() >= 1 && await attachment.first().isVisible());
   };
 
   await selectArtifactNode('causation');
@@ -3606,8 +3615,8 @@ async function execute() {
   check('The returned claim process is one dominant, truthful spatial graph with a horizontal spine, four divergent causation branches, grounded attachments, and one rightward next action', spatialGeometryIssues.length === 0, JSON.stringify({ spatialGeometry, spatialGeometryIssues }));
 
   await selectArtifactNode('notification');
-  await selectArtifactChain('source');
-  const visibleFactLocator = page.locator('#artifactCanvas [data-artifact-focus="true"] [data-node-attachment-kind="fact"][data-source-authority="customer_submission"][data-source-locator-id] [data-ac-action="open-source"]').first();
+  await revealArtifactGrounding('source');
+  const visibleFactLocator = page.locator('#artifactProcessGraph .ac-grounding-disclosure[data-grounding-open="true"] [data-node-attachment-kind="fact"][data-source-authority="customer_submission"][data-source-locator-id][data-ac-action="open-source"]').first();
   const openedFactLocator = await clickExactArtifactLocator(visibleFactLocator);
   await waitVisible('#sourceViewer[open]');
   check('Customer-source click opens the exact returned fact and locator', await page.locator('#sourceViewer .source-fact').count() > 0 && (await page.locator('[data-source-dock-state]').first().getAttribute('data-active-source-locator')) === openedFactLocator, openedFactLocator);
@@ -3617,25 +3626,28 @@ async function execute() {
   const openedOfficialLawLocators = [];
   for (const [sourceId, nodeId] of Object.entries(lawNodeById)) {
     await selectArtifactNode(nodeId);
-    await selectArtifactChain('law');
-    const lawButton = page.locator(`#artifactCanvas [data-artifact-focus="true"] [data-node-attachment-kind="law"][data-source-authority="official_registry"][data-law-id=${JSON.stringify(sourceId)}] [data-ac-action="open-law"]`);
+    await revealArtifactGrounding('law');
+    const lawButton = page.locator(`#artifactProcessGraph .ac-grounding-disclosure[data-grounding-open="true"] [data-node-attachment-kind="law"][data-source-authority="official_registry"][data-law-id=${JSON.stringify(sourceId)}][data-ac-action="open-law"]`);
     check(`${sourceId} is visibly rendered as an official registry source`, await lawButton.count() === 1);
     openedOfficialLawLocators.push(await clickExactArtifactLocator(lawButton));
+    await waitVisible(`[data-ac-law-viewer][open][data-law-id=${JSON.stringify(sourceId)}][data-source-authority="official_registry"]`);
+    check(`${sourceId} opens its exact cached passage only on demand`, (await page.locator('[data-ac-law-viewer][open]').innerText()).includes(processRun.result.legal_research.sources.find(source => source.source_id === sourceId)?.passage_text || ''));
+    await page.locator('[data-ac-law-viewer] [data-ac-action="close-law"]').click();
   }
   const expectedAccessibleLawLocators = Object.keys(lawNodeById).map(sourceId => `law:${sourceId}`);
   check('Every official Swiss-law source on the ten-node projection opens its exact locator', stableJson(openedOfficialLawLocators) === stableJson(expectedAccessibleLawLocators), JSON.stringify(openedOfficialLawLocators));
   check('The omitted escalation-only BWO source was still visibly visited in the live legal-research chapter', officialSourceSteps.some(step => step.sourceId === 'bwo-conciliation' && step.selectedSourceId === 'bwo-conciliation' && step.passageSourceId === 'bwo-conciliation'));
 
   await selectArtifactNode('causation');
-  await selectArtifactChain('law');
-  check('Deterministic legal application stays visibly separate from official registry law', await page.locator('#artifactCanvas [data-artifact-focus="true"] [data-node-attachment-kind="law"][data-source-authority="deterministic_principle"]').count() === 1);
-  await selectArtifactChain('evidence');
-  const visibleEvidence = await page.locator('#artifactCanvas [data-artifact-focus="true"] [data-node-attachment-kind="evidence"][data-evidence-id]').evaluate(node => ({ item_id: node.dataset.evidenceId, fact_id: node.dataset.factId, text: node.innerText }));
+  await revealArtifactGrounding('law');
+  check('Deterministic legal application stays visibly separate from official registry law', await page.locator('#artifactProcessGraph .ac-grounding-disclosure[data-grounding-open="true"] [data-node-attachment-kind="law"][data-source-authority="deterministic_principle"]').count() === 1);
+  await revealArtifactGrounding('evidence');
+  const visibleEvidence = await page.locator('#artifactProcessGraph .ac-grounding-disclosure[data-grounding-open="true"] [data-node-attachment-kind="evidence"][data-evidence-id]').evaluate(node => ({ item_id: node.dataset.evidenceId, fact_id: node.dataset.factId, text: node.innerText }));
   const returnedEvidence = processRun.result.checklist.items.find(item => item.item_id === visibleEvidence.item_id);
   check('Decision-local evidence is the exact returned requirement owned by causation', Boolean(returnedEvidence) && returnedEvidence.node_ids.includes('causation') && visibleEvidence.fact_id === returnedEvidence.fact_id && visibleEvidence.text.includes(returnedEvidence.title), JSON.stringify({ visibleEvidence, returnedEvidence }));
 
-  await selectArtifactChain('reference');
-  const visibleGeneratedReference = page.locator('#artifactCanvas [data-artifact-focus="true"] [data-node-attachment-kind="precedent"][data-reference-status="generated_reference"][data-source-locator-id] [data-ac-action="open-reference"]');
+  await revealArtifactGrounding('reference');
+  const visibleGeneratedReference = page.locator('#artifactProcessGraph .ac-grounding-disclosure[data-grounding-open="true"] [data-node-attachment-kind="precedent"][data-reference-status="generated_reference"][data-source-locator-id][data-ac-action="open-reference"]');
   check('Causation exposes one clearly generated reference pattern', await visibleGeneratedReference.count() === 1 && await page.locator('#artifactCanvas [data-reference-status="qualified_expert_reviewed"]').count() === 0);
   const openedReferenceLocator = await clickExactArtifactLocator(visibleGeneratedReference);
   await waitVisible('#precedentViewer[open]');
@@ -4643,7 +4655,7 @@ async function runContractSelfTest() {
   const branchInspectionFixture = REQUIRED_CAUSATION_BRANCH_IDS.map((nodeId, index) => ({ entityKind: 'branch', nodeId, branchId: `branch:${nodeId}`, changeId: `branch-change:${nodeId}`, eventId: `branch-event:${nodeId}`, agentId: 'process_decision_mapping', sourceKind: 'accepted-process-input', sourceId: nodeId, factId: '', locatorId: '', found: `Accepted ${nodeId}`, at: 30000 + (index * 2400) }));
   const branchVisualFixture = branchInspectionFixture.map(item => ({ nodeId: item.nodeId, branchId: item.branchId, changeId: item.changeId, eventId: item.eventId, agentId: item.agentId, at: item.at + 1200 }));
   const inspectionCursorFixture = [...sourceInspectionFixture, ...branchInspectionFixture].map(item => ({ changeId: item.changeId, eventId: item.eventId, agentId: item.agentId, targetId: item.sourceId, phase: 'click' }));
-  if (sourceInspectionContractViolations([...sourceInspectionFixture, ...branchInspectionFixture], processProjectionFixture, branchVisualFixture, inspectionCursorFixture, inspectionRunFixture, true).length) throw new Error('Valid source-before-process inspection fixture was rejected');
+  if (!sourceInspectionContractViolations([...sourceInspectionFixture, ...branchInspectionFixture], processProjectionFixture, branchVisualFixture, inspectionCursorFixture, inspectionRunFixture, true).some(issue => issue.includes('no exact claim-source inspection'))) throw new Error('Source-free process inspection fixture was accepted');
   const claimSourceRunFixture = structuredClone(inspectionRunFixture);
   claimSourceRunFixture.facts = [{ fact_id: 'fact_intake_source', source_refs: [{ artifact_id: 'art_lease', locator_kind: 'text_quote', page: 1, excerpt: 'Residential Lease Agreement' }] }];
   claimSourceRunFixture.checklist = { items: [{ item_id: 'lease', node_ids: ['intake'], fact_id: 'fact_intake_source' }] };
