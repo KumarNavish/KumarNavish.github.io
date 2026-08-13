@@ -703,11 +703,32 @@
     result.dataset.v21Progressive = 'true';
     const heading = result.querySelector('.v20-later-heading');
     const causal = result.querySelector('.causal-delta');
-    if (causal) causal.dataset.casepathPrimaryArtifact = 'true';
+    if (causal) {
+      causal.dataset.casepathPrimaryArtifact = 'true';
+      const values = kind => (causal.querySelector(`[data-delta-kind="${kind}"] strong`)?.textContent || '')
+        .split(/\s*·\s*|,\s*/).map(value => value.trim()).filter(value => value && value !== 'none');
+      const nodes = values('nodes');
+      const edges = values('edges');
+      const evidence = values('evidence');
+      const summary = causal.querySelector('header h3');
+      if (summary && causal.dataset.causalNonzero === 'true') {
+        const readableNode = (nodes[0] || '').replaceAll('_', ' ');
+        const nodeLabel = nodes.length === 1
+          ? `${readableNode.charAt(0).toUpperCase()}${readableNode.slice(1)} decision added`
+          : `${nodes.length} decisions added`;
+        summary.textContent = `${nodeLabel} · ${edges.length} process links · ${evidence.length} evidence needs updated`;
+        summary.classList.add('v21-causal-summary');
+      }
+    }
     const details = document.createElement('details');
     details.className = 'v21-progressive-details v21-proof-details';
     details.innerHTML = '<summary>Inspect proof</summary><div></div>';
     const body = details.querySelector('div');
+    const causalProof = causal?.querySelector(':scope > div')?.cloneNode(true);
+    if (causalProof) {
+      causalProof.classList.add('v21-causal-proof');
+      body.append(causalProof);
+    }
     [...result.children].filter(child => child !== heading && child !== causal).forEach(child => body.append(child));
     result.append(details);
   }
