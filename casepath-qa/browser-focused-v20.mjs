@@ -3709,8 +3709,7 @@ async function execute() {
   }));
   const openedFact = processRun.result.facts.find(fact => fact.fact_id === openedFactContext.fact_id);
   if (openedFactContext.locator_kind === 'text_quote') await waitVisible('#sourceViewer[open] #sourceStage mark');
-  const sourceRoundtrip = await page.locator('#sourceViewer[open]').evaluate(context => {
-    const root = document.querySelector('#sourceViewer[open]');
+  const sourceRoundtrip = await page.locator('#sourceViewer[open]').evaluate((root, context) => {
     const opened = root.querySelector(`.opened-grounding[data-fact-id="${CSS.escape(context.fact_id)}"][data-node-id="${CSS.escape(context.node_id)}"]`);
     const passage = opened?.querySelector(`[data-locator-kind="${CSS.escape(context.locator_kind)}"]`);
     const highlighted = [...root.querySelectorAll('#sourceStage mark,.source-highlight,[data-source-highlight="true"],[data-highlighted="true"]')]
