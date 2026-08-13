@@ -176,6 +176,7 @@
   const cursorMotion = {
     activationKey: '', cursor: null, target: null, x: null, y: null,
     clickTimer: 0, targetTimer: 0, holdTimer: 0, activatedAt: 0,
+    emittedActivationKeys: new Set(),
   };
 
   const $ = (selector, root = document) => root.querySelector(selector);
@@ -269,6 +270,11 @@
       callId: proof.dataset.currentCallId || '', status: proof.dataset.currentStatus || '',
       outputArtifact: proof.dataset.currentOutputArtifact || '', headline: proof.dataset.currentHeadline || '',
     } : {};
+    // Keep the raw proof-event identity even when that event is not the actor
+    // for the visible presentation frame. Neutral cursor fallbacks still need
+    // a stable semantic key; discarding it collapses separate frames into the
+    // same moment/target activation and makes the cursor appear to repeat.
+    const rawProofEventId = currentEvent.eventId || '';
     const eventMoment = currentEvent.stage === 'orchestrator' ? 'opening' : currentEvent.stage === 'complete' ? 'ready' : currentEvent.stage;
     const nemotronIdentity = currentEvent.actorType === 'nemotron_agent'
       ? NEMOTRON_AGENT_IDENTITIES[currentEvent.actorId] || null
@@ -298,7 +304,14 @@
     const outputProduced = PRODUCED_EVENT_STATES.has(currentEvent.status.toLowerCase())
       || ['ready', 'review-applied', 'later-result', 'failure'].includes(moment)
       || (moment === 'knowledge' && document.body.dataset.casepathLearningReady === 'true');
-    const signature = `${moment}:${focus.stage}:${action}:${currentEvent.eventId}:${currentEvent.status}:${currentEvent.actorId}`;
+    const ownedArtifact = currentIdentity && outputProduced
+      ? ownedArtifactMarkup(canvas, proof, currentEvent, currentIdentity)
+      : '';
+    // A returned specialist identity can truthfully remain visible while its
+    // contribution is taking shape. It becomes an artifact interaction only
+    // once the exact receipt-bound owned-artifact card exists in this focus.
+    const cursorPhase = ownedArtifact ? 'artifact' : 'working';
+    const signature = `${moment}:${focus.stage}:${action}:${rawProofEventId}:${currentEvent.eventId}:${currentEvent.status}:${currentEvent.actorId}:${cursorPhase}`;
     if (surface.dataset.signature === signature) {
       positionAgentCursor(surface, canvas, moment);
       return;
@@ -310,9 +323,9 @@
       : `Stage ${activeIndex + 1} of ${FLAGSHIP_STAGES.length} · ${role.label}`;
     const cursorRole = currentIdentity ? currentIdentity.label : liveAuthority;
     const cursorMonogram = currentIdentity?.monogram || 'CP';
-    const ownedArtifact = currentIdentity && outputProduced
-      ? ownedArtifactMarkup(canvas, proof, currentEvent, currentIdentity)
-      : '';
+    const cursorStatus = currentIdentity
+      ? cursorPhase === 'artifact' ? 'Returned Nemotron specialist' : 'Nemotron specialist working'
+      : cursorRole;
     surface.dataset.signature = signature;
     surface.dataset.casepathSpecialist = role.id;
     surface.dataset.nemotronAgentId = currentIdentity ? currentEvent.actorId : '';
@@ -325,13 +338,13 @@
           <span class="v21-focus-task-label">Doing now</span>
           <h2>${esc(visibleTitle)}</h2>
           <p class="v21-focus-why"><span>Why it matters</span><strong>${esc(visibleWhy)}</strong></p>
-          <div class="v21-agent-cursor" id="v21AgentCursor" role="status" aria-label="${esc(`${cursorRole}: ${liveAction}`)}" data-action="${esc(liveAction)}" data-casepath-moment="${esc(moment)}" data-casepath-specialist="${esc(role.id)}" data-agent-id="${esc(currentIdentity ? currentEvent.actorId : '')}" data-agent-signature="${esc(currentIdentity?.signature || 'casepath')}" data-work-authority="${esc(liveAuthority)}" data-event-id="${esc(currentEvent.eventId)}" data-event-stage="${esc(currentEvent.stage)}" data-actor-type="${esc(currentEvent.actorType)}" data-actor-id="${esc(currentEvent.actorId)}" data-call-id="${esc(currentEvent.callId)}" data-event-status="${esc(currentEvent.status)}" data-output-artifact="${esc(currentEvent.outputArtifact)}">
+          <div class="v21-agent-cursor" id="v21AgentCursor" role="status" aria-label="${esc(`${cursorRole}: ${liveAction}`)}" data-action="${esc(liveAction)}" data-casepath-moment="${esc(moment)}" data-casepath-specialist="${esc(role.id)}" data-cursor-phase="${cursorPhase}" data-agent-id="${esc(currentIdentity ? currentEvent.actorId : '')}" data-agent-signature="${esc(currentIdentity?.signature || 'casepath')}" data-work-authority="${esc(liveAuthority)}" data-event-id="${esc(currentEvent.eventId)}" data-proof-event-id="${esc(rawProofEventId)}" data-event-stage="${esc(currentEvent.stage)}" data-actor-type="${esc(currentEvent.actorType)}" data-actor-id="${esc(currentEvent.actorId)}" data-call-id="${esc(currentEvent.callId)}" data-event-status="${esc(currentEvent.status)}" data-output-artifact="${esc(currentEvent.outputArtifact)}">
             <span class="v21-cursor-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 3.8v14.5l3.7-3.3 2.7 5.2 2.5-1.3-2.7-5.1 4.9-.7L5 3.8Z"/></svg><b>${esc(cursorMonogram)}</b></span>
             <span class="v21-cursor-action">${esc(currentIdentity?.shortLabel || liveAction)}</span>
-            <small><strong>${esc(currentIdentity ? 'Returned Nemotron specialist' : cursorRole)}</strong></small>
+            <small><strong>${esc(cursorStatus)}</strong></small>
           </div>
         </div>
-        ${ownedArtifact || `<div class="v21-focus-artifact"><span>${outputProduced ? 'Produced' : 'Output taking shape'}</span><strong>${esc(visibleOutput)}</strong></div>`}
+        ${ownedArtifact || `<div class="v21-focus-artifact"><span>${currentIdentity || !outputProduced ? 'Output taking shape' : 'Produced'}</span><strong>${esc(visibleOutput)}</strong></div>`}
       </div>
     `;
     positionAgentCursor(surface, canvas, moment);
@@ -427,7 +440,9 @@
     if (!cursor || !target) return;
     requestAnimationFrame(() => {
       if (!cursor.isConnected || !target.isConnected) return;
-      const activationKey = `${cursor.dataset.eventId || moment}:${cursor.dataset.agentId || 'casepath'}:${cursorTargetKey(target)}`;
+      const semanticEventId = cursor.dataset.eventId || cursor.dataset.proofEventId || moment;
+      const cursorPhase = cursor.dataset.cursorPhase || 'working';
+      const activationKey = `${semanticEventId}:${cursor.dataset.agentId || 'casepath'}:${cursorPhase}:${cursorTargetKey(target)}`;
       const elapsed = performance.now() - cursorMotion.activatedAt;
       if (cursorMotion.activationKey && cursorMotion.activationKey !== activationKey && elapsed < CURSOR_TARGET_MIN_HOLD_MS) {
         window.clearTimeout(cursorMotion.holdTimer);
@@ -457,14 +472,22 @@
       settleCursorTarget(target);
       if (cursorMotion.activationKey === activationKey) return;
       cursorMotion.activationKey = activationKey;
+      // A semantic activation may return after an intervening DOM frame. Keep
+      // the cursor positioned, but never replay its click or telemetry step.
+      if (cursorMotion.emittedActivationKeys.has(activationKey)) return;
+      cursorMotion.emittedActivationKeys.add(activationKey);
       cursorMotion.activatedAt = performance.now();
       window.dispatchEvent(new CustomEvent('casepath:cursor-step', { detail: {
         activationKey,
         moment,
         eventId: cursor.dataset.eventId || '',
+        proofEventId: cursor.dataset.proofEventId || '',
         actorType: cursor.dataset.actorType || '',
         agentId: cursor.dataset.agentId || '',
         signature: cursor.dataset.agentSignature || 'casepath',
+        phase: cursorPhase,
+        callId: cursor.dataset.callId || '',
+        outputArtifact: cursor.dataset.outputArtifact || '',
         target: cursorTargetKey(target),
         x,
         y,

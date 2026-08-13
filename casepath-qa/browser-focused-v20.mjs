@@ -1727,6 +1727,45 @@ function providerSingleFlightContractViolations(releaseContract, health, readine
   return issues;
 }
 
+function cursorSemanticContractViolations(cursorSteps, expectedSpineIds, production = false) {
+  const issues = [];
+  if (!cursorSteps.length) issues.push('no cursor steps emitted');
+  cursorSteps.forEach((step, index) => {
+    if (!step.activationKey || !step.target || !Number.isFinite(step.x) || !Number.isFinite(step.y)) issues.push(`${index}: incomplete semantic cursor key`);
+    if (step.actorType === 'nemotron_agent') {
+      if (!REQUIRED_NEMOTRON_AGENT_IDS.includes(step.agentId)) issues.push(`${index}: unrecognized model agent`);
+      if (step.signature !== REQUIRED_NEMOTRON_AGENT_SIGNATURES[step.agentId]?.signature) issues.push(`${index}: agent signature drift`);
+      if (!['working', 'artifact'].includes(step.phase)) issues.push(`${index}: model cursor phase is not explicit`);
+    } else if (step.agentId) issues.push(`${index}: non-agent inherited model identity`);
+    if (step.focus && (step.focus.focusIdCount !== 1 || step.focus.cursorIdCount !== 1 || step.focus.focusCount !== 1 || step.focus.cursorCount !== 1 || !step.focus.cursorInsideFocus)) issues.push(`${index}: cursor/focus multiplicity`);
+  });
+  const activations = cursorSteps.map(step => step.activationKey);
+  if (new Set(activations).size !== activations.length) issues.push('semantic cursor activation repeated');
+  for (const nodeId of expectedSpineIds) {
+    if (!cursorSteps.some(step => step.moment === 'process' && step.target.endsWith(`:${nodeId}`))) issues.push(`${nodeId}: cursor never followed graph step`);
+  }
+  if (!production) return issues;
+
+  const modelSteps = cursorSteps.filter(step => step.actorType === 'nemotron_agent');
+  if (!exactMembers([...new Set(modelSteps.map(step => step.agentId))], REQUIRED_NEMOTRON_AGENT_IDS)) issues.push('production cursor did not present exact six model identities');
+  if (!exactMembers([...new Set(modelSteps.map(step => step.signature))], Object.values(REQUIRED_NEMOTRON_AGENT_SIGNATURES).map(value => value.signature))) issues.push('production cursor signatures are not exact');
+  for (const agentId of REQUIRED_NEMOTRON_AGENT_IDS) {
+    const agentSteps = modelSteps.filter(step => step.agentId === agentId);
+    const artifactSteps = agentSteps.filter(step => step.phase === 'artifact');
+    if (artifactSteps.length !== 1) {
+      issues.push(`${agentId}: expected exactly one receipt-bound artifact phase`);
+      continue;
+    }
+    const step = artifactSteps[0];
+    const artifact = step.ownedArtifact;
+    if (!artifact || artifact.targetCount !== 1 || artifact.owner !== step.agentId || artifact.actorType !== 'nemotron_agent' || !nonemptyString(step.callId) || !nonemptyString(step.outputArtifact) || !nonemptyString(artifact.callId) || !nonemptyString(artifact.outputArtifact)) issues.push(`${step.agentId}: visible owned artifact is not exactly bound to its receipt`);
+    if (artifact?.requestedModel !== REQUESTED_NEMOTRON_MODEL || !EXACT_NEMOTRON_RESPONSE_MODELS.has(artifact?.responseModel)) issues.push(`${step.agentId}: visible owned artifact is not bound to the required Nemotron model receipt`);
+    if (!step.target.includes(`${step.agentId}:${artifact?.outputArtifact || ''}`)) issues.push(`${step.agentId}: cursor did not target its owned output artifact`);
+    if (step.callId !== artifact?.callId || step.outputArtifact !== artifact?.outputArtifact) issues.push(`${step.agentId}: cursor artifact phase is not bound to its emitted call/output identity`);
+  }
+  return issues;
+}
+
 function assertHealthRuntimeContract(health, releaseRuntime) {
   const runtime = health.agentic_runtime;
   if (!isProductionJourney()) {
@@ -2273,6 +2312,9 @@ async function execute() {
         actorType: detail.actorType || '',
         agentId: detail.agentId || '',
         signature: detail.signature || '',
+        phase: detail.phase || '',
+        callId: detail.callId || '',
+        outputArtifact: detail.outputArtifact || '',
         target: detail.target || '',
         x: detail.x,
         y: detail.y,
@@ -2483,7 +2525,7 @@ async function execute() {
   const declaredAgentIds = [...identityMapSource.matchAll(/^\s{4}([a-z_]+): \{/gm)].map(match => match[1]);
   check('Cursor identities are the exact six call-bound Nemotron agents with six distinct restrained signatures', identitySourceIssues.length === 0 && exactMembers(declaredAgentIds, REQUIRED_NEMOTRON_AGENT_IDS) && new Set(Object.values(REQUIRED_NEMOTRON_AGENT_SIGNATURES).map(value => value.monogram)).size === 6 && new Set(Object.values(REQUIRED_NEMOTRON_AGENT_SIGNATURES).map(value => value.signature)).size === 6, JSON.stringify({ declaredAgentIds, identitySourceIssues }));
   check('Seven visible chapters remain presentation phases with explicit execution authority, not a synthetic seven-agent team', REQUIRED_PRESENTATION_PHASE_LABELS.every(fragment => specialistFocusSource.includes(`label: '${fragment}'`)) && ['dataset.casepathSpecialist', 'dataset.workAuthority'].every(fragment => specialistFocusSource.includes(fragment)));
-  check('Cursor motion is keyed to semantic event/agent/target identity and emits one inspectable step without class-mutation feedback', specialistFocusSource.includes('const activationKey =') && specialistFocusSource.includes("cursor.dataset.eventId || moment") && specialistFocusSource.includes("cursor.dataset.agentId || 'casepath'") && specialistFocusSource.includes('cursorTargetKey(target)') && specialistFocusSource.includes("new CustomEvent('casepath:cursor-step'") && specialistFocusSource.includes("['is-clicking', 'v21-agent-target']") && specialistFocusSource.includes("attributeOldValue: true") && !specialistFocusSource.includes("requestAnimationFrame(() => cursor.classList.add('is-clicking'))"));
+  check('Cursor motion is keyed to semantic event/agent/phase/target identity, suppresses replay, and emits one inspectable step without class-mutation feedback', specialistFocusSource.includes('const activationKey =') && specialistFocusSource.includes("cursor.dataset.eventId || cursor.dataset.proofEventId || moment") && specialistFocusSource.includes("cursor.dataset.agentId || 'casepath'") && specialistFocusSource.includes('cursorPhase') && specialistFocusSource.includes('emittedActivationKeys.has(activationKey)') && specialistFocusSource.includes('cursorTargetKey(target)') && specialistFocusSource.includes("new CustomEvent('casepath:cursor-step'") && specialistFocusSource.includes("['is-clicking', 'v21-agent-target']") && specialistFocusSource.includes("attributeOldValue: true") && !specialistFocusSource.includes("requestAnimationFrame(() => cursor.classList.add('is-clicking'))"));
   check('Every successful call-bound specialist owns one receipt-bound artifact target instead of relabelling an unrelated canvas', ['function ownedArtifactMarkup(', 'data-agent-artifact-target="true"', 'data-agent-artifact-owner=', 'data-actor-type=', 'data-call-id=', 'data-output-artifact=', 'data-requested-model=', 'data-response-model=', "event.actorType !== 'nemotron_agent'", 'Official-law tabs remain a separate deterministic cached registry view.'].every(fragment => specialistFocusSource.includes(fragment)));
 
   await page.waitForFunction(expected => document.querySelectorAll('.attachment-row').length === expected, demo.claim.artifacts.length, { timeout: 120000 });
@@ -2792,32 +2834,7 @@ async function execute() {
   check('Process graph is built once in returned order with one focal node, inspectable law/evidence/reasoning provenance, semantic holds, one selected branch, and a completion receipt', graphStepIssues.length === 0, JSON.stringify({ expectedSpineIds, graphSteps, processFrameHold, graphStepIssues }));
 
   const cursorSteps = await page.evaluate(() => window.__casepathCursorSteps || []);
-  const cursorStepIssues = [];
-  if (!cursorSteps.length) cursorStepIssues.push('no cursor steps emitted');
-  cursorSteps.forEach((step, index) => {
-    if (!step.activationKey || !step.target || !Number.isFinite(step.x) || !Number.isFinite(step.y)) cursorStepIssues.push(`${index}: incomplete semantic cursor key`);
-    if (step.actorType === 'nemotron_agent') {
-      if (!REQUIRED_NEMOTRON_AGENT_IDS.includes(step.agentId)) cursorStepIssues.push(`${index}: unrecognized model agent`);
-      if (step.signature !== REQUIRED_NEMOTRON_AGENT_SIGNATURES[step.agentId]?.signature) cursorStepIssues.push(`${index}: agent signature drift`);
-    } else if (step.agentId) cursorStepIssues.push(`${index}: non-agent inherited model identity`);
-    if (step.focus && (step.focus.focusIdCount !== 1 || step.focus.cursorIdCount !== 1 || step.focus.focusCount !== 1 || step.focus.cursorCount !== 1 || !step.focus.cursorInsideFocus)) cursorStepIssues.push(`${index}: cursor/focus multiplicity`);
-  });
-  const cursorActivations = cursorSteps.map(step => step.activationKey);
-  if (new Set(cursorActivations).size !== cursorActivations.length) cursorStepIssues.push('semantic cursor activation repeated');
-  for (const nodeId of expectedSpineIds) {
-    if (!cursorSteps.some(step => step.moment === 'process' && step.target.endsWith(`:${nodeId}`))) cursorStepIssues.push(`${nodeId}: cursor never followed graph step`);
-  }
-  if (isProductionJourney()) {
-    const modelCursorSteps = cursorSteps.filter(step => step.actorType === 'nemotron_agent');
-    if (!exactMembers(modelCursorSteps.map(step => step.agentId), REQUIRED_NEMOTRON_AGENT_IDS)) cursorStepIssues.push('production cursor did not present exact six model identities');
-    if (!exactMembers(modelCursorSteps.map(step => step.signature), Object.values(REQUIRED_NEMOTRON_AGENT_SIGNATURES).map(value => value.signature))) cursorStepIssues.push('production cursor signatures are not exact');
-    for (const step of modelCursorSteps) {
-      const artifact = step.ownedArtifact;
-      if (!artifact || artifact.targetCount !== 1 || artifact.owner !== step.agentId || artifact.actorType !== 'nemotron_agent' || artifact.callId === '' || artifact.outputArtifact === '') cursorStepIssues.push(`${step.agentId}: visible owned artifact is not exactly bound to its receipt`);
-      if (artifact?.requestedModel !== REQUESTED_NEMOTRON_MODEL || !EXACT_NEMOTRON_RESPONSE_MODELS.has(artifact?.responseModel)) cursorStepIssues.push(`${step.agentId}: visible owned artifact is not bound to the required Nemotron model receipt`);
-      if (!step.target.includes(`${step.agentId}:${artifact?.outputArtifact || ''}`)) cursorStepIssues.push(`${step.agentId}: cursor did not target its owned output artifact`);
-    }
-  }
+  const cursorStepIssues = cursorSemanticContractViolations(cursorSteps, expectedSpineIds, isProductionJourney());
   const cursorTargetHolds = cursorSteps.slice(1).map((step, index) => step.at - cursorSteps[index].at);
   if (cursorTargetHolds.some(value => value < MIN_CURSOR_TARGET_HOLD_MS)) cursorStepIssues.push(`cursor target hold ${JSON.stringify(cursorTargetHolds)}`);
   const focusViolations = await page.evaluate(() => window.__casepathFocusViolations || []);
@@ -3853,6 +3870,38 @@ async function runContractSelfTest() {
   if (!symlinkedParentRejected) throw new Error('Symlinked QA output parent fixture was accepted');
   await assertRunReadSessionIsolation();
   await assertMemoryReuseRendererDeterminism();
+  const cursorFocus = { focusIdCount: 1, cursorIdCount: 1, focusCount: 1, cursorCount: 1, cursorInsideFocus: true };
+  const productionCursorFixture = REQUIRED_NEMOTRON_AGENT_IDS.flatMap((agentId, index) => {
+    const callId = `modelcall_${String(index + 1).padStart(16, '0')}`;
+    const outputArtifact = `artifact_${index + 1}`;
+    const base = {
+      moment: 'verify', actorType: 'nemotron_agent', agentId,
+      signature: REQUIRED_NEMOTRON_AGENT_SIGNATURES[agentId].signature,
+      callId, outputArtifact, x: 800 + index, y: 300 + index, focus: cursorFocus,
+    };
+    return [
+      { ...base, phase: 'working', activationKey: `event-${index}-working:${agentId}:working`, target: `div:working-${index}`, ownedArtifact: null },
+      { ...base, phase: 'artifact', activationKey: `event-${index}-artifact:${agentId}:${outputArtifact}`, target: `section:${agentId}:${outputArtifact}`, ownedArtifact: { owner: agentId, actorType: 'nemotron_agent', callId, outputArtifact, requestedModel: REQUESTED_NEMOTRON_MODEL, responseModel: REQUESTED_NEMOTRON_MODEL, targetCount: 1 } },
+    ];
+  });
+  const positiveCursorIssues = cursorSemanticContractViolations(productionCursorFixture, [], true);
+  if (positiveCursorIssues.length) throw new Error(`Positive six-agent cursor phase fixture failed: ${JSON.stringify(positiveCursorIssues)}`);
+  const duplicateCursorFixture = structuredClone(productionCursorFixture);
+  duplicateCursorFixture.at(-1).activationKey = duplicateCursorFixture.at(-2).activationKey;
+  if (!cursorSemanticContractViolations(duplicateCursorFixture, [], true).includes('semantic cursor activation repeated')) throw new Error('Repeated semantic cursor activation fixture was not rejected');
+  const missingArtifactCursorFixture = structuredClone(productionCursorFixture);
+  missingArtifactCursorFixture.find(step => step.agentId === 'evidence_checklist' && step.phase === 'artifact').ownedArtifact = null;
+  if (!cursorSemanticContractViolations(missingArtifactCursorFixture, [], true).some(issue => issue.includes('evidence_checklist: visible owned artifact'))) throw new Error('Unbound agent artifact cursor fixture was not rejected');
+  const missingReceiptIdentityFixture = structuredClone(productionCursorFixture);
+  const missingReceiptStep = missingReceiptIdentityFixture.find(step => step.agentId === 'process_decision_mapping' && step.phase === 'artifact');
+  delete missingReceiptStep.callId;
+  delete missingReceiptStep.outputArtifact;
+  delete missingReceiptStep.ownedArtifact.callId;
+  delete missingReceiptStep.ownedArtifact.outputArtifact;
+  if (!cursorSemanticContractViolations(missingReceiptIdentityFixture, [], true).some(issue => issue.includes('process_decision_mapping: visible owned artifact'))) throw new Error('Missing cursor receipt identity fixture was not rejected');
+  const mismatchedReceiptIdentityFixture = structuredClone(productionCursorFixture);
+  mismatchedReceiptIdentityFixture.find(step => step.agentId === 'final_claim_brief_audit' && step.phase === 'artifact').callId = 'modelcall_ffffffffffffffff';
+  if (!cursorSemanticContractViolations(mismatchedReceiptIdentityFixture, [], true).some(issue => issue.includes('final_claim_brief_audit: cursor artifact phase'))) throw new Error('Mismatched cursor receipt identity fixture was not rejected');
   if (dtoHash({ z: 'ü', a: [{ k: 0.91 }, true, null] }) !== '3d745913ce5b8f5555065b544f018be38bd43e9e5bfe1eca86c1d4f25dda68dd') throw new Error('Compact sorted DTO hashing diverges from the Python release contract');
   const splitLeaseSource = 'Tenant\nAlex Morgan, Feldbergstrasse 114, 4057 Basel';
   if (!exactNormalizedGroundingQuote(splitLeaseSource, 'Tenant Alex Morgan, Feldbergstrasse 114, 4057 Basel')) throw new Error('Normalized grounding did not preserve the backend whitespace contract');
