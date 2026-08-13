@@ -527,8 +527,8 @@
     {
       "executable": false,
       "path": "casepath/assets/artifact-canvas.js",
-      "sha256": "ca936e01ed4dd5b07c6ed74c758ce69eac208a413827cdedf8cbdd2a1975f86f",
-      "size_bytes": 117446
+      "sha256": "60fa6ed39604c4ebe656dad808047ce8c3e3787aa2493feec81abf08e6dcd1bd",
+      "size_bytes": 117448
     },
     {
       "executable": false,
@@ -755,7 +755,7 @@
     {
       "executable": false,
       "path": "casepath/index.html",
-      "sha256": "b70e09dd166f45157b17df780dff99e8f2a7aafcfb2f0f34814199b03c655f13",
+      "sha256": "e85ad320f0de4ef8979d17e25b1d47a8c4d0127f9ed942b9872fa3c6b5db3f35",
       "size_bytes": 10611
     },
     {
