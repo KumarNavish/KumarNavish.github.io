@@ -353,6 +353,16 @@ def test_cursor_exposes_exact_six_call_bound_agents_without_synthetic_seven() ->
     assert "@keyframes v21" not in focus_css
     assert "requestAnimationFrame(() => cursor.classList.add('is-clicking'))" not in focus
     assert "const activationKey =" in focus
+    assert "const rawProofEventId = currentEvent.eventId || '';" in focus
+    assert "const cursorPhase = ownedArtifact ? 'artifact' : 'working';" in focus
+    assert 'data-cursor-phase="${cursorPhase}"' in focus
+    assert 'data-proof-event-id="${esc(rawProofEventId)}"' in focus
+    assert "cursor.dataset.eventId || cursor.dataset.proofEventId || moment" in focus
+    assert "cursorMotion.emittedActivationKeys.has(activationKey)" in focus
+    assert "cursorMotion.emittedActivationKeys.add(activationKey)" in focus
+    assert "phase: cursorPhase" in focus
+    assert "callId: cursor.dataset.callId || ''" in focus
+    assert "outputArtifact: cursor.dataset.outputArtifact || ''" in focus
     assert "cursorTargetKey(target)" in focus
     assert "casepath:cursor-step" in focus
     assert "cursorDecorationMutation" in focus
@@ -430,7 +440,7 @@ def test_later_result_keeps_returned_comparison_hashes_visible() -> None:
     assert '.stage-canvas:focus-visible' in focus_css
     assert 'v20-artifact-header:has([data-v20-open-documents])' in focus_css
     assert 'justify-content:flex-end' in focus_css
-    assert 'assets/live-v20-focus.js?v=20.0.5' in index
+    assert 'assets/live-v20-focus.js?v=20.0.6' in index
     assert "const CURSOR_TARGET_MIN_HOLD_MS = 220;" in focus_js
     assert "elapsed < CURSOR_TARGET_MIN_HOLD_MS" in focus_js
     assert "const finalComparison = page.locator('#laterResult .final-proof');" in browser_gate
