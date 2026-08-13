@@ -408,7 +408,9 @@ def test_later_result_keeps_returned_comparison_hashes_visible() -> None:
         and "display:none!important" in line
     )
     assert ".final-proof" not in hidden_later_result_rule
-    assert 'assets/live-v20-focus.css?v=20.0.6' in index
+    assert 'assets/live-v20-focus.css?v=20.0.7' in index
+    assert 'v20-artifact-header:has([data-v20-open-documents])' in focus_css
+    assert 'justify-content:flex-end' in focus_css
     assert 'assets/live-v20-focus.js?v=20.0.5' in index
     assert "const CURSOR_TARGET_MIN_HOLD_MS = 220;" in focus_js
     assert "elapsed < CURSOR_TARGET_MIN_HOLD_MS" in focus_js

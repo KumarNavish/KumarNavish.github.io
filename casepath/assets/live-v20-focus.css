@@ -376,6 +376,14 @@ body[data-casepath-moment="research"] .stage-shell>.stage-title,body[data-casepa
 html[data-casepath-release="20.0.0"] .v17-progress-focus,
 html[data-casepath-release="20.0.0"] .v18-progress-focus,
 html[data-casepath-release="20.0.0"] .v20-artifact-header{display:none!important}
+html[data-casepath-release="20.0.0"] body[data-casepath-moment="ready"] .v20-artifact-header:has([data-v20-open-documents]){
+  display:flex!important;
+  justify-content:flex-end;
+  margin:0 0 8px;
+  padding:0;
+  border:0;
+}
+html[data-casepath-release="20.0.0"] body[data-casepath-moment="ready"] .v20-artifact-header:has([data-v20-open-documents])>div:first-child{display:none}
 html[data-casepath-release="20.0.0"] .stage-kicker{display:none}
 html[data-casepath-release="20.0.0"] .stage-title{max-width:760px;margin:12px 0 8px;font-size:clamp(25px,2.5vw,34px);line-height:1.08;letter-spacing:-.04em}
 html[data-casepath-release="20.0.0"] .stage-intro{max-width:700px;font-size:12px;line-height:1.5}
