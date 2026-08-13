@@ -2973,6 +2973,7 @@ async function execute() {
         agentId: detail.agentId || '',
         sourceKind: detail.sourceKind || '',
         sourceId: detail.sourceId || '',
+        factId: detail.factId || '',
         locatorId: detail.locatorId || '',
         found: detail.found || '',
         at: performance.now(),
@@ -4633,6 +4634,17 @@ async function runContractSelfTest() {
   const branchVisualFixture = branchInspectionFixture.map(item => ({ nodeId: item.nodeId, branchId: item.branchId, changeId: item.changeId, eventId: item.eventId, agentId: item.agentId, at: item.at + 1200 }));
   const inspectionCursorFixture = [...sourceInspectionFixture, ...branchInspectionFixture].map(item => ({ changeId: item.changeId, eventId: item.eventId, agentId: item.agentId, targetId: item.sourceId, phase: 'click' }));
   if (sourceInspectionContractViolations([...sourceInspectionFixture, ...branchInspectionFixture], processProjectionFixture, branchVisualFixture, inspectionCursorFixture, inspectionRunFixture, true).length) throw new Error('Valid source-before-process inspection fixture was rejected');
+  const claimSourceRunFixture = structuredClone(inspectionRunFixture);
+  claimSourceRunFixture.process.nodes.find(node => node.node_id === 'intake').fact_ids = ['fact_intake_source'];
+  claimSourceRunFixture.facts = [{ fact_id: 'fact_intake_source', source_refs: [{ artifact_id: 'art_lease', locator_kind: 'text_quote', page: 1, excerpt: 'Residential Lease Agreement' }] }];
+  const claimSourceInspectionFixture = structuredClone(sourceInspectionFixture);
+  Object.assign(claimSourceInspectionFixture[0], { sourceKind: 'claim-source', sourceId: 'art_lease', factId: 'fact_intake_source', locatorId: 'source:art_lease:page:1:quote:Residential Lease Agreement', found: 'Residential Lease Agreement' });
+  const claimSourceCursorFixture = structuredClone(inspectionCursorFixture);
+  claimSourceCursorFixture[0].targetId = 'art_lease';
+  if (sourceInspectionContractViolations([...claimSourceInspectionFixture, ...branchInspectionFixture], processProjectionFixture, branchVisualFixture, claimSourceCursorFixture, claimSourceRunFixture, true).length) throw new Error('Valid claim-source inspection fixture was rejected');
+  const factlessClaimSourceFixture = structuredClone(claimSourceInspectionFixture);
+  factlessClaimSourceFixture[0].factId = '';
+  if (!sourceInspectionContractViolations([...factlessClaimSourceFixture, ...branchInspectionFixture], processProjectionFixture, branchVisualFixture, claimSourceCursorFixture, claimSourceRunFixture, true).some(issue => issue.includes('not returned by the node basis'))) throw new Error('Factless claim-source inspection fixture was accepted');
   const fabricatedInspectionFixture = structuredClone(sourceInspectionFixture);
   fabricatedInspectionFixture[0].sourceKind = 'fabricated-source';
   if (!sourceInspectionContractViolations([...fabricatedInspectionFixture, ...branchInspectionFixture], processProjectionFixture, branchVisualFixture, inspectionCursorFixture, inspectionRunFixture, true).some(issue => issue.includes('not returned by the node basis'))) throw new Error('Fabricated source-inspection fixture was accepted');
