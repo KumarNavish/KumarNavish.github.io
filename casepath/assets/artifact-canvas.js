@@ -1863,6 +1863,9 @@
         } }));
       }
     } else if (action === 'open-reference') {
+      const locatorId = button.dataset.sourceLocatorId || '';
+      if (!detail.precedentId || locatorId !== `reference:${detail.precedentId}`) return;
+      setActiveSourceLocator(locatorId);
       const index = state.precedents.findIndex(item => item.claim_id === detail.precedentId);
       if (index >= 0) document.dispatchEvent(new CustomEvent('casepath:open-precedent', { detail: { index } }));
     } else if (action === 'request-review') {
