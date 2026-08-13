@@ -341,8 +341,8 @@
     {
       "executable": false,
       "path": "casepath-qa/browser-focused-v20.mjs",
-      "sha256": "adf6c0c9195270a736b00c6912af2b59b33605e140e1b46d78f2885d8cc73366",
-      "size_bytes": 486367
+      "sha256": "9cc465524b8b08643e9289983537df11c19e7910be3d4f0b0b107436c2c9a14b",
+      "size_bytes": 487838
     },
     {
       "executable": false,
@@ -521,14 +521,14 @@
     {
       "executable": false,
       "path": "casepath/assets/artifact-canvas.css",
-      "sha256": "a5278115fbd28e338a9be96241c7d48bcbd69a7262897dc3ddfe48084966cf09",
-      "size_bytes": 28448
+      "sha256": "0a060aaa3d288d0c2f40ea78307fabf042baae63b23ee0673d8dff1c9d7e79dd",
+      "size_bytes": 29815
     },
     {
       "executable": false,
       "path": "casepath/assets/artifact-canvas.js",
-      "sha256": "d4c1eed780e8b3841460c0cc64007a83fc3787fd1141b51fbd805fd1a9f7eebb",
-      "size_bytes": 105906
+      "sha256": "302f77dfb0b19b4e80ce65585bc6a9da184de8e5ff36707cc23ca224d483dc85",
+      "size_bytes": 112935
     },
     {
       "executable": false,
@@ -629,8 +629,8 @@
     {
       "executable": false,
       "path": "casepath/assets/live-v16.js",
-      "sha256": "3ef8ba0920db9575dc64cfebaf786e9709c24edd0f8f75155b98a572eef038ad",
-      "size_bytes": 164585
+      "sha256": "9412158d63c2d5c83b777210b12dc38160005eeb37354c12ec53c00c6edfc2f3",
+      "size_bytes": 165919
     },
     {
       "executable": false,
@@ -959,8 +959,8 @@
     {
       "executable": false,
       "path": "casepath/tools/test_casepath_release.py",
-      "sha256": "927f3174701f877e6e33eee306e48cb0df382ce5804c7a2a26dc1e1b0f47f2e5",
-      "size_bytes": 308123
+      "sha256": "b3cd5fad2623b7b29dfab934d94827088973a1688fae1b28cce9c8420c9a7432",
+      "size_bytes": 309811
     },
     {
       "executable": false,
@@ -985,7 +985,7 @@
   "gates": [
     {
       "path": "casepath-qa/browser-focused-v20.mjs",
-      "sha256": "adf6c0c9195270a736b00c6912af2b59b33605e140e1b46d78f2885d8cc73366"
+      "sha256": "9cc465524b8b08643e9289983537df11c19e7910be3d4f0b0b107436c2c9a14b"
     },
     {
       "path": "casepath-qa/browser-guided-v13-smoke.mjs",
