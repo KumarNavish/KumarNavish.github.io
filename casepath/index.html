@@ -7,6 +7,8 @@
   <meta name="theme-color" content="#ffffff">
   <meta name="casepath-release" content="20.0.0">
   <title>CasePath — Analyse one claim</title>
+  <link rel="preconnect" href="https://casepath-agentic-api.onrender.com" crossorigin>
+  <link rel="dns-prefetch" href="//casepath-agentic-api.onrender.com">
   <link rel="stylesheet" href="assets/live-v16.css?v=20.0.0">
   <link rel="stylesheet" href="assets/live-v17.css">
   <link rel="stylesheet" href="assets/live-v17-continuity.css?v=20.0.0">
@@ -25,8 +27,9 @@
       <span>CasePath</span>
     </a>
     <div class="appbar-context">
-      <strong id="headerClaimTitle">Recurring mould</strong>
-      <span id="headerClaimId">Opening claim…</span>
+      <strong id="headerClaimTitle">Bedroom condition keeps returning</strong>
+      <span id="headerClaimId">DEF-027-E0-DEMO · EN · received 1 Aug 2026, 11:03</span>
+      <span class="visually-hidden">Opening claim…</span>
     </div>
     <button class="text-button" id="openAudit" type="button" disabled>How it worked</button>
   </header>
@@ -44,7 +47,26 @@
       </header>
       <div class="submission-scroll" id="submissionContent">
         <article class="customer-email" id="customerEmail" aria-label="Customer email" aria-busy="true">
-          <div class="v20-source-skeleton" aria-hidden="true">
+          <header class="email-head">
+            <h2 class="email-subject">Bedroom condition keeps returning</h2>
+            <div class="email-meta">
+              <strong>From</strong><span>Alex Morgan</span>
+              <strong>Address</strong><span>Feldbergstrasse 114, 4057 Basel</span>
+              <strong>Policy</strong><span>LP-2024-08317</span>
+              <strong>Received</strong><span>1 Aug 2026, 11:03</span>
+            </div>
+          </header>
+          <div class="email-body">Hello,
+
+The mould in the external corner of our bedroom keeps coming back. I first noticed it around 20 March. We clean it and it returns. The radiator works and we air the room every morning and evening.
+
+I notified the property manager by email on 15 July. They replied that the cause was insufficient ventilation and said they would not arrange an inspection. I disagree because the problem keeps returning. There are no current health symptoms and no urgent deadline. I can provide access after 17:30.
+
+Please tell me what should happen next. I want the cause clarified and the defect repaired.
+
+Kind regards,
+Alex Morgan</div>
+          <div class="v20-source-skeleton" aria-hidden="true" hidden>
             <span class="v20-skeleton-line medium"></span>
             <span class="v20-skeleton-line short"></span>
             <span class="v20-skeleton-line medium"></span>
@@ -52,9 +74,39 @@
           </div>
         </article>
         <section class="attachments-block" aria-labelledby="attachmentsHeading">
-          <header><h2 id="attachmentsHeading">Attachments</h2><span id="attachmentCount">Opening files…</span></header>
+          <header><h2 id="attachmentsHeading">Attachments</h2><span id="attachmentCount">6 files</span></header>
           <div class="attachment-list" id="attachmentList">
-            <div class="v20-attachment-skeleton" aria-hidden="true">
+            <button class="attachment-row" type="button" data-artifact-id="art_lease" aria-disabled="true">
+              <span class="attachment-thumb"><span>PDF</span></span>
+              <span><span class="attachment-title">Residential lease agreement</span><span class="attachment-meta">lease-agreement.pdf · PDF · 6 pages</span></span>
+              <span class="attachment-open">Open</span>
+            </button>
+            <button class="attachment-row" type="button" data-artifact-id="art_notification" aria-disabled="true">
+              <span class="attachment-thumb"><span>EML</span></span>
+              <span><span class="attachment-title">Email notifying the property manager</span><span class="attachment-meta">notification-email.eml · Email</span></span>
+              <span class="attachment-open">Open</span>
+            </button>
+            <button class="attachment-row" type="button" data-artifact-id="art_management_reply" aria-disabled="true">
+              <span class="attachment-thumb"><span>EML</span></span>
+              <span><span class="attachment-title">Management reply</span><span class="attachment-meta">management-reply.eml · Email</span></span>
+              <span class="attachment-open">Open</span>
+            </button>
+            <button class="attachment-row" type="button" data-artifact-id="art_photo" aria-disabled="true">
+              <span class="attachment-thumb"><span>IMG</span></span>
+              <span><span class="attachment-title">Bedroom photograph</span><span class="attachment-meta">bedroom-corner-2026-07-27.jpg · Image</span></span>
+              <span class="attachment-open">Open</span>
+            </button>
+            <button class="attachment-row" type="button" data-artifact-id="art_timeline" aria-disabled="true">
+              <span class="attachment-thumb"><span>PDF</span></span>
+              <span><span class="attachment-title">Defect timeline</span><span class="attachment-meta">defect-timeline.pdf · PDF · 2 pages</span></span>
+              <span class="attachment-open">Open</span>
+            </button>
+            <button class="attachment-row" type="button" data-artifact-id="art_delivery" aria-disabled="true">
+              <span class="attachment-thumb"><span>PDF</span></span>
+              <span><span class="attachment-title">Email delivery receipt</span><span class="attachment-meta">delivery-receipt.pdf · PDF</span></span>
+              <span class="attachment-open">Open</span>
+            </button>
+            <div class="v20-attachment-skeleton" aria-hidden="true" hidden>
               <div class="v20-skeleton-row"><span class="v20-skeleton-thumb"></span><span><span class="v20-skeleton-line medium"></span><span class="v20-skeleton-line short"></span></span></div>
               <div class="v20-skeleton-row"><span class="v20-skeleton-thumb"></span><span><span class="v20-skeleton-line medium"></span><span class="v20-skeleton-line short"></span></span></div>
               <div class="v20-skeleton-row"><span class="v20-skeleton-thumb"></span><span><span class="v20-skeleton-line medium"></span><span class="v20-skeleton-line short"></span></span></div>
