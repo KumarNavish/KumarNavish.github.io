@@ -653,7 +653,11 @@ body[data-casepath-artifact-canvas="ready"] .v21-source-summary-toggle{
   left:2%;
   bottom:1%;
   width:min(320px,30%);
+  pointer-events:none;
 }
+
+.ac-spatial-detail .ac-grounding-toggle,
+.ac-spatial-detail .ac-grounding-disclosure button{pointer-events:auto}
 
 .ac-spatial-node-detail{
   padding-left:13px;
