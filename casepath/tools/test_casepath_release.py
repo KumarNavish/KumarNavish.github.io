@@ -6601,6 +6601,60 @@ def test_dynamic_runtime_acceptance_allows_parallel_warm_completion_order_swap(
     )
 
 
+@pytest.mark.parametrize(
+    "surface",
+    ["cold_audit", "warm_audit", "cold_ledger", "warm_ledger", "cache_lineage"],
+)
+def test_dynamic_runtime_acceptance_rejects_non_topological_agent_order(
+    surface: str,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    collections = {
+        "cold_audit": retained["flagship-run.json"]["agent_orchestration"]["agents"],
+        "warm_audit": retained["isolation-run.json"]["agent_orchestration"]["agents"],
+        "cold_ledger": retained["flagship-cold-model-ledger.json"]["items"],
+        "warm_ledger": retained["isolation-model-ledger.json"]["items"][6:],
+        "cache_lineage": retained["flagship-cache-lineage.json"]["lineage"],
+    }
+    collections[surface].reverse()
+
+    if surface == "cache_lineage":
+        with pytest.raises(
+            release_tool.VerificationError,
+            match="cache-lineage receipt",
+        ):
+            release_tool.verify_dynamic_runtime_acceptance(
+                contract,
+                report,
+                manifest,
+                retained,
+                evidence_manifest_bytes=manifest_bytes,
+            )
+    else:
+        with pytest.raises(
+            release_tool.VerificationError,
+            match="violates the execution topology",
+        ):
+            release_tool._verify_cold_warm_model_pair(
+                cold_run=retained["flagship-run.json"],
+                warm_run=retained["isolation-run.json"],
+                cold_items=(
+                    collections["cold_ledger"]
+                    if surface == "cold_ledger"
+                    else retained["flagship-cold-model-ledger.json"]["items"]
+                ),
+                warm_items=(
+                    collections["warm_ledger"]
+                    if surface == "warm_ledger"
+                    else retained["isolation-model-ledger.json"]["items"][6:]
+                ),
+                label="Adversarial cache pair",
+            )
+
+
 @pytest.mark.parametrize("surface", ["warm_audit", "warm_ledger", "cache_lineage"])
 @pytest.mark.parametrize("mutation", ["duplicate", "missing", "foreign"])
 def test_dynamic_runtime_acceptance_rejects_non_exact_warm_agent_membership(

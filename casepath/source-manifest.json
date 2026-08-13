@@ -923,8 +923,8 @@
     {
       "executable": false,
       "path": "casepath/tools/casepath_release.py",
-      "sha256": "f02097bea0521669971a0a8afd18ae3f86c04124419036c056ad7b3c0f2bd93c",
-      "size_bytes": 503399
+      "sha256": "6b21fe32d45576c1292acd5bc321affef6837566414497075ca0df50db21d93a",
+      "size_bytes": 504299
     },
     {
       "executable": false,
@@ -935,8 +935,8 @@
     {
       "executable": false,
       "path": "casepath/tools/test_casepath_release.py",
-      "sha256": "2aaa8f0c5d9fd6fae910886a2676d495b177301cb0e5d01d0f330fdda772410d",
-      "size_bytes": 296111
+      "sha256": "ed667a6f3a1d6507ff8edcc0e48cdc3c018892bbab1a33758837317c06dfb353",
+      "size_bytes": 298185
     },
     {
       "executable": false,
