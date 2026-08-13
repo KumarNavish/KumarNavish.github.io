@@ -341,8 +341,8 @@
     {
       "executable": false,
       "path": "casepath-qa/browser-focused-v20.mjs",
-      "sha256": "9d871e3dc9e9c62ae2677e28653c69455571de17d578f768573bfc21224ddbbb",
-      "size_bytes": 487867
+      "sha256": "480df13ccbaec3bef8bb56afe26a9e1149038f503cfadeb8d560f371600c0b0c",
+      "size_bytes": 502186
     },
     {
       "executable": false,
@@ -521,14 +521,14 @@
     {
       "executable": false,
       "path": "casepath/assets/artifact-canvas.css",
-      "sha256": "82479c0b7a993be930a722dbf46eda5e6ebfbd501a5a52b27b6601465385cbcc",
-      "size_bytes": 48891
+      "sha256": "0503c3cc0dbd51a954d7bfbf71a489234fc2d84270de90ddcbb99dae39373f59",
+      "size_bytes": 54874
     },
     {
       "executable": false,
       "path": "casepath/assets/artifact-canvas.js",
-      "sha256": "5a8dfb0bbd86674da1625abb2e898a639f624fd88623c05f41a21a088768459b",
-      "size_bytes": 117938
+      "sha256": "6c6f246e2eeb9e44af325172ad51ac96ae07992e901b2e95d902701c6cad130e",
+      "size_bytes": 131903
     },
     {
       "executable": false,
@@ -629,8 +629,8 @@
     {
       "executable": false,
       "path": "casepath/assets/live-v16.js",
-      "sha256": "23ec36ed5ae93e667cb4aa2665e0ddf74d9423cd11a6191630d6e03ad1e62af3",
-      "size_bytes": 166545
+      "sha256": "2c871ee068defecae24693a5ab3c3775cf6b45560e2c5afbafc3ca5ca76c66c6",
+      "size_bytes": 169204
     },
     {
       "executable": false,
@@ -755,7 +755,7 @@
     {
       "executable": false,
       "path": "casepath/index.html",
-      "sha256": "f041fdf45904c3318036a726e1e233ed6988825e085c0d63f5ef991a9a8c16e2",
+      "sha256": "f1d1d771977c11793b67ff562a3c071e22432430a602cef126991901b19e7896",
       "size_bytes": 14526
     },
     {
@@ -959,8 +959,8 @@
     {
       "executable": false,
       "path": "casepath/tools/test_casepath_release.py",
-      "sha256": "f8168b46497625ff363c3c1fa492119ce61de9265322f4e4e178d25f415bbc1c",
-      "size_bytes": 311500
+      "sha256": "d00484b9a6376018a8a92f9c76e51090b805fb6dcffee4afa260887f012b201e",
+      "size_bytes": 316125
     },
     {
       "executable": false,
@@ -985,7 +985,7 @@
   "gates": [
     {
       "path": "casepath-qa/browser-focused-v20.mjs",
-      "sha256": "9d871e3dc9e9c62ae2677e28653c69455571de17d578f768573bfc21224ddbbb"
+      "sha256": "480df13ccbaec3bef8bb56afe26a9e1149038f503cfadeb8d560f371600c0b0c"
     },
     {
       "path": "casepath-qa/browser-guided-v13-smoke.mjs",

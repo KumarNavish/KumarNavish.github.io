@@ -7,13 +7,17 @@
   // Provider work may finish quickly, but each user-facing chapter must remain readable.
   // These timings pace only the presentation of returned events; they never delay or
   // change the run, its provider calls, or its persisted result.
-  const WORKING_FRAME_MS = 2400;
-  const ARTIFACT_FRAME_MS = 5600;
+  const WORKING_FRAME_MS = 2300;
+  const ARTIFACT_FRAME_MS = 5500;
+  const CONCISE_WORKING_FRAME_MS = 1000;
+  const CONCISE_ARTIFACT_FRAME_MS = 1600;
+  const CONCISE_GRAPH_STAGES = new Set(['evidence', 'experience', 'verify']);
   const RESEARCH_ARTIFACT_FRAME_MS = 9000;
-  const PROCESS_ARTIFACT_FRAME_MS = 35000;
-  const PROCESS_STORY_TIMEOUT_MS = 120000;
+  const PROCESS_STORY_TIMEOUT_MS = 75000;
+  const OFFICIAL_LAW_TOUR_TIMEOUT_MS = 120000;
+  const AGENT_RECEIPT_BEAT_MS = reduceMotion ? 20 : 800;
   const BACKGROUND_BEAT_MS = reduceMotion ? 20 : 120;
-  const KNOWLEDGE_BEAT_MS = 1800;
+  const KNOWLEDGE_BEAT_MS = 1200;
   const SESSION_STORAGE_KEY = 'casepath:demo-session';
   const SESSION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
   const NEMOTRON_AGENT_IDS = new Set([
@@ -126,6 +130,9 @@
     '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
   }[character]));
   const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+  let processStoryWaitRunId = '';
+  let processStoryWaitPromise = null;
+  let processStoryAwaitedRunId = '';
 
   function renderCanvas(markup, moment = '') {
     const canvas = $('#stageCanvas');
@@ -819,22 +826,55 @@
     } }));
   }
 
+  function processStoryComplete() {
+    return document.querySelectorAll('#artifactProcessGraph[data-process-construction-state="complete"] [data-process-build-state="built"]').length >= 10;
+  }
+
+  function processStoryRunId() {
+    return state.runId || document.body.dataset.casepathActiveRunId || 'unbound-run';
+  }
+
   function waitForProcessStory() {
-    const complete = () => document.querySelectorAll('#artifactProcessGraph[data-process-construction-state="complete"] [data-process-build-state="built"]').length >= 10;
-    if (complete()) return Promise.resolve();
-    return new Promise(resolve => {
+    const runId = processStoryRunId();
+    if (processStoryWaitRunId !== runId) {
+      processStoryWaitRunId = runId;
+      processStoryWaitPromise = null;
+    }
+    if (processStoryComplete()) {
+      document.body.dataset.casepathProcessStoryWait = 'complete';
+      return Promise.resolve('complete');
+    }
+    if (processStoryWaitPromise) return processStoryWaitPromise;
+    document.body.dataset.casepathProcessStoryWait = 'waiting';
+    processStoryWaitPromise = new Promise(resolve => {
       let settled = false;
-      const finish = () => {
+      const finish = status => {
         if (settled) return;
         settled = true;
         window.removeEventListener('casepath:artifact-process-complete', onComplete);
         window.clearTimeout(timeout);
-        resolve();
+        document.body.dataset.casepathProcessStoryWait = status;
+        if (status === 'timed-out') {
+          setOrchestrator('Process drawing timed out; continuing with the accepted process.');
+          toast('Process drawing took too long. Continuing with the accepted result.');
+          window.dispatchEvent(new CustomEvent('casepath:artifact-process-timeout', {
+            detail: { runId, timeoutMs: PROCESS_STORY_TIMEOUT_MS },
+          }));
+        }
+        resolve(status);
       };
-      const onComplete = () => { if (complete()) finish(); };
-      const timeout = window.setTimeout(finish, PROCESS_STORY_TIMEOUT_MS);
+      const onComplete = () => { if (processStoryComplete()) finish('complete'); };
+      const timeout = window.setTimeout(() => finish('timed-out'), PROCESS_STORY_TIMEOUT_MS);
       window.addEventListener('casepath:artifact-process-complete', onComplete, { once: true });
     });
+    return processStoryWaitPromise;
+  }
+
+  function waitForProcessStoryOnce() {
+    const runId = processStoryRunId();
+    if (processStoryAwaitedRunId === runId) return processStoryWaitPromise || Promise.resolve('already-awaited');
+    processStoryAwaitedRunId = runId;
+    return waitForProcessStory();
   }
 
   function waitForOfficialLawTour() {
@@ -850,7 +890,7 @@
         resolve();
       };
       const onComplete = () => finish();
-      const timeout = window.setTimeout(finish, PROCESS_STORY_TIMEOUT_MS);
+      const timeout = window.setTimeout(finish, OFFICIAL_LAW_TOUR_TIMEOUT_MS);
       window.addEventListener('casepath:official-source-tour-complete', onComplete, { once: true });
     });
   }
@@ -870,7 +910,9 @@
         state.eventQueue.push(entry);
         break;
       }
-      if (!later && waitsForCompletedProcess(entry.event)) await waitForProcessStory();
+      if (!later && waitsForCompletedProcess(entry.event) && processStoryAwaitedRunId !== processStoryRunId()) {
+        await waitForProcessStoryOnce();
+      }
       let phase = 'background';
       if (later) {
         appendLaterEvent(entry.event);
@@ -878,18 +920,22 @@
         phase = presentFlagshipEvent(entry.event);
         announcePresentation(phase, entry.event);
       }
+      const conciseGraphStage = CONCISE_GRAPH_STAGES.has(entry.event.stage);
       const frameMs = phase === 'working'
-        ? WORKING_FRAME_MS
+        ? conciseGraphStage ? CONCISE_WORKING_FRAME_MS : WORKING_FRAME_MS
+        : phase === 'receipt'
+          ? AGENT_RECEIPT_BEAT_MS
         : phase === 'artifact' && entry.event.stage === 'research'
           ? RESEARCH_ARTIFACT_FRAME_MS
-          : phase === 'artifact' && entry.event.stage === 'process'
-            ? PROCESS_ARTIFACT_FRAME_MS
+          : phase === 'artifact' && conciseGraphStage
+            ? CONCISE_ARTIFACT_FRAME_MS
           : phase === 'artifact'
             ? ARTIFACT_FRAME_MS
             : BACKGROUND_BEAT_MS;
-      await wait(frameMs);
+      const processArtifact = phase === 'artifact' && entry.event.stage === 'process';
+      if (!processArtifact) await wait(frameMs);
       if (phase === 'artifact' && entry.event.stage === 'research') await waitForOfficialLawTour();
-      if (phase === 'artifact' && entry.event.stage === 'process') await waitForProcessStory();
+      if (processArtifact) await waitForProcessStoryOnce();
     }
     state.presenting = false;
     const run = later ? state.laterRun : state.run;
@@ -920,6 +966,7 @@
       && NEMOTRON_AGENT_IDS.has(returnedAgentId)
       && eventSucceeded(event)) {
       const canvas = $('#stageCanvas');
+      const visibleMoment = canvas?.dataset.casepathMoment || state.stageMode || state.activeStage || '';
       if (canvas) canvas.dataset.casepathActiveAgentId = returnedAgentId;
       setOrchestrator(`${returnedActorName(event)} returned a bounded contribution`);
       window.dispatchEvent(new CustomEvent('casepath:agent-focus', { detail: {
@@ -928,7 +975,8 @@
         outputArtifact: eventArtifacts(event).join(', '),
         eventId: returnedValue(event, 'event_id'),
       } }));
-      return 'artifact';
+      if (visibleMoment) announceRender(visibleMoment);
+      return 'receipt';
     }
     const stage = STAGES.find(item => item.id === event.stage);
     if (!stage) return 'background';
@@ -1873,20 +1921,21 @@
       return;
     }
     const returnFocus = $('#sourceViewer').open ? state.viewer.returnFocus : document.activeElement;
-    state.viewer = { artifact, extraction: null, page: Math.max(1, page), zoom: 1, tab: 'original', context, searchMatches: [], query: '', returnFocus };
+    const exactTextQuery = context?.locator_kind === 'text_quote' ? String(context.excerpt || '').trim() : '';
+    state.viewer = { artifact, extraction: null, page: Math.max(1, page), zoom: 1, tab: exactTextQuery ? 'extraction' : 'original', context, searchMatches: [], query: exactTextQuery, returnFocus };
     $('#sourceViewerKind').textContent = 'Original attachment';
     $('#sourceViewerTitle').textContent = artifact.title;
     $('#sourceViewerMeta').textContent = `${artifact.filename} · ${mimeLabel(artifact)} · received ${formatDate(artifact.received_at)}`;
     $('#openOriginal').href = artifactUrl(artifact.artifact_id);
     $('#openOriginal').hidden = false;
     $('#openOriginal').removeAttribute('aria-disabled');
-    $('#sourceSearch').value = '';
+    $('#sourceSearch').value = exactTextQuery;
     $('#sourceSearchStatus').textContent = '';
     $('#sourceSearchResults').innerHTML = '';
     renderGalleryControls();
     if (!$('#sourceViewer').open) $('#sourceViewer').showModal();
     $('#closeSourceViewer').focus();
-    setSourceTab('original');
+    setSourceTab(exactTextQuery ? 'extraction' : 'original');
     renderSourceEvidence(artifact.artifact_id);
   }
 
@@ -2092,7 +2141,7 @@
   function renderSourceEvidence(artifactId) {
     const facts = (currentRun()?.result?.facts || currentRun()?.understanding?.facts || []).filter(fact => (fact.source_refs || []).some(ref => ref.artifact_id === artifactId));
     const context = state.viewer.context;
-    const openedFrom = context?.factId ? `<section class="opened-grounding" data-fact-id="${esc(context.factId)}" data-node-id="${esc(context.nodeId || '')}"><small>Opened from fact ${esc(context.factId)}</small>${sourceLocatorMarkup(context, 'opened-locator')}<p>confidence ${formatConfidence(context.confidence)} · ${esc(context.state || 'state not returned')}</p></section>` : '';
+    const openedFrom = context?.factId ? `<section class="opened-grounding" data-fact-id="${esc(context.factId)}" data-node-id="${esc(context.nodeId || '')}" data-source-agent="${esc(context.agent || '')}" data-source-producer="${esc(context.producer || '')}" data-source-authority="${esc(context.authority || '')}" data-fact-confidence="${esc(context.confidence ?? '')}" data-fact-state="${esc(context.state || '')}"><small>Opened from fact ${esc(context.factId)}</small>${sourceLocatorMarkup(context, 'opened-locator')}<p>confidence ${formatConfidence(context.confidence)} · ${esc(context.state || 'state not returned')}</p></section>` : '';
     $('#sourceEvidence').innerHTML = `${openedFrom}<h3>Facts linked to this source</h3><p>Source → facts and their owning decisions.</p>${facts.length ? facts.map(fact => {
       const refs = (fact.source_refs || []).filter(ref => ref.artifact_id === artifactId);
       const node = owningNodeForFact(fact.fact_id);
