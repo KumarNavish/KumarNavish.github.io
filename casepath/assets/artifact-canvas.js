@@ -1647,7 +1647,9 @@
       || focal.firstElementChild?.dataset.memoryId
       || ownedAgentId
       || focal.dataset.focalKind;
-    if (!state.graphRevealRunning && !state.pendingLawId) emitArtifactChange(kind, entityId);
+    if (focal.dataset.artifactFocus === 'true' && !state.graphRevealRunning && !state.pendingLawId) {
+      emitArtifactChange(kind, entityId);
+    }
   }
 
   function emitArtifactChange(kind, entityId) {
@@ -1888,8 +1890,9 @@
   function positionCursor() {
     const root = state.root;
     const cursor = root?.querySelector('[data-ac-cursor]');
-    const target = root?.querySelector('[data-ac-cursor-target="true"]')
-      || (!state.graphRevealRunning && !state.graphDwell ? root?.querySelector('[data-selected="true"] button') : null);
+    const focus = root?.querySelector('[data-artifact-focus="true"]');
+    const target = focus?.querySelector('[data-ac-cursor-target="true"]')
+      || (!state.graphRevealRunning && !state.graphDwell ? focus?.querySelector('[data-selected="true"] button') : null);
     if (!root || !cursor || !target) return;
     const rootBox = root.getBoundingClientRect();
     const targetBox = target.getBoundingClientRect();
