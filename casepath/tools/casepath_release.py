@@ -9814,6 +9814,8 @@ def _verify_cold_flagship_evidence(
     expected_agent_ids = [item["agent_id"] for item in REQUIRED_MODEL_AGENTS]
     if set(by_agent) != set(expected_agent_ids):
         raise VerificationError("Dynamic flagship agent set is not the required six-role set")
+    if not _has_valid_parallel_agent_order(agents):
+        raise VerificationError("Dynamic flagship agent order violates the execution topology")
 
     call_ids: list[str] = []
     response_ids: list[str] = []
@@ -10000,6 +10002,7 @@ def _verify_cold_flagship_evidence(
         or set(ledger_call_ids) != set(call_ids)
         or len(set(ledger_agent_ids)) != len(expected_agent_ids)
         or set(ledger_agent_ids) != set(expected_agent_ids)
+        or not _has_valid_parallel_agent_order(ledger["items"])
         or ledger["summary"].get("records") != len(REQUIRED_MODEL_AGENTS)
         or ledger["summary"].get("network_calls") != len(REQUIRED_MODEL_AGENTS)
         or ledger["summary"].get("unknown_cost_call_count") != 0
@@ -10139,6 +10142,19 @@ def _bound_runtime_audit(
     return audit
 
 
+def _has_valid_parallel_agent_order(values: list[Any]) -> bool:
+    """Allow only the declared document/process fan-out to finish in either order."""
+
+    agent_ids = [
+        value.get("agent_id") if isinstance(value, Mapping) else None
+        for value in values
+    ]
+    required = [item["agent_id"] for item in REQUIRED_MODEL_AGENTS]
+    swapped = [*required]
+    swapped[2], swapped[3] = swapped[3], swapped[2]
+    return agent_ids in (required, swapped)
+
+
 def _verify_cold_warm_model_pair(
     *,
     cold_run: Mapping[str, Any],
@@ -10182,6 +10198,8 @@ def _verify_cold_warm_model_pair(
             keyed[agent_id] = value
         if set(keyed) != expected_agent_id_set:
             raise VerificationError(f"{label} {surface} agent membership is not exact")
+        if not _has_valid_parallel_agent_order(values):
+            raise VerificationError(f"{label} {surface} violates the execution topology")
         return keyed
 
     cold_agents_by_id = exact_agent_map(cold_agents, "cold audit")
@@ -10743,7 +10761,11 @@ def _verify_warm_cache_lineage(
     expected_agent_ids = [item["agent_id"] for item in REQUIRED_MODEL_AGENTS]
     expected_agent_id_set = set(expected_agent_ids)
     lineage_by_agent: dict[str, Mapping[str, Any]] = {}
-    if isinstance(lineage, list) and len(lineage) == len(expected_agent_ids):
+    if (
+        isinstance(lineage, list)
+        and len(lineage) == len(expected_agent_ids)
+        and _has_valid_parallel_agent_order(lineage)
+    ):
         for item in lineage:
             if not isinstance(item, Mapping):
                 lineage_by_agent = {}
