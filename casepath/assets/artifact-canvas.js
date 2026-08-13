@@ -32,9 +32,9 @@
     notification: [41, 48],
     defect: [50, 48],
     causation: [62, 48],
-    responsibility: [84, 48],
+    responsibility: [83, 48],
     remedy: [89, 48],
-    resolution: [95.8, 48],
+    resolution: [96, 48],
     ventilation_dispute: [73, 83],
   });
   const CAUSATION_BRANCH_LAYOUT = Object.freeze([
