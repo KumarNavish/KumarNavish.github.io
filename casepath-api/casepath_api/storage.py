@@ -11,6 +11,13 @@ import threading
 from datetime import datetime, timezone
 from typing import Any
 
+from .live_events import (
+    LIVE_EVENT_CONTRACT,
+    activity_event,
+    terminal_event,
+    validate_event_draft,
+)
+
 
 _OPENROUTER_GENERATION_ID_PATTERN = re.compile(
     r"^gen-[0-9]{10}-[A-Za-z0-9]{20}$"
@@ -33,6 +40,8 @@ class Storage:
         self.path = Path(path or os.getenv("CASEPATH_DB_PATH", "/tmp/casepath-useful-demo/casepath.db"))
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.lock = threading.RLock()
+        self.stream_condition = threading.Condition()
+        self.stream_revisions: dict[str, int] = {}
         self.init()
 
     def connect(self):
@@ -45,7 +54,14 @@ class Storage:
             # State tables created before session isolation cannot safely preserve
             # tenant boundaries. This is generated demo state, so reset only those
             # legacy tables while deliberately retaining the global paid-call ledger.
-            state_tables = ("runs", "events", "reviews", "memories", "candidates")
+            state_tables = (
+                "runs",
+                "events",
+                "reviews",
+                "memories",
+                "candidates",
+                "run_stream_events",
+            )
             reset_legacy_state = False
             for table in state_tables:
                 exists = con.execute(
@@ -61,6 +77,7 @@ class Storage:
                 con.executescript(
                     "DROP TABLE IF EXISTS events; DROP TABLE IF EXISTS reviews; "
                     "DROP TABLE IF EXISTS memories; DROP TABLE IF EXISTS candidates; "
+                    "DROP TABLE IF EXISTS run_stream_events; "
                     "DROP TABLE IF EXISTS runs;"
                 )
             con.executescript(
@@ -123,8 +140,21 @@ class Storage:
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS run_stream_events (
+                    event_id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    run_id TEXT NOT NULL,
+                    sequence INTEGER NOT NULL,
+                    dedupe_key TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(session_id, run_id, sequence),
+                    UNIQUE(session_id, run_id, dedupe_key)
+                );
                 CREATE INDEX IF NOT EXISTS runs_session ON runs(session_id, updated_at);
                 CREATE INDEX IF NOT EXISTS events_session_run ON events(session_id, run_id, ordinal);
+                CREATE INDEX IF NOT EXISTS stream_events_session_run ON run_stream_events(session_id, run_id, sequence);
                 CREATE INDEX IF NOT EXISTS reviews_session_run ON reviews(session_id, run_id);
                 CREATE INDEX IF NOT EXISTS model_calls_cache ON model_calls(cache_key, outcome, updated_at);
                 """
@@ -142,9 +172,39 @@ class Storage:
                 "INSERT INTO runs (run_id, session_id, claim_id, status, payload, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
                 (run_id, session_id, claim_id, "queued", json.dumps(payload), now(), now()),
             )
+            self._append_stream_events(
+                con,
+                run_id=run_id,
+                session_id=session_id,
+                drafts=[
+                    {
+                        "dedupe_key": "run:queued",
+                        "type": "run.queued",
+                        "stage": "queued",
+                        "actor": {
+                            "type": "deterministic_tool",
+                            "id": "run_queue",
+                            "label": "Run queue",
+                            "model": None,
+                        },
+                        "acceptance": {"state": "queued"},
+                        "entity": {"kind": "run", "id": run_id, "status": "queued"},
+                        "links": {"claim_id": claim_id},
+                    }
+                ],
+            )
+        self._notify_stream(run_id)
         return run_id
 
-    def patch_run(self, run_id: str, *, status: str | None = None, patch: dict[str, Any] | None = None):
+    def patch_run(
+        self,
+        run_id: str,
+        *,
+        status: str | None = None,
+        patch: dict[str, Any] | None = None,
+        stream_events: list[dict[str, Any]] | None = None,
+    ):
+        stream_changed = False
         with self.lock, self.connect() as con:
             row = con.execute("SELECT * FROM runs WHERE run_id=?", (run_id,)).fetchone()
             if not row:
@@ -158,6 +218,20 @@ class Storage:
                 "UPDATE runs SET status=?, payload=?, updated_at=? WHERE run_id=?",
                 (status or row["status"], json.dumps(payload, ensure_ascii=False), now(), run_id),
             )
+            drafts = list(stream_events or [])
+            if status in {"complete", "failed"}:
+                drafts.append(terminal_event(status))
+            if drafts:
+                stream_changed = bool(
+                    self._append_stream_events(
+                        con,
+                        run_id=run_id,
+                        session_id=row["session_id"],
+                        drafts=drafts,
+                    )
+                )
+        if stream_changed:
+            self._notify_stream(run_id)
 
     def add_event(self, run_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         with self.lock, self.connect() as con:
@@ -171,7 +245,135 @@ class Storage:
                 "INSERT INTO events (event_id, session_id, run_id, ordinal, payload, created_at) VALUES (?,?,?,?,?,?)",
                 (event["event_id"], session_id, run_id, ordinal, json.dumps(event, ensure_ascii=False), event["created_at"]),
             )
+            self._append_stream_events(
+                con,
+                run_id=run_id,
+                session_id=session_id,
+                drafts=[activity_event(event)],
+            )
+        self._notify_stream(run_id)
         return event
+
+    def add_stream_events(
+        self, run_id: str, drafts: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        if not drafts:
+            return []
+        with self.lock, self.connect() as con:
+            run = con.execute(
+                "SELECT session_id FROM runs WHERE run_id=?", (run_id,)
+            ).fetchone()
+            if not run:
+                raise KeyError(run_id)
+            persisted = self._append_stream_events(
+                con,
+                run_id=run_id,
+                session_id=run["session_id"],
+                drafts=drafts,
+            )
+        if persisted:
+            self._notify_stream(run_id)
+        return persisted
+
+    def _append_stream_events(
+        self,
+        con: sqlite3.Connection,
+        *,
+        run_id: str,
+        session_id: str,
+        drafts: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        if con.execute(
+            "SELECT 1 FROM run_stream_events WHERE session_id=? AND run_id=? AND event_type IN ('run.completed', 'run.failed') LIMIT 1",
+            (session_id, run_id),
+        ).fetchone():
+            return []
+        sequence = con.execute(
+            "SELECT COALESCE(MAX(sequence), 0) FROM run_stream_events WHERE session_id=? AND run_id=?",
+            (session_id, run_id),
+        ).fetchone()[0]
+        persisted: list[dict[str, Any]] = []
+        for draft in drafts:
+            validate_event_draft(draft)
+            dedupe_key = draft["dedupe_key"]
+            if con.execute(
+                "SELECT 1 FROM run_stream_events WHERE session_id=? AND run_id=? AND dedupe_key=?",
+                (session_id, run_id, dedupe_key),
+            ).fetchone():
+                continue
+            sequence += 1
+            stamp = now()
+            event_id = self.ident("liveevt")
+            event = {
+                "contract": LIVE_EVENT_CONTRACT,
+                "event_id": event_id,
+                "sequence": sequence,
+                "run_id": run_id,
+                "occurred_at": stamp,
+                **{key: value for key, value in draft.items() if key != "dedupe_key"},
+            }
+            if event.get("entity", {}).get("kind") == "run" and event["entity"].get("id") is None:
+                event["entity"]["id"] = run_id
+            con.execute(
+                "INSERT INTO run_stream_events (event_id, session_id, run_id, sequence, dedupe_key, event_type, payload, created_at) VALUES (?,?,?,?,?,?,?,?)",
+                (
+                    event_id,
+                    session_id,
+                    run_id,
+                    sequence,
+                    dedupe_key,
+                    event["type"],
+                    json.dumps(event, ensure_ascii=False),
+                    stamp,
+                ),
+            )
+            persisted.append(event)
+        return persisted
+
+    def stream_events(
+        self,
+        run_id: str,
+        *,
+        session_id: str = "public",
+        after: int = 0,
+    ) -> list[dict[str, Any]]:
+        with self.connect() as con:
+            return [
+                json.loads(row["payload"])
+                for row in con.execute(
+                    "SELECT payload FROM run_stream_events WHERE session_id=? AND run_id=? AND sequence>? ORDER BY sequence",
+                    (session_id, run_id, after),
+                )
+            ]
+
+    def run_stream_state(
+        self, run_id: str, *, session_id: str = "public"
+    ) -> dict[str, Any] | None:
+        with self.connect() as con:
+            row = con.execute(
+                "SELECT status, updated_at FROM runs WHERE run_id=? AND session_id=?",
+                (run_id, session_id),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def stream_revision(self, run_id: str) -> int:
+        with self.stream_condition:
+            return self.stream_revisions.get(run_id, 0)
+
+    def wait_for_stream_change(
+        self, run_id: str, revision: int, timeout: float
+    ) -> int:
+        with self.stream_condition:
+            self.stream_condition.wait_for(
+                lambda: self.stream_revisions.get(run_id, 0) != revision,
+                timeout=timeout,
+            )
+            return self.stream_revisions.get(run_id, 0)
+
+    def _notify_stream(self, run_id: str) -> None:
+        with self.stream_condition:
+            self.stream_revisions[run_id] = self.stream_revisions.get(run_id, 0) + 1
+            self.stream_condition.notify_all()
 
     def get_run(self, run_id: str, *, session_id: str = "public") -> dict[str, Any] | None:
         with self.connect() as con:
@@ -366,6 +568,14 @@ class Storage:
                     ),
                 )
                 persisted_events.append(event)
+                self._append_stream_events(
+                    con,
+                    run_id=run_id,
+                    session_id=session_id,
+                    drafts=[activity_event(event)],
+                )
+        if persisted_events:
+            self._notify_stream(run_id)
         return persisted_events
 
     def candidates(self, *, session_id: str = "public") -> list[dict[str, Any]]:
@@ -653,6 +863,7 @@ class Storage:
                 "memories": con.execute("SELECT COUNT(*) FROM memories WHERE session_id=?", (session_id,)).fetchone()[0],
                 "candidates": con.execute("SELECT COUNT(*) FROM candidates WHERE session_id=?", (session_id,)).fetchone()[0],
             }
+            con.execute("DELETE FROM run_stream_events WHERE session_id=?", (session_id,))
             con.execute("DELETE FROM events WHERE session_id=?", (session_id,))
             con.execute("DELETE FROM runs WHERE session_id=?", (session_id,))
             con.execute("DELETE FROM reviews WHERE session_id=?", (session_id,))

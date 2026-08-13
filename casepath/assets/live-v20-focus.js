@@ -741,7 +741,9 @@
   }
 
   function markPrimaryArtifact(canvas, moment) {
-    document.querySelectorAll('[data-casepath-primary-artifact]').forEach(node => node.removeAttribute('data-casepath-primary-artifact'));
+    document.querySelectorAll('[data-casepath-primary-artifact]').forEach(node => {
+      if (!node.closest('#artifactCanvas')) node.removeAttribute('data-casepath-primary-artifact');
+    });
     const owned = $('#v21AgentFocus .v21-owned-artifact');
     if (owned) {
       owned.dataset.casepathPrimaryArtifact = 'true';
@@ -760,7 +762,9 @@
   }
 
   function markPrimaryAction(canvas, moment) {
-    document.querySelectorAll('[data-casepath-primary-action]').forEach(node => node.removeAttribute('data-casepath-primary-action'));
+    document.querySelectorAll('[data-casepath-primary-action]').forEach(node => {
+      if (!node.closest('#artifactCanvas')) node.removeAttribute('data-casepath-primary-action');
+    });
     const action = moment === 'review' ? canvas?.querySelector('#reviewForm button[type="submit"]') : $('#journeyNext');
     if (action && !action.hidden) action.dataset.casepathPrimaryAction = 'true';
   }
