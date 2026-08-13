@@ -615,6 +615,29 @@ def test_browser_gate_requires_authenticated_sse_and_causal_memory_delta() -> No
     assert "REQUIRED_DETERMINISTIC_GATE_IDS" in browser_gate
 
 
+def test_first_paint_contains_the_complete_flagship_claim_shell() -> None:
+    index = (release_tool.REPOSITORY / "casepath" / "index.html").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'rel="preconnect" href="https://casepath-agentic-api.onrender.com"' in index
+    assert 'id="headerClaimTitle">Bedroom condition keeps returning<' in index
+    assert 'id="attachmentCount">6 files<' in index
+    assert all(
+        f'data-artifact-id="{artifact_id}"' in index
+        for artifact_id in (
+            "art_lease",
+            "art_notification",
+            "art_management_reply",
+            "art_photo",
+            "art_timeline",
+            "art_delivery",
+        )
+    )
+    assert 'class="v20-source-skeleton" aria-hidden="true" hidden' in index
+    assert 'class="v20-attachment-skeleton" aria-hidden="true" hidden' in index
+
+
 def test_later_result_keeps_returned_comparison_hashes_visible() -> None:
     focus_css = (
         release_tool.REPOSITORY / "casepath" / "assets" / "live-v20-focus.css"
