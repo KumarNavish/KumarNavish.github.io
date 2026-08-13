@@ -10,10 +10,19 @@
   const WORKING_FRAME_MS = 2400;
   const ARTIFACT_FRAME_MS = 5600;
   const RESEARCH_ARTIFACT_FRAME_MS = 9000;
+  const PROCESS_ARTIFACT_FRAME_MS = 35000;
   const BACKGROUND_BEAT_MS = reduceMotion ? 20 : 120;
   const KNOWLEDGE_BEAT_MS = 1800;
   const SESSION_STORAGE_KEY = 'casepath:demo-session';
   const SESSION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
+  const NEMOTRON_AGENT_IDS = new Set([
+    'canonical_facts',
+    'orchestrator_plan',
+    'document_source_integrity',
+    'process_decision_mapping',
+    'evidence_checklist',
+    'final_claim_brief_audit',
+  ]);
 
   function createSessionId() {
     const token = crypto.randomUUID?.() || [...crypto.getRandomValues(new Uint8Array(16))].map(value => value.toString(16).padStart(2, '0')).join('');
@@ -684,6 +693,8 @@
         ? WORKING_FRAME_MS
         : phase === 'artifact' && entry.event.stage === 'research'
           ? RESEARCH_ARTIFACT_FRAME_MS
+          : phase === 'artifact' && entry.event.stage === 'process'
+            ? PROCESS_ARTIFACT_FRAME_MS
           : phase === 'artifact'
             ? ARTIFACT_FRAME_MS
             : BACKGROUND_BEAT_MS;
@@ -711,6 +722,22 @@
     if (event.stage === 'complete') {
       setOrchestrator(returnedValue(event, 'headline', 'label') || 'Final run event returned', false);
       return 'background';
+    }
+    const returnedAgentId = returnedValue(event, 'agent_id', 'actor_id');
+    if (event.stage === 'agent_orchestration'
+      && eventKind(event) === 'nemotron_agent'
+      && NEMOTRON_AGENT_IDS.has(returnedAgentId)
+      && eventSucceeded(event)) {
+      const canvas = $('#stageCanvas');
+      if (canvas) canvas.dataset.casepathActiveAgentId = returnedAgentId;
+      setOrchestrator(`${returnedActorName(event)} returned a bounded contribution`);
+      window.dispatchEvent(new CustomEvent('casepath:agent-focus', { detail: {
+        agentId: returnedAgentId,
+        callId: returnedValue(event, 'call_id'),
+        outputArtifact: eventArtifacts(event).join(', '),
+        eventId: returnedValue(event, 'event_id'),
+      } }));
+      return 'artifact';
     }
     const stage = STAGES.find(item => item.id === event.stage);
     if (!stage) return 'background';
@@ -790,6 +817,14 @@
     return `<article class="legal-authority deterministic" data-legal-source-id="${esc(source?.source_id || '')}" data-producer="${esc(source?.producer || '')}"><small>Deterministic application proposal · qualified review pending</small><strong>${esc(source?.title || 'Handling proposal not returned')}</strong><p>${esc(source?.role || '')}</p><p><b>Producer:</b> ${esc(source?.producer || 'not returned')} · <b>status:</b> ${esc(source?.validation_status || 'not returned')}</p></article>`;
   }
 
+  function officialUrlHost(value) {
+    try {
+      return new URL(String(value || '')).host || 'official source';
+    } catch (_) {
+      return 'official source';
+    }
+  }
+
   function legalQuestionMarkup(question, legal, index) {
     const officialById = new Map((legal.sources || []).map(source => [source.source_id, source]));
     const principleById = new Map((legal.handling_principles || []).map(source => [source.source_id, source]));
@@ -801,7 +836,16 @@
   function officialSourceBrowserMarkup(legal) {
     const sources = legal.sources || [];
     if (!sources.length) return '';
-    return `<section class="official-source-browser" data-retrieval-method="versioned_official_source_registry_lookup" data-registry-version="${esc(legal.registry_version || '')}"><header><span><small>Official Swiss source · cached snapshot</small><strong>Swiss tenant-law source registry</strong></span><code>${esc(legal.registry_version || 'version not returned')}</code></header><nav aria-label="Official law sections">${sources.map((source, index) => `<button class="official-source-tab" type="button" data-official-source-tab="${esc(source.source_id)}" aria-selected="${index === 0}">${esc(source.location || source.title)}</button>`).join('')}</nav>${sources.map((source, index) => `<article class="official-source-passage" data-official-source-panel="${esc(source.source_id)}" ${index === 0 ? '' : 'hidden'}><div><small>${esc(source.title)}</small><strong>${esc(source.location || 'Exact section')}</strong></div><blockquote lang="${esc(source.passage_language || '')}">${esc(source.passage_text || 'Official passage not returned.')}</blockquote><footer><span>Cached for reuse · ${esc(source.version_date || 'version date not returned')}</span>${source.url ? `<a href="${esc(source.url)}" target="_blank" rel="noopener">Open official website ↗</a>` : ''}</footer></article>`).join('')}</section>`;
+    const first = sources[0];
+    return `<section class="official-source-browser" data-retrieval-method="versioned_official_source_registry_lookup" data-registry-version="${esc(legal.registry_version || '')}" data-cache-purpose="reliable_same-source_reuse">
+      <header class="official-browser-chrome">
+        <span class="official-browser-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="official-browser-address"><small>Cached exact official source</small><strong data-official-browser-host>${esc(officialUrlHost(first?.url))}</strong><code data-official-browser-url>${esc(first?.url || 'URL not returned')}</code></span>
+        <span class="official-browser-cache"><b>Reusable snapshot</b><code>${esc(legal.registry_version || 'version not returned')}</code></span>
+      </header>
+      <nav aria-label="Exact official Swiss-law sections">${sources.map((source, index) => `<button class="official-source-tab" type="button" data-official-source-tab="${esc(source.source_id)}" data-official-source-url="${esc(source.url || '')}" data-official-source-location="${esc(source.location || source.title)}" aria-selected="${index === 0}">${esc(source.location || source.title)}</button>`).join('')}</nav>
+      ${sources.map((source, index) => `<article class="official-source-passage" data-official-source-panel="${esc(source.source_id)}" data-official-source-url="${esc(source.url || '')}" ${index === 0 ? '' : 'hidden'}><div><small>${esc(source.title)}</small><strong>${esc(source.location || 'Exact section')}</strong></div><blockquote lang="${esc(source.passage_language || '')}">${esc(source.passage_text || 'Official passage not returned.')}</blockquote><footer><span>Cached for reliable reuse · ${esc(source.version_date || 'version date not returned')} · passage ${esc((source.passage_sha256 || '').slice(0, 10) || 'hash unavailable')}</span>${source.url ? `<a href="${esc(source.url)}" target="_blank" rel="noopener">Verify on official website ↗</a>` : ''}</footer></article>`).join('')}
+    </section>`;
   }
 
   function bindOfficialSourceBrowser() {
@@ -811,6 +855,19 @@
     for (const button of buttons) button.addEventListener('click', () => {
       for (const item of buttons) item.setAttribute('aria-selected', String(item === button));
       for (const panel of $$('.official-source-passage', browser)) panel.hidden = panel.dataset.officialSourcePanel !== button.dataset.officialSourceTab;
+      const url = button.dataset.officialSourceUrl || '';
+      const urlNode = $('[data-official-browser-url]', browser);
+      const hostNode = $('[data-official-browser-host]', browser);
+      if (urlNode) urlNode.textContent = url;
+      if (hostNode) hostNode.textContent = officialUrlHost(url);
+      window.dispatchEvent(new CustomEvent('casepath:official-source-step', { detail: {
+        sourceId: button.dataset.officialSourceTab,
+        location: button.dataset.officialSourceLocation,
+        url,
+        retrievalMethod: browser.dataset.retrievalMethod,
+        registryVersion: browser.dataset.registryVersion,
+        cachePurpose: browser.dataset.cachePurpose,
+      } }));
     });
     buttons.forEach((button, index) => window.setTimeout(() => {
       if (button.isConnected && $('#stageCanvas')?.dataset.casepathMoment === 'research') button.click();
@@ -997,6 +1054,55 @@
     return all.filter(source => ids.has(source.source_id));
   }
 
+  function processConstructionBasis(node) {
+    const facts = factsForNode(node);
+    const laws = legalForNode(node);
+    const official = laws.find(source => Boolean(source?.url));
+    const handlingRule = laws.find(source => !source?.url);
+    const primaryFact = facts.find(fact => !['unknown', 'conflicting'].includes(fact.state)) || facts[0];
+    const items = [];
+    if (primaryFact) {
+      items.push({
+        kind: 'evidence',
+        label: 'Claim evidence',
+        detail: `${primaryFact.label || primaryFact.fact_id}: ${primaryFact.value ?? 'value not returned'}`,
+      });
+    }
+    if (official) {
+      items.push({
+        kind: 'law',
+        label: 'Swiss law',
+        detail: official.location || official.title || official.source_id,
+      });
+    }
+    if (handlingRule) {
+      items.push({
+        kind: 'reasoning',
+        label: 'Handling rule',
+        detail: handlingRule.title || handlingRule.role || handlingRule.source_id,
+      });
+    }
+    items.push({
+      kind: 'reasoning',
+      label: 'Process rationale',
+      detail: node?.why || node?.activation || 'Required by the returned process topology.',
+    });
+    return {
+      items,
+      factIds: facts.map(fact => fact.fact_id).filter(Boolean),
+      lawIds: laws.map(source => source.source_id).filter(Boolean),
+      evidenceRequirementIds: [...new Set([...(node?.evidence_requirement_ids || []), ...evidenceForNode(node?.node_id).map(item => item.item_id).filter(Boolean)])],
+    };
+  }
+
+  function processBasisAttributes(basis) {
+    return `data-basis-kinds="${esc([...new Set(basis.items.map(item => item.kind))].join(','))}" data-basis-label="${esc(basis.items.map(item => item.label).join(' + '))}" data-basis-detail="${esc(basis.items.map(item => item.detail).join(' → '))}" data-basis-fact-ids="${esc(basis.factIds.join(','))}" data-basis-law-ids="${esc(basis.lawIds.join(','))}" data-basis-evidence-requirement-ids="${esc(basis.evidenceRequirementIds.join(','))}"`;
+  }
+
+  function processBasisMarkup(basis) {
+    return `<span class="process-node-basis" ${processBasisAttributes(basis)}>${basis.items.map(item => `<span class="process-basis-item" data-basis-kind="${esc(item.kind)}"><small>${esc(item.label)}</small><em>${esc(item.detail)}</em></span>`).join('')}</span>`;
+  }
+
   function statusLabel(status) {
     return ({
       provided_sufficient: 'Available',
@@ -1069,27 +1175,31 @@
     state.stageMode = options.precedents ? 'experience' : options.evidence ? 'evidence' : 'process';
     const title = options.precedents ? 'Generated reference patterns are helping with the difficult decision.' : options.evidence ? 'Evidence now follows directly from the process.' : 'The complete handling process is taking shape.';
     const intro = options.precedents ? 'CasePath ranked generated reference patterns against the same branch, unresolved fact, and evidence need. Each result carries its provenance, factors, context hash, and review state.' : options.evidence ? 'Each process node now carries the facts and evidence it needs. The checklist is only an aggregate of these links.' : 'The main handling spine is visible first. The current claim is overlaid inside it, and alternative branches stay folded until they matter.';
-    renderCanvas(`<div class="stage-shell">${stageHeader(stage, title, intro)}${renderProcessWorkspace(options)}</div>`, state.stageMode);
+    renderCanvas(`<div class="stage-shell">${stageHeader(stage, title, intro)}${renderProcessWorkspace({ ...options, story: state.stageMode === 'process' })}</div>`, state.stageMode);
     bindProcessInteractions();
   }
 
-  function renderProcessWorkspace({ evidence = false, precedents = false } = {}) {
+  function renderProcessWorkspace({ evidence = false, precedents = false, story = false } = {}) {
     const process = processData();
     if (!process) return '<p>Process artifact is not ready.</p>';
     const spine = (process.main_spine || []).map(nodeById).filter(Boolean);
     const spineIds = new Set(spine.map(node => node.node_id));
     const branchNodes = (process.nodes || []).filter(node => !spineIds.has(node.node_id));
     if (!state.selectedNodeId || !nodeById(state.selectedNodeId)) state.selectedNodeId = process.current_node || 'causation';
-    return `<div class="process-layout" data-evidence="${esc(String(evidence))}" data-precedents="${esc(String(precedents))}"><div class="process-map"><div class="process-spine">${spine.map((node, index) => {
+    return `<div class="process-layout" data-evidence="${esc(String(evidence))}" data-precedents="${esc(String(precedents))}" data-process-story="${story ? 'grounded-node-sequence/1.0.0' : ''}" data-process-id="${esc(process.process_id || '')}" data-process-current-node="${esc(process.current_node || '')}" data-process-node-count="${spine.length}"><div class="process-map">${story ? `<span class="visually-hidden" aria-live="polite" aria-atomic="true" data-process-build-announcement>Preparing the process decisions.</span><section class="process-build-focus" aria-live="off" data-process-build-focus><span class="process-build-order"><i aria-hidden="true"></i><b data-process-build-count>Preparing ${spine.length} decisions</b></span><div><small data-process-build-basis>Claim evidence + Swiss law + process rationale</small><strong data-process-build-title>Connecting every decision to its reason</strong><p data-process-build-detail>The graph will be constructed in returned process order. One grounded decision is introduced at a time.</p></div></section>` : ''}<div class="process-spine">${spine.map((node, index) => {
       const status = nodeState(node.node_id);
       const count = evidenceForNode(node.node_id).length;
-      return `<div class="process-node ${status}" style="animation-delay:${index * 55}ms"><span class="process-marker">${status === 'complete' ? '✓' : status === 'current' ? '?' : index + 1}</span><button class="process-node-button" type="button" data-node-id="${esc(node.node_id)}"><span><small>${status === 'current' ? 'Current decision' : status === 'complete' ? 'Established' : status === 'blocked' ? 'Waits for earlier answer' : 'Later stage'}</small><strong>${esc(node.title)}</strong><span class="node-answer">${esc(node.answer || node.question)}</span>${renderContributionAttribution(node.agent_decision_contributions, 'fact')}</span>${evidence && count ? `<span class="node-evidence-count">${count} evidence link${count === 1 ? '' : 's'}</span>` : ''}</button>${node.node_id === (process.current_node || 'causation') ? renderBranches(node) : ''}</div>`;
+      const basis = processConstructionBasis(node);
+      return `<div class="process-node ${status}" data-process-build-index="${index}" data-process-parent-id="${esc(index ? spine[index - 1]?.node_id || '' : '')}" data-process-edge-condition="${esc((process.edges || []).find(edge => edge.source === spine[index - 1]?.node_id && edge.target === node.node_id)?.condition || '')}" ${processBasisAttributes(basis)} style="animation-delay:${index * 55}ms"><span class="process-marker">${status === 'complete' ? '✓' : status === 'current' ? '?' : index + 1}</span><button class="process-node-button" type="button" data-node-id="${esc(node.node_id)}"><span><small>${status === 'current' ? 'Current decision' : status === 'complete' ? 'Established' : status === 'blocked' ? 'Waits for earlier answer' : 'Later stage'}</small><strong>${esc(node.title)}</strong><span class="node-answer">${esc(node.answer || node.question)}</span>${processBasisMarkup(basis)}${renderContributionAttribution(node.agent_decision_contributions, 'fact')}</span>${evidence && count ? `<span class="node-evidence-count">${count} evidence link${count === 1 ? '' : 's'}</span>` : ''}</button>${node.node_id === (process.current_node || 'causation') ? renderBranches(node) : ''}</div>`;
     }).join('')}</div>${renderBranchExplorer(branchNodes, process.edges || [], evidence)}</div>${renderInspector(state.selectedNodeId, { evidence, precedents })}</div>`;
   }
 
   function renderBranches(node) {
     if (!node.branches?.length) return '';
-    return `<div class="branch-fork"><button type="button" data-toggle-node-branches aria-expanded="false"><span>${node.branches.length} possible causation outcomes</span><strong>Reveal outcomes</strong></button><div class="branch-options" hidden>${node.branches.map(branch => `<button type="button" class="branch-option ${branch.state === 'selected' ? 'selected' : ''}" data-node-id="${esc(branch.target)}"><strong>${esc(branch.label)}</strong><p>${esc(branch.condition)}</p><small>${esc(edgeStateLabel(branch.state))} · opens ${esc(branch.target)}</small></button>`).join('')}</div></div>`;
+    const selected = node.branches.find(branch => branch.state === 'selected') || node.branches[0];
+    const selectedNode = nodeById(selected.target);
+    const selectedBasis = processConstructionBasis(selectedNode || { why: selected.condition, activation: selected.condition });
+    return `<div class="branch-fork"><article class="process-selected-branch" data-process-selected-branch data-node-id="${esc(selected.target)}" data-process-parent-id="${esc(node.node_id)}" data-process-edge-condition="${esc(selected.condition)}" ${processBasisAttributes(selectedBasis)}><span class="process-selected-branch-line" aria-hidden="true"></span><div><small>Selected from the returned graph</small><strong>${esc(selected.label)}</strong><p>${esc(selected.condition)}</p><span>${esc(selectedBasis.items.map(item => item.label).join(' + '))}</span></div></article><button type="button" data-toggle-node-branches aria-expanded="false"><span>${node.branches.length - 1} alternative causation outcome${node.branches.length === 2 ? '' : 's'}</span><strong>Inspect alternatives</strong></button><div class="branch-options" hidden>${node.branches.map(branch => { const target = nodeById(branch.target); const basis = processConstructionBasis(target || { why: branch.condition, activation: branch.condition }); return `<button type="button" class="branch-option ${branch.state === 'selected' ? 'selected' : ''}" data-node-id="${esc(branch.target)}" data-process-parent-id="${esc(node.node_id)}" data-process-edge-condition="${esc(branch.condition)}" ${processBasisAttributes(basis)}><strong>${esc(branch.label)}</strong><p>${esc(branch.condition)}</p>${processBasisMarkup(basis)}<small>${esc(edgeStateLabel(branch.state))} · opens ${esc(branch.target)}</small></button>`; }).join('')}</div></div>`;
   }
 
   function renderBranchExplorer(nodes, edges, evidence) {
@@ -1128,6 +1238,7 @@
       const options = {
         evidence: layout.dataset.evidence === 'true',
         precedents: layout.dataset.precedents === 'true',
+        story: Boolean(layout.dataset.processStory),
       };
       layout.outerHTML = renderProcessWorkspace(options);
       bindProcessInteractions();

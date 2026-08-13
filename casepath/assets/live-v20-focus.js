@@ -35,14 +35,58 @@
   };
 
   const FLAGSHIP_STAGES = [
-    { id: 'understand', label: 'Claim Understanding Agent' },
-    { id: 'research', label: 'Legal Research Agent' },
-    { id: 'process', label: 'Process Discovery Agent' },
-    { id: 'evidence', label: 'Evidence / Document Agent' },
-    { id: 'experience', label: 'Historical Claims Agent' },
-    { id: 'verify', label: 'Verification Agent' },
-    { id: 'knowledge', label: 'Knowledge Agent' },
+    { id: 'understand', label: 'Claim understanding' },
+    { id: 'research', label: 'Swiss-law research' },
+    { id: 'process', label: 'Process discovery' },
+    { id: 'evidence', label: 'Evidence requirements' },
+    { id: 'experience', label: 'Historical claims' },
+    { id: 'verify', label: 'Verification' },
+    { id: 'knowledge', label: 'Knowledge' },
   ];
+
+  // These are the six call-bound roles returned by the Nemotron runtime. Keep
+  // this map closed: deterministic tools and gates must never inherit an agent
+  // signature simply because they are presented during the same product stage.
+  const NEMOTRON_AGENT_IDENTITIES = Object.freeze({
+    canonical_facts: {
+      order: 1, label: 'Guarded Canonical Facts Agent', shortLabel: 'Claim facts', monogram: 'CF', signature: 'facts',
+      title: 'Separating supported facts from allegations and unknowns',
+      why: 'Only source-bound facts should shape the handling process.', output: 'Canonical claim state',
+      target: '.decision-inspector .inspector-fact:first-of-type,.fact-row:last-child,.process-node.current .process-node-button',
+    },
+    orchestrator_plan: {
+      order: 2, label: 'Nemotron Orchestrator', shortLabel: 'Orchestration', monogram: 'OR', signature: 'orchestrator',
+      title: 'Setting the bounded focus for every specialist',
+      why: 'A shared plan keeps parallel contributions coherent.', output: 'Orchestration focus plan',
+      target: '.process-build-focus,.process-spine,.process-synthesis',
+    },
+    document_source_integrity: {
+      order: 3, label: 'Document and Source Integrity Agent', shortLabel: 'Source integrity', monogram: 'DS', signature: 'sources',
+      title: 'Checking every source link and document reference',
+      why: 'A decision is trustworthy only when its evidence can be reopened.', output: 'Source integrity contribution',
+      target: '.decision-inspector .grounding-ref:first-of-type,.official-source-browser,.decision-inspector .law-marker:first-of-type',
+    },
+    process_decision_mapping: {
+      order: 4, label: 'Process Decision Mapping Agent', shortLabel: 'Process mapping', monogram: 'PM', signature: 'process',
+      title: 'Mapping facts and law into the decision process',
+      why: 'Each node must exist for a grounded, inspectable reason.', output: 'Process mapping contribution',
+      target: '.process-node.current .process-node-button,.process-node-button[aria-current="step"],.process-node-button:first-of-type',
+    },
+    evidence_checklist: {
+      order: 5, label: 'Evidence and Checklist Agent', shortLabel: 'Evidence mapping', monogram: 'EC', signature: 'evidence',
+      title: 'Attaching evidence to the decision it can resolve',
+      why: 'Requirements become useful when their process owner is explicit.', output: 'Evidence checklist contribution',
+      target: '.decision-inspector .inspector-row:last-of-type,.v17-checklist-item:last-child,.process-node.current .node-evidence-count',
+    },
+    final_claim_brief_audit: {
+      order: 6, label: 'Final Claim Brief Agent', shortLabel: 'Final audit', monogram: 'FB', signature: 'audit',
+      title: 'Auditing the complete claim-handling brief',
+      why: 'The final handoff must remain consistent across every contribution.', output: 'Final claim brief contribution',
+      target: '.v20-final-handoff,.verification-row:last-child,.process-synthesis',
+    },
+  });
+
+  const NEMOTRON_AGENT_COUNT = Object.keys(NEMOTRON_AGENT_IDENTITIES).length;
 
   const FLAGSHIP_FOCUS = {
     opening: { stage: 'understand', title: 'Opening one shared claim context', why: 'Every specialist must work from the same message and original files.', context: 'Customer message + 6 original attachments', authority: 'Application source parser', output: 'Shared claim package' },
@@ -82,9 +126,9 @@
 
   const PLAIN_AUTHORITIES = {
     opening: 'CasePath source parser', read: 'CasePath source parser',
-    understand: 'Nemotron + CasePath validation', research: 'Versioned source registry · legal review pending',
-    process: 'Nemotron + process checks', evidence: 'Nemotron + evidence checks',
-    experience: 'CasePath reference ranking', verify: 'Nemotron + safety checks',
+    understand: 'CasePath fact contract', research: 'Versioned source registry · legal review pending',
+    process: 'CasePath process checks', evidence: 'CasePath evidence checks',
+    experience: 'CasePath reference ranking', verify: 'CasePath safety checks',
     ready: 'CasePath safety checks', review: 'Simulated review',
     'review-applied': 'CasePath review transform', knowledge: 'CasePath governance',
     'later-work': 'Deterministic comparison', 'later-result': 'Deterministic comparison',
@@ -93,8 +137,45 @@
 
   const PRODUCED_EVENT_STATES = new Set(['accepted', 'cache_hit', 'candidate_prepared', 'completed', 'passed', 'succeeded', 'succeeded_with_guarded_fallback', 'success']);
 
+  const OWNED_ARTIFACT_COPY = Object.freeze({
+    canonical_facts: {
+      title: 'Canonical claim state',
+      detail: 'The returned fact contribution keeps supported facts, allegations and unknowns separate.',
+      selector: '.fact-row strong',
+    },
+    orchestrator_plan: {
+      title: 'Bounded orchestration focus',
+      detail: 'The returned plan sets the shared focus used by the downstream specialist calls.',
+      selector: '',
+    },
+    document_source_integrity: {
+      title: 'Claim-source integrity contribution',
+      detail: 'This returned contribution checks claim documents and source references. Official-law tabs remain a separate deterministic cached registry view.',
+      selector: '.fact-row .grounding-source-title',
+    },
+    process_decision_mapping: {
+      title: 'Process decision contribution',
+      detail: 'The returned decision mapping is the model contribution submitted to the deterministic process gate.',
+      selector: '.process-node-button strong,.process-branch-node strong',
+    },
+    evidence_checklist: {
+      title: 'Evidence checklist contribution',
+      detail: 'The returned checklist contribution binds evidence needs to the decisions they can resolve.',
+      selector: '.inspector-row[data-item-id] strong,.v17-checklist-item strong',
+    },
+    final_claim_brief_audit: {
+      title: 'Final claim brief contribution',
+      detail: 'The returned audit contribution names the current decision, next action and supporting lineage for the whole-playbook gate.',
+      selector: '.v20-final-handoff-route strong',
+    },
+  });
+
   let queued = false;
   let lastMoment = '';
+  const cursorMotion = {
+    activationKey: '', cursor: null, target: null, x: null, y: null,
+    clickTimer: 0, targetTimer: 0,
+  };
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -188,11 +269,26 @@
       outputArtifact: proof.dataset.currentOutputArtifact || '', headline: proof.dataset.currentHeadline || '',
     } : {};
     const eventMoment = currentEvent.stage === 'orchestrator' ? 'opening' : currentEvent.stage === 'complete' ? 'ready' : currentEvent.stage;
-    const eventIsCurrent = Boolean(currentEvent.eventId && eventMoment === moment);
+    const nemotronIdentity = currentEvent.actorType === 'nemotron_agent'
+      ? NEMOTRON_AGENT_IDENTITIES[currentEvent.actorId] || null
+      : null;
+    // Specialist receipts arrive at the agent_orchestration boundary while the
+    // currently constructed artifact remains on screen. They are current for
+    // that visible artifact; every other event must match the visible moment.
+    const eventIsCurrent = Boolean(currentEvent.eventId && (
+      eventMoment === moment
+      || (currentEvent.stage === 'agent_orchestration' && nemotronIdentity)
+    ));
     if (!eventIsCurrent) Object.keys(currentEvent).forEach(key => { currentEvent[key] = ''; });
-    const liveAction = currentEvent.headline || action;
-    const liveAuthority = currentEvent.actorType === 'nemotron_agent'
-      ? 'Nemotron specialist'
+    const currentIdentity = eventIsCurrent ? nemotronIdentity : null;
+    const visibleTitle = currentIdentity?.title || focus.title;
+    const visibleWhy = currentIdentity?.why || focus.why;
+    const visibleOutput = currentIdentity?.output || focus.output;
+    const liveAction = currentEvent.headline || currentIdentity?.title || action;
+    const liveAuthority = currentIdentity
+      ? currentIdentity.label
+      : currentEvent.actorType === 'nemotron_agent'
+        ? 'Unrecognized model role'
       : currentEvent.actorType === 'deterministic_gate'
         ? 'CasePath safety check'
         : currentEvent.actorType === 'deterministic_tool'
@@ -201,34 +297,91 @@
     const outputProduced = PRODUCED_EVENT_STATES.has(currentEvent.status.toLowerCase())
       || ['ready', 'review-applied', 'later-result', 'failure'].includes(moment)
       || (moment === 'knowledge' && document.body.dataset.casepathLearningReady === 'true');
-    const signature = `${moment}:${focus.stage}:${action}:${currentEvent.eventId}:${currentEvent.status}`;
-    if (surface.dataset.signature === signature) return;
+    const signature = `${moment}:${focus.stage}:${action}:${currentEvent.eventId}:${currentEvent.status}:${currentEvent.actorId}`;
+    if (surface.dataset.signature === signature) {
+      positionAgentCursor(surface, canvas, moment);
+      return;
+    }
     const activeIndex = FLAGSHIP_STAGES.findIndex(stage => stage.id === focus.stage);
     const role = FLAGSHIP_STAGES[activeIndex] || FLAGSHIP_STAGES[0];
+    const positionLabel = currentIdentity
+      ? `Specialist ${currentIdentity.order} of ${NEMOTRON_AGENT_COUNT} · ${currentIdentity.label}`
+      : `Stage ${activeIndex + 1} of ${FLAGSHIP_STAGES.length} · ${role.label}`;
+    const cursorRole = currentIdentity ? currentIdentity.label : liveAuthority;
+    const cursorMonogram = currentIdentity?.monogram || 'CP';
+    const ownedArtifact = currentIdentity && outputProduced
+      ? ownedArtifactMarkup(canvas, proof, currentEvent, currentIdentity)
+      : '';
     surface.dataset.signature = signature;
     surface.dataset.casepathSpecialist = role.id;
-    surface.dataset.workAuthority = focus.authority;
-    surface.dataset.casepathAction = action;
+    surface.dataset.nemotronAgentId = currentIdentity ? currentEvent.actorId : '';
+    surface.dataset.workAuthority = liveAuthority;
+    surface.dataset.casepathAction = liveAction;
     surface.innerHTML = `
       <div class="v21-focus-inner">
-        <p class="v21-stage-position"><i aria-hidden="true"></i><span>${activeIndex + 1} of ${FLAGSHIP_STAGES.length} · ${esc(role.label)}</span></p>
+        <p class="v21-stage-position"><i aria-hidden="true"></i><span>${esc(positionLabel)}</span></p>
         <div class="v21-focus-copy">
           <span class="v21-focus-task-label">Doing now</span>
-          <h2>${esc(focus.title)}</h2>
-          <p class="v21-focus-why"><span>Why it matters</span><strong>${esc(focus.why)}</strong></p>
-          <div class="v21-agent-cursor" id="v21AgentCursor" role="status" data-action="${esc(liveAction)}" data-casepath-moment="${esc(moment)}" data-casepath-specialist="${esc(role.id)}" data-work-authority="${esc(liveAuthority)}" data-event-id="${esc(currentEvent.eventId)}" data-event-stage="${esc(currentEvent.stage)}" data-actor-type="${esc(currentEvent.actorType)}" data-actor-id="${esc(currentEvent.actorId)}" data-call-id="${esc(currentEvent.callId)}" data-event-status="${esc(currentEvent.status)}" data-output-artifact="${esc(currentEvent.outputArtifact)}">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3.8v14.5l3.7-3.3 2.7 5.2 2.5-1.3-2.7-5.1 4.9-.7L5 3.8Z"/></svg>
-            <span>${esc(liveAction)}</span>
-            <small>${esc(liveAuthority)}</small>
+          <h2>${esc(visibleTitle)}</h2>
+          <p class="v21-focus-why"><span>Why it matters</span><strong>${esc(visibleWhy)}</strong></p>
+          <div class="v21-agent-cursor" id="v21AgentCursor" role="status" aria-label="${esc(`${cursorRole}: ${liveAction}`)}" data-action="${esc(liveAction)}" data-casepath-moment="${esc(moment)}" data-casepath-specialist="${esc(role.id)}" data-agent-id="${esc(currentIdentity ? currentEvent.actorId : '')}" data-agent-signature="${esc(currentIdentity?.signature || 'casepath')}" data-work-authority="${esc(liveAuthority)}" data-event-id="${esc(currentEvent.eventId)}" data-event-stage="${esc(currentEvent.stage)}" data-actor-type="${esc(currentEvent.actorType)}" data-actor-id="${esc(currentEvent.actorId)}" data-call-id="${esc(currentEvent.callId)}" data-event-status="${esc(currentEvent.status)}" data-output-artifact="${esc(currentEvent.outputArtifact)}">
+            <span class="v21-cursor-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 3.8v14.5l3.7-3.3 2.7 5.2 2.5-1.3-2.7-5.1 4.9-.7L5 3.8Z"/></svg><b>${esc(cursorMonogram)}</b></span>
+            <span class="v21-cursor-action">${esc(currentIdentity?.shortLabel || liveAction)}</span>
+            <small><strong>${esc(currentIdentity ? 'Returned Nemotron specialist' : cursorRole)}</strong></small>
           </div>
         </div>
-        <div class="v21-focus-artifact"><span>${outputProduced ? 'Produced' : 'Output taking shape'}</span><strong>${esc(focus.output)}</strong></div>
+        ${ownedArtifact || `<div class="v21-focus-artifact"><span>${outputProduced ? 'Produced' : 'Output taking shape'}</span><strong>${esc(visibleOutput)}</strong></div>`}
       </div>
     `;
     positionAgentCursor(surface, canvas, moment);
   }
 
-  function cursorTarget(canvas, moment) {
+  function returnedProofValue(card, key) {
+    return card?.querySelector(`[data-proof-field="${key}"] code`)?.textContent?.trim() || '';
+  }
+
+  function ownedArtifactMarkup(canvas, proof, event, identity) {
+    const outputArtifact = event.outputArtifact.trim();
+    const callId = event.callId.trim();
+    if (!outputArtifact || !callId || event.actorType !== 'nemotron_agent') return '';
+    const actorCard = proof?.querySelector(`.orchestration-actor-card[data-actor-type="nemotron_agent"][data-actor-id="${CSS.escape(event.actorId)}"][data-call-id="${CSS.escape(callId)}"]`);
+    if (!actorCard) return '';
+    const copy = OWNED_ARTIFACT_COPY[event.actorId];
+    if (!copy) return '';
+    const requestedModel = returnedProofValue(actorCard, 'model');
+    const responseModel = returnedProofValue(actorCard, 'response-model');
+    const outputHash = returnedProofValue(actorCard, 'artifact-hash');
+    const preview = copy.selector
+      ? [...canvas.querySelectorAll(copy.selector)].filter(visible).slice(0, 2).map(node => node.textContent?.trim()).filter(Boolean)
+      : [];
+    const metrics = [...actorCard.querySelectorAll('.orchestration-result-metrics [data-result-metric]')].slice(0, 3).map(node => ({
+      value: node.querySelector('strong')?.textContent?.trim() || '',
+      label: node.querySelector('small')?.textContent?.trim() || '',
+    })).filter(item => item.value && item.label);
+    return `<section class="v21-owned-artifact" data-agent-artifact-target="true" data-agent-artifact-owner="${esc(event.actorId)}" data-actor-type="${esc(event.actorType)}" data-call-id="${esc(callId)}" data-output-artifact="${esc(outputArtifact)}" data-event-status="${esc(event.status)}" data-requested-model="${esc(requestedModel)}" data-response-model="${esc(responseModel)}" data-output-hash="${esc(outputHash)}" aria-label="Returned artifact owned by ${esc(identity.label)}">
+      <header><span>Returned work · Specialist ${identity.order} of ${NEMOTRON_AGENT_COUNT}</span><strong>${esc(outputArtifact)}</strong><small>${esc(event.status)}</small></header>
+      <div class="v21-owned-artifact-copy"><strong>${esc(copy.title)}</strong><p>${esc(copy.detail)}</p>${preview.length ? `<ul>${preview.map(item => `<li>${esc(item)}</li>`).join('')}</ul>` : ''}</div>
+      ${metrics.length ? `<div class="v21-owned-artifact-metrics">${metrics.map(item => `<span><strong>${esc(item.value)}</strong><small>${esc(item.label)}</small></span>`).join('')}</div>` : ''}
+      <footer><span>Returned by <strong>${esc(identity.label)}</strong></span>${requestedModel ? `<span>Model <code>${esc(requestedModel)}</code></span>` : ''}<span>Call <code>${esc(callId)}</code></span>${outputHash ? `<span>Output hash <code>${esc(outputHash)}</code></span>` : ''}</footer>
+    </section>`;
+  }
+
+  function cursorTarget(canvas, moment, agentId = '', surface = null) {
+    const ownedArtifact = agentId
+      ? surface?.querySelector(`[data-agent-artifact-target="true"][data-agent-artifact-owner="${CSS.escape(agentId)}"]`)
+      : null;
+    if (ownedArtifact) return ownedArtifact;
+    const graphStepTarget = canvas.querySelector('[data-agent-cursor-target="true"]');
+    if (graphStepTarget) return graphStepTarget;
+    const identity = NEMOTRON_AGENT_IDENTITIES[agentId];
+    if (identity) {
+      const specialistTargets = [...canvas.querySelectorAll(identity.target)];
+      const specialistTarget = specialistTargets.find(node => {
+        const box = node.getBoundingClientRect();
+        return box.bottom > 72 && box.top < window.innerHeight - 36;
+      }) || specialistTargets[0];
+      if (specialistTarget) return specialistTarget;
+    }
     const selectors = {
       opening: '.live-question,.event-row:last-child', read: '.event-row:last-child,.attachment-row:last-child',
       understand: '.fact-row:last-child,.event-row:last-child', research: '.official-source-tab[aria-selected="true"],.law-query:last-child,.law-card:last-child',
@@ -239,25 +392,85 @@
       'review-applied': '.review-applied-delta,.review-applied', knowledge: '.v20-learning-summary',
       'later-work': '#laterResult', 'later-result': '.before-after section:last-child,.v18-reuse-proof', failure: '.failure-state',
     };
-    return canvas.querySelector(selectors[moment] || selectors.opening) || canvas.querySelector('.stage-shell');
+    const candidates = [...canvas.querySelectorAll(selectors[moment] || selectors.opening)];
+    return candidates.find(node => {
+      const box = node.getBoundingClientRect();
+      return box.bottom > 72 && box.top < window.innerHeight - 36;
+    }) || candidates[0] || canvas.querySelector('.stage-shell');
+  }
+
+  function cursorTargetKey(target) {
+    if (!target) return '';
+    const identity = [
+      target.id, target.dataset.officialSourceTab, target.dataset.nodeId,
+      target.dataset.factId, target.dataset.itemId, target.dataset.lawId,
+      target.dataset.agentArtifactOwner && target.dataset.outputArtifact
+        ? `${target.dataset.agentArtifactOwner}:${target.dataset.outputArtifact}`
+        : '',
+      target.dataset.processBuildIndex, target.dataset.memoryCheck,
+      target.getAttribute('data-agent-cursor-target') === 'true' ? target.dataset.nodeId || target.dataset.processBuildIndex || 'graph-step' : '',
+    ].find(Boolean);
+    return `${target.tagName.toLowerCase()}:${identity || [...target.parentElement?.children || []].indexOf(target)}`;
+  }
+
+  function settleCursorTarget(target) {
+    if (cursorMotion.target && cursorMotion.target !== target && cursorMotion.target.isConnected) {
+      cursorMotion.target.classList.remove('v21-agent-target');
+    }
+    cursorMotion.target = target;
   }
 
   function positionAgentCursor(surface, canvas, moment) {
     const cursor = $('#v21AgentCursor', surface);
-    const target = cursorTarget(canvas, moment);
+    const target = cursorTarget(canvas, moment, cursor?.dataset.agentId || '', surface);
     if (!cursor || !target) return;
     requestAnimationFrame(() => {
       if (!cursor.isConnected || !target.isConnected) return;
-      const surfaceBox = surface.getBoundingClientRect();
       const targetBox = target.getBoundingClientRect();
-      const x = Math.max(18, Math.min(surfaceBox.width - 330, targetBox.right - surfaceBox.left - 300));
-      const y = Math.max(145, targetBox.top - surfaceBox.top + Math.min(24, targetBox.height * .35));
-      cursor.style.setProperty('--cursor-x', `${Math.round(x)}px`);
-      cursor.style.setProperty('--cursor-y', `${Math.round(y)}px`);
-      cursor.classList.remove('is-clicking');
-      requestAnimationFrame(() => cursor.classList.add('is-clicking'));
+      const cursorBox = cursor.getBoundingClientRect();
+      const cursorWidth = cursorBox.width || 238;
+      const cursorHeight = cursorBox.height || 46;
+      const targetIsVisible = targetBox.bottom > 72 && targetBox.top < window.innerHeight - 36;
+      const anchorX = targetIsVisible ? targetBox.right - Math.min(18, targetBox.width * .1) : window.innerWidth - cursorWidth - 32;
+      const anchorY = targetIsVisible ? targetBox.top + Math.min(22, targetBox.height * .32) : window.innerHeight - cursorHeight - 36;
+      const x = Math.round(Math.max(18, Math.min(window.innerWidth - cursorWidth - 18, anchorX - 16)) / 2) * 2;
+      const y = Math.round(Math.max(80, Math.min(window.innerHeight - cursorHeight - 18, anchorY)) / 2) * 2;
+      const cursorChanged = cursorMotion.cursor !== cursor;
+      const geometryChanged = cursorMotion.x === null || cursorMotion.y === null
+        || Math.abs(cursorMotion.x - x) >= 4 || Math.abs(cursorMotion.y - y) >= 4;
+      if (cursorChanged || geometryChanged) {
+        cursor.style.setProperty('--cursor-x', `${x}px`);
+        cursor.style.setProperty('--cursor-y', `${y}px`);
+        cursorMotion.cursor = cursor;
+        cursorMotion.x = x;
+        cursorMotion.y = y;
+      }
+
+      const activationKey = `${cursor.dataset.eventId || moment}:${cursor.dataset.agentId || 'casepath'}:${cursorTargetKey(target)}`;
+      settleCursorTarget(target);
+      if (cursorMotion.activationKey === activationKey) return;
+      cursorMotion.activationKey = activationKey;
+      window.dispatchEvent(new CustomEvent('casepath:cursor-step', { detail: {
+        activationKey,
+        moment,
+        eventId: cursor.dataset.eventId || '',
+        actorType: cursor.dataset.actorType || '',
+        agentId: cursor.dataset.agentId || '',
+        signature: cursor.dataset.agentSignature || 'casepath',
+        target: cursorTargetKey(target),
+        x,
+        y,
+      } }));
+      window.clearTimeout(cursorMotion.clickTimer);
+      window.clearTimeout(cursorMotion.targetTimer);
+      cursor.classList.add('is-clicking');
       target.classList.add('v21-agent-target');
-      window.setTimeout(() => target.classList.remove('v21-agent-target'), 900);
+      cursorMotion.clickTimer = window.setTimeout(() => {
+        if (cursor.isConnected) cursor.classList.remove('is-clicking');
+      }, 160);
+      cursorMotion.targetTimer = window.setTimeout(() => {
+        if (target.isConnected) target.classList.remove('v21-agent-target');
+      }, 680);
     });
   }
 
@@ -418,6 +631,31 @@
     });
   }
 
+  function cursorDecorationMutation(mutation) {
+    if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') return false;
+    const withoutCursorDecoration = value => String(value || '')
+      .split(/\s+/)
+      .filter(name => name && !['is-clicking', 'v21-agent-target'].includes(name))
+      .sort()
+      .join(' ');
+    return withoutCursorDecoration(mutation.oldValue)
+      === withoutCursorDecoration(mutation.target.getAttribute('class'));
+  }
+
+  function narrateGraphCursor(event) {
+    const cursor = $('#v21AgentCursor');
+    const nodeId = event?.detail?.nodeId || '';
+    const target = nodeId ? $(`[data-agent-cursor-target="true"][data-node-id="${CSS.escape(nodeId)}"], [data-agent-cursor-target="true"] [data-node-id="${CSS.escape(nodeId)}"]`) : null;
+    const title = target?.querySelector?.('strong')?.textContent?.trim()
+      || target?.textContent?.trim()
+      || nodeId;
+    if (!cursor || !title || event?.detail?.kind === 'complete') return;
+    const action = event.detail.kind === 'branch' ? `Selecting ${title}` : `Adding ${title}`;
+    cursor.dataset.action = action;
+    cursor.querySelector('.v21-cursor-action').textContent = action;
+    cursor.setAttribute('aria-label', `CasePath process construction: ${action}`);
+  }
+
   function onClick(event) {
     const open = event.target.closest?.('[data-v20-open-documents]');
     if (open) {
@@ -450,11 +688,20 @@
   function boot() {
     document.addEventListener('click', onClick);
     document.addEventListener('keydown', onKeydown);
-    const observer = new MutationObserver(queueEnhance);
+    const observer = new MutationObserver(mutations => {
+      if (mutations.every(cursorDecorationMutation)) return;
+      queueEnhance();
+    });
     for (const target of [document.body, $('#stageCanvas'), $('#agentProgress'), $('#submissionContent')]) {
-      if (target) observer.observe(target, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class', 'data-active-stage'] });
+      if (target) observer.observe(target, { childList: true, subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ['hidden', 'class', 'aria-selected', 'data-active-stage'] });
     }
+    $('#stageCanvas')?.addEventListener('scroll', queueEnhance, { passive: true });
+    window.addEventListener('resize', queueEnhance, { passive: true });
     window.addEventListener('casepath:render', queueEnhance);
+    window.addEventListener('casepath:graph-step', event => {
+      narrateGraphCursor(event);
+      queueEnhance();
+    });
     queueEnhance();
   }
 

@@ -43,6 +43,8 @@ PUBLIC_ASSETS = (
     "assets/live-v19.css",
     "assets/live-v20-focus.css",
     "assets/live-v20-focus.js",
+    "assets/process-story.css",
+    "assets/process-story.js",
 )
 GENERATED_FILES = ("deployment.json",)
 PUBLIC_INVENTORY = frozenset((*PUBLIC_ROOT_FILES, *PUBLIC_ASSETS, *GENERATED_FILES))
