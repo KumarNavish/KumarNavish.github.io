@@ -837,6 +837,24 @@
     });
   }
 
+  function waitForOfficialLawTour() {
+    const complete = () => document.querySelector('#artifactCanvas[data-official-law-tour-state="complete"]');
+    if (complete()) return Promise.resolve();
+    return new Promise(resolve => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        window.removeEventListener('casepath:official-source-tour-complete', onComplete);
+        window.clearTimeout(timeout);
+        resolve();
+      };
+      const onComplete = () => finish();
+      const timeout = window.setTimeout(finish, PROCESS_STORY_TIMEOUT_MS);
+      window.addEventListener('casepath:official-source-tour-complete', onComplete, { once: true });
+    });
+  }
+
   function waitsForCompletedProcess(event) {
     if (['evidence', 'experience', 'verify'].includes(event?.stage)) return true;
     if (event?.stage !== 'agent_orchestration') return false;
@@ -870,6 +888,7 @@
             ? ARTIFACT_FRAME_MS
             : BACKGROUND_BEAT_MS;
       await wait(frameMs);
+      if (phase === 'artifact' && entry.event.stage === 'research') await waitForOfficialLawTour();
       if (phase === 'artifact' && entry.event.stage === 'process') await waitForProcessStory();
     }
     state.presenting = false;
@@ -1041,9 +1060,6 @@
         cachePurpose: browser.dataset.cachePurpose,
       } }));
     });
-    buttons.forEach((button, index) => window.setTimeout(() => {
-      if (button.isConnected && $('#stageCanvas')?.dataset.casepathMoment === 'research') button.click();
-    }, 500 + index * 2000));
   }
 
   function renderLawStage(stage, event) {
