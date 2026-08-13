@@ -132,10 +132,8 @@ def test_process_workspace_interactions_preserve_declared_capabilities() -> None
     source = (
         release_tool.REPOSITORY / "casepath" / "assets" / "live-v16.js"
     ).read_text(encoding="utf-8")
-    assert (
-        '<div class="process-layout" data-evidence="${esc(String(evidence))}" '
-        'data-precedents="${esc(String(precedents))}">' in source
-    )
+    assert '<div class="process-layout" data-evidence="${esc(String(evidence))}" ' in source
+    assert 'data-precedents="${esc(String(precedents))}"' in source
     assert "const layout = button.closest('.process-layout');" in source
     assert "if (!layout) return;" in source
     assert "evidence: layout.dataset.evidence === 'true'" in source
@@ -210,6 +208,7 @@ def test_flagship_presentation_holds_work_and_artifacts_for_clarity() -> None:
     assert "const WORKING_FRAME_MS = 2400;" in renderer
     assert "const ARTIFACT_FRAME_MS = 5600;" in renderer
     assert "const RESEARCH_ARTIFACT_FRAME_MS = 9000;" in renderer
+    assert "const PROCESS_ARTIFACT_FRAME_MS = 35000;" in renderer
     assert "const BACKGROUND_BEAT_MS = reduceMotion ? 20 : 120;" in renderer
     assert "const PRESENTABLE_STAGE_STATES = new Set([...SUCCESS_EVENT_STATES, 'candidate_prepared']);" in renderer
     assert "run?.process_candidate" in renderer
@@ -217,8 +216,8 @@ def test_flagship_presentation_holds_work_and_artifacts_for_clarity() -> None:
     assert "state.run?.verification_candidate" in renderer
     assert "casepath:presentation" in renderer
     assert 'data-retrieval-method="versioned_official_source_registry_lookup"' in renderer
-    assert "Official Swiss source · cached snapshot" in renderer
-    assert "Open official website ↗" in renderer
+    assert "Cached exact official source" in renderer
+    assert "Verify on official website ↗" in renderer
     assert "button.click();" in renderer
     assert "Why it matters" in focus
     assert "Doing now" in focus
@@ -226,6 +225,167 @@ def test_flagship_presentation_holds_work_and_artifacts_for_clarity() -> None:
     assert "window.__casepathPresentationTimeline" in browser_gate
     assert "working frame ${workMs.toFixed(0)}ms" in browser_gate
     assert "artifact frame ${artifactMs.toFixed(0)}ms" in browser_gate
+
+
+def test_process_story_builds_grounded_nodes_at_a_readable_rate() -> None:
+    renderer = (
+        release_tool.REPOSITORY / "casepath" / "assets" / "live-v16.js"
+    ).read_text(encoding="utf-8")
+    controller = (
+        release_tool.REPOSITORY / "casepath" / "assets" / "process-story.js"
+    ).read_text(encoding="utf-8")
+    styles = (
+        release_tool.REPOSITORY / "casepath" / "assets" / "process-story.css"
+    ).read_text(encoding="utf-8")
+    index = (release_tool.REPOSITORY / "casepath" / "index.html").read_text(
+        encoding="utf-8"
+    )
+
+    assert "const PROCESS_NODE_INTERVAL_MS = 2500;" in controller
+    assert "const PROCESS_BRANCH_HOLD_MS = 2500;" in controller
+    assert "const PROCESS_ARTIFACT_FRAME_MS = 35000;" in renderer
+    assert "phase === 'artifact' && entry.event.stage === 'process'" in renderer
+    assert "? PROCESS_ARTIFACT_FRAME_MS" in renderer
+    assert "casepath:graph-step" in controller
+    assert "basisKinds" in controller
+    assert "factIds" in controller
+    assert "lawIds" in controller
+    assert "parentId" in controller
+    assert "evidenceRequirementIds" in controller
+    assert "if (completedStories.has(key))" in controller
+    assert "completedStories.has(key) || reduceMotion" not in controller
+    assert 'data-process-story="${story ? \'grounded-node-sequence/1.0.0\' : \'\'}"' in renderer
+    assert "data-basis-fact-ids" in renderer
+    assert "data-basis-law-ids" in renderer
+    assert "data-basis-evidence-requirement-ids" in renderer
+    assert "Claim evidence" in renderer
+    assert "Swiss law" in renderer
+    assert "Process rationale" in renderer
+    assert "process-selected-branch" in renderer
+    assert 'aria-live="off" data-process-build-focus' in renderer
+    assert 'aria-live="polite" aria-atomic="true" data-process-build-announcement' in renderer
+    assert "Decision ${index + 1} of ${total}: ${title}." in controller
+    assert "display:block;\n  opacity:.46;" in styles
+    assert '[data-process-construction-state="complete"] .process-node.current .process-node-button' in styles
+    assert '[data-process-construction-state="complete"] .process-selected-branch[data-process-build-state="built"]' in styles
+    assert 'data-process-build-state="building"' in styles
+    assert "assets/process-story.css?v=1.0.0" in index
+    assert "assets/process-story.js?v=1.0.0" in index
+
+
+def test_cursor_exposes_exact_six_call_bound_agents_without_synthetic_seven() -> None:
+    assets = release_tool.REPOSITORY / "casepath" / "assets"
+    focus = (assets / "live-v20-focus.js").read_text(encoding="utf-8")
+    focus_css = (assets / "live-v20-focus.css").read_text(encoding="utf-8")
+    browser_gate = (
+        release_tool.REPOSITORY / "casepath-qa" / "browser-focused-v20.mjs"
+    ).read_text(encoding="utf-8")
+    identities = {
+        "canonical_facts": ("Guarded Canonical Facts Agent", "CF", "facts"),
+        "orchestrator_plan": ("Nemotron Orchestrator", "OR", "orchestrator"),
+        "document_source_integrity": (
+            "Document and Source Integrity Agent",
+            "DS",
+            "sources",
+        ),
+        "process_decision_mapping": (
+            "Process Decision Mapping Agent",
+            "PM",
+            "process",
+        ),
+        "evidence_checklist": (
+            "Evidence and Checklist Agent",
+            "EC",
+            "evidence",
+        ),
+        "final_claim_brief_audit": ("Final Claim Brief Agent", "FB", "audit"),
+    }
+    identity_start = focus.index("const NEMOTRON_AGENT_IDENTITIES = Object.freeze({")
+    identity_end = focus.index("\n  });", identity_start)
+    identity_source = focus[identity_start:identity_end]
+    assert identity_source.count("order:") == 6
+    for agent_id, (role, monogram, signature) in identities.items():
+        agent_start = identity_source.index(f"    {agent_id}: {{")
+        following = [
+            position
+            for other_id in identities
+            if other_id != agent_id
+            and (position := identity_source.find(f"    {other_id}: {{", agent_start + 1))
+            >= 0
+        ]
+        agent_end = min(following, default=len(identity_source))
+        block = identity_source[agent_start:agent_end]
+        assert f"label: '{role}'" in block
+        assert f"monogram: '{monogram}'" in block
+        assert f"signature: '{signature}'" in block
+    assert "data-agent-id=\"${esc(currentIdentity ? currentEvent.actorId : '')}\"" in focus
+    assert "currentEvent.actorType === 'nemotron_agent'" in focus
+    assert "NEMOTRON_AGENT_IDENTITIES[currentEvent.actorId] || null" in focus
+    for phase in (
+        "Claim understanding",
+        "Swiss-law research",
+        "Process discovery",
+        "Evidence requirements",
+        "Historical claims",
+        "Verification",
+        "Knowledge",
+    ):
+        assert f"label: '{phase}'" in focus
+        assert f"{phase} Agent" not in focus
+    assert focus_css.count('.v21-agent-cursor[data-agent-signature="') == 6
+    assert "@keyframes v21" not in focus_css
+    assert "requestAnimationFrame(() => cursor.classList.add('is-clicking'))" not in focus
+    assert "const activationKey =" in focus
+    assert "cursorTargetKey(target)" in focus
+    assert "casepath:cursor-step" in focus
+    assert "cursorDecorationMutation" in focus
+    assert "attributeOldValue: true" in focus
+    assert "graphStepTarget" in focus
+    assert "casepath:graph-step" in focus
+    assert "Cursor identities are the exact six call-bound Nemotron agents" in browser_gate
+    assert "production cursor did not present exact six model identities" in browser_gate
+
+
+def test_browser_gate_observes_single_focus_graph_steps_and_official_url_truth() -> None:
+    browser_gate = (
+        release_tool.REPOSITORY / "casepath-qa" / "browser-focused-v20.mjs"
+    ).read_text(encoding="utf-8")
+    renderer = (
+        release_tool.REPOSITORY / "casepath" / "assets" / "live-v16.js"
+    ).read_text(encoding="utf-8")
+    controller = (
+        release_tool.REPOSITORY / "casepath" / "assets" / "process-story.js"
+    ).read_text(encoding="utf-8")
+
+    assert "window.__casepathCursorSteps = [];" in browser_gate
+    assert "window.__casepathGraphSteps = [];" in browser_gate
+    assert "window.__casepathOfficialSourceSteps = [];" in browser_gate
+    assert "focusIdCount" in browser_gate
+    assert "cursorIdCount" in browser_gate
+    assert "cursorInsideFocus" in browser_gate
+    assert "semantic cursor activation repeated" in browser_gate
+    assert "cursor never followed graph step" in browser_gate
+    assert "node order does not equal returned main_spine" in browser_gate
+    assert "provenance kinds absent or invalid" in browser_gate
+    assert "process rationale absent" in browser_gate
+    assert "process artifact hold" in browser_gate
+    assert "completed graph does not visibly retain the full returned spine" in browser_gate
+    assert "completed graph spine is not fully interactive" in browser_gate
+    assert "completed graph does not emphasize only the current node" in browser_gate
+    assert "detailed provenance floods the live region" in browser_gate
+    assert "source, tab, passage, address, and verify-URL truth" in browser_gate
+    assert "officialStepHolds.some(value => value < 1850)" in browser_gate
+    assert "versioned_official_source_registry_lookup" in browser_gate
+    assert "reliable_same-source_reuse" in browser_gate
+    assert "fedlex.admin.ch" in browser_gate
+    assert "bwo.admin.ch" in browser_gate
+    assert "data-official-source-url" in renderer
+    assert "data-official-source-panel" in renderer
+    assert "data-official-browser-url" in renderer
+    assert "Verify on official website ↗" in renderer
+    assert "casepath:official-source-step" in renderer
+    assert "data-agent-cursor-target" in controller
+    assert "casepath:graph-step" in controller
 
 
 def test_later_result_keeps_returned_comparison_hashes_visible() -> None:
@@ -245,7 +405,8 @@ def test_later_result_keeps_returned_comparison_hashes_visible() -> None:
         and "display:none!important" in line
     )
     assert ".final-proof" not in hidden_later_result_rule
-    assert 'assets/live-v20-focus.css?v=20.0.5' in index
+    assert 'assets/live-v20-focus.css?v=20.0.6' in index
+    assert 'assets/live-v20-focus.js?v=20.0.4' in index
     assert "const finalComparison = page.locator('#laterResult .final-proof');" in browser_gate
     assert "await finalComparison.isVisible()" in browser_gate
     assert "finalComparisonText.includes(proof.before.result_hash)" in browser_gate
@@ -6985,7 +7146,7 @@ def test_handoff_continuity_uses_structured_moments_without_translucent_text() -
         encoding="utf-8"
     )
     assert 'assets/live-v17-continuity.css?v=20.0.0' in index
-    assert 'assets/live-v16.js?v=20.0.6' in index
+    assert 'assets/live-v16.js?v=20.0.7' in index
     assert 'assets/live-v17.js?v=20.0.1' in index
     assert 'assets/live-v18.js?v=20.0.1' in index
     assert 'assets/live-v16.css?v=20.0.0' in index
