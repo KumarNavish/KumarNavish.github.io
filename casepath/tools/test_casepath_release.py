@@ -227,6 +227,23 @@ def test_flagship_presentation_holds_work_and_artifacts_for_clarity() -> None:
     assert "artifact frame ${artifactMs.toFixed(0)}ms" in browser_gate
 
 
+def test_unified_audit_preserves_the_live_orchestration_proof() -> None:
+    stability = (
+        release_tool.REPOSITORY / "casepath" / "assets" / "live-v16-stability.js"
+    ).read_text(encoding="utf-8")
+    index = (release_tool.REPOSITORY / "casepath" / "index.html").read_text(
+        encoding="utf-8"
+    )
+
+    handler = stability[stability.index("async function openUnifiedAudit") :]
+    assert handler.index("shell.insertBefore(proof, content);") < handler.index(
+        "content.innerHTML ="
+    )
+    assert "proof.hidden = false;" in handler
+    assert "proof.classList.add('v21-audit-proof');" in handler
+    assert 'assets/live-v16-stability.js?v=20.0.1' in index
+
+
 def test_process_story_builds_grounded_nodes_at_a_readable_rate() -> None:
     renderer = (
         release_tool.REPOSITORY / "casepath" / "assets" / "live-v16.js"
