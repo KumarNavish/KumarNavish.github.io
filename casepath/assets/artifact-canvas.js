@@ -1290,7 +1290,7 @@
     return `<section class="ac-review-applied-note" style="--spatial-x:54;--spatial-y:76" data-review-edit-state="applied" data-review-node-id="ventilation_dispute" data-spatial-anchor-node-id="ventilation_dispute">
       <small>Correction applied to this case</small>
       <strong>Ventilation check added · broader testing conditional</strong>
-      <span>Responsibility remains blocked.</span>
+      <span>Unverified demo correction · model acceptance not reused · responsibility remains blocked.</span>
     </section>`;
   }
 
