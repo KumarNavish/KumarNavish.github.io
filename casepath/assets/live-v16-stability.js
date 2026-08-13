@@ -233,13 +233,23 @@
 
     const drawer = document.querySelector('#auditDrawer');
     const content = document.querySelector('#auditContent');
-    if (!drawer || !content) return;
+    const shell = drawer?.querySelector('.audit-shell');
+    const proof = document.querySelector('#orchestrationProof');
+    if (!drawer || !content || !shell) return;
 
     trigger.disabled = true;
     const originalLabel = trigger.textContent;
     trigger.textContent = 'Loading audit…';
 
     try {
+      // The capture-phase handler owns this click. Move the renderer-owned
+      // proof beside the replaceable event list so later content refreshes
+      // cannot delete the six-agent/three-gate evidence.
+      if (proof) {
+        proof.hidden = false;
+        proof.classList.add('v21-audit-proof');
+        shell.insertBefore(proof, content);
+      }
       const ids = discoveredRunIds();
       const runs = await Promise.all(ids.map(async runId => {
         const response = await fetch(`${apiBase}/api/runs/${encodeURIComponent(runId)}`);
