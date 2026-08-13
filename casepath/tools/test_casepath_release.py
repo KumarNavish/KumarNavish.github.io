@@ -301,6 +301,7 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "factId: detail.factId || ''" in browser_gate
     assert "Valid claim-source inspection fixture was rejected" in browser_gate
     assert "Factless claim-source inspection fixture was accepted" in browser_gate
+    assert "Cross-node evidence-derived claim-source inspection was accepted" in browser_gate
     assert "Fabricated source-inspection fixture was accepted" in browser_gate
     assert "Cursor-unbound source-inspection fixture was accepted" in browser_gate
     assert "Valid spatial process geometry fixture was rejected" in browser_gate
