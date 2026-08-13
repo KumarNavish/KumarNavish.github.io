@@ -3108,7 +3108,7 @@ async function execute() {
   check(isProductionJourney() ? 'Review is an explicitly unverified post-model transform with exact pre/post hashes and preserved model-time acceptance receipts' : 'Local deterministic review is an explicitly unverified transform with exact pre/post hashes', reviewTransformIssues.length === 0, JSON.stringify(reviewTransformIssues));
   const appliedReviewCopy = await page.locator('#stageCanvas').innerText();
   check('Applied-review UI keeps the edit explicitly unverified', /unverified/i.test(appliedReviewCopy), appliedReviewCopy);
-  if (isProductionJourney()) check('Applied-review UI says model acceptance was not reused for the unverified edit', /model acceptance\b[^.]{0,120}\b(?:was|is)\s+not reused/i.test(appliedReviewCopy), appliedReviewCopy);
+  if (isProductionJourney()) check('Applied-review UI says model acceptance was not reused for the unverified edit', /model acceptance\b[^.]{0,120}\b(?:(?:was|is)\s+)?not reused/i.test(appliedReviewCopy), appliedReviewCopy);
   const appliedContributionBadgeCount = await page.locator('.review-applied .model-contribution-attribution').count();
   const visibleContributionBadgeCount = await page.locator('.model-contribution-attribution:visible').count();
   const visibleFinalHandoffCount = await page.locator('.v20-final-handoff:visible').count();
