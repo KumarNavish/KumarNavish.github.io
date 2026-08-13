@@ -320,6 +320,7 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "Number(item.ranking?.rank) === 1" in canvas
     assert "focal.dataset.artifactFocus === 'true'" in canvas
     assert "state.officialLawTourVisitedIds.has(String(entityId || ''))" in canvas
+    assert "if (button.dataset.acInspectionTarget !== 'true')" in canvas
     assert "const focus = root?.querySelector('[data-artifact-focus=\"true\"]');" in canvas
     assert "focus?.querySelector('[data-ac-cursor-target=\"true\"]')" in canvas
     assert canvas.count("Number(item.ranking?.rank) === 1") >= 2

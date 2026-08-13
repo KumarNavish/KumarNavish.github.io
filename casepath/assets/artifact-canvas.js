@@ -1876,7 +1876,11 @@
       document.dispatchEvent(new CustomEvent('casepath:continue-journey'));
     } else if (action === 'open-law') {
       setActiveSourceLocator(button.dataset.sourceLocatorId || '');
-      openLawDetail(button.dataset.lawId || '', button.dataset.sourceLocatorId || '');
+      // Automatic graph construction already presents the exact passage as the
+      // sole focal artifact. Reserve the modal for an explicit post-build click.
+      if (button.dataset.acInspectionTarget !== 'true') {
+        openLawDetail(button.dataset.lawId || '', button.dataset.sourceLocatorId || '');
+      }
     }
   }
 
