@@ -8,10 +8,11 @@
   const SUCCESS_STATES = new Set(['accepted', 'complete', 'completed', 'passed', 'produced', 'succeeded', 'verified']);
   const PROCESS_GATE_ID = 'deterministic_process_gate';
   const PROCESS_ARTIFACT_IDS = new Set(['process_graph', 'accepted_process_graph']);
-  const GRAPH_NODE_DWELL_MS = 2400;
-  const GRAPH_SOURCE_DWELL_MS = 1200;
+  const GRAPH_NODE_DWELL_MS = 500;
+  const GRAPH_SOURCE_DWELL_MS = 650;
+  const GRAPH_BRANCH_SOURCE_DWELL_MS = 1100;
   const OFFICIAL_LAW_DWELL_MS = 1900;
-  const GRAPH_MOMENTS = new Set(['process', 'ready', 'review-applied']);
+  const GRAPH_MOMENTS = new Set(['process', 'evidence', 'experience', 'ready', 'review', 'review-applied', 'later-result']);
   const SIMPLIFIED_SPINE_IDS = [
     'intake',
     'scope',
@@ -141,6 +142,8 @@
     moisture_measurements: 'Moisture measurements',
     building_envelope: 'Building envelope',
     technical_assessment: 'Independent assessment',
+    management_position: 'Management allegation',
+    use_evidence: 'Ventilation evidence',
   });
 
   const MOMENT_COPY = Object.freeze({
@@ -190,13 +193,13 @@
       authority: 'Deterministically verified demo result',
     },
     review: {
-      title: 'Reviewing the decision that changes the process',
-      detail: 'The demonstration review is not qualified expert approval.',
+      title: 'Expert correction',
+      detail: 'Change one evidence relationship without resolving causation.',
       authority: 'Simulated demo review',
     },
     'review-applied': {
-      title: 'Applying the correction across the process',
-      detail: 'The returned graph and evidence relationships change together.',
+      title: 'The correction now changes the process',
+      detail: 'A ventilation check is added while responsibility remains blocked.',
       authority: 'Deterministic review transform · unverified review',
     },
     knowledge: {
@@ -210,8 +213,8 @@
       authority: 'Receipt-bound deterministic comparison',
     },
     'later-result': {
-      title: 'Showing exactly what the future claim gained',
-      detail: 'Only receipt-backed, case-specific changes are presented as reuse.',
+      title: 'A later claim uses the correction',
+      detail: 'Unverified case memory · qualified review still required.',
       authority: 'Deterministic comparison · shared playbook unchanged unless released',
     },
     failure: {
@@ -445,6 +448,19 @@
       if (laterNodeIds.has('ventilation_dispute')) state.visibleNodeIds.add('ventilation_dispute');
       state.selectedNodeId = laterNodeIds.has('ventilation_dispute') ? 'ventilation_dispute' : (state.process?.current_node || 'causation');
     }
+    if (normalized === 'evidence' && state.focusEvidenceId) {
+      const focusedEvidence = asArray(state.checklist?.items).find(item => item.item_id === state.focusEvidenceId);
+      const ownerId = evidenceOwnerIds(focusedEvidence).find(nodeId => Boolean(nodeById(nodeId)));
+      if (ownerId) state.selectedNodeId = ownerId;
+    }
+    if (normalized === 'experience' && state.focusPrecedentId) {
+      const focusedPrecedent = state.precedents.find(item => item.claim_id === state.focusPrecedentId);
+      const factor = asArray(focusedPrecedent?.ranking?.factors).find(item => (
+        ['current_process_node', 'process_branch'].includes(item.factor) && nodeById(item.value)
+      ));
+      if (factor?.value) state.selectedNodeId = factor.value;
+    }
+    if (normalized === 'review') state.selectedNodeId = 'causation';
     if (normalized === 'review-applied' && nodeById('ventilation_dispute')) state.selectedNodeId = 'ventilation_dispute';
     if (normalized === 'research') state.neutralAuthority = 'official-law-registry';
     else if (normalized === 'experience') state.neutralAuthority = 'historical-ranking';
@@ -630,6 +646,10 @@
 
     if (state.moment === 'experience' && state.precedents.length && !state.focusPrecedentId) {
       state.focusPrecedentId = state.precedents[0]?.claim_id || '';
+      const factor = asArray(state.precedents[0]?.ranking?.factors).find(item => (
+        ['current_process_node', 'process_branch'].includes(item.factor) && nodeById(item.value)
+      ));
+      if (factor?.value) state.selectedNodeId = factor.value;
     }
     if (source === 'render' && state.moment === 'research') startOfficialLawTour();
     render();
@@ -698,7 +718,7 @@
   function simplifiedNodes() {
     const byId = new Map(asArray(state.process?.nodes).map(node => [node.node_id, node]));
     const projectedIds = [...SIMPLIFIED_SPINE_IDS];
-    if (state.result?.review_transform && byId.has('ventilation_dispute')) {
+    if (byId.has('ventilation_dispute') && (state.result?.review_transform || state.moment === 'later-result')) {
       projectedIds.splice(projectedIds.indexOf('causation') + 1, 0, 'ventilation_dispute');
     }
     return projectedIds.map(nodeId => {
@@ -865,8 +885,8 @@
           eventId: state.lastCursorEventId,
           agentId: state.lastCursorAgentId,
         } }));
-        state.graphRevealTimer = window.setTimeout(startBranchReveal, 700);
-      }, GRAPH_SOURCE_DWELL_MS);
+        state.graphRevealTimer = window.setTimeout(startBranchReveal, 350);
+      }, GRAPH_BRANCH_SOURCE_DWELL_MS);
     };
     render();
   }
@@ -1079,6 +1099,11 @@
     return `source:${artifactId}:page:${String(ref?.page || '')}:quote:${String(ref?.excerpt || '')}`;
   }
 
+  function sourceContextAttributes(fact, ref) {
+    const region = asArray(ref?.region).length === 4 ? JSON.stringify(ref.region) : '';
+    return `data-fact-id="${esc(fact?.fact_id || '')}" data-source-id="${esc(ref?.artifact_id || '')}" data-locator-kind="${esc(ref?.locator_kind || '')}" data-source-page="${esc(ref?.page || '')}" data-source-excerpt="${esc(ref?.excerpt || '')}" data-source-region="${esc(region)}" data-source-observation="${esc(ref?.observation || '')}" data-source-field="${esc(ref?.field || '')}" data-source-value="${esc(ref?.value ?? '')}" data-source-agent="${esc(ref?.agent || '')}" data-source-producer="${esc(ref?.producer || '')}" data-source-authority="${esc(ref?.authority || 'customer_submission')}" data-annotation-contract="${esc(ref?.annotation_contract || '')}" data-annotation-version="${esc(ref?.annotation_version || '')}" data-image-sha256="${esc(ref?.image_sha256 || '')}" data-fact-confidence="${esc(fact?.confidence ?? '')}" data-fact-state="${esc(fact?.state || '')}" data-source-locator-id="${esc(sourceLocatorId(ref))}"`;
+  }
+
   function lawLocatorId(law) {
     return `law:${String(law?.source_id || 'unknown-law')}`;
   }
@@ -1214,10 +1239,74 @@
   }
 
   function spatialPosition(nodeId) {
+    const branchPosition = CAUSATION_BRANCH_LAYOUT.find(([branchNodeId]) => branchNodeId === nodeId);
+    if (branchPosition) return [branchPosition[2], branchPosition[3]];
     return SPATIAL_SPINE_POSITIONS[nodeId] || [50, 50];
   }
 
-  function edgeMarkup(source, target, path, stateValue = '', sourcePosition = null, targetPosition = null) {
+  function laterMemoryDelta() {
+    const later = state.laterResult || {};
+    const receipt = asObject(later.memory_application) || {};
+    const processOperations = asArray(receipt.process_operations);
+    const evidenceOperations = asArray(receipt.evidence_operations);
+    const nodeOperation = processOperations.find(operation => operation?.operation === 'add_node');
+    const nodeId = String(nodeOperation?.node_id || (nodeById('ventilation_dispute') ? 'ventilation_dispute' : ''));
+    const edges = processOperations
+      .filter(operation => operation?.operation === 'add_edge' && operation.source && operation.target)
+      .map(operation => ({ source: String(operation.source), target: String(operation.target) }));
+    const evidenceIds = unique([
+      ...asArray(nodeOperation?.evidence_requirement_ids).map(String),
+      ...evidenceOperations.map(operation => String(operation?.item_id || '')),
+    ]);
+    const originId = String(
+      valueFrom(receipt?.source_memory, 'memory_id')
+      || valueFrom(receipt, 'memory_id')
+      || valueFrom(state.review, 'memory_id')
+      || '',
+    );
+    return {
+      originId,
+      nodeId,
+      edges: edges.slice(0, 2),
+      evidenceIds: evidenceIds.slice(0, 3),
+      receiptBound: receipt.contract === 'casepath.memory-application-receipt/1.0.0',
+    };
+  }
+
+  function nodeLabel(nodeId) {
+    return SPATIAL_NODE_LABELS[nodeId] || nodeById(nodeId)?.title || String(nodeId || '').replaceAll('_', ' ');
+  }
+
+  function reviewGraphEditMarkup() {
+    return `<section class="ac-review-graph-edit" style="--spatial-x:62;--spatial-y:74" data-review-edit-state="pending" data-review-node-id="causation" data-spatial-anchor-node-id="causation">
+      <small>Building-envelope assessment</small>
+      <div class="ac-review-change"><span>Required</span><b aria-hidden="true">→</b><strong>Conditional</strong></div>
+      <p>Responsibility remains blocked until competent causation evidence arrives.</p>
+      <button type="button" data-ac-action="submit-review" data-review-mode="conditional" data-casepath-primary-action="true" data-ac-cursor-target="true">Apply correction</button>
+    </section>`;
+  }
+
+  function reviewAppliedMarkup() {
+    return `<section class="ac-review-applied-note" style="--spatial-x:54;--spatial-y:76" data-review-edit-state="applied" data-review-node-id="ventilation_dispute" data-spatial-anchor-node-id="ventilation_dispute">
+      <small>Correction applied to this case</small>
+      <strong>Ventilation check added · broader testing conditional</strong>
+      <span>Responsibility remains blocked.</span>
+    </section>`;
+  }
+
+  function laterMemoryDeltaMarkup() {
+    const delta = laterMemoryDelta();
+    if (!delta.receiptBound || !delta.originId || !delta.nodeId || delta.edges.length !== 2 || delta.evidenceIds.length !== 3) return '';
+    const links = delta.edges.map(edge => `<span class="ac-memory-process-link" data-memory-origin-id="${esc(delta.originId)}" data-edge-source="${esc(edge.source)}" data-edge-target="${esc(edge.target)}"><b>${esc(nodeLabel(edge.source))}</b><i aria-hidden="true">→</i><strong>${esc(nodeLabel(edge.target))}</strong></span>`).join('');
+    const evidence = delta.evidenceIds.map(itemId => `<span class="ac-memory-evidence-change" data-memory-effect="evidence-changed" data-memory-origin-id="${esc(delta.originId)}" data-item-id="${esc(itemId)}"><b>${esc(SPATIAL_EVIDENCE_LABELS[itemId] || itemId.replaceAll('_', ' '))}</b><small>Updated</small></span>`).join('');
+    return `<section class="ac-memory-graph-delta" style="--spatial-x:53;--spatial-y:62" data-memory-receipt="true" data-memory-origin-id="${esc(delta.originId)}" data-spatial-anchor-node-id="${esc(delta.nodeId)}">
+      <div class="ac-memory-process-links" aria-label="Two receipt-bound process links">${links}</div>
+      <div class="ac-memory-evidence-changes" aria-label="Three receipt-bound evidence changes">${evidence}</div>
+      <p>Shared playbook unchanged.</p>
+    </section>`;
+  }
+
+  function edgeMarkup(source, target, path, stateValue = '', sourcePosition = null, targetPosition = null, extraAttributes = '') {
     const [sourceX, sourceY] = sourcePosition || spatialPosition(source);
     const [targetX, targetY] = targetPosition || spatialPosition(target);
     const x1 = sourceX * 10;
@@ -1228,18 +1317,51 @@
     const d = Math.abs(y2 - y1) < 2
       ? `M ${x1} ${y1} L ${x2} ${y2}`
       : `M ${x1} ${y1} C ${x1 + control} ${y1}, ${x2 - control} ${y2}, ${x2} ${y2}`;
-    return `<path d="${d}" data-spatial-edge="${esc(path)}" data-spatial-path="${esc(path)}" data-edge-source="${esc(source)}" data-edge-target="${esc(target)}" data-edge-state="${esc(stateValue)}"></path>`;
+    return `<path d="${d}" data-spatial-edge="${esc(path)}" data-spatial-path="${esc(path)}" data-edge-source="${esc(source)}" data-edge-target="${esc(target)}" data-edge-state="${esc(stateValue)}" ${extraAttributes}></path>`;
   }
 
   function spatialEdgesMarkup(nodes) {
     const visible = new Set(nodes.filter(node => state.visibleNodeIds.has(node.node_id)).map(node => node.node_id));
     const paths = [];
+    const laterDelta = state.moment === 'later-result' ? laterMemoryDelta() : null;
+    const renderedMemoryEdges = new Set();
     asArray(state.process?.edges).forEach(edge => {
       if (!visible.has(edge.source) || !visible.has(edge.target)) return;
       const path = edge.state === 'selected' || edge.state === 'loop' ? 'accepted' : 'future';
-      paths.push(edgeMarkup(edge.source, edge.target, path, edge.state || ''));
+      const edgeKey = `${edge.source}:${edge.target}`;
+      const isMemoryEdge = Boolean(laterDelta?.receiptBound && laterDelta.originId && !renderedMemoryEdges.has(edgeKey) && laterDelta.edges.some(item => (
+        item.source === edge.source && item.target === edge.target
+      )));
+      if (isMemoryEdge) renderedMemoryEdges.add(edgeKey);
+      const memoryAttributes = isMemoryEdge
+        ? `data-memory-effect="edge-added" data-memory-origin-id="${esc(laterDelta.originId)}"`
+        : '';
+      paths.push(edgeMarkup(edge.source, edge.target, path, edge.state || '', null, null, memoryAttributes));
     });
-    if (visible.has('causation') && !['review', 'review-applied'].includes(state.moment)) {
+    if (laterDelta?.receiptBound && laterDelta.originId) {
+      laterDelta.edges.forEach(edge => {
+        const edgeKey = `${edge.source}:${edge.target}`;
+        const exactVisibleBranch = nodeId => {
+          const returnedBranch = nodeById('causation')?.branches?.find(item => item.target === nodeId);
+          const returnedEdge = asArray(state.process?.edges).find(item => item.source === 'causation' && item.target === nodeId);
+          return Boolean(!state.graphRevealRunning && nodeById(nodeId) && returnedBranch && returnedEdge);
+        };
+        const sourceVisible = visible.has(edge.source) || exactVisibleBranch(edge.source);
+        const targetVisible = visible.has(edge.target) || exactVisibleBranch(edge.target);
+        if (renderedMemoryEdges.has(edgeKey) || !sourceVisible || !targetVisible) return;
+        renderedMemoryEdges.add(edgeKey);
+        paths.push(edgeMarkup(
+          edge.source,
+          edge.target,
+          'memory-added',
+          'added',
+          spatialPosition(edge.source),
+          spatialPosition(edge.target),
+          `data-memory-effect="edge-added" data-memory-origin-id="${esc(laterDelta.originId)}"`,
+        ));
+      });
+    }
+    if (visible.has('causation') && state.moment !== 'review-applied') {
       CAUSATION_BRANCH_LAYOUT.forEach(([target, , x, y]) => {
         if (state.graphRevealRunning && !state.visibleBranchIds.has(target)) return;
         const targetNode = nodeById(target);
@@ -1261,7 +1383,6 @@
 
   function spatialSatellitesMarkup() {
     if (!state.processAccepted || !state.visibleNodeIds.has('causation')) return '';
-    if (['review', 'review-applied'].includes(state.moment)) return '';
     const causation = nodeById('causation');
     const law = relevantLaw(lawsForNode(causation));
     const next = relevantEvidence(evidenceForNode('evidence_gap'));
@@ -1275,16 +1396,50 @@
       if (!branch || !returnedEdge) return '';
       return `<button type="button" class="ac-spatial-branch" style="--spatial-x:${x};--spatial-y:${y}" data-ac-action="select-node" data-spatial-id="${esc(nodeId)}" data-spatial-role="branch" data-spatial-path="${nodeId === 'evidence_gap' ? 'next-action' : 'uncertainty'}" data-node-id="${esc(nodeId)}" data-branch-id="${esc(branch.branch_id)}" data-branch-state="${esc(branch.state || '')}" aria-label="${esc(returnedNode.title)}"><span aria-hidden="true"></span><strong>${esc(shortLabel)}</strong></button>`;
     }).join('');
+    if (state.moment === 'review') return `${branchMarkup}${reviewGraphEditMarkup()}`;
+    if (state.moment === 'review-applied') return reviewAppliedMarkup();
     const lawLabel = law?.location?.match(/Art(?:icle)?\.?\s*\d+/i)?.[0]?.replace(/^Article/i, 'Art.') || 'Swiss law';
     const lawMarkup = !state.graphRevealRunning && law ? `<button type="button" class="ac-spatial-law-marker" style="--spatial-x:62;--spatial-y:27" data-ac-action="open-law" data-law-id="${esc(law.source_id)}" data-spatial-id="${esc(law.source_id)}" data-spatial-anchor-node-id="causation" data-spatial-role="law" data-spatial-path="legal-grounding" data-node-attachment-kind="law" ${lineageAttributes('law', law.source_id)} data-source-authority="${isOfficialLaw(law) ? 'official_registry' : 'deterministic_principle'}" data-source-locator-id="${esc(lawLocatorId(law))}" aria-label="${esc(`${law.title || law.source_id} ${law.location || ''}`)}"><span aria-hidden="true">§</span><strong>${esc(lawLabel)}</strong></button>` : '';
     const evidenceMarkup = evidence.map(item => `<button type="button" class="ac-evidence-chip" data-ac-action="inspect-evidence" data-evidence-id="${esc(item.item_id)}" data-spatial-id="${esc(item.item_id)}" data-spatial-anchor-node-id="causation" data-spatial-role="evidence" data-spatial-path="evidence-support" data-node-attachment-kind="evidence" ${lineageAttributes('evidence', item.item_id)} data-evidence-status="${esc(item.status || '')}" data-fact-id="${esc(item.fact_id || '')}" aria-label="${esc(`${item.title} · ${statusLabel(item.status)}`)}">${esc(SPATIAL_EVIDENCE_LABELS[item.item_id] || item.title)}</button>`).join('<span aria-hidden="true">·</span>');
     const nextMarkup = next && nodeById('evidence_gap') && evidenceOwnerIds(next).includes('evidence_gap') ? `<button type="button" class="ac-evidence-need" data-ac-action="inspect-evidence" data-spatial-id="${esc(next.item_id)}" data-spatial-role="next-action" data-spatial-path="next-action" data-spatial-next-action="true" data-spatial-anchor-node-id="causation" data-node-attachment-kind="evidence" ${lineageAttributes('evidence', next.item_id)} data-node-id="evidence_gap" data-evidence-id="${esc(next.item_id)}"><span>Need</span><strong>${esc(SPATIAL_EVIDENCE_LABELS[next.item_id] || next.title)}</strong><b aria-hidden="true">→</b></button>` : '';
     const evidencePanel = !state.graphRevealRunning && (nextMarkup || evidenceMarkup) ? `<section class="ac-evidence-relationship" style="--spatial-x:53;--spatial-y:82" aria-label="Evidence generated by the current process decision"><small>Causation unresolved</small>${nextMarkup}${evidenceMarkup ? `<div><span>Later</span>${evidenceMarkup}</div>` : ''}</section>` : '';
+    if (state.moment === 'later-result') return `${lawMarkup}${branchMarkup}${laterMemoryDeltaMarkup()}`;
     return `${lawMarkup}${branchMarkup}${evidencePanel}`;
+  }
+
+  function graphEvidenceDetailMarkup(node) {
+    const focused = asArray(state.checklist?.items).find(item => item.item_id === state.focusEvidenceId);
+    const localItems = evidenceForNode(node.node_id);
+    const item = localItems.find(candidate => candidate.item_id === focused?.item_id)
+      || relevantEvidence(localItems);
+    if (!item) return '';
+    return `<article class="ac-spatial-node-detail ac-graph-local-object ac-graph-local-evidence" data-spatial-role="active-detail" data-active-focal-path="true" data-node-id="${esc(node.node_id)}" data-spatial-anchor-node-id="${esc(node.node_id)}" data-node-attachment-kind="evidence" ${lineageAttributes('evidence', item.item_id)} data-evidence-id="${esc(item.item_id)}" data-evidence-status="${esc(item.status || '')}" data-fact-id="${esc(item.fact_id || '')}">
+      <span>${esc(statusLabel(item.status))} · evidence for this decision</span>
+      <strong>${esc(item.title)}</strong>
+      <p>${esc(item.why || 'This process decision generates the requirement.')}</p>
+      <button type="button" data-ac-action="inspect-evidence" data-node-id="${esc(node.node_id)}" data-evidence-id="${esc(item.item_id)}" data-casepath-primary-action="true" data-ac-cursor-target="true">Inspect requirement</button>
+    </article>`;
+  }
+
+  function graphReferenceDetailMarkup(node) {
+    const local = precedentsForNode(node.node_id);
+    const precedent = local.find(item => item.claim_id === state.focusPrecedentId)
+      || relevantPrecedent(local)
+      || null;
+    if (!precedent) return '';
+    const ranking = precedent.ranking || {};
+    return `<article class="ac-spatial-node-detail ac-graph-local-object ac-graph-local-reference" data-spatial-role="active-detail" data-active-focal-path="true" data-node-id="${esc(node.node_id)}" data-spatial-anchor-node-id="${esc(node.node_id)}" data-node-attachment-kind="precedent" ${lineageAttributes('precedent', precedent.claim_id)} data-precedent-id="${esc(precedent.claim_id)}" data-reference-status="${esc(precedent.review_status || '')}" data-source-authority="generated_reference" data-source-locator-id="reference:${esc(precedent.claim_id)}" data-ranking-contract="${esc(ranking.contract || '')}" data-ranking-rank="${esc(ranking.rank ?? '')}" data-ranking-score-basis-points="${esc(ranking.score_basis_points ?? '')}" data-ranking-context-hash="${esc(ranking.context_hash || '')}">
+      <span>${esc(provenanceLabel(precedent))}</span>
+      <strong>${esc(precedent.title)}</strong>
+      <p>${esc(precedent.why_useful || 'A generated reference pattern attached to this decision.')}</p>
+      <button type="button" data-ac-action="open-reference" data-node-id="${esc(node.node_id)}" data-precedent-id="${esc(precedent.claim_id)}" data-reference-status="${esc(precedent.review_status || '')}" data-source-authority="generated_reference" data-source-locator-id="reference:${esc(precedent.claim_id)}" data-casepath-primary-action="true" data-ac-cursor-target="true">Inspect generated pattern</button>
+    </article>`;
   }
 
   function spatialDetailMarkup(node) {
     if (!node) return '';
+    if (state.moment === 'evidence') return graphEvidenceDetailMarkup(node) || spatialGroundingMarkup(node);
+    if (state.moment === 'experience') return graphReferenceDetailMarkup(node) || spatialGroundingMarkup(node);
     if (state.graphInspecting && [state.pendingGraphNodeId, state.pendingBranchNodeId].includes(node.node_id)) return nodeInspectionMarkup(node);
     const facts = asArray(node.fact_ids);
     const laws = asArray(node.legal_source_ids);
@@ -1304,7 +1459,7 @@
     const items = [];
     if (fact && ref) {
       const found = ref.excerpt || ref.observation || `${fact.label}: ${fact.value}`;
-      items.push(`<button type="button" data-node-attachment-kind="fact" ${lineageAttributes('fact', fact.fact_id)} data-ac-action="open-source" data-node-id="${esc(node.node_id)}" data-fact-id="${esc(fact.fact_id)}" data-source-id="${esc(ref.artifact_id)}" data-locator-kind="${esc(ref.locator_kind || '')}" data-source-page="${esc(ref.page || '')}" data-source-excerpt="${esc(ref.excerpt || '')}" data-source-region="${esc(asArray(ref.region).length === 4 ? JSON.stringify(ref.region) : '')}" data-source-authority="customer_submission" data-source-locator-id="${esc(sourceLocatorId(ref))}"><span>Claim source</span><strong>${esc(found)}</strong></button>`);
+      items.push(`<button type="button" data-node-attachment-kind="fact" ${lineageAttributes('fact', fact.fact_id)} data-ac-action="open-source" data-node-id="${esc(node.node_id)}" ${sourceContextAttributes(fact, ref)}><span>Claim source</span><strong>${esc(found)}</strong></button>`);
     }
     laws.forEach(law => {
       items.push(`<button type="button" data-node-attachment-kind="law" ${lineageAttributes('law', law.source_id)} data-ac-action="open-law" data-node-id="${esc(node.node_id)}" data-law-id="${esc(law.source_id)}" data-source-authority="${isOfficialLaw(law) ? 'official_registry' : 'deterministic_principle'}" data-source-locator-id="${esc(lawLocatorId(law))}"><span>${isOfficialLaw(law) ? 'Swiss law' : 'Handling principle'} · ${esc(law.location || '')}</span><strong>${esc(law.passage_text || law.passage_summary || law.role || law.title)}</strong></button>`);
@@ -1323,6 +1478,7 @@
     const fact = relevantFact(factsForNode(node));
     const ref = asArray(fact?.source_refs)[0];
     const law = relevantLaw(lawsForNode(node));
+    const isCausationBranch = CAUSATION_BRANCH_LAYOUT.some(([branchNodeId]) => branchNodeId === node.node_id);
     if (LAW_FIRST_NODE_IDS.has(node.node_id) && law) {
       return `<button type="button" class="ac-build-inspection" data-ac-inspection-target="true" data-node-id="${esc(node.node_id)}" data-ac-action="open-law" data-law-id="${esc(law.source_id)}" data-source-authority="${isOfficialLaw(law) ? 'official_registry' : 'deterministic_principle'}" data-source-locator-id="${esc(lawLocatorId(law))}"><small>Looking at · ${isOfficialLaw(law) ? 'official Swiss law' : 'handling principle'} · ${esc(law.location || '')}</small><strong>${esc(law.passage_text || law.passage_summary || law.role || law.title)}</strong><span>Shapes the next decision · ${esc(SPATIAL_NODE_LABELS[node.node_id] || node.title)}</span></button>`;
     }
@@ -1331,16 +1487,31 @@
         ? `Image region · ${asArray(ref.region).map(value => Number(value).toFixed(2)).join(', ')}`
         : `Page ${ref.page || 'not returned'}`;
       const found = ref.excerpt || ref.observation || `${fact.label}: ${fact.value}`;
-      return `<button type="button" class="ac-build-inspection" data-ac-inspection-target="true" data-node-id="${esc(node.node_id)}" data-ac-action="open-source" data-fact-id="${esc(fact.fact_id)}" data-source-id="${esc(ref.artifact_id)}" data-locator-kind="${esc(ref.locator_kind || '')}" data-source-page="${esc(ref.page || '')}" data-source-excerpt="${esc(ref.excerpt || '')}" data-source-region="${esc(asArray(ref.region).length === 4 ? JSON.stringify(ref.region) : '')}" data-source-authority="customer_submission" data-source-locator-id="${esc(sourceLocatorId(ref))}"><small>Looking at · customer source · ${esc(locator)}</small><strong>${esc(found)}</strong><span>Supports the next decision · ${esc(SPATIAL_NODE_LABELS[node.node_id] || node.title)}</span></button>`;
+      const basis = node.node_id === 'evidence_gap'
+        ? 'Missing-fact basis · causation remains unresolved'
+        : isCausationBranch
+          ? `Unresolved allegation · does not establish ${SPATIAL_NODE_LABELS[node.node_id] || node.title}`
+          : `Supports the next decision · ${SPATIAL_NODE_LABELS[node.node_id] || node.title}`;
+      const sourceKind = isCausationBranch ? 'unresolved claim evidence' : 'customer source';
+      return `<button type="button" class="ac-build-inspection" data-ac-inspection-target="true" data-node-id="${esc(node.node_id)}" data-ac-action="open-source" ${sourceContextAttributes(fact, ref)}><small>Looking at · ${sourceKind} · ${esc(locator)}</small><strong>${esc(found)}</strong><span>${esc(basis)}</span></button>`;
     }
     if (law) {
-      return `<button type="button" class="ac-build-inspection" data-ac-inspection-target="true" data-node-id="${esc(node.node_id)}" data-ac-action="open-law" data-law-id="${esc(law.source_id)}" data-source-authority="${isOfficialLaw(law) ? 'official_registry' : 'deterministic_principle'}" data-source-locator-id="${esc(lawLocatorId(law))}"><small>Looking at · ${isOfficialLaw(law) ? 'official Swiss law' : 'handling principle'} · ${esc(law.location || '')}</small><strong>${esc(law.passage_text || law.passage_summary || law.role || law.title)}</strong><span>Shapes the next decision · ${esc(SPATIAL_NODE_LABELS[node.node_id] || node.title)}</span></button>`;
+      const relation = isCausationBranch
+        ? `Missing-fact basis · does not establish ${SPATIAL_NODE_LABELS[node.node_id] || node.title}`
+        : `Shapes the next decision · ${SPATIAL_NODE_LABELS[node.node_id] || node.title}`;
+      return `<button type="button" class="ac-build-inspection" data-ac-inspection-target="true" data-node-id="${esc(node.node_id)}" data-ac-action="open-law" data-law-id="${esc(law.source_id)}" data-source-authority="${isOfficialLaw(law) ? 'official_registry' : 'deterministic_principle'}" data-source-locator-id="${esc(lawLocatorId(law))}"><small>Looking at · ${isOfficialLaw(law) ? 'official Swiss law' : 'handling principle'} · ${esc(law.location || '')}</small><strong>${esc(law.passage_text || law.passage_summary || law.role || law.title)}</strong><span>${esc(relation)}</span></button>`;
     }
     const evidence = relevantEvidence(evidenceForNode(node.node_id));
     if (evidence) {
-      return `<button type="button" class="ac-build-inspection" data-ac-inspection-target="true" data-node-id="${esc(node.node_id)}" data-ac-action="inspect-evidence" data-evidence-id="${esc(evidence.item_id)}"><small>Looking at · exact evidence requirement</small><strong>${esc(evidence.title)}</strong><span>${esc(evidence.why || `Determines the next decision · ${SPATIAL_NODE_LABELS[node.node_id] || node.title}`)}</span></button>`;
+      const relation = isCausationBranch
+        ? `Missing-fact basis · this requirement can test, not establish, ${SPATIAL_NODE_LABELS[node.node_id] || node.title}`
+        : evidence.why || `Determines the next decision · ${SPATIAL_NODE_LABELS[node.node_id] || node.title}`;
+      return `<button type="button" class="ac-build-inspection" data-ac-inspection-target="true" data-node-id="${esc(node.node_id)}" data-ac-action="inspect-evidence" data-evidence-id="${esc(evidence.item_id)}"><small>Looking at · exact evidence requirement</small><strong>${esc(evidence.title)}</strong><span>${esc(relation)}</span></button>`;
     }
-    return `<button type="button" class="ac-build-inspection" data-ac-inspection-target="true" data-node-id="${esc(node.node_id)}" data-ac-action="select-node" data-inspection-id="${esc(node.node_id)}"><small>Looking at · exact accepted process record</small><strong>${esc(node.why || node.question || node.title)}</strong><span>Creates the next decision · ${esc(SPATIAL_NODE_LABELS[node.node_id] || node.title)}</span></button>`;
+    const relation = isCausationBranch
+      ? `Missing-fact basis · ${SPATIAL_NODE_LABELS[node.node_id] || node.title} remains hypothetical`
+      : `Creates the next decision · ${SPATIAL_NODE_LABELS[node.node_id] || node.title}`;
+    return `<button type="button" class="ac-build-inspection" data-ac-inspection-target="true" data-node-id="${esc(node.node_id)}" data-ac-action="select-node" data-inspection-id="${esc(node.node_id)}"><small>Looking at · exact accepted process record</small><strong>${esc(node.why || node.question || node.title)}</strong><span>${esc(relation)}</span></button>`;
   }
 
   function reconcileGraph() {
@@ -1380,6 +1551,9 @@
       ? 'pending'
       : state.graphRevealRunning ? 'building' : 'complete';
     if (!state.processAccepted) return;
+    if (!state.graphRevealRunning && ['evidence', 'experience'].includes(state.moment) && nodeById('causation')) {
+      state.selectedNodeId = 'causation';
+    }
     if (state.moment === 'review-applied' && nodeById('ventilation_dispute')) {
       state.visibleNodeIds.add('ventilation_dispute');
     }
@@ -1409,6 +1583,15 @@
       item.dataset.spatialPath = 'accepted';
       item.dataset.nodeState = nodeState(node);
       item.dataset.reviewChange = node.node_id === 'ventilation_dispute' && state.result?.review_transform ? 'added' : '';
+      const laterDelta = state.moment === 'later-result' ? laterMemoryDelta() : null;
+      const memoryAdded = Boolean(laterDelta?.receiptBound && laterDelta.originId && laterDelta.nodeId === node.node_id);
+      if (memoryAdded) {
+        item.dataset.memoryEffect = 'node-added';
+        item.dataset.memoryOriginId = laterDelta.originId;
+      } else {
+        delete item.dataset.memoryEffect;
+        delete item.dataset.memoryOriginId;
+      }
       item.dataset.revealState = state.visibleNodeIds.has(node.node_id) ? 'visible' : 'pending';
       item.dataset.processBuildState = state.visibleNodeIds.has(node.node_id)
         ? state.graphRevealRunning && state.graphDwell && index === state.graphRevealIndex - 1 ? 'building' : 'built'
@@ -1449,10 +1632,20 @@
       focus.textContent = nodeById(state.selectedNodeId)?.title || DEFAULT_NODE_COPY[state.selectedNodeId]?.[0] || 'Grounded decision';
       status.textContent = `Decision ${Math.min(state.graphRevealIndex + (state.graphDwell ? 0 : 1), nodes.length)} of ${nodes.length}: ${focus.textContent}`;
     } else {
-      count.textContent = state.moment === 'review-applied'
-        ? `Unverified demo correction · ${nodes.length} accepted decisions`
-        : `${nodes.length} accepted decisions · complete path available`;
-      focus.textContent = nodeById(state.selectedNodeId)?.title || 'Select one decision';
+      count.textContent = state.moment === 'review'
+        ? 'Expert correction'
+        : state.moment === 'review-applied'
+          ? 'Correction applied to this case'
+          : state.moment === 'later-result'
+            ? 'A later claim uses the correction'
+            : `${nodes.length} accepted decisions · complete path available`;
+      focus.textContent = state.moment === 'review'
+        ? 'Causation · responsibility remains blocked'
+        : state.moment === 'review-applied'
+          ? 'Ventilation check added · broader testing remains conditional'
+          : state.moment === 'later-result'
+            ? 'Unverified case memory · qualified review still required'
+            : nodeById(state.selectedNodeId)?.title || 'Select one decision';
       status.textContent = `${nodes.length} accepted decisions. Current decision: ${focus.textContent}.`;
     }
     edgeLayer.innerHTML = spatialEdgesMarkup(nodes);
@@ -1499,11 +1692,10 @@
       || state.precedents[0];
     if (!precedent) return `<article class="ac-stage-focus" data-ac-focal-object="reference" data-ac-cursor-target="true"><span>${esc(copy.authority)}</span><h3>${esc(copy.title)}</h3><p>${esc(copy.detail)}</p></article>`;
     const ranking = precedent.ranking || {};
-    return `<article class="ac-stage-focus ac-reference-focus" data-ac-focal-object="reference" data-node-attachment-kind="precedent" ${lineageAttributes('precedent', precedent.claim_id)} data-precedent-id="${esc(precedent.claim_id)}" data-reference-status="${esc(precedent.review_status || '')}" data-source-authority="generated_reference" data-source-locator-id="reference:${esc(precedent.claim_id)}" data-ac-cursor-target="true">
+    return `<article class="ac-stage-focus ac-reference-focus" data-ac-focal-object="reference" data-node-attachment-kind="precedent" ${lineageAttributes('precedent', precedent.claim_id)} data-precedent-id="${esc(precedent.claim_id)}" data-reference-status="${esc(precedent.review_status || '')}" data-source-authority="generated_reference" data-source-locator-id="reference:${esc(precedent.claim_id)}" data-ranking-contract="${esc(ranking.contract || '')}" data-ranking-rank="${esc(ranking.rank ?? '')}" data-ranking-score-basis-points="${esc(ranking.score_basis_points ?? '')}" data-ranking-context-hash="${esc(ranking.context_hash || '')}" data-ac-cursor-target="true">
       <span>${esc(copy.authority)} · ${esc(provenanceLabel(precedent))}</span>
       <h3>${esc(precedent.title)}</h3>
       <p>${esc(precedent.why_useful || copy.detail)}</p>
-      <strong>Rank ${esc(ranking.rank ?? 'not returned')} · ${esc(ranking.score_basis_points ?? 'score not returned')} points</strong>
       <button type="button" data-ac-action="open-reference" data-precedent-id="${esc(precedent.claim_id)}" data-reference-status="${esc(precedent.review_status || '')}" data-source-authority="generated_reference" data-source-locator-id="reference:${esc(precedent.claim_id)}" data-casepath-primary-action="true">Inspect this generated pattern</button>
     </article>`;
   }
@@ -1605,7 +1797,7 @@
       : memoryId
         ? 'It remains unverified and does not change the shared playbook.'
         : copy.detail;
-    const memoryEffects = state.moment === 'later-result' && memoryOriginId ? `
+    const memoryEffects = state.moment === 'later-result' && memoryOriginId && !state.processAccepted ? `
       <ol class="ac-memory-effects" aria-label="Receipt-bound case-specific changes">
         <li data-memory-effect="node-added" data-memory-origin-id="${esc(memoryOriginId)}">One decision node added</li>
         <li data-memory-effect="edge-added" data-memory-origin-id="${esc(memoryOriginId)}">Connection into the learned decision</li>
@@ -1660,10 +1852,9 @@
       : ref.locator_kind === 'metadata_field'
         ? `${ref.field || 'Metadata field'}: ${ref.value ?? 'value not returned'}`
         : `Page ${ref.page || 'not returned'} · “${ref.excerpt || 'passage not returned'}”`;
-    const locatorId = sourceLocatorId(ref);
-    return `<div class="ac-chain-object ac-source-object" data-node-attachment-kind="fact" ${lineageAttributes('fact', fact.fact_id)} data-fact-id="${esc(fact.fact_id)}" data-source-id="${esc(ref.artifact_id)}" data-locator-kind="${esc(ref.locator_kind || '')}" data-source-authority="customer_submission" data-source-locator-id="${esc(locatorId)}">
+    return `<div class="ac-chain-object ac-source-object" data-node-attachment-kind="fact" ${lineageAttributes('fact', fact.fact_id)} ${sourceContextAttributes(fact, ref)}>
       <div><span>What is established</span><strong>${esc(fact.label)} · ${esc(fact.value)}</strong><p>${esc(fact.explanation || '')}</p></div>
-      <aside><small>${esc(locator)}</small>${ref.observation ? `<p>${esc(ref.observation)}</p>` : ''}<button type="button" data-ac-action="open-source" data-node-id="${esc(node.node_id)}" data-fact-id="${esc(fact.fact_id)}" data-source-id="${esc(ref.artifact_id)}" data-locator-kind="${esc(ref.locator_kind || '')}" data-source-page="${esc(ref.page || '')}" data-source-excerpt="${esc(ref.excerpt || '')}" data-source-region="${esc(asArray(ref.region).length === 4 ? JSON.stringify(ref.region) : '')}" data-source-authority="customer_submission" data-source-locator-id="${esc(locatorId)}" data-casepath-primary-action="true">Open exact source</button></aside>
+      <aside><small>${esc(locator)}</small>${ref.observation ? `<p>${esc(ref.observation)}</p>` : ''}<button type="button" data-ac-action="open-source" data-node-id="${esc(node.node_id)}" ${sourceContextAttributes(fact, ref)} data-casepath-primary-action="true">Open exact source</button></aside>
       ${refs.length > 1 ? `<em>${refs.length - 1} corroborating source${refs.length === 2 ? '' : 's'} kept in this fact</em>` : ''}
     </div>`;
   }
@@ -1696,9 +1887,9 @@
     const precedent = relevantPrecedent(references);
     if (!precedent) return '<p class="ac-empty-chain">No node-local reference pattern was returned.</p>';
     const ranking = precedent.ranking || {};
-    return `<div class="ac-chain-object ac-reference-object" data-node-attachment-kind="precedent" ${lineageAttributes('precedent', precedent.claim_id)} data-precedent-id="${esc(precedent.claim_id)}" data-review-status="${esc(precedent.review_status || '')}" data-reference-status="${esc(precedent.review_status || '')}" data-source-authority="generated_reference" data-source-locator-id="reference:${esc(precedent.claim_id)}">
+    return `<div class="ac-chain-object ac-reference-object" data-node-attachment-kind="precedent" ${lineageAttributes('precedent', precedent.claim_id)} data-precedent-id="${esc(precedent.claim_id)}" data-review-status="${esc(precedent.review_status || '')}" data-reference-status="${esc(precedent.review_status || '')}" data-source-authority="generated_reference" data-source-locator-id="reference:${esc(precedent.claim_id)}" data-ranking-contract="${esc(ranking.contract || '')}" data-ranking-rank="${esc(ranking.rank ?? '')}" data-ranking-score-basis-points="${esc(ranking.score_basis_points ?? '')}" data-ranking-context-hash="${esc(ranking.context_hash || '')}">
       <div><span>${esc(provenanceLabel(precedent))}</span><strong>${esc(precedent.title)}</strong><p>${esc(precedent.why_useful || '')}</p></div>
-      <aside><small>Rank ${esc(ranking.rank ?? 'not returned')} · ${esc(ranking.score_basis_points ?? 'score not returned')} points</small><p>${esc((precedent.shared_features || []).slice(0, 3).join(' · '))}</p><button type="button" data-ac-action="open-reference" data-node-id="${esc(node.node_id)}" data-precedent-id="${esc(precedent.claim_id)}" data-reference-status="${esc(precedent.review_status || '')}" data-source-authority="generated_reference" data-source-locator-id="reference:${esc(precedent.claim_id)}" data-casepath-primary-action="true">Open reference pattern</button></aside>
+      <aside><p>${esc((precedent.shared_features || []).slice(0, 3).join(' · '))}</p><button type="button" data-ac-action="open-reference" data-node-id="${esc(node.node_id)}" data-precedent-id="${esc(precedent.claim_id)}" data-reference-status="${esc(precedent.review_status || '')}" data-source-authority="generated_reference" data-source-locator-id="reference:${esc(precedent.claim_id)}" data-casepath-primary-action="true">Open reference pattern</button></aside>
       ${references.length > 1 ? `<em>${references.length - 1} more ranked pattern${references.length === 2 ? '' : 's'} available.</em>` : ''}
     </div>`;
   }
@@ -1840,6 +2031,17 @@
       page: button.dataset.sourcePage ? Number(button.dataset.sourcePage) : null,
       excerpt: button.dataset.sourceExcerpt || '',
       region,
+      observation: button.dataset.sourceObservation || '',
+      field: button.dataset.sourceField || '',
+      value: button.dataset.sourceValue || '',
+      sourceAgent: button.dataset.sourceAgent || '',
+      sourceProducer: button.dataset.sourceProducer || '',
+      sourceAuthority: button.dataset.sourceAuthority || '',
+      annotationContract: button.dataset.annotationContract || '',
+      annotationVersion: button.dataset.annotationVersion || '',
+      imageSha256: button.dataset.imageSha256 || '',
+      factConfidence: button.dataset.factConfidence || '',
+      factState: button.dataset.factState || '',
       lawId: button.dataset.lawId || '',
       evidenceId: button.dataset.evidenceId || '',
       precedentId: button.dataset.precedentId || '',
@@ -1864,8 +2066,20 @@
             factId: detail.factId,
             nodeId: detail.nodeId,
             locator_kind: detail.locatorKind,
+            page: detail.page || 1,
             excerpt: detail.excerpt,
             region: detail.region,
+            observation: detail.observation,
+            field: detail.field,
+            value: detail.value,
+            agent: detail.sourceAgent,
+            producer: detail.sourceProducer,
+            authority: detail.sourceAuthority,
+            annotation_contract: detail.annotationContract,
+            annotation_version: detail.annotationVersion,
+            image_sha256: detail.imageSha256,
+            confidence: detail.factConfidence,
+            state: detail.factState,
           },
         } }));
       }

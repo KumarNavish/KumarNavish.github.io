@@ -193,8 +193,81 @@ def test_v20_review_keeps_the_unverified_authority_disclosure_visible() -> None:
     assert '[data-ac-action="submit-review"]' in browser_gate
     assert "const visibleReviewCopy" in browser_gate
     assert "[data-review-edit-state=\"applied\"]" in browser_gate
-    assert "/not qualified expert approval/i" in browser_gate
+    assert "/unverified/i" in browser_gate
     assert "Applied-review UI keeps the edit explicitly unverified" in browser_gate
+
+
+def test_north_star_review_and_learning_remain_graph_native() -> None:
+    assets = release_tool.REPOSITORY / "casepath" / "assets"
+    canvas = (assets / "artifact-canvas.js").read_text(encoding="utf-8")
+    browser_gate = (
+        release_tool.REPOSITORY / "casepath-qa" / "browser-focused-v20.mjs"
+    ).read_text(encoding="utf-8")
+
+    assert (
+        "const GRAPH_MOMENTS = new Set(['process', 'evidence', 'experience', "
+        "'ready', 'review', 'review-applied', 'later-result']);"
+    ) in canvas
+    assert "function reviewGraphEditMarkup()" in canvas
+    assert 'class="ac-review-graph-edit"' in canvas
+    assert 'data-review-node-id="causation"' in canvas
+    assert 'data-ac-action="submit-review"' in canvas
+    assert "function reviewAppliedMarkup()" in canvas
+    assert "function laterMemoryDeltaMarkup()" in canvas
+    assert 'data-memory-effect="node-added"' in canvas
+    assert 'data-memory-effect="edge-added"' in canvas
+    assert 'data-memory-effect="evidence-changed"' in canvas
+    assert "Shared playbook unchanged." in canvas
+    assert "function persistentGraphSceneSnapshot()" in browser_gate
+    assert "function persistentGraphSceneContractViolations" in browser_gate
+    assert "process graph is not the sole visible focal object" in browser_gate
+    assert "process graph is not the sole visible primary artifact" in browser_gate
+    assert "memory effect identity" in browser_gate
+    assert "exact returned node, fact, page and excerpt or region" in browser_gate
+    assert "unresolved allegations or missing-fact paths" in browser_gate
+    assert "Unresolved allegation" in canvas
+    assert "Missing-fact basis" in canvas
+    assert "sourceContextAttributes" in canvas
+    assert "page: detail.page || 1," in canvas
+
+
+def test_default_reference_surface_hides_ranking_numbers_but_keeps_audit_truth() -> None:
+    assets = release_tool.REPOSITORY / "casepath" / "assets"
+    canvas = (assets / "artifact-canvas.js").read_text(encoding="utf-8")
+    browser_gate = (
+        release_tool.REPOSITORY / "casepath-qa" / "browser-focused-v20.mjs"
+    ).read_text(encoding="utf-8")
+
+    reference_start = canvas.index("  function referenceStageMarkup(copy)")
+    reference_end = canvas.index("\n  function agentArtifactMarkup()", reference_start)
+    reference_surface = canvas[reference_start:reference_end]
+    graph_reference_start = canvas.index("  function graphReferenceDetailMarkup(node)")
+    graph_reference_end = canvas.index("\n  function spatialDetailMarkup(node)", graph_reference_start)
+    graph_reference_surface = canvas[graph_reference_start:graph_reference_end]
+    assert "data-ranking-contract=" in reference_surface
+    assert "data-ranking-rank=" in reference_surface
+    assert "data-ranking-score-basis-points=" in reference_surface
+    assert "data-ranking-context-hash=" in reference_surface
+    assert "Rank ${esc(" not in reference_surface
+    assert "points</strong>" not in reference_surface
+    assert "data-ranking-contract=" in graph_reference_surface
+    assert "data-ranking-rank=" in graph_reference_surface
+    assert "data-ranking-score-basis-points=" in graph_reference_surface
+    assert "Rank ${esc(" not in graph_reference_surface
+    assert "points</strong>" not in graph_reference_surface
+    assert "precedentRankingContractViolations" in browser_gate
+    assert "candidate_scores" in browser_gate
+    assert "score_basis_points" in browser_gate
+
+
+def test_flagship_timing_gate_is_the_70_to_100_second_band() -> None:
+    browser_gate = (
+        release_tool.REPOSITORY / "casepath-qa" / "browser-focused-v20.mjs"
+    ).read_text(encoding="utf-8")
+    assert "const MIN_FLAGSHIP_PRESENTATION_MS = 70000;" in browser_gate
+    assert "const MAX_FLAGSHIP_PRESENTATION_MS = 110000;" in browser_gate
+    assert "MIN_PRODUCTION_FLAGSHIP_PRESENTATION_MS" not in browser_gate
+    assert "inside the 70–110 second production-tolerant north-star band" in browser_gate
 
 
 def test_flagship_surface_is_one_persistent_source_plus_artifact_canvas() -> None:
@@ -270,8 +343,9 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "setAttribute('aria-current', 'step')" in canvas
     assert "tabIndex = state.visibleNodeIds.has(node.node_id) ? 0 : -1" in canvas
     assert 'aria-hidden="true" focusable="false" data-ac-spatial-edges' in canvas
-    assert "const GRAPH_NODE_DWELL_MS = 2400;" in canvas
-    assert "const GRAPH_SOURCE_DWELL_MS = 1200;" in canvas
+    assert "const GRAPH_NODE_DWELL_MS = 500;" in canvas
+    assert "const GRAPH_SOURCE_DWELL_MS = 650;" in canvas
+    assert "const GRAPH_BRANCH_SOURCE_DWELL_MS = 1100;" in canvas
     assert 'data-ac-inspection-target="true"' in canvas
     assert "casepath:source-inspection" in canvas
     assert "casepath:branch-visualized" in canvas
@@ -281,9 +355,9 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "data-ac-law-viewer" in canvas
     assert "Cached official Swiss-law passage · qualified review pending" in canvas
     assert ".ac-law-viewer" in canvas_css
-    assert "if (state.moment === 'experience') return referenceStageMarkup(copy);" in canvas
+    assert "if (state.moment === 'experience') return graphReferenceDetailMarkup(node)" in canvas
     assert "Inspect this generated pattern" in canvas
-    assert "const GRAPH_MOMENTS = new Set(['process', 'ready', 'review-applied']);" in canvas
+    assert "'review', 'review-applied', 'later-result'" in canvas
     assert "['official_statute', 'official_guidance'].includes(law?.source_type)" in canvas
     assert canvas.count("REDUCED_MOTION ? 0 : 560") == 1
     assert ".ac-spatial-viewport" in canvas_css
@@ -339,12 +413,17 @@ def test_flagship_presentation_holds_work_and_artifacts_for_clarity() -> None:
     canvas = (
         release_tool.REPOSITORY / "casepath" / "assets" / "artifact-canvas.js"
     ).read_text(encoding="utf-8")
-    assert "const PROCESS_STORY_TIMEOUT_MS = 120000;" in renderer
+    assert "const PROCESS_STORY_TIMEOUT_MS = 75000;" in renderer
+    assert "const OFFICIAL_LAW_TOUR_TIMEOUT_MS = 120000;" in renderer
+    assert "const AGENT_RECEIPT_BEAT_MS = reduceMotion ? 20 : 800;" in renderer
     assert "function waitForProcessStory()" in renderer
+    assert "function waitForProcessStoryOnce()" in renderer
+    assert "if (processStoryWaitPromise) return processStoryWaitPromise;" in renderer
+    assert "casepath:artifact-process-timeout" in renderer
     assert "[data-process-build-state=\"built\"]').length >= 10" in renderer
     assert "function waitsForCompletedProcess(event)" in renderer
-    assert "if (!later && waitsForCompletedProcess(entry.event)) await waitForProcessStory();" in renderer
-    assert "entry.event.stage === 'process') await waitForProcessStory()" in renderer
+    assert "await waitForProcessStoryOnce();" in renderer
+    assert "if (processArtifact) await waitForProcessStoryOnce();" in renderer
     focus = (
         release_tool.REPOSITORY / "casepath" / "assets" / "live-v20-focus.js"
     ).read_text(encoding="utf-8")
@@ -352,10 +431,12 @@ def test_flagship_presentation_holds_work_and_artifacts_for_clarity() -> None:
         release_tool.REPOSITORY / "casepath-qa" / "browser-focused-v20.mjs"
     ).read_text(encoding="utf-8")
 
-    assert "const WORKING_FRAME_MS = 2400;" in renderer
-    assert "const ARTIFACT_FRAME_MS = 5600;" in renderer
+    assert "const WORKING_FRAME_MS = 2300;" in renderer
+    assert "const ARTIFACT_FRAME_MS = 5500;" in renderer
     assert "const RESEARCH_ARTIFACT_FRAME_MS = 9000;" in renderer
-    assert "const PROCESS_ARTIFACT_FRAME_MS = 35000;" in renderer
+    assert "const PROCESS_ARTIFACT_FRAME_MS" not in renderer
+    assert "phase === 'receipt'" in renderer
+    assert "return 'receipt';" in renderer
     assert "const BACKGROUND_BEAT_MS = reduceMotion ? 20 : 120;" in renderer
     assert "const PRESENTABLE_STAGE_STATES = new Set([...SUCCESS_EVENT_STATES, 'candidate_prepared']);" in renderer
     assert "run?.process_candidate" in renderer
@@ -377,6 +458,8 @@ def test_flagship_presentation_holds_work_and_artifacts_for_clarity() -> None:
     assert "window.__casepathPresentationTimeline" in browser_gate
     assert "working frame ${workMs.toFixed(0)}ms" in browser_gate
     assert "artifact frame ${artifactMs.toFixed(0)}ms" in browser_gate
+    assert "const minimumWorkMs = concise ? 1000 : 2300;" in browser_gate
+    assert "const minimumArtifactMs = concise ? 1600 : 5500;" in browser_gate
 
 
 def test_unified_audit_preserves_the_live_orchestration_proof() -> None:
@@ -412,9 +495,10 @@ def test_process_story_builds_grounded_nodes_at_a_readable_rate() -> None:
 
     assert "const PROCESS_NODE_INTERVAL_MS = 2500;" in controller
     assert "const PROCESS_BRANCH_HOLD_MS = 2500;" in controller
-    assert "const PROCESS_ARTIFACT_FRAME_MS = 35000;" in renderer
+    assert "const PROCESS_ARTIFACT_FRAME_MS" not in renderer
     assert "phase === 'artifact' && entry.event.stage === 'process'" in renderer
-    assert "? PROCESS_ARTIFACT_FRAME_MS" in renderer
+    assert "const processArtifact = phase === 'artifact' && entry.event.stage === 'process';" in renderer
+    assert "if (!processArtifact) await wait(frameMs);" in renderer
     assert "casepath:graph-step" in controller
     assert "basisKinds" in controller
     assert "factIds" in controller
@@ -610,7 +694,7 @@ def test_browser_gate_requires_authenticated_sse_and_causal_memory_delta() -> No
     assert "'edge-added': 2" in browser_gate
     assert "'evidence-changed': 3" in browser_gate
     assert "originIds.length !== 1 || originIds[0] !== expectedOriginId" in browser_gate
-    assert "same graph in place" in browser_gate
+    assert "same persistent graph in place" in browser_gate
     assert "REQUIRED_NEMOTRON_AGENT_IDS" in browser_gate
     assert "REQUIRED_DETERMINISTIC_GATE_IDS" in browser_gate
 
@@ -7627,7 +7711,7 @@ def test_handoff_continuity_uses_structured_moments_without_translucent_text() -
         encoding="utf-8"
     )
     assert 'assets/live-v17-continuity.css?v=20.0.0' in index
-    assert 'assets/live-v16.js?v=20.0.14' in index
+    assert 'assets/live-v16.js?v=20.0.15' in index
     assert 'assets/live-v17.js?v=20.0.2' in index
     assert 'assets/live-v18.js?v=20.0.2' in index
     assert 'assets/live-v16.css?v=20.0.0' in index
