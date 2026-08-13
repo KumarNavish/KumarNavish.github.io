@@ -252,7 +252,12 @@
       }
       const ids = discoveredRunIds();
       const runs = await Promise.all(ids.map(async runId => {
-        const response = await fetch(`${apiBase}/api/runs/${encodeURIComponent(runId)}`);
+        const retained = window.CasePathRunStore?.get?.(runId);
+        if (retained?.run_id === runId && Array.isArray(retained.events)) return retained;
+        const sessionId = sessionStorage.getItem('casepath:demo-session') || '';
+        const response = await fetch(`${apiBase}/api/runs/${encodeURIComponent(runId)}`, {
+          headers: sessionId ? { 'X-CasePath-Session': sessionId } : {},
+        });
         if (!response.ok) throw new Error(`Run ${runId} could not be read.`);
         return response.json();
       }));
