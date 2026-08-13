@@ -392,6 +392,9 @@ def test_later_result_keeps_returned_comparison_hashes_visible() -> None:
     focus_css = (
         release_tool.REPOSITORY / "casepath" / "assets" / "live-v20-focus.css"
     ).read_text(encoding="utf-8")
+    focus_js = (
+        release_tool.REPOSITORY / "casepath" / "assets" / "live-v20-focus.js"
+    ).read_text(encoding="utf-8")
     index = (release_tool.REPOSITORY / "casepath" / "index.html").read_text(
         encoding="utf-8"
     )
@@ -406,7 +409,9 @@ def test_later_result_keeps_returned_comparison_hashes_visible() -> None:
     )
     assert ".final-proof" not in hidden_later_result_rule
     assert 'assets/live-v20-focus.css?v=20.0.6' in index
-    assert 'assets/live-v20-focus.js?v=20.0.4' in index
+    assert 'assets/live-v20-focus.js?v=20.0.5' in index
+    assert "const CURSOR_TARGET_MIN_HOLD_MS = 220;" in focus_js
+    assert "elapsed < CURSOR_TARGET_MIN_HOLD_MS" in focus_js
     assert "const finalComparison = page.locator('#laterResult .final-proof');" in browser_gate
     assert "await finalComparison.isVisible()" in browser_gate
     assert "finalComparisonText.includes(proof.before.result_hash)" in browser_gate

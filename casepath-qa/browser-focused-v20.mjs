@@ -64,7 +64,7 @@ const FORBIDDEN_SYNTHETIC_AGENT_LABELS = Object.freeze([
   'Attachment Parsing Agent',
   'Document Requirements Agent',
 ]);
-const MIN_CURSOR_TARGET_HOLD_MS = 120;
+const MIN_CURSOR_TARGET_HOLD_MS = 180;
 const MIN_PROCESS_NODE_STEP_MS = 2400;
 const MIN_PROCESS_BRANCH_HOLD_MS = 2400;
 const MIN_PROCESS_ARTIFACT_HOLD_MS = 34000;

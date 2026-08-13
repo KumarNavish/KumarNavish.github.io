@@ -329,7 +329,7 @@
     {
       "executable": false,
       "path": "casepath-qa/browser-focused-v20.mjs",
-      "sha256": "4dfea02c3fc45e93e61859eb5578fbef098c64edd4a53745fd488f0b4e4b2d3c",
+      "sha256": "fa080edaece7dd2b12fbbc0c592b833ce848318d4125a1635bfe75173ac3b5a2",
       "size_bytes": 403149
     },
     {
@@ -683,8 +683,8 @@
     {
       "executable": false,
       "path": "casepath/assets/live-v20-focus.js",
-      "sha256": "4a39fd699a65609ee79b7b8133a17890370d13f78d399cb4f0832a247c7fbbb1",
-      "size_bytes": 42108
+      "sha256": "71c1c808b941df14984b0588d6dee1a57df27362604f873aaf37dfeb502526a2",
+      "size_bytes": 42617
     },
     {
       "executable": false,
@@ -731,7 +731,7 @@
     {
       "executable": false,
       "path": "casepath/index.html",
-      "sha256": "28f3380e4c49184b2c37babe4671e957cb34bf45a4f22936789cbf193c248c9c",
+      "sha256": "60b191b9e22eb1d41df069c676f3d8156b86e534a30f95ee853ef096b6b78182",
       "size_bytes": 10414
     },
     {
@@ -935,8 +935,8 @@
     {
       "executable": false,
       "path": "casepath/tools/test_casepath_release.py",
-      "sha256": "83924f36fb2c337abe727cfe925784b5f350881532aed84be9d24991fae90581",
-      "size_bytes": 288239
+      "sha256": "346d3657c80e266458ffbcfe393152e8a4ee2826aa0acc672291fed4a8a57dc0",
+      "size_bytes": 288493
     },
     {
       "executable": false,
@@ -961,7 +961,7 @@
   "gates": [
     {
       "path": "casepath-qa/browser-focused-v20.mjs",
-      "sha256": "4dfea02c3fc45e93e61859eb5578fbef098c64edd4a53745fd488f0b4e4b2d3c"
+      "sha256": "fa080edaece7dd2b12fbbc0c592b833ce848318d4125a1635bfe75173ac3b5a2"
     },
     {
       "path": "casepath-qa/browser-guided-v13-smoke.mjs",
