@@ -334,6 +334,9 @@ def test_flagship_presentation_holds_work_and_artifacts_for_clarity() -> None:
     renderer = (
         release_tool.REPOSITORY / "casepath" / "assets" / "live-v16.js"
     ).read_text(encoding="utf-8")
+    canvas = (
+        release_tool.REPOSITORY / "casepath" / "assets" / "artifact-canvas.js"
+    ).read_text(encoding="utf-8")
     assert "const PROCESS_STORY_TIMEOUT_MS = 120000;" in renderer
     assert "function waitForProcessStory()" in renderer
     assert "[data-process-build-state=\"built\"]').length >= 10" in renderer
@@ -360,7 +363,12 @@ def test_flagship_presentation_holds_work_and_artifacts_for_clarity() -> None:
     assert 'data-retrieval-method="versioned_official_source_registry_lookup"' in renderer
     assert "Cached exact official source" in renderer
     assert "Verify on official website ↗" in renderer
-    assert "button.click();" in renderer
+    assert "function waitForOfficialLawTour()" in renderer
+    assert "entry.event.stage === 'research') await waitForOfficialLawTour()" in renderer
+    assert "casepath:official-source-tour-complete" in renderer
+    assert "function startOfficialLawTour()" in canvas
+    assert "OFFICIAL_LAW_DWELL_MS = 1900" in canvas
+    assert "tourOwner: CONTRACT" in canvas
     assert "Why it matters" in focus
     assert "Doing now" in focus
     assert "Unsupported conclusions must fail closed before review." in focus
@@ -7594,7 +7602,7 @@ def test_handoff_continuity_uses_structured_moments_without_translucent_text() -
         encoding="utf-8"
     )
     assert 'assets/live-v17-continuity.css?v=20.0.0' in index
-    assert 'assets/live-v16.js?v=20.0.13' in index
+    assert 'assets/live-v16.js?v=20.0.14' in index
     assert 'assets/live-v17.js?v=20.0.2' in index
     assert 'assets/live-v18.js?v=20.0.2' in index
     assert 'assets/live-v16.css?v=20.0.0' in index
