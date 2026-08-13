@@ -9992,17 +9992,21 @@ def _verify_cold_flagship_evidence(
     _verify_hybrid_causal_artifacts(result, audit, by_agent, gates_by_id)
 
     _verify_public_model_ledger(ledger, "Dynamic flagship ledger")
+    ledger_call_ids = [item.get("call_id") for item in ledger["items"]]
+    ledger_agent_ids = [item.get("agent_id") for item in ledger["items"]]
     if (
         len(ledger["items"]) != len(REQUIRED_MODEL_AGENTS)
-        or [item.get("call_id") for item in ledger["items"]] != call_ids
-        or [item.get("agent_id") for item in ledger["items"]] != expected_agent_ids
+        or len(set(ledger_call_ids)) != len(call_ids)
+        or set(ledger_call_ids) != set(call_ids)
+        or len(set(ledger_agent_ids)) != len(expected_agent_ids)
+        or set(ledger_agent_ids) != set(expected_agent_ids)
         or ledger["summary"].get("records") != len(REQUIRED_MODEL_AGENTS)
         or ledger["summary"].get("network_calls") != len(REQUIRED_MODEL_AGENTS)
         or ledger["summary"].get("unknown_cost_call_count") != 0
         or ledger["summary"].get("actual_cost_complete") is not True
         or ledger["summary"].get("outcomes", {}).get("cache_hit", 0) != 0
     ):
-        raise VerificationError("Dynamic flagship ledger is not the exact cold six")
+        raise VerificationError("Dynamic flagship ledger is not the exact cold six-agent set")
     ledger_by_call = {
         item.get("call_id"): item
         for item in ledger["items"]
@@ -10157,23 +10161,33 @@ def _verify_cold_warm_model_pair(
         raise VerificationError(f"{label} cold/warm run identity is invalid")
 
     expected_agent_ids = [item["agent_id"] for item in REQUIRED_MODEL_AGENTS]
+    expected_agent_id_set = set(expected_agent_ids)
     cold_agents = cold_audit.get("agents")
     warm_agents = warm_audit.get("agents")
-    if (
-        not isinstance(cold_agents, list)
-        or not isinstance(warm_agents, list)
-        or [item.get("agent_id") if isinstance(item, Mapping) else None for item in cold_agents]
-        != expected_agent_ids
-        or [item.get("agent_id") if isinstance(item, Mapping) else None for item in warm_agents]
-        != expected_agent_ids
-        or len(cold_items) != len(REQUIRED_MODEL_AGENTS)
-        or len(warm_items) != len(REQUIRED_MODEL_AGENTS)
-        or [item.get("agent_id") if isinstance(item, Mapping) else None for item in cold_items]
-        != expected_agent_ids
-        or [item.get("agent_id") if isinstance(item, Mapping) else None for item in warm_items]
-        != expected_agent_ids
-    ):
-        raise VerificationError(f"{label} does not contain the exact ordered six agents")
+
+    def exact_agent_map(values: Any, surface: str) -> dict[str, Mapping[str, Any]]:
+        if not isinstance(values, list) or len(values) != len(expected_agent_ids):
+            raise VerificationError(f"{label} {surface} does not contain exactly six agents")
+        keyed: dict[str, Mapping[str, Any]] = {}
+        for value in values:
+            if not isinstance(value, Mapping):
+                raise VerificationError(f"{label} {surface} agent evidence is not an object")
+            agent_id = value.get("agent_id")
+            if (
+                not isinstance(agent_id, str)
+                or agent_id not in expected_agent_id_set
+                or agent_id in keyed
+            ):
+                raise VerificationError(f"{label} {surface} agent membership is not exact")
+            keyed[agent_id] = value
+        if set(keyed) != expected_agent_id_set:
+            raise VerificationError(f"{label} {surface} agent membership is not exact")
+        return keyed
+
+    cold_agents_by_id = exact_agent_map(cold_agents, "cold audit")
+    warm_agents_by_id = exact_agent_map(warm_agents, "warm audit")
+    cold_items_by_id = exact_agent_map(cold_items, "cold ledger")
+    warm_items_by_id = exact_agent_map(warm_items, "warm ledger")
 
     audit_dynamic_fields = {"orchestration_id", "agents", "deterministic_gates"}
     cold_static_audit = {
@@ -10221,21 +10235,14 @@ def _verify_cold_warm_model_pair(
     cold_delegation_ids: list[str] = []
     warm_delegation_ids: list[str] = []
     expected_lineage: list[dict[str, Any]] = []
-    cold_by_id: dict[str, Mapping[str, Any]] = {}
-    warm_by_id: dict[str, Mapping[str, Any]] = {}
-    for index, expected_agent in enumerate(REQUIRED_MODEL_AGENTS):
+    cold_by_id: dict[str, Mapping[str, Any]] = cold_agents_by_id
+    warm_by_id: dict[str, Mapping[str, Any]] = warm_agents_by_id
+    for expected_agent in REQUIRED_MODEL_AGENTS:
         agent_id = expected_agent["agent_id"]
-        cold_agent = cold_agents[index]
-        warm_agent = warm_agents[index]
-        cold_item = cold_items[index]
-        warm_item = warm_items[index]
-        if not all(
-            isinstance(value, Mapping)
-            for value in (cold_agent, warm_agent, cold_item, warm_item)
-        ):
-            raise VerificationError(f"{label} {agent_id} evidence is not an object")
-        cold_by_id[agent_id] = cold_agent
-        warm_by_id[agent_id] = warm_agent
+        cold_agent = cold_agents_by_id[agent_id]
+        warm_agent = warm_agents_by_id[agent_id]
+        cold_item = cold_items_by_id[agent_id]
+        warm_item = warm_items_by_id[agent_id]
 
         cold_call_id = cold_agent.get("call_id")
         warm_call_id = warm_agent.get("call_id")
@@ -10732,6 +10739,29 @@ def _verify_warm_cache_lineage(
         "provider_calls_during_isolation_replay",
     }
     exact_response_models = lineage_receipt.get("exact_response_models")
+    lineage = lineage_receipt.get("lineage")
+    expected_agent_ids = [item["agent_id"] for item in REQUIRED_MODEL_AGENTS]
+    expected_agent_id_set = set(expected_agent_ids)
+    lineage_by_agent: dict[str, Mapping[str, Any]] = {}
+    if isinstance(lineage, list) and len(lineage) == len(expected_agent_ids):
+        for item in lineage:
+            if not isinstance(item, Mapping):
+                lineage_by_agent = {}
+                break
+            agent_id = item.get("agent_id")
+            if (
+                not isinstance(agent_id, str)
+                or agent_id not in expected_agent_id_set
+                or agent_id in lineage_by_agent
+            ):
+                lineage_by_agent = {}
+                break
+            lineage_by_agent[agent_id] = item
+    normalized_lineage = (
+        [lineage_by_agent[agent_id] for agent_id in expected_agent_ids]
+        if set(lineage_by_agent) == expected_agent_id_set
+        else None
+    )
     if (
         set(lineage_receipt) != expected_lineage_fields
         or lineage_receipt.get("contract")
@@ -10751,7 +10781,7 @@ def _verify_warm_cache_lineage(
         or lineage_receipt.get("warm_guarded_fallback_count")
         != isolation_run["agent_orchestration"].get("guarded_fallback_count")
         or lineage_receipt.get("provider_calls_during_isolation_replay") != 0
-        or lineage_receipt.get("lineage") != flagship_lineage
+        or normalized_lineage != flagship_lineage
     ):
         raise VerificationError("Dynamic flagship cache-lineage receipt is invalid")
 
