@@ -409,6 +409,8 @@ def test_later_result_keeps_returned_comparison_hashes_visible() -> None:
     )
     assert ".final-proof" not in hidden_later_result_rule
     assert 'assets/live-v20-focus.css?v=20.0.7' in index
+    assert 'id="stageCanvas" aria-busy="false" tabindex="0" aria-label="CasePath work canvas"' in index
+    assert '.stage-canvas:focus-visible' in focus_css
     assert 'v20-artifact-header:has([data-v20-open-documents])' in focus_css
     assert 'justify-content:flex-end' in focus_css
     assert 'assets/live-v20-focus.js?v=20.0.5' in index
