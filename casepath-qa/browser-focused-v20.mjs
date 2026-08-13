@@ -2300,11 +2300,21 @@ function sourceInspectionContractViolations(inspections, changes, branchVisuals,
   const cursorBindings = new Set(cursorSteps.filter(step => step.phase === 'click').map(step => `${step.changeId}:${step.eventId}:${step.agentId}:${step.targetId}`));
   const processNodes = new Map((runResult?.process?.nodes || []).map(node => [node.node_id, node]));
   const facts = new Map((runResult?.facts || []).map(fact => [fact.fact_id, fact]));
+  const checklistItems = runResult?.checklist?.items || [];
+  const evidenceOwnerIds = item => (Array.isArray(item?.node_ids) && item.node_ids.length
+    ? item.node_ids
+    : item?.node_id ? [item.node_id] : []);
+  const returnedFactIdsForNode = node => new Set([
+    ...(node?.fact_ids || []),
+    ...checklistItems
+      .filter(item => evidenceOwnerIds(item).includes(node?.node_id) && nonemptyString(item.fact_id))
+      .map(item => item.fact_id),
+  ]);
   const validSourceId = (inspection, node) => {
     if (inspection.sourceKind === 'accepted-process-input') return inspection.sourceId === node?.node_id;
     if (inspection.sourceKind === 'swiss-law') return (node?.legal_source_ids || []).includes(inspection.sourceId) && inspection.locatorId === `law:${inspection.sourceId}`;
     if (inspection.sourceKind === 'evidence-requirement') return (node?.evidence_requirement_ids || []).includes(inspection.sourceId);
-    if (!(node?.fact_ids || []).includes(inspection.factId)) return false;
+    if (!returnedFactIdsForNode(node).has(inspection.factId)) return false;
     return (facts.get(inspection.factId)?.source_refs || []).some(ref => ref.artifact_id === inspection.sourceId) && inspection.locatorId.includes(inspection.sourceId);
   };
   const nodeInspections = inspections.filter(item => item.entityKind === 'node');
@@ -4635,8 +4645,8 @@ async function runContractSelfTest() {
   const inspectionCursorFixture = [...sourceInspectionFixture, ...branchInspectionFixture].map(item => ({ changeId: item.changeId, eventId: item.eventId, agentId: item.agentId, targetId: item.sourceId, phase: 'click' }));
   if (sourceInspectionContractViolations([...sourceInspectionFixture, ...branchInspectionFixture], processProjectionFixture, branchVisualFixture, inspectionCursorFixture, inspectionRunFixture, true).length) throw new Error('Valid source-before-process inspection fixture was rejected');
   const claimSourceRunFixture = structuredClone(inspectionRunFixture);
-  claimSourceRunFixture.process.nodes.find(node => node.node_id === 'intake').fact_ids = ['fact_intake_source'];
   claimSourceRunFixture.facts = [{ fact_id: 'fact_intake_source', source_refs: [{ artifact_id: 'art_lease', locator_kind: 'text_quote', page: 1, excerpt: 'Residential Lease Agreement' }] }];
+  claimSourceRunFixture.checklist = { items: [{ item_id: 'lease', node_ids: ['intake'], fact_id: 'fact_intake_source' }] };
   const claimSourceInspectionFixture = structuredClone(sourceInspectionFixture);
   Object.assign(claimSourceInspectionFixture[0], { sourceKind: 'claim-source', sourceId: 'art_lease', factId: 'fact_intake_source', locatorId: 'source:art_lease:page:1:quote:Residential Lease Agreement', found: 'Residential Lease Agreement' });
   const claimSourceCursorFixture = structuredClone(inspectionCursorFixture);
@@ -4645,6 +4655,9 @@ async function runContractSelfTest() {
   const factlessClaimSourceFixture = structuredClone(claimSourceInspectionFixture);
   factlessClaimSourceFixture[0].factId = '';
   if (!sourceInspectionContractViolations([...factlessClaimSourceFixture, ...branchInspectionFixture], processProjectionFixture, branchVisualFixture, claimSourceCursorFixture, claimSourceRunFixture, true).some(issue => issue.includes('not returned by the node basis'))) throw new Error('Factless claim-source inspection fixture was accepted');
+  const wrongOwnerClaimSourceRunFixture = structuredClone(claimSourceRunFixture);
+  wrongOwnerClaimSourceRunFixture.checklist.items[0].node_ids = ['scope'];
+  if (!sourceInspectionContractViolations([...claimSourceInspectionFixture, ...branchInspectionFixture], processProjectionFixture, branchVisualFixture, claimSourceCursorFixture, wrongOwnerClaimSourceRunFixture, true).some(issue => issue.includes('not returned by the node basis'))) throw new Error('Cross-node evidence-derived claim-source inspection was accepted');
   const fabricatedInspectionFixture = structuredClone(sourceInspectionFixture);
   fabricatedInspectionFixture[0].sourceKind = 'fabricated-source';
   if (!sourceInspectionContractViolations([...fabricatedInspectionFixture, ...branchInspectionFixture], processProjectionFixture, branchVisualFixture, inspectionCursorFixture, inspectionRunFixture, true).some(issue => issue.includes('not returned by the node basis'))) throw new Error('Fabricated source-inspection fixture was accepted');
