@@ -3957,7 +3957,7 @@ async function execute() {
   const visibleReviewCopy = reviewGraphScene.text;
   check('Simulated review foregrounds one consequential correction while leaving causation and responsibility unresolved', /building-envelope assessment/i.test(visibleReviewCopy) && /required/i.test(visibleReviewCopy) && /conditional/i.test(visibleReviewCopy) && /responsibility remains blocked/i.test(visibleReviewCopy), visibleReviewCopy);
   await auditViewports('04-review', '#artifactCanvas [data-artifact-focus="true"] [data-review-edit-state="pending"]');
-  await page.locator('#artifactCanvas [data-ac-action="submit-review"][data-review-mode="conditional"]').click();
+  await page.locator('#artifactCanvas [data-artifact-focus="true"] [data-ac-action="submit-review"][data-review-mode="conditional"]').click();
   await waitVisible('body[data-casepath-moment="review-applied"]');
   await page.waitForFunction(() => document.querySelector('[data-review-edit-state="applied"]'), null, { timeout: 30000 });
   const appliedCanvas = await artifactCanvasSnapshot();

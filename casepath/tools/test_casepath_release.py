@@ -402,6 +402,7 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "emitGraphContextualArtifact(detail);" in canvas
     assert "emitArtifactChange(kind, entityId);" in canvas
     assert "evaluate((root, context) =>" in browser_gate
+    assert '#artifactCanvas [data-artifact-focus="true"] [data-ac-action="submit-review"]' in browser_gate
     assert "Active decision offers its ${kind} grounding on demand" in browser_gate
     assert "#artifactProcessGraph .ac-grounding-disclosure" in browser_gate
     assert "Valid spatial process geometry fixture was rejected" in browser_gate
