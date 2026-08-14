@@ -4975,7 +4975,7 @@ html[data-casepath-release="20.0.0"] [data-ac-global-agent-work] [data-ac-agent-
 }
 
 .casepath-artifact-canvas .ac-source-document-head small{
-  color:#777e87;
+  color:#6b727c;
   font-size:9px;
 }
 
@@ -4994,7 +4994,7 @@ html[data-casepath-release="20.0.0"] [data-ac-global-agent-work] [data-ac-agent-
 }
 
 .casepath-artifact-canvas .ac-source-passage>small{
-  color:#777e87;
+  color:#6b727c;
   font-family:Inter,ui-sans-serif,system-ui,sans-serif;
   font-size:9px;
   font-weight:700;
@@ -5177,7 +5177,9 @@ html[data-casepath-release="20.0.0"] body[data-casepath-artifact-canvas="ready"]
 }
 
 .casepath-artifact-canvas .ac-spatial-branch:not([data-branch-state="selected"]){
-  opacity:.58;
+  opacity:1;
+  border-color:#d4d8de;
+  color:#626873;
 }
 
 .casepath-artifact-canvas .ac-spatial-branch[data-branch-state="selected"]{
@@ -5340,7 +5342,7 @@ html[data-casepath-release="20.0.0"] body[data-casepath-artifact-canvas="ready"]
 }
 
 .casepath-artifact-canvas .ac-node-causal-chain small{
-  color:#777e87;
+  color:#6b727c;
   font-size:8.5px;
 }
 
