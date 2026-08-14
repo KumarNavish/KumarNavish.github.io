@@ -3305,11 +3305,13 @@ async function execute() {
         sourceId: detail.sourceId || '',
         locatorId: detail.locatorId || '',
         memoryOriginId: detail.memoryOriginId || '',
-        activeSourceIds: [...document.querySelectorAll('.attachment-row.is-active[data-artifact-id]')].map(row => row.dataset.artifactId || ''),
         at: performance.now(),
       };
-      window.__casepathLaterCausalSteps.push(step);
-      captureGraphMoment('later-work', step.phase);
+      queueMicrotask(() => {
+        step.activeSourceIds = [...document.querySelectorAll('.attachment-row.is-active[data-artifact-id]')].map(row => row.dataset.artifactId || '');
+        window.__casepathLaterCausalSteps.push(step);
+        captureGraphMoment('later-work', step.phase);
+      });
     });
     window.addEventListener('casepath:branch-visualized', event => {
       const detail = event.detail || {};
