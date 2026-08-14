@@ -557,7 +557,7 @@
     const evidenceId = String(valueFrom(detail, 'evidenceId', 'evidence_id', 'itemId', 'item_id') || valueFrom(event, 'item_id', 'evidence_id') || (entity.kind === 'evidence_requirement' ? entity.id : '') || '');
     const precedentId = String(valueFrom(detail, 'precedentId', 'precedent_id', 'claimId', 'claim_id') || valueFrom(event, 'precedent_id') || (entity.kind === 'precedent' ? entity.id : '') || '');
     if (factId) state.focusFactId = factId;
-    if (nodeId) state.selectedNodeId = nodeId;
+    if (nodeId && !state.graphRevealRunning) state.selectedNodeId = nodeId;
     if (lawId) state.focusLawId = lawId;
     if (evidenceId) state.focusEvidenceId = evidenceId;
     if (precedentId && /^HIST-|^DEF-|^DEMO-/.test(precedentId)) state.focusPrecedentId = precedentId;
@@ -1666,7 +1666,10 @@
     }
     edgeLayer.innerHTML = spatialEdgesMarkup(nodes);
     satellites.innerHTML = spatialSatellitesMarkup();
-    detail.innerHTML = spatialDetailMarkup(nodeById(state.selectedNodeId));
+    const detailNodeId = state.graphInspecting
+      ? state.pendingGraphNodeId || state.pendingBranchNodeId || state.selectedNodeId
+      : state.selectedNodeId;
+    detail.innerHTML = spatialDetailMarkup(nodeById(detailNodeId));
     emitGraphContextualArtifact(detail);
   }
 
