@@ -11,9 +11,9 @@
   const ARTIFACT_FRAME_MS = 5500;
   const CONCISE_WORKING_FRAME_MS = 1000;
   const CONCISE_ARTIFACT_FRAME_MS = 1600;
-  // The read summary only confirms that files were opened; the exact source tour
-  // that follows is the real story and retains its full inspection dwell.
-  const CONCISE_GRAPH_STAGES = new Set(['read', 'evidence', 'experience', 'verify']);
+  // Source opening is part of the story, so it keeps the full readable hold.
+  // These graph-native summaries can remain concise without hiding causal work.
+  const CONCISE_GRAPH_STAGES = new Set(['evidence', 'experience', 'verify']);
   const RESEARCH_ARTIFACT_FRAME_MS = 9000;
   const PROCESS_STORY_TIMEOUT_MS = 120000;
   const OFFICIAL_LAW_TOUR_TIMEOUT_MS = 120000;
