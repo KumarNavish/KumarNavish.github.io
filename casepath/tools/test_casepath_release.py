@@ -521,18 +521,35 @@ def test_flagship_surface_is_one_persistent_source_plus_artifact_canvas() -> Non
     assert "Management alleges insufficient ventilation and declines inspection" not in index
     assert "assets/artifact-canvas.css" in index
     assert "assets/artifact-canvas.js" in index
-    assert "assets/artifact-canvas.css?v=1.0.40" in index
-    assert "assets/artifact-canvas.js?v=1.0.51" in index
+    assert "assets/artifact-canvas.css?v=1.0.41" in index
+    assert "assets/artifact-canvas.js?v=1.0.52" in index
     assert "const CURSOR_AVATARS = Object.freeze({" in canvas
     assert "data-ac-cursor-avatar" in canvas
     assert "function setCursorAvatar(" in canvas
     assert all(f"{signature}: '<" in canvas for signature in (
         "facts", "orchestrator", "sources", "process", "evidence", "audit",
     ))
+    assert "const SOURCE_TYPE_ICONS = Object.freeze({" in canvas
+    assert "function sourcePreludeType(" in canvas
+    assert 'data-source-icon-kind="${esc(source.type)}"' in canvas
+    assert 'data-source-type-icon="${esc(source.type)}"' in canvas
+    assert 'data-source-exact-control="true"' in canvas
+    assert 'data-source-exact-mark="true"' in canvas
+    assert '<p>${esc(agent.why)}</p>' not in canvas
+    assert 'data-agent-history-accepted-ids' in canvas
+    assert 'data-agent-history-rejections' in canvas
+    assert 'data-rejected-item-id=' in canvas
+    assert "Opening source package has seven type-correct source icons and no checkbox-shaped control semantics" in browser_gate
+    assert "Every call-bound specialist cursor uses its exact distinct role icon" in browser_gate
+    assert "Each visible specialist opens an exact call-bound activity history" in browser_gate
+    assert "Main focal work never shows a large generic agent why paragraph" in browser_gate
+    assert "Neutral source rendered as a preselected mark was accepted" in browser_gate
+    assert "Selected source without one highlighted mark was accepted" in browser_gate
     assert "factSourceTrailMarkup" in canvas
     assert 'class="ac-source-inspection-trail"' in canvas
     assert ".ac-source-inspection-trail" in canvas_css
-    assert ".ac-source-page-excerpt>mark.is-awaiting-click" in canvas_css
+    assert '.ac-source-page-excerpt>button.ac-source-exact-control[data-source-exact-control="true"]' in canvas_css
+    assert '.ac-source-page-excerpt>mark.ac-source-exact-mark.is-highlighted[data-source-exact-mark="true"]' in canvas_css
     assert "opened sources do not accumulate in one ordered trail" in browser_gate
     assert index.index("assets/process-story.js") < index.index("assets/artifact-canvas.js")
     assert "source claim and work canvas are not simultaneously visible" in browser_gate
@@ -701,6 +718,9 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "Clicked process source without a matching active source target was accepted" in browser_gate
     assert "Fact/source basis preview without a matching exact source target was accepted" in browser_gate
     assert "Fact/source basis preview with an altered returned passage was accepted" in browser_gate
+    assert "Intake construction and ready preview both show the exact returned customer-message passage and locator" in browser_gate
+    assert "intakeClaimMessageBasisContractViolations" in browser_gate
+    assert "Generated intake summary fixture was accepted" in browser_gate
     assert "Non-source basis preview with a fabricated source locator was accepted" in browser_gate
     assert "Incomplete accepted-decision basis preview was accepted" in browser_gate
     assert "contextual basis preview is not visible in the default graph state with modal grounding closed" in browser_gate

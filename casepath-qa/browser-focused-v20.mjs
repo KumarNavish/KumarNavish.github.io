@@ -143,6 +143,16 @@ const FACT_SOURCE_TOUR_IDS = Object.freeze([
 ]);
 const MIN_FACT_SOURCE_HOLD_MS = 1100;
 const FACT_SOURCE_CINEMATIC_CONTRACT = 'casepath.source-select-confirm-highlight-fact/2.0.0';
+const SOURCE_PRELUDE_ICON_KINDS = Object.freeze([
+  'message',
+  'document',
+  'email',
+  'email',
+  'photo',
+  'timeline',
+  'delivery',
+]);
+const AGENT_HISTORY_CONTRACT = 'casepath.agent-history/1.0.0';
 const SPATIAL_GRAPH_PROJECTION = 'flagship-spine/1';
 const SPATIAL_GEOMETRY_EPSILON_PX = 2;
 const PROCESS_PREVIEW_BOTTOM_INSET_PX = 8;
@@ -1904,6 +1914,112 @@ function artifactCursorProducerRoleContractViolations(team, cursorSteps, semanti
   return issues;
 }
 
+function sourcePreludeContractViolations(snapshot) {
+  const issues = [];
+  const cards = Array.isArray(snapshot?.cards) ? snapshot.cards : [];
+  if (snapshot?.cardCount !== SOURCE_PRELUDE_ICON_KINDS.length || cards.length !== SOURCE_PRELUDE_ICON_KINDS.length) issues.push('opening source package does not contain the exact seven source cards');
+  if (snapshot?.inputCount !== 0 || snapshot?.checkboxRoleCount !== 0) issues.push('opening source package retains a checkbox or checkbox role');
+  if (stableJson(cards.map(card => card.kind)) !== stableJson(SOURCE_PRELUDE_ICON_KINDS)) issues.push('opening source card type order drift');
+  cards.forEach((card, index) => {
+    const expectedKind = SOURCE_PRELUDE_ICON_KINDS[index];
+    if (card.iconCount !== 1 || card.iconKind !== expectedKind || !nonemptyString(card.iconMarkup)) issues.push(`${index}: opening source card lacks one nonempty type-correct icon`);
+  });
+  return [...new Set(issues)];
+}
+
+function specialistAvatarContractViolations(team, cursorSteps, production = true) {
+  const issues = [];
+  const members = Array.isArray(team?.members) ? team.members : [];
+  const byId = new Map(members.map(member => [member.agentId, member]));
+  const iconHashes = [];
+  for (const agentId of REQUIRED_NEMOTRON_AGENT_IDS) {
+    const member = byId.get(agentId);
+    const expectedSignature = REQUIRED_NEMOTRON_AGENT_SIGNATURES[agentId]?.signature || '';
+    if (!member || member.signature !== expectedSignature || !nonemptyString(member.iconMarkup)) {
+      issues.push(`${agentId}: rail role icon is absent or not bound to its signature`);
+      continue;
+    }
+    iconHashes.push(sha256(member.iconMarkup));
+  }
+  if (iconHashes.length !== REQUIRED_NEMOTRON_AGENT_IDS.length || new Set(iconHashes).size !== REQUIRED_NEMOTRON_AGENT_IDS.length) issues.push('six agent identities do not have six unique normalized role-icon hashes');
+
+  const covered = new Set();
+  (cursorSteps || []).filter(step => step.specialistBound).forEach((step, index) => {
+    const agentId = REQUIRED_NEMOTRON_AGENT_IDS.includes(step.visualActiveAgentId)
+      ? step.visualActiveAgentId
+      : REQUIRED_NEMOTRON_AGENT_IDS.includes(step.agentId)
+        ? step.agentId
+        : REQUIRED_NEMOTRON_AGENT_IDS.find(candidate => REQUIRED_NEMOTRON_AGENT_SIGNATURES[candidate].signature === step.signature) || '';
+    if (!agentId) return;
+    covered.add(agentId);
+    const member = byId.get(agentId);
+    const expectedSignature = REQUIRED_NEMOTRON_AGENT_SIGNATURES[agentId].signature;
+    if (step.signature !== expectedSignature || step.avatar !== expectedSignature || !nonemptyString(step.avatarMarkup) || step.avatarMarkup !== member?.iconMarkup) issues.push(`${index}: live specialist cursor role icon does not exactly match its rail identity`);
+  });
+  if (production && !exactMembers([...covered], REQUIRED_NEMOTRON_AGENT_IDS)) issues.push('production cursor did not visibly exercise all six call-bound role icons');
+  return [...new Set(issues)];
+}
+
+function intakeClaimMessageBasisContractViolations(construction, preview, expected) {
+  const issues = [];
+  if (!expected || expected.factId !== 'fact_customer_objective' || expected.sourceId !== 'message' || !nonemptyString(expected.locatorId) || !nonemptyString(expected.passage)) return ['returned intake claim-message basis is incomplete'];
+  if (!construction
+    || construction.nodeId !== 'intake'
+    || construction.attachmentKind !== 'fact'
+    || construction.factId !== expected.factId
+    || construction.sourceId !== expected.sourceId
+    || construction.locatorId !== expected.locatorId
+    || construction.passage !== expected.passage
+    || construction.highlightMarkCount !== 1
+    || construction.generatedSummaryVisible) issues.push('intake construction does not use the exact selected claim-message passage');
+  if (!preview
+    || preview.nodeId !== 'intake'
+    || preview.basisKind !== 'fact'
+    || preview.factId !== expected.factId
+    || preview.sourceId !== expected.sourceId
+    || preview.locatorId !== expected.locatorId
+    || preview.passage !== expected.passage
+    || preview.exactReturnedSource !== true
+    || preview.exactPassage !== true
+    || preview.noGeneratedContext !== true) issues.push('ready intake preview is not the exact returned claim-message passage');
+  return issues;
+}
+
+function agentAuditContractViolations(snapshots, audit, production = true) {
+  const issues = [];
+  const returned = Array.isArray(snapshots) ? snapshots : [];
+  if (stableJson(returned.map(item => item.agentId)) !== stableJson(REQUIRED_VISIBLE_SPECIALIST_IDS)) issues.push('agent audit did not inspect the exact five visible specialist roles in order');
+  const authoritativeById = new Map((Array.isArray(audit?.agents) ? audit.agents : []).map(item => [item.agent_id, item]));
+  returned.forEach(snapshot => {
+    const expectedIdentity = REQUIRED_NEMOTRON_AGENT_SIGNATURES[snapshot.agentId];
+    if (!snapshot.opened || snapshot.panelAgentId !== snapshot.agentId || snapshot.panelSignature !== expectedIdentity?.signature || snapshot.buttonPressed !== 'true') issues.push(`${snapshot.agentId}: activity panel did not open for the clicked role identity`);
+    if (!snapshot.focusRestored || snapshot.buttonPressedAfterClose !== 'false' || snapshot.panelOpenAfterClose) issues.push(`${snapshot.agentId}: activity panel close did not restore its trigger and closed state`);
+    if (!production) {
+      if (snapshot.historyAvailable || snapshot.historyContract || snapshot.historyStepCounts.some(count => count !== 0) || snapshot.acceptedIds.length || snapshot.rejections.length || snapshot.callId || snapshot.outputHash || !snapshot.emptyStateVisible) issues.push(`${snapshot.agentId}: deterministic reference replay fabricated call-bound activity`);
+      return;
+    }
+    const receipt = authoritativeById.get(snapshot.agentId);
+    if (!receipt || receipt.actor_type !== 'nemotron_agent') {
+      issues.push(`${snapshot.agentId}: authoritative call receipt is absent`);
+      return;
+    }
+    if (!snapshot.historyAvailable || snapshot.historyContract !== AGENT_HISTORY_CONTRACT || snapshot.historyStepCounts.some(count => count !== 1)) issues.push(`${snapshot.agentId}: real activity history does not expose the exact five-step structure`);
+    if (snapshot.callId !== receipt.call_id || snapshot.outputHash !== receipt.output_artifact_hash) issues.push(`${snapshot.agentId}: activity technical receipt is not exact`);
+    const expectedAccepted = Array.isArray(receipt.accepted_ids) ? receipt.accepted_ids.map(String) : [];
+    if (snapshot.acceptedCount !== receipt.accepted_count || snapshot.acceptedCount !== expectedAccepted.length || stableJson(snapshot.acceptedIds) !== stableJson(expectedAccepted)) issues.push(`${snapshot.agentId}: accepted item identities do not match the authoritative receipt`);
+    const returnedRejected = Array.isArray(receipt.rejected)
+      ? receipt.rejected
+      : Array.isArray(receipt.rejected_items) ? receipt.rejected_items : null;
+    const expectedRejected = (returnedRejected || []).map(item => ({
+      id: String(item.item_id || item.fact_id || ''),
+      invariant: String(item.invariant || ''),
+    }));
+    if (returnedRejected && (receipt.rejected_count !== expectedRejected.length || stableJson(snapshot.rejections) !== stableJson(expectedRejected))) issues.push(`${snapshot.agentId}: rejected item identities or reasons do not match the authoritative receipt`);
+    if (!returnedRejected && snapshot.rejections.length) issues.push(`${snapshot.agentId}: activity history invented rejected item details`);
+  });
+  return [...new Set(issues)];
+}
+
 function zoomOutDesktopContractViolations({ sourceMoments, factSteps, artifactCursorSteps, previews, postConstructionSourceUse, team, documentPlan, documentRoundtrip }) {
   const diagnostics = [];
   const sourceIssues = [];
@@ -3027,12 +3143,17 @@ function factSourceCinematicContractViolations(steps, highlights, inspections, c
       || read.locatorId !== select.locatorId || read.activeSourceIds.length !== 1
       || read.activeSourceIds[0] !== read.sourceId || read.activeSourceLocator !== read.locatorId
       || !['open', 'active', 'drawer'].includes(read.sourceDockState)
-      || !read.sourceVisible || read.sourceHighlighted || !read.pendingVisible || read.factVisible || read.findingVisible) {
+      || !read.sourceVisible || read.sourceHighlighted || read.markCount !== 0
+      || read.exactControlCount !== 1 || read.exactControlTag !== 'BUTTON'
+      || !nonemptyString(read.exactControlText) || read.neutralControlLooksHighlighted
+      || !read.pendingVisible || read.factVisible || read.findingVisible) {
       issues.push(`${factId}: neutral source read does not visibly follow the exact open-source click`);
     }
     if (confirm.at < read.at || confirm.cursorPhase !== 'click' || confirm.targetId !== read.sourceId
       || confirm.sourceId !== read.sourceId || confirm.locatorId !== read.locatorId
-      || confirm.sourceHighlighted || !confirm.sourceVisible || !confirm.pendingVisible
+      || confirm.sourceHighlighted || confirm.markCount !== 0 || confirm.exactControlCount !== 1
+      || confirm.exactControlTag !== 'BUTTON' || confirm.neutralControlLooksHighlighted
+      || !confirm.sourceVisible || !confirm.pendingVisible
       || confirm.factVisible || confirm.findingVisible) {
       issues.push(`${factId}: exact source remains unconfirmed before highlight-source`);
     }
@@ -3043,7 +3164,8 @@ function factSourceCinematicContractViolations(steps, highlights, inspections, c
       issues.push(`${factId}: casepath:source-highlighted is absent or not bound to the confirmed source`);
     }
     if (highlighted.at < confirm.at || highlighted.sourceId !== read.sourceId || highlighted.locatorId !== read.locatorId
-      || highlighted.sourceHighlighted !== true || !highlighted.sourceVisible || highlighted.pendingVisible
+      || highlighted.sourceHighlighted !== true || highlighted.markCount !== 1 || highlighted.highlightedMarkCount !== 1
+      || highlighted.exactControlCount !== 0 || !highlighted.sourceVisible || highlighted.pendingVisible
       || highlighted.factVisible || highlighted.findingVisible) {
       issues.push(`${factId}: confirmed source does not become the sole visible highlight before fact appearance`);
     }
@@ -3518,6 +3640,43 @@ async function execute() {
     window.__casepathDesktopSourcePanelMoments = [];
     window.__casepathArtifactInteractions = [];
     window.__casepathProcessPreviewGeometry = [];
+    window.__casepathSourcePreludeSnapshots = [];
+    window.__casepathMainFocalWhyViolations = [];
+    window.__casepathNormalizeSvg = svg => String(svg?.innerHTML || '').replace(/\s+/g, ' ').replace(/> </g, '><').trim();
+    window.__casepathCaptureSourcePrelude = () => {
+      const prelude = document.querySelector('#artifactCanvas [data-ac-focal-object="source-prelude"]');
+      if (!visible(prelude)) return;
+      const cards = [...prelude.querySelectorAll('.ac-source-prelude-strip > [data-source-kind]')].map(card => {
+        const icon = card.querySelector('[data-source-icon-kind]');
+        const svg = icon?.querySelector('svg[data-source-type-icon]');
+        return {
+          kind: card.dataset.sourceKind || '',
+          iconKind: icon?.dataset.sourceIconKind || '',
+          iconCount: card.querySelectorAll('[data-source-icon-kind] > svg[data-source-type-icon]').length,
+          iconMarkup: window.__casepathNormalizeSvg(svg),
+        };
+      });
+      const snapshot = {
+        cardCount: cards.length,
+        inputCount: prelude.querySelectorAll('input').length,
+        checkboxRoleCount: prelude.querySelectorAll('[role="checkbox"]').length,
+        cards,
+      };
+      const key = JSON.stringify(snapshot);
+      if (!window.__casepathSourcePreludeSnapshots.some(item => JSON.stringify(item) === key)) window.__casepathSourcePreludeSnapshots.push(snapshot);
+    };
+    window.__casepathCaptureMainFocalWhy = () => {
+      const violations = [...document.querySelectorAll('#artifactCanvas [data-ac-focal] .ac-agent-artifact > p')].filter(visible);
+      if (violations.length) window.__casepathMainFocalWhyViolations.push(...violations.map(node => node.textContent?.trim() || 'visible agent why paragraph'));
+    };
+    window.addEventListener('DOMContentLoaded', () => {
+      window.__casepathCaptureSourcePrelude();
+      window.__casepathCaptureMainFocalWhy();
+      new MutationObserver(() => {
+        window.__casepathCaptureSourcePrelude();
+        window.__casepathCaptureMainFocalWhy();
+      }).observe(document.documentElement, { childList: true, subtree: true });
+    }, { once: true });
     window.addEventListener('casepath:presentation', event => {
       window.__casepathPresentationTimeline.push({
         moment: event.detail?.moment || '',
@@ -3701,6 +3860,13 @@ async function execute() {
       const locatorId = binding.locatorId || target?.dataset.sourceLocatorId || '';
       if (!factId || !sourceId || !locatorId) return null;
       const sourceDock = document.querySelector('[data-source-dock-state]');
+      const exactControl = stage?.querySelector('button.ac-source-exact-control[data-source-exact-control="true"]');
+      const exactMarks = [...(stage?.querySelectorAll('mark') || [])].filter(visible);
+      const highlightedMarks = exactMarks.filter(mark => mark.matches('mark.ac-source-exact-mark.is-highlighted[data-source-exact-mark="true"]'));
+      const controlStyle = exactControl ? getComputedStyle(exactControl) : null;
+      const neutralControlLooksHighlighted = Boolean(controlStyle
+        && !['transparent', 'rgba(0, 0, 0, 0)'].includes(controlStyle.backgroundColor)
+        && controlStyle.backgroundColor !== getComputedStyle(exactControl.closest('.ac-source-page-excerpt') || exactControl).backgroundColor);
       return {
         contract: factSourceCinematicContract,
         timing,
@@ -3718,6 +3884,12 @@ async function execute() {
         activeSourceLocator: sourceDock?.dataset.activeSourceLocator || '',
         sourceVisible: visible(stage?.querySelector('.ac-fact-source')),
         sourceHighlighted: visible(stage?.querySelector('.ac-fact-source.is-source-selected .is-highlighted, .ac-fact-source .is-highlighted')),
+        exactControlCount: exactControl && visible(exactControl) ? 1 : 0,
+        exactControlTag: exactControl?.tagName || '',
+        exactControlText: exactControl?.textContent?.trim() || '',
+        markCount: exactMarks.length,
+        highlightedMarkCount: highlightedMarks.length,
+        neutralControlLooksHighlighted,
         pendingVisible: visible(stage?.querySelector('.ac-extraction-pending:not(.is-extracting)')),
         findingVisible: visible(stage?.querySelector('.ac-fact-finding')),
         factVisible: visible(stage?.querySelector('[data-node-attachment-kind="fact"]')),
@@ -3737,6 +3909,7 @@ async function execute() {
         const cursor = document.querySelector('#artifactAgentCursor');
         const inspectionTarget = root?.querySelector('[data-ac-inspection-target="true"]');
         const inspectionSourceId = inspectionTarget?.dataset.sourceId || '';
+        const avatar = cursor?.querySelector('[data-ac-cursor-avatar]');
         window.__casepathArtifactCursorSteps.push({
           changeId: detail.changeId || '',
           eventId: detail.eventId || '',
@@ -3748,6 +3921,8 @@ async function execute() {
           factTourPhase: document.querySelector('#artifactCanvas')?.dataset.factSourceTourPhase || '',
           graphInspectionPhase: document.querySelector('#artifactCanvas')?.dataset.graphInspectionPhase || '',
           signature: cursor?.dataset.agentSignature || '',
+          avatar: avatar?.dataset.agentAvatar || '',
+          avatarMarkup: window.__casepathNormalizeSvg(avatar?.querySelector('svg')),
           specialistBound: cursor?.dataset.specialistBound === 'true',
           cursorAgent: cursor?.querySelector('[data-ac-cursor-agent]')?.textContent?.trim() || '',
           cursorAction: cursor?.querySelector('[data-ac-cursor-action]')?.textContent?.trim() || '',
@@ -4000,6 +4175,11 @@ async function execute() {
     window.addEventListener('casepath:source-highlighted', event => {
       const detail = event.detail || {};
       const root = document.querySelector('#artifactCanvas');
+      const construction = detail.entityKind === 'node'
+        ? root?.querySelector('#artifactProcessGraph .ac-build-source-highlight')
+        : null;
+      const constructionMark = construction?.querySelector('mark.ac-source-exact-mark.is-highlighted, mark.is-highlighted');
+      const constructionSource = construction?.querySelector('[data-fact-id][data-source-id][data-source-locator-id]');
       const sourceHighlight = {
         entityKind: detail.entityKind || '',
         nodeId: detail.nodeId || '',
@@ -4015,6 +4195,13 @@ async function execute() {
         sourceHighlighted: detail.entityKind === 'fact'
           ? visible(root?.querySelector('[data-fact-tour-phase="highlight-source"] .ac-fact-source.is-source-selected .is-highlighted'))
           : visible(root?.querySelector('.ac-build-source-highlight .is-highlighted, .ac-build-source-highlight')),
+        attachmentKind: construction?.querySelector('[data-node-attachment-kind]')?.dataset.nodeAttachmentKind || (constructionSource ? 'fact' : ''),
+        constructionFactId: construction?.dataset.factId || constructionSource?.dataset.factId || '',
+        constructionSourceId: construction?.dataset.sourceId || constructionSource?.dataset.sourceId || '',
+        constructionLocatorId: construction?.dataset.sourceLocatorId || constructionSource?.dataset.sourceLocatorId || '',
+        passage: constructionMark?.textContent?.trim() || '',
+        highlightMarkCount: construction ? construction.querySelectorAll('mark.ac-source-exact-mark.is-highlighted, mark.is-highlighted').length : 0,
+        generatedSummaryVisible: Boolean(construction && [...construction.querySelectorAll('p')].filter(visible).some(node => /summary|context/i.test(node.className) || node.textContent?.trim())),
         at: performance.now(),
       };
       window.__casepathSourceHighlights.push(sourceHighlight);
@@ -4662,6 +4849,7 @@ async function execute() {
         short: member.querySelector('small')?.textContent?.trim() || '',
         monogram: member.dataset.agentMonogram || '',
         signature: member.dataset.agentSignature || '',
+        iconMarkup: window.__casepathNormalizeSvg(member.querySelector('svg')),
         color: getComputedStyle(member).getPropertyValue('--agent-color').trim(),
         visible: visible(member),
         monogramVisible: visible(member.querySelector('svg')),
@@ -4669,8 +4857,56 @@ async function execute() {
       })),
     };
   });
+  const agentAuditSnapshots = [];
+  for (const agentId of REQUIRED_VISIBLE_SPECIALIST_IDS) {
+    const trigger = page.locator(`.ac-global-agent-work [data-ac-action="open-agent-audit"][data-agent-id="${agentId}"]`);
+    await trigger.click();
+    await waitVisible(`#artifactCanvas [data-ac-agent-audit][data-agent-id="${agentId}"]`);
+    const snapshot = await page.locator('#artifactCanvas [data-ac-agent-audit]').evaluate((panel, expectedAgentId) => {
+      const visible = node => Boolean(node && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden' && getComputedStyle(node).display !== 'none');
+      const receipt = Object.fromEntries([...panel.querySelectorAll('[data-agent-history-receipt] dl > div')].map(row => [row.querySelector('dt')?.textContent?.trim() || '', row.querySelector('dd')?.textContent?.trim() || '']));
+      const accepted = panel.querySelector('[data-agent-history-accepted-ids]');
+      return {
+        agentId: expectedAgentId,
+        opened: visible(panel),
+        panelAgentId: panel.dataset.agentId || '',
+        panelSignature: panel.dataset.agentSignature || '',
+        historyAvailable: panel.dataset.agentHistoryAvailable === 'true',
+        historyContract: panel.querySelector('[data-agent-history-contract]')?.dataset.agentHistoryContract || '',
+        historyStepCounts: ['task', 'sources', 'facts', 'output', 'acceptance'].map(part => panel.querySelectorAll(`[data-agent-history-${part}]`).length),
+        acceptedCount: Number(accepted?.dataset.acceptedCount || 0),
+        acceptedIds: [...panel.querySelectorAll('[data-accepted-item-id]')].map(item => item.dataset.acceptedItemId || ''),
+        rejections: [...panel.querySelectorAll('[data-agent-history-rejections] [data-rejected-item-id]')].map(item => ({ id: item.dataset.rejectedItemId || '', invariant: item.dataset.rejectedInvariant || '' })),
+        callId: receipt.Call || '',
+        outputHash: receipt['Output hash'] || '',
+        emptyStateVisible: visible(panel.querySelector('.ac-agent-history-empty')),
+        buttonPressed: document.querySelector(`.ac-global-agent-work [data-ac-action="open-agent-audit"][data-agent-id="${CSS.escape(expectedAgentId)}"]`)?.getAttribute('aria-pressed') || '',
+      };
+    }, agentId);
+    await page.locator('#artifactCanvas [data-ac-agent-audit] [data-ac-action="close-agent-audit"]').click();
+    await waitHidden('#artifactCanvas [data-ac-agent-audit]');
+    Object.assign(snapshot, await page.evaluate(expectedAgentId => {
+      const trigger = document.querySelector(`.ac-global-agent-work [data-ac-action="open-agent-audit"][data-agent-id="${CSS.escape(expectedAgentId)}"]`);
+      return {
+        focusRestored: document.activeElement === trigger,
+        buttonPressedAfterClose: trigger?.getAttribute('aria-pressed') || '',
+        panelOpenAfterClose: Boolean(document.querySelector('#artifactCanvas [data-ac-agent-audit]:not([hidden])')),
+      };
+    }, agentId));
+    agentAuditSnapshots.push(snapshot);
+  }
+  const returnedAgentAudit = processRun.result?.agent_orchestration || processRun.result?.audit?.agent_orchestration || null;
+  const agentAuditIssues = agentAuditContractViolations(agentAuditSnapshots, returnedAgentAudit, isProductionJourney());
+  check('Each visible specialist opens an exact call-bound activity history and deterministic reference replay fails closed', agentAuditIssues.length === 0, JSON.stringify({ agentAuditSnapshots, returnedAgentAudit, agentAuditIssues }));
   const artifactProducerRoleIssues = artifactCursorProducerRoleContractViolations(artifactTeamSnapshot, artifactCursorSteps, semanticEvents);
   check('Desktop shows only five useful signature-colored specialists while retaining exact six-agent receipts and keeping deterministic law, reference, and gates outside model identity', artifactProducerRoleIssues.length === 0, JSON.stringify({ artifactTeamSnapshot, artifactCursorSteps, artifactProducerRoleIssues }));
+  const specialistAvatarIssues = specialistAvatarContractViolations(artifactTeamSnapshot, artifactCursorSteps, isProductionJourney());
+  check('Every call-bound specialist cursor uses its exact distinct role icon, including the hidden planner identity without exposing planner in the rail', specialistAvatarIssues.length === 0, JSON.stringify({ artifactTeamSnapshot, artifactCursorSteps, specialistAvatarIssues }));
+  const sourcePreludeSnapshots = await page.evaluate(() => window.__casepathSourcePreludeSnapshots || []);
+  const sourcePreludeIssues = sourcePreludeContractViolations(sourcePreludeSnapshots[0]);
+  check('Opening source package has seven type-correct source icons and no checkbox-shaped control semantics', sourcePreludeIssues.length === 0, JSON.stringify({ sourcePreludeSnapshots, sourcePreludeIssues }));
+  const mainFocalWhyViolations = await page.evaluate(() => window.__casepathMainFocalWhyViolations || []);
+  check('Main focal work never shows a large generic agent why paragraph', mainFocalWhyViolations.length === 0, JSON.stringify(mainFocalWhyViolations));
   const processChangeIssues = processProjectionContractViolations(processArtifactChanges, semanticEvents, artifactCursorSteps, isProductionJourney());
   check('Persistent process canvas constructs the exact ten-node handling spine monotonically, one justified node at a time', processChangeIssues.length === 0, JSON.stringify({ processArtifactChanges, processChangeIssues }));
   const sourceInspections = await page.evaluate(() => window.__casepathSourceInspections || []);
@@ -5161,6 +5397,29 @@ async function execute() {
   const processPreviewGeometry = await page.evaluate(() => window.__casepathProcessPreviewGeometry || []);
   const processPreviewGeometryIssues = processPreviewGeometryContractViolations(processPreviewGeometry);
   check('Every visible construction and completed source preview stays inside the 1440×900 process viewport with an 8px bottom inset', processPreviewGeometryIssues.length === 0, JSON.stringify({ processPreviewGeometryIssues, processPreviewGeometry }));
+  const intakeFact = processRun.result.facts.find(item => item.fact_id === 'fact_customer_objective');
+  const intakeRef = intakeFact?.source_refs?.find(ref => ref.artifact_id === 'message' && ref.locator_kind === 'text_quote');
+  const intakeTruth = intakeFact && intakeRef ? factSourcePreviewTruth(demo.claim, intakeFact, intakeRef, false) : null;
+  const expectedIntakeBasis = intakeTruth ? {
+    factId: intakeFact.fact_id,
+    sourceId: intakeRef.artifact_id,
+    locatorId: factSourceLocatorId(intakeRef),
+    passage: intakeTruth.passage,
+  } : null;
+  const intakeHighlight = sourceHighlights.find(item => item.entityKind === 'node' && item.nodeId === 'intake');
+  const intakeConstruction = intakeHighlight ? {
+    nodeId: intakeHighlight.nodeId,
+    attachmentKind: intakeHighlight.attachmentKind,
+    factId: intakeHighlight.constructionFactId,
+    sourceId: intakeHighlight.constructionSourceId,
+    locatorId: intakeHighlight.constructionLocatorId,
+    passage: intakeHighlight.passage,
+    highlightMarkCount: intakeHighlight.highlightMarkCount,
+    generatedSummaryVisible: intakeHighlight.generatedSummaryVisible,
+  } : null;
+  const intakePreview = processNodeSourcePreviews.find(item => item.nodeId === 'intake');
+  const intakeBasisIssues = intakeClaimMessageBasisContractViolations(intakeConstruction, intakePreview, expectedIntakeBasis);
+  check('Intake construction and ready preview both show the exact returned customer-message passage and locator', intakeBasisIssues.length === 0, JSON.stringify({ expectedIntakeBasis, intakeConstruction, intakePreview, intakeBasisIssues }));
   await page.locator('#artifactProcessGraph [data-ac-action="select-node"][data-node-id="causation"]').click();
   const representativePreview = processNodeSourcePreviews.find(preview => ['fact', 'source'].includes(preview.basisKind) && preview.exactReturnedSource && ['message', 'intake'].includes(preview.sourceId))
     || processNodeSourcePreviews.find(preview => ['fact', 'source'].includes(preview.basisKind) && preview.exactReturnedSource && preview.sourceHasTarget);
@@ -6303,6 +6562,93 @@ async function assertMemoryReuseRendererDeterminism() {
 }
 
 async function runContractSelfTest() {
+  const sourcePreludeFixture = {
+    cardCount: 7,
+    inputCount: 0,
+    checkboxRoleCount: 0,
+    cards: SOURCE_PRELUDE_ICON_KINDS.map((kind, index) => ({ kind, iconKind: kind, iconCount: 1, iconMarkup: `<path data-fixture="${index}"></path>` })),
+  };
+  if (sourcePreludeContractViolations(sourcePreludeFixture).length) throw new Error('Valid seven-card source icon fixture was rejected');
+  const checkboxPreludeFixture = structuredClone(sourcePreludeFixture);
+  checkboxPreludeFixture.checkboxRoleCount = 1;
+  if (!sourcePreludeContractViolations(checkboxPreludeFixture).some(issue => issue.includes('checkbox'))) throw new Error('Opening source checkbox fixture was accepted');
+  const wrongPreludeIconFixture = structuredClone(sourcePreludeFixture);
+  wrongPreludeIconFixture.cards[4].iconKind = 'document';
+  if (!sourcePreludeContractViolations(wrongPreludeIconFixture).some(issue => issue.includes('type-correct icon'))) throw new Error('Wrong opening source type icon fixture was accepted');
+
+  const avatarTeamFixture = {
+    members: REQUIRED_NEMOTRON_AGENT_IDS.map((agentId, index) => ({ agentId, signature: REQUIRED_NEMOTRON_AGENT_SIGNATURES[agentId].signature, iconMarkup: `<path data-role="${index}"></path>` })),
+  };
+  const avatarCursorFixture = avatarTeamFixture.members.map(member => ({
+    specialistBound: true,
+    agentId: member.agentId,
+    visualActiveAgentId: member.agentId,
+    signature: member.signature,
+    avatar: member.signature,
+    avatarMarkup: member.iconMarkup,
+  }));
+  if (specialistAvatarContractViolations(avatarTeamFixture, avatarCursorFixture, true).length) throw new Error('Valid six-role cursor avatar fixture was rejected');
+  const mismatchedAvatarFixture = structuredClone(avatarCursorFixture);
+  mismatchedAvatarFixture[2].avatarMarkup = avatarTeamFixture.members[0].iconMarkup;
+  if (!specialistAvatarContractViolations(avatarTeamFixture, mismatchedAvatarFixture, true).some(issue => issue.includes('does not exactly match'))) throw new Error('Mismatched live role icon fixture was accepted');
+  const duplicateAvatarTeamFixture = structuredClone(avatarTeamFixture);
+  duplicateAvatarTeamFixture.members[5].iconMarkup = duplicateAvatarTeamFixture.members[4].iconMarkup;
+  if (!specialistAvatarContractViolations(duplicateAvatarTeamFixture, avatarCursorFixture, true).some(issue => issue.includes('unique normalized role-icon hashes'))) throw new Error('Duplicate agent role icon fixture was accepted');
+
+  const expectedIntakeFixture = { factId: 'fact_customer_objective', sourceId: 'message', locatorId: 'source:message:page:1:quote:requested action', passage: 'Please tell me what should happen next.' };
+  const intakeConstructionFixture = { nodeId: 'intake', attachmentKind: 'fact', ...expectedIntakeFixture, highlightMarkCount: 1, generatedSummaryVisible: false };
+  const intakePreviewFixture = { nodeId: 'intake', basisKind: 'fact', ...expectedIntakeFixture, exactReturnedSource: true, exactPassage: true, noGeneratedContext: true };
+  if (intakeClaimMessageBasisContractViolations(intakeConstructionFixture, intakePreviewFixture, expectedIntakeFixture).length) throw new Error('Valid intake customer-message basis fixture was rejected');
+  const generatedIntakeFixture = { ...intakeConstructionFixture, generatedSummaryVisible: true };
+  if (!intakeClaimMessageBasisContractViolations(generatedIntakeFixture, intakePreviewFixture, expectedIntakeFixture).some(issue => issue.includes('exact selected claim-message'))) throw new Error('Generated intake summary fixture was accepted');
+
+  const auditFixture = {
+    executed: true,
+    agents: REQUIRED_VISIBLE_SPECIALIST_IDS.map((agentId, index) => ({
+      agent_id: agentId,
+      actor_type: 'nemotron_agent',
+      call_id: `call-${index}`,
+      output_artifact_hash: String(index + 1).padStart(64, '0'),
+      accepted_ids: [`accepted-${index}`],
+      accepted_count: 1,
+      rejected: index === 2 ? [{ item_id: 'rejected-2', invariant: 'source_integrity' }] : [],
+      rejected_count: index === 2 ? 1 : 0,
+    })),
+  };
+  const auditSnapshotFixture = auditFixture.agents.map(agent => ({
+    agentId: agent.agent_id,
+    opened: true,
+    panelAgentId: agent.agent_id,
+    panelSignature: REQUIRED_NEMOTRON_AGENT_SIGNATURES[agent.agent_id].signature,
+    buttonPressed: 'true',
+    focusRestored: true,
+    buttonPressedAfterClose: 'false',
+    panelOpenAfterClose: false,
+    historyAvailable: true,
+    historyContract: AGENT_HISTORY_CONTRACT,
+    historyStepCounts: [1, 1, 1, 1, 1],
+    acceptedCount: agent.accepted_count,
+    acceptedIds: agent.accepted_ids,
+    rejections: agent.rejected.map(item => ({ id: item.item_id, invariant: item.invariant })),
+    callId: agent.call_id,
+    outputHash: agent.output_artifact_hash,
+    emptyStateVisible: false,
+  }));
+  if (agentAuditContractViolations(auditSnapshotFixture, auditFixture, true).length) throw new Error('Valid call-bound agent history fixture was rejected');
+  const wrongAuditHashFixture = structuredClone(auditSnapshotFixture);
+  wrongAuditHashFixture[0].outputHash = '0'.repeat(64);
+  if (!agentAuditContractViolations(wrongAuditHashFixture, auditFixture, true).some(issue => issue.includes('technical receipt'))) throw new Error('Agent history with a forged output hash was accepted');
+  const hiddenRejectionAuditFixture = structuredClone(auditSnapshotFixture);
+  hiddenRejectionAuditFixture[2].rejections = [];
+  if (!agentAuditContractViolations(hiddenRejectionAuditFixture, auditFixture, true).some(issue => issue.includes('rejected item'))) throw new Error('Agent history hiding a rejected item was accepted');
+  const referenceAuditFixture = REQUIRED_VISIBLE_SPECIALIST_IDS.map(agentId => ({
+    agentId, opened: true, panelAgentId: agentId, panelSignature: REQUIRED_NEMOTRON_AGENT_SIGNATURES[agentId].signature,
+    buttonPressed: 'true', focusRestored: true, buttonPressedAfterClose: 'false', panelOpenAfterClose: false,
+    historyAvailable: false, historyContract: '', historyStepCounts: [0, 0, 0, 0, 0], acceptedCount: 0,
+    acceptedIds: [], rejections: [], callId: '', outputHash: '', emptyStateVisible: true,
+  }));
+  if (agentAuditContractViolations(referenceAuditFixture, { executed: false, agents: [] }, false).length) throw new Error('Valid fail-closed reference agent history fixture was rejected');
+
   const processProjectionFixture = FLAGSHIP_PROCESS_PROJECTION_IDS.map((entityId, index) => ({
     changeId: `change:${entityId}`,
     eventId: `event:${entityId}`,
@@ -6481,19 +6827,19 @@ async function runContractSelfTest() {
     {
       contract: FACT_SOURCE_CINEMATIC_CONTRACT, timing: 'neutral-read', cursorPhase: 'click', targetId: inspection.sourceId,
       factId: inspection.factId, sourceId: inspection.sourceId, locatorId: inspection.locatorId, factTourPhase: 'read-source',
-      activeSourceIds: [inspection.sourceId], sourceDockState: 'open', activeSourceLocator: inspection.locatorId, sourceVisible: true, sourceHighlighted: false, pendingVisible: true, findingVisible: false, factVisible: false, sourceTrail: factTrailFixture(index, 'active'),
+      activeSourceIds: [inspection.sourceId], sourceDockState: 'open', activeSourceLocator: inspection.locatorId, sourceVisible: true, sourceHighlighted: false, exactControlCount: 1, exactControlTag: 'BUTTON', exactControlText: `Exact ${inspection.factId}`, markCount: 0, highlightedMarkCount: 0, neutralControlLooksHighlighted: false, pendingVisible: true, findingVisible: false, factVisible: false, sourceTrail: factTrailFixture(index, 'active'),
       focus: factCinematicFocusFixture, at: inspection.at - 700,
     },
     {
       contract: FACT_SOURCE_CINEMATIC_CONTRACT, timing: 'confirm-click', cursorPhase: 'click', targetId: inspection.sourceId,
       factId: inspection.factId, sourceId: inspection.sourceId, locatorId: inspection.locatorId, factTourPhase: 'read-source',
-      activeSourceIds: [inspection.sourceId], sourceDockState: 'open', activeSourceLocator: inspection.locatorId, sourceVisible: true, sourceHighlighted: false, pendingVisible: true, findingVisible: false, factVisible: false, sourceTrail: factTrailFixture(index, 'active'),
+      activeSourceIds: [inspection.sourceId], sourceDockState: 'open', activeSourceLocator: inspection.locatorId, sourceVisible: true, sourceHighlighted: false, exactControlCount: 1, exactControlTag: 'BUTTON', exactControlText: `Exact ${inspection.factId}`, markCount: 0, highlightedMarkCount: 0, neutralControlLooksHighlighted: false, pendingVisible: true, findingVisible: false, factVisible: false, sourceTrail: factTrailFixture(index, 'active'),
       focus: factCinematicFocusFixture, at: inspection.at - 500,
     },
     {
       contract: FACT_SOURCE_CINEMATIC_CONTRACT, timing: 'highlight-source', cursorPhase: 'source-highlighted', targetId: inspection.sourceId,
       factId: inspection.factId, sourceId: inspection.sourceId, locatorId: inspection.locatorId, factTourPhase: 'highlight-source',
-      activeSourceIds: [inspection.sourceId], sourceDockState: 'open', activeSourceLocator: inspection.locatorId, sourceVisible: true, sourceHighlighted: true, pendingVisible: false, findingVisible: false, factVisible: false, sourceTrail: factTrailFixture(index, 'active'),
+      activeSourceIds: [inspection.sourceId], sourceDockState: 'open', activeSourceLocator: inspection.locatorId, sourceVisible: true, sourceHighlighted: true, exactControlCount: 0, exactControlTag: '', exactControlText: '', markCount: 1, highlightedMarkCount: 1, neutralControlLooksHighlighted: false, pendingVisible: false, findingVisible: false, factVisible: false, sourceTrail: factTrailFixture(index, 'active'),
       focus: factCinematicFocusFixture, at: inspection.at - 400,
     },
     {
@@ -6510,6 +6856,14 @@ async function runContractSelfTest() {
   const prehighlightedReadFixture = structuredClone(factCinematicFixture);
   prehighlightedReadFixture[1].sourceHighlighted = true;
   if (!factSourceCinematicContractViolations(prehighlightedReadFixture, factHighlightFixture, factTourInspections, factTourChanges).some(issue => issue.includes('neutral source read'))) throw new Error('Prehighlighted neutral-read cinematic fixture was accepted');
+  const neutralMarkFixture = structuredClone(factCinematicFixture);
+  neutralMarkFixture[1].markCount = 1;
+  neutralMarkFixture[1].exactControlCount = 0;
+  if (!factSourceCinematicContractViolations(neutralMarkFixture, factHighlightFixture, factTourInspections, factTourChanges).some(issue => issue.includes('neutral source read'))) throw new Error('Neutral source rendered as a preselected mark was accepted');
+  const selectedWithoutMarkFixture = structuredClone(factCinematicFixture);
+  selectedWithoutMarkFixture[3].markCount = 0;
+  selectedWithoutMarkFixture[3].highlightedMarkCount = 0;
+  if (!factSourceCinematicContractViolations(selectedWithoutMarkFixture, factHighlightFixture, factTourInspections, factTourChanges).some(issue => issue.includes('sole visible highlight'))) throw new Error('Selected source without one highlighted mark was accepted');
   const missingConfirmFixture = factCinematicFixture.filter(item => !(item.factId === FACT_SOURCE_TOUR_IDS[0] && item.timing === 'confirm-click'));
   if (!factSourceCinematicContractViolations(missingConfirmFixture, factHighlightFixture, factTourInspections, factTourChanges).some(issue => issue.includes('cinematic trace is incomplete'))) throw new Error('Highlight without an exact confirm click was accepted');
   const missingFactHighlightFixture = factHighlightFixture.filter(item => item.factId !== FACT_SOURCE_TOUR_IDS[0]);
@@ -7827,7 +8181,7 @@ async function runContractSelfTest() {
   const unsafeAxeTarget = `.v20-learning-row[data-customer="${'claim-bearing-'.repeat(700)}"] > span`;
   const axeDiagnostics = axeViolationDiagnostics([{ id: 'color-contrast', impact: 'serious', help: 'Elements must meet minimum color contrast ratio thresholds', nodes: [{ target: [unsafeAxeTarget], html: '<span>claim-bearing text must not be logged</span>', failureSummary: 'Claim-bearing failure prose must not be logged', any: [{ id: 'color-contrast', impact: 'serious', message: 'Claim-bearing check prose must not be logged', data: { fgColor: '#147a56', bgColor: '#edf8f3', contrastRatio: 4.44, raw: 'must not be retained' } }], all: [], none: [] }] }]);
   if (axeDiagnostics.length !== 1 || axeDiagnostics[0].node_count !== 1 || axeDiagnostics[0].omitted_node_count !== 0 || !/^sha256:[0-9a-f]{64}$/.test(axeDiagnostics[0].nodes[0].target[0]) || JSON.stringify(axeDiagnostics).includes('claim-bearing') || axeDiagnostics[0].nodes[0].checks[0].data.contrastRatio !== 4.44 || 'raw' in axeDiagnostics[0].nodes[0].checks[0].data || 'html' in axeDiagnostics[0].nodes[0] || 'message' in axeDiagnostics[0].nodes[0].checks[0] || 'failure_summary' in axeDiagnostics[0].nodes[0]) throw new Error(`Bounded Axe diagnostics fixture failed: ${JSON.stringify(axeDiagnostics)}`);
-  return { status: 'passed', fixtures: ['persistent_ten_node_projection_and_tamper', 'graph_native_review_scene_and_competing_artifact_rejection', 'semantic_attachment_cursor_tether_and_tamper', 'zoom_out_desktop_three_priority_diagnostics', 'process_preview_1440x900_containment_and_bottom_inset', 'bounded_future_claim_memory_delta_identity_origin_and_tamper', 'bounded_axe_node_diagnostics', 'session_scoped_run_read_coalescing', 'memory_reuse_renderer_determinism', 'stable_text_grounding_fact_selection', 'normalized_text_grounding', 'python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'fail_closed_model_contribution_badges', 'mixed_field_contribution_badge', 'post_memory_contribution_suppression', 'reciprocal_evidence_truth_and_tamper', 'structured_legal_truth_and_tamper', 'visual_reference_truth_and_tamper', 'precedent_ranking_truth_and_tamper', 'memory_application_truth_and_tamper', 'memory_boundary_event_cross_binding', 'dormant_memory_retrieval_not_application', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'parallel_source_artifact_hash_rejection', 'parallel_process_artifact_hash_rejection', 'process_field_membership_rejection', 'process_field_attribution_rejection', 'process_inherited_field_rejection_with_recomputed_hashes', 'evidence_field_membership_rejection', 'evidence_field_attribution_rejection', 'evidence_source_ref_rejection_with_recomputed_hashes', 'final_field_membership_rejection', 'final_current_node_binding_rejection', 'final_next_action_binding_rejection', 'final_supporting_facts_binding_rejection', 'final_upstream_contributions_binding_rejection', 'final_audit_checks_binding_rejection', 'noncontrolling_supporting_fact_source_binding', 'cold_upstream_provider_policy_rejection', 'warm_upstream_provider_policy_rejection', 'agent_role_label_rejection', 'gate_role_label_rejection', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'provider_concurrency_zero_call_receipt', 'provider_concurrency_receipt_call_rejection', 'provider_concurrency_receipt_identity_rejection', 'safe_upstream_rejection_receipt', 'forged_upstream_rejection_receipt_attribution_rejection', 'missing_upstream_rejection_receipt_attribution_rejection', 'out_of_scope_upstream_rejection_receipt_attribution_rejection', 'unbounded_upstream_error_code_rejection', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'safe_upstream_rejection_ledger', 'provider_concurrency_zero_call_ledger', 'provider_concurrency_ledger_call_rejection', 'provider_concurrency_ledger_cost_rejection', 'provider_concurrency_ledger_identity_rejection', 'forged_upstream_rejection_ledger_attribution_rejection', 'missing_upstream_rejection_ledger_attribution_rejection', 'out_of_scope_upstream_rejection_ledger_attribution_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
+  return { status: 'passed', fixtures: ['seven_source_icons_and_checkbox_rejection', 'neutral_source_control_then_selected_mark', 'six_distinct_cursor_role_icons_and_tamper', 'exact_intake_claim_message_basis_and_generated_summary_rejection', 'call_bound_agent_history_and_reference_fail_closed', 'persistent_ten_node_projection_and_tamper', 'graph_native_review_scene_and_competing_artifact_rejection', 'semantic_attachment_cursor_tether_and_tamper', 'zoom_out_desktop_three_priority_diagnostics', 'process_preview_1440x900_containment_and_bottom_inset', 'bounded_future_claim_memory_delta_identity_origin_and_tamper', 'bounded_axe_node_diagnostics', 'session_scoped_run_read_coalescing', 'memory_reuse_renderer_determinism', 'stable_text_grounding_fact_selection', 'normalized_text_grounding', 'python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'fail_closed_model_contribution_badges', 'mixed_field_contribution_badge', 'post_memory_contribution_suppression', 'reciprocal_evidence_truth_and_tamper', 'structured_legal_truth_and_tamper', 'visual_reference_truth_and_tamper', 'precedent_ranking_truth_and_tamper', 'memory_application_truth_and_tamper', 'memory_boundary_event_cross_binding', 'dormant_memory_retrieval_not_application', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'parallel_source_artifact_hash_rejection', 'parallel_process_artifact_hash_rejection', 'process_field_membership_rejection', 'process_field_attribution_rejection', 'process_inherited_field_rejection_with_recomputed_hashes', 'evidence_field_membership_rejection', 'evidence_field_attribution_rejection', 'evidence_source_ref_rejection_with_recomputed_hashes', 'final_field_membership_rejection', 'final_current_node_binding_rejection', 'final_next_action_binding_rejection', 'final_supporting_facts_binding_rejection', 'final_upstream_contributions_binding_rejection', 'final_audit_checks_binding_rejection', 'noncontrolling_supporting_fact_source_binding', 'cold_upstream_provider_policy_rejection', 'warm_upstream_provider_policy_rejection', 'agent_role_label_rejection', 'gate_role_label_rejection', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'provider_concurrency_zero_call_receipt', 'provider_concurrency_receipt_call_rejection', 'provider_concurrency_receipt_identity_rejection', 'safe_upstream_rejection_receipt', 'forged_upstream_rejection_receipt_attribution_rejection', 'missing_upstream_rejection_receipt_attribution_rejection', 'out_of_scope_upstream_rejection_receipt_attribution_rejection', 'unbounded_upstream_error_code_rejection', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'safe_upstream_rejection_ledger', 'provider_concurrency_zero_call_ledger', 'provider_concurrency_ledger_call_rejection', 'provider_concurrency_ledger_cost_rejection', 'provider_concurrency_ledger_identity_rejection', 'forged_upstream_rejection_ledger_attribution_rejection', 'missing_upstream_rejection_ledger_attribution_rejection', 'out_of_scope_upstream_rejection_ledger_attribution_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
 }
 
 let report;
