@@ -2905,22 +2905,41 @@ body[data-casepath-moment="review-applied"] .casepath-artifact-canvas .ac-spatia
 }
 
 .casepath-artifact-canvas .ac-agent-cursor b{
-  top:19px;
-  left:17px;
-  min-width:20px;
+  position:absolute;
+  inset:0 auto auto 0;
+  width:32px;
+  min-width:32px;
+  height:32px;
+  padding:0;
+  border:1px solid color-mix(in srgb,var(--cursor-color) 24%,var(--ac-line));
+  border-radius:10px;
+  background:color-mix(in srgb,var(--cursor-color) 10%,#fff);
+  color:var(--cursor-color);
+  font-size:0;
+  box-shadow:0 5px 14px rgba(18,21,26,.11);
+}
+
+.casepath-artifact-canvas .ac-agent-cursor[data-agent-signature] b svg{
+  position:static;
+  inset:auto;
+  width:18px;
   height:18px;
-  border-radius:9px;
-  font-size:7px;
+  fill:none;
+  stroke:currentColor;
+  stroke-width:1.8;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+  filter:none;
 }
 
 .casepath-artifact-canvas .ac-agent-cursor-label{
   position:absolute;
-  top:27px;
-  display:grid;
-  gap:1px;
+  top:-2px;
+  display:block;
   width:max-content;
-  max-width:176px;
-  padding:5px 7px 6px;
+  max-width:190px;
+  min-height:36px;
+  padding:7px 10px;
   border:1px solid color-mix(in srgb,var(--cursor-color) 22%,var(--ac-line));
   border-radius:6px;
   background:rgba(255,255,255,.97);
@@ -2929,13 +2948,23 @@ body[data-casepath-moment="review-applied"] .casepath-artifact-canvas .ac-spatia
   filter:none;
 }
 
-.casepath-artifact-canvas .ac-agent-cursor[data-label-side="right"] .ac-agent-cursor-label{left:24px}
-.casepath-artifact-canvas .ac-agent-cursor[data-label-side="left"] .ac-agent-cursor-label{right:18px;text-align:right}
+.casepath-artifact-canvas .ac-agent-cursor[data-label-side="right"] .ac-agent-cursor-label{left:39px}
+.casepath-artifact-canvas .ac-agent-cursor[data-label-side="left"] .ac-agent-cursor-label{right:39px;text-align:left}
+
+.casepath-artifact-canvas .ac-agent-cursor-copy{
+  display:grid;
+  min-width:0;
+  gap:2px;
+}
+
+.casepath-artifact-canvas .ac-agent-cursor.is-clicking b{
+  box-shadow:0 0 0 4px color-mix(in srgb,var(--cursor-color) 13%,transparent),0 5px 14px rgba(18,21,26,.11);
+}
 
 .casepath-artifact-canvas .ac-agent-cursor-label strong{
   overflow:hidden;
   color:var(--cursor-color);
-  font-size:9px;
+  font-size:10px;
   line-height:1.2;
   font-weight:800;
   text-overflow:ellipsis;
@@ -2945,7 +2974,7 @@ body[data-casepath-moment="review-applied"] .casepath-artifact-canvas .ac-spatia
 .casepath-artifact-canvas .ac-agent-cursor-label small{
   overflow:hidden;
   color:var(--ac-muted);
-  font-size:8px;
+  font-size:8.5px;
   line-height:1.25;
   text-overflow:ellipsis;
   white-space:nowrap;
@@ -5467,4 +5496,84 @@ body[data-casepath-moment="later-result"] .casepath-artifact-canvas .ac-spatial-
 
 body[data-casepath-moment="later-result"] .casepath-artifact-canvas .ac-spatial-branch>span{
   display:none;
+}
+
+/* Evidence-bound node progress: one calm arc on the active specialist, never a generic loader. */
+@property --ac-process-node-progress{
+  syntax:"<percentage>";
+  inherits:false;
+  initial-value:0%;
+}
+
+.casepath-artifact-canvas .ac-agent-cursor{
+  --ac-process-node-progress:0%;
+}
+
+.casepath-artifact-canvas .ac-agent-cursor[data-process-node-progress="active"]{
+  transition:transform .62s var(--ac-ease),--ac-process-node-progress .42s var(--ac-ease);
+}
+
+.casepath-artifact-canvas .ac-agent-cursor>.ac-cursor-role-icon:after{
+  content:"";
+  position:absolute;
+  inset:-4px;
+  padding:1.5px;
+  border-radius:13px;
+  background:conic-gradient(from -90deg,var(--cursor-color) var(--ac-process-node-progress),color-mix(in srgb,var(--cursor-color) 14%,transparent) 0);
+  opacity:0;
+  pointer-events:none;
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;
+  mask-composite:exclude;
+  transition:opacity .16s ease;
+}
+
+.casepath-artifact-canvas .ac-agent-cursor[data-process-node-progress="active"]>.ac-cursor-role-icon:after{
+  opacity:1;
+}
+
+.casepath-artifact-canvas .ac-agent-cursor[data-process-node-progress="active"] .ac-agent-cursor-label{
+  min-width:154px;
+}
+
+.casepath-artifact-canvas .ac-process-node-progress{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:10px;
+  margin-top:5px;
+  padding-top:5px;
+  border-top:1px solid color-mix(in srgb,var(--cursor-color) 15%,var(--ac-line));
+}
+
+.casepath-artifact-canvas .ac-process-node-progress[hidden]{
+  display:none!important;
+}
+
+.casepath-artifact-canvas .ac-agent-cursor-label .ac-process-node-progress small{
+  color:var(--ac-muted);
+  font-size:8px;
+  line-height:1.2;
+  font-weight:650;
+  letter-spacing:.005em;
+}
+
+.casepath-artifact-canvas .ac-agent-cursor-label .ac-process-node-progress strong{
+  margin:0;
+  color:var(--cursor-color);
+  font-size:9px;
+  line-height:1;
+  font-weight:800;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:-.01em;
+}
+
+@media(prefers-reduced-motion:reduce){
+  .casepath-artifact-canvas .ac-agent-cursor[data-process-node-progress="active"]{
+    transition:none;
+  }
+
+  .casepath-artifact-canvas .ac-agent-cursor>.ac-cursor-role-icon:after{
+    transition:none;
+  }
 }

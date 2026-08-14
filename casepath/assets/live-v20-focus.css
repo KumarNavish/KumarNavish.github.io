@@ -206,6 +206,37 @@
     font-weight:730;
   }
 
+  .v20-document-chain .v20-document-name{
+    display:grid!important;
+    grid-template-columns:17px minmax(0,1fr);
+    align-items:start;
+    gap:7px;
+    overflow:visible;
+    -webkit-line-clamp:unset;
+  }
+
+  .v20-document-type-icon{
+    width:17px;
+    height:17px;
+    margin-top:-1px;
+    fill:none;
+    stroke:#646c76;
+    stroke-width:1.55;
+    stroke-linecap:round;
+    stroke-linejoin:round;
+    vector-effect:non-scaling-stroke;
+  }
+
+  .v20-document-chain .v20-document-name>.v20-document-name-copy{
+    display:-webkit-box!important;
+    overflow:hidden;
+    color:inherit;
+    font:inherit;
+    line-height:inherit;
+    -webkit-box-orient:vertical;
+    -webkit-line-clamp:2;
+  }
+
   .v20-document-chain .v20-chain-arrow{
     align-self:center;
     color:#aeb4bb;

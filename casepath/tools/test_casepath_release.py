@@ -521,8 +521,14 @@ def test_flagship_surface_is_one_persistent_source_plus_artifact_canvas() -> Non
     assert "Management alleges insufficient ventilation and declines inspection" not in index
     assert "assets/artifact-canvas.css" in index
     assert "assets/artifact-canvas.js" in index
-    assert "assets/artifact-canvas.css?v=1.0.38" in index
-    assert "assets/artifact-canvas.js?v=1.0.49" in index
+    assert "assets/artifact-canvas.css?v=1.0.40" in index
+    assert "assets/artifact-canvas.js?v=1.0.51" in index
+    assert "const CURSOR_AVATARS = Object.freeze({" in canvas
+    assert "data-ac-cursor-avatar" in canvas
+    assert "function setCursorAvatar(" in canvas
+    assert all(f"{signature}: '<" in canvas for signature in (
+        "facts", "orchestrator", "sources", "process", "evidence", "audit",
+    ))
     assert "factSourceTrailMarkup" in canvas
     assert 'class="ac-source-inspection-trail"' in canvas
     assert ".ac-source-inspection-trail" in canvas_css
@@ -569,6 +575,20 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "const GRAPH_NODE_DWELL_MS = 1300;" in canvas
     assert "const GRAPH_SOURCE_DWELL_MS = 1900;" in canvas
     assert "const GRAPH_BRANCH_SOURCE_DWELL_MS = 1900;" in canvas
+    assert "casepath.process-node-progress/1.0.0" in canvas
+    assert "visible_evidence_bound_construction" in canvas
+    assert "casepath:process-node-progress" in canvas
+    assert "data-ac-process-node-progress" in canvas
+    assert ".ac-process-node-progress" in canvas_css
+    assert "setProcessNodeProgress('search', 0" in canvas
+    assert "setProcessNodeProgress('read', 38" in canvas
+    assert "setProcessNodeProgress('extract', 72" in canvas
+    assert "setProcessNodeProgress('form', 90" in canvas
+    assert "setProcessNodeProgress('complete', 100" in canvas
+    progress_finish = canvas.index("function finishProcessNodeProgress")
+    progress_clear = canvas.index("clearProcessNodeProgress();", progress_finish)
+    progress_commit = canvas.index("window.setTimeout(commit, clearGapMs);", progress_finish)
+    assert progress_clear < progress_commit
     assert 'data-ac-inspection-target="true"' in canvas
     assert 'data-inspection-phase="${esc(state.graphInspectionPhase)}"' in canvas
     assert "state.graphInspectionPhase = 'highlight-source'" in canvas
@@ -749,6 +769,20 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "Source-free process inspection fixture was accepted" in browser_gate
     assert "Fabricated source-inspection fixture was accepted" in browser_gate
     assert "Cursor-unbound source-inspection fixture was accepted" in browser_gate
+    assert "function processNodeProgressContractViolations" in browser_gate
+    assert "window.__casepathProcessNodeProgress = []" in browser_gate
+    assert "window.addEventListener('casepath:process-node-progress'" in browser_gate
+    assert "progress does not cover the ten spine nodes and four causation branches in order" in browser_gate
+    assert "one visible progress indicator is not inside the agent cursor" in browser_gate
+    assert "100 percent was not visibly reached" in browser_gate
+    assert "progress was not cleared while the output was still absent" in browser_gate
+    assert "progress indicator remains visible when the output appears" in browser_gate
+    assert "completed process leaves progress visible or active" in browser_gate
+    assert "Valid evidence-bound process-node progress fixture was rejected" in browser_gate
+    assert "Process progress with a missing extraction phase was accepted" in browser_gate
+    assert "Process progress owned by the wrong specialist was accepted" in browser_gate
+    assert "Process output visible before progress cleared was accepted" in browser_gate
+    assert "Process progress still visible when the node appeared was accepted" in browser_gate
     assert "node.dataset.artifactChangeId === detail.changeId" in browser_gate
     assert "for (const kind of ['law', 'evidence', 'precedent', 'verification'])" in browser_gate
     assert "casepath:artifact-process-complete" in canvas
@@ -1236,6 +1270,12 @@ def test_later_result_keeps_returned_comparison_hashes_visible() -> None:
     focus_js = (
         release_tool.REPOSITORY / "casepath" / "assets" / "live-v20-focus.js"
     ).read_text(encoding="utf-8")
+    renderer = (
+        release_tool.REPOSITORY / "casepath" / "assets" / "live-v16.js"
+    ).read_text(encoding="utf-8")
+    canvas = (
+        release_tool.REPOSITORY / "casepath" / "assets" / "artifact-canvas.js"
+    ).read_text(encoding="utf-8")
     index = (release_tool.REPOSITORY / "casepath" / "index.html").read_text(
         encoding="utf-8"
     )
@@ -1249,12 +1289,22 @@ def test_later_result_keeps_returned_comparison_hashes_visible() -> None:
         and "display:none!important" in line
     )
     assert ".final-proof" not in hidden_later_result_rule
-    assert 'assets/live-v20-focus.css?v=20.0.19' in index
+    assert 'assets/live-v20-focus.css?v=20.0.20' in index
     assert 'id="stageCanvas" aria-busy="false" tabindex="0" aria-label="CasePath work canvas"' in index
     assert '.stage-canvas:focus-visible' in focus_css
     assert 'v20-artifact-header:has([data-v20-open-documents])' in focus_css
     assert 'justify-content:flex-end' in focus_css
-    assert 'assets/live-v20-focus.js?v=20.0.20' in index
+    assert 'assets/live-v20-focus.js?v=20.0.21' in index
+    compact_held_out_truth = "\n".join((renderer, focus_js, canvas))
+    assert "held-out later demo claim" in compact_held_out_truth
+    assert "The later claim remains source-isolated while eligible guidance is evaluated." in compact_held_out_truth
+    assert "Frozen memory receipt + later demo claim" in compact_held_out_truth
+    assert "The earlier result came from six call-bound specialist agents." in compact_held_out_truth
+    assert "Deterministic comparison · no second model run" in compact_held_out_truth
+    assert "This comparison makes no new model call." in compact_held_out_truth
+    assert "excluded from the simulated review and memory construction" not in compact_held_out_truth
+    assert "flagship above is the live six-agent nemotron analysis" not in compact_held_out_truth
+    assert "the later claim remains source-isolated while eligible guidance is evaluated" in browser_gate
     assert "const CURSOR_TARGET_MIN_HOLD_MS = 220;" in focus_js
     assert "elapsed < CURSOR_TARGET_MIN_HOLD_MS" in focus_js
     assert "const finalComparison = page.locator('#laterResult .final-proof');" in browser_gate
@@ -1266,6 +1316,42 @@ def test_later_result_keeps_returned_comparison_hashes_visible() -> None:
     assert "await laterProofDetails.locator(':scope > summary').click();" in browser_gate
     assert "await page.locator('.v21-progressive-details > summary').click();" in browser_gate
     assert "await page.locator('.v21-progressive-details summary').click();" not in browser_gate
+
+
+def test_document_names_use_a_semantic_reusable_icon_resolver() -> None:
+    focus_js = (
+        release_tool.REPOSITORY / "casepath" / "assets" / "live-v20-focus.js"
+    ).read_text(encoding="utf-8")
+    focus_css = (
+        release_tool.REPOSITORY / "casepath" / "assets" / "live-v20-focus.css"
+    ).read_text(encoding="utf-8")
+    browser_gate = (
+        release_tool.REPOSITORY / "casepath-qa" / "browser-focused-v20.mjs"
+    ).read_text(encoding="utf-8")
+    assert "const DOCUMENT_TYPE_ICONS = Object.freeze({" in focus_js
+    assert "const DOCUMENT_ICON_RULES = Object.freeze([" in focus_js
+    assert "function documentIconKey(semanticValue)" in focus_js
+    assert "function resolveDocumentIcon(documentName, ...semanticContext)" in focus_js
+    assert "documentIconKey(documentName) || documentIconKey(semanticContext.filter(Boolean).join(' ')) || 'generic'" in focus_js
+    for icon_kind in (
+        "contract",
+        "mail",
+        "inspection",
+        "image",
+        "timeline",
+        "invoice",
+        "medical",
+        "legal",
+        "delivery",
+        "generic",
+    ):
+        assert f"{icon_kind}: '" in focus_js
+    assert 'data-document-icon-kind="${esc(icon.key)}"' in focus_js
+    assert 'class="v20-document-type-icon"' in focus_js
+    assert ".v20-document-type-icon" in focus_css
+    assert "stroke-width:1.55" in focus_css
+    assert "Every document name has one restrained semantic type icon while status remains separate" in browser_gate
+    assert "expectedRepresentativeDocumentIcons" in browser_gate
 
 
 def test_every_observable_claim_artifact_is_model_visible_and_scanned() -> None:
