@@ -407,6 +407,16 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert '#artifactCanvas [data-artifact-focus="true"] [data-ac-action="submit-review"]' in browser_gate
     assert "Active decision offers its ${kind} grounding on demand" in browser_gate
     assert "#artifactProcessGraph .ac-grounding-disclosure" in browser_gate
+    compatibility_block = browser_gate.index(
+        "if (false) { // Hidden compatibility DOM remains contract-tested statically"
+    )
+    assert browser_gate.index(
+        "await auditViewports('02-ready-process', '#artifactProcessGraph"
+    ) < compatibility_block
+    assert browser_gate.index(
+        "await screenshot('03-image-grounding-inspection.png');"
+    ) < compatibility_block
+    assert "await page.evaluate(detail => document.dispatchEvent(new CustomEvent('casepath:open-source'" in browser_gate
     assert "Valid spatial process geometry fixture was rejected" in browser_gate
     assert "Vertical-list spatial graph fixture was accepted" in browser_gate
     assert "Invented spatial process edge fixture was accepted" in browser_gate
