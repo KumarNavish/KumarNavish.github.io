@@ -4659,7 +4659,7 @@ async function execute() {
   await waitJourneyUi('Flagship browser did not reach stable review readiness', async () => {
     await page.waitForFunction(() => window.__casepathMomentHistory.includes('process'), null, { timeout: runTimeoutMs() });
     await page.waitForFunction(() => window.__casepathMomentHistory.includes('evidence'), null, { timeout: runTimeoutMs() });
-    await waitText('#journeyNext', /Review the proposed playbook/i, runTimeoutMs());
+    await waitText('#journeyNext', /Review document plan/i, runTimeoutMs());
     await waitVisible('body[data-casepath-moment="ready"]', runTimeoutMs());
     await waitVisible('#artifactCanvas[data-casepath-scene="ready"]', runTimeoutMs());
     await page.waitForFunction(() => document.querySelector('#artifactCanvas')?.dataset.casepathScene === 'ready', null, { timeout: runTimeoutMs() });
