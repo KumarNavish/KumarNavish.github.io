@@ -1993,6 +1993,7 @@ RELEASE_SEMANTIC_FACT_ID_BY_CLAIM = {
 SOURCE_ROOTS = ("casepath", "casepath-api", "casepath-qa")
 EXTRA_SOURCE_FILES = (
     ".gitignore",
+    ".openai/hosting.json",
     "render.yaml",
     "CASEPATH_MASTER_KNOWLEDGE_TRANSFER.md",
 )

@@ -29,9 +29,10 @@ def sha256_file(path: Path) -> str:
 
 
 def normalized_commit(environment: Mapping[str, str]) -> tuple[str, str]:
-    candidate = environment.get("RENDER_GIT_COMMIT", "").strip().lower()
-    if re.fullmatch(r"[0-9a-f]{40}", candidate):
-        return candidate, "RENDER_GIT_COMMIT"
+    for variable in ("RENDER_GIT_COMMIT", "CASEPATH_SOURCE_COMMIT"):
+        candidate = environment.get(variable, "").strip().lower()
+        if re.fullmatch(r"[0-9a-f]{40}", candidate):
+            return candidate, variable
     return "unknown", "unavailable_or_invalid"
 
 
@@ -71,7 +72,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--require-known-commit",
         action="store_true",
-        help="Fail the build when RENDER_GIT_COMMIT is absent or invalid.",
+        help="Fail when neither RENDER_GIT_COMMIT nor CASEPATH_SOURCE_COMMIT is valid.",
     )
     return parser.parse_args()
 
