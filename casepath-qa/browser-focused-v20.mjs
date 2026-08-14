@@ -2515,12 +2515,13 @@ function factSourceTourContractViolations(completions, inspections, changes, cur
       || ![inspection.changeId, inspection.eventId, inspection.sourceId, inspection.locatorId, inspection.found].every(nonemptyString)) issues.push(`${factId}: source inspection provenance is incomplete`);
     const exactReference = (fact.source_refs || []).find(reference => reference.artifact_id === inspection.sourceId && factSourceLocatorId(reference) === inspection.locatorId);
     if (!exactReference) issues.push(`${factId}: inspected locator is not an exact returned source reference`);
+    const expectedSourceAuthority = exactReference?.authority || 'customer_submission';
     if (inspection.activeSourceLocator !== inspection.locatorId || !['open', 'active', 'drawer'].includes(inspection.sourceDockState)) issues.push(`${factId}: inspected locator was not visibly opened in the source dock`);
     if (!cursorBindings.has(`${inspection.changeId}:${inspection.eventId}:${inspection.agentId}:${inspection.sourceId}`)) issues.push(`${factId}: source inspection is not bound to the cursor click target`);
     if (!change || change.entityId !== factId || change.changeId !== inspection.changeId || change.eventId !== inspection.eventId || change.agentId !== inspection.agentId) issues.push(`${factId}: resulting fact change is not bound to the inspection`);
     if (change && change.at - inspection.at < MIN_FACT_SOURCE_HOLD_MS) issues.push(`${factId}: source finding was not readable before the fact appeared`);
     if (!change?.attachment || change.attachment.kind !== 'fact' || change.attachment.factId !== factId
-      || change.attachment.sourceAuthority !== 'customer_submission'
+      || change.attachment.sourceAuthority !== expectedSourceAuthority
       || change.attachment.sourceLocatorId !== inspection.locatorId) issues.push(`${factId}: fact artifact does not retain the inspected source binding`);
   });
   if (factChanges.length && (!Number.isFinite(completion.at) || completion.at < factChanges.at(-1).at)) issues.push('fact source tour completed before the last fact appeared');
@@ -2545,7 +2546,7 @@ function contextualAttachmentContractViolations(attachments, semanticEvents, cur
     if (attachment.agentId !== expectedActor) issues.push(`${index}: attachment actor ${attachment.agentId} does not match truthful ${expectedActor} authority`);
     if (!semanticEventIds.has(attachment.eventId)) issues.push(`${index}: attachment event is absent from the authenticated stream`);
     if (!cursorBindings.has(`${attachment.changeId}:${attachment.eventId}:${attachment.agentId}`)) issues.push(`${index}: attachment change is not tied to its agent cursor event`);
-    if (attachment.kind === 'fact' && attachment.sourceAuthority !== 'customer_submission') issues.push(`${index}: fact source authority is not the customer submission`);
+    if (attachment.kind === 'fact' && !['customer_submission', 'generated_demo_reference_only'].includes(attachment.sourceAuthority)) issues.push(`${index}: fact source authority is not a returned claim-source authority`);
     if (attachment.kind === 'law' && !['official_registry', 'deterministic_principle'].includes(attachment.sourceAuthority)) issues.push(`${index}: legal authority is not distinguished truthfully`);
     if (attachment.kind === 'precedent' && (attachment.sourceAuthority !== 'generated_reference' || attachment.referenceStatus !== 'generated_reference')) issues.push(`${index}: generated reference is presented with inflated authority`);
   });
@@ -5153,7 +5154,9 @@ async function runContractSelfTest() {
 
   const factTourFacts = FACT_SOURCE_TOUR_IDS.map((factId, index) => ({
     fact_id: factId,
-    source_refs: [{ artifact_id: `source-${index}`, locator_kind: 'text_quote', page: index + 1, excerpt: `Exact source ${index}` }],
+    source_refs: [index === 2
+      ? { artifact_id: `source-${index}`, locator_kind: 'visual_observation', region: [0.42, 0.1, 0.2, 0.7], observation: 'Exact visual source', authority: 'generated_demo_reference_only' }
+      : { artifact_id: `source-${index}`, locator_kind: 'text_quote', page: index + 1, excerpt: `Exact source ${index}` }],
   }));
   const factTourInspections = factTourFacts.map((fact, index) => ({
     entityKind: 'fact', factId: fact.fact_id, changeId: `fact-change:${index}`, eventId: `fact-event:${index}`, agentId: 'canonical_facts',
@@ -5162,7 +5165,7 @@ async function runContractSelfTest() {
   }));
   const factTourChanges = factTourInspections.map((inspection, index) => ({
     kind: 'fact', entityId: inspection.factId, changeId: inspection.changeId, eventId: inspection.eventId, agentId: inspection.agentId, at: inspection.at + MIN_FACT_SOURCE_HOLD_MS,
-    attachment: { kind: 'fact', factId: inspection.factId, sourceAuthority: 'customer_submission', sourceLocatorId: inspection.locatorId },
+    attachment: { kind: 'fact', factId: inspection.factId, sourceAuthority: factTourFacts[index].source_refs[0].authority || 'customer_submission', sourceLocatorId: inspection.locatorId },
   }));
   const factTourCursors = factTourInspections.map(inspection => ({
     changeId: inspection.changeId, eventId: inspection.eventId, agentId: inspection.agentId, targetId: inspection.sourceId, phase: 'click',
@@ -5173,6 +5176,9 @@ async function runContractSelfTest() {
   }];
   const factTourRun = { facts: factTourFacts };
   if (factSourceTourContractViolations(factTourCompletion, factTourInspections, factTourChanges, factTourCursors, factTourRun).length) throw new Error('Valid five-fact source tour fixture was rejected');
+  const forgedVisualAuthorityFactTour = structuredClone(factTourChanges);
+  forgedVisualAuthorityFactTour[2].attachment.sourceAuthority = 'customer_submission';
+  if (!factSourceTourContractViolations(factTourCompletion, factTourInspections, forgedVisualAuthorityFactTour, factTourCursors, factTourRun).some(issue => issue.includes('fact artifact does not retain the inspected source binding'))) throw new Error('Authority-relabelled visual fact source fixture was accepted');
   const crossBoundFactTour = structuredClone(factTourInspections);
   crossBoundFactTour[2].locatorId = crossBoundFactTour[1].locatorId;
   if (!factSourceTourContractViolations(factTourCompletion, crossBoundFactTour, factTourChanges, factTourCursors, factTourRun).some(issue => issue.includes('not an exact returned source reference'))) throw new Error('Cross-bound fact source locator fixture was accepted');
@@ -5249,6 +5255,12 @@ async function runContractSelfTest() {
   const semanticFixture = attachmentFixture.map((item, index) => ({ type: REQUIRED_SEMANTIC_EVENT_TYPES[index], eventId: item.eventId, sequence: index + 1 }));
   const cursorFixture = attachmentFixture.map(item => ({ ...item, phase: 'click' }));
   if (contextualAttachmentContractViolations(attachmentFixture, semanticFixture, cursorFixture, true).length) throw new Error('Valid semantic attachment/cursor fixture was rejected');
+  const visualAttachmentFixture = structuredClone(attachmentFixture);
+  visualAttachmentFixture[0].sourceAuthority = 'generated_demo_reference_only';
+  if (contextualAttachmentContractViolations(visualAttachmentFixture, semanticFixture, cursorFixture, true).length) throw new Error('Valid generated-demo visual fact attachment was rejected');
+  const inflatedFactAuthorityAttachment = structuredClone(attachmentFixture);
+  inflatedFactAuthorityAttachment[0].sourceAuthority = 'official_registry';
+  if (!contextualAttachmentContractViolations(inflatedFactAuthorityAttachment, semanticFixture, cursorFixture, true).some(issue => issue.includes('returned claim-source authority'))) throw new Error('Inflated fact source authority was accepted');
   const untetheredAttachment = structuredClone(attachmentFixture);
   untetheredAttachment[0].eventId = 'event:forged';
   if (!contextualAttachmentContractViolations(untetheredAttachment, semanticFixture, cursorFixture, true).some(issue => issue.includes('authenticated stream'))) throw new Error('Untethered attachment fixture was accepted');
