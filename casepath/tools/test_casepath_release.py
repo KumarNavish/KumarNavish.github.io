@@ -442,6 +442,8 @@ def test_flagship_presentation_holds_work_and_artifacts_for_clarity() -> None:
     assert "window.removeEventListener('casepath:artifact-process-started', onStarted);" in renderer
     assert "const acceptedProjectionComplete = SIMPLIFIED_SPINE_IDS.every" in canvas
     assert "acceptedProjectionComplete ? 'complete' : 'pending'" in canvas
+    assert "if (nodeId && !state.graphRevealRunning) state.selectedNodeId = nodeId;" in canvas
+    assert "state.pendingGraphNodeId || state.pendingBranchNodeId || state.selectedNodeId" in canvas
     assert "casepath:artifact-process-timeout" in renderer
     assert "[data-process-build-state=\"built\"]').length >= 10" in renderer
     assert "function waitsForCompletedProcess(event)" in renderer
