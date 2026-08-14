@@ -87,6 +87,24 @@ const REQUIRED_CAUSATION_BRANCH_IDS = Object.freeze([
   'mixed_cause',
   'evidence_gap',
 ]);
+const LATER_MEMORY_VALIDATION_CONTRACT = 'casepath.later-memory-validation/1.0.0';
+const EXPECTED_LATER_MEMORY_DELTA = Object.freeze({
+  nodeIds: ['ventilation_dispute'],
+  edges: [
+    { source: 'evidence_gap', target: 'ventilation_dispute' },
+    { source: 'ventilation_dispute', target: 'causation' },
+  ],
+  evidenceIds: ['building_envelope', 'management_position', 'use_evidence'],
+});
+const FACT_SOURCE_TOUR_CONTRACT = 'casepath.persistent-artifact-canvas/1.0.0';
+const FACT_SOURCE_TOUR_IDS = Object.freeze([
+  'fact_tenancy',
+  'fact_notification',
+  'fact_recurrence',
+  'fact_ventilation_allegation',
+  'fact_cause',
+]);
+const MIN_FACT_SOURCE_HOLD_MS = 1100;
 const SPATIAL_GRAPH_PROJECTION = 'flagship-spine/1';
 const SPATIAL_GEOMETRY_EPSILON_PX = 2;
 const REQUIRED_SEMANTIC_EVENT_TYPES = Object.freeze([
@@ -2046,6 +2064,14 @@ async function persistentGraphSceneSnapshot() {
     const root = document.querySelector('#artifactCanvas');
     const graph = document.querySelector('#artifactProcessGraph');
     const visibleWithinRoot = selector => [...(root?.querySelectorAll(selector) || [])].filter(visible);
+    const graphAttachments = selector => [...(graph?.querySelectorAll(selector) || [])].filter(visible).map(node => ({
+      text: node.innerText.trim(),
+      attachment_kind: node.dataset.nodeAttachmentKind || '',
+      memory_id: node.dataset.memoryId || '',
+      memory_status: node.dataset.memoryStatus || '',
+      memory_origin_id: node.dataset.memoryOriginId || '',
+      later_causal_phase: node.dataset.laterCausalPhase || '',
+    }));
     const memoryEffects = [...(graph?.querySelectorAll('[data-memory-origin-id][data-memory-effect]') || [])].filter(visible).map(node => ({
       origin_id: node.dataset.memoryOriginId || '',
       effect: node.dataset.memoryEffect || '',
@@ -2069,8 +2095,15 @@ async function persistentGraphSceneSnapshot() {
       inline_correction_count: [...(graph?.querySelectorAll('.ac-review-graph-edit[data-review-edit-state="pending"][data-review-node-id="causation"]') || [])].filter(visible).length,
       apply_action_count: [...(graph?.querySelectorAll('[data-ac-action="submit-review"][data-review-mode="conditional"]') || [])].filter(visible).length,
       applied_note_count: [...(graph?.querySelectorAll('.ac-review-applied-note[data-review-edit-state="applied"][data-review-node-id="ventilation_dispute"]') || [])].filter(visible).length,
+      later_memory_validated: root?.dataset.laterMemoryValidated || '',
+      later_memory_application_hash: root?.dataset.laterMemoryApplicationHash || '',
+      memory_receipt_count: [...(graph?.querySelectorAll('[data-memory-receipt="true"]') || [])].filter(visible).length,
       memory_effects: memoryEffects,
+      verification_attachments: graphAttachments('.ac-graph-verification[data-node-attachment-kind="verification"]'),
+      knowledge_memory_notes: graphAttachments('.ac-knowledge-graph-note[data-memory-id][data-memory-status]'),
+      later_memory_retrievals: graphAttachments('.ac-later-memory-retrieval[data-memory-origin-id]'),
       text: graph?.innerText || '',
+      root_text: root?.innerText || '',
     };
   });
 }
@@ -2087,6 +2120,43 @@ function persistentGraphSceneContractViolations(snapshot, expected) {
   if (Number.isInteger(expected.inlineCorrectionCount) && snapshot?.inline_correction_count !== expected.inlineCorrectionCount) issues.push(`inline correction count ${snapshot?.inline_correction_count}`);
   if (Number.isInteger(expected.applyActionCount) && snapshot?.apply_action_count !== expected.applyActionCount) issues.push(`apply action count ${snapshot?.apply_action_count}`);
   if (Number.isInteger(expected.appliedNoteCount) && snapshot?.applied_note_count !== expected.appliedNoteCount) issues.push(`applied note count ${snapshot?.applied_note_count}`);
+  return issues;
+}
+
+function graphNativeMomentCopyContractViolations(snapshot, expected) {
+  const issues = [];
+  const attachments = snapshot?.[expected.attachmentKey] || [];
+  if (attachments.length !== 1) {
+    issues.push(`${expected.attachmentKey} count ${attachments.length}`);
+    return issues;
+  }
+  const attachment = attachments[0];
+  if (expected.attachmentKind && attachment.attachment_kind !== expected.attachmentKind) issues.push(`attachment kind ${attachment.attachment_kind}`);
+  for (const [attribute, value] of Object.entries(expected.attributes || {})) {
+    if (attachment[attribute] !== value) issues.push(`${attribute} ${attachment[attribute]}`);
+  }
+  for (const attribute of expected.requiredNonemptyAttributes || []) {
+    if (!nonemptyString(attachment[attribute])) issues.push(`${attribute} is empty`);
+  }
+  if (attachment.text.length > 180) issues.push(`copy is not concise (${attachment.text.length} characters)`);
+  for (const phrase of expected.requiredCopy || []) {
+    if (!attachment.text.includes(phrase)) issues.push(`copy omits ${JSON.stringify(phrase)}`);
+  }
+  if ((expected.anyOfCopy || []).length && !expected.anyOfCopy.some(phrases => phrases.every(phrase => attachment.text.includes(phrase)))) {
+    issues.push(`copy omits one truthful outcome ${JSON.stringify(expected.anyOfCopy)}`);
+  }
+  for (const phrase of expected.forbiddenCopy || []) {
+    if (attachment.text.includes(phrase)) issues.push(`copy overclaims ${JSON.stringify(phrase)}`);
+  }
+  return issues;
+}
+
+function graphNativeMomentSceneViolations(snapshot, expectedMoment) {
+  const issues = [];
+  if (snapshot?.moment !== expectedMoment || snapshot?.scene !== expectedMoment) issues.push(`moment/scene ${snapshot?.moment || ''}/${snapshot?.scene || ''}`);
+  if (!snapshot?.graph_visible) issues.push('process graph is hidden');
+  if (!snapshot?.graph_is_sole_focus) issues.push('process graph is not the sole visible focal object');
+  if (!snapshot?.graph_is_sole_primary_artifact) issues.push('process graph is not the sole visible primary artifact');
   return issues;
 }
 
@@ -2407,6 +2477,56 @@ function sourceInspectionContractViolations(inspections, changes, branchVisuals,
   return issues;
 }
 
+function factSourceLocatorId(reference) {
+  const artifactId = String(reference?.artifact_id || 'unknown-source');
+  const kind = String(reference?.locator_kind || 'unknown-locator');
+  if (kind === 'visual_observation') return `source:${artifactId}:region:${(reference?.region || []).join(',')}`;
+  if (kind === 'metadata_field') return `source:${artifactId}:field:${String(reference?.field || '')}`;
+  return `source:${artifactId}:page:${String(reference?.page || '')}:quote:${String(reference?.excerpt || '')}`;
+}
+
+function factSourceTourContractViolations(completions, inspections, changes, cursorSteps, runResult) {
+  const issues = [];
+  const factInspections = inspections.filter(item => item.entityKind === 'fact');
+  const factChanges = changes.filter(item => item.kind === 'fact' && FACT_SOURCE_TOUR_IDS.includes(item.entityId));
+  const cursorBindings = new Set(cursorSteps.filter(step => step.phase === 'click').map(step => `${step.changeId}:${step.eventId}:${step.agentId}:${step.targetId}`));
+  const facts = new Map((runResult?.facts || []).map(fact => [fact.fact_id, fact]));
+  if (completions.length !== 1) issues.push(`fact source tour completion count ${completions.length}`);
+  const completion = completions[0] || {};
+  if (completion.contract !== FACT_SOURCE_TOUR_CONTRACT
+    || completion.count !== FACT_SOURCE_TOUR_IDS.length
+    || stableJson(completion.factIds) !== stableJson(FACT_SOURCE_TOUR_IDS)) issues.push('fact source tour completion payload is not exact');
+  if (completion.rootState !== 'complete' || completion.rootIndex !== String(FACT_SOURCE_TOUR_IDS.length - 1)) issues.push(`fact source tour root state ${completion.rootState || ''}:${completion.rootIndex || ''}`);
+  if (stableJson(factInspections.map(item => item.factId)) !== stableJson(FACT_SOURCE_TOUR_IDS)) issues.push('five fact source inspections did not arrive in order');
+  if (stableJson(factChanges.map(item => item.entityId)) !== stableJson(FACT_SOURCE_TOUR_IDS)) issues.push('five source-grounded fact changes did not arrive in order');
+  FACT_SOURCE_TOUR_IDS.forEach((factId, index) => {
+    const inspection = factInspections[index];
+    const change = factChanges[index];
+    const fact = facts.get(factId);
+    if (!fact) {
+      issues.push(`${factId}: fact is absent from the returned canonical state`);
+      return;
+    }
+    if (!inspection || inspection.factId !== factId) {
+      issues.push(`${factId}: exact source inspection is missing`);
+      return;
+    }
+    if (inspection.sourceKind !== 'claim-source' || inspection.agentId !== 'canonical_facts'
+      || ![inspection.changeId, inspection.eventId, inspection.sourceId, inspection.locatorId, inspection.found].every(nonemptyString)) issues.push(`${factId}: source inspection provenance is incomplete`);
+    const exactReference = (fact.source_refs || []).find(reference => reference.artifact_id === inspection.sourceId && factSourceLocatorId(reference) === inspection.locatorId);
+    if (!exactReference) issues.push(`${factId}: inspected locator is not an exact returned source reference`);
+    if (inspection.activeSourceLocator !== inspection.locatorId || !['open', 'active', 'drawer'].includes(inspection.sourceDockState)) issues.push(`${factId}: inspected locator was not visibly opened in the source dock`);
+    if (!cursorBindings.has(`${inspection.changeId}:${inspection.eventId}:${inspection.agentId}:${inspection.sourceId}`)) issues.push(`${factId}: source inspection is not bound to the cursor click target`);
+    if (!change || change.entityId !== factId || change.changeId !== inspection.changeId || change.eventId !== inspection.eventId || change.agentId !== inspection.agentId) issues.push(`${factId}: resulting fact change is not bound to the inspection`);
+    if (change && change.at - inspection.at < MIN_FACT_SOURCE_HOLD_MS) issues.push(`${factId}: source finding was not readable before the fact appeared`);
+    if (!change?.attachment || change.attachment.kind !== 'fact' || change.attachment.factId !== factId
+      || change.attachment.sourceAuthority !== 'customer_submission'
+      || change.attachment.sourceLocatorId !== inspection.locatorId) issues.push(`${factId}: fact artifact does not retain the inspected source binding`);
+  });
+  if (factChanges.length && (!Number.isFinite(completion.at) || completion.at < factChanges.at(-1).at)) issues.push('fact source tour completed before the last fact appeared');
+  return issues;
+}
+
 function contextualAttachmentContractViolations(attachments, semanticEvents, cursorSteps, production = true) {
   const issues = [];
   const allowedKinds = new Set(['fact', 'law', 'evidence', 'precedent', 'verification']);
@@ -2457,6 +2577,40 @@ function memoryEffectContractViolations(effects, expectedOriginId) {
   if (stableJson(counts) !== stableJson({ 'node-added': 1, 'edge-added': 2, 'evidence-changed': 3 })) issues.push(`memory effect shape ${stableJson(counts)}`);
   if (!nonemptyString(expectedOriginId) || effects.some(item => !nonemptyString(item.origin_id)) || originIds.length !== 1 || originIds[0] !== expectedOriginId) issues.push(`memory origin ${stableJson(originIds)}`);
   if (stableJson(identity) !== stableJson(expectedIdentity)) issues.push(`memory effect identity ${stableJson(identity)}`);
+  return issues;
+}
+
+function laterMemoryPresentationContractViolations(validations, renderTimeline, scene, laterResult, expectedValidated = true) {
+  const issues = [];
+  if (validations.length !== 1) issues.push(`validation event count ${validations.length}`);
+  const validation = validations[0] || {};
+  const laterRender = renderTimeline.find(item => item.moment === 'later-result');
+  const receipt = laterResult?.memory_application || {};
+  if (validation.contract !== LATER_MEMORY_VALIDATION_CONTRACT) issues.push(`validation contract ${validation.contract || ''}`);
+  if (!laterRender || !Number.isFinite(validation.at) || validation.at >= laterRender.at) issues.push('memory validation did not precede the later-result render');
+  if (validation.validated !== expectedValidated) issues.push(`validated ${String(validation.validated)}`);
+  if (scene?.later_memory_validated !== String(expectedValidated)) issues.push(`canvas validation state ${scene?.later_memory_validated || ''}`);
+  if (!expectedValidated) {
+    if (nonemptyString(validation.applicationHash) || nonemptyString(validation.memoryOriginId)) issues.push('invalid presentation retained memory identity');
+    if ((validation.delta?.nodeIds || []).length || (validation.delta?.edges || []).length || (validation.delta?.evidenceIds || []).length) issues.push('invalid presentation retained memory delta');
+    if (nonemptyString(scene?.later_memory_application_hash)) issues.push('invalid canvas retained application hash');
+    if ((scene?.memory_effects || []).length || scene?.memory_receipt_count) issues.push('invalid canvas claimed memory effects');
+    if (!/No memory-driven process change is claimed\./i.test(scene?.root_text || '')) issues.push('invalid canvas omitted fail-closed copy');
+    return issues;
+  }
+  for (const field of ['proofReady', 'memoryUsed', 'memoryRetrieved', 'sharedPlaybookUnchanged']) {
+    if (validation[field] !== true) issues.push(`${field} was not true`);
+  }
+  if (validation.retrievedOnly !== false) issues.push('validated presentation remained retrieval-only');
+  if (!nonemptyString(validation.runId) || validation.runId !== laterResult?.run_id || validation.runId !== receipt?.target?.run_id) issues.push('validation run identity does not bind the returned receipt');
+  if (!nonemptyString(validation.applicationHash) || validation.applicationHash !== receipt?.application_hash || validation.applicationHash !== scene?.later_memory_application_hash) issues.push('validation application hash does not bind receipt and canvas');
+  if (!nonemptyString(validation.memoryOriginId) || validation.memoryOriginId !== receipt?.source_memory?.memory_id) issues.push('validation memory origin does not bind the returned receipt');
+  if (stableJson(validation.delta?.nodeIds) !== stableJson(EXPECTED_LATER_MEMORY_DELTA.nodeIds)
+    || stableJson(validation.delta?.edges) !== stableJson(EXPECTED_LATER_MEMORY_DELTA.edges)
+    || stableJson(validation.delta?.evidenceIds) !== stableJson(EXPECTED_LATER_MEMORY_DELTA.evidenceIds)) issues.push(`validation delta ${stableJson(validation.delta)}`);
+  if (scene?.memory_receipt_count !== 1) issues.push(`memory receipt count ${scene?.memory_receipt_count}`);
+  issues.push(...memoryEffectContractViolations(scene?.memory_effects || [], validation.memoryOriginId));
+  if (/No memory-driven process change is claimed\./i.test(scene?.root_text || '')) issues.push('validated canvas rendered fail-closed copy');
   return issues;
 }
 
@@ -2807,6 +2961,7 @@ async function execute() {
     window.__casepathReleaseMutations = [];
     window.__casepathMomentHistory = [];
     window.__casepathPresentationTimeline = [];
+    window.__casepathRenderTimeline = [];
     window.__casepathVisibleAgentIds = [];
     window.__casepathVisibleGateIds = [];
     window.__casepathOpeningContexts = [];
@@ -2820,6 +2975,10 @@ async function execute() {
     window.__casepathSourceInspections = [];
     window.__casepathBranchVisuals = [];
     window.__casepathBranchInspectionCopy = [];
+    window.__casepathFactSourceTours = [];
+    window.__casepathLaterMemoryValidations = [];
+    window.__casepathLaterCausalSteps = [];
+    window.__casepathGraphMomentSnapshots = [];
     window.__casepathArtifactFocusViolations = [];
     window.addEventListener('casepath:presentation', event => {
       window.__casepathPresentationTimeline.push({
@@ -2831,6 +2990,11 @@ async function execute() {
       });
     });
     window.addEventListener('casepath:render', event => {
+      window.__casepathRenderTimeline.push({
+        moment: event.detail?.moment || '',
+        at: performance.now(),
+      });
+      if (['verify', 'knowledge', 'later-work'].includes(event.detail?.moment || '')) captureGraphMoment(event.detail.moment);
       if (event.detail?.moment !== 'opening') return;
       const actorCard = document.querySelector('#orchestrationProof .orchestration-actor-card');
       window.__casepathOpeningContexts.push({
@@ -2998,6 +3162,34 @@ async function execute() {
       }
       return snapshot;
     };
+    const captureGraphMoment = (moment, phase = '') => {
+      window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+        const root = document.querySelector('#artifactCanvas');
+        const graph = document.querySelector('#artifactProcessGraph');
+        const attachments = selector => [...(graph?.querySelectorAll(selector) || [])].filter(visible).map(node => ({
+          text: node.innerText.trim(),
+          attachment_kind: node.dataset.nodeAttachmentKind || '',
+          memory_id: node.dataset.memoryId || '',
+          memory_status: node.dataset.memoryStatus || '',
+          memory_origin_id: node.dataset.memoryOriginId || '',
+          later_causal_phase: node.dataset.laterCausalPhase || '',
+        }));
+        const focus = [...(root?.querySelectorAll('[data-artifact-focus="true"]') || [])].filter(visible);
+        const primaryArtifacts = [...(root?.querySelectorAll('[data-casepath-primary-artifact="true"]') || [])].filter(visible);
+        window.__casepathGraphMomentSnapshots.push({
+          moment,
+          phase,
+          scene: root?.dataset.casepathScene || '',
+          graph_visible: visible(graph),
+          graph_is_sole_focus: focus.length === 1 && focus[0] === graph,
+          graph_is_sole_primary_artifact: primaryArtifacts.length === 1 && primaryArtifacts[0] === graph,
+          verification_attachments: attachments('.ac-graph-verification[data-node-attachment-kind="verification"]'),
+          knowledge_memory_notes: attachments('.ac-knowledge-graph-note[data-memory-id][data-memory-status]'),
+          later_memory_retrievals: attachments('.ac-later-memory-retrieval[data-memory-origin-id]'),
+          at: performance.now(),
+        });
+      }));
+    };
     window.addEventListener('casepath:semantic-event', event => {
       const detail = event.detail || {};
       window.__casepathSemanticEvents.push({
@@ -3028,6 +3220,7 @@ async function execute() {
         entityId: detail.entityId || '',
         attachment: attachment ? {
           kind: attachment.dataset.nodeAttachmentKind || '',
+          factId: attachment.dataset.factId || '',
           changeId: attachment.dataset.artifactChangeId || '',
           eventId: attachment.dataset.artifactEventId || '',
           agentId: attachment.dataset.artifactAgentId || '',
@@ -3045,6 +3238,7 @@ async function execute() {
     window.addEventListener('casepath:source-inspection', event => {
       const detail = event.detail || {};
       const inspectedTarget = document.querySelector('#artifactProcessGraph [data-ac-inspection-target="true"]');
+      const sourceDock = document.querySelector('[data-source-dock-state]');
       window.__casepathSourceInspections.push({
         entityKind: detail.entityKind || '',
         nodeId: detail.nodeId || '',
@@ -3057,6 +3251,8 @@ async function execute() {
         factId: detail.factId || '',
         locatorId: detail.locatorId || '',
         found: detail.found || '',
+        sourceDockState: sourceDock?.dataset.sourceDockState || '',
+        activeSourceLocator: sourceDock?.dataset.activeSourceLocator || '',
         at: performance.now(),
       });
       if (detail.entityKind === 'branch') {
@@ -3065,6 +3261,54 @@ async function execute() {
           text: inspectedTarget?.innerText || '',
         });
       }
+    });
+    window.addEventListener('casepath:fact-source-tour-complete', event => {
+      const detail = event.detail || {};
+      const root = document.querySelector('#artifactCanvas');
+      window.__casepathFactSourceTours.push({
+        contract: detail.contract || '',
+        factIds: Array.isArray(detail.factIds) ? [...detail.factIds] : [],
+        count: detail.count,
+        rootState: root?.dataset.factSourceTourState || '',
+        rootIndex: root?.dataset.factSourceTourIndex || '',
+        at: performance.now(),
+      });
+    });
+    window.addEventListener('casepath:later-memory-validation', event => {
+      const detail = event.detail || {};
+      window.__casepathLaterMemoryValidations.push({
+        contract: detail.contract || '',
+        runId: detail.runId || '',
+        validated: detail.validated === true,
+        proofReady: detail.proofReady === true,
+        memoryUsed: detail.memoryUsed === true,
+        memoryRetrieved: detail.memoryRetrieved === true,
+        retrievedOnly: detail.retrievedOnly === true,
+        applicationHash: detail.applicationHash || '',
+        memoryOriginId: detail.memoryOriginId || '',
+        sharedPlaybookUnchanged: detail.sharedPlaybookUnchanged === true,
+        delta: {
+          nodeIds: Array.isArray(detail.delta?.nodeIds) ? [...detail.delta.nodeIds] : [],
+          edges: Array.isArray(detail.delta?.edges) ? detail.delta.edges.map(edge => ({ source: edge?.source || '', target: edge?.target || '' })) : [],
+          evidenceIds: Array.isArray(detail.delta?.evidenceIds) ? [...detail.delta.evidenceIds] : [],
+        },
+        at: performance.now(),
+      });
+    });
+    window.addEventListener('casepath:later-causal-step', event => {
+      const detail = event.detail || {};
+      const step = {
+        contract: detail.contract || '',
+        phase: detail.phase || '',
+        factId: detail.factId || '',
+        sourceId: detail.sourceId || '',
+        locatorId: detail.locatorId || '',
+        memoryOriginId: detail.memoryOriginId || '',
+        activeSourceIds: [...document.querySelectorAll('.attachment-row.is-active[data-artifact-id]')].map(row => row.dataset.artifactId || ''),
+        at: performance.now(),
+      };
+      window.__casepathLaterCausalSteps.push(step);
+      captureGraphMoment('later-work', step.phase);
     });
     window.addEventListener('casepath:branch-visualized', event => {
       const detail = event.detail || {};
@@ -3410,6 +3654,21 @@ async function execute() {
   const readyCanvasIssues = focusedArtifactCanvasViolations(readyCanvas);
   check('Ready state preserves the same source-plus-canvas workspace with exactly one focus, cursor, primary artifact, and primary action', readyCanvasIssues.length === 0 && readyCanvas.action_count === 1, JSON.stringify({ readyCanvas, readyCanvasIssues }));
   check('Ready state keeps the exact ten-node handling projection as the dominant artifact', readyCanvas.projection === 'flagship-spine/1' && readyCanvas.construction_state === 'complete' && stableJson(readyCanvas.node_states) === stableJson(FLAGSHIP_PROCESS_PROJECTION_IDS.map(node_id => ({ node_id, state: 'built' }))), JSON.stringify(readyCanvas.node_states));
+  const graphMomentSnapshots = await page.evaluate(() => window.__casepathGraphMomentSnapshots || []);
+  const verificationGraphScene = [...graphMomentSnapshots].reverse().find(snapshot => snapshot.moment === 'verify' && snapshot.scene === 'verify');
+  const verificationGraphIssues = [
+    ...graphNativeMomentSceneViolations(verificationGraphScene, 'verify'),
+    ...graphNativeMomentCopyContractViolations(verificationGraphScene, {
+      attachmentKey: 'verification_attachments',
+      attachmentKind: 'verification',
+      requiredCopy: ['Final audit'],
+      anyOfCopy: [
+        ['checks agree', 'No unsupported proposals retained'],
+        ['Verification incomplete'],
+      ],
+    }),
+  ];
+  check('Verification keeps the graph as the sole focal artifact and states only its concise passed or fail-closed outcome', verificationGraphIssues.length === 0, JSON.stringify({ verificationGraphScene, verificationGraphIssues }));
   const flagshipPresentationMs = await page.evaluate(() => performance.now() - window.__casepathFlagshipLaunchAt);
   check('The autonomous flagship journey stays inside the 70–110 second production-tolerant north-star band', flagshipPresentationMs >= MIN_FLAGSHIP_PRESENTATION_MS && flagshipPresentationMs <= MAX_FLAGSHIP_PRESENTATION_MS, `duration_ms=${flagshipPresentationMs.toFixed(0)}`);
   await auditViewports('02-ready-process', '#artifactProcessGraph[data-graph-projection="flagship-spine/1"]');
@@ -3567,6 +3826,11 @@ async function execute() {
   const processChangeIssues = processProjectionContractViolations(processArtifactChanges, semanticEvents, artifactCursorSteps, isProductionJourney());
   check('Persistent process canvas constructs the exact ten-node handling spine monotonically, one justified node at a time', processChangeIssues.length === 0, JSON.stringify({ processArtifactChanges, processChangeIssues }));
   const sourceInspections = await page.evaluate(() => window.__casepathSourceInspections || []);
+  const factSourceTours = await page.evaluate(() => window.__casepathFactSourceTours || []);
+  const factSourceTourIssues = factSourceTourContractViolations(factSourceTours, sourceInspections, artifactChanges, artifactCursorSteps, processRun.result);
+  const factSourceTourWaitState = await page.evaluate(() => document.body.dataset.casepathFactSourceTourWait || '');
+  if (factSourceTourWaitState !== 'complete') factSourceTourIssues.push(`fact source tour wait state ${factSourceTourWaitState || 'missing'}`);
+  check('Claim understanding visibly inspects one exact returned source before adding each of the five key facts', factSourceTourIssues.length === 0, JSON.stringify({ factSourceTours, factSourceTourIssues, factInspections: sourceInspections.filter(item => item.entityKind === 'fact') }));
   const branchVisuals = await page.evaluate(() => window.__casepathBranchVisuals || []);
   const sourceInspectionIssues = sourceInspectionContractViolations(sourceInspections, processArtifactChanges, branchVisuals, artifactCursorSteps, processRun.result, isProductionJourney());
   check('Before every process node and causation branch appears, the agent visibly inspects one exact source, finding, or accepted input that earns it', sourceInspectionIssues.length === 0, JSON.stringify({ sourceInspections, branchVisuals, sourceInspectionIssues }));
@@ -3986,7 +4250,7 @@ async function execute() {
   });
   check('Expert review keeps the persistent process graph as the sole focal artifact, with Causation selected and exactly one inline correction and Apply action', reviewCanvasIssues.length === 0 && reviewCanvas.action_count === 1 && reviewGraphSceneIssues.length === 0, JSON.stringify({ reviewCanvas, reviewCanvasIssues, reviewGraphScene, reviewGraphSceneIssues }));
   const visibleReviewCopy = reviewGraphScene.text;
-  check('Simulated review foregrounds one consequential correction while leaving causation and responsibility unresolved', /building-envelope assessment/i.test(visibleReviewCopy) && /required/i.test(visibleReviewCopy) && /conditional/i.test(visibleReviewCopy) && /responsibility remains blocked/i.test(visibleReviewCopy), visibleReviewCopy);
+  check('Simulated review truthfully adds the ventilation decision and moves use evidence without inventing a pre-review requirement transition', /Process and evidence correction/i.test(visibleReviewCopy) && /Implicit allegation/i.test(visibleReviewCopy) && /Add ventilation decision/i.test(visibleReviewCopy) && /Move use evidence to the new decision; building-envelope assessment remains conditional\./i.test(visibleReviewCopy) && !/Required\s*→\s*Conditional/i.test(visibleReviewCopy), visibleReviewCopy);
   await auditViewports('04-review', '#artifactCanvas [data-artifact-focus="true"] [data-review-edit-state="pending"]');
   await page.locator('#artifactCanvas [data-artifact-focus="true"] [data-ac-action="submit-review"][data-review-mode="conditional"]').click();
   await waitVisible('body[data-casepath-moment="review-applied"]');
@@ -4063,8 +4327,19 @@ async function execute() {
   await waitVisible('body[data-casepath-moment="knowledge"]');
   await page.waitForFunction(() => document.body.dataset.casepathLearningReady === 'true', null, { timeout: 30000 });
   const knowledgeCanvas = await artifactCanvasSnapshot();
+  const knowledgeGraphScene = await persistentGraphSceneSnapshot();
+  const knowledgeGraphIssues = [
+    ...graphNativeMomentSceneViolations({ ...knowledgeGraphScene, moment: 'knowledge' }, 'knowledge'),
+    ...graphNativeMomentCopyContractViolations(knowledgeGraphScene, {
+      attachmentKey: 'knowledge_memory_notes',
+      attributes: { memory_status: 'unverified_demo_memory' },
+      requiredNonemptyAttributes: ['memory_id'],
+      requiredCopy: ['Saved as unverified case memory', 'Shared playbook unchanged'],
+      forbiddenCopy: ['qualified review complete', 'shared playbook updated'],
+    }),
+  ];
   const candidateCopy = await page.locator('#artifactCanvas [data-artifact-focus="true"]').innerText();
-  check('Knowledge consolidation becomes one visible unverified-memory outcome', focusedArtifactCanvasViolations(knowledgeCanvas).length === 0 && knowledgeCanvas.action_count === 1 && /unverified demo memory/i.test(candidateCopy), JSON.stringify({ knowledgeCanvas, candidateCopy }));
+  check('Knowledge consolidation keeps the graph as the sole focal artifact with one concise, unverified case-memory note', focusedArtifactCanvasViolations(knowledgeCanvas).length === 0 && knowledgeCanvas.action_count === 1 && knowledgeGraphIssues.length === 0 && /unverified case memory/i.test(candidateCopy), JSON.stringify({ knowledgeCanvas, knowledgeGraphScene, knowledgeGraphIssues, candidateCopy }));
   check('Candidate remains honestly quarantined with one unverified support record and zero qualified support', reviewed.candidate?.status === 'quarantined' && reviewed.candidate?.support_count === 1 && reviewed.candidate?.required_support === 3 && reviewed.candidate?.qualified_support_count === 0 && reviewed.candidate?.required_qualified_support === 3, JSON.stringify(reviewed.candidate));
   check('Shared playbook is explicitly unchanged', reviewed.candidate?.shared_knowledge_changed === false && /shared playbook unchanged/i.test(candidateCopy), candidateCopy);
   check('Passed deterministic gates remain distinct from missing qualified support and approval', reviewed.candidate?.target_tests?.status === 'passed' && reviewed.candidate?.protected_regression?.status === 'passed' && reviewed.candidate?.approval?.status === 'pending' && reviewed.candidate?.approval?.qualified_reviewer === false, JSON.stringify(reviewed.candidate));
@@ -4076,6 +4351,29 @@ async function execute() {
   await waitJourneyUi('Later-claim comparison did not reach its terminal UI state', async () => {
     await awaitLaterJourneyTerminalUi();
   });
+  const laterCausalSteps = await page.evaluate(() => window.__casepathLaterCausalSteps || []);
+  const laterWorkGraphSnapshots = await page.evaluate(() => window.__casepathGraphMomentSnapshots || []);
+  const laterMemoryGraphScene = [...laterWorkGraphSnapshots].reverse().find(snapshot => snapshot.moment === 'later-work' && snapshot.phase === 'memory' && snapshot.scene === 'later-work');
+  const laterMemoryGraphIssues = [
+    ...graphNativeMomentSceneViolations(laterMemoryGraphScene, 'later-work'),
+    ...graphNativeMomentCopyContractViolations(laterMemoryGraphScene, {
+      attachmentKey: 'later_memory_retrievals',
+      requiredNonemptyAttributes: ['memory_origin_id'],
+      attributes: { later_causal_phase: 'memory' },
+      requiredCopy: ['Unverified case memory retrieved', 'Now checking whether it applies'],
+      forbiddenCopy: ['applied guidance', 'shared playbook updated'],
+    }),
+  ];
+  const laterCausalStepIssues = [];
+  if (laterCausalSteps.length !== 3) laterCausalStepIssues.push(`step count ${laterCausalSteps.length}`);
+  if (!laterCausalSteps.every(step => step.contract === 'casepath.later-causal-step/1.0.0')) laterCausalStepIssues.push('step contract');
+  if (stableJson(laterCausalSteps.map(step => step.phase)) !== stableJson(['waiting', 'source', 'memory'])) laterCausalStepIssues.push(`step phases ${stableJson(laterCausalSteps.map(step => step.phase))}`);
+  const laterSourceStep = laterCausalSteps.find(step => step.phase === 'source');
+  if (!laterSourceStep?.factId || !laterSourceStep?.sourceId || !laterSourceStep?.locatorId) laterCausalStepIssues.push('source identity');
+  if (stableJson(laterSourceStep?.activeSourceIds || []) !== stableJson([laterSourceStep?.sourceId])) laterCausalStepIssues.push(`source rail ${stableJson(laterSourceStep?.activeSourceIds || [])}`);
+  const laterMemoryStep = laterCausalSteps.find(step => step.phase === 'memory');
+  if ((laterMemoryStep?.activeSourceIds || []).length) laterCausalStepIssues.push(`memory source rail ${stableJson(laterMemoryStep.activeSourceIds)}`);
+  check('Later-work keeps the graph as the sole focal artifact while a three-step causal sequence retrieves only unverified case memory before testing applicability', laterMemoryGraphIssues.length === 0 && laterCausalStepIssues.length === 0, JSON.stringify({ laterCausalSteps, laterMemoryGraphScene, laterMemoryGraphIssues, laterCausalStepIssues }));
   const laterCanvas = await artifactCanvasSnapshot();
   const laterCanvasIssues = focusedArtifactCanvasViolations(laterCanvas);
   const laterGraphScene = await persistentGraphSceneSnapshot();
@@ -4128,6 +4426,10 @@ async function execute() {
   const expectedMemoryOrigin = later.result?.memory_application?.source_memory?.memory_id || reviewed.memory_id;
   const visibleMemoryEffectIssues = memoryEffectContractViolations(visibleMemoryEffects, expectedMemoryOrigin);
   check('Future claim shows one memory-origin causal delta: one node, two edges, and three evidence changes', visibleMemoryEffectIssues.length === 0, JSON.stringify({ visibleMemoryEffects, visibleMemoryEffectIssues, expectedMemoryOrigin }));
+  const laterMemoryValidations = await page.evaluate(() => window.__casepathLaterMemoryValidations || []);
+  const renderTimeline = await page.evaluate(() => window.__casepathRenderTimeline || []);
+  const laterMemoryPresentationIssues = laterMemoryPresentationContractViolations(laterMemoryValidations, renderTimeline, laterGraphScene, later.result, true);
+  check('Later memory effects appear only after one receipt-bound validation event that precedes rendering and binds the exact returned delta', laterMemoryPresentationIssues.length === 0, JSON.stringify({ laterMemoryValidations, laterGraphScene, laterMemoryPresentationIssues }));
   const memoryUsed = later.result?.memory_application != null
     && later.result?.memory_used === true
     && later.result?.reviewed_memory_used === true
@@ -4849,6 +5151,35 @@ async function runContractSelfTest() {
   const unboundInspectionCursorFixture = inspectionCursorFixture.filter(item => item.targetId !== 'intake');
   if (!sourceInspectionContractViolations([...sourceInspectionFixture, ...branchInspectionFixture], processProjectionFixture, branchVisualFixture, unboundInspectionCursorFixture, inspectionRunFixture, true).some(issue => issue.includes('not bound to the cursor click target'))) throw new Error('Cursor-unbound source-inspection fixture was accepted');
 
+  const factTourFacts = FACT_SOURCE_TOUR_IDS.map((factId, index) => ({
+    fact_id: factId,
+    source_refs: [{ artifact_id: `source-${index}`, locator_kind: 'text_quote', page: index + 1, excerpt: `Exact source ${index}` }],
+  }));
+  const factTourInspections = factTourFacts.map((fact, index) => ({
+    entityKind: 'fact', factId: fact.fact_id, changeId: `fact-change:${index}`, eventId: `fact-event:${index}`, agentId: 'canonical_facts',
+    sourceKind: 'claim-source', sourceId: `source-${index}`, locatorId: factSourceLocatorId(fact.source_refs[0]), found: `Exact source ${index}`,
+    sourceDockState: 'open', activeSourceLocator: factSourceLocatorId(fact.source_refs[0]), at: index * 2000,
+  }));
+  const factTourChanges = factTourInspections.map((inspection, index) => ({
+    kind: 'fact', entityId: inspection.factId, changeId: inspection.changeId, eventId: inspection.eventId, agentId: inspection.agentId, at: inspection.at + MIN_FACT_SOURCE_HOLD_MS,
+    attachment: { kind: 'fact', factId: inspection.factId, sourceAuthority: 'customer_submission', sourceLocatorId: inspection.locatorId },
+  }));
+  const factTourCursors = factTourInspections.map(inspection => ({
+    changeId: inspection.changeId, eventId: inspection.eventId, agentId: inspection.agentId, targetId: inspection.sourceId, phase: 'click',
+  }));
+  const factTourCompletion = [{
+    contract: FACT_SOURCE_TOUR_CONTRACT, factIds: [...FACT_SOURCE_TOUR_IDS], count: FACT_SOURCE_TOUR_IDS.length,
+    rootState: 'complete', rootIndex: String(FACT_SOURCE_TOUR_IDS.length - 1), at: factTourChanges.at(-1).at + 420,
+  }];
+  const factTourRun = { facts: factTourFacts };
+  if (factSourceTourContractViolations(factTourCompletion, factTourInspections, factTourChanges, factTourCursors, factTourRun).length) throw new Error('Valid five-fact source tour fixture was rejected');
+  const crossBoundFactTour = structuredClone(factTourInspections);
+  crossBoundFactTour[2].locatorId = crossBoundFactTour[1].locatorId;
+  if (!factSourceTourContractViolations(factTourCompletion, crossBoundFactTour, factTourChanges, factTourCursors, factTourRun).some(issue => issue.includes('not an exact returned source reference'))) throw new Error('Cross-bound fact source locator fixture was accepted');
+  const earlyFactChange = structuredClone(factTourChanges);
+  earlyFactChange[3].at = factTourInspections[3].at + MIN_FACT_SOURCE_HOLD_MS - 1;
+  if (!factSourceTourContractViolations(factTourCompletion, factTourInspections, earlyFactChange, factTourCursors, factTourRun).some(issue => issue.includes('not readable'))) throw new Error('Unreadable fact source hold fixture was accepted');
+
   const fixtureRect = (left, top, width, height) => ({ left, top, right: left + width, bottom: top + height, width, height });
   const spatialNodeRects = Object.fromEntries(FLAGSHIP_PROCESS_PROJECTION_IDS.map((nodeId, index) => [nodeId, fixtureRect(60 + (index * 108), 300, 82, 62)]));
   const spatialBranchRects = {
@@ -4940,6 +5271,38 @@ async function runContractSelfTest() {
   emptyMemoryOrigin[0].origin_id = '';
   if (!memoryEffectContractViolations(emptyMemoryOrigin, 'memory:one').some(issue => issue.includes('memory origin'))) throw new Error('Empty future-claim memory origin was accepted');
 
+  const laterPresentationResultFixture = {
+    run_id: 'run:later',
+    memory_application: {
+      target: { run_id: 'run:later' },
+      application_hash: 'a'.repeat(64),
+      source_memory: { memory_id: 'memory:one' },
+    },
+  };
+  const laterValidationFixture = [{
+    contract: LATER_MEMORY_VALIDATION_CONTRACT,
+    runId: 'run:later', validated: true, proofReady: true, memoryUsed: true, memoryRetrieved: true, retrievedOnly: false,
+    applicationHash: 'a'.repeat(64), memoryOriginId: 'memory:one', sharedPlaybookUnchanged: true,
+    delta: structuredClone(EXPECTED_LATER_MEMORY_DELTA), at: 100,
+  }];
+  const laterSceneFixture = {
+    later_memory_validated: 'true', later_memory_application_hash: 'a'.repeat(64), memory_receipt_count: 1,
+    memory_effects: memoryEffectsFixture, text: 'Case-specific memory changed the next step. Shared playbook unchanged.', root_text: 'Case-specific memory changed the next step. Shared playbook unchanged.',
+  };
+  const laterRenderFixture = [{ moment: 'later-result', at: 101 }];
+  if (laterMemoryPresentationContractViolations(laterValidationFixture, laterRenderFixture, laterSceneFixture, laterPresentationResultFixture, true).length) throw new Error('Valid later-memory presentation bridge fixture was rejected');
+  const failedClosedValidationFixture = [{
+    ...laterValidationFixture[0], validated: false, applicationHash: '', memoryOriginId: '',
+    delta: { nodeIds: [], edges: [], evidenceIds: [] },
+  }];
+  const failedClosedSceneFixture = {
+    later_memory_validated: 'false', later_memory_application_hash: '', memory_receipt_count: 0, memory_effects: [],
+    text: 'No memory-driven change claimed', root_text: 'No memory-driven process change is claimed.',
+  };
+  if (laterMemoryPresentationContractViolations(failedClosedValidationFixture, laterRenderFixture, failedClosedSceneFixture, laterPresentationResultFixture, false).length) throw new Error('Valid fail-closed later-memory presentation fixture was rejected');
+  const forgedFailedClosedScene = { ...failedClosedSceneFixture, memory_effects: memoryEffectsFixture };
+  if (!laterMemoryPresentationContractViolations(failedClosedValidationFixture, laterRenderFixture, forgedFailedClosedScene, laterPresentationResultFixture, false).some(issue => issue.includes('claimed memory effects'))) throw new Error('Fail-closed presentation with visible memory effects was accepted');
+
   const reviewSceneFixture = {
     scene: 'review', graph_present: true, graph_visible: true, graph_same: true,
     graph_is_sole_focus: true, graph_is_sole_primary_artifact: true,
@@ -4951,6 +5314,26 @@ async function runContractSelfTest() {
   const competingReviewArtifact = structuredClone(reviewSceneFixture);
   competingReviewArtifact.graph_is_sole_primary_artifact = false;
   if (!persistentGraphSceneContractViolations(competingReviewArtifact, reviewSceneExpected).some(issue => issue.includes('sole visible primary artifact'))) throw new Error('Competing review artifact fixture was accepted');
+
+  const graphNativeMomentFixture = {
+    moment: 'verify', scene: 'verify', graph_visible: true, graph_is_sole_focus: true, graph_is_sole_primary_artifact: true,
+    verification_attachments: [{ attachment_kind: 'verification', text: 'Final audit 10 checks agree No unsupported proposals retained' }],
+    knowledge_memory_notes: [{ memory_id: 'memory:one', memory_status: 'unverified_demo_memory', text: 'Saved as unverified case memory Shared playbook unchanged' }],
+    later_memory_retrievals: [{ memory_origin_id: 'memory:one', later_causal_phase: 'memory', text: 'Unverified case memory retrieved Now checking whether it applies' }],
+  };
+  const verificationMomentExpected = { attachmentKey: 'verification_attachments', attachmentKind: 'verification', requiredCopy: ['Final audit'], anyOfCopy: [['checks agree', 'No unsupported proposals retained'], ['Verification incomplete']] };
+  if (graphNativeMomentSceneViolations(graphNativeMomentFixture, 'verify').length || graphNativeMomentCopyContractViolations(graphNativeMomentFixture, verificationMomentExpected).length) throw new Error('Valid graph-native verification fixture was rejected');
+  const knowledgeMomentFixture = { ...graphNativeMomentFixture, moment: 'knowledge', scene: 'knowledge' };
+  const knowledgeMomentExpected = { attachmentKey: 'knowledge_memory_notes', attributes: { memory_status: 'unverified_demo_memory' }, requiredNonemptyAttributes: ['memory_id'], requiredCopy: ['Saved as unverified case memory', 'Shared playbook unchanged'] };
+  if (graphNativeMomentSceneViolations(knowledgeMomentFixture, 'knowledge').length || graphNativeMomentCopyContractViolations(knowledgeMomentFixture, knowledgeMomentExpected).length) throw new Error('Valid graph-native knowledge fixture was rejected');
+  const laterWorkMomentFixture = { ...graphNativeMomentFixture, moment: 'later-work', scene: 'later-work' };
+  const laterWorkMomentExpected = { attachmentKey: 'later_memory_retrievals', attributes: { later_causal_phase: 'memory' }, requiredNonemptyAttributes: ['memory_origin_id'], requiredCopy: ['Unverified case memory retrieved', 'Now checking whether it applies'] };
+  if (graphNativeMomentSceneViolations(laterWorkMomentFixture, 'later-work').length || graphNativeMomentCopyContractViolations(laterWorkMomentFixture, laterWorkMomentExpected).length) throw new Error('Valid graph-native later-work fixture was rejected');
+  const competingGraphNativeMoment = { ...laterWorkMomentFixture, graph_is_sole_focus: false };
+  if (!graphNativeMomentSceneViolations(competingGraphNativeMoment, 'later-work').some(issue => issue.includes('sole visible focal object'))) throw new Error('Competing graph-native moment fixture was accepted');
+  const inflatedGraphNativeCopy = structuredClone(laterWorkMomentFixture);
+  inflatedGraphNativeCopy.later_memory_retrievals[0].text = 'Unverified case memory retrieved Now checking whether it applies ' + 'unnecessary detail '.repeat(20);
+  if (!graphNativeMomentCopyContractViolations(inflatedGraphNativeCopy, laterWorkMomentExpected).some(issue => issue.includes('not concise'))) throw new Error('Verbose graph-native moment copy fixture was accepted');
 
   const allowedOutputFixtures = [
     path.join(QA_DIRECTORY, QA_OUTPUT_BASENAME),

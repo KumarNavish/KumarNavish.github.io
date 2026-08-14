@@ -221,9 +221,10 @@
     if (document.body.dataset.claimReady !== String(ready)) document.body.dataset.claimReady = String(ready);
     const button = $('#runCasePath');
     if (button && visible($('#startState'))) {
-      if (button.disabled === ready) button.disabled = !ready;
       const label = button.querySelector('span');
-      if (label && ready && !/Opening|Could not/i.test(label.textContent || '') && label.textContent !== 'Watch CasePath handle this claim') label.textContent = 'Watch CasePath handle this claim';
+      const starting = /Opening the claim context/i.test(label?.textContent || '');
+      if (!starting && button.disabled === ready) button.disabled = !ready;
+      if (label && ready && !/Opening|Could not/i.test(label.textContent || '') && label.textContent !== 'Analyse claim') label.textContent = 'Analyse claim';
     }
     const header = $('#headerClaimId');
     if (header && !ready && /Loading claim/i.test(header.textContent || '')) header.textContent = 'Opening claim…';
@@ -235,9 +236,9 @@
     const label = start.querySelector('.start-copy .quiet-label');
     const title = start.querySelector('.start-copy h2');
     const buttonLabel = start.querySelector('#runCasePath span');
-    if (label) label.textContent = 'CasePath flagship';
-    if (title) title.textContent = 'One messy claim. One coordinated handling plan.';
-    if (buttonLabel) buttonLabel.textContent = 'Watch CasePath handle this claim';
+    if (label) label.textContent = 'Ready';
+    if (title) title.textContent = 'Build the handling process from this claim.';
+    if (buttonLabel) buttonLabel.textContent = 'Analyse claim';
     start.dataset.v20Ready = 'true';
   }
 
