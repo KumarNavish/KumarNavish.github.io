@@ -341,8 +341,8 @@
     {
       "executable": false,
       "path": "casepath-qa/browser-focused-v20.mjs",
-      "sha256": "5bed408c7fa43466c841dfda6a98bde0ab6fa49a6312c0e291e76c4f1facd8cb",
-      "size_bytes": 537604
+      "sha256": "873905583e6f6e9ebc8d62fa67ac23a1435689b724821f3312a50ea9a9af689c",
+      "size_bytes": 538030
     },
     {
       "executable": false,
@@ -959,8 +959,8 @@
     {
       "executable": false,
       "path": "casepath/tools/test_casepath_release.py",
-      "sha256": "de673a078815a50a596321f5f7ae7008cf06edd3059762e3ac68b27ff935970c",
-      "size_bytes": 327134
+      "sha256": "5ea557bd504f430d1b7f83318aefa385df9a53829597352ef90d11b5d29f7ea3",
+      "size_bytes": 327360
     },
     {
       "executable": false,
@@ -985,7 +985,7 @@
   "gates": [
     {
       "path": "casepath-qa/browser-focused-v20.mjs",
-      "sha256": "5bed408c7fa43466c841dfda6a98bde0ab6fa49a6312c0e291e76c4f1facd8cb"
+      "sha256": "873905583e6f6e9ebc8d62fa67ac23a1435689b724821f3312a50ea9a9af689c"
     },
     {
       "path": "casepath-qa/browser-guided-v13-smoke.mjs",
