@@ -185,6 +185,50 @@
     '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
   }[character]));
 
+  const DOCUMENT_TYPE_ICONS = Object.freeze({
+    contract: '<path d="M7 3.5h7l3 3v14H7z"/><path d="M14 3.5v3h3M9.5 11.5h5M9.5 15h3.2M13.2 18c.8-.8 1.5-.8 2.3 0"/>',
+    mail: '<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="m5 7 7 5 7-5"/>',
+    inspection: '<path d="M8 4.5h8v3H8zM6 6.5H5v14h11"/><circle cx="16.5" cy="15.5" r="3.5"/><path d="m19 18 2 2M9 11h3M9 15h2"/>',
+    image: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m5.5 17 4.3-4.3 3.1 3.1 2.2-2.2 3.4 3.4"/>',
+    timeline: '<path d="M8 4.5v15M8 7h9M8 12h6M8 17h9"/><circle cx="8" cy="7" r="1.7"/><circle cx="8" cy="12" r="1.7"/><circle cx="8" cy="17" r="1.7"/>',
+    invoice: '<path d="M6 3.5h12v17l-2-1.5-2 1.5-2-1.5-2 1.5L8 19l-2 1.5z"/><path d="M9 8h6M9 11.5h6M9 15h3"/>',
+    medical: '<path d="M7 3.5h7l3 3v14H7zM14 3.5v3h3"/><path d="M9.3 13.2h2l1-2.2 1.3 4 1-1.8h1.3"/>',
+    legal: '<path d="M7 3.5h7l3 3v14H7zM14 3.5v3h3"/><path d="M12 9v6M9 10.5h6M9 10.5l-2 3h4zM15 10.5l-2 3h4zM9 17h6"/>',
+    delivery: '<path d="M4.5 7.5 12 3.5l7.5 4v9L12 20.5l-7.5-4zM4.5 7.5 12 12l7.5-4.5M12 12v8.5"/><path d="m8.5 7.2 2 1.2 4.8-2.7"/>',
+    generic: '<path d="M7 3.5h7l3 3v14H7zM14 3.5v3h3M9.5 11h5M9.5 14.5h5M9.5 18h3"/>',
+  });
+
+  // Ordered, semantic rules make the icon system work for future claims and
+  // returned document names without coupling presentation to checklist IDs.
+  const DOCUMENT_ICON_RULES = Object.freeze([
+    { key: 'medical', pattern: /\b(medical|clinical|doctor|health|injury|treatment|hospital)\b/i },
+    { key: 'delivery', pattern: /\b(proof of delivery|delivery (?:proof|confirmation|receipt)|registered mail|dispatch|tracking|notice was received|notification reached)\b/i },
+    { key: 'legal', pattern: /\b(legal|court|conciliation|statutory|formal notice|summons|lawyer|attorney|tribunal|reasoned decision)\b/i },
+    { key: 'image', pattern: /\b(photo|photograph|image|picture|thermal imaging|video)\b/i },
+    { key: 'timeline', pattern: /\b(timeline|chronolog(?:y|ical)|event log|sequence of events|case history)\b/i },
+    { key: 'invoice', pattern: /\b(invoice|bill|receipt|payment|cost|quote|estimate|rent record|documented loss|financial)\b/i },
+    { key: 'contract', pattern: /\b(lease|agreement|contract|policy|terms|settlement)\b/i },
+    { key: 'mail', pattern: /\b(e-?mail|message|reply|letter|correspondence|statement|proposal|notification|notice)\b/i },
+    { key: 'inspection', pattern: /\b(inspection|assessment|report|survey|measurement|moisture|technical|building[ -]?physics|facade|window[ -]?seal|thermal[ -]?bridge|analysis|work order|contractor)\b/i },
+  ]);
+
+  function documentIconKey(semanticValue) {
+    const semanticDocument = String(semanticValue || '').replace(/[_/]+/g, ' ').replace(/\s+/g, ' ').trim();
+    return DOCUMENT_ICON_RULES.find(rule => rule.pattern.test(semanticDocument))?.key || '';
+  }
+
+  function resolveDocumentIcon(documentName, ...semanticContext) {
+    // The displayed artifact wins. Context is consulted only when a new or
+    // ambiguous name has no semantic match of its own.
+    const key = documentIconKey(documentName) || documentIconKey(semanticContext.filter(Boolean).join(' ')) || 'generic';
+    return { key, paths: DOCUMENT_TYPE_ICONS[key] };
+  }
+
+  function documentIconNameMarkup(documentName, ...semanticContext) {
+    const icon = resolveDocumentIcon(documentName, ...semanticContext);
+    return `<strong class="v20-document-name" data-document-icon-kind="${esc(icon.key)}"><svg class="v20-document-type-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icon.paths}</svg><span class="v20-document-name-copy">${esc(documentName)}</span></strong>`;
+  }
+
   function visible(element) {
     return Boolean(element && !element.hidden && element.getAttribute('aria-hidden') !== 'true');
   }
@@ -675,6 +719,13 @@
           : kind === 'conditional'
             ? `Only if: ${copy.dataset.appliesWhen || 'this process branch becomes active'}`
             : 'Not required on this path';
+      const documentNameMarkup = documentIconNameMarkup(
+        documentCopy,
+        copy.dataset.documentLabel,
+        copy.dataset.evidenceTitle,
+        copy.dataset.documentOptions,
+        returnedDocuments.join(' '),
+      );
       const statusPresentation = kind === 'available'
         ? { state: 'received', icon: '✓', label: 'Received' }
         : kind === 'needed'
@@ -696,7 +747,7 @@
         <i class="v20-chain-arrow" aria-hidden="true">→</i>
         <div class="v20-chain-step" data-chain-part="evidence"><small>Evidence needed</small><strong>${esc(evidenceTitle)}</strong><span>${esc(evidenceWhy)}</span></div>
         <i class="v20-chain-arrow" aria-hidden="true">→</i>
-        <div class="v20-chain-step" data-chain-part="document"><small>Document or record</small><strong>${esc(documentCopy)}</strong><span>${esc(documentState)}</span></div>
+        <div class="v20-chain-step" data-chain-part="document"><small>Document or record</small>${documentNameMarkup}<span>${esc(documentState)}</span></div>
         <div class="v20-chain-status" data-document-status="${esc(statusPresentation.state)}"><i aria-hidden="true">${statusPresentation.icon}</i><strong>${esc(statusPresentation.label)}</strong><b>Show process →</b></div>`;
       return { kind, markup: copy.outerHTML };
     });

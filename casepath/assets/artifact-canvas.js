@@ -7,6 +7,7 @@
   const INTERACTION_EVENT = 'casepath:artifact-canvas-interaction';
   const LATER_MEMORY_VALIDATION_CONTRACT = 'casepath.later-memory-validation/1.0.0';
   const LATER_CAUSAL_STEP_CONTRACT = 'casepath.later-causal-step/1.0.0';
+  const PROCESS_NODE_PROGRESS_CONTRACT = 'casepath.process-node-progress/1.0.0';
   const VISUAL_ANNOTATION_CONTRACT = 'casepath.visual-reference-annotation/1.0.0';
   const VISUAL_ANNOTATION_VERSION = 'generated-demo-reference/2026-08-12';
   const VISUAL_ANNOTATION_PRODUCER = 'deterministic_reference_annotation';
@@ -18,6 +19,9 @@
   const GRAPH_NODE_DWELL_MS = 1300;
   const GRAPH_SOURCE_DWELL_MS = 1900;
   const GRAPH_BRANCH_SOURCE_DWELL_MS = 1900;
+  const PROCESS_NODE_PROGRESS_FORM_MS = 900;
+  const PROCESS_NODE_PROGRESS_COMPLETE_MS = 500;
+  const PROCESS_NODE_PROGRESS_HOLD_MS = 320;
   const OFFICIAL_LAW_DWELL_MS = 1900;
   const FACT_SOURCE_DWELL_MS = 1600;
   const FACT_NEUTRAL_READ_DWELL_MS = 900;
@@ -125,13 +129,30 @@
     },
   });
   const AGENT_ICONS = Object.freeze({
-    facts: '<circle cx="12" cy="12" r="9"></circle><path d="m8 12 2.4 2.5L16 9"></path>',
-    orchestrator: '<circle cx="9" cy="8" r="3"></circle><circle cx="16.5" cy="9" r="2.5"></circle><path d="M3.8 18c.8-3.2 2.6-4.8 5.2-4.8s4.4 1.6 5.2 4.8M14 14.2c2.7-.4 4.8.9 6.1 3.8"></path>',
-    sources: '<path d="M6 3.5h8l4 4V20.5H6z"></path><path d="M14 3.5v4h4"></path>',
+    facts: '<path d="M4 5.5h16v11H9l-4.5 3v-3H4z"></path><path d="M8 10h.01M12 10h.01M16 10h.01"></path>',
+    orchestrator: '<circle cx="12" cy="5.5" r="2.5"></circle><circle cx="5.5" cy="17.5" r="2.5"></circle><circle cx="18.5" cy="17.5" r="2.5"></circle><path d="m10.8 7.7-4 7.5M13.2 7.7l4 7.5M8 17.5h8"></path>',
+    sources: '<path d="M5 3.5h9l4 4v5.2M14 3.5v4h4M5 3.5v17h7"></path><circle cx="15.5" cy="16" r="3.5"></circle><path d="m18 18.5 2.5 2.5"></path>',
     process: '<circle cx="7" cy="5" r="2"></circle><circle cx="7" cy="19" r="2"></circle><circle cx="18" cy="12" r="2"></circle><path d="M7 7v10M9 5h3v7h4M9 19h3v-7"></path>',
-    evidence: '<path d="M3.5 7.5h6l2-2h9v14h-17z"></path>',
+    evidence: '<path d="M3.5 7.5h6l2-2h9v14h-17z"></path><path d="m8 13 2.2 2.2 4.6-5"></path>',
     audit: '<path d="M12 3 20 6v5c0 5.1-3.1 8.5-8 10-4.9-1.5-8-4.9-8-10V6z"></path><path d="m8.5 12 2.2 2.2 4.8-5"></path>',
   });
+  const CURSOR_AVATARS = Object.freeze({
+    ...AGENT_ICONS,
+    casepath: '<path d="M17.5 7.5A7 7 0 1 0 17.5 16.5"></path><path d="M10 9h5M10 15h5"></path>',
+    law: '<path d="M12 4v16M6 7h12M7.5 7 4.5 13h6zM16.5 7l-3 6h6zM8 20h8"></path>',
+    reference: '<circle cx="10.5" cy="10.5" r="6.5"></circle><path d="m15.5 15.5 4 4M8 10.5h5M10.5 8v5"></path>',
+    gate: '<path d="M12 3 20 6v5c0 5.1-3.1 8.5-8 10-4.9-1.5-8-4.9-8-10V6z"></path><path d="m8.5 12 2.2 2.2 4.8-5"></path>',
+    memory: '<path d="M6 8.5A7 7 0 1 1 5.2 15"></path><path d="M6 4v4.5H1.5M12 8v4l3 2"></path>',
+  });
+
+  function setCursorAvatar(cursor, identity = {}) {
+    const avatar = cursor?.querySelector('[data-ac-cursor-avatar]');
+    if (!avatar) return;
+    const signature = String(identity.signature || 'casepath');
+    avatar.dataset.agentAvatar = signature;
+    avatar.dataset.agentMonogram = String(identity.monogram || 'CP');
+    avatar.innerHTML = `<svg viewBox="0 0 24 24" focusable="false">${CURSOR_AVATARS[signature] || CURSOR_AVATARS.casepath}</svg>`;
+  }
   const AGENT_MOMENTS = Object.freeze({
     canonical_facts: 'understand',
     orchestrator_plan: 'understand',
@@ -314,6 +335,7 @@
     graphDwell: false,
     graphInspecting: false,
     graphInspectionPhase: 'select-source',
+    processNodeProgress: null,
     groundingOpen: false,
     manualNodeInspection: false,
     agentAuditOpenId: '',
@@ -340,6 +362,82 @@
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&#039;');
+  }
+
+  function processNodeProgressLabel(phase, entityKind) {
+    if (phase === 'search') return 'Finding source';
+    if (phase === 'read') return 'Reading source';
+    if (phase === 'extract') return 'Extracting fact';
+    if (phase === 'form') return entityKind === 'branch' ? 'Testing outcome' : 'Forming decision';
+    if (phase === 'complete') return entityKind === 'branch' ? 'Outcome ready' : 'Decision ready';
+    return '';
+  }
+
+  function emitProcessNodeProgress(progress, visible) {
+    if (!progress) return;
+    window.dispatchEvent(new CustomEvent('casepath:process-node-progress', { detail: {
+      contract: PROCESS_NODE_PROGRESS_CONTRACT,
+      scope: 'visible_evidence_bound_construction',
+      processId: state.process?.process_id || '',
+      entityKind: progress.entityKind,
+      nodeId: progress.nodeId,
+      branchId: progress.branchId,
+      phase: progress.phase,
+      percent: progress.percent,
+      label: progress.label,
+      visible,
+      changeId: progress.changeId,
+      eventId: progress.eventId,
+      agentId: progress.agentId,
+    } }));
+  }
+
+  function setProcessNodeProgress(phase, percent, identity = null) {
+    const prior = state.processNodeProgress;
+    const next = {
+      entityKind: String(identity?.entityKind || prior?.entityKind || 'node'),
+      nodeId: String(identity?.nodeId || prior?.nodeId || state.pendingGraphNodeId || state.pendingBranchNodeId || ''),
+      branchId: String(identity?.branchId || prior?.branchId || ''),
+      phase,
+      percent: Math.max(0, Math.min(100, Math.round(Number(percent) || 0))),
+      label: processNodeProgressLabel(phase, String(identity?.entityKind || prior?.entityKind || 'node')),
+      changeId: String(identity?.changeId || prior?.changeId || state.lastCursorChangeId || ''),
+      eventId: String(identity?.eventId || prior?.eventId || state.lastCursorEventId || ''),
+      agentId: String(identity?.agentId || prior?.agentId || state.lastCursorAgentId || ''),
+    };
+    state.processNodeProgress = next;
+    render();
+    emitProcessNodeProgress(next, true);
+  }
+
+  function clearProcessNodeProgress() {
+    const prior = state.processNodeProgress;
+    if (!prior) return;
+    const cleared = { ...prior, phase: 'cleared', percent: 100, label: '' };
+    state.processNodeProgress = null;
+    render();
+    emitProcessNodeProgress(cleared, false);
+  }
+
+  function resetProcessNodeProgress() {
+    state.processNodeProgress = null;
+  }
+
+  function finishProcessNodeProgress(dwellMs, commit) {
+    const clearGapMs = Math.max(0, dwellMs
+      - PROCESS_NODE_PROGRESS_FORM_MS
+      - PROCESS_NODE_PROGRESS_COMPLETE_MS
+      - PROCESS_NODE_PROGRESS_HOLD_MS);
+    state.graphRevealTimer = window.setTimeout(() => {
+      setProcessNodeProgress('form', 90);
+      state.graphRevealTimer = window.setTimeout(() => {
+        setProcessNodeProgress('complete', 100);
+        state.graphRevealTimer = window.setTimeout(() => {
+          clearProcessNodeProgress();
+          state.graphRevealTimer = window.setTimeout(commit, clearGapMs);
+        }, PROCESS_NODE_PROGRESS_HOLD_MS);
+      }, PROCESS_NODE_PROGRESS_COMPLETE_MS);
+    }, PROCESS_NODE_PROGRESS_FORM_MS);
   }
 
   function asObject(value) {
@@ -821,6 +919,7 @@
     state.graphDwell = false;
     state.graphInspecting = false;
     state.graphInspectionPhase = 'select-source';
+    resetProcessNodeProgress();
     state.cursorCommit = null;
     const nodes = simplifiedNodes();
     window.dispatchEvent(new CustomEvent('casepath:artifact-process-started', { detail: {
@@ -896,9 +995,8 @@
           locatorId,
           found,
         } }));
-        state.graphRevealTimer = window.setTimeout(() => {
-          commitNode();
-        }, GRAPH_SOURCE_DWELL_MS);
+        setProcessNodeProgress('extract', 72);
+        finishProcessNodeProgress(GRAPH_SOURCE_DWELL_MS, commitNode);
       };
       state.cursorCommit = () => {
         if (state.pendingGraphNodeId !== node.node_id) return;
@@ -909,9 +1007,15 @@
         emitInteraction(inspectionTarget.dataset.acAction || 'inspect', inspectionTarget);
         state.graphInspectionPhase = 'read-source';
         state.cursorCommit = highlightSource;
-        render();
+        setProcessNodeProgress('read', 38);
       };
-      render();
+      setProcessNodeProgress('search', 0, {
+        entityKind: 'node',
+        nodeId: node.node_id,
+        changeId: state.lastCursorChangeId,
+        eventId: state.lastCursorEventId,
+        agentId: state.lastCursorAgentId,
+      });
     };
     revealNext();
   }
@@ -933,6 +1037,7 @@
     state.graphDwell = false;
     state.graphInspecting = false;
     state.graphInspectionPhase = 'select-source';
+    resetProcessNodeProgress();
     state.cursorCommit = null;
     clearActiveSource();
     state.selectedNodeId = state.process?.current_overlay?.current_node_id || state.process?.current_node || 'causation';
@@ -993,7 +1098,8 @@
         locatorId,
         found,
       } }));
-      state.graphRevealTimer = window.setTimeout(() => {
+      setProcessNodeProgress('extract', 72);
+      finishProcessNodeProgress(GRAPH_BRANCH_SOURCE_DWELL_MS, () => {
         state.visibleBranchIds.add(node.node_id);
         state.pendingBranchNodeId = '';
         state.graphInspecting = false;
@@ -1008,7 +1114,7 @@
           agentId: state.lastCursorAgentId,
         } }));
         state.graphRevealTimer = window.setTimeout(startBranchReveal, 350);
-      }, GRAPH_BRANCH_SOURCE_DWELL_MS);
+      });
     };
     state.cursorCommit = () => {
       if (state.pendingBranchNodeId !== node.node_id) return;
@@ -1019,9 +1125,16 @@
       emitInteraction(inspectionTarget.dataset.acAction || 'inspect', inspectionTarget);
       state.graphInspectionPhase = 'read-source';
       state.cursorCommit = highlightSource;
-      render();
+      setProcessNodeProgress('read', 38);
     };
-    render();
+    setProcessNodeProgress('search', 0, {
+      entityKind: 'branch',
+      nodeId: node.node_id,
+      branchId: branch.branch_id,
+      changeId: state.lastCursorChangeId,
+      eventId: state.lastCursorEventId,
+      agentId: state.lastCursorAgentId,
+    });
   }
 
   function nodeById(nodeId) {
@@ -1679,9 +1792,11 @@
         <span data-ac-proof>Only validated outputs are shown.</span>
       </footer>
       <div class="ac-agent-cursor" id="artifactAgentCursor" aria-hidden="true" data-ac-cursor data-agent-signature="casepath">
-        <svg viewBox="0 0 24 24"><path d="M5 3.8v14.5l3.7-3.3 2.7 5.2 2.5-1.3-2.7-5.1 4.9-.7L5 3.8Z"/></svg>
-        <b data-ac-cursor-monogram>CP</b>
-        <span class="ac-agent-cursor-label"><strong data-ac-cursor-agent>CasePath</strong><small data-ac-cursor-action>Opening the claim</small></span>
+        <b class="ac-cursor-role-icon" data-ac-cursor-monogram data-ac-cursor-avatar data-agent-avatar="casepath" data-agent-monogram="CP"><svg viewBox="0 0 24 24" focusable="false">${CURSOR_AVATARS.casepath}</svg></b>
+        <span class="ac-agent-cursor-label">
+          <span class="ac-agent-cursor-copy"><strong data-ac-cursor-agent>CasePath</strong><small data-ac-cursor-action>Opening the claim</small></span>
+          <span class="ac-process-node-progress" data-ac-process-node-progress hidden><small data-ac-process-node-progress-phase></small><strong data-ac-process-node-progress-value>0%</strong></span>
+        </span>
       </div>`;
     renderTeam();
     installGlobalAgentRail();
@@ -1927,6 +2042,17 @@
     root.dataset.factSourceTourPhase = state.factTourPhase;
     root.dataset.graphInspectionPhase = state.graphInspectionPhase;
     root.dataset.manualNodeInspection = String(state.manualNodeInspection);
+    const nodeProgress = state.processNodeProgress;
+    root.dataset.processNodeProgressState = nodeProgress ? 'active' : 'idle';
+    if (nodeProgress) {
+      root.dataset.processNodeProgress = String(nodeProgress.percent);
+      root.dataset.processNodeProgressPhase = nodeProgress.phase;
+      root.dataset.processNodeProgressNodeId = nodeProgress.nodeId;
+    } else {
+      delete root.dataset.processNodeProgress;
+      delete root.dataset.processNodeProgressPhase;
+      delete root.dataset.processNodeProgressNodeId;
+    }
     if (state.moment === 'later-result') {
       const validatedMemory = validatedLaterMemory();
       root.dataset.laterMemoryValidated = String(Boolean(validatedMemory));
@@ -1946,10 +2072,29 @@
     root.querySelector('[data-ac-task]').textContent = identity.task;
     root.querySelector('[data-ac-why]').textContent = identity.why;
     root.querySelector('[data-ac-authority]').textContent = copy.authority;
-    root.querySelector('[data-ac-cursor]').dataset.agentSignature = identity.signature;
-    root.querySelector('[data-ac-cursor-monogram]').textContent = identity.monogram;
+    const cursor = root.querySelector('[data-ac-cursor]');
+    cursor.dataset.agentSignature = identity.signature;
+    setCursorAvatar(cursor, identity);
     root.querySelector('[data-ac-cursor-agent]').textContent = identity.label;
     root.querySelector('[data-ac-cursor-action]').textContent = identity.task;
+    const progressIndicator = cursor.querySelector('[data-ac-process-node-progress]');
+    if (nodeProgress) {
+      cursor.dataset.processNodeProgress = 'active';
+      cursor.style.setProperty('--ac-process-node-progress', `${nodeProgress.percent}%`);
+      progressIndicator.hidden = false;
+      progressIndicator.dataset.progress = String(nodeProgress.percent);
+      progressIndicator.dataset.phase = nodeProgress.phase;
+      progressIndicator.dataset.nodeId = nodeProgress.nodeId;
+      progressIndicator.querySelector('[data-ac-process-node-progress-phase]').textContent = nodeProgress.label;
+      progressIndicator.querySelector('[data-ac-process-node-progress-value]').textContent = `${nodeProgress.percent}%`;
+    } else {
+      delete cursor.dataset.processNodeProgress;
+      cursor.style.removeProperty('--ac-process-node-progress');
+      progressIndicator.hidden = true;
+      delete progressIndicator.dataset.progress;
+      delete progressIndicator.dataset.phase;
+      delete progressIndicator.dataset.nodeId;
+    }
 
     document.querySelectorAll('.ac-global-agent-work [data-ac-agent-id]').forEach(item => {
       const agentId = item.dataset.acAgentId;
@@ -2687,6 +2832,16 @@
       : state.graphRevealRunning
         ? 'building'
         : acceptedProjectionComplete ? 'complete' : 'pending';
+    processRegion.dataset.processNodeProgressState = state.processNodeProgress ? 'active' : 'idle';
+    if (state.processNodeProgress) {
+      processRegion.dataset.processNodeProgress = String(state.processNodeProgress.percent);
+      processRegion.dataset.processNodeProgressPhase = state.processNodeProgress.phase;
+      processRegion.dataset.processNodeProgressNodeId = state.processNodeProgress.nodeId;
+    } else {
+      delete processRegion.dataset.processNodeProgress;
+      delete processRegion.dataset.processNodeProgressPhase;
+      delete processRegion.dataset.processNodeProgressNodeId;
+    }
     if (!state.processAccepted) return;
     if (!state.graphRevealRunning && ['evidence', 'experience'].includes(state.moment) && nodeById('causation')) {
       state.selectedNodeId = 'causation';
@@ -2774,12 +2929,16 @@
         const branchNumber = Math.min(state.visibleBranchIds.size + 1, CAUSATION_BRANCH_LAYOUT.length);
         count.textContent = `Testing causation branch ${branchNumber} of ${CAUSATION_BRANCH_LAYOUT.length}`;
         focus.textContent = pendingBranch[1];
-        status.textContent = `Causation branch ${branchNumber} of ${CAUSATION_BRANCH_LAYOUT.length}: ${focus.textContent}`;
+        status.textContent = state.processNodeProgress
+          ? `${state.processNodeProgress.label} · ${state.processNodeProgress.percent}% · ${focus.textContent}`
+          : `Causation branch ${branchNumber} of ${CAUSATION_BRANCH_LAYOUT.length}: ${focus.textContent}`;
       } else {
         const decisionNumber = Math.min(state.graphRevealIndex + (state.graphDwell ? 0 : 1), nodes.length);
         count.textContent = `Building decision ${decisionNumber} of ${nodes.length}`;
         focus.textContent = nodeLabel(state.selectedNodeId) || 'Grounded decision';
-        status.textContent = `Decision ${decisionNumber} of ${nodes.length}: ${focus.textContent}`;
+        status.textContent = state.processNodeProgress
+          ? `${state.processNodeProgress.label} · ${state.processNodeProgress.percent}% · ${focus.textContent}`
+          : `Decision ${decisionNumber} of ${nodes.length}: ${focus.textContent}`;
       }
     } else {
       count.textContent = `${nodes.length} decisions · core handling spine`;
@@ -3723,7 +3882,7 @@
     cursor.dataset.labelSide = x > viewportWidth * .56 ? 'left' : 'right';
     if (specialist) {
       cursor.dataset.agentSignature = specialist.agent.signature;
-      cursor.querySelector('[data-ac-cursor-monogram]').textContent = specialist.agent.monogram;
+      setCursorAvatar(cursor, specialist.agent);
       if (cursorAgent) cursorAgent.textContent = specialist.agent.short;
     }
     if (cursorAction) cursorAction.textContent = cursorActionLabel(identityTarget, specialist);
