@@ -651,7 +651,6 @@
       ));
       if (factor?.value) state.selectedNodeId = factor.value;
     }
-    if (source === 'render' && state.moment === 'research') startOfficialLawTour();
     render();
   }
 
@@ -1033,7 +1032,6 @@
 
   function startOfficialLawTour() {
     if (state.officialLawTourRunning || state.officialLawTourComplete) return;
-    if (!document.querySelector('.official-source-browser')) return;
     const sources = asArray(state.legal?.sources).filter(isOfficialLaw);
     if (!sources.length) return;
     state.officialLawTourRunning = true;
@@ -2359,6 +2357,10 @@
   window.addEventListener('casepath:claim-rendered', event => ingestClaim(event.detail || {}));
   window.addEventListener('casepath:render', onRender);
   window.addEventListener('casepath:agent-focus', onAgentFocus);
+  window.addEventListener('casepath:presentation', event => {
+    const detail = event.detail || {};
+    if (detail.phase === 'artifact' && detail.moment === 'research') startOfficialLawTour();
+  });
   window.addEventListener('casepath:official-source-step', event => ingest({ ...event.detail, moment: 'research' }, 'law-step'));
   window.addEventListener('resize', scheduleCursor, { passive: true });
 

@@ -467,6 +467,9 @@ def test_flagship_presentation_holds_work_and_artifacts_for_clarity() -> None:
     assert "casepath:official-source-tour-complete" in renderer
     assert "function startOfficialLawTour()" in canvas
     assert "OFFICIAL_LAW_DWELL_MS = 1900" in canvas
+    assert "if (!document.querySelector('.official-source-browser')) return;" not in canvas
+    assert "if (source === 'render' && state.moment === 'research') startOfficialLawTour();" not in canvas
+    assert "detail.phase === 'artifact' && detail.moment === 'research'" in canvas
     assert "tourOwner: CONTRACT" in canvas
     assert "Why it matters" in focus
     assert "Doing now" in focus
@@ -655,6 +658,9 @@ def test_browser_gate_observes_single_focus_graph_steps_and_official_url_truth()
     assert "The complete process appears only after explicit exploration" in browser_gate
     assert "detailed provenance floods the live region" in browser_gate
     assert "source, tab, passage, address, and verify-URL truth" in browser_gate
+    assert "sourceSurface: lawSurface ? 'artifact-canvas' : ''" in browser_gate
+    assert "source was not visited on the primary artifact canvas" in browser_gate
+    assert "#artifactCanvas .ac-law-focus[data-ac-law-id]" in browser_gate
     assert "officialStepHolds.some(value => value < 1850)" in browser_gate
     assert "versioned_official_source_registry_lookup" in browser_gate
     assert "reliable_same-source_reuse" in browser_gate
