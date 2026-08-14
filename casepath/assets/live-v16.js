@@ -11,17 +11,21 @@
   const ARTIFACT_FRAME_MS = 5500;
   const CONCISE_WORKING_FRAME_MS = 1000;
   const CONCISE_ARTIFACT_FRAME_MS = 1600;
-  const CONCISE_GRAPH_STAGES = new Set(['evidence', 'experience', 'verify']);
+  // The read summary only confirms that files were opened; the exact source tour
+  // that follows is the real story and retains its full inspection dwell.
+  const CONCISE_GRAPH_STAGES = new Set(['read', 'evidence', 'experience', 'verify']);
   const RESEARCH_ARTIFACT_FRAME_MS = 9000;
-  const PROCESS_STORY_TIMEOUT_MS = 75000;
+  const PROCESS_STORY_TIMEOUT_MS = 120000;
   const OFFICIAL_LAW_TOUR_TIMEOUT_MS = 120000;
   const FACT_SOURCE_TOUR_TIMEOUT_MS = 45000;
   const AGENT_RECEIPT_BEAT_MS = reduceMotion ? 20 : 800;
   const BACKGROUND_BEAT_MS = reduceMotion ? 20 : 120;
   const KNOWLEDGE_BEAT_MS = 1200;
   const LATER_CAUSAL_STEP_CONTRACT = 'casepath.later-causal-step/1.0.0';
-  const LATER_CAUSAL_SOURCE_HOLD_MS = reduceMotion ? 20 : 1900;
-  const LATER_CAUSAL_MEMORY_HOLD_MS = reduceMotion ? 20 : 1400;
+  const LATER_CAUSAL_SOURCE_HOLD_MS = reduceMotion ? 2400 : 5200;
+  const LATER_CAUSAL_MEMORY_HOLD_MS = reduceMotion ? 1800 : 3000;
+  const LATER_CAUSAL_ELIGIBILITY_HOLD_MS = reduceMotion ? 1800 : 2800;
+  const LATER_CAUSAL_STEP_TIMEOUT_MS = 10000;
   const SESSION_STORAGE_KEY = 'casepath:demo-session';
   const SESSION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
   const NEMOTRON_AGENT_IDS = new Set([
@@ -883,20 +887,23 @@
         window.removeEventListener('casepath:artifact-process-started', onStarted);
         window.clearTimeout(timeout);
         document.body.dataset.casepathProcessStoryWait = status;
-        if (status === 'timed-out') {
-          setOrchestrator('Process drawing timed out; continuing with the accepted process.');
-          toast('Process drawing took too long. Continuing with the accepted result.');
-          window.dispatchEvent(new CustomEvent('casepath:artifact-process-timeout', {
-            detail: { runId, timeoutMs: PROCESS_STORY_TIMEOUT_MS },
-          }));
-        }
         resolve(status);
       };
       const onComplete = () => { if (processStoryComplete()) finish('complete'); };
+      const noteDelay = () => {
+        if (settled) return;
+        timeout = 0;
+        document.body.dataset.casepathProcessStoryWait = 'drawing-overdue';
+        setOrchestrator('Process drawing is taking longer than expected. Review remains locked until it completes.');
+        toast('Still drawing the accepted process. Review remains locked.');
+        window.dispatchEvent(new CustomEvent('casepath:artifact-process-timeout', {
+          detail: { runId, timeoutMs: PROCESS_STORY_TIMEOUT_MS },
+        }));
+      };
       const armTimeout = () => {
         if (settled || timeout) return;
         document.body.dataset.casepathProcessStoryWait = 'drawing';
-        timeout = window.setTimeout(() => finish('timed-out'), PROCESS_STORY_TIMEOUT_MS);
+        timeout = window.setTimeout(noteDelay, PROCESS_STORY_TIMEOUT_MS);
       };
       const onStarted = () => armTimeout();
       window.addEventListener('casepath:artifact-process-complete', onComplete, { once: true });
@@ -1031,7 +1038,7 @@
         outputArtifact: eventArtifacts(event).join(', '),
         eventId: returnedValue(event, 'event_id'),
       } }));
-      return 'background';
+      return 'receipt';
     }
     const stage = STAGES.find(item => item.id === event.stage);
     if (!stage) return 'background';
@@ -1088,8 +1095,6 @@
     const parsed = state.run?.parsed_submission || {};
     const rows = (parsed.files || []).map(file => `<div class="event-row"><span class="event-mark">✓</span><div><strong>${esc(file.title)}</strong><p>${esc(file.read_detail)}</p></div></div>`).join('');
     renderCanvas(`<div class="stage-shell">${stageHeader(stage, 'The original submission is in the shared claim context.', event.detail || '')}<div class="event-list"><div class="event-row"><span class="event-mark">✓</span><div><strong>Customer message</strong><p>${parsed.message_chars || 0} characters preserved as submitted.</p></div></div>${rows}</div></div>`, 'read');
-    $$('.attachment-row').forEach(row => row.classList.add('is-active'));
-    setTimeout(() => $$('.attachment-row').forEach(row => row.classList.remove('is-active')), ARTIFACT_FRAME_MS);
   }
 
   function renderUnderstandStage(stage, event) {
@@ -1573,6 +1578,12 @@
 
   function finishFlagshipRun() {
     if (state.journey !== 'live' || !state.runComplete || state.presenting) return;
+    if (!processStoryComplete()) {
+      waitForProcessStory().then(status => {
+        if (status === 'complete') finishFlagshipRun();
+      });
+      return;
+    }
     state.polling = false;
     state.journey = 'ready';
     state.flagshipRun = state.run;
@@ -1797,18 +1808,65 @@
     } }));
   }
 
+  function waitForLaterCausalStep(eventName, accept) {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (error, detail) => {
+        if (settled) return;
+        settled = true;
+        window.removeEventListener(eventName, onEvent);
+        window.clearTimeout(timeout);
+        if (error) reject(error);
+        else resolve(detail);
+      };
+      const onEvent = event => {
+        const detail = event.detail || {};
+        if (accept(detail)) finish(null, detail);
+      };
+      const timeout = window.setTimeout(() => {
+        finish(new Error(`The later-claim ${eventName.replace('casepath:', '')} step did not become visible.`));
+      }, LATER_CAUSAL_STEP_TIMEOUT_MS);
+      window.addEventListener(eventName, onEvent);
+    });
+  }
+
+  function waitForTwoPaints() {
+    return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  }
+
+  async function presentLaterCausalStep(detail, { eventName, holdMs, minimumVisibleMs, accept }) {
+    const startedAt = performance.now();
+    const visible = waitForLaterCausalStep(eventName, accept);
+    dispatchLaterCausalStep(detail);
+    await visible;
+    await waitForTwoPaints();
+    await wait(Math.max(minimumVisibleMs, holdMs - (performance.now() - startedAt)));
+  }
+
   async function presentLaterCausalBridge(result) {
     const fact = (result?.facts || []).find(item => item.semantic_role === 'management_ventilation_allegation')
       || (result?.facts || []).find(item => item.fact_id === 'fact_ventilation_allegation');
     const ref = (fact?.source_refs || [])[0];
     if (fact && ref?.artifact_id) {
-      dispatchLaterCausalStep({
+      const sourceStep = {
         phase: 'source',
         factId: String(fact.fact_id || ''),
         sourceId: String(ref.artifact_id),
         locatorId: sourceLocatorId(ref),
+      };
+      await presentLaterCausalStep(sourceStep, {
+        eventName: 'casepath:later-source-opened',
+        holdMs: LATER_CAUSAL_SOURCE_HOLD_MS,
+        minimumVisibleMs: reduceMotion ? 900 : 1800,
+        accept: detail => detail.contract === LATER_CAUSAL_STEP_CONTRACT
+          && detail.runId === String(state.laterRun?.run_id || '')
+          && detail.factId === sourceStep.factId
+          && detail.sourceId === sourceStep.sourceId
+          && detail.locatorId === sourceStep.locatorId
+          && Boolean(document.querySelector('[data-later-causal-phase="source"] mark.is-highlighted, [data-later-causal-phase="source"] .ac-visual-region-target.is-highlighted'))
+          && ([...document.querySelectorAll('.attachment-row.is-active, .v21-source-summary-toggle.is-active')]
+            .some(row => (row.dataset.artifactId || row.dataset.activeSourceId) === sourceStep.sourceId)),
       });
-      await wait(LATER_CAUSAL_SOURCE_HOLD_MS);
     }
     const receipt = result?.memory_application;
     const memoryOriginId = String(receipt?.source_memory?.memory_id || '');
@@ -1817,8 +1875,45 @@
     if (memoryRetrieved
       && receipt?.contract === 'casepath.memory-application-receipt/1.0.0'
       && memoryOriginId) {
-      dispatchLaterCausalStep({ phase: 'memory', memoryOriginId });
-      await wait(LATER_CAUSAL_MEMORY_HOLD_MS);
+      await presentLaterCausalStep({ phase: 'memory', memoryOriginId }, {
+        eventName: 'casepath:later-causal-step-visible',
+        holdMs: LATER_CAUSAL_MEMORY_HOLD_MS,
+        minimumVisibleMs: reduceMotion ? 900 : 1600,
+        accept: detail => detail.contract === LATER_CAUSAL_STEP_CONTRACT
+          && detail.runId === String(state.laterRun?.run_id || '')
+          && detail.phase === 'memory'
+          && detail.memoryOriginId === memoryOriginId
+          && Boolean(document.querySelector('[data-later-causal-phase="memory"]')),
+      });
+    }
+    const eligibility = receipt?.eligibility || {};
+    const eligibilityChecks = eligibility?.checks || {};
+    if (memoryRetrieved
+      && receipt?.applied === true
+      && eligibility?.eligible === true
+      && eligibility?.contract === 'casepath.semantic-memory-eligibility/1.0.0'
+      && eligibility?.rule_id
+      && fact?.semantic_role === 'management_ventilation_allegation'
+      && Object.keys(eligibilityChecks).length
+      && Object.values(eligibilityChecks).every(value => value === true)) {
+      const eligibilityStep = {
+        phase: 'eligibility',
+        memoryOriginId,
+        eligibilityContract: String(eligibility.contract),
+        ruleId: String(eligibility.rule_id),
+        semanticRole: String(fact?.semantic_role || ''),
+      };
+      await presentLaterCausalStep(eligibilityStep, {
+        eventName: 'casepath:later-causal-step-visible',
+        holdMs: LATER_CAUSAL_ELIGIBILITY_HOLD_MS,
+        minimumVisibleMs: reduceMotion ? 900 : 1600,
+        accept: detail => detail.contract === LATER_CAUSAL_STEP_CONTRACT
+          && detail.runId === String(state.laterRun?.run_id || '')
+          && detail.phase === 'eligibility'
+          && detail.memoryOriginId === memoryOriginId
+          && detail.ruleId === eligibilityStep.ruleId
+          && Boolean(document.querySelector('[data-later-causal-phase="eligibility"]')),
+      });
     }
   }
 
@@ -1838,7 +1933,18 @@
       state.laterRunComplete = false;
       state.eventQueue = [];
       state.queuedEventIds.clear();
-      renderCanvas(`<div class="stage-shell later-run"><div class="later-source-banner"><div><span class="quiet-label">Deterministic held-out memory comparison</span><h3>${esc(state.laterClaim.subject)}</h3><p>This claim was excluded from the simulated review and memory construction. The flagship above is the live six-agent Nemotron analysis. After learning was frozen, CasePath's deterministic application layer computed one no-memory counterfactual and now evaluates the same observable package with the explicitly unverified demo memory available—without another model run. Semantic eligibility does not depend on target claim, fact, or artifact IDs; the quarantined candidate must not change the shared ${esc(state.review?.knowledge?.shared_playbook_version || 'playbook')}.</p></div><span class="new-knowledge">Deterministic comparison · unverified memory</span></div><div class="later-agent-stream" id="laterAgentStream"></div><div id="laterResult"></div></div>`, 'later-work');
+      const flagshipAudit = state.flagshipRun?.result?.agent_orchestration || state.run?.result?.agent_orchestration || {};
+      const flagshipAgents = Array.isArray(flagshipAudit.agents) ? flagshipAudit.agents : [];
+      const callBoundSixAgentRun = NEMOTRON_AGENT_IDS.size === 6
+        && [...NEMOTRON_AGENT_IDS].every(agentId => flagshipAgents.some(entry => (
+          entry?.agent_id === agentId
+          && entry?.actor_type === 'nemotron_agent'
+          && entry?.call_id
+        )));
+      const flagshipTruth = callBoundSixAgentRun
+        ? 'The earlier result came from six call-bound specialist agents.'
+        : 'The earlier result was a reference replay of six specialist roles.';
+      renderCanvas(`<div class="stage-shell later-run"><div class="later-source-banner"><div><span class="quiet-label">Later claim · unverified memory</span><h3>${esc(state.laterClaim.subject)}</h3><p>${esc(flagshipTruth)} This comparison makes no new model call.</p></div><span class="new-knowledge">Before → after</span></div><div class="later-agent-stream" id="laterAgentStream"></div><div id="laterResult"></div></div>`, 'later-work');
       dispatchLaterCausalStep({
         phase: 'waiting',
         memoryOriginId: String(state.review?.memory_id || ''),
