@@ -2958,9 +2958,9 @@ async function execute() {
     });
     window.addEventListener('casepath:official-source-step', event => {
       const detail = event.detail || {};
-      const browser = document.querySelector('.official-source-browser');
-      const selected = browser?.querySelector('.official-source-tab[aria-selected="true"]');
-      const passage = browser?.querySelector('.official-source-passage:not([hidden])');
+      const lawSurface = document.querySelector('#artifactCanvas .ac-law-focus[data-ac-law-id]');
+      const selected = lawSurface?.querySelector('.ac-law-tabs [data-law-id][aria-current="true"]');
+      const officialLink = lawSurface?.querySelector('.ac-official-link[href]');
       window.__casepathOfficialSourceSteps.push({
         sourceId: detail.sourceId || '',
         factId: detail.factId || '',
@@ -2969,13 +2969,14 @@ async function execute() {
         retrievalMethod: detail.retrievalMethod || '',
         registryVersion: detail.registryVersion || '',
         cachePurpose: detail.cachePurpose || '',
-        selectedSourceId: selected?.dataset.officialSourceTab || '',
-        selectedUrl: selected?.dataset.officialSourceUrl || '',
-        passageSourceId: passage?.dataset.officialSourcePanel || '',
-        passageUrl: passage?.dataset.officialSourceUrl || '',
-        addressUrl: browser?.querySelector('[data-official-browser-url]')?.textContent?.trim() || '',
-        addressHost: browser?.querySelector('[data-official-browser-host]')?.textContent?.trim() || '',
-        verifyUrl: passage?.querySelector('a[href]')?.href || '',
+        sourceSurface: lawSurface ? 'artifact-canvas' : '',
+        selectedSourceId: selected?.dataset.lawId || '',
+        selectedUrl: officialLink?.href || '',
+        passageSourceId: lawSurface?.dataset.acLawId || '',
+        passageUrl: officialLink?.href || '',
+        addressUrl: lawSurface?.querySelector('.ac-browser-bar code')?.textContent?.trim() || '',
+        addressHost: lawSurface?.querySelector('.ac-browser-bar strong')?.textContent?.trim() || '',
+        verifyUrl: officialLink?.href || '',
         at: performance.now(),
         focus: artifactCanvasFocusSnapshot('official-source-step'),
       });
@@ -3363,6 +3364,7 @@ async function execute() {
   expectedOfficialSources.forEach((source, index) => {
     const step = officialSourceSteps[index];
     if (!step || step.sourceId !== source.source_id) officialSourceStepIssues.push(`${index}: wrong source order`);
+    if (step?.sourceSurface !== 'artifact-canvas') officialSourceStepIssues.push(`${source.source_id}: source was not visited on the primary artifact canvas`);
     if (step?.url !== source.url || step?.selectedUrl !== source.url || step?.passageUrl !== source.url || step?.addressUrl !== source.url || step?.verifyUrl !== source.url) officialSourceStepIssues.push(`${source.source_id}: URL projection drift`);
     if (step?.selectedSourceId !== source.source_id || step?.passageSourceId !== source.source_id) officialSourceStepIssues.push(`${source.source_id}: selected tab/passage drift`);
     if (step?.location !== source.location) officialSourceStepIssues.push(`${source.source_id}: location drift`);
