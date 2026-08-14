@@ -348,7 +348,10 @@ def test_claim_understanding_visibly_binds_five_facts_to_exact_sources() -> None
     assert "entityKind: 'fact'" in canvas
     assert "Fact added from this source" in canvas
     assert "${sourceContextAttributes(fact, ref)} data-fact-id=" in canvas
+    assert "ref?.authority || 'customer_submission'" in canvas
     assert "function factSourceTourContractViolations" in browser_gate
+    assert "exactReference?.authority || 'customer_submission'" in browser_gate
+    assert "['customer_submission', 'generated_demo_reference_only'].includes(attachment.sourceAuthority)" in browser_gate
     assert "five fact source inspections did not arrive in order" in browser_gate
     assert "fact artifact does not retain the inspected source binding" in browser_gate
 
