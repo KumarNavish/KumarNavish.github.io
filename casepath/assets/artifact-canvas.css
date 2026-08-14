@@ -1905,6 +1905,65 @@ body[data-casepath-artifact-canvas="ready"] .claim-workspace{
   line-height:1.4;
 }
 
+.casepath-artifact-canvas [data-agent-history-accepted-ids]{
+  margin-top:8px;
+  padding-top:7px;
+  border-top:1px solid #eceef0;
+  color:#656c75;
+  font-size:8px;
+}
+
+.casepath-artifact-canvas [data-agent-history-accepted-ids] summary,
+.casepath-artifact-canvas [data-agent-history-rejections] summary{
+  color:#59606a;
+  font-weight:720;
+  cursor:pointer;
+}
+
+.casepath-artifact-canvas [data-agent-history-accepted-ids]>div{
+  display:grid;
+  gap:4px;
+  max-height:112px;
+  margin-top:7px;
+  overflow:auto;
+}
+
+.casepath-artifact-canvas [data-agent-history-accepted-ids] code{
+  color:#59606a;
+  font:500 8px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;
+  overflow-wrap:anywhere;
+}
+
+.casepath-artifact-canvas [data-agent-history-rejections]{
+  margin:0 18px 10px;
+  padding:10px 0;
+  border-top:1px solid #e3e5e8;
+  border-bottom:1px solid #e3e5e8;
+  color:#59606a;
+  font-size:9px;
+}
+
+.casepath-artifact-canvas [data-agent-history-rejections] ul{
+  display:grid;
+  gap:7px;
+  margin:8px 0 0;
+  padding:0;
+  list-style:none;
+}
+
+.casepath-artifact-canvas [data-agent-history-rejections] li{
+  display:grid;
+  gap:2px;
+}
+
+.casepath-artifact-canvas [data-agent-history-rejections] strong,
+.casepath-artifact-canvas [data-agent-history-rejections] span{
+  overflow-wrap:anywhere;
+}
+
+.casepath-artifact-canvas [data-agent-history-rejections] strong{color:#343840}
+.casepath-artifact-canvas [data-agent-history-rejections] span{color:#707680;font-size:8px}
+
 .casepath-artifact-canvas [data-agent-history-receipt]{
   margin:0 18px 20px;
   padding-top:10px;
@@ -3681,13 +3740,28 @@ body[data-casepath-moment="later-result"] .casepath-artifact-canvas .ac-process-
 }
 
 .casepath-artifact-canvas .ac-source-prelude-strip i{
-  display:block;
-  width:18px;
-  height:22px;
+  display:grid;
+  place-items:center;
+  width:24px;
+  height:24px;
   margin-bottom:10px;
-  border:1px solid var(--ac-line-strong);
-  border-radius:3px;
-  background:linear-gradient(135deg,#fff 0 72%,var(--ac-soft) 72%);
+  border:1px solid var(--ac-line);
+  border-radius:6px;
+  background:#fafafa;
+  color:#656c75;
+  font-style:normal;
+}
+
+.casepath-artifact-canvas .ac-source-prelude-strip i svg{
+  width:16px;
+  height:16px;
+  overflow:visible;
+  fill:none;
+  stroke:currentColor;
+  stroke-width:1.55;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+  vector-effect:non-scaling-stroke;
 }
 
 .casepath-artifact-canvas .ac-source-prelude-strip small,
@@ -3793,8 +3867,18 @@ body[data-casepath-moment="later-result"] .casepath-artifact-canvas .ac-process-
   -webkit-box-decoration-break:clone;
 }
 
+.casepath-artifact-canvas .ac-source-exact-control{
+  all:unset;
+  display:inline;
+  color:inherit;
+  font:inherit;
+  line-height:inherit;
+  text-align:inherit;
+  text-decoration:none;
+}
+
 .casepath-artifact-canvas .ac-fact-reading-target.is-awaiting-click,
-.casepath-artifact-canvas .ac-build-source-reading mark.is-awaiting-click{
+.casepath-artifact-canvas .ac-source-exact-control.is-awaiting-click{
   cursor:pointer;
   outline:1px dashed transparent;
   outline-offset:3px;
@@ -3802,7 +3886,8 @@ body[data-casepath-moment="later-result"] .casepath-artifact-canvas .ac-process-
 
 .casepath-artifact-canvas .ac-fact-reading-target.is-awaiting-click:hover,
 .casepath-artifact-canvas .ac-fact-reading-target.is-awaiting-click:focus-visible,
-.casepath-artifact-canvas .ac-build-source-reading mark.is-awaiting-click:hover{
+.casepath-artifact-canvas .ac-source-exact-control.is-awaiting-click:hover,
+.casepath-artifact-canvas .ac-source-exact-control.is-awaiting-click:focus-visible{
   outline-color:var(--ac-line-strong);
 }
 
@@ -5113,7 +5198,8 @@ html[data-casepath-release="20.0.0"] body[data-casepath-artifact-canvas="ready"]
 }
 
 .casepath-artifact-canvas .ac-source-page-excerpt>span,
-.casepath-artifact-canvas .ac-source-page-excerpt>mark{
+.casepath-artifact-canvas .ac-source-page-excerpt>mark,
+.casepath-artifact-canvas .ac-source-page-excerpt>button{
   display:inline;
 }
 
@@ -5122,12 +5208,12 @@ html[data-casepath-release="20.0.0"] body[data-casepath-artifact-canvas="ready"]
   font-weight:700;
 }
 
-.casepath-artifact-canvas .ac-source-page-excerpt>mark.is-awaiting-click{
+.casepath-artifact-canvas .ac-source-page-excerpt>button.ac-source-exact-control[data-source-exact-control="true"]{
   color:inherit;
   font-weight:400;
 }
 
-.casepath-artifact-canvas .ac-source-page-excerpt>mark.is-highlighted{
+.casepath-artifact-canvas .ac-source-page-excerpt>mark.ac-source-exact-mark.is-highlighted[data-source-exact-mark="true"]{
   color:#17191c;
   font-weight:700;
 }

@@ -136,6 +136,14 @@
     evidence: '<path d="M3.5 7.5h6l2-2h9v14h-17z"></path><path d="m8 13 2.2 2.2 4.6-5"></path>',
     audit: '<path d="M12 3 20 6v5c0 5.1-3.1 8.5-8 10-4.9-1.5-8-4.9-8-10V6z"></path><path d="m8.5 12 2.2 2.2 4.8-5"></path>',
   });
+  const SOURCE_TYPE_ICONS = Object.freeze({
+    message: '<path d="M4 5.5h16v11H9l-4.5 3v-3H4z"></path><path d="M8 10h.01M12 10h.01M16 10h.01"></path>',
+    document: '<path d="M6 3.5h8l4 4v13H6z"></path><path d="M14 3.5v4h4M9 12h6M9 16h6"></path>',
+    email: '<rect x="3.5" y="5.5" width="17" height="13" rx="1.5"></rect><path d="m4.5 7 7.5 6 7.5-6"></path>',
+    photo: '<rect x="3.5" y="4.5" width="17" height="15" rx="1.5"></rect><circle cx="9" cy="9" r="1.5"></circle><path d="m5.5 17 4.5-4 3 2.5 2.5-2 3 3.5"></path>',
+    timeline: '<path d="M7 4v16M7 7h8M7 12h11M7 17h7"></path><circle cx="7" cy="7" r="1.5"></circle><circle cx="7" cy="12" r="1.5"></circle><circle cx="7" cy="17" r="1.5"></circle>',
+    delivery: '<path d="M6 3.5h8l4 4v13H6z"></path><path d="M14 3.5v4h4M9 13l2 2 4-4"></path>',
+  });
   const CURSOR_AVATARS = Object.freeze({
     ...AGENT_ICONS,
     casepath: '<path d="M17.5 7.5A7 7 0 1 0 17.5 16.5"></path><path d="M10 9h5M10 15h5"></path>',
@@ -339,6 +347,7 @@
     groundingOpen: false,
     manualNodeInspection: false,
     agentAuditOpenId: '',
+    agentAuditReturnFocus: null,
     cursorCommit: null,
     lastCursorKey: '',
     lastCursorChangeId: '',
@@ -1560,7 +1569,13 @@
       </div>`;
     }
     const sourceWindow = sourceTextWindow(ref);
-    return `<div class="ac-source-document-preview">${documentHead}<blockquote class="ac-source-passage ac-source-page-excerpt">${sourceWindow.before ? `<span>${esc(sourceWindow.before)}</span>` : ''}<mark class="ac-fact-reading-target${interactive ? ' is-awaiting-click' : ''}${highlighted ? ' is-highlighted' : ''}" ${targetAttributes}>${esc(sourceWindow.exact || finding)}</mark>${sourceWindow.after ? `<span>${esc(sourceWindow.after)}</span>` : ''}</blockquote></div>`;
+    const exactText = esc(sourceWindow.exact || finding);
+    const exactMarkup = highlighted
+      ? `<mark class="ac-fact-reading-target ac-source-exact-mark is-highlighted" data-source-exact-mark="true">${exactText}</mark>`
+      : interactive
+        ? `<button type="button" class="ac-fact-reading-target ac-source-exact-control is-awaiting-click" data-source-exact-control="true" ${targetAttributes}>${exactText}</button>`
+        : `<span class="ac-source-exact-text">${exactText}</span>`;
+    return `<div class="ac-source-document-preview">${documentHead}<blockquote class="ac-source-passage ac-source-page-excerpt">${sourceWindow.before ? `<span>${esc(sourceWindow.before)}</span>` : ''}${exactMarkup}${sourceWindow.after ? `<span>${esc(sourceWindow.after)}</span>` : ''}</blockquote></div>`;
   }
 
   function finishFactSourceTour(items) {
@@ -1940,6 +1955,27 @@
     return `<strong>${esc(visible.join(' · '))}</strong>${returned.length > visible.length ? `<span>+${returned.length - visible.length} more returned</span>` : ''}`;
   }
 
+  function acceptedIdsMarkup(entry) {
+    const acceptedIds = unique([...asArray(entry?.accepted_ids), ...asArray(entry?.accepted_item_ids)]
+      .map(value => String(value || '').trim()).filter(Boolean));
+    if (!acceptedIds.length) return '';
+    return `<details data-agent-history-accepted-ids data-accepted-count="${esc(acceptedIds.length)}"><summary>Accepted IDs · ${esc(acceptedIds.length)}</summary><div>${acceptedIds.map(acceptedId => `<code data-accepted-item-id="${esc(acceptedId)}">${esc(acceptedId)}</code>`).join('')}</div></details>`;
+  }
+
+  function rejectedItemsMarkup(entry) {
+    const returned = [...asArray(entry?.rejected), ...asArray(entry?.rejected_items)].flatMap(item => {
+      const rejected = asObject(item);
+      if (!rejected) return [];
+      const itemId = String(rejected.item_id || rejected.fact_id || rejected.id || rejected.rejected_id || '').trim();
+      if (!itemId) return [];
+      const invariant = String(rejected.invariant || rejected.error_invariant || '').trim();
+      const reason = String(rejected.reason || rejected.rejection_reason || '').trim();
+      return [{ itemId, invariant, reason }];
+    });
+    if (!returned.length) return '';
+    return `<details data-agent-history-rejections data-rejected-count="${esc(returned.length)}"><summary>Rejected items · ${esc(returned.length)}</summary><ul>${returned.map(item => `<li data-rejected-item-id="${esc(item.itemId)}" data-rejected-invariant="${esc(item.invariant)}"><strong>${esc(item.itemId)}</strong>${item.invariant || item.reason ? `<span>${esc([item.invariant, item.reason].filter(Boolean).join(' · '))}</span>` : ''}</li>`).join('')}</ul></details>`;
+  }
+
   function renderAgentAudit() {
     const panel = state.root?.querySelector('[data-ac-agent-audit]');
     if (!panel) return;
@@ -1960,28 +1996,34 @@
     const runId = document.body.dataset.casepathActiveRunId || '';
     const receipt = history?.entry || {};
     const sources = history?.sourceIds.map(sourceId => sourceId.startsWith('art_') || ['message', 'intake'].includes(sourceId) ? sourceDisplayTitle(sourceId) : sourceId) || [];
+    const acceptedIds = acceptedIdsMarkup(receipt);
+    const rejectedItems = rejectedItemsMarkup(receipt);
     panel.innerHTML = `<header><div><span data-agent-signature="${esc(agent.signature)}"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">${AGENT_ICONS[agent.signature] || ''}</svg></span><div><small>${esc(agent.label)}</small><h2 id="artifactAgentAuditTitle">${esc(agent.short)} activity</h2></div></div><button type="button" data-ac-action="close-agent-audit" aria-label="Close agent activity">×</button></header>
       ${history ? `<ol class="ac-agent-history" data-agent-history-contract="casepath.agent-history/1.0.0" data-run-id="${esc(runId)}" data-agent-id="${esc(agentId)}">
         <li data-agent-history-task><i>1</i><div><small>Task</small><strong>${esc(agent.task)}</strong><span>${esc(agent.why)}</span></div></li>
         <li data-agent-history-sources><i>2</i><div><small>${esc(history.sourcesLabel)}</small>${compactHistoryList(sources, history.emptySources)}</div></li>
         <li data-agent-history-facts><i>3</i><div><small>${agentId === 'canonical_facts' ? 'Extracted' : 'Used'}</small>${compactHistoryList(history.extracted, 'No bounded item returned')}</div></li>
         <li data-agent-history-output><i>4</i><div><small>Produced</small><strong>${esc(history.output.replaceAll('_', ' '))}</strong>${compactHistoryList(history.affected, 'No downstream entity returned')}</div></li>
-        <li data-agent-history-acceptance><i>5</i><div><small>Accepted</small><strong>${esc(String(receipt.outcome || 'outcome not returned').replaceAll('_', ' '))}</strong><span>${esc(String(receipt.accepted_count ?? 0))} accepted · ${esc(String(receipt.rejected_count ?? 0))} rejected${receipt.deterministic_fallback_applied === true ? ' · CasePath replaced rejected fields' : ''} · next: ${esc(history.downstream)}</span></div></li>
-      </ol><details data-agent-history-receipt><summary>Technical receipt</summary><dl><div><dt>Call</dt><dd>${esc(receipt.call_id || 'not returned')}</dd></div><div><dt>Output hash</dt><dd>${esc(receipt.output_artifact_hash || 'not returned')}</dd></div><div><dt>Fallback</dt><dd>${esc(String(receipt.deterministic_fallback_applied === true))}</dd></div></dl></details>`
+        <li data-agent-history-acceptance><i>5</i><div><small>Accepted</small><strong>${esc(String(receipt.outcome || 'outcome not returned').replaceAll('_', ' '))}</strong><span>${esc(String(receipt.accepted_count ?? 0))} accepted · ${esc(String(receipt.rejected_count ?? 0))} rejected${receipt.deterministic_fallback_applied === true ? ' · CasePath replaced rejected fields' : ''} · next: ${esc(history.downstream)}</span>${acceptedIds}</div></li>
+      </ol>${rejectedItems}<details data-agent-history-receipt><summary>Technical receipt</summary><dl><div><dt>Call</dt><dd>${esc(receipt.call_id || 'not returned')}</dd></div><div><dt>Output hash</dt><dd>${esc(receipt.output_artifact_hash || 'not returned')}</dd></div><div><dt>Fallback</dt><dd>${esc(String(receipt.deterministic_fallback_applied === true))}</dd></div></dl></details>`
         : `<div class="ac-agent-history-empty"><small>Activity record</small><strong>${audit?.executed === false ? 'No agent calls were made in this reference replay.' : 'Call-bound history has not been returned yet.'}</strong><p>${audit?.executed === false ? 'This screen replays accepted reference output; it does not invent agent activity.' : 'This panel will fill only when exact call receipts arrive.'}</p></div>`}`;
   }
 
   function openAgentAudit(agentId) {
     if (!AGENTS[agentId]) return;
+    if (document.activeElement instanceof HTMLElement) state.agentAuditReturnFocus = document.activeElement;
     state.agentAuditOpenId = agentId;
     renderHeader();
     renderAgentAudit();
   }
 
   function closeAgentAudit() {
+    const returnFocus = state.agentAuditReturnFocus;
     state.agentAuditOpenId = '';
+    state.agentAuditReturnFocus = null;
     renderHeader();
     renderAgentAudit();
+    if (returnFocus?.isConnected) returnFocus.focus();
   }
 
   function renderHeader() {
@@ -2631,8 +2673,11 @@
 
   function spatialGroundingMarkup(node) {
     const directFact = relevantFact(directFactsForNode(node));
-    const fact = directFact || relevantFact(factsForNode(node));
-    const ref = representativeFactRef(directFact);
+    const connectedFacts = factsForNode(node);
+    const fact = node?.node_id === 'intake'
+      ? connectedFacts.find(candidate => String(candidate?.fact_id || '') === 'fact_customer_objective') || relevantFact(connectedFacts)
+      : directFact || relevantFact(connectedFacts);
+    const ref = representativeFactRef(fact);
     const nodeLaws = lawsForNode(node);
     const laws = [nodeLaws.find(isOfficialLaw), nodeLaws.find(item => !isOfficialLaw(item))].filter(Boolean);
     const evidence = relevantEvidence(evidenceForNode(node.node_id));
@@ -2669,10 +2714,11 @@
   }
 
   function nodeInspectionBasis(node) {
-    const nodeFacts = directFactsForNode(node);
+    const directNodeFacts = directFactsForNode(node);
+    const nodeFacts = factsForNode(node);
     const fact = node?.node_id === 'intake'
       ? nodeFacts.find(candidate => String(candidate?.fact_id || '').includes('customer_objective')) || relevantFact(nodeFacts)
-      : relevantFact(nodeFacts);
+      : relevantFact(directNodeFacts);
     const ref = representativeFactRef(fact);
     const law = relevantLaw(lawsForNode(node));
     const isCausationBranch = CAUSATION_BRANCH_LAYOUT.some(([branchNodeId]) => branchNodeId === node.node_id);
@@ -2775,7 +2821,7 @@
     const interactionAttributes = highlighted ? '' : common;
     const fallbackFinding = highlighted
       ? `<strong><mark class="is-highlighted">${esc(basis.finding)}</mark></strong>`
-      : `<strong><mark class="is-awaiting-click" data-ac-inspection-read-target="true">${esc(basis.finding)}</mark></strong>`;
+      : `<strong><button type="button" class="ac-source-exact-control is-awaiting-click" data-source-exact-control="true" data-ac-inspection-read-target="true">${esc(basis.finding)}</button></strong>`;
     const extractedLabel = basis.fact?.label || (basis.sourceLabel === 'official Swiss law' ? 'Legal question' : 'Decision basis');
     const extractedValue = basis.fact?.value || basis.relation || basis.finding;
     const fullSourceAction = highlighted && basis.ref
@@ -3009,20 +3055,29 @@
     </article>`;
   }
 
+  function sourcePreludeType(title, mediaType) {
+    const semanticName = String(title || '').toLowerCase();
+    const semanticType = String(mediaType || '').toLowerCase();
+    if (semanticType.startsWith('image/') || /photo|photograph|image/.test(semanticName)) return ['photo', 'Photo'];
+    if (/timeline|chronology/.test(semanticName)) return ['timeline', 'Timeline'];
+    if (/delivery|receipt|confirmation/.test(semanticName)) return ['delivery', 'Delivery proof'];
+    if (semanticType.includes('message') || /email|e-mail|landlord|management reply|letter/.test(semanticName)) return ['email', 'Email'];
+    return ['document', /pdf/.test(semanticType) ? 'PDF' : 'Document'];
+  }
+
   function sourcePreludeMarkup({ readyToInspect = false } = {}) {
     const artifacts = asArray(state.claim?.artifacts);
     const sources = [
-      { title: 'Customer message', kind: 'Message' },
-      ...artifacts.map(artifact => ({
-        title: artifact.title || artifact.filename || artifact.artifact_id || 'Source file',
-        kind: String(artifact.media_type || '').startsWith('image/')
-          ? 'Image'
-          : String(artifact.media_type || '').includes('message') ? 'Message' : 'Document',
-      })),
+      { title: 'Customer message', type: 'message', kind: 'Message' },
+      ...artifacts.map(artifact => {
+        const title = artifact.title || artifact.filename || artifact.artifact_id || 'Source file';
+        const [type, kind] = sourcePreludeType(title, artifact.media_type);
+        return { title, type, kind };
+      }),
     ];
     return `<article class="ac-source-prelude" data-ac-focal-object="source-prelude" data-source-count="${esc(sources.length)}" data-ac-cursor-target="true">
       <header><span>${readyToInspect ? 'Source package ready' : 'Opening source package'}</span><strong>${esc(sources.length)} originals · no conclusions yet</strong></header>
-      <div class="ac-source-prelude-strip" aria-label="Claim sources being prepared">${sources.map((source, index) => `<span style="--source-order:${index}" data-source-kind="${esc(source.kind.toLowerCase())}"><i aria-hidden="true"></i><small>${esc(source.kind)}</small><strong>${esc(source.title)}</strong></span>`).join('')}</div>
+      <div class="ac-source-prelude-strip" aria-label="Claim sources being prepared">${sources.map((source, index) => `<span style="--source-order:${index}" data-source-kind="${esc(source.type)}"><i data-source-icon-kind="${esc(source.type)}" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false" data-source-type-icon="${esc(source.type)}">${SOURCE_TYPE_ICONS[source.type] || SOURCE_TYPE_ICONS.document}</svg></i><small>${esc(source.kind)}</small><strong>${esc(source.title)}</strong></span>`).join('')}</div>
       <footer><i aria-hidden="true"></i><span>${readyToInspect ? 'Starting with the exact passage that supports the first fact.' : 'Preserving each file before inspection.'}</span></footer>
     </article>`;
   }
@@ -3176,7 +3231,6 @@
     return `<article class="ac-stage-focus ac-agent-artifact" data-ac-focal-object="agent-artifact" data-agent-id="${esc(agentId)}" data-call-id="${esc(valueFrom(event, 'call_id', 'callId'))}" data-output-artifact="${esc(returnedOutput)}" ${finalLineage} data-ac-cursor-target="true">
       <span>Specialist ${agent.order} of 6 · ${esc(agent.label)}</span>
       <h3>${esc(agent.task)}</h3>
-      <p>${esc(agent.why)}</p>
       <strong>Produced · ${esc(artifactLabel)}</strong>
     </article>`;
   }
