@@ -187,6 +187,8 @@ def test_document_plan_exposes_all_items_as_graph_derived_chains() -> None:
     assert "Next: simulated review of one process decision · not expert approval" in focus
     assert "function continueToExpertReview()" in focus
     assert "new CustomEvent('casepath:begin-review')" in focus
+    assert "await waitText('#journeyNext', /Review document plan/i" in browser_gate
+    assert "await waitText('#journeyNext', /Review the proposed playbook/i" not in browser_gate
     assert "Ready exposes Review document plan as its sole primary action" in browser_gate
     assert "Open Document plan has exactly one primary action: Continue to review" in browser_gate
     assert "Continue to review closes the plan and reaches simulated review" in browser_gate
