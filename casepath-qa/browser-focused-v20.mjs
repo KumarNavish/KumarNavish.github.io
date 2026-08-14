@@ -113,6 +113,17 @@ const REQUIRED_CAUSATION_BRANCH_IDS = Object.freeze([
   'mixed_cause',
   'evidence_gap',
 ]);
+const PROCESS_NODE_PROGRESS_CONTRACT = 'casepath.process-node-progress/1.0.0';
+const PROCESS_NODE_PROGRESS_SCOPE = 'visible_evidence_bound_construction';
+const PROCESS_NODE_PROGRESS_SEQUENCE = Object.freeze([
+  Object.freeze({ phase: 'search', percent: 0, visible: true }),
+  Object.freeze({ phase: 'read', percent: 38, visible: true }),
+  Object.freeze({ phase: 'extract', percent: 72, visible: true }),
+  Object.freeze({ phase: 'form', percent: 90, visible: true }),
+  Object.freeze({ phase: 'complete', percent: 100, visible: true }),
+  Object.freeze({ phase: 'cleared', percent: 100, visible: false }),
+]);
+const MIN_PROCESS_NODE_PROGRESS_CLEAR_GAP_MS = 170;
 const LATER_MEMORY_VALIDATION_CONTRACT = 'casepath.later-memory-validation/1.0.0';
 const EXPECTED_LATER_MEMORY_DELTA = Object.freeze({
   nodeIds: ['ventilation_dispute'],
@@ -2728,6 +2739,78 @@ function processProjectionContractViolations(changes, semanticEvents, cursorStep
   return issues;
 }
 
+function processNodeProgressContractViolations(progressEvents, nodeChanges, branchVisuals, finalState, production = true) {
+  const issues = [];
+  const expectedAgentId = production ? 'process_decision_mapping' : 'process_projection';
+  const expectedRootAgentId = production ? 'process_decision_mapping' : '';
+  const expectedVisualAgentId = 'process_decision_mapping';
+  const expectedEntities = [
+    ...FLAGSHIP_PROCESS_PROJECTION_IDS.map(nodeId => ({ entityKind: 'node', nodeId, branchId: '' })),
+    ...REQUIRED_CAUSATION_BRANCH_IDS.map(nodeId => ({ entityKind: 'branch', nodeId, branchId: '' })),
+  ];
+  const entityKey = item => `${item.entityKind}:${item.nodeId}`;
+  const expectedSequence = PROCESS_NODE_PROGRESS_SEQUENCE.map(({ phase, percent, visible }) => ({ phase, percent, visible }));
+  const grouped = new Map();
+  for (const event of progressEvents || []) {
+    const key = entityKey(event);
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(event);
+  }
+  if (stableJson([...grouped.keys()]) !== stableJson(expectedEntities.map(entityKey))) {
+    issues.push('progress does not cover the ten spine nodes and four causation branches in order');
+  }
+  const nodeOutputs = new Map((nodeChanges || []).map(item => [`node:${item.entityId}`, item]));
+  const branchOutputs = new Map((branchVisuals || []).map(item => [`branch:${item.nodeId}`, item]));
+
+  expectedEntities.forEach(entity => {
+    const key = entityKey(entity);
+    const events = grouped.get(key) || [];
+    if (stableJson(events.map(({ phase, percent, visible }) => ({ phase, percent, visible }))) !== stableJson(expectedSequence)) {
+      issues.push(`${key}: progress sequence is not exactly search 0, read 38, extract 72, form 90, complete 100, cleared 100`);
+    }
+    if (events.some(event => event.contract !== PROCESS_NODE_PROGRESS_CONTRACT || event.scope !== PROCESS_NODE_PROGRESS_SCOPE)) issues.push(`${key}: progress contract or scope drift`);
+    const visibleEvents = events.filter(item => item.visible === true);
+    visibleEvents.forEach(event => {
+      if (event.indicatorDomCount !== 1 || event.indicatorVisibleCount !== 1 || event.indicatorVisible !== true || event.indicatorInsideCursor !== true) issues.push(`${key}:${event.phase}: one visible progress indicator is not inside the agent cursor`);
+      if (event.indicatorPercent !== event.percent || event.indicatorPhase !== event.phase) issues.push(`${key}:${event.phase}: progress UI does not equal the emitted state`);
+      if (event.rootProgressState !== 'active' || event.processProgressState !== 'active'
+        || event.rootPercent !== String(event.percent) || event.processPercent !== String(event.percent)
+        || event.rootPhase !== event.phase || event.processPhase !== event.phase
+        || event.rootNodeId !== entity.nodeId || event.processNodeId !== entity.nodeId) issues.push(`${key}:${event.phase}: root/process progress datasets drift from the visible indicator`);
+      if (event.cursorSignature !== 'process' || event.cursorAgent !== REQUIRED_DESKTOP_AGENT_LABELS.process_decision_mapping
+        || event.activeAgentId !== expectedRootAgentId || event.visualActiveAgentId !== expectedVisualAgentId
+        || event.agentId !== expectedAgentId) issues.push(`${key}:${event.phase}: progress is not visibly owned by Process builder`);
+      if (event.outputVisible) issues.push(`${key}:${event.phase}: output appears before progress clears`);
+    });
+    const percentages = visibleEvents.map(item => item.percent);
+    if (percentages.some((value, index) => index > 0 && value < percentages[index - 1])) issues.push(`${key}: progress is not monotonic`);
+    const identities = new Set(events.map(item => `${item.changeId}:${item.eventId}:${item.agentId}`));
+    if (identities.size !== 1 || !events.every(item => nonemptyString(item.changeId) && nonemptyString(item.eventId))) issues.push(`${key}: progress identity is missing or changes during analysis`);
+    if (entity.entityKind === 'branch' && (new Set(events.map(item => item.branchId)).size !== 1 || !events.every(item => nonemptyString(item.branchId)))) issues.push(`${key}: branch progress identity drift`);
+
+    const complete = events.find(item => item.phase === 'complete');
+    const cleared = events.find(item => item.phase === 'cleared');
+    if (!complete || complete.percent !== 100 || complete.visible !== true || complete.indicatorVisible !== true) issues.push(`${key}: 100 percent was not visibly reached`);
+    if (!cleared || cleared.percent !== 100 || cleared.visible !== false || cleared.indicatorVisible || cleared.indicatorVisibleCount !== 0
+      || cleared.rootProgressState !== 'idle' || cleared.processProgressState !== 'idle' || cleared.outputVisible) issues.push(`${key}: progress was not cleared while the output was still absent`);
+
+    const output = entity.entityKind === 'node' ? nodeOutputs.get(key) : branchOutputs.get(key);
+    if (!output) {
+      issues.push(`${key}: no resulting process output was observed`);
+      return;
+    }
+    if (cleared && output.at - cleared.at < MIN_PROCESS_NODE_PROGRESS_CLEAR_GAP_MS) issues.push(`${key}: output did not wait after the progress indicator cleared`);
+    if (output.indicatorVisible || output.indicatorVisibleCount !== 0 || output.rootProgressState !== 'idle' || output.processProgressState !== 'idle') issues.push(`${key}: progress indicator remains visible when the output appears`);
+    if (output.outputVisible !== true) issues.push(`${key}: resulting process output was not visible after progress cleared`);
+    if (events.length && (output.changeId !== events[0].changeId || output.eventId !== events[0].eventId || output.agentId !== events[0].agentId)) issues.push(`${key}: progress identity is not bound to its resulting output`);
+  });
+
+  if (!finalState || finalState.indicatorVisible || finalState.indicatorVisibleCount !== 0
+    || finalState.rootProgressState !== 'idle' || finalState.processProgressState !== 'idle'
+    || finalState.rootPercent || finalState.processPercent) issues.push('completed process leaves progress visible or active');
+  return [...new Set(issues)];
+}
+
 function sourceInspectionContractViolations(inspections, highlights, changes, branchVisuals, cursorSteps, runResult, production = true) {
   const issues = [];
   const expectedAgent = production ? 'process_decision_mapping' : 'process_projection';
@@ -3420,6 +3503,7 @@ async function execute() {
     window.__casepathFocusViolations = [];
     window.__casepathSemanticEvents = [];
     window.__casepathArtifactChanges = [];
+    window.__casepathProcessNodeProgress = [];
     window.__casepathSourceHighlights = [];
     window.__casepathSourceInspections = [];
     window.__casepathBranchVisuals = [];
@@ -3458,6 +3542,39 @@ async function execute() {
       });
     });
     const visible = node => Boolean(node && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden' && getComputedStyle(node).display !== 'none');
+    window.__casepathProcessNodeProgressUi = (nodeId = '', entityKind = 'node') => {
+      const root = document.querySelector('#artifactCanvas');
+      const graph = document.querySelector('#artifactProcessGraph');
+      const process = root?.querySelector('[data-ac-process]');
+      const cursor = root?.querySelector('#artifactAgentCursor');
+      const indicators = [...(cursor?.querySelectorAll('[data-ac-process-node-progress]') || [])];
+      const indicator = indicators[0] || null;
+      const escapedNodeId = CSS.escape(String(nodeId || ''));
+      const output = entityKind === 'branch'
+        ? graph?.querySelector(`[data-spatial-role~="branch"][data-node-id="${escapedNodeId}"]`)
+        : graph?.querySelector(`[data-node-id="${escapedNodeId}"][data-reveal-state="visible"]`);
+      return {
+        indicatorDomCount: indicators.length,
+        indicatorVisibleCount: indicators.filter(visible).length,
+        indicatorVisible: visible(indicator),
+        indicatorInsideCursor: Boolean(indicator && cursor?.contains(indicator)),
+        indicatorPercent: Number.parseInt(indicator?.dataset.progress || '', 10),
+        indicatorPhase: indicator?.dataset.phase || '',
+        cursorSignature: cursor?.dataset.agentSignature || '',
+        cursorAgent: cursor?.querySelector('[data-ac-cursor-agent]')?.textContent?.trim() || '',
+        activeAgentId: root?.dataset.activeAgentId || '',
+        visualActiveAgentId: root?.dataset.visualActiveAgentId || '',
+        rootProgressState: root?.dataset.processNodeProgressState || '',
+        rootPercent: root?.dataset.processNodeProgress || '',
+        rootPhase: root?.dataset.processNodeProgressPhase || '',
+        rootNodeId: root?.dataset.processNodeProgressNodeId || '',
+        processProgressState: process?.dataset.processNodeProgressState || '',
+        processPercent: process?.dataset.processNodeProgress || '',
+        processPhase: process?.dataset.processNodeProgressPhase || '',
+        processNodeId: process?.dataset.processNodeProgressNodeId || '',
+        outputVisible: visible(output),
+      };
+    };
     const geometryRect = node => {
       const value = node.getBoundingClientRect();
       return { left: value.left, top: value.top, right: value.right, bottom: value.bottom, width: value.width, height: value.height };
@@ -3811,6 +3928,26 @@ async function execute() {
         at: performance.now(),
       });
     });
+    window.addEventListener('casepath:process-node-progress', event => {
+      const detail = event.detail || {};
+      window.__casepathProcessNodeProgress.push({
+        contract: detail.contract || '',
+        scope: detail.scope || '',
+        processId: detail.processId || '',
+        entityKind: detail.entityKind || '',
+        nodeId: detail.nodeId || '',
+        branchId: detail.branchId || '',
+        phase: detail.phase || '',
+        percent: detail.percent,
+        label: detail.label || '',
+        visible: detail.visible === true,
+        changeId: detail.changeId || '',
+        eventId: detail.eventId || '',
+        agentId: detail.agentId || '',
+        ...window.__casepathProcessNodeProgressUi(detail.nodeId, detail.entityKind),
+        at: performance.now(),
+      });
+    });
     window.addEventListener('casepath:artifact-change', event => {
       const detail = event.detail || {};
       const graph = document.querySelector('#artifactProcessGraph');
@@ -3842,6 +3979,7 @@ async function execute() {
           activeSourceLocator: document.querySelector('[data-source-dock-state]')?.dataset.activeSourceLocator || '',
         } : null,
         nodeStates,
+        ...window.__casepathProcessNodeProgressUi(detail.entityId, 'node'),
         focus: artifactCanvasFocusSnapshot('artifact-change'),
         at: performance.now(),
       });
@@ -3994,6 +4132,7 @@ async function execute() {
         changeId: detail.changeId || '',
         eventId: detail.eventId || '',
         agentId: detail.agentId || '',
+        ...window.__casepathProcessNodeProgressUi(detail.nodeId, 'branch'),
         at: performance.now(),
       });
     });
@@ -4073,7 +4212,7 @@ async function execute() {
   check('Current QA destination is guarded by exact live API identity and an atomic hash-bound report/manifest attestation', loadedFlagshipSource.includes("const qaEvidenceBase = 'https://casepath-guided-canonical-qa.onrender.com'") && loadedFlagshipSource.includes('function releaseEvidenceAttested(') && loadedFlagshipSource.includes("fetch(`${apiBase}/healthz`") && loadedFlagshipSource.includes("api?.source_commit === commit") && loadedFlagshipSource.includes('reportIdentities.every(value => value === commit)') && loadedFlagshipSource.includes('report?.failed === 0') && loadedFlagshipSource.includes('manifest?.source_commit === commit') && loadedFlagshipSource.includes('report.evidence.manifest.sha256 === manifestBinding.sha256') && loadedFlagshipSource.includes('report.evidence.manifest.bytes === manifestBinding.bytes') && loadedFlagshipSource.includes('retainedEvidenceComplete(report, manifest)') && loadedFlagshipSource.includes("link.dataset.evidenceState = 'attested'"));
   check('Loaded release contains no false reviewed-v4 lifecycle claim', !falseReviewedV4Claim.test(loadedFlagshipSource));
   check('Loaded release contains no false image-extraction, model-legal, or live-retrieval authority copy', !falseGroundingAuthority.test(loadedFlagshipSource));
-  check('Loaded release truthfully defines a deterministic post-learning held-out comparison without calling the fixture unseen or claiming another model run', !falseHeldOutNovelty.test(loadedFlagshipSource) && /held-out later demo claim/i.test(loadedFlagshipSource) && /excluded from the simulated review and memory construction/i.test(loadedFlagshipSource) && /after learning was frozen/i.test(loadedFlagshipSource) && /flagship above is the live six-agent nemotron analysis/i.test(loadedFlagshipSource) && /deterministic application layer/i.test(loadedFlagshipSource) && /without another model run/i.test(loadedFlagshipSource));
+  check('Loaded release truthfully defines a deterministic post-learning held-out comparison without calling the fixture unseen or claiming another model run', !falseHeldOutNovelty.test(loadedFlagshipSource) && /held-out later demo claim/i.test(loadedFlagshipSource) && /the later claim remains source-isolated while eligible guidance is evaluated/i.test(loadedFlagshipSource) && /frozen memory receipt \+ later demo claim/i.test(loadedFlagshipSource) && /the earlier result came from six call-bound specialist agents/i.test(loadedFlagshipSource) && /deterministic comparison · no second model run/i.test(loadedFlagshipSource) && /this comparison makes no new model call/i.test(loadedFlagshipSource));
   const evidenceControl = await page.locator('#browserEvidenceLink').evaluate(node => ({
     tag: node.tagName,
     state: node.dataset.evidenceState,
@@ -4144,7 +4283,12 @@ async function execute() {
   const identityMapEnd = specialistFocusSource.indexOf('\n  });', identityMapStart);
   const identityMapSource = specialistFocusSource.slice(identityMapStart, identityMapEnd);
   const declaredAgentIds = [...identityMapSource.matchAll(/^\s{4}([a-z_]+): \{/gm)].map(match => match[1]);
-  check('Desktop cursor presents the agreed six simple agent names while preserving exact IDs, monograms, and distinct signatures', identitySourceIssues.length === 0 && exactMembers(declaredAgentIds, REQUIRED_NEMOTRON_AGENT_IDS) && new Set(Object.values(REQUIRED_NEMOTRON_AGENT_SIGNATURES).map(value => value.monogram)).size === 6 && new Set(Object.values(REQUIRED_NEMOTRON_AGENT_SIGNATURES).map(value => value.signature)).size === 6, JSON.stringify({ declaredAgentIds, identitySourceIssues }));
+  const cursorAvatarSignatures = Object.values(REQUIRED_NEMOTRON_AGENT_SIGNATURES).map(value => value.signature);
+  const cursorAvatarsAreDistinct = cursorAvatarSignatures.every(signature => artifactCanvasSource.includes(`${signature}: '<`))
+    && artifactCanvasSource.includes('const CURSOR_AVATARS = Object.freeze({')
+    && artifactCanvasSource.includes('data-ac-cursor-avatar')
+    && artifactCanvasSource.includes('function setCursorAvatar(');
+  check('Desktop cursor presents the agreed six simple agent names and six distinct specialist avatars while preserving exact IDs, monograms, and signatures', identitySourceIssues.length === 0 && exactMembers(declaredAgentIds, REQUIRED_NEMOTRON_AGENT_IDS) && new Set(Object.values(REQUIRED_NEMOTRON_AGENT_SIGNATURES).map(value => value.monogram)).size === 6 && new Set(cursorAvatarSignatures).size === 6 && cursorAvatarsAreDistinct, JSON.stringify({ declaredAgentIds, identitySourceIssues, cursorAvatarsAreDistinct }));
   check('Seven visible chapters remain presentation phases with explicit execution authority, not a synthetic seven-agent team', REQUIRED_PRESENTATION_PHASE_LABELS.every(fragment => specialistFocusSource.includes(`label: '${fragment}'`)) && ['dataset.casepathSpecialist', 'dataset.workAuthority'].every(fragment => specialistFocusSource.includes(fragment)));
   check('Cursor motion is keyed to semantic event/agent/phase/target identity, suppresses replay, and emits one inspectable step without class-mutation feedback', specialistFocusSource.includes('const activationKey =') && specialistFocusSource.includes("cursor.dataset.eventId || cursor.dataset.proofEventId || moment") && specialistFocusSource.includes("cursor.dataset.agentId || 'casepath'") && specialistFocusSource.includes('cursorPhase') && specialistFocusSource.includes('emittedActivationKeys.has(activationKey)') && specialistFocusSource.includes('cursorTargetKey(target)') && specialistFocusSource.includes("new CustomEvent('casepath:cursor-step'") && specialistFocusSource.includes("['is-clicking', 'v21-agent-target']") && specialistFocusSource.includes("attributeOldValue: true") && !specialistFocusSource.includes("requestAnimationFrame(() => cursor.classList.add('is-clicking'))"));
   check('Every successful call-bound specialist owns one receipt-bound artifact target instead of relabelling an unrelated canvas', ['function ownedArtifactMarkup(', 'data-agent-artifact-target="true"', 'data-agent-artifact-owner=', 'data-actor-type=', 'data-call-id=', 'data-output-artifact=', 'data-requested-model=', 'data-response-model=', "event.actorType !== 'nemotron_agent'", 'Official-law tabs remain a separate deterministic cached registry view.'].every(fragment => specialistFocusSource.includes(fragment)));
@@ -4540,6 +4684,10 @@ async function execute() {
   const factSourceCinematicIssues = factSourceCinematicContractViolations(factSourceCinematicSteps, sourceHighlights, sourceInspections, artifactChanges);
   check('Each claim fact opens neutrally, waits for an exact confirm click, emits source-highlighted, then becomes a finding after a readable dwell', factSourceCinematicIssues.length === 0, JSON.stringify({ contract: FACT_SOURCE_CINEMATIC_CONTRACT, factSourceCinematicSteps, factSourceHighlights: sourceHighlights.filter(item => item.entityKind === 'fact'), factSourceCinematicIssues }));
   const branchVisuals = await page.evaluate(() => window.__casepathBranchVisuals || []);
+  const processNodeProgressEvents = await page.evaluate(() => window.__casepathProcessNodeProgress || []);
+  const processNodeProgressFinal = await page.evaluate(() => window.__casepathProcessNodeProgressUi?.('', 'node') || null);
+  const processNodeProgressIssues = processNodeProgressContractViolations(processNodeProgressEvents, processArtifactChanges, branchVisuals, processNodeProgressFinal, isProductionJourney());
+  check('Process builder alone shows one evidence-bound 0–100% indicator, clears it before each of ten decisions and four outcomes appears, then leaves no loader behind', processNodeProgressIssues.length === 0, JSON.stringify({ contract: PROCESS_NODE_PROGRESS_CONTRACT, scope: PROCESS_NODE_PROGRESS_SCOPE, processNodeProgressEvents, processNodeProgressFinal, processNodeProgressIssues }));
   const sourceInspectionIssues = sourceInspectionContractViolations(sourceInspections, sourceHighlights, processArtifactChanges, branchVisuals, artifactCursorSteps, processRun.result, isProductionJourney());
   check('Before every process node and causation branch appears, a confirm click visibly highlights the exact source, finding, or accepted input that earns it', sourceInspectionIssues.length === 0, JSON.stringify({ sourceHighlights, sourceInspections, branchVisuals, sourceInspectionIssues }));
   const branchInspectionCopy = await page.evaluate(() => window.__casepathBranchInspectionCopy || []);
@@ -5065,6 +5213,9 @@ async function execute() {
       documentStatus: chain.dataset.documentStatus || '',
       statusIcon: chain.querySelector('.v20-chain-status i')?.textContent?.trim() || '',
       statusLabel: chain.querySelector('.v20-chain-status strong')?.textContent?.trim() || '',
+      documentIconKind: chain.querySelector('.v20-document-name')?.dataset.documentIconKind || '',
+      documentIconCount: chain.querySelectorAll('.v20-document-name .v20-document-type-icon').length,
+      documentIconAriaHidden: chain.querySelector('.v20-document-type-icon')?.getAttribute('aria-hidden') || '',
       evidenceTitle: chain.dataset.evidenceTitle || '',
       documentOptions: chain.dataset.documentOptions || '',
       artifactIds: chain.dataset.artifactIds || '',
@@ -5117,6 +5268,17 @@ async function execute() {
     itemIds: expectedDocumentItems.filter(item => documentKind(item) === kind).map(item => item.item_id),
   })).filter(group => group.itemIds.length);
   check('All 21 requirements visibly partition into exact status groups with needed first and missing or received icons', stableJson(renderedStatusProjection) === stableJson(expectedStatusProjection) && stableJson(documentPlanProjection.groups) === stableJson(expectedGroups) && documentPlanProjection.groups[0]?.kind === 'needed' && documentPlanProjection.groups.every(group => group.visible) && stableJson(documentPlanProjection.filterStatuses) === stableJson({ all: '', available: 'received', needed: 'missing', conditional: 'conditional', 'not-needed': 'not-required' }) && documentPlanProjection.chains.filter(chain => chain.documentStatus === 'missing').every(chain => chain.statusIcon === '×') && documentPlanProjection.chains.filter(chain => chain.documentStatus === 'received').every(chain => chain.statusIcon === '✓'), JSON.stringify({ expectedStatusProjection, renderedStatusProjection, expectedGroups, groups: documentPlanProjection.groups, filterStatuses: documentPlanProjection.filterStatuses }));
+  const documentIconKinds = new Set(['contract', 'mail', 'inspection', 'image', 'timeline', 'invoice', 'medical', 'legal', 'delivery', 'generic']);
+  const expectedRepresentativeDocumentIcons = new Map([
+    ['claim_message', 'mail'],
+    ['lease', 'contract'],
+    ['proof_of_delivery', 'delivery'],
+    ['dated_photos', 'image'],
+    ['recurrence_chronology', 'timeline'],
+    ['technical_assessment', 'inspection'],
+    ['financial_impact', 'invoice'],
+  ]);
+  check('Every document name has one restrained semantic type icon while status remains separate', documentPlanProjection.chains.every(chain => chain.documentIconCount === 1 && chain.documentIconAriaHidden === 'true' && documentIconKinds.has(chain.documentIconKind) && nonemptyString(chain.statusIcon)) && [...expectedRepresentativeDocumentIcons].every(([itemId, expectedKind]) => documentPlanProjection.chains.find(chain => chain.itemId === itemId)?.documentIconKind === expectedKind), JSON.stringify(documentPlanProjection.chains.map(chain => ({ itemId: chain.itemId, icon: chain.documentIconKind, count: chain.documentIconCount, status: chain.statusIcon }))));
   check('Every document row preserves process question to fact to evidence to document to status in that order', documentPlanProjection.chains.every(chain => stableJson(chain.rowParts) === stableJson(['decision', 'fact', 'evidence', 'document', 'status']) && stableJson(chain.parts.map(part => part.part)) === stableJson(['decision', 'fact', 'evidence', 'document']) && chain.parts.every(part => nonemptyString(part.strong) && nonemptyString(part.detail)) && nonemptyString(chain.documentStatus) && nonemptyString(chain.statusLabel)), JSON.stringify(documentPlanProjection.chains));
   check('Evidence needs and document forms are not reversed', documentPlanProjection.chains.every(chain => {
     const evidencePart = chain.parts.find(part => part.part === 'evidence');
@@ -6163,6 +6325,80 @@ async function runContractSelfTest() {
   const deterministicProjection = processProjectionFixture.map(item => ({ ...item, agentId: 'process_projection' }));
   const deterministicCursor = processCursorFixture.map(item => ({ ...item, agentId: 'process_projection' }));
   if (processProjectionContractViolations(deterministicProjection, processSemanticFixture, deterministicCursor, false).length) throw new Error('Truthful deterministic process projection fixture was rejected');
+
+  const progressEntityFixture = [
+    ...FLAGSHIP_PROCESS_PROJECTION_IDS.map(nodeId => ({ entityKind: 'node', nodeId, branchId: '' })),
+    ...REQUIRED_CAUSATION_BRANCH_IDS.map((nodeId, index) => ({ entityKind: 'branch', nodeId, branchId: ['building-defect', 'tenant-use', 'mixed-cause', 'insufficient'][index] })),
+  ];
+  const progressFixture = progressEntityFixture.flatMap((entity, entityIndex) => {
+    const identity = {
+      changeId: `progress-change:${entity.nodeId}`,
+      eventId: `progress-event:${entity.nodeId}`,
+      agentId: 'process_projection',
+    };
+    return PROCESS_NODE_PROGRESS_SEQUENCE.map((step, stepIndex) => ({
+      contract: PROCESS_NODE_PROGRESS_CONTRACT,
+      scope: PROCESS_NODE_PROGRESS_SCOPE,
+      processId: 'process-progress-fixture',
+      ...entity,
+      ...identity,
+      ...step,
+      label: step.phase === 'cleared' ? '' : step.phase,
+      indicatorDomCount: 1,
+      indicatorVisibleCount: step.visible ? 1 : 0,
+      indicatorVisible: step.visible,
+      indicatorInsideCursor: true,
+      indicatorPercent: step.percent,
+      indicatorPhase: step.visible ? step.phase : '',
+      cursorSignature: 'process',
+      cursorAgent: REQUIRED_DESKTOP_AGENT_LABELS.process_decision_mapping,
+      activeAgentId: '',
+      visualActiveAgentId: 'process_decision_mapping',
+      rootProgressState: step.visible ? 'active' : 'idle',
+      rootPercent: step.visible ? String(step.percent) : '',
+      rootPhase: step.visible ? step.phase : '',
+      rootNodeId: step.visible ? entity.nodeId : '',
+      processProgressState: step.visible ? 'active' : 'idle',
+      processPercent: step.visible ? String(step.percent) : '',
+      processPhase: step.visible ? step.phase : '',
+      processNodeId: step.visible ? entity.nodeId : '',
+      outputVisible: false,
+      at: (entityIndex * 10000) + (stepIndex * 350),
+    }));
+  });
+  const progressOutputFixture = entity => {
+    const cleared = progressFixture.find(item => item.entityKind === entity.entityKind && item.nodeId === entity.nodeId && item.phase === 'cleared');
+    return {
+      nodeId: entity.nodeId,
+      entityId: entity.nodeId,
+      branchId: entity.branchId,
+      changeId: cleared.changeId,
+      eventId: cleared.eventId,
+      agentId: cleared.agentId,
+      indicatorVisible: false,
+      indicatorVisibleCount: 0,
+      rootProgressState: 'idle',
+      processProgressState: 'idle',
+      outputVisible: true,
+      at: cleared.at + MIN_PROCESS_NODE_PROGRESS_CLEAR_GAP_MS + 10,
+    };
+  };
+  const progressNodeOutputFixture = progressEntityFixture.filter(item => item.entityKind === 'node').map(progressOutputFixture);
+  const progressBranchOutputFixture = progressEntityFixture.filter(item => item.entityKind === 'branch').map(progressOutputFixture);
+  const progressFinalFixture = { indicatorVisible: false, indicatorVisibleCount: 0, rootProgressState: 'idle', processProgressState: 'idle', rootPercent: '', processPercent: '' };
+  if (processNodeProgressContractViolations(progressFixture, progressNodeOutputFixture, progressBranchOutputFixture, progressFinalFixture, false).length) throw new Error('Valid evidence-bound process-node progress fixture was rejected');
+  const missingProgressPhaseFixture = progressFixture.filter(item => !(item.nodeId === 'causation' && item.phase === 'extract'));
+  if (!processNodeProgressContractViolations(missingProgressPhaseFixture, progressNodeOutputFixture, progressBranchOutputFixture, progressFinalFixture, false).some(issue => issue.includes('progress sequence is not exactly'))) throw new Error('Process progress with a missing extraction phase was accepted');
+  const wrongProgressOwnerFixture = structuredClone(progressFixture);
+  wrongProgressOwnerFixture.find(item => item.nodeId === 'intake' && item.phase === 'read').cursorSignature = 'facts';
+  if (!processNodeProgressContractViolations(wrongProgressOwnerFixture, progressNodeOutputFixture, progressBranchOutputFixture, progressFinalFixture, false).some(issue => issue.includes('not visibly owned by Process builder'))) throw new Error('Process progress owned by the wrong specialist was accepted');
+  const prematureProgressOutputFixture = structuredClone(progressFixture);
+  prematureProgressOutputFixture.find(item => item.nodeId === 'responsibility' && item.phase === 'cleared').outputVisible = true;
+  if (!processNodeProgressContractViolations(prematureProgressOutputFixture, progressNodeOutputFixture, progressBranchOutputFixture, progressFinalFixture, false).some(issue => issue.includes('output was still absent'))) throw new Error('Process output visible before progress cleared was accepted');
+  const lingeringProgressOutputFixture = structuredClone(progressNodeOutputFixture);
+  lingeringProgressOutputFixture[0].indicatorVisible = true;
+  lingeringProgressOutputFixture[0].indicatorVisibleCount = 1;
+  if (!processNodeProgressContractViolations(progressFixture, lingeringProgressOutputFixture, progressBranchOutputFixture, progressFinalFixture, false).some(issue => issue.includes('remains visible when the output appears'))) throw new Error('Process progress still visible when the node appeared was accepted');
 
   const branchFixtureNodes = REQUIRED_CAUSATION_BRANCH_IDS.map(nodeId => ({ node_id: nodeId, fact_ids: [], legal_source_ids: [], evidence_requirement_ids: [] }));
   const inspectionRunFixture = { process: { nodes: [...FLAGSHIP_PROCESS_PROJECTION_IDS.map(nodeId => ({ node_id: nodeId, fact_ids: [], legal_source_ids: [], evidence_requirement_ids: [] })), ...branchFixtureNodes] }, facts: [] };
