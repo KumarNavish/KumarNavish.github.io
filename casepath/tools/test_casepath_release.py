@@ -67,6 +67,22 @@ def test_browser_gate_pins_complete_runtime_acceptance_criteria() -> None:
     assert "requires_learning_replay_proof: true" in criteria
 
 
+def test_local_preflight_is_loopback_deterministic_and_zero_provider() -> None:
+    wrapper = (
+        release_tool.REPOSITORY / "casepath-qa" / "run-local-preflight-v20.sh"
+    ).read_text(encoding="utf-8")
+
+    assert 'parsed.hostname not in {"127.0.0.1", "localhost", "::1"}' in wrapper
+    assert 'frontend.port != 4173' in wrapper
+    assert 'health.get("model_mode") != "deterministic_reference"' in wrapper
+    assert 'get("credential_configured") is not False' in wrapper
+    assert "CASEPATH_ALLOW_PRODUCTION_MUTATION=0" in wrapper
+    assert "node browser-guided-v13-smoke.mjs" in wrapper
+    assert "verify-runtime-causal-evidence" in wrapper
+    assert "local model ledger is not fresh" in wrapper
+    assert "post-journey model ledger is not exactly empty" in wrapper
+
+
 def test_loaded_precedent_renderers_preserve_exact_review_authority() -> None:
     assets = release_tool.REPOSITORY / "casepath" / "assets"
     precedent_renderer = (assets / "live-v16.js").read_text(encoding="utf-8")
@@ -157,23 +173,28 @@ def test_visual_grounding_qa_matches_rendered_authority_copy() -> None:
     assert "/not an exact quote/i" not in browser_gate
 
 
-def test_document_sheet_expands_hidden_multi_owner_item_before_reading_text() -> None:
+def test_document_plan_exposes_all_items_as_graph_derived_chains() -> None:
+    focus = (
+        release_tool.REPOSITORY / "casepath" / "assets" / "live-v20-focus.js"
+    ).read_text(encoding="utf-8")
     browser_gate = (
         release_tool.REPOSITORY / "casepath-qa" / "browser-focused-v20.mjs"
     ).read_text(encoding="utf-8")
-    expand = "renderedMultiOwner.locator('xpath=ancestor::details[not(@open)][1]')"
-    scroll = "await renderedMultiOwner.scrollIntoViewIfNeeded();"
-    visible = "await renderedMultiOwner.isVisible()"
-    read = "text: node.innerText"
-    assert expand in browser_gate
-    assert scroll in browser_gate
-    assert visible in browser_gate
-    assert read in browser_gate
-    expand_index = browser_gate.index(expand)
-    scroll_index = browser_gate.index(scroll, expand_index)
-    visible_index = browser_gate.index(visible, scroll_index)
-    read_index = browser_gate.index(read, scroll_index)
-    assert expand_index < scroll_index < visible_index < read_index
+    assert "Review document plan" in focus
+    assert "data-v20-guided-documents" in focus
+    assert "data-v20-continue-review" in focus
+    assert "Continue to review" in focus
+    assert "Next: simulated review of one process decision · not expert approval" in focus
+    assert "function continueToExpertReview()" in focus
+    assert "new CustomEvent('casepath:begin-review')" in focus
+    assert "Ready exposes Review document plan as its sole primary action" in browser_gate
+    assert "Open Document plan has exactly one primary action: Continue to review" in browser_gate
+    assert "Continue to review closes the plan and reaches simulated review" in browser_gate
+    assert "Document plan contains each of the exact 21 returned checklist items once" in browser_gate
+    assert "Every document row preserves process question to fact to evidence to document to status in that order" in browser_gate
+    assert "Each document chain preserves exact returned primary owner, ordered owners, path, fact, status, and item identity" in browser_gate
+    assert "Document status filters report exact returned counts" in browser_gate
+    assert ".v20-document-chain[data-item-id]" in browser_gate
 
 
 def test_v20_review_keeps_the_unverified_authority_disclosure_visible() -> None:
@@ -237,6 +258,16 @@ def test_north_star_review_and_learning_remain_graph_native() -> None:
     assert "No correction is claimed" in canvas
     assert "function reviewAppliedMarkup()" in canvas
     assert "function laterMemoryDeltaMarkup()" in canvas
+    assert 'data-memory-payoff="single-action"' in canvas
+    assert 'data-memory-status="unverified-case-memory"' in canvas
+    assert 'data-responsibility-state="blocked"' in canvas
+    assert 'data-shared-playbook-changed="false"' in canvas
+    assert "Saved lesson used on this claim" in canvas
+    assert "Check ventilation before assigning responsibility." in canvas
+    assert "Why the next handler is safer" not in canvas
+    assert "Cause still unproven · responsibility stays blocked · qualified review required." in canvas
+    assert "1 decision · 2 connections · 3 document needs" in canvas
+    assert "Later payoff shows one exact guarded action and keeps five technical effects behind closed Inspect proof" in browser_gate
     assert "function verificationGraphMarkup()" in canvas
     assert 'class="ac-graph-verification"' in canvas
     assert 'data-node-attachment-kind="verification"' in canvas
@@ -248,24 +279,45 @@ def test_north_star_review_and_learning_remain_graph_native() -> None:
     assert 'data-memory-id="${esc(memory.memoryId)}"' in canvas
     assert 'data-memory-status="${memory.available ? \'unverified_demo_memory\' : \'not-confirmed\'}"' in canvas
     assert "Saved as unverified case memory" in canvas
+    assert "Check ventilation allegations separately" in canvas
     assert "function laterCausalGraphMarkup()" in canvas
     assert 'class="ac-later-memory-retrieval"' in canvas
     assert 'data-later-causal-phase="memory"' in canvas
+    assert 'data-later-causal-phase="eligibility"' in canvas
+    assert 'data-later-source-opened="false"' in canvas
+    assert 'data-later-source-opened="true"' in canvas
     assert 'data-memory-origin-id="${esc(step.memoryOriginId)}"' in canvas
     assert "Unverified case memory retrieved" in canvas
-    assert "Now checking whether it applies." in canvas
+    assert 'item.dataset.memoryCandidate = \'true\'' in canvas
+    assert "Unverified case memory found · now checking whether it fits this claim." in canvas
     assert "casepath.later-causal-step/1.0.0" in canvas
     assert "casepath:later-causal-step" in canvas
     assert "const LATER_CAUSAL_STEP_CONTRACT = 'casepath.later-causal-step/1.0.0';" in flagship_renderer
+    assert "const LATER_CAUSAL_SOURCE_HOLD_MS = reduceMotion ? 2400 : 5200;" in flagship_renderer
+    assert "const LATER_CAUSAL_MEMORY_HOLD_MS = reduceMotion ? 1800 : 3000;" in flagship_renderer
+    assert "const LATER_CAUSAL_ELIGIBILITY_HOLD_MS = reduceMotion ? 1800 : 2800;" in flagship_renderer
+    assert "casepath:later-source-opened" in flagship_renderer
+    assert "casepath:later-causal-step-visible" in flagship_renderer
+    assert "await presentLaterCausalStep(sourceStep" in flagship_renderer
+    assert "await waitForTwoPaints()" in flagship_renderer
+    assert "[data-later-causal-phase=\"source\"] mark.is-highlighted" in flagship_renderer
+    assert ".attachment-row.is-active, .v21-source-summary-toggle.is-active" in flagship_renderer
+    assert "[data-later-causal-phase=\"memory\"]" in flagship_renderer
+    assert "[data-later-causal-phase=\"eligibility\"]" in flagship_renderer
     assert "function dispatchLaterCausalStep(detail)" in flagship_renderer
     assert "new CustomEvent('casepath:later-causal-step'" in flagship_renderer
     assert "phase: 'waiting'" in flagship_renderer
     assert "phase: 'source'" in flagship_renderer
     assert "phase: 'memory'" in flagship_renderer
+    assert "phase: 'eligibility'" in flagship_renderer
+    assert "Match confirmed" in canvas
+    assert "Same unresolved ventilation allegation" in canvas
     assert "fact.semantic_role !== 'management_ventilation_allegation'" in canvas
     assert "String(receipt?.target?.run_id || '') !== runId" in canvas
-    assert "markSubmissionSource(step.phase === 'source' ? step.ref.artifact_id : '')" in canvas
-    assert "What changed on this claim" in canvas
+    assert "clearActiveSource();" in canvas
+    assert "markSubmissionSource(step.ref.artifact_id);" in canvas
+    assert "casepath:later-source-opened" in canvas
+    assert "Saved lesson used on this claim" in canvas
     assert "casepathLearningReady === 'true'" in browser_gate
     assert "laterSourceStep?.activeSourceIds" in browser_gate
     assert 'data-memory-effect="node-added"' in canvas
@@ -280,10 +332,10 @@ def test_north_star_review_and_learning_remain_graph_native() -> None:
     assert "function graphNativeMomentSceneViolations" in browser_gate
     assert "Verification keeps the graph as the sole focal artifact" in browser_gate
     assert "Knowledge consolidation keeps the graph as the sole focal artifact" in browser_gate
-    assert "Later-work keeps the graph as the sole focal artifact" in browser_gate
+    assert "Later-work keeps the untouched graph central" in browser_gate
     assert "casepath.later-causal-step/1.0.0" in browser_gate
     assert "queueMicrotask(() => {" in browser_gate
-    assert "step.activeSourceIds = [...document.querySelectorAll('.attachment-row.is-active[data-artifact-id]')]" in browser_gate
+    assert "step.activeSourceIds = window.__casepathActiveSourceIds();" in browser_gate
     assert "memory effect identity" in browser_gate
     assert "exact returned node, fact, page and excerpt or region" in browser_gate
     assert "unresolved allegations or missing-fact paths" in browser_gate
@@ -349,15 +401,44 @@ def test_claim_understanding_visibly_binds_five_facts_to_exact_sources() -> None
     assert "root.dataset.factSourceTourState" in canvas
     assert "root.dataset.factSourceTourIndex" in canvas
     assert "data-fact-inspection-target=\"true\"" in canvas
+    assert 'data-fact-tour-phase="select-source"' in canvas
+    assert 'data-fact-tour-phase="read-source"' in canvas
+    assert 'data-fact-tour-phase="highlight-source"' in canvas
+    assert "state.factTourPhase = 'read-source'" in canvas
+    assert "state.factTourPhase = 'highlight-source'" in canvas
+    assert "emitInteraction('confirm-source', target)" in canvas
+    assert "casepath:source-highlighted" in canvas
     assert "entityKind: 'fact'" in canvas
     assert "Fact added from this source" in canvas
     assert "${sourceContextAttributes(fact, ref)} data-fact-id=" in canvas
     assert "ref?.authority || 'customer_submission'" in canvas
     assert "function factSourceTourContractViolations" in browser_gate
+    assert "function factSourceCinematicContractViolations" in browser_gate
+    assert "FACT_SOURCE_CINEMATIC_CONTRACT" in browser_gate
+    assert "window.__casepathFactSourceCinematicSteps" in browser_gate
     assert "exactReference?.authority || 'customer_submission'" in browser_gate
     assert "['customer_submission', 'generated_demo_reference_only'].includes(attachment.sourceAuthority)" in browser_gate
     assert "five fact source inspections did not arrive in order" in browser_gate
     assert "fact artifact does not retain the inspected source binding" in browser_gate
+    assert "source or fact is preselected before the agent click" in browser_gate
+    assert "neutral source read does not visibly follow the exact open-source click" in browser_gate
+    assert "exact source remains unconfirmed before highlight-source" in browser_gate
+    assert "casepath:source-highlighted is absent or not bound to the confirmed source" in browser_gate
+    assert "Valid select-read-confirm-highlight-finding cinematic fixture was rejected" in browser_gate
+    assert "Preselected source cinematic fixture was accepted" in browser_gate
+    assert "Prehighlighted neutral-read cinematic fixture was accepted" in browser_gate
+    assert "Highlight without an exact confirm click was accepted" in browser_gate
+    assert "function isRenderableVisualRef" in canvas
+    assert "String(artifact?.media_type || '').startsWith('image/')" in canvas
+    assert "String(artifact?.sha256 || '') === String(ref?.image_sha256 || '')" in canvas
+    assert "exactText(/residential use/i)" in canvas
+    assert "exactText(/arrange an inspection and repair/i)" in canvas
+    assert "exactText(/insufficient ventilation/i)" in canvas
+    assert "/independent|inspection/i" in canvas
+    assert "includes('customer_objective')" in canvas
+    assert 'class="ac-visual-region-target is-awaiting-click"' in canvas
+    assert 'class="ac-visual-region-target${highlighted' in canvas
+    assert 'data-ac-inspection-read-target="true"' in canvas
 
 
 def test_default_reference_surface_hides_ranking_numbers_but_keeps_audit_truth() -> None:
@@ -389,14 +470,14 @@ def test_default_reference_surface_hides_ranking_numbers_but_keeps_audit_truth()
     assert "score_basis_points" in browser_gate
 
 
-def test_flagship_timing_gate_is_the_70_to_100_second_band() -> None:
+def test_flagship_timing_gate_is_the_90_to_150_second_band() -> None:
     browser_gate = (
         release_tool.REPOSITORY / "casepath-qa" / "browser-focused-v20.mjs"
     ).read_text(encoding="utf-8")
-    assert "const MIN_FLAGSHIP_PRESENTATION_MS = 70000;" in browser_gate
-    assert "const MAX_FLAGSHIP_PRESENTATION_MS = 110000;" in browser_gate
+    assert "const MIN_FLAGSHIP_PRESENTATION_MS = 90000;" in browser_gate
+    assert "const MAX_FLAGSHIP_PRESENTATION_MS = 150000;" in browser_gate
     assert "MIN_PRODUCTION_FLAGSHIP_PRESENTATION_MS" not in browser_gate
-    assert "inside the 70–110 second production-tolerant north-star band" in browser_gate
+    assert "inside the 90–150 second deliberate desktop-story band" in browser_gate
 
 
 def test_flagship_surface_is_one_persistent_source_plus_artifact_canvas() -> None:
@@ -432,8 +513,21 @@ def test_flagship_surface_is_one_persistent_source_plus_artifact_canvas() -> Non
     assert "!state.graphRevealRunning && !state.graphDwell" in canvas
     assert "source-canvas" in canvas_css
     assert ".casepath-artifact-canvas" in canvas_css
+    assert '.casepath-artifact-canvas .ac-team{\n  display:flex;' in canvas_css
+    assert '[data-casepath-moment="start"] .email-body' in canvas_css
+    assert ".customer-email," in canvas_css
+    assert "display:none!important" in canvas_css
+    assert "start-claim-summary" not in index
+    assert "Management alleges insufficient ventilation and declines inspection" not in index
     assert "assets/artifact-canvas.css" in index
     assert "assets/artifact-canvas.js" in index
+    assert "assets/artifact-canvas.css?v=1.0.38" in index
+    assert "assets/artifact-canvas.js?v=1.0.49" in index
+    assert "factSourceTrailMarkup" in canvas
+    assert 'class="ac-source-inspection-trail"' in canvas
+    assert ".ac-source-inspection-trail" in canvas_css
+    assert ".ac-source-page-excerpt>mark.is-awaiting-click" in canvas_css
+    assert "opened sources do not accumulate in one ordered trail" in browser_gate
     assert index.index("assets/process-story.js") < index.index("assets/artifact-canvas.js")
     assert "source claim and work canvas are not simultaneously visible" in browser_gate
     assert "artifact canvas root was replaced" in browser_gate
@@ -472,15 +566,33 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "setAttribute('aria-current', 'step')" in canvas
     assert "tabIndex = state.visibleNodeIds.has(node.node_id) ? 0 : -1" in canvas
     assert 'aria-hidden="true" focusable="false" data-ac-spatial-edges' in canvas
-    assert "const GRAPH_NODE_DWELL_MS = 500;" in canvas
-    assert "const GRAPH_SOURCE_DWELL_MS = 650;" in canvas
-    assert "const GRAPH_BRANCH_SOURCE_DWELL_MS = 1100;" in canvas
+    assert "const GRAPH_NODE_DWELL_MS = 1300;" in canvas
+    assert "const GRAPH_SOURCE_DWELL_MS = 1900;" in canvas
+    assert "const GRAPH_BRANCH_SOURCE_DWELL_MS = 1900;" in canvas
     assert 'data-ac-inspection-target="true"' in canvas
+    assert 'data-inspection-phase="${esc(state.graphInspectionPhase)}"' in canvas
+    assert "state.graphInspectionPhase = 'highlight-source'" in canvas
+    assert "casepath:source-highlighted" in canvas
     assert "casepath:source-inspection" in canvas
     assert "casepath:branch-visualized" in canvas
     assert "ac-grounding-disclosure" in canvas
+    assert 'class="ac-node-source-preview' in canvas
+    assert "function sourceTextWindow(ref)" in canvas
+    assert "/api/artifacts/${encodeURIComponent(sourceId)}/extraction" in canvas
+    assert "sourceWindow.before" in canvas and "sourceWindow.after" in canvas
+    assert "artifact?.description" not in canvas
+    assert "Context ·" not in canvas
+    assert "const packageActive = ['message', 'intake'].includes(sourceId);" in canvas
+    assert "sourcePackage.dataset.activeSourceId = sourceId;" in canvas
+    assert "sourcePackage.setAttribute('aria-current', 'true');" in canvas
+    assert "Open original →" in canvas
     assert "data-ac-action=\"toggle-grounding\"" in canvas
-    assert "data-grounding-open" in canvas
+    assert 'data-grounding-open="false"' in canvas
+    assert 'aria-haspopup="dialog" aria-expanded="false"' in canvas
+    assert 'data-ac-grounding-viewer' in canvas
+    assert "detail.innerHTML = panel.innerHTML;" in canvas
+    assert "if (!viewer.open) viewer.showModal();" in canvas
+    assert "state.root.querySelector('[data-ac-grounding-viewer]')?.close();" in canvas
     assert "data-ac-law-viewer" in canvas
     assert "Cached official Swiss-law passage · qualified review pending" in canvas
     assert ".ac-law-viewer" in canvas_css
@@ -488,8 +600,126 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "Inspect this generated pattern" in canvas
     assert "['verify', 'review', 'review-applied', 'knowledge', 'later-work', 'later-result']" in canvas
     assert "['official_statute', 'official_guidance'].includes(law?.source_type)" in canvas
-    assert canvas.count("REDUCED_MOTION ? 0 : 560") == 1
+    assert "const CURSOR_TRAVEL_MS = 620;" in canvas
+    assert "const FACT_NEUTRAL_READ_DWELL_MS = 900;" in canvas
+    assert "sourceRailTarget(target.dataset.sourceId)" in canvas
+    assert "x > viewportWidth * .56" in canvas
+    assert "position:fixed;" in canvas_css
+    assert "state.lastCursorKey = '';\n        scheduleCursor();" in canvas
+    assert "One exact source at a time · no conclusion yet" in canvas
+    assert canvas.count("document.querySelectorAll('.is-agent-clicked').forEach") >= 2
+    assert "const CURSOR_SETTLE_MS = 260;" in canvas
+    assert canvas.count("REDUCED_MOTION ? 0 : CURSOR_TRAVEL_MS") == 1
+    assert canvas.count("REDUCED_MOTION ? 0 : CURSOR_SETTLE_MS") == 1
+    assert 'class="ac-cursor-park"' in canvas
+    assert "const parked = ['review-applied', 'knowledge', 'later-result'].includes(state.moment);" in canvas
+    assert "cursor.dataset.parked = String(parked);" in canvas
+    assert "if (parked) return;" in canvas
+    assert ".casepath-artifact-canvas .ac-process>.ac-cursor-park{" in canvas_css
+    assert '.casepath-artifact-canvas .ac-agent-cursor[data-parked="true"] .ac-agent-cursor-label{\n  opacity:0;' in canvas_css
+    assert 'data-ac-action="open-documents"' in canvas
+    assert "Documents created by this decision" in canvas
+    assert "Causation is unresolved" in canvas
+    assert "See all ${checklistCount} across the process" in canvas
+    assert "const CONCISE_GRAPH_STAGES = new Set(['read', 'evidence', 'experience', 'verify']);" in (
+        assets / "live-v16.js"
+    ).read_text(encoding="utf-8")
+    live_v17 = (assets / "live-v17.js").read_text(encoding="utf-8")
+    focus_v20 = (assets / "live-v20-focus.js").read_text(encoding="utf-8")
+    assert "toggle.dataset.sourceIds = 'message,intake';" in focus_v20
+    assert live_v17.index("title: 'Needed next'") < live_v17.index("title: 'Already available'")
+    assert "Only if a branch becomes relevant" in live_v17
+    assert 'class="v17-checklist-technical"' in live_v17
+    assert "<small>Process question</small>" in focus_v20
+    assert "<small>Fact to establish</small>" in focus_v20
+    assert "<small>Evidence needed</small>" in focus_v20
+    assert "<small>Document or record</small>" in focus_v20
+    assert 'data-document-model="complete-claim-record"' in focus_v20
+    assert 'data-document-group="${esc(kind)}"' in focus_v20
+    assert "const groupMarkup = ['needed', 'available', 'conditional', 'not-needed']" in focus_v20
+    assert 'data-document-status="${esc(statusPresentation.state)}"' in focus_v20
+    assert "{ state: 'received', icon: '✓', label: 'Received' }" in focus_v20
+    assert "{ state: 'missing', icon: '×', label: status === 'provided_insufficient' ? 'Incomplete' : 'Missing' }" in focus_v20
+    assert "copy.className = 'v17-checklist-item v20-document-chain'" in focus_v20
+    assert 'data-evidence-title=' in live_v17
+    assert 'data-document-options=' in live_v17
+    assert 'data-artifact-ids=' in live_v17
+    assert "const evidenceTitle = copy.dataset.evidenceTitle" in focus_v20
+    assert "const documentChoices = returnedDocuments.length ? returnedDocuments : documentOptions" in focus_v20
+    assert 'data-chain-part="decision"' in focus_v20
+    assert 'data-chain-part="fact"' in focus_v20
+    assert 'data-chain-part="evidence"' in focus_v20
+    assert 'data-chain-part="document"' in focus_v20
+    assert 'data-v20-document-filter="needed"' in focus_v20
+    assert "const selectedNodeId = '';" in focus_v20
+    assert '#artifactProcessGraph [data-ac-action="select-node"]' in focus_v20
+    assert "Document plan contains each of the exact 21 returned checklist items once" in browser_gate
+    assert "Claim documents opens as the complete 21-item evidence model with no hidden node filter" in browser_gate
+    assert "All 21 requirements visibly partition into exact status groups with needed first and missing or received icons" in browser_gate
+    assert "Every document row preserves process question to fact to evidence to document to status in that order" in browser_gate
+    assert "Evidence needs and document forms are not reversed" in browser_gate
+    assert "Each document chain preserves exact returned primary owner, ordered owners, path, fact, status, and item identity" in browser_gate
+    assert "Document chain returns to its exact graph node and no competing decision" in browser_gate
+    assert "function zoomOutDesktopContractViolations" in browser_gate
+    assert "REQUIRED_DESKTOP_SOURCE_MOMENTS" in browser_gate
+    assert "window.__casepathCaptureDesktopSourcePanel" in browser_gate
+    assert "toggleLooksDropdown" in browser_gate
+    assert "processNodeSourcePreviews" in browser_gate
+    assert "postConstructionSourceUse" in browser_gate
+    assert ".v21-source-summary-toggle.is-active[data-active-source-id]" in browser_gate
+    assert "window.__casepathActiveSourceIds" in browser_gate
+    assert "window.__casepathSourceTargetExists" in browser_gate
+    assert "inspectionSourceHasTarget" in browser_gate
+    assert "sourceHasTarget" in browser_gate
+    assert "basisKind" in browser_gate
+    assert "exactLocator" in browser_gate
+    assert "exactTitle" in browser_gate
+    assert "exactLocation" in browser_gate
+    assert "sourceWindowTruth" in browser_gate
+    assert "noGeneratedContext" in browser_gate
+    assert "exactPassage" in browser_gate
+    assert "Clicked process source without a matching active source target was accepted" in browser_gate
+    assert "Fact/source basis preview without a matching exact source target was accepted" in browser_gate
+    assert "Fact/source basis preview with an altered returned passage was accepted" in browser_gate
+    assert "Non-source basis preview with a fabricated source locator was accepted" in browser_gate
+    assert "Incomplete accepted-decision basis preview was accepted" in browser_gate
+    assert "contextual basis preview is not visible in the default graph state with modal grounding closed" in browser_gate
+    assert "human-readable returned reasoning path" in browser_gate
+    assert "basis preview overlaps" in browser_gate
+    assert "function processPreviewGeometryContractViolations" in browser_gate
+    assert "PROCESS_PREVIEW_BOTTOM_INSET_PX = 8" in browser_gate
+    for selector in (
+        ".ac-spatial-detail",
+        ".ac-build-inspection",
+        ".ac-visual-source-frame",
+        ".ac-source-page-excerpt",
+        ".ac-node-causal-chain",
+    ):
+        assert selector in browser_gate
+    assert "window.__casepathCaptureProcessPreviewGeometry" in browser_gate
+    assert "Every visible construction and completed source preview stays inside the 1440×900 process viewport with an 8px bottom inset" in browser_gate
+    assert "Bottom-clipped construction preview fixture was accepted" in browser_gate
+    assert "function groundingModalContractViolations" in browser_gate
+    assert "async function artifactGroundingModalSnapshot" in browser_gate
+    assert "grounding modal overlaps or obscures the persistent source rail" in browser_gate
+    assert "closing grounding did not restore one graph focus and one primary action" in browser_gate
+    assert "Exact document/evidence requirement remains actionable from the grounding modal" in browser_gate
+    assert "function settledCursorPayoffContractViolations" in browser_gate
+    assert "async function settledCursorPayoffSnapshot" in browser_gate
+    assert "syntheticClickCountAfterParking" in browser_gate
+    assert "Review-applied parks one visible cursor clear of the correction payoff and new ventilation node" in browser_gate
+    assert "Knowledge parks one visible cursor clear of the saved-memory payoff and ventilation node" in browser_gate
+    assert "Later result parks one visible cursor clear of the memory-effect payoff and added ventilation node" in browser_gate
+    assert "Tampered settled cursor payoff fixture was accepted" in browser_gate
+    assert 'data-grounding-open="true"' not in browser_gate
+    assert "return diagnostics.slice(0, 3);" in browser_gate
+    assert "Zoom-out desktop journey keeps sources visible and causal" in browser_gate
     assert ".ac-spatial-viewport" in canvas_css
+    assert ".casepath-artifact-canvas .ac-source-page-excerpt{" in canvas_css
+    assert "max-height:9.5em!important" in canvas_css
+    assert ".casepath-artifact-canvas .ac-grounding-viewer{" in canvas_css
+    assert "width:min(760px,calc(100vw - 332px));" in canvas_css
+    assert "body[data-casepath-artifact-canvas=\"ready\"] .v21-source-summary-toggle.is-active" in canvas_css
     assert '.ac-process-track li[data-spatial-role="hub"]' in canvas_css
     assert '.ac-spatial-edges path[data-spatial-path="uncertainty"]' in canvas_css
     assert ".ac-spatial-law-marker" in canvas_css and ".ac-evidence-relationship" in canvas_css
@@ -499,7 +729,7 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "spine is a vertical list instead of a horizontal process" in browser_gate
     assert "uncertainty branches do not physically diverge" in browser_gate
     assert "connector invents a process relationship" in browser_gate
-    assert "visible connector identities do not equal the returned process edges" in browser_gate
+    assert "visible connectors do not equal the human-readable returned reasoning path" in browser_gate
     assert "visible spatial objects overlap" in browser_gate
     assert "permanent node lineage is incomplete" in browser_gate
     assert "title is clipped or below 12px" in browser_gate
@@ -507,7 +737,10 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "evidence requirements are not physically below" in browser_gate
     assert "compact next action beneath the unresolved causation decision" in browser_gate
     assert "sourceInspectionContractViolations" in browser_gate
-    assert "the agent visibly inspects one exact source" in browser_gate
+    assert "a confirm click visibly highlights the exact source" in browser_gate
+    assert "highlight-source did not visibly precede the node inspection" in browser_gate
+    assert "highlight-source did not visibly precede the branch inspection" in browser_gate
+    assert "Node commit without source-highlighted was accepted" in browser_gate
     assert "source inspections did not precede all four causation branches in order" in browser_gate
     assert "factId: detail.factId || ''" in browser_gate
     assert "Valid claim-source inspection fixture was rejected" in browser_gate
@@ -560,7 +793,7 @@ def test_flagship_presentation_holds_work_and_artifacts_for_clarity() -> None:
     api_app = (
         release_tool.REPOSITORY / "casepath-api" / "casepath_api" / "app.py"
     ).read_text(encoding="utf-8")
-    assert "const PROCESS_STORY_TIMEOUT_MS = 75000;" in renderer
+    assert "const PROCESS_STORY_TIMEOUT_MS = 120000;" in renderer
     assert "const OFFICIAL_LAW_TOUR_TIMEOUT_MS = 120000;" in renderer
     assert "const AGENT_RECEIPT_BEAT_MS = reduceMotion ? 20 : 800;" in renderer
     assert "function waitForProcessStory()" in renderer
@@ -569,6 +802,15 @@ def test_flagship_presentation_holds_work_and_artifacts_for_clarity() -> None:
     assert "if (processStoryWaitPromise) return processStoryWaitPromise;" in renderer
     assert "const onStarted = () => armTimeout();" in renderer
     assert "if (processStoryDrawing()) armTimeout();" in renderer
+    assert "const noteDelay = () => {" in renderer
+    assert "Review remains locked until it completes." in renderer
+    process_wait = renderer[
+        renderer.index("  function waitForProcessStory()") : renderer.index(
+            "\n  function waitForProcessStoryOnce()"
+        )
+    ]
+    assert "finish('timed-out')" not in process_wait
+    assert "if (!processStoryComplete()) {" in renderer
     assert "window.removeEventListener('casepath:artifact-process-started', onStarted);" in renderer
     assert "const acceptedProjectionComplete = SIMPLIFIED_SPINE_IDS.every" in canvas
     assert "acceptedProjectionComplete ? 'complete' : 'pending'" in canvas
@@ -599,13 +841,14 @@ def test_flagship_presentation_holds_work_and_artifacts_for_clarity() -> None:
         agent_completion_start,
     )
     agent_completion = renderer[agent_completion_start:agent_completion_end]
-    assert "return 'background';" in agent_completion
-    assert "return 'receipt';" not in agent_completion
+    assert "return 'receipt';" in agent_completion
+    assert "return 'background';" not in agent_completion
     assert "announceRender" not in agent_completion
     assert "held_out_pipeline = ClaimPipeline(" in api_app
     assert "model_mode=MODEL_MODE_REFERENCE," in api_app
     assert "pace_seconds=0," in api_app
     assert "const BACKGROUND_BEAT_MS = reduceMotion ? 20 : 120;" in renderer
+    assert "const CURSOR_TARGET_MIN_HOLD_MS = 220;" in focus
     assert "const PRESENTABLE_STAGE_STATES = new Set([...SUCCESS_EVENT_STATES, 'candidate_prepared']);" in renderer
     assert "run?.process_candidate" in renderer
     assert "run?.checklist_candidate" in renderer
@@ -702,34 +945,47 @@ def test_cursor_exposes_exact_six_call_bound_agents_without_synthetic_seven() ->
     assets = release_tool.REPOSITORY / "casepath" / "assets"
     focus = (assets / "live-v20-focus.js").read_text(encoding="utf-8")
     focus_css = (assets / "live-v20-focus.css").read_text(encoding="utf-8")
+    canvas = (assets / "artifact-canvas.js").read_text(encoding="utf-8")
+    canvas_css = (assets / "artifact-canvas.css").read_text(encoding="utf-8")
     browser_gate = (
         release_tool.REPOSITORY / "casepath-qa" / "browser-focused-v20.mjs"
     ).read_text(encoding="utf-8")
     identities = {
-        "canonical_facts": ("Guarded Canonical Facts Agent", "CF", "facts"),
-        "orchestrator_plan": ("Nemotron Orchestrator", "OR", "orchestrator"),
+        "canonical_facts": ("Guarded Canonical Facts Agent", "Claim", "CF", "facts"),
+        "orchestrator_plan": ("Nemotron Orchestrator", "Plan", "OR", "orchestrator"),
         "document_source_integrity": (
             "Document and Source Integrity Agent",
+            "Sources",
             "DS",
             "sources",
         ),
         "process_decision_mapping": (
             "Process Decision Mapping Agent",
+            "Path",
             "PM",
             "process",
         ),
         "evidence_checklist": (
             "Evidence and Checklist Agent",
+            "Docs",
             "EC",
             "evidence",
         ),
-        "final_claim_brief_audit": ("Final Claim Brief Agent", "FB", "audit"),
+        "final_claim_brief_audit": ("Final Claim Brief Agent", "Check", "FB", "audit"),
+    }
+    visible_labels = {
+        "canonical_facts": "Claim reader",
+        "orchestrator_plan": "Work planner",
+        "document_source_integrity": "Source checker",
+        "process_decision_mapping": "Process builder",
+        "evidence_checklist": "Document finder",
+        "final_claim_brief_audit": "Result checker",
     }
     identity_start = focus.index("const NEMOTRON_AGENT_IDENTITIES = Object.freeze({")
     identity_end = focus.index("\n  });", identity_start)
     identity_source = focus[identity_start:identity_end]
     assert identity_source.count("order:") == 6
-    for agent_id, (role, monogram, signature) in identities.items():
+    for agent_id, (role, _short, monogram, signature) in identities.items():
         agent_start = identity_source.index(f"    {agent_id}: {{")
         following = [
             position
@@ -740,9 +996,10 @@ def test_cursor_exposes_exact_six_call_bound_agents_without_synthetic_seven() ->
         ]
         agent_end = min(following, default=len(identity_source))
         block = identity_source[agent_start:agent_end]
-        assert f"label: '{role}'" in block
+        assert f"label: '{visible_labels[agent_id]}'" in block
         assert f"monogram: '{monogram}'" in block
         assert f"signature: '{signature}'" in block
+        assert f"{agent_id}: '{role}'" in browser_gate
     assert "data-agent-id=\"${esc(currentIdentity ? currentEvent.actorId : '')}\"" in focus
     assert "currentEvent.actorType === 'nemotron_agent'" in focus
     assert "NEMOTRON_AGENT_IDENTITIES[currentEvent.actorId] || null" in focus
@@ -777,7 +1034,66 @@ def test_cursor_exposes_exact_six_call_bound_agents_without_synthetic_seven() ->
     assert "attributeOldValue: true" in focus
     assert "graphStepTarget" in focus
     assert "casepath:graph-step" in focus
-    assert "Cursor identities are the exact six call-bound Nemotron agents" in browser_gate
+    canvas_identity_start = canvas.index("  const AGENTS = Object.freeze({")
+    canvas_identity_end = canvas.index("\n  });", canvas_identity_start)
+    canvas_identity_source = canvas[canvas_identity_start:canvas_identity_end]
+    assert canvas_identity_source.count("order:") == 6
+    assert canvas.count('id="artifactAgentCursor"') == 1
+    assert 'aria-label="Specialist activity"' in canvas
+    assert 'aria-label="Six Nemotron specialist roles"' not in canvas
+    assert '[data-ac-agent-id="orchestrator_plan"]' in canvas_css
+    assert "display:none" in canvas_css
+    assert "data-ac-cursor-agent" in canvas
+    assert "data-ac-cursor-action" in canvas
+    assert "function specialistForCursorTarget(target)" in canvas
+    assert "let agentId = AGENTS[lineage?.agentId]" in canvas
+    assert "cursor.dataset.specialistBound = String(Boolean(specialist));" in canvas
+    assert "cursorActionLabel(identityTarget, specialist)" in canvas
+    for agent_id, (_audit_role, short, monogram, signature) in identities.items():
+        agent_start = canvas_identity_source.index(f"    {agent_id}: {{")
+        following = [
+            position
+            for other_id in identities
+            if other_id != agent_id
+            and (position := canvas_identity_source.find(
+                f"    {other_id}: {{", agent_start + 1
+            ))
+            >= 0
+        ]
+        agent_end = min(following, default=len(canvas_identity_source))
+        block = canvas_identity_source[agent_start:agent_end]
+        assert f"label: '{visible_labels[agent_id]}'" in block
+        assert f"short: '{short}'" in block
+        assert f"monogram: '{monogram}'" in block
+        assert f"signature: '{signature}'" in block
+    signature_colors = {
+        "facts": "#a81f22",
+        "orchestrator": "#3a4b66",
+        "sources": "#166b82",
+        "process": "#6947a8",
+        "evidence": "#9b6514",
+        "audit": "#207a54",
+    }
+    for signature, color in signature_colors.items():
+        assert (
+            f'.casepath-artifact-canvas .ac-team li[data-agent-signature="{signature}"]'
+            f'{{--agent-color:{color}}}'
+        ) in canvas_css
+        assert (
+            f'.casepath-artifact-canvas .ac-agent-cursor[data-agent-signature="{signature}"]'
+            f'{{--cursor-color:{color}}}'
+        ) in canvas_css
+    assert len(set(signature_colors.values())) == 6
+    assert '.casepath-artifact-canvas .ac-team{\n  display:flex;' in canvas_css
+    assert '.ac-agent-cursor[data-agent-signature="law"]' in canvas_css
+    assert '.ac-agent-cursor[data-agent-signature="reference"]' in canvas_css
+    assert '.ac-agent-cursor[data-agent-signature="gate"]' in canvas_css
+    assert "deterministic authority inherited model-call identity" in browser_gate
+    assert "visualActiveAgentId" in browser_gate
+    assert "root.dataset.activeAgentId = neutral ? '' : effectiveAgentId;" in canvas
+    assert "root.dataset.visualActiveAgentId = neutral?.visualAgentId" in canvas
+    assert "target-lineage producer role" in browser_gate
+    assert "Desktop cursor presents the agreed six simple agent names" in browser_gate
     assert "production cursor did not present exact six model identities" in browser_gate
 
 
@@ -933,21 +1249,21 @@ def test_later_result_keeps_returned_comparison_hashes_visible() -> None:
         and "display:none!important" in line
     )
     assert ".final-proof" not in hidden_later_result_rule
-    assert 'assets/live-v20-focus.css?v=20.0.10' in index
+    assert 'assets/live-v20-focus.css?v=20.0.19' in index
     assert 'id="stageCanvas" aria-busy="false" tabindex="0" aria-label="CasePath work canvas"' in index
     assert '.stage-canvas:focus-visible' in focus_css
     assert 'v20-artifact-header:has([data-v20-open-documents])' in focus_css
     assert 'justify-content:flex-end' in focus_css
-    assert 'assets/live-v20-focus.js?v=20.0.11' in index
+    assert 'assets/live-v20-focus.js?v=20.0.20' in index
     assert "const CURSOR_TARGET_MIN_HOLD_MS = 220;" in focus_js
     assert "elapsed < CURSOR_TARGET_MIN_HOLD_MS" in focus_js
     assert "const finalComparison = page.locator('#laterResult .final-proof');" in browser_gate
     assert "await finalComparison.isVisible()" in browser_gate
     assert "finalComparisonText.includes(proof.before.result_hash)" in browser_gate
     assert "finalComparisonText.includes(proof.after.result_hash)" in browser_gate
-    assert "Future-claim result visibly explains the exact bounded improvement in one concise line" in browser_gate
-    assert "Exact causal operations remain available behind Inspect proof" in browser_gate
-    assert "await page.locator('.v21-proof-details > summary').click();" in browser_gate
+    assert "Later payoff shows one exact guarded action and keeps five technical effects behind closed Inspect proof" in browser_gate
+    assert "Inspect proof reveals exactly two process links and three document-need effects" in browser_gate
+    assert "await laterProofDetails.locator(':scope > summary').click();" in browser_gate
     assert "await page.locator('.v21-progressive-details > summary').click();" in browser_gate
     assert "await page.locator('.v21-progressive-details summary').click();" not in browser_gate
 
@@ -7902,8 +8218,8 @@ def test_handoff_continuity_uses_structured_moments_without_translucent_text() -
         encoding="utf-8"
     )
     assert 'assets/live-v17-continuity.css?v=20.0.0' in index
-    assert 'assets/live-v16.js?v=20.0.19' in index
-    assert 'assets/live-v17.js?v=20.0.2' in index
+    assert 'assets/live-v16.js?v=20.0.25' in index
+    assert 'assets/live-v17.js?v=20.0.5' in index
     assert 'assets/live-v18.js?v=20.0.2' in index
     assert 'assets/live-v16.css?v=20.0.0' in index
 

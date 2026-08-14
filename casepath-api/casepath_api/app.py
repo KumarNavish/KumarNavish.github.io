@@ -79,6 +79,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "https://casepath.onrender.com",
         "https://casepath-swiss-claim-lab.onrender.com",
         "https://casepath-guided-v13-preview.onrender.com",
         "https://casepath-full-lifecycle-v15.onrender.com",
