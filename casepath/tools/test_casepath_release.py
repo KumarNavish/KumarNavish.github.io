@@ -320,6 +320,9 @@ def test_later_memory_presentation_fails_closed_without_validated_bridge() -> No
     assert "No memory-driven process change is claimed." in canvas
     assert "state.moment === 'later-result' && receipt && memoryOriginId" in canvas
     assert "function laterMemoryPresentationContractViolations" in browser_gate
+    assert "const laterResult = laterRun?.result || {};" in browser_gate
+    assert "laterGraphScene, later, true" in browser_gate
+    assert "Later-memory presentation with a forged run envelope was accepted" in browser_gate
     assert "Fail-closed presentation with visible memory effects was accepted" in browser_gate
 
 

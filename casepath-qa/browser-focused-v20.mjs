@@ -2581,11 +2581,12 @@ function memoryEffectContractViolations(effects, expectedOriginId) {
   return issues;
 }
 
-function laterMemoryPresentationContractViolations(validations, renderTimeline, scene, laterResult, expectedValidated = true) {
+function laterMemoryPresentationContractViolations(validations, renderTimeline, scene, laterRun, expectedValidated = true) {
   const issues = [];
   if (validations.length !== 1) issues.push(`validation event count ${validations.length}`);
   const validation = validations[0] || {};
   const laterRender = renderTimeline.find(item => item.moment === 'later-result');
+  const laterResult = laterRun?.result || {};
   const receipt = laterResult?.memory_application || {};
   if (validation.contract !== LATER_MEMORY_VALIDATION_CONTRACT) issues.push(`validation contract ${validation.contract || ''}`);
   if (!laterRender || !Number.isFinite(validation.at) || validation.at >= laterRender.at) issues.push('memory validation did not precede the later-result render');
@@ -2603,7 +2604,7 @@ function laterMemoryPresentationContractViolations(validations, renderTimeline, 
     if (validation[field] !== true) issues.push(`${field} was not true`);
   }
   if (validation.retrievedOnly !== false) issues.push('validated presentation remained retrieval-only');
-  if (!nonemptyString(validation.runId) || validation.runId !== laterResult?.run_id || validation.runId !== receipt?.target?.run_id) issues.push('validation run identity does not bind the returned receipt');
+  if (!nonemptyString(validation.runId) || validation.runId !== laterRun?.run_id || validation.runId !== receipt?.target?.run_id) issues.push('validation run identity does not bind the returned receipt');
   if (!nonemptyString(validation.applicationHash) || validation.applicationHash !== receipt?.application_hash || validation.applicationHash !== scene?.later_memory_application_hash) issues.push('validation application hash does not bind receipt and canvas');
   if (!nonemptyString(validation.memoryOriginId) || validation.memoryOriginId !== receipt?.source_memory?.memory_id) issues.push('validation memory origin does not bind the returned receipt');
   if (stableJson(validation.delta?.nodeIds) !== stableJson(EXPECTED_LATER_MEMORY_DELTA.nodeIds)
@@ -4431,7 +4432,7 @@ async function execute() {
   check('Future claim shows one memory-origin causal delta: one node, two edges, and three evidence changes', visibleMemoryEffectIssues.length === 0, JSON.stringify({ visibleMemoryEffects, visibleMemoryEffectIssues, expectedMemoryOrigin }));
   const laterMemoryValidations = await page.evaluate(() => window.__casepathLaterMemoryValidations || []);
   const renderTimeline = await page.evaluate(() => window.__casepathRenderTimeline || []);
-  const laterMemoryPresentationIssues = laterMemoryPresentationContractViolations(laterMemoryValidations, renderTimeline, laterGraphScene, later.result, true);
+  const laterMemoryPresentationIssues = laterMemoryPresentationContractViolations(laterMemoryValidations, renderTimeline, laterGraphScene, later, true);
   check('Later memory effects appear only after one receipt-bound validation event that precedes rendering and binds the exact returned delta', laterMemoryPresentationIssues.length === 0, JSON.stringify({ laterMemoryValidations, laterGraphScene, laterMemoryPresentationIssues }));
   const memoryUsed = later.result?.memory_application != null
     && later.result?.memory_used === true
@@ -5285,12 +5286,14 @@ async function runContractSelfTest() {
   emptyMemoryOrigin[0].origin_id = '';
   if (!memoryEffectContractViolations(emptyMemoryOrigin, 'memory:one').some(issue => issue.includes('memory origin'))) throw new Error('Empty future-claim memory origin was accepted');
 
-  const laterPresentationResultFixture = {
+  const laterPresentationRunFixture = {
     run_id: 'run:later',
-    memory_application: {
-      target: { run_id: 'run:later' },
-      application_hash: 'a'.repeat(64),
-      source_memory: { memory_id: 'memory:one' },
+    result: {
+      memory_application: {
+        target: { run_id: 'run:later' },
+        application_hash: 'a'.repeat(64),
+        source_memory: { memory_id: 'memory:one' },
+      },
     },
   };
   const laterValidationFixture = [{
@@ -5304,7 +5307,9 @@ async function runContractSelfTest() {
     memory_effects: memoryEffectsFixture, text: 'Case-specific memory changed the next step. Shared playbook unchanged.', root_text: 'Case-specific memory changed the next step. Shared playbook unchanged.',
   };
   const laterRenderFixture = [{ moment: 'later-result', at: 101 }];
-  if (laterMemoryPresentationContractViolations(laterValidationFixture, laterRenderFixture, laterSceneFixture, laterPresentationResultFixture, true).length) throw new Error('Valid later-memory presentation bridge fixture was rejected');
+  if (laterMemoryPresentationContractViolations(laterValidationFixture, laterRenderFixture, laterSceneFixture, laterPresentationRunFixture, true).length) throw new Error('Valid later-memory presentation bridge fixture was rejected');
+  const forgedLaterPresentationRun = { ...laterPresentationRunFixture, run_id: 'run:forged' };
+  if (!laterMemoryPresentationContractViolations(laterValidationFixture, laterRenderFixture, laterSceneFixture, forgedLaterPresentationRun, true).some(issue => issue.includes('run identity'))) throw new Error('Later-memory presentation with a forged run envelope was accepted');
   const failedClosedValidationFixture = [{
     ...laterValidationFixture[0], validated: false, applicationHash: '', memoryOriginId: '',
     delta: { nodeIds: [], edges: [], evidenceIds: [] },
@@ -5313,9 +5318,9 @@ async function runContractSelfTest() {
     later_memory_validated: 'false', later_memory_application_hash: '', memory_receipt_count: 0, memory_effects: [],
     text: 'No memory-driven change claimed', root_text: 'No memory-driven process change is claimed.',
   };
-  if (laterMemoryPresentationContractViolations(failedClosedValidationFixture, laterRenderFixture, failedClosedSceneFixture, laterPresentationResultFixture, false).length) throw new Error('Valid fail-closed later-memory presentation fixture was rejected');
+  if (laterMemoryPresentationContractViolations(failedClosedValidationFixture, laterRenderFixture, failedClosedSceneFixture, laterPresentationRunFixture, false).length) throw new Error('Valid fail-closed later-memory presentation fixture was rejected');
   const forgedFailedClosedScene = { ...failedClosedSceneFixture, memory_effects: memoryEffectsFixture };
-  if (!laterMemoryPresentationContractViolations(failedClosedValidationFixture, laterRenderFixture, forgedFailedClosedScene, laterPresentationResultFixture, false).some(issue => issue.includes('claimed memory effects'))) throw new Error('Fail-closed presentation with visible memory effects was accepted');
+  if (!laterMemoryPresentationContractViolations(failedClosedValidationFixture, laterRenderFixture, forgedFailedClosedScene, laterPresentationRunFixture, false).some(issue => issue.includes('claimed memory effects'))) throw new Error('Fail-closed presentation with visible memory effects was accepted');
 
   const reviewSceneFixture = {
     scene: 'review', graph_present: true, graph_visible: true, graph_same: true,
