@@ -5077,8 +5077,58 @@ html[data-casepath-release="20.0.0"] body[data-casepath-artifact-canvas="ready"]
 
 /* Payoff states stay graph-native, but their one consequence must be readable at a glance. */
 .casepath-artifact-canvas .ac-review-graph-edit{
-  width:360px;
+  width:430px;
   padding-bottom:15px;
+}
+
+.casepath-artifact-canvas .ac-review-question{
+  display:block;
+  margin-top:7px;
+  color:#202226;
+  font-size:13px;
+  line-height:1.35;
+}
+
+.casepath-artifact-canvas .ac-review-options{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:7px;
+  margin-top:10px;
+}
+
+.casepath-artifact-canvas .ac-review-options>button{
+  display:grid;
+  gap:3px;
+  min-height:58px;
+  padding:8px 9px;
+  border:1px solid #d8dce1;
+  border-radius:6px;
+  background:#fff;
+  color:#555c66;
+  text-align:left;
+  cursor:pointer;
+}
+
+.casepath-artifact-canvas .ac-review-options>button strong{
+  color:#202226;
+  font-size:10px;
+  line-height:1.3;
+}
+
+.casepath-artifact-canvas .ac-review-options>button span{
+  font-size:8.5px;
+  line-height:1.35;
+}
+
+.casepath-artifact-canvas .ac-review-options>button[aria-checked="true"]{
+  border-color:#a81f22;
+  background:#fff8f7;
+  box-shadow:inset 3px 0 0 #a81f22;
+}
+
+body[data-casepath-moment="review"] .casepath-artifact-canvas .ac-agent-cursor-label{
+  opacity:0!important;
+  pointer-events:none;
 }
 
 .casepath-artifact-canvas .ac-review-graph-edit>small,
@@ -5087,13 +5137,13 @@ html[data-casepath-release="20.0.0"] body[data-casepath-artifact-canvas="ready"]
 }
 
 .casepath-artifact-canvas .ac-review-change{
-  margin-top:10px;
+  margin-top:9px;
   font-size:14px;
 }
 
 .casepath-artifact-canvas .ac-review-graph-edit>p{
-  max-width:340px;
-  margin-top:10px;
+  max-width:410px;
+  margin-top:8px;
   font-size:11px;
   line-height:1.5;
 }
@@ -5538,6 +5588,65 @@ body[data-casepath-moment="later-result"] .casepath-artifact-canvas .ac-memory-a
   line-height:1.16;
   font-weight:720;
   letter-spacing:-.028em;
+}
+
+body[data-casepath-moment="later-result"] .casepath-artifact-canvas .ac-memory-causal-seam{
+  display:grid;
+  grid-template-columns:minmax(0,1.3fr) auto minmax(0,.8fr) auto minmax(0,.75fr);
+  align-items:stretch;
+  gap:8px;
+  margin:11px 0 12px;
+  padding:9px 0;
+  border-top:1px solid #e0e3e7;
+  border-bottom:1px solid #e0e3e7;
+}
+
+body[data-casepath-moment="later-result"] .casepath-artifact-canvas .ac-memory-causal-seam>div{
+  min-width:0;
+}
+
+body[data-casepath-moment="later-result"] .casepath-artifact-canvas .ac-memory-causal-seam>small,
+body[data-casepath-moment="later-result"] .casepath-artifact-canvas .ac-memory-causal-seam small{
+  display:block;
+  color:#6b727c;
+  font-size:7.5px;
+  line-height:1.3;
+  font-weight:700;
+  text-transform:uppercase;
+}
+
+body[data-casepath-moment="later-result"] .casepath-artifact-canvas .ac-memory-causal-seam strong{
+  display:-webkit-box;
+  margin-top:4px;
+  overflow:hidden;
+  color:#25282d;
+  font-size:9px;
+  line-height:1.35;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:3;
+}
+
+body[data-casepath-moment="later-result"] .casepath-artifact-canvas .ac-memory-causal-seam mark{
+  padding:1px 2px;
+  background:rgba(168,31,34,.1);
+  color:inherit;
+}
+
+body[data-casepath-moment="later-result"] .casepath-artifact-canvas .ac-memory-causal-seam>b{
+  align-self:center;
+  color:#a81f22;
+  font-size:12px;
+}
+
+/* During inspection, the source or requirement is the only active object. */
+.casepath-artifact-canvas[data-graph-inspecting="true"] .ac-process[data-process-construction-state="building"] .ac-spatial-branch,
+.casepath-artifact-canvas[data-graph-inspecting="true"] .ac-process[data-process-construction-state="building"] .ac-spatial-edges path[data-spatial-path="uncertainty"]{
+  visibility:hidden;
+}
+
+.casepath-artifact-canvas .ac-build-inspection[data-inspection-basis-kind="evidence-requirement"]{
+  border-left-color:#8f5f00;
+  background:linear-gradient(110deg,#fffaf2,#fff 58%);
 }
 
 body[data-casepath-moment="later-result"] .casepath-artifact-canvas .ac-memory-graph-delta>p{

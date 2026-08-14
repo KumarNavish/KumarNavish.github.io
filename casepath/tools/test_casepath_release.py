@@ -83,6 +83,31 @@ def test_local_preflight_is_loopback_deterministic_and_zero_provider() -> None:
     assert "post-journey model ledger is not exactly empty" in wrapper
 
 
+def test_sites_delivery_is_same_origin_and_streaming_proxy_safe() -> None:
+    worker = (
+        release_tool.REPOSITORY / "casepath" / "tools" / "sites_worker.mjs"
+    ).read_text(encoding="utf-8")
+    builder = (
+        release_tool.REPOSITORY / "casepath" / "tools" / "build_sites_site.py"
+    ).read_text(encoding="utf-8")
+    hosting = release_tool.load_json(
+        release_tool.REPOSITORY / ".openai" / "hosting.json"
+    )
+
+    assert hosting["project_id"] == "appgprj_6a7f8320f8388191ba2caf9b1bbbeebb"
+    assert "https://casepath-agentic-api.onrender.com" in worker
+    assert 'pathname.startsWith("/api/")' in worker
+    assert '"/healthz"' in worker and '"/readyz"' in worker
+    assert "return fetch(upstreamRequest)" in worker
+    assert "request.body" in worker
+    assert "window.CASEPATH_API = window.location.origin" in worker
+    assert "API_CONFIGURATION" in builder
+    assert "API_SCRIPT_MARKER" in builder
+    assert "index_path.write_text" in builder
+    assert 'staging / "server" / "index.js"' in builder
+    assert 'shutil.copytree(PUBLIC_ROOT, staging / "client")' in builder
+
+
 def test_loaded_precedent_renderers_preserve_exact_review_authority() -> None:
     assets = release_tool.REPOSITORY / "casepath" / "assets"
     precedent_renderer = (assets / "live-v16.js").read_text(encoding="utf-8")
@@ -241,13 +266,32 @@ def test_north_star_review_and_learning_remain_graph_native() -> None:
     assert 'class="ac-review-graph-edit"' in canvas
     assert 'data-review-node-id="causation"' in canvas
     assert 'data-ac-action="submit-review"' in canvas
-    assert "Process and evidence correction" in review_markup
+    assert "Review one evidence relationship" in review_markup
+    assert "When should ventilation evidence become relevant?" in review_markup
+    assert 'data-review-selected-mode="${esc(state.reviewMode)}"' in review_markup
+    assert 'role="radiogroup"' in review_markup
+    assert review_markup.count('role="radio"') == 2
+    assert 'data-review-mode="conditional"' in review_markup
+    assert 'data-review-mode="required_now"' in review_markup
+    assert "After a neutral inspection" in review_markup
+    assert "Request both checks now" in review_markup
     assert "Implicit allegation" in review_markup
     assert "Add ventilation decision" in review_markup
     assert (
         "Move use evidence to the new decision; building-envelope assessment "
         "remains conditional."
     ) in review_markup
+    assert (
+        "Do not add a ventilation decision; keep broader building testing "
+        "immediately required."
+    ) in review_markup
+    assert review_markup.count('data-ac-action="submit-review"') == 1
+    assert review_markup.count('data-casepath-primary-action="true"') == 1
+    assert "function reviewChoiceContractViolations" in browser_gate
+    assert "defaults to conditional, changes the visible consequence for required now" in browser_gate
+    assert "Review fixture with two selected radio choices was accepted" in browser_gate
+    assert "Required-now review fixture without a changed consequence was accepted" in browser_gate
+    assert "Review fixture with competing primary Apply actions was accepted" in browser_gate
     assert "Required</span>" not in review_markup
     assert "Building-envelope testing becomes conditional" not in flagship_renderer
     assert (
@@ -269,6 +313,23 @@ def test_north_star_review_and_learning_remain_graph_native() -> None:
     assert "Why the next handler is safer" not in canvas
     assert "Cause still unproven · responsibility stays blocked · qualified review required." in canvas
     assert "1 decision · 2 connections · 3 document needs" in canvas
+    assert 'class="ac-memory-causal-seam"' in canvas
+    assert 'data-later-payoff-source="${esc(source.ref.artifact_id)}"' in canvas
+    assert 'data-later-payoff-locator="${esc(sourceLocatorId(source.ref))}"' in canvas
+    assert 'data-later-payoff-rule="${esc(eligibility.ruleId)}"' in canvas
+    assert 'data-causal-seam-part="source"' in canvas
+    assert 'data-causal-seam-part="memory"' in canvas
+    assert 'data-causal-seam-part="result"' in canvas
+    assert "Saved correction matched" in canvas
+    assert "Check ventilation separately" in canvas
+    assert "Graph change" in canvas
+    assert "Ventilation check added" in canvas
+    assert "function laterCausalSeamContractViolations" in browser_gate
+    assert "exact returned source locator and excerpt, accepted eligibility rule" in browser_gate
+    assert "Later causal seam with a forged source locator was accepted" in browser_gate
+    assert "Later causal seam with a generated excerpt was accepted" in browser_gate
+    assert "Later causal seam with an unaccepted eligibility rule was accepted" in browser_gate
+    assert "Later causal seam with a forged receipt effect count was accepted" in browser_gate
     assert "Later payoff shows one exact guarded action and keeps five technical effects behind closed Inspect proof" in browser_gate
     assert "function verificationGraphMarkup()" in canvas
     assert 'class="ac-graph-verification"' in canvas
@@ -523,8 +584,8 @@ def test_flagship_surface_is_one_persistent_source_plus_artifact_canvas() -> Non
     assert "Management alleges insufficient ventilation and declines inspection" not in index
     assert "assets/artifact-canvas.css" in index
     assert "assets/artifact-canvas.js" in index
-    assert "assets/artifact-canvas.css?v=1.0.43" in index
-    assert "assets/artifact-canvas.js?v=1.0.52" in index
+    assert "assets/artifact-canvas.css?v=1.0.44" in index
+    assert "assets/artifact-canvas.js?v=1.0.53" in index
     assert "const CURSOR_AVATARS = Object.freeze({" in canvas
     assert "data-ac-cursor-avatar" in canvas
     assert "function setCursorAvatar(" in canvas
@@ -810,6 +871,13 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "Process progress owned by the wrong specialist was accepted" in browser_gate
     assert "Process output visible before progress cleared was accepted" in browser_gate
     assert "Process progress still visible when the node appeared was accepted" in browser_gate
+    assert "'evidence-requirement': { search: 'Checking evidence need', read: 'Reading requirement', extract: 'Confirming gap' }" in canvas
+    assert "'evidence-requirement': ['Evidence still needed', 'Inspect requirement']" in canvas
+    assert "basisKind: detail.basisKind || ''" in browser_gate
+    assert "event.inspectionPrompt !== 'Evidence still needed'" in browser_gate
+    assert "/Finding source|Source for the next decision/i" in browser_gate
+    assert "Evidence requirement mislabeled as a source was accepted" in browser_gate
+    assert "no evidence-requirement process basis was visibly analyzed" in browser_gate
     assert "node.dataset.artifactChangeId === detail.changeId" in browser_gate
     assert "for (const kind of ['law', 'evidence', 'precedent', 'verification'])" in browser_gate
     assert "casepath:artifact-process-complete" in canvas

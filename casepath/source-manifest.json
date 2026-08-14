@@ -102,13 +102,19 @@
     "sha256": "5a8eb4d760fd2d1f82c86233d498870bfd15bb5e9fd6d04ceb626d4460ec28d2"
   },
   "contract": "casepath.source-manifest/2.0.0",
-  "file_count": 147,
+  "file_count": 150,
   "files": [
     {
       "executable": false,
       "path": ".gitignore",
-      "sha256": "0b577febbabee0b4bdfd7dc6f997e10fcbb8159ba99d08f270fcbbee04cd863a",
-      "size_bytes": 255
+      "sha256": "ee26c0d2bccae9c0ba2ffcb8a7c356c40e060e79983c73c509ac7573668b063d",
+      "size_bytes": 262
+    },
+    {
+      "executable": false,
+      "path": ".openai/hosting.json",
+      "sha256": "ea47278dc004f892078760cd867e53e90240779853adfdc04c88ba76dba0ffca",
+      "size_bytes": 91
     },
     {
       "executable": false,
@@ -341,8 +347,8 @@
     {
       "executable": false,
       "path": "casepath-qa/browser-focused-v20.mjs",
-      "sha256": "e600864b43f59144e2160bc1c99d6e19a38998e09edc5490e8fd5e80995372d9",
-      "size_bytes": 686307
+      "sha256": "30ecbed089e456f3d17255f7e2c9573f01593260b991ee6928a785af348cd46e",
+      "size_bytes": 706257
     },
     {
       "executable": false,
@@ -527,14 +533,14 @@
     {
       "executable": false,
       "path": "casepath/assets/artifact-canvas.css",
-      "sha256": "ea5b5a726ebc65da888f725cad2557d23596d26fac5c7618271246df2f96db19",
-      "size_bytes": 142607
+      "sha256": "057cbf4246f3879d6b7bb4c557e4f09c778b6d2325877483a4ab88d1f3edc4cd",
+      "size_bytes": 145590
     },
     {
       "executable": false,
       "path": "casepath/assets/artifact-canvas.js",
-      "sha256": "3a734f5099a982c56384f8441cb0ed9e987fefa2c77be8b10b9a9126da826b64",
-      "size_bytes": 237021
+      "sha256": "e1cf13688ede4e663db4b76fa2fe4d7cf5aae93c6a1bcb941b798a48071c6b56",
+      "size_bytes": 243044
     },
     {
       "executable": false,
@@ -761,7 +767,7 @@
     {
       "executable": false,
       "path": "casepath/index.html",
-      "sha256": "d0b7671663de6799a3efe60f14a7211818b0cf82c480efc72f2dfe88cab5d6d1",
+      "sha256": "58a01e012c50c53965f2699b1e99b762aa344daadb4e9ff4ae0f65ff8838b1f8",
       "size_bytes": 14515
     },
     {
@@ -941,32 +947,44 @@
     {
       "executable": false,
       "path": "casepath/tools/build_deployment_identity.py",
-      "sha256": "c2096e92a23062dc84b94ada24859a0667e5258c8d2aae3a5e3413ba6dbbfc47",
-      "size_bytes": 3233
+      "sha256": "37ff1a072cf0c8df821590238759c23fd8b8e230a5c9900ccc608ff4f426ac08",
+      "size_bytes": 3305
+    },
+    {
+      "executable": false,
+      "path": "casepath/tools/build_sites_site.py",
+      "sha256": "553b3a361cc7179badad837dc3b107fe2564571b9554a19c51739301c5319620",
+      "size_bytes": 2764
     },
     {
       "executable": false,
       "path": "casepath/tools/build_static_site.py",
-      "sha256": "517aa089b75545c65574b4bec5200d118678b992129bde765d1bb09ac3641813",
-      "size_bytes": 7300
+      "sha256": "528224c49fa95ad502322a33c5074a1a022b22dbe7e9de6fb919c3885baa25f9",
+      "size_bytes": 7297
     },
     {
       "executable": false,
       "path": "casepath/tools/casepath_release.py",
-      "sha256": "6b21fe32d45576c1292acd5bc321affef6837566414497075ca0df50db21d93a",
-      "size_bytes": 504299
+      "sha256": "fb817670826da02de66028e886eb83a9031215badbd6af6842b2b6565d6610e2",
+      "size_bytes": 504327
+    },
+    {
+      "executable": false,
+      "path": "casepath/tools/sites_worker.mjs",
+      "sha256": "00b983614f88fecae80bb90f02b20707bb3e96f0a356b85b141033d898ee8c14",
+      "size_bytes": 2303
     },
     {
       "executable": false,
       "path": "casepath/tools/test_build_deployment_identity.py",
-      "sha256": "75ec4f1b704a227f5d26b1d277874b7ada13bb4ab7ea9105850f37ba25e24900",
-      "size_bytes": 7135
+      "sha256": "e4163083881f0d681f2da108f7cb22d3aee6e0cbdb5497d3b5f7cd37f292c2d4",
+      "size_bytes": 7512
     },
     {
       "executable": false,
       "path": "casepath/tools/test_casepath_release.py",
-      "sha256": "342ba6c1036826948ee5ff4218bb00adec89b1920788da1a6d8b8c4412cdef1f",
-      "size_bytes": 355102
+      "sha256": "df43a3842fdec7c0686e19ad2704d77ebc43fdf15623cc93587e9840db987b95",
+      "size_bytes": 359258
     },
     {
       "executable": false,
@@ -991,7 +1009,7 @@
   "gates": [
     {
       "path": "casepath-qa/browser-focused-v20.mjs",
-      "sha256": "e600864b43f59144e2160bc1c99d6e19a38998e09edc5490e8fd5e80995372d9"
+      "sha256": "30ecbed089e456f3d17255f7e2c9573f01593260b991ee6928a785af348cd46e"
     },
     {
       "path": "casepath-qa/browser-guided-v13-smoke.mjs",
@@ -1037,6 +1055,7 @@
       "casepath-api",
       "casepath-qa",
       ".gitignore",
+      ".openai/hosting.json",
       "render.yaml",
       "CASEPATH_MASTER_KNOWLEDGE_TRANSFER.md"
     ],

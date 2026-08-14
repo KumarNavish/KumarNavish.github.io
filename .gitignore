@@ -11,3 +11,4 @@ casepath-qa/test-results/
 casepath/deployment.json
 casepath-public/
 reports/
+/dist/

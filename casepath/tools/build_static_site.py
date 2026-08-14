@@ -193,7 +193,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--require-known-commit",
         action="store_true",
-        help="Fail before publishing when RENDER_GIT_COMMIT is absent or invalid.",
+        help="Fail before publishing when no supported source commit is valid.",
     )
     return parser.parse_args()
 

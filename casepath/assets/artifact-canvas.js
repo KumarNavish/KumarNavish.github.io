@@ -304,6 +304,7 @@
     laterResult: null,
     laterMemoryValidation: null,
     laterCausalStep: null,
+    laterCausalSource: null,
     facts: [],
     process: null,
     legal: null,
@@ -311,6 +312,7 @@
     precedents: [],
     verification: null,
     review: null,
+    reviewMode: 'conditional',
     knowledge: null,
     processAccepted: false,
     selectedNodeId: 'causation',
@@ -373,10 +375,14 @@
       .replaceAll("'", '&#039;');
   }
 
-  function processNodeProgressLabel(phase, entityKind) {
-    if (phase === 'search') return 'Finding source';
-    if (phase === 'read') return 'Reading source';
-    if (phase === 'extract') return 'Extracting fact';
+  function processNodeProgressLabel(phase, entityKind, basisKind = 'fact') {
+    const labels = {
+      fact: { search: 'Finding source', read: 'Reading source', extract: 'Extracting fact' },
+      law: { search: 'Finding law', read: 'Reading law', extract: 'Extracting rule' },
+      'evidence-requirement': { search: 'Checking evidence need', read: 'Reading requirement', extract: 'Confirming gap' },
+      'accepted-decision': { search: 'Finding prior step', read: 'Reading prior step', extract: 'Using accepted answer' },
+    };
+    if (labels[basisKind]?.[phase]) return labels[basisKind][phase];
     if (phase === 'form') return entityKind === 'branch' ? 'Testing outcome' : 'Forming decision';
     if (phase === 'complete') return entityKind === 'branch' ? 'Outcome ready' : 'Decision ready';
     return '';
@@ -391,6 +397,7 @@
       entityKind: progress.entityKind,
       nodeId: progress.nodeId,
       branchId: progress.branchId,
+      basisKind: progress.basisKind,
       phase: progress.phase,
       percent: progress.percent,
       label: progress.label,
@@ -407,9 +414,14 @@
       entityKind: String(identity?.entityKind || prior?.entityKind || 'node'),
       nodeId: String(identity?.nodeId || prior?.nodeId || state.pendingGraphNodeId || state.pendingBranchNodeId || ''),
       branchId: String(identity?.branchId || prior?.branchId || ''),
+      basisKind: String(identity?.basisKind || prior?.basisKind || 'fact'),
       phase,
       percent: Math.max(0, Math.min(100, Math.round(Number(percent) || 0))),
-      label: processNodeProgressLabel(phase, String(identity?.entityKind || prior?.entityKind || 'node')),
+      label: processNodeProgressLabel(
+        phase,
+        String(identity?.entityKind || prior?.entityKind || 'node'),
+        String(identity?.basisKind || prior?.basisKind || 'fact'),
+      ),
       changeId: String(identity?.changeId || prior?.changeId || state.lastCursorChangeId || ''),
       eventId: String(identity?.eventId || prior?.eventId || state.lastCursorEventId || ''),
       agentId: String(identity?.agentId || prior?.agentId || state.lastCursorAgentId || ''),
@@ -594,6 +606,7 @@
     if (normalized !== state.moment) {
       state.manualNodeInspection = false;
       state.agentAuditOpenId = '';
+      if (normalized === 'review') state.reviewMode = 'conditional';
       if (state.root && ['review', 'review-applied', 'knowledge', 'later-work', 'later-result'].includes(normalized)) {
         clearActiveSource();
       }
@@ -942,6 +955,7 @@
         return;
       }
       const lineage = lineageFor('process_node', node.node_id);
+      const inspectionBasis = nodeInspectionBasis(node);
       state.pendingGraphNodeId = node.node_id;
       state.selectedNodeId = node.node_id;
       state.lastCursorChangeId = visibleChangeId('process_node', node.node_id, lineage);
@@ -982,7 +996,7 @@
           || '';
         const factId = inspectionTarget.dataset.factId || '';
         const locatorId = inspectionTarget.dataset.sourceLocatorId || '';
-        const found = nodeInspectionBasis(node).finding || '';
+        const found = inspectionBasis.finding || '';
         emitInteraction('confirm-source', inspectionTarget);
         state.graphInspectionPhase = 'highlight-source';
         state.cursorCommit = null;
@@ -1021,6 +1035,7 @@
       setProcessNodeProgress('search', 0, {
         entityKind: 'node',
         nodeId: node.node_id,
+        basisKind: inspectionBasis.basisKind,
         changeId: state.lastCursorChangeId,
         eventId: state.lastCursorEventId,
         agentId: state.lastCursorAgentId,
@@ -1067,6 +1082,7 @@
     }
     const { node, branch } = current;
     const lineage = lineageFor('process_node', node.node_id) || lineageFor('branch', branch.branch_id);
+    const inspectionBasis = nodeInspectionBasis(node);
     state.pendingGraphNodeId = '';
     state.pendingBranchNodeId = node.node_id;
     state.selectedNodeId = node.node_id;
@@ -1084,7 +1100,7 @@
       const sourceId = inspectionTarget.dataset.sourceId || inspectionTarget.dataset.lawId || inspectionTarget.dataset.evidenceId || inspectionTarget.dataset.inspectionId || '';
       const factId = inspectionTarget.dataset.factId || '';
       const locatorId = inspectionTarget.dataset.sourceLocatorId || '';
-      const found = nodeInspectionBasis(node).finding || '';
+      const found = inspectionBasis.finding || '';
       emitInteraction('confirm-source', inspectionTarget);
       state.graphInspectionPhase = 'highlight-source';
       state.cursorCommit = null;
@@ -1140,6 +1156,7 @@
       entityKind: 'branch',
       nodeId: node.node_id,
       branchId: branch.branch_id,
+      basisKind: inspectionBasis.basisKind,
       changeId: state.lastCursorChangeId,
       eventId: state.lastCursorEventId,
       agentId: state.lastCursorAgentId,
@@ -2083,6 +2100,7 @@
     root.dataset.factSourceTourIndex = String(state.factTourIndex);
     root.dataset.factSourceTourPhase = state.factTourPhase;
     root.dataset.graphInspectionPhase = state.graphInspectionPhase;
+    root.dataset.graphInspecting = String(state.graphInspecting);
     root.dataset.manualNodeInspection = String(state.manualNodeInspection);
     const nodeProgress = state.processNodeProgress;
     root.dataset.processNodeProgressState = nodeProgress ? 'active' : 'idle';
@@ -2090,10 +2108,12 @@
       root.dataset.processNodeProgress = String(nodeProgress.percent);
       root.dataset.processNodeProgressPhase = nodeProgress.phase;
       root.dataset.processNodeProgressNodeId = nodeProgress.nodeId;
+      root.dataset.processNodeProgressBasisKind = nodeProgress.basisKind;
     } else {
       delete root.dataset.processNodeProgress;
       delete root.dataset.processNodeProgressPhase;
       delete root.dataset.processNodeProgressNodeId;
+      delete root.dataset.processNodeProgressBasisKind;
     }
     if (state.moment === 'later-result') {
       const validatedMemory = validatedLaterMemory();
@@ -2149,7 +2169,7 @@
     const globalTask = document.querySelector('[data-ac-global-task]');
     const globalHost = document.querySelector('[data-ac-global-agent-work]');
     if (globalHost) globalHost.dataset.referenceReplay = String(referenceReplay);
-    if (globalAgent) globalAgent.textContent = referenceReplay ? `Live reference run · ${identity.label}` : identity.label;
+    if (globalAgent) globalAgent.textContent = referenceReplay ? `Reference preview · ${identity.label}` : identity.label;
     if (globalTask) globalTask.textContent = identity.task;
   }
 
@@ -2411,11 +2431,23 @@
   }
 
   function reviewGraphEditMarkup() {
-    return `<section class="ac-review-graph-edit" style="--spatial-x:62;--spatial-y:68" data-review-edit-state="pending" data-review-node-id="causation" data-spatial-anchor-node-id="causation">
-      <small>Process and evidence correction</small>
-      <div class="ac-review-change"><span>Implicit allegation</span><b aria-hidden="true">→</b><strong>Add ventilation decision</strong></div>
-      <p>Move use evidence to the new decision; building-envelope assessment remains conditional.</p>
-      <button type="button" data-ac-action="submit-review" data-review-mode="conditional" data-casepath-primary-action="true" data-ac-cursor-target="true">Apply correction</button>
+    const conditional = state.reviewMode !== 'required_now';
+    const change = conditional
+      ? '<span>Implicit allegation</span><b aria-hidden="true">→</b><strong>Add ventilation decision</strong>'
+      : '<span>Existing evidence order</span><b aria-hidden="true">→</b><strong>Request both checks now</strong>';
+    const consequence = conditional
+      ? 'Move use evidence to the new decision; building-envelope assessment remains conditional.'
+      : 'Do not add a ventilation decision; keep broader building testing immediately required.';
+    return `<section class="ac-review-graph-edit" style="--spatial-x:44;--spatial-y:51" data-review-edit-state="pending" data-review-node-id="causation" data-spatial-anchor-node-id="causation" data-review-selected-mode="${esc(state.reviewMode)}">
+      <small>Review one evidence relationship</small>
+      <strong class="ac-review-question">When should ventilation evidence become relevant?</strong>
+      <div class="ac-review-options" role="radiogroup" aria-label="Choose the evidence order">
+        <button type="button" role="radio" aria-checked="${String(conditional)}" data-ac-action="select-review-mode" data-review-mode="conditional"><strong>After a neutral inspection</strong><span>Add one ventilation check only when the allegation remains plausible.</span></button>
+        <button type="button" role="radio" aria-checked="${String(!conditional)}" data-ac-action="select-review-mode" data-review-mode="required_now"><strong>Request both checks now</strong><span>Keep broader building and use evidence immediate.</span></button>
+      </div>
+      <div class="ac-review-change">${change}</div>
+      <p>${esc(consequence)}</p>
+      <button type="button" data-ac-action="submit-review" data-review-mode="${esc(state.reviewMode)}" data-casepath-primary-action="true" data-ac-cursor-target="true">Apply correction</button>
     </section>`;
   }
 
@@ -2430,13 +2462,58 @@
     </section>`;
   }
 
+  function laterPayoffSource() {
+    const step = asObject(state.laterCausalSource);
+    const later = asObject(state.laterResult);
+    const receipt = asObject(later?.memory_application);
+    const validated = validatedLaterMemory();
+    if (!step
+      || step.phase !== 'source'
+      || step.opened !== true
+      || step.highlighted !== true
+      || !validated
+      || !later
+      || String(step.runId || '') !== String(receipt?.target?.run_id || '')) return null;
+    const fact = asArray(later.facts).find(item => (
+      item.fact_id === step.fact?.fact_id
+      && item.semantic_role === 'management_ventilation_allegation'
+    ));
+    const ref = asArray(fact?.source_refs).find(item => (
+      item.artifact_id === step.ref?.artifact_id
+      && sourceLocatorId(item) === sourceLocatorId(step.ref)
+    ));
+    if (!fact || !ref) return null;
+    return {
+      fact,
+      ref,
+      title: sourceDisplayTitle(ref.artifact_id),
+      location: ref.locator_kind === 'visual_observation'
+        ? 'Exact image region'
+        : `Page ${ref.page || 'not returned'}`,
+      finding: ref.excerpt || ref.observation || `${fact.label}: ${fact.value}`,
+    };
+  }
+
   function laterMemoryDeltaMarkup() {
     const delta = laterMemoryDelta();
     if (!delta.receiptBound || !delta.originId || !delta.nodeId || delta.edges.length !== 2 || delta.evidenceIds.length !== 3) return '';
+    const source = laterPayoffSource();
+    const eligibility = state.laterCausalStep?.phase === 'eligibility'
+      && state.laterCausalStep.memoryOriginId === delta.originId
+      ? state.laterCausalStep
+      : null;
     const links = delta.edges.map(edge => `<span class="ac-memory-process-link" data-memory-origin-id="${esc(delta.originId)}" data-edge-source="${esc(edge.source)}" data-edge-target="${esc(edge.target)}"><b>${esc(nodeLabel(edge.source))}</b><i aria-hidden="true">→</i><strong>${esc(nodeLabel(edge.target))}</strong></span>`).join('');
     const evidence = delta.evidenceIds.map(itemId => `<span class="ac-memory-evidence-change" data-memory-effect="evidence-changed" data-memory-origin-id="${esc(delta.originId)}" data-item-id="${esc(itemId)}"><b>${esc(SPATIAL_EVIDENCE_LABELS[itemId] || itemId.replaceAll('_', ' '))}</b><small>Updated</small></span>`).join('');
+    const causalSeam = source && eligibility ? `<div class="ac-memory-causal-seam" data-later-payoff-source="${esc(source.ref.artifact_id)}" data-later-payoff-locator="${esc(sourceLocatorId(source.ref))}" data-later-payoff-rule="${esc(eligibility.ruleId)}">
+      <div data-causal-seam-part="source"><small>${esc(source.title)} · ${esc(source.location)}</small><strong><mark>${esc(source.finding)}</mark></strong></div>
+      <b aria-hidden="true">→</b>
+      <div data-causal-seam-part="memory"><small>Saved correction matched</small><strong>Check ventilation separately</strong></div>
+      <b aria-hidden="true">→</b>
+      <div data-causal-seam-part="result"><small>Graph change</small><strong>Ventilation check added</strong></div>
+    </div>` : '';
     return `<section class="ac-memory-graph-delta" style="--spatial-x:44;--spatial-y:67" data-memory-receipt="true" data-memory-origin-id="${esc(delta.originId)}" data-spatial-anchor-node-id="${esc(delta.nodeId)}" data-memory-payoff="single-action" data-memory-status="unverified-case-memory" data-responsibility-state="blocked" data-shared-playbook-changed="false">
       <small>Saved lesson used on this claim</small>
+      ${causalSeam}
       <strong class="ac-memory-action">Check ventilation before assigning responsibility.</strong>
       <p>Cause still unproven · responsibility stays blocked · qualified review required.</p>
       <details><summary>Inspect proof</summary><div class="ac-memory-proof-summary">1 decision · 2 connections · 3 document needs</div><div class="ac-memory-process-links" aria-label="Two process links added from saved case memory">${links}</div><div class="ac-memory-evidence-changes" aria-label="Three evidence needs updated from saved case memory">${evidence}</div><small>Unverified case memory · only this claim changed · Shared playbook unchanged.</small></details>
@@ -2559,6 +2636,7 @@
     const next = relevantEvidence(evidenceForNode('evidence_gap'));
     const evidence = priorityEvidence(evidenceForNode('causation')).filter(item => item.item_id !== next?.item_id).slice(0, 2);
     const branchMarkup = CAUSATION_BRANCH_LAYOUT.map(([nodeId, shortLabel, x, y], index) => {
+      if (state.moment === 'review' && nodeId !== 'evidence_gap') return '';
       if (['review-applied', 'knowledge', 'later-work', 'later-result'].includes(state.moment) && nodeId !== 'evidence_gap') return '';
       if (state.graphRevealRunning && !state.visibleBranchIds.has(nodeId)) return '';
       const returnedNode = nodeById(nodeId);
@@ -2724,6 +2802,7 @@
     const isCausationBranch = CAUSATION_BRANCH_LAYOUT.some(([branchNodeId]) => branchNodeId === node.node_id);
     if (LAW_FIRST_NODE_IDS.has(node.node_id) && law) {
       return {
+        basisKind: 'law',
         action: 'open-law',
         attributes: `data-law-id="${esc(law.source_id)}" data-source-authority="${isOfficialLaw(law) ? 'official_registry' : 'deterministic_principle'}" data-source-locator-id="${esc(lawLocatorId(law))}"`,
         sourceLabel: isOfficialLaw(law) ? 'official Swiss law' : 'handling principle',
@@ -2747,6 +2826,7 @@
           : `Supports the next decision · ${SPATIAL_NODE_LABELS[node.node_id] || node.title}`;
       const sourceKind = isCausationBranch ? 'unresolved claim evidence' : 'customer source';
       return {
+        basisKind: 'fact',
         action: 'open-source',
         attributes: sourceContextAttributes(fact, ref),
         fact,
@@ -2764,6 +2844,7 @@
         ? `Missing-fact basis · does not establish ${SPATIAL_NODE_LABELS[node.node_id] || node.title}`
         : `Shapes the next decision · ${SPATIAL_NODE_LABELS[node.node_id] || node.title}`;
       return {
+        basisKind: 'law',
         action: 'open-law',
         attributes: `data-law-id="${esc(law.source_id)}" data-source-authority="${isOfficialLaw(law) ? 'official_registry' : 'deterministic_principle'}" data-source-locator-id="${esc(lawLocatorId(law))}"`,
         sourceLabel: isOfficialLaw(law) ? 'official Swiss law' : 'handling principle',
@@ -2781,8 +2862,9 @@
         ? `Missing-fact basis · this requirement can test, not establish, ${SPATIAL_NODE_LABELS[node.node_id] || node.title}`
         : evidence.why || `Determines the next decision · ${SPATIAL_NODE_LABELS[node.node_id] || node.title}`;
       return {
+        basisKind: 'evidence-requirement',
         action: 'inspect-evidence',
-        attributes: `data-evidence-id="${esc(evidence.item_id)}"`,
+        attributes: `data-evidence-id="${esc(evidence.item_id)}" data-evidence-status="${esc(evidence.status || '')}"`,
         sourceLabel: 'evidence need',
         title: evidence.title,
         location: 'required by this decision',
@@ -2799,6 +2881,7 @@
         ? `Follows the accepted answer to · ${nodeQuestion(prior)}`
         : 'Starts from the accepted claim record';
     return {
+      basisKind: 'accepted-decision',
       action: 'select-node',
       attributes: `data-inspection-id="${esc(node.node_id)}" data-prior-node-id="${esc(prior?.node_id || '')}"`,
       sourceLabel: 'accepted process record',
@@ -2812,9 +2895,15 @@
 
   function nodeInspectionMarkup(node) {
     const basis = nodeInspectionBasis(node);
-    const common = `data-ac-inspection-target="true" data-inspection-phase="${esc(state.graphInspectionPhase)}" data-node-id="${esc(node.node_id)}" data-ac-action="${esc(basis.action)}" ${basis.attributes}`;
+    const common = `data-ac-inspection-target="true" data-inspection-phase="${esc(state.graphInspectionPhase)}" data-inspection-basis-kind="${esc(basis.basisKind)}" data-node-id="${esc(node.node_id)}" data-ac-action="${esc(basis.action)}" ${basis.attributes}`;
     if (state.graphInspectionPhase === 'select-source') {
-      return `<button type="button" class="ac-build-inspection ac-build-source-select" ${common}><small>Source for the next decision</small><strong>${esc(basis.title)}</strong><span>Click to open · ${esc(basis.location)}</span></button>`;
+      const selectCopy = {
+        fact: ['Source for the next decision', 'Open source'],
+        law: ['Law for the next decision', 'Open exact section'],
+        'evidence-requirement': ['Evidence still needed', 'Inspect requirement'],
+        'accepted-decision': ['Prior decision for the next step', 'Open prior step'],
+      }[basis.basisKind] || ['Basis for the next decision', 'Inspect basis'];
+      return `<button type="button" class="ac-build-inspection ac-build-source-select" ${common}><small>${esc(selectCopy[0])}</small><strong>${esc(basis.title)}</strong><span>${esc(selectCopy[1])} · ${esc(basis.location)}</span></button>`;
     }
     const highlighted = state.graphInspectionPhase === 'highlight-source';
     const exactSource = basis.ref ? sourceReadingMarkup(basis.fact, basis.ref, !highlighted, highlighted) : '';
@@ -2822,7 +2911,10 @@
     const fallbackFinding = highlighted
       ? `<strong><mark class="is-highlighted">${esc(basis.finding)}</mark></strong>`
       : `<strong><button type="button" class="ac-source-exact-control is-awaiting-click" data-source-exact-control="true" data-ac-inspection-read-target="true">${esc(basis.finding)}</button></strong>`;
-    const extractedLabel = basis.fact?.label || (basis.sourceLabel === 'official Swiss law' ? 'Legal question' : 'Decision basis');
+    const extractedLabel = basis.fact?.label
+      || (basis.basisKind === 'law' ? 'Legal rule'
+        : basis.basisKind === 'evidence-requirement' ? 'Evidence gap'
+          : basis.basisKind === 'accepted-decision' ? 'Accepted answer' : 'Decision basis');
     const extractedValue = basis.fact?.value || basis.relation || basis.finding;
     const fullSourceAction = highlighted && basis.ref
       ? `<button type="button" class="ac-build-open-source" data-ac-action="open-source" data-node-id="${esc(node.node_id)}" ${sourceContextAttributes(basis.fact, basis.ref)}>Open original →</button>`
@@ -2830,7 +2922,7 @@
         ? `<button type="button" class="ac-build-open-source" data-ac-action="open-law" data-node-id="${esc(node.node_id)}" data-law-id="${esc(basis.law.source_id)}" data-source-authority="${isOfficialLaw(basis.law) ? 'official_registry' : 'deterministic_principle'}" data-source-locator-id="${esc(lawLocatorId(basis.law))}">Open law →</button>`
         : '';
     return `<div class="ac-build-inspection ac-build-source-reading${highlighted ? ' ac-build-source-highlight' : ''}" ${interactionAttributes}>
-      <header><small>${highlighted ? 'Selected from' : 'Opened from'} · ${esc(basis.sourceLabel)}</small><strong>${esc(basis.title)}</strong><span>${esc(basis.location)}</span></header>
+      <header><small>${highlighted ? (basis.basisKind === 'evidence-requirement' ? 'Confirmed' : 'Selected from') : (basis.basisKind === 'evidence-requirement' ? 'Requirement opened' : 'Opened from')} · ${esc(basis.sourceLabel)}</small><strong>${esc(basis.title)}</strong><span>${esc(basis.location)}</span></header>
       ${exactSource || fallbackFinding}
       ${highlighted ? `<div class="ac-build-finding"><small>Extracted for this decision</small><strong>${esc(extractedLabel)}</strong><span>${esc(extractedValue)}</span></div>` : ''}
       <span>${highlighted ? `${esc(basis.effect || 'Supports')} · ${esc(nodeLabel(node.node_id))}` : 'Select the exact passage, field, region, or prior decision before this step appears.'}</span>
@@ -3665,10 +3757,20 @@
       if (index >= 0) document.dispatchEvent(new CustomEvent('casepath:open-precedent', { detail: { index } }));
     } else if (action === 'request-review') {
       document.dispatchEvent(new CustomEvent('casepath:begin-review'));
+    } else if (action === 'select-review-mode') {
+      const mode = button.dataset.reviewMode;
+      if (!['conditional', 'required_now'].includes(mode)) return;
+      state.reviewMode = mode;
+      render();
     } else if (action === 'submit-review') {
+      const mode = ['conditional', 'required_now'].includes(button.dataset.reviewMode)
+        ? button.dataset.reviewMode
+        : state.reviewMode;
       document.dispatchEvent(new CustomEvent('casepath:submit-review', { detail: {
-        buildingEnvelopeMode: button.dataset.reviewMode || 'conditional',
-        justification: 'Keep causation unresolved. Use one neutral inspection first, then test the ventilation allegation or building envelope only when the first assessment supports that branch.',
+        buildingEnvelopeMode: mode,
+        justification: mode === 'conditional'
+          ? 'Keep causation unresolved. Use one neutral inspection first, then test the ventilation allegation or building envelope only when the first assessment supports that branch.'
+          : 'Keep causation unresolved and request the neutral assessment and broader building testing together.',
       } }));
     } else if (action === 'continue-journey') {
       document.dispatchEvent(new CustomEvent('casepath:continue-journey'));
@@ -4087,6 +4189,7 @@
     const step = acceptedLaterCausalStep(asObject(event.detail));
     if (!step) return;
     state.laterCausalStep = step;
+    if (step.phase === 'source') state.laterCausalSource = step;
     state.moment = 'later-work';
     state.neutralAuthority = 'case-memory-comparison';
     state.selectedNodeId = step.phase === 'source' || step.phase === 'memory' || step.phase === 'eligibility'
