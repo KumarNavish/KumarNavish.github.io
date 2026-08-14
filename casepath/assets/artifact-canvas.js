@@ -7,15 +7,25 @@
   const INTERACTION_EVENT = 'casepath:artifact-canvas-interaction';
   const LATER_MEMORY_VALIDATION_CONTRACT = 'casepath.later-memory-validation/1.0.0';
   const LATER_CAUSAL_STEP_CONTRACT = 'casepath.later-causal-step/1.0.0';
+  const VISUAL_ANNOTATION_CONTRACT = 'casepath.visual-reference-annotation/1.0.0';
+  const VISUAL_ANNOTATION_VERSION = 'generated-demo-reference/2026-08-12';
+  const VISUAL_ANNOTATION_PRODUCER = 'deterministic_reference_annotation';
+  const VISUAL_ANNOTATION_AUTHORITY = 'generated_demo_reference_only';
+  const API = (new URLSearchParams(location.search).get('api') || window.CASEPATH_API || 'https://casepath-agentic-api.onrender.com').replace(/\/$/, '');
   const SUCCESS_STATES = new Set(['accepted', 'complete', 'completed', 'passed', 'produced', 'succeeded', 'verified']);
   const PROCESS_GATE_ID = 'deterministic_process_gate';
   const PROCESS_ARTIFACT_IDS = new Set(['process_graph', 'accepted_process_graph']);
-  const GRAPH_NODE_DWELL_MS = 500;
-  const GRAPH_SOURCE_DWELL_MS = 650;
-  const GRAPH_BRANCH_SOURCE_DWELL_MS = 1100;
+  const GRAPH_NODE_DWELL_MS = 1300;
+  const GRAPH_SOURCE_DWELL_MS = 1900;
+  const GRAPH_BRANCH_SOURCE_DWELL_MS = 1900;
   const OFFICIAL_LAW_DWELL_MS = 1900;
-  const FACT_SOURCE_DWELL_MS = 1100;
-  const FACT_RESULT_DWELL_MS = 420;
+  const FACT_SOURCE_DWELL_MS = 1600;
+  const FACT_NEUTRAL_READ_DWELL_MS = 900;
+  const FACT_RESULT_DWELL_MS = 1400;
+  const FACT_HERO_RESULT_DWELL_MS = 1800;
+  const FACT_HERO_IDS = new Set(['fact_notification', 'fact_recurrence', 'fact_cause']);
+  const CURSOR_TRAVEL_MS = 620;
+  const CURSOR_SETTLE_MS = 260;
   const FACT_STORY_IDS = Object.freeze([
     'fact_tenancy',
     'fact_notification',
@@ -37,23 +47,23 @@
     'resolution',
   ];
   const SPATIAL_SPINE_POSITIONS = Object.freeze({
-    intake: [5, 48],
-    scope: [14, 48],
-    dispute: [23, 48],
-    urgency: [32, 48],
-    notification: [41, 48],
-    defect: [50, 48],
-    causation: [62, 48],
-    responsibility: [83, 48],
-    remedy: [89, 48],
-    resolution: [96, 48],
-    ventilation_dispute: [64, 72],
+    intake: [9, 15],
+    scope: [24, 15],
+    dispute: [39, 15],
+    urgency: [54, 15],
+    notification: [69, 15],
+    defect: [84, 15],
+    causation: [25, 38],
+    responsibility: [48, 38],
+    remedy: [65, 38],
+    resolution: [82, 38],
+    ventilation_dispute: [46, 57],
   });
   const CAUSATION_BRANCH_LAYOUT = Object.freeze([
-    ['building_defect', 'Building cause', 76, 24],
-    ['tenant_use', 'Use-related cause', 79, 36],
-    ['mixed_cause', 'Mixed cause', 79, 64],
-    ['evidence_gap', 'Investigate', 76, 76],
+    ['building_defect', 'Building issue?', 32, 57],
+    ['tenant_use', 'Room-use issue?', 47, 57],
+    ['mixed_cause', 'Both possible?', 62, 57],
+    ['evidence_gap', 'Independent check needed', 78, 57],
   ]);
   const LAW_FIRST_NODE_IDS = new Set(['scope', 'dispute', 'responsibility', 'remedy']);
   const REDUCED_MOTION = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
@@ -61,58 +71,66 @@
   const AGENTS = Object.freeze({
     canonical_facts: {
       order: 1,
-      label: 'Guarded Canonical Facts Agent',
-      short: 'Claim facts',
+      label: 'Claim reader',
+      short: 'Claim',
       monogram: 'CF',
       signature: 'facts',
-      task: 'Separating supported facts from allegations and unknowns',
-      why: 'Only source-bound facts should shape the handling process.',
+      task: 'Reading the claim and keeping only source-backed facts',
+      why: 'Each fact must come from an exact passage, field, or image region.',
     },
     orchestrator_plan: {
       order: 2,
-      label: 'Nemotron Orchestrator',
-      short: 'Orchestration',
+      label: 'Work planner',
+      short: 'Plan',
       monogram: 'OR',
       signature: 'orchestrator',
-      task: 'Setting one bounded focus for every specialist',
-      why: 'A shared plan keeps specialist contributions coherent.',
+      task: 'Giving each specialist one clear job',
+      why: 'The team works from one shared claim and one shared plan.',
     },
     document_source_integrity: {
       order: 3,
-      label: 'Document and Source Integrity Agent',
+      label: 'Source checker',
       short: 'Sources',
       monogram: 'DS',
       signature: 'sources',
-      task: 'Checking the source behind the active decision',
-      why: 'A decision is trustworthy only when its evidence can be reopened.',
+      task: 'Checking the exact source behind each fact',
+      why: 'The viewer can reopen the same source and verify what was used.',
     },
     process_decision_mapping: {
       order: 4,
-      label: 'Process Decision Mapping Agent',
-      short: 'Process',
+      label: 'Process builder',
+      short: 'Path',
       monogram: 'PM',
       signature: 'process',
-      task: 'Mapping grounded facts into the handling process',
-      why: 'Every process node must exist for an inspectable reason.',
+      task: 'Building the claim-handling steps',
+      why: 'Each step appears only after its reason has been inspected.',
     },
     evidence_checklist: {
       order: 5,
-      label: 'Evidence and Checklist Agent',
-      short: 'Evidence',
+      label: 'Document finder',
+      short: 'Docs',
       monogram: 'EC',
       signature: 'evidence',
-      task: 'Attaching evidence to the decision it can resolve',
-      why: 'Evidence becomes useful when its process owner is explicit.',
+      task: 'Working out which documents each step needs',
+      why: 'Every document need comes from a fact the process must establish.',
     },
     final_claim_brief_audit: {
       order: 6,
-      label: 'Final Claim Brief Agent',
-      short: 'Final audit',
+      label: 'Result checker',
+      short: 'Check',
       monogram: 'FB',
       signature: 'audit',
-      task: 'Auditing the complete claim-handling brief',
-      why: 'Unsupported conclusions must fail closed before review.',
+      task: 'Checking the full result before review',
+      why: 'Anything unsupported must stop before it reaches the reviewer.',
     },
+  });
+  const AGENT_ICONS = Object.freeze({
+    facts: '<circle cx="12" cy="12" r="9"></circle><path d="m8 12 2.4 2.5L16 9"></path>',
+    orchestrator: '<circle cx="9" cy="8" r="3"></circle><circle cx="16.5" cy="9" r="2.5"></circle><path d="M3.8 18c.8-3.2 2.6-4.8 5.2-4.8s4.4 1.6 5.2 4.8M14 14.2c2.7-.4 4.8.9 6.1 3.8"></path>',
+    sources: '<path d="M6 3.5h8l4 4V20.5H6z"></path><path d="M14 3.5v4h4"></path>',
+    process: '<circle cx="7" cy="5" r="2"></circle><circle cx="7" cy="19" r="2"></circle><circle cx="18" cy="12" r="2"></circle><path d="M7 7v10M9 5h3v7h4M9 19h3v-7"></path>',
+    evidence: '<path d="M3.5 7.5h6l2-2h9v14h-17z"></path>',
+    audit: '<path d="M12 3 20 6v5c0 5.1-3.1 8.5-8 10-4.9-1.5-8-4.9-8-10V6z"></path><path d="m8.5 12 2.2 2.2 4.8-5"></path>',
   });
   const AGENT_MOMENTS = Object.freeze({
     canonical_facts: 'understand',
@@ -132,22 +150,28 @@
   });
 
   const DEFAULT_NODE_COPY = Object.freeze({
-    intake: ['Claim intake', 'Are the message and source files readable and attributable?'],
-    scope: ['Tenant-law scope', 'Is this a Swiss residential-tenancy matter?'],
-    dispute: ['Existence of a dispute', 'Is there a concrete disagreement requiring legal handling?'],
-    urgency: ['Urgency and safety', 'Is immediate health, safety or deadline action required?'],
-    notification: ['Landlord notification', 'Was the landlord told about the defect?'],
-    defect: ['Defect and recurrence', 'Is a recurring condition sufficiently documented?'],
-    causation: ['Causation assessment', 'What caused the recurring moisture condition?'],
-    responsibility: ['Responsibility', 'Who is responsible for the established cause?'],
-    remedy: ['Remedy selection', 'Which supported remedy branch applies?'],
-    resolution: ['Resolution and closure', 'Has the agreed outcome been completed and documented?'],
+    intake: ['What happened?', 'What did the customer submit?'],
+    scope: ['Is this our claim?', 'Is this a Swiss residential-tenancy claim?'],
+    dispute: ['What is disputed?', 'Is there a real disagreement that needs handling?'],
+    urgency: ['Is it urgent?', 'Does health, safety, or a deadline require action now?'],
+    notification: ['Was the landlord told?', 'Was the landlord or property manager told, and can we show it?'],
+    defect: ['Is it recurring?', 'Do the sources show a recurring problem rather than one event?'],
+    causation: ['Is the cause proven?', 'What is proven about the cause, and what is still only alleged?'],
+    responsibility: ['Who is responsible?', 'Once the cause is proven, who is responsible for the next step?'],
+    remedy: ['What happens next?', 'What response is supported by the cause, responsibility, and customer goal?'],
+    resolution: ['What closes the claim?', 'Was the agreed action completed, or must the dispute be escalated?'],
   });
   const SPATIAL_NODE_LABELS = Object.freeze({
-    intake: 'Claim intake', scope: 'Tenancy scope', dispute: 'Dispute', urgency: 'Urgency',
-    notification: 'Notice', defect: 'Recurrence', causation: 'Causation assessment',
-    responsibility: 'Owner', remedy: 'Remedy', resolution: 'Close',
+    intake: 'What happened?', scope: 'Is this our claim?', dispute: 'What is disputed?', urgency: 'Is it urgent?',
+    notification: 'Was the landlord told?', defect: 'Is it recurring?', causation: 'Is the cause proven?',
+    responsibility: 'Who is responsible?', remedy: 'What happens next?', resolution: 'What closes the claim?',
     ventilation_dispute: 'Ventilation check',
+  });
+  const CAUSATION_BRANCH_QUESTIONS = Object.freeze({
+    building_defect: 'Does the building explain it?',
+    tenant_use: 'Does room use explain it?',
+    mixed_cause: 'Could both contribute?',
+    evidence_gap: 'Is an independent check needed?',
   });
   const SPATIAL_EVIDENCE_LABELS = Object.freeze({
     moisture_measurements: 'Moisture measurements',
@@ -161,17 +185,17 @@
     opening: {
       title: 'Opening one shared claim context',
       detail: 'The message and original files remain the source of truth.',
-      authority: 'Application source parser',
+      authority: 'Claim sources',
     },
     read: {
       title: 'Reading the customer message and original files',
       detail: 'Nothing enters the claim state without an exact source.',
-      authority: 'Application source parser',
+      authority: 'Claim sources',
     },
     understand: {
-      title: 'Separating facts, allegations and unknowns',
+      title: 'Showing the source behind each returned fact',
       detail: 'The active fact is kept beside the passage or image region that supports it.',
-      authority: 'Guarded claim-state contract',
+      authority: 'Claim reader',
     },
     research: {
       title: 'Opening the exact Swiss-law section',
@@ -179,29 +203,29 @@
       authority: 'Swiss-law source · qualified review pending',
     },
     process: {
-      title: 'Building the claim-handling process',
+      title: 'Building the handling path',
       detail: 'The accepted process appears one grounded decision at a time.',
-      authority: 'Process mapping · accepted handling path',
+      authority: 'Process builder · accepted handling path',
     },
     evidence: {
       title: 'Attaching evidence to the decision it can resolve',
       detail: 'Only the active decision and its local evidence chain are expanded.',
-      authority: 'Accepted evidence projection · deterministic gate',
+      authority: 'Document finder',
     },
     experience: {
       title: 'Finding the closest reference pattern',
       detail: 'Relevance and provenance remain visible at the difficult branch.',
-      authority: 'Deterministic generated-pattern ranking',
+      authority: 'Reference patterns',
     },
     verify: {
       title: 'Checking the complete playbook',
       detail: 'Grounding, graph integrity and evidence relationships must agree.',
-      authority: 'Final audit · accepted result checks',
+      authority: 'Result checker · accepted result checks',
     },
     ready: {
       title: 'A grounded handling path is ready for review',
       detail: 'Causation stays open; responsibility and remedy remain blocked until competent evidence arrives.',
-      authority: 'Deterministically verified demo result',
+      authority: 'Handling path ready for review',
     },
     review: {
       title: 'Expert correction',
@@ -211,22 +235,22 @@
     'review-applied': {
       title: 'The correction now changes the process',
       detail: 'A ventilation check is added while responsibility remains blocked.',
-      authority: 'Deterministic review transform · unverified review',
+      authority: 'Unverified case correction',
     },
     knowledge: {
-      title: 'Keeping learning bounded and inspectable',
-      detail: 'Case-specific memory can be stored without silently changing the shared playbook.',
-      authority: 'Unverified demo memory · governed knowledge boundary',
+      title: 'Saving one correction for a future claim',
+      detail: 'CasePath keeps the ventilation check as unverified case memory; the shared playbook does not change.',
+      authority: 'Unverified case memory',
     },
     'later-work': {
       title: 'Checking a separate future claim',
       detail: 'The later claim remains source-isolated while eligible guidance is evaluated.',
-      authority: 'Receipt-bound deterministic comparison',
+      authority: 'New claim · comparing with saved case memory',
     },
     'later-result': {
       title: 'A later claim uses the correction',
-      detail: 'Unverified case memory · qualified review still required.',
-      authority: 'Deterministic comparison · shared playbook unchanged unless released',
+      detail: 'Unverified case memory adds one conditional ventilation check; qualified review is still required.',
+      authority: 'New claim · case-specific memory comparison',
     },
     failure: {
       title: 'The run stopped safely',
@@ -274,7 +298,8 @@
     factTourRunning: false,
     factTourComplete: false,
     factTourIndex: 0,
-    factTourPhase: 'source',
+    factTourPhase: 'select-source',
+    factTourReadArmed: false,
     factTourTimer: 0,
     pendingFactId: '',
     focusEvidenceId: '',
@@ -288,7 +313,10 @@
     visibleBranchIds: new Set(),
     graphDwell: false,
     graphInspecting: false,
+    graphInspectionPhase: 'select-source',
     groundingOpen: false,
+    manualNodeInspection: false,
+    agentAuditOpenId: '',
     cursorCommit: null,
     lastCursorKey: '',
     lastCursorChangeId: '',
@@ -296,9 +324,12 @@
     lastCursorAgentId: '',
     cursorTimer: 0,
     cursorArrivalTimer: 0,
+    cursorSettleTimer: 0,
     cursorClickTimer: 0,
     artifactChangeSerial: 0,
     artifactChangeKeys: new Set(),
+    sourceExtractions: new Map(),
+    sourceExtractionRequests: new Map(),
     claim: null,
   };
 
@@ -453,6 +484,13 @@
   function setMoment(moment) {
     const normalized = normalizeMoment(moment);
     if (!normalized) return;
+    if (normalized !== state.moment) {
+      state.manualNodeInspection = false;
+      state.agentAuditOpenId = '';
+      if (state.root && ['review', 'review-applied', 'knowledge', 'later-work', 'later-result'].includes(normalized)) {
+        clearActiveSource();
+      }
+    }
     state.moment = normalized;
     if (normalized === 'later-result' && asObject(state.laterResult)) {
       const later = state.laterResult;
@@ -551,7 +589,12 @@
       eventType: String(event.type || ''),
     };
     state.entityLineage.set(entityLineageKey(entity.kind, entity.id), lineage);
-    if (agentId) state.agentLineage.set(agentId, lineage);
+    if (agentId) {
+      const acceptedAgentLineage = state.agentLineage.get(agentId);
+      if (lineage.actorType === 'nemotron_agent' || acceptedAgentLineage?.actorType !== 'nemotron_agent') {
+        state.agentLineage.set(agentId, lineage);
+      }
+    }
   }
 
   function lineageFor(kind, entityId) {
@@ -682,7 +725,12 @@
 
   function ingestClaim(detail = {}) {
     const claim = asObject(detail.claim);
-    if (claim) state.claim = claim;
+    if (claim) {
+      state.claim = claim;
+      asArray(claim.artifacts).forEach(artifact => {
+        if (!String(artifact?.media_type || '').startsWith('image/')) ensureSourceExtraction(artifact.artifact_id);
+      });
+    }
     mount();
     render();
   }
@@ -743,7 +791,9 @@
   function simplifiedNodes() {
     const byId = new Map(asArray(state.process?.nodes).map(node => [node.node_id, node]));
     const projectedIds = [...SIMPLIFIED_SPINE_IDS];
-    if (byId.has('ventilation_dispute') && (state.result?.review_transform || state.moment === 'later-result')) {
+    if (byId.has('ventilation_dispute')
+      && state.moment !== 'later-work'
+      && (state.result?.review_transform || state.moment === 'later-result')) {
       projectedIds.splice(projectedIds.indexOf('causation') + 1, 0, 'ventilation_dispute');
     }
     return projectedIds.map(nodeId => {
@@ -770,6 +820,7 @@
     state.pendingGraphNodeId = '';
     state.graphDwell = false;
     state.graphInspecting = false;
+    state.graphInspectionPhase = 'select-source';
     state.cursorCommit = null;
     const nodes = simplifiedNodes();
     window.dispatchEvent(new CustomEvent('casepath:artifact-process-started', { detail: {
@@ -789,10 +840,13 @@
       state.lastCursorEventId = lineage?.eventId || '';
       state.lastCursorAgentId = lineage?.agentId || '';
       state.graphInspecting = true;
+      state.graphInspectionPhase = 'select-source';
+      clearActiveSource();
       const commitNode = () => {
         if (state.pendingGraphNodeId !== node.node_id) return;
         state.pendingGraphNodeId = '';
         state.graphInspecting = false;
+        state.graphInspectionPhase = 'select-source';
         state.visibleNodeIds.add(node.node_id);
         state.graphRevealIndex += 1;
         state.graphDwell = true;
@@ -802,18 +856,34 @@
           revealNext();
         }, GRAPH_NODE_DWELL_MS);
       };
-      state.cursorCommit = () => {
+      const highlightSource = () => {
         if (state.pendingGraphNodeId !== node.node_id) return;
         const inspectionTarget = state.root?.querySelector('[data-ac-inspection-target="true"]');
-        if (inspectionTarget?.dataset.sourceLocatorId) setActiveSourceLocator(inspectionTarget.dataset.sourceLocatorId);
-        if (inspectionTarget) emitInteraction(inspectionTarget.dataset.acAction || 'inspect', inspectionTarget);
-        const sourceKind = inspectionTarget?.dataset.sourceId
+        if (!inspectionTarget || inspectionTarget.dataset.inspectionPhase !== 'read-source') return;
+        const sourceKind = inspectionTarget.dataset.sourceId
           ? 'claim-source'
-          : inspectionTarget?.dataset.lawId
+          : inspectionTarget.dataset.lawId
             ? 'swiss-law'
-            : inspectionTarget?.dataset.evidenceId
+            : inspectionTarget.dataset.evidenceId
               ? 'evidence-requirement'
               : 'accepted-process-input';
+        const sourceId = inspectionTarget.dataset.sourceId
+          || inspectionTarget.dataset.lawId
+          || inspectionTarget.dataset.evidenceId
+          || inspectionTarget.dataset.inspectionId
+          || '';
+        const factId = inspectionTarget.dataset.factId || '';
+        const locatorId = inspectionTarget.dataset.sourceLocatorId || '';
+        const found = nodeInspectionBasis(node).finding || '';
+        emitInteraction('confirm-source', inspectionTarget);
+        state.graphInspectionPhase = 'highlight-source';
+        state.cursorCommit = null;
+        render();
+        window.dispatchEvent(new CustomEvent('casepath:source-highlighted', { detail: {
+          entityKind: 'node', nodeId: node.node_id, changeId: state.lastCursorChangeId,
+          eventId: state.lastCursorEventId, agentId: state.lastCursorAgentId,
+          sourceId, factId, locatorId,
+        } }));
         window.dispatchEvent(new CustomEvent('casepath:source-inspection', { detail: {
           entityKind: 'node',
           nodeId: node.node_id,
@@ -821,20 +891,25 @@
           eventId: state.lastCursorEventId,
           agentId: state.lastCursorAgentId,
           sourceKind,
-          sourceId: inspectionTarget?.dataset.sourceId
-            || inspectionTarget?.dataset.lawId
-            || inspectionTarget?.dataset.evidenceId
-            || inspectionTarget?.dataset.inspectionId
-            || '',
-          factId: inspectionTarget?.dataset.factId || '',
-          locatorId: inspectionTarget?.dataset.sourceLocatorId || '',
-          found: inspectionTarget?.querySelector('strong')?.textContent?.trim() || '',
+          sourceId,
+          factId,
+          locatorId,
+          found,
         } }));
         state.graphRevealTimer = window.setTimeout(() => {
-          state.graphInspecting = false;
-          state.cursorCommit = commitNode;
-          render();
+          commitNode();
         }, GRAPH_SOURCE_DWELL_MS);
+      };
+      state.cursorCommit = () => {
+        if (state.pendingGraphNodeId !== node.node_id) return;
+        const inspectionTarget = state.root?.querySelector('[data-ac-inspection-target="true"]');
+        if (!inspectionTarget || inspectionTarget.dataset.inspectionPhase !== 'select-source') return;
+        if (inspectionTarget.dataset.sourceId) markSubmissionSource(inspectionTarget.dataset.sourceId);
+        if (inspectionTarget.dataset.sourceLocatorId) setActiveSourceLocator(inspectionTarget.dataset.sourceLocatorId);
+        emitInteraction(inspectionTarget.dataset.acAction || 'inspect', inspectionTarget);
+        state.graphInspectionPhase = 'read-source';
+        state.cursorCommit = highlightSource;
+        render();
       };
       render();
     };
@@ -857,7 +932,9 @@
     state.pendingBranchNodeId = '';
     state.graphDwell = false;
     state.graphInspecting = false;
+    state.graphInspectionPhase = 'select-source';
     state.cursorCommit = null;
+    clearActiveSource();
     state.selectedNodeId = state.process?.current_overlay?.current_node_id || state.process?.current_node || 'causation';
     state.activeChainKind = 'source';
     render();
@@ -883,11 +960,26 @@
     state.lastCursorEventId = lineage?.eventId || '';
     state.lastCursorAgentId = lineage?.agentId || '';
     state.graphInspecting = true;
-    state.cursorCommit = () => {
+    state.graphInspectionPhase = 'select-source';
+    clearActiveSource();
+    const highlightSource = () => {
       if (state.pendingBranchNodeId !== node.node_id) return;
       const inspectionTarget = state.root?.querySelector('[data-ac-inspection-target="true"]');
-      if (inspectionTarget?.dataset.sourceLocatorId) setActiveSourceLocator(inspectionTarget.dataset.sourceLocatorId);
-      if (inspectionTarget) emitInteraction(inspectionTarget.dataset.acAction || 'inspect', inspectionTarget);
+      if (!inspectionTarget || inspectionTarget.dataset.inspectionPhase !== 'read-source') return;
+      const sourceKind = inspectionTarget.dataset.sourceId ? 'claim-source' : inspectionTarget.dataset.lawId ? 'swiss-law' : inspectionTarget.dataset.evidenceId ? 'evidence-requirement' : 'accepted-process-input';
+      const sourceId = inspectionTarget.dataset.sourceId || inspectionTarget.dataset.lawId || inspectionTarget.dataset.evidenceId || inspectionTarget.dataset.inspectionId || '';
+      const factId = inspectionTarget.dataset.factId || '';
+      const locatorId = inspectionTarget.dataset.sourceLocatorId || '';
+      const found = nodeInspectionBasis(node).finding || '';
+      emitInteraction('confirm-source', inspectionTarget);
+      state.graphInspectionPhase = 'highlight-source';
+      state.cursorCommit = null;
+      render();
+      window.dispatchEvent(new CustomEvent('casepath:source-highlighted', { detail: {
+        entityKind: 'branch', nodeId: node.node_id, branchId: branch.branch_id,
+        changeId: state.lastCursorChangeId, eventId: state.lastCursorEventId,
+        agentId: state.lastCursorAgentId, sourceId, factId, locatorId,
+      } }));
       window.dispatchEvent(new CustomEvent('casepath:source-inspection', { detail: {
         entityKind: 'branch',
         nodeId: node.node_id,
@@ -895,16 +987,17 @@
         changeId: state.lastCursorChangeId,
         eventId: state.lastCursorEventId,
         agentId: state.lastCursorAgentId,
-        sourceKind: inspectionTarget?.dataset.sourceId ? 'claim-source' : inspectionTarget?.dataset.lawId ? 'swiss-law' : inspectionTarget?.dataset.evidenceId ? 'evidence-requirement' : 'accepted-process-input',
-        sourceId: inspectionTarget?.dataset.sourceId || inspectionTarget?.dataset.lawId || inspectionTarget?.dataset.evidenceId || inspectionTarget?.dataset.inspectionId || '',
-        factId: inspectionTarget?.dataset.factId || '',
-        locatorId: inspectionTarget?.dataset.sourceLocatorId || '',
-        found: inspectionTarget?.querySelector('strong')?.textContent?.trim() || '',
+        sourceKind,
+        sourceId,
+        factId,
+        locatorId,
+        found,
       } }));
       state.graphRevealTimer = window.setTimeout(() => {
         state.visibleBranchIds.add(node.node_id);
         state.pendingBranchNodeId = '';
         state.graphInspecting = false;
+        state.graphInspectionPhase = 'select-source';
         state.cursorCommit = null;
         render();
         window.dispatchEvent(new CustomEvent('casepath:branch-visualized', { detail: {
@@ -916,6 +1009,17 @@
         } }));
         state.graphRevealTimer = window.setTimeout(startBranchReveal, 350);
       }, GRAPH_BRANCH_SOURCE_DWELL_MS);
+    };
+    state.cursorCommit = () => {
+      if (state.pendingBranchNodeId !== node.node_id) return;
+      const inspectionTarget = state.root?.querySelector('[data-ac-inspection-target="true"]');
+      if (!inspectionTarget || inspectionTarget.dataset.inspectionPhase !== 'select-source') return;
+      if (inspectionTarget.dataset.sourceId) markSubmissionSource(inspectionTarget.dataset.sourceId);
+      if (inspectionTarget.dataset.sourceLocatorId) setActiveSourceLocator(inspectionTarget.dataset.sourceLocatorId);
+      emitInteraction(inspectionTarget.dataset.acAction || 'inspect', inspectionTarget);
+      state.graphInspectionPhase = 'read-source';
+      state.cursorCommit = highlightSource;
+      render();
     };
     render();
   }
@@ -938,6 +1042,11 @@
     evidenceForNode(node?.node_id).forEach(item => {
       if (item.fact_id) ids.add(item.fact_id);
     });
+    return state.facts.filter(fact => ids.has(fact.fact_id));
+  }
+
+  function directFactsForNode(node) {
+    const ids = new Set(asArray(node?.fact_ids));
     return state.facts.filter(fact => ids.has(fact.fact_id));
   }
 
@@ -1067,23 +1176,40 @@
     state.officialLawTourRunning = true;
     state.officialLawTourIndex = 0;
     state.officialLawTourVisitedIds.clear();
-    state.focusLawId = sources[0].source_id;
+    state.focusLawId = '';
     beginOfficialLawStep(sources, 0);
   }
 
   function representativeFactRef(fact) {
     const refs = asArray(fact?.source_refs);
-    if (fact?.fact_id === 'fact_recurrence') {
-      return refs.find(ref => ref?.locator_kind === 'visual_observation') || refs[0] || null;
-    }
-    if (fact?.fact_id === 'fact_cause') {
-      return refs.find(ref => /independent|inspection/i.test(`${ref?.excerpt || ''} ${ref?.observation || ''}`))
-        || refs.find(ref => ref?.locator_kind === 'text_quote')
-        || refs[0]
+    const exactText = pattern => refs.find(ref => ref?.locator_kind === 'text_quote' && pattern.test(String(ref?.excerpt || '')));
+    if (fact?.fact_id === 'fact_tenancy') {
+      return exactText(/residential use/i)
+        || refs.find(ref => ['text_quote', 'metadata_field'].includes(ref?.locator_kind))
         || null;
     }
-    return refs.find(ref => ['text_quote', 'metadata_field', 'visual_observation'].includes(ref?.locator_kind))
-      || refs[0]
+    if (fact?.fact_id === 'fact_notification') {
+      return exactText(/arrange an inspection and repair/i)
+        || refs.find(ref => ['text_quote', 'metadata_field'].includes(ref?.locator_kind))
+        || null;
+    }
+    if (fact?.fact_id === 'fact_recurrence') {
+      return refs.find(ref => isRenderableVisualRef(ref))
+        || refs.find(ref => ['text_quote', 'metadata_field'].includes(ref?.locator_kind))
+        || null;
+    }
+    if (fact?.fact_id === 'fact_ventilation_allegation') {
+      return exactText(/insufficient ventilation/i)
+        || refs.find(ref => ['text_quote', 'metadata_field'].includes(ref?.locator_kind))
+        || null;
+    }
+    if (fact?.fact_id === 'fact_cause') {
+      const supportedRefs = refs.filter(ref => ['text_quote', 'metadata_field'].includes(ref?.locator_kind) || isRenderableVisualRef(ref));
+      return supportedRefs.find(ref => /independent|inspection/i.test(`${ref?.excerpt || ''} ${ref?.observation || ''}`))
+        || refs.find(ref => ref?.locator_kind === 'text_quote')
+        || null;
+    }
+    return refs.find(ref => ['text_quote', 'metadata_field'].includes(ref?.locator_kind) || isRenderableVisualRef(ref))
       || null;
   }
 
@@ -1098,10 +1224,108 @@
   }
 
   function sourceDisplayTitle(artifactId) {
+    if (['message', 'intake'].includes(String(artifactId || ''))) return 'Claim message';
     const row = [...document.querySelectorAll('.attachment-row[data-artifact-id]')]
       .find(item => item.dataset.artifactId === String(artifactId || ''));
     return row?.querySelector('.attachment-title')?.textContent?.trim()
       || String(artifactId || 'Claim source').replace(/^art_/, '').replaceAll('_', ' ');
+  }
+
+  function sourceArtifactMeta(ref) {
+    if (ref?.artifact_id === 'message') {
+      return {
+        title: 'Claim message',
+        filename: 'Customer claim message',
+        pageCount: 1,
+      };
+    }
+    if (ref?.artifact_id === 'intake') {
+      return {
+        title: 'Claim details',
+        filename: 'Observed intake fields',
+        pageCount: 1,
+      };
+    }
+    const artifact = asArray(state.claim?.artifacts)
+      .find(item => String(item?.artifact_id || '') === String(ref?.artifact_id || ''));
+    return {
+      title: String(artifact?.title || sourceDisplayTitle(ref?.artifact_id) || 'Claim source'),
+      filename: String(artifact?.filename || sourceDisplayTitle(ref?.artifact_id) || 'Claim source'),
+      pageCount: Math.max(1, Number(artifact?.page_count) || 1),
+    };
+  }
+
+  function ensureSourceExtraction(artifactId) {
+    const sourceId = String(artifactId || '');
+    if (!sourceId || ['message', 'intake'].includes(sourceId) || state.sourceExtractions.has(sourceId)) {
+      return Promise.resolve(state.sourceExtractions.get(sourceId) || null);
+    }
+    if (state.sourceExtractionRequests.has(sourceId)) return state.sourceExtractionRequests.get(sourceId);
+    const request = fetch(`${API}/api/artifacts/${encodeURIComponent(sourceId)}/extraction`, { cache: 'force-cache' })
+      .then(response => {
+        if (!response.ok) throw new Error(`Source extraction unavailable (${response.status})`);
+        return response.json();
+      })
+      .then(extraction => {
+        state.sourceExtractions.set(sourceId, asObject(extraction) || {});
+        return extraction;
+      })
+      .catch(() => {
+        state.sourceExtractions.set(sourceId, {});
+        return null;
+      })
+      .finally(() => state.sourceExtractionRequests.delete(sourceId));
+    state.sourceExtractionRequests.set(sourceId, request);
+    return request;
+  }
+
+  function sourceArtifactText(ref) {
+    const sourceId = String(ref?.artifact_id || '');
+    if (sourceId === 'message') return String(state.claim?.message || '');
+    if (sourceId === 'intake') return '';
+    const extraction = state.sourceExtractions.get(sourceId);
+    if (!extraction) {
+      ensureSourceExtraction(sourceId);
+      return '';
+    }
+    if (Array.isArray(extraction.pages)) {
+      return String(extraction.pages[Math.max(0, Number(ref?.page || 1) - 1)] || '');
+    }
+    const email = asObject(extraction.email);
+    if (email) {
+      return [
+        email.from ? `From: ${email.from}` : '',
+        email.to ? `To: ${email.to}` : '',
+        email.date ? `Date: ${email.date}` : '',
+        email.subject ? `Subject: ${email.subject}` : '',
+        String(email.body || ''),
+      ].filter(Boolean).join('\n');
+    }
+    return '';
+  }
+
+  function sourceTextWindow(ref) {
+    const exactReturned = sourceFinding(ref).trim();
+    const sourceText = sourceArtifactText(ref);
+    if (!sourceText || !exactReturned) return { before: '', exact: exactReturned, after: '', matched: false };
+    const index = sourceText.toLocaleLowerCase().indexOf(exactReturned.toLocaleLowerCase());
+    if (index < 0) return { before: '', exact: exactReturned, after: '', matched: false };
+    let start = Math.max(0, index - 90);
+    let end = Math.min(sourceText.length, index + exactReturned.length + 180);
+    if (start > 0) {
+      const nextBoundary = sourceText.slice(start).search(/\s/);
+      if (nextBoundary >= 0) start += nextBoundary + 1;
+    }
+    if (end < sourceText.length) {
+      const previousBoundary = sourceText.slice(0, end).lastIndexOf(' ');
+      if (previousBoundary > index + exactReturned.length) end = previousBoundary;
+    }
+    return {
+      before: `${start > 0 ? '…' : ''}${sourceText.slice(start, index).replace(/\s+/g, ' ')}`,
+      exact: sourceText.slice(index, index + exactReturned.length),
+      after: `${sourceText.slice(index + exactReturned.length, end).replace(/\s+/g, ' ')}${end < sourceText.length ? '…' : ''}`,
+      matched: true,
+    };
   }
 
   function sourceFinding(ref) {
@@ -1114,15 +1338,116 @@
   }
 
   function sourceLocation(ref) {
-    if (ref?.locator_kind === 'visual_observation') return 'Marked image region';
-    if (ref?.locator_kind === 'metadata_field') return `${String(ref.field || 'Metadata').replaceAll('_', ' ')} field`;
-    return `Page ${String(ref?.page || 1)} · exact passage`;
+    if (ref?.locator_kind === 'visual_observation') return 'Image region';
+    if (ref?.locator_kind === 'metadata_field') return 'Returned field';
+    return `Page ${String(ref?.page || 1)}`;
   }
 
   function markSubmissionSource(artifactId = '') {
+    const sourceId = String(artifactId || '');
+    const sourcePackage = document.querySelector('.v21-source-summary-toggle');
+    const packageActive = ['message', 'intake'].includes(sourceId);
+    if (sourcePackage) {
+      sourcePackage.classList.toggle('is-active', packageActive);
+      if (packageActive) {
+        sourcePackage.dataset.activeSourceId = sourceId;
+        sourcePackage.setAttribute('aria-current', 'true');
+      } else {
+        delete sourcePackage.dataset.activeSourceId;
+        sourcePackage.removeAttribute('aria-current');
+      }
+    }
     document.querySelectorAll('.attachment-row[data-artifact-id]').forEach(row => {
-      row.classList.toggle('is-active', Boolean(artifactId) && row.dataset.artifactId === String(artifactId));
+      const active = Boolean(sourceId) && row.dataset.artifactId === sourceId;
+      row.classList.toggle('is-active', active);
+      if (active) row.setAttribute('aria-current', 'true');
+      else row.removeAttribute('aria-current');
     });
+  }
+
+  function clearActiveSource() {
+    markSubmissionSource('');
+    setActiveSourceLocator('');
+    document.querySelectorAll('.is-agent-clicked').forEach(item => item.classList.remove('is-agent-clicked'));
+  }
+
+  function normalizedVisualRegion(ref) {
+    if (ref?.locator_kind !== 'visual_observation'
+      || !String(ref?.observation || '').trim()
+      || ref?.annotation_contract !== VISUAL_ANNOTATION_CONTRACT
+      || ref?.annotation_version !== VISUAL_ANNOTATION_VERSION
+      || ref?.producer !== VISUAL_ANNOTATION_PRODUCER
+      || ref?.authority !== VISUAL_ANNOTATION_AUTHORITY
+      || !/^[0-9a-f]{64}$/.test(String(ref?.image_sha256 || ''))) return null;
+    const region = asArray(ref?.region).map(Number);
+    if (region.length !== 4 || region.some(value => !Number.isFinite(value))) return null;
+    const [x, y, width, height] = region;
+    if (x < 0 || y < 0 || width <= 0 || height <= 0 || x + width > 1 || y + height > 1) return null;
+    return region;
+  }
+
+  function visualSourceImage(ref) {
+    const artifact = asArray(state.claim?.artifacts)
+      .find(item => String(item?.artifact_id || '') === String(ref?.artifact_id || ''));
+    const image = [...document.querySelectorAll('.attachment-row[data-artifact-id]')]
+      .find(row => row.dataset.artifactId === String(ref?.artifact_id || ''))
+      ?.querySelector('.attachment-thumb img');
+    const imageSource = image?.currentSrc || image?.getAttribute('src') || '';
+    return imageSource
+      && String(artifact?.media_type || '').startsWith('image/')
+      && String(artifact?.sha256 || '') === String(ref?.image_sha256 || '')
+      ? imageSource
+      : '';
+  }
+
+  function isRenderableVisualRef(ref) {
+    return Boolean(normalizedVisualRegion(ref) && visualSourceImage(ref));
+  }
+
+  function visualSourceMarkup(fact, ref, interactive = true, highlighted = false) {
+    const region = normalizedVisualRegion(ref);
+    const imageSource = visualSourceImage(ref);
+    if (!region || !imageSource) return '';
+    const [x, y, width, height] = region;
+    const label = interactive && !highlighted
+      ? 'Select the region the agent is inspecting'
+      : String(ref?.observation || 'Curated generated-demo image region');
+    const targetAttributes = interactive
+      ? `data-ac-action="confirm-source" data-ac-inspection-target="true" data-ac-inspection-read-target="true" data-fact-inspection-target="true" data-inspection-phase="read-source" data-ac-cursor-target="true" ${sourceContextAttributes(fact, ref)}`
+      : '';
+    const sourceMeta = sourceArtifactMeta(ref);
+    return `<figure class="ac-visual-source" ${sourceContextAttributes(fact, ref)}>
+      <div class="ac-visual-source-frame">
+        <img src="${esc(imageSource)}" alt="Bedroom condition source">
+        ${interactive
+          ? `<button type="button" class="ac-visual-region-target is-awaiting-click" ${targetAttributes} style="--region-x:${x * 100}%;--region-y:${y * 100}%;--region-width:${width * 100}%;--region-height:${height * 100}%" aria-label="Select this exact image region"></button>`
+          : `<span class="ac-visual-region-target${highlighted ? ' is-highlighted' : ''}" style="--region-x:${x * 100}%;--region-y:${y * 100}%;--region-width:${width * 100}%;--region-height:${height * 100}%" aria-hidden="true"></span>`}
+      </div>
+      <figcaption><span>${esc(sourceMeta.title)}</span><small>Image</small><strong>${esc(label)}</strong></figcaption>
+    </figure>`;
+  }
+
+  function sourceReadingMarkup(fact, ref, interactive = true, highlighted = false) {
+    if (ref?.locator_kind === 'visual_observation') return visualSourceMarkup(fact, ref, interactive, highlighted);
+    const finding = sourceFinding(ref);
+    const sourceMeta = sourceArtifactMeta(ref);
+    const page = Math.max(1, Number(ref?.page) || 1);
+    const pageLabel = ref?.locator_kind === 'metadata_field'
+      ? 'Returned field'
+      : `Page ${page} of ${sourceMeta.pageCount}`;
+    const documentHead = `<div class="ac-source-document-head"><strong>${esc(sourceMeta.title)}</strong><small>${esc(pageLabel)}</small></div>`;
+    const targetAttributes = interactive
+      ? `data-ac-action="confirm-source" data-ac-inspection-target="true" data-ac-inspection-read-target="true" data-fact-inspection-target="true" data-inspection-phase="read-source" data-ac-cursor-target="true" ${sourceContextAttributes(fact, ref)}`
+      : '';
+    if (ref?.locator_kind === 'metadata_field') {
+      const field = String(ref?.field || 'Returned field').replaceAll('_', ' ');
+      return `<div class="ac-source-document-preview">${documentHead}<div class="ac-source-field${interactive ? ' is-awaiting-click' : ''}${highlighted ? ' is-highlighted' : ''}" ${targetAttributes}>
+        <small>${esc(field)}</small><strong>${esc(String(ref?.value ?? 'Value not returned'))}</strong>
+      </div>
+      </div>`;
+    }
+    const sourceWindow = sourceTextWindow(ref);
+    return `<div class="ac-source-document-preview">${documentHead}<blockquote class="ac-source-passage ac-source-page-excerpt">${sourceWindow.before ? `<span>${esc(sourceWindow.before)}</span>` : ''}<mark class="ac-fact-reading-target${interactive ? ' is-awaiting-click' : ''}${highlighted ? ' is-highlighted' : ''}" ${targetAttributes}>${esc(sourceWindow.exact || finding)}</mark>${sourceWindow.after ? `<span>${esc(sourceWindow.after)}</span>` : ''}</blockquote></div>`;
   }
 
   function finishFactSourceTour(items) {
@@ -1130,8 +1455,9 @@
     state.factTourRunning = false;
     state.factTourComplete = true;
     state.factTourPhase = 'finding';
+    state.factTourReadArmed = false;
     state.cursorCommit = null;
-    markSubmissionSource('');
+    clearActiveSource();
     render();
     window.dispatchEvent(new CustomEvent('casepath:fact-source-tour-complete', { detail: {
       contract: CONTRACT,
@@ -1148,19 +1474,28 @@
     }
     const { fact, ref, lineage } = items[index];
     state.factTourIndex = index;
-    state.factTourPhase = 'source';
+    state.factTourPhase = 'select-source';
+    state.factTourReadArmed = false;
     state.pendingFactId = fact.fact_id;
     state.focusFactId = fact.fact_id;
     state.lastCursorChangeId = visibleChangeId('fact', fact.fact_id, lineage);
     state.lastCursorEventId = lineage.eventId;
     state.lastCursorAgentId = lineage.agentId;
-    markSubmissionSource(ref.artifact_id);
-    state.cursorCommit = () => {
-      if (!state.factTourRunning || state.pendingFactId !== fact.fact_id || state.factTourPhase !== 'source') return;
+    clearActiveSource();
+    const highlightSource = () => {
+      if (!state.factTourRunning || state.pendingFactId !== fact.fact_id || state.factTourPhase !== 'read-source') return;
       const target = state.root?.querySelector('[data-fact-inspection-target="true"]');
-      if (!target || target.dataset.factId !== fact.fact_id || target.dataset.sourceId !== String(ref.artifact_id || '')) return;
-      setActiveSourceLocator(target.dataset.sourceLocatorId || '');
-      emitInteraction('open-source', target);
+      if (!target || target.dataset.factId !== fact.fact_id || target.dataset.sourceId !== String(ref.artifact_id || '') || target.dataset.inspectionPhase !== 'read-source') return;
+      emitInteraction('confirm-source', target);
+      state.factTourPhase = 'highlight-source';
+      state.factTourReadArmed = false;
+      state.cursorCommit = null;
+      render();
+      window.dispatchEvent(new CustomEvent('casepath:source-highlighted', { detail: {
+        entityKind: 'fact', factId: fact.fact_id, changeId: state.lastCursorChangeId,
+        eventId: state.lastCursorEventId, agentId: state.lastCursorAgentId,
+        sourceId: String(ref.artifact_id || ''), locatorId: target.dataset.sourceLocatorId || '',
+      } }));
       window.dispatchEvent(new CustomEvent('casepath:source-inspection', { detail: {
         entityKind: 'fact',
         factId: fact.fact_id,
@@ -1176,8 +1511,29 @@
         if (!state.factTourRunning || state.pendingFactId !== fact.fact_id) return;
         state.factTourPhase = 'finding';
         render();
-        state.factTourTimer = window.setTimeout(() => beginFactSourceStep(items, index + 1), FACT_RESULT_DWELL_MS);
+        const resultDwell = FACT_HERO_IDS.has(fact.fact_id)
+          ? FACT_HERO_RESULT_DWELL_MS
+          : FACT_RESULT_DWELL_MS;
+        state.factTourTimer = window.setTimeout(() => beginFactSourceStep(items, index + 1), resultDwell);
       }, FACT_SOURCE_DWELL_MS);
+    };
+    state.cursorCommit = () => {
+      if (!state.factTourRunning || state.pendingFactId !== fact.fact_id || state.factTourPhase !== 'select-source') return;
+      const target = state.root?.querySelector('[data-fact-inspection-target="true"]');
+      if (!target || target.dataset.factId !== fact.fact_id || target.dataset.sourceId !== String(ref.artifact_id || '') || target.dataset.inspectionPhase !== 'select-source') return;
+      markSubmissionSource(ref.artifact_id);
+      setActiveSourceLocator(target.dataset.sourceLocatorId || '');
+      emitInteraction('open-source', target);
+      state.factTourPhase = 'read-source';
+      state.factTourReadArmed = false;
+      state.cursorCommit = null;
+      render();
+      state.factTourTimer = window.setTimeout(() => {
+        if (!state.factTourRunning || state.pendingFactId !== fact.fact_id || state.factTourPhase !== 'read-source') return;
+        state.factTourReadArmed = true;
+        state.cursorCommit = highlightSource;
+        render();
+      }, FACT_NEUTRAL_READ_DWELL_MS);
     };
     render();
   }
@@ -1188,7 +1544,7 @@
     if (items.length !== FACT_STORY_IDS.length) return;
     state.factTourRunning = true;
     state.factTourIndex = 0;
-    state.factTourPhase = 'source';
+    state.factTourPhase = 'select-source';
     beginFactSourceStep(items, 0);
   }
 
@@ -1289,10 +1645,11 @@
             <span data-ac-why>The message and original files remain the source of truth.</span>
           </div>
         </div>
-        <ol class="ac-team" aria-label="Six Nemotron specialist roles" data-ac-team></ol>
+        <ol class="ac-team" aria-label="Specialist activity" data-ac-team></ol>
       </header>
       <main class="ac-work-body" data-artifact-layout="persistent-source-process-focal">
         <section class="ac-process" id="artifactProcessGraph" aria-label="Accepted handling process" data-ac-process data-graph-projection="flagship-spine/1" data-process-construction-state="pending" data-process-graph-id="" hidden>
+          <span class="ac-cursor-park" data-ac-cursor-park aria-hidden="true"></span>
           <div class="ac-process-copy">
             <span data-ac-process-count>Accepted handling process</span>
             <strong data-ac-process-focus>Grounded decision path</strong>
@@ -1312,36 +1669,220 @@
         <header><span data-ac-law-authority></span><button type="button" data-ac-action="close-law" aria-label="Close Swiss-law detail">×</button></header>
         <article data-ac-law-detail></article>
       </dialog>
+      <dialog class="ac-grounding-viewer" data-ac-grounding-viewer aria-labelledby="artifactGroundingViewerTitle">
+        <header><div><span>Why this step</span><h3 id="artifactGroundingViewerTitle">Law, documents and examples</h3></div><button type="button" data-ac-action="close-grounding" aria-label="Close supporting detail">×</button></header>
+        <article data-ac-grounding-viewer-detail></article>
+      </dialog>
+      <aside class="ac-agent-audit" data-ac-agent-audit aria-labelledby="artifactAgentAuditTitle" hidden></aside>
       <footer class="ac-authority-line">
         <span data-ac-authority>Application source parser</span>
-        <span data-ac-proof>Only returned, contract-bound work is shown.</span>
+        <span data-ac-proof>Only validated outputs are shown.</span>
       </footer>
       <div class="ac-agent-cursor" id="artifactAgentCursor" aria-hidden="true" data-ac-cursor data-agent-signature="casepath">
         <svg viewBox="0 0 24 24"><path d="M5 3.8v14.5l3.7-3.3 2.7 5.2 2.5-1.3-2.7-5.1 4.9-.7L5 3.8Z"/></svg>
         <b data-ac-cursor-monogram>CP</b>
+        <span class="ac-agent-cursor-label"><strong data-ac-cursor-agent>CasePath</strong><small data-ac-cursor-action>Opening the claim</small></span>
       </div>`;
     renderTeam();
+    installGlobalAgentRail();
     root.addEventListener('click', handleClick);
     root.addEventListener('keydown', handleKeydown);
+    root.querySelector('[data-ac-grounding-viewer]')?.addEventListener('close', () => {
+      root.querySelectorAll('[data-ac-action="toggle-grounding"]').forEach(toggle => toggle.setAttribute('aria-expanded', 'false'));
+    });
   }
 
   function renderTeam() {
-    const team = state.root?.querySelector('[data-ac-team]');
+    const team = document.querySelector('[data-ac-team]') || state.root?.querySelector('[data-ac-team]');
     if (!team || team.children.length) return;
     team.innerHTML = Object.entries(AGENTS)
       .sort(([, a], [, b]) => a.order - b.order)
-      .map(([agentId, agent]) => `<li data-ac-agent-id="${esc(agentId)}" data-agent-signature="${esc(agent.signature)}" title="${esc(agent.label)}"><span>${esc(agent.monogram)}</span><small>${esc(agent.short)}</small></li>`)
+      .map(([agentId, agent]) => `<li data-ac-agent-id="${esc(agentId)}" data-agent-label="${esc(agent.label)}" data-agent-monogram="${esc(agent.monogram)}" data-agent-signature="${esc(agent.signature)}"><button type="button" data-ac-action="open-agent-audit" data-agent-id="${esc(agentId)}" aria-label="Open ${esc(agent.label)} activity" aria-pressed="false"><span aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false">${AGENT_ICONS[agent.signature] || ''}</svg></span><small>${esc(agent.short)}</small></button></li>`)
       .join('');
+  }
+
+  function installGlobalAgentRail() {
+    const appbar = document.querySelector('.appbar');
+    const team = state.root?.querySelector('[data-ac-team]');
+    if (!appbar || !team) return;
+    let host = appbar.querySelector('[data-ac-global-agent-work]');
+    if (!host) {
+      host = document.createElement('div');
+      host.className = 'ac-global-agent-work';
+      host.dataset.acGlobalAgentWork = 'true';
+      host.innerHTML = '<div class="ac-global-task"><small data-ac-global-agent></small><strong data-ac-global-task></strong></div>';
+      const auditButton = appbar.querySelector('#openAudit');
+      appbar.insertBefore(host, auditButton || null);
+      host.addEventListener('click', event => {
+        const button = event.target.closest?.('[data-ac-action="open-agent-audit"]');
+        if (!button) return;
+        openAgentAudit(button.dataset.agentId || '');
+      });
+    }
+    if (!host.contains(team)) host.prepend(team);
+  }
+
+  function orchestrationAudit() {
+    return asObject(state.result?.agent_orchestration)
+      || asObject(state.result?.audit?.agent_orchestration)
+      || null;
+  }
+
+  function sourceIdsFromFacts(facts) {
+    return unique(asArray(facts).flatMap(fact => asArray(fact?.source_refs).map(ref => String(ref?.artifact_id || ''))));
+  }
+
+  function agentHistoryData(agentId) {
+    const audit = orchestrationAudit();
+    const entry = asArray(audit?.agents).find(item => item?.agent_id === agentId);
+    if (!entry || entry.actor_type !== 'nemotron_agent') return null;
+    const acceptedIds = new Set(asArray(entry.accepted_ids).map(String));
+    const artifacts = asObject(audit?.specialist_artifacts) || {};
+    const flagshipFacts = asArray(state.result?.facts).length
+      ? asArray(state.result.facts)
+      : asArray(state.result?.understanding?.facts);
+    const flagshipProcess = asObject(state.result?.process) || {};
+    const flagshipChecklist = asObject(state.result?.checklist) || {};
+    const artifact = agentId === 'canonical_facts'
+      ? { facts: flagshipFacts }
+      : agentId === 'final_claim_brief_audit'
+        ? asObject(audit?.final_claim_brief) || asObject(artifacts[agentId]) || {}
+        : asObject(artifacts[agentId]) || {};
+    let sourceIds = [];
+    let factIds = [];
+    let extracted = [];
+    let affected = [];
+    let sourcesLabel = 'Sources cited';
+    let emptySources = 'No source citation accepted';
+    if (agentId === 'canonical_facts') {
+      const acceptedFacts = flagshipFacts.filter(fact => acceptedIds.has(String(fact?.fact_id || '')));
+      factIds = acceptedFacts.map(fact => fact.fact_id).filter(Boolean);
+      sourceIds = sourceIdsFromFacts(acceptedFacts);
+      extracted = acceptedFacts.map(fact => `${fact.label}: ${fact.value}`).filter(Boolean);
+      affected = ['Shared fact state', 'Internal work plan'];
+    } else if (agentId === 'orchestrator_plan') {
+      const planAccepted = acceptedIds.has('model_priority_order');
+      factIds = planAccepted ? asArray(artifact.model_priority_fact_ids).map(String) : [];
+      extracted = planAccepted ? asArray(artifact.model_priority_task_codes || artifact.priority_task_codes).map(String) : [];
+      sourcesLabel = 'Source coverage';
+      emptySources = 'CasePath attached source coverage after the plan';
+      affected = ['Source and Process work started in parallel'];
+    } else if (agentId === 'document_source_integrity') {
+      const acceptedArtifacts = asArray(artifact.artifacts).filter(item => acceptedIds.has(String(item?.artifact_id || '')));
+      sourceIds = acceptedArtifacts.map(item => String(item?.artifact_id || '')).filter(Boolean);
+      extracted = acceptedArtifacts.map(item => `${sourceDisplayTitle(item?.artifact_id)}: ${String(item?.integrity_class || 'checked').replaceAll('_', ' ')}`);
+      affected = ['Process gate source check'];
+    } else if (agentId === 'process_decision_mapping') {
+      const decisions = asArray(artifact.decisions).filter(item => acceptedIds.has(String(item?.contribution_id || '')));
+      factIds = decisions.map(item => String(item?.fact_id || '')).filter(Boolean);
+      sourceIds = sourceIdsFromFacts(flagshipFacts.filter(fact => factIds.includes(fact.fact_id)));
+      extracted = decisions.map(item => String(item?.decision_value || item?.fact_id || '')).filter(Boolean);
+      affected = asArray(flagshipProcess.nodes).filter(node => asArray(node.fact_ids).some(factId => factIds.includes(factId))).map(node => nodeQuestion(node));
+    } else if (agentId === 'evidence_checklist') {
+      const items = asArray(artifact.items);
+      const acceptedItems = items.flatMap(item => {
+        const fields = asArray(item?.field_contributions).filter(field => acceptedIds.has(String(field?.contribution_id || ''))).map(field => String(field?.field || 'field'));
+        return fields.length ? [{ item, fields }] : [];
+      });
+      factIds = acceptedItems.map(({ item }) => String(item?.fact_id || '')).filter(Boolean);
+      sourceIds = unique(acceptedItems.filter(({ fields }) => fields.includes('artifact_ids')).flatMap(({ item }) => asArray(item?.artifact_ids).map(String)));
+      extracted = acceptedItems.map(({ item, fields }) => `${String(item?.item_id || '')}: ${fields.join(' + ')}`);
+      affected = asArray(flagshipChecklist.items).filter(item => acceptedItems.some(({ item: accepted }) => accepted?.item_id === item?.item_id)).map(item => item.title).filter(Boolean);
+    } else if (agentId === 'final_claim_brief_audit') {
+      factIds = acceptedIds.has('final:supporting_facts') ? asArray(artifact.supporting_fact_ids).map(String) : [];
+      sourceIds = sourceIdsFromFacts(flagshipFacts.filter(fact => factIds.includes(fact.fact_id)));
+      extracted = acceptedIds.has('final:audit_checks') ? asArray(artifact.audit_check_ids).map(String) : [];
+      affected = [
+        acceptedIds.has('final:current_node') ? nodeLabel(artifact.current_node_id) : '',
+        acceptedIds.has('final:next_action') ? nodeLabel(artifact.next_action_node_id) : '',
+      ].filter(Boolean);
+    }
+    const downstream = {
+      canonical_facts: 'Internal work plan',
+      orchestrator_plan: 'Sources + Process',
+      document_source_integrity: 'Process gate',
+      process_decision_mapping: 'Process gate',
+      evidence_checklist: 'Documents gate',
+      final_claim_brief_audit: 'Final safety gate',
+    }[agentId] || 'Next check';
+    return {
+      entry,
+      sourceIds: unique(sourceIds),
+      factIds: unique(factIds),
+      extracted: unique(extracted),
+      affected: unique(affected),
+      downstream,
+      output: String(entry.output_artifact || AGENT_ARTIFACT_LABELS[agentId] || ''),
+      sourcesLabel,
+      emptySources,
+    };
+  }
+
+  function compactHistoryList(values, emptyLabel) {
+    const returned = unique(asArray(values).map(value => String(value || '').trim()).filter(Boolean));
+    if (!returned.length) return `<span>${esc(emptyLabel)}</span>`;
+    const visible = returned.slice(0, 3);
+    return `<strong>${esc(visible.join(' · '))}</strong>${returned.length > visible.length ? `<span>+${returned.length - visible.length} more returned</span>` : ''}`;
+  }
+
+  function renderAgentAudit() {
+    const panel = state.root?.querySelector('[data-ac-agent-audit]');
+    if (!panel) return;
+    const agentId = state.agentAuditOpenId;
+    const agent = AGENTS[agentId];
+    state.root.dataset.agentAuditOpen = String(Boolean(agent));
+    if (!agent) {
+      panel.hidden = true;
+      panel.innerHTML = '';
+      return;
+    }
+    const audit = orchestrationAudit();
+    const history = agentHistoryData(agentId);
+    panel.hidden = false;
+    panel.dataset.agentId = agentId;
+    panel.dataset.agentSignature = agent.signature;
+    panel.dataset.agentHistoryAvailable = String(Boolean(history));
+    const runId = document.body.dataset.casepathActiveRunId || '';
+    const receipt = history?.entry || {};
+    const sources = history?.sourceIds.map(sourceId => sourceId.startsWith('art_') || ['message', 'intake'].includes(sourceId) ? sourceDisplayTitle(sourceId) : sourceId) || [];
+    panel.innerHTML = `<header><div><span data-agent-signature="${esc(agent.signature)}"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">${AGENT_ICONS[agent.signature] || ''}</svg></span><div><small>${esc(agent.label)}</small><h2 id="artifactAgentAuditTitle">${esc(agent.short)} activity</h2></div></div><button type="button" data-ac-action="close-agent-audit" aria-label="Close agent activity">×</button></header>
+      ${history ? `<ol class="ac-agent-history" data-agent-history-contract="casepath.agent-history/1.0.0" data-run-id="${esc(runId)}" data-agent-id="${esc(agentId)}">
+        <li data-agent-history-task><i>1</i><div><small>Task</small><strong>${esc(agent.task)}</strong><span>${esc(agent.why)}</span></div></li>
+        <li data-agent-history-sources><i>2</i><div><small>${esc(history.sourcesLabel)}</small>${compactHistoryList(sources, history.emptySources)}</div></li>
+        <li data-agent-history-facts><i>3</i><div><small>${agentId === 'canonical_facts' ? 'Extracted' : 'Used'}</small>${compactHistoryList(history.extracted, 'No bounded item returned')}</div></li>
+        <li data-agent-history-output><i>4</i><div><small>Produced</small><strong>${esc(history.output.replaceAll('_', ' '))}</strong>${compactHistoryList(history.affected, 'No downstream entity returned')}</div></li>
+        <li data-agent-history-acceptance><i>5</i><div><small>Accepted</small><strong>${esc(String(receipt.outcome || 'outcome not returned').replaceAll('_', ' '))}</strong><span>${esc(String(receipt.accepted_count ?? 0))} accepted · ${esc(String(receipt.rejected_count ?? 0))} rejected${receipt.deterministic_fallback_applied === true ? ' · CasePath replaced rejected fields' : ''} · next: ${esc(history.downstream)}</span></div></li>
+      </ol><details data-agent-history-receipt><summary>Technical receipt</summary><dl><div><dt>Call</dt><dd>${esc(receipt.call_id || 'not returned')}</dd></div><div><dt>Output hash</dt><dd>${esc(receipt.output_artifact_hash || 'not returned')}</dd></div><div><dt>Fallback</dt><dd>${esc(String(receipt.deterministic_fallback_applied === true))}</dd></div></dl></details>`
+        : `<div class="ac-agent-history-empty"><small>Activity record</small><strong>${audit?.executed === false ? 'No agent calls were made in this reference replay.' : 'Call-bound history has not been returned yet.'}</strong><p>${audit?.executed === false ? 'This screen replays accepted reference output; it does not invent agent activity.' : 'This panel will fill only when exact call receipts arrive.'}</p></div>`}`;
+  }
+
+  function openAgentAudit(agentId) {
+    if (!AGENTS[agentId]) return;
+    state.agentAuditOpenId = agentId;
+    renderHeader();
+    renderAgentAudit();
+  }
+
+  function closeAgentAudit() {
+    state.agentAuditOpenId = '';
+    renderHeader();
+    renderAgentAudit();
   }
 
   function renderHeader() {
     const root = state.root;
     if (!root) return;
-    const graphActorId = state.graphRevealRunning
+    const graphProjectionActorId = state.graphRevealRunning
       ? lineageFor('process_node', state.pendingGraphNodeId || state.selectedNodeId)?.agentId || ''
       : '';
+    const acceptedProcessAgentId = state.agentLineage.get('process_decision_mapping')?.actorType === 'nemotron_agent'
+      ? 'process_decision_mapping'
+      : '';
+    const graphActorId = AGENTS[graphProjectionActorId]
+      ? graphProjectionActorId
+      : state.graphRevealRunning ? acceptedProcessAgentId : '';
     const factLineage = state.factTourRunning ? lineageFor('fact', state.pendingFactId) : null;
-    const factActorId = factLineage?.actorType === 'nemotron_agent' ? factLineage.agentId : '';
+    const factActorId = AGENTS[factLineage?.agentId] ? factLineage.agentId : '';
     const effectiveAgentId = AGENTS[factActorId]
       ? factActorId
       : AGENTS[graphActorId]
@@ -1349,18 +1890,20 @@
         : state.activeAgentId;
     const agent = AGENTS[effectiveAgentId];
     const copy = momentCopy();
-    const neutral = state.factTourRunning && factLineage?.actorType !== 'nemotron_agent'
-      ? { label: 'Canonical Fact Projection Tool · deterministic', monogram: 'CF', signature: 'facts', task: 'Checking exact claim sources before adding facts', why: 'Each visible fact appears only after its returned source locator is inspected.' }
-      : state.graphRevealRunning && !AGENTS[graphActorId]
-      ? { label: 'Process mapping · accepted path', monogram: '◇', signature: 'gate', task: copy.title, why: copy.detail }
+    const neutral = state.factTourRunning && !factActorId
+      ? { label: 'Claim reader', monogram: 'CF', signature: 'facts', visualAgentId: 'canonical_facts', task: 'Showing the exact source behind a returned fact', why: 'The fact appears only after the passage, field, or image region is selected.' }
+      : state.graphRevealRunning && !graphActorId
+      ? { label: 'Process builder', monogram: 'PM', signature: 'process', visualAgentId: 'process_decision_mapping', task: 'Building the handling path', why: 'Each step appears after the source or earlier decision that supports it.' }
       : state.neutralAuthority === 'official-law-registry'
-      ? { label: 'Swiss source lookup · deterministic tool', monogram: '§', signature: 'law', task: copy.title, why: copy.detail }
+      ? { label: 'Source checker', monogram: 'DS', signature: 'sources', visualAgentId: 'document_source_integrity', task: 'Showing the exact Swiss-law section', why: 'The official text is shown directly; legal interpretation still needs qualified review.' }
       : state.neutralAuthority === 'historical-ranking'
-        ? { label: 'Historical reference lookup · deterministic tool', monogram: '↗', signature: 'reference', task: copy.title, why: copy.detail }
+        ? { label: 'Reference lookup', monogram: '↗', signature: 'reference', task: copy.title, why: copy.detail }
       : state.neutralAuthority === 'whole-playbook-gate'
-        ? { label: 'Final audit · deterministic checks', monogram: '✓', signature: 'gate', task: copy.title, why: copy.detail }
+        ? { label: 'Result checker', monogram: 'FB', signature: 'audit', visualAgentId: 'final_claim_brief_audit', task: 'Checking the full result', why: 'A deterministic safety check still decides whether it may proceed.' }
       : state.neutralAuthority === 'case-memory-comparison'
-        ? { label: 'Case-memory comparison · deterministic', monogram: '↺', signature: 'memory', task: copy.title, why: copy.detail }
+        ? { label: 'Saved-case comparison', monogram: '↺', signature: 'memory', task: copy.title, why: copy.detail }
+      : state.moment === 'ready'
+        ? { label: 'Result checker', monogram: 'FB', signature: 'audit', visualAgentId: 'final_claim_brief_audit', task: 'The checked result is ready', why: 'Every source, process step, and document need remains open for review.' }
         : null;
     const identity = neutral || (agent ? {
       label: agent.label,
@@ -1377,8 +1920,13 @@
     });
     root.dataset.casepathMoment = state.moment;
     root.dataset.casepathScene = state.moment;
+    const referenceReplay = orchestrationAudit()?.executed === false;
+    root.dataset.referenceReplay = String(referenceReplay);
     root.dataset.factSourceTourState = state.factTourComplete ? 'complete' : state.factTourRunning ? 'running' : state.factTourEligible ? 'waiting' : 'idle';
     root.dataset.factSourceTourIndex = String(state.factTourIndex);
+    root.dataset.factSourceTourPhase = state.factTourPhase;
+    root.dataset.graphInspectionPhase = state.graphInspectionPhase;
+    root.dataset.manualNodeInspection = String(state.manualNodeInspection);
     if (state.moment === 'later-result') {
       const validatedMemory = validatedLaterMemory();
       root.dataset.laterMemoryValidated = String(Boolean(validatedMemory));
@@ -1389,6 +1937,8 @@
     }
     root.dataset.reviewEditState = state.moment === 'review-applied' ? 'applied' : state.moment === 'review' ? 'pending' : 'not-active';
     root.dataset.activeAgentId = neutral ? '' : effectiveAgentId;
+    root.dataset.visualActiveAgentId = neutral?.visualAgentId || (!neutral ? effectiveAgentId : '');
+    root.dataset.activeSignature = identity.signature;
     root.dataset.workAuthority = identity.label;
     root.querySelector('[data-ac-active-work]').dataset.agentSignature = identity.signature;
     root.querySelector('[data-ac-active-monogram]').textContent = identity.monogram;
@@ -1398,13 +1948,22 @@
     root.querySelector('[data-ac-authority]').textContent = copy.authority;
     root.querySelector('[data-ac-cursor]').dataset.agentSignature = identity.signature;
     root.querySelector('[data-ac-cursor-monogram]').textContent = identity.monogram;
+    root.querySelector('[data-ac-cursor-agent]').textContent = identity.label;
+    root.querySelector('[data-ac-cursor-action]').textContent = identity.task;
 
-    root.querySelectorAll('[data-ac-agent-id]').forEach(item => {
+    document.querySelectorAll('.ac-global-agent-work [data-ac-agent-id]').forEach(item => {
       const agentId = item.dataset.acAgentId;
-      item.dataset.agentState = agentId === effectiveAgentId && !neutral
+      item.dataset.agentState = agentId === root.dataset.visualActiveAgentId
         ? 'active'
         : state.completedAgents.has(agentId) ? 'complete' : 'waiting';
+      item.querySelector('button')?.setAttribute('aria-pressed', String(agentId === state.agentAuditOpenId));
     });
+    const globalAgent = document.querySelector('[data-ac-global-agent]');
+    const globalTask = document.querySelector('[data-ac-global-task]');
+    const globalHost = document.querySelector('[data-ac-global-agent-work]');
+    if (globalHost) globalHost.dataset.referenceReplay = String(referenceReplay);
+    if (globalAgent) globalAgent.textContent = referenceReplay ? `Live reference run · ${identity.label}` : identity.label;
+    if (globalTask) globalTask.textContent = identity.task;
   }
 
   function spatialPosition(nodeId) {
@@ -1525,6 +2084,35 @@
         || !originId) return null;
       return { phase, memoryOriginId: originId, runId };
     }
+    if (phase === 'eligibility') {
+      const receipt = asObject(state.laterResult.memory_application);
+      const eligibility = asObject(receipt.eligibility);
+      const checks = asObject(eligibility.checks);
+      const fact = asArray(state.laterResult.facts).find(item => item.semantic_role === 'management_ventilation_allegation');
+      const originId = String(detail.memoryOriginId || '');
+      const runId = String(detail.runId || '');
+      if (receipt?.applied !== true
+        || eligibility?.eligible !== true
+        || eligibility?.contract !== 'casepath.semantic-memory-eligibility/1.0.0'
+        || fact?.semantic_role !== 'management_ventilation_allegation'
+        || String(detail.eligibilityContract || '') !== String(eligibility.contract || '')
+        || String(detail.ruleId || '') !== String(eligibility.rule_id || '')
+        || String(detail.semanticRole || '') !== String(fact?.semantic_role || '')
+        || !Object.keys(checks).length
+        || !Object.values(checks).every(value => value === true)
+        || !originId
+        || originId !== String(receipt.source_memory?.memory_id || '')
+        || !runId
+        || runId !== String(receipt.target?.run_id || '')) return null;
+      return {
+        phase,
+        memoryOriginId: originId,
+        runId,
+        eligibilityContract: String(eligibility.contract),
+        ruleId: String(eligibility.rule_id),
+        semanticRole: String(fact.semantic_role),
+      };
+    }
     return null;
   }
 
@@ -1535,7 +2123,7 @@
         ...copy,
         title: 'The correction could not be verified.',
         detail: 'No process change is claimed until every returned review consequence agrees.',
-        authority: 'Deterministic review transform · incomplete result',
+        authority: 'Unverified correction · incomplete result',
       };
     }
     if (state.moment !== 'later-result' || validatedLaterMemory()) return copy;
@@ -1544,17 +2132,25 @@
       ? 'Unverified memory was retrieved but not applied.'
       : validation.memoryRetrieved === true
         ? 'Memory retrieval returned, but application proof did not agree.'
-        : 'No receipt-bound memory application was validated.';
+        : 'No saved-memory change was validated.';
     return {
       ...copy,
       title: 'No memory-driven process change is claimed.',
       detail,
-      authority: 'Deterministic comparison · application not proven',
+      authority: 'Saved-case comparison · application not proven',
     };
   }
 
   function nodeLabel(nodeId) {
     return SPATIAL_NODE_LABELS[nodeId] || nodeById(nodeId)?.title || String(nodeId || '').replaceAll('_', ' ');
+  }
+
+  function nodeQuestion(node) {
+    return DEFAULT_NODE_COPY[node?.node_id]?.[0]
+      || CAUSATION_BRANCH_QUESTIONS[node?.node_id]
+      || node?.question
+      || node?.title
+      || 'What must this step establish?';
   }
 
   function verificationGraphMarkup() {
@@ -1572,9 +2168,9 @@
   function knowledgeGraphMarkup() {
     const memory = reviewedKnowledgeState();
     return `<section class="ac-knowledge-graph-note" style="--spatial-x:43;--spatial-y:67" data-spatial-anchor-node-id="ventilation_dispute" data-memory-id="${esc(memory.memoryId)}" data-memory-status="${memory.available ? 'unverified_demo_memory' : 'not-confirmed'}" data-shared-rule-applied="${esc(String(memory.sharedChanged))}">
-      <small>What the organization can learn</small>
-      <strong>${memory.available ? 'Saved as unverified case memory' : 'No demo memory was confirmed'}</strong>
-      <span>${memory.sharedChanged ? 'A released shared-playbook change was returned.' : 'Shared playbook unchanged'}</span>
+      <small>What CasePath learned</small>
+      <strong>${memory.available ? 'Check ventilation allegations separately' : 'No demo memory was confirmed'}</strong>
+      <span>${memory.sharedChanged ? 'A released shared-playbook change was returned.' : 'Saved as unverified case memory · Shared playbook unchanged'}</span>
     </section>`;
   }
 
@@ -1583,24 +2179,47 @@
     const memory = reviewedKnowledgeState();
     if (step?.phase === 'source') {
       const finding = step.ref.excerpt || step.ref.observation || `${step.fact.label}: ${step.fact.value}`;
-      return `<section class="ac-later-memory-retrieval ac-later-source-step" style="--spatial-x:42;--spatial-y:65" data-later-causal-phase="source" data-spatial-anchor-node-id="ventilation_dispute">
-        <small>New claim · exact source</small>
-        <strong>${esc(finding)}</strong>
-        <span>Unresolved allegation · now checking the saved correction.</span>
-        <button type="button" data-ac-action="open-source" data-ac-inspection-target="true" data-ac-cursor-target="true" ${sourceContextAttributes(step.fact, step.ref)}>Inspecting this passage</button>
+      if (!step.opened) {
+        return `<section class="ac-later-memory-retrieval ac-later-source-step" style="--spatial-x:42;--spatial-y:65" data-later-causal-phase="source" data-later-source-opened="false" data-spatial-anchor-node-id="causation">
+          <small>Held-out claim · new evidence</small>
+          <strong>${esc(step.fact.label || 'Management allegation')}</strong>
+          <span>Open the exact source before testing saved memory.</span>
+          <button type="button" data-ac-action="open-source" data-ac-inspection-target="true" data-ac-cursor-target="true" ${sourceContextAttributes(step.fact, step.ref)}>Open this source</button>
+        </section>`;
+      }
+      if (!step.highlighted) {
+        return `<section class="ac-later-memory-retrieval ac-later-source-step" style="--spatial-x:42;--spatial-y:65" data-later-causal-phase="source" data-later-source-opened="true" data-later-source-highlighted="false" data-spatial-anchor-node-id="causation">
+          <small>Held-out claim · source opened</small>
+          <strong>${esc(sourceDisplayTitle(step.ref.artifact_id))}</strong>
+          ${sourceReadingMarkup(step.fact, step.ref, true, false)}
+          <span>Select the exact passage before testing saved memory.</span>
+        </section>`;
+      }
+      return `<section class="ac-later-memory-retrieval ac-later-source-step" style="--spatial-x:42;--spatial-y:65" data-later-causal-phase="source" data-later-source-opened="true" data-spatial-anchor-node-id="causation">
+        <small>Held-out claim · exact source opened</small>
+        ${sourceReadingMarkup(step.fact, step.ref, false, true) || `<strong><mark class="is-highlighted">${esc(finding)}</mark></strong>`}
+        <span>Unresolved allegation extracted · now comparing with the saved correction.</span>
+        <button type="button" data-ac-action="open-source" ${sourceContextAttributes(step.fact, step.ref)}>View source</button>
       </section>`;
     }
     if (step?.phase === 'memory') {
-      return `<section class="ac-later-memory-retrieval" style="--spatial-x:42;--spatial-y:65" data-later-causal-phase="memory" data-spatial-anchor-node-id="ventilation_dispute" data-memory-origin-id="${esc(step.memoryOriginId)}" data-ac-cursor-target="true">
-        <small>Held-out claim · governed retrieval</small>
-        <strong>Unverified case memory retrieved</strong>
-        <span>Now checking whether it applies.</span>
+      return `<section class="ac-later-memory-retrieval" style="--spatial-x:42;--spatial-y:65" data-later-causal-phase="memory" data-spatial-anchor-node-id="causation" data-memory-origin-id="${esc(step.memoryOriginId)}" data-ac-cursor-target="true">
+        <small>Saved case memory</small>
+        <strong>Check ventilation allegations separately</strong>
+        <span>Unverified case memory found · now checking whether it fits this claim.</span>
       </section>`;
     }
-    return `<section class="ac-later-memory-retrieval" style="--spatial-x:42;--spatial-y:65" data-later-causal-phase="waiting" data-spatial-anchor-node-id="ventilation_dispute" data-memory-origin-id="${esc(step?.memoryOriginId || memory.memoryId)}">
-      <small>Held-out new claim</small>
-      <strong>Checking the saved correction</strong>
-      <span>Source first · memory eligibility second · graph change only if proven.</span>
+    if (step?.phase === 'eligibility') {
+      return `<section class="ac-later-memory-retrieval ac-later-eligibility-step" style="--spatial-x:42;--spatial-y:65" data-later-causal-phase="eligibility" data-spatial-anchor-node-id="causation" data-memory-origin-id="${esc(step.memoryOriginId)}" data-eligibility-contract="${esc(step.eligibilityContract)}" data-eligibility-rule-id="${esc(step.ruleId)}" data-semantic-role="${esc(step.semanticRole)}" data-ac-cursor-target="true">
+        <small>Match confirmed</small>
+        <strong>Same unresolved ventilation allegation</strong>
+        <span>Adding one conditional check to this claim.</span>
+      </section>`;
+    }
+    return `<section class="ac-later-memory-retrieval" style="--spatial-x:42;--spatial-y:65" data-later-causal-phase="waiting" data-spatial-anchor-node-id="causation" data-memory-origin-id="${esc(step?.memoryOriginId || memory.memoryId)}">
+      <small>Separate future claim</small>
+      <strong>Checking whether the saved lesson applies</strong>
+      <span>Source first · saved lesson next · graph changes only when the match is confirmed.</span>
     </section>`;
   }
 
@@ -1629,11 +2248,11 @@
     if (!delta.receiptBound || !delta.originId || !delta.nodeId || delta.edges.length !== 2 || delta.evidenceIds.length !== 3) return '';
     const links = delta.edges.map(edge => `<span class="ac-memory-process-link" data-memory-origin-id="${esc(delta.originId)}" data-edge-source="${esc(edge.source)}" data-edge-target="${esc(edge.target)}"><b>${esc(nodeLabel(edge.source))}</b><i aria-hidden="true">→</i><strong>${esc(nodeLabel(edge.target))}</strong></span>`).join('');
     const evidence = delta.evidenceIds.map(itemId => `<span class="ac-memory-evidence-change" data-memory-effect="evidence-changed" data-memory-origin-id="${esc(delta.originId)}" data-item-id="${esc(itemId)}"><b>${esc(SPATIAL_EVIDENCE_LABELS[itemId] || itemId.replaceAll('_', ' '))}</b><small>Updated</small></span>`).join('');
-    return `<section class="ac-memory-graph-delta" style="--spatial-x:38;--spatial-y:64" data-memory-receipt="true" data-memory-origin-id="${esc(delta.originId)}" data-spatial-anchor-node-id="${esc(delta.nodeId)}">
-      <header><small>What changed on this claim</small><strong>1 decision · 2 links · 3 evidence needs</strong></header>
-      <div class="ac-memory-process-links" aria-label="Two receipt-bound process links">${links}</div>
-      <div class="ac-memory-evidence-changes" aria-label="Three receipt-bound evidence changes">${evidence}</div>
-      <p>Shared playbook unchanged.</p>
+    return `<section class="ac-memory-graph-delta" style="--spatial-x:44;--spatial-y:67" data-memory-receipt="true" data-memory-origin-id="${esc(delta.originId)}" data-spatial-anchor-node-id="${esc(delta.nodeId)}" data-memory-payoff="single-action" data-memory-status="unverified-case-memory" data-responsibility-state="blocked" data-shared-playbook-changed="false">
+      <small>Saved lesson used on this claim</small>
+      <strong class="ac-memory-action">Check ventilation before assigning responsibility.</strong>
+      <p>Cause still unproven · responsibility stays blocked · qualified review required.</p>
+      <details><summary>Inspect proof</summary><div class="ac-memory-proof-summary">1 decision · 2 connections · 3 document needs</div><div class="ac-memory-process-links" aria-label="Two process links added from saved case memory">${links}</div><div class="ac-memory-evidence-changes" aria-label="Three evidence needs updated from saved case memory">${evidence}</div><small>Unverified case memory · only this claim changed · Shared playbook unchanged.</small></details>
     </section>`;
   }
 
@@ -1654,11 +2273,15 @@
   function spatialEdgesMarkup(nodes) {
     const visible = new Set(nodes.filter(node => state.visibleNodeIds.has(node.node_id)).map(node => node.node_id));
     const paths = [];
+    const explanatorySpineEdges = new Set(
+      SIMPLIFIED_SPINE_IDS.slice(1, SIMPLIFIED_SPINE_IDS.indexOf('causation') + 1)
+        .map((target, index) => `${SIMPLIFIED_SPINE_IDS[index]}:${target}`),
+    );
+    const focusMemoryPath = ['review-applied', 'knowledge', 'later-work', 'later-result'].includes(state.moment);
     const laterDelta = state.moment === 'later-result' ? laterMemoryDelta() : null;
     const renderedMemoryEdges = new Set();
     asArray(state.process?.edges).forEach(edge => {
       if (!visible.has(edge.source) || !visible.has(edge.target)) return;
-      const path = edge.state === 'selected' || edge.state === 'loop' ? 'accepted' : 'future';
       const edgeKey = `${edge.source}:${edge.target}`;
       const reviewAdded = state.moment === 'review-applied'
         && edge.source === 'ventilation_dispute'
@@ -1666,6 +2289,12 @@
       const isMemoryEdge = Boolean(laterDelta?.receiptBound && laterDelta.originId && !renderedMemoryEdges.has(edgeKey) && laterDelta.edges.some(item => (
         item.source === edge.source && item.target === edge.target
       )));
+      if (!explanatorySpineEdges.has(edgeKey) && !reviewAdded && !isMemoryEdge) return;
+      const path = edge.state === 'selected'
+        ? 'accepted'
+        : edge.state === 'loop'
+          ? 'loop'
+          : 'future';
       if (isMemoryEdge) renderedMemoryEdges.add(edgeKey);
       const memoryAttributes = isMemoryEdge
         ? `data-memory-effect="edge-added" data-memory-origin-id="${esc(laterDelta.originId)}"`
@@ -1697,19 +2326,14 @@
     }
     if (visible.has('causation')) {
       CAUSATION_BRANCH_LAYOUT.forEach(([target, , x, y]) => {
+        if (focusMemoryPath && target !== 'evidence_gap') return;
         if (state.graphRevealRunning && !state.visibleBranchIds.has(target)) return;
         const targetNode = nodeById(target);
         const returnedBranch = nodeById('causation')?.branches?.find(item => item.target === target);
         const returnedEdge = asArray(state.process?.edges).find(edge => edge.source === 'causation' && edge.target === target);
         if (!targetNode || !returnedBranch || !returnedEdge) return;
-        paths.push(edgeMarkup('causation', target, target === 'evidence_gap' ? 'next-action' : 'uncertainty', returnedEdge.state || '', spatialPosition('causation'), [x, y]));
-      });
-      CAUSATION_BRANCH_LAYOUT.forEach(([source, , x, y]) => {
-        if (state.graphRevealRunning && !state.visibleBranchIds.has(source)) return;
-        if (!nodeById(source)) return;
-        asArray(state.process?.edges).filter(edge => edge.source === source && ['responsibility', 'causation'].includes(edge.target)).forEach(edge => {
-          paths.push(edgeMarkup(edge.source, edge.target, edge.state === 'loop' ? 'loop' : 'branch-resolution', edge.state || '', [x, y], spatialPosition(edge.target)));
-        });
+        const routePath = returnedEdge.state === 'selected' ? 'next-action' : 'uncertainty';
+        paths.push(edgeMarkup('causation', target, routePath, returnedEdge.state || '', spatialPosition('causation'), [x, y]));
       });
     }
     if (state.moment === 'review-applied' && visible.has('ventilation_dispute')) {
@@ -1728,6 +2352,16 @@
         ));
       }
     }
+    const detailNodeId = state.graphInspecting
+      ? state.pendingGraphNodeId || state.pendingBranchNodeId || state.selectedNodeId
+      : state.selectedNodeId;
+    const detailIsVisible = visible.has(detailNodeId)
+      || CAUSATION_BRANCH_LAYOUT.some(([nodeId]) => nodeId === detailNodeId && nodeById(nodeId));
+    if (detailIsVisible && !['review', 'review-applied', 'later-work'].includes(state.moment)) {
+      const [detailX, detailY] = spatialPosition(detailNodeId);
+      const connectorX = detailX * 10;
+      paths.push(`<path d="M ${connectorX} ${detailY * 6.2} L ${connectorX} ${63 * 6.2}" data-spatial-edge="source-proof" data-spatial-path="source-proof" data-source-proof="true"></path>`);
+    }
     return paths.join('');
   }
 
@@ -1737,20 +2371,22 @@
     const law = relevantLaw(lawsForNode(causation));
     const next = relevantEvidence(evidenceForNode('evidence_gap'));
     const evidence = priorityEvidence(evidenceForNode('causation')).filter(item => item.item_id !== next?.item_id).slice(0, 2);
-    const branchMarkup = CAUSATION_BRANCH_LAYOUT.map(([nodeId, shortLabel, x, y]) => {
+    const branchMarkup = CAUSATION_BRANCH_LAYOUT.map(([nodeId, shortLabel, x, y], index) => {
+      if (['review-applied', 'knowledge', 'later-work', 'later-result'].includes(state.moment) && nodeId !== 'evidence_gap') return '';
       if (state.graphRevealRunning && !state.visibleBranchIds.has(nodeId)) return '';
       const returnedNode = nodeById(nodeId);
       if (!returnedNode) return '';
       const branch = causation?.branches?.find(item => item.target === nodeId);
       const returnedEdge = asArray(state.process?.edges).find(edge => edge.source === 'causation' && edge.target === nodeId);
       if (!branch || !returnedEdge) return '';
-      return `<button type="button" class="ac-spatial-branch" style="--spatial-x:${x};--spatial-y:${y}" data-ac-action="select-node" data-spatial-id="${esc(nodeId)}" data-spatial-role="branch" data-spatial-path="${nodeId === 'evidence_gap' ? 'next-action' : 'uncertainty'}" data-node-id="${esc(nodeId)}" data-branch-id="${esc(branch.branch_id)}" data-branch-state="${esc(branch.state || '')}" aria-label="${esc(returnedNode.title)}"><span aria-hidden="true"></span><strong>${esc(shortLabel)}</strong></button>`;
+      return `<button type="button" class="ac-spatial-branch" style="--spatial-x:${x};--spatial-y:${y}" data-ac-action="select-node" data-spatial-id="${esc(nodeId)}" data-spatial-role="branch" data-spatial-path="${returnedEdge.state === 'selected' ? 'next-action' : 'uncertainty'}" data-node-id="${esc(nodeId)}" data-branch-id="${esc(branch.branch_id)}" data-branch-state="${esc(branch.state || '')}" aria-label="${esc(CAUSATION_BRANCH_QUESTIONS[nodeId] || returnedNode.title)}"><span aria-hidden="true">H${index + 1}</span><strong>${esc(shortLabel)}</strong></button>`;
     }).join('');
     const lawLabel = law?.location?.match(/Art(?:icle)?\.?\s*\d+/i)?.[0]?.replace(/^Article/i, 'Art.') || 'Swiss law';
     const lawMarkup = !state.graphRevealRunning && law ? `<button type="button" class="ac-spatial-law-marker" style="--spatial-x:62;--spatial-y:27" data-ac-action="open-law" data-law-id="${esc(law.source_id)}" data-spatial-id="${esc(law.source_id)}" data-spatial-anchor-node-id="causation" data-spatial-role="law" data-spatial-path="legal-grounding" data-node-attachment-kind="law" ${lineageAttributes('law', law.source_id)} data-source-authority="${isOfficialLaw(law) ? 'official_registry' : 'deterministic_principle'}" data-source-locator-id="${esc(lawLocatorId(law))}" aria-label="${esc(`${law.title || law.source_id} ${law.location || ''}`)}"><span aria-hidden="true">§</span><strong>${esc(lawLabel)}</strong></button>` : '';
     const evidenceMarkup = evidence.map(item => `<button type="button" class="ac-evidence-chip" data-ac-action="inspect-evidence" data-evidence-id="${esc(item.item_id)}" data-spatial-id="${esc(item.item_id)}" data-spatial-anchor-node-id="causation" data-spatial-role="evidence" data-spatial-path="evidence-support" data-node-attachment-kind="evidence" ${lineageAttributes('evidence', item.item_id)} data-evidence-status="${esc(item.status || '')}" data-fact-id="${esc(item.fact_id || '')}" aria-label="${esc(`${item.title} · ${statusLabel(item.status)}`)}">${esc(SPATIAL_EVIDENCE_LABELS[item.item_id] || item.title)}</button>`).join('<span aria-hidden="true">·</span>');
-    const nextMarkup = next && nodeById('evidence_gap') && evidenceOwnerIds(next).includes('evidence_gap') ? `<button type="button" class="ac-evidence-need" data-ac-action="inspect-evidence" data-spatial-id="${esc(next.item_id)}" data-spatial-role="next-action" data-spatial-path="next-action" data-spatial-next-action="true" data-spatial-anchor-node-id="causation" data-node-attachment-kind="evidence" ${lineageAttributes('evidence', next.item_id)} data-node-id="evidence_gap" data-evidence-id="${esc(next.item_id)}"><span>Need</span><strong>${esc(SPATIAL_EVIDENCE_LABELS[next.item_id] || next.title)}</strong><b aria-hidden="true">→</b></button>` : '';
-    const evidencePanel = !state.graphRevealRunning && (nextMarkup || evidenceMarkup) ? `<section class="ac-evidence-relationship" style="--spatial-x:53;--spatial-y:75" aria-label="Evidence generated by the current process decision"><small>Causation unresolved</small>${nextMarkup}${evidenceMarkup ? `<div><span>Later</span>${evidenceMarkup}</div>` : ''}</section>` : '';
+    const nextMarkup = next && nodeById('evidence_gap') && evidenceOwnerIds(next).includes('evidence_gap') ? `<button type="button" class="ac-evidence-need" data-ac-action="inspect-evidence" data-spatial-id="${esc(next.item_id)}" data-spatial-role="next-action" data-spatial-path="next-action" data-spatial-next-action="true" data-spatial-anchor-node-id="causation" data-node-attachment-kind="evidence" ${lineageAttributes('evidence', next.item_id)} data-node-id="evidence_gap" data-evidence-id="${esc(next.item_id)}"><span>Needed next</span><strong>${esc(SPATIAL_EVIDENCE_LABELS[next.item_id] || next.title)}</strong><b aria-hidden="true">→</b></button>` : '';
+    const checklistCount = asArray(state.checklist?.items).length;
+    const evidencePanel = !state.graphRevealRunning && (nextMarkup || evidenceMarkup) ? `<section class="ac-evidence-relationship" style="--spatial-x:53;--spatial-y:75" aria-label="Documents created by the current process decision"><small>Documents created by this decision</small><p class="ac-evidence-origin">Causation is unresolved</p>${nextMarkup}${evidenceMarkup ? `<div><span>Later, if required</span>${evidenceMarkup}</div>` : ''}${state.moment === 'ready' && checklistCount ? `<button type="button" class="ac-document-needs-link" data-ac-action="open-documents" aria-controls="v20DocumentSheet" aria-haspopup="dialog">See all ${checklistCount} across the process</button>` : ''}</section>` : '';
     if (state.moment === 'review') return `${branchMarkup}${reviewGraphEditMarkup()}`;
     if (state.moment === 'review-applied') return `${branchMarkup}${reviewAppliedMarkup()}`;
     if (state.moment === 'verify') return `${lawMarkup}${branchMarkup}${verificationGraphMarkup()}`;
@@ -1791,14 +2427,16 @@
 
   function spatialDetailMarkup(node) {
     if (!node) return '';
-    if (['verify', 'review', 'review-applied', 'knowledge', 'later-work', 'later-result'].includes(state.moment)) return '';
+    const specialMoment = ['verify', 'review', 'review-applied', 'knowledge', 'later-work', 'later-result'].includes(state.moment);
+    if (specialMoment && !state.manualNodeInspection) return '';
+    if (['review', 'review-applied', 'later-work'].includes(state.moment)) return '';
     if (state.moment === 'evidence') return graphEvidenceDetailMarkup(node) || spatialGroundingMarkup(node);
     if (state.moment === 'experience') return graphReferenceDetailMarkup(node) || spatialGroundingMarkup(node);
     if (state.graphInspecting && [state.pendingGraphNodeId, state.pendingBranchNodeId].includes(node.node_id)) return nodeInspectionMarkup(node);
     const facts = asArray(node.fact_ids);
     const laws = asArray(node.legal_source_ids);
     const evidence = asArray(node.evidence_requirement_ids);
-    return `<div class="ac-spatial-node-detail" data-spatial-role="active-detail" data-spatial-path="active" data-active-focal-path="true" data-node-id="${esc(node.node_id)}" data-basis-fact-ids="${esc(facts.join(','))}" data-basis-law-ids="${esc(laws.join(','))}" data-basis-evidence-requirement-ids="${esc(evidence.join(','))}"><span>${nodeState(node) === 'current' ? 'Current decision' : 'Grounded decision'}</span><strong>${esc(node.question || node.title)}</strong><p>${esc(node.why || node.answer || '')}</p>${spatialGroundingMarkup(node)}</div>`;
+    return `<div class="ac-spatial-node-detail" data-spatial-role="active-detail" data-spatial-path="active" data-active-focal-path="true" data-node-id="${esc(node.node_id)}" data-basis-fact-ids="${esc(facts.join(','))}" data-basis-law-ids="${esc(laws.join(','))}" data-basis-evidence-requirement-ids="${esc(evidence.join(','))}"><span>Process question</span><strong>${esc(nodeQuestion(node))}</strong>${spatialGroundingMarkup(node)}</div>`;
   }
 
   function emitGraphContextualArtifact(detail, satellites) {
@@ -1816,19 +2454,62 @@
     emitArtifactChange(kind, entityId);
   }
 
+  function nodeCausalChainMarkup(node, fact, evidence) {
+    if (!evidence) return '';
+    const evidenceFact = state.facts.find(item => item.fact_id === evidence.fact_id) || fact;
+    const alternatives = unique(asArray(evidence.acceptable_alternatives).map(String));
+    const returnedArtifacts = unique(asArray(evidence.artifact_ids).map(String));
+    const status = String(evidence.status || '');
+    const labels = {
+      provided_sufficient: ['Fact already shown', 'Evidence available', 'Source available'],
+      provided_insufficient: ['Fact not yet settled', 'Evidence incomplete', 'More evidence needed'],
+      missing: ['Fact to establish', 'Evidence needed', 'Document required'],
+      conditional: ['Fact to establish if needed', 'Evidence if needed', 'Document if needed'],
+      not_applicable: ['Fact not needed on this path', 'Evidence not needed', 'No document required'],
+    }[status] || ['Fact to establish', 'Evidence needed', 'Document required'];
+    const factCopy = evidenceFact
+      ? `${evidenceFact.label}: ${evidenceFact.value}`
+      : evidence.fact_label || 'A fact still needs to be established';
+    const evidenceCopy = evidence.title || evidence.why || 'Returned evidence requirement';
+    const documentCopy = status === 'not_applicable'
+      ? 'None on the current path'
+      : returnedArtifacts.length
+        ? returnedArtifacts.map(sourceDisplayTitle).join(' · ')
+        : alternatives[0] || evidence.title || 'Document type returned in the plan';
+    return `<section class="ac-node-causal-chain" data-node-document-chain="true" data-node-id="${esc(node.node_id)}" data-evidence-id="${esc(evidence.item_id || '')}" data-evidence-status="${esc(status)}" data-fact-id="${esc(evidenceFact?.fact_id || evidence.fact_id || '')}">
+      <div data-chain-part="decision"><small>Process question</small><strong>${esc(nodeQuestion(node))}</strong></div><i aria-hidden="true">→</i>
+      <div data-chain-part="fact"><small>${esc(labels[0])}</small><strong>${esc(factCopy)}</strong></div><i aria-hidden="true">→</i>
+      <div data-chain-part="evidence"><small>${esc(labels[1])}</small><strong>${esc(evidenceCopy)}</strong></div><i aria-hidden="true">→</i>
+      <div data-chain-part="document"><small>${esc(labels[2])}</small><strong>${esc(documentCopy)}</strong><button type="button" data-ac-action="open-documents" data-node-id="${esc(node.node_id)}">Open plan →</button></div>
+    </section>`;
+  }
+
   function spatialGroundingMarkup(node) {
-    const fact = relevantFact(factsForNode(node));
-    const ref = asArray(fact?.source_refs)[0];
+    const directFact = relevantFact(directFactsForNode(node));
+    const fact = directFact || relevantFact(factsForNode(node));
+    const ref = representativeFactRef(directFact);
     const nodeLaws = lawsForNode(node);
     const laws = [nodeLaws.find(isOfficialLaw), nodeLaws.find(item => !isOfficialLaw(item))].filter(Boolean);
     const evidence = relevantEvidence(evidenceForNode(node.node_id));
     const nodePrecedents = precedentsForNode(node.node_id);
     const precedent = nodePrecedents.find(item => Number(item.ranking?.rank) === 1)
       || relevantPrecedent(nodePrecedents);
+    let sourcePreview = '';
     const items = [];
     if (fact && ref) {
-      const found = ref.excerpt || ref.observation || `${fact.label}: ${fact.value}`;
-      items.push(`<button type="button" data-node-attachment-kind="fact" ${lineageAttributes('fact', fact.fact_id)} data-ac-action="open-source" data-node-id="${esc(node.node_id)}" ${sourceContextAttributes(fact, ref)}><span>Claim source</span><strong>${esc(found)}</strong></button>`);
+      sourcePreview = `<div class="ac-node-source-preview${ref.locator_kind === 'visual_observation' ? ' ac-node-source-preview-visual' : ''}" data-node-attachment-kind="fact" ${lineageAttributes('fact', fact.fact_id)} ${sourceContextAttributes(fact, ref)}>${sourceReadingMarkup(fact, ref, false, true)}<button type="button" class="ac-node-source-open" data-ac-action="open-source" data-node-id="${esc(node.node_id)}" ${sourceContextAttributes(fact, ref)}>Open original →</button></div>`;
+    }
+    if (!sourcePreview && laws[0]) {
+      const law = laws[0];
+      sourcePreview = `<button type="button" class="ac-node-source-preview ac-node-basis-preview" data-basis-kind="law" data-node-attachment-kind="law" ${lineageAttributes('law', law.source_id)} data-ac-action="open-law" data-node-id="${esc(node.node_id)}" data-law-id="${esc(law.source_id)}" data-source-authority="${isOfficialLaw(law) ? 'official_registry' : 'deterministic_principle'}" data-source-locator-id="${esc(lawLocatorId(law))}"><span>${isOfficialLaw(law) ? 'Swiss law' : 'Handling rule'}</span><small>${esc(law.location || law.title || 'Returned legal basis')}</small><strong>${esc(law.passage_text || law.passage_summary || law.role || law.title)}</strong><em>Open law →</em></button>`;
+    }
+    if (!sourcePreview && evidence) {
+      sourcePreview = `<button type="button" class="ac-node-source-preview ac-node-basis-preview" data-basis-kind="evidence" data-node-attachment-kind="evidence" ${lineageAttributes('evidence', evidence.item_id)} data-ac-action="inspect-evidence" data-node-id="${esc(node.node_id)}" data-evidence-id="${esc(evidence.item_id)}"><span>${['missing', 'provided_insufficient'].includes(evidence.status) ? 'Evidence gap' : 'Evidence status'}</span><small>${esc(statusLabel(evidence.status))}</small><strong>${esc(evidence.title)}</strong><em>Open document plan →</em></button>`;
+    }
+    if (!sourcePreview) {
+      const incoming = asArray(state.process?.edges).find(edge => edge.target === node.node_id && nodeById(edge.source));
+      const prior = incoming ? nodeById(incoming.source) : null;
+      sourcePreview = `<button type="button" class="ac-node-source-preview ac-node-basis-preview" data-basis-kind="accepted-decision" data-ac-action="select-node" data-node-id="${esc(prior?.node_id || node.node_id)}"><span>${prior ? 'Previous accepted step' : 'Claim received'}</span><small>${esc(prior ? nodeQuestion(prior) : 'Starting point')}</small><strong>${esc(nodeQuestion(node))}</strong><em>${prior ? 'Open previous step →' : 'View this step →'}</em></button>`;
     }
     laws.forEach(law => {
       items.push(`<button type="button" data-node-attachment-kind="law" ${lineageAttributes('law', law.source_id)} data-ac-action="open-law" data-node-id="${esc(node.node_id)}" data-law-id="${esc(law.source_id)}" data-source-authority="${isOfficialLaw(law) ? 'official_registry' : 'deterministic_principle'}" data-source-locator-id="${esc(lawLocatorId(law))}"><span>${isOfficialLaw(law) ? 'Swiss law' : 'Handling principle'} · ${esc(law.location || '')}</span><strong>${esc(law.passage_text || law.passage_summary || law.role || law.title)}</strong></button>`);
@@ -1839,17 +2520,29 @@
     if (precedent) {
       items.push(`<button type="button" data-node-attachment-kind="precedent" ${lineageAttributes('precedent', precedent.claim_id)} data-ac-action="open-reference" data-node-id="${esc(node.node_id)}" data-precedent-id="${esc(precedent.claim_id)}" data-reference-status="${esc(precedent.review_status || '')}" data-source-authority="generated_reference" data-source-locator-id="reference:${esc(precedent.claim_id)}"><span>${esc(provenanceLabel(precedent))}</span><strong>${esc(precedent.title)}</strong></button>`);
     }
-    if (!items.length) return '';
-    return `<div class="ac-grounding-disclosure" data-grounding-open="${String(state.groundingOpen)}"><button type="button" class="ac-grounding-toggle" data-ac-action="toggle-grounding" aria-expanded="${String(state.groundingOpen)}">View grounding</button><div ${state.groundingOpen ? '' : 'hidden'}>${items.join('')}</div></div>`;
+    return `<div class="ac-grounding-disclosure" data-grounding-open="false">${sourcePreview}${nodeCausalChainMarkup(node, fact, evidence)}${items.length ? `<button type="button" class="ac-grounding-toggle" data-ac-action="toggle-grounding" aria-haspopup="dialog" aria-expanded="false">View law and examples</button><div hidden>${items.join('')}</div>` : ''}</div>`;
   }
 
-  function nodeInspectionMarkup(node) {
-    const fact = relevantFact(factsForNode(node));
-    const ref = asArray(fact?.source_refs)[0];
+  function nodeInspectionBasis(node) {
+    const nodeFacts = directFactsForNode(node);
+    const fact = node?.node_id === 'intake'
+      ? nodeFacts.find(candidate => String(candidate?.fact_id || '').includes('customer_objective')) || relevantFact(nodeFacts)
+      : relevantFact(nodeFacts);
+    const ref = representativeFactRef(fact);
     const law = relevantLaw(lawsForNode(node));
     const isCausationBranch = CAUSATION_BRANCH_LAYOUT.some(([branchNodeId]) => branchNodeId === node.node_id);
     if (LAW_FIRST_NODE_IDS.has(node.node_id) && law) {
-      return `<button type="button" class="ac-build-inspection" data-ac-inspection-target="true" data-node-id="${esc(node.node_id)}" data-ac-action="open-law" data-law-id="${esc(law.source_id)}" data-source-authority="${isOfficialLaw(law) ? 'official_registry' : 'deterministic_principle'}" data-source-locator-id="${esc(lawLocatorId(law))}"><small>Looking at · ${isOfficialLaw(law) ? 'official Swiss law' : 'handling principle'} · ${esc(law.location || '')}</small><strong>${esc(law.passage_text || law.passage_summary || law.role || law.title)}</strong><span>Shapes the next decision · ${esc(SPATIAL_NODE_LABELS[node.node_id] || node.title)}</span></button>`;
+      return {
+        action: 'open-law',
+        attributes: `data-law-id="${esc(law.source_id)}" data-source-authority="${isOfficialLaw(law) ? 'official_registry' : 'deterministic_principle'}" data-source-locator-id="${esc(lawLocatorId(law))}"`,
+        sourceLabel: isOfficialLaw(law) ? 'official Swiss law' : 'handling principle',
+        law,
+        title: law.location || law.title,
+        location: law.location || 'exact Swiss-law section',
+        finding: law.passage_text || law.passage_summary || law.role || law.title,
+        relation: `Shapes the next decision · ${SPATIAL_NODE_LABELS[node.node_id] || node.title}`,
+        effect: 'Shapes',
+      };
     }
     if (fact && ref) {
       const locator = ref.locator_kind === 'visual_observation'
@@ -1862,25 +2555,97 @@
           ? `Unresolved allegation · does not establish ${SPATIAL_NODE_LABELS[node.node_id] || node.title}`
           : `Supports the next decision · ${SPATIAL_NODE_LABELS[node.node_id] || node.title}`;
       const sourceKind = isCausationBranch ? 'unresolved claim evidence' : 'customer source';
-      return `<button type="button" class="ac-build-inspection" data-ac-inspection-target="true" data-node-id="${esc(node.node_id)}" data-ac-action="open-source" ${sourceContextAttributes(fact, ref)}><small>Looking at · ${sourceKind} · ${esc(locator)}</small><strong>${esc(found)}</strong><span>${esc(basis)}</span></button>`;
+      return {
+        action: 'open-source',
+        attributes: sourceContextAttributes(fact, ref),
+        fact,
+        ref,
+        sourceLabel: sourceKind,
+        title: sourceDisplayTitle(ref.artifact_id),
+        location: locator,
+        finding: found,
+        relation: basis,
+        effect: isCausationBranch || node.node_id === 'evidence_gap' ? 'Keeps open' : 'Supports',
+      };
     }
     if (law) {
       const relation = isCausationBranch
         ? `Missing-fact basis · does not establish ${SPATIAL_NODE_LABELS[node.node_id] || node.title}`
         : `Shapes the next decision · ${SPATIAL_NODE_LABELS[node.node_id] || node.title}`;
-      return `<button type="button" class="ac-build-inspection" data-ac-inspection-target="true" data-node-id="${esc(node.node_id)}" data-ac-action="open-law" data-law-id="${esc(law.source_id)}" data-source-authority="${isOfficialLaw(law) ? 'official_registry' : 'deterministic_principle'}" data-source-locator-id="${esc(lawLocatorId(law))}"><small>Looking at · ${isOfficialLaw(law) ? 'official Swiss law' : 'handling principle'} · ${esc(law.location || '')}</small><strong>${esc(law.passage_text || law.passage_summary || law.role || law.title)}</strong><span>${esc(relation)}</span></button>`;
+      return {
+        action: 'open-law',
+        attributes: `data-law-id="${esc(law.source_id)}" data-source-authority="${isOfficialLaw(law) ? 'official_registry' : 'deterministic_principle'}" data-source-locator-id="${esc(lawLocatorId(law))}"`,
+        sourceLabel: isOfficialLaw(law) ? 'official Swiss law' : 'handling principle',
+        law,
+        title: law.location || law.title,
+        location: law.location || 'exact Swiss-law section',
+        finding: law.passage_text || law.passage_summary || law.role || law.title,
+        relation,
+        effect: isCausationBranch ? 'Keeps open' : 'Shapes',
+      };
     }
     const evidence = relevantEvidence(evidenceForNode(node.node_id));
     if (evidence) {
       const relation = isCausationBranch
         ? `Missing-fact basis · this requirement can test, not establish, ${SPATIAL_NODE_LABELS[node.node_id] || node.title}`
         : evidence.why || `Determines the next decision · ${SPATIAL_NODE_LABELS[node.node_id] || node.title}`;
-      return `<button type="button" class="ac-build-inspection" data-ac-inspection-target="true" data-node-id="${esc(node.node_id)}" data-ac-action="inspect-evidence" data-evidence-id="${esc(evidence.item_id)}"><small>Looking at · exact evidence requirement</small><strong>${esc(evidence.title)}</strong><span>${esc(relation)}</span></button>`;
+      return {
+        action: 'inspect-evidence',
+        attributes: `data-evidence-id="${esc(evidence.item_id)}"`,
+        sourceLabel: 'evidence need',
+        title: evidence.title,
+        location: 'required by this decision',
+        finding: evidence.title,
+        relation,
+        effect: ['missing', 'provided_insufficient'].includes(evidence.status) ? 'Keeps open' : 'Supports',
+      };
     }
+    const incoming = asArray(state.process?.edges).find(edge => edge.target === node.node_id && nodeById(edge.source));
+    const prior = incoming ? nodeById(incoming.source) : null;
     const relation = isCausationBranch
       ? `Missing-fact basis · ${SPATIAL_NODE_LABELS[node.node_id] || node.title} remains hypothetical`
-      : `Creates the next decision · ${SPATIAL_NODE_LABELS[node.node_id] || node.title}`;
-    return `<button type="button" class="ac-build-inspection" data-ac-inspection-target="true" data-node-id="${esc(node.node_id)}" data-ac-action="select-node" data-inspection-id="${esc(node.node_id)}"><small>Looking at · exact accepted process record</small><strong>${esc(node.why || node.question || node.title)}</strong><span>${esc(relation)}</span></button>`;
+      : prior
+        ? `Follows the accepted answer to · ${nodeQuestion(prior)}`
+        : 'Starts from the accepted claim record';
+    return {
+      action: 'select-node',
+      attributes: `data-inspection-id="${esc(node.node_id)}" data-prior-node-id="${esc(prior?.node_id || '')}"`,
+      sourceLabel: 'accepted process record',
+      title: prior ? nodeQuestion(prior) : (SPATIAL_NODE_LABELS[node.node_id] || node.title),
+      location: 'prior accepted decision',
+      finding: node.why || node.question || node.title,
+      relation,
+      effect: prior ? 'Follows' : 'Starts',
+    };
+  }
+
+  function nodeInspectionMarkup(node) {
+    const basis = nodeInspectionBasis(node);
+    const common = `data-ac-inspection-target="true" data-inspection-phase="${esc(state.graphInspectionPhase)}" data-node-id="${esc(node.node_id)}" data-ac-action="${esc(basis.action)}" ${basis.attributes}`;
+    if (state.graphInspectionPhase === 'select-source') {
+      return `<button type="button" class="ac-build-inspection ac-build-source-select" ${common}><small>Source for the next decision</small><strong>${esc(basis.title)}</strong><span>Click to open · ${esc(basis.location)}</span></button>`;
+    }
+    const highlighted = state.graphInspectionPhase === 'highlight-source';
+    const exactSource = basis.ref ? sourceReadingMarkup(basis.fact, basis.ref, !highlighted, highlighted) : '';
+    const interactionAttributes = highlighted ? '' : common;
+    const fallbackFinding = highlighted
+      ? `<strong><mark class="is-highlighted">${esc(basis.finding)}</mark></strong>`
+      : `<strong><mark class="is-awaiting-click" data-ac-inspection-read-target="true">${esc(basis.finding)}</mark></strong>`;
+    const extractedLabel = basis.fact?.label || (basis.sourceLabel === 'official Swiss law' ? 'Legal question' : 'Decision basis');
+    const extractedValue = basis.fact?.value || basis.relation || basis.finding;
+    const fullSourceAction = highlighted && basis.ref
+      ? `<button type="button" class="ac-build-open-source" data-ac-action="open-source" data-node-id="${esc(node.node_id)}" ${sourceContextAttributes(basis.fact, basis.ref)}>Open original →</button>`
+      : highlighted && basis.law
+        ? `<button type="button" class="ac-build-open-source" data-ac-action="open-law" data-node-id="${esc(node.node_id)}" data-law-id="${esc(basis.law.source_id)}" data-source-authority="${isOfficialLaw(basis.law) ? 'official_registry' : 'deterministic_principle'}" data-source-locator-id="${esc(lawLocatorId(basis.law))}">Open law →</button>`
+        : '';
+    return `<div class="ac-build-inspection ac-build-source-reading${highlighted ? ' ac-build-source-highlight' : ''}" ${interactionAttributes}>
+      <header><small>${highlighted ? 'Selected from' : 'Opened from'} · ${esc(basis.sourceLabel)}</small><strong>${esc(basis.title)}</strong><span>${esc(basis.location)}</span></header>
+      ${exactSource || fallbackFinding}
+      ${highlighted ? `<div class="ac-build-finding"><small>Extracted for this decision</small><strong>${esc(extractedLabel)}</strong><span>${esc(extractedValue)}</span></div>` : ''}
+      <span>${highlighted ? `${esc(basis.effect || 'Supports')} · ${esc(nodeLabel(node.node_id))}` : 'Select the exact passage, field, region, or prior decision before this step appears.'}</span>
+      ${fullSourceAction}
+      ${highlighted ? '<i class="ac-source-to-decision" aria-hidden="true"></i>' : ''}
+    </div>`;
   }
 
   function reconcileGraph() {
@@ -1952,7 +2717,9 @@
       item.style.setProperty('--spatial-x', spatialX);
       item.style.setProperty('--spatial-y', spatialY);
       item.dataset.spatialRole = node.node_id === 'causation' ? 'hub' : 'spine';
-      item.dataset.spatialPath = 'accepted';
+      item.dataset.spatialPath = SIMPLIFIED_SPINE_IDS.indexOf(node.node_id) > SIMPLIFIED_SPINE_IDS.indexOf('causation')
+        ? 'future'
+        : 'accepted';
       item.dataset.nodeState = nodeState(node);
       item.dataset.reviewChange = node.node_id === 'ventilation_dispute' && state.result?.review_transform ? 'added' : '';
       const laterDelta = state.moment === 'later-result' ? laterMemoryDelta() : null;
@@ -1964,14 +2731,16 @@
         delete item.dataset.memoryEffect;
         delete item.dataset.memoryOriginId;
       }
+      if (state.moment === 'later-work' && node.node_id === 'ventilation_dispute') item.dataset.memoryCandidate = 'true';
+      else delete item.dataset.memoryCandidate;
       item.dataset.revealState = state.visibleNodeIds.has(node.node_id) ? 'visible' : 'pending';
       item.dataset.processBuildState = state.visibleNodeIds.has(node.node_id)
         ? state.graphRevealRunning && state.graphDwell && index === state.graphRevealIndex - 1 ? 'building' : 'built'
         : 'pending';
       item.dataset.selected = String(node.node_id === state.selectedNodeId);
-      item.querySelector('[data-ac-node-marker]').textContent = nodeState(node) === 'complete' ? '✓' : String(index + 1);
+      item.querySelector('[data-ac-node-marker]').textContent = String(index + 1);
       item.querySelector('[data-ac-node-title]').textContent = SPATIAL_NODE_LABELS[node.node_id] || node.title || DEFAULT_NODE_COPY[node.node_id]?.[0] || node.node_id;
-      item.querySelector('button').setAttribute('aria-label', `${node.title || node.node_id}: ${node.answer || node.question || nodeState(node)}`);
+      item.querySelector('button').setAttribute('aria-label', `${nodeLabel(node.node_id)}: ${nodeQuestion(node)}`);
       item.querySelector('button').disabled = !state.visibleNodeIds.has(node.node_id);
       item.querySelector('button').tabIndex = state.visibleNodeIds.has(node.node_id) ? 0 : -1;
       item.querySelector('button').dataset.nodeId = node.node_id;
@@ -1993,19 +2762,28 @@
     const count = state.root.querySelector('[data-ac-process-count]');
     const focus = state.root.querySelector('[data-ac-process-focus]');
     const pendingNode = nodes.find(node => node.node_id === state.pendingGraphNodeId);
-    buildTarget.hidden = !pendingNode || state.graphInspecting;
+    buildTarget.hidden = !pendingNode || (state.graphInspecting && state.graphInspectionPhase !== 'read-source');
     buildTarget.dataset.nodeId = pendingNode?.node_id || '';
     const [buildX, buildY] = spatialPosition(pendingNode?.node_id);
     buildTarget.style.setProperty('--spatial-x', buildX);
     buildTarget.style.setProperty('--spatial-y', buildY);
-    buildTarget.textContent = pendingNode ? `Add decision · ${pendingNode.title || pendingNode.node_id}` : '';
+    buildTarget.textContent = pendingNode ? `Next · ${nodeLabel(pendingNode.node_id)}` : '';
     if (state.graphRevealRunning) {
-      count.textContent = `Building decision ${Math.min(state.graphRevealIndex + (state.graphDwell ? 0 : 1), nodes.length)} of ${nodes.length}`;
-      focus.textContent = nodeById(state.selectedNodeId)?.title || DEFAULT_NODE_COPY[state.selectedNodeId]?.[0] || 'Grounded decision';
-      status.textContent = `Decision ${Math.min(state.graphRevealIndex + (state.graphDwell ? 0 : 1), nodes.length)} of ${nodes.length}: ${focus.textContent}`;
+      const pendingBranch = CAUSATION_BRANCH_LAYOUT.find(([nodeId]) => nodeId === state.pendingBranchNodeId);
+      if (pendingBranch) {
+        const branchNumber = Math.min(state.visibleBranchIds.size + 1, CAUSATION_BRANCH_LAYOUT.length);
+        count.textContent = `Testing causation branch ${branchNumber} of ${CAUSATION_BRANCH_LAYOUT.length}`;
+        focus.textContent = pendingBranch[1];
+        status.textContent = `Causation branch ${branchNumber} of ${CAUSATION_BRANCH_LAYOUT.length}: ${focus.textContent}`;
+      } else {
+        const decisionNumber = Math.min(state.graphRevealIndex + (state.graphDwell ? 0 : 1), nodes.length);
+        count.textContent = `Building decision ${decisionNumber} of ${nodes.length}`;
+        focus.textContent = nodeLabel(state.selectedNodeId) || 'Grounded decision';
+        status.textContent = `Decision ${decisionNumber} of ${nodes.length}: ${focus.textContent}`;
+      }
     } else {
       count.textContent = `${nodes.length} decisions · core handling spine`;
-      focus.textContent = nodeById(state.selectedNodeId)?.title || 'Select one decision';
+      focus.textContent = nodeLabel(state.selectedNodeId) || 'Select one decision';
       if (state.moment === 'review') {
         count.textContent = 'Expert correction';
         focus.textContent = 'Causation · responsibility remains blocked';
@@ -2019,19 +2797,21 @@
         count.textContent = 'Final audit · complete graph';
         focus.textContent = 'Causation stays open · unsupported conclusions fail closed';
       } else if (state.moment === 'knowledge') {
-        count.textContent = 'Correction saved for governed reuse';
-        focus.textContent = 'Ventilation check · unverified case memory only';
+        count.textContent = 'One correction saved for governed reuse';
+        focus.textContent = 'Check ventilation allegations separately · unverified case memory';
       } else if (state.moment === 'later-work') {
-        count.textContent = 'Held-out claim · checking the saved correction';
+        count.textContent = 'Separate future claim · checking the saved correction';
         focus.textContent = state.laterCausalStep?.phase === 'source'
           ? 'New claim source · ventilation allegation'
           : state.laterCausalStep?.phase === 'memory'
             ? 'Unverified case memory retrieved'
-            : 'New claim · checking memory eligibility';
+            : state.laterCausalStep?.phase === 'eligibility'
+              ? 'Match confirmed · adding one conditional check'
+            : 'New claim · checking whether the saved lesson applies';
       } else if (state.moment === 'later-result') {
         count.textContent = validatedLaterMemory() ? 'A later claim uses the correction' : 'Memory application not proven';
         focus.textContent = validatedLaterMemory()
-          ? 'Unverified case memory · qualified review still required'
+          ? 'One conditional ventilation check · qualified review still required'
           : 'No memory-driven change claimed';
       }
       status.textContent = `${nodes.length} accepted decisions. Current decision: ${focus.textContent}.`;
@@ -2047,6 +2827,8 @@
 
   function stageFocalMarkup() {
     const copy = momentCopy();
+    if (['opening', 'read'].includes(state.moment)) return sourcePreludeMarkup();
+    if (state.moment === 'understand' && !state.factTourRunning && !state.factTourComplete) return sourcePreludeMarkup({ readyToInspect: true });
     if (state.moment === 'understand' && (state.factTourRunning || state.factTourComplete)) return factSourceStageMarkup(copy);
     if (state.moment === 'research') return lawStageMarkup(copy);
     if (state.moment === 'evidence') return evidenceStageMarkup(copy);
@@ -2068,36 +2850,132 @@
     </article>`;
   }
 
+  function sourcePreludeMarkup({ readyToInspect = false } = {}) {
+    const artifacts = asArray(state.claim?.artifacts);
+    const sources = [
+      { title: 'Customer message', kind: 'Message' },
+      ...artifacts.map(artifact => ({
+        title: artifact.title || artifact.filename || artifact.artifact_id || 'Source file',
+        kind: String(artifact.media_type || '').startsWith('image/')
+          ? 'Image'
+          : String(artifact.media_type || '').includes('message') ? 'Message' : 'Document',
+      })),
+    ];
+    return `<article class="ac-source-prelude" data-ac-focal-object="source-prelude" data-source-count="${esc(sources.length)}" data-ac-cursor-target="true">
+      <header><span>${readyToInspect ? 'Source package ready' : 'Opening source package'}</span><strong>${esc(sources.length)} originals · no conclusions yet</strong></header>
+      <div class="ac-source-prelude-strip" aria-label="Claim sources being prepared">${sources.map((source, index) => `<span style="--source-order:${index}" data-source-kind="${esc(source.kind.toLowerCase())}"><i aria-hidden="true"></i><small>${esc(source.kind)}</small><strong>${esc(source.title)}</strong></span>`).join('')}</div>
+      <footer><i aria-hidden="true"></i><span>${readyToInspect ? 'Starting with the exact passage that supports the first fact.' : 'Preserving each file before inspection.'}</span></footer>
+    </article>`;
+  }
+
+  function sourceTrailKind(ref) {
+    if (['message', 'intake'].includes(String(ref?.artifact_id || ''))) return ['message', 'Customer message'];
+    const artifact = asArray(state.claim?.artifacts)
+      .find(item => String(item?.artifact_id || '') === String(ref?.artifact_id || ''));
+    const title = String(artifact?.title || sourceDisplayTitle(ref?.artifact_id) || '').toLowerCase();
+    const mediaType = String(artifact?.media_type || '').toLowerCase();
+    if (mediaType.startsWith('image/')) return ['photo', 'Photo'];
+    if (/timeline|chronology/.test(title)) return ['timeline', 'Timeline'];
+    if (/delivery|receipt/.test(title)) return ['receipt', 'Delivery proof'];
+    if (/management|landlord|reply/.test(title)) return ['letter', 'Landlord letter'];
+    if (mediaType.includes('message')) return ['message', 'Message'];
+    return ['pdf', 'PDF'];
+  }
+
+  function factSourceTrailMarkup(items, currentIndex, phase) {
+    const opened = [];
+    items.slice(0, Math.max(0, currentIndex) + 1).forEach((item, index) => {
+      const sourceId = String(item.ref?.artifact_id || '');
+      const existing = opened.find(entry => entry.sourceId === sourceId);
+      const current = index === currentIndex;
+      if (existing) {
+        if (current) existing.current = true;
+        return;
+      }
+      const [kind, kindLabel] = sourceTrailKind(item.ref);
+      opened.push({
+        sourceId,
+        title: sourceDisplayTitle(sourceId),
+        kind,
+        kindLabel,
+        image: kind === 'photo' ? visualSourceImage(item.ref) : '',
+        current,
+      });
+    });
+    return `<ol class="ac-source-inspection-trail" aria-label="Sources opened so far">${opened.map((source, index) => {
+      const stateLabel = source.current ? (phase === 'select-source' ? 'opening' : 'active') : 'inspected';
+      const icon = source.image
+        ? `<i data-source-kind="photo" aria-hidden="true"><img src="${esc(source.image)}" alt=""></i>`
+        : `<i data-source-kind="${esc(source.kind)}" aria-hidden="true"></i>`;
+      return `<li style="--trail-order:${index}" data-source-id="${esc(source.sourceId)}" data-source-kind="${esc(source.kind)}" data-source-trail-state="${stateLabel}">${icon}<span><small>${esc(source.kindLabel)}</small><strong>${esc(source.title)}</strong></span></li>`;
+    }).join('')}</ol>`;
+  }
+
   function factSourceStageMarkup(copy) {
     const items = factStoryItems();
     const item = items.find(candidate => candidate.fact.fact_id === state.pendingFactId)
       || items[Math.min(state.factTourIndex, Math.max(0, items.length - 1))];
-    if (!item) return `<article class="ac-stage-focus" data-ac-focal-object="fact-inspection"><span>${esc(copy.authority)}</span><h3>${esc(copy.title)}</h3><p>Waiting for exact returned source locators.</p></article>`;
+    if (!item) return `<article class="ac-stage-focus" data-ac-focal-object="fact-inspection"><span>${esc(copy.authority)}</span><h3>${esc(copy.title)}</h3><p>Opening the first exact source.</p></article>`;
     const { fact, ref } = item;
     const finding = sourceFinding(ref);
     const sourceTitle = sourceDisplayTitle(ref.artifact_id);
     const step = state.factTourIndex + 1;
+    const sourceHeader = `<header><span>Source ${step} of ${FACT_STORY_IDS.length}</span><strong>${esc(sourceTitle)}</strong><small>${esc(sourceLocation(ref))}</small></header>`;
+    const sourceReading = sourceReadingMarkup(fact, ref, state.factTourReadArmed, false);
+    const sourceHighlight = sourceReadingMarkup(fact, ref, false, true);
+    const sourceFindingMarkup = sourceReadingMarkup(fact, ref, false, true);
+    const sourceTrail = factSourceTrailMarkup(items, state.factTourIndex, state.factTourPhase);
+    const unverifiedVisual = `<p class="ac-visual-source-unverified">Image-region provenance could not be verified. No visual observation is claimed.</p>`;
     const sourceMarkup = `<section class="ac-fact-source" data-source-authority="${esc(ref.authority || 'customer_submission')}">
-      <header><span>Source ${step} of ${FACT_STORY_IDS.length}</span><strong>${esc(sourceTitle)}</strong><small>${esc(sourceLocation(ref))}</small></header>
-      <blockquote>${esc(finding)}</blockquote>
+      ${sourceHeader}
+      ${sourceFindingMarkup || unverifiedVisual}
     </section>`;
-    if (state.factTourPhase === 'source' && state.factTourRunning) {
-      return `<article class="ac-stage-focus ac-fact-source-focus" data-ac-focal-object="fact-inspection" data-fact-tour-phase="source" data-fact-id="${esc(fact.fact_id)}">
-        <span>${esc(copy.authority)} · exact returned source</span>
-        <h3>Checking the source before adding a fact.</h3>
-        ${sourceMarkup}
-        <button type="button" class="ac-fact-inspection-target" data-ac-action="open-source" data-ac-inspection-target="true" data-fact-inspection-target="true" data-ac-cursor-target="true" ${sourceContextAttributes(fact, ref)}>Inspect ${esc(sourceTitle)}</button>
+    if (state.factTourPhase === 'select-source' && state.factTourRunning) {
+      return `<article class="ac-stage-focus ac-fact-source-focus" data-ac-focal-object="fact-inspection" data-fact-tour-phase="select-source" data-fact-id="${esc(fact.fact_id)}">
+        <span>${esc(copy.authority)} · source not yet opened</span>
+        <h3>Open the source.</h3>
+        ${sourceTrail}
+        <button type="button" class="ac-fact-source-picker" data-ac-action="open-source" data-ac-inspection-target="true" data-fact-inspection-target="true" data-inspection-phase="select-source" data-ac-cursor-target="true" ${sourceContextAttributes(fact, ref)}>
+          <small>Source ${step} of ${FACT_STORY_IDS.length}</small><strong>${esc(sourceTitle)}</strong><span>Open ${esc(sourceLocation(ref))}</span>
+        </button>
+      </article>`;
+    }
+    if (state.factTourPhase === 'read-source' && state.factTourRunning) {
+      return `<article class="ac-stage-focus ac-fact-source-focus" data-ac-focal-object="fact-inspection" data-fact-tour-phase="read-source" data-fact-id="${esc(fact.fact_id)}">
+        <span>${esc(copy.authority)} · Source opened</span>
+        <h3>Select the exact part.</h3>
+        ${sourceTrail}
+        <section class="ac-fact-source" data-source-authority="${esc(ref.authority || 'customer_submission')}">
+          ${sourceHeader}
+          ${sourceReading || unverifiedVisual}
+          <div class="ac-extraction-pending"><span>Nothing selected yet</span><strong>The fact will appear only after this source is selected.</strong></div>
+        </section>
+      </article>`;
+    }
+    if (state.factTourPhase === 'highlight-source' && state.factTourRunning) {
+      return `<article class="ac-stage-focus ac-fact-source-focus" data-ac-focal-object="fact-inspection" data-fact-tour-phase="highlight-source" data-fact-id="${esc(fact.fact_id)}">
+        <span>${esc(copy.authority)} · Source selected</span>
+        <h3>One fact comes from this selection.</h3>
+        ${sourceTrail}
+        <section class="ac-fact-source is-source-selected" data-source-authority="${esc(ref.authority || 'customer_submission')}">
+          ${sourceHeader}
+          ${sourceHighlight || unverifiedVisual}
+          <div class="ac-extraction-pending is-extracting"><span>Selected from this source</span><strong>${esc(fact.label || 'Preparing the source-bound fact')}</strong></div>
+        </section>
       </article>`;
     }
     return `<article class="ac-stage-focus ac-fact-source-focus" data-ac-focal-object="fact-inspection" data-fact-tour-phase="finding" data-fact-id="${esc(fact.fact_id)}">
-      <span>${esc(copy.authority)} · source-grounded fact</span>
-      ${sourceMarkup}
-      <section class="ac-fact-finding" data-node-attachment-kind="fact" ${lineageAttributes('fact', fact.fact_id)} ${sourceContextAttributes(fact, ref)} data-fact-id="${esc(fact.fact_id)}">
-        <small>Fact added from this source</small>
-        <h3>${esc(fact.label || 'Returned fact')}</h3>
-        <strong>${esc(fact.value || 'Value not returned')}</strong>
-        <p>${esc(fact.explanation || (fact.state === 'unknown' ? 'This remains unresolved.' : 'This fact is bound to the source shown above.'))}</p>
-      </section>
+      <span>${esc(copy.authority)} · Verified from this source</span>
+      ${sourceTrail}
+      <div class="ac-fact-resolution">
+        ${sourceMarkup}
+        <span class="ac-fact-causal-link" aria-hidden="true">Extracted</span>
+        <section class="ac-fact-finding" data-node-attachment-kind="fact" ${lineageAttributes('fact', fact.fact_id)} ${sourceContextAttributes(fact, ref)} data-fact-id="${esc(fact.fact_id)}">
+          <small>Fact added from this source</small>
+          <h3>${esc(fact.label || 'Returned fact')}</h3>
+          <strong>${esc(fact.value || 'Value not returned')}</strong>
+        </section>
+      </div>
     </article>`;
   }
 
@@ -2146,19 +3024,32 @@
 
   function lawStageMarkup(copy) {
     const sources = asArray(state.legal?.sources).filter(isOfficialLaw);
-    const law = sources.find(item => item.source_id === state.focusLawId) || sources[0];
+    const law = sources.find(item => item.source_id === state.focusLawId)
+      || (!state.officialLawTourRunning && !state.pendingLawId ? sources[0] : null);
     const cursorLawId = state.pendingLawId || law?.source_id || '';
-    if (!law) return `<article class="ac-stage-focus ac-law-focus" data-ac-focal-object="law" data-ac-cursor-target="true"><span>${esc(copy.authority)}</span><h3>${esc(copy.title)}</h3><p>${esc(copy.detail)}</p></article>`;
+    const lawTabs = sources.map(source => {
+      const article = String(source.location || '').match(/Art(?:icle)?\.?\s*\d+[a-z]?/i)?.[0]?.replace(/^Article/i, 'Art.');
+      const label = article || (/conciliation|schlichtung/i.test(`${source.title || ''} ${source.location || ''}`) ? 'Conciliation' : source.title || source.location);
+      return `<button type="button" data-ac-action="select-law" data-law-id="${esc(source.source_id)}" data-source-authority="official_registry" data-source-locator-id="${esc(lawLocatorId(source))}" aria-current="${String(source.source_id === law?.source_id)}" ${source.source_id === cursorLawId ? 'data-ac-cursor-target="true"' : ''} aria-label="${esc(source.location || source.title)}">${esc(label)}</button>`;
+    }).join('');
+    if (!law) {
+      const pending = sources.find(item => item.source_id === state.pendingLawId) || sources[0];
+      let pendingHost = 'official source';
+      try { pendingHost = new URL(String(pending?.url || '')).host || pendingHost; } catch (_) {}
+      return `<article class="ac-stage-focus ac-law-focus ac-law-pending" data-ac-focal-object="law">
+        <div class="ac-browser-bar"><i aria-hidden="true"></i><span><strong>${esc(pendingHost)}</strong><code>${esc(pending?.url || 'Official URL not returned')}</code></span><small>Not opened yet</small></div>
+        <nav class="ac-law-tabs" aria-label="Exact official Swiss-law sections">${lawTabs}</nav>
+        <span>Official Swiss-law registry · qualified review pending</span>
+        <h3>Select the exact section before its passage appears.</h3>
+        <div class="ac-law-pending-surface"><i aria-hidden="true"></i><strong>No passage selected</strong><small>The source text is revealed by the cursor click.</small></div>
+      </article>`;
+    }
     const retrieval = law.retrieval || {};
     let officialHost = 'official source';
     try { officialHost = new URL(String(law.url || '')).host || officialHost; } catch (_) {}
     return `<article class="ac-stage-focus ac-law-focus" data-ac-focal-object="law" data-ac-law-id="${esc(law.source_id)}" data-node-attachment-kind="law" ${lineageAttributes('law', law.source_id)} data-source-authority="official_registry" data-source-locator-id="${esc(lawLocatorId(law))}">
       <div class="ac-browser-bar"><i aria-hidden="true"></i><span><strong>${esc(officialHost)}</strong><code>${esc(law.url || 'Official URL not returned')}</code></span><small>Cached exact passage</small></div>
-      <nav class="ac-law-tabs" aria-label="Exact official Swiss-law sections">${sources.map(source => {
-        const article = String(source.location || '').match(/Art(?:icle)?\.?\s*\d+[a-z]?/i)?.[0]?.replace(/^Article/i, 'Art.');
-        const label = article || (/conciliation|schlichtung/i.test(`${source.title || ''} ${source.location || ''}`) ? 'Conciliation' : source.title || source.location);
-        return `<button type="button" data-ac-action="select-law" data-law-id="${esc(source.source_id)}" data-source-authority="official_registry" data-source-locator-id="${esc(lawLocatorId(source))}" aria-current="${String(source.source_id === law.source_id)}" ${source.source_id === cursorLawId ? 'data-ac-cursor-target="true"' : ''} aria-label="${esc(source.location || source.title)}">${esc(label)}</button>`;
-      }).join('')}</nav>
+      <nav class="ac-law-tabs" aria-label="Exact official Swiss-law sections">${lawTabs}</nav>
       <span>Cached exact official source · qualified review pending</span>
       <h3>${esc(law.title)}</h3>
       <blockquote lang="${esc(law.passage_language || '')}">${esc(law.passage_text || 'Official passage not returned.')}</blockquote>
@@ -2274,7 +3165,7 @@
   function sourceChainMarkup(node, facts) {
     const fact = relevantFact(facts);
     const refs = asArray(fact?.source_refs);
-    const ref = refs[0];
+    const ref = representativeFactRef(fact);
     if (!fact || !ref) return '<p class="ac-empty-chain">No exact source reference was returned for this decision.</p>';
     const locator = ref.locator_kind === 'visual_observation'
       ? `Image region ${asArray(ref.region).map(value => Number(value).toFixed(2)).join(', ')}`
@@ -2368,7 +3259,7 @@
     const tourBoundLaw = kind !== 'law'
       || state.moment !== 'research'
       || state.officialLawTourVisitedIds.has(String(entityId || ''));
-    const sourceBeforeFact = Boolean(focal.querySelector('[data-fact-tour-phase="source"]'));
+    const sourceBeforeFact = Boolean(focal.querySelector('[data-fact-tour-phase="select-source"], [data-fact-tour-phase="read-source"]'));
     if (!sourceBeforeFact && tourBoundLaw && focal.dataset.artifactFocus === 'true' && !state.graphRevealRunning && !state.pendingLawId) {
       emitArtifactChange(kind, entityId);
     }
@@ -2399,6 +3290,18 @@
   function renderProofLine() {
     const proof = state.root?.querySelector('[data-ac-proof]');
     if (!proof) return;
+    if (['opening', 'read'].includes(state.moment)) {
+      proof.textContent = 'Original claim package · no conclusion yet';
+      return;
+    }
+    if (state.moment === 'understand') {
+      proof.textContent = 'One exact source at a time · no conclusion yet';
+      return;
+    }
+    if (state.moment === 'research') {
+      proof.textContent = 'Checking exact Swiss-law sections · process path not shown yet';
+      return;
+    }
     if (state.processAccepted) {
       if (state.moment === 'review-applied') {
         proof.textContent = reviewAppliedTruth().verified
@@ -2411,20 +3314,22 @@
         return;
       }
       if (state.moment === 'later-work') {
-        proof.textContent = 'New claim source → memory eligibility → proven graph change only';
+        proof.textContent = 'New claim source → saved lesson → confirmed graph change';
         return;
       }
       if (state.moment === 'later-result') {
         proof.textContent = validatedLaterMemory()
-          ? 'Receipt-bound change · one decision · two links · three evidence updates'
-          : 'No receipt-bound memory change was proven';
+          ? 'Saved lesson used here · responsibility still blocked'
+          : 'No saved-memory change was proven';
         return;
       }
       const current = state.process?.current_overlay?.current_node_id || state.process?.current_node || 'not returned';
       const next = state.process?.current_overlay?.next_action_node_id || 'not returned';
-      proof.textContent = `Verified path · ${nodeLabel(current)} open · ${nodeLabel(next)} next`;
+      proof.textContent = ['causation', 'evidence_gap'].includes(current)
+        ? 'Cause not proven → independent check needed → responsibility waits'
+        : `Verified path · ${nodeLabel(current)} open · ${nodeLabel(next)} next`;
     } else {
-      proof.textContent = 'Only returned, contract-bound work is shown.';
+      proof.textContent = 'Only validated outputs are shown.';
     }
   }
 
@@ -2433,11 +3338,12 @@
     if (!state.root) return;
     const submission = document.querySelector('.submission-pane');
     if (submission) {
-      submission.classList.remove('collapsed');
-      submission.dataset.sourceDockState = submission.dataset.activeSourceLocator ? 'active' : 'open';
-      document.querySelector('#toggleSource')?.setAttribute('aria-expanded', 'true');
+      submission.dataset.sourceDockState = submission.dataset.activeSourceLocator
+        ? 'active'
+        : submission.classList.contains('collapsed') ? 'closed' : 'open';
     }
     renderHeader();
+    renderAgentAudit();
     reconcileGraph();
     renderFocal();
     syncGraphCursorTarget();
@@ -2455,7 +3361,12 @@
     state.root.querySelectorAll('[data-ac-cursor-target="true"]').forEach(item => item.removeAttribute('data-ac-cursor-target'));
     if (state.graphDwell) return;
     if (state.graphInspecting) {
-      state.root.querySelector('[data-ac-inspection-target="true"]')?.setAttribute('data-ac-cursor-target', 'true');
+      if (state.graphInspectionPhase === 'highlight-source') return;
+      const inspection = state.root.querySelector('[data-ac-inspection-target="true"]');
+      const readingTarget = state.graphInspectionPhase === 'read-source'
+        ? inspection?.querySelector('[data-ac-inspection-read-target="true"]')
+        : null;
+      (readingTarget || inspection)?.setAttribute('data-ac-cursor-target', 'true');
       return;
     }
     const buildTarget = state.root?.querySelector('[data-ac-build-target]:not([hidden])');
@@ -2503,6 +3414,7 @@
     const detail = interactionDetail(action, button);
     state.root.dispatchEvent(new CustomEvent(INTERACTION_EVENT, { bubbles: true, detail }));
     if (action === 'open-source') {
+      markSubmissionSource(detail.sourceId || '');
       setActiveSourceLocator(button.dataset.sourceLocatorId || '');
       // During automatic construction the exact excerpt is already the focal
       // artifact. Keep the graph visible; reserve the full source viewer for
@@ -2578,12 +3490,13 @@
   }
 
   function setActiveSourceLocator(locatorId) {
+    const dockState = locatorId ? 'active' : 'open';
     state.root.dataset.activeSourceLocator = locatorId;
-    state.root.dataset.sourceDockState = 'open';
+    state.root.dataset.sourceDockState = dockState;
     const submission = document.querySelector('.submission-pane');
     if (submission) {
       submission.dataset.activeSourceLocator = locatorId;
-      submission.dataset.sourceDockState = 'open';
+      submission.dataset.sourceDockState = dockState;
     }
   }
 
@@ -2593,24 +3506,63 @@
     const action = button.dataset.acAction;
     if (action === 'toggle-grounding') {
       event.preventDefault();
-      state.groundingOpen = !state.groundingOpen;
       const disclosure = button.closest('.ac-grounding-disclosure');
-      if (disclosure) {
-        disclosure.dataset.groundingOpen = String(state.groundingOpen);
-        button.setAttribute('aria-expanded', String(state.groundingOpen));
-        const panel = disclosure.querySelector(':scope > div');
-        if (panel) panel.hidden = !state.groundingOpen;
+      const panel = disclosure?.querySelector(':scope > div');
+      const viewer = state.root.querySelector('[data-ac-grounding-viewer]');
+      const detail = viewer?.querySelector('[data-ac-grounding-viewer-detail]');
+      if (panel && viewer && detail) {
+        detail.innerHTML = panel.innerHTML;
+        button.setAttribute('aria-expanded', 'true');
+        if (!viewer.open) viewer.showModal();
       }
+      return;
+    }
+    if (action === 'close-grounding') {
+      state.root.querySelector('[data-ac-grounding-viewer]')?.close();
+      state.root.querySelectorAll('[data-ac-action="toggle-grounding"]').forEach(toggle => toggle.setAttribute('aria-expanded', 'false'));
       return;
     }
     if (action === 'close-law') {
       state.root.querySelector('[data-ac-law-viewer]')?.close();
       return;
     }
+    if (action === 'close-agent-audit') {
+      closeAgentAudit();
+      return;
+    }
+    if (action === 'open-agent-audit') {
+      openAgentAudit(button.dataset.agentId || '');
+      return;
+    }
+    if (action === 'open-documents') {
+      event.preventDefault();
+      const nodeId = button.dataset.nodeId || state.selectedNodeId || '';
+      const existingAction = document.querySelector('[data-v20-open-documents]');
+      if (existingAction) existingAction.click();
+      else {
+        const sheet = document.querySelector('#v20DocumentSheet');
+        if (sheet && !sheet.open) sheet.showModal();
+      }
+      window.requestAnimationFrame(() => {
+        if (!nodeId) return;
+        document.querySelector(`#v20DocumentSheet [data-v20-document-node="${CSS.escape(nodeId)}"]`)?.click();
+      });
+      return;
+    }
     if (action === 'select-node') {
       state.selectedNodeId = button.dataset.nodeId;
       state.activeChainKind = 'source';
-      state.groundingOpen = true;
+      state.groundingOpen = false;
+      state.manualNodeInspection = true;
+      const selectedNode = nodeById(state.selectedNodeId);
+      const selectedFact = relevantFact(directFactsForNode(selectedNode));
+      const selectedRef = representativeFactRef(selectedFact);
+      if (selectedRef) {
+        markSubmissionSource(selectedRef.artifact_id || '');
+        setActiveSourceLocator(sourceLocatorId(selectedRef));
+      } else {
+        clearActiveSource();
+      }
       emitInteraction(action, button);
       render();
       return;
@@ -2627,6 +3579,10 @@
       emitInteraction(action, button);
       render();
       return;
+    }
+    if (button.closest('[data-ac-grounding-viewer]')) {
+      state.root.querySelector('[data-ac-grounding-viewer]')?.close();
+      state.root.querySelectorAll('[data-ac-action="toggle-grounding"]').forEach(toggle => toggle.setAttribute('aria-expanded', 'false'));
     }
     emitInteraction(action, button);
     markCursorTarget(button);
@@ -2655,33 +3611,103 @@
     state.cursorTimer = window.setTimeout(positionCursor, 80);
   }
 
+  function specialistForCursorTarget(target) {
+    if (state.graphRevealRunning) {
+      return { agentId: 'process_decision_mapping', agent: AGENTS.process_decision_mapping };
+    }
+    const candidates = [
+      ['process_node', target?.dataset.nodeId],
+      ['evidence_requirement', target?.dataset.evidenceId],
+      ['fact', target?.dataset.factId],
+      ['verification', target?.dataset.verificationId],
+      ['agent_output', target?.dataset.agentId],
+    ];
+    let lineage = null;
+    for (const [kind, entityId] of candidates) {
+      if (!entityId) continue;
+      lineage = lineageFor(kind, entityId);
+      if (lineage) break;
+    }
+    if (!lineage && state.lastCursorAgentId) {
+      const agentLineage = state.agentLineage.get(state.lastCursorAgentId);
+      if (agentLineage?.eventId && agentLineage.eventId === state.lastCursorEventId) lineage = agentLineage;
+    }
+    const acceptedAgentLineage = lineage?.agentId ? state.agentLineage.get(lineage.agentId) : null;
+    let agentId = AGENTS[lineage?.agentId]
+      && (Boolean(lineage.eventId)
+        || (acceptedAgentLineage?.actorType === 'nemotron_agent'
+          && acceptedAgentLineage.agentId === lineage.agentId))
+      ? lineage.agentId
+      : '';
+    if (!agentId && state.graphRevealRunning
+      && state.agentLineage.get('process_decision_mapping')?.actorType === 'nemotron_agent') {
+      agentId = 'process_decision_mapping';
+    }
+    return agentId ? { agentId, agent: AGENTS[agentId] } : null;
+  }
+
+  function cursorActionLabel(target, specialist) {
+    const action = target?.dataset.acAction || '';
+    const phase = target?.dataset.inspectionPhase || '';
+    if (phase === 'select-source') return 'Opening source';
+    if (phase === 'read-source' || action === 'confirm-source') return 'Selecting exact evidence';
+    if (phase === 'highlight-source') return 'Adding what was found';
+    if (action === 'open-law' || action === 'select-law') return 'Reading Swiss law';
+    if (action === 'inspect-evidence' || action === 'open-documents') return 'Finding the document need';
+    if (action === 'open-reference') return 'Checking a past pattern';
+    if (action === 'select-node') return 'Checking this step';
+    return specialist?.agent.task || 'Working on this artifact';
+  }
+
+  function sourceRailTarget(sourceId) {
+    const id = String(sourceId || '');
+    if (!id) return null;
+    if (['message', 'intake'].includes(id)) return document.querySelector('.v21-source-summary-toggle');
+    return [...document.querySelectorAll('.attachment-row[data-artifact-id]')]
+      .find(row => row.dataset.artifactId === id) || null;
+  }
+
   function positionCursor() {
     const root = state.root;
     const cursor = root?.querySelector('[data-ac-cursor]');
     const focus = root?.querySelector('[data-artifact-focus="true"]');
-    const target = focus?.querySelector('[data-ac-cursor-target="true"]')
+    const parked = ['review-applied', 'knowledge', 'later-result'].includes(state.moment);
+    const target = parked
+      ? focus?.querySelector('[data-ac-cursor-park]')
+      : focus?.querySelector('[data-ac-cursor-target="true"]')
       || (!state.graphRevealRunning && !state.graphDwell ? focus?.querySelector('[data-selected="true"] button') : null);
     if (!root || !cursor || !target) return;
-    const rootBox = root.getBoundingClientRect();
-    const targetBox = target.getBoundingClientRect();
-    if (!rootBox.width || !targetBox.width) return;
-    const x = Math.round(Math.max(18, Math.min(rootBox.width - 56, targetBox.right - rootBox.left - 22)) / 2) * 2;
-    const y = Math.round(Math.max(74, Math.min(rootBox.height - 52, targetBox.top - rootBox.top + Math.min(targetBox.height * .55, 54))) / 2) * 2;
-    const targetId = target.dataset.lawId
-      || target.dataset.sourceId
-      || target.dataset.evidenceId
-      || target.dataset.inspectionId
-      || target.dataset.factId
-      || target.dataset.nodeId
-      || target.dataset.precedentId
-      || target.dataset.acFocalObject
-      || target.dataset.acAction
+    const visualTarget = target.dataset.inspectionPhase === 'select-source'
+      ? sourceRailTarget(target.dataset.sourceId)
+      : null;
+    const targetBox = (visualTarget || target).getBoundingClientRect();
+    if (!targetBox.width) return;
+    const viewportWidth = document.documentElement.clientWidth;
+    const viewportHeight = document.documentElement.clientHeight;
+    const x = Math.round(Math.max(18, Math.min(viewportWidth - 56, targetBox.right - 22)) / 2) * 2;
+    const y = Math.round(Math.max(18, Math.min(viewportHeight - 52, targetBox.top + Math.min(targetBox.height * .55, 54))) / 2) * 2;
+    const identityTarget = target.closest?.('[data-ac-inspection-target="true"]') || target;
+    const targetId = identityTarget.dataset.lawId
+      || identityTarget.dataset.sourceId
+      || identityTarget.dataset.evidenceId
+      || identityTarget.dataset.inspectionId
+      || identityTarget.dataset.factId
+      || identityTarget.dataset.nodeId
+      || identityTarget.dataset.precedentId
+      || identityTarget.dataset.acFocalObject
+      || identityTarget.dataset.acAction
       || target.tagName.toLowerCase();
-    const key = `${state.lastCursorChangeId}:${state.activeAgentId}:${state.neutralAuthority}:${state.moment}:${targetId}:${Math.round(x)}:${Math.round(y)}`;
+    const laterSourcePhase = state.laterCausalStep?.phase === 'source'
+      ? `${String(state.laterCausalStep.opened)}:${String(state.laterCausalStep.highlighted)}`
+      : '';
+    const key = `${state.lastCursorChangeId}:${state.activeAgentId}:${state.neutralAuthority}:${state.moment}:${state.factTourPhase}:${state.graphInspectionPhase}:${laterSourcePhase}:${targetId}:${Math.round(x)}:${Math.round(y)}`;
     if (state.lastCursorKey === key) return;
     state.lastCursorKey = key;
     window.clearTimeout(state.cursorArrivalTimer);
+    window.clearTimeout(state.cursorSettleTimer);
     window.clearTimeout(state.cursorClickTimer);
+    document.querySelectorAll('.is-agent-clicked').forEach(item => item.classList.remove('is-agent-clicked'));
+    cursor.classList.remove('is-clicking');
     cursor.style.setProperty('--ac-cursor-x', `${x}px`);
     cursor.style.setProperty('--ac-cursor-y', `${y}px`);
     cursor.dataset.changeId = state.lastCursorChangeId;
@@ -2689,25 +3715,59 @@
     cursor.dataset.agentId = state.lastCursorAgentId;
     cursor.dataset.targetId = targetId;
     cursor.dataset.cursorPhase = 'moving';
+    cursor.dataset.parked = String(parked);
+    const specialist = specialistForCursorTarget(identityTarget);
+    const cursorAgent = cursor.querySelector('[data-ac-cursor-agent]');
+    const cursorAction = cursor.querySelector('[data-ac-cursor-action]');
+    cursor.dataset.specialistBound = String(Boolean(specialist));
+    cursor.dataset.labelSide = x > viewportWidth * .56 ? 'left' : 'right';
+    if (specialist) {
+      cursor.dataset.agentSignature = specialist.agent.signature;
+      cursor.querySelector('[data-ac-cursor-monogram]').textContent = specialist.agent.monogram;
+      if (cursorAgent) cursorAgent.textContent = specialist.agent.short;
+    }
+    if (cursorAction) cursorAction.textContent = cursorActionLabel(identityTarget, specialist);
     const cursorDetail = () => ({
       changeId: state.lastCursorChangeId,
       eventId: state.lastCursorEventId,
       agentId: state.lastCursorAgentId,
       targetId,
       moment: state.moment,
+      action: identityTarget.dataset.acAction || target.dataset.acAction || '',
+      inspectionPhase: identityTarget.dataset.inspectionPhase || target.dataset.inspectionPhase || '',
     });
     window.dispatchEvent(new CustomEvent('casepath:cursor-step', { detail: { ...cursorDetail(), phase: 'move' } }));
     state.cursorArrivalTimer = window.setTimeout(() => {
-      if (!cursor.isConnected) return;
+      if (!cursor.isConnected || !target.isConnected) {
+        state.lastCursorKey = '';
+        scheduleCursor();
+        return;
+      }
       cursor.dataset.cursorPhase = 'settled';
       window.dispatchEvent(new CustomEvent('casepath:cursor-step', { detail: { ...cursorDetail(), phase: 'arrived' } }));
-      cursor.classList.add('is-clicking');
-      window.dispatchEvent(new CustomEvent('casepath:cursor-step', { detail: { ...cursorDetail(), phase: 'click' } }));
-      const commit = state.cursorCommit;
-      state.cursorCommit = null;
-      commit?.();
-      state.cursorClickTimer = window.setTimeout(() => cursor.classList.remove('is-clicking'), 240);
-    }, REDUCED_MOTION ? 0 : 560);
+      if (parked) return;
+      state.cursorSettleTimer = window.setTimeout(() => {
+        if (!cursor.isConnected || !target.isConnected) {
+          state.lastCursorKey = '';
+          scheduleCursor();
+          return;
+        }
+        cursor.dataset.cursorPhase = 'clicking';
+        cursor.classList.add('is-clicking');
+        target.classList.add('is-agent-clicked');
+        visualTarget?.classList.add('is-agent-clicked');
+        window.dispatchEvent(new CustomEvent('casepath:cursor-step', { detail: { ...cursorDetail(), phase: 'click' } }));
+        const commit = state.cursorCommit;
+        state.cursorCommit = null;
+        commit?.();
+        state.cursorClickTimer = window.setTimeout(() => {
+          cursor.classList.remove('is-clicking');
+          target.classList.remove('is-agent-clicked');
+          visualTarget?.classList.remove('is-agent-clicked');
+          if (cursor.dataset.cursorPhase === 'clicking') cursor.dataset.cursorPhase = 'settled';
+        }, 260);
+      }, REDUCED_MOTION ? 0 : CURSOR_SETTLE_MS);
+    }, REDUCED_MOTION ? 0 : CURSOR_TRAVEL_MS);
   }
 
   function mount() {
@@ -2816,19 +3876,58 @@
     state.laterCausalStep = step;
     state.moment = 'later-work';
     state.neutralAuthority = 'case-memory-comparison';
-    if (nodeById('ventilation_dispute')) state.selectedNodeId = 'ventilation_dispute';
+    state.selectedNodeId = step.phase === 'source' || step.phase === 'memory' || step.phase === 'eligibility'
+      ? 'causation'
+      : state.selectedNodeId;
     state.lastCursorChangeId = step.phase === 'source'
       ? `later-source:${step.fact.fact_id}:${sourceLocatorId(step.ref)}`
-      : `later-memory-retrieval:${step.memoryOriginId}`;
+      : step.phase === 'eligibility'
+        ? `later-memory-eligibility:${step.ruleId}`
+        : `later-memory-retrieval:${step.memoryOriginId}`;
     state.lastCursorEventId = step.runId;
     state.lastCursorAgentId = '';
-    markSubmissionSource(step.phase === 'source' ? step.ref.artifact_id : '');
+    clearActiveSource();
+    const highlightLaterSource = () => {
+      if (state.laterCausalStep !== step || !step.opened || step.highlighted) return;
+      const target = state.root?.querySelector('[data-later-causal-phase="source"] [data-ac-inspection-target="true"]');
+      if (!target) return;
+      emitInteraction('confirm-source', target);
+      step.highlighted = true;
+      state.cursorCommit = null;
+      render();
+      window.dispatchEvent(new CustomEvent('casepath:source-highlighted', { detail: {
+        entityKind: 'later-fact', factId: step.fact.fact_id,
+        changeId: state.lastCursorChangeId, eventId: step.runId, agentId: '',
+        sourceId: step.ref.artifact_id, locatorId: sourceLocatorId(step.ref),
+      } }));
+      window.dispatchEvent(new CustomEvent('casepath:later-source-opened', { detail: {
+        contract: LATER_CAUSAL_STEP_CONTRACT,
+        runId: step.runId,
+        factId: step.fact.fact_id,
+        sourceId: step.ref.artifact_id,
+        locatorId: sourceLocatorId(step.ref),
+      } }));
+    };
     state.cursorCommit = step.phase === 'source' ? () => {
       if (state.laterCausalStep !== step) return;
+      const target = state.root?.querySelector('[data-later-causal-phase="source"] [data-ac-inspection-target="true"]');
+      if (!target) return;
+      markSubmissionSource(step.ref.artifact_id);
       setActiveSourceLocator(sourceLocatorId(step.ref));
+      emitInteraction('open-source', target);
+      step.opened = true;
+      step.highlighted = false;
+      state.cursorCommit = highlightLaterSource;
       render();
     } : null;
     render();
+    window.dispatchEvent(new CustomEvent('casepath:later-causal-step-visible', { detail: {
+      contract: LATER_CAUSAL_STEP_CONTRACT,
+      phase: step.phase,
+      runId: step.runId,
+      memoryOriginId: step.memoryOriginId || '',
+      ruleId: step.ruleId || '',
+    } }));
   });
   window.addEventListener('casepath:review-saved', event => {
     const detail = event.detail || {};

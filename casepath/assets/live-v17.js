@@ -45,18 +45,31 @@
 
   const NODE_TITLES = {
     intake: 'Claim intake',
-    scope: 'Tenant-law scope',
-    dispute: 'Existence of a dispute',
-    urgency: 'Urgency and safety',
-    notification: 'Landlord notification',
-    defect: 'Defect and recurrence',
-    causation: 'Causation assessment',
-    responsibility: 'Responsibility',
-    remedy: 'Remedy selection',
+    scope: 'Tenancy scope',
+    dispute: 'Dispute',
+    urgency: 'Urgency',
+    notification: 'Notice to landlord',
+    defect: 'Recurring condition',
+    causation: 'Cause not proven',
+    responsibility: 'Who is responsible?',
+    remedy: 'What happens next?',
     escalation: 'Escalation',
-    resolution: 'Resolution and closure',
+    resolution: 'What closes the claim?',
     evidence_gap: 'Causation evidence loop',
     ventilation_dispute: 'Test the ventilation allegation',
+  };
+  const NODE_QUESTIONS = {
+    intake: 'What happened?',
+    scope: 'Is this our claim?',
+    dispute: 'Is it disputed?',
+    urgency: 'Is it urgent?',
+    notification: 'Was the landlord told?',
+    defect: 'Is it recurring?',
+    causation: 'Is the cause proven?',
+    responsibility: 'Who must act?',
+    remedy: 'What action?',
+    escalation: 'Is escalation needed?',
+    resolution: 'What closes the claim?',
   };
 
   const esc = (value = '') => String(value).replace(/[&<>'"]/g, character => ({
@@ -347,9 +360,9 @@
 
   function groupItems(items) {
     return [
+      { kind: 'needed', title: 'Needed next', items: items.filter(item => ['missing', 'provided_insufficient'].includes(item.status)) },
+      { kind: 'conditional', title: 'Only if a branch becomes relevant', items: items.filter(item => item.status === 'conditional') },
       { kind: 'available', title: 'Already available', items: items.filter(item => item.status === 'provided_sufficient') },
-      { kind: 'needed', title: 'Still needed', items: items.filter(item => ['missing', 'provided_insufficient'].includes(item.status)) },
-      { kind: 'conditional', title: 'Conditional', items: items.filter(item => item.status === 'conditional') },
       { kind: 'not-needed', title: 'Not needed on this path', items: items.filter(item => item.status === 'not_applicable') },
     ];
   }
@@ -388,12 +401,15 @@
     return `<span class="model-contribution-attribution ${authority}" data-contribution-authority="${authority}" data-accepted-count="${accepted.length}" data-fallback-count="${fallback.length}" data-accepted-contribution-ids="${esc(accepted.map(value => value.contribution_id).join(','))}" data-fallback-contribution-ids="${esc(fallback.map(value => value.contribution_id).join(','))}"><i aria-hidden="true"></i><span><strong>${esc([acceptedLabel, fallbackLabel].filter(Boolean).join(' · '))}</strong>${accepted.length ? '<small>Evidence and Checklist Agent</small>' : ''}</span></span>`;
   }
 
-  function checklistItem(item, nodeMap, transform) {
+  function checklistItem(item, nodeMap, factMap, transform) {
     const owners = evidenceOwnerIds(item);
-    const labels = owners.map(nodeId => nodeMap.get(nodeId)?.title || nodeId.replaceAll('_', ' '));
-    const relation = labels.length ? `Primary decision: ${labels[0]}` : '';
+    const node = nodeMap.get(item.node_id) || nodeMap.get(owners[0]);
+    const fact = factMap.get(item.fact_id);
+    const labels = owners.map(nodeId => NODE_TITLES[nodeId] || nodeMap.get(nodeId)?.title || nodeId.replaceAll('_', ' '));
+    const relation = labels.length ? `${labels[0]} requires this` : 'Process decision not returned';
     const secondary = labels.slice(1);
-    return `<div class="v17-checklist-item" data-item-id="${esc(item.item_id || '')}" data-node-id="${esc(item.node_id || '')}" data-node-ids="${esc(owners.join(','))}" data-current-path="${esc(String(item.current_path === true))}" data-fact-id="${esc(item.fact_id || '')}"><i aria-hidden="true"></i><div><strong>${esc(item.title)} — ${esc(statusName(item.status))}</strong><p>${esc(relation)}${secondary.length ? ` · Also required by ${esc(secondary.join(' · '))}` : ''}${item.why ? ` · ${esc(item.why)}` : ''}</p><small>${esc(item.item_id || '')} · ordered decisions ${esc(owners.join(' → ') || 'not returned')} · current path ${esc(String(item.current_path === true))} · fact ${esc(item.fact_id || '')}</small>${checklistContribution(item, transform)}</div></div>`;
+    const evidenceOptions = unique(item.acceptable_alternatives || []);
+    return `<div class="v17-checklist-item" data-item-id="${esc(item.item_id || '')}" data-node-id="${esc(item.node_id || '')}" data-node-ids="${esc(owners.join(','))}" data-current-path="${esc(String(item.current_path === true))}" data-fact-id="${esc(item.fact_id || '')}" data-status="${esc(item.status || '')}" data-decision-title="${esc(NODE_TITLES[item.node_id] || node?.title || labels[0] || 'Process decision')}" data-decision-question="${esc(NODE_QUESTIONS[item.node_id] || node?.question || node?.why || 'What must this process step establish?')}" data-fact-label="${esc(fact?.label || item.fact_label || item.fact_id || 'Fact to establish')}" data-fact-value="${esc(fact?.value || 'Not yet established')}" data-evidence-title="${esc(item.title || '')}" data-evidence-why="${esc(item.why || '')}" data-document-options="${esc(evidenceOptions.join(' · '))}" data-artifact-ids="${esc((item.artifact_ids || []).join(','))}" data-evidence-options="${esc(evidenceOptions.join(' · ') || item.title || '')}" data-document-label="${esc(item.title || '')}" data-artifact-count="${esc((item.artifact_ids || []).length)}" data-applies-when="${esc(item.applies_when || '')}"><i aria-hidden="true"></i><div><header><strong>${esc(item.title)}</strong><span>${esc(statusName(item.status))}</span></header><p class="v17-checklist-owner">${esc(relation)}${secondary.length ? ` · Also required by ${esc(secondary.join(' · '))}` : ''}</p>${item.why ? `<p class="v17-checklist-reason">${esc(item.why)}</p>` : ''}<small class="v17-checklist-technical">${esc(item.item_id || '')} · ordered decisions ${esc(owners.join(' → ') || 'not returned')} · current path ${esc(String(item.current_path === true))} · fact ${esc(item.fact_id || '')}</small>${checklistContribution(item, transform)}</div></div>`;
   }
 
   async function enhanceReady(canvas) {
@@ -411,6 +427,7 @@
     const right = synthesis?.querySelector(':scope > section:last-child');
     if (!right) return;
     const nodeMap = new Map((process.nodes || []).map(node => [node.node_id, node]));
+    const factMap = new Map((result.facts || run.understanding?.facts || []).map(fact => [fact.fact_id, fact]));
     const groups = groupItems(checklist.items || []);
     const checks = verification.checks || verification.accepted_checks || [];
 
@@ -423,7 +440,7 @@
         ${groups.map(group => {
           const visible = group.items.slice(0, 3);
           const rest = group.items.slice(3);
-          return `<section class="v17-checklist-group" data-kind="${group.kind}"><header><h4>${esc(group.title)}</h4><span>${group.items.length}</span></header>${visible.length ? visible.map(item => checklistItem(item, nodeMap, reviewTransform)).join('') : '<div class="v17-checklist-item"><i aria-hidden="true"></i><div><strong>No items in this state</strong></div></div>'}${rest.length ? `<details class="v17-checklist-more"><summary>Show ${rest.length} more</summary>${rest.map(item => checklistItem(item, nodeMap, reviewTransform)).join('')}</details>` : ''}</section>`;
+          return `<section class="v17-checklist-group" data-kind="${group.kind}"><header><h4>${esc(group.title)}</h4><span>${group.items.length}</span></header>${visible.length ? visible.map(item => checklistItem(item, nodeMap, factMap, reviewTransform)).join('') : '<div class="v17-checklist-item"><i aria-hidden="true"></i><div><strong>No items in this state</strong></div></div>'}${rest.length ? `<details class="v17-checklist-more"><summary>Show ${rest.length} more</summary>${rest.map(item => checklistItem(item, nodeMap, factMap, reviewTransform)).join('')}</details>` : ''}</section>`;
         }).join('')}
       </div>
       ${checks.length ? `<details class="v17-acceptance"><summary>Inspect ${checks.length} acceptance checks</summary><div class="verification-list">${checks.map(check => `<div class="verification-row"><span>✓</span><div>${esc(typeof check === 'string' ? check : check.label || check.name || JSON.stringify(check))}</div></div>`).join('')}</div></details>` : ''}`;

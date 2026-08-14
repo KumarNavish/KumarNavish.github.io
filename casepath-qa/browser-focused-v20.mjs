@@ -28,6 +28,7 @@ const REQUIRED_NEMOTRON_AGENT_IDS = Object.freeze([
   'evidence_checklist',
   'final_claim_brief_audit',
 ]);
+const REQUIRED_VISIBLE_SPECIALIST_IDS = Object.freeze(REQUIRED_NEMOTRON_AGENT_IDS.filter(id => id !== 'orchestrator_plan'));
 const REQUIRED_NEMOTRON_AGENT_ROLES = Object.freeze({
   canonical_facts: 'Guarded Canonical Facts Agent',
   orchestrator_plan: 'Nemotron Orchestrator',
@@ -43,6 +44,30 @@ const REQUIRED_NEMOTRON_AGENT_SIGNATURES = Object.freeze({
   process_decision_mapping: { monogram: 'PM', signature: 'process' },
   evidence_checklist: { monogram: 'EC', signature: 'evidence' },
   final_claim_brief_audit: { monogram: 'FB', signature: 'audit' },
+});
+const REQUIRED_DESKTOP_AGENT_LABELS = Object.freeze({
+  canonical_facts: 'Claim reader',
+  orchestrator_plan: 'Work planner',
+  document_source_integrity: 'Source checker',
+  process_decision_mapping: 'Process builder',
+  evidence_checklist: 'Document finder',
+  final_claim_brief_audit: 'Result checker',
+});
+const REQUIRED_DESKTOP_AGENT_SHORTS = Object.freeze({
+  canonical_facts: 'Claim',
+  orchestrator_plan: 'Plan',
+  document_source_integrity: 'Sources',
+  process_decision_mapping: 'Path',
+  evidence_checklist: 'Docs',
+  final_claim_brief_audit: 'Check',
+});
+const REQUIRED_DESKTOP_AGENT_COLORS = Object.freeze({
+  canonical_facts: '#a81f22',
+  orchestrator_plan: '#3a4b66',
+  document_source_integrity: '#166b82',
+  process_decision_mapping: '#6947a8',
+  evidence_checklist: '#9b6514',
+  final_claim_brief_audit: '#207a54',
 });
 const REQUIRED_PRESENTATION_PHASE_LABELS = Object.freeze([
   'Claim understanding',
@@ -67,8 +92,9 @@ const FORBIDDEN_SYNTHETIC_AGENT_LABELS = Object.freeze([
 const MIN_CURSOR_TARGET_HOLD_MS = 180;
 const MIN_PROCESS_NODE_STEP_MS = 2200;
 const MIN_PROCESS_BRANCH_HOLD_MS = 1200;
-const MIN_FLAGSHIP_PRESENTATION_MS = 70000;
-const MAX_FLAGSHIP_PRESENTATION_MS = 110000;
+const MIN_FLAGSHIP_PRESENTATION_MS = 90000;
+const MAX_FLAGSHIP_PRESENTATION_MS = 150000;
+const REQUIRED_DESKTOP_SOURCE_MOMENTS = Object.freeze(['read', 'understand', 'research', 'process', 'evidence', 'experience', 'verify', 'ready', 'document-plan']);
 const FLAGSHIP_PROCESS_PROJECTION_IDS = Object.freeze([
   'intake',
   'scope',
@@ -105,8 +131,17 @@ const FACT_SOURCE_TOUR_IDS = Object.freeze([
   'fact_cause',
 ]);
 const MIN_FACT_SOURCE_HOLD_MS = 1100;
+const FACT_SOURCE_CINEMATIC_CONTRACT = 'casepath.source-select-confirm-highlight-fact/2.0.0';
 const SPATIAL_GRAPH_PROJECTION = 'flagship-spine/1';
 const SPATIAL_GEOMETRY_EPSILON_PX = 2;
+const PROCESS_PREVIEW_BOTTOM_INSET_PX = 8;
+const PROCESS_PREVIEW_GEOMETRY_SELECTORS = Object.freeze([
+  '.ac-spatial-detail',
+  '.ac-build-inspection',
+  '.ac-visual-source-frame',
+  '.ac-source-page-excerpt',
+  '.ac-node-causal-chain',
+]);
 const REQUIRED_SEMANTIC_EVENT_TYPES = Object.freeze([
   'fact.accepted',
   'legal_source.linked',
@@ -1816,6 +1851,184 @@ function cursorSemanticContractViolations(cursorSteps, expectedSpineIds, product
   return issues;
 }
 
+function artifactCursorProducerRoleContractViolations(team, cursorSteps, semanticEvents) {
+  const issues = [];
+  const members = Array.isArray(team?.members) ? team.members : [];
+  if (team?.ariaLabel !== 'Specialist activity') issues.push('desktop team label drift');
+  if (team?.cursorCount !== 1) issues.push(`artifact cursor count ${team?.cursorCount}`);
+  if (stableJson(members.map(member => member.agentId)) !== stableJson(REQUIRED_NEMOTRON_AGENT_IDS)) issues.push('desktop team is not the exact ordered six-role set');
+  members.forEach(member => {
+    const expectedRole = REQUIRED_DESKTOP_AGENT_LABELS[member.agentId];
+    const expectedIdentity = REQUIRED_NEMOTRON_AGENT_SIGNATURES[member.agentId];
+    const shouldBeVisible = REQUIRED_VISIBLE_SPECIALIST_IDS.includes(member.agentId);
+    if (shouldBeVisible && (!member.visible || !member.monogramVisible || !member.shortVisible)) issues.push(`${member.agentId || 'unknown'}: useful specialist identity is not visible`);
+    if (!shouldBeVisible && (member.visible || member.monogramVisible || member.shortVisible)) issues.push(`${member.agentId || 'unknown'}: internal planning role leaked into the main experience`);
+    if (member.role !== expectedRole || member.short !== REQUIRED_DESKTOP_AGENT_SHORTS[member.agentId] || member.monogram !== expectedIdentity?.monogram || member.signature !== expectedIdentity?.signature) issues.push(`${member.agentId || 'unknown'}: desktop identity drift`);
+    if (String(member.color || '').toLowerCase() !== REQUIRED_DESKTOP_AGENT_COLORS[member.agentId]) issues.push(`${member.agentId || 'unknown'}: signature color drift`);
+  });
+  if (members.length === REQUIRED_NEMOTRON_AGENT_IDS.length && new Set(members.map(member => String(member.color || '').toLowerCase())).size !== REQUIRED_NEMOTRON_AGENT_IDS.length) issues.push('desktop signature colors are not unique');
+
+  const semanticById = new Map((semanticEvents || []).filter(event => event.eventId).map(event => [event.eventId, event]));
+  const clickSteps = (cursorSteps || []).filter(step => step.phase === 'click');
+  if (!clickSteps.length) issues.push('artifact cursor never completed a target-bound click');
+  clickSteps.forEach((step, index) => {
+    if (step.cursorCount !== 1 || step.cursorTargetCount !== 1 || step.cursorTargetId !== step.targetId) issues.push(`${index}: artifact cursor is not bound to exactly one target`);
+    if (!nonemptyString(step.cursorAgent) || !nonemptyString(step.cursorAction)) issues.push(`${index}: artifact cursor agent/action label is unreadable`);
+    const semantic = semanticById.get(step.eventId);
+    if (step.specialistBound) {
+      const visualAgentId = step.visualActiveAgentId || REQUIRED_NEMOTRON_AGENT_IDS.find(agentId => REQUIRED_NEMOTRON_AGENT_SIGNATURES[agentId].signature === step.signature) || '';
+      const expectedIdentity = REQUIRED_NEMOTRON_AGENT_SIGNATURES[visualAgentId];
+      if (!expectedIdentity || step.signature !== expectedIdentity.signature || ![REQUIRED_DESKTOP_AGENT_SHORTS[visualAgentId], REQUIRED_DESKTOP_AGENT_LABELS[visualAgentId]].includes(step.cursorAgent)) issues.push(`${index}: target-lineage producer role is outside the closed six-role identity map`);
+      if (semantic?.actorType === 'nemotron_agent' && semantic.agentId !== visualAgentId) issues.push(`${index}: model-call identity differs from its receipt-bound specialist`);
+    }
+    if (semantic && !REQUIRED_NEMOTRON_AGENT_IDS.includes(semantic.agentId)) {
+      if (step.activeAgentId) issues.push(`${index}: deterministic authority inherited model-call identity`);
+      if (step.visualActiveAgentId && !REQUIRED_NEMOTRON_AGENT_IDS.includes(step.visualActiveAgentId)) issues.push(`${index}: visual coordinator is outside the closed six-role map`);
+    }
+    if (step.activeAgentId && !REQUIRED_NEMOTRON_AGENT_IDS.includes(step.activeAgentId)) issues.push(`${index}: active model identity is outside the closed six-role map`);
+  });
+  if (!clickSteps.some(step => !step.activeAgentId && step.activeSignature === 'sources' && /law/i.test(`${step.agentId} ${semanticById.get(step.eventId)?.agentId || ''}`))) issues.push('law: deterministic authority/model identity distinction was not visibly exercised');
+  if (!clickSteps.some(step => !step.activeAgentId && step.activeSignature === 'reference')) issues.push('reference: deterministic authority/model identity distinction was not visibly exercised');
+  if (!clickSteps.some(step => !step.activeAgentId && ['process', 'audit'].includes(step.activeSignature) && /gate/i.test(`${step.agentId} ${semanticById.get(step.eventId)?.agentId || ''}`))) issues.push('gate: deterministic authority/model identity distinction was not visibly exercised');
+  return issues;
+}
+
+function zoomOutDesktopContractViolations({ sourceMoments, factSteps, artifactCursorSteps, previews, postConstructionSourceUse, team, documentPlan, documentRoundtrip }) {
+  const diagnostics = [];
+  const sourceIssues = [];
+  const latestSourceMoment = new Map((sourceMoments || []).map(snapshot => [snapshot.moment, snapshot]));
+  REQUIRED_DESKTOP_SOURCE_MOMENTS.forEach(moment => {
+    const snapshot = latestSourceMoment.get(moment);
+    if (!snapshot) {
+      sourceIssues.push(`${moment} was not observed`);
+      return;
+    }
+    if (!snapshot.panelVisible || !snapshot.contentVisible || snapshot.collapsed || !snapshot.insideViewport || snapshot.width < 220 || snapshot.height < 400) sourceIssues.push(`${moment} does not keep the physical source panel open`);
+    if (snapshot.toggleLooksDropdown) sourceIssues.push(`${moment} presents the source control as a dropdown`);
+  });
+  if (sourceIssues.length) diagnostics.push(`1. Source workspace continuity — ${sourceIssues.slice(0, 4).join('; ')}`);
+
+  const selectionIssues = [];
+  const factIds = new Set((factSteps || []).map(step => step.factId));
+  for (const factId of factIds) {
+    const select = factSteps.find(step => step.factId === factId && step.timing === 'select-source');
+    const read = factSteps.find(step => step.factId === factId && step.timing === 'neutral-read');
+    if (!select || select.activeSourceIds.length !== 0 || select.activeSourceLocator || select.sourceHighlighted) selectionIssues.push(`${factId} is active before source use`);
+    if (!read || read.activeSourceIds.length !== 1 || read.activeSourceIds[0] !== read.sourceId || read.activeSourceLocator !== read.locatorId || read.sourceHighlighted) selectionIssues.push(`${factId} does not open exactly its selected neutral source`);
+  }
+  const processClicks = (artifactCursorSteps || []).filter(step => step.phase === 'click' && ['select-source', 'read-source'].includes(step.graphInspectionPhase));
+  processClicks.filter(step => step.graphInspectionPhase === 'select-source').forEach(step => {
+    if (step.activeSourceIds.length || step.activeSourceLocator || step.visibleSourceHighlightCount) selectionIssues.push(`${step.targetId}: process source is pre-active`);
+  });
+  processClicks.filter(step => step.graphInspectionPhase === 'read-source').forEach(step => {
+    if (step.inspectionSourceId && (!step.inspectionSourceHasTarget || step.activeSourceIds.length !== 1 || step.activeSourceIds[0] !== step.inspectionSourceId)) selectionIssues.push(`${step.targetId}: clicked process source is not the one exact active source target`);
+    if (step.inspectionLocatorId && step.activeSourceLocator !== step.inspectionLocatorId) selectionIssues.push(`${step.targetId}: active locator differs from the clicked process source`);
+    if (step.visibleSourceHighlightCount) selectionIssues.push(`${step.targetId}: process source is highlighted before confirmation`);
+  });
+  if (!postConstructionSourceUse?.viewerOpen || postConstructionSourceUse.activeSourceIds.length !== 1 || postConstructionSourceUse.activeSourceIds[0] !== postConstructionSourceUse.sourceId || postConstructionSourceUse.activeSourceLocator !== postConstructionSourceUse.locatorId) selectionIssues.push('post-construction full-source action does not activate its one exact source target and locator');
+  if (selectionIssues.length) diagnostics.push(`2. Visible source causality — ${selectionIssues.slice(0, 4).join('; ')}`);
+
+  const reasoningIssues = [];
+  const previewIds = (previews || []).map(preview => preview.nodeId);
+  if (stableJson(previewIds) !== stableJson(FLAGSHIP_PROCESS_PROJECTION_IDS)) reasoningIssues.push('the ten important decisions do not each expose one contextual basis preview');
+  (previews || []).forEach(preview => {
+    if (preview.viewportWidth !== 1440 || preview.viewportHeight !== 900) reasoningIssues.push(`${preview.nodeId}: preview was not checked at 1440×900`);
+    if (preview.previewCount !== 1 || !preview.previewVisible) reasoningIssues.push(`${preview.nodeId}: expected exactly one visible contextual basis preview, found ${preview.previewCount}`);
+    const sourceBasis = ['fact', 'source'].includes(preview.basisKind);
+    if (sourceBasis) {
+      if (!preview.exactReturnedSource || !preview.sourceHasTarget || !preview.exactLocator || !preview.exactTitle || !preview.exactLocation || !preview.sourceWindowTruth || !preview.exactPassage || !preview.noGeneratedContext || !nonemptyString(preview.title) || !nonemptyString(preview.location) || !nonemptyString(preview.passage)) reasoningIssues.push(`${preview.nodeId}: fact/source basis preview does not preserve the actual returned artifact window, exact locator, and selected passage`);
+      if (preview.action !== 'open-source' || preview.onDemandText !== 'Open original →') reasoningIssues.push(`${preview.nodeId}: original source is not explicitly on demand`);
+    } else {
+      if (!['law', 'evidence', 'accepted-decision', 'start-point'].includes(preview.basisKind) || !nonemptyString(preview.title) || !nonemptyString(preview.passage)) reasoningIssues.push(`${preview.nodeId}: non-source basis preview lacks a truthful kind, title, or returned basis`);
+      if (preview.locatorId && !preview.exactLocator) reasoningIssues.push(`${preview.nodeId}: non-source basis preview claims a source locator that is not exact`);
+    }
+    if (!preview.inlineGroundingClosed || !preview.otherGroundingHidden || preview.groundingViewerOpen) reasoningIssues.push(`${preview.nodeId}: contextual basis preview is not visible in the default graph state with modal grounding closed`);
+    if (preview.overlaps.length) reasoningIssues.push(`${preview.nodeId}: basis preview overlaps ${preview.overlaps.join(', ')}`);
+  });
+  const visibleTeam = (team?.members || []).filter(member => member.agentId !== 'orchestrator_plan');
+  if (stableJson(visibleTeam.map(member => ({ id: member.agentId, label: member.role, short: member.short, signature: member.signature }))) !== stableJson(REQUIRED_VISIBLE_SPECIALIST_IDS.map(id => ({ id, label: REQUIRED_DESKTOP_AGENT_LABELS[id], short: REQUIRED_DESKTOP_AGENT_SHORTS[id], signature: REQUIRED_NEMOTRON_AGENT_SIGNATURES[id].signature })))) reasoningIssues.push('the visible five-specialist team is not the agreed simple label set');
+  if (!documentPlan || documentPlan.chains.length !== 21 || !documentPlan.chains.every(chain => stableJson(chain.parts.map(part => part.part)) === stableJson(['decision', 'fact', 'evidence', 'document']))) reasoningIssues.push('Document plan no longer shows each decision-to-document chain');
+  if (!documentRoundtrip) reasoningIssues.push('Document plan does not return to the exact owning graph node');
+  if (reasoningIssues.length) diagnostics.push(`3. Process-to-document story — ${reasoningIssues.slice(0, 5).join('; ')}`);
+  return diagnostics.slice(0, 3);
+}
+
+function processPreviewGeometryContractViolations(samples) {
+  const issues = [];
+  const snapshots = Array.isArray(samples) ? samples : [];
+  if (!snapshots.length) return ['process preview geometry was not observed'];
+  const completedNodeIds = new Set();
+  let buildingObserved = false;
+  let visibleItemCount = 0;
+  snapshots.forEach((snapshot, snapshotIndex) => {
+    const phase = snapshot?.phase || `snapshot-${snapshotIndex}`;
+    if (snapshot?.viewportWidth !== 1440 || snapshot?.viewportHeight !== 900) issues.push(`${phase}: geometry was not captured at 1440×900`);
+    if (snapshot?.constructionState === 'building') buildingObserved = true;
+    if (phase.startsWith('completed-preview:')) completedNodeIds.add(phase.slice('completed-preview:'.length));
+    const graphViewport = snapshot?.graphViewportRect;
+    if (!graphViewport || !Number.isFinite(graphViewport.left) || !Number.isFinite(graphViewport.top) || !Number.isFinite(graphViewport.right) || !Number.isFinite(graphViewport.bottom)) {
+      issues.push(`${phase}: graph viewport geometry is absent`);
+      return;
+    }
+    (snapshot?.items || []).forEach((item, itemIndex) => {
+      visibleItemCount += 1;
+      const kind = item?.kind || `item-${itemIndex}`;
+      const rect = item?.rect;
+      if (!PROCESS_PREVIEW_GEOMETRY_SELECTORS.includes(kind) || !rect || !Number.isFinite(rect.left) || !Number.isFinite(rect.top) || !Number.isFinite(rect.right) || !Number.isFinite(rect.bottom)) {
+        issues.push(`${phase}:${kind}: preview geometry is incomplete`);
+        return;
+      }
+      const insideDesktop = rect.left >= -SPATIAL_GEOMETRY_EPSILON_PX
+        && rect.top >= -SPATIAL_GEOMETRY_EPSILON_PX
+        && rect.right <= snapshot.viewportWidth + SPATIAL_GEOMETRY_EPSILON_PX
+        && rect.bottom <= snapshot.viewportHeight + SPATIAL_GEOMETRY_EPSILON_PX;
+      const insideGraph = rect.left >= graphViewport.left - SPATIAL_GEOMETRY_EPSILON_PX
+        && rect.top >= graphViewport.top - SPATIAL_GEOMETRY_EPSILON_PX
+        && rect.right <= graphViewport.right + SPATIAL_GEOMETRY_EPSILON_PX
+        && rect.bottom <= graphViewport.bottom + SPATIAL_GEOMETRY_EPSILON_PX;
+      if (!insideDesktop || !insideGraph) issues.push(`${phase}:${kind}: preview leaves the desktop or graph viewport`);
+      if (graphViewport.bottom - rect.bottom < PROCESS_PREVIEW_BOTTOM_INSET_PX - SPATIAL_GEOMETRY_EPSILON_PX) issues.push(`${phase}:${kind}: preview leaves less than an 8px bottom inset`);
+    });
+  });
+  if (!buildingObserved) issues.push('building-state process preview geometry was not observed');
+  const missingCompletedNodes = FLAGSHIP_PROCESS_PROJECTION_IDS.filter(nodeId => !completedNodeIds.has(nodeId));
+  if (missingCompletedNodes.length) issues.push(`completed process preview geometry was not observed for ${missingCompletedNodes.join(', ')}`);
+  if (!visibleItemCount) issues.push('no visible process preview geometry was captured');
+  return [...new Set(issues)];
+}
+
+function groundingModalContractViolations(trace, requiredKind = '') {
+  const issues = [];
+  const before = trace?.before || {};
+  const opened = trace?.opened || {};
+  const closed = trace?.closed;
+  if (before.viewerOpen || !before.inlinePanelHidden || before.visibleInlineItemCount !== 0) issues.push('grounding details are exposed before the explicit modal action');
+  if (before.toggleHaspopup !== 'dialog' || before.toggleExpanded !== 'false') issues.push('grounding trigger does not declare a closed dialog action');
+  if (!opened.openedByExplicitClick || !opened.viewerOpen || !opened.modalHasFocus) issues.push('grounding modal did not open from the explicit trigger click');
+  if (!opened.inlinePanelHidden || opened.visibleInlineItemCount !== 0) issues.push('graph-local grounding details became visible behind the modal');
+  if (!opened.sourceRailVisible || opened.sourceRailOverlapArea > SPATIAL_GEOMETRY_EPSILON_PX) issues.push('grounding modal overlaps or obscures the persistent source rail');
+  if (requiredKind && !opened.actionKinds?.includes(requiredKind)) issues.push(`grounding modal omits actionable ${requiredKind}`);
+  if (!opened.actionableButtonCount || opened.actionableButtonCount !== opened.detailButtonCount) issues.push('grounding modal contains a non-actionable detail button');
+  if (closed) {
+    if (closed.viewerOpen || !closed.inlinePanelHidden || closed.visibleInlineItemCount !== 0) issues.push('closing grounding did not restore the closed graph-local state');
+    if (!closed.focusRestoredToTrigger || closed.graphFocusCount !== 1 || closed.primaryActionCount !== 1) issues.push('closing grounding did not restore one graph focus and one primary action');
+  }
+  return issues;
+}
+
+function settledCursorPayoffContractViolations(snapshot) {
+  const issues = [];
+  if (!['review-applied', 'knowledge', 'later-result'].includes(snapshot?.moment || '')) issues.push('settled cursor snapshot has the wrong outcome moment');
+  if (!snapshot?.cursorVisible) issues.push('settled outcome hides the agent cursor');
+  if (!snapshot?.parked || snapshot?.cursorPhase !== 'settled' || !snapshot?.parkTargetVisible) issues.push('settled outcome cursor is not parked at its graph park target');
+  if ((snapshot?.parkedStepCount || 0) < 1) issues.push('settled outcome has no cursor parking trace');
+  if (snapshot?.labelOpacity !== 0) issues.push('settled outcome cursor label remains visually present');
+  if ((snapshot?.payoffObjectCount || 0) < 2) issues.push('settled outcome omits its graph-local payoff objects');
+  if ((snapshot?.cursorOverlaps || []).length || (snapshot?.visibleLabelOverlaps || []).length) issues.push('settled cursor or visible label overlaps a graph-local payoff object');
+  if (snapshot?.cursorClicking || (snapshot?.syntheticClickCountAfterParking || 0) !== 0) issues.push('settled cursor synthesizes a click after parking');
+  return issues;
+}
+
 function assertHealthRuntimeContract(health, releaseRuntime) {
   const runtime = health.agentic_runtime;
   if (!isProductionJourney()) {
@@ -2024,6 +2237,22 @@ async function minimalSurfaceSnapshot() {
   });
 }
 
+async function primaryActionSnapshot() {
+  return page.evaluate(() => {
+    const visible = node => Boolean(node && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden' && getComputedStyle(node).display !== 'none');
+    return {
+      dialogOpen: document.querySelector('#v20DocumentSheet')?.open === true,
+      actions: [...document.querySelectorAll('[data-casepath-primary-action="true"]')].filter(visible).map(node => ({
+        id: node.id || '',
+        text: node.textContent.trim(),
+        guidedDocuments: node.dataset.v20GuidedDocuments || '',
+        continueReview: node.hasAttribute('data-v20-continue-review'),
+        ariaControls: node.getAttribute('aria-controls') || '',
+      })),
+    };
+  });
+}
+
 async function artifactCanvasSnapshot() {
   return page.evaluate(() => {
     const visible = node => Boolean(node && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden');
@@ -2058,6 +2287,81 @@ async function artifactCanvasSnapshot() {
   });
 }
 
+async function artifactGroundingModalSnapshot() {
+  return page.evaluate(() => {
+    const visible = node => Boolean(node && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden' && getComputedStyle(node).display !== 'none');
+    const intersection = (first, second) => Math.max(0, Math.min(first.right, second.right) - Math.max(first.left, second.left)) * Math.max(0, Math.min(first.bottom, second.bottom) - Math.max(first.top, second.top));
+    const disclosure = document.querySelector('#artifactProcessGraph .ac-spatial-detail .ac-grounding-disclosure');
+    const toggle = disclosure?.querySelector(':scope > [data-ac-action="toggle-grounding"]');
+    const inlinePanel = disclosure?.querySelector(':scope > div');
+    const viewer = document.querySelector('#artifactCanvas [data-ac-grounding-viewer]');
+    const sourceRail = document.querySelector('.submission-pane');
+    const viewerRect = viewer?.open ? viewer.getBoundingClientRect() : null;
+    const sourceRect = visible(sourceRail) ? sourceRail.getBoundingClientRect() : null;
+    const detailButtons = [...(viewer?.querySelectorAll('[data-ac-grounding-viewer-detail] > button') || [])];
+    return {
+      viewerOpen: viewer?.open === true,
+      inlinePanelHidden: inlinePanel?.hidden === true,
+      visibleInlineItemCount: [...(inlinePanel?.querySelectorAll('[data-node-attachment-kind]') || [])].filter(visible).length,
+      toggleHaspopup: toggle?.getAttribute('aria-haspopup') || '',
+      toggleExpanded: toggle?.getAttribute('aria-expanded') || '',
+      modalHasFocus: Boolean(viewer?.open && viewer.contains(document.activeElement)),
+      sourceRailVisible: visible(sourceRail),
+      sourceRailOverlapArea: viewerRect && sourceRect ? intersection(viewerRect, sourceRect) : 0,
+      actionKinds: detailButtons.map(button => button.dataset.nodeAttachmentKind || ''),
+      detailButtonCount: detailButtons.length,
+      actionableButtonCount: detailButtons.filter(button => visible(button) && !button.disabled && Boolean(button.dataset.acAction)).length,
+      focusRestoredToTrigger: document.activeElement === toggle,
+      graphFocusCount: [...document.querySelectorAll('#artifactCanvas [data-artifact-focus="true"]')].filter(visible).length,
+      primaryActionCount: [...document.querySelectorAll('[data-casepath-primary-action="true"]')].filter(visible).length,
+    };
+  });
+}
+
+async function settledCursorPayoffSnapshot(moment) {
+  await page.waitForFunction(expectedMoment => {
+    const root = document.querySelector(`#artifactCanvas[data-casepath-scene="${CSS.escape(expectedMoment)}"]`);
+    const cursor = root?.querySelector('#artifactAgentCursor[data-parked="true"][data-cursor-phase="settled"]');
+    return Boolean(cursor && root.querySelector('[data-ac-cursor-park]'));
+  }, moment, { timeout: 30000 });
+  await sleep(520);
+  return page.evaluate(({ expectedMoment, epsilon }) => {
+    const root = document.querySelector(`#artifactCanvas[data-casepath-scene="${CSS.escape(expectedMoment)}"]`);
+    const cursor = root?.querySelector('#artifactAgentCursor');
+    const label = cursor?.querySelector('.ac-agent-cursor-label');
+    const park = root?.querySelector('[data-ac-cursor-park]');
+    const visible = node => Boolean(node && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden' && getComputedStyle(node).display !== 'none' && Number.parseFloat(getComputedStyle(node).opacity || '1') > 0.001);
+    const rect = node => { const value = node.getBoundingClientRect(); return { left: value.left, top: value.top, right: value.right, bottom: value.bottom }; };
+    const intersection = (first, second) => Math.max(0, Math.min(first.right, second.right) - Math.max(first.left, second.left)) * Math.max(0, Math.min(first.bottom, second.bottom) - Math.max(first.top, second.top));
+    const selectors = {
+      'review-applied': '.ac-review-applied-note,[data-ac-node-id="ventilation_dispute"]',
+      knowledge: '.ac-knowledge-graph-note,[data-ac-node-id="ventilation_dispute"]',
+      'later-result': '.ac-memory-graph-delta,[data-memory-effect],[data-ac-node-id="ventilation_dispute"]',
+    };
+    const payoffObjects = [...new Set([...(root?.querySelectorAll(selectors[expectedMoment] || '') || [])])].filter(visible);
+    const cursorRect = cursor ? rect(cursor) : null;
+    const labelOpacity = label ? Number.parseFloat(getComputedStyle(label).opacity || '1') : 1;
+    const labelRect = label && labelOpacity > 0.001 ? rect(label) : null;
+    const cursorSteps = window.__casepathArtifactCursorSteps || [];
+    const parkedSteps = cursorSteps.filter(step => step.moment === expectedMoment && step.parked);
+    const firstParkAt = parkedSteps.length ? Math.min(...parkedSteps.map(step => step.at)) : Number.POSITIVE_INFINITY;
+    return {
+      moment: expectedMoment,
+      cursorVisible: visible(cursor),
+      parked: cursor?.dataset.parked === 'true',
+      cursorPhase: cursor?.dataset.cursorPhase || '',
+      parkTargetVisible: visible(park),
+      labelOpacity,
+      payoffObjectCount: payoffObjects.length,
+      cursorOverlaps: cursorRect ? payoffObjects.filter(node => intersection(cursorRect, rect(node)) > epsilon).map(node => node.dataset.acNodeId || node.dataset.memoryEffect || node.className) : [],
+      visibleLabelOverlaps: labelRect ? payoffObjects.filter(node => intersection(labelRect, rect(node)) > epsilon).map(node => node.dataset.acNodeId || node.dataset.memoryEffect || node.className) : [],
+      cursorClicking: cursor?.classList.contains('is-clicking') === true,
+      parkedStepCount: parkedSteps.length,
+      syntheticClickCountAfterParking: cursorSteps.filter(step => step.moment === expectedMoment && step.phase === 'click' && step.at >= firstParkAt).length,
+    };
+  }, { expectedMoment: moment, epsilon: SPATIAL_GEOMETRY_EPSILON_PX });
+}
+
 async function persistentGraphSceneSnapshot() {
   return page.evaluate(() => {
     const visible = node => Boolean(node && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden' && getComputedStyle(node).display !== 'none');
@@ -2071,6 +2375,10 @@ async function persistentGraphSceneSnapshot() {
       memory_status: node.dataset.memoryStatus || '',
       memory_origin_id: node.dataset.memoryOriginId || '',
       later_causal_phase: node.dataset.laterCausalPhase || '',
+      later_source_opened: node.dataset.laterSourceOpened || '',
+      eligibility_contract: node.dataset.eligibilityContract || '',
+      eligibility_rule_id: node.dataset.eligibilityRuleId || '',
+      semantic_role: node.dataset.semanticRole || '',
     }));
     const memoryEffects = [...(graph?.querySelectorAll('[data-memory-origin-id][data-memory-effect]') || [])].filter(visible).map(node => ({
       origin_id: node.dataset.memoryOriginId || '',
@@ -2320,13 +2628,21 @@ function spatialGraphGeometryContractViolations(snapshot, expected) {
     }
   });
   const visibleProcessEndpointIds = new Set(snapshot.endpoints.map(item => item.id).filter(id => returnedNodeIds.has(id)));
+  const causationIndex = FLAGSHIP_PROCESS_PROJECTION_IDS.indexOf('causation');
+  const explanatoryEdgeKeys = new Set([
+    ...FLAGSHIP_PROCESS_PROJECTION_IDS.slice(1, causationIndex + 1)
+      .map((target, index) => `${FLAGSHIP_PROCESS_PROJECTION_IDS[index]}->${target}`),
+    ...REQUIRED_CAUSATION_BRANCH_IDS.map(target => `causation->${target}`),
+  ]);
   const expectedVisibleProcessEdges = expected.returnedEdges
-    .filter(edge => visibleProcessEndpointIds.has(edge.source) && visibleProcessEndpointIds.has(edge.target))
+    .filter(edge => visibleProcessEndpointIds.has(edge.source)
+      && visibleProcessEndpointIds.has(edge.target)
+      && explanatoryEdgeKeys.has(`${edge.source}->${edge.target}`))
     .map(edge => `${edge.source}->${edge.target}:${edge.state || ''}`).sort();
   const renderedProcessEdges = snapshot.edges
     .filter(edge => returnedNodeIds.has(edge.source) && returnedNodeIds.has(edge.target))
     .map(edge => `${edge.source}->${edge.target}:${edge.state || ''}`).sort();
-  if (stableJson(renderedProcessEdges) !== stableJson(expectedVisibleProcessEdges)) issues.push('visible connector identities do not equal the returned process edges');
+  if (stableJson(renderedProcessEdges) !== stableJson(expectedVisibleProcessEdges)) issues.push('visible connectors do not equal the human-readable returned reasoning path');
   if (!snapshot.edges.length || snapshot.edgeLayerAriaHidden !== 'true' || snapshot.edgeLayerFocusable !== 'false') issues.push('spatial connectors are absent or exposed to assistive technology');
 
   const causation = nodesById.get('causation');
@@ -2412,11 +2728,13 @@ function processProjectionContractViolations(changes, semanticEvents, cursorStep
   return issues;
 }
 
-function sourceInspectionContractViolations(inspections, changes, branchVisuals, cursorSteps, runResult, production = true) {
+function sourceInspectionContractViolations(inspections, highlights, changes, branchVisuals, cursorSteps, runResult, production = true) {
   const issues = [];
   const expectedAgent = production ? 'process_decision_mapping' : 'process_projection';
   const allowedKinds = new Set(['claim-source', 'swiss-law', 'evidence-requirement', 'accepted-process-input']);
-  const cursorBindings = new Set(cursorSteps.filter(step => step.phase === 'click').map(step => `${step.changeId}:${step.eventId}:${step.agentId}:${step.targetId}`));
+  const confirmCursorBindings = new Set(cursorSteps
+    .filter(step => step.phase === 'click' && step.graphInspectionPhase === 'read-source')
+    .map(step => `${step.changeId}:${step.eventId}:${step.agentId}:${step.targetId}`));
   const processNodes = new Map((runResult?.process?.nodes || []).map(node => [node.node_id, node]));
   const facts = new Map((runResult?.facts || []).map(fact => [fact.fact_id, fact]));
   const checklistItems = runResult?.checklist?.items || [];
@@ -2438,6 +2756,14 @@ function sourceInspectionContractViolations(inspections, changes, branchVisuals,
   };
   const nodeInspections = inspections.filter(item => item.entityKind === 'node');
   const branchInspections = inspections.filter(item => item.entityKind === 'branch');
+  const nodeHighlights = highlights.filter(item => item.entityKind === 'node');
+  const branchHighlights = highlights.filter(item => item.entityKind === 'branch');
+  if (stableJson(nodeHighlights.map(item => item.nodeId)) !== stableJson(FLAGSHIP_PROCESS_PROJECTION_IDS)) {
+    issues.push('source-highlighted events did not precede all ten process nodes in order');
+  }
+  if (stableJson(branchHighlights.map(item => item.nodeId)) !== stableJson(REQUIRED_CAUSATION_BRANCH_IDS)) {
+    issues.push('source-highlighted events did not precede all four causation branches in order');
+  }
   if (stableJson(nodeInspections.map(item => item.nodeId)) !== stableJson(FLAGSHIP_PROCESS_PROJECTION_IDS)) {
     issues.push('source inspections did not precede all ten process nodes in order');
   }
@@ -2447,6 +2773,7 @@ function sourceInspectionContractViolations(inspections, changes, branchVisuals,
   }
   nodeInspections.forEach((inspection, index) => {
     const change = changes[index];
+    const highlight = nodeHighlights.find(item => item.nodeId === inspection.nodeId);
     const node = processNodes.get(inspection.nodeId);
     if (!change || change.entityId !== inspection.nodeId) issues.push(`${inspection.nodeId}: inspection/change mismatch`);
     if (inspection.agentId !== expectedAgent) issues.push(`${inspection.nodeId}: wrong inspection actor`);
@@ -2454,25 +2781,36 @@ function sourceInspectionContractViolations(inspections, changes, branchVisuals,
       issues.push(`${inspection.nodeId}: incomplete inspection provenance`);
     }
     if (!allowedKinds.has(inspection.sourceKind) || !validSourceId(inspection, node)) issues.push(`${inspection.nodeId}: inspection source is not returned by the node basis`);
-    if (!cursorBindings.has(`${inspection.changeId}:${inspection.eventId}:${inspection.agentId}:${inspection.sourceId}`)) issues.push(`${inspection.nodeId}: inspection is not bound to the cursor click target`);
+    if (!confirmCursorBindings.has(`${inspection.changeId}:${inspection.eventId}:${inspection.agentId}:${inspection.sourceId}`)) issues.push(`${inspection.nodeId}: inspection is not bound to the confirm-source cursor click target`);
+    if (!highlight || highlight.changeId !== inspection.changeId || highlight.eventId !== inspection.eventId
+      || highlight.agentId !== inspection.agentId || highlight.sourceId !== inspection.sourceId
+      || highlight.factId !== inspection.factId || highlight.locatorId !== inspection.locatorId
+      || highlight.graphInspectionPhase !== 'highlight-source' || highlight.sourceHighlighted !== true
+      || highlight.at > inspection.at) issues.push(`${inspection.nodeId}: highlight-source did not visibly precede the node inspection`);
     if (change && (change.changeId !== inspection.changeId || change.eventId !== inspection.eventId || change.agentId !== inspection.agentId)) {
       issues.push(`${inspection.nodeId}: inspection is not bound to the resulting node`);
     }
-    if (change && change.at - inspection.at < 1100) issues.push(`${inspection.nodeId}: source finding was not readable before the node appeared`);
+    if (change && (!highlight || change.at - highlight.at < 1100)) issues.push(`${inspection.nodeId}: highlighted source was not readable before the node appeared`);
   });
   if (stableJson(branchInspections.map(item => item.nodeId)) !== stableJson(REQUIRED_CAUSATION_BRANCH_IDS)) {
     issues.push('source inspections did not precede all four causation branches in order');
   }
   branchInspections.forEach((inspection, index) => {
     const visual = branchVisuals[index];
+    const highlight = branchHighlights.find(item => item.nodeId === inspection.nodeId && item.branchId === inspection.branchId);
     const node = processNodes.get(inspection.nodeId);
     if (!visual || visual.nodeId !== inspection.nodeId || visual.branchId !== inspection.branchId) issues.push(`${inspection.nodeId}: branch inspection/visual mismatch`);
     if (inspection.agentId !== expectedAgent) issues.push(`${inspection.nodeId}: wrong branch inspection actor`);
     if (![inspection.changeId, inspection.eventId, inspection.sourceKind, inspection.sourceId, inspection.found].every(nonemptyString)) issues.push(`${inspection.nodeId}: incomplete branch inspection provenance`);
     if (!allowedKinds.has(inspection.sourceKind) || !validSourceId(inspection, node)) issues.push(`${inspection.nodeId}: branch inspection source is not returned by the branch node basis`);
-    if (!cursorBindings.has(`${inspection.changeId}:${inspection.eventId}:${inspection.agentId}:${inspection.sourceId}`)) issues.push(`${inspection.nodeId}: branch inspection is not bound to the cursor click target`);
+    if (!confirmCursorBindings.has(`${inspection.changeId}:${inspection.eventId}:${inspection.agentId}:${inspection.sourceId}`)) issues.push(`${inspection.nodeId}: branch inspection is not bound to the confirm-source cursor click target`);
+    if (!highlight || highlight.changeId !== inspection.changeId || highlight.eventId !== inspection.eventId
+      || highlight.agentId !== inspection.agentId || highlight.sourceId !== inspection.sourceId
+      || highlight.factId !== inspection.factId || highlight.locatorId !== inspection.locatorId
+      || highlight.graphInspectionPhase !== 'highlight-source' || highlight.sourceHighlighted !== true
+      || highlight.at > inspection.at) issues.push(`${inspection.nodeId}: highlight-source did not visibly precede the branch inspection`);
     if (visual && (visual.changeId !== inspection.changeId || visual.eventId !== inspection.eventId || visual.agentId !== inspection.agentId)) issues.push(`${inspection.nodeId}: branch inspection is not bound to the resulting branch`);
-    if (visual && visual.at - inspection.at < 1100) issues.push(`${inspection.nodeId}: branch finding was not readable before the branch appeared`);
+    if (visual && (!highlight || visual.at - highlight.at < 1100)) issues.push(`${inspection.nodeId}: highlighted source was not readable before the branch appeared`);
   });
   return issues;
 }
@@ -2483,6 +2821,26 @@ function factSourceLocatorId(reference) {
   if (kind === 'visual_observation') return `source:${artifactId}:region:${(reference?.region || []).join(',')}`;
   if (kind === 'metadata_field') return `source:${artifactId}:field:${String(reference?.field || '')}`;
   return `source:${artifactId}:page:${String(reference?.page || '')}:quote:${String(reference?.excerpt || '')}`;
+}
+
+function factSourcePreviewTruth(claim, fact, reference, visualPreview = false) {
+  const sourceId = String(reference?.artifact_id || '');
+  const artifact = (claim?.artifacts || []).find(item => String(item?.artifact_id || '') === sourceId);
+  const title = sourceId === 'message'
+    ? 'Claim message'
+    : sourceId === 'intake'
+      ? 'Claim details'
+      : String(artifact?.title || sourceId || 'Claim source').replace(/^art_/, '').replaceAll('_', ' ');
+  const location = reference?.locator_kind === 'visual_observation'
+    ? 'Image'
+    : reference?.locator_kind === 'metadata_field'
+      ? 'Returned field'
+      : `Page ${String(reference?.page || 1)} of ${Math.max(1, Number(artifact?.page_count) || 1)}`;
+  return {
+    title,
+    location,
+    passage: String(reference?.excerpt || reference?.observation || `${fact?.label}: ${fact?.value}`),
+  };
 }
 
 function factSourceTourContractViolations(completions, inspections, changes, cursorSteps, runResult) {
@@ -2525,6 +2883,94 @@ function factSourceTourContractViolations(completions, inspections, changes, cur
       || change.attachment.sourceLocatorId !== inspection.locatorId) issues.push(`${factId}: fact artifact does not retain the inspected source binding`);
   });
   if (factChanges.length && (!Number.isFinite(completion.at) || completion.at < factChanges.at(-1).at)) issues.push('fact source tour completed before the last fact appeared');
+  return issues;
+}
+
+function factSourceCinematicContractViolations(steps, highlights, inspections, changes) {
+  const issues = [];
+  const factInspections = inspections.filter(item => item.entityKind === 'fact');
+  const factHighlights = highlights.filter(item => item.entityKind === 'fact');
+  const factChanges = changes.filter(item => item.kind === 'fact' && FACT_SOURCE_TOUR_IDS.includes(item.entityId));
+  if (stableJson(factHighlights.map(item => item.factId)) !== stableJson(FACT_SOURCE_TOUR_IDS)) {
+    issues.push('source-highlighted events did not occur exactly once for the five facts in order');
+  }
+  FACT_SOURCE_TOUR_IDS.forEach(factId => {
+    const inspection = factInspections.find(item => item.factId === factId);
+    const highlightEvent = factHighlights.find(item => item.factId === factId);
+    const change = factChanges.find(item => item.entityId === factId);
+    const snapshots = steps.filter(item => item.factId === factId);
+    const select = snapshots.find(item => item.timing === 'select-source' && item.factTourPhase === 'select-source');
+    const read = snapshots.find(item => item.timing === 'neutral-read' && item.factTourPhase === 'read-source');
+    const confirm = snapshots.find(item => item.timing === 'confirm-click' && item.factTourPhase === 'read-source');
+    const highlighted = snapshots.find(item => item.timing === 'highlight-source' && item.factTourPhase === 'highlight-source');
+    const finding = snapshots.find(item => item.timing === 'finding' && item.factTourPhase === 'finding');
+    if (!select || !read || !confirm || !highlighted || !finding) {
+      issues.push(`${factId}: select to neutral-read to confirm to highlight to finding cinematic trace is incomplete`);
+      return;
+    }
+    const factIndex = FACT_SOURCE_TOUR_IDS.indexOf(factId);
+    const expectedTrailIds = [...new Set(FACT_SOURCE_TOUR_IDS.slice(0, factIndex + 1)
+      .map(id => factInspections.find(item => item.factId === id)?.sourceId)
+      .filter(nonemptyString))];
+    const trailIssue = (snapshot, currentState) => {
+      const trail = Array.isArray(snapshot.sourceTrail) ? snapshot.sourceTrail : [];
+      const ids = trail.map(item => item.sourceId);
+      const current = trail.filter(item => item.state === currentState);
+      const prior = trail.filter(item => item.sourceId !== snapshot.sourceId);
+      return stableJson(ids) !== stableJson(expectedTrailIds)
+        || new Set(ids).size !== ids.length
+        || trail.some(item => item.visible !== true)
+        || current.length !== 1
+        || current[0]?.sourceId !== snapshot.sourceId
+        || prior.some(item => item.state !== 'inspected');
+    };
+    if (trailIssue(select, 'opening')
+      || [read, confirm, highlighted, finding].some(snapshot => trailIssue(snapshot, 'active'))) {
+      issues.push(`${factId}: opened sources do not accumulate in one ordered trail with only the current source active`);
+    }
+    for (const snapshot of [select, read, confirm, highlighted, finding]) {
+      const focus = snapshot.focus || {};
+      if (focus.focusCount !== 1 || focus.cursorCount !== 1 || focus.artifactCount !== 1) {
+        issues.push(`${factId}: cinematic snapshot does not retain one cursor and one focal artifact`);
+      }
+    }
+    if ([select, read, confirm, highlighted, finding].some(snapshot => snapshot.contract !== FACT_SOURCE_CINEMATIC_CONTRACT)
+      || select.cursorPhase !== 'click'
+      || select.targetId !== select.sourceId || select.activeSourceIds.length !== 0
+      || select.activeSourceLocator || select.sourceHighlighted || select.factVisible || select.findingVisible) {
+      issues.push(`${factId}: source or fact is preselected before the agent click`);
+    }
+    if (read.at < select.at || read.targetId !== read.sourceId || read.sourceId !== select.sourceId
+      || read.locatorId !== select.locatorId || read.activeSourceIds.length !== 1
+      || read.activeSourceIds[0] !== read.sourceId || read.activeSourceLocator !== read.locatorId
+      || !['open', 'active', 'drawer'].includes(read.sourceDockState)
+      || !read.sourceVisible || read.sourceHighlighted || !read.pendingVisible || read.factVisible || read.findingVisible) {
+      issues.push(`${factId}: neutral source read does not visibly follow the exact open-source click`);
+    }
+    if (confirm.at < read.at || confirm.cursorPhase !== 'click' || confirm.targetId !== read.sourceId
+      || confirm.sourceId !== read.sourceId || confirm.locatorId !== read.locatorId
+      || confirm.sourceHighlighted || !confirm.sourceVisible || !confirm.pendingVisible
+      || confirm.factVisible || confirm.findingVisible) {
+      issues.push(`${factId}: exact source remains unconfirmed before highlight-source`);
+    }
+    if (!highlightEvent || highlightEvent.changeId !== inspection?.changeId || highlightEvent.eventId !== inspection?.eventId
+      || highlightEvent.agentId !== inspection?.agentId || highlightEvent.sourceId !== read.sourceId
+      || highlightEvent.locatorId !== read.locatorId || highlightEvent.factTourPhase !== 'highlight-source'
+      || highlightEvent.sourceHighlighted !== true || highlightEvent.at < confirm.at) {
+      issues.push(`${factId}: casepath:source-highlighted is absent or not bound to the confirmed source`);
+    }
+    if (highlighted.at < confirm.at || highlighted.sourceId !== read.sourceId || highlighted.locatorId !== read.locatorId
+      || highlighted.sourceHighlighted !== true || !highlighted.sourceVisible || highlighted.pendingVisible
+      || highlighted.factVisible || highlighted.findingVisible) {
+      issues.push(`${factId}: confirmed source does not become the sole visible highlight before fact appearance`);
+    }
+    if (!inspection || !change || highlighted.at > inspection.at || inspection.sourceId !== read.sourceId
+      || inspection.locatorId !== read.locatorId || finding.at < inspection.at + MIN_FACT_SOURCE_HOLD_MS
+      || change.at < inspection.at + MIN_FACT_SOURCE_HOLD_MS || finding.sourceHighlighted !== true
+      || !finding.sourceVisible || !finding.factVisible || !finding.findingVisible) {
+      issues.push(`${factId}: highlighted source is not causally retained through the finding dwell`);
+    }
+  });
   return issues;
 }
 
@@ -2958,7 +3404,7 @@ async function execute() {
     } catch (_) {}
   });
 
-  await page.addInitScript(sessionId => {
+  await page.addInitScript(({ sessionId, factSourceCinematicContract, factSourceTourIds, processPreviewGeometrySelectors, processPreviewBottomInset }) => {
     sessionStorage.setItem('casepath:demo-session', sessionId);
     window.__casepathReleaseMutations = [];
     window.__casepathMomentHistory = [];
@@ -2974,14 +3420,20 @@ async function execute() {
     window.__casepathFocusViolations = [];
     window.__casepathSemanticEvents = [];
     window.__casepathArtifactChanges = [];
+    window.__casepathSourceHighlights = [];
     window.__casepathSourceInspections = [];
     window.__casepathBranchVisuals = [];
     window.__casepathBranchInspectionCopy = [];
     window.__casepathFactSourceTours = [];
+    window.__casepathFactSourceCinematicSteps = [];
     window.__casepathLaterMemoryValidations = [];
     window.__casepathLaterCausalSteps = [];
+    window.__casepathLaterSourceOpenings = [];
     window.__casepathGraphMomentSnapshots = [];
     window.__casepathArtifactFocusViolations = [];
+    window.__casepathDesktopSourcePanelMoments = [];
+    window.__casepathArtifactInteractions = [];
+    window.__casepathProcessPreviewGeometry = [];
     window.addEventListener('casepath:presentation', event => {
       window.__casepathPresentationTimeline.push({
         moment: event.detail?.moment || '',
@@ -3005,7 +3457,85 @@ async function execute() {
         nemotron_plan_visible: Boolean(document.querySelector('#orchestrationProof .orchestration-actor-card[data-actor-type="nemotron_agent"][data-actor-id="orchestrator_plan"]')),
       });
     });
-    const visible = node => Boolean(node && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden');
+    const visible = node => Boolean(node && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden' && getComputedStyle(node).display !== 'none');
+    const geometryRect = node => {
+      const value = node.getBoundingClientRect();
+      return { left: value.left, top: value.top, right: value.right, bottom: value.bottom, width: value.width, height: value.height };
+    };
+    window.__casepathCaptureProcessPreviewGeometry = phase => new Promise(resolve => {
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const graph = document.querySelector('#artifactProcessGraph');
+        const graphViewport = graph?.querySelector('.ac-spatial-viewport');
+        if (!visible(graph) || !visible(graphViewport)) {
+          resolve(null);
+          return;
+        }
+        const nodes = [...new Set(processPreviewGeometrySelectors.flatMap(selector => [...graph.querySelectorAll(selector)]))].filter(visible);
+        if (!nodes.length) {
+          resolve(null);
+          return;
+        }
+        const snapshot = {
+          phase: String(phase || 'unspecified'),
+          scene: document.querySelector('#artifactCanvas')?.dataset.casepathScene || '',
+          constructionState: graph.dataset.processConstructionState || '',
+          viewportWidth: innerWidth,
+          viewportHeight: innerHeight,
+          requiredBottomInset: processPreviewBottomInset,
+          graphViewportRect: geometryRect(graphViewport),
+          items: nodes.map(node => ({
+            kind: processPreviewGeometrySelectors.find(selector => node.matches(selector)) || '',
+            rect: geometryRect(node),
+          })),
+          at: performance.now(),
+        };
+        window.__casepathProcessPreviewGeometry.push(snapshot);
+        resolve(snapshot);
+      }));
+    });
+    window.__casepathActiveSourceIds = () => [
+      ...document.querySelectorAll('.attachment-row.is-active[data-artifact-id],.v21-source-summary-toggle.is-active[data-active-source-id]'),
+    ].filter(visible).map(target => target.dataset.artifactId || target.dataset.activeSourceId || '').filter(Boolean);
+    window.__casepathSourceTargetExists = sourceId => {
+      const exactId = String(sourceId || '');
+      if (!exactId) return false;
+      if (document.querySelector(`.attachment-row[data-artifact-id="${CSS.escape(exactId)}"]`)) return true;
+      const sourcePackage = document.querySelector('.v21-source-summary-toggle[data-source-ids]');
+      return Boolean(visible(sourcePackage) && String(sourcePackage.dataset.sourceIds || '').split(',').includes(exactId));
+    };
+    window.__casepathCaptureDesktopSourcePanel = moment => {
+      const pane = document.querySelector('.submission-pane');
+      const content = document.querySelector('#submissionContent');
+      const toggle = document.querySelector('#toggleSource');
+      const paneRect = pane?.getBoundingClientRect();
+      const toggleSvg = toggle?.querySelector('svg');
+      const snapshot = {
+        moment,
+        panelVisible: visible(pane),
+        contentVisible: visible(content),
+        collapsed: pane?.classList.contains('collapsed') === true,
+        insideViewport: Boolean(paneRect && paneRect.left >= 0 && paneRect.top >= 0 && paneRect.right <= innerWidth + 1 && paneRect.bottom <= innerHeight + 1),
+        width: paneRect?.width || 0,
+        height: paneRect?.height || 0,
+        toggleVisible: visible(toggle),
+        toggleDisabled: toggle?.disabled === true,
+        toggleTabIndex: toggle?.tabIndex ?? null,
+        toggleAriaControls: toggle?.getAttribute('aria-controls') || '',
+        toggleLooksDropdown: Boolean(visible(toggle) && (visible(toggleSvg) || ['menu', 'listbox', 'combobox'].includes(toggle.getAttribute('role') || '') || toggle.hasAttribute('aria-haspopup') || (!toggle.disabled && toggle.hasAttribute('aria-controls')))),
+        activeSourceIds: window.__casepathActiveSourceIds(),
+        activeSourceLocator: pane?.dataset.activeSourceLocator || '',
+        at: performance.now(),
+      };
+      const prior = window.__casepathDesktopSourcePanelMoments.findIndex(item => item.moment === moment);
+      if (prior >= 0) window.__casepathDesktopSourcePanelMoments[prior] = snapshot;
+      else window.__casepathDesktopSourcePanelMoments.push(snapshot);
+      return snapshot;
+    };
+    window.addEventListener('casepath:render', event => {
+      const moment = event.detail?.moment || '';
+      if (!['read', 'understand', 'research', 'process', 'evidence', 'experience', 'verify', 'ready'].includes(moment)) return;
+      requestAnimationFrame(() => window.__casepathCaptureDesktopSourcePanel?.(moment));
+    });
     const focusSnapshot = reason => {
       const workspace = document.querySelector('#liveWorkspace');
       if (!visible(workspace)) return null;
@@ -3045,20 +3575,93 @@ async function execute() {
       }
       return snapshot;
     };
+    const factSourceCinematicSnapshot = (timing, detail, binding = {}) => {
+      const root = document.querySelector('#artifactCanvas');
+      const stage = root?.querySelector('[data-fact-tour-phase][data-fact-id]');
+      const target = stage?.querySelector('[data-fact-inspection-target="true"]');
+      const factId = binding.factId || stage?.dataset.factId || '';
+      const sourceId = binding.sourceId || target?.dataset.sourceId || '';
+      const locatorId = binding.locatorId || target?.dataset.sourceLocatorId || '';
+      if (!factId || !sourceId || !locatorId) return null;
+      const sourceDock = document.querySelector('[data-source-dock-state]');
+      return {
+        contract: factSourceCinematicContract,
+        timing,
+        cursorPhase: detail.phase || '',
+        changeId: detail.changeId || '',
+        eventId: detail.eventId || '',
+        agentId: detail.agentId || '',
+        targetId: detail.targetId || '',
+        factId,
+        sourceId,
+        locatorId,
+        factTourPhase: stage?.dataset.factTourPhase || '',
+        activeSourceIds: window.__casepathActiveSourceIds(),
+        sourceDockState: sourceDock?.dataset.sourceDockState || '',
+        activeSourceLocator: sourceDock?.dataset.activeSourceLocator || '',
+        sourceVisible: visible(stage?.querySelector('.ac-fact-source')),
+        sourceHighlighted: visible(stage?.querySelector('.ac-fact-source.is-source-selected .is-highlighted, .ac-fact-source .is-highlighted')),
+        pendingVisible: visible(stage?.querySelector('.ac-extraction-pending:not(.is-extracting)')),
+        findingVisible: visible(stage?.querySelector('.ac-fact-finding')),
+        factVisible: visible(stage?.querySelector('[data-node-attachment-kind="fact"]')),
+        sourceTrail: [...(stage?.querySelectorAll('.ac-source-inspection-trail li') || [])].map(item => ({
+          sourceId: item.dataset.sourceId || '',
+          state: item.dataset.sourceTrailState || '',
+          visible: visible(item),
+        })),
+        focus: artifactCanvasFocusSnapshot(`fact-source-${timing}`),
+        at: performance.now(),
+      };
+    };
     window.addEventListener('casepath:cursor-step', event => {
       const detail = event.detail || {};
       if (detail.changeId) {
+        const root = document.querySelector('#artifactCanvas');
         const cursor = document.querySelector('#artifactAgentCursor');
+        const inspectionTarget = root?.querySelector('[data-ac-inspection-target="true"]');
+        const inspectionSourceId = inspectionTarget?.dataset.sourceId || '';
         window.__casepathArtifactCursorSteps.push({
           changeId: detail.changeId || '',
           eventId: detail.eventId || '',
           agentId: detail.agentId || '',
           targetId: detail.targetId || '',
+          moment: detail.moment || root?.dataset.casepathScene || '',
           phase: detail.phase || '',
+          parked: cursor?.dataset.parked === 'true',
+          factTourPhase: document.querySelector('#artifactCanvas')?.dataset.factSourceTourPhase || '',
+          graphInspectionPhase: document.querySelector('#artifactCanvas')?.dataset.graphInspectionPhase || '',
           signature: cursor?.dataset.agentSignature || '',
+          specialistBound: cursor?.dataset.specialistBound === 'true',
+          cursorAgent: cursor?.querySelector('[data-ac-cursor-agent]')?.textContent?.trim() || '',
+          cursorAction: cursor?.querySelector('[data-ac-cursor-action]')?.textContent?.trim() || '',
+          cursorTargetId: cursor?.dataset.targetId || '',
+          cursorCount: root?.querySelectorAll('#artifactAgentCursor').length || 0,
+          cursorTargetCount: root?.querySelectorAll('[data-ac-cursor-target="true"]').length || 0,
+          activeAgentId: root?.dataset.activeAgentId || '',
+          visualActiveAgentId: root?.dataset.visualActiveAgentId || '',
+          activeSignature: root?.dataset.activeSignature || '',
+          inspectionSourceId,
+          inspectionLocatorId: inspectionTarget?.dataset.sourceLocatorId || '',
+          inspectionSourceHasTarget: window.__casepathSourceTargetExists(inspectionSourceId),
+          activeSourceIds: window.__casepathActiveSourceIds(),
+          activeSourceLocator: document.querySelector('.submission-pane')?.dataset.activeSourceLocator || '',
+          visibleSourceHighlightCount: [...(root?.querySelectorAll('.is-highlighted, .ac-build-source-highlight') || [])].filter(visible).length,
           at: performance.now(),
           focus: artifactCanvasFocusSnapshot('artifact-cursor-step'),
         });
+        void window.__casepathCaptureProcessPreviewGeometry?.(`construction:cursor-${detail.phase || 'step'}`);
+        if (detail.phase === 'click') {
+          const phase = document.querySelector('#artifactCanvas')?.dataset.factSourceTourPhase || '';
+          const timing = phase === 'select-source' ? 'select-source' : phase === 'read-source' ? 'confirm-click' : '';
+          const before = timing ? factSourceCinematicSnapshot(timing, detail) : null;
+          if (before) {
+            window.__casepathFactSourceCinematicSteps.push(before);
+            if (timing === 'select-source') queueMicrotask(() => {
+              const read = factSourceCinematicSnapshot('neutral-read', detail, before);
+              if (read) window.__casepathFactSourceCinematicSteps.push(read);
+            });
+          }
+        }
         return;
       }
       const ownedArtifact = detail.agentId
@@ -3121,6 +3724,7 @@ async function execute() {
         announcementLiveMode: layout?.querySelector('[data-process-build-announcement]')?.getAttribute('aria-live') || '',
         focus: focusSnapshot('graph-step'),
       });
+      void window.__casepathCaptureProcessPreviewGeometry?.(`construction:graph-${detail.kind || 'step'}`);
     });
     window.addEventListener('casepath:official-source-step', event => {
       const detail = event.detail || {};
@@ -3175,6 +3779,10 @@ async function execute() {
           memory_status: node.dataset.memoryStatus || '',
           memory_origin_id: node.dataset.memoryOriginId || '',
           later_causal_phase: node.dataset.laterCausalPhase || '',
+          later_source_opened: node.dataset.laterSourceOpened || '',
+          eligibility_contract: node.dataset.eligibilityContract || '',
+          eligibility_rule_id: node.dataset.eligibilityRuleId || '',
+          semantic_role: node.dataset.semanticRole || '',
         }));
         const focus = [...(root?.querySelectorAll('[data-artifact-focus="true"]') || [])].filter(visible);
         const primaryArtifacts = [...(root?.querySelectorAll('[data-casepath-primary-artifact="true"]') || [])].filter(visible);
@@ -3199,6 +3807,7 @@ async function execute() {
         eventId: detail.event_id || detail.eventId || '',
         sequence: detail.sequence,
         agentId: detail.actor?.id || '',
+        actorType: detail.actor?.type || detail.actor_type || '',
         at: performance.now(),
       });
     });
@@ -3236,6 +3845,50 @@ async function execute() {
         focus: artifactCanvasFocusSnapshot('artifact-change'),
         at: performance.now(),
       });
+      void window.__casepathCaptureProcessPreviewGeometry?.(`construction:artifact-${detail.kind || 'change'}`);
+      if (detail.kind === 'fact' && factSourceTourIds.includes(detail.entityId || '')) {
+        const binding = [...window.__casepathSourceHighlights].reverse().find(item => item.entityKind === 'fact' && item.factId === detail.entityId);
+        const finding = binding ? factSourceCinematicSnapshot('finding', {
+          ...detail,
+          phase: 'artifact-change',
+          targetId: binding.sourceId,
+        }, binding) : null;
+        if (finding) window.__casepathFactSourceCinematicSteps.push(finding);
+      }
+    });
+    window.addEventListener('casepath:artifact-canvas-interaction', event => {
+      window.__casepathArtifactInteractions.push({ ...(event.detail || {}), at: performance.now() });
+    });
+    window.addEventListener('casepath:source-highlighted', event => {
+      const detail = event.detail || {};
+      const root = document.querySelector('#artifactCanvas');
+      const sourceHighlight = {
+        entityKind: detail.entityKind || '',
+        nodeId: detail.nodeId || '',
+        branchId: detail.branchId || '',
+        factId: detail.factId || '',
+        changeId: detail.changeId || '',
+        eventId: detail.eventId || '',
+        agentId: detail.agentId || '',
+        sourceId: detail.sourceId || '',
+        locatorId: detail.locatorId || '',
+        factTourPhase: root?.dataset.factSourceTourPhase || '',
+        graphInspectionPhase: root?.dataset.graphInspectionPhase || '',
+        sourceHighlighted: detail.entityKind === 'fact'
+          ? visible(root?.querySelector('[data-fact-tour-phase="highlight-source"] .ac-fact-source.is-source-selected .is-highlighted'))
+          : visible(root?.querySelector('.ac-build-source-highlight .is-highlighted, .ac-build-source-highlight')),
+        at: performance.now(),
+      };
+      window.__casepathSourceHighlights.push(sourceHighlight);
+      void window.__casepathCaptureProcessPreviewGeometry?.(`construction:highlight-${detail.entityKind || 'source'}`);
+      if (detail.entityKind === 'fact') {
+        const snapshot = factSourceCinematicSnapshot('highlight-source', {
+          ...detail,
+          phase: 'source-highlighted',
+          targetId: detail.sourceId || '',
+        }, detail);
+        if (snapshot) window.__casepathFactSourceCinematicSteps.push(snapshot);
+      }
     });
     window.addEventListener('casepath:source-inspection', event => {
       const detail = event.detail || {};
@@ -3257,6 +3910,7 @@ async function execute() {
         activeSourceLocator: sourceDock?.dataset.activeSourceLocator || '',
         at: performance.now(),
       });
+      void window.__casepathCaptureProcessPreviewGeometry?.(`construction:inspection-${detail.entityKind || 'source'}`);
       if (detail.entityKind === 'branch') {
         window.__casepathBranchInspectionCopy.push({
           nodeId: detail.nodeId || '',
@@ -3301,17 +3955,35 @@ async function execute() {
       const detail = event.detail || {};
       const step = {
         contract: detail.contract || '',
+        runId: detail.runId || '',
         phase: detail.phase || '',
         factId: detail.factId || '',
         sourceId: detail.sourceId || '',
         locatorId: detail.locatorId || '',
         memoryOriginId: detail.memoryOriginId || '',
+        eligibilityContract: detail.eligibilityContract || '',
+        ruleId: detail.ruleId || '',
+        semanticRole: detail.semanticRole || '',
         at: performance.now(),
       };
       queueMicrotask(() => {
-        step.activeSourceIds = [...document.querySelectorAll('.attachment-row.is-active[data-artifact-id]')].map(row => row.dataset.artifactId || '');
+        step.activeSourceIds = window.__casepathActiveSourceIds();
         window.__casepathLaterCausalSteps.push(step);
         captureGraphMoment('later-work', step.phase);
+      });
+    });
+    window.addEventListener('casepath:later-source-opened', event => {
+      const detail = event.detail || {};
+      window.__casepathLaterSourceOpenings.push({
+        contract: detail.contract || '',
+        runId: detail.runId || '',
+        factId: detail.factId || '',
+        sourceId: detail.sourceId || '',
+        locatorId: detail.locatorId || '',
+        activeSourceIds: window.__casepathActiveSourceIds(),
+        activeLocatorId: document.querySelector('.submission-pane')?.dataset.activeSourceLocator || '',
+        sourceOpened: document.querySelector('[data-later-causal-phase="source"]')?.dataset.laterSourceOpened || '',
+        at: performance.now(),
       });
     });
     window.addEventListener('casepath:branch-visualized', event => {
@@ -3359,7 +4031,13 @@ async function execute() {
       });
       parserObserver.observe(document, { childList: true });
     }
-  }, QA_SESSION_ID);
+  }, {
+    sessionId: QA_SESSION_ID,
+    factSourceCinematicContract: FACT_SOURCE_CINEMATIC_CONTRACT,
+    factSourceTourIds: FACT_SOURCE_TOUR_IDS,
+    processPreviewGeometrySelectors: PROCESS_PREVIEW_GEOMETRY_SELECTORS,
+    processPreviewBottomInset: PROCESS_PREVIEW_BOTTOM_INSET_PX,
+  });
 
   const response = await page.goto(`${BASE}/?api=${encodeURIComponent(API)}&qa=${Date.now()}`, { waitUntil: 'domcontentloaded', timeout: 120000 });
   const sourceHtml = await response.text();
@@ -3457,7 +4135,8 @@ async function execute() {
   for (const agentId of REQUIRED_NEMOTRON_AGENT_IDS) {
     const expected = REQUIRED_NEMOTRON_AGENT_SIGNATURES[agentId];
     if (!specialistFocusSource.includes(`${agentId}: {`)) identitySourceIssues.push(`${agentId}: missing identity`);
-    if (!specialistFocusSource.includes(`label: '${REQUIRED_NEMOTRON_AGENT_ROLES[agentId]}'`)) identitySourceIssues.push(`${agentId}: wrong role`);
+    if (!specialistFocusSource.includes(`label: '${REQUIRED_DESKTOP_AGENT_LABELS[agentId]}'`)) identitySourceIssues.push(`${agentId}: wrong visible label`);
+    if (!specialistFocusSource.includes(`shortLabel: '${REQUIRED_DESKTOP_AGENT_SHORTS[agentId]}'`)) identitySourceIssues.push(`${agentId}: wrong short label`);
     if (!specialistFocusSource.includes(`monogram: '${expected.monogram}'`)) identitySourceIssues.push(`${agentId}: wrong monogram`);
     if (!specialistFocusSource.includes(`signature: '${expected.signature}'`)) identitySourceIssues.push(`${agentId}: wrong signature`);
   }
@@ -3465,7 +4144,7 @@ async function execute() {
   const identityMapEnd = specialistFocusSource.indexOf('\n  });', identityMapStart);
   const identityMapSource = specialistFocusSource.slice(identityMapStart, identityMapEnd);
   const declaredAgentIds = [...identityMapSource.matchAll(/^\s{4}([a-z_]+): \{/gm)].map(match => match[1]);
-  check('Cursor identities are the exact six call-bound Nemotron agents with six distinct restrained signatures', identitySourceIssues.length === 0 && exactMembers(declaredAgentIds, REQUIRED_NEMOTRON_AGENT_IDS) && new Set(Object.values(REQUIRED_NEMOTRON_AGENT_SIGNATURES).map(value => value.monogram)).size === 6 && new Set(Object.values(REQUIRED_NEMOTRON_AGENT_SIGNATURES).map(value => value.signature)).size === 6, JSON.stringify({ declaredAgentIds, identitySourceIssues }));
+  check('Desktop cursor presents the agreed six simple agent names while preserving exact IDs, monograms, and distinct signatures', identitySourceIssues.length === 0 && exactMembers(declaredAgentIds, REQUIRED_NEMOTRON_AGENT_IDS) && new Set(Object.values(REQUIRED_NEMOTRON_AGENT_SIGNATURES).map(value => value.monogram)).size === 6 && new Set(Object.values(REQUIRED_NEMOTRON_AGENT_SIGNATURES).map(value => value.signature)).size === 6, JSON.stringify({ declaredAgentIds, identitySourceIssues }));
   check('Seven visible chapters remain presentation phases with explicit execution authority, not a synthetic seven-agent team', REQUIRED_PRESENTATION_PHASE_LABELS.every(fragment => specialistFocusSource.includes(`label: '${fragment}'`)) && ['dataset.casepathSpecialist', 'dataset.workAuthority'].every(fragment => specialistFocusSource.includes(fragment)));
   check('Cursor motion is keyed to semantic event/agent/phase/target identity, suppresses replay, and emits one inspectable step without class-mutation feedback', specialistFocusSource.includes('const activationKey =') && specialistFocusSource.includes("cursor.dataset.eventId || cursor.dataset.proofEventId || moment") && specialistFocusSource.includes("cursor.dataset.agentId || 'casepath'") && specialistFocusSource.includes('cursorPhase') && specialistFocusSource.includes('emittedActivationKeys.has(activationKey)') && specialistFocusSource.includes('cursorTargetKey(target)') && specialistFocusSource.includes("new CustomEvent('casepath:cursor-step'") && specialistFocusSource.includes("['is-clicking', 'v21-agent-target']") && specialistFocusSource.includes("attributeOldValue: true") && !specialistFocusSource.includes("requestAnimationFrame(() => cursor.classList.add('is-clicking'))"));
   check('Every successful call-bound specialist owns one receipt-bound artifact target instead of relabelling an unrelated canvas', ['function ownedArtifactMarkup(', 'data-agent-artifact-target="true"', 'data-agent-artifact-owner=', 'data-actor-type=', 'data-call-id=', 'data-output-artifact=', 'data-requested-model=', 'data-response-model=', "event.actorType !== 'nemotron_agent'", 'Official-law tabs remain a separate deterministic cached registry view.'].every(fragment => specialistFocusSource.includes(fragment)));
@@ -3674,7 +4353,7 @@ async function execute() {
   ];
   check('Verification keeps the graph as the sole focal artifact and states only its concise passed or fail-closed outcome', verificationGraphIssues.length === 0, JSON.stringify({ verificationGraphScene, verificationGraphIssues }));
   const flagshipPresentationMs = await page.evaluate(() => performance.now() - window.__casepathFlagshipLaunchAt);
-  check('The autonomous flagship journey stays inside the 70–110 second production-tolerant north-star band', flagshipPresentationMs >= MIN_FLAGSHIP_PRESENTATION_MS && flagshipPresentationMs <= MAX_FLAGSHIP_PRESENTATION_MS, `duration_ms=${flagshipPresentationMs.toFixed(0)}`);
+  check('The autonomous flagship journey stays inside the 90–150 second deliberate desktop-story band', flagshipPresentationMs >= MIN_FLAGSHIP_PRESENTATION_MS && flagshipPresentationMs <= MAX_FLAGSHIP_PRESENTATION_MS, `duration_ms=${flagshipPresentationMs.toFixed(0)}`);
   await auditViewports('02-ready-process', '#artifactProcessGraph[data-graph-projection="flagship-spine/1"]');
   const flagshipTransport = await page.evaluate(() => ({
     transport: document.body.dataset.runTransport || '',
@@ -3827,17 +4506,42 @@ async function execute() {
   const processArtifactChanges = artifactChanges.filter(change => FLAGSHIP_PROCESS_PROJECTION_IDS.includes(change.entityId));
   const semanticEvents = await page.evaluate(() => window.__casepathSemanticEvents || []);
   const artifactCursorSteps = await page.evaluate(() => window.__casepathArtifactCursorSteps || []);
+  const artifactTeamSnapshot = await page.locator('#artifactCanvas').evaluate(root => {
+    const visible = node => Boolean(node && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden' && getComputedStyle(node).display !== 'none');
+    const team = document.querySelector('.ac-global-agent-work [data-ac-team]');
+    return {
+      ariaLabel: team?.getAttribute('aria-label') || '',
+      cursorCount: [...root.querySelectorAll('#artifactAgentCursor')].filter(visible).length,
+      members: [...(team?.querySelectorAll('[data-ac-agent-id]') || [])].map(member => ({
+        agentId: member.dataset.acAgentId || '',
+        role: member.dataset.agentLabel || '',
+        short: member.querySelector('small')?.textContent?.trim() || '',
+        monogram: member.dataset.agentMonogram || '',
+        signature: member.dataset.agentSignature || '',
+        color: getComputedStyle(member).getPropertyValue('--agent-color').trim(),
+        visible: visible(member),
+        monogramVisible: visible(member.querySelector('svg')),
+        shortVisible: visible(member.querySelector('small')),
+      })),
+    };
+  });
+  const artifactProducerRoleIssues = artifactCursorProducerRoleContractViolations(artifactTeamSnapshot, artifactCursorSteps, semanticEvents);
+  check('Desktop shows only five useful signature-colored specialists while retaining exact six-agent receipts and keeping deterministic law, reference, and gates outside model identity', artifactProducerRoleIssues.length === 0, JSON.stringify({ artifactTeamSnapshot, artifactCursorSteps, artifactProducerRoleIssues }));
   const processChangeIssues = processProjectionContractViolations(processArtifactChanges, semanticEvents, artifactCursorSteps, isProductionJourney());
   check('Persistent process canvas constructs the exact ten-node handling spine monotonically, one justified node at a time', processChangeIssues.length === 0, JSON.stringify({ processArtifactChanges, processChangeIssues }));
   const sourceInspections = await page.evaluate(() => window.__casepathSourceInspections || []);
+  const sourceHighlights = await page.evaluate(() => window.__casepathSourceHighlights || []);
   const factSourceTours = await page.evaluate(() => window.__casepathFactSourceTours || []);
   const factSourceTourIssues = factSourceTourContractViolations(factSourceTours, sourceInspections, artifactChanges, artifactCursorSteps, processRun.result);
   const factSourceTourWaitState = await page.evaluate(() => document.body.dataset.casepathFactSourceTourWait || '');
   if (factSourceTourWaitState !== 'complete') factSourceTourIssues.push(`fact source tour wait state ${factSourceTourWaitState || 'missing'}`);
   check('Claim understanding visibly inspects one exact returned source before adding each of the five key facts', factSourceTourIssues.length === 0, JSON.stringify({ factSourceTours, factSourceTourIssues, factInspections: sourceInspections.filter(item => item.entityKind === 'fact') }));
+  const factSourceCinematicSteps = await page.evaluate(() => window.__casepathFactSourceCinematicSteps || []);
+  const factSourceCinematicIssues = factSourceCinematicContractViolations(factSourceCinematicSteps, sourceHighlights, sourceInspections, artifactChanges);
+  check('Each claim fact opens neutrally, waits for an exact confirm click, emits source-highlighted, then becomes a finding after a readable dwell', factSourceCinematicIssues.length === 0, JSON.stringify({ contract: FACT_SOURCE_CINEMATIC_CONTRACT, factSourceCinematicSteps, factSourceHighlights: sourceHighlights.filter(item => item.entityKind === 'fact'), factSourceCinematicIssues }));
   const branchVisuals = await page.evaluate(() => window.__casepathBranchVisuals || []);
-  const sourceInspectionIssues = sourceInspectionContractViolations(sourceInspections, processArtifactChanges, branchVisuals, artifactCursorSteps, processRun.result, isProductionJourney());
-  check('Before every process node and causation branch appears, the agent visibly inspects one exact source, finding, or accepted input that earns it', sourceInspectionIssues.length === 0, JSON.stringify({ sourceInspections, branchVisuals, sourceInspectionIssues }));
+  const sourceInspectionIssues = sourceInspectionContractViolations(sourceInspections, sourceHighlights, processArtifactChanges, branchVisuals, artifactCursorSteps, processRun.result, isProductionJourney());
+  check('Before every process node and causation branch appears, a confirm click visibly highlights the exact source, finding, or accepted input that earns it', sourceInspectionIssues.length === 0, JSON.stringify({ sourceHighlights, sourceInspections, branchVisuals, sourceInspectionIssues }));
   const branchInspectionCopy = await page.evaluate(() => window.__casepathBranchInspectionCopy || []);
   check('Causation branches are presented as unresolved allegations or missing-fact paths, never as supported conclusions from a generic management quote', stableJson(branchInspectionCopy.map(item => item.nodeId)) === stableJson(REQUIRED_CAUSATION_BRANCH_IDS) && branchInspectionCopy.every(item => /unresolved allegation|missing-fact basis/i.test(item.text)) && branchInspectionCopy.every(item => !/supports?(?: the)? (?:next )?(?:decision|branch)/i.test(item.text)), JSON.stringify(branchInspectionCopy));
 
@@ -3934,9 +4638,26 @@ async function execute() {
   const revealArtifactGrounding = async kind => {
     const disclosure = page.locator('#artifactProcessGraph .ac-grounding-disclosure');
     check(`Active decision offers its ${kind} grounding on demand`, await disclosure.count() === 1);
-    if (await disclosure.getAttribute('data-grounding-open') !== 'true') await disclosure.locator(':scope > [data-ac-action="toggle-grounding"]').click();
-    const attachment = disclosure.locator(`[data-node-attachment-kind=${JSON.stringify(kind === 'source' ? 'fact' : kind === 'reference' ? 'precedent' : kind)}]`);
-    check(`Active decision exposes its ${kind} grounding only after disclosure`, await attachment.count() >= 1 && await attachment.first().isVisible());
+    const before = await artifactGroundingModalSnapshot();
+    const toggle = disclosure.locator(':scope > [data-ac-action="toggle-grounding"]');
+    check(`Active decision keeps ${kind} details hidden before the explicit modal click`, !before.viewerOpen && before.inlinePanelHidden && before.visibleInlineItemCount === 0 && before.toggleHaspopup === 'dialog' && before.toggleExpanded === 'false', JSON.stringify(before));
+    await toggle.click();
+    await waitVisible('#artifactCanvas [data-ac-grounding-viewer][open]');
+    const opened = { ...(await artifactGroundingModalSnapshot()), openedByExplicitClick: true };
+    const requiredKind = kind === 'reference' ? 'precedent' : kind;
+    const trace = { before, opened };
+    const modalIssues = groundingModalContractViolations(trace, requiredKind);
+    check(`Active decision opens ${kind} only in a source-rail-safe modal`, modalIssues.length === 0, JSON.stringify({ trace, modalIssues }));
+    const attachment = page.locator(`#artifactCanvas [data-ac-grounding-viewer][open] [data-node-attachment-kind=${JSON.stringify(requiredKind)}]`);
+    check(`Grounding modal exposes actionable ${kind}`, await attachment.count() >= 1 && await attachment.first().isVisible() && await attachment.first().isEnabled() && nonemptyString(await attachment.first().getAttribute('data-ac-action')));
+    return { attachment, trace };
+  };
+  const closeArtifactGrounding = async (trace, label) => {
+    await page.locator('#artifactCanvas [data-ac-grounding-viewer][open] [data-ac-action="close-grounding"]').click();
+    await waitHidden('#artifactCanvas [data-ac-grounding-viewer][open]');
+    trace.closed = await artifactGroundingModalSnapshot();
+    const issues = groundingModalContractViolations(trace);
+    check(`${label} modal close restores one graph focus and action`, issues.length === 0, JSON.stringify({ trace, issues }));
   };
 
   await selectArtifactNode('causation');
@@ -3958,8 +4679,8 @@ async function execute() {
   check('The returned claim process is one dominant, truthful spatial graph with a horizontal spine, four divergent causation branches, grounded attachments, and one rightward next action', spatialGeometryIssues.length === 0, JSON.stringify({ spatialGeometry, spatialGeometryIssues }));
 
   await selectArtifactNode('notification');
-  await revealArtifactGrounding('source');
-  const visibleFactLocator = page.locator('#artifactProcessGraph .ac-grounding-disclosure[data-grounding-open="true"] [data-node-attachment-kind="fact"][data-source-authority="customer_submission"][data-source-locator-id][data-ac-action="open-source"]').first();
+  const visibleFactLocator = page.locator('#artifactProcessGraph .ac-grounding-disclosure[data-grounding-open="false"] > .ac-node-source-preview[data-node-attachment-kind="fact"][data-source-authority="customer_submission"][data-source-locator-id]').first();
+  check('Completed decision keeps its exact customer-source preview visible while modal grounding remains closed', await visibleFactLocator.isVisible() && await visibleFactLocator.locator('[data-ac-action="open-source"]').count() === 1 && await page.locator('#artifactCanvas [data-ac-grounding-viewer][open]').count() === 0 && await page.locator('#artifactProcessGraph .ac-grounding-disclosure > div:not([hidden])').count() === 0);
   const openedFactLocator = await clickExactArtifactLocator(visibleFactLocator);
   await waitVisible('#sourceViewer[open]');
   check('Customer-source click opens the exact returned fact and locator', await page.locator('#sourceViewer .source-fact').count() > 0 && (await page.locator('[data-source-dock-state]').first().getAttribute('data-active-source-locator')) === openedFactLocator, openedFactLocator);
@@ -4015,9 +4736,9 @@ async function execute() {
   for (const [sourceId, nodeId] of Object.entries(lawNodeById)) {
     await selectArtifactNode(nodeId);
     await revealArtifactGrounding('law');
-    const lawButton = page.locator(`#artifactProcessGraph .ac-grounding-disclosure[data-grounding-open="true"] [data-node-attachment-kind="law"][data-source-authority="official_registry"][data-law-id=${JSON.stringify(sourceId)}][data-ac-action="open-law"]`);
-    check(`${sourceId} is visibly rendered as an official registry source`, await lawButton.count() === 1);
-    openedOfficialLawLocators.push(await clickExactArtifactLocator(lawButton));
+    const exactLawButton = page.locator(`#artifactCanvas [data-ac-grounding-viewer][open] [data-node-attachment-kind="law"][data-source-authority="official_registry"][data-law-id=${JSON.stringify(sourceId)}][data-ac-action="open-law"]`);
+    check(`${sourceId} is visibly rendered as an official registry source`, await exactLawButton.count() === 1);
+    openedOfficialLawLocators.push(await clickExactArtifactLocator(exactLawButton));
     await waitVisible(`[data-ac-law-viewer][open][data-law-id=${JSON.stringify(sourceId)}][data-source-authority="official_registry"]`);
     check(`${sourceId} opens its exact cached passage only on demand`, (await page.locator('[data-ac-law-viewer][open]').innerText()).includes(processRun.result.legal_research.sources.find(source => source.source_id === sourceId)?.passage_text || ''));
     await page.locator('[data-ac-law-viewer] [data-ac-action="close-law"]').click();
@@ -4027,18 +4748,25 @@ async function execute() {
   check('The omitted escalation-only BWO source was still visibly visited in the live legal-research chapter', officialSourceSteps.some(step => step.sourceId === 'bwo-conciliation' && step.selectedSourceId === 'bwo-conciliation' && step.passageSourceId === 'bwo-conciliation'));
 
   await selectArtifactNode('causation');
-  await revealArtifactGrounding('law');
-  check('Deterministic legal application stays visibly separate from official registry law', await page.locator('#artifactProcessGraph .ac-grounding-disclosure[data-grounding-open="true"] [data-node-attachment-kind="law"][data-source-authority="deterministic_principle"]').count() === 1);
-  await revealArtifactGrounding('evidence');
-  const visibleEvidence = await page.locator('#artifactProcessGraph .ac-grounding-disclosure[data-grounding-open="true"] [data-node-attachment-kind="evidence"][data-evidence-id]').evaluate(node => ({ item_id: node.dataset.evidenceId, fact_id: node.dataset.factId, text: node.innerText }));
+  const { trace: deterministicLawTrace } = await revealArtifactGrounding('law');
+  check('Deterministic legal application stays visibly separate from official registry law', await page.locator('#artifactCanvas [data-ac-grounding-viewer][open] [data-node-attachment-kind="law"][data-source-authority="deterministic_principle"]').count() === 1);
+  await closeArtifactGrounding(deterministicLawTrace, 'Law grounding');
+  const { attachment: evidenceButtons } = await revealArtifactGrounding('evidence');
+  const exactEvidenceButton = evidenceButtons.first();
+  const visibleEvidence = await exactEvidenceButton.evaluate(node => ({ item_id: node.dataset.evidenceId, fact_id: node.dataset.factId, text: node.innerText }));
   const returnedEvidence = processRun.result.checklist.items.find(item => item.item_id === visibleEvidence.item_id);
   check('Decision-local evidence is the exact returned requirement owned by causation', Boolean(returnedEvidence) && returnedEvidence.node_ids.includes('causation') && visibleEvidence.fact_id === returnedEvidence.fact_id && visibleEvidence.text.includes(returnedEvidence.title), JSON.stringify({ visibleEvidence, returnedEvidence }));
+  const evidenceInteractionCount = await page.evaluate(() => window.__casepathArtifactInteractions.length);
+  await exactEvidenceButton.click();
+  await waitHidden('#artifactCanvas [data-ac-grounding-viewer][open]');
+  const evidenceInteraction = await page.evaluate(index => window.__casepathArtifactInteractions.slice(index).find(item => item.action === 'inspect-evidence') || null, evidenceInteractionCount);
+  check('Exact document/evidence requirement remains actionable from the grounding modal', evidenceInteraction?.nodeId === 'causation' && evidenceInteraction?.evidenceId === returnedEvidence?.item_id, JSON.stringify(evidenceInteraction));
 
   await revealArtifactGrounding('reference');
-  const visibleGeneratedReference = page.locator('#artifactProcessGraph .ac-grounding-disclosure[data-grounding-open="true"] [data-node-attachment-kind="precedent"][data-reference-status="generated_reference"][data-source-locator-id][data-ac-action="open-reference"]');
+  const visibleGeneratedReference = page.locator('#artifactCanvas [data-ac-grounding-viewer][open] [data-node-attachment-kind="precedent"][data-reference-status="generated_reference"][data-source-locator-id][data-ac-action="open-reference"]');
   check('Causation exposes one clearly generated reference pattern', await visibleGeneratedReference.count() === 1 && await page.locator('#artifactCanvas [data-reference-status="qualified_expert_reviewed"]').count() === 0);
   const defaultReferenceCopy = await visibleGeneratedReference.innerText();
-  check('Default graph-local reference surface hides rank and score while retaining the audit-bound metadata in data attributes', !/\brank\b|\bscore\b|\d+\s*points?/i.test(defaultReferenceCopy) && nonemptyString(await visibleGeneratedReference.getAttribute('data-artifact-change-id')) && nonemptyString(await visibleGeneratedReference.getAttribute('data-artifact-event-id')) && nonemptyString(await visibleGeneratedReference.getAttribute('data-artifact-agent-id')), defaultReferenceCopy);
+  check('Default grounding-modal reference hides rank and score while retaining the audit-bound metadata in data attributes', !/\brank\b|\bscore\b|\d+\s*points?/i.test(defaultReferenceCopy) && nonemptyString(await visibleGeneratedReference.getAttribute('data-artifact-change-id')) && nonemptyString(await visibleGeneratedReference.getAttribute('data-artifact-event-id')) && nonemptyString(await visibleGeneratedReference.getAttribute('data-artifact-agent-id')), defaultReferenceCopy);
   const openedReferenceLocator = await clickExactArtifactLocator(visibleGeneratedReference);
   await waitVisible('#precedentViewer[open]');
   check('Generated reference opens by its exact locator and preserves ranking provenance', openedReferenceLocator.startsWith('reference:') && await page.locator('#precedentViewer .precedent-rank').count() === 1, openedReferenceLocator);
@@ -4192,53 +4920,300 @@ async function execute() {
   const metadataPassage = await page.locator(`.source-fact[data-fact-id="${metadataFact.fact_id}"] .source-passage[data-locator-kind="metadata_field"]`).evaluate(node => ({ field: node.dataset.sourceField, value: node.dataset.sourceValue, agent: node.dataset.sourceAgent, hasQuote: Boolean(node.querySelector('q')) }));
   check('Metadata source retains exact field, value, and agent and routes back to its owning decision', metadataPassage.field === metadataRef.field && metadataPassage.value === String(metadataRef.value) && metadataPassage.agent === metadataRef.agent && !metadataPassage.hasQuote && await page.locator(`.source-fact[data-fact-id="${metadataFact.fact_id}"] [data-source-fact-node="${metadataNodeId}"]`).count() === 1, JSON.stringify({ metadataRef, metadataPassage }));
   await page.locator('#closeSourceViewer').click();
+  }
 
-  await waitVisible('[data-v20-open-documents]');
-  await page.locator('[data-v20-open-documents]').click();
+  const processNodeSourcePreviews = [];
+  for (const nodeId of FLAGSHIP_PROCESS_PROJECTION_IDS) {
+    const nodeButton = page.locator(`#artifactProcessGraph [data-ac-action="select-node"][data-node-id="${nodeId}"]`).first();
+    await nodeButton.click();
+    await page.waitForFunction(id => document.querySelector(`#artifactProcessGraph [data-ac-action="select-node"][data-node-id="${CSS.escape(id)}"]`)?.getAttribute('aria-current') === 'step', nodeId, { timeout: 30000 });
+    await page.evaluate(phase => window.__casepathCaptureProcessPreviewGeometry?.(phase), `completed-preview:${nodeId}`);
+    const previewSelector = `#artifactProcessGraph .ac-spatial-detail [data-node-id="${nodeId}"] .ac-node-source-preview`;
+    const previewLocator = page.locator(previewSelector);
+    const previewCount = await previewLocator.count();
+    if (!previewCount) {
+      processNodeSourcePreviews.push({ nodeId, previewCount, basisKind: '', viewportWidth: 1440, viewportHeight: 900, overlaps: [] });
+      continue;
+    }
+    const preview = await previewLocator.first().evaluate((node, context) => {
+      const visible = item => Boolean(item && item.getClientRects().length && getComputedStyle(item).visibility !== 'hidden' && getComputedStyle(item).display !== 'none');
+      const rect = item => { const value = item.getBoundingClientRect(); return { left: value.left, top: value.top, right: value.right, bottom: value.bottom, width: value.width, height: value.height }; };
+      const intersection = (first, second) => Math.max(0, Math.min(first.right, second.right) - Math.max(first.left, second.left)) * Math.max(0, Math.min(first.bottom, second.bottom) - Math.max(first.top, second.top));
+      const previewRect = rect(node);
+      const graph = node.closest('#artifactProcessGraph');
+      const disclosure = node.closest('.ac-grounding-disclosure');
+      const groundingToggle = disclosure?.querySelector('.ac-grounding-toggle');
+      const otherGrounding = groundingToggle?.nextElementSibling;
+      const sourceWindowNode = node.querySelector('.ac-source-page-excerpt');
+      const visualFrame = node.querySelector('.ac-visual-source-frame');
+      const actionTarget = node.matches('[data-ac-action]') ? node : node.querySelector('[data-ac-action]');
+      const titleNode = node.querySelector('.ac-source-document-head strong') || node.querySelector('.ac-visual-source figcaption span') || node.querySelector(':scope > small') || node.querySelector(':scope > header small');
+      const locationNode = node.querySelector('.ac-source-document-head small') || node.querySelector('.ac-visual-source figcaption small') || node.querySelector(':scope > span') || node.querySelector(':scope > header span');
+      const passageNode = node.querySelector('.ac-source-page-excerpt mark') || node.querySelector('.ac-source-field strong') || node.querySelector('.ac-visual-source figcaption strong') || node.querySelector(':scope > strong');
+      const onDemandNode = node.querySelector(':scope > em') || actionTarget;
+      const spatialObjects = [...graph.querySelectorAll('[data-spatial-role="spine"],[data-spatial-role="hub"],[data-spatial-role="branch"],[data-spatial-role="law"],[data-spatial-role="evidence"],[data-spatial-role="next-action"],.ac-document-needs-link,[data-casepath-primary-action="true"]')]
+        .filter(item => item !== node && !item.contains(node) && !node.contains(item) && visible(item));
+      return {
+        nodeId: context.nodeId,
+        previewCount: context.previewCount,
+        previewVisible: visible(node),
+        basisKind: node.dataset.basisKind || node.dataset.nodeAttachmentKind || (node.dataset.sourceId ? 'source' : ''),
+        basisTargetNodeId: node.dataset.nodeId || '',
+        factId: node.dataset.factId || '',
+        sourceId: node.dataset.sourceId || '',
+        lawId: node.dataset.lawId || '',
+        evidenceId: node.dataset.evidenceId || '',
+        locatorId: node.dataset.sourceLocatorId || '',
+        title: titleNode?.textContent?.trim() || '',
+        location: locationNode?.textContent?.trim() || '',
+        passage: passageNode?.textContent?.trim() || '',
+        visualPreview: node.classList.contains('ac-node-source-preview-visual'),
+        sourceWindowText: sourceWindowNode?.textContent?.trim() || '',
+        sourceWindowTruth: Boolean((sourceWindowNode && passageNode && sourceWindowNode.textContent.includes(passageNode.textContent)) || (visualFrame?.querySelector('img') && visualFrame?.querySelector('.ac-visual-region-target')) || node.querySelector('.ac-source-field')),
+        noGeneratedContext: !/\b(?:Context|Source context)\s*·/i.test(node.textContent || ''),
+        onDemandText: onDemandNode?.textContent?.trim() || '',
+        action: actionTarget?.dataset.acAction || '',
+        inlineGroundingClosed: disclosure?.dataset.groundingOpen === 'false',
+        otherGroundingHidden: !otherGrounding || otherGrounding.hidden === true,
+        groundingViewerOpen: document.querySelector('#artifactCanvas [data-ac-grounding-viewer]')?.open === true,
+        changeId: node.dataset.artifactChangeId || '',
+        eventId: node.dataset.artifactEventId || '',
+        agentId: node.dataset.artifactAgentId || '',
+        sourceHasTarget: window.__casepathSourceTargetExists?.(node.dataset.sourceId) === true,
+        viewportWidth: innerWidth,
+        viewportHeight: innerHeight,
+        overlaps: spatialObjects.filter(item => intersection(previewRect, rect(item)) > 2).map(item => item.dataset.nodeId || item.dataset.spatialId || item.dataset.spatialRole || item.className),
+      };
+    }, { nodeId, previewCount });
+    const returnedNode = processRun.result.process.nodes.find(node => node.node_id === nodeId);
+    const returnedFact = processRun.result.facts.find(fact => fact.fact_id === preview.factId && returnedNode?.fact_ids?.includes(fact.fact_id));
+    const returnedRef = returnedFact?.source_refs?.find(ref => ref.artifact_id === preview.sourceId && factSourceLocatorId(ref) === preview.locatorId);
+    const expectedSource = returnedRef ? factSourcePreviewTruth(demo.claim, returnedFact, returnedRef, preview.visualPreview) : null;
+    const legal = processRun.result.legal_research || {};
+    const linkedLawIds = new Set([
+      ...(returnedNode?.legal_source_ids || []),
+      ...(legal.node_links?.[nodeId] || []),
+      ...(legal.questions || []).filter(question => (question.process_node_ids || []).includes(nodeId)).flatMap(question => [...(question.source_ids || []), ...(question.interpretation_ids || [])]),
+    ]);
+    const returnedLaw = [...(legal.sources || []), ...(legal.handling_principles || [])].find(item => item.source_id === preview.lawId && linkedLawIds.has(item.source_id));
+    const exactReturnedSource = Boolean(returnedNode && returnedFact && returnedRef && [preview.changeId, preview.eventId, preview.agentId].every(nonemptyString));
+    const exactLawLocator = Boolean(returnedLaw && preview.locatorId === `law:${returnedLaw.source_id}`);
+    processNodeSourcePreviews.push({
+      ...preview,
+      exactReturnedSource,
+      sourceHasTarget: preview.sourceHasTarget === true,
+      exactLocator: Boolean(returnedRef) || exactLawLocator,
+      exactTitle: Boolean(expectedSource && preview.title === expectedSource.title),
+      exactLocation: Boolean(expectedSource && preview.location === expectedSource.location),
+      sourceWindowTruth: preview.sourceWindowTruth === true,
+      noGeneratedContext: preview.noGeneratedContext === true,
+      exactPassage: Boolean(expectedSource && preview.passage === expectedSource.passage),
+    });
+  }
+  const processPreviewGeometry = await page.evaluate(() => window.__casepathProcessPreviewGeometry || []);
+  const processPreviewGeometryIssues = processPreviewGeometryContractViolations(processPreviewGeometry);
+  check('Every visible construction and completed source preview stays inside the 1440×900 process viewport with an 8px bottom inset', processPreviewGeometryIssues.length === 0, JSON.stringify({ processPreviewGeometryIssues, processPreviewGeometry }));
+  await page.locator('#artifactProcessGraph [data-ac-action="select-node"][data-node-id="causation"]').click();
+  const representativePreview = processNodeSourcePreviews.find(preview => ['fact', 'source'].includes(preview.basisKind) && preview.exactReturnedSource && ['message', 'intake'].includes(preview.sourceId))
+    || processNodeSourcePreviews.find(preview => ['fact', 'source'].includes(preview.basisKind) && preview.exactReturnedSource && preview.sourceHasTarget);
+  let postConstructionSourceUse = { viewerOpen: false, activeSourceIds: [], activeSourceLocator: '', sourceId: '', locatorId: '' };
+  if (representativePreview) {
+    const representativeNode = page.locator(`#artifactProcessGraph [data-ac-action="select-node"][data-node-id="${representativePreview.nodeId}"]`).first();
+    await representativeNode.click();
+    const representativeSelector = `#artifactProcessGraph .ac-spatial-detail [data-node-id="${representativePreview.nodeId}"] .ac-node-source-preview[data-source-locator-id=${JSON.stringify(representativePreview.locatorId)}]`;
+    const representativeAction = page.locator(`${representativeSelector}[data-ac-action="open-source"],${representativeSelector} [data-ac-action="open-source"]`).first();
+    await representativeAction.click();
+    await waitVisible('#sourceViewer[open]');
+    postConstructionSourceUse = await page.evaluate(({ sourceId, locatorId }) => ({
+      viewerOpen: document.querySelector('#sourceViewer')?.open === true,
+      activeSourceIds: window.__casepathActiveSourceIds?.() || [],
+      activeSourceLocator: document.querySelector('.submission-pane')?.dataset.activeSourceLocator || '',
+      sourceId,
+      locatorId,
+    }), { sourceId: representativePreview.sourceId, locatorId: representativePreview.locatorId });
+    await page.locator('#closeSourceViewer').click();
+    await page.locator('#artifactProcessGraph [data-ac-action="select-node"][data-node-id="causation"]').click();
+  }
+
+  await waitVisible('#journeyNext[data-v20-guided-documents="true"]');
+  const readyPrimaryAction = await primaryActionSnapshot();
+  check('Ready exposes Review document plan as its sole primary action', readyPrimaryAction.dialogOpen === false && readyPrimaryAction.actions.length === 1 && readyPrimaryAction.actions[0]?.id === 'journeyNext' && readyPrimaryAction.actions[0]?.text === 'Review document plan' && readyPrimaryAction.actions[0]?.guidedDocuments === 'true' && readyPrimaryAction.actions[0]?.ariaControls === 'v20DocumentSheet', JSON.stringify(readyPrimaryAction));
+  await page.locator('#journeyNext').click();
   await waitVisible('#v20DocumentSheet[open]');
-  const neededItem = page.locator('.v20-document-body .v17-checklist-group[data-kind="needed"] .v17-checklist-item[data-node-id][data-node-ids][data-current-path][data-fact-id][data-item-id]').first();
-  check('Derived document items own structural primary, ordered-owner, current-path, fact, and item identifiers', await neededItem.count() === 1 && Boolean(await neededItem.getAttribute('data-node-id')) && Boolean(await neededItem.getAttribute('data-node-ids')) && ['true', 'false'].includes(await neededItem.getAttribute('data-current-path')) && Boolean(await neededItem.getAttribute('data-fact-id')) && Boolean(await neededItem.getAttribute('data-item-id')));
+  await page.evaluate(() => window.__casepathCaptureDesktopSourcePanel?.('document-plan'));
+  const openDocumentPrimaryAction = await primaryActionSnapshot();
+  check('Open Document plan has exactly one primary action: Continue to review', openDocumentPrimaryAction.dialogOpen === true && openDocumentPrimaryAction.actions.length === 1 && openDocumentPrimaryAction.actions[0]?.continueReview === true && openDocumentPrimaryAction.actions[0]?.text === 'Continue to review' && await page.locator('#v20DocumentSheet .v20-document-footer>small').innerText() === 'Next: simulated review of one process decision · not expert approval', JSON.stringify(openDocumentPrimaryAction));
+  const expectedDocumentItems = processRun.result.checklist.items;
+  const documentKind = item => ['missing', 'provided_insufficient'].includes(item.status)
+    ? 'needed'
+    : item.status === 'conditional' ? 'conditional' : item.status === 'provided_sufficient' ? 'available' : 'not-needed';
+  const expectedDocumentCounts = expectedDocumentItems.reduce((counts, item) => {
+    counts[documentKind(item)] += 1;
+    return counts;
+  }, { all: expectedDocumentItems.length, needed: 0, conditional: 0, available: 0, 'not-needed': 0 });
+  const documentPlanProjection = await page.locator('#v20DocumentSheet').evaluate(sheet => {
+    const body = sheet.querySelector('.v20-document-body');
+    const chains = [...sheet.querySelectorAll('.v20-document-chain[data-item-id]')].map(chain => ({
+      itemId: chain.dataset.itemId || '',
+      nodeId: chain.dataset.nodeId || '',
+      nodeIds: chain.dataset.nodeIds || '',
+      v20NodeId: chain.dataset.v20NodeId || '',
+      currentPath: chain.dataset.currentPath || '',
+      factId: chain.dataset.factId || '',
+      status: chain.dataset.status || '',
+      kind: chain.dataset.documentKind || '',
+      documentStatus: chain.dataset.documentStatus || '',
+      statusIcon: chain.querySelector('.v20-chain-status i')?.textContent?.trim() || '',
+      statusLabel: chain.querySelector('.v20-chain-status strong')?.textContent?.trim() || '',
+      evidenceTitle: chain.dataset.evidenceTitle || '',
+      documentOptions: chain.dataset.documentOptions || '',
+      artifactIds: chain.dataset.artifactIds || '',
+      text: chain.innerText,
+      technicalCount: chain.querySelectorAll('.v17-checklist-technical,.model-contribution-attribution').length,
+      rowParts: [...chain.children].filter(node => node.matches('[data-chain-part],.v20-chain-status')).map(node => node.dataset.chainPart || 'status'),
+      parts: [...chain.querySelectorAll(':scope > [data-chain-part]')].map(part => ({
+        part: part.dataset.chainPart || '',
+        strong: part.querySelector('strong')?.textContent?.trim() || '',
+        detail: part.querySelector('span')?.textContent?.trim() || '',
+      })),
+    }));
+    return {
+      title: sheet.querySelector('#v20DocumentTitle')?.textContent?.trim() || '',
+      model: body?.dataset.documentModel || '',
+      selectedNode: body?.dataset.documentSelectedNode || '',
+      filter: body?.dataset.documentFilter || '',
+      spineNodeIds: [...sheet.querySelectorAll('.v20-document-spine [data-v20-document-node]')].map(button => button.dataset.v20DocumentNode || ''),
+      pressedNodeIds: [...sheet.querySelectorAll('[data-v20-document-node][aria-pressed="true"]')].map(button => button.dataset.v20DocumentNode || ''),
+      pressedFilters: [...sheet.querySelectorAll('[data-v20-document-filter][aria-pressed="true"]')].map(button => button.dataset.v20DocumentFilter || ''),
+      filterCounts: Object.fromEntries([...sheet.querySelectorAll('[data-v20-document-filter]')].map(button => [button.dataset.v20DocumentFilter || '', Number(button.querySelector('span')?.textContent || NaN)])),
+      filterStatuses: Object.fromEntries([...sheet.querySelectorAll('[data-v20-document-filter]')].map(button => [button.dataset.v20DocumentFilter || '', button.dataset.documentStatus || ''])),
+      groups: [...sheet.querySelectorAll('.v20-document-group[data-document-group]')].map(group => ({
+        kind: group.dataset.documentGroup || '',
+        visible: !group.hidden && group.getClientRects().length > 0 && getComputedStyle(group).display !== 'none' && getComputedStyle(group).visibility !== 'hidden',
+        itemIds: [...group.querySelectorAll('.v20-document-chain[data-item-id]')].map(chain => chain.dataset.itemId || ''),
+      })),
+      visibleChainIds: chains.filter(chain => {
+        const node = sheet.querySelector(`.v20-document-chain[data-item-id="${CSS.escape(chain.itemId)}"]`);
+        return node && !node.hidden && node.getClientRects().length > 0 && getComputedStyle(node).display !== 'none' && getComputedStyle(node).visibility !== 'hidden';
+      }).map(chain => chain.itemId),
+      chains,
+    };
+  });
+  const chainIds = documentPlanProjection.chains.map(item => item.itemId);
+  check('Document plan contains each of the exact 21 returned checklist items once', expectedDocumentItems.length === 21 && documentPlanProjection.chains.length === 21 && new Set(chainIds).size === 21 && stableJson([...chainIds].sort()) === stableJson(expectedDocumentItems.map(item => item.item_id).sort()), JSON.stringify({ chainIds, expected: expectedDocumentItems.map(item => item.item_id) }));
+  check('Claim documents opens as the complete 21-item evidence model with no hidden node filter', documentPlanProjection.title === 'Claim documents' && documentPlanProjection.model === 'complete-claim-record' && documentPlanProjection.selectedNode === '' && documentPlanProjection.filter === 'all' && documentPlanProjection.pressedNodeIds.length === 0 && documentPlanProjection.spineNodeIds.length === 0 && stableJson(documentPlanProjection.pressedFilters) === stableJson(['all']) && documentPlanProjection.visibleChainIds.length === 21 && stableJson([...documentPlanProjection.visibleChainIds].sort()) === stableJson(expectedDocumentItems.map(item => item.item_id).sort()), JSON.stringify(documentPlanProjection));
+  const documentStatus = item => item.status === 'provided_sufficient'
+    ? { state: 'received', icon: '✓', label: 'Received' }
+    : ['missing', 'provided_insufficient'].includes(item.status)
+      ? { state: 'missing', icon: '×', label: item.status === 'provided_insufficient' ? 'Incomplete' : 'Missing' }
+      : item.status === 'conditional'
+        ? { state: 'conditional', icon: '○', label: 'Conditional' }
+        : { state: 'not-required', icon: '–', label: 'Not required' };
+  const expectedStatusProjection = expectedDocumentItems.map(item => ({ itemId: item.item_id, ...documentStatus(item) }));
+  const renderedStatusProjection = documentPlanProjection.chains.map(chain => ({ itemId: chain.itemId, state: chain.documentStatus, icon: chain.statusIcon, label: chain.statusLabel }));
+  const expectedGroups = ['needed', 'available', 'conditional', 'not-needed'].map(kind => ({
+    kind,
+    visible: true,
+    itemIds: expectedDocumentItems.filter(item => documentKind(item) === kind).map(item => item.item_id),
+  })).filter(group => group.itemIds.length);
+  check('All 21 requirements visibly partition into exact status groups with needed first and missing or received icons', stableJson(renderedStatusProjection) === stableJson(expectedStatusProjection) && stableJson(documentPlanProjection.groups) === stableJson(expectedGroups) && documentPlanProjection.groups[0]?.kind === 'needed' && documentPlanProjection.groups.every(group => group.visible) && stableJson(documentPlanProjection.filterStatuses) === stableJson({ all: '', available: 'received', needed: 'missing', conditional: 'conditional', 'not-needed': 'not-required' }) && documentPlanProjection.chains.filter(chain => chain.documentStatus === 'missing').every(chain => chain.statusIcon === '×') && documentPlanProjection.chains.filter(chain => chain.documentStatus === 'received').every(chain => chain.statusIcon === '✓'), JSON.stringify({ expectedStatusProjection, renderedStatusProjection, expectedGroups, groups: documentPlanProjection.groups, filterStatuses: documentPlanProjection.filterStatuses }));
+  check('Every document row preserves process question to fact to evidence to document to status in that order', documentPlanProjection.chains.every(chain => stableJson(chain.rowParts) === stableJson(['decision', 'fact', 'evidence', 'document', 'status']) && stableJson(chain.parts.map(part => part.part)) === stableJson(['decision', 'fact', 'evidence', 'document']) && chain.parts.every(part => nonemptyString(part.strong) && nonemptyString(part.detail)) && nonemptyString(chain.documentStatus) && nonemptyString(chain.statusLabel)), JSON.stringify(documentPlanProjection.chains));
+  check('Evidence needs and document forms are not reversed', documentPlanProjection.chains.every(chain => {
+    const evidencePart = chain.parts.find(part => part.part === 'evidence');
+    const documentPart = chain.parts.find(part => part.part === 'document');
+    const firstDocumentOption = chain.documentOptions.split(' · ').filter(Boolean)[0] || '';
+    return evidencePart?.strong === chain.evidenceTitle
+      && nonemptyString(documentPart?.strong)
+      && (nonemptyString(chain.artifactIds) || !firstDocumentOption || documentPart.strong === firstDocumentOption);
+  }), JSON.stringify(documentPlanProjection.chains));
+  const renderedChainsById = new Map(documentPlanProjection.chains.map(item => [item.itemId, item]));
+  const documentLineageExact = expectedDocumentItems.every(item => {
+    const rendered = renderedChainsById.get(item.item_id);
+    const owners = Array.isArray(item.node_ids) && item.node_ids.length ? item.node_ids : item.node_id ? [item.node_id] : [];
+    return rendered?.nodeId === (item.node_id || '')
+      && rendered?.nodeIds === owners.join(',')
+      && rendered?.v20NodeId === (item.node_id || '')
+      && rendered?.currentPath === String(item.current_path === true)
+      && rendered?.factId === (item.fact_id || '')
+      && rendered?.status === (item.status || '')
+      && rendered?.kind === documentKind(item);
+  });
+  check('Each document chain preserves exact returned primary owner, ordered owners, path, fact, status, and item identity', documentLineageExact, JSON.stringify({ expectedDocumentItems, rendered: documentPlanProjection.chains }));
+  check('The visible plan removes internal identifiers and contribution plumbing without removing audit data', documentPlanProjection.chains.every(chain => chain.technicalCount === 0 && !chain.text.includes(chain.itemId) && (!chain.factId || !chain.text.includes(chain.factId)) && !/ordered decisions|current path/i.test(chain.text)), JSON.stringify(documentPlanProjection.chains.map(item => ({ itemId: item.itemId, factId: item.factId, text: item.text }))));
+  check('Document status filters report exact returned counts', stableJson(documentPlanProjection.filterCounts) === stableJson(expectedDocumentCounts), JSON.stringify({ expectedDocumentCounts, actual: documentPlanProjection.filterCounts }));
   const multiOwnerItem = processRun.result.checklist.items.find(item => Array.isArray(item.node_ids) && item.node_ids.length > 1);
   check('Flagship checklist contains an inspectable reciprocal multi-owner evidence item', Boolean(multiOwnerItem), JSON.stringify(processRun.result.checklist.items.map(item => ({ item_id: item.item_id, node_ids: item.node_ids }))));
-  const renderedMultiOwner = page.locator(`.v20-document-body .v17-checklist-item[data-item-id="${multiOwnerItem.item_id}"]`).first();
-  const collapsedOwnerGroup = renderedMultiOwner.locator('xpath=ancestor::details[not(@open)][1]');
-  if (await collapsedOwnerGroup.count()) await collapsedOwnerGroup.locator(':scope > summary').click();
-  await renderedMultiOwner.scrollIntoViewIfNeeded();
-  check('Multi-owner document item is visibly inspectable after expanding its group', await renderedMultiOwner.isVisible());
-  const multiOwnerProjection = await renderedMultiOwner.evaluate(node => ({ node_id: node.dataset.nodeId, node_ids: node.dataset.nodeIds, current_path: node.dataset.currentPath, text: node.innerText }));
-  check('Document sheet preserves exact owner order, primary owner, current-path state, and secondary relationships', multiOwnerProjection.node_id === multiOwnerItem.node_id && multiOwnerProjection.node_ids === multiOwnerItem.node_ids.join(',') && multiOwnerProjection.current_path === String(multiOwnerItem.current_path === true) && /Also required by/i.test(multiOwnerProjection.text), JSON.stringify({ multiOwnerItem, multiOwnerProjection }));
   if (isProductionJourney()) {
     const expectedChecklistContributions = processRun.result.checklist.items.map(item => ({
       item_id: item.item_id,
       contribution: contributionDomProjection(item.agent_contribution, EVIDENCE_CONTRIBUTION_ROLE),
     })).filter(item => item.contribution);
-    const renderedChecklistContributions = await page.locator('.v20-document-body .v17-checklist-item[data-item-id]').evaluateAll(items => items.flatMap(item => {
+    const renderedChecklistContributions = await page.locator('#stageCanvas .v17-derived-checklist .v17-checklist-item[data-item-id]').evaluateAll(items => items.flatMap(item => {
       const badge = item.querySelector('.model-contribution-attribution');
       return badge ? [{ item_id: item.dataset.itemId, contribution: { authority: badge.dataset.contributionAuthority, accepted_count: badge.dataset.acceptedCount, fallback_count: badge.dataset.fallbackCount, accepted_ids: badge.dataset.acceptedContributionIds, fallback_ids: badge.dataset.fallbackContributionIds } }] : [];
     }));
-    check('Every document need visibly preserves its exact Nemotron acceptance or deterministic fallback attribution', expectedChecklistContributions.length === processRun.result.checklist.items.length && stableJson(renderedChecklistContributions.sort((a, b) => a.item_id.localeCompare(b.item_id))) === stableJson(expectedChecklistContributions.sort((a, b) => a.item_id.localeCompare(b.item_id))) && renderedChecklistContributions.some(item => Number(item.contribution.accepted_count) > 0), JSON.stringify({ expectedChecklistContributions, renderedChecklistContributions }));
+    check('The underlying derived checklist preserves exact Nemotron acceptance or deterministic fallback attribution while the visible plan stays plain-language', expectedChecklistContributions.length === processRun.result.checklist.items.length && stableJson(renderedChecklistContributions.sort((a, b) => a.item_id.localeCompare(b.item_id))) === stableJson(expectedChecklistContributions.sort((a, b) => a.item_id.localeCompare(b.item_id))) && renderedChecklistContributions.some(item => Number(item.contribution.accepted_count) > 0), JSON.stringify({ expectedChecklistContributions, renderedChecklistContributions }));
   }
+  for (const filter of ['all', 'needed', 'conditional', 'available', 'not-needed']) {
+    await page.locator(`[data-v20-document-filter="${filter}"]`).click();
+    const visibleItemIds = await page.locator('#v20DocumentSheet .v20-document-chain[data-item-id]').evaluateAll(items => items.filter(item => !item.hidden).map(item => item.dataset.itemId || ''));
+    const expectedVisibleIds = expectedDocumentItems.filter(item => filter === 'all' || documentKind(item) === filter).map(item => item.item_id);
+    check(`Document ${filter} filter shows exactly its returned items and count`, stableJson([...visibleItemIds].sort()) === stableJson([...expectedVisibleIds].sort()) && visibleItemIds.length === expectedDocumentCounts[filter], JSON.stringify({ filter, visibleItemIds, expectedVisibleIds, expectedDocumentCounts }));
+  }
+  await page.locator('[data-v20-document-filter="all"]').click();
+  const allVisibleIds = await page.locator('#v20DocumentSheet .v20-document-chain[data-item-id]').evaluateAll(items => items.filter(item => !item.hidden).map(item => item.dataset.itemId || ''));
+  check('Returning to All restores every one of the 21 claim requirements', allVisibleIds.length === 21 && stableJson([...allVisibleIds].sort()) === stableJson(expectedDocumentItems.map(item => item.item_id).sort()), JSON.stringify(allVisibleIds));
+  const routeItem = expectedDocumentItems.find(item => item.node_id === 'causation')
+    || expectedDocumentItems.find(item => FLAGSHIP_PROCESS_PROJECTION_IDS.includes(item.node_id));
+  const routeChain = page.locator(`#v20DocumentSheet .v20-document-chain[data-item-id="${routeItem?.item_id || ''}"]:not([hidden])`);
+  const routeChainCount = await routeChain.count();
+  const owningNodeId = routeChainCount === 1 ? await routeChain.getAttribute('data-v20-node-id') : '';
+  const returnedProcessNodeIds = processRun.result.process.nodes.map(node => node.node_id);
+  check('The selected document chain declares an exact returned core-graph target', Boolean(routeItem) && routeChainCount === 1 && nonemptyString(owningNodeId) && returnedProcessNodeIds.includes(owningNodeId) && FLAGSHIP_PROCESS_PROJECTION_IDS.includes(owningNodeId), JSON.stringify({ routeItem, routeChainCount, owningNodeId, returnedProcessNodeIds }));
   check('Document sheet is a labelled modal dialog with focus inside', await page.evaluate(() => { const sheet = document.querySelector('#v20DocumentSheet'); return sheet?.tagName === 'DIALOG' && sheet.getAttribute('aria-labelledby') === 'v20DocumentTitle' && sheet.contains(document.activeElement); }));
   await page.keyboard.press('Escape');
   await waitHidden('#v20DocumentSheet');
-  check('Closing document sheet restores trigger focus', await page.evaluate(() => document.activeElement?.hasAttribute('data-v20-open-documents')));
-  await page.locator('[data-v20-open-documents]').click();
-  const owningNodeId = await neededItem.getAttribute('data-node-id');
-  await neededItem.click();
+  check('Closing the guided Document plan restores focus to its Ready action', await page.evaluate(() => document.activeElement?.id === 'journeyNext'));
+  await page.locator('#journeyNext').click();
+  await routeChain.click();
   await waitHidden('#v20DocumentSheet');
-  check('Document need routes by its own node identifier', await page.locator(`.decision-inspector[data-inspector-node="${owningNodeId}"]`).count() === 1);
+  await page.waitForFunction(nodeId => document.querySelector(`#artifactProcessGraph [data-ac-action="select-node"][data-node-id="${CSS.escape(nodeId)}"]`)?.getAttribute('aria-current') === 'step', owningNodeId, { timeout: 30000 });
+  const returnedGraphSelection = await page.locator('#artifactProcessGraph').evaluate(graph => ({
+    current: [...graph.querySelectorAll('[data-ac-action="select-node"][aria-current="step"]')].map(node => node.dataset.nodeId || ''),
+    selected: [...graph.querySelectorAll('[data-ac-node-id][data-selected="true"]')].map(node => node.dataset.acNodeId || ''),
+  }));
+  const documentRoundtrip = stableJson(returnedGraphSelection.current) === stableJson([owningNodeId]) && stableJson(returnedGraphSelection.selected) === stableJson([owningNodeId]);
+  check('Document chain returns to its exact graph node and no competing decision', documentRoundtrip, JSON.stringify({ owningNodeId, returnedGraphSelection }));
+  const desktopSourceMoments = await page.evaluate(() => window.__casepathDesktopSourcePanelMoments || []);
+  const zoomOutDesktopIssues = zoomOutDesktopContractViolations({
+    sourceMoments: desktopSourceMoments,
+    factSteps: factSourceCinematicSteps,
+    artifactCursorSteps,
+    previews: processNodeSourcePreviews,
+    postConstructionSourceUse,
+    team: artifactTeamSnapshot,
+    documentPlan: documentPlanProjection,
+    documentRoundtrip,
+  });
+  check('Zoom-out desktop journey keeps sources visible and causal, process previews contextual, team labels simple, and document chains graph-derived', zoomOutDesktopIssues.length === 0, JSON.stringify({ zoomOutDesktopIssues, desktopSourceMoments, processNodeSourcePreviews, postConstructionSourceUse }));
   const secondaryOwnerId = multiOwnerItem.node_ids.find(nodeId => nodeId !== multiOwnerItem.node_id);
-  await page.locator(`.process-node-button[data-node-id="${secondaryOwnerId}"],.process-branch-node[data-node-id="${secondaryOwnerId}"]`).first().click();
-  const secondaryOwnerEvidence = page.locator(`.decision-inspector[data-inspector-node="${secondaryOwnerId}"] .inspector-row[data-item-id="${multiOwnerItem.item_id}"][data-node-ids="${multiOwnerItem.node_ids.join(',')}"]`);
-  check('A secondary process owner renders the same reciprocal evidence item and names the additional relationship', await secondaryOwnerEvidence.count() === 1 && /Primary decision:|Also required by/i.test(await secondaryOwnerEvidence.innerText()), JSON.stringify({ item_id: multiOwnerItem.item_id, secondaryOwnerId }));
-  }
+  const reciprocalSourceItem = page.locator(`#stageCanvas .v17-derived-checklist .v17-checklist-item[data-item-id="${multiOwnerItem.item_id}"][data-node-ids="${multiOwnerItem.node_ids.join(',')}"]`);
+  const secondaryOwnerButton = page.locator(`#artifactProcessGraph [data-ac-action="select-node"][data-node-id="${secondaryOwnerId}"]`);
+  check('A reciprocal evidence item retains every returned owner and every owner remains an exact selectable graph decision', await reciprocalSourceItem.count() === 1 && await secondaryOwnerButton.count() === 1, JSON.stringify({ item_id: multiOwnerItem.item_id, owners: multiOwnerItem.node_ids, secondaryOwnerId }));
+  await secondaryOwnerButton.click();
+  check('The secondary evidence owner is still navigable in the persistent graph', await secondaryOwnerButton.getAttribute('aria-current') === 'step', secondaryOwnerId);
   const flagshipBeforeReview = processRun;
   const preReviewGraphProjection = await page.locator('#artifactProcessGraph').evaluate(node => ({
     node_ids: [...node.querySelectorAll('[data-node-id][data-process-build-state]')].map(item => item.dataset.nodeId).filter(Boolean),
     change_ids: [...node.querySelectorAll('[data-artifact-change-id]')].map(item => item.dataset.artifactChangeId).filter(Boolean),
   }));
   await page.locator('#journeyNext').click();
+  await waitVisible('#v20DocumentSheet[open]');
+  const reviewTransitionPrimaryAction = await primaryActionSnapshot();
+  check('Document plan still exposes one Continue to review action before handoff', reviewTransitionPrimaryAction.dialogOpen === true && reviewTransitionPrimaryAction.actions.length === 1 && reviewTransitionPrimaryAction.actions[0]?.continueReview === true && reviewTransitionPrimaryAction.actions[0]?.text === 'Continue to review', JSON.stringify(reviewTransitionPrimaryAction));
+  await page.locator('[data-v20-continue-review]').click();
   await waitVisible('body[data-casepath-moment="review"]');
+  check('Continue to review closes the plan and reaches simulated review', await page.locator('#v20DocumentSheet').isHidden() && await page.locator('body[data-casepath-moment="review"]').count() === 1);
   check('Review keeps one consequential choice and one calm cursor', await page.locator('#artifactCanvas[data-casepath-scene="review"] [data-artifact-focus="true"] #artifactAgentCursor').count() === 0 && await page.locator('#artifactCanvas[data-casepath-scene="review"] #artifactAgentCursor').count() === 1);
   const reviewCanvas = await artifactCanvasSnapshot();
   const reviewCanvasIssues = focusedArtifactCanvasViolations(reviewCanvas);
@@ -4279,6 +5254,9 @@ async function execute() {
   });
   const addedReviewNodeIds = postReviewGraphProjection.node_ids.filter(nodeId => !preReviewGraphProjection.node_ids.includes(nodeId));
   check('Accepted review visibly mutates the same persistent graph in place and adds only the disputed-ventilation decision', appliedCanvasIssues.length === 0 && appliedCanvas.action_count === 1 && appliedGraphSceneIssues.length === 0 && stableJson(preReviewGraphProjection.node_ids) === stableJson(FLAGSHIP_PROCESS_PROJECTION_IDS) && stableJson(postReviewGraphProjection.node_ids) === stableJson(expectedReviewedProjection) && stableJson(addedReviewNodeIds) === stableJson(['ventilation_dispute']), JSON.stringify({ appliedCanvas, appliedCanvasIssues, appliedGraphScene, appliedGraphSceneIssues, preReviewGraphProjection, postReviewGraphProjection, addedReviewNodeIds }));
+  const appliedCursorPayoff = await settledCursorPayoffSnapshot('review-applied');
+  const appliedCursorPayoffIssues = settledCursorPayoffContractViolations(appliedCursorPayoff);
+  check('Review-applied parks one visible cursor clear of the correction payoff and new ventilation node', appliedCursorPayoffIssues.length === 0, JSON.stringify({ appliedCursorPayoff, appliedCursorPayoffIssues }));
   if (false) {
   await page.locator('.v21-progressive-details > summary').click();
   await waitVisible('.v21-progressive-details[open] .review-applied-layout');
@@ -4344,6 +5322,9 @@ async function execute() {
   ];
   const candidateCopy = await page.locator('#artifactCanvas [data-artifact-focus="true"]').innerText();
   check('Knowledge consolidation keeps the graph as the sole focal artifact with one concise, unverified case-memory note', focusedArtifactCanvasViolations(knowledgeCanvas).length === 0 && knowledgeCanvas.action_count === 1 && knowledgeGraphIssues.length === 0 && /unverified case memory/i.test(candidateCopy), JSON.stringify({ knowledgeCanvas, knowledgeGraphScene, knowledgeGraphIssues, candidateCopy }));
+  const knowledgeCursorPayoff = await settledCursorPayoffSnapshot('knowledge');
+  const knowledgeCursorPayoffIssues = settledCursorPayoffContractViolations(knowledgeCursorPayoff);
+  check('Knowledge parks one visible cursor clear of the saved-memory payoff and ventilation node', knowledgeCursorPayoffIssues.length === 0, JSON.stringify({ knowledgeCursorPayoff, knowledgeCursorPayoffIssues }));
   check('Candidate remains honestly quarantined with one unverified support record and zero qualified support', reviewed.candidate?.status === 'quarantined' && reviewed.candidate?.support_count === 1 && reviewed.candidate?.required_support === 3 && reviewed.candidate?.qualified_support_count === 0 && reviewed.candidate?.required_qualified_support === 3, JSON.stringify(reviewed.candidate));
   check('Shared playbook is explicitly unchanged', reviewed.candidate?.shared_knowledge_changed === false && /shared playbook unchanged/i.test(candidateCopy), candidateCopy);
   check('Passed deterministic gates remain distinct from missing qualified support and approval', reviewed.candidate?.target_tests?.status === 'passed' && reviewed.candidate?.protected_regression?.status === 'passed' && reviewed.candidate?.approval?.status === 'pending' && reviewed.candidate?.approval?.qualified_reviewer === false, JSON.stringify(reviewed.candidate));
@@ -4356,8 +5337,10 @@ async function execute() {
     await awaitLaterJourneyTerminalUi();
   });
   const laterCausalSteps = await page.evaluate(() => window.__casepathLaterCausalSteps || []);
+  const laterSourceOpenings = await page.evaluate(() => window.__casepathLaterSourceOpenings || []);
   const laterWorkGraphSnapshots = await page.evaluate(() => window.__casepathGraphMomentSnapshots || []);
   const laterMemoryGraphScene = [...laterWorkGraphSnapshots].reverse().find(snapshot => snapshot.moment === 'later-work' && snapshot.phase === 'memory' && snapshot.scene === 'later-work');
+  const laterEligibilityGraphScene = [...laterWorkGraphSnapshots].reverse().find(snapshot => snapshot.moment === 'later-work' && snapshot.phase === 'eligibility' && snapshot.scene === 'later-work');
   const laterMemoryGraphIssues = [
     ...graphNativeMomentSceneViolations(laterMemoryGraphScene, 'later-work'),
     ...graphNativeMomentCopyContractViolations(laterMemoryGraphScene, {
@@ -4368,16 +5351,38 @@ async function execute() {
       forbiddenCopy: ['applied guidance', 'shared playbook updated'],
     }),
   ];
+  const laterEligibilityGraphIssues = [
+    ...graphNativeMomentSceneViolations(laterEligibilityGraphScene, 'later-work'),
+    ...graphNativeMomentCopyContractViolations(laterEligibilityGraphScene, {
+      attachmentKey: 'later_memory_retrievals',
+      requiredNonemptyAttributes: ['memory_origin_id', 'eligibility_contract', 'eligibility_rule_id', 'semantic_role'],
+      attributes: { later_causal_phase: 'eligibility' },
+      requiredCopy: ['Eligibility check passed', 'Same unresolved ventilation allegation', 'final proof'],
+      forbiddenCopy: ['shared playbook updated', 'qualified approval'],
+    }),
+  ];
   const laterCausalStepIssues = [];
-  if (laterCausalSteps.length !== 3) laterCausalStepIssues.push(`step count ${laterCausalSteps.length}`);
+  if (laterCausalSteps.length !== 4) laterCausalStepIssues.push(`step count ${laterCausalSteps.length}`);
   if (!laterCausalSteps.every(step => step.contract === 'casepath.later-causal-step/1.0.0')) laterCausalStepIssues.push('step contract');
-  if (stableJson(laterCausalSteps.map(step => step.phase)) !== stableJson(['waiting', 'source', 'memory'])) laterCausalStepIssues.push(`step phases ${stableJson(laterCausalSteps.map(step => step.phase))}`);
+  if (stableJson(laterCausalSteps.map(step => step.phase)) !== stableJson(['waiting', 'source', 'memory', 'eligibility'])) laterCausalStepIssues.push(`step phases ${stableJson(laterCausalSteps.map(step => step.phase))}`);
   const laterSourceStep = laterCausalSteps.find(step => step.phase === 'source');
   if (!laterSourceStep?.factId || !laterSourceStep?.sourceId || !laterSourceStep?.locatorId) laterCausalStepIssues.push('source identity');
-  if (stableJson(laterSourceStep?.activeSourceIds || []) !== stableJson([laterSourceStep?.sourceId])) laterCausalStepIssues.push(`source rail ${stableJson(laterSourceStep?.activeSourceIds || [])}`);
+  if ((laterSourceStep?.activeSourceIds || []).length) laterCausalStepIssues.push(`source preselected ${stableJson(laterSourceStep?.activeSourceIds || [])}`);
+  if (laterSourceOpenings.length !== 1) laterCausalStepIssues.push(`source opening count ${laterSourceOpenings.length}`);
+  const laterSourceOpening = laterSourceOpenings[0];
+  if (laterSourceOpening && (laterSourceOpening.contract !== 'casepath.later-causal-step/1.0.0'
+    || laterSourceOpening.runId !== laterSourceStep?.runId
+    || laterSourceOpening.factId !== laterSourceStep?.factId
+    || laterSourceOpening.sourceId !== laterSourceStep?.sourceId
+    || laterSourceOpening.locatorId !== laterSourceStep?.locatorId
+    || stableJson(laterSourceOpening.activeSourceIds || []) !== stableJson([laterSourceStep?.sourceId])
+    || laterSourceOpening.activeLocatorId !== laterSourceStep?.locatorId
+    || laterSourceOpening.sourceOpened !== 'true')) laterCausalStepIssues.push('source click did not reveal the exact later-claim passage');
   const laterMemoryStep = laterCausalSteps.find(step => step.phase === 'memory');
   if ((laterMemoryStep?.activeSourceIds || []).length) laterCausalStepIssues.push(`memory source rail ${stableJson(laterMemoryStep.activeSourceIds)}`);
-  check('Later-work keeps the graph as the sole focal artifact while a three-step causal sequence retrieves only unverified case memory before testing applicability', laterMemoryGraphIssues.length === 0 && laterCausalStepIssues.length === 0, JSON.stringify({ laterCausalSteps, laterMemoryGraphScene, laterMemoryGraphIssues, laterCausalStepIssues }));
+  const laterEligibilityStep = laterCausalSteps.find(step => step.phase === 'eligibility');
+  if (!laterEligibilityStep?.memoryOriginId || !laterEligibilityStep?.eligibilityContract || !laterEligibilityStep?.ruleId || laterEligibilityStep?.semanticRole !== 'management_ventilation_allegation') laterCausalStepIssues.push('eligibility identity');
+  check('Later-work keeps the untouched graph central while source click, memory retrieval, and exact eligibility visibly precede the proven graph change', laterMemoryGraphIssues.length === 0 && laterEligibilityGraphIssues.length === 0 && laterCausalStepIssues.length === 0, JSON.stringify({ laterCausalSteps, laterSourceOpenings, laterMemoryGraphScene, laterEligibilityGraphScene, laterMemoryGraphIssues, laterEligibilityGraphIssues, laterCausalStepIssues }));
   const laterCanvas = await artifactCanvasSnapshot();
   const laterCanvasIssues = focusedArtifactCanvasViolations(laterCanvas);
   const laterGraphScene = await persistentGraphSceneSnapshot();
@@ -4389,6 +5394,9 @@ async function execute() {
     selectedNodeId: 'ventilation_dispute',
   });
   check('The future claim reuses the same source-plus-process canvas with the persistent graph as its sole visible focal artifact', laterCanvasIssues.length === 0 && laterCanvas.action_count === 1 && laterGraphSceneIssues.length === 0, JSON.stringify({ laterCanvas, laterCanvasIssues, laterGraphScene, laterGraphSceneIssues }));
+  const laterCursorPayoff = await settledCursorPayoffSnapshot('later-result');
+  const laterCursorPayoffIssues = settledCursorPayoffContractViolations(laterCursorPayoff);
+  check('Later result parks one visible cursor clear of the memory-effect payoff and added ventilation node', laterCursorPayoffIssues.length === 0, JSON.stringify({ laterCursorPayoff, laterCursorPayoffIssues }));
   const proof = await waitForValue(() => proofResponse, runTimeoutMs());
   check('Held-out result retains one authority-labelled knowledge focus and one calm cursor', await page.locator('#artifactCanvas[data-casepath-scene="later-result"][data-work-authority] [data-artifact-focus="true"]').count() === 1 && await page.locator('#artifactCanvas[data-casepath-scene="later-result"] #artifactAgentCursor').count() === 1);
   retainedEvidence['learning-proof'] = proof;
@@ -4445,7 +5453,39 @@ async function execute() {
     && proof.reviewed_memory_proof?.used === true
     && memoryIssues.length === 0;
   const visibleLaterCopy = laterGraphScene.text;
-  check('Later graph visibly keeps the reused guidance unverified and the shared playbook unchanged only when every use flag, receipt, and proof agrees', memoryUsed && /unverified case memory/i.test(visibleLaterCopy) && /qualified review still required/i.test(visibleLaterCopy) && /shared playbook unchanged/i.test(visibleLaterCopy), visibleLaterCopy);
+  check('Later graph visibly keeps the reused guidance unverified and the shared playbook unchanged only when every use flag, receipt, and proof agrees', memoryUsed && /unverified case memory/i.test(visibleLaterCopy) && /qualified review required/i.test(visibleLaterCopy) && /shared playbook unchanged/i.test(visibleLaterCopy), visibleLaterCopy);
+  const laterOperationalBenefit = await page.locator('#artifactCanvas .ac-memory-graph-delta[data-memory-payoff="single-action"]').evaluate(panel => {
+    const visible = node => Boolean(node && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden' && getComputedStyle(node).display !== 'none');
+    const eyebrow = panel.querySelector(':scope>small');
+    const action = panel.querySelector('.ac-memory-action');
+    const caveat = panel.querySelector(':scope>p');
+    const details = panel.querySelector(':scope>details');
+    const effects = [...panel.querySelectorAll('.ac-memory-process-link, .ac-memory-evidence-change')];
+    return {
+      payoff: panel.dataset.memoryPayoff || '',
+      status: panel.dataset.memoryStatus || '',
+      responsibility: panel.dataset.responsibilityState || '',
+      sharedPlaybookChanged: panel.dataset.sharedPlaybookChanged || '',
+      eyebrow: eyebrow?.textContent?.trim() || '',
+      action: action?.textContent?.trim() || '',
+      guardrail: caveat?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      detailsClosed: Boolean(details && !details.open),
+      detailsSummary: details?.querySelector(':scope>summary')?.textContent?.trim() || '',
+      technicalEffectCount: effects.length,
+      visibleTechnicalEffectCount: effects.filter(visible).length,
+    };
+  });
+  check('Later payoff shows one exact guarded action and keeps five technical effects behind closed Inspect proof', laterOperationalBenefit.payoff === 'single-action' && laterOperationalBenefit.status === 'unverified-case-memory' && laterOperationalBenefit.responsibility === 'blocked' && laterOperationalBenefit.sharedPlaybookChanged === 'false' && laterOperationalBenefit.eyebrow === 'Saved lesson used on this claim' && laterOperationalBenefit.action === 'Check ventilation before assigning responsibility.' && laterOperationalBenefit.guardrail === 'Cause still unproven · responsibility stays blocked · qualified review required.' && laterOperationalBenefit.detailsClosed && laterOperationalBenefit.detailsSummary === 'Inspect proof' && laterOperationalBenefit.technicalEffectCount === 5 && laterOperationalBenefit.visibleTechnicalEffectCount === 0, JSON.stringify(laterOperationalBenefit));
+  const laterProofDetails = page.locator('#artifactCanvas .ac-memory-graph-delta[data-memory-payoff="single-action"] > details');
+  await laterProofDetails.locator(':scope > summary').click();
+  await waitVisible('#artifactCanvas .ac-memory-graph-delta[data-memory-payoff="single-action"] > details[open] .ac-memory-process-link');
+  const revealedLaterEffects = await laterProofDetails.evaluate(details => ({
+    processLinks: details.querySelectorAll('.ac-memory-process-link').length,
+    documentNeeds: details.querySelectorAll('.ac-memory-evidence-change').length,
+  }));
+  check('Inspect proof reveals exactly two process links and three document-need effects', revealedLaterEffects.processLinks === 2 && revealedLaterEffects.documentNeeds === 3, JSON.stringify(revealedLaterEffects));
+  await laterProofDetails.locator(':scope > summary').click();
+  check('Later proof returns to its closed default after inspection', await laterProofDetails.evaluate(details => details.open === false));
   check('Later ranking selects the unverified demo memory and remains exactly three ordered patterns', later.result.precedents.length === 3 && later.result.precedents[0]?.claim_id === 'DEF-027-E0-DEMO' && later.result.precedents[0]?.review_status === 'unverified_demo_memory' && later.result.precedent_ranking.selected_claim_ids[0] === 'DEF-027-E0-DEMO', JSON.stringify(later.result.precedents.map(item => ({ claim_id: item.claim_id, status: item.review_status, rank: item.ranking?.rank }))));
   const transformedContributionValues = [
     ...(later.result.process.nodes || []).flatMap(node => (node.agent_decision_contributions || []).map(contribution => contributionExpectation(contribution, PROCESS_CONTRIBUTION_ROLE, later.result.memory_application))),
@@ -4454,9 +5494,6 @@ async function execute() {
   check('Post-memory DTOs and UI contain no pre-memory Nemotron acceptance attribution', transformedContributionValues.every(value => value === null) && await page.locator('#laterResult .model-contribution-attribution').count() === 0 && !Object.hasOwn(later.result.process, 'agent_contribution') && !later.result.process.nodes.some(node => Object.hasOwn(node, 'agent_decision_contributions')) && !Object.hasOwn(later.result.checklist, 'agent_contribution') && !later.result.checklist.items.some(item => Object.hasOwn(item, 'agent_contribution')) && later.result.next_action?.agent_brief_contribution === null, JSON.stringify(transformedContributionValues));
   if (false) {
   const returnedUnverifiedMemory = later.result?.precedents?.find(item => item.review_status === 'unverified_demo_memory' && item.memory_id);
-  await page.locator('.v21-proof-details > summary').click();
-  await waitVisible('.v21-proof-details[open] .memory-application-receipt');
-  check('Exact causal operations remain available behind Inspect proof', await page.locator('.v21-proof-details[open] .v21-causal-proof').isVisible());
   if (memoryUsed && returnedUnverifiedMemory) {
     const reuseThreadSelector = '#laterResult .v18-reuse-proof .v17-reuse-thread';
     await waitVisible(reuseThreadSelector);
@@ -4506,9 +5543,8 @@ async function execute() {
   const finalComparison = page.locator('#laterResult .final-proof');
   const finalComparisonText = await finalComparison.innerText();
   check('Before/after visibly exposes both returned result hashes and retains unchanged shared v3', await finalComparison.isVisible() && finalComparisonText.includes(proof.before.result_hash) && finalComparisonText.includes(proof.after.result_hash) && /Shared playbook v3 unchanged/i.test(laterResultText) && /mould-playbook-v3/i.test(laterResultText), JSON.stringify({ comparison: finalComparisonText, shared_playbook_visible: /Shared playbook v3 unchanged/i.test(laterResultText) }));
-  await page.locator('.v21-proof-details > summary').click();
   const compactLater = await minimalSurfaceSnapshot();
-  check('Future-claim view recedes to one causal outcome with proof behind disclosure', compactLater.focus_count === 1 && compactLater.artifact_count === 1 && compactLater.action_count === 1 && await page.locator('.v21-proof-details').isVisible() && await page.locator('.memory-application-receipt').isHidden(), JSON.stringify(compactLater));
+  check('Future-claim view recedes to one causal outcome with proof behind disclosure', compactLater.focus_count === 1 && compactLater.artifact_count === 1 && compactLater.action_count === 1 && await laterProofDetails.isVisible() && await page.locator('.memory-application-receipt').isHidden(), JSON.stringify(compactLater));
   }
   await auditViewports('07-later-result', '#artifactCanvas [data-memory-effect="node-added"]');
 
@@ -5132,28 +6168,37 @@ async function runContractSelfTest() {
   const inspectionRunFixture = { process: { nodes: [...FLAGSHIP_PROCESS_PROJECTION_IDS.map(nodeId => ({ node_id: nodeId, fact_ids: [], legal_source_ids: [], evidence_requirement_ids: [] })), ...branchFixtureNodes] }, facts: [] };
   const sourceInspectionFixture = FLAGSHIP_PROCESS_PROJECTION_IDS.map((nodeId, index) => ({ entityKind: 'node', nodeId, branchId: '', changeId: `change:${nodeId}`, eventId: `event:${nodeId}`, agentId: 'process_decision_mapping', sourceKind: 'accepted-process-input', sourceId: nodeId, factId: '', locatorId: '', found: `Accepted ${nodeId}`, at: (index * 2400) - 1200 }));
   const branchInspectionFixture = REQUIRED_CAUSATION_BRANCH_IDS.map((nodeId, index) => ({ entityKind: 'branch', nodeId, branchId: `branch:${nodeId}`, changeId: `branch-change:${nodeId}`, eventId: `branch-event:${nodeId}`, agentId: 'process_decision_mapping', sourceKind: 'accepted-process-input', sourceId: nodeId, factId: '', locatorId: '', found: `Accepted ${nodeId}`, at: 30000 + (index * 2400) }));
+  const sourceHighlightFixture = [...sourceInspectionFixture, ...branchInspectionFixture].map(item => ({
+    entityKind: item.entityKind, nodeId: item.nodeId, branchId: item.branchId, factId: item.factId,
+    changeId: item.changeId, eventId: item.eventId, agentId: item.agentId, sourceId: item.sourceId,
+    locatorId: item.locatorId, graphInspectionPhase: 'highlight-source', sourceHighlighted: true, at: item.at - 1,
+  }));
   const branchVisualFixture = branchInspectionFixture.map(item => ({ nodeId: item.nodeId, branchId: item.branchId, changeId: item.changeId, eventId: item.eventId, agentId: item.agentId, at: item.at + 1200 }));
-  const inspectionCursorFixture = [...sourceInspectionFixture, ...branchInspectionFixture].map(item => ({ changeId: item.changeId, eventId: item.eventId, agentId: item.agentId, targetId: item.sourceId, phase: 'click' }));
-  if (!sourceInspectionContractViolations([...sourceInspectionFixture, ...branchInspectionFixture], processProjectionFixture, branchVisualFixture, inspectionCursorFixture, inspectionRunFixture, true).some(issue => issue.includes('no exact claim-source inspection'))) throw new Error('Source-free process inspection fixture was accepted');
+  const inspectionCursorFixture = [...sourceInspectionFixture, ...branchInspectionFixture].map(item => ({ changeId: item.changeId, eventId: item.eventId, agentId: item.agentId, targetId: item.sourceId, phase: 'click', graphInspectionPhase: 'read-source' }));
+  if (!sourceInspectionContractViolations([...sourceInspectionFixture, ...branchInspectionFixture], sourceHighlightFixture, processProjectionFixture, branchVisualFixture, inspectionCursorFixture, inspectionRunFixture, true).some(issue => issue.includes('no exact claim-source inspection'))) throw new Error('Source-free process inspection fixture was accepted');
   const claimSourceRunFixture = structuredClone(inspectionRunFixture);
   claimSourceRunFixture.facts = [{ fact_id: 'fact_intake_source', source_refs: [{ artifact_id: 'art_lease', locator_kind: 'text_quote', page: 1, excerpt: 'Residential Lease Agreement' }] }];
   claimSourceRunFixture.checklist = { items: [{ item_id: 'lease', node_ids: ['intake'], fact_id: 'fact_intake_source' }] };
   const claimSourceInspectionFixture = structuredClone(sourceInspectionFixture);
   Object.assign(claimSourceInspectionFixture[0], { sourceKind: 'claim-source', sourceId: 'art_lease', factId: 'fact_intake_source', locatorId: 'source:art_lease:page:1:quote:Residential Lease Agreement', found: 'Residential Lease Agreement' });
+  const claimSourceHighlightFixture = structuredClone(sourceHighlightFixture);
+  Object.assign(claimSourceHighlightFixture[0], { sourceId: 'art_lease', factId: 'fact_intake_source', locatorId: 'source:art_lease:page:1:quote:Residential Lease Agreement' });
   const claimSourceCursorFixture = structuredClone(inspectionCursorFixture);
   claimSourceCursorFixture[0].targetId = 'art_lease';
-  if (sourceInspectionContractViolations([...claimSourceInspectionFixture, ...branchInspectionFixture], processProjectionFixture, branchVisualFixture, claimSourceCursorFixture, claimSourceRunFixture, true).length) throw new Error('Valid claim-source inspection fixture was rejected');
+  if (sourceInspectionContractViolations([...claimSourceInspectionFixture, ...branchInspectionFixture], claimSourceHighlightFixture, processProjectionFixture, branchVisualFixture, claimSourceCursorFixture, claimSourceRunFixture, true).length) throw new Error('Valid claim-source inspection fixture was rejected');
+  const missingNodeHighlightFixture = claimSourceHighlightFixture.filter(item => item.nodeId !== 'scope');
+  if (!sourceInspectionContractViolations([...claimSourceInspectionFixture, ...branchInspectionFixture], missingNodeHighlightFixture, processProjectionFixture, branchVisualFixture, claimSourceCursorFixture, claimSourceRunFixture, true).some(issue => issue.includes('highlight-source did not visibly precede'))) throw new Error('Node commit without source-highlighted was accepted');
   const factlessClaimSourceFixture = structuredClone(claimSourceInspectionFixture);
   factlessClaimSourceFixture[0].factId = '';
-  if (!sourceInspectionContractViolations([...factlessClaimSourceFixture, ...branchInspectionFixture], processProjectionFixture, branchVisualFixture, claimSourceCursorFixture, claimSourceRunFixture, true).some(issue => issue.includes('not returned by the node basis'))) throw new Error('Factless claim-source inspection fixture was accepted');
+  if (!sourceInspectionContractViolations([...factlessClaimSourceFixture, ...branchInspectionFixture], claimSourceHighlightFixture, processProjectionFixture, branchVisualFixture, claimSourceCursorFixture, claimSourceRunFixture, true).some(issue => issue.includes('not returned by the node basis'))) throw new Error('Factless claim-source inspection fixture was accepted');
   const wrongOwnerClaimSourceRunFixture = structuredClone(claimSourceRunFixture);
   wrongOwnerClaimSourceRunFixture.checklist.items[0].node_ids = ['scope'];
-  if (!sourceInspectionContractViolations([...claimSourceInspectionFixture, ...branchInspectionFixture], processProjectionFixture, branchVisualFixture, claimSourceCursorFixture, wrongOwnerClaimSourceRunFixture, true).some(issue => issue.includes('not returned by the node basis'))) throw new Error('Cross-node evidence-derived claim-source inspection was accepted');
+  if (!sourceInspectionContractViolations([...claimSourceInspectionFixture, ...branchInspectionFixture], claimSourceHighlightFixture, processProjectionFixture, branchVisualFixture, claimSourceCursorFixture, wrongOwnerClaimSourceRunFixture, true).some(issue => issue.includes('not returned by the node basis'))) throw new Error('Cross-node evidence-derived claim-source inspection was accepted');
   const fabricatedInspectionFixture = structuredClone(sourceInspectionFixture);
   fabricatedInspectionFixture[0].sourceKind = 'fabricated-source';
-  if (!sourceInspectionContractViolations([...fabricatedInspectionFixture, ...branchInspectionFixture], processProjectionFixture, branchVisualFixture, inspectionCursorFixture, inspectionRunFixture, true).some(issue => issue.includes('not returned by the node basis'))) throw new Error('Fabricated source-inspection fixture was accepted');
+  if (!sourceInspectionContractViolations([...fabricatedInspectionFixture, ...branchInspectionFixture], sourceHighlightFixture, processProjectionFixture, branchVisualFixture, inspectionCursorFixture, inspectionRunFixture, true).some(issue => issue.includes('not returned by the node basis'))) throw new Error('Fabricated source-inspection fixture was accepted');
   const unboundInspectionCursorFixture = inspectionCursorFixture.filter(item => item.targetId !== 'intake');
-  if (!sourceInspectionContractViolations([...sourceInspectionFixture, ...branchInspectionFixture], processProjectionFixture, branchVisualFixture, unboundInspectionCursorFixture, inspectionRunFixture, true).some(issue => issue.includes('not bound to the cursor click target'))) throw new Error('Cursor-unbound source-inspection fixture was accepted');
+  if (!sourceInspectionContractViolations([...sourceInspectionFixture, ...branchInspectionFixture], sourceHighlightFixture, processProjectionFixture, branchVisualFixture, unboundInspectionCursorFixture, inspectionRunFixture, true).some(issue => issue.includes('not bound to the confirm-source cursor click target'))) throw new Error('Cursor-unbound source-inspection fixture was accepted');
 
   const factTourFacts = FACT_SOURCE_TOUR_IDS.map((factId, index) => ({
     fact_id: factId,
@@ -5179,6 +6224,192 @@ async function runContractSelfTest() {
   }];
   const factTourRun = { facts: factTourFacts };
   if (factSourceTourContractViolations(factTourCompletion, factTourInspections, factTourChanges, factTourCursors, factTourRun).length) throw new Error('Valid five-fact source tour fixture was rejected');
+  const factCinematicFocusFixture = { focusCount: 1, cursorCount: 1, artifactCount: 1 };
+  const factHighlightFixture = factTourInspections.map(inspection => ({
+    entityKind: 'fact', factId: inspection.factId, changeId: inspection.changeId, eventId: inspection.eventId,
+    agentId: inspection.agentId, sourceId: inspection.sourceId, locatorId: inspection.locatorId,
+    factTourPhase: 'highlight-source', sourceHighlighted: true, at: inspection.at - 400,
+  }));
+  const factTrailFixture = (index, currentState) => factTourInspections.slice(0, index + 1).map((inspection, trailIndex) => ({
+    sourceId: inspection.sourceId,
+    state: trailIndex === index ? currentState : 'inspected',
+    visible: true,
+  }));
+  const factCinematicFixture = factTourInspections.flatMap((inspection, index) => ([
+    {
+      contract: FACT_SOURCE_CINEMATIC_CONTRACT, timing: 'select-source', cursorPhase: 'click', targetId: inspection.sourceId,
+      factId: inspection.factId, sourceId: inspection.sourceId, locatorId: inspection.locatorId, factTourPhase: 'select-source',
+      activeSourceIds: [], sourceDockState: '', activeSourceLocator: '', sourceVisible: false, sourceHighlighted: false, pendingVisible: false, findingVisible: false, factVisible: false, sourceTrail: factTrailFixture(index, 'opening'),
+      focus: factCinematicFocusFixture, at: inspection.at - 900,
+    },
+    {
+      contract: FACT_SOURCE_CINEMATIC_CONTRACT, timing: 'neutral-read', cursorPhase: 'click', targetId: inspection.sourceId,
+      factId: inspection.factId, sourceId: inspection.sourceId, locatorId: inspection.locatorId, factTourPhase: 'read-source',
+      activeSourceIds: [inspection.sourceId], sourceDockState: 'open', activeSourceLocator: inspection.locatorId, sourceVisible: true, sourceHighlighted: false, pendingVisible: true, findingVisible: false, factVisible: false, sourceTrail: factTrailFixture(index, 'active'),
+      focus: factCinematicFocusFixture, at: inspection.at - 700,
+    },
+    {
+      contract: FACT_SOURCE_CINEMATIC_CONTRACT, timing: 'confirm-click', cursorPhase: 'click', targetId: inspection.sourceId,
+      factId: inspection.factId, sourceId: inspection.sourceId, locatorId: inspection.locatorId, factTourPhase: 'read-source',
+      activeSourceIds: [inspection.sourceId], sourceDockState: 'open', activeSourceLocator: inspection.locatorId, sourceVisible: true, sourceHighlighted: false, pendingVisible: true, findingVisible: false, factVisible: false, sourceTrail: factTrailFixture(index, 'active'),
+      focus: factCinematicFocusFixture, at: inspection.at - 500,
+    },
+    {
+      contract: FACT_SOURCE_CINEMATIC_CONTRACT, timing: 'highlight-source', cursorPhase: 'source-highlighted', targetId: inspection.sourceId,
+      factId: inspection.factId, sourceId: inspection.sourceId, locatorId: inspection.locatorId, factTourPhase: 'highlight-source',
+      activeSourceIds: [inspection.sourceId], sourceDockState: 'open', activeSourceLocator: inspection.locatorId, sourceVisible: true, sourceHighlighted: true, pendingVisible: false, findingVisible: false, factVisible: false, sourceTrail: factTrailFixture(index, 'active'),
+      focus: factCinematicFocusFixture, at: inspection.at - 400,
+    },
+    {
+      contract: FACT_SOURCE_CINEMATIC_CONTRACT, timing: 'finding', cursorPhase: 'artifact-change', targetId: inspection.sourceId,
+      factId: inspection.factId, sourceId: inspection.sourceId, locatorId: inspection.locatorId, factTourPhase: 'finding',
+      activeSourceIds: [inspection.sourceId], sourceDockState: 'open', activeSourceLocator: inspection.locatorId, sourceVisible: true, sourceHighlighted: true, pendingVisible: false, findingVisible: true, factVisible: true, sourceTrail: factTrailFixture(index, 'active'),
+      focus: factCinematicFocusFixture, at: inspection.at + MIN_FACT_SOURCE_HOLD_MS,
+    },
+  ]));
+  if (factSourceCinematicContractViolations(factCinematicFixture, factHighlightFixture, factTourInspections, factTourChanges).length) throw new Error('Valid select-read-confirm-highlight-finding cinematic fixture was rejected');
+  const preselectedFactCinematicFixture = structuredClone(factCinematicFixture);
+  preselectedFactCinematicFixture[0].activeSourceIds = [preselectedFactCinematicFixture[0].sourceId];
+  if (!factSourceCinematicContractViolations(preselectedFactCinematicFixture, factHighlightFixture, factTourInspections, factTourChanges).some(issue => issue.includes('preselected'))) throw new Error('Preselected source cinematic fixture was accepted');
+  const prehighlightedReadFixture = structuredClone(factCinematicFixture);
+  prehighlightedReadFixture[1].sourceHighlighted = true;
+  if (!factSourceCinematicContractViolations(prehighlightedReadFixture, factHighlightFixture, factTourInspections, factTourChanges).some(issue => issue.includes('neutral source read'))) throw new Error('Prehighlighted neutral-read cinematic fixture was accepted');
+  const missingConfirmFixture = factCinematicFixture.filter(item => !(item.factId === FACT_SOURCE_TOUR_IDS[0] && item.timing === 'confirm-click'));
+  if (!factSourceCinematicContractViolations(missingConfirmFixture, factHighlightFixture, factTourInspections, factTourChanges).some(issue => issue.includes('cinematic trace is incomplete'))) throw new Error('Highlight without an exact confirm click was accepted');
+  const missingFactHighlightFixture = factHighlightFixture.filter(item => item.factId !== FACT_SOURCE_TOUR_IDS[0]);
+  if (!factSourceCinematicContractViolations(factCinematicFixture, missingFactHighlightFixture, factTourInspections, factTourChanges).some(issue => issue.includes('casepath:source-highlighted'))) throw new Error('Fact appearance without source-highlighted was accepted');
+  const missingOpenedSourceFixture = structuredClone(factCinematicFixture);
+  missingOpenedSourceFixture.find(item => item.factId === FACT_SOURCE_TOUR_IDS[2] && item.timing === 'select-source').sourceTrail.shift();
+  if (!factSourceCinematicContractViolations(missingOpenedSourceFixture, factHighlightFixture, factTourInspections, factTourChanges).some(issue => issue.includes('opened sources do not accumulate'))) throw new Error('Fact cinematic with a missing prior source card was accepted');
+  const zoomOutFixture = {
+    sourceMoments: REQUIRED_DESKTOP_SOURCE_MOMENTS.map(moment => ({ moment, panelVisible: true, contentVisible: true, collapsed: false, insideViewport: true, width: 280, height: 700, toggleLooksDropdown: false })),
+    factSteps: factCinematicFixture.filter(step => ['select-source', 'neutral-read'].includes(step.timing)),
+    artifactCursorSteps: [
+      { phase: 'click', graphInspectionPhase: 'select-source', targetId: 'message', activeSourceIds: [], activeSourceLocator: '', visibleSourceHighlightCount: 0 },
+      { phase: 'click', graphInspectionPhase: 'read-source', targetId: 'message', inspectionSourceHasTarget: true, inspectionSourceId: 'message', inspectionLocatorId: 'source:message:p1', activeSourceIds: ['message'], activeSourceLocator: 'source:message:p1', visibleSourceHighlightCount: 0 },
+    ],
+    previews: FLAGSHIP_PROCESS_PROJECTION_IDS.map((nodeId, index) => {
+      const basisKind = ['fact', 'law', 'evidence', 'accepted-decision', 'start-point'][index % 5];
+      const sourceBasis = basisKind === 'fact';
+      const lawBasis = basisKind === 'law';
+      return {
+        nodeId,
+        previewCount: 1,
+        previewVisible: true,
+        basisKind,
+        exactReturnedSource: sourceBasis,
+        sourceHasTarget: sourceBasis,
+        exactLocator: sourceBasis || lawBasis,
+        exactTitle: sourceBasis,
+        exactLocation: sourceBasis,
+        sourceWindowTruth: sourceBasis,
+        noGeneratedContext: sourceBasis,
+        exactPassage: sourceBasis,
+        locatorId: sourceBasis ? `source:${nodeId}:page:1:quote:Exact returned passage` : lawBasis ? `law:${nodeId}` : '',
+        title: sourceBasis ? 'Source title' : `${basisKind} title`,
+        location: sourceBasis ? 'Page 1 of 1' : `${basisKind} basis`,
+        passage: sourceBasis ? 'Exact returned passage' : `Returned ${basisKind} basis`,
+        action: sourceBasis ? 'open-source' : lawBasis ? 'open-law' : basisKind === 'evidence' ? 'inspect-evidence' : 'select-node',
+        onDemandText: sourceBasis ? 'Open original →' : 'Open basis →',
+        inlineGroundingClosed: true,
+        otherGroundingHidden: true,
+        groundingViewerOpen: false,
+        overlaps: [],
+        viewportWidth: 1440,
+        viewportHeight: 900,
+      };
+    }),
+    postConstructionSourceUse: { viewerOpen: true, activeSourceIds: ['art_lease'], activeSourceLocator: 'art_lease:p1', sourceId: 'art_lease', locatorId: 'art_lease:p1' },
+    team: { members: REQUIRED_NEMOTRON_AGENT_IDS.map(id => ({ agentId: id, role: REQUIRED_DESKTOP_AGENT_LABELS[id], short: REQUIRED_DESKTOP_AGENT_SHORTS[id], signature: REQUIRED_NEMOTRON_AGENT_SIGNATURES[id].signature, visible: id !== 'orchestrator_plan' })) },
+    documentPlan: { chains: Array.from({ length: 21 }, () => ({ parts: ['decision', 'fact', 'evidence', 'document'].map(part => ({ part })) })) },
+    documentRoundtrip: true,
+  };
+  if (zoomOutDesktopContractViolations(zoomOutFixture).length) throw new Error('Valid zoom-out desktop fixture was rejected');
+  const previewFixtureRect = (left, top, width, height) => ({ left, top, right: left + width, bottom: top + height, width, height });
+  const previewGraphViewportRect = previewFixtureRect(280, 80, 1140, 760);
+  const processPreviewGeometryFixture = [
+    {
+      phase: 'construction:artifact-fact',
+      constructionState: 'building',
+      viewportWidth: 1440,
+      viewportHeight: 900,
+      graphViewportRect: previewGraphViewportRect,
+      items: PROCESS_PREVIEW_GEOMETRY_SELECTORS.map((kind, index) => ({ kind, rect: previewFixtureRect(310 + (index * 12), 120 + (index * 12), 500, 220) })),
+    },
+    ...FLAGSHIP_PROCESS_PROJECTION_IDS.map((nodeId, index) => ({
+      phase: `completed-preview:${nodeId}`,
+      constructionState: 'complete',
+      viewportWidth: 1440,
+      viewportHeight: 900,
+      graphViewportRect: previewGraphViewportRect,
+      items: [{ kind: '.ac-spatial-detail', rect: previewFixtureRect(320, 500 + (index % 2) * 4, 720, 260) }],
+    })),
+  ];
+  if (processPreviewGeometryContractViolations(processPreviewGeometryFixture).length) throw new Error('Valid 1440×900 process preview containment fixture was rejected');
+  const clippedProcessPreviewFixture = structuredClone(processPreviewGeometryFixture);
+  clippedProcessPreviewFixture[0].items[0].rect.bottom = previewGraphViewportRect.bottom - 2;
+  clippedProcessPreviewFixture[0].items[0].rect.height = clippedProcessPreviewFixture[0].items[0].rect.bottom - clippedProcessPreviewFixture[0].items[0].rect.top;
+  if (!processPreviewGeometryContractViolations(clippedProcessPreviewFixture).some(issue => issue.includes('8px bottom inset'))) throw new Error('Bottom-clipped construction preview fixture was accepted');
+  const missingActiveSourceTargetFixture = structuredClone(zoomOutFixture);
+  missingActiveSourceTargetFixture.artifactCursorSteps[1].inspectionSourceHasTarget = false;
+  missingActiveSourceTargetFixture.artifactCursorSteps[1].activeSourceIds = [];
+  if (!zoomOutDesktopContractViolations(missingActiveSourceTargetFixture).some(issue => issue.includes('active source target'))) throw new Error('Clicked process source without a matching active source target was accepted');
+  const missingPreviewSourceTargetFixture = structuredClone(zoomOutFixture);
+  missingPreviewSourceTargetFixture.previews[0].sourceHasTarget = false;
+  if (!zoomOutDesktopContractViolations(missingPreviewSourceTargetFixture).some(issue => issue.includes('actual returned artifact window'))) throw new Error('Fact/source basis preview without a matching exact source target was accepted');
+  const alteredSourcePassageFixture = structuredClone(zoomOutFixture);
+  alteredSourcePassageFixture.previews[0].exactPassage = false;
+  if (!zoomOutDesktopContractViolations(alteredSourcePassageFixture).some(issue => issue.includes('actual returned artifact window'))) throw new Error('Fact/source basis preview with an altered returned passage was accepted');
+  const forgedBasisLocatorFixture = structuredClone(zoomOutFixture);
+  const evidenceBasisPreview = forgedBasisLocatorFixture.previews.find(preview => preview.basisKind === 'evidence');
+  evidenceBasisPreview.locatorId = 'source:forged:page:1:quote:not-returned';
+  evidenceBasisPreview.exactLocator = false;
+  if (!zoomOutDesktopContractViolations(forgedBasisLocatorFixture).some(issue => issue.includes('claims a source locator that is not exact'))) throw new Error('Non-source basis preview with a fabricated source locator was accepted');
+  const incompleteBasisPreviewFixture = structuredClone(zoomOutFixture);
+  incompleteBasisPreviewFixture.previews.find(preview => preview.basisKind === 'accepted-decision').passage = '';
+  if (!zoomOutDesktopContractViolations(incompleteBasisPreviewFixture).some(issue => issue.includes('lacks a truthful kind, title, or returned basis'))) throw new Error('Incomplete accepted-decision basis preview was accepted');
+  const brokenZoomOutFixture = structuredClone(zoomOutFixture);
+  brokenZoomOutFixture.sourceMoments[0].collapsed = true;
+  brokenZoomOutFixture.factSteps.find(step => step.timing === 'select-source').activeSourceIds = ['art_lease'];
+  brokenZoomOutFixture.previews[0].overlaps = ['node:scope'];
+  brokenZoomOutFixture.team.members[0].role = 'Guarded Canonical Facts Agent';
+  brokenZoomOutFixture.documentRoundtrip = false;
+  const brokenZoomOutIssues = zoomOutDesktopContractViolations(brokenZoomOutFixture);
+  if (brokenZoomOutIssues.length !== 3 || !brokenZoomOutIssues.every((issue, index) => issue.startsWith(`${index + 1}.`))) throw new Error(`Zoom-out diagnostics did not retain only the three highest-impact failures: ${JSON.stringify(brokenZoomOutIssues)}`);
+  const groundingModalFixture = {
+    before: { viewerOpen: false, inlinePanelHidden: true, visibleInlineItemCount: 0, toggleHaspopup: 'dialog', toggleExpanded: 'false' },
+    opened: { openedByExplicitClick: true, viewerOpen: true, modalHasFocus: true, inlinePanelHidden: true, visibleInlineItemCount: 0, sourceRailVisible: true, sourceRailOverlapArea: 0, actionKinds: ['law', 'evidence', 'precedent'], detailButtonCount: 3, actionableButtonCount: 3 },
+    closed: { viewerOpen: false, inlinePanelHidden: true, visibleInlineItemCount: 0, focusRestoredToTrigger: true, graphFocusCount: 1, primaryActionCount: 1 },
+  };
+  if (groundingModalContractViolations(groundingModalFixture, 'precedent').length) throw new Error('Valid explicit grounding-modal fixture was rejected');
+  const brokenGroundingModalFixture = structuredClone(groundingModalFixture);
+  brokenGroundingModalFixture.before.visibleInlineItemCount = 1;
+  brokenGroundingModalFixture.opened.sourceRailOverlapArea = 200;
+  brokenGroundingModalFixture.closed.graphFocusCount = 2;
+  const brokenGroundingModalIssues = groundingModalContractViolations(brokenGroundingModalFixture, 'precedent');
+  if (!brokenGroundingModalIssues.some(issue => issue.includes('before the explicit')) || !brokenGroundingModalIssues.some(issue => issue.includes('source rail')) || !brokenGroundingModalIssues.some(issue => issue.includes('one graph focus'))) throw new Error(`Broken grounding-modal fixture was accepted: ${JSON.stringify(brokenGroundingModalIssues)}`);
+  const settledCursorPayoffFixture = {
+    moment: 'later-result',
+    cursorVisible: true,
+    parked: true,
+    cursorPhase: 'settled',
+    parkTargetVisible: true,
+    parkedStepCount: 2,
+    labelOpacity: 0,
+    payoffObjectCount: 5,
+    cursorOverlaps: [],
+    visibleLabelOverlaps: [],
+    cursorClicking: false,
+    syntheticClickCountAfterParking: 0,
+  };
+  if (settledCursorPayoffContractViolations(settledCursorPayoffFixture).length) throw new Error('Valid settled cursor payoff fixture was rejected');
+  const tamperedSettledCursorPayoffFixture = structuredClone(settledCursorPayoffFixture);
+  tamperedSettledCursorPayoffFixture.parked = false;
+  tamperedSettledCursorPayoffFixture.labelOpacity = 1;
+  tamperedSettledCursorPayoffFixture.cursorOverlaps = ['ac-memory-graph-delta'];
+  tamperedSettledCursorPayoffFixture.syntheticClickCountAfterParking = 1;
+  const tamperedSettledCursorPayoffIssues = settledCursorPayoffContractViolations(tamperedSettledCursorPayoffFixture);
+  if (!tamperedSettledCursorPayoffIssues.some(issue => issue.includes('not parked')) || !tamperedSettledCursorPayoffIssues.some(issue => issue.includes('label remains')) || !tamperedSettledCursorPayoffIssues.some(issue => issue.includes('overlaps')) || !tamperedSettledCursorPayoffIssues.some(issue => issue.includes('synthesizes a click'))) throw new Error(`Tampered settled cursor payoff fixture was accepted: ${JSON.stringify(tamperedSettledCursorPayoffIssues)}`);
   const forgedVisualAuthorityFactTour = structuredClone(factTourChanges);
   forgedVisualAuthorityFactTour[2].attachment.sourceAuthority = 'customer_submission';
   if (!factSourceTourContractViolations(factTourCompletion, factTourInspections, forgedVisualAuthorityFactTour, factTourCursors, factTourRun).some(issue => issue.includes('fact artifact does not retain the inspected source binding'))) throw new Error('Authority-relabelled visual fact source fixture was accepted');
@@ -5208,8 +6439,13 @@ async function runContractSelfTest() {
     ...FLAGSHIP_PROCESS_PROJECTION_IDS.slice(1).map((target, index) => ({ source: FLAGSHIP_PROCESS_PROJECTION_IDS[index], target, state: 'selected' })),
     ...REQUIRED_CAUSATION_BRANCH_IDS.map(target => ({ source: 'causation', target, state: target === 'evidence_gap' ? 'selected' : 'conditional' })),
   ];
+  const explanatoryFixtureKeys = new Set([
+    ...FLAGSHIP_PROCESS_PROJECTION_IDS.slice(1, FLAGSHIP_PROCESS_PROJECTION_IDS.indexOf('causation') + 1)
+      .map((target, index) => `${FLAGSHIP_PROCESS_PROJECTION_IDS[index]}->${target}`),
+    ...REQUIRED_CAUSATION_BRANCH_IDS.map(target => `causation->${target}`),
+  ]);
   const spatialFixtureEdges = [
-    ...returnedFixtureEdges.map(edge => ({ ...edge, path: edge.source === 'causation' && REQUIRED_CAUSATION_BRANCH_IDS.includes(edge.target) ? 'uncertainty' : 'accepted', start: center(spatialNodeRects[edge.source] || spatialBranchRects[edge.source]), end: center(spatialNodeRects[edge.target] || spatialBranchRects[edge.target]) })),
+    ...returnedFixtureEdges.filter(edge => explanatoryFixtureKeys.has(`${edge.source}->${edge.target}`)).map(edge => ({ ...edge, path: edge.source === 'causation' && REQUIRED_CAUSATION_BRANCH_IDS.includes(edge.target) ? edge.state === 'selected' ? 'next-action' : 'uncertainty' : 'accepted', start: center(spatialNodeRects[edge.source] || spatialBranchRects[edge.source]), end: center(spatialNodeRects[edge.target] || spatialBranchRects[edge.target]) })),
     { source: 'causation', target: 'fedlex-or-259a', state: 'linked', path: 'legal-grounding', start: center(spatialNodeRects.causation), end: center(spatialSatelliteRects['fedlex-or-259a']) },
     { source: 'causation', target: 'condition_photo', state: 'available', path: 'evidence-support', start: center(spatialNodeRects.causation), end: center(spatialSatelliteRects.condition_photo) },
     { source: 'causation', target: 'landlord_reply', state: 'missing', path: 'evidence-support', start: center(spatialNodeRects.causation), end: center(spatialSatelliteRects.landlord_reply) },
@@ -6355,7 +7591,7 @@ async function runContractSelfTest() {
   const unsafeAxeTarget = `.v20-learning-row[data-customer="${'claim-bearing-'.repeat(700)}"] > span`;
   const axeDiagnostics = axeViolationDiagnostics([{ id: 'color-contrast', impact: 'serious', help: 'Elements must meet minimum color contrast ratio thresholds', nodes: [{ target: [unsafeAxeTarget], html: '<span>claim-bearing text must not be logged</span>', failureSummary: 'Claim-bearing failure prose must not be logged', any: [{ id: 'color-contrast', impact: 'serious', message: 'Claim-bearing check prose must not be logged', data: { fgColor: '#147a56', bgColor: '#edf8f3', contrastRatio: 4.44, raw: 'must not be retained' } }], all: [], none: [] }] }]);
   if (axeDiagnostics.length !== 1 || axeDiagnostics[0].node_count !== 1 || axeDiagnostics[0].omitted_node_count !== 0 || !/^sha256:[0-9a-f]{64}$/.test(axeDiagnostics[0].nodes[0].target[0]) || JSON.stringify(axeDiagnostics).includes('claim-bearing') || axeDiagnostics[0].nodes[0].checks[0].data.contrastRatio !== 4.44 || 'raw' in axeDiagnostics[0].nodes[0].checks[0].data || 'html' in axeDiagnostics[0].nodes[0] || 'message' in axeDiagnostics[0].nodes[0].checks[0] || 'failure_summary' in axeDiagnostics[0].nodes[0]) throw new Error(`Bounded Axe diagnostics fixture failed: ${JSON.stringify(axeDiagnostics)}`);
-  return { status: 'passed', fixtures: ['persistent_ten_node_projection_and_tamper', 'graph_native_review_scene_and_competing_artifact_rejection', 'semantic_attachment_cursor_tether_and_tamper', 'bounded_future_claim_memory_delta_identity_origin_and_tamper', 'bounded_axe_node_diagnostics', 'session_scoped_run_read_coalescing', 'memory_reuse_renderer_determinism', 'stable_text_grounding_fact_selection', 'normalized_text_grounding', 'python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'fail_closed_model_contribution_badges', 'mixed_field_contribution_badge', 'post_memory_contribution_suppression', 'reciprocal_evidence_truth_and_tamper', 'structured_legal_truth_and_tamper', 'visual_reference_truth_and_tamper', 'precedent_ranking_truth_and_tamper', 'memory_application_truth_and_tamper', 'memory_boundary_event_cross_binding', 'dormant_memory_retrieval_not_application', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'parallel_source_artifact_hash_rejection', 'parallel_process_artifact_hash_rejection', 'process_field_membership_rejection', 'process_field_attribution_rejection', 'process_inherited_field_rejection_with_recomputed_hashes', 'evidence_field_membership_rejection', 'evidence_field_attribution_rejection', 'evidence_source_ref_rejection_with_recomputed_hashes', 'final_field_membership_rejection', 'final_current_node_binding_rejection', 'final_next_action_binding_rejection', 'final_supporting_facts_binding_rejection', 'final_upstream_contributions_binding_rejection', 'final_audit_checks_binding_rejection', 'noncontrolling_supporting_fact_source_binding', 'cold_upstream_provider_policy_rejection', 'warm_upstream_provider_policy_rejection', 'agent_role_label_rejection', 'gate_role_label_rejection', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'provider_concurrency_zero_call_receipt', 'provider_concurrency_receipt_call_rejection', 'provider_concurrency_receipt_identity_rejection', 'safe_upstream_rejection_receipt', 'forged_upstream_rejection_receipt_attribution_rejection', 'missing_upstream_rejection_receipt_attribution_rejection', 'out_of_scope_upstream_rejection_receipt_attribution_rejection', 'unbounded_upstream_error_code_rejection', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'safe_upstream_rejection_ledger', 'provider_concurrency_zero_call_ledger', 'provider_concurrency_ledger_call_rejection', 'provider_concurrency_ledger_cost_rejection', 'provider_concurrency_ledger_identity_rejection', 'forged_upstream_rejection_ledger_attribution_rejection', 'missing_upstream_rejection_ledger_attribution_rejection', 'out_of_scope_upstream_rejection_ledger_attribution_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
+  return { status: 'passed', fixtures: ['persistent_ten_node_projection_and_tamper', 'graph_native_review_scene_and_competing_artifact_rejection', 'semantic_attachment_cursor_tether_and_tamper', 'zoom_out_desktop_three_priority_diagnostics', 'process_preview_1440x900_containment_and_bottom_inset', 'bounded_future_claim_memory_delta_identity_origin_and_tamper', 'bounded_axe_node_diagnostics', 'session_scoped_run_read_coalescing', 'memory_reuse_renderer_determinism', 'stable_text_grounding_fact_selection', 'normalized_text_grounding', 'python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'fail_closed_model_contribution_badges', 'mixed_field_contribution_badge', 'post_memory_contribution_suppression', 'reciprocal_evidence_truth_and_tamper', 'structured_legal_truth_and_tamper', 'visual_reference_truth_and_tamper', 'precedent_ranking_truth_and_tamper', 'memory_application_truth_and_tamper', 'memory_boundary_event_cross_binding', 'dormant_memory_retrieval_not_application', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'parallel_source_artifact_hash_rejection', 'parallel_process_artifact_hash_rejection', 'process_field_membership_rejection', 'process_field_attribution_rejection', 'process_inherited_field_rejection_with_recomputed_hashes', 'evidence_field_membership_rejection', 'evidence_field_attribution_rejection', 'evidence_source_ref_rejection_with_recomputed_hashes', 'final_field_membership_rejection', 'final_current_node_binding_rejection', 'final_next_action_binding_rejection', 'final_supporting_facts_binding_rejection', 'final_upstream_contributions_binding_rejection', 'final_audit_checks_binding_rejection', 'noncontrolling_supporting_fact_source_binding', 'cold_upstream_provider_policy_rejection', 'warm_upstream_provider_policy_rejection', 'agent_role_label_rejection', 'gate_role_label_rejection', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'provider_concurrency_zero_call_receipt', 'provider_concurrency_receipt_call_rejection', 'provider_concurrency_receipt_identity_rejection', 'safe_upstream_rejection_receipt', 'forged_upstream_rejection_receipt_attribution_rejection', 'missing_upstream_rejection_receipt_attribution_rejection', 'out_of_scope_upstream_rejection_receipt_attribution_rejection', 'unbounded_upstream_error_code_rejection', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'safe_upstream_rejection_ledger', 'provider_concurrency_zero_call_ledger', 'provider_concurrency_ledger_call_rejection', 'provider_concurrency_ledger_cost_rejection', 'provider_concurrency_ledger_identity_rejection', 'forged_upstream_rejection_ledger_attribution_rejection', 'missing_upstream_rejection_ledger_attribution_rejection', 'out_of_scope_upstream_rejection_ledger_attribution_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
 }
 
 let report;

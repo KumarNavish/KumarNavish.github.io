@@ -69,6 +69,29 @@ def create_and_wait(
     return wait(client, response.json()["run_id"], session_id=session_id)
 
 
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "https://casepath.onrender.com",
+        "https://casepath-swiss-claim-lab.onrender.com",
+    ],
+)
+def test_production_frontend_origins_pass_cors_preflight(
+    client: TestClient,
+    origin: str,
+) -> None:
+    response = client.options(
+        "/api/demo",
+        headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "X-CasePath-Session",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == origin
+
+
 def test_health_and_release_metadata_expose_semantic_identity(client: TestClient, monkeypatch):
     source_commit = "a" * 40
     monkeypatch.delenv("RENDER_GIT_COMMIT", raising=False)

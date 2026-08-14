@@ -4,7 +4,10 @@ import { extname, resolve, sep } from 'node:path';
 
 const root = resolve('casepath-qa/guided-v13-smoke-out');
 const port = Number(process.env.PORT || 10000);
-const allowedOrigin = 'https://casepath-swiss-claim-lab.onrender.com';
+const allowedOrigins = new Set([
+  'https://casepath.onrender.com',
+  'https://casepath-swiss-claim-lab.onrender.com',
+]);
 const mediaTypes = Object.freeze({
   '.json': 'application/json; charset=utf-8',
   '.png': 'image/png',
@@ -19,8 +22,8 @@ function responseHeaders(origin, path) {
     'Content-Type': mediaTypes[extname(path)] || 'application/octet-stream',
     'X-Content-Type-Options': 'nosniff',
   };
-  if (origin === allowedOrigin) {
-    headers['Access-Control-Allow-Origin'] = allowedOrigin;
+  if (allowedOrigins.has(origin)) {
+    headers['Access-Control-Allow-Origin'] = origin;
     headers.Vary = 'Origin';
   }
   return headers;

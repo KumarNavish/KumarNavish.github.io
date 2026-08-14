@@ -49,39 +49,39 @@
   // signature simply because they are presented during the same product stage.
   const NEMOTRON_AGENT_IDENTITIES = Object.freeze({
     canonical_facts: {
-      order: 1, label: 'Guarded Canonical Facts Agent', shortLabel: 'Claim facts', monogram: 'CF', signature: 'facts',
-      title: 'Separating supported facts from allegations and unknowns',
-      why: 'Only source-bound facts should shape the handling process.', output: 'Canonical claim state',
+      order: 1, label: 'Claim reader', shortLabel: 'Claim', monogram: 'CF', signature: 'facts',
+      title: 'Reading the claim and adding only what the sources show',
+      why: 'Each fact must come from an exact passage, field, or image region.', output: 'Grounded claim facts',
       target: '.decision-inspector .inspector-fact:first-of-type,.fact-row:last-child,.process-node.current .process-node-button',
     },
     orchestrator_plan: {
-      order: 2, label: 'Nemotron Orchestrator', shortLabel: 'Orchestration', monogram: 'OR', signature: 'orchestrator',
-      title: 'Setting the bounded focus for every specialist',
-      why: 'A shared plan keeps parallel contributions coherent.', output: 'Orchestration focus plan',
+      order: 2, label: 'Work planner', shortLabel: 'Plan', monogram: 'OR', signature: 'orchestrator',
+      title: 'Giving each specialist one clear job',
+      why: 'The team works from one shared claim and one shared plan.', output: 'Team plan',
       target: '.process-build-focus,.process-spine,.process-synthesis',
     },
     document_source_integrity: {
-      order: 3, label: 'Document and Source Integrity Agent', shortLabel: 'Source integrity', monogram: 'DS', signature: 'sources',
-      title: 'Checking every source link and document reference',
-      why: 'A decision is trustworthy only when its evidence can be reopened.', output: 'Source integrity contribution',
+      order: 3, label: 'Source checker', shortLabel: 'Sources', monogram: 'DS', signature: 'sources',
+      title: 'Checking the exact source behind each decision',
+      why: 'The same source can be reopened and verified.', output: 'Checked sources',
       target: '.decision-inspector .grounding-ref:first-of-type,.official-source-browser,.decision-inspector .law-marker:first-of-type',
     },
     process_decision_mapping: {
-      order: 4, label: 'Process Decision Mapping Agent', shortLabel: 'Process mapping', monogram: 'PM', signature: 'process',
-      title: 'Mapping facts and law into the decision process',
-      why: 'Each node must exist for a grounded, inspectable reason.', output: 'Process mapping contribution',
+      order: 4, label: 'Process builder', shortLabel: 'Path', monogram: 'PM', signature: 'process',
+      title: 'Building the claim-handling steps',
+      why: 'Each step appears only after its reason has been inspected.', output: 'Handling process',
       target: '.process-node.current .process-node-button,.process-node-button[aria-current="step"],.process-node-button:first-of-type',
     },
     evidence_checklist: {
-      order: 5, label: 'Evidence and Checklist Agent', shortLabel: 'Evidence mapping', monogram: 'EC', signature: 'evidence',
-      title: 'Attaching evidence to the decision it can resolve',
-      why: 'Requirements become useful when their process owner is explicit.', output: 'Evidence checklist contribution',
+      order: 5, label: 'Document finder', shortLabel: 'Docs', monogram: 'EC', signature: 'evidence',
+      title: 'Working out which documents each step needs',
+      why: 'Every document need comes from a fact the process must establish.', output: 'Document plan',
       target: '.decision-inspector .inspector-row:last-of-type,.v17-checklist-item:last-child,.process-node.current .node-evidence-count',
     },
     final_claim_brief_audit: {
-      order: 6, label: 'Final Claim Brief Agent', shortLabel: 'Final audit', monogram: 'FB', signature: 'audit',
-      title: 'Auditing the complete claim-handling brief',
-      why: 'The final handoff must remain consistent across every contribution.', output: 'Final claim brief contribution',
+      order: 6, label: 'Result checker', shortLabel: 'Check', monogram: 'FB', signature: 'audit',
+      title: 'Checking the full result before review',
+      why: 'Anything unsupported must stop before it reaches the reviewer.', output: 'Checked result',
       target: '.v20-final-handoff,.verification-row:last-child,.process-synthesis',
     },
   });
@@ -245,25 +245,56 @@
   function normalizeSourceRail(moment) {
     const pane = $('.submission-pane');
     if (!pane) return;
+    const desktopRail = window.matchMedia('(min-width: 761px)').matches;
     pane.dataset.v21SourceRail = 'true';
     const label = pane.querySelector('.submission-head .quiet-label');
-    if (label && label.textContent !== 'Customer claim') label.textContent = 'Customer claim';
+    if (label && label.textContent !== 'Sources') label.textContent = 'Sources';
     const toggle = $('#toggleSource', pane);
     if (!toggle) return;
     if (!toggle.classList.contains('v21-source-summary-toggle')) {
       toggle.classList.add('v21-source-summary-toggle');
       toggle.innerHTML = `
-        <span class="v21-source-summary-copy"><strong>Customer claim</strong><small>Opening source package…</small></span>
+        <span class="v21-source-summary-copy"><strong>Claim message</strong><small>Opening source package…</small></span>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`;
       toggle.setAttribute('aria-controls', 'submissionContent');
       toggle.setAttribute('aria-label', 'Show or hide the customer claim source package');
     }
-    const subject = pane.querySelector('.email-subject')?.textContent?.trim() || 'Customer claim';
+    toggle.dataset.sourceIds = 'message,intake';
+    const subject = pane.querySelector('.email-subject')?.textContent?.trim() || 'Customer message';
     const sourceCount = $('#attachmentCount')?.textContent?.trim() || 'Opening source package…';
     const summaryTitle = toggle.querySelector('.v21-source-summary-copy strong');
     const summaryMeta = toggle.querySelector('.v21-source-summary-copy small');
-    if (summaryTitle && summaryTitle.textContent !== subject) summaryTitle.textContent = subject;
-    if (summaryMeta && summaryMeta.textContent !== sourceCount) summaryMeta.textContent = sourceCount;
+    if (summaryTitle && summaryTitle.textContent !== 'Claim message') summaryTitle.textContent = 'Claim message';
+    if (summaryMeta) {
+      const sourceMeta = `${subject} · ${sourceCount}`;
+      if (summaryMeta.textContent !== sourceMeta) summaryMeta.textContent = sourceMeta;
+    }
+
+    const rows = [toggle, ...$$('.attachment-row[data-artifact-id]', pane)];
+    const activeRow = rows.find(row => row.classList.contains('is-active')) || null;
+    rows.forEach(row => {
+      if (row === activeRow) row.setAttribute('aria-current', 'true');
+      else row.removeAttribute('aria-current');
+    });
+    if (activeRow) pane.dataset.v21ActiveSource = activeRow.dataset.activeSourceId || activeRow.dataset.artifactId || '';
+    else delete pane.dataset.v21ActiveSource;
+
+    if (desktopRail) {
+      pane.classList.remove('collapsed');
+      pane.dataset.v21DesktopSourceRail = 'true';
+      toggle.disabled = true;
+      toggle.tabIndex = -1;
+      toggle.setAttribute('aria-expanded', 'true');
+      toggle.setAttribute('aria-label', 'Customer claim source package');
+      toggle.removeAttribute('aria-controls');
+      delete pane.dataset.v21AutoCollapsed;
+      return;
+    }
+    delete pane.dataset.v21DesktopSourceRail;
+    toggle.disabled = false;
+    toggle.tabIndex = 0;
+    toggle.setAttribute('aria-controls', 'submissionContent');
+    toggle.setAttribute('aria-label', 'Show or hide the customer claim source package');
 
     if (moment === 'start') {
       pane.classList.remove('collapsed');
@@ -597,47 +628,205 @@
     sheet.id = 'v20DocumentSheet';
     sheet.className = 'v20-document-sheet';
     sheet.setAttribute('aria-labelledby', 'v20DocumentTitle');
-    const clone = checklist.cloneNode(true);
-    clone.removeAttribute('class');
-    clone.className = 'v20-document-checklist';
-    for (const item of $$('.v17-checklist-item', clone)) {
-      const nodeId = item.dataset.nodeId || '';
-      item.dataset.v20NodeId = nodeId;
-      item.tabIndex = 0;
-      item.setAttribute('role', 'button');
-      item.setAttribute('aria-label', `${item.querySelector('strong')?.textContent || 'Document need'}; open its process decision`);
-    }
+    const sourceItems = $$('.v17-checklist-item[data-item-id]', checklist);
+    const itemCount = sourceItems.length;
+    const counts = sourceItems.reduce((summary, item) => {
+      const status = item.dataset.status || '';
+      const kind = ['missing', 'provided_insufficient'].includes(status)
+        ? 'needed'
+        : status === 'conditional' ? 'conditional' : status === 'provided_sufficient' ? 'available' : 'not-needed';
+      summary[kind] += 1;
+      return summary;
+    }, { needed: 0, conditional: 0, available: 0, 'not-needed': 0 });
+    const selectedNodeId = '';
+    const artifactTitle = artifactId => {
+      if (['message', 'intake'].includes(artifactId)) return 'Claim message';
+      const row = document.querySelector(`.attachment-row[data-artifact-id="${CSS.escape(artifactId)}"]`);
+      return row?.querySelector('.attachment-title')?.textContent?.trim()
+        || artifactId.replace(/^art_/, '').replaceAll('_', ' ');
+    };
+    const chainRows = sourceItems.map(source => {
+      const copy = source.cloneNode(true);
+      const nodeId = copy.dataset.nodeId || '';
+      const status = copy.dataset.status || '';
+      const kind = ['missing', 'provided_insufficient'].includes(status)
+        ? 'needed'
+        : status === 'conditional' ? 'conditional' : status === 'provided_sufficient' ? 'available' : 'not-needed';
+      const statusLabel = source.querySelector('header>span')?.textContent?.trim() || status.replaceAll('_', ' ');
+      const evidenceTitle = copy.dataset.evidenceTitle || copy.dataset.documentLabel || 'Evidence requirement';
+      const evidenceWhy = copy.dataset.evidenceWhy || statusLabel;
+      const documentOptions = (copy.dataset.documentOptions || '').split(' · ').filter(Boolean);
+      const artifactIds = (copy.dataset.artifactIds || '').split(',').filter(Boolean);
+      const returnedDocuments = artifactIds.map(artifactTitle);
+      const documentChoices = returnedDocuments.length ? returnedDocuments : documentOptions;
+      const documentCopy = (kind === 'available'
+        ? returnedDocuments[0] || documentOptions[0]
+        : kind === 'needed'
+          ? documentOptions[0] || returnedDocuments[0]
+          : returnedDocuments[0] || documentOptions[0]) || 'No document needed on this path';
+      const artifactCount = Number(copy.dataset.artifactCount || 0);
+      const remainingChoices = Math.max(0, documentChoices.length - 1);
+      const documentState = kind === 'available'
+        ? `${artifactCount || 1} source${artifactCount === 1 ? '' : 's'} received`
+        : kind === 'needed'
+          ? status === 'provided_insufficient'
+            ? `${returnedDocuments[0] || 'Existing source'} received, but incomplete${remainingChoices ? ` · ${remainingChoices} other accepted form${remainingChoices === 1 ? '' : 's'}` : ''}`
+            : `Missing${remainingChoices ? ` · ${remainingChoices} other accepted form${remainingChoices === 1 ? '' : 's'}` : ''}`
+          : kind === 'conditional'
+            ? `Only if: ${copy.dataset.appliesWhen || 'this process branch becomes active'}`
+            : 'Not required on this path';
+      const statusPresentation = kind === 'available'
+        ? { state: 'received', icon: '✓', label: 'Received' }
+        : kind === 'needed'
+          ? { state: 'missing', icon: '×', label: status === 'provided_insufficient' ? 'Incomplete' : 'Missing' }
+          : kind === 'conditional'
+            ? { state: 'conditional', icon: '○', label: 'Conditional' }
+            : { state: 'not-required', icon: '–', label: 'Not required' };
+      copy.className = 'v17-checklist-item v20-document-chain';
+      copy.dataset.v20NodeId = nodeId;
+      copy.dataset.documentKind = kind;
+      copy.dataset.documentStatus = statusPresentation.state;
+      copy.tabIndex = 0;
+      copy.setAttribute('role', 'button');
+      copy.setAttribute('aria-label', `${copy.dataset.documentLabel || 'Document need'}; return to ${copy.dataset.decisionTitle || 'its process decision'}`);
+      copy.innerHTML = `
+        <div class="v20-chain-step" data-chain-part="decision"><small>Process question</small><strong>${esc(copy.dataset.decisionQuestion || 'What must be decided?')}</strong><span>${esc(copy.dataset.decisionTitle || 'Process decision')}</span></div>
+        <i class="v20-chain-arrow" aria-hidden="true">→</i>
+        <div class="v20-chain-step" data-chain-part="fact"><small>Fact to establish</small><strong>${esc(copy.dataset.factLabel || 'Fact not returned')}</strong><span>${esc(copy.dataset.factValue || 'Not yet established')}</span></div>
+        <i class="v20-chain-arrow" aria-hidden="true">→</i>
+        <div class="v20-chain-step" data-chain-part="evidence"><small>Evidence needed</small><strong>${esc(evidenceTitle)}</strong><span>${esc(evidenceWhy)}</span></div>
+        <i class="v20-chain-arrow" aria-hidden="true">→</i>
+        <div class="v20-chain-step" data-chain-part="document"><small>Document or record</small><strong>${esc(documentCopy)}</strong><span>${esc(documentState)}</span></div>
+        <div class="v20-chain-status" data-document-status="${esc(statusPresentation.state)}"><i aria-hidden="true">${statusPresentation.icon}</i><strong>${esc(statusPresentation.label)}</strong><b>Show process →</b></div>`;
+      return { kind, markup: copy.outerHTML };
+    });
+    const groupLabels = {
+      needed: `${counts.needed} document${counts.needed === 1 ? '' : 's'} needed now`,
+      available: `${counts.available} received`,
+      conditional: `${counts.conditional} conditional`,
+      'not-needed': `${counts['not-needed']} not required for this claim`,
+    };
+    const groupMarkup = ['needed', 'available', 'conditional', 'not-needed'].map(kind => {
+      const rows = chainRows.filter(row => row.kind === kind).map(row => row.markup).join('');
+      if (!rows) return '';
+      return `<section class="v20-document-group" data-document-group="${esc(kind)}"><header><h4>${esc(groupLabels[kind])}</h4></header><div class="v20-document-group-items">${rows}</div></section>`;
+    }).join('');
     sheet.innerHTML = `
       <header>
-        <div><span class="quiet-label">Derived from the process</span><h2 id="v20DocumentTitle">Document needs</h2><p>Every item keeps its item, decision, and fact identifiers and returns to the decision that requires it.</p></div>
+        <div><span class="quiet-label v20-agent-attribution" data-agent-signature="evidence">Documents</span><h2 id="v20DocumentTitle">Claim documents</h2></div>
         <button class="icon-button" type="button" data-v20-close-documents aria-label="Return to handling process"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
       </header>
-      <div class="v20-document-body"></div>`;
-    sheet.querySelector('.v20-document-body').append(clone);
+      <div class="v20-document-body" data-document-model="complete-claim-record" data-document-selected-node="${esc(selectedNodeId)}" data-document-filter="all">
+        <section class="v20-document-model" aria-label="Complete claim evidence and document model">
+          <header><small>Complete claim record</small><h3>Evidence and documents</h3><span>${counts.available} received · ${counts.needed} missing · ${counts.conditional} conditional</span></header>
+          <nav class="v20-document-filters" aria-label="Filter claim documents">
+            <button type="button" data-v20-document-filter="all" aria-pressed="true">All <span>${itemCount}</span></button>
+            <button type="button" data-v20-document-filter="available" aria-pressed="false" data-document-status="received"><i aria-hidden="true">✓</i> Received <span>${counts.available}</span></button>
+            <button type="button" data-v20-document-filter="needed" aria-pressed="false" data-document-status="missing"><i aria-hidden="true">×</i> Missing <span>${counts.needed}</span></button>
+            <button type="button" data-v20-document-filter="conditional" aria-pressed="false" data-document-status="conditional"><i aria-hidden="true">○</i> Conditional <span>${counts.conditional}</span></button>
+            <button type="button" data-v20-document-filter="not-needed" aria-pressed="false" data-document-status="not-required">Not required <span>${counts['not-needed']}</span></button>
+          </nav>
+          <section class="v20-document-chains" aria-live="polite">${groupMarkup}</section>
+          <p class="v20-document-empty" hidden>No documents match this filter.</p>
+        </section>
+      </div>
+      <footer class="v20-document-footer">
+        <small>Next: simulated review of one process decision · not expert approval</small>
+        <button class="primary-button" type="button" data-v20-continue-review><span>Continue to review</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+      </footer>`;
     workPane.append(sheet);
+    applyDocumentSheetFilters(sheet);
   }
 
-  function openDocuments() {
+  function applyDocumentSheetFilters(sheet = $('.v20-document-sheet')) {
+    const body = sheet?.querySelector('.v20-document-body');
+    if (!body) return;
+    const selectedNode = body.dataset.documentSelectedNode || '';
+    const filter = body.dataset.documentFilter || 'all';
+    const items = $$('.v20-document-chain[data-item-id]', body);
+    let visibleCount = 0;
+    items.forEach(item => {
+      const owners = (item.dataset.nodeIds || item.dataset.nodeId || '').split(',').filter(Boolean);
+      const visible = (!selectedNode || owners.includes(selectedNode))
+        && (filter === 'all' || item.dataset.documentKind === filter);
+      item.hidden = !visible;
+      if (visible) visibleCount += 1;
+    });
+    $$('.v20-document-group', body).forEach(group => {
+      group.hidden = !$$('.v20-document-chain[data-item-id]', group).some(item => !item.hidden);
+    });
+    $$('[data-v20-document-node]', body).forEach(button => button.setAttribute('aria-pressed', String((button.dataset.v20DocumentNode || '') === selectedNode)));
+    $$('[data-v20-document-filter]', body).forEach(button => button.setAttribute('aria-pressed', String(button.dataset.v20DocumentFilter === filter)));
+    const selectedLabel = selectedNode
+      ? body.querySelector(`[data-v20-document-node="${CSS.escape(selectedNode)}"] strong`)?.textContent?.trim() || selectedNode.replaceAll('_', ' ')
+      : 'All decisions';
+    const context = body.querySelector('[data-v20-document-context]');
+    if (context) context.textContent = selectedLabel;
+    const empty = body.querySelector('.v20-document-empty');
+    if (empty) empty.hidden = visibleCount > 0;
+  }
+
+  function syncDocumentPrimaryAction(moment = currentMoment()) {
+    const sheet = $('.v20-document-sheet');
+    const documentAction = sheet?.querySelector('[data-v20-continue-review]');
+    const journeyAction = $('#journeyNext');
+    const activeAction = moment === 'ready' && sheet?.open ? documentAction : journeyAction;
+    document.querySelectorAll('[data-casepath-primary-action]').forEach(action => {
+      if (action !== activeAction) action.removeAttribute('data-casepath-primary-action');
+    });
+    if (activeAction && !activeAction.hidden) activeAction.dataset.casepathPrimaryAction = 'true';
+  }
+
+  function syncGuidedDocumentTrigger(moment = currentMoment()) {
+    const journeyAction = $('#journeyNext');
+    const sheet = $('.v20-document-sheet');
+    if (!journeyAction) return;
+    if (moment === 'ready' && sheet) {
+      const label = journeyAction.querySelector('span');
+      if (label) label.textContent = 'Review document plan';
+      journeyAction.dataset.v20GuidedDocuments = 'true';
+      journeyAction.setAttribute('aria-haspopup', 'dialog');
+      journeyAction.setAttribute('aria-controls', sheet.id);
+      return;
+    }
+    delete journeyAction.dataset.v20GuidedDocuments;
+    journeyAction.removeAttribute('aria-haspopup');
+    journeyAction.removeAttribute('aria-controls');
+  }
+
+  function openDocuments({ returnFocus = null } = {}) {
     const sheet = $('.v20-document-sheet');
     if (!sheet) return;
-    openDocuments.returnFocus = $('[data-v20-open-documents]');
+    openDocuments.returnFocus = returnFocus || document.activeElement || $('[data-v20-open-documents]');
     $('[data-v20-open-documents]')?.setAttribute('aria-expanded', 'true');
     if (!sheet.open) sheet.showModal();
+    syncDocumentPrimaryAction('ready');
     sheet.querySelector('[data-v20-close-documents]')?.focus();
   }
 
-  function closeDocuments({ nodeId = '' } = {}) {
+  function closeDocuments({ nodeId = '', restoreFocus = true } = {}) {
     const sheet = $('.v20-document-sheet');
     if (!sheet) return;
     if (sheet.open) sheet.close();
     $('[data-v20-open-documents]')?.setAttribute('aria-expanded', 'false');
+    syncDocumentPrimaryAction(currentMoment());
     if (nodeId) {
-      const target = $(`.process-node-button[data-node-id="${CSS.escape(nodeId)}"],.process-branch-node[data-node-id="${CSS.escape(nodeId)}"]`, $('#stageCanvas'));
-      target?.click();
-      requestAnimationFrame(() => $(`.process-node-button[data-node-id="${CSS.escape(nodeId)}"],.process-branch-node[data-node-id="${CSS.escape(nodeId)}"]`, $('#stageCanvas'))?.focus());
-    } else {
+      const escapedNodeId = CSS.escape(nodeId);
+      const artifactTarget = $(`#artifactProcessGraph [data-ac-action="select-node"][data-node-id="${escapedNodeId}"]`);
+      const legacyTarget = $(`.process-node-button[data-node-id="${escapedNodeId}"],.process-branch-node[data-node-id="${escapedNodeId}"]`, $('#stageCanvas'));
+      artifactTarget?.click();
+      legacyTarget?.click();
+      requestAnimationFrame(() => (artifactTarget || legacyTarget)?.focus());
+    } else if (restoreFocus) {
       openDocuments.returnFocus?.focus();
     }
+  }
+
+  function continueToExpertReview() {
+    const sheet = $('.v20-document-sheet');
+    if (!sheet?.open || currentMoment() !== 'ready') return;
+    closeDocuments({ restoreFocus: false });
+    document.dispatchEvent(new CustomEvent('casepath:begin-review'));
   }
 
   function focusReview(canvas) {
@@ -766,7 +955,10 @@
     document.querySelectorAll('[data-casepath-primary-action]').forEach(node => {
       if (!node.closest('#artifactCanvas')) node.removeAttribute('data-casepath-primary-action');
     });
-    const action = moment === 'review' ? canvas?.querySelector('#reviewForm button[type="submit"]') : $('#journeyNext');
+    const documentAction = $('.v20-document-sheet[open] [data-v20-continue-review]');
+    const action = moment === 'ready' && documentAction
+      ? documentAction
+      : moment === 'review' ? canvas?.querySelector('#reviewForm button[type="submit"]') : $('#journeyNext');
     if (action && !action.hidden) action.dataset.casepathPrimaryAction = 'true';
   }
 
@@ -783,6 +975,7 @@
     directInspectorCopy(canvas);
     ensureArtifactHeader(canvas, moment);
     ensureDocumentSheet(canvas);
+    syncGuidedDocumentTrigger(moment);
     focusReview(canvas);
     focusReviewApplied(canvas);
     focusKnowledge(canvas);
@@ -826,17 +1019,54 @@
     cursor.setAttribute('aria-label', `CasePath process construction: ${action}`);
   }
 
+  function onGuidedPrimaryClick(event) {
+    const trigger = event.target.closest?.('#journeyNext[data-v20-guided-documents="true"]');
+    if (!trigger || currentMoment() !== 'ready' || !$('.v20-document-sheet')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openDocuments({ returnFocus: trigger });
+  }
+
   function onClick(event) {
+    const sourceToggle = event.target.closest?.('#toggleSource');
+    if (sourceToggle && window.matchMedia('(min-width: 761px)').matches) {
+      const pane = sourceToggle.closest('.submission-pane');
+      pane?.classList.remove('collapsed');
+      sourceToggle.setAttribute('aria-expanded', 'true');
+      return;
+    }
     const open = event.target.closest?.('[data-v20-open-documents]');
     if (open) {
       event.preventDefault();
-      openDocuments();
+      openDocuments({ returnFocus: open });
       return;
     }
     const close = event.target.closest?.('[data-v20-close-documents]');
     if (close) {
       event.preventDefault();
       closeDocuments();
+      return;
+    }
+    const continueReview = event.target.closest?.('[data-v20-continue-review]');
+    if (continueReview) {
+      event.preventDefault();
+      continueToExpertReview();
+      return;
+    }
+    const documentNode = event.target.closest?.('[data-v20-document-node]');
+    if (documentNode) {
+      event.preventDefault();
+      const body = documentNode.closest('.v20-document-body');
+      if (body) body.dataset.documentSelectedNode = documentNode.dataset.v20DocumentNode || '';
+      applyDocumentSheetFilters(documentNode.closest('.v20-document-sheet'));
+      return;
+    }
+    const documentFilter = event.target.closest?.('[data-v20-document-filter]');
+    if (documentFilter) {
+      event.preventDefault();
+      const body = documentFilter.closest('.v20-document-body');
+      if (body) body.dataset.documentFilter = documentFilter.dataset.v20DocumentFilter || 'all';
+      applyDocumentSheetFilters(documentFilter.closest('.v20-document-sheet'));
       return;
     }
     const item = event.target.closest?.('.v20-document-body .v17-checklist-item');
@@ -856,6 +1086,7 @@
   }
 
   function boot() {
+    document.addEventListener('click', onGuidedPrimaryClick, true);
     document.addEventListener('click', onClick);
     document.addEventListener('keydown', onKeydown);
     const observer = new MutationObserver(mutations => {
