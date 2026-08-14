@@ -42,6 +42,14 @@ def test_render_commit_is_normalized_and_alignment_eligible() -> None:
     assert payload["alignment_eligible"] is True
 
 
+def test_explicit_source_commit_supports_non_render_delivery() -> None:
+    commit = "0123456789ABCDEF0123456789ABCDEF01234567"
+    payload = identity.build_payload({"CASEPATH_SOURCE_COMMIT": commit})
+    assert payload["source_commit"] == commit.lower()
+    assert payload["source_commit_source"] == "CASEPATH_SOURCE_COMMIT"
+    assert payload["alignment_eligible"] is True
+
+
 def test_curated_static_build_has_exact_runtime_inventory(
     tmp_path: Path,
     monkeypatch,
