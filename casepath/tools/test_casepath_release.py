@@ -523,7 +523,7 @@ def test_flagship_surface_is_one_persistent_source_plus_artifact_canvas() -> Non
     assert "Management alleges insufficient ventilation and declines inspection" not in index
     assert "assets/artifact-canvas.css" in index
     assert "assets/artifact-canvas.js" in index
-    assert "assets/artifact-canvas.css?v=1.0.42" in index
+    assert "assets/artifact-canvas.css?v=1.0.43" in index
     assert "assets/artifact-canvas.js?v=1.0.52" in index
     assert "const CURSOR_AVATARS = Object.freeze({" in canvas
     assert "data-ac-cursor-avatar" in canvas
@@ -599,6 +599,10 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "casepath:process-node-progress" in canvas
     assert "data-ac-process-node-progress" in canvas
     assert ".ac-process-node-progress" in canvas_css
+    assert '.ac-spatial-branch:not([data-branch-state="selected"]){\n  opacity:1;' in canvas_css
+    assert "border-color:#d4d8de;\n  color:#626873;" in canvas_css
+    assert "#777e87" not in canvas_css
+    assert canvas_css.count("color:#6b727c;") >= 3
     assert "setProcessNodeProgress('search', 0" in canvas
     assert "setProcessNodeProgress('read', 38" in canvas
     assert "setProcessNodeProgress('extract', 72" in canvas
