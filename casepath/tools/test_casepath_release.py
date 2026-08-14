@@ -267,7 +267,6 @@ def test_north_star_review_and_learning_remain_graph_native() -> None:
     assert "markSubmissionSource(step.phase === 'source' ? step.ref.artifact_id : '')" in canvas
     assert "What changed on this claim" in canvas
     assert "casepathLearningReady === 'true'" in browser_gate
-    assert "activeSourceIds: [...document.querySelectorAll('.attachment-row.is-active[data-artifact-id]')]" in browser_gate
     assert "laterSourceStep?.activeSourceIds" in browser_gate
     assert 'data-memory-effect="node-added"' in canvas
     assert 'data-memory-effect="edge-added"' in canvas
@@ -283,6 +282,8 @@ def test_north_star_review_and_learning_remain_graph_native() -> None:
     assert "Knowledge consolidation keeps the graph as the sole focal artifact" in browser_gate
     assert "Later-work keeps the graph as the sole focal artifact" in browser_gate
     assert "casepath.later-causal-step/1.0.0" in browser_gate
+    assert "queueMicrotask(() => {" in browser_gate
+    assert "step.activeSourceIds = [...document.querySelectorAll('.attachment-row.is-active[data-artifact-id]')]" in browser_gate
     assert "memory effect identity" in browser_gate
     assert "exact returned node, fact, page and excerpt or region" in browser_gate
     assert "unresolved allegations or missing-fact paths" in browser_gate
