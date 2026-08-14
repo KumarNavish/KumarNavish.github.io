@@ -664,9 +664,10 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "Documents created by this decision" in canvas
     assert "Causation is unresolved" in canvas
     assert "See all ${checklistCount} across the process" in canvas
-    assert "const CONCISE_GRAPH_STAGES = new Set(['read', 'evidence', 'experience', 'verify']);" in (
+    assert "const CONCISE_GRAPH_STAGES = new Set(['evidence', 'experience', 'verify']);" in (
         assets / "live-v16.js"
     ).read_text(encoding="utf-8")
+    assert "const concise = ['evidence', 'experience', 'verify'].includes(moment);" in browser_gate
     live_v17 = (assets / "live-v17.js").read_text(encoding="utf-8")
     focus_v20 = (assets / "live-v20-focus.js").read_text(encoding="utf-8")
     assert "toggle.dataset.sourceIds = 'message,intake';" in focus_v20
@@ -8330,7 +8331,7 @@ def test_handoff_continuity_uses_structured_moments_without_translucent_text() -
         encoding="utf-8"
     )
     assert 'assets/live-v17-continuity.css?v=20.0.0' in index
-    assert 'assets/live-v16.js?v=20.0.25' in index
+    assert 'assets/live-v16.js?v=20.0.26' in index
     assert 'assets/live-v17.js?v=20.0.5' in index
     assert 'assets/live-v18.js?v=20.0.2' in index
     assert 'assets/live-v16.css?v=20.0.0' in index
