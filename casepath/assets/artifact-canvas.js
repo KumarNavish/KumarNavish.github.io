@@ -5,6 +5,8 @@
   const ROOT_ID = 'artifactCanvas';
   const READY_EVENT = 'casepath:artifact-canvas-ready';
   const INTERACTION_EVENT = 'casepath:artifact-canvas-interaction';
+  const LATER_MEMORY_VALIDATION_CONTRACT = 'casepath.later-memory-validation/1.0.0';
+  const LATER_CAUSAL_STEP_CONTRACT = 'casepath.later-causal-step/1.0.0';
   const SUCCESS_STATES = new Set(['accepted', 'complete', 'completed', 'passed', 'produced', 'succeeded', 'verified']);
   const PROCESS_GATE_ID = 'deterministic_process_gate';
   const PROCESS_ARTIFACT_IDS = new Set(['process_graph', 'accepted_process_graph']);
@@ -12,7 +14,16 @@
   const GRAPH_SOURCE_DWELL_MS = 650;
   const GRAPH_BRANCH_SOURCE_DWELL_MS = 1100;
   const OFFICIAL_LAW_DWELL_MS = 1900;
-  const GRAPH_MOMENTS = new Set(['process', 'evidence', 'experience', 'ready', 'review', 'review-applied', 'later-result']);
+  const FACT_SOURCE_DWELL_MS = 1100;
+  const FACT_RESULT_DWELL_MS = 420;
+  const FACT_STORY_IDS = Object.freeze([
+    'fact_tenancy',
+    'fact_notification',
+    'fact_recurrence',
+    'fact_ventilation_allegation',
+    'fact_cause',
+  ]);
+  const GRAPH_MOMENTS = new Set(['process', 'evidence', 'experience', 'verify', 'ready', 'review', 'review-applied', 'knowledge', 'later-work', 'later-result']);
   const SIMPLIFIED_SPINE_IDS = [
     'intake',
     'scope',
@@ -36,7 +47,7 @@
     responsibility: [83, 48],
     remedy: [89, 48],
     resolution: [96, 48],
-    ventilation_dispute: [73, 83],
+    ventilation_dispute: [64, 72],
   });
   const CAUSATION_BRANCH_LAYOUT = Object.freeze([
     ['building_defect', 'Building cause', 76, 24],
@@ -165,12 +176,12 @@
     research: {
       title: 'Opening the exact Swiss-law section',
       detail: 'A cached official passage frames the handling question without deciding technical cause.',
-      authority: 'Versioned official-source registry · qualified review pending',
+      authority: 'Swiss-law source · qualified review pending',
     },
     process: {
       title: 'Building the claim-handling process',
       detail: 'The accepted process appears one grounded decision at a time.',
-      authority: 'Accepted process projection · deterministic gate',
+      authority: 'Process mapping · accepted handling path',
     },
     evidence: {
       title: 'Attaching evidence to the decision it can resolve',
@@ -185,7 +196,7 @@
     verify: {
       title: 'Checking the complete playbook',
       detail: 'Grounding, graph integrity and evidence relationships must agree.',
-      authority: 'Final brief audit · deterministic acceptance gate',
+      authority: 'Final audit · accepted result checks',
     },
     ready: {
       title: 'A grounded handling path is ready for review',
@@ -238,6 +249,8 @@
     eventKeys: new Set(),
     result: null,
     laterResult: null,
+    laterMemoryValidation: null,
+    laterCausalStep: null,
     facts: [],
     process: null,
     legal: null,
@@ -257,6 +270,13 @@
     officialLawTourComplete: false,
     officialLawTourIndex: 0,
     officialLawTourVisitedIds: new Set(),
+    factTourEligible: false,
+    factTourRunning: false,
+    factTourComplete: false,
+    factTourIndex: 0,
+    factTourPhase: 'source',
+    factTourTimer: 0,
+    pendingFactId: '',
     focusEvidenceId: '',
     focusPrecedentId: '',
     visibleNodeIds: new Set(),
@@ -453,8 +473,11 @@
       const ownerId = evidenceOwnerIds(focusedEvidence).find(nodeId => Boolean(nodeById(nodeId)));
       if (ownerId) state.selectedNodeId = ownerId;
     }
-    if (normalized === 'experience' && state.focusPrecedentId) {
-      const focusedPrecedent = state.precedents.find(item => item.claim_id === state.focusPrecedentId);
+    if (normalized === 'experience' && state.precedents.length) {
+      const focusedPrecedent = state.precedents.find(item => Number(item.ranking?.rank) === 1)
+        || state.precedents.find(item => item.claim_id === state.focusPrecedentId)
+        || state.precedents[0];
+      state.focusPrecedentId = focusedPrecedent?.claim_id || '';
       const factor = asArray(focusedPrecedent?.ranking?.factors).find(item => (
         ['current_process_node', 'process_branch'].includes(item.factor) && nodeById(item.value)
       ));
@@ -462,11 +485,13 @@
     }
     if (normalized === 'review') state.selectedNodeId = 'causation';
     if (normalized === 'review-applied' && nodeById('ventilation_dispute')) state.selectedNodeId = 'ventilation_dispute';
+    if (['knowledge', 'later-work'].includes(normalized) && nodeById('ventilation_dispute')) state.selectedNodeId = 'ventilation_dispute';
     if (normalized === 'research') state.neutralAuthority = 'official-law-registry';
     else if (normalized === 'experience') state.neutralAuthority = 'historical-ranking';
     else if (normalized === 'verify') state.neutralAuthority = (
       state.activeAgentId === 'final_claim_brief_audit' || state.completedAgents.has('final_claim_brief_audit')
     ) ? '' : 'whole-playbook-gate';
+    else if (normalized === 'later-work') state.neutralAuthority = 'case-memory-comparison';
     else state.neutralAuthority = '';
     chooseChainForMoment();
     if (normalized === 'process' && state.processAccepted && processProjectionReady() && !state.graphRevealRunning && state.visibleNodeIds.size === 0) {
@@ -595,6 +620,7 @@
       mergeSemanticEntity(event);
       if (isAcceptedProcessGate(event, detail)) state.processAccepted = true;
       updateSemanticFocus(detail, event);
+      maybeStartFactSourceTour();
       if (state.moment === 'process' && state.processAccepted && processProjectionReady()
         && !state.graphRevealRunning && state.visibleNodeIds.size === 0) {
         startGraphReveal();
@@ -1045,6 +1071,127 @@
     beginOfficialLawStep(sources, 0);
   }
 
+  function representativeFactRef(fact) {
+    const refs = asArray(fact?.source_refs);
+    if (fact?.fact_id === 'fact_recurrence') {
+      return refs.find(ref => ref?.locator_kind === 'visual_observation') || refs[0] || null;
+    }
+    if (fact?.fact_id === 'fact_cause') {
+      return refs.find(ref => /independent|inspection/i.test(`${ref?.excerpt || ''} ${ref?.observation || ''}`))
+        || refs.find(ref => ref?.locator_kind === 'text_quote')
+        || refs[0]
+        || null;
+    }
+    return refs.find(ref => ['text_quote', 'metadata_field', 'visual_observation'].includes(ref?.locator_kind))
+      || refs[0]
+      || null;
+  }
+
+  function factStoryItems() {
+    const facts = new Map(state.facts.map(fact => [String(fact?.fact_id || ''), fact]));
+    return FACT_STORY_IDS.flatMap(factId => {
+      const fact = facts.get(factId);
+      const ref = representativeFactRef(fact);
+      const lineage = lineageFor('fact', factId);
+      return fact && ref && lineage?.eventId && lineage?.agentId ? [{ fact, ref, lineage }] : [];
+    });
+  }
+
+  function sourceDisplayTitle(artifactId) {
+    const row = [...document.querySelectorAll('.attachment-row[data-artifact-id]')]
+      .find(item => item.dataset.artifactId === String(artifactId || ''));
+    return row?.querySelector('.attachment-title')?.textContent?.trim()
+      || String(artifactId || 'Claim source').replace(/^art_/, '').replaceAll('_', ' ');
+  }
+
+  function sourceFinding(ref) {
+    if (ref?.locator_kind === 'visual_observation') return String(ref.observation || 'Returned image region');
+    if (ref?.locator_kind === 'metadata_field') {
+      const field = String(ref.field || 'Returned field').replaceAll('_', ' ');
+      return `${field} · ${String(ref.value ?? 'value not returned')}`;
+    }
+    return String(ref?.excerpt || ref?.observation || 'Returned source passage');
+  }
+
+  function sourceLocation(ref) {
+    if (ref?.locator_kind === 'visual_observation') return 'Marked image region';
+    if (ref?.locator_kind === 'metadata_field') return `${String(ref.field || 'Metadata').replaceAll('_', ' ')} field`;
+    return `Page ${String(ref?.page || 1)} · exact passage`;
+  }
+
+  function markSubmissionSource(artifactId = '') {
+    document.querySelectorAll('.attachment-row[data-artifact-id]').forEach(row => {
+      row.classList.toggle('is-active', Boolean(artifactId) && row.dataset.artifactId === String(artifactId));
+    });
+  }
+
+  function finishFactSourceTour(items) {
+    window.clearTimeout(state.factTourTimer);
+    state.factTourRunning = false;
+    state.factTourComplete = true;
+    state.factTourPhase = 'finding';
+    state.cursorCommit = null;
+    markSubmissionSource('');
+    render();
+    window.dispatchEvent(new CustomEvent('casepath:fact-source-tour-complete', { detail: {
+      contract: CONTRACT,
+      factIds: items.map(item => item.fact.fact_id),
+      count: items.length,
+    } }));
+  }
+
+  function beginFactSourceStep(items, index) {
+    if (!state.factTourRunning) return;
+    if (index >= items.length) {
+      finishFactSourceTour(items);
+      return;
+    }
+    const { fact, ref, lineage } = items[index];
+    state.factTourIndex = index;
+    state.factTourPhase = 'source';
+    state.pendingFactId = fact.fact_id;
+    state.focusFactId = fact.fact_id;
+    state.lastCursorChangeId = visibleChangeId('fact', fact.fact_id, lineage);
+    state.lastCursorEventId = lineage.eventId;
+    state.lastCursorAgentId = lineage.agentId;
+    markSubmissionSource(ref.artifact_id);
+    state.cursorCommit = () => {
+      if (!state.factTourRunning || state.pendingFactId !== fact.fact_id || state.factTourPhase !== 'source') return;
+      const target = state.root?.querySelector('[data-fact-inspection-target="true"]');
+      if (!target || target.dataset.factId !== fact.fact_id || target.dataset.sourceId !== String(ref.artifact_id || '')) return;
+      setActiveSourceLocator(target.dataset.sourceLocatorId || '');
+      emitInteraction('open-source', target);
+      window.dispatchEvent(new CustomEvent('casepath:source-inspection', { detail: {
+        entityKind: 'fact',
+        factId: fact.fact_id,
+        changeId: state.lastCursorChangeId,
+        eventId: state.lastCursorEventId,
+        agentId: state.lastCursorAgentId,
+        sourceKind: 'claim-source',
+        sourceId: String(ref.artifact_id || ''),
+        locatorId: target.dataset.sourceLocatorId || '',
+        found: sourceFinding(ref),
+      } }));
+      state.factTourTimer = window.setTimeout(() => {
+        if (!state.factTourRunning || state.pendingFactId !== fact.fact_id) return;
+        state.factTourPhase = 'finding';
+        render();
+        state.factTourTimer = window.setTimeout(() => beginFactSourceStep(items, index + 1), FACT_RESULT_DWELL_MS);
+      }, FACT_SOURCE_DWELL_MS);
+    };
+    render();
+  }
+
+  function maybeStartFactSourceTour() {
+    if (!state.factTourEligible || state.factTourRunning || state.factTourComplete || state.moment !== 'understand') return;
+    const items = factStoryItems();
+    if (items.length !== FACT_STORY_IDS.length) return;
+    state.factTourRunning = true;
+    state.factTourIndex = 0;
+    state.factTourPhase = 'source';
+    beginFactSourceStep(items, 0);
+  }
+
   function relevantEvidence(items) {
     return items.find(item => item.item_id === state.focusEvidenceId)
       || priorityEvidence(items)[0]
@@ -1193,17 +1340,27 @@
     const graphActorId = state.graphRevealRunning
       ? lineageFor('process_node', state.pendingGraphNodeId || state.selectedNodeId)?.agentId || ''
       : '';
-    const effectiveAgentId = AGENTS[graphActorId] ? graphActorId : state.activeAgentId;
+    const factLineage = state.factTourRunning ? lineageFor('fact', state.pendingFactId) : null;
+    const factActorId = factLineage?.actorType === 'nemotron_agent' ? factLineage.agentId : '';
+    const effectiveAgentId = AGENTS[factActorId]
+      ? factActorId
+      : AGENTS[graphActorId]
+        ? graphActorId
+        : state.activeAgentId;
     const agent = AGENTS[effectiveAgentId];
-    const copy = MOMENT_COPY[state.moment] || MOMENT_COPY.opening;
-    const neutral = state.graphRevealRunning && !AGENTS[graphActorId]
-      ? { label: 'Accepted process projection · deterministic gate', monogram: '◇', signature: 'gate', task: copy.title, why: copy.detail }
+    const copy = momentCopy();
+    const neutral = state.factTourRunning && factLineage?.actorType !== 'nemotron_agent'
+      ? { label: 'Canonical Fact Projection Tool · deterministic', monogram: 'CF', signature: 'facts', task: 'Checking exact claim sources before adding facts', why: 'Each visible fact appears only after its returned source locator is inspected.' }
+      : state.graphRevealRunning && !AGENTS[graphActorId]
+      ? { label: 'Process mapping · accepted path', monogram: '◇', signature: 'gate', task: copy.title, why: copy.detail }
       : state.neutralAuthority === 'official-law-registry'
       ? { label: 'Swiss source lookup · deterministic tool', monogram: '§', signature: 'law', task: copy.title, why: copy.detail }
       : state.neutralAuthority === 'historical-ranking'
         ? { label: 'Historical reference lookup · deterministic tool', monogram: '↗', signature: 'reference', task: copy.title, why: copy.detail }
       : state.neutralAuthority === 'whole-playbook-gate'
-        ? { label: 'Whole-playbook verification gate', monogram: '✓', signature: 'gate', task: copy.title, why: copy.detail }
+        ? { label: 'Final audit · deterministic checks', monogram: '✓', signature: 'gate', task: copy.title, why: copy.detail }
+      : state.neutralAuthority === 'case-memory-comparison'
+        ? { label: 'Case-memory comparison · deterministic', monogram: '↺', signature: 'memory', task: copy.title, why: copy.detail }
         : null;
     const identity = neutral || (agent ? {
       label: agent.label,
@@ -1220,6 +1377,16 @@
     });
     root.dataset.casepathMoment = state.moment;
     root.dataset.casepathScene = state.moment;
+    root.dataset.factSourceTourState = state.factTourComplete ? 'complete' : state.factTourRunning ? 'running' : state.factTourEligible ? 'waiting' : 'idle';
+    root.dataset.factSourceTourIndex = String(state.factTourIndex);
+    if (state.moment === 'later-result') {
+      const validatedMemory = validatedLaterMemory();
+      root.dataset.laterMemoryValidated = String(Boolean(validatedMemory));
+      root.dataset.laterMemoryApplicationHash = validatedMemory?.applicationHash || '';
+    } else {
+      delete root.dataset.laterMemoryValidated;
+      delete root.dataset.laterMemoryApplicationHash;
+    }
     root.dataset.reviewEditState = state.moment === 'review-applied' ? 'applied' : state.moment === 'review' ? 'pending' : 'not-active';
     root.dataset.activeAgentId = neutral ? '' : effectiveAgentId;
     root.dataset.workAuthority = identity.label;
@@ -1247,31 +1414,142 @@
   }
 
   function laterMemoryDelta() {
-    const later = state.laterResult || {};
-    const receipt = asObject(later.memory_application) || {};
-    const processOperations = asArray(receipt.process_operations);
-    const evidenceOperations = asArray(receipt.evidence_operations);
-    const nodeOperation = processOperations.find(operation => operation?.operation === 'add_node');
-    const nodeId = String(nodeOperation?.node_id || (nodeById('ventilation_dispute') ? 'ventilation_dispute' : ''));
-    const edges = processOperations
-      .filter(operation => operation?.operation === 'add_edge' && operation.source && operation.target)
-      .map(operation => ({ source: String(operation.source), target: String(operation.target) }));
-    const evidenceIds = unique([
-      ...asArray(nodeOperation?.evidence_requirement_ids).map(String),
-      ...evidenceOperations.map(operation => String(operation?.item_id || '')),
-    ]);
-    const originId = String(
-      valueFrom(receipt?.source_memory, 'memory_id')
-      || valueFrom(receipt, 'memory_id')
-      || valueFrom(state.review, 'memory_id')
-      || '',
-    );
+    return validatedLaterMemory() || {
+      originId: '',
+      nodeId: '',
+      edges: [],
+      evidenceIds: [],
+      receiptBound: false,
+    };
+  }
+
+  function validatedLaterMemory() {
+    const validation = asObject(state.laterMemoryValidation);
+    const later = asObject(state.laterResult) || {};
+    const receipt = asObject(later.memory_application);
+    const delta = asObject(validation?.delta);
+    if (!validation
+      || validation.contract !== LATER_MEMORY_VALIDATION_CONTRACT
+      || validation.validated !== true
+      || validation.proofReady !== true
+      || validation.memoryUsed !== true
+      || validation.sharedPlaybookUnchanged !== true
+      || !receipt
+      || receipt.contract !== 'casepath.memory-application-receipt/1.0.0'
+      || later.shared_rule_applied !== false
+      || String(validation.runId || '') !== String(receipt.target?.run_id || '')
+      || String(validation.applicationHash || '') !== String(receipt.application_hash || '')
+      || String(validation.memoryOriginId || '') !== String(receipt.source_memory?.memory_id || '')) return null;
+    const nodeIds = unique(asArray(delta?.nodeIds).map(value => String(value || '')).filter(Boolean));
+    const edges = asArray(delta?.edges)
+      .map(edge => ({ source: String(edge?.source || ''), target: String(edge?.target || '') }))
+      .filter(edge => edge.source && edge.target);
+    const evidenceIds = unique(asArray(delta?.evidenceIds).map(value => String(value || '')).filter(Boolean));
+    if (nodeIds.length !== 1 || edges.length !== 2 || evidenceIds.length !== 3) return null;
+    const returnedNodeIds = new Set(asArray(later.process?.nodes).map(node => String(node?.node_id || '')));
+    const returnedEdges = new Set(asArray(later.process?.edges).map(edge => `${edge?.source || ''}:${edge?.target || ''}`));
+    const returnedEvidenceIds = new Set(asArray(later.checklist?.items).map(item => String(item?.item_id || '')));
+    if (!nodeIds.every(nodeId => returnedNodeIds.has(nodeId))
+      || !edges.every(edge => returnedEdges.has(`${edge.source}:${edge.target}`))
+      || !evidenceIds.every(itemId => returnedEvidenceIds.has(itemId))) return null;
     return {
-      originId,
-      nodeId,
-      edges: edges.slice(0, 2),
-      evidenceIds: evidenceIds.slice(0, 3),
-      receiptBound: receipt.contract === 'casepath.memory-application-receipt/1.0.0',
+      originId: String(validation.memoryOriginId),
+      nodeId: nodeIds[0],
+      edges,
+      evidenceIds,
+      applicationHash: String(validation.applicationHash),
+      receiptBound: true,
+    };
+  }
+
+  function reviewedKnowledgeState() {
+    const result = asObject(state.result) || {};
+    const knowledge = asObject(state.review?.knowledge) || asObject(result.knowledge) || asObject(state.knowledge) || {};
+    const candidate = asObject(state.review?.candidate) || asObject(knowledge.candidate) || asObject(knowledge.reusable_rule_candidate) || asObject(result.reusable_rule_candidate) || {};
+    const memoryId = String(valueFrom(state.review, 'memory_id') || valueFrom(knowledge, 'memory_id') || valueFrom(result, 'memory_id') || '');
+    const available = Boolean(state.review?.accepted === true && knowledge.reviewed_memory_available === true && memoryId);
+    const sharedChanged = Boolean(candidate.shared_knowledge_changed === true && candidate.status === 'released');
+    return { memoryId, available, sharedChanged, candidate, knowledge };
+  }
+
+  function reviewAppliedTruth() {
+    const nodeAdded = Boolean(nodeById('ventilation_dispute'));
+    const useEvidence = asArray(state.checklist?.items).find(item => item.item_id === 'use_evidence');
+    const buildingEnvelope = asArray(state.checklist?.items).find(item => item.item_id === 'building_envelope');
+    const useEvidenceMoved = evidenceOwnerIds(useEvidence).includes('ventilation_dispute');
+    const buildingRemainsConditional = buildingEnvelope?.status === 'conditional';
+    return {
+      nodeAdded,
+      useEvidenceMoved,
+      buildingRemainsConditional,
+      verified: nodeAdded && useEvidenceMoved && buildingRemainsConditional,
+    };
+  }
+
+  function acceptedLaterCausalStep(detail) {
+    if (!detail || detail.contract !== LATER_CAUSAL_STEP_CONTRACT) return null;
+    const phase = String(detail.phase || '');
+    if (phase === 'waiting') {
+      const memory = reviewedKnowledgeState();
+      const originId = String(detail.memoryOriginId || '');
+      if (!memory.available || !originId || originId !== memory.memoryId) return null;
+      return { phase, memoryOriginId: originId, runId: String(detail.runId || '') };
+    }
+    if (!asObject(state.laterResult)) return null;
+    if (phase === 'source') {
+      const fact = asArray(state.laterResult.facts).find(item => item.fact_id === String(detail.factId || ''));
+      const receipt = asObject(state.laterResult.memory_application);
+      const runId = String(detail.runId || '');
+      const ref = asArray(fact?.source_refs).find(item => (
+        item.artifact_id === String(detail.sourceId || '')
+        && sourceLocatorId(item) === String(detail.locatorId || '')
+      ));
+      if (!fact
+        || fact.semantic_role !== 'management_ventilation_allegation'
+        || !ref
+        || !runId
+        || String(receipt?.target?.run_id || '') !== runId) return null;
+      return { phase, fact, ref, runId };
+    }
+    if (phase === 'memory') {
+      const receipt = asObject(state.laterResult.memory_application);
+      const originId = String(detail.memoryOriginId || '');
+      const runId = String(detail.runId || '');
+      const retrieved = state.laterResult.reviewed_memory_retrieved === true
+        || state.laterResult.knowledge?.reviewed_memory_retrieved === true;
+      if (!retrieved
+        || receipt?.contract !== 'casepath.memory-application-receipt/1.0.0'
+        || String(receipt.source_memory?.memory_id || '') !== originId
+        || !runId
+        || String(receipt.target?.run_id || '') !== runId
+        || !originId) return null;
+      return { phase, memoryOriginId: originId, runId };
+    }
+    return null;
+  }
+
+  function momentCopy() {
+    const copy = MOMENT_COPY[state.moment] || MOMENT_COPY.opening;
+    if (state.moment === 'review-applied' && !reviewAppliedTruth().verified) {
+      return {
+        ...copy,
+        title: 'The correction could not be verified.',
+        detail: 'No process change is claimed until every returned review consequence agrees.',
+        authority: 'Deterministic review transform · incomplete result',
+      };
+    }
+    if (state.moment !== 'later-result' || validatedLaterMemory()) return copy;
+    const validation = asObject(state.laterMemoryValidation) || {};
+    const detail = validation.retrievedOnly === true
+      ? 'Unverified memory was retrieved but not applied.'
+      : validation.memoryRetrieved === true
+        ? 'Memory retrieval returned, but application proof did not agree.'
+        : 'No receipt-bound memory application was validated.';
+    return {
+      ...copy,
+      title: 'No memory-driven process change is claimed.',
+      detail,
+      authority: 'Deterministic comparison · application not proven',
     };
   }
 
@@ -1279,20 +1557,70 @@
     return SPATIAL_NODE_LABELS[nodeId] || nodeById(nodeId)?.title || String(nodeId || '').replaceAll('_', ' ');
   }
 
+  function verificationGraphMarkup() {
+    const verification = asObject(state.verification) || {};
+    const checksTotal = asArray(verification.checks).length || Number(verification.checks_total) || 0;
+    const rejectedCount = asArray(verification.rejected_proposals).length || Number(verification.rejected_count) || 0;
+    const verified = verification.valid === true && verification.computed === true && checksTotal > 0;
+    return `<section class="ac-graph-verification" style="--spatial-x:49;--spatial-y:72" data-spatial-anchor-node-id="causation" data-node-attachment-kind="verification" ${lineageAttributes('verification', 'whole_playbook_verification')} data-verification-status="${verified ? 'accepted' : 'incomplete'}" data-verification-check-count="${esc(checksTotal)}" data-verification-rejected-count="${esc(rejectedCount)}" data-ac-cursor-target="true">
+      <small>Final audit</small>
+      <strong>${verified ? `${esc(checksTotal)} checks agree` : 'Verification incomplete'}</strong>
+      <span>${verified ? rejectedCount ? `${esc(rejectedCount)} unsupported proposal${rejectedCount === 1 ? '' : 's'} rejected` : 'No unsupported proposals retained' : 'No complete result is claimed.'}</span>
+    </section>`;
+  }
+
+  function knowledgeGraphMarkup() {
+    const memory = reviewedKnowledgeState();
+    return `<section class="ac-knowledge-graph-note" style="--spatial-x:43;--spatial-y:67" data-spatial-anchor-node-id="ventilation_dispute" data-memory-id="${esc(memory.memoryId)}" data-memory-status="${memory.available ? 'unverified_demo_memory' : 'not-confirmed'}" data-shared-rule-applied="${esc(String(memory.sharedChanged))}">
+      <small>What the organization can learn</small>
+      <strong>${memory.available ? 'Saved as unverified case memory' : 'No demo memory was confirmed'}</strong>
+      <span>${memory.sharedChanged ? 'A released shared-playbook change was returned.' : 'Shared playbook unchanged'}</span>
+    </section>`;
+  }
+
+  function laterCausalGraphMarkup() {
+    const step = state.laterCausalStep;
+    const memory = reviewedKnowledgeState();
+    if (step?.phase === 'source') {
+      const finding = step.ref.excerpt || step.ref.observation || `${step.fact.label}: ${step.fact.value}`;
+      return `<section class="ac-later-memory-retrieval ac-later-source-step" style="--spatial-x:42;--spatial-y:65" data-later-causal-phase="source" data-spatial-anchor-node-id="ventilation_dispute">
+        <small>New claim · exact source</small>
+        <strong>${esc(finding)}</strong>
+        <span>Unresolved allegation · now checking the saved correction.</span>
+        <button type="button" data-ac-action="open-source" data-ac-inspection-target="true" data-ac-cursor-target="true" ${sourceContextAttributes(step.fact, step.ref)}>Inspecting this passage</button>
+      </section>`;
+    }
+    if (step?.phase === 'memory') {
+      return `<section class="ac-later-memory-retrieval" style="--spatial-x:42;--spatial-y:65" data-later-causal-phase="memory" data-spatial-anchor-node-id="ventilation_dispute" data-memory-origin-id="${esc(step.memoryOriginId)}" data-ac-cursor-target="true">
+        <small>Held-out claim · governed retrieval</small>
+        <strong>Unverified case memory retrieved</strong>
+        <span>Now checking whether it applies.</span>
+      </section>`;
+    }
+    return `<section class="ac-later-memory-retrieval" style="--spatial-x:42;--spatial-y:65" data-later-causal-phase="waiting" data-spatial-anchor-node-id="ventilation_dispute" data-memory-origin-id="${esc(step?.memoryOriginId || memory.memoryId)}">
+      <small>Held-out new claim</small>
+      <strong>Checking the saved correction</strong>
+      <span>Source first · memory eligibility second · graph change only if proven.</span>
+    </section>`;
+  }
+
   function reviewGraphEditMarkup() {
-    return `<section class="ac-review-graph-edit" style="--spatial-x:62;--spatial-y:74" data-review-edit-state="pending" data-review-node-id="causation" data-spatial-anchor-node-id="causation">
-      <small>Building-envelope assessment</small>
-      <div class="ac-review-change"><span>Required</span><b aria-hidden="true">→</b><strong>Conditional</strong></div>
-      <p>Responsibility remains blocked until competent causation evidence arrives.</p>
+    return `<section class="ac-review-graph-edit" style="--spatial-x:62;--spatial-y:68" data-review-edit-state="pending" data-review-node-id="causation" data-spatial-anchor-node-id="causation">
+      <small>Process and evidence correction</small>
+      <div class="ac-review-change"><span>Implicit allegation</span><b aria-hidden="true">→</b><strong>Add ventilation decision</strong></div>
+      <p>Move use evidence to the new decision; building-envelope assessment remains conditional.</p>
       <button type="button" data-ac-action="submit-review" data-review-mode="conditional" data-casepath-primary-action="true" data-ac-cursor-target="true">Apply correction</button>
     </section>`;
   }
 
   function reviewAppliedMarkup() {
-    return `<section class="ac-review-applied-note" style="--spatial-x:54;--spatial-y:76" data-review-edit-state="applied" data-review-node-id="ventilation_dispute" data-spatial-anchor-node-id="ventilation_dispute">
-      <small>Correction applied to this case</small>
-      <strong>Ventilation check added · broader testing conditional</strong>
-      <span>Unverified demo correction · model acceptance not reused · responsibility remains blocked.</span>
+    const truth = reviewAppliedTruth();
+    return `<section class="ac-review-applied-note" style="--spatial-x:43;--spatial-y:67" data-review-edit-state="applied" data-review-delta-verified="${esc(String(truth.verified))}" data-review-node-id="ventilation_dispute" data-spatial-anchor-node-id="ventilation_dispute" data-review-node-added="${esc(String(truth.nodeAdded))}" data-review-use-evidence-moved="${esc(String(truth.useEvidenceMoved))}" data-review-building-conditional="${esc(String(truth.buildingRemainsConditional))}">
+      <small>${truth.verified ? 'Correction applied to this case' : 'Correction result incomplete'}</small>
+      <strong>${truth.verified ? 'Ventilation check added' : 'No correction is claimed'}</strong>
+      <span data-review-effect="evidence-moved">${truth.useEvidenceMoved ? 'Ventilation evidence moved here' : 'Evidence move not returned'}</span>
+      <span data-review-effect="testing-conditional">${truth.buildingRemainsConditional ? 'Building-envelope test remains conditional' : 'Conditional testing state not returned'}</span>
+      <em>${truth.verified ? 'Unverified demo correction · model acceptance not reused · responsibility remains blocked.' : 'Returned review consequences did not agree · existing process retained.'}</em>
     </section>`;
   }
 
@@ -1301,7 +1629,8 @@
     if (!delta.receiptBound || !delta.originId || !delta.nodeId || delta.edges.length !== 2 || delta.evidenceIds.length !== 3) return '';
     const links = delta.edges.map(edge => `<span class="ac-memory-process-link" data-memory-origin-id="${esc(delta.originId)}" data-edge-source="${esc(edge.source)}" data-edge-target="${esc(edge.target)}"><b>${esc(nodeLabel(edge.source))}</b><i aria-hidden="true">→</i><strong>${esc(nodeLabel(edge.target))}</strong></span>`).join('');
     const evidence = delta.evidenceIds.map(itemId => `<span class="ac-memory-evidence-change" data-memory-effect="evidence-changed" data-memory-origin-id="${esc(delta.originId)}" data-item-id="${esc(itemId)}"><b>${esc(SPATIAL_EVIDENCE_LABELS[itemId] || itemId.replaceAll('_', ' '))}</b><small>Updated</small></span>`).join('');
-    return `<section class="ac-memory-graph-delta" style="--spatial-x:53;--spatial-y:62" data-memory-receipt="true" data-memory-origin-id="${esc(delta.originId)}" data-spatial-anchor-node-id="${esc(delta.nodeId)}">
+    return `<section class="ac-memory-graph-delta" style="--spatial-x:38;--spatial-y:64" data-memory-receipt="true" data-memory-origin-id="${esc(delta.originId)}" data-spatial-anchor-node-id="${esc(delta.nodeId)}">
+      <header><small>What changed on this claim</small><strong>1 decision · 2 links · 3 evidence needs</strong></header>
       <div class="ac-memory-process-links" aria-label="Two receipt-bound process links">${links}</div>
       <div class="ac-memory-evidence-changes" aria-label="Three receipt-bound evidence changes">${evidence}</div>
       <p>Shared playbook unchanged.</p>
@@ -1331,13 +1660,16 @@
       if (!visible.has(edge.source) || !visible.has(edge.target)) return;
       const path = edge.state === 'selected' || edge.state === 'loop' ? 'accepted' : 'future';
       const edgeKey = `${edge.source}:${edge.target}`;
+      const reviewAdded = state.moment === 'review-applied'
+        && edge.source === 'ventilation_dispute'
+        && edge.target === 'causation';
       const isMemoryEdge = Boolean(laterDelta?.receiptBound && laterDelta.originId && !renderedMemoryEdges.has(edgeKey) && laterDelta.edges.some(item => (
         item.source === edge.source && item.target === edge.target
       )));
       if (isMemoryEdge) renderedMemoryEdges.add(edgeKey);
       const memoryAttributes = isMemoryEdge
         ? `data-memory-effect="edge-added" data-memory-origin-id="${esc(laterDelta.originId)}"`
-        : '';
+        : reviewAdded ? 'data-review-effect="edge-added"' : '';
       paths.push(edgeMarkup(edge.source, edge.target, path, edge.state || '', null, null, memoryAttributes));
     });
     if (laterDelta?.receiptBound && laterDelta.originId) {
@@ -1363,7 +1695,7 @@
         ));
       });
     }
-    if (visible.has('causation') && state.moment !== 'review-applied') {
+    if (visible.has('causation')) {
       CAUSATION_BRANCH_LAYOUT.forEach(([target, , x, y]) => {
         if (state.graphRevealRunning && !state.visibleBranchIds.has(target)) return;
         const targetNode = nodeById(target);
@@ -1379,6 +1711,22 @@
           paths.push(edgeMarkup(edge.source, edge.target, edge.state === 'loop' ? 'loop' : 'branch-resolution', edge.state || '', [x, y], spatialPosition(edge.target)));
         });
       });
+    }
+    if (state.moment === 'review-applied' && visible.has('ventilation_dispute')) {
+      const reviewEdge = asArray(state.process?.edges).find(edge => (
+        edge.source === 'evidence_gap' && edge.target === 'ventilation_dispute'
+      ));
+      if (reviewEdge && nodeById('evidence_gap')) {
+        paths.push(edgeMarkup(
+          reviewEdge.source,
+          reviewEdge.target,
+          'review-added',
+          reviewEdge.state || 'added',
+          spatialPosition('evidence_gap'),
+          spatialPosition('ventilation_dispute'),
+          'data-review-effect="edge-added"',
+        ));
+      }
     }
     return paths.join('');
   }
@@ -1398,14 +1746,17 @@
       if (!branch || !returnedEdge) return '';
       return `<button type="button" class="ac-spatial-branch" style="--spatial-x:${x};--spatial-y:${y}" data-ac-action="select-node" data-spatial-id="${esc(nodeId)}" data-spatial-role="branch" data-spatial-path="${nodeId === 'evidence_gap' ? 'next-action' : 'uncertainty'}" data-node-id="${esc(nodeId)}" data-branch-id="${esc(branch.branch_id)}" data-branch-state="${esc(branch.state || '')}" aria-label="${esc(returnedNode.title)}"><span aria-hidden="true"></span><strong>${esc(shortLabel)}</strong></button>`;
     }).join('');
-    if (state.moment === 'review') return `${branchMarkup}${reviewGraphEditMarkup()}`;
-    if (state.moment === 'review-applied') return reviewAppliedMarkup();
     const lawLabel = law?.location?.match(/Art(?:icle)?\.?\s*\d+/i)?.[0]?.replace(/^Article/i, 'Art.') || 'Swiss law';
     const lawMarkup = !state.graphRevealRunning && law ? `<button type="button" class="ac-spatial-law-marker" style="--spatial-x:62;--spatial-y:27" data-ac-action="open-law" data-law-id="${esc(law.source_id)}" data-spatial-id="${esc(law.source_id)}" data-spatial-anchor-node-id="causation" data-spatial-role="law" data-spatial-path="legal-grounding" data-node-attachment-kind="law" ${lineageAttributes('law', law.source_id)} data-source-authority="${isOfficialLaw(law) ? 'official_registry' : 'deterministic_principle'}" data-source-locator-id="${esc(lawLocatorId(law))}" aria-label="${esc(`${law.title || law.source_id} ${law.location || ''}`)}"><span aria-hidden="true">§</span><strong>${esc(lawLabel)}</strong></button>` : '';
     const evidenceMarkup = evidence.map(item => `<button type="button" class="ac-evidence-chip" data-ac-action="inspect-evidence" data-evidence-id="${esc(item.item_id)}" data-spatial-id="${esc(item.item_id)}" data-spatial-anchor-node-id="causation" data-spatial-role="evidence" data-spatial-path="evidence-support" data-node-attachment-kind="evidence" ${lineageAttributes('evidence', item.item_id)} data-evidence-status="${esc(item.status || '')}" data-fact-id="${esc(item.fact_id || '')}" aria-label="${esc(`${item.title} · ${statusLabel(item.status)}`)}">${esc(SPATIAL_EVIDENCE_LABELS[item.item_id] || item.title)}</button>`).join('<span aria-hidden="true">·</span>');
     const nextMarkup = next && nodeById('evidence_gap') && evidenceOwnerIds(next).includes('evidence_gap') ? `<button type="button" class="ac-evidence-need" data-ac-action="inspect-evidence" data-spatial-id="${esc(next.item_id)}" data-spatial-role="next-action" data-spatial-path="next-action" data-spatial-next-action="true" data-spatial-anchor-node-id="causation" data-node-attachment-kind="evidence" ${lineageAttributes('evidence', next.item_id)} data-node-id="evidence_gap" data-evidence-id="${esc(next.item_id)}"><span>Need</span><strong>${esc(SPATIAL_EVIDENCE_LABELS[next.item_id] || next.title)}</strong><b aria-hidden="true">→</b></button>` : '';
-    const evidencePanel = !state.graphRevealRunning && (nextMarkup || evidenceMarkup) ? `<section class="ac-evidence-relationship" style="--spatial-x:53;--spatial-y:82" aria-label="Evidence generated by the current process decision"><small>Causation unresolved</small>${nextMarkup}${evidenceMarkup ? `<div><span>Later</span>${evidenceMarkup}</div>` : ''}</section>` : '';
-    if (state.moment === 'later-result') return `${lawMarkup}${branchMarkup}${laterMemoryDeltaMarkup()}`;
+    const evidencePanel = !state.graphRevealRunning && (nextMarkup || evidenceMarkup) ? `<section class="ac-evidence-relationship" style="--spatial-x:53;--spatial-y:75" aria-label="Evidence generated by the current process decision"><small>Causation unresolved</small>${nextMarkup}${evidenceMarkup ? `<div><span>Later</span>${evidenceMarkup}</div>` : ''}</section>` : '';
+    if (state.moment === 'review') return `${branchMarkup}${reviewGraphEditMarkup()}`;
+    if (state.moment === 'review-applied') return `${branchMarkup}${reviewAppliedMarkup()}`;
+    if (state.moment === 'verify') return `${lawMarkup}${branchMarkup}${verificationGraphMarkup()}`;
+    if (state.moment === 'knowledge') return `${branchMarkup}${knowledgeGraphMarkup()}`;
+    if (state.moment === 'later-work') return `${branchMarkup}${laterCausalGraphMarkup()}`;
+    if (state.moment === 'later-result') return `${branchMarkup}${laterMemoryDeltaMarkup()}`;
     return `${lawMarkup}${branchMarkup}${evidencePanel}`;
   }
 
@@ -1440,6 +1791,7 @@
 
   function spatialDetailMarkup(node) {
     if (!node) return '';
+    if (['verify', 'review', 'review-applied', 'knowledge', 'later-work', 'later-result'].includes(state.moment)) return '';
     if (state.moment === 'evidence') return graphEvidenceDetailMarkup(node) || spatialGroundingMarkup(node);
     if (state.moment === 'experience') return graphReferenceDetailMarkup(node) || spatialGroundingMarkup(node);
     if (state.graphInspecting && [state.pendingGraphNodeId, state.pendingBranchNodeId].includes(node.node_id)) return nodeInspectionMarkup(node);
@@ -1449,13 +1801,17 @@
     return `<div class="ac-spatial-node-detail" data-spatial-role="active-detail" data-spatial-path="active" data-active-focal-path="true" data-node-id="${esc(node.node_id)}" data-basis-fact-ids="${esc(facts.join(','))}" data-basis-law-ids="${esc(laws.join(','))}" data-basis-evidence-requirement-ids="${esc(evidence.join(','))}"><span>${nodeState(node) === 'current' ? 'Current decision' : 'Grounded decision'}</span><strong>${esc(node.question || node.title)}</strong><p>${esc(node.why || node.answer || '')}</p>${spatialGroundingMarkup(node)}</div>`;
   }
 
-  function emitGraphContextualArtifact(detail) {
-    if (state.graphRevealRunning || !['evidence', 'experience'].includes(state.moment)) return;
-    const attachment = detail?.querySelector('.ac-graph-local-object[data-node-attachment-kind]');
+  function emitGraphContextualArtifact(detail, satellites) {
+    if (state.graphRevealRunning || !['evidence', 'experience', 'verify'].includes(state.moment)) return;
+    const attachment = state.moment === 'verify'
+      ? satellites?.querySelector('.ac-graph-verification[data-node-attachment-kind="verification"]')
+      : detail?.querySelector('.ac-graph-local-object[data-node-attachment-kind]');
     const kind = attachment?.dataset.nodeAttachmentKind || '';
     const entityId = kind === 'evidence'
       ? attachment?.dataset.evidenceId
-      : kind === 'precedent' ? attachment?.dataset.precedentId : '';
+      : kind === 'precedent'
+        ? attachment?.dataset.precedentId
+        : kind === 'verification' ? 'whole_playbook_verification' : '';
     if (!entityId) return;
     emitArtifactChange(kind, entityId);
   }
@@ -1648,20 +2004,36 @@
       focus.textContent = nodeById(state.selectedNodeId)?.title || DEFAULT_NODE_COPY[state.selectedNodeId]?.[0] || 'Grounded decision';
       status.textContent = `Decision ${Math.min(state.graphRevealIndex + (state.graphDwell ? 0 : 1), nodes.length)} of ${nodes.length}: ${focus.textContent}`;
     } else {
-      count.textContent = state.moment === 'review'
-        ? 'Expert correction'
-        : state.moment === 'review-applied'
-          ? 'Correction applied to this case'
-          : state.moment === 'later-result'
-            ? 'A later claim uses the correction'
-            : `${nodes.length} accepted decisions · complete path available`;
-      focus.textContent = state.moment === 'review'
-        ? 'Causation · responsibility remains blocked'
-        : state.moment === 'review-applied'
+      count.textContent = `${nodes.length} decisions · core handling spine`;
+      focus.textContent = nodeById(state.selectedNodeId)?.title || 'Select one decision';
+      if (state.moment === 'review') {
+        count.textContent = 'Expert correction';
+        focus.textContent = 'Causation · responsibility remains blocked';
+      } else if (state.moment === 'review-applied') {
+        const truth = reviewAppliedTruth();
+        count.textContent = truth.verified ? 'Correction applied to this case' : 'Correction result incomplete';
+        focus.textContent = truth.verified
           ? 'Ventilation check added · broader testing remains conditional'
-          : state.moment === 'later-result'
-            ? 'Unverified case memory · qualified review still required'
-            : nodeById(state.selectedNodeId)?.title || 'Select one decision';
+          : 'No process correction is claimed';
+      } else if (state.moment === 'verify') {
+        count.textContent = 'Final audit · complete graph';
+        focus.textContent = 'Causation stays open · unsupported conclusions fail closed';
+      } else if (state.moment === 'knowledge') {
+        count.textContent = 'Correction saved for governed reuse';
+        focus.textContent = 'Ventilation check · unverified case memory only';
+      } else if (state.moment === 'later-work') {
+        count.textContent = 'Held-out claim · checking the saved correction';
+        focus.textContent = state.laterCausalStep?.phase === 'source'
+          ? 'New claim source · ventilation allegation'
+          : state.laterCausalStep?.phase === 'memory'
+            ? 'Unverified case memory retrieved'
+            : 'New claim · checking memory eligibility';
+      } else if (state.moment === 'later-result') {
+        count.textContent = validatedLaterMemory() ? 'A later claim uses the correction' : 'Memory application not proven';
+        focus.textContent = validatedLaterMemory()
+          ? 'Unverified case memory · qualified review still required'
+          : 'No memory-driven change claimed';
+      }
       status.textContent = `${nodes.length} accepted decisions. Current decision: ${focus.textContent}.`;
     }
     edgeLayer.innerHTML = spatialEdgesMarkup(nodes);
@@ -1670,11 +2042,12 @@
       ? state.pendingGraphNodeId || state.pendingBranchNodeId || state.selectedNodeId
       : state.selectedNodeId;
     detail.innerHTML = spatialDetailMarkup(nodeById(detailNodeId));
-    emitGraphContextualArtifact(detail);
+    emitGraphContextualArtifact(detail, satellites);
   }
 
   function stageFocalMarkup() {
-    const copy = MOMENT_COPY[state.moment] || MOMENT_COPY.opening;
+    const copy = momentCopy();
+    if (state.moment === 'understand' && (state.factTourRunning || state.factTourComplete)) return factSourceStageMarkup(copy);
     if (state.moment === 'research') return lawStageMarkup(copy);
     if (state.moment === 'evidence') return evidenceStageMarkup(copy);
     if (state.moment === 'experience') return referenceStageMarkup(copy);
@@ -1692,6 +2065,39 @@
       <h3>${esc(headline)}</h3>
       <p>${esc(detail)}</p>
       ${output ? `<strong data-ac-output-artifact="${esc(output)}">Produced · ${esc(output.replaceAll('_', ' '))}</strong>` : ''}
+    </article>`;
+  }
+
+  function factSourceStageMarkup(copy) {
+    const items = factStoryItems();
+    const item = items.find(candidate => candidate.fact.fact_id === state.pendingFactId)
+      || items[Math.min(state.factTourIndex, Math.max(0, items.length - 1))];
+    if (!item) return `<article class="ac-stage-focus" data-ac-focal-object="fact-inspection"><span>${esc(copy.authority)}</span><h3>${esc(copy.title)}</h3><p>Waiting for exact returned source locators.</p></article>`;
+    const { fact, ref } = item;
+    const finding = sourceFinding(ref);
+    const sourceTitle = sourceDisplayTitle(ref.artifact_id);
+    const step = state.factTourIndex + 1;
+    const sourceMarkup = `<section class="ac-fact-source" data-source-authority="${esc(ref.authority || 'customer_submission')}">
+      <header><span>Source ${step} of ${FACT_STORY_IDS.length}</span><strong>${esc(sourceTitle)}</strong><small>${esc(sourceLocation(ref))}</small></header>
+      <blockquote>${esc(finding)}</blockquote>
+    </section>`;
+    if (state.factTourPhase === 'source' && state.factTourRunning) {
+      return `<article class="ac-stage-focus ac-fact-source-focus" data-ac-focal-object="fact-inspection" data-fact-tour-phase="source" data-fact-id="${esc(fact.fact_id)}">
+        <span>${esc(copy.authority)} · exact returned source</span>
+        <h3>Checking the source before adding a fact.</h3>
+        ${sourceMarkup}
+        <button type="button" class="ac-fact-inspection-target" data-ac-action="open-source" data-ac-inspection-target="true" data-fact-inspection-target="true" data-ac-cursor-target="true" ${sourceContextAttributes(fact, ref)}>Inspect ${esc(sourceTitle)}</button>
+      </article>`;
+    }
+    return `<article class="ac-stage-focus ac-fact-source-focus" data-ac-focal-object="fact-inspection" data-fact-tour-phase="finding" data-fact-id="${esc(fact.fact_id)}">
+      <span>${esc(copy.authority)} · source-grounded fact</span>
+      ${sourceMarkup}
+      <section class="ac-fact-finding" data-node-attachment-kind="fact" ${lineageAttributes('fact', fact.fact_id)} ${sourceContextAttributes(fact, ref)} data-fact-id="${esc(fact.fact_id)}">
+        <small>Fact added from this source</small>
+        <h3>${esc(fact.label || 'Returned fact')}</h3>
+        <strong>${esc(fact.value || 'Value not returned')}</strong>
+        <p>${esc(fact.explanation || (fact.state === 'unknown' ? 'This remains unresolved.' : 'This fact is bound to the source shown above.'))}</p>
+      </section>
     </article>`;
   }
 
@@ -1748,7 +2154,11 @@
     try { officialHost = new URL(String(law.url || '')).host || officialHost; } catch (_) {}
     return `<article class="ac-stage-focus ac-law-focus" data-ac-focal-object="law" data-ac-law-id="${esc(law.source_id)}" data-node-attachment-kind="law" ${lineageAttributes('law', law.source_id)} data-source-authority="official_registry" data-source-locator-id="${esc(lawLocatorId(law))}">
       <div class="ac-browser-bar"><i aria-hidden="true"></i><span><strong>${esc(officialHost)}</strong><code>${esc(law.url || 'Official URL not returned')}</code></span><small>Cached exact passage</small></div>
-      <nav class="ac-law-tabs" aria-label="Exact official Swiss-law sections">${sources.map(source => `<button type="button" data-ac-action="select-law" data-law-id="${esc(source.source_id)}" data-source-authority="official_registry" data-source-locator-id="${esc(lawLocatorId(source))}" aria-current="${String(source.source_id === law.source_id)}" ${source.source_id === cursorLawId ? 'data-ac-cursor-target="true"' : ''}>${esc(source.location || source.title)}</button>`).join('')}</nav>
+      <nav class="ac-law-tabs" aria-label="Exact official Swiss-law sections">${sources.map(source => {
+        const article = String(source.location || '').match(/Art(?:icle)?\.?\s*\d+[a-z]?/i)?.[0]?.replace(/^Article/i, 'Art.');
+        const label = article || (/conciliation|schlichtung/i.test(`${source.title || ''} ${source.location || ''}`) ? 'Conciliation' : source.title || source.location);
+        return `<button type="button" data-ac-action="select-law" data-law-id="${esc(source.source_id)}" data-source-authority="official_registry" data-source-locator-id="${esc(lawLocatorId(source))}" aria-current="${String(source.source_id === law.source_id)}" ${source.source_id === cursorLawId ? 'data-ac-cursor-target="true"' : ''} aria-label="${esc(source.location || source.title)}">${esc(label)}</button>`;
+      }).join('')}</nav>
       <span>Cached exact official source · qualified review pending</span>
       <h3>${esc(law.title)}</h3>
       <blockquote lang="${esc(law.passage_language || '')}">${esc(law.passage_text || 'Official passage not returned.')}</blockquote>
@@ -1804,20 +2214,19 @@
     const knowledge = state.review?.knowledge || result.knowledge || state.knowledge || {};
     const candidate = state.review?.candidate || knowledge.candidate || knowledge.reusable_rule_candidate || result.reusable_rule_candidate || {};
     const memoryId = valueFrom(memory, 'memory_id') || valueFrom(state.review, 'memory_id') || valueFrom(result, 'memory_id') || valueFrom(knowledge, 'memory_id');
-    const memoryOriginId = String(valueFrom(memory?.source_memory, 'memory_id') || valueFrom(memory, 'memory_id') || memoryId || valueFrom(memory, 'application_hash') || '');
-    const receipt = memory.contract === 'casepath.memory-application-receipt/1.0.0';
+    const laterValidation = state.moment === 'later-result' ? validatedLaterMemory() : null;
+    const memoryOriginId = String(laterValidation?.originId || (state.moment === 'later-result' ? '' : valueFrom(memory?.source_memory, 'memory_id') || valueFrom(memory, 'memory_id') || memoryId || valueFrom(memory, 'application_hash')) || '');
+    const receipt = state.moment === 'later-result'
+      ? Boolean(laterValidation)
+      : memory.contract === 'casepath.memory-application-receipt/1.0.0';
     const sharedChanged = later.shared_rule_applied === true || result.shared_rule_applied === true;
-    const headline = state.moment === 'later-result' && receipt
-      ? 'Case-specific memory changed the next step.'
-      : memoryId
-        ? 'Case memory saved for governed reuse.'
-        : copy.title;
-    const detail = state.moment === 'later-result' && receipt
-      ? 'The later claim now asks for one neutral assessment before broader building tests.'
-      : memoryId
-        ? 'It remains unverified and does not change the shared playbook.'
-        : copy.detail;
-    const memoryEffects = state.moment === 'later-result' && memoryOriginId && !state.processAccepted ? `
+    const headline = state.moment === 'later-result'
+      ? receipt ? 'Case-specific memory changed the next step.' : copy.title
+      : memoryId ? 'Case memory saved for governed reuse.' : copy.title;
+    const detail = state.moment === 'later-result'
+      ? receipt ? 'The later claim now asks for one neutral assessment before broader building tests.' : copy.detail
+      : memoryId ? 'It remains unverified and does not change the shared playbook.' : copy.detail;
+    const memoryEffects = state.moment === 'later-result' && receipt && memoryOriginId && !state.processAccepted ? `
       <ol class="ac-memory-effects" aria-label="Receipt-bound case-specific changes">
         <li data-memory-effect="node-added" data-memory-origin-id="${esc(memoryOriginId)}">One decision node added</li>
         <li data-memory-effect="edge-added" data-memory-origin-id="${esc(memoryOriginId)}">Connection into the learned decision</li>
@@ -1919,9 +2328,12 @@
     if (!focal) return;
     const specialMoment = ['verify', 'review', 'review-applied', 'knowledge', 'later-work', 'later-result', 'failure'].includes(state.moment);
     const semanticArtifactMoment = ['evidence', 'experience'].includes(state.moment);
+    const factTourMoment = state.moment === 'understand' && (state.factTourRunning || state.factTourComplete);
     const node = nodeById(state.selectedNodeId);
     const modelArtifact = eventActorType(state.currentEvent) === 'nemotron_agent' && AGENTS[eventAgentId(state.currentEvent)];
-    const markup = state.graphRevealRunning && node
+    const markup = factTourMoment
+      ? stageFocalMarkup()
+      : state.graphRevealRunning && node
       ? graphBuildFocalMarkup(node)
       : semanticArtifactMoment
         ? stageFocalMarkup()
@@ -1956,7 +2368,8 @@
     const tourBoundLaw = kind !== 'law'
       || state.moment !== 'research'
       || state.officialLawTourVisitedIds.has(String(entityId || ''));
-    if (tourBoundLaw && focal.dataset.artifactFocus === 'true' && !state.graphRevealRunning && !state.pendingLawId) {
+    const sourceBeforeFact = Boolean(focal.querySelector('[data-fact-tour-phase="source"]'));
+    if (!sourceBeforeFact && tourBoundLaw && focal.dataset.artifactFocus === 'true' && !state.graphRevealRunning && !state.pendingLawId) {
       emitArtifactChange(kind, entityId);
     }
   }
@@ -1988,12 +2401,28 @@
     if (!proof) return;
     if (state.processAccepted) {
       if (state.moment === 'review-applied') {
-        proof.textContent = 'Accepted correction · causation → ventilation check → evidence loop';
+        proof.textContent = reviewAppliedTruth().verified
+          ? 'Unverified correction · ventilation check added · responsibility still blocked'
+          : 'Correction not verified · existing process retained';
+        return;
+      }
+      if (state.moment === 'knowledge') {
+        proof.textContent = 'Unverified case memory saved · shared playbook unchanged';
+        return;
+      }
+      if (state.moment === 'later-work') {
+        proof.textContent = 'New claim source → memory eligibility → proven graph change only';
+        return;
+      }
+      if (state.moment === 'later-result') {
+        proof.textContent = validatedLaterMemory()
+          ? 'Receipt-bound change · one decision · two links · three evidence updates'
+          : 'No receipt-bound memory change was proven';
         return;
       }
       const current = state.process?.current_overlay?.current_node_id || state.process?.current_node || 'not returned';
       const next = state.process?.current_overlay?.next_action_node_id || 'not returned';
-      proof.textContent = `Accepted path · current ${current} · next ${next}`;
+      proof.textContent = `Verified path · ${nodeLabel(current)} open · ${nodeLabel(next)} next`;
     } else {
       proof.textContent = 'Only returned, contract-bound work is shown.';
     }
@@ -2181,7 +2610,7 @@
     if (action === 'select-node') {
       state.selectedNodeId = button.dataset.nodeId;
       state.activeChainKind = 'source';
-      state.groundingOpen = false;
+      state.groundingOpen = true;
       emitInteraction(action, button);
       render();
       return;
@@ -2330,6 +2759,8 @@
       selectedNodeId: state.selectedNodeId,
       activeChainKind: state.activeChainKind,
       visibleNodeIds: [...state.visibleNodeIds],
+      factSourceTourState: state.factTourComplete ? 'complete' : state.factTourRunning ? 'running' : state.factTourEligible ? 'waiting' : 'idle',
+      factSourceTourIndex: state.factTourIndex,
       hasResult: Boolean(state.result),
       hasLaterResult: Boolean(state.laterResult),
     };
@@ -2357,6 +2788,48 @@
   window.addEventListener('casepath:semantic-event', event => ingest(event.detail || {}, 'semantic'));
   window.addEventListener('casepath:run-event', event => ingest(event.detail || {}, 'run'));
   window.addEventListener('casepath:run-snapshot', event => ingest(event.detail || {}, 'snapshot'));
+  window.addEventListener('casepath:later-memory-validation', event => {
+    const detail = asObject(event.detail);
+    const delta = asObject(detail?.delta) || {};
+    state.laterMemoryValidation = detail?.contract === LATER_MEMORY_VALIDATION_CONTRACT ? {
+      contract: detail.contract,
+      runId: String(detail.runId || ''),
+      validated: detail.validated === true,
+      proofReady: detail.proofReady === true,
+      memoryUsed: detail.memoryUsed === true,
+      memoryRetrieved: detail.memoryRetrieved === true,
+      retrievedOnly: detail.retrievedOnly === true,
+      applicationHash: String(detail.applicationHash || ''),
+      memoryOriginId: String(detail.memoryOriginId || ''),
+      sharedPlaybookUnchanged: detail.sharedPlaybookUnchanged === true,
+      delta: {
+        nodeIds: unique(asArray(delta.nodeIds).map(value => String(value || '')).filter(Boolean)),
+        edges: asArray(delta.edges).map(edge => ({ source: String(edge?.source || ''), target: String(edge?.target || '') })).filter(edge => edge.source && edge.target),
+        evidenceIds: unique(asArray(delta.evidenceIds).map(value => String(value || '')).filter(Boolean)),
+      },
+    } : null;
+    markSubmissionSource('');
+  });
+  window.addEventListener('casepath:later-causal-step', event => {
+    const step = acceptedLaterCausalStep(asObject(event.detail));
+    if (!step) return;
+    state.laterCausalStep = step;
+    state.moment = 'later-work';
+    state.neutralAuthority = 'case-memory-comparison';
+    if (nodeById('ventilation_dispute')) state.selectedNodeId = 'ventilation_dispute';
+    state.lastCursorChangeId = step.phase === 'source'
+      ? `later-source:${step.fact.fact_id}:${sourceLocatorId(step.ref)}`
+      : `later-memory-retrieval:${step.memoryOriginId}`;
+    state.lastCursorEventId = step.runId;
+    state.lastCursorAgentId = '';
+    markSubmissionSource(step.phase === 'source' ? step.ref.artifact_id : '');
+    state.cursorCommit = step.phase === 'source' ? () => {
+      if (state.laterCausalStep !== step) return;
+      setActiveSourceLocator(sourceLocatorId(step.ref));
+      render();
+    } : null;
+    render();
+  });
   window.addEventListener('casepath:review-saved', event => {
     const detail = event.detail || {};
     if (asObject(detail.review)) state.review = detail.review;
@@ -2369,6 +2842,10 @@
   window.addEventListener('casepath:agent-focus', onAgentFocus);
   window.addEventListener('casepath:presentation', event => {
     const detail = event.detail || {};
+    if (detail.phase === 'artifact' && detail.moment === 'understand') {
+      state.factTourEligible = true;
+      maybeStartFactSourceTour();
+    }
     if (detail.phase === 'artifact' && detail.moment === 'research') startOfficialLawTour();
   });
   window.addEventListener('casepath:official-source-step', event => ingest({ ...event.detail, moment: 'research' }, 'law-step'));
@@ -2384,6 +2861,7 @@
       if (!nodeById(nodeId)) return false;
       state.selectedNodeId = nodeId;
       state.activeChainKind = 'source';
+      state.groundingOpen = true;
       render();
       return true;
     },

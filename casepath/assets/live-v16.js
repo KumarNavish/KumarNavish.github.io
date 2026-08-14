@@ -15,9 +15,13 @@
   const RESEARCH_ARTIFACT_FRAME_MS = 9000;
   const PROCESS_STORY_TIMEOUT_MS = 75000;
   const OFFICIAL_LAW_TOUR_TIMEOUT_MS = 120000;
+  const FACT_SOURCE_TOUR_TIMEOUT_MS = 45000;
   const AGENT_RECEIPT_BEAT_MS = reduceMotion ? 20 : 800;
   const BACKGROUND_BEAT_MS = reduceMotion ? 20 : 120;
   const KNOWLEDGE_BEAT_MS = 1200;
+  const LATER_CAUSAL_STEP_CONTRACT = 'casepath.later-causal-step/1.0.0';
+  const LATER_CAUSAL_SOURCE_HOLD_MS = reduceMotion ? 20 : 1900;
+  const LATER_CAUSAL_MEMORY_HOLD_MS = reduceMotion ? 20 : 1400;
   const SESSION_STORAGE_KEY = 'casepath:demo-session';
   const SESSION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
   const NEMOTRON_AGENT_IDS = new Set([
@@ -80,6 +84,7 @@
     presentedEvents: [],
     presenting: false,
     polling: false,
+    starting: false,
     runComplete: false,
     streamConnections: 0,
     terminalHydrations: 0,
@@ -523,6 +528,14 @@
     return width > 0 && height > 0 && x + width <= 1 && y + height <= 1 ? values : null;
   }
 
+  function sourceLocatorId(ref) {
+    const artifactId = String(ref?.artifact_id || 'unknown-source');
+    const kind = String(ref?.locator_kind || 'unknown-locator');
+    if (kind === 'visual_observation') return `source:${artifactId}:region:${(ref?.region || []).join(',')}`;
+    if (kind === 'metadata_field') return `source:${artifactId}:field:${String(ref?.field || '')}`;
+    return `source:${artifactId}:page:${String(ref?.page || '')}:quote:${String(ref?.excerpt || '')}`;
+  }
+
   function validVisualAnnotation(ref) {
     return ref?.locator_kind === 'visual_observation'
       && ref?.producer === 'deterministic_reference_annotation'
@@ -582,19 +595,26 @@
   }
 
   async function boot() {
+    // Bind the static claim shell before the API request. Render's API may be
+    // waking up, but the already-rendered desktop workspace must remain
+    // immediately interactive instead of feeling like a blank/loading page.
+    bindGlobalInteractions();
+    $('#runCasePath').disabled = false;
     try {
-      state.demo = await api('/api/demo');
+      const demo = await api('/api/demo');
+      if (state.starting || state.journey !== 'start') return;
+      state.demo = demo;
       state.flagshipClaim = state.demo.claim;
       state.claim = state.flagshipClaim;
       renderClaim(state.claim);
       renderProgress();
-      bindGlobalInteractions();
       window.dispatchEvent(new CustomEvent('casepath:demo-ready', { detail: {
         claim: state.flagshipClaim,
         laterClaimId: state.demo?.later_claim_id || '',
         demoClaimId: state.demo?.demo_claim_id || '',
       } }));
     } catch (error) {
+      if (state.starting || state.journey !== 'start') return;
       $('#startState').innerHTML = `<div class="start-copy"><span class="quiet-label">CasePath could not open</span><h2>The claim workspace is unavailable.</h2><p>${esc(error.message)}</p></div><button class="primary-button" type="button" onclick="location.reload()">Retry</button>`;
     }
   }
@@ -655,7 +675,8 @@
   }
 
   async function startFlagshipRun() {
-    if (state.polling || state.journey !== 'start') return;
+    if (state.polling || state.starting || state.journey !== 'start') return;
+    state.starting = true;
     const button = $('#runCasePath');
     button.disabled = true;
     button.querySelector('span').textContent = 'Opening the claim context…';
@@ -669,6 +690,7 @@
       state.runId = created.run_id;
       document.body.dataset.casepathActiveRunId = created.run_id;
       state.journey = 'live';
+      state.starting = false;
       state.eventQueue = [];
       state.queuedEventIds.clear();
       state.presentedEvents = [];
@@ -685,8 +707,9 @@
       state.polling = true;
       streamRun(state.runId, false).catch(() => {});
     } catch (error) {
+      state.starting = false;
       button.disabled = false;
-      button.querySelector('span').textContent = 'Watch CasePath handle this claim';
+      button.querySelector('span').textContent = 'Analyse claim';
       toast(`Could not start: ${error.message}`);
     }
   }
@@ -908,6 +931,26 @@
     });
   }
 
+  function waitForFactSourceTour() {
+    const complete = () => document.querySelector('#artifactCanvas[data-fact-source-tour-state="complete"]');
+    if (complete()) return Promise.resolve('complete');
+    document.body.dataset.casepathFactSourceTourWait = 'waiting';
+    return new Promise(resolve => {
+      let settled = false;
+      const finish = status => {
+        if (settled) return;
+        settled = true;
+        window.removeEventListener('casepath:fact-source-tour-complete', onComplete);
+        window.clearTimeout(timeout);
+        document.body.dataset.casepathFactSourceTourWait = status;
+        resolve(status);
+      };
+      const onComplete = () => finish('complete');
+      const timeout = window.setTimeout(() => finish('timed-out'), FACT_SOURCE_TOUR_TIMEOUT_MS);
+      window.addEventListener('casepath:fact-source-tour-complete', onComplete, { once: true });
+    });
+  }
+
   function waitsForCompletedProcess(event) {
     if (['evidence', 'experience', 'verify'].includes(event?.stage)) return true;
     if (event?.stage !== 'agent_orchestration') return false;
@@ -947,6 +990,7 @@
             : BACKGROUND_BEAT_MS;
       const processArtifact = phase === 'artifact' && entry.event.stage === 'process';
       if (!processArtifact) await wait(frameMs);
+      if (phase === 'artifact' && entry.event.stage === 'understand') await waitForFactSourceTour();
       if (phase === 'artifact' && entry.event.stage === 'research') await waitForOfficialLawTour();
       if (processArtifact) await waitForProcessStoryOnce();
     }
@@ -979,7 +1023,6 @@
       && NEMOTRON_AGENT_IDS.has(returnedAgentId)
       && eventSucceeded(event)) {
       const canvas = $('#stageCanvas');
-      const visibleMoment = canvas?.dataset.casepathMoment || state.stageMode || state.activeStage || '';
       if (canvas) canvas.dataset.casepathActiveAgentId = returnedAgentId;
       setOrchestrator(`${returnedActorName(event)} returned a bounded contribution`);
       window.dispatchEvent(new CustomEvent('casepath:agent-focus', { detail: {
@@ -988,8 +1031,7 @@
         outputArtifact: eventArtifacts(event).join(', '),
         eventId: returnedValue(event, 'event_id'),
       } }));
-      if (visibleMoment) announceRender(visibleMoment);
-      return 'receipt';
+      return 'background';
     }
     const stage = STAGES.find(item => item.id === event.stage);
     if (!stage) return 'background';
@@ -1615,7 +1657,7 @@
 
   function renderReviewImpact(mode) {
     const recommended = mode === 'conditional';
-    $('#reviewImpact').innerHTML = `<div class="review-impact-row"><small>Process</small><strong>${recommended ? 'Add “Test the ventilation allegation” after the neutral assessment.' : 'No new process decision.'}</strong></div><div class="review-impact-row"><small>Evidence</small><strong>${recommended ? 'Building-envelope testing becomes conditional; use evidence moves to the new branch.' : 'Broad building-envelope testing remains immediately missing.'}</strong></div><div class="review-impact-row"><small>Next action</small><strong>${recommended ? 'Arrange one competent neutral assessment first.' : 'Request neutral and broader testing together.'}</strong></div>`;
+    $('#reviewImpact').innerHTML = `<div class="review-impact-row"><small>Process</small><strong>${recommended ? 'Add “Test the ventilation allegation” after the neutral assessment.' : 'No new process decision.'}</strong></div><div class="review-impact-row"><small>Evidence</small><strong>${recommended ? 'Move use evidence to the new decision; building-envelope testing remains conditional.' : 'Broad building-envelope testing remains immediately missing.'}</strong></div><div class="review-impact-row"><small>Next action</small><strong>${recommended ? 'Arrange one competent neutral assessment first.' : 'Request neutral and broader testing together.'}</strong></div>`;
   }
 
   function snapshot(value) {
@@ -1747,6 +1789,39 @@
     showJourneyActions({ back: false, next: memoryAvailable ? 'Test unverified memory on a new claim' : 'Restart the demo' });
   }
 
+  function dispatchLaterCausalStep(detail) {
+    window.dispatchEvent(new CustomEvent('casepath:later-causal-step', { detail: {
+      contract: LATER_CAUSAL_STEP_CONTRACT,
+      runId: String(state.laterRun?.run_id || ''),
+      ...detail,
+    } }));
+  }
+
+  async function presentLaterCausalBridge(result) {
+    const fact = (result?.facts || []).find(item => item.semantic_role === 'management_ventilation_allegation')
+      || (result?.facts || []).find(item => item.fact_id === 'fact_ventilation_allegation');
+    const ref = (fact?.source_refs || [])[0];
+    if (fact && ref?.artifact_id) {
+      dispatchLaterCausalStep({
+        phase: 'source',
+        factId: String(fact.fact_id || ''),
+        sourceId: String(ref.artifact_id),
+        locatorId: sourceLocatorId(ref),
+      });
+      await wait(LATER_CAUSAL_SOURCE_HOLD_MS);
+    }
+    const receipt = result?.memory_application;
+    const memoryOriginId = String(receipt?.source_memory?.memory_id || '');
+    const memoryRetrieved = result?.reviewed_memory_retrieved === true
+      || result?.knowledge?.reviewed_memory_retrieved === true;
+    if (memoryRetrieved
+      && receipt?.contract === 'casepath.memory-application-receipt/1.0.0'
+      && memoryOriginId) {
+      dispatchLaterCausalStep({ phase: 'memory', memoryOriginId });
+      await wait(LATER_CAUSAL_MEMORY_HOLD_MS);
+    }
+  }
+
   async function startLaterClaim() {
     state.journey = 'later';
     hideJourneyActions();
@@ -1764,6 +1839,10 @@
       state.eventQueue = [];
       state.queuedEventIds.clear();
       renderCanvas(`<div class="stage-shell later-run"><div class="later-source-banner"><div><span class="quiet-label">Deterministic held-out memory comparison</span><h3>${esc(state.laterClaim.subject)}</h3><p>This claim was excluded from the simulated review and memory construction. The flagship above is the live six-agent Nemotron analysis. After learning was frozen, CasePath's deterministic application layer computed one no-memory counterfactual and now evaluates the same observable package with the explicitly unverified demo memory available—without another model run. Semantic eligibility does not depend on target claim, fact, or artifact IDs; the quarantined candidate must not change the shared ${esc(state.review?.knowledge?.shared_playbook_version || 'playbook')}.</p></div><span class="new-knowledge">Deterministic comparison · unverified memory</span></div><div class="later-agent-stream" id="laterAgentStream"></div><div id="laterResult"></div></div>`, 'later-work');
+      dispatchLaterCausalStep({
+        phase: 'waiting',
+        memoryOriginId: String(state.review?.memory_id || ''),
+      });
       renderProgress();
       streamRun(created.run_id, true).catch(() => {});
     } catch (error) {
@@ -1794,6 +1873,7 @@
       const baselineId = state.baselineLaterRun?.run_id;
       const laterId = state.laterRun?.run_id;
       if (!baselineId || !laterId) throw new Error('Both completed comparison run identifiers are required.');
+      await presentLaterCausalBridge(state.laterRun.result || {});
       state.proof = await api(`/api/learning-proof?baseline_run_id=${encodeURIComponent(baselineId)}&later_run_id=${encodeURIComponent(laterId)}`);
       window.__casepathLearningProof = state.proof;
       const renderedState = renderLaterResult();
@@ -1871,6 +1951,39 @@
     const reuseProofMarkup = renderMemoryReuseProof({ result, proof, memoryUsed, retrievedOnly, memoryState: returnedMemoryState });
     $('#laterResult').innerHTML = `<header class="v20-later-heading" data-memory-retrieved="${memoryRetrieved}" data-memory-used="${memoryUsed}" data-memory-retrieved-only="${retrievedOnly}" data-causal-proof-ready="${Boolean(proofReady)}"><small>${headerState.small}</small><h2>${headerState.title}</h2><p>${headerState.detail}</p></header>${receiptMarkup}${causalMarkup}${processMarkup}<div class="final-proof"><span class="quiet-label">Computed comparison</span><strong>Baseline ${esc(before.result_hash || 'hash not returned')} → after ${esc(after.result_hash || 'hash not returned')}</strong><p>Both sides are completed later-claim runs. Shared rule applied: ${esc(String(sharedApplied))}.</p></div>${reuseProofMarkup}<div class="before-after"><section><h4>Baseline without governed memory application</h4><h3>${esc(before.playbook_version || 'Version not returned')}</h3><ul><li>Run ${esc(before.run_id || 'not returned')}</li><li>Precedents: ${esc(beforePrecedents.join(', ') || 'none returned')}</li><li>Process nodes: ${esc(String((before.process_node_ids || []).length))}</li></ul></section><section><h4>${afterLabel}</h4><h3>${esc(after.playbook_version || 'Version not returned')}</h3><ul><li class="${memoryUsed ? 'reused' : ''}">Run ${esc(after.run_id || 'not returned')}</li><li class="${memoryRetrieved ? 'reused' : ''}">Precedents added: ${esc(addedPrecedents.join(', ') || 'none')}</li><li>Process nodes added: ${esc(addedNodes.join(', ') || 'none')}</li><li>Evidence items changed: ${esc(evidenceChanges.join(', ') || 'none')}</li></ul></section></div>${checksMarkup}<section class="reuse-boundary"><strong>Shared playbook v3 unchanged</strong><p>${esc(proof.shared_rule?.version_after || result.playbook?.version || 'Version not returned')} remains active; candidate status ${esc(proof.shared_rule?.candidate_status || proof.candidate?.status || 'not returned')}. Retrieval or passing deterministic checks does not mean application, qualified approval, or shared v4 release.</p></section>`;
     bindProcessInteractions();
+    const normalizedNodeIds = [...new Set((Array.isArray(addedNodes) ? addedNodes : []).map(value => String(value || '')).filter(Boolean))];
+    const normalizedEdges = (Array.isArray(addedEdges) ? addedEdges : [])
+      .map(edge => ({ source: String(edge?.source || ''), target: String(edge?.target || '') }))
+      .filter(edge => edge.source && edge.target);
+    const normalizedEvidenceIds = [...new Set((Array.isArray(evidenceChanges) ? evidenceChanges : []).map(value => String(value || '')).filter(Boolean))];
+    const applicationHash = String(receipt?.application_hash || '');
+    const memoryOriginId = String(receipt?.source_memory?.memory_id || '');
+    const sharedPlaybookUnchanged = result.shared_rule_applied === false && proof.shared_rule?.applied === false;
+    const validatedMemoryPresentation = Boolean(
+      memoryUsed
+      && proofReady
+      && applicationHash
+      && memoryOriginId
+      && sharedPlaybookUnchanged
+      && normalizedNodeIds.length === 1
+      && normalizedEdges.length === 2
+      && normalizedEvidenceIds.length === 3
+    );
+    window.dispatchEvent(new CustomEvent('casepath:later-memory-validation', { detail: {
+      contract: 'casepath.later-memory-validation/1.0.0',
+      runId: String(state.laterRun.run_id || ''),
+      validated: validatedMemoryPresentation,
+      proofReady: Boolean(proofReady),
+      memoryUsed: Boolean(memoryUsed),
+      memoryRetrieved: Boolean(memoryRetrieved),
+      retrievedOnly: Boolean(retrievedOnly),
+      applicationHash: validatedMemoryPresentation ? applicationHash : '',
+      memoryOriginId: validatedMemoryPresentation ? memoryOriginId : '',
+      sharedPlaybookUnchanged,
+      delta: validatedMemoryPresentation
+        ? { nodeIds: normalizedNodeIds, edges: normalizedEdges, evidenceIds: normalizedEvidenceIds }
+        : { nodeIds: [], edges: [], evidenceIds: [] },
+    } }));
     announceRender('later-result');
     return { proofReady: Boolean(proofReady), memoryRetrieved, memoryUsed, retrievedOnly };
   }

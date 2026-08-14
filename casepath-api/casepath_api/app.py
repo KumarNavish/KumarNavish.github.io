@@ -55,7 +55,11 @@ pipeline = ClaimPipeline(storage)
 # is a deterministic causal-comparison surface: routing it here by its exact
 # server-owned claim identity prevents a client-supplied knowledge mode from
 # activating another paid inference DAG.
-held_out_pipeline = ClaimPipeline(storage, model_mode=MODEL_MODE_REFERENCE)
+held_out_pipeline = ClaimPipeline(
+    storage,
+    model_mode=MODEL_MODE_REFERENCE,
+    pace_seconds=0,
+)
 DEFAULT_RELEASE_ID = "casepath-v20-reference-20260811"
 FRONTEND_CONTRACT = "focused-claim-workspace-v20"
 SESSION_HEADER = "X-CasePath-Session"
