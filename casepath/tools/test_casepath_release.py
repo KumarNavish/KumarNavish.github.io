@@ -392,6 +392,7 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "node.dataset.artifactChangeId === detail.changeId" in browser_gate
     assert "for (const kind of ['law', 'evidence', 'precedent', 'verification'])" in browser_gate
     assert "casepath:artifact-process-complete" in canvas
+    assert "casepath:artifact-process-started" in canvas
     assert "function evidenceStageMarkup(copy)" in canvas
     assert "Number(item.ranking?.rank) === 1" in canvas
     assert "focal.dataset.artifactFocus === 'true'" in canvas
@@ -434,7 +435,13 @@ def test_flagship_presentation_holds_work_and_artifacts_for_clarity() -> None:
     assert "const AGENT_RECEIPT_BEAT_MS = reduceMotion ? 20 : 800;" in renderer
     assert "function waitForProcessStory()" in renderer
     assert "function waitForProcessStoryOnce()" in renderer
+    assert "function processStoryDrawing()" in renderer
     assert "if (processStoryWaitPromise) return processStoryWaitPromise;" in renderer
+    assert "const onStarted = () => armTimeout();" in renderer
+    assert "if (processStoryDrawing()) armTimeout();" in renderer
+    assert "window.removeEventListener('casepath:artifact-process-started', onStarted);" in renderer
+    assert "const acceptedProjectionComplete = SIMPLIFIED_SPINE_IDS.every" in canvas
+    assert "acceptedProjectionComplete ? 'complete' : 'pending'" in canvas
     assert "casepath:artifact-process-timeout" in renderer
     assert "[data-process-build-state=\"built\"]').length >= 10" in renderer
     assert "function waitsForCompletedProcess(event)" in renderer
@@ -7733,7 +7740,7 @@ def test_handoff_continuity_uses_structured_moments_without_translucent_text() -
         encoding="utf-8"
     )
     assert 'assets/live-v17-continuity.css?v=20.0.0' in index
-    assert 'assets/live-v16.js?v=20.0.15' in index
+    assert 'assets/live-v16.js?v=20.0.16' in index
     assert 'assets/live-v17.js?v=20.0.2' in index
     assert 'assets/live-v18.js?v=20.0.2' in index
     assert 'assets/live-v16.css?v=20.0.0' in index

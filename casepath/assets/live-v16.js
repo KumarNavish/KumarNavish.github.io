@@ -830,6 +830,10 @@
     return document.querySelectorAll('#artifactProcessGraph[data-process-construction-state="complete"] [data-process-build-state="built"]').length >= 10;
   }
 
+  function processStoryDrawing() {
+    return Boolean(document.querySelector('#artifactProcessGraph[data-process-construction-state="building"]'));
+  }
+
   function processStoryRunId() {
     return state.runId || document.body.dataset.casepathActiveRunId || 'unbound-run';
   }
@@ -848,10 +852,12 @@
     document.body.dataset.casepathProcessStoryWait = 'waiting';
     processStoryWaitPromise = new Promise(resolve => {
       let settled = false;
+      let timeout = 0;
       const finish = status => {
         if (settled) return;
         settled = true;
         window.removeEventListener('casepath:artifact-process-complete', onComplete);
+        window.removeEventListener('casepath:artifact-process-started', onStarted);
         window.clearTimeout(timeout);
         document.body.dataset.casepathProcessStoryWait = status;
         if (status === 'timed-out') {
@@ -864,8 +870,15 @@
         resolve(status);
       };
       const onComplete = () => { if (processStoryComplete()) finish('complete'); };
-      const timeout = window.setTimeout(() => finish('timed-out'), PROCESS_STORY_TIMEOUT_MS);
+      const armTimeout = () => {
+        if (settled || timeout) return;
+        document.body.dataset.casepathProcessStoryWait = 'drawing';
+        timeout = window.setTimeout(() => finish('timed-out'), PROCESS_STORY_TIMEOUT_MS);
+      };
+      const onStarted = () => armTimeout();
       window.addEventListener('casepath:artifact-process-complete', onComplete, { once: true });
+      window.addEventListener('casepath:artifact-process-started', onStarted, { once: true });
+      if (processStoryDrawing()) armTimeout();
     });
     return processStoryWaitPromise;
   }

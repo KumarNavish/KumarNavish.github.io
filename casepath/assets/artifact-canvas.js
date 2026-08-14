@@ -746,6 +746,10 @@
     state.graphInspecting = false;
     state.cursorCommit = null;
     const nodes = simplifiedNodes();
+    window.dispatchEvent(new CustomEvent('casepath:artifact-process-started', { detail: {
+      processId: state.process?.process_id || '',
+      nodeCount: nodes.length,
+    } }));
     const revealNext = () => {
       const node = nodes[state.graphRevealIndex];
       if (!node) {
@@ -1556,9 +1560,12 @@
     processRegion.dataset.reviewEditState = state.moment === 'review-applied'
       ? 'applied'
       : state.moment === 'review' ? 'pending' : 'not-active';
+    const acceptedProjectionComplete = SIMPLIFIED_SPINE_IDS.every(nodeId => state.visibleNodeIds.has(nodeId));
     processRegion.dataset.processConstructionState = !state.processAccepted
       ? 'pending'
-      : state.graphRevealRunning ? 'building' : 'complete';
+      : state.graphRevealRunning
+        ? 'building'
+        : acceptedProjectionComplete ? 'complete' : 'pending';
     if (!state.processAccepted) return;
     if (!state.graphRevealRunning && ['evidence', 'experience'].includes(state.moment) && nodeById('causation')) {
       state.selectedNodeId = 'causation';
