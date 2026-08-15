@@ -589,7 +589,9 @@ def test_process_decisions_integrate_exact_sources_law_and_node_commit() -> None
     assert "Numeric progress remains machine-readable only." in canvas_css
     assert ".casepath-artifact-canvas .ac-process-node-progress{\n  display:none!important;" in canvas_css
     assert '.ac-agent-cursor[data-process-node-progress="active"]>.ac-cursor-role-icon:after' in canvas_css
-    assert '.casepath-artifact-canvas[data-graph-inspecting="true"] .ac-agent-cursor{' in canvas_css
+    assert '.casepath-artifact-canvas[data-graph-inspecting="true"] .ac-agent-cursor,' in canvas_css
+    assert '.ac-spatial-detail .ac-node-source-preview[data-node-attachment-kind="fact"]) .ac-agent-cursor{' in canvas_css
+    assert '.ac-spatial-detail .ac-node-source-preview[data-node-attachment-kind="fact"])::after{' in canvas_css
     assert 'height:78%;\n  background:linear-gradient(to bottom' in canvas_css
     complete_start = canvas.index("      const completeDecision = () => {")
     complete_end = canvas.index("      const prepareStep = index => {", complete_start)
@@ -897,7 +899,7 @@ def test_flagship_surface_is_one_persistent_source_plus_artifact_canvas() -> Non
     assert 'href="http://127.0.0.1:4173/?ui=final"' in index
     assert "python3 -m http.server 4173 --bind 127.0.0.1 --directory casepath" in index
     assert "Claim sources are still loading." in runtime
-    assert "assets/artifact-canvas.css?v=1.0.57" in index
+    assert "assets/artifact-canvas.css?v=1.0.58" in index
     assert "assets/artifact-canvas.js?v=1.0.72" in index
     assert "state.moment === 'understand' && state.factTourRunning" in canvas
     assert "finishFactSourceTour(items);" in canvas
