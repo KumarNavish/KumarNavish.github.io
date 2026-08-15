@@ -614,8 +614,8 @@ def test_process_decisions_integrate_exact_sources_law_and_node_commit() -> None
     assert "decision replay is not bound to its run-scoped accepted execution trace and visible mode label" in browser_gate
     assert "process structure event lacks neutral accepted execution-trace lineage" in browser_gate
     assert "process model identity is not limited to the accepted decision_value event" in browser_gate
-    assert "accepted decision_value is not visibly owned by Process builder" in browser_gate
-    assert "accepted input or structural replay inherited Process builder identity" in browser_gate
+    assert "accepted decision_value is not bound to the merged Path builder workstream and exact process receipt" in browser_gate
+    assert "accepted input or structural replay inherited a model identity" in browser_gate
     assert "fact assertion ownership is not exact" in browser_gate
     assert "Document finder is not limited to exact accepted status/artifact_ids fields" in browser_gate
     assert "modelSelectedTextRefs" in browser_gate
@@ -720,16 +720,17 @@ def test_claim_reader_live_wait_uses_one_call_bound_plan() -> None:
     assert 'data-run-id="${esc(call.runId)}"' in canvas
     assert 'data-call-id="${esc(call.callId)}"' in canvas
     assert 'data-event-id="${esc(call.eventId)}"' in canvas
-    assert "['package', 'Claim package sent', 'complete']" in canvas
-    assert "['choose', 'Choose source-backed facts', 'active']" in canvas
-    assert "['return', 'Show each fact with its source', 'waiting']" in canvas
+    assert "['package', 'Claim package ready', 'complete']" in canvas
+    assert "['choose', 'Read exact source', 'active']" in canvas
+    assert "['return', 'Return supported facts', 'waiting']" in canvas
+    assert 'data-visible-agent-group="${esc(visibleAgentGroupId(call.agentId))}"' in canvas
     assert "state.currentEvent = null;" in canvas
     assert "if (!agent || !SUCCESS_STATES.has(eventStatus(event))) return '';" in canvas
     assert 'data-live-agent-work-state="working"' in canvas_css
     assert ".ac-live-work-plan" in canvas_css
     assert "inputArtifact: returnedValue(event, 'input_artifact')" in live
     assert "function canonicalFactsLiveWorkPlanContractViolations" in browser_gate
-    assert "live work plan persists after the fact tour starts" in browser_gate
+    assert "separate source-to-fact tour remains outside the merged Path builder graph flow" in browser_gate
     live_plan_start = canvas.index("  function liveWorkPlanMarkup()")
     live_plan_end = canvas.index("\n  function stageFocalMarkup()", live_plan_start)
     live_plan = canvas[live_plan_start:live_plan_end]
@@ -784,6 +785,7 @@ def test_flagship_surface_is_one_persistent_source_plus_artifact_canvas() -> Non
     assets = release_tool.REPOSITORY / "casepath" / "assets"
     canvas = (assets / "artifact-canvas.js").read_text(encoding="utf-8")
     canvas_css = (assets / "artifact-canvas.css").read_text(encoding="utf-8")
+    runtime = (assets / "live-v16.js").read_text(encoding="utf-8")
     index = (release_tool.REPOSITORY / "casepath" / "index.html").read_text(
         encoding="utf-8"
     )
@@ -821,9 +823,15 @@ def test_flagship_surface_is_one_persistent_source_plus_artifact_canvas() -> Non
     assert "Management alleges insufficient ventilation and declines inspection" not in index
     assert "assets/artifact-canvas.css" in index
     assert "assets/artifact-canvas.js" in index
-    assert "assets/artifact-canvas.css?v=1.0.50" in index
-    assert "assets/artifact-canvas.js?v=1.0.65" in index
-    assert "state.moment === 'understand' && (state.factTourRunning || state.factTourComplete)" in canvas
+    assert "location.protocol === 'file:'" in index
+    assert 'id="localFileLaunch"' in index
+    assert 'href="http://127.0.0.1:4173/?ui=final"' in index
+    assert "python3 -m http.server 4173 --bind 127.0.0.1 --directory casepath" in index
+    assert "Claim sources are still loading." in runtime
+    assert "assets/artifact-canvas.css?v=1.0.52" in index
+    assert "assets/artifact-canvas.js?v=1.0.67" in index
+    assert "state.moment === 'understand' && state.factTourRunning" in canvas
+    assert "finishFactSourceTour(items);" in canvas
     assert "return factSourceStageMarkup(copy);" in canvas
     assert "const CURSOR_AVATARS = Object.freeze({" in canvas
     assert "data-ac-cursor-avatar" in canvas
@@ -832,28 +840,28 @@ def test_flagship_surface_is_one_persistent_source_plus_artifact_canvas() -> Non
         "facts", "orchestrator", "sources", "process", "evidence", "audit",
     ))
     assert "const SOURCE_TYPE_ICONS = Object.freeze({" in canvas
-    assert "function sourcePreludeType(" in canvas
-    assert 'data-source-icon-kind="${esc(source.type)}"' in canvas
-    assert 'data-source-type-icon="${esc(source.type)}"' in canvas
+    assert "const sourceCount = artifacts.length + 1;" in canvas
+    assert 'class="ac-source-prelude-plan"' in canvas
+    assert "ac-source-prelude-strip" not in canvas[canvas.index("  function sourcePreludeMarkup("):canvas.index("\n  function sourceTrailKind(")]
     assert 'data-source-exact-control="true"' in canvas
     assert 'data-source-exact-mark="true"' in canvas
     assert '<p>${esc(agent.why)}</p>' not in canvas
     assert 'data-agent-history-accepted-ids' in canvas
     assert 'data-agent-history-rejections' in canvas
     assert 'data-rejected-item-id=' in canvas
-    assert "Opening source package has seven type-correct source icons and no checkbox-shaped control semantics" in browser_gate
-    assert "Every call-bound specialist cursor uses its exact distinct role icon" in browser_gate
+    assert "Opening uses one calm three-step Path builder plan instead of seven competing source cards" in browser_gate
+    assert "Four visible workstream icons retain all six exact call-bound runtime identities beneath them" in browser_gate
     assert "Each visible specialist opens an exact call-bound history; reference replay keeps the exact Path actions" in browser_gate
     assert "Main focal work never shows a large generic agent why paragraph" in browser_gate
-    assert "Valid eight-fact returned source replay fixture was rejected" in browser_gate
-    assert "Fact tour with a forged source locator was accepted" in browser_gate
+    assert "No separate eight-fact presentation competes with the merged Path builder graph flow" in browser_gate
+    assert "Separate source-to-fact presentation outside the Path builder graph flow was accepted" in browser_gate
     assert 'data-decision-workspace' in canvas
     assert 'data-decision-plan' in canvas
     assert ".ac-decision-workspace" in canvas_css
     assert ".ac-decision-plan" in canvas_css
     assert '.ac-source-page-excerpt>button.ac-source-exact-control[data-source-exact-control="true"]' in canvas_css
     assert '.ac-source-page-excerpt>mark.ac-source-exact-mark.is-highlighted[data-source-exact-mark="true"]' in canvas_css
-    assert "fact tour does not show the exact eight returned facts in order" in browser_gate
+    assert "separate source-to-fact tour remains outside the merged Path builder graph flow" in browser_gate
     assert "graph decision replay reopens a source or law instead of reusing accepted trace" in browser_gate
     assert index.index("assets/process-story.js") < index.index("assets/artifact-canvas.js")
     assert "source claim and work canvas are not simultaneously visible" in browser_gate
@@ -1125,8 +1133,8 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "completed process leaves progress visible or active" in browser_gate
     assert "Valid execution-trace-bound process-node progress fixture was rejected" in browser_gate
     assert "Process progress with a missing accepted-input phase was accepted" in browser_gate
-    assert "Accepted decision_value progress owned by the wrong specialist was accepted" in browser_gate
-    assert "Accepted-input progress with an inflated Process builder identity was accepted" in browser_gate
+    assert "Accepted decision_value progress owned by the wrong visible workstream was accepted" in browser_gate
+    assert "Accepted-input progress with an inflated model identity was accepted" in browser_gate
     assert "Visible numeric process percentage fixture was accepted" in browser_gate
     assert "Blocked downstream decision without its waiting basis was accepted" in browser_gate
     assert "Process output visible before progress cleared was accepted" in browser_gate
@@ -1485,7 +1493,7 @@ def test_cursor_exposes_exact_six_call_bound_agents_without_synthetic_seven() ->
     assert "visualActiveAgentId" in browser_gate
     assert "root.dataset.activeAgentId = neutral ? '' : effectiveAgentId;" in canvas
     assert "root.dataset.visualActiveAgentId = neutral?.visualAgentId" in canvas
-    assert "target-lineage producer role" in browser_gate
+    assert "target-lineage producer is not in its truthful viewer-facing workstream" in browser_gate
     assert "Desktop cursor presents the agreed six simple agent names" in browser_gate
     assert "production cursor did not present exact six model identities" in browser_gate
 
@@ -1684,7 +1692,7 @@ def test_later_result_keeps_returned_comparison_hashes_visible() -> None:
         and "display:none!important" in line
     )
     assert ".final-proof" not in hidden_later_result_rule
-    assert 'assets/live-v20-focus.css?v=20.0.20' in index
+    assert 'assets/live-v20-focus.css?v=20.0.22' in index
     assert 'id="stageCanvas" aria-busy="false" tabindex="0" aria-label="CasePath work canvas"' in index
     assert '.stage-canvas:focus-visible' in focus_css
     assert 'v20-artifact-header:has([data-v20-open-documents])' in focus_css
@@ -9484,7 +9492,7 @@ def test_handoff_continuity_uses_structured_moments_without_translucent_text() -
         encoding="utf-8"
     )
     assert 'assets/live-v17-continuity.css?v=20.0.0' in index
-    assert 'assets/live-v16.js?v=20.0.33' in index
+    assert 'assets/live-v16.js?v=20.0.35' in index
     live_runtime = (
         release_tool.REPOSITORY / "casepath/assets/live-v16.js"
     ).read_text(encoding="utf-8")

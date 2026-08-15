@@ -2351,6 +2351,10 @@
 
   function openMessageSource(_page = 1, context = null) {
     const claim = state.claim || state.flagshipClaim;
+    if (!claim) {
+      toast('Claim sources are still loading.');
+      return;
+    }
     const returnFocus = $('#sourceViewer').open ? state.viewer.returnFocus : document.activeElement;
     state.viewer = { artifact: { artifact_id: 'message', title: 'Customer message', filename: 'customer-message', media_type: 'message/rfc822', page_count: 1 }, extraction: null, page: 1, zoom: 1, tab: 'original', context, searchMatches: [], query: '', returnFocus };
     $('#sourceViewerKind').textContent = 'Original customer message';
@@ -2552,10 +2556,13 @@
     const facts = (currentRun()?.result?.facts || currentRun()?.understanding?.facts || []).filter(fact => (fact.source_refs || []).some(ref => ref.artifact_id === artifactId));
     const context = state.viewer.context;
     const openedFrom = context?.factId ? `<section class="opened-grounding" data-fact-id="${esc(context.factId)}" data-node-id="${esc(context.nodeId || '')}" data-source-agent="${esc(context.agent || '')}" data-source-producer="${esc(context.producer || '')}" data-source-authority="${esc(context.authority || '')}" data-fact-confidence="${esc(context.confidence ?? '')}" data-fact-state="${esc(context.state || '')}"><small>Opened from fact ${esc(context.factId)}</small>${sourceLocatorMarkup(context, 'opened-locator')}<p>confidence ${formatConfidence(context.confidence)} · ${esc(context.state || 'state not returned')}</p></section>` : '';
-    $('#sourceEvidence').innerHTML = `${openedFrom}<h3>Facts linked to this source</h3><p>Source → facts and their owning decisions.</p>${facts.length ? facts.map(fact => {
+    const selectedFact = context?.factId ? facts.find(fact => fact.fact_id === context.factId) : null;
+    const visibleFacts = selectedFact ? [selectedFact] : facts;
+    $('#sourceEvidence').innerHTML = `${openedFrom}<h3>Used in the path</h3><p>${facts.length ? `${facts.length} linked decision${facts.length === 1 ? '' : 's'} · open one to return to the graph.` : 'No process decision uses this source yet.'}</p>${visibleFacts.length ? visibleFacts.map(fact => {
       const refs = (fact.source_refs || []).filter(ref => ref.artifact_id === artifactId);
       const node = owningNodeForFact(fact.fact_id);
-      return `<article class="source-fact" data-fact-id="${esc(fact.fact_id)}" data-node-id="${esc(node?.node_id || '')}"><strong>${esc(fact.label)} — ${esc(fact.value)}</strong><p>${esc(fact.explanation)}</p><small>${esc(fact.fact_id)} · ${esc(fact.state || 'unclassified')} · confidence ${formatConfidence(fact.confidence)}</small>${refs.map(ref => sourceLocatorMarkup(ref, 'source-passage')).join('')}${node ? `<button type="button" class="route-to-decision" data-source-fact-node="${esc(node.node_id)}">Return to decision · ${esc(node.title)}</button>` : '<p class="grounding-warning">No owning process decision returned.</p>'}</article>`;
+      const exactRefs = selectedFact ? refs.map(ref => sourceLocatorMarkup(ref, 'source-passage')).join('') : '';
+      return `<article class="source-fact${selectedFact ? ' is-selected-fact' : ' is-compact-fact'}" data-fact-id="${esc(fact.fact_id)}" data-node-id="${esc(node?.node_id || '')}"><strong>${esc(fact.label)}</strong><small>${esc(fact.value)} · ${esc(fact.state || 'unclassified')}</small>${exactRefs}${node ? `<button type="button" class="route-to-decision" data-source-fact-node="${esc(node.node_id)}">${selectedFact ? 'Return to decision' : 'Open decision'} · ${esc(node.title)}</button>` : '<p class="grounding-warning">No owning process decision returned.</p>'}</article>`;
     }).join('') : '<article class="source-fact"><p>No current claim fact points to this source yet.</p></article>'}`;
   }
 
