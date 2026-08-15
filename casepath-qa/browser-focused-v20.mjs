@@ -28,7 +28,14 @@ const REQUIRED_NEMOTRON_AGENT_IDS = Object.freeze([
   'evidence_checklist',
   'final_claim_brief_audit',
 ]);
-const REQUIRED_VISIBLE_SPECIALIST_IDS = Object.freeze(REQUIRED_NEMOTRON_AGENT_IDS.filter(id => id !== 'orchestrator_plan'));
+const PATH_BUILDER_VISUAL_GROUP_ID = 'process_decision_mapping';
+const PATH_BUILDER_RUNTIME_AGENT_IDS = Object.freeze(['canonical_facts', 'process_decision_mapping']);
+const REQUIRED_VISIBLE_SPECIALIST_IDS = Object.freeze([
+  PATH_BUILDER_VISUAL_GROUP_ID,
+  'document_source_integrity',
+  'evidence_checklist',
+  'final_claim_brief_audit',
+]);
 const REQUIRED_NEMOTRON_AGENT_ROLES = Object.freeze({
   canonical_facts: 'Guarded Canonical Facts Agent',
   orchestrator_plan: 'Nemotron Orchestrator',
@@ -69,6 +76,27 @@ const REQUIRED_DESKTOP_AGENT_COLORS = Object.freeze({
   evidence_checklist: '#9b6514',
   final_claim_brief_audit: '#207a54',
 });
+const PATH_BUILDER_VISIBLE_IDENTITY = Object.freeze({
+  label: 'Path builder',
+  short: 'Build',
+  signature: 'process',
+});
+
+function visibleAgentGroupId(agentId) {
+  return PATH_BUILDER_RUNTIME_AGENT_IDS.includes(String(agentId || ''))
+    ? PATH_BUILDER_VISUAL_GROUP_ID
+    : String(agentId || '');
+}
+
+function visibleAgentIdentity(agentId) {
+  const runtimeAgentId = String(agentId || '');
+  if (PATH_BUILDER_RUNTIME_AGENT_IDS.includes(runtimeAgentId)) return PATH_BUILDER_VISIBLE_IDENTITY;
+  return {
+    label: REQUIRED_DESKTOP_AGENT_LABELS[runtimeAgentId] || '',
+    short: REQUIRED_DESKTOP_AGENT_SHORTS[runtimeAgentId] || '',
+    signature: REQUIRED_NEMOTRON_AGENT_SIGNATURES[runtimeAgentId]?.signature || '',
+  };
+}
 const REQUIRED_PRESENTATION_PHASE_LABELS = Object.freeze([
   'Claim understanding',
   'Swiss-law research',
@@ -189,9 +217,9 @@ const SOURCE_RAIL_MIN_ICON_SIZE_PX = 24;
 const SOURCE_RAIL_MAX_ICON_SIZE_PX = 34;
 const LIVE_WORK_PLAN_CONTRACT = 'casepath.live-work-plan/1.0.0';
 const CANONICAL_FACTS_LIVE_WORK_STEPS = Object.freeze([
-  Object.freeze({ stepId: 'package', label: 'Claim package sent', state: 'complete', spinnerCount: 0 }),
-  Object.freeze({ stepId: 'choose', label: 'Choose source-backed facts', state: 'active', spinnerCount: 1 }),
-  Object.freeze({ stepId: 'return', label: 'Show each fact with its source', state: 'waiting', spinnerCount: 0 }),
+  Object.freeze({ stepId: 'package', label: 'Claim package ready', state: 'complete', spinnerCount: 0 }),
+  Object.freeze({ stepId: 'choose', label: 'Read exact source', state: 'active', spinnerCount: 1 }),
+  Object.freeze({ stepId: 'return', label: 'Return supported facts', state: 'waiting', spinnerCount: 0 }),
 ]);
 const AGENT_HISTORY_CONTRACT = 'casepath.agent-history/1.0.0';
 const SPATIAL_GRAPH_PROJECTION = 'flagship-spine/1';
@@ -2059,14 +2087,28 @@ function artifactCursorProducerRoleContractViolations(team, cursorSteps, semanti
   if (stableJson(members.map(member => member.agentId)) !== stableJson(REQUIRED_NEMOTRON_AGENT_IDS)) issues.push('desktop team is not the exact ordered six-role set');
   members.forEach(member => {
     const expectedRole = REQUIRED_DESKTOP_AGENT_LABELS[member.agentId];
-    const expectedIdentity = REQUIRED_NEMOTRON_AGENT_SIGNATURES[member.agentId];
+    const expectedRuntimeIdentity = REQUIRED_NEMOTRON_AGENT_SIGNATURES[member.agentId];
+    const expectedVisualIdentity = visibleAgentIdentity(member.agentId);
+    const expectedVisualGroupId = visibleAgentGroupId(member.agentId);
     const shouldBeVisible = REQUIRED_VISIBLE_SPECIALIST_IDS.includes(member.agentId);
     if (shouldBeVisible && (!member.visible || !member.monogramVisible || !member.shortVisible)) issues.push(`${member.agentId || 'unknown'}: useful specialist identity is not visible`);
     if (!shouldBeVisible && (member.visible || member.monogramVisible || member.shortVisible)) issues.push(`${member.agentId || 'unknown'}: internal planning role leaked into the main experience`);
-    if (member.role !== expectedRole || member.short !== REQUIRED_DESKTOP_AGENT_SHORTS[member.agentId] || member.monogram !== expectedIdentity?.monogram || member.signature !== expectedIdentity?.signature) issues.push(`${member.agentId || 'unknown'}: desktop identity drift`);
-    if (String(member.color || '').toLowerCase() !== REQUIRED_DESKTOP_AGENT_COLORS[member.agentId]) issues.push(`${member.agentId || 'unknown'}: signature color drift`);
+    const expectedShort = member.agentId === PATH_BUILDER_VISUAL_GROUP_ID
+      ? PATH_BUILDER_VISIBLE_IDENTITY.short
+      : REQUIRED_DESKTOP_AGENT_SHORTS[member.agentId];
+    if (member.role !== expectedRole || member.short !== expectedShort || member.monogram !== expectedRuntimeIdentity?.monogram
+      || member.signature !== expectedVisualIdentity.signature || member.visualGroupId !== expectedVisualGroupId) {
+      issues.push(`${member.agentId || 'unknown'}: desktop runtime identity or visible group drift`);
+    }
+    if (member.agentId === PATH_BUILDER_VISUAL_GROUP_ID && member.controlLabel !== `Open ${PATH_BUILDER_VISIBLE_IDENTITY.label} activity`) {
+      issues.push('path builder: merged activity control label drift');
+    }
+    if (shouldBeVisible && String(member.color || '').toLowerCase() !== REQUIRED_DESKTOP_AGENT_COLORS[expectedVisualGroupId]) issues.push(`${member.agentId || 'unknown'}: visible-group color drift`);
   });
-  if (members.length === REQUIRED_NEMOTRON_AGENT_IDS.length && new Set(members.map(member => String(member.color || '').toLowerCase())).size !== REQUIRED_NEMOTRON_AGENT_IDS.length) issues.push('desktop signature colors are not unique');
+  const visibleMembers = members.filter(member => member.visible);
+  if (stableJson(visibleMembers.map(member => member.agentId).sort()) !== stableJson([...REQUIRED_VISIBLE_SPECIALIST_IDS].sort())) issues.push('desktop does not expose the exact four useful viewer-facing workstreams');
+  if (new Set(visibleMembers.map(member => member.visualGroupId)).size !== REQUIRED_VISIBLE_SPECIALIST_IDS.length) issues.push('viewer-facing workstream groups are not unique');
+  if (new Set(visibleMembers.map(member => String(member.color || '').toLowerCase())).size !== REQUIRED_VISIBLE_SPECIALIST_IDS.length) issues.push('viewer-facing workstream colors are not unique');
 
   const semanticById = new Map((semanticEvents || []).filter(event => event.eventId).map(event => [event.eventId, event]));
   const clickSteps = (cursorSteps || []).filter(step => step.phase === 'click');
@@ -2076,10 +2118,18 @@ function artifactCursorProducerRoleContractViolations(team, cursorSteps, semanti
     if (!nonemptyString(step.cursorAgent) || !nonemptyString(step.cursorAction)) issues.push(`${index}: artifact cursor agent/action label is unreadable`);
     const semantic = semanticById.get(step.eventId);
     if (step.specialistBound) {
-      const visualAgentId = step.visualActiveAgentId || REQUIRED_NEMOTRON_AGENT_IDS.find(agentId => REQUIRED_NEMOTRON_AGENT_SIGNATURES[agentId].signature === step.signature) || '';
-      const expectedIdentity = REQUIRED_NEMOTRON_AGENT_SIGNATURES[visualAgentId];
-      if (!expectedIdentity || step.signature !== expectedIdentity.signature || ![REQUIRED_DESKTOP_AGENT_SHORTS[visualAgentId], REQUIRED_DESKTOP_AGENT_LABELS[visualAgentId]].includes(step.cursorAgent)) issues.push(`${index}: target-lineage producer role is outside the closed six-role identity map`);
-      if (semantic?.actorType === 'nemotron_agent' && semantic.agentId !== visualAgentId) issues.push(`${index}: model-call identity differs from its receipt-bound specialist`);
+      const runtimeAgentId = step.runtimeAgentId || step.agentId || step.visualActiveAgentId || '';
+      const expectedVisualGroupId = visibleAgentGroupId(runtimeAgentId);
+      const expectedIdentity = visibleAgentIdentity(runtimeAgentId);
+      const allowedCursorLabels = [expectedIdentity.short, expectedIdentity.label];
+      if (expectedVisualGroupId === PATH_BUILDER_VISUAL_GROUP_ID) allowedCursorLabels.push('Path');
+      if (!REQUIRED_NEMOTRON_AGENT_IDS.includes(runtimeAgentId)
+        || step.visualGroupId !== expectedVisualGroupId
+        || step.signature !== expectedIdentity.signature
+        || !allowedCursorLabels.includes(step.cursorAgent)) {
+        issues.push(`${index}: target-lineage producer is not in its truthful viewer-facing workstream`);
+      }
+      if (semantic?.actorType === 'nemotron_agent' && semantic.agentId !== runtimeAgentId) issues.push(`${index}: model-call identity differs from its receipt-bound runtime specialist`);
     }
     if (semantic && !REQUIRED_NEMOTRON_AGENT_IDS.includes(semantic.agentId)) {
       if (step.activeAgentId) issues.push(`${index}: deterministic authority inherited model-call identity`);
@@ -2095,14 +2145,22 @@ function artifactCursorProducerRoleContractViolations(team, cursorSteps, semanti
 
 function sourcePreludeContractViolations(snapshot) {
   const issues = [];
-  const cards = Array.isArray(snapshot?.cards) ? snapshot.cards : [];
-  if (snapshot?.cardCount !== SOURCE_PRELUDE_ICON_KINDS.length || cards.length !== SOURCE_PRELUDE_ICON_KINDS.length) issues.push('opening source package does not contain the exact seven source cards');
-  if (snapshot?.inputCount !== 0 || snapshot?.checkboxRoleCount !== 0) issues.push('opening source package retains a checkbox or checkbox role');
-  if (stableJson(cards.map(card => card.kind)) !== stableJson(SOURCE_PRELUDE_ICON_KINDS)) issues.push('opening source card type order drift');
-  cards.forEach((card, index) => {
-    const expectedKind = SOURCE_PRELUDE_ICON_KINDS[index];
-    if (card.iconCount !== 1 || card.iconKind !== expectedKind || !nonemptyString(card.iconMarkup)) issues.push(`${index}: opening source card lacks one nonempty type-correct icon`);
-  });
+  const steps = Array.isArray(snapshot?.steps) ? snapshot.steps : [];
+  const allowedStates = [
+    ['active', 'waiting', 'waiting'],
+    ['complete', 'active', 'waiting'],
+  ];
+  if (snapshot?.sourceCount !== SOURCE_PRELUDE_ICON_KINDS.length) issues.push('opening path plan is not bound to the exact seven-source package');
+  if (snapshot?.cardCount !== 0) issues.push('opening path plan retains the obsolete seven-card strip');
+  if (snapshot?.inputCount !== 0 || snapshot?.checkboxRoleCount !== 0) issues.push('opening path plan retains a checkbox or checkbox role');
+  if (snapshot?.label !== PATH_BUILDER_VISIBLE_IDENTITY.label || snapshot?.title !== 'Build the claim path') issues.push('opening path plan is not owned by the merged Path builder presentation');
+  if (snapshot?.planCount !== 1 || stableJson(steps.map(step => step.label)) !== stableJson([
+    'Read the exact source',
+    'Keep the supported fact',
+    'Add the next process step',
+  ])) issues.push('opening path plan is not the exact three-step read-to-node sequence');
+  if (!allowedStates.some(states => stableJson(steps.map(step => step.state)) === stableJson(states))
+    || steps.filter(step => step.state === 'active').length !== 1) issues.push('opening path plan does not have one calm active step');
   return [...new Set(issues)];
 }
 
@@ -2215,7 +2273,9 @@ function canonicalFactsLiveWorkPlanContractViolations(planSnapshots, factTourSna
     if (snapshot?.contract !== LIVE_WORK_PLAN_CONTRACT
       || snapshot?.presentationMode !== 'live-call'
       || snapshot?.agentId !== 'canonical_facts'
-      || snapshot?.agentSignature !== 'facts'
+      || snapshot?.runtimeAgentId !== 'canonical_facts'
+      || snapshot?.visualGroupId !== PATH_BUILDER_VISUAL_GROUP_ID
+      || snapshot?.agentSignature !== PATH_BUILDER_VISIBLE_IDENTITY.signature
       || snapshot?.runId !== expectedRunId
       || snapshot?.callId !== String(started?.call_id || '')
       || snapshot?.eventId !== String(started?.event_id || '')
@@ -2233,7 +2293,7 @@ function canonicalFactsLiveWorkPlanContractViolations(planSnapshots, factTourSna
       || snapshot?.rootEventId !== snapshot?.eventId) {
       issues.push(`${index}: focal plan and live canvas authority are not the same call`);
     }
-    if (snapshot?.title !== 'Find the supported facts'
+    if (snapshot?.title !== 'Build the claim path'
       || stableJson(snapshot?.steps || []) !== stableJson(CANONICAL_FACTS_LIVE_WORK_STEPS)) {
       issues.push(`${index}: live work plan is not the exact three simple truthful steps with one active spinner`);
     }
@@ -2245,16 +2305,7 @@ function canonicalFactsLiveWorkPlanContractViolations(planSnapshots, factTourSna
     }
   });
 
-  if (!facts.length) issues.push('canonical fact live plan never yields to the source-backed fact tour');
-  if (facts.some(snapshot => snapshot?.liveWorkPlanCount !== 0)) issues.push('live work plan persists after the fact tour starts');
-  if (facts.some(snapshot => snapshot?.sourcePreludeCount !== 0)) issues.push('idle source prelude returns during the fact tour');
-  const firstRead = facts.find(snapshot => snapshot?.phase === 'read-source');
-  if (!firstRead?.artifactSurfaceVisible) issues.push('live work plan does not yield to the first real artifact preview');
-  const lastPlanAt = Math.max(...snapshots.map(snapshot => Number(snapshot?.at)).filter(Number.isFinite));
-  const firstFactAt = Math.min(...facts.map(snapshot => Number(snapshot?.at)).filter(Number.isFinite));
-  if (Number.isFinite(lastPlanAt) && Number.isFinite(firstFactAt) && lastPlanAt > firstFactAt) {
-    issues.push('live work plan overlaps the source-backed fact tour in time');
-  }
+  if (facts.length) issues.push('separate source-to-fact tour remains outside the merged Path builder graph flow');
   return [...new Set(issues)];
 }
 
@@ -2471,32 +2522,35 @@ function specialistAvatarContractViolations(team, cursorSteps, production = true
   const issues = [];
   const members = Array.isArray(team?.members) ? team.members : [];
   const byId = new Map(members.map(member => [member.agentId, member]));
+  const visibleMembers = members.filter(member => member.visible === true);
   const iconHashes = [];
-  for (const agentId of REQUIRED_NEMOTRON_AGENT_IDS) {
+  for (const agentId of REQUIRED_VISIBLE_SPECIALIST_IDS) {
     const member = byId.get(agentId);
-    const expectedSignature = REQUIRED_NEMOTRON_AGENT_SIGNATURES[agentId]?.signature || '';
+    const expectedSignature = visibleAgentIdentity(agentId).signature;
     if (!member || member.signature !== expectedSignature || !nonemptyString(member.iconMarkup)) {
-      issues.push(`${agentId}: rail role icon is absent or not bound to its signature`);
+      issues.push(`${agentId}: visible workstream icon is absent or not bound to its signature`);
       continue;
     }
     iconHashes.push(sha256(member.iconMarkup));
   }
-  if (iconHashes.length !== REQUIRED_NEMOTRON_AGENT_IDS.length || new Set(iconHashes).size !== REQUIRED_NEMOTRON_AGENT_IDS.length) issues.push('six agent identities do not have six unique normalized role-icon hashes');
+  if (visibleMembers.length !== REQUIRED_VISIBLE_SPECIALIST_IDS.length
+    || iconHashes.length !== REQUIRED_VISIBLE_SPECIALIST_IDS.length
+    || new Set(iconHashes).size !== REQUIRED_VISIBLE_SPECIALIST_IDS.length) {
+    issues.push('four viewer-facing workstreams do not have four unique normalized role-icon hashes');
+  }
 
   const covered = new Set();
   (cursorSteps || []).filter(step => step.specialistBound).forEach((step, index) => {
-    const agentId = REQUIRED_NEMOTRON_AGENT_IDS.includes(step.visualActiveAgentId)
-      ? step.visualActiveAgentId
-      : REQUIRED_NEMOTRON_AGENT_IDS.includes(step.agentId)
-        ? step.agentId
-        : REQUIRED_NEMOTRON_AGENT_IDS.find(candidate => REQUIRED_NEMOTRON_AGENT_SIGNATURES[candidate].signature === step.signature) || '';
-    if (!agentId) return;
-    covered.add(agentId);
-    const member = byId.get(agentId);
-    const expectedSignature = REQUIRED_NEMOTRON_AGENT_SIGNATURES[agentId].signature;
+    const runtimeAgentId = step.runtimeAgentId || step.agentId || step.visualActiveAgentId || '';
+    if (!REQUIRED_NEMOTRON_AGENT_IDS.includes(runtimeAgentId)) return;
+    covered.add(runtimeAgentId);
+    const visualGroupId = visibleAgentGroupId(runtimeAgentId);
+    const member = byId.get(visualGroupId);
+    const expectedSignature = visibleAgentIdentity(runtimeAgentId).signature;
     if (step.signature !== expectedSignature || step.avatar !== expectedSignature || !nonemptyString(step.avatarMarkup) || step.avatarMarkup !== member?.iconMarkup) issues.push(`${index}: live specialist cursor role icon does not exactly match its rail identity`);
+    if (step.visualGroupId !== visualGroupId) issues.push(`${index}: live specialist cursor is not bound to its viewer-facing workstream`);
   });
-  if (production && !exactMembers([...covered], REQUIRED_NEMOTRON_AGENT_IDS)) issues.push('production cursor did not visibly exercise all six call-bound role icons');
+  if (production && !exactMembers([...covered], REQUIRED_NEMOTRON_AGENT_IDS)) issues.push('production cursor did not retain all six exact runtime agent identities beneath the merged workstreams');
   return [...new Set(issues)];
 }
 
@@ -2528,8 +2582,13 @@ function intakeClaimMessageBasisContractViolations(construction, preview, expect
 function agentAuditContractViolations(snapshots, audit, production = true, decisionFlowSteps = []) {
   const issues = [];
   const returned = Array.isArray(snapshots) ? snapshots : [];
-  if (stableJson(returned.map(item => item.agentId)) !== stableJson(REQUIRED_VISIBLE_SPECIALIST_IDS)) issues.push('agent audit did not inspect the exact five visible specialist roles in order');
-  const authoritativeById = new Map((Array.isArray(audit?.agents) ? audit.agents : []).map(item => [item.agent_id, item]));
+  if (stableJson(returned.map(item => item.agentId)) !== stableJson(REQUIRED_VISIBLE_SPECIALIST_IDS)) issues.push('agent audit did not inspect the exact four visible workstreams in order');
+  const authoritativeAgents = Array.isArray(audit?.agents) ? audit.agents : [];
+  const authoritativeById = new Map(authoritativeAgents.map(item => [item.agent_id, item]));
+  if (production && (stableJson(authoritativeAgents.map(item => item.agent_id)) !== stableJson(REQUIRED_NEMOTRON_AGENT_IDS)
+    || authoritativeAgents.some(item => item.actor_type !== 'nemotron_agent'))) {
+    issues.push('merged presentation does not retain the exact six runtime agent receipts');
+  }
   const expectedReferenceActions = (decisionFlowSteps || [])
     .filter(step => REFERENCE_DECISION_AUDIT_PHASES.includes(step.phase))
     .map(step => ({ phase: step.phase, nodeId: step.nodeId || '', sourceId: step.sourceId || '', locatorId: step.locatorId || '' }));
@@ -2617,8 +2676,12 @@ function zoomOutDesktopContractViolations({ sourceMoments, decisionSteps, artifa
     if (!preview.inlineGroundingClosed || !preview.otherGroundingHidden || preview.groundingViewerOpen) reasoningIssues.push(`${preview.nodeId}: contextual basis preview is not visible in the default graph state with modal grounding closed`);
     if (preview.overlaps.length) reasoningIssues.push(`${preview.nodeId}: basis preview overlaps ${preview.overlaps.join(', ')}`);
   });
-  const visibleTeam = (team?.members || []).filter(member => member.agentId !== 'orchestrator_plan');
-  if (stableJson(visibleTeam.map(member => ({ id: member.agentId, label: member.role, short: member.short, signature: member.signature }))) !== stableJson(REQUIRED_VISIBLE_SPECIALIST_IDS.map(id => ({ id, label: REQUIRED_DESKTOP_AGENT_LABELS[id], short: REQUIRED_DESKTOP_AGENT_SHORTS[id], signature: REQUIRED_NEMOTRON_AGENT_SIGNATURES[id].signature })))) reasoningIssues.push('the visible five-specialist team is not the agreed simple label set');
+  const visibleTeam = (team?.members || []).filter(member => member.visible === true);
+  if (stableJson(visibleTeam.map(member => member.agentId).sort()) !== stableJson([...REQUIRED_VISIBLE_SPECIALIST_IDS].sort())
+    || visibleTeam.some(member => member.visualGroupId !== visibleAgentGroupId(member.agentId)
+      || member.signature !== visibleAgentIdentity(member.agentId).signature)) {
+    reasoningIssues.push('the visible workstream rail does not merge source reading and process formation into one Path builder group');
+  }
   if (!documentPlan || documentPlan.chains.length !== 21 || !documentPlan.chains.every(chain => stableJson(chain.parts.map(part => part.part)) === stableJson(['decision', 'fact', 'evidence', 'document']))) reasoningIssues.push('Document plan no longer shows each decision-to-document chain');
   if (!documentRoundtrip) reasoningIssues.push('Document plan does not return to the exact owning graph node');
   if (reasoningIssues.length) diagnostics.push(`3. Process-to-document story — ${reasoningIssues.slice(0, 5).join('; ')}`);
@@ -3613,12 +3676,13 @@ function processNodeProgressContractViolations(progressEvents, nodeChanges, fina
       }
       if (modelDecisionPhase) {
         if (event.cursorSignature !== 'process' || event.cursorAgent !== REQUIRED_DESKTOP_AGENT_LABELS.process_decision_mapping
-          || event.activeAgentId !== 'process_decision_mapping' || event.visualActiveAgentId !== 'process_decision_mapping') {
-          issues.push(`${key}:${event.phase}: accepted decision_value is not visibly owned by Process builder`);
+          || event.activeAgentId !== 'process_decision_mapping' || event.visualActiveAgentId !== 'process_decision_mapping'
+          || event.visualGroupId !== PATH_BUILDER_VISUAL_GROUP_ID) {
+          issues.push(`${key}:${event.phase}: accepted decision_value is not bound to the merged Path builder workstream and exact process receipt`);
         }
       } else if (event.cursorSignature !== 'gate' || event.cursorAgent !== 'Process safety check'
-        || event.activeAgentId || event.visualActiveAgentId || event.workAuthority !== 'Process safety check') {
-        issues.push(`${key}:${event.phase}: accepted-input or structural progress inherited Process builder identity`);
+        || event.activeAgentId || event.visualActiveAgentId || event.visualGroupId || event.workAuthority !== 'Process safety check') {
+        issues.push(`${key}:${event.phase}: accepted-input or structural progress inherited a model identity`);
       }
       if (event.outputVisible) issues.push(`${key}:${event.phase}: output appears before progress clears`);
       if (evidenceRequirement && analysisEvents.length) {
@@ -3821,11 +3885,12 @@ function decisionFlowContractViolations(steps, nodeChanges, highlights, interact
       const modelDecisionPhase = Boolean(decisionSemantic) && ['combining', 'decision-ready'].includes(event.phase);
       if (modelDecisionPhase) {
         if (event.activeAgentId !== 'process_decision_mapping' || event.visualActiveAgentId !== 'process_decision_mapping'
+          || event.visualGroupId !== PATH_BUILDER_VISUAL_GROUP_ID
           || event.activeSignature !== 'process' || event.workAuthority !== 'Process builder') {
-          issues.push(`${nodeId}:${event.phase}: accepted decision_value is not visibly owned by Process builder`);
+          issues.push(`${nodeId}:${event.phase}: accepted decision_value is not bound to the merged Path builder workstream and exact process receipt`);
         }
-      } else if (event.activeAgentId || event.visualActiveAgentId || event.activeSignature === 'process' || event.workAuthority === 'Process builder') {
-        issues.push(`${nodeId}:${event.phase}: accepted input or structural replay inherited Process builder identity`);
+      } else if (event.activeAgentId || event.visualActiveAgentId || event.visualGroupId || event.activeSignature === 'process' || event.workAuthority === 'Process builder') {
+        issues.push(`${nodeId}:${event.phase}: accepted input or structural replay inherited a model identity`);
       }
     });
     if (events.some(event => !event.graphVisible || event.graphConstructionState !== 'building'
@@ -4449,21 +4514,19 @@ async function execute() {
     window.__casepathCaptureSourcePrelude = () => {
       const prelude = document.querySelector('#artifactCanvas [data-ac-focal-object="source-prelude"]');
       if (!visible(prelude)) return;
-      const cards = [...prelude.querySelectorAll('.ac-source-prelude-strip > [data-source-kind]')].map(card => {
-        const icon = card.querySelector('[data-source-icon-kind]');
-        const svg = icon?.querySelector('svg[data-source-type-icon]');
-        return {
-          kind: card.dataset.sourceKind || '',
-          iconKind: icon?.dataset.sourceIconKind || '',
-          iconCount: card.querySelectorAll('[data-source-icon-kind] > svg[data-source-type-icon]').length,
-          iconMarkup: window.__casepathNormalizeSvg(svg),
-        };
-      });
+      const steps = [...prelude.querySelectorAll('.ac-source-prelude-plan > li[data-step-state]')].map(step => ({
+        label: step.querySelector('span')?.textContent?.trim() || '',
+        state: step.dataset.stepState || '',
+      }));
       const snapshot = {
-        cardCount: cards.length,
+        sourceCount: Number(prelude.dataset.sourceCount || 0),
+        label: prelude.querySelector(':scope > header span')?.textContent?.trim() || '',
+        title: prelude.querySelector(':scope > header strong')?.textContent?.trim() || '',
+        planCount: prelude.querySelectorAll('.ac-source-prelude-plan').length,
+        cardCount: prelude.querySelectorAll('.ac-source-prelude-strip > [data-source-kind]').length,
         inputCount: prelude.querySelectorAll('input').length,
         checkboxRoleCount: prelude.querySelectorAll('[role="checkbox"]').length,
-        cards,
+        steps,
       };
       const key = JSON.stringify(snapshot);
       if (!window.__casepathSourcePreludeSnapshots.some(item => JSON.stringify(item) === key)) window.__casepathSourcePreludeSnapshots.push(snapshot);
@@ -4487,6 +4550,8 @@ async function execute() {
         contract: plan.dataset.contract || '',
         presentationMode: plan.dataset.presentationMode || '',
         agentId: plan.dataset.agentId || '',
+        runtimeAgentId: plan.dataset.runtimeAgentId || '',
+        visualGroupId: plan.dataset.visibleAgentGroup || '',
         agentSignature: plan.dataset.agentSignature || '',
         runId: plan.dataset.runId || '',
         callId: plan.dataset.callId || '',
@@ -4716,6 +4781,9 @@ async function execute() {
         cursorAgent: cursor?.querySelector('[data-ac-cursor-agent]')?.textContent?.trim() || '',
         activeAgentId: root?.dataset.activeAgentId || '',
         visualActiveAgentId: root?.dataset.visualActiveAgentId || '',
+        visualGroupId: ['canonical_facts', 'process_decision_mapping'].includes(root?.dataset.visualActiveAgentId || '')
+          ? 'process_decision_mapping'
+          : root?.dataset.visualActiveAgentId || '',
         presentationMode: root?.dataset.presentationMode || '',
         presentationLabel: document.querySelector('[data-ac-global-agent]')?.textContent?.trim() || '',
         workAuthority: root?.dataset.workAuthority || '',
@@ -4863,6 +4931,10 @@ async function execute() {
           changeId: detail.changeId || '',
           eventId: detail.eventId || '',
           agentId: detail.agentId || '',
+          runtimeAgentId: detail.agentId || '',
+          visualGroupId: ['canonical_facts', 'process_decision_mapping'].includes(detail.agentId || '')
+            ? 'process_decision_mapping'
+            : detail.agentId || '',
           targetId: detail.targetId || '',
           moment: detail.moment || root?.dataset.casepathScene || '',
           phase: detail.phase || '',
@@ -5126,6 +5198,9 @@ async function execute() {
         presentationLabel: document.querySelector('[data-ac-global-agent]')?.textContent?.trim() || '',
         activeAgentId: root?.dataset.activeAgentId || '',
         visualActiveAgentId: root?.dataset.visualActiveAgentId || '',
+        visualGroupId: ['canonical_facts', 'process_decision_mapping'].includes(root?.dataset.visualActiveAgentId || '')
+          ? 'process_decision_mapping'
+          : root?.dataset.visualActiveAgentId || '',
         activeSignature: root?.dataset.activeSignature || '',
         workAuthority: root?.dataset.workAuthority || '',
         sourceId,
@@ -5690,9 +5765,8 @@ async function execute() {
   let semanticEvents = await page.evaluate(() => window.__casepathSemanticEvents || []);
   const factTourHighlights = await page.evaluate(() => window.__casepathSourceHighlights || []);
   const liveWorkPlanIssues = canonicalFactsLiveWorkPlanContractViolations(liveWorkPlanSnapshots, factTourSnapshots, processRun);
-  check('The exact live Claim reader call replaces the idle source cards with three simple steps, then yields fully to real source previews', liveWorkPlanIssues.length === 0, JSON.stringify({ liveWorkPlanSnapshots, liveWorkPlanIssues }));
-  const factTourIssues = factSourceTourContractViolations(factTourSnapshots, factTourHighlights, semanticEvents, processRun);
-  check('Eight returned facts each show their exact source first, then the accepted fact, with run-bound replay lineage', factTourIssues.length === 0, JSON.stringify({ factTourSnapshots, factTourIssues }));
+  check('The exact canonical-facts call uses one simple plan and yields source reading to the merged Path builder graph flow', liveWorkPlanIssues.length === 0, JSON.stringify({ liveWorkPlanSnapshots, liveWorkPlanIssues }));
+  check('No separate eight-fact presentation competes with the merged Path builder graph flow', factTourSnapshots.length === 0, JSON.stringify({ factTourSnapshots, factTourHighlights }));
   const sourceRailSnapshots = await page.evaluate(() => window.__casepathSourceRailSnapshots || []);
   const sourceRailIssues = sourceRailSnapshots.flatMap(snapshot => sourceRailContractViolations(
     snapshot,
@@ -5701,11 +5775,10 @@ async function execute() {
   ));
   const expectedRailReasons = [
     ...SOURCE_RAIL_VIEWPORTS.map(viewport => `opening:${viewport.width}x${viewport.height}`),
-    ...FACT_TOUR_FACT_IDS.flatMap(factId => [`fact-tour:${factId}:select-source`, `fact-tour:${factId}:read-source`]),
   ];
   const observedRailReasons = new Set(sourceRailSnapshots.map(snapshot => snapshot.reason));
   const missingRailReasons = expectedRailReasons.filter(reason => !observedRailReasons.has(reason));
-  check('Every source-use step keeps one compact seven-item rail and activates only the exact source after it opens', sourceRailIssues.length === 0 && missingRailReasons.length === 0, JSON.stringify({ sourceRailSnapshots, sourceRailIssues, missingRailReasons }));
+  check('Opening keeps one compact exact seven-item source rail without a competing source-card strip', sourceRailIssues.length === 0 && missingRailReasons.length === 0, JSON.stringify({ sourceRailSnapshots, sourceRailIssues, missingRailReasons }));
   const officialSourceSteps = await page.evaluate(() => window.__casepathOfficialSourceSteps || []);
   const officialLawTourIssues = officialLawTourContractViolations(officialSourceSteps, semanticEvents, processRun);
   check('Four official Swiss-law items are visibly exact deterministic registry lookups, never Nemotron work', expectedOfficialSources.length === 4 && officialLawTourIssues.length === 0, JSON.stringify({ expectedOfficialSourceIds: expectedOfficialSources.map(source => source.source_id), officialSourceSteps, officialLawTourIssues }));
@@ -5927,10 +6000,12 @@ async function execute() {
       cursorCount: [...root.querySelectorAll('#artifactAgentCursor')].filter(visible).length,
       members: [...(team?.querySelectorAll('[data-ac-agent-id]') || [])].map(member => ({
         agentId: member.dataset.acAgentId || '',
+        visualGroupId: member.dataset.visibleAgentGroup || member.dataset.acAgentId || '',
         role: member.dataset.agentLabel || '',
         short: member.querySelector('small')?.textContent?.trim() || '',
         monogram: member.dataset.agentMonogram || '',
         signature: member.dataset.agentSignature || '',
+        controlLabel: member.querySelector('[data-ac-action="open-agent-audit"]')?.getAttribute('aria-label') || '',
         iconMarkup: window.__casepathNormalizeSvg(member.querySelector('svg')),
         color: getComputedStyle(member).getPropertyValue('--agent-color').trim(),
         visible: visible(member),
@@ -5994,12 +6069,12 @@ async function execute() {
   const agentAuditIssues = agentAuditContractViolations(agentAuditSnapshots, returnedAgentAudit, isProductionJourney(), decisionFlowAuditSteps);
   check('Each visible specialist opens an exact call-bound history; reference replay keeps the exact Path actions and provenance without fabricating calls', agentAuditIssues.length === 0, JSON.stringify({ agentAuditSnapshots, returnedAgentAudit, decisionFlowAuditSteps, agentAuditIssues }));
   const artifactProducerRoleIssues = artifactCursorProducerRoleContractViolations(artifactTeamSnapshot, artifactCursorSteps, semanticEvents);
-  check('Desktop shows only five useful signature-colored specialists while retaining exact six-agent receipts and keeping deterministic law, reference, and gates outside model identity', artifactProducerRoleIssues.length === 0, JSON.stringify({ artifactTeamSnapshot, artifactCursorSteps, artifactProducerRoleIssues }));
+  check('Desktop merges source reading and process formation into one Path builder workstream while retaining all six exact runtime identities', artifactProducerRoleIssues.length === 0, JSON.stringify({ artifactTeamSnapshot, artifactCursorSteps, artifactProducerRoleIssues }));
   const specialistAvatarIssues = specialistAvatarContractViolations(artifactTeamSnapshot, artifactCursorSteps, isProductionJourney());
-  check('Every call-bound specialist cursor uses its exact distinct role icon, including the hidden planner identity without exposing planner in the rail', specialistAvatarIssues.length === 0, JSON.stringify({ artifactTeamSnapshot, artifactCursorSteps, specialistAvatarIssues }));
+  check('Four visible workstream icons retain all six exact call-bound runtime identities beneath them', specialistAvatarIssues.length === 0, JSON.stringify({ artifactTeamSnapshot, artifactCursorSteps, specialistAvatarIssues }));
   const sourcePreludeSnapshots = await page.evaluate(() => window.__casepathSourcePreludeSnapshots || []);
   const sourcePreludeIssues = sourcePreludeContractViolations(sourcePreludeSnapshots[0]);
-  check('Opening source package has seven type-correct source icons and no checkbox-shaped control semantics', sourcePreludeIssues.length === 0, JSON.stringify({ sourcePreludeSnapshots, sourcePreludeIssues }));
+  check('Opening uses one calm three-step Path builder plan instead of seven competing source cards', sourcePreludeIssues.length === 0, JSON.stringify({ sourcePreludeSnapshots, sourcePreludeIssues }));
   const mainFocalWhyViolations = await page.evaluate(() => window.__casepathMainFocalWhyViolations || []);
   check('Main focal work never shows a large generic agent why paragraph', mainFocalWhyViolations.length === 0, JSON.stringify(mainFocalWhyViolations));
   const processChangeIssues = processProjectionContractViolations(processArtifactChanges, semanticEvents, artifactCursorSteps, processRun.run_id, routeStory.storyNodeIds);
@@ -7830,18 +7905,26 @@ async function runContractSelfTest() {
     throw new Error('Unknown terminal failure leaked unbounded provider text');
   }
   const sourcePreludeFixture = {
-    cardCount: 7,
+    sourceCount: 7,
+    label: 'Path builder',
+    title: 'Build the claim path',
+    planCount: 1,
+    cardCount: 0,
     inputCount: 0,
     checkboxRoleCount: 0,
-    cards: SOURCE_PRELUDE_ICON_KINDS.map((kind, index) => ({ kind, iconKind: kind, iconCount: 1, iconMarkup: `<path data-fixture="${index}"></path>` })),
+    steps: [
+      { label: 'Read the exact source', state: 'complete' },
+      { label: 'Keep the supported fact', state: 'active' },
+      { label: 'Add the next process step', state: 'waiting' },
+    ],
   };
-  if (sourcePreludeContractViolations(sourcePreludeFixture).length) throw new Error('Valid seven-card source icon fixture was rejected');
+  if (sourcePreludeContractViolations(sourcePreludeFixture).length) throw new Error('Valid merged Path builder opening plan fixture was rejected');
   const checkboxPreludeFixture = structuredClone(sourcePreludeFixture);
   checkboxPreludeFixture.checkboxRoleCount = 1;
   if (!sourcePreludeContractViolations(checkboxPreludeFixture).some(issue => issue.includes('checkbox'))) throw new Error('Opening source checkbox fixture was accepted');
-  const wrongPreludeIconFixture = structuredClone(sourcePreludeFixture);
-  wrongPreludeIconFixture.cards[4].iconKind = 'document';
-  if (!sourcePreludeContractViolations(wrongPreludeIconFixture).some(issue => issue.includes('type-correct icon'))) throw new Error('Wrong opening source type icon fixture was accepted');
+  const obsoletePreludeCardsFixture = structuredClone(sourcePreludeFixture);
+  obsoletePreludeCardsFixture.cardCount = 7;
+  if (!sourcePreludeContractViolations(obsoletePreludeCardsFixture).some(issue => issue.includes('obsolete seven-card strip'))) throw new Error('Obsolete seven-card opening strip fixture was accepted');
 
   const sourceRailSourcesFixture = [
     ['message', 'mail', 'Claim message'],
@@ -7920,19 +8003,17 @@ async function runContractSelfTest() {
   const liveWorkPlanFixture = [{
     planCount: 1, focalChildCount: 1, visible: true,
     contract: LIVE_WORK_PLAN_CONTRACT, presentationMode: 'live-call',
-    agentId: 'canonical_facts', agentSignature: 'facts', runId: liveWorkRunFixture.run_id,
+    agentId: 'canonical_facts', runtimeAgentId: 'canonical_facts', visualGroupId: PATH_BUILDER_VISUAL_GROUP_ID,
+    agentSignature: PATH_BUILDER_VISIBLE_IDENTITY.signature, runId: liveWorkRunFixture.run_id,
     callId: 'call:live-canonical-facts', eventId: 'event:live-canonical-facts', workState: 'started',
     inputArtifact: 'observable_claim_package', inputArtifactHash: '1'.repeat(64),
     rootWorkState: 'working', rootAgentId: 'canonical_facts', rootRunId: liveWorkRunFixture.run_id,
     rootCallId: 'call:live-canonical-facts', rootEventId: 'event:live-canonical-facts',
-    title: 'Find the supported facts', steps: structuredClone(CANONICAL_FACTS_LIVE_WORK_STEPS),
+    title: 'Build the claim path', steps: structuredClone(CANONICAL_FACTS_LIVE_WORK_STEPS),
     sourcePreludeCount: 0, sourcePreludeCardCount: 0, factTourCount: 0,
     forbiddenProgressCount: 0, percentText: false, at: 100,
   }];
-  const liveWorkFactTourFixture = [
-    { phase: 'select-source', liveWorkPlanCount: 0, sourcePreludeCount: 0, artifactSurfaceVisible: false, at: 200 },
-    { phase: 'read-source', liveWorkPlanCount: 0, sourcePreludeCount: 0, artifactSurfaceVisible: true, at: 300 },
-  ];
+  const liveWorkFactTourFixture = [];
   if (canonicalFactsLiveWorkPlanContractViolations(liveWorkPlanFixture, liveWorkFactTourFixture, liveWorkRunFixture).length) throw new Error('Valid call-bound canonical-fact live plan fixture was rejected');
   const stagedPreludeLiveWorkFixture = structuredClone(liveWorkPlanFixture);
   Object.assign(stagedPreludeLiveWorkFixture[0], { sourcePreludeCount: 1, sourcePreludeCardCount: 7 });
@@ -7943,28 +8024,40 @@ async function runContractSelfTest() {
   const forgedLiveWorkCallFixture = structuredClone(liveWorkPlanFixture);
   forgedLiveWorkCallFixture[0].callId = 'call:forged';
   if (!canonicalFactsLiveWorkPlanContractViolations(forgedLiveWorkCallFixture, liveWorkFactTourFixture, liveWorkRunFixture).some(issue => issue.includes('exact returned run, call, event, agent, and work state'))) throw new Error('Live plan with a forged call binding was accepted');
-  const lingeringLiveWorkFactTourFixture = structuredClone(liveWorkFactTourFixture);
-  lingeringLiveWorkFactTourFixture[0].liveWorkPlanCount = 1;
-  if (!canonicalFactsLiveWorkPlanContractViolations(liveWorkPlanFixture, lingeringLiveWorkFactTourFixture, liveWorkRunFixture).some(issue => issue.includes('persists after the fact tour starts'))) throw new Error('Live plan lingering over the real source tour was accepted');
+  const obsoleteSeparateFactTourFixture = [{ phase: 'read-source', liveWorkPlanCount: 0, sourcePreludeCount: 0, artifactSurfaceVisible: true, at: 300 }];
+  if (!canonicalFactsLiveWorkPlanContractViolations(liveWorkPlanFixture, obsoleteSeparateFactTourFixture, liveWorkRunFixture).some(issue => issue.includes('separate source-to-fact tour'))) throw new Error('Separate source-to-fact presentation outside the Path builder graph flow was accepted');
 
+  const avatarGroups = [...new Set(REQUIRED_NEMOTRON_AGENT_IDS.map(visibleAgentGroupId))];
+  const avatarMarkupByGroup = new Map(avatarGroups.map((groupId, index) => [groupId, `<path data-role="${index}"></path>`]));
   const avatarTeamFixture = {
-    members: REQUIRED_NEMOTRON_AGENT_IDS.map((agentId, index) => ({ agentId, signature: REQUIRED_NEMOTRON_AGENT_SIGNATURES[agentId].signature, iconMarkup: `<path data-role="${index}"></path>` })),
+    members: REQUIRED_NEMOTRON_AGENT_IDS.map(agentId => ({
+      agentId,
+      visualGroupId: visibleAgentGroupId(agentId),
+      signature: visibleAgentIdentity(agentId).signature,
+      iconMarkup: avatarMarkupByGroup.get(visibleAgentGroupId(agentId)),
+      visible: REQUIRED_VISIBLE_SPECIALIST_IDS.includes(agentId),
+    })),
   };
   const avatarCursorFixture = avatarTeamFixture.members.map(member => ({
     specialistBound: true,
     agentId: member.agentId,
+    runtimeAgentId: member.agentId,
     visualActiveAgentId: member.agentId,
+    visualGroupId: member.visualGroupId,
     signature: member.signature,
     avatar: member.signature,
     avatarMarkup: member.iconMarkup,
   }));
-  if (specialistAvatarContractViolations(avatarTeamFixture, avatarCursorFixture, true).length) throw new Error('Valid six-role cursor avatar fixture was rejected');
+  if (specialistAvatarContractViolations(avatarTeamFixture, avatarCursorFixture, true).length) throw new Error('Valid four-workstream/six-runtime-agent avatar fixture was rejected');
   const mismatchedAvatarFixture = structuredClone(avatarCursorFixture);
   mismatchedAvatarFixture[2].avatarMarkup = avatarTeamFixture.members[0].iconMarkup;
   if (!specialistAvatarContractViolations(avatarTeamFixture, mismatchedAvatarFixture, true).some(issue => issue.includes('does not exactly match'))) throw new Error('Mismatched live role icon fixture was accepted');
+  const ungroupedCanonicalCursorFixture = structuredClone(avatarCursorFixture);
+  ungroupedCanonicalCursorFixture.find(item => item.runtimeAgentId === 'canonical_facts').visualGroupId = 'canonical_facts';
+  if (!specialistAvatarContractViolations(avatarTeamFixture, ungroupedCanonicalCursorFixture, true).some(issue => issue.includes('viewer-facing workstream'))) throw new Error('Canonical-facts cursor outside the merged Path builder workstream was accepted');
   const duplicateAvatarTeamFixture = structuredClone(avatarTeamFixture);
   duplicateAvatarTeamFixture.members[5].iconMarkup = duplicateAvatarTeamFixture.members[4].iconMarkup;
-  if (!specialistAvatarContractViolations(duplicateAvatarTeamFixture, avatarCursorFixture, true).some(issue => issue.includes('unique normalized role-icon hashes'))) throw new Error('Duplicate agent role icon fixture was accepted');
+  if (!specialistAvatarContractViolations(duplicateAvatarTeamFixture, avatarCursorFixture, true).some(issue => issue.includes('four unique normalized role-icon hashes'))) throw new Error('Duplicate visible workstream icon fixture was accepted');
 
   const openingClaimFixture = {
     subject: 'Bedroom condition keeps returning',
@@ -8069,7 +8162,7 @@ async function runContractSelfTest() {
 
   const auditFixture = {
     executed: true,
-    agents: REQUIRED_VISIBLE_SPECIALIST_IDS.map((agentId, index) => ({
+    agents: REQUIRED_NEMOTRON_AGENT_IDS.map((agentId, index) => ({
       agent_id: agentId,
       actor_type: 'nemotron_agent',
       call_id: `call-${index}`,
@@ -8080,7 +8173,7 @@ async function runContractSelfTest() {
       rejected_count: index === 2 ? 1 : 0,
     })),
   };
-  const auditSnapshotFixture = auditFixture.agents.map(agent => ({
+  const auditSnapshotFixture = REQUIRED_VISIBLE_SPECIALIST_IDS.map(agentId => auditFixture.agents.find(agent => agent.agent_id === agentId)).map(agent => ({
     agentId: agent.agent_id,
     opened: true,
     panelAgentId: agent.agent_id,
@@ -8104,7 +8197,7 @@ async function runContractSelfTest() {
   wrongAuditHashFixture[0].outputHash = '0'.repeat(64);
   if (!agentAuditContractViolations(wrongAuditHashFixture, auditFixture, true).some(issue => issue.includes('technical receipt'))) throw new Error('Agent history with a forged output hash was accepted');
   const hiddenRejectionAuditFixture = structuredClone(auditSnapshotFixture);
-  hiddenRejectionAuditFixture[2].rejections = [];
+  hiddenRejectionAuditFixture.find(item => item.agentId === 'document_source_integrity').rejections = [];
   if (!agentAuditContractViolations(hiddenRejectionAuditFixture, auditFixture, true).some(issue => issue.includes('rejected item'))) throw new Error('Agent history hiding a rejected item was accepted');
   const referenceDecisionAuditFixture = [
     { phase: 'source-opened', nodeId: 'notification', sourceId: 'art_notification', locatorId: 'source:art_notification:page:1:quote:notice' },
@@ -8315,6 +8408,7 @@ async function runContractSelfTest() {
       cursorAgent: modelDecisionPhase ? REQUIRED_DESKTOP_AGENT_LABELS.process_decision_mapping : 'Process safety check',
       activeAgentId: modelDecisionPhase ? 'process_decision_mapping' : '',
       visualActiveAgentId: modelDecisionPhase ? 'process_decision_mapping' : '',
+      visualGroupId: modelDecisionPhase ? PATH_BUILDER_VISUAL_GROUP_ID : '',
       presentationMode: 'returned-action-replay',
       presentationLabel: modelDecisionPhase ? 'Returned work · Process builder' : 'Returned work · Process safety check',
       workAuthority: modelDecisionPhase ? 'Process builder' : 'Process safety check',
@@ -8363,11 +8457,11 @@ async function runContractSelfTest() {
   if (!processNodeProgressContractViolations(missingProgressPhaseFixture, progressNodeOutputFixture, progressFinalFixture, processSemanticFixture, fixtureRunId).some(issue => issue.includes('does not replay accepted inputs'))) throw new Error('Process progress with a missing accepted-input phase was accepted');
   const wrongProgressOwnerFixture = structuredClone(progressFixture);
   wrongProgressOwnerFixture.find(item => item.nodeId === 'intake' && item.phase === 'form').cursorSignature = 'facts';
-  if (!processNodeProgressContractViolations(wrongProgressOwnerFixture, progressNodeOutputFixture, progressFinalFixture, processSemanticFixture, fixtureRunId).some(issue => issue.includes('accepted decision_value is not visibly owned by Process builder'))) throw new Error('Accepted decision_value progress owned by the wrong specialist was accepted');
+  if (!processNodeProgressContractViolations(wrongProgressOwnerFixture, progressNodeOutputFixture, progressFinalFixture, processSemanticFixture, fixtureRunId).some(issue => issue.includes('merged Path builder workstream'))) throw new Error('Accepted decision_value progress owned by the wrong visible workstream was accepted');
   const inflatedFallbackProgressFixture = structuredClone(progressFixture);
   const fallbackProgress = inflatedFallbackProgressFixture.find(item => item.nodeId === 'scope' && item.phase === 'read');
-  Object.assign(fallbackProgress, { cursorSignature: 'process', cursorAgent: 'Process builder', activeAgentId: 'process_decision_mapping', visualActiveAgentId: 'process_decision_mapping', workAuthority: 'Process builder' });
-  if (!processNodeProgressContractViolations(inflatedFallbackProgressFixture, progressNodeOutputFixture, progressFinalFixture, processSemanticFixture, fixtureRunId).some(issue => issue.includes('accepted-input or structural progress inherited Process builder identity'))) throw new Error('Accepted-input progress with an inflated Process builder identity was accepted');
+  Object.assign(fallbackProgress, { cursorSignature: 'process', cursorAgent: 'Process builder', activeAgentId: 'process_decision_mapping', visualActiveAgentId: 'process_decision_mapping', visualGroupId: PATH_BUILDER_VISUAL_GROUP_ID, workAuthority: 'Process builder' });
+  if (!processNodeProgressContractViolations(inflatedFallbackProgressFixture, progressNodeOutputFixture, progressFinalFixture, processSemanticFixture, fixtureRunId).some(issue => issue.includes('inherited a model identity'))) throw new Error('Accepted-input progress with an inflated model identity was accepted');
   const visibleNumericProgressFixture = structuredClone(progressFixture);
   visibleNumericProgressFixture.find(item => item.nodeId === 'intake' && item.phase === 'read').indicatorValueVisible = true;
   if (!processNodeProgressContractViolations(visibleNumericProgressFixture, progressNodeOutputFixture, progressFinalFixture, processSemanticFixture, fixtureRunId).some(issue => issue.includes('numeric percentage is visible'))) throw new Error('Visible numeric process percentage fixture was accepted');
@@ -8462,7 +8556,7 @@ async function runContractSelfTest() {
       decisionDeterministicFallbackApplied: false,
       presentationMode: 'returned-action-replay',
       presentationLabel: 'Returned work · Process safety check',
-      activeAgentId: '', visualActiveAgentId: '', activeSignature: 'gate', workAuthority: 'Process safety check',
+      activeAgentId: '', visualActiveAgentId: '', visualGroupId: '', activeSignature: 'gate', workAuthority: 'Process safety check',
       graphVisible: true,
       graphConstructionState: 'building',
       workspaceVisible: true,
@@ -8509,6 +8603,7 @@ async function runContractSelfTest() {
         presentationLabel: modelDecisionPhase ? 'Returned work · Process builder' : 'Returned work · Process safety check',
         activeAgentId: modelDecisionPhase ? 'process_decision_mapping' : '',
         visualActiveAgentId: modelDecisionPhase ? 'process_decision_mapping' : '',
+        visualGroupId: modelDecisionPhase ? PATH_BUILDER_VISUAL_GROUP_ID : '',
         activeSignature: modelDecisionPhase ? 'process' : 'gate',
         workAuthority: modelDecisionPhase ? 'Process builder' : 'Process safety check',
         ...extra,
@@ -8589,7 +8684,14 @@ async function runContractSelfTest() {
       };
     }),
     postConstructionSourceUse: { viewerOpen: true, activeSourceIds: ['art_lease'], activeSourceLocator: 'art_lease:p1', sourceId: 'art_lease', locatorId: 'art_lease:p1' },
-    team: { members: REQUIRED_NEMOTRON_AGENT_IDS.map(id => ({ agentId: id, role: REQUIRED_DESKTOP_AGENT_LABELS[id], short: REQUIRED_DESKTOP_AGENT_SHORTS[id], signature: REQUIRED_NEMOTRON_AGENT_SIGNATURES[id].signature, visible: id !== 'orchestrator_plan' })) },
+    team: { members: REQUIRED_NEMOTRON_AGENT_IDS.map(id => ({
+      agentId: id,
+      visualGroupId: visibleAgentGroupId(id),
+      role: REQUIRED_DESKTOP_AGENT_LABELS[id],
+      short: id === PATH_BUILDER_VISUAL_GROUP_ID ? PATH_BUILDER_VISIBLE_IDENTITY.short : REQUIRED_DESKTOP_AGENT_SHORTS[id],
+      signature: visibleAgentIdentity(id).signature,
+      visible: REQUIRED_VISIBLE_SPECIALIST_IDS.includes(id),
+    })) },
     documentPlan: { chains: Array.from({ length: 21 }, () => ({ parts: ['decision', 'fact', 'evidence', 'document'].map(part => ({ part })) })) },
     documentRoundtrip: true,
   };
@@ -10053,7 +10155,7 @@ async function runContractSelfTest() {
   const unsafeAxeTarget = `.v20-learning-row[data-customer="${'claim-bearing-'.repeat(700)}"] > span`;
   const axeDiagnostics = axeViolationDiagnostics([{ id: 'color-contrast', impact: 'serious', help: 'Elements must meet minimum color contrast ratio thresholds', nodes: [{ target: [unsafeAxeTarget], html: '<span>claim-bearing text must not be logged</span>', failureSummary: 'Claim-bearing failure prose must not be logged', any: [{ id: 'color-contrast', impact: 'serious', message: 'Claim-bearing check prose must not be logged', data: { fgColor: '#147a56', bgColor: '#edf8f3', contrastRatio: 4.44, raw: 'must not be retained' } }], all: [], none: [] }] }]);
   if (axeDiagnostics.length !== 1 || axeDiagnostics[0].node_count !== 1 || axeDiagnostics[0].omitted_node_count !== 0 || !/^sha256:[0-9a-f]{64}$/.test(axeDiagnostics[0].nodes[0].target[0]) || JSON.stringify(axeDiagnostics).includes('claim-bearing') || axeDiagnostics[0].nodes[0].checks[0].data.contrastRatio !== 4.44 || 'raw' in axeDiagnostics[0].nodes[0].checks[0].data || 'html' in axeDiagnostics[0].nodes[0] || 'message' in axeDiagnostics[0].nodes[0].checks[0] || 'failure_summary' in axeDiagnostics[0].nodes[0]) throw new Error(`Bounded Axe diagnostics fixture failed: ${JSON.stringify(axeDiagnostics)}`);
-  return { status: 'passed', fixtures: ['visible_cached_replay_and_terminal_failure_truth', 'authored_terminal_failure_restart', 'seven_source_icons_and_checkbox_rejection', 'eight_fact_source_to_fact_execution_trace_and_four_deterministic_laws', 'accepted_fact_law_graph_replay_and_neutral_fallback_identity', 'six_distinct_cursor_role_icons_and_tamper', 'exact_intake_claim_message_basis_and_generated_summary_rejection', 'call_bound_agent_history_and_reference_fail_closed', 'persistent_ten_node_projection_and_tamper', 'graph_native_review_scene_and_competing_artifact_rejection', 'semantic_attachment_cursor_tether_and_tamper', 'zoom_out_desktop_three_priority_diagnostics', 'process_preview_1440x900_containment_and_bottom_inset', 'bounded_future_claim_memory_delta_identity_origin_and_tamper', 'bounded_axe_node_diagnostics', 'session_scoped_run_read_coalescing', 'memory_reuse_renderer_determinism', 'stable_text_grounding_fact_selection', 'normalized_text_grounding', 'python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'fail_closed_model_contribution_badges', 'mixed_field_contribution_badge', 'post_memory_contribution_suppression', 'reciprocal_evidence_truth_and_tamper', 'structured_legal_truth_and_tamper', 'visual_reference_truth_and_tamper', 'precedent_ranking_truth_and_tamper', 'memory_application_truth_and_tamper', 'memory_boundary_event_cross_binding', 'dormant_memory_retrieval_not_application', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'parallel_source_artifact_hash_rejection', 'parallel_process_artifact_hash_rejection', 'process_field_membership_rejection', 'process_field_attribution_rejection', 'process_inherited_field_rejection_with_recomputed_hashes', 'evidence_field_membership_rejection', 'evidence_field_attribution_rejection', 'evidence_source_ref_rejection_with_recomputed_hashes', 'final_field_membership_rejection', 'final_current_node_binding_rejection', 'final_next_action_binding_rejection', 'final_supporting_facts_binding_rejection', 'final_upstream_contributions_binding_rejection', 'final_audit_checks_binding_rejection', 'noncontrolling_supporting_fact_source_binding', 'cold_upstream_provider_policy_rejection', 'warm_upstream_provider_policy_rejection', 'agent_role_label_rejection', 'gate_role_label_rejection', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'provider_concurrency_zero_call_receipt', 'provider_concurrency_receipt_call_rejection', 'provider_concurrency_receipt_identity_rejection', 'safe_upstream_rejection_receipt', 'forged_upstream_rejection_receipt_attribution_rejection', 'missing_upstream_rejection_receipt_attribution_rejection', 'out_of_scope_upstream_rejection_receipt_attribution_rejection', 'unbounded_upstream_error_code_rejection', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'safe_upstream_rejection_ledger', 'provider_concurrency_zero_call_ledger', 'provider_concurrency_ledger_call_rejection', 'provider_concurrency_ledger_cost_rejection', 'provider_concurrency_ledger_identity_rejection', 'forged_upstream_rejection_ledger_attribution_rejection', 'missing_upstream_rejection_ledger_attribution_rejection', 'out_of_scope_upstream_rejection_ledger_attribution_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
+  return { status: 'passed', fixtures: ['visible_cached_replay_and_terminal_failure_truth', 'authored_terminal_failure_restart', 'three_step_path_builder_opening_and_checkbox_rejection', 'eight_fact_source_to_fact_execution_trace_and_four_deterministic_laws', 'accepted_fact_law_graph_replay_and_neutral_fallback_identity', 'four_visible_workstream_icons_six_runtime_identities_and_tamper', 'exact_intake_claim_message_basis_and_generated_summary_rejection', 'call_bound_agent_history_and_reference_fail_closed', 'persistent_ten_node_projection_and_tamper', 'graph_native_review_scene_and_competing_artifact_rejection', 'semantic_attachment_cursor_tether_and_tamper', 'zoom_out_desktop_three_priority_diagnostics', 'process_preview_1440x900_containment_and_bottom_inset', 'bounded_future_claim_memory_delta_identity_origin_and_tamper', 'bounded_axe_node_diagnostics', 'session_scoped_run_read_coalescing', 'memory_reuse_renderer_determinism', 'stable_text_grounding_fact_selection', 'normalized_text_grounding', 'python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'fail_closed_model_contribution_badges', 'mixed_field_contribution_badge', 'post_memory_contribution_suppression', 'reciprocal_evidence_truth_and_tamper', 'structured_legal_truth_and_tamper', 'visual_reference_truth_and_tamper', 'precedent_ranking_truth_and_tamper', 'memory_application_truth_and_tamper', 'memory_boundary_event_cross_binding', 'dormant_memory_retrieval_not_application', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'parallel_source_artifact_hash_rejection', 'parallel_process_artifact_hash_rejection', 'process_field_membership_rejection', 'process_field_attribution_rejection', 'process_inherited_field_rejection_with_recomputed_hashes', 'evidence_field_membership_rejection', 'evidence_field_attribution_rejection', 'evidence_source_ref_rejection_with_recomputed_hashes', 'final_field_membership_rejection', 'final_current_node_binding_rejection', 'final_next_action_binding_rejection', 'final_supporting_facts_binding_rejection', 'final_upstream_contributions_binding_rejection', 'final_audit_checks_binding_rejection', 'noncontrolling_supporting_fact_source_binding', 'cold_upstream_provider_policy_rejection', 'warm_upstream_provider_policy_rejection', 'agent_role_label_rejection', 'gate_role_label_rejection', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'provider_concurrency_zero_call_receipt', 'provider_concurrency_receipt_call_rejection', 'provider_concurrency_receipt_identity_rejection', 'safe_upstream_rejection_receipt', 'forged_upstream_rejection_receipt_attribution_rejection', 'missing_upstream_rejection_receipt_attribution_rejection', 'out_of_scope_upstream_rejection_receipt_attribution_rejection', 'unbounded_upstream_error_code_rejection', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'safe_upstream_rejection_ledger', 'provider_concurrency_zero_call_ledger', 'provider_concurrency_ledger_call_rejection', 'provider_concurrency_ledger_cost_rejection', 'provider_concurrency_ledger_identity_rejection', 'forged_upstream_rejection_ledger_attribution_rejection', 'missing_upstream_rejection_ledger_attribution_rejection', 'out_of_scope_upstream_rejection_ledger_attribution_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
 }
 
 let report;

@@ -1149,3 +1149,87 @@ body[data-casepath-moment="later-result"] .v21-proof-details .memory-determinist
     border-color:#d7b9bb!important;
   }
 }
+
+/* Final visual polish: replace Chromium focus chrome with the CasePath language. */
+.v20-document-sheet button:focus-visible,
+.source-viewer button:focus-visible{
+  outline:2px solid rgba(168,31,34,.26);
+  outline-offset:2px;
+  box-shadow:none;
+}
+
+.v20-document-sheet>.icon-button:focus-visible{
+  border-color:rgba(168,31,34,.32);
+  background:#fff8f7;
+}
+
+.v20-document-chain:focus-visible{
+  outline:2px solid rgba(168,31,34,.24)!important;
+  outline-offset:2px;
+}
+
+.source-viewer-head>div:first-child{
+  min-width:0;
+  flex:1;
+}
+
+.source-viewer-head h2,
+.source-viewer-head p{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.source-search input{
+  font:600 10px/1.35 Inter,ui-sans-serif,system-ui,sans-serif;
+  color:var(--ink);
+  background:#fff;
+  appearance:none;
+}
+
+.source-search input::-webkit-search-cancel-button{
+  -webkit-appearance:none;
+}
+
+.source-search input:focus-visible{
+  outline:2px solid rgba(168,31,34,.22);
+  outline-offset:1px;
+  border-color:rgba(168,31,34,.38);
+}
+
+/* Source provenance stays useful without becoming a second document. */
+.source-evidence>h3{
+  margin-bottom:5px;
+  font-size:13px;
+}
+
+.source-evidence>.source-fact{
+  display:grid;
+  gap:5px;
+  padding:13px 0;
+}
+
+.source-evidence>.source-fact>strong{
+  font-size:10px;
+  line-height:1.35;
+}
+
+.source-evidence>.source-fact>small{
+  margin:0;
+  color:#747b84;
+  font-size:8px;
+  line-height:1.35;
+}
+
+.source-evidence>.source-fact.is-compact-fact .route-to-decision,
+.source-evidence>.source-fact.is-selected-fact .route-to-decision{
+  justify-self:start;
+  margin-top:2px;
+  border:0;
+  color:#8f1924;
+  text-decoration:none;
+}
+
+.source-evidence>.source-fact.is-compact-fact .source-passage{
+  display:none;
+}

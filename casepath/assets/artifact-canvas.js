@@ -136,6 +136,24 @@
     },
   });
 
+  // One viewer-facing workstream; exact runtime roles and receipts remain
+  // unchanged in lineage and in the audit drawer.
+  const PATH_BUILDER_AGENT_IDS = new Set(['canonical_facts', 'process_decision_mapping']);
+
+  function visibleAgentGroupId(agentId) {
+    return PATH_BUILDER_AGENT_IDS.has(agentId) ? 'process_decision_mapping' : agentId;
+  }
+
+  function visibleAgentIdentity(agentId) {
+    if (!PATH_BUILDER_AGENT_IDS.has(agentId)) return AGENTS[agentId];
+    return {
+      ...AGENTS.process_decision_mapping,
+      label: 'Path builder',
+      short: 'Path builder',
+      task: 'Building the claim path',
+    };
+  }
+
   const SAFE_FAILURE_STAGE_COPY = Object.freeze({
     canonical_facts: 'Claim reading stopped.',
     orchestrator_plan: 'Planning stopped.',
@@ -221,11 +239,11 @@
   const LIVE_WORK_PLAN_CONTRACT = 'casepath.live-work-plan/1.0.0';
   const LIVE_WORK_PLANS = Object.freeze({
     canonical_facts: Object.freeze({
-      title: 'Find the supported facts',
+      title: 'Build the claim path',
       steps: Object.freeze([
-        ['package', 'Claim package sent', 'complete'],
-        ['choose', 'Choose source-backed facts', 'active'],
-        ['return', 'Show each fact with its source', 'waiting'],
+        ['package', 'Claim package ready', 'complete'],
+        ['choose', 'Read exact source', 'active'],
+        ['return', 'Return supported facts', 'waiting'],
       ]),
     }),
   });
@@ -1499,7 +1517,10 @@
       };
       prepareStep(0);
     };
-    revealNext();
+    // Establish the faint returned graph before the first evidence movement.
+    // This is presentation pacing only; no execution or artifact timing moves.
+    render();
+    state.graphRevealTimer = window.setTimeout(revealNext, REDUCED_MOTION ? 20 : 560);
   }
 
   function branchRevealItems() {
@@ -1737,10 +1758,10 @@
       const article = String(step.basis?.location || step.title || '').match(/Article\s+\d+[a-z]?/i)?.[0];
       return `Check ${article || 'Swiss law'}`;
     }
-    if (step.stepKind === 'accepted-fact') return 'Use the accepted fact';
-    if (step.stepKind === 'accepted-law') return 'Use the checked law';
-    if (step.stepKind === 'accepted-decision') return 'Use the earlier answer';
-    if (step.stepKind === 'evidence-requirement') return 'Check what is missing';
+    if (step.stepKind === 'accepted-fact') return 'Use this fact';
+    if (step.stepKind === 'accepted-law') return 'Use this law';
+    if (step.stepKind === 'accepted-decision') return 'Use the earlier step';
+    if (step.stepKind === 'evidence-requirement') return 'See what is missing';
     return 'Check the known fact';
   }
 
@@ -2341,13 +2362,10 @@
     if (!state.factTourEligible || state.factTourRunning || state.factTourComplete || state.moment !== 'understand') return;
     const items = factStoryItems();
     if (items.length !== FACT_STORY_IDS.length) return;
-    state.factTourRunning = true;
     state.factTourRunId = state.primaryRunId;
-    state.factTourComplete = false;
-    state.factTourIndex = 0;
-    state.factTourPhase = 'select-source';
-    render();
-    beginFactSourceStep(items, 0);
+    // Source reading is presented once, inside the process-node build where
+    // the selected fact visibly becomes its owning decision.
+    finishFactSourceTour(items);
   }
 
   function relevantEvidence(items) {
@@ -2501,7 +2519,13 @@
     if (!team || team.children.length) return;
     team.innerHTML = Object.entries(AGENTS)
       .sort(([, a], [, b]) => a.order - b.order)
-      .map(([agentId, agent]) => `<li data-ac-agent-id="${esc(agentId)}" data-agent-label="${esc(agent.label)}" data-agent-monogram="${esc(agent.monogram)}" data-agent-signature="${esc(agent.signature)}"><button type="button" data-ac-action="open-agent-audit" data-agent-id="${esc(agentId)}" aria-label="Open ${esc(agent.label)} activity" aria-pressed="false"><span aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false">${AGENT_ICONS[agent.signature] || ''}</svg></span><small>${esc(agent.short)}</small></button></li>`)
+      .map(([agentId, agent]) => {
+        const grouped = PATH_BUILDER_AGENT_IDS.has(agentId);
+        const visibleLabel = agentId === 'process_decision_mapping' ? 'Path builder' : agent.label;
+        const visibleShort = agentId === 'process_decision_mapping' ? 'Build' : agent.short;
+        const visibleSignature = grouped ? 'process' : agent.signature;
+        return `<li data-ac-agent-id="${esc(agentId)}" data-visible-agent-group="${esc(visibleAgentGroupId(agentId))}" data-agent-label="${esc(agent.label)}" data-agent-monogram="${esc(agent.monogram)}" data-agent-signature="${esc(visibleSignature)}"><button type="button" data-ac-action="open-agent-audit" data-agent-id="${esc(agentId)}" aria-label="Open ${esc(visibleLabel)} activity" aria-pressed="false"><span aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false">${AGENT_ICONS[visibleSignature] || ''}</svg></span><small>${esc(visibleShort)}</small></button></li>`;
+      })
       .join('');
   }
 
@@ -2935,11 +2959,16 @@
       delete progressIndicator.dataset.nodeId;
     }
 
+    const activeVisibleGroup = visibleAgentGroupId(root.dataset.visualActiveAgentId);
     document.querySelectorAll('.ac-global-agent-work [data-ac-agent-id]').forEach(item => {
       const agentId = item.dataset.acAgentId;
-      item.dataset.agentState = agentId === root.dataset.visualActiveAgentId
+      const visibleGroup = item.dataset.visibleAgentGroup || agentId;
+      const groupedComplete = visibleGroup === 'process_decision_mapping'
+        ? [...PATH_BUILDER_AGENT_IDS].every(id => state.completedAgents.has(id))
+        : state.completedAgents.has(agentId);
+      item.dataset.agentState = visibleGroup === activeVisibleGroup
         ? 'active'
-        : state.completedAgents.has(agentId) ? 'complete' : 'waiting';
+        : groupedComplete ? 'complete' : 'waiting';
       item.querySelector('button')?.setAttribute('aria-pressed', String(agentId === state.agentAuditOpenId));
     });
     const globalAgent = document.querySelector('[data-ac-global-agent]');
@@ -2955,8 +2984,15 @@
       'cached-result-replay': 'Cached result replay',
       'deterministic-projection': 'Application step',
     }[presentationMode] || 'Application step';
-    if (globalAgent) globalAgent.textContent = `${presentationLabel} · ${identity.label}`;
-    if (globalTask) globalTask.textContent = identity.task;
+    if (globalAgent) {
+      const label = String(identity.label || '').trim();
+      globalAgent.textContent = label.toLowerCase() === presentationLabel.toLowerCase()
+        ? presentationLabel
+        : `${presentationLabel} · ${label}`;
+    }
+    if (globalTask) globalTask.textContent = PATH_BUILDER_AGENT_IDS.has(effectiveAgentId)
+      ? 'Build the claim path'
+      : identity.task;
   }
 
   function spatialPosition(nodeId) {
@@ -3780,7 +3816,7 @@
     )).map(item => item.fact_id).filter(Boolean)).length;
     return `<aside class="ac-decision-plan" data-decision-plan data-node-id="${esc(node.node_id)}" data-plan-phase="${esc(state.decisionFlowPhase)}" data-plan-kind="${waitingCopy ? 'waiting-decision' : 'evidence-decision'}">
       <header><small>Building</small><strong>“${esc(nodeQuestion(node))}”</strong></header>
-      <ol>${sourceRows}<li data-decision-plan-item data-step-id="combine" data-step-kind="combine" data-step-state="${combineState}"${combineState === 'active' ? ` aria-current="step" data-ac-cursor-target="true" data-process-decision-id="${esc(node.node_id)}"` : ''}><i aria-hidden="true">${combineState === 'complete' ? '✓' : ''}</i><span>${esc(waitingCopy?.[0] || 'Put the facts together')}</span></li><li data-decision-plan-item data-step-id="add-node" data-step-kind="decision" data-step-state="${addState}"${addState === 'active' ? ' aria-current="step"' : ''}><i aria-hidden="true">${addState === 'complete' ? '✓' : ''}</i><span>${esc(waitingCopy?.[1] || 'Add this step')}</span></li></ol>
+      <ol>${sourceRows}<li data-decision-plan-item data-step-id="combine" data-step-kind="combine" data-step-state="${combineState}"${combineState === 'active' ? ` aria-current="step" data-ac-cursor-target="true" data-process-decision-id="${esc(node.node_id)}"` : ''}><i aria-hidden="true">${combineState === 'complete' ? '✓' : ''}</i><span>${esc(waitingCopy?.[0] || 'Decide from this')}</span></li><li data-decision-plan-item data-step-id="add-node" data-step-kind="decision" data-step-state="${addState}"${addState === 'active' ? ' aria-current="step"' : ''}><i aria-hidden="true">${addState === 'complete' ? '✓' : ''}</i><span>${esc(waitingCopy?.[1] || 'Add this step')}</span></li></ol>
     </aside>`;
   }
 
@@ -4104,9 +4140,10 @@
     const call = liveWorkingCall();
     if (!call) return '';
     const agent = AGENTS[call.agentId];
+    const visibleAgent = visibleAgentIdentity(call.agentId);
     const plan = LIVE_WORK_PLANS[call.agentId];
-    return `<article class="ac-decision-plan ac-live-work-plan" data-ac-live-work-plan data-ac-focal-object="live-work-plan" data-contract="${LIVE_WORK_PLAN_CONTRACT}" data-agent-id="${esc(call.agentId)}" data-agent-signature="${esc(agent.signature)}" data-run-id="${esc(call.runId)}" data-call-id="${esc(call.callId)}" data-event-id="${esc(call.eventId)}" data-work-state="${esc(call.status)}" data-input-artifact="${esc(call.inputArtifact)}" data-input-artifact-hash="${esc(call.inputArtifactHash)}" data-presentation-mode="live-call" aria-live="polite">
-      <header><span class="ac-live-work-agent" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false">${AGENT_ICONS[agent.signature] || ''}</svg></span><div><small>${esc(agent.label)} · working now</small><strong>${esc(plan.title)}</strong></div></header>
+    return `<article class="ac-decision-plan ac-live-work-plan" data-ac-live-work-plan data-ac-focal-object="live-work-plan" data-contract="${LIVE_WORK_PLAN_CONTRACT}" data-agent-id="${esc(call.agentId)}" data-runtime-agent-id="${esc(call.agentId)}" data-visible-agent-group="${esc(visibleAgentGroupId(call.agentId))}" data-agent-signature="${esc(visibleAgent.signature)}" data-run-id="${esc(call.runId)}" data-call-id="${esc(call.callId)}" data-event-id="${esc(call.eventId)}" data-work-state="${esc(call.status)}" data-input-artifact="${esc(call.inputArtifact)}" data-input-artifact-hash="${esc(call.inputArtifactHash)}" data-presentation-mode="live-call" aria-live="polite">
+      <header><span class="ac-live-work-agent" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false">${AGENT_ICONS[visibleAgent.signature] || ''}</svg></span><div><small>${esc(visibleAgent.label)} · ${esc(agent.label)} working now</small><strong>${esc(plan.title)}</strong></div></header>
       <ol>${plan.steps.map(([stepId, label, stepState]) => `<li data-live-work-step="${esc(stepId)}" data-step-state="${esc(stepState)}"><i ${stepState === 'active' ? 'data-live-work-spinner' : ''} aria-hidden="true">${stepState === 'complete' ? '✓' : ''}</i><span>${esc(label)}</span></li>`).join('')}</ol>
     </article>`;
   }
@@ -4115,7 +4152,7 @@
     const copy = momentCopy();
     if (state.moment === 'failure') return failureFocalMarkup();
     if (['opening', 'read'].includes(state.moment)) return sourcePreludeMarkup();
-    if (state.moment === 'understand' && (state.factTourRunning || state.factTourComplete)) {
+    if (state.moment === 'understand' && state.factTourRunning) {
       return factSourceStageMarkup(copy);
     }
     if (state.moment === 'understand' && liveWorkingCall()) return liveWorkPlanMarkup();
@@ -4154,30 +4191,17 @@
     </article>`;
   }
 
-  function sourcePreludeType(title, mediaType) {
-    const semanticName = String(title || '').toLowerCase();
-    const semanticType = String(mediaType || '').toLowerCase();
-    if (semanticType.startsWith('image/') || /photo|photograph|image/.test(semanticName)) return ['photo', 'Photo'];
-    if (/timeline|chronology/.test(semanticName)) return ['timeline', 'Timeline'];
-    if (/delivery|receipt|confirmation/.test(semanticName)) return ['delivery', 'Delivery proof'];
-    if (semanticType.includes('message') || /email|e-mail|landlord|management reply|letter/.test(semanticName)) return ['email', 'Email'];
-    return ['document', /pdf/.test(semanticType) ? 'PDF' : 'Document'];
-  }
-
   function sourcePreludeMarkup({ readyToInspect = false } = {}) {
     const artifacts = asArray(state.claim?.artifacts);
-    const sources = [
-      { title: 'Customer message', type: 'message', kind: 'Message' },
-      ...artifacts.map(artifact => {
-        const title = artifact.title || artifact.filename || artifact.artifact_id || 'Source file';
-        const [type, kind] = sourcePreludeType(title, artifact.media_type);
-        return { title, type, kind };
-      }),
-    ];
-    return `<article class="ac-source-prelude" data-ac-focal-object="source-prelude" data-source-count="${esc(sources.length)}" data-ac-cursor-target="true">
-      <header><span>${readyToInspect ? 'Source package ready' : 'Opening source package'}</span><strong>${esc(sources.length)} originals · no conclusions yet</strong></header>
-      <div class="ac-source-prelude-strip" aria-label="Claim sources being prepared">${sources.map((source, index) => `<span style="--source-order:${index}" data-source-kind="${esc(source.type)}"><i data-source-icon-kind="${esc(source.type)}" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false" data-source-type-icon="${esc(source.type)}">${SOURCE_TYPE_ICONS[source.type] || SOURCE_TYPE_ICONS.document}</svg></i><small>${esc(source.kind)}</small><strong>${esc(source.title)}</strong></span>`).join('')}</div>
-      <footer><i aria-hidden="true"></i><span>${readyToInspect ? 'Starting with the exact passage that supports the first fact.' : 'Preserving each file before inspection.'}</span></footer>
+    const sourceCount = artifacts.length + 1;
+    return `<article class="ac-source-prelude" data-ac-focal-object="source-prelude" data-source-count="${esc(sourceCount)}" data-ac-cursor-target="true">
+      <header><span>Path builder</span><strong>Build the claim path</strong></header>
+      <ol class="ac-source-prelude-plan" aria-label="Path-building plan">
+        <li data-step-state="${readyToInspect ? 'complete' : 'active'}"><i aria-hidden="true">${readyToInspect ? '✓' : ''}</i><span>Read the exact source</span></li>
+        <li data-step-state="${readyToInspect ? 'active' : 'waiting'}"><i aria-hidden="true"></i><span>Keep the supported fact</span></li>
+        <li data-step-state="waiting"><i aria-hidden="true"></i><span>Add the next process step</span></li>
+      </ol>
+      <footer><i aria-hidden="true"></i><span>${esc(sourceCount)} originals ready · the left rail stays available.</span></footer>
     </article>`;
   }
 
@@ -4238,7 +4262,7 @@
     const sourceReading = sourceReadingMarkup(fact, ref, state.factTourReadArmed, false);
     const sourceHighlight = sourceReadingMarkup(fact, ref, false, true);
     const sourceFindingMarkup = sourceReadingMarkup(fact, ref, false, true);
-    const sourceTrail = factSourceTrailMarkup(items, state.factTourIndex, state.factTourPhase);
+    const sourceTrail = '';
     const unverifiedVisual = `<p class="ac-visual-source-unverified">Image-region provenance could not be verified. No visual observation is claimed.</p>`;
     const sourceMarkup = `<section class="ac-fact-source" data-source-authority="${esc(ref.authority || 'customer_submission')}">
       ${sourceHeader}
@@ -4323,13 +4347,14 @@
     const agentId = eventAgentId(event);
     const agent = AGENTS[agentId];
     if (!agent || !SUCCESS_STATES.has(eventStatus(event))) return '';
+    const visibleAgent = visibleAgentIdentity(agentId);
     const returnedOutput = eventOutputArtifacts(event)[0] || '';
     const artifactLabel = AGENT_ARTIFACT_LABELS[agentId] || returnedOutput.replaceAll('_', ' ') || 'Bounded specialist contribution';
     const finalLineage = agentId === 'final_claim_brief_audit'
       ? `data-node-attachment-kind="verification" ${lineageAttributes('verification', 'whole_playbook_verification')}`
       : '';
-    return `<article class="ac-stage-focus ac-agent-artifact" data-ac-focal-object="agent-artifact" data-agent-id="${esc(agentId)}" data-call-id="${esc(valueFrom(event, 'call_id', 'callId'))}" data-output-artifact="${esc(returnedOutput)}" ${finalLineage} data-ac-cursor-target="true">
-      <span>Specialist ${agent.order} of 6 · ${esc(agent.label)}</span>
+    return `<article class="ac-stage-focus ac-agent-artifact" data-ac-focal-object="agent-artifact" data-agent-id="${esc(agentId)}" data-runtime-agent-id="${esc(agentId)}" data-visible-agent-group="${esc(visibleAgentGroupId(agentId))}" data-call-id="${esc(valueFrom(event, 'call_id', 'callId'))}" data-output-artifact="${esc(returnedOutput)}" ${finalLineage} data-ac-cursor-target="true">
+      <span>${PATH_BUILDER_AGENT_IDS.has(agentId) ? `${esc(visibleAgent.label)} · ${esc(agent.label)} returned work` : `Specialist ${agent.order} of 6 · ${esc(agent.label)}`}</span>
       <h3>${esc(agent.task)}</h3>
       <strong>Produced · ${esc(artifactLabel)}</strong>
     </article>`;
@@ -4532,7 +4557,7 @@
     if (!focal) return;
     const specialMoment = ['verify', 'review', 'review-applied', 'knowledge', 'later-work', 'later-result', 'failure'].includes(state.moment);
     const semanticArtifactMoment = ['evidence', 'experience'].includes(state.moment);
-    const factTourMoment = state.moment === 'understand' && (state.factTourRunning || state.factTourComplete);
+    const factTourMoment = state.moment === 'understand' && state.factTourRunning;
     const liveWorkPlan = !factTourMoment && Boolean(liveWorkingCall());
     const node = nodeById(state.selectedNodeId);
     const currentEventRunId = String(valueFrom(state.currentEvent, 'run_id', 'runId') || '');
@@ -5071,14 +5096,19 @@
     cursor.dataset.cursorPhase = 'moving';
     cursor.dataset.parked = String(parked);
     const specialist = specialistForCursorTarget(identityTarget);
+    const visibleSpecialist = specialist
+      ? { agentId: visibleAgentGroupId(specialist.agentId), agent: visibleAgentIdentity(specialist.agentId) }
+      : null;
     const cursorAgent = cursor.querySelector('[data-ac-cursor-agent]');
     const cursorAction = cursor.querySelector('[data-ac-cursor-action]');
     cursor.dataset.specialistBound = String(Boolean(specialist));
+    cursor.dataset.runtimeAgentId = specialist?.agentId || '';
+    cursor.dataset.visibleAgentGroup = visibleSpecialist?.agentId || '';
     cursor.dataset.labelSide = x > viewportWidth * .56 ? 'left' : 'right';
     if (specialist) {
-      cursor.dataset.agentSignature = specialist.agent.signature;
-      setCursorAvatar(cursor, specialist.agent);
-      if (cursorAgent) cursorAgent.textContent = specialist.agent.short;
+      cursor.dataset.agentSignature = visibleSpecialist.agent.signature;
+      setCursorAvatar(cursor, visibleSpecialist.agent);
+      if (cursorAgent) cursorAgent.textContent = visibleSpecialist.agent.short;
     } else {
       const neutralIdentity = {
         signature: root.dataset.activeSignature || 'casepath',
@@ -5094,6 +5124,8 @@
       changeId: state.lastCursorChangeId,
       eventId: state.lastCursorEventId,
       agentId: specialist?.agentId || '',
+      runtimeAgentId: specialist?.agentId || '',
+      visualGroupId: visibleSpecialist?.agentId || '',
       targetId,
       moment: state.moment,
       action: identityTarget.dataset.acAction || target.dataset.acAction || '',

@@ -7,6 +7,25 @@
   <meta name="theme-color" content="#ffffff">
   <meta name="casepath-release" content="20.0.0">
   <title>CasePath — Analyse one claim</title>
+  <script>
+    if (location.protocol === 'file:') document.documentElement.dataset.casepathFileEntry = 'true';
+  </script>
+  <style>
+    #localFileLaunch{display:none}
+    html[data-casepath-file-entry="true"]{background:#f6f6f4;color:#202226;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    html[data-casepath-file-entry="true"] body{min-height:100vh;margin:0;background:radial-gradient(circle at 50% 24%,#fff 0,#f8f8f6 48%,#f2f2ef 100%)}
+    html[data-casepath-file-entry="true"] body>:not(#localFileLaunch){display:none!important}
+    html[data-casepath-file-entry="true"] #localFileLaunch{display:grid;min-height:100vh;box-sizing:border-box;place-items:center;padding:32px}
+    .local-file-launch-card{width:min(540px,100%);box-sizing:border-box;padding:38px 40px;border:1px solid #dedfdf;border-radius:18px;background:rgba(255,255,255,.96);box-shadow:0 24px 70px rgba(21,24,29,.08)}
+    .local-file-launch-brand{display:flex;align-items:center;gap:11px;margin-bottom:34px;font-size:17px;font-weight:760;letter-spacing:-.02em}
+    .local-file-launch-mark{display:grid;width:32px;height:32px;place-items:center;border-radius:9px;background:#a81f22;color:#fff;font-size:11px;letter-spacing:.02em}
+    .local-file-launch-card small{display:block;margin-bottom:8px;color:#8f1924;font-size:10px;font-weight:760;letter-spacing:.07em;text-transform:uppercase}
+    .local-file-launch-card h1{max-width:440px;margin:0;color:#202226;font-size:clamp(30px,5vw,44px);line-height:1.02;letter-spacing:-.045em}
+    .local-file-launch-card p{max-width:440px;margin:18px 0 0;color:#656b73;font-size:14px;line-height:1.6}
+    .local-file-launch-card>a{display:inline-flex;align-items:center;justify-content:center;min-height:46px;margin-top:26px;padding:0 18px;border-radius:8px;background:#a81f22;color:#fff;font-size:13px;font-weight:720;text-decoration:none}
+    .local-file-launch-command{margin-top:25px;padding-top:20px;border-top:1px solid #e5e6e7;color:#777d85;font-size:11px;line-height:1.5}
+    .local-file-launch-command code{display:block;overflow:auto;margin-top:7px;padding:10px 12px;border-radius:7px;background:#f4f4f2;color:#34383e;font:10px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:nowrap}
+  </style>
   <link rel="preconnect" href="https://casepath-agentic-api.onrender.com" crossorigin>
   <link rel="dns-prefetch" href="//casepath-agentic-api.onrender.com">
   <link rel="stylesheet" href="assets/live-v16.css?v=20.0.1">
@@ -14,11 +33,21 @@
   <link rel="stylesheet" href="assets/live-v17-continuity.css?v=20.0.0">
   <link rel="stylesheet" href="assets/live-v18.css">
   <link rel="stylesheet" href="assets/live-v19.css">
-  <link rel="stylesheet" href="assets/live-v20-focus.css?v=20.0.20">
+  <link rel="stylesheet" href="assets/live-v20-focus.css?v=20.0.22">
   <link rel="stylesheet" href="assets/process-story.css?v=1.0.1">
-  <link rel="stylesheet" href="assets/artifact-canvas.css?v=1.0.50">
+  <link rel="stylesheet" href="assets/artifact-canvas.css?v=1.0.52">
 </head>
 <body>
+  <section id="localFileLaunch" aria-labelledby="localFileLaunchTitle">
+    <div class="local-file-launch-card">
+      <div class="local-file-launch-brand"><span class="local-file-launch-mark" aria-hidden="true">CP</span><span>CasePath</span></div>
+      <small>Local demo</small>
+      <h1 id="localFileLaunchTitle">Open CasePath through its local web address.</h1>
+      <p>This file was opened directly. CasePath needs a small local web server so its design, source previews, and API connection can load correctly.</p>
+      <a href="http://127.0.0.1:4173/?ui=final">Open served demo</a>
+      <div class="local-file-launch-command">From the <strong>casepath-canonical</strong> repository folder, run this once in Terminal and keep the window open:<code>python3 -m http.server 4173 --bind 127.0.0.1 --directory casepath</code></div>
+    </div>
+  </section>
   <a class="skip-link" href="#casepathWork">Skip to CasePath</a>
 
   <header class="appbar">
@@ -224,7 +253,7 @@ Alex Morgan</div>
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/live-v16.js?v=20.0.33"></script>
+  <script src="assets/live-v16.js?v=20.0.35"></script>
   <script src="assets/live-v16-stability.js?v=20.0.2"></script>
   <script src="assets/live-v18-insertion-guard.js"></script>
   <script src="assets/live-v17.js?v=20.0.5"></script>
@@ -233,6 +262,6 @@ Alex Morgan</div>
   <script src="assets/live-v19-active-stage.js"></script>
   <script src="assets/live-v20-focus.js?v=20.0.22"></script>
   <script src="assets/process-story.js?v=1.0.1"></script>
-  <script src="assets/artifact-canvas.js?v=1.0.65"></script>
+  <script src="assets/artifact-canvas.js?v=1.0.67"></script>
 </body>
 </html>

@@ -2122,6 +2122,124 @@ body[data-casepath-artifact-canvas="ready"] .claim-workspace{
   }
 }
 
+/* One calm path-building workstream: exact model roles remain in the audit. */
+html[data-casepath-release="20.0.0"] [data-ac-global-agent-work] [data-ac-agent-id="canonical_facts"]{
+  display:none;
+}
+
+html[data-casepath-release="20.0.0"] [data-ac-global-agent-work] [data-ac-agent-id="process_decision_mapping"]{order:1}
+html[data-casepath-release="20.0.0"] [data-ac-global-agent-work] [data-ac-agent-id="document_source_integrity"]{order:2}
+html[data-casepath-release="20.0.0"] [data-ac-global-agent-work] [data-ac-agent-id="evidence_checklist"]{order:3}
+html[data-casepath-release="20.0.0"] [data-ac-global-agent-work] [data-ac-agent-id="final_claim_brief_audit"]{order:4}
+
+.casepath-artifact-canvas .ac-source-prelude{
+  width:min(560px,100%);
+  padding:4px 0;
+  border:0;
+  background:transparent;
+  box-shadow:none;
+}
+
+.casepath-artifact-canvas .ac-source-prelude>header{
+  display:grid;
+  gap:5px;
+  padding:0 0 22px;
+  border-bottom:1px solid #e3e5e8;
+}
+
+.casepath-artifact-canvas .ac-source-prelude>header span{
+  color:#8f1924;
+  font-size:9px;
+  font-weight:760;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+
+.casepath-artifact-canvas .ac-source-prelude>header strong{
+  color:#202226;
+  font-size:28px;
+  line-height:1.08;
+  letter-spacing:-.035em;
+}
+
+.casepath-artifact-canvas .ac-source-prelude-plan{
+  display:grid;
+  gap:0;
+  margin:0;
+  padding:10px 0 0;
+  list-style:none;
+}
+
+.casepath-artifact-canvas .ac-source-prelude-plan li{
+  display:grid;
+  grid-template-columns:26px minmax(0,1fr);
+  align-items:center;
+  min-height:48px;
+  color:#8a9098;
+  font-size:12px;
+  font-weight:650;
+}
+
+.casepath-artifact-canvas .ac-source-prelude-plan i{
+  display:grid;
+  width:17px;
+  height:17px;
+  place-items:center;
+  border:1px solid #cfd3d8;
+  border-radius:50%;
+  font-size:9px;
+  font-style:normal;
+}
+
+.casepath-artifact-canvas .ac-source-prelude-plan li[data-step-state="active"]{
+  color:#202226;
+}
+
+.casepath-artifact-canvas .ac-source-prelude-plan li[data-step-state="active"] i{
+  border:2px solid #8f1924;
+  border-right-color:transparent;
+  animation:ac-calm-spin 1s linear infinite;
+}
+
+.casepath-artifact-canvas .ac-source-prelude-plan li[data-step-state="complete"]{
+  color:#59606a;
+}
+
+.casepath-artifact-canvas .ac-source-prelude-plan li[data-step-state="complete"] i{
+  border-color:#7f878f;
+}
+
+.casepath-artifact-canvas .ac-source-prelude>footer{
+  margin-top:10px;
+  padding-top:16px;
+  border-top:1px solid #e3e5e8;
+  color:#6b727c;
+  font-size:10px;
+}
+
+html[data-casepath-release="20.0.0"] body[data-casepath-artifact-canvas="ready"] .v21-source-status[data-source-status="ready"]{
+  width:8px;
+  overflow:hidden;
+  color:transparent!important;
+  font-size:0!important;
+}
+
+html[data-casepath-release="20.0.0"] body[data-casepath-artifact-canvas="ready"] .v21-source-status[data-source-status="read"]{
+  width:16px;
+  color:transparent!important;
+  font-size:0!important;
+}
+
+html[data-casepath-release="20.0.0"] body[data-casepath-artifact-canvas="ready"] .v21-source-status[data-source-status="read"]::before{
+  content:"✓";
+  color:#7b828b;
+  font-size:10px;
+}
+
+@media(prefers-reduced-motion:reduce){
+  .casepath-artifact-canvas .ac-source-prelude-plan li[data-step-state="active"] i{animation:none}
+}
+
 /* Premium evidence proof: the artifact stays primary and its selected region reads as one object. */
 .casepath-artifact-canvas .ac-node-source-preview-visual[data-node-attachment-kind="fact"]{
   position:relative;
@@ -6844,5 +6962,470 @@ body[data-casepath-artifact-canvas="ready"] .start-copy .start-claim-source>p{di
     gap:6px;
     margin-bottom:16px;
     padding:12px 15px 13px;
+  }
+}
+
+/* Final visual polish: quiet provenance, deliberate focus, and collision-free work. */
+.casepath-artifact-canvas .ac-browser-bar{
+  grid-template-columns:minmax(0,1fr) auto;
+  min-height:32px;
+  margin-bottom:12px;
+  padding:0 0 9px;
+  border:0;
+  border-bottom:1px solid #e4e7ea;
+  border-radius:0;
+  background:transparent;
+}
+
+.casepath-artifact-canvas .ac-browser-bar>i{display:none}
+.casepath-artifact-canvas .ac-browser-bar>span{padding-left:0}
+.casepath-artifact-canvas .ac-browser-bar strong{font-size:9.5px}
+.casepath-artifact-canvas .ac-browser-bar code{display:none}
+.casepath-artifact-canvas .ac-browser-bar small{
+  color:#44745e;
+  font-size:8.5px;
+  white-space:nowrap;
+}
+
+.casepath-artifact-canvas .ac-decision-basis{
+  display:grid;
+  width:min(520px,78%);
+  gap:9px;
+  min-height:84px;
+  margin:auto;
+  padding:14px 16px;
+  border:1px solid #d7dade;
+  border-left:2px solid #a81f22;
+  border-radius:8px;
+  background:#fff;
+  box-shadow:0 12px 32px rgba(25,29,34,.05);
+}
+
+.casepath-artifact-canvas .ac-decision-basis>header{
+  display:grid;
+  gap:3px;
+}
+
+.casepath-artifact-canvas .ac-decision-basis>header small{
+  color:#8f1924;
+  font-size:8px;
+  font-weight:760;
+  letter-spacing:.045em;
+  text-transform:uppercase;
+}
+
+.casepath-artifact-canvas .ac-decision-basis>header strong{
+  color:#25282d;
+  font-size:12px;
+  line-height:1.35;
+}
+
+.casepath-artifact-canvas .ac-decision-basis>mark,
+.casepath-artifact-canvas .ac-decision-basis>.ac-source-exact-control{
+  display:block;
+  width:100%;
+  min-height:0;
+  margin:0;
+  padding:8px 10px;
+  border:1px solid #e4e6e9;
+  border-radius:5px;
+  background:#fafafa;
+  color:#4f555e;
+  font:600 10px/1.45 Inter,ui-sans-serif,system-ui,sans-serif;
+  text-align:left;
+}
+
+.casepath-artifact-canvas .ac-decision-basis>mark{
+  border-color:rgba(168,31,34,.18);
+  background:#fff8f7;
+}
+
+.casepath-artifact-canvas .ac-decision-workspace:is(
+  [data-decision-flow-state="highlight-source"],
+  [data-decision-flow-state="combine"],
+  [data-decision-flow-state="complete"],
+  [data-decision-flow-state="receding"]
+) .ac-decision-basis{display:none}
+
+/* The header already names the authority in dense visual chapters. Keep only the calm cursor icon. */
+.casepath-artifact-canvas[data-graph-visible="true"] .ac-agent-cursor-label,
+body[data-casepath-moment="read"] .casepath-artifact-canvas .ac-agent-cursor-label,
+body[data-casepath-moment="understand"] .casepath-artifact-canvas .ac-agent-cursor-label,
+body[data-casepath-moment="research"] .casepath-artifact-canvas .ac-agent-cursor-label,
+body[data-casepath-moment="later-work"] .casepath-artifact-canvas .ac-agent-cursor-label{
+  display:none!important;
+}
+
+/* Keep the real source passage complete; the canvas scrolls quietly at laptop height. */
+.casepath-artifact-canvas .ac-work-body{
+  overflow:auto;
+  overscroll-behavior:contain;
+  scrollbar-width:none;
+}
+
+.casepath-artifact-canvas .ac-work-body::-webkit-scrollbar{display:none}
+
+.casepath-artifact-canvas .ac-node-source-preview[data-node-attachment-kind="fact"] .ac-source-page-excerpt{
+  max-height:none!important;
+}
+
+/* Keep the cumulative source trail in document flow so it never competes with the title. */
+.casepath-artifact-canvas .ac-source-inspection-trail{
+  position:static;
+  justify-content:flex-start;
+  max-width:100%;
+  margin:10px 0 16px;
+  overflow-x:auto;
+  overflow-y:hidden;
+  scrollbar-width:none;
+}
+
+.casepath-artifact-canvas .ac-source-inspection-trail::-webkit-scrollbar{display:none}
+
+.casepath-artifact-canvas .ac-source-inspection-trail li{
+  flex:0 0 102px;
+  margin-left:0;
+}
+
+/* Source inspection intentionally takes focus over the lower graph lane. */
+.casepath-artifact-canvas .ac-spatial-viewport:has(.ac-spatial-detail [data-decision-workspace])::after,
+.casepath-artifact-canvas .ac-spatial-viewport:has(.ac-spatial-detail .ac-node-source-preview[data-node-attachment-kind="fact"])::after{
+  content:"";
+  position:absolute;
+  z-index:3;
+  right:0;
+  bottom:0;
+  left:0;
+  height:62%;
+  background:linear-gradient(to bottom,rgba(255,255,255,0),rgba(255,255,255,.97) 13%,#fff 25%);
+  pointer-events:none;
+}
+
+.casepath-artifact-canvas .ac-spatial-detail{z-index:5}
+
+.casepath-artifact-canvas .ac-failure-focus>.ac-failure-retry,
+.casepath-artifact-canvas .ac-failure-focus>.ac-failure-retry:hover{
+  border-color:var(--ac-accent);
+  background:var(--ac-accent);
+  color:#fff;
+}
+
+.casepath-artifact-canvas button:focus-visible{
+  outline:2px solid rgba(168,31,34,.26);
+  outline-offset:2px;
+  box-shadow:none;
+}
+
+/*
+ * Cinematic process construction.
+ *
+ * The execution model and spatial coordinates stay untouched. This layer only
+ * gives the real evidence -> decision -> node transition a calm visual cadence.
+ */
+.casepath-artifact-canvas[data-graph-visible="true"] .ac-process{
+  animation:ac-graph-stage-enter .58s var(--ac-ease) both;
+}
+
+.casepath-artifact-canvas .ac-spatial-viewport{
+  background:
+    linear-gradient(180deg,rgba(248,249,250,.7),rgba(255,255,255,0) 18%),
+    #fff;
+}
+
+.casepath-artifact-canvas .ac-spatial-edges path{
+  transition:stroke .28s ease,stroke-width .28s ease,opacity .28s ease;
+}
+
+.casepath-artifact-canvas[data-graph-inspecting="true"] .ac-process-track li[data-process-build-state="built"]{
+  opacity:.32;
+}
+
+.casepath-artifact-canvas[data-graph-inspecting="true"] .ac-spatial-edges path:not([data-source-proof="true"]){
+  opacity:.22;
+}
+
+.casepath-artifact-canvas .ac-process-track li button{
+  border-color:#d4d8dd;
+  border-radius:10px;
+  box-shadow:0 1px 2px rgba(22,25,30,.025),0 8px 22px rgba(22,25,30,.035);
+  transition:border-color .22s ease,background-color .22s ease,box-shadow .28s var(--ac-ease),transform .28s var(--ac-ease);
+}
+
+.casepath-artifact-canvas .ac-process-track li button:not(:disabled):hover{
+  transform:translateY(-2px);
+  border-color:#b9bec5;
+  box-shadow:0 2px 4px rgba(22,25,30,.04),0 12px 28px rgba(22,25,30,.065);
+}
+
+.casepath-artifact-canvas .ac-process-track li button>span,
+.casepath-artifact-canvas .ac-process-track li[data-spatial-role="hub"] button>span{
+  border-color:#c8cdd3!important;
+  box-shadow:0 2px 8px rgba(22,25,30,.045)!important;
+}
+
+.casepath-artifact-canvas .ac-process-track li button small,
+.casepath-artifact-canvas .ac-process-track li[data-spatial-role="hub"] button small{
+  letter-spacing:-.012em;
+}
+
+.casepath-artifact-canvas .ac-process-track li[data-selected="true"] button{
+  border-color:#a81f22;
+  background:linear-gradient(180deg,#fff,#fffdfd);
+  box-shadow:0 0 0 3px rgba(168,31,34,.055),0 14px 34px rgba(72,23,28,.075);
+}
+
+.casepath-artifact-canvas .ac-process-track li[data-spatial-role="hub"] button{
+  border-radius:12px;
+  background:linear-gradient(180deg,#fff,#fffcfc);
+  box-shadow:0 16px 38px rgba(72,23,28,.075);
+}
+
+.casepath-artifact-canvas .ac-process-track li[data-process-build-state="pending"][data-selected="true"]{
+  opacity:.24;
+  filter:saturate(.55);
+}
+
+.casepath-artifact-canvas .ac-process-track li[data-process-build-state="pending"][data-selected="true"] button{
+  border-color:#aeb4bc;
+  background:rgba(255,255,255,.82);
+  box-shadow:none;
+}
+
+.casepath-artifact-canvas .ac-process-track li[data-process-build-state="building"] button{
+  animation:ac-graph-node-settle .72s var(--ac-ease) both;
+}
+
+.casepath-artifact-canvas .ac-process-track li[data-process-build-state="building"]:after{
+  top:50%;
+  left:50%;
+  width:calc(100% + 18px);
+  height:calc(100% + 18px);
+  transform:translate(-50%,-50%);
+  border-color:rgba(168,31,34,.34);
+  border-radius:15px;
+  animation:ac-graph-node-wave .82s var(--ac-ease) both;
+}
+
+.casepath-artifact-canvas .ac-process[data-process-construction-state="building"] .ac-spatial-edges path[data-source-proof="true"]{
+  stroke:#a81f22;
+  stroke-width:1.35;
+  stroke-dasharray:4 7;
+  animation:ac-graph-proof-flow 2.4s linear infinite;
+}
+
+.casepath-artifact-canvas .ac-process[data-process-construction-state="complete"] .ac-spatial-edges path[data-spatial-path="next-action"][data-edge-state="selected"]{
+  animation:ac-graph-route-breathe 3.2s ease-in-out infinite;
+}
+
+.casepath-artifact-canvas .ac-spatial-branch{
+  border-radius:9px;
+  box-shadow:0 8px 22px rgba(22,25,30,.035);
+  transition:border-color .22s ease,background-color .22s ease,box-shadow .25s var(--ac-ease),opacity .25s ease,transform .25s var(--ac-ease);
+}
+
+.casepath-artifact-canvas .ac-spatial-branch[data-branch-state="selected"]{
+  box-shadow:0 0 0 3px rgba(168,31,34,.05),0 12px 28px rgba(72,23,28,.065);
+}
+
+.casepath-artifact-canvas .ac-decision-source-stage,
+.casepath-artifact-canvas .ac-decision-plan{
+  transform-origin:50% 50%;
+  transition:opacity .24s ease,transform .32s var(--ac-ease),filter .24s ease;
+}
+
+.casepath-artifact-canvas .ac-decision-workspace[data-decision-flow-state="combine"] .ac-decision-source-stage,
+.casepath-artifact-canvas .ac-decision-workspace[data-decision-flow-state="complete"] .ac-decision-source-stage{
+  opacity:.58;
+  transform:translateY(3px) scale(.994);
+  filter:saturate(.78);
+}
+
+.casepath-artifact-canvas .ac-decision-workspace[data-decision-flow-state="receding"] .ac-decision-source-stage{
+  opacity:0;
+  transform:translateY(8px) scale(.988);
+}
+
+.casepath-artifact-canvas .ac-decision-plan[data-plan-phase="complete"]{
+  border-color:rgba(168,31,34,.28);
+  box-shadow:0 0 0 3px rgba(168,31,34,.045),0 18px 42px rgba(44,27,30,.075);
+}
+
+.casepath-artifact-canvas .ac-decision-plan[data-plan-phase="receding"]{
+  opacity:0;
+  transform:translateY(9px) scale(.985);
+}
+
+@keyframes ac-graph-stage-enter{
+  from{opacity:0;transform:translateY(8px)}
+  to{opacity:1;transform:translateY(0)}
+}
+
+@keyframes ac-graph-node-settle{
+  0%{opacity:.22;transform:translateY(7px) scale(.94);box-shadow:0 0 0 rgba(72,23,28,0)}
+  58%{opacity:1;transform:translateY(-1px) scale(1.012);box-shadow:0 0 0 5px rgba(168,31,34,.06),0 18px 40px rgba(72,23,28,.09)}
+  100%{opacity:1;transform:translateY(0) scale(1)}
+}
+
+@keyframes ac-graph-node-wave{
+  from{opacity:.58;transform:translate(-50%,-50%) scale(.84)}
+  to{opacity:0;transform:translate(-50%,-50%) scale(1.08)}
+}
+
+@keyframes ac-graph-proof-flow{
+  to{stroke-dashoffset:-22}
+}
+
+@keyframes ac-graph-route-breathe{
+  0%,100%{opacity:.76;stroke-width:1.55}
+  50%{opacity:1;stroke-width:2}
+}
+
+/* Keep the same spatial map legible when the desktop canvas is narrow. */
+@media(min-width:761px) and (max-width:1300px){
+  .casepath-artifact-canvas .ac-work-body{
+    padding-right:22px;
+    padding-left:22px;
+  }
+
+  .casepath-artifact-canvas .ac-process-track li,
+  .casepath-artifact-canvas .ac-process-track li button{
+    width:104px!important;
+  }
+
+  .casepath-artifact-canvas .ac-process-track li button{
+    min-height:78px;
+    padding-inline:8px;
+  }
+
+  .casepath-artifact-canvas .ac-process-track li button small{
+    font-size:11.5px;
+  }
+
+  .casepath-artifact-canvas .ac-process-track li[data-spatial-role="hub"],
+  .casepath-artifact-canvas .ac-process-track li[data-spatial-role="hub"] button{
+    width:134px!important;
+  }
+
+  .casepath-artifact-canvas .ac-spatial-branch{
+    width:124px;
+  }
+
+  .casepath-artifact-canvas .ac-decision-workspace{
+    grid-template-columns:minmax(0,1fr) minmax(218px,25%);
+    gap:16px;
+  }
+}
+
+.casepath-artifact-canvas[data-agent-audit-open="true"] .ac-process-track li,
+.casepath-artifact-canvas[data-agent-audit-open="true"] .ac-process-track li button{
+  width:100px!important;
+}
+
+.casepath-artifact-canvas[data-agent-audit-open="true"] .ac-process-track li button small{
+  font-size:11px;
+}
+
+.casepath-artifact-canvas[data-agent-audit-open="true"] .ac-process-track li[data-spatial-role="hub"],
+.casepath-artifact-canvas[data-agent-audit-open="true"] .ac-process-track li[data-spatial-role="hub"] button{
+  width:124px!important;
+}
+
+.casepath-artifact-canvas[data-agent-audit-open="true"] .ac-spatial-branch{
+  width:112px;
+}
+
+@media(max-height:760px) and (min-width:761px){
+  .casepath-artifact-canvas .ac-work-body{
+    padding-bottom:28px;
+  }
+
+  .casepath-artifact-canvas .ac-spatial-viewport{
+    height:calc(100dvh - 130px)!important;
+  }
+
+  .casepath-artifact-canvas .ac-process[data-process-construction-state="building"] .ac-spatial-detail:has([data-decision-workspace]){
+    bottom:0!important;
+    width:96%!important;
+  }
+
+  .casepath-artifact-canvas .ac-decision-workspace{
+    gap:14px;
+  }
+}
+
+@media(prefers-reduced-motion:reduce){
+  .casepath-artifact-canvas[data-graph-visible="true"] .ac-process,
+  .casepath-artifact-canvas .ac-process-track li[data-process-build-state="building"] button,
+  .casepath-artifact-canvas .ac-process-track li[data-process-build-state="building"]:after,
+  .casepath-artifact-canvas .ac-process[data-process-construction-state="building"] .ac-spatial-edges path[data-source-proof="true"],
+  .casepath-artifact-canvas .ac-process[data-process-construction-state="complete"] .ac-spatial-edges path[data-spatial-path="next-action"][data-edge-state="selected"]{
+    animation:none!important;
+  }
+
+  .casepath-artifact-canvas .ac-decision-source-stage,
+  .casepath-artifact-canvas .ac-decision-plan,
+  .casepath-artifact-canvas .ac-process-track li button,
+  .casepath-artifact-canvas .ac-spatial-branch,
+  .casepath-artifact-canvas .ac-spatial-edges path{
+    transition:none!important;
+  }
+}
+
+/* Final source-to-path composition. Keep this after legacy prelude rules. */
+@keyframes ac-path-spin{
+  to{transform:rotate(1turn)}
+}
+
+html[data-casepath-release="20.0.0"] .casepath-artifact-canvas .ac-source-prelude{
+  width:min(560px,100%)!important;
+  padding:4px 0!important;
+  border:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+}
+
+html[data-casepath-release="20.0.0"] .casepath-artifact-canvas .ac-source-prelude>header{
+  display:grid!important;
+  align-items:initial!important;
+  justify-content:initial!important;
+  gap:5px!important;
+  padding:0 0 22px!important;
+  border-bottom:1px solid #e3e5e8!important;
+}
+
+html[data-casepath-release="20.0.0"] .casepath-artifact-canvas .ac-source-prelude>header span{
+  color:#8f1924!important;
+  font-size:9px!important;
+  font-weight:760!important;
+  letter-spacing:.06em!important;
+  text-transform:uppercase!important;
+}
+
+html[data-casepath-release="20.0.0"] .casepath-artifact-canvas .ac-source-prelude>header strong{
+  color:#202226!important;
+  font-size:28px!important;
+  line-height:1.08!important;
+  font-weight:720!important;
+  letter-spacing:-.035em!important;
+}
+
+html[data-casepath-release="20.0.0"] .casepath-artifact-canvas .ac-source-prelude>footer{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-start!important;
+  margin-top:10px!important;
+  padding-top:16px!important;
+  border-top:1px solid #e3e5e8!important;
+  color:#6b727c!important;
+  font-size:10px!important;
+}
+
+html[data-casepath-release="20.0.0"] .casepath-artifact-canvas .ac-source-prelude-plan li[data-step-state="active"] i{
+  animation:ac-path-spin 1s linear infinite;
+}
+
+@media(prefers-reduced-motion:reduce){
+  html[data-casepath-release="20.0.0"] .casepath-artifact-canvas .ac-source-prelude-plan li[data-step-state="active"] i{
+    animation:none!important;
   }
 }
