@@ -17,15 +17,22 @@
   const SUCCESS_STATES = new Set(['accepted', 'complete', 'completed', 'passed', 'produced', 'succeeded', 'verified']);
   const PROCESS_GATE_ID = 'deterministic_process_gate';
   const PROCESS_ARTIFACT_IDS = new Set(['process_graph', 'accepted_process_graph']);
-  const GRAPH_NODE_DWELL_MS = 550;
+  const GRAPH_NODE_DWELL_MS = 900;
   const GRAPH_SOURCE_DWELL_MS = 1900;
   const GRAPH_BRANCH_SOURCE_DWELL_MS = 1900;
   const PROCESS_NODE_PROGRESS_FORM_MS = 900;
   const PROCESS_NODE_PROGRESS_COMPLETE_MS = 360;
   const PROCESS_NODE_PROGRESS_HOLD_MS = 240;
-  const DECISION_SOURCE_HOLD_MS = 1500;
-  const DECISION_COMBINE_HOLD_MS = 520;
-  const DECISION_PLAN_RECEDE_MS = 240;
+  // Reading is part of the product demonstration, not dead time. Keep an
+  // opened source still before the exact passage is selected, then scale the
+  // highlighted hold to the amount of evidence on screen.
+  const DECISION_SOURCE_PREVIEW_HOLD_MS = 1200;
+  const DECISION_SOURCE_HOLD_MS = 3200;
+  const DECISION_SOURCE_MAX_HOLD_MS = 5200;
+  const DECISION_SOURCE_WORD_MS = 150;
+  const DECISION_COMBINE_HOLD_MS = 1500;
+  const DECISION_COMBINE_MAX_HOLD_MS = 2800;
+  const DECISION_PLAN_RECEDE_MS = 360;
   const OFFICIAL_LAW_DWELL_MS = 1900;
   const FACT_SOURCE_DWELL_MS = 1600;
   const FACT_NEUTRAL_READ_DWELL_MS = 900;
@@ -558,6 +565,26 @@
 
   function asArray(value) {
     return Array.isArray(value) ? value : [];
+  }
+
+  function decisionSourceHoldMs(...values) {
+    const words = [...new Set(values.map(value => String(value || '').trim()).filter(Boolean))]
+      .join(' ')
+      .split(/\s+/)
+      .filter(Boolean).length;
+    return Math.max(
+      DECISION_SOURCE_HOLD_MS,
+      Math.min(DECISION_SOURCE_MAX_HOLD_MS, 900 + words * DECISION_SOURCE_WORD_MS),
+    );
+  }
+
+  function decisionCombineHoldMs(stepCount, fragmentCount) {
+    return Math.min(
+      DECISION_COMBINE_MAX_HOLD_MS,
+      DECISION_COMBINE_HOLD_MS
+        + Math.max(0, Number(fragmentCount || 0) - 1) * 320
+        + Math.max(0, Number(stepCount || 0) - 1) * 180,
+    );
   }
 
   function valueFrom(value, ...keys) {
@@ -1352,7 +1379,9 @@
         }, GRAPH_NODE_DWELL_MS);
       };
       const completeDecision = () => {
-        const decisionHoldMs = steps.length ? DECISION_COMBINE_HOLD_MS : 1000;
+        const decisionHoldMs = steps.length
+          ? decisionCombineHoldMs(steps.length, state.decisionFlowFragments.length)
+          : DECISION_COMBINE_HOLD_MS;
         state.lastCursorEventId = decisionLineage?.eventId || lineage?.eventId || '';
         state.lastCursorAgentId = decisionLineage?.modelContributionAccepted
           ? decisionLineage.agentId
@@ -1484,6 +1513,12 @@
         const progress = Math.min(82, Math.round((completedMilestones / totalMilestones) * 82));
         setProcessNodeProgress('extract', progress);
         emitDecisionFlowStep(node, step, 'fragment-extracted', progress);
+        const sourceHoldMs = decisionSourceHoldMs(
+          activeItem?.ref?.excerpt,
+          activeItem?.ref?.observation,
+          activeItem?.ref?.value,
+          found,
+        );
         state.graphRevealTimer = window.setTimeout(() => {
           if (state.decisionFlowLocatorIndex + 1 < asArray(step.items).length) {
             state.decisionFlowLocatorIndex += 1;
@@ -1496,7 +1531,7 @@
             setProcessNodeProgress('read', Math.min(72, Math.round((nextMilestone / totalMilestones) * 82)));
             emitDecisionFlowStep(node, step, 'next-locator', Math.min(72, Math.round((nextMilestone / totalMilestones) * 82)));
           } else prepareStep(state.decisionFlowIndex + 1);
-        }, DECISION_SOURCE_HOLD_MS);
+        }, sourceHoldMs);
       };
       const openStep = () => {
         if (state.pendingGraphNodeId !== node.node_id) return;
@@ -5134,6 +5169,12 @@
     });
     window.dispatchEvent(new CustomEvent('casepath:cursor-step', { detail: { ...cursorDetail(), phase: 'move' } }));
     const scheduledCommit = state.cursorCommit;
+    const isDecisionSourceReading = state.graphRevealRunning
+      && identityTarget.dataset.inspectionPhase === 'read-source';
+    const baseSettleDelayMs = REDUCED_MOTION ? 0 : CURSOR_SETTLE_MS;
+    const settleDelayMs = isDecisionSourceReading
+      ? DECISION_SOURCE_PREVIEW_HOLD_MS + baseSettleDelayMs
+      : baseSettleDelayMs;
     state.cursorArrivalTimer = window.setTimeout(() => {
       if (!cursor.isConnected || !target.isConnected) {
         state.lastCursorKey = '';
@@ -5164,7 +5205,7 @@
           visualTarget?.classList.remove('is-agent-clicked');
           if (cursor.dataset.cursorPhase === 'clicking') cursor.dataset.cursorPhase = 'settled';
         }, 260);
-      }, REDUCED_MOTION ? 0 : CURSOR_SETTLE_MS);
+      }, settleDelayMs);
     }, REDUCED_MOTION ? 0 : CURSOR_TRAVEL_MS);
   }
 
