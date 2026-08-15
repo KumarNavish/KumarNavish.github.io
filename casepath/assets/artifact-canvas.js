@@ -24,11 +24,16 @@
   const PROCESS_NODE_PROGRESS_COMPLETE_MS = 360;
   const PROCESS_NODE_PROGRESS_HOLD_MS = 240;
   // Reading is part of the product demonstration, not dead time. Keep an
-  // opened source still before handing control to the viewer.
-  const DECISION_SOURCE_PREVIEW_HOLD_MS = 1200;
-  const DECISION_COMBINE_HOLD_MS = 1500;
-  const DECISION_COMBINE_MAX_HOLD_MS = 2800;
-  const DECISION_READY_HOLD_MS = 1200;
+  // opened source still before the exact passage is selected, then scale the
+  // highlighted hold to the amount of evidence on screen. The journey keeps
+  // moving by itself; viewers never need to discover a hidden "continue" step.
+  const DECISION_SOURCE_PREVIEW_HOLD_MS = 5200;
+  const DECISION_SOURCE_HOLD_MS = 6800;
+  const DECISION_SOURCE_MAX_HOLD_MS = 11200;
+  const DECISION_SOURCE_WORD_MS = 190;
+  const DECISION_COMBINE_HOLD_MS = 3000;
+  const DECISION_COMBINE_MAX_HOLD_MS = 5200;
+  const DECISION_READY_HOLD_MS = 2200;
   const DECISION_PLAN_RECEDE_MS = 360;
   const OFFICIAL_LAW_DWELL_MS = 1900;
   const FACT_SOURCE_DWELL_MS = 1600;
@@ -434,7 +439,6 @@
     decisionFlowFragments: [],
     decisionFlowAuditEvents: [],
     decisionFlowPhase: 'idle',
-    decisionFlowAdvance: null,
     decisionFlowSeenLocatorIds: new Set(),
     decisionFlowSeenLawIds: new Set(),
     groundingOpen: false,
@@ -563,6 +567,17 @@
 
   function asArray(value) {
     return Array.isArray(value) ? value : [];
+  }
+
+  function decisionSourceHoldMs(...values) {
+    const words = [...new Set(values.map(value => String(value || '').trim()).filter(Boolean))]
+      .join(' ')
+      .split(/\s+/)
+      .filter(Boolean).length;
+    return Math.max(
+      DECISION_SOURCE_HOLD_MS,
+      Math.min(DECISION_SOURCE_MAX_HOLD_MS, 1800 + words * DECISION_SOURCE_WORD_MS),
+    );
   }
 
   function decisionCombineHoldMs(stepCount, fragmentCount) {
@@ -696,7 +711,6 @@
     state.decisionFlowSeenLocatorIds.clear();
     state.decisionFlowSeenLawIds.clear();
     state.decisionFlowAuditEvents = [];
-    state.decisionFlowAdvance = null;
     state.lastCursorAgentId = '';
     state.lastCursorEventId = '';
     state.lastCursorChangeId = '';
@@ -722,7 +736,6 @@
     state.pendingGraphNodeId = '';
     state.pendingBranchNodeId = '';
     state.cursorCommit = null;
-    state.decisionFlowAdvance = null;
     state.liveModelCall = null;
     state.processAccepted = false;
     state.visibleNodeIds.clear();
@@ -1307,7 +1320,6 @@
     state.graphInspectionPhase = 'select-source';
     state.decisionFlowLocatorIndex = 0;
     state.decisionFlowAuditEvents = [];
-    state.decisionFlowAdvance = null;
     resetProcessNodeProgress();
     state.cursorCommit = null;
     const nodes = simplifiedNodes();
@@ -1324,7 +1336,6 @@
         state.decisionFlowLocatorIndex = 0;
         state.decisionFlowFragments = [];
         state.decisionFlowPhase = 'idle';
-        state.decisionFlowAdvance = null;
         startBranchReveal();
         return;
       }
@@ -1348,7 +1359,6 @@
       state.decisionFlowLocatorIndex = 0;
       state.decisionFlowFragments = [];
       state.decisionFlowPhase = 'select-source';
-      state.decisionFlowAdvance = null;
       clearActiveSource();
       const commitNode = () => {
         if (state.pendingGraphNodeId !== node.node_id) return;
@@ -1361,7 +1371,6 @@
         state.decisionFlowLocatorIndex = 0;
         state.decisionFlowFragments = [];
         state.decisionFlowPhase = 'idle';
-        state.decisionFlowAdvance = null;
         state.visibleNodeIds.add(node.node_id);
         state.graphRevealIndex += 1;
         state.graphDwell = true;
@@ -1372,7 +1381,6 @@
         }, GRAPH_NODE_DWELL_MS);
       };
       const completeDecision = () => {
-        state.decisionFlowAdvance = null;
         const decisionHoldMs = steps.length
           ? decisionCombineHoldMs(steps.length, state.decisionFlowFragments.length)
           : DECISION_COMBINE_HOLD_MS;
@@ -1437,7 +1445,6 @@
         state.decisionFlowLocatorIndex = 0;
         state.decisionFlowPhase = 'select-source';
         state.graphInspectionPhase = 'select-source';
-        state.decisionFlowAdvance = null;
         clearActiveSource();
         const completedMilestones = completedLocatorsBefore(index) * 2;
         const searchProgress = Math.round((completedMilestones / totalMilestones) * 82);
@@ -1483,26 +1490,11 @@
         state.graphInspectionPhase = 'highlight-source';
         state.decisionFlowPhase = 'highlight-source';
         state.cursorCommit = null;
-        state.decisionFlowAdvance = null;
         if (activeItem && !state.decisionFlowFragments.some(fragment => fragment.locatorId === activeItem.locatorId)) {
           state.decisionFlowFragments.push(activeItem);
         }
         if (activeItem?.locatorId) state.decisionFlowSeenLocatorIds.add(activeItem.locatorId);
         if (step.stepKind === 'law' && step.sourceId) state.decisionFlowSeenLawIds.add(step.sourceId);
-        state.decisionFlowAdvance = () => {
-          if (state.pendingGraphNodeId !== node.node_id || state.decisionFlowPhase !== 'highlight-source') return;
-          if (state.decisionFlowLocatorIndex + 1 < asArray(step.items).length) {
-            state.decisionFlowLocatorIndex += 1;
-            const nextItem = asArray(step.items)[state.decisionFlowLocatorIndex];
-            if (nextItem?.locatorId) setActiveSourceLocator(nextItem.locatorId);
-            state.graphInspectionPhase = 'read-source';
-            state.decisionFlowPhase = 'read-source';
-            state.decisionFlowAdvance = highlightSource;
-            const nextMilestone = completedLocatorsBefore(state.decisionFlowIndex) * 2 + state.decisionFlowLocatorIndex * 2 + 1;
-            setProcessNodeProgress('read', Math.min(72, Math.round((nextMilestone / totalMilestones) * 82)));
-            emitDecisionFlowStep(node, step, 'next-locator', Math.min(72, Math.round((nextMilestone / totalMilestones) * 82)));
-          } else prepareStep(state.decisionFlowIndex + 1);
-        };
         render();
         const inspectedFacts = activeFacts.length ? activeFacts : [{ fact_id: factId }];
         inspectedFacts.forEach(fact => {
@@ -1523,6 +1515,26 @@
         const progress = Math.min(82, Math.round((completedMilestones / totalMilestones) * 82));
         setProcessNodeProgress('extract', progress);
         emitDecisionFlowStep(node, step, 'fragment-extracted', progress);
+        const sourceHoldMs = decisionSourceHoldMs(
+          activeItem?.ref?.excerpt,
+          activeItem?.ref?.observation,
+          activeItem?.ref?.value,
+          found,
+        );
+        state.graphRevealTimer = window.setTimeout(() => {
+          if (state.pendingGraphNodeId !== node.node_id || state.decisionFlowPhase !== 'highlight-source') return;
+          if (state.decisionFlowLocatorIndex + 1 < asArray(step.items).length) {
+            state.decisionFlowLocatorIndex += 1;
+            const nextItem = asArray(step.items)[state.decisionFlowLocatorIndex];
+            if (nextItem?.locatorId) setActiveSourceLocator(nextItem.locatorId);
+            state.graphInspectionPhase = 'read-source';
+            state.decisionFlowPhase = 'read-source';
+            state.cursorCommit = highlightSource;
+            const nextMilestone = completedLocatorsBefore(state.decisionFlowIndex) * 2 + state.decisionFlowLocatorIndex * 2 + 1;
+            setProcessNodeProgress('read', Math.min(72, Math.round((nextMilestone / totalMilestones) * 82)));
+            emitDecisionFlowStep(node, step, 'next-locator', Math.min(72, Math.round((nextMilestone / totalMilestones) * 82)));
+          } else prepareStep(state.decisionFlowIndex + 1);
+        }, sourceHoldMs);
       };
       const openStep = () => {
         if (state.pendingGraphNodeId !== node.node_id) return;
@@ -1535,8 +1547,7 @@
         emitInteraction(inspectionTarget.dataset.acAction || 'inspect', inspectionTarget);
         state.graphInspectionPhase = 'read-source';
         state.decisionFlowPhase = 'read-source';
-        state.cursorCommit = null;
-        state.decisionFlowAdvance = highlightSource;
+        state.cursorCommit = highlightSource;
         const completedMilestones = completedLocatorsBefore(state.decisionFlowIndex) * 2 + state.decisionFlowLocatorIndex * 2 + 1;
         const progress = Math.min(72, Math.round((completedMilestones / totalMilestones) * 82));
         setProcessNodeProgress('read', progress);
@@ -1574,7 +1585,6 @@
     state.decisionFlowLocatorIndex = 0;
     state.decisionFlowFragments = [];
     state.decisionFlowPhase = 'idle';
-    state.decisionFlowAdvance = null;
     resetProcessNodeProgress();
     state.cursorCommit = null;
     clearActiveSource();
@@ -3875,19 +3885,6 @@
       ? sourceContextAttributes(primary.fact, primary.ref)
       : basis.attributes;
     const common = `data-ac-inspection-target="true" data-inspection-phase="${esc(selecting ? 'select-source' : 'read-source')}" data-inspection-basis-kind="${esc(step.stepKind)}" data-node-id="${esc(node.node_id)}" data-step-id="${esc(step.stepId)}" data-ac-action="${esc(step.stepKind === 'source' ? 'open-source' : basis.action)}" ${inspectionAttributes}`;
-    const hasAnotherLocator = state.decisionFlowLocatorIndex + 1 < asArray(step.items).length;
-    const hasAnotherStep = state.decisionFlowIndex + 1 < asArray(state.decisionFlowSteps).length;
-    const readerAdvanceKind = phase === 'read-source'
-      ? 'highlight'
-      : hasAnotherLocator || hasAnotherStep ? 'continue' : 'build';
-    const readerAdvanceCopy = readerAdvanceKind === 'highlight'
-      ? ['Pause here. Read the original in full.', 'I’ve read this source — show what it proves']
-      : readerAdvanceKind === 'build'
-        ? ['Every accepted input is now visible.', 'Form this decision from the evidence']
-        : ['Only this highlighted evidence moves forward.', 'Continue to the next source'];
-    const readerControl = ['read-source', 'highlight-source'].includes(phase)
-      ? `<button type="button" class="ac-decision-reader-continue" data-ac-action="advance-decision-flow" data-decision-advance="${readerAdvanceKind}" data-node-id="${esc(node.node_id)}" data-step-id="${esc(step.stepId)}" data-casepath-primary-action="true" ${phase === 'read-source' ? `data-ac-inspection-target="true" data-inspection-phase="read-source" data-inspection-basis-kind="${esc(step.stepKind)}" ${inspectionAttributes}` : ''}><small>${esc(readerAdvanceCopy[0])}</small><strong>${esc(readerAdvanceCopy[1])}</strong><i aria-hidden="true">→</i></button>`
-      : '';
     let source = '';
     if (selecting) {
       const selectorCopy = step.stepKind === 'accepted-fact'
@@ -3897,12 +3894,12 @@
           : ['Next source', 'Open exact source →'];
       source = `<button type="button" class="ac-decision-source-picker" ${common}><i aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false">${SOURCE_TYPE_ICONS[sourceTrailKind(primary?.ref)[0]] || SOURCE_TYPE_ICONS.document}</svg></i><span><small>${esc(selectorCopy[0])}</small><strong>${esc(step.title)}</strong><em>${esc(selectorCopy[1])}</em></span></button>`;
     } else if (step.stepKind === 'source') {
-      source = `<section class="ac-decision-real-source">${sourceGroupReadingMarkup(step, false, highlighted)}</section>`;
+      source = `<section class="ac-decision-real-source">${sourceGroupReadingMarkup(step, !highlighted, highlighted)}</section>`;
     } else {
       const exact = esc(basis.finding || basis.title || 'Returned basis');
-      source = `<section class="ac-decision-real-source ac-decision-basis"><header><small>${esc(basis.sourceLabel)}</small><strong>${esc(basis.title)}</strong></header>${highlighted ? `<mark class="is-highlighted">${exact}</mark>` : `<span class="ac-source-exact-control ac-source-exact-text" data-source-exact-control="true">${exact}</span>`}</section>`;
+      source = `<section class="ac-decision-real-source ac-decision-basis" ${highlighted ? '' : common}><header><small>${esc(basis.sourceLabel)}</small><strong>${esc(basis.title)}</strong></header>${highlighted ? `<mark class="is-highlighted">${exact}</mark>` : `<button type="button" class="ac-source-exact-control is-awaiting-click" data-source-exact-control="true">${exact}</button>`}</section>`;
     }
-    return `<div class="ac-decision-workspace" data-decision-workspace data-decision-flow-state="${esc(phase)}" data-decision-node-id="${esc(node.node_id)}"><div class="ac-decision-source-stage">${source}${readerControl}${decisionFragmentsMarkup(node)}</div>${decisionFlowPlanMarkup(node)}</div>`;
+    return `<div class="ac-decision-workspace" data-decision-workspace data-decision-flow-state="${esc(phase)}" data-decision-node-id="${esc(node.node_id)}"><div class="ac-decision-source-stage">${source}${decisionFragmentsMarkup(node)}</div>${decisionFlowPlanMarkup(node)}</div>`;
   }
 
   function nodeInspectionMarkup(node) {
@@ -4701,7 +4698,6 @@
     state.root.querySelectorAll('[data-ac-cursor-target="true"]').forEach(item => item.removeAttribute('data-ac-cursor-target'));
     if (state.graphDwell) return;
     if (state.graphInspecting) {
-      if (state.decisionFlowAdvance) return;
       if (state.graphInspectionPhase === 'highlight-source') return;
       const inspection = state.root.querySelector('[data-ac-inspection-target="true"]');
       const readingTarget = state.graphInspectionPhase === 'read-source'
@@ -4727,7 +4723,6 @@
       nodeState: selectedNode ? nodeState(selectedNode) : '',
       chainKind: button.dataset.chainKind || state.activeChainKind || '',
       stepId: button.dataset.stepId || '',
-      decisionAdvance: button.dataset.decisionAdvance || '',
       factId: button.dataset.factId || '',
       sourceId: button.dataset.sourceId || '',
       locatorKind: button.dataset.locatorKind || '',
@@ -4857,22 +4852,6 @@
     const button = event.target.closest?.('[data-ac-action]');
     if (!button || !state.root?.contains(button)) return;
     const action = button.dataset.acAction;
-    if (action === 'advance-decision-flow') {
-      event.preventDefault();
-      const step = state.decisionFlowSteps[state.decisionFlowIndex];
-      const validTarget = state.graphRevealRunning
-        && state.graphInspecting
-        && button.dataset.nodeId === state.pendingGraphNodeId
-        && button.dataset.stepId === step?.stepId
-        && ((state.decisionFlowPhase === 'read-source' && button.dataset.decisionAdvance === 'highlight')
-          || (state.decisionFlowPhase === 'highlight-source' && ['continue', 'build'].includes(button.dataset.decisionAdvance)));
-      const advance = validTarget ? state.decisionFlowAdvance : null;
-      if (!advance) return;
-      state.decisionFlowAdvance = null;
-      emitInteraction(action, button);
-      advance();
-      return;
-    }
     if (action === 'toggle-grounding') {
       event.preventDefault();
       const disclosure = button.closest('.ac-grounding-disclosure');

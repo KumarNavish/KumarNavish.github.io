@@ -15,6 +15,8 @@
   // These graph-native summaries can remain concise without hiding causal work.
   const CONCISE_GRAPH_STAGES = new Set(['evidence', 'experience', 'verify']);
   const RESEARCH_ARTIFACT_FRAME_MS = 9000;
+  // This is an inactivity limit, not a reading-speed limit. Each accepted
+  // decision-flow step rearms it while the cinematic trace is progressing.
   const PROCESS_STORY_TIMEOUT_MS = 120000;
   const OFFICIAL_LAW_TOUR_TIMEOUT_MS = 120000;
   // A real six-specialist run can return the accepted fact batch after the
@@ -931,6 +933,7 @@
         settled = true;
         window.removeEventListener('casepath:artifact-process-complete', onComplete);
         window.removeEventListener('casepath:artifact-process-started', onStarted);
+        window.removeEventListener('casepath:decision-flow-step', onProgress);
         window.clearTimeout(timeout);
         document.body.dataset.casepathProcessStoryWait = status;
         resolve(status);
@@ -949,15 +952,20 @@
         finish('timed-out');
       };
       const armTimeout = () => {
-        if (settled || timeout) return;
+        if (settled) return;
+        window.clearTimeout(timeout);
         document.body.dataset.casepathProcessStoryWait = 'drawing';
         timeout = window.setTimeout(noteDelay, PROCESS_STORY_TIMEOUT_MS);
       };
       const onStarted = event => {
         if (String(event.detail?.runId || '') === runId) armTimeout();
       };
+      const onProgress = event => {
+        if (String(event.detail?.runId || '') === runId) armTimeout();
+      };
       window.addEventListener('casepath:artifact-process-complete', onComplete);
       window.addEventListener('casepath:artifact-process-started', onStarted);
+      window.addEventListener('casepath:decision-flow-step', onProgress);
       armTimeout();
     });
     return processStoryWaitPromise;

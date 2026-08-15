@@ -192,10 +192,10 @@ const EXPECTED_LATER_MEMORY_DELTA = Object.freeze({
   ],
   evidenceIds: ['building_envelope', 'management_position', 'use_evidence'],
 });
-const MIN_DECISION_READER_GATE_PROOF_MS = 5400;
-const QA_DECISION_SOURCE_READ_MS = 1200;
-const QA_DECISION_HIGHLIGHT_READ_MS = 3200;
-const MIN_DECISION_COMBINE_HOLD_MS = 1400;
+const MIN_DECISION_SOURCE_PREVIEW_HOLD_MS = 5100;
+const MIN_DECISION_SOURCE_HOLD_MS = 6700;
+const MIN_DECISION_COMBINE_HOLD_MS = 2900;
+const MIN_DECISION_READY_HOLD_MS = 2100;
 const MIN_DECISION_PLAN_RECEDE_MS = 170;
 const SOURCE_PRELUDE_ICON_KINDS = Object.freeze([
   'message',
@@ -3902,8 +3902,7 @@ function decisionFlowContractViolations(steps, nodeChanges, highlights, interact
     if (events.some(event => event.planCount !== 1 || !event.planVisible || event.planNodeId !== nodeId
       || event.planParagraphCount !== 0 || event.planButtonCount !== 0
       || event.planItemCount !== planned.length + 2)) issues.push(`${nodeId}: live plan is not the one minimal accepted-input-to-decision checklist`);
-    if (reducedMotion && (interactions || []).filter(item => item.action === 'qa-reader-gate' && item.nodeId === nodeId)
-      .some(item => item.reducedMotion !== true)) issues.push(`${nodeId}: reduced motion bypasses the manual reader gate`);
+    if (events.some(event => event.readerControlCount !== 0)) issues.push(`${nodeId}: automatic decision replay exposes a viewer-facing reader control`);
 
     const decisionFacts = decisionFactsForReturnedNode(runResult, node);
     const blockedDownstream = BLOCKED_DOWNSTREAM_DECISION_IDS.includes(nodeId);
@@ -3937,14 +3936,8 @@ function decisionFlowContractViolations(steps, nodeChanges, highlights, interact
         issues.push(`${nodeId}:${plan.stepId}: accepted input is not replayed sequentially`);
         return;
       }
-      if (opened.readerControlCount !== 1 || opened.readerControlAdvance !== 'highlight'
-        || opened.readerControlDisabled || !opened.readerControlAccessibleName) {
-        issues.push(`${nodeId}:${plan.stepId}: readable source does not wait behind one accessible highlight action`);
-      }
-      const expectedAdvance = index === planned.length - 1 ? 'build' : 'continue';
-      if (extracted.readerControlCount !== 1 || extracted.readerControlAdvance !== expectedAdvance
-        || extracted.readerControlDisabled || !extracted.readerControlAccessibleName) {
-        issues.push(`${nodeId}:${plan.stepId}: highlighted evidence does not wait behind one accessible continue action`);
+      if (extracted.at - opened.at < MIN_DECISION_SOURCE_PREVIEW_HOLD_MS) {
+        issues.push(`${nodeId}:${plan.stepId}: exact source is not readable before its passage is highlighted`);
       }
       if (plan.realArtifactVisible || opened.realArtifactVisible || extracted.realArtifactVisible
         || plan.sourceRowActive || opened.sourceRowActive || extracted.sourceRowActive
@@ -3973,6 +3966,8 @@ function decisionFlowContractViolations(steps, nodeChanges, highlights, interact
           issues.push(`${nodeId}:${plan.stepId}: checked-law replay is not bound to the deterministic official registry event`);
         }
       }
+      const nextEvent = events.find(event => event.at > extracted.at);
+      if (!nextEvent || nextEvent.at - extracted.at < MIN_DECISION_SOURCE_HOLD_MS) issues.push(`${nodeId}:${plan.stepId}: accepted input is not readable before the next reasoning step`);
     });
 
     const expectedPhases = planned.flatMap(() => ['planned', 'source-opened', 'fragment-extracted'])
@@ -3982,10 +3977,6 @@ function decisionFlowContractViolations(steps, nodeChanges, highlights, interact
     const ready = events.find(event => event.phase === 'decision-ready');
     const receding = events.find(event => event.phase === 'plan-receding');
     const receded = events.find(event => event.phase === 'plan-receded');
-    if (events.filter(event => ['combining', 'decision-ready', 'plan-receding', 'plan-receded'].includes(event.phase))
-      .some(event => event.readerControlCount || event.readerControlAdvance || event.readerControlAccessibleName)) {
-      issues.push(`${nodeId}: reader continue action remains after decision formation starts`);
-    }
     const expectedFactIds = blockedDownstream ? [] : decisionFacts.map(fact => fact.fact_id);
     if (!combining || (expectedFactIds.length && (!combining.combinationVisible
       || combining.combineState !== 'combining' || stableJson(combining.fragmentFactIds) !== stableJson(expectedFactIds)))) {
@@ -3993,6 +3984,9 @@ function decisionFlowContractViolations(steps, nodeChanges, highlights, interact
     }
     if (!combining || !ready || ready.at - combining.at < MIN_DECISION_COMBINE_HOLD_MS) {
       issues.push(`${nodeId}: source highlights do not remain visible while the decision is formed`);
+    }
+    if (!ready || !receding || receding.at - ready.at < MIN_DECISION_READY_HOLD_MS) {
+      issues.push(`${nodeId}: completed decision does not remain readable before node commit begins`);
     }
     if (!ready || ready.progress !== 100 || !ready.progressVisible) issues.push(`${nodeId}: decision indicator does not semantically reach completion without showing a numeric percentage`);
     if (!receding || receding.progressVisible || receding.planPhase !== 'receding' || receding.nodeVisible) issues.push(`${nodeId}: progress is not hidden while the live plan recedes before node creation`);
@@ -4002,25 +3996,6 @@ function decisionFlowContractViolations(steps, nodeChanges, highlights, interact
       || change.indicatorVisible || change.planVisible || change.decisionFlowState !== 'idle'
       || !change.outputVisible || !change.graphVisible) issues.push(`${nodeId}: accepted node appears before progress and plan have cleared`);
   });
-
-  const manualGateInteractions = (interactions || []).filter(item => item.action === 'qa-reader-gate');
-  const expectedManualGateCount = relevantSteps.filter(step => ['source-opened', 'fragment-extracted'].includes(step.phase)).length;
-  if (manualGateInteractions.length !== expectedManualGateCount) {
-    issues.push('reader-controlled replay does not expose exactly one activation for every source and highlight gate');
-  }
-  if (manualGateInteractions.some(item => item.controlCount !== 1 || !item.accessibleName
-    || item.disabled || item.connectedBeforeClick !== true || item.visibleBeforeClick !== true
-    || item.connectedAfterClick !== false || item.clickAttempts !== 2)) {
-    issues.push('reader continue action is not accessible, single-use, and removed after activation');
-  }
-  if (manualGateInteractions.some(item => item.phaseStableBeforeClick !== true)) {
-    issues.push('reader continue action auto-advanced before explicit activation');
-  }
-  const noTimerProof = manualGateInteractions.find(item => item.advance !== 'highlight' && item.provesNoTimerAdvance === true);
-  if (!noTimerProof || noTimerProof.heldMs < MIN_DECISION_READER_GATE_PROOF_MS
-    || noTimerProof.phaseStableBeforeClick !== true) {
-    issues.push('highlighted evidence was not proven to remain until the viewer continued');
-  }
 
   if (!storyNodeIds.includes(NOTIFICATION_DECISION_NODE_ID)) return [...new Set(issues)];
   const notification = returnedNodes.get(NOTIFICATION_DECISION_NODE_ID);
@@ -4516,7 +4491,7 @@ async function execute() {
     } catch (_) {}
   });
 
-  await page.addInitScript(({ sessionId, decisionFlowContract, decisionReaderGateProofMs, decisionSourceReadMs, decisionHighlightReadMs, processPreviewGeometrySelectors, processPreviewBottomInset, sourceRailContract }) => {
+  await page.addInitScript(({ sessionId, decisionFlowContract, processPreviewGeometrySelectors, processPreviewBottomInset, sourceRailContract }) => {
     sessionStorage.setItem('casepath:demo-session', sessionId);
     window.__casepathReleaseMutations = [];
     window.__casepathMomentHistory = [];
@@ -5202,8 +5177,7 @@ async function execute() {
         ? plan?.querySelector(`[data-decision-plan-item][data-step-id="${CSS.escape(String(detail.stepId))}"]`)
         : null;
       const exactControl = workspace?.querySelector('button.ac-source-exact-control[data-source-exact-control="true"],button.ac-visual-region-target[data-ac-inspection-read-target="true"]');
-      const readerControls = [...(workspace?.querySelectorAll('button.ac-decision-reader-continue[data-ac-action="advance-decision-flow"]') || [])].filter(visible);
-      const readerControl = readerControls[0] || null;
+      const readerControls = [...(workspace?.querySelectorAll('.ac-decision-reader-continue,[data-ac-action="advance-decision-flow"]') || [])].filter(visible);
       const realArtifact = workspace?.querySelector('[data-real-artifact="true"]');
       const visualArtifact = workspace?.querySelector('.ac-visual-source[data-source-id]');
       const artifactSurface = realArtifact || visualArtifact;
@@ -5277,9 +5251,6 @@ async function execute() {
         exactControlTag: exactControl?.tagName || '',
         exactControlText: exactControl?.textContent?.trim() || '',
         readerControlCount: readerControls.length,
-        readerControlAdvance: readerControl?.dataset.decisionAdvance || '',
-        readerControlAccessibleName: readerControl?.getAttribute('aria-label')?.trim() || readerControl?.textContent?.trim() || '',
-        readerControlDisabled: readerControl?.disabled === true || readerControl?.getAttribute('aria-disabled') === 'true',
         highlightVisible: highlighted.length > 0,
         highlightCount: highlighted.length,
         fragmentFactIds: [...(workspace?.querySelectorAll('[data-extracted-fragment][data-fact-id]') || [])].filter(visible).map(item => item.dataset.factId || ''),
@@ -5294,61 +5265,8 @@ async function execute() {
         at: performance.now(),
       };
     };
-    const automatedReaderControls = new WeakSet();
-    let noTimerAdvanceProven = false;
-    const automateDecisionReaderGate = snapshot => {
-      if (!['source-opened', 'fragment-extracted'].includes(snapshot.phase)) return;
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        const workspace = document.querySelector('#artifactProcessGraph [data-decision-workspace]');
-        const button = workspace?.querySelector('button.ac-decision-reader-continue[data-ac-action="advance-decision-flow"]');
-        if (!button || automatedReaderControls.has(button)) return;
-        automatedReaderControls.add(button);
-        const proveNoTimerAdvance = snapshot.phase === 'fragment-extracted' && !noTimerAdvanceProven;
-        if (proveNoTimerAdvance) noTimerAdvanceProven = true;
-        const appearedAt = performance.now();
-        const expectedState = snapshot.phase === 'source-opened' ? 'read-source' : 'highlight-source';
-        const interaction = {
-          action: 'qa-reader-gate',
-          nodeId: snapshot.nodeId,
-          stepId: snapshot.stepId,
-          phase: snapshot.phase,
-          advance: button.dataset.decisionAdvance || '',
-          controlCount: [...workspace.querySelectorAll('button.ac-decision-reader-continue[data-ac-action="advance-decision-flow"]')].filter(visible).length,
-          accessibleName: button.getAttribute('aria-label')?.trim() || button.textContent?.trim() || '',
-          disabled: button.disabled === true || button.getAttribute('aria-disabled') === 'true',
-          reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true,
-          provesNoTimerAdvance: proveNoTimerAdvance,
-          connectedBeforeClick: false,
-          visibleBeforeClick: false,
-          phaseStableBeforeClick: false,
-          connectedAfterClick: true,
-          clickAttempts: 0,
-          heldMs: 0,
-          at: appearedAt,
-        };
-        window.__casepathArtifactInteractions.push(interaction);
-        const holdMs = proveNoTimerAdvance
-          ? decisionReaderGateProofMs + 100
-          : snapshot.phase === 'source-opened' ? decisionSourceReadMs : decisionHighlightReadMs;
-        setTimeout(() => {
-          interaction.heldMs = performance.now() - appearedAt;
-          interaction.connectedBeforeClick = button.isConnected;
-          interaction.visibleBeforeClick = visible(button);
-          interaction.phaseStableBeforeClick = workspace?.dataset.decisionFlowState === expectedState;
-          if (!interaction.connectedBeforeClick || !interaction.visibleBeforeClick || !interaction.phaseStableBeforeClick) return;
-          interaction.clickAttempts = 2;
-          button.click();
-          button.click();
-          setTimeout(() => {
-            interaction.connectedAfterClick = button.isConnected;
-          }, 350);
-        }, holdMs);
-      }));
-    };
     window.addEventListener('casepath:decision-flow-step', event => {
-      const snapshot = decisionFlowSnapshot(event.detail || {});
-      window.__casepathDecisionFlowSteps.push(snapshot);
-      automateDecisionReaderGate(snapshot);
+      window.__casepathDecisionFlowSteps.push(decisionFlowSnapshot(event.detail || {}));
     });
     window.addEventListener('casepath:process-node-progress', event => {
       const detail = event.detail || {};
@@ -5554,9 +5472,6 @@ async function execute() {
   }, {
     sessionId: QA_SESSION_ID,
     decisionFlowContract: DECISION_FLOW_CONTRACT,
-    decisionReaderGateProofMs: MIN_DECISION_READER_GATE_PROOF_MS,
-    decisionSourceReadMs: QA_DECISION_SOURCE_READ_MS,
-    decisionHighlightReadMs: QA_DECISION_HIGHLIGHT_READ_MS,
     processPreviewGeometrySelectors: PROCESS_PREVIEW_GEOMETRY_SELECTORS,
     processPreviewBottomInset: PROCESS_PREVIEW_BOTTOM_INSET_PX,
     sourceRailContract: SOURCE_RAIL_CONTRACT,
@@ -5591,6 +5506,12 @@ async function execute() {
   check('Loaded release contains no obsolete public QA-service destination', !staleQaService.test(loadedFlagshipSource));
   check('Loaded release labels logical specialist topology as fan-out rather than physical parallel transport', loadedFlagshipSource.includes('<i>fan-out</i>') && !loadedFlagshipSource.includes('<i>parallel</i>'));
   check('Artifact canvas owns one authenticated fetch-SSE transport and no active run polling loop', orchestrationRendererSource.includes("document.body.dataset.runTransport = 'fetch-sse'") && orchestrationRendererSource.includes("'X-CasePath-Session': SESSION_ID") && orchestrationRendererSource.includes("Accept: 'text/event-stream'") && orchestrationRendererSource.includes('/events?after=${after}') && !orchestrationRendererSource.includes('function pollRun(') && !orchestrationRendererSource.includes('setTimeout(() => pollRun(') && artifactCanvasSource.includes('artifactCanvas'));
+  check('Process-story watchdog rearms only on same-run decision-flow progress and removes its listener when settled', [
+    "window.addEventListener('casepath:decision-flow-step', onProgress);",
+    "window.removeEventListener('casepath:decision-flow-step', onProgress);",
+    "if (String(event.detail?.runId || '') === runId) armTimeout();",
+    'window.clearTimeout(timeout);',
+  ].every(fragment => orchestrationRendererSource.includes(fragment)));
   check('Loaded orchestration renderer never promotes a validator label to a deterministic gate ID', orchestrationRendererSource.includes("const gateId = returnedValue(event, 'gate_id', 'agent_id');") && orchestrationRendererSource.includes("const validator = returnedValue(event, 'validator');") && orchestrationRendererSource.includes('const gateIdentity = gateId ? ` data-gate-id=') && !orchestrationRendererSource.includes("returnedValue(event, 'gate_id', 'agent_id', 'validator', 'label')"));
   check('Loaded run-read coalescing is session-scoped, in-flight-only, review-mutation-aware, and renders the authoritative review response', runReadGuardSource.includes("headers.get('X-CasePath-Session')") && runReadGuardSource.includes('runResourceKey(url, request, init)') && runReadGuardSource.includes('const pendingRunMutations = new Map();') && runReadGuardSource.includes("const isReviewMutation = method === 'POST'") && runReadGuardSource.includes('const activeMutation = pendingRunMutations.get(resourceKey);') && runReadGuardSource.includes('await activeMutation;') && !runReadGuardSource.includes('runReadWindowMs') && !runReadGuardSource.includes('window.setTimeout') && orchestrationRendererSource.includes('result: snapshot(state.review.result)'));
   check('Current QA destination is guarded by exact live API identity and an atomic hash-bound report/manifest attestation', loadedFlagshipSource.includes("const qaEvidenceBase = 'https://casepath-guided-canonical-qa.onrender.com'") && loadedFlagshipSource.includes('function releaseEvidenceAttested(') && loadedFlagshipSource.includes("fetch(`${apiBase}/healthz`") && loadedFlagshipSource.includes("api?.source_commit === commit") && loadedFlagshipSource.includes('reportIdentities.every(value => value === commit)') && loadedFlagshipSource.includes('report?.failed === 0') && loadedFlagshipSource.includes('manifest?.source_commit === commit') && loadedFlagshipSource.includes('report.evidence.manifest.sha256 === manifestBinding.sha256') && loadedFlagshipSource.includes('report.evidence.manifest.bytes === manifestBinding.bytes') && loadedFlagshipSource.includes('retainedEvidenceComplete(report, manifest)') && loadedFlagshipSource.includes("link.dataset.evidenceState = 'attested'"));
@@ -5619,455 +5540,7 @@ async function execute() {
     const binding = { sha256: 'f'.repeat(64), bytes: 1234 };
     const report = { status: 'passed', passed: 80, failed: 0, release_id: frontend.release_id, deployment: { frontend: { source_commit: commit }, api: { source_commit: commit }, qa: { source_commit: commit } }, evidence: { gate: { sha256: 'b'.repeat(64) }, retained_before_session_reset: true, missing: [], files, manifest: { path: 'evidence-manifest.json', ...binding } } };
     const manifest = { contract: 'casepath.qa-evidence-manifest/1.0.0', release_id: frontend.release_id, source_commit: commit, gate: { sha256: 'b'.repeat(64) }, retained_before_session_reset: true, retained_media_contract: { json: ['flagship-run.json'], screenshots: ['final-state.png'], video: 'uninterrupted-focused-demo.webm', missing: [], empty: [] }, files };
-    const isAttested = window.__casepathEvidenceAttestation?.isAttested;
-    return {
-      valid: isAttested?.(frontend, api, report, manifest, binding) === true,
-      wrongReportCommit: isAttested?.(frontend, api, { ...report, deployment: { ...report.deployment, api: { source_commit: 'c'.repeat(40) } } }, manifest, binding) === false,
-      liveApiDrift: isAttested?.(frontend, { ...api, source_commit: 'c'.repeat(40) }, report, manifest, binding) === false,
-      missingMedia: isAttested?.(frontend, api, report, { ...manifest, retained_media_contract: { ...manifest.retained_media_contract, missing: ['final-state.png'] } }, binding) === false,
-      failedReport: isAttested?.(frontend, api, { ...report, status: 'failed' }, manifest, binding) === false,
-      failedCount: isAttested?.(frontend, api, { ...report, failed: 17 }, manifest, binding) === false,
-      notRetained: isAttested?.(frontend, api, { ...report, evidence: { ...report.evidence, retained_before_session_reset: false } }, manifest, binding) === false,
-      tamperedManifestBytes: isAttested?.(frontend, api, report, manifest, { ...binding, sha256: '0'.repeat(64) }) === false,
-      changedInventory: isAttested?.(frontend, api, report, { ...manifest, files: manifest.files.slice(1) }, binding) === false,
-    };
-  });
-  check('Evidence attestation accepts only a passed complete exact-commit report/manifest pair', Object.values(attestationMatrix).every(Boolean), JSON.stringify(attestationMatrix));
-  const checklistRendererSource = flagshipScriptSources.find(item => item.scriptPath === 'assets/live-v17.js')?.source || '';
-  const precedentRendererSource = flagshipScriptSources.find(item => item.scriptPath === 'assets/live-v16.js')?.source || '';
-  const reuseRendererSource = flagshipScriptSources.find(item => item.scriptPath === 'assets/live-v17.js')?.source || '';
-  const laterStageSource = flagshipScriptSources.find(item => item.scriptPath === 'assets/live-v18.js')?.source || '';
-  check('Precedent rendering accepts qualified_expert_reviewed while preserving explicit unverified memory copy', precedentRendererSource.includes("'qualified_expert_reviewed'") && precedentRendererSource.includes("'unverified_demo_memory'") && precedentRendererSource.includes('Unverified generated-demo review memory returned by the server') && precedentRendererSource.includes('Unverified demo review memory returned'));
-  check('Loaded later-result renderer distinguishes retrieval from receipt-bound use/application without asynchronous reuse enhancement', precedentRendererSource.includes('reviewed_memory_retrieved') && precedentRendererSource.includes('data-memory-retrieved-only=') && precedentRendererSource.includes('retrieved-not-applied') && precedentRendererSource.includes('Saving it does not mean later guidance was used or applied') && precedentRendererSource.includes('Not used or applied Â· no memory-driven DTO change') && precedentRendererSource.includes('function renderMemoryReuseProof') && !reuseRendererSource.includes('function enhanceReuse') && !laterStageSource.includes('function enhanceReuse'));
-  check('Document-checklist renderer fails closed on exact field units, reciprocal owners, and transformed acceptance', [
-    'const expectedUnits = [',
-    'new Set(ids).size === ids.length',
-    'Number.isInteger(value.confidence_basis_points)',
-    "value.attribution === expectedAttribution",
-    'data-accepted-contribution-ids=',
-    'post_review_unverified_transform',
-    'casepath.memory-application-receipt/1.0.0',
-    'data-node-ids=',
-    'data-current-path=',
-  ].every(fragment => checklistRendererSource.includes(fragment)));
-  const syntheticActorLabels = ['Agent complete', ...FORBIDDEN_SYNTHETIC_AGENT_LABELS];
-  const syntheticActorSources = flagshipScriptSources.flatMap(({ scriptPath, source }) => syntheticActorLabels.filter(label => source.includes(label)).map(label => `${scriptPath}:${label}`));
-  check('Loaded flagship scripts never promote seven presentation phases, deterministic stages, or knowledge governance into extra model agents', syntheticActorSources.length === 0, JSON.stringify(syntheticActorSources));
-  const specialistFocusSource = flagshipScriptSources.find(item => item.scriptPath === 'assets/live-v20-focus.js')?.source || '';
-  const identitySourceIssues = [];
-  for (const agentId of REQUIRED_NEMOTRON_AGENT_IDS) {
-    const expected = REQUIRED_NEMOTRON_AGENT_SIGNATURES[agentId];
-    if (!specialistFocusSource.includes(`${agentId}: {`)) identitySourceIssues.push(`${agentId}: missing identity`);
-    if (!specialistFocusSource.includes(`label: '${REQUIRED_DESKTOP_AGENT_LABELS[agentId]}'`)) identitySourceIssues.push(`${agentId}: wrong visible label`);
-    if (!specialistFocusSource.includes(`shortLabel: '${REQUIRED_DESKTOP_AGENT_SHORTS[agentId]}'`)) identitySourceIssues.push(`${agentId}: wrong short label`);
-    if (!specialistFocusSource.includes(`monogram: '${expected.monogram}'`)) identitySourceIssues.push(`${agentId}: wrong monogram`);
-    if (!specialistFocusSource.includes(`signature: '${expected.signature}'`)) identitySourceIssues.push(`${agentId}: wrong signature`);
-  }
-  const identityMapStart = specialistFocusSource.indexOf('const NEMOTRON_AGENT_IDENTITIES = Object.freeze({');
-  const identityMapEnd = specialistFocusSource.indexOf('\n  });', identityMapStart);
-  const identityMapSource = specialistFocusSource.slice(identityMapStart, identityMapEnd);
-  const declaredAgentIds = [...identityMapSource.matchAll(/^\s{4}([a-z_]+): \{/gm)].map(match => match[1]);
-  const cursorAvatarSignatures = Object.values(REQUIRED_NEMOTRON_AGENT_SIGNATURES).map(value => value.signature);
-  const cursorAvatarsAreDistinct = cursorAvatarSignatures.every(signature => artifactCanvasSource.includes(`${signature}: '<`))
-    && artifactCanvasSource.includes('const CURSOR_AVATARS = Object.freeze({')
-    && artifactCanvasSource.includes('data-ac-cursor-avatar')
-    && artifactCanvasSource.includes('function setCursorAvatar(');
-  check('Desktop cursor presents the agreed six simple agent names and six distinct specialist avatars while preserving exact IDs, monograms, and signatures', identitySourceIssues.length === 0 && exactMembers(declaredAgentIds, REQUIRED_NEMOTRON_AGENT_IDS) && new Set(Object.values(REQUIRED_NEMOTRON_AGENT_SIGNATURES).map(value => value.monogram)).size === 6 && new Set(cursorAvatarSignatures).size === 6 && cursorAvatarsAreDistinct, JSON.stringify({ declaredAgentIds, identitySourceIssues, cursorAvatarsAreDistinct }));
-  check('Seven visible chapters remain presentation phases with explicit execution authority, not a synthetic seven-agent team', REQUIRED_PRESENTATION_PHASE_LABELS.every(fragment => specialistFocusSource.includes(`label: '${fragment}'`)) && ['dataset.casepathSpecialist', 'dataset.workAuthority'].every(fragment => specialistFocusSource.includes(fragment)));
-  check('Cursor motion is keyed to semantic event/agent/phase/target identity, suppresses replay, and emits one inspectable step without class-mutation feedback', specialistFocusSource.includes('const activationKey =') && specialistFocusSource.includes("cursor.dataset.eventId || cursor.dataset.proofEventId || moment") && specialistFocusSource.includes("cursor.dataset.agentId || 'casepath'") && specialistFocusSource.includes('cursorPhase') && specialistFocusSource.includes('emittedActivationKeys.has(activationKey)') && specialistFocusSource.includes('cursorTargetKey(target)') && specialistFocusSource.includes("new CustomEvent('casepath:cursor-step'") && specialistFocusSource.includes("['is-clicking', 'v21-agent-target']") && specialistFocusSource.includes("attributeOldValue: true") && !specialistFocusSource.includes("requestAnimationFrame(() => cursor.classList.add('is-clicking'))"));
-  check('Every successful call-bound specialist owns one receipt-bound artifact target instead of relabelling an unrelated canvas', ['function ownedArtifactMarkup(', 'data-agent-artifact-target="true"', 'data-agent-artifact-owner=', 'data-actor-type=', 'data-call-id=', 'data-output-artifact=', 'data-requested-model=', 'data-response-model=', "event.actorType !== 'nemotron_agent'", 'Official-law tabs remain a separate deterministic cached registry view.'].every(fragment => specialistFocusSource.includes(fragment)));
-
-  const expectedRailSources = expectedSourceRailItems(demo.claim);
-  await page.waitForFunction(({ contract, count }) => {
-    const rail = document.querySelector(`aside[data-source-rail-contract="${contract}"]`);
-    const list = rail?.matches('[data-source-rail-list]') ? rail : rail?.querySelector('[data-source-rail-list]');
-    const rows = [...(list?.querySelectorAll('[data-source-rail-item][data-source-id]') || [])];
-    return rows.length === count && rows.every(row => (
-      row.querySelectorAll('[data-source-icon-kind] > svg').length === 1
-      && row.querySelectorAll('[data-source-name]').length === 1
-      && row.querySelectorAll('[data-source-meta]').length === 1
-      && row.querySelectorAll('[data-source-status]').length === 1
-    ));
-  }, { contract: SOURCE_RAIL_CONTRACT, count: expectedRailSources.length }, { timeout: 120000 });
-  await page.waitForFunction(() => !document.querySelector('#runCasePath')?.disabled, null, { timeout: 120000 });
-  await page.waitForFunction(() => document.querySelector('#artifactCanvas') && document.querySelector('#artifactProcessGraph'), null, { timeout: 120000 });
-  const openingSourceRailSnapshots = [];
-  for (const viewport of SOURCE_RAIL_VIEWPORTS) {
-    await page.setViewportSize(viewport);
-    await sleep(120);
-    openingSourceRailSnapshots.push(await page.evaluate(label => window.__casepathCaptureSourceRail?.(label, '', ''), `opening:${viewport.width}x${viewport.height}`));
-  }
-  await page.setViewportSize({ width: 1440, height: 900 });
-  const openingSourceRailIssues = openingSourceRailSnapshots.flatMap(snapshot => sourceRailContractViolations(snapshot, expectedRailSources));
-  check('The compact source rail shows all seven exact sources without collapse, dropdown, clipping, or overlap at 1280x720 and 1440x900', openingSourceRailSnapshots.length === SOURCE_RAIL_VIEWPORTS.length && openingSourceRailIssues.length === 0, JSON.stringify({ openingSourceRailSnapshots, openingSourceRailIssues }));
-  await page.evaluate(() => {
-    window.__casepathPersistentArtifactCanvas = document.querySelector('#artifactCanvas');
-    window.__casepathPersistentProcessGraph = document.querySelector('#artifactProcessGraph');
-  });
-  const openingCanvas = await artifactCanvasSnapshot();
-  check('Opening mounts the persistent artifact canvas and graph roots before analysis begins', openingCanvas.root_present && openingCanvas.root_same && openingCanvas.graph_present && openingCanvas.graph_same, JSON.stringify(openingCanvas));
-  await page.evaluate(() => {
-    const moment = document.body.dataset.casepathMoment;
-    if (moment && !window.__casepathMomentHistory.includes(moment)) window.__casepathMomentHistory.push(moment);
-    if (document.querySelector('meta[name="casepath-release"]')?.content !== '20.0.0') window.__casepathReleaseMutations.push('initial-meta-mismatch');
-  });
-  check('DOM and meta release markers agree', await page.evaluate(() => document.documentElement.dataset.casepathRelease === '20.0.0' && document.querySelector('meta[name="casepath-release"]')?.content === '20.0.0' && !document.body.hasAttribute('data-casepath-release')));
-  check('Claim source clears aria-busy after rendering', await page.locator('#customerEmail').getAttribute('aria-busy') === 'false');
-  const quietContrast = await page.evaluate(() => {
-    const values = getComputedStyle(document.querySelector('.quiet-label')).color.match(/[\d.]+/g).slice(0, 3).map(Number);
-    const luminance = rgb => rgb.map(value => { const channel = value / 255; return channel <= .03928 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4; }).reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0);
-    const foreground = luminance(values);
-    return (1.05) / (foreground + .05);
-  });
-  check('Quiet small-text color meets WCAG AA contrast on the white product surface', quietContrast >= 4.5, `contrast=${quietContrast.toFixed(2)}`);
-  const openingClaimCard = await page.evaluate(() => {
-    const visible = node => Boolean(node && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden' && getComputedStyle(node).display !== 'none');
-    const cards = [...document.querySelectorAll('[data-opening-claim-source]')];
-    const card = cards[0] || null;
-    const rect = card?.getBoundingClientRect();
-    const problem = card?.querySelector(':scope > blockquote')?.textContent?.trim() || '';
-    const outcome = card?.querySelector(':scope > p')?.textContent?.trim() || '';
-    return {
-      cardCount: cards.length,
-      visible: visible(card),
-      sourceId: card?.dataset.openingClaimSource || '',
-      childTags: [...(card?.children || [])].map(child => child.tagName),
-      subject: card?.querySelector(':scope > strong')?.textContent?.trim() || '',
-      problem,
-      outcome,
-      blockquoteCount: card?.querySelectorAll(':scope > blockquote').length || 0,
-      paragraphCount: card?.querySelectorAll(':scope > p').length || 0,
-      generatedSummaryCount: card?.querySelectorAll('[data-generated-summary],.ai-summary,.generated-summary').length || 0,
-      bodyCopyLength: problem.length + outcome.length,
-      width: rect?.width || 0,
-      height: rect?.height || 0,
-    };
-  });
-  const openingClaimCardIssues = openingClaimCardContractViolations(openingClaimCard, demo.claim);
-  check('Opening shows one compact source-derived claim card with the exact problem and requested outcome and no generated summary prose', openingClaimCardIssues.length === 0, JSON.stringify({ openingClaimCard, openingClaimCardIssues }));
-  await auditViewports('01-start', '#startState');
-
-  const pdf = demo.claim.artifacts.find(item => item.media_type === 'application/pdf');
-  const image = demo.claim.artifacts.find(item => item.media_type?.startsWith('image/'));
-  const email = demo.claim.artifacts.find(item => item.media_type === 'message/rfc822');
-  check('PDF, image, and email fixtures are available', Boolean(pdf && image && email), JSON.stringify(demo.claim.artifacts.map(item => ({ id: item.artifact_id, type: item.media_type }))));
-
-  const pdfRow = page.locator(`[data-artifact-id="${pdf.artifact_id}"]`);
-  await pdfRow.focus();
-  await page.keyboard.press('Enter');
-  await waitVisible('#sourceViewer[open]');
-  await page.waitForFunction(() => document.querySelector('#sourceViewer')?.getAttribute('aria-busy') === 'false');
-  check('Source dialog moves focus inside on open', await page.evaluate(() => document.querySelector('#sourceViewer')?.contains(document.activeElement)));
-  check('PDF original pages remain inspectable', await page.locator('.page-thumb').count() === pdf.page_count && await page.locator('#documentPage').isVisible());
-  check('Lease PDF viewer identifies and serves the selected original artifact', (await page.locator('#sourceViewerTitle').innerText()) === pdf.title && new URL(await page.locator('#openOriginal').getAttribute('href'), API).pathname === `/api/artifacts/${encodeURIComponent(pdf.artifact_id)}`);
-  await screenshot('03-lease-pdf-overview.png');
-  await page.locator('#zoomIn').click();
-  await page.waitForFunction(() => document.querySelector('#sourceViewer')?.getAttribute('aria-busy') === 'false' && document.querySelector('#zoomValue')?.textContent === '115%');
-  check('Lease PDF zoom control changes the rendered page, not just its label', await page.locator('#zoomValue').innerText() === '115%' && (await page.locator('#documentPage').getAttribute('style')).includes('scale(1.15)'));
-  const inspectedPdfPage = Math.max(1, pdf.page_count || 1);
-  if (inspectedPdfPage > 1) {
-    const inspectedThumb = page.locator(`.page-thumb[data-page="${inspectedPdfPage}"]`);
-    await inspectedThumb.focus();
-    await page.keyboard.press('Enter');
-    await page.waitForFunction(pageNumber => document.querySelector(`.page-thumb[data-page="${pageNumber}"]`)?.getAttribute('aria-current') === 'page' && document.querySelector('#documentPage')?.alt.endsWith(`page ${pageNumber}`), inspectedPdfPage);
-  }
-  check('Lease PDF thumbnail navigation renders the requested original page', await page.locator(`.page-thumb[data-page="${inspectedPdfPage}"]`).getAttribute('aria-current') === 'page' && (await page.locator('#documentPage').getAttribute('alt')).endsWith(`page ${inspectedPdfPage}`));
-  await screenshot('03-lease-pdf-detail.png');
-  await runAxe('Lease PDF original viewer');
-  check('Source tabs expose keyboard and panel semantics', await page.evaluate(() => [...document.querySelectorAll('[data-source-tab]')].every(tab => tab.getAttribute('role') === 'tab' && tab.getAttribute('aria-controls') === 'sourceStage') && document.querySelector('#sourceStage')?.getAttribute('role') === 'tabpanel'));
-  await page.locator('#sourceTabOriginal').focus();
-  await page.keyboard.press('ArrowRight');
-  check('Arrow key selects and focuses extraction tab', await page.locator('#sourceTabExtraction').getAttribute('aria-selected') === 'true' && await page.evaluate(() => document.activeElement?.id === 'sourceTabExtraction'));
-  const extraction = await getJson(`${API}/api/artifacts/${encodeURIComponent(pdf.artifact_id)}/extraction`);
-  const searchQuery = String(extraction.pages?.join(' ') || '').match(/[A-Za-z]{6,}/)?.[0] || 'Tenant';
-  await page.locator('#sourceSearch').fill(searchQuery);
-  await page.locator('#sourceSearchForm button[type="submit"]').click();
-  await waitText('#sourceSearchStatus', /matched/i);
-  check('PDF extracted-text search returns navigable page results', await page.locator('#sourceSearchResults [data-search-page]').count() > 0 && await page.locator('#sourceStage mark').count() > 0);
-  await screenshot('03-lease-pdf-search.png');
-  await page.locator('#sourceTabOriginal').click();
-  await waitVisible('#documentPage');
-  await page.keyboard.press('Escape');
-  await waitHidden('#sourceViewer');
-  await page.waitForFunction(artifactId => document.activeElement?.dataset.artifactId === artifactId, pdf.artifact_id);
-  check('Closing source dialog restores attachment focus', await page.evaluate(artifactId => document.activeElement?.dataset.artifactId === artifactId, pdf.artifact_id));
-
-  const imageRow = page.locator(`[data-artifact-id="${image.artifact_id}"]`);
-  await imageRow.focus();
-  await page.keyboard.press('Enter');
-  await waitVisible('#sourceImage');
-  await page.waitForFunction(() => { const image = document.querySelector('#sourceImage'); return image?.complete && image.naturalWidth > 0 && image.naturalHeight > 0; });
-  const renderedImage = await page.locator('#sourceImage').evaluate(node => ({ src: node.currentSrc, width: node.naturalWidth, height: node.naturalHeight, alt: node.alt }));
-  check('Image viewer decodes the selected original pixels with an accessible identity', new URL(renderedImage.src).pathname === `/api/artifacts/${encodeURIComponent(image.artifact_id)}` && renderedImage.width > 0 && renderedImage.height > 0 && renderedImage.alt === image.title, JSON.stringify(renderedImage));
-  const imageCount = demo.claim.artifacts.filter(item => item.media_type?.startsWith('image/')).length;
-  check('Image gallery controls appear only when useful', imageCount > 1 ? await page.locator('#sourceGalleryNav').isVisible() : await page.locator('#sourceGalleryNav').isHidden());
-  if (imageCount > 1) {
-    const firstImageTitle = await page.locator('#sourceViewerTitle').innerText();
-    await page.locator('#sourceNext').click();
-    check('Image next control opens the adjacent original image', (await page.locator('#sourceViewerTitle').innerText()) !== firstImageTitle);
-    await page.locator('#sourcePrevious').click();
-    check('Image previous control returns to the original image', (await page.locator('#sourceViewerTitle').innerText()) === firstImageTitle);
-  }
-  await page.locator('#zoomIn').click();
-  await page.waitForFunction(() => document.querySelector('#sourceViewer')?.getAttribute('aria-busy') === 'false' && document.querySelector('#zoomValue')?.textContent === '115%');
-  check('Image zoom control changes the rendered original image frame', await page.locator('#zoomValue').innerText() === '115%' && (await page.locator('.source-image-frame').getAttribute('style')).includes('scale(1.15)'));
-  await screenshot('03-image-inspection.png');
-  await runAxe('Original image viewer');
-  await page.keyboard.press('Escape');
-  await waitHidden('#sourceViewer');
-  await page.waitForFunction(artifactId => document.activeElement?.dataset.artifactId === artifactId, image.artifact_id);
-  check('Closing image viewer restores attachment focus', await page.evaluate(artifactId => document.activeElement?.dataset.artifactId === artifactId, image.artifact_id));
-
-  await page.locator(`[data-artifact-id="${email.artifact_id}"]`).click();
-  await waitVisible('#sourceViewer .email-document');
-  check('Email original and extraction representations remain inspectable', await page.locator('#sourceViewer .email-document').isVisible());
-  await page.locator('#sourceTabExtraction').click();
-  await waitVisible('#sourceStage .extraction-page');
-  await page.locator('#closeSourceViewer').click();
-
-  await page.evaluate(() => { window.__casepathFlagshipLaunchAt = performance.now(); });
-  await page.locator('#runCasePath').click();
-  await waitVisible('#liveWorkspace');
-  await waitVisible('#artifactCanvas[data-casepath-scene]');
-  const workingCanvas = await artifactCanvasSnapshot();
-  const workingCanvasIssues = focusedArtifactCanvasViolations(workingCanvas);
-  check('After launch the customer submission and persistent working canvas remain simultaneous with one focus, cursor, artifact, and action', workingCanvasIssues.length === 0, JSON.stringify({ workingCanvas, workingCanvasIssues }));
-  const initialSpecialistFocus = await page.locator('#artifactCanvas').evaluate(node => ({
-    scene: node.dataset.casepathScene,
-    authority: node.dataset.workAuthority,
-    cursor_count: node.querySelectorAll('#artifactAgentCursor').length,
-    cursor_agent_id: node.querySelector('#artifactAgentCursor')?.dataset.agentId || '',
-    cursor_agent_signature: node.querySelector('#artifactAgentCursor')?.dataset.agentSignature || '',
-    title: node.querySelector('[data-ac-task]')?.textContent?.trim() || '',
-  }));
-  check('Flagship opens with one readable phase and one truthful neutral cursor before a call-bound agent receipt', ['opening', 'read', 'understand'].includes(initialSpecialistFocus.scene) && Boolean(initialSpecialistFocus.authority) && initialSpecialistFocus.cursor_count === 1 && initialSpecialistFocus.cursor_agent_id === '' && initialSpecialistFocus.cursor_agent_signature === 'casepath' && Boolean(initialSpecialistFocus.title), JSON.stringify(initialSpecialistFocus));
-  const flagshipRunId = await waitForValue(() => runIds[0]);
-  if (isProductionJourney()) {
-    await page.waitForFunction(() => window.__casepathOpeningContexts?.length > 0, null, { timeout: runTimeoutMs() });
-    const openingContexts = await page.evaluate(() => window.__casepathOpeningContexts);
-    const openingContextIssues = productionOpeningContextViolations(openingContexts);
-    check('First live production frame attributes shared-context setup to application code and waits for the returned Nemotron plan', openingContextIssues.length === 0, JSON.stringify({ openingContexts, openingContextIssues }));
-  }
-  const processRun = await waitJourneyUi('Visible flagship cold orchestration did not complete', () => awaitRun(flagshipRunId));
-  const processGraph = processRun.result?.process || processRun.process;
-  const routeStory = processRouteStory(processGraph);
-  const routeStoryIssues = processRouteStoryContractViolations(processGraph);
-  check('Visible process story is derived from the returned selected path and current overlay', routeStoryIssues.length === 0, JSON.stringify({ routeStory, routeStoryIssues }));
-  retainedEvidence['flagship-run'] = processRun;
-  const flagshipEvidenceIssues = evidenceRelationContractViolations(processRun.result?.process, processRun.result?.checklist);
-  check('Flagship evidence ownership is independently derived from ordered process requirements', flagshipEvidenceIssues.length === 0, JSON.stringify(flagshipEvidenceIssues));
-  const flagshipMemoryStateIssues = memoryRetrievalContractViolations(processRun.result);
-  check('Flagship result keeps retrieval separate from receipt-bound memory use', flagshipMemoryStateIssues.length === 0, JSON.stringify(flagshipMemoryStateIssues));
-  const flagshipLegalIssues = legalContextContractViolations(processRun.result?.legal_research, processRun.result?.process);
-  check('Flagship legal questions join exact official passages and deterministic proposals by ID', flagshipLegalIssues.length === 0, JSON.stringify(flagshipLegalIssues));
-  const expectedOfficialSources = processRun.result?.legal_research?.sources || [];
-  await page.waitForFunction(() => document.querySelector('#artifactCanvas')?.dataset.officialLawTourState === 'complete', null, { timeout: runTimeoutMs() });
-  const factTourSnapshots = await page.evaluate(() => window.__casepathFactTourSnapshots || []);
-  const liveWorkPlanSnapshots = await page.evaluate(() => window.__casepathLiveWorkPlanSnapshots || []);
-  let semanticEvents = await page.evaluate(() => window.__casepathSemanticEvents || []);
-  const factTourHighlights = await page.evaluate(() => window.__casepathSourceHighlights || []);
-  const liveWorkPlanIssues = canonicalFactsLiveWorkPlanContractViolations(liveWorkPlanSnapshots, factTourSnapshots, processRun);
-  check('The exact canonical-facts call uses one simple plan and yields source reading to the merged Path builder graph flow', liveWorkPlanIssues.length === 0, JSON.stringify({ liveWorkPlanSnapshots, liveWorkPlanIssues }));
-  check('No separate eight-fact presentation competes with the merged Path builder graph flow', factTourSnapshots.length === 0, JSON.stringify({ factTourSnapshots, factTourHighlights }));
-  const sourceRailSnapshots = await page.evaluate(() => window.__casepathSourceRailSnapshots || []);
-  const sourceRailIssues = sourceRailSnapshots.flatMap(snapshot => sourceRailContractViolations(
-    snapshot,
-    expectedRailSources,
-    { sourceId: snapshot.expectedSourceId, locatorId: snapshot.expectedLocatorId },
-  ));
-  const expectedRailReasons = [
-    ...SOURCE_RAIL_VIEWPORTS.map(viewport => `opening:${viewport.width}x${viewport.height}`),
-  ];
-  const observedRailReasons = new Set(sourceRailSnapshots.map(snapshot => snapshot.reason));
-  const missingRailReasons = expectedRailReasons.filter(reason => !observedRailReasons.has(reason));
-  check('Opening keeps one compact exact seven-item source rail without a competing source-card strip', sourceRailIssues.length === 0 && missingRailReasons.length === 0, JSON.stringify({ sourceRailSnapshots, sourceRailIssues, missingRailReasons }));
-  const officialSourceSteps = await page.evaluate(() => window.__casepathOfficialSourceSteps || []);
-  const officialLawTourIssues = officialLawTourContractViolations(officialSourceSteps, semanticEvents, processRun);
-  check('Four official Swiss-law items are visibly exact deterministic registry lookups, never Nemotron work', expectedOfficialSources.length === 4 && officialLawTourIssues.length === 0, JSON.stringify({ expectedOfficialSourceIds: expectedOfficialSources.map(source => source.source_id), officialSourceSteps, officialLawTourIssues }));
-  const linkedOfficialSourceEvents = semanticEvents.filter(event => event.type === 'legal_source.linked' && event.entityKind === 'official_source');
-  check('Run returns four exact official legal-source execution traces', linkedOfficialSourceEvents.length === 4 && linkedOfficialSourceEvents.every(event => event.traceContract === EXECUTION_TRACE_CONTRACT && event.presentationMode === 'deterministic_projection' && event.authority === 'versioned_official_source_registry' && event.officialSourceCount === 4 && SHA256_PATTERN.test(event.outputBindingHash) && event.modelContributionAccepted === false && event.deterministicFallbackApplied === false), JSON.stringify(linkedOfficialSourceEvents));
-  const flagshipVisualRefs = (processRun.result?.facts || []).flatMap(fact => (fact.source_refs || []).filter(reference => reference.locator_kind === 'visual_observation'));
-  const flagshipVisualIssues = flagshipVisualRefs.flatMap(reference => visualReferenceContractViolations(reference, demo.claim.artifacts.find(artifact => artifact.artifact_id === reference.artifact_id)).map(issue => `${reference.artifact_id}: ${issue}`));
-  check('Every flagship visual observation is an exact curated generated-demo annotation bound to public image bytes', flagshipVisualRefs.length > 0 && flagshipVisualIssues.length === 0, JSON.stringify(flagshipVisualIssues));
-  const flagshipRankingIssues = precedentRankingContractViolations(processRun.result);
-  check('Flagship returns exactly three hash-bound generated reference rankings', flagshipRankingIssues.length === 0, JSON.stringify(flagshipRankingIssues));
-  if (isProductionJourney()) {
-    const coldIssues = orchestrationContractViolations(processRun, 'cold', releaseContract.agentic_runtime.framework);
-    check('Visible flagship proves the exact cold six-agent LangGraph DAG and three deterministic accepted-artifact gates', coldIssues.length === 0, JSON.stringify(coldIssues));
-    coldOrchestration = orchestrationAudit(processRun);
-  }
-  const flagshipColdLedger = await getJson(`${API}/api/model-ledger`);
-  retainedEvidence['flagship-cold-model-ledger'] = flagshipColdLedger;
-  const flagshipLedgerIssues = sanitizedLedgerViolations(flagshipColdLedger);
-  check('Flagship cold ledger is public-safe and schema-bounded', flagshipLedgerIssues.length === 0, JSON.stringify(flagshipLedgerIssues));
-  if (isProductionJourney()) {
-    const coldLedgerIssues = coldLedgerContractViolations(coldOrchestration, flagshipColdLedger);
-    check('Visible flagship binds six distinct paid responses, positive usage, costs, contributions, and lineage to one orchestration', coldLedgerIssues.length === 0, JSON.stringify(coldLedgerIssues));
-  }
-  await waitJourneyUi('Flagship browser did not reach stable review readiness', async () => {
-    await page.waitForFunction(() => window.__casepathMomentHistory.includes('process'), null, { timeout: runTimeoutMs() });
-    await page.waitForFunction(() => window.__casepathMomentHistory.includes('evidence'), null, { timeout: runTimeoutMs() });
-    if (routeStory.flagshipCausation) await waitText('#journeyNext', /Review document plan/i, runTimeoutMs());
-    else await page.waitForFunction(() => document.querySelector('#journeyNext')?.dataset.casepathRouteTerminal === 'true', null, { timeout: runTimeoutMs() });
-    await waitVisible('body[data-casepath-moment="ready"]', runTimeoutMs());
-    await waitVisible('#artifactCanvas[data-casepath-scene="ready"]', runTimeoutMs());
-    await page.waitForFunction(() => document.querySelector('#artifactCanvas')?.dataset.casepathScene === 'ready', null, { timeout: runTimeoutMs() });
-  });
-  const readyCanvas = await artifactCanvasSnapshot();
-  const readyCanvasIssues = focusedArtifactCanvasViolations(readyCanvas);
-  check('Ready state preserves the same source-plus-canvas workspace with one focus, one cursor, one primary artifact, and an action only when the returned route can continue', readyCanvasIssues.length === 0 && readyCanvas.action_count === (routeStory.flagshipCausation ? 1 : 0), JSON.stringify({ routeStory, readyCanvas, readyCanvasIssues }));
-  check('Ready state keeps only the returned route story as the dominant artifact', readyCanvas.projection === 'flagship-spine/1' && readyCanvas.construction_state === 'complete' && stableJson(readyCanvas.node_states) === stableJson(routeStory.storyNodeIds.map(node_id => ({ node_id, state: 'built' }))), JSON.stringify({ routeStory, nodeStates: readyCanvas.node_states }));
-  const readyRouteAction = await page.locator('#journeyNext').evaluate(button => ({ terminal: button.dataset.casepathRouteTerminal || '', disabled: button.disabled, ariaDisabled: button.getAttribute('aria-disabled') || '', primary: button.dataset.casepathPrimaryAction || '' }));
-  check('Ready action continues only for the returned evidence-gap flagship route', routeStory.flagshipCausation
-    ? readyRouteAction.terminal === 'false' && !readyRouteAction.disabled && readyRouteAction.ariaDisabled === 'false' && readyRouteAction.primary === 'true'
-    : readyRouteAction.terminal === 'true' && readyRouteAction.disabled && readyRouteAction.ariaDisabled === 'true' && !readyRouteAction.primary, JSON.stringify({ routeStory, readyRouteAction }));
-  const graphMomentSnapshots = await page.evaluate(() => window.__casepathGraphMomentSnapshots || []);
-  const verificationGraphScene = [...graphMomentSnapshots].reverse().find(snapshot => snapshot.moment === 'verify' && snapshot.scene === 'verify');
-  const verificationGraphIssues = [
-    ...graphNativeMomentSceneViolations(verificationGraphScene, 'verify'),
-    ...graphNativeMomentCopyContractViolations(verificationGraphScene, {
-      attachmentKey: 'verification_attachments',
-      attachmentKind: 'verification',
-      requiredCopy: ['Final audit'],
-      anyOfCopy: [
-        ['checks agree', 'No unsupported proposals retained'],
-        ['Verification incomplete'],
-      ],
-    }),
-  ];
-  check('Verification keeps the graph as the sole focal artifact and states only its concise passed or fail-closed outcome', verificationGraphIssues.length === 0, JSON.stringify({ verificationGraphScene, verificationGraphIssues }));
-  const flagshipPresentationMs = await page.evaluate(() => performance.now() - window.__casepathFlagshipLaunchAt);
-  const minimumPresentationMs = routeStory.flagshipCausation ? MIN_FLAGSHIP_PRESENTATION_MS : 30000;
-  const presentationUpperBoundApplies = !isProductionJourney();
-  check('The autonomous returned-route journey stays readable without treating real provider latency as presentation failure', flagshipPresentationMs >= minimumPresentationMs && (!presentationUpperBoundApplies || flagshipPresentationMs <= MAX_FLAGSHIP_PRESENTATION_MS), JSON.stringify({ routeStory: routeStory.storyNodeIds, minimumPresentationMs, maximumPresentationMs: presentationUpperBoundApplies ? MAX_FLAGSHIP_PRESENTATION_MS : null, durationMs: flagshipPresentationMs }));
-  await auditViewports('02-ready-process', '#artifactProcessGraph[data-graph-projection="flagship-spine/1"]');
-  const flagshipTransport = await page.evaluate(() => ({
-    transport: document.body.dataset.runTransport || '',
-    stream_connections: Number(document.body.dataset.streamConnections || '0'),
-    terminal_hydrations: Number(document.body.dataset.terminalHydrations || '0'),
-    active_run_polls: Number(document.body.dataset.activeRunPolls || '-1'),
-  }));
-  const flagshipBrowserRequests = browserRunRequests.filter(item => item.pathname.includes(`/${flagshipRunId}`));
-  const flagshipStreams = flagshipBrowserRequests.filter(item => item.pathname.endsWith('/events'));
-  const flagshipHydrations = flagshipBrowserRequests.filter(item => item.pathname === `/api/runs/${flagshipRunId}`);
-  check('Visible flagship uses exactly one authenticated fetch-SSE stream, one terminal hydration, and zero active run polls', flagshipTransport.transport === 'fetch-sse' && flagshipTransport.stream_connections === 1 && flagshipTransport.terminal_hydrations === 1 && flagshipTransport.active_run_polls === 0 && flagshipStreams.length === 1 && flagshipStreams[0].method === 'GET' && flagshipStreams[0].session === QA_SESSION_ID && /text\/event-stream/i.test(flagshipStreams[0].accept) && flagshipHydrations.length === 1, JSON.stringify({ flagshipTransport, flagshipBrowserRequests }));
-  const terminalValidatorReceipt = await page.locator('.orchestration-receipt.gate-receipt').evaluate(node => ({
-    gate_id: node.getAttribute('data-gate-id'),
-    label: node.querySelector('small')?.textContent || '',
-    identity: node.querySelector('strong')?.textContent || '',
-  }));
-  check('Final pipeline validator remains visible without becoming a fourth orchestration gate ID', terminalValidatorReceipt.gate_id === null && /deterministic validator receipt/i.test(terminalValidatorReceipt.label) && terminalValidatorReceipt.identity === 'whole-playbook-validator/15.2', JSON.stringify(terminalValidatorReceipt));
-  if (isProductionJourney()) {
-    await page.locator('#openAudit').click();
-    await waitVisible('#auditDrawer[open] #orchestrationProof');
-    await screenshot('02-live-nemotron-agent.png');
-    const visibleProof = await page.evaluate(() => ({
-      agent_ids: window.__casepathVisibleAgentIds || [],
-      gate_ids: window.__casepathVisibleGateIds || [],
-      proof_visible: !document.querySelector('#orchestrationProof')?.hidden,
-      proof_boundary: document.querySelector('.orchestration-boundary')?.textContent || '',
-      orchestrator_label: document.querySelector('#orchestratorLabel')?.textContent || '',
-    }));
-    check('Cold flagship visibly presented every Nemotron role and deterministic gate', exactMembers(visibleProof.agent_ids, REQUIRED_NEMOTRON_AGENT_IDS) && exactMembers(visibleProof.gate_ids, REQUIRED_DETERMINISTIC_GATE_IDS) && visibleProof.proof_visible, JSON.stringify(visibleProof));
-    check('Flagship visibly distinguishes the Nemotron focus plan from deterministic LangGraph topology', visibleProof.orchestrator_label === 'Nemotron focus plan Â· deterministic LangGraph topology', visibleProof.orchestrator_label);
-    check('Visible orchestration proof retains the fictional-data, non-decision, unapproved-law, simulated-review, and quarantine boundary', /fictional claim/i.test(visibleProof.proof_boundary) && /no coverage or legal decision/i.test(visibleProof.proof_boundary) && /unapproved/i.test(visibleProof.proof_boundary) && /simulated review is not expert approval/i.test(visibleProof.proof_boundary) && /quarantined/i.test(visibleProof.proof_boundary), visibleProof.proof_boundary);
-    const returnedTeam = await page.locator('.orchestration-run-summary').evaluate(node => ({
-      role_count: node.dataset.nemotronRoleCount,
-      gate_count: node.dataset.deterministicGateCount,
-      role_ids: (node.dataset.nemotronRoleIds || '').split(',').filter(Boolean),
-      gate_ids: (node.dataset.deterministicGateIds || '').split(',').filter(Boolean),
-    }));
-    check('Stable flagship summary proves exactly six returned Nemotron roles and three returned deterministic gates', returnedTeam.role_count === '6' && returnedTeam.gate_count === '3' && exactMembers(returnedTeam.role_ids, REQUIRED_NEMOTRON_AGENT_IDS) && exactMembers(returnedTeam.gate_ids, REQUIRED_DETERMINISTIC_GATE_IDS), JSON.stringify(returnedTeam));
-    const parallelBranch = await page.locator('.orchestration-parallel-branch').evaluateAll(nodes => nodes.map(node => ({
-      role_ids: node.dataset.parallelRoleIds,
-      gate_id: node.dataset.parallelGateId,
-      labels: [...node.querySelectorAll('span,strong')].map(item => item.textContent.trim()),
-    })));
-    check('Stable flagship visibly proves the returned source/process fan-out and deterministic join gate', parallelBranch.length === 1 && stableJson(parallelBranch[0]) === stableJson({ role_ids: 'document_source_integrity,process_decision_mapping', gate_id: 'deterministic_process_gate', labels: ['Document and Source Integrity Agent', 'Process Decision Mapping Agent', 'Deterministic Process Contract Gate'] }), JSON.stringify(parallelBranch));
-    await page.locator('#teamTrace summary').click();
-    await screenshot('03-deterministic-accepted-artifact.png');
-    const traceProof = await page.locator('#teamTrace').evaluate(node => {
-      const modelRows = [...node.querySelectorAll('li[data-actor-type="nemotron_agent"][data-call-id]:not([data-call-id=""])')];
-      return {
-        model_call_ids: [...new Set(modelRows.map(item => item.dataset.callId))],
-        deterministic_gate_rows: node.querySelectorAll('li[data-actor-type="deterministic_gate"]').length,
-        warning_count: document.querySelectorAll('.orchestration-proof-warning').length,
-      };
-    });
-    check('Collapsed Team Trace expands to six distinct model calls and at least three deterministic receipts without missing-proof warnings', traceProof.model_call_ids.length === REQUIRED_NEMOTRON_AGENT_IDS.length && traceProof.deterministic_gate_rows >= REQUIRED_DETERMINISTIC_GATE_IDS.length && traceProof.warning_count === 0, JSON.stringify(traceProof));
-    await page.locator('#teamTrace summary').click();
-    await page.keyboard.press('Escape');
-    await waitHidden('#auditDrawer');
-  }
-  const isolatedRun = await getJsonForSession(`${API}/api/runs`, ISOLATION_SESSION_ID, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ claim_id: demo.demo_claim_id }) });
-  isolationMutated = true;
-  const isolatedRead = await awaitRunForSession(isolatedRun.run_id, ISOLATION_SESSION_ID);
-  retainedEvidence['isolation-run'] = isolatedRead;
-  const isolationLedger = await getJsonForSession(`${API}/api/model-ledger`, ISOLATION_SESSION_ID);
-  retainedEvidence['isolation-model-ledger'] = isolationLedger;
-  const isolationLedgerIssues = sanitizedLedgerViolations(isolationLedger);
-  check('Isolation cache ledger is public-safe and schema-bounded', isolationLedgerIssues.length === 0, JSON.stringify(isolationLedgerIssues));
-  if (isProductionJourney()) {
-    const warmIssues = orchestrationContractViolations(isolatedRead, 'warm', releaseContract.agentic_runtime.framework);
-    check('Post-flagship isolation run reuses all six accepted artifacts without a provider call', warmIssues.length === 0, JSON.stringify(warmIssues));
-    warmOrchestration = orchestrationAudit(isolatedRead);
-    const earlyLineage = warmLineageContractViolations(coldOrchestration, warmOrchestration, isolationLedger);
-    check('Isolation replay binds every warm call to the visible flagship cold origin', earlyLineage.issues.length === 0 && earlyLineage.lineage.length === REQUIRED_NEMOTRON_AGENT_IDS.length, JSON.stringify(earlyLineage));
-  }
-  const crossSessionRead = await fetch(`${API}/api/runs/${encodeURIComponent(isolatedRun.run_id)}`, { headers: { 'X-CasePath-Session': QA_SESSION_ID } });
-  check('Isolation run identifier is not readable from the browser session', crossSessionRead.status === 404, `status=${crossSessionRead.status}`);
-  const isolationReset = await getJsonForSession(`${API}/api/demo/reset`, ISOLATION_SESSION_ID, { method: 'POST' });
-  check('Isolation reset removes only its caller state and preserves the global model ledger', isolationReset.session_scope === 'caller_only' && isolationReset.removed?.runs >= 1 && isolationReset.model_ledger_preserved === true, JSON.stringify(isolationReset));
-  const isolationReadAfterReset = await fetch(`${API}/api/runs/${encodeURIComponent(isolatedRun.run_id)}`, { headers: { 'X-CasePath-Session': ISOLATION_SESSION_ID } });
-  const flagshipReadAfterIsolationReset = await getJson(`${API}/api/runs/${encodeURIComponent(flagshipRunId)}`);
-  check('Isolation reset removes its own run without disturbing the visible flagship', isolationReadAfterReset.status === 404 && flagshipReadAfterIsolationReset.run_id === flagshipRunId && flagshipReadAfterIsolationReset.status === 'complete', JSON.stringify({ isolation_status: isolationReadAfterReset.status, flagship: runProgressDiagnostic(flagshipReadAfterIsolationReset) }));
-  isolationMutated = false;
-  check('Uninterrupted journey rendered both process and evidence moments before stable review readiness', await page.evaluate(() => ['process', 'evidence', 'ready'].every(moment => window.__casepathMomentHistory.includes(moment))), JSON.stringify(await page.evaluate(() => window.__casepathMomentHistory)));
-  const presentationClarity = await page.evaluate(() => {
-    const timeline = window.__casepathPresentationTimeline || [];
-    const moments = ['read', 'understand', 'research', 'process', 'evidence', 'experience', 'verify'];
-    const issues = [];
-    for (const moment of moments) {
-      const workIndex = timeline.findIndex(frame => frame.moment === moment && frame.phase === 'working');
-      const artifactIndex = timeline.findIndex((frame, index) => index > workIndex && frame.moment === moment && frame.phase === 'artifact');
-      if (workIndex < 0 || artifactIndex < 0) {
-        issues.push(`${moment}: missing working or artifact frame`);
-        continue;
-      }
-      const concise = ['evidence', 'experience', 'verify'].includes(moment);
-      const minimumWorkMs = concise ? 500 : 2300;
-      const minimumArtifactMs = concise ? 800 : 5500;
-      const workMs = timeline[artifactIndex].at - timeline[workIndex].at;
-      if (workMs < minimumWorkMs) issues.push(`${moment}: working frame ${workMs.toFixed(0)}ms`);
-      const nextIndex = timeline.findIndex((frame, index) => index > artifactIndex && frame.moment !== moment && ['working', 'artifact', 'ready'].includes(frame.phase));
-      if (nextIndex >= 0) {
-        const artifactMs = timeline[nextIndex].at - timeline[artifactIndex].at;
-        if (artifactMs < minimumArtifactMs) issues.push(`${moment}: artifact frame ${artifactMs.toFixed(0)}ms`);
-      }
-    }
-    const visibleOrder = timeline.filter(frame => ['working', 'artifact', 'ready'].includes(frame.phase)).map(frame => `${frame.moment}:${frame.phase}`);
-    return { issues, visible_order: visibleOrder };
-  });
-  check('Every specialist chapter holds its work and produced artifact long enough to understand', presentationClarity.issues.length === 0, JSON.stringify(presentationClarity));
-  const graphSteps = await page.evaluate(() => window.__casepathGraphSteps || []);
-  const expectedSpineIds = routeStory.storyNodeIds;
-  const nodeSteps = graphSteps.filter(step => step.kind === 'node');
-  const branchSteps = graphSteps.filter(step => step.kind === 'branch');
-  const completeSteps = graphSteps.filter(step => step.kind === 'complete');
-  const graphStepIssues = [];
-  if (stableJson(nodeSteps.map(step => step.nodeId)) !== stableJson(expectedSpineIds)) graphStepIssues.push('node order does not equal returned main_spine');
-  if (nodeSteps.length !== expectedSpineIds.length || new Set(nodeSteps.map(step => step.nodeId)).size !== expectedSpineIds.length) graphStepIssues.push('node steps are absent or duplicated');
-  nodeSteps.forEach((step, index) => {
-    if (step.index !== index || step.total !== expectedSpineIds.length) graphStepIssues.push(`${step.nodeId}: index/total drift`);
-    if (step.buildingCount !== 1 || step.cursorTargetCount !== 1) graphStepIssues.push(`${step.nodeId}: focal-node count drift`);
-    if (!step.basisKinds.length || !step.basisKinds.every(kind => ['evidence', 'law', 'reasoning'].includes(kind))) graphStepIssues.push(`${step.nodeId}: provenance kinds absent or invalid`);
-    if (!step.basisKinds.includes('reasoning')) graphStepIssues.push(`${step.nodeId}: process rationale absent`);
-    if (step.basisKinds.includes('evidence') && !step.factIds.length) graphStepIssues.push(`${step.nodeId}: evidence without fact IDs`);
-    if (step.basisKinds.includes('law') && !step.lawIds.length) graphStepIssues.push(`${step.nodeId}: law without source IDs`);
-  });
-  const nodeStepHolds = nodeSteps.slice(1).map((step, index) => step.at - nodeSteps[index].at);
-  if (nodeStepHolds.some(value => value < MIN_PROCESS_NODE_STEP_MS)) graphStepIssues.push(`node hold ${JSON.stringify(nodeStepHolds)}`);
-  const expectedBranchStepIds = routeStory.selectedBranchTargetId ? [routeStory.selectedBranchTargetId] : [];
+    const isAttested = window.__casepathEvidenceAttestation?.isAttesë~5í¼­zÊ&ŠÛ^wetId ? [routeStory.selectedBranchTargetId] : [];
   if (stableJson(branchSteps.map(step => step.nodeId)) !== stableJson(expectedBranchStepIds) || completeSteps.length !== 1) graphStepIssues.push('selected branch or complete receipt does not match the returned route');
   if (branchSteps[0] && completeSteps[0] && completeSteps[0].at - branchSteps[0].at < MIN_PROCESS_BRANCH_HOLD_MS) graphStepIssues.push(`branch hold ${(completeSteps[0].at - branchSteps[0].at).toFixed(0)}ms`);
   const completedGraph = completeSteps[0];
@@ -7967,6 +7440,15 @@ async function runContractSelfTest() {
     || !liveRuntimeCss.includes('.live-chip[data-orchestration-mode="failed"]')) {
     throw new Error('Visible cached-replay or sanitized terminal-failure state contract is incomplete');
   }
+  const processStoryWatchdogFragments = [
+    "window.addEventListener('casepath:decision-flow-step', onProgress);",
+    "window.removeEventListener('casepath:decision-flow-step', onProgress);",
+    "if (String(event.detail?.runId || '') === runId) armTimeout();",
+    'window.clearTimeout(timeout);',
+  ];
+  if (!processStoryWatchdogFragments.every(fragment => liveRuntimeSource.includes(fragment))) {
+    throw new Error('Process-story watchdog does not rearm on same-run automatic decision-flow progress');
+  }
   const authoredFailureFragments = [
     'function terminalFailureFromRun(run)',
     'function stopActiveWorkForFailure()',
@@ -8623,7 +8105,6 @@ async function runContractSelfTest() {
   const decisionHighlightFixture = [];
   const decisionInteractionFixture = [];
   let decisionAt = 1000;
-  let decisionNoTimerProofAdded = false;
   for (const [nodeIndex, node] of decisionNodes.entries()) {
     const nodeFacts = decisionFactsForReturnedNode(decisionRunFixture, node);
     const blockedDownstream = BLOCKED_DOWNSTREAM_DECISION_IDS.includes(node.node_id);
@@ -8674,14 +8155,11 @@ async function runContractSelfTest() {
       waitingBasisVisible: blockedDownstream,
       waitingBasisText: blockedDownstream ? BLOCKED_DOWNSTREAM_WAITING_COPY[node.node_id] : '',
       readerControlCount: 0,
-      readerControlAdvance: '',
-      readerControlAccessibleName: '',
-      readerControlDisabled: false,
       nodeVisible: false,
       reducedMotion: false,
     };
     const accumulatedFactIds = [];
-    for (const [planIndex, plan] of plans.entries()) {
+    for (const plan of plans) {
       const basis = plan.basis;
       const replay = {
         ...common,
@@ -8694,26 +8172,11 @@ async function runContractSelfTest() {
       };
       decisionFlowFixture.push({ ...replay, phase: 'planned', progress: 0, planPhase: 'select-source', fragmentFactIds: [...accumulatedFactIds], progressVisible: true, at: decisionAt });
       decisionAt += 1500;
-      decisionFlowFixture.push({ ...replay, phase: 'source-opened', progress: 30, planPhase: 'read-source', fragmentFactIds: [...accumulatedFactIds], progressVisible: true, readerControlCount: 1, readerControlAdvance: 'highlight', readerControlAccessibleName: 'Highlight this evidence', at: decisionAt });
-      decisionInteractionFixture.push({
-        action: 'qa-reader-gate', nodeId: node.node_id, stepId: plan.stepId, phase: 'source-opened', advance: 'highlight',
-        controlCount: 1, accessibleName: 'Highlight this evidence', disabled: false, connectedBeforeClick: true,
-        visibleBeforeClick: true, connectedAfterClick: false, clickAttempts: 2, phaseStableBeforeClick: true,
-        provesNoTimerAdvance: false, heldMs: 120, reducedMotion: false,
-      });
-      decisionAt += 130;
+      decisionFlowFixture.push({ ...replay, phase: 'source-opened', progress: 30, planPhase: 'read-source', fragmentFactIds: [...accumulatedFactIds], progressVisible: true, at: decisionAt });
+      decisionAt += MIN_DECISION_SOURCE_PREVIEW_HOLD_MS + 10;
       plan.factIds.forEach(factId => { if (!accumulatedFactIds.includes(factId)) accumulatedFactIds.push(factId); });
-      const readerAdvance = planIndex === plans.length - 1 ? 'build' : 'continue';
-      decisionFlowFixture.push({ ...replay, phase: 'fragment-extracted', progress: 60, planPhase: 'highlight-source', fragmentFactIds: [...accumulatedFactIds], progressVisible: true, readerControlCount: 1, readerControlAdvance: readerAdvance, readerControlAccessibleName: 'Continue building', at: decisionAt });
-      const provesNoTimerAdvance = !decisionNoTimerProofAdded;
-      if (provesNoTimerAdvance) decisionNoTimerProofAdded = true;
-      decisionInteractionFixture.push({
-        action: 'qa-reader-gate', nodeId: node.node_id, stepId: plan.stepId, phase: 'fragment-extracted', advance: readerAdvance,
-        controlCount: 1, accessibleName: 'Continue building', disabled: false, connectedBeforeClick: true,
-        visibleBeforeClick: true, connectedAfterClick: false, clickAttempts: 2, phaseStableBeforeClick: true,
-        provesNoTimerAdvance, heldMs: provesNoTimerAdvance ? MIN_DECISION_READER_GATE_PROOF_MS + 100 : 120, reducedMotion: false,
-      });
-      decisionAt += 130;
+      decisionFlowFixture.push({ ...replay, phase: 'fragment-extracted', progress: 60, planPhase: 'highlight-source', fragmentFactIds: [...accumulatedFactIds], progressVisible: true, at: decisionAt });
+      decisionAt += MIN_DECISION_SOURCE_HOLD_MS + 10;
     }
     const terminal = (phase, progress, extra = {}) => {
       const modelDecisionPhase = Boolean(decisionSemantic) && ['combining', 'decision-ready'].includes(phase);
@@ -8733,7 +8196,7 @@ async function runContractSelfTest() {
       });
     };
     decisionFlowFixture.push(terminal('combining', 90)); decisionAt += MIN_DECISION_COMBINE_HOLD_MS + 10;
-    decisionFlowFixture.push(terminal('decision-ready', 100)); decisionAt += 1500;
+    decisionFlowFixture.push(terminal('decision-ready', 100)); decisionAt += MIN_DECISION_READY_HOLD_MS + 10;
     const receding = terminal('plan-receding', 100, { nodeVisible: false, progressVisible: false });
     decisionFlowFixture.push(receding); decisionAt += MIN_DECISION_PLAN_RECEDE_MS + 20;
     decisionFlowFixture.push(terminal('plan-receded', 100, { nodeVisible: false, progressVisible: false })); decisionAt += 10;
@@ -8741,28 +8204,31 @@ async function runContractSelfTest() {
     decisionAt += 1500;
   }
   if (decisionFlowContractViolations(decisionFlowFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).length) throw new Error(`Valid accepted-input decision-flow fixture was rejected: ${JSON.stringify(decisionFlowContractViolations(decisionFlowFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture))}`);
-  const missingReaderActionFixture = structuredClone(decisionFlowFixture);
-  const missingReaderAction = missingReaderActionFixture.find(step => step.phase === 'fragment-extracted');
-  Object.assign(missingReaderAction, { readerControlCount: 0, readerControlAdvance: '', readerControlAccessibleName: '' });
-  if (!decisionFlowContractViolations(missingReaderActionFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('one accessible continue action'))) throw new Error('Highlighted evidence without its explicit Continue action was accepted');
-  const autoAdvanceInteractionFixture = structuredClone(decisionInteractionFixture);
-  const noTimerInteraction = autoAdvanceInteractionFixture.find(item => item.provesNoTimerAdvance);
-  Object.assign(noTimerInteraction, { phaseStableBeforeClick: false, heldMs: 100 });
-  if (!decisionFlowContractViolations(decisionFlowFixture, decisionChangeFixture, decisionHighlightFixture, autoAdvanceInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('remain until the viewer continued'))) throw new Error('Timer-driven highlighted evidence advance was accepted');
-  const reusableReaderActionFixture = structuredClone(decisionInteractionFixture);
-  reusableReaderActionFixture[0].connectedAfterClick = true;
-  if (!decisionFlowContractViolations(decisionFlowFixture, decisionChangeFixture, decisionHighlightFixture, reusableReaderActionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('single-use'))) throw new Error('Reader Continue action that remained after activation was accepted');
-  const duplicateReaderPhaseFixture = structuredClone(decisionFlowFixture);
-  const firstExtractedIndex = duplicateReaderPhaseFixture.findIndex(step => step.phase === 'fragment-extracted');
-  duplicateReaderPhaseFixture.splice(firstExtractedIndex + 1, 0, structuredClone(duplicateReaderPhaseFixture[firstExtractedIndex]));
-  if (!decisionFlowContractViolations(duplicateReaderPhaseFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('incomplete or out of order'))) throw new Error('Double-click duplicate decision phase was accepted');
+  const rushedSourcePreviewFixture = structuredClone(decisionFlowFixture);
+  const rushedPreviewOpened = rushedSourcePreviewFixture.find(step => step.phase === 'source-opened');
+  const rushedPreviewHighlight = rushedSourcePreviewFixture.find(step => step.nodeId === rushedPreviewOpened.nodeId && step.stepId === rushedPreviewOpened.stepId && step.phase === 'fragment-extracted');
+  rushedPreviewHighlight.at = rushedPreviewOpened.at + MIN_DECISION_SOURCE_PREVIEW_HOLD_MS - 1;
+  if (!decisionFlowContractViolations(rushedSourcePreviewFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('exact source is not readable'))) throw new Error('Rushed exact-source preview was accepted');
+  const rushedHighlightFixture = structuredClone(decisionFlowFixture);
+  const intakeHighlights = rushedHighlightFixture.filter(step => step.nodeId === 'intake' && step.phase === 'fragment-extracted');
+  const rushedHighlight = intakeHighlights.reduce((latest, step) => step.at > latest.at ? step : latest);
+  const rushedHighlightNext = rushedHighlightFixture.filter(step => step.nodeId === rushedHighlight.nodeId && step.at > rushedHighlight.at).sort((left, right) => left.at - right.at)[0];
+  rushedHighlightNext.at = rushedHighlight.at + MIN_DECISION_SOURCE_HOLD_MS - 1;
+  if (!decisionFlowContractViolations(rushedHighlightFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('accepted input is not readable'))) throw new Error('Rushed highlighted passage was accepted');
+  const readerControlFixture = structuredClone(decisionFlowFixture);
+  readerControlFixture.find(step => step.phase === 'source-opened').readerControlCount = 1;
+  if (!decisionFlowContractViolations(readerControlFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('viewer-facing reader control'))) throw new Error('Automatic decision replay with a reader CTA was accepted');
   const rushedDecisionFixture = structuredClone(decisionFlowFixture);
   const rushedCombining = rushedDecisionFixture.find(step => step.phase === 'combining');
   const rushedReady = rushedDecisionFixture.find(step => step.nodeId === rushedCombining.nodeId && step.phase === 'decision-ready');
   rushedReady.at = rushedCombining.at + MIN_DECISION_COMBINE_HOLD_MS - 1;
   if (!decisionFlowContractViolations(rushedDecisionFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('decision is formed'))) throw new Error('Rushed source-to-decision formation was accepted');
+  const rushedReadyHoldFixture = structuredClone(decisionFlowFixture);
+  const rushedReadyState = rushedReadyHoldFixture.find(step => step.phase === 'decision-ready');
+  const rushedRecedingState = rushedReadyHoldFixture.find(step => step.nodeId === rushedReadyState.nodeId && step.phase === 'plan-receding');
+  rushedRecedingState.at = rushedReadyState.at + MIN_DECISION_READY_HOLD_MS - 1;
+  if (!decisionFlowContractViolations(rushedReadyHoldFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('completed decision does not remain readable'))) throw new Error('Rushed completed-decision hold was accepted');
   const reducedMotionDecisionFixture = structuredClone(decisionFlowFixture).map(step => ({ ...step, reducedMotion: true }));
-  const reducedMotionDecisionInteractionFixture = structuredClone(decisionInteractionFixture).map(item => ({ ...item, reducedMotion: true }));
   const reducedMotionChangeFixture = structuredClone(decisionChangeFixture);
   reducedMotionChangeFixture.forEach(change => {
     const receding = reducedMotionDecisionFixture.find(step => step.nodeId === change.entityId && step.phase === 'plan-receding');
@@ -8770,13 +8236,9 @@ async function runContractSelfTest() {
     receded.at = receding.at;
     change.at = receded.at;
   });
-  if (decisionFlowContractViolations(reducedMotionDecisionFixture, reducedMotionChangeFixture, decisionHighlightFixture, reducedMotionDecisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).length) throw new Error(`Reduced-motion semantic decision sequence was rejected: ${JSON.stringify(decisionFlowContractViolations(reducedMotionDecisionFixture, reducedMotionChangeFixture, decisionHighlightFixture, reducedMotionDecisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture))}`);
-  const reducedMotionMissingReaderGateFixture = structuredClone(reducedMotionDecisionFixture);
-  const reducedMotionMissingReaderGate = reducedMotionMissingReaderGateFixture.find(step => step.phase === 'source-opened');
-  Object.assign(reducedMotionMissingReaderGate, { readerControlCount: 0, readerControlAdvance: '', readerControlAccessibleName: '' });
-  if (!decisionFlowContractViolations(reducedMotionMissingReaderGateFixture, reducedMotionChangeFixture, decisionHighlightFixture, reducedMotionDecisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('accessible highlight action'))) throw new Error('Reduced-motion sequence without its manual reader gate was accepted');
+  if (decisionFlowContractViolations(reducedMotionDecisionFixture, reducedMotionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).length) throw new Error(`Reduced-motion semantic decision sequence was rejected: ${JSON.stringify(decisionFlowContractViolations(reducedMotionDecisionFixture, reducedMotionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture))}`);
   const reducedMotionMissingHighlightFixture = reducedMotionDecisionFixture.filter((step, index) => index !== reducedMotionDecisionFixture.findIndex(item => item.phase === 'fragment-extracted'));
-  if (!decisionFlowContractViolations(reducedMotionMissingHighlightFixture, reducedMotionChangeFixture, decisionHighlightFixture, reducedMotionDecisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('sequentially') || issue.includes('incomplete or out of order'))) throw new Error('Reduced-motion sequence without a highlighted passage was accepted');
+  if (!decisionFlowContractViolations(reducedMotionMissingHighlightFixture, reducedMotionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('sequentially') || issue.includes('incomplete or out of order'))) throw new Error('Reduced-motion sequence without a highlighted passage was accepted');
   const fakeSourceDecisionFixture = structuredClone(decisionFlowFixture);
   const intakePlan = fakeSourceDecisionFixture.find(step => step.nodeId === 'intake' && step.phase === 'planned');
   Object.assign(intakePlan, { stepKind: 'source', stepId: 'source:message', sourceId: 'message' });
