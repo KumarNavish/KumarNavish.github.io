@@ -1,0 +1,108 @@
+name: Publish exact CasePath API image
+
+on:
+  push:
+    branches:
+      - codex/casepath-image-4f7f07d
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: casepath-api-image-4f7f07d
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      SOURCE_SHA: 4f7f07d653379aa97a8574788c6df20d336d8ce5
+      IMAGE: ghcr.io/kumarnavish/casepath-agentic-api
+      IMAGE_TAG: sha-4f7f07d653379aa97a8574788c6df20d336d8ce5
+    steps:
+      - name: Check out exact accepted source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.SOURCE_SHA }}
+          path: source
+          persist-credentials: false
+
+      - name: Verify exact source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C source rev-parse HEAD)" = "$SOURCE_SHA"
+          test -z "$(git -C source status --porcelain --untracked-files=normal)"
+
+      - name: Define immutable runtime image
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > source/.casepath-runtime.Dockerfile <<'DOCKERFILE'
+          FROM --platform=linux/amd64 python:3.13.9-slim-bookworm@sha256:8cdd496996889eef0a8a7921c152c0a4a9f18a26c7a5e7257d3c90b431891894
+
+          ENV PYTHONDONTWRITEBYTECODE=1 \
+              PYTHONUNBUFFERED=1 \
+              SOURCE_DATE_EPOCH=1786406400 \
+              CASEPATH_SOURCE_COMMIT=4f7f07d653379aa97a8574788c6df20d336d8ce5
+          WORKDIR /app
+          COPY . /app
+          RUN bash casepath-api/render-build.sh \
+              && rm -rf /root/.cache /tmp/casepath-build.*
+          RUN useradd --system --uid 10001 --create-home casepath \
+              && chown -R casepath:casepath /app
+          USER 10001
+          EXPOSE 10000
+          CMD ["bash", "casepath-api/start.sh"]
+          DOCKERFILE
+          cat > source/.dockerignore <<'DOCKERIGNORE'
+          .git
+          .github
+          dist
+          __pycache__
+          .pytest_cache
+          *.pyc
+          DOCKERIGNORE
+
+      - name: Authenticate to GHCR
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
+
+      - name: Build and publish immutable image
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref="$IMAGE:$IMAGE_TAG"
+          docker build \
+            --platform linux/amd64 \
+            --file source/.casepath-runtime.Dockerfile \
+            --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+            --label "org.opencontainers.image.revision=$SOURCE_SHA" \
+            --label "org.opencontainers.image.version=$IMAGE_TAG" \
+            --tag "$ref" \
+            source
+          docker push "$ref" | tee /tmp/casepath-image-push.log
+          digest="$(awk '/digest: sha256:/ {print $3}' /tmp/casepath-image-push.log | tail -1)"
+          test "${digest#sha256:}" != "$digest"
+          image_ref="$ref@$digest"
+          printf '%s\n' "$image_ref" | tee /tmp/casepath-image-ref.txt
+          {
+            echo '### Exact CasePath API image'
+            echo
+            echo '`'"$image_ref"'`'
+            echo
+            echo "Canonical source: \`$SOURCE_SHA\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify anonymous immutable pull
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_ref="$(cat /tmp/casepath-image-ref.txt)"
+          docker logout ghcr.io
+          docker manifest inspect "$image_ref" >/dev/null
+          test "$(docker manifest inspect "$image_ref" | python -c 'import json,sys; print(json.load(sys.stdin)["schemaVersion"])')" = "2"
