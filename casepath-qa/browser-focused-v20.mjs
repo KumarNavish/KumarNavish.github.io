@@ -192,7 +192,9 @@ const EXPECTED_LATER_MEMORY_DELTA = Object.freeze({
   ],
   evidenceIds: ['building_envelope', 'management_position', 'use_evidence'],
 });
-const MIN_DECISION_SOURCE_HOLD_MS = 1400;
+const MIN_DECISION_SOURCE_PREVIEW_HOLD_MS = 1100;
+const MIN_DECISION_SOURCE_HOLD_MS = 3100;
+const MIN_DECISION_COMBINE_HOLD_MS = 1400;
 const MIN_DECISION_PLAN_RECEDE_MS = 170;
 const SOURCE_PRELUDE_ICON_KINDS = Object.freeze([
   'message',
@@ -3849,6 +3851,7 @@ function decisionFlowContractViolations(steps, nodeChanges, highlights, interact
   storyNodeIds.forEach(nodeId => {
     const node = returnedNodes.get(nodeId);
     const events = relevantSteps.filter(step => step.nodeId === nodeId);
+    const reducedMotion = events.length > 0 && events.every(event => event.reducedMotion === true);
     const planned = events.filter(step => step.phase === 'planned');
     const change = (nodeChanges || []).find(item => item.entityId === nodeId);
     const structureSemantic = semanticByEntity.get(`process_node:${nodeId}`);
@@ -3931,6 +3934,9 @@ function decisionFlowContractViolations(steps, nodeChanges, highlights, interact
         issues.push(`${nodeId}:${plan.stepId}: accepted input is not replayed sequentially`);
         return;
       }
+      if (extracted.at - opened.at < MIN_DECISION_SOURCE_PREVIEW_HOLD_MS) {
+        issues.push(`${nodeId}:${plan.stepId}: exact source is not readable before its passage is highlighted`);
+      }
       if (plan.realArtifactVisible || opened.realArtifactVisible || extracted.realArtifactVisible
         || plan.sourceRowActive || opened.sourceRowActive || extracted.sourceRowActive
         || plan.activeSourceIds.length || opened.activeSourceIds.length || extracted.activeSourceIds.length
@@ -3974,10 +3980,13 @@ function decisionFlowContractViolations(steps, nodeChanges, highlights, interact
       || combining.combineState !== 'combining' || stableJson(combining.fragmentFactIds) !== stableJson(expectedFactIds)))) {
       issues.push(`${nodeId}: accepted facts are not visibly combined exactly once`);
     }
+    if (!combining || !ready || ready.at - combining.at < MIN_DECISION_COMBINE_HOLD_MS) {
+      issues.push(`${nodeId}: source highlights do not remain visible while the decision is formed`);
+    }
     if (!ready || ready.progress !== 100 || !ready.progressVisible) issues.push(`${nodeId}: decision indicator does not semantically reach completion without showing a numeric percentage`);
     if (!receding || receding.progressVisible || receding.planPhase !== 'receding' || receding.nodeVisible) issues.push(`${nodeId}: progress is not hidden while the live plan recedes before node creation`);
     if (!receded || receded.progressVisible || receded.planPhase !== 'receded' || receded.nodeVisible) issues.push(`${nodeId}: live plan does not finish receding before node creation`);
-    if (!change || !receding || change.at - receding.at < MIN_DECISION_PLAN_RECEDE_MS
+    if (!change || !receding || (!reducedMotion && change.at - receding.at < MIN_DECISION_PLAN_RECEDE_MS)
       || !receded || change.at < receded.at || change.eventId !== structureSemantic.eventId || change.agentId
       || change.indicatorVisible || change.planVisible || change.decisionFlowState !== 'idle'
       || !change.outputVisible || !change.graphVisible) issues.push(`${nodeId}: accepted node appears before progress and plan have cleared`);
@@ -5243,6 +5252,7 @@ async function execute() {
         basisLocatorId: workspace?.querySelector('[data-source-locator-id]')?.dataset.sourceLocatorId || '',
         officialLawId: workspace?.querySelector('[data-law-id]')?.dataset.lawId || '',
         sourceAuthority: workspace?.querySelector('[data-source-authority]')?.dataset.sourceAuthority || '',
+        reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true,
         progressVisible: progress.indicatorVisible === true,
         nodeVisible: node?.dataset.revealState === 'visible' && visible(node),
         at: performance.now(),
@@ -6083,7 +6093,7 @@ async function execute() {
   const decisionFlowSteps = await page.evaluate(() => window.__casepathDecisionFlowSteps || []);
   const artifactInteractions = await page.evaluate(() => window.__casepathArtifactInteractions || []);
   const decisionFlowIssues = decisionFlowContractViolations(decisionFlowSteps, processArtifactChanges, sourceHighlights, artifactInteractions, processRun, semanticEvents, routeStory.storyNodeIds);
-  check('The visible graph replays accepted facts and checked law without inventing new source reads, then clears its plan before each node', decisionFlowIssues.length === 0, JSON.stringify({ contract: DECISION_FLOW_CONTRACT, decisionFlowSteps, decisionFlowIssues }));
+  check('The graph holds each accepted source basis, keeps its highlighted passage readable, forms the decision, and only then commits the node', decisionFlowIssues.length === 0, JSON.stringify({ contract: DECISION_FLOW_CONTRACT, decisionFlowSteps, decisionFlowIssues }));
   const notificationDecisionSteps = decisionFlowSteps.filter(step => step.nodeId === NOTIFICATION_DECISION_NODE_ID);
   check('Landlord notification appears only when it belongs to the returned route story, with its accepted fact and checked law trace', routeStory.storyNodeIds.includes(NOTIFICATION_DECISION_NODE_ID)
     ? !decisionFlowIssues.some(issue => /notification/i.test(issue)) && notificationDecisionSteps.length > 0
@@ -8571,6 +8581,7 @@ async function runContractSelfTest() {
       waitingBasisVisible: blockedDownstream,
       waitingBasisText: blockedDownstream ? BLOCKED_DOWNSTREAM_WAITING_COPY[node.node_id] : '',
       nodeVisible: false,
+      reducedMotion: false,
     };
     const accumulatedFactIds = [];
     for (const plan of plans) {
@@ -8587,10 +8598,10 @@ async function runContractSelfTest() {
       decisionFlowFixture.push({ ...replay, phase: 'planned', progress: 0, planPhase: 'select-source', fragmentFactIds: [...accumulatedFactIds], progressVisible: true, at: decisionAt });
       decisionAt += 1500;
       decisionFlowFixture.push({ ...replay, phase: 'source-opened', progress: 30, planPhase: 'read-source', fragmentFactIds: [...accumulatedFactIds], progressVisible: true, at: decisionAt });
-      decisionAt += 1500;
+      decisionAt += MIN_DECISION_SOURCE_PREVIEW_HOLD_MS + 10;
       plan.factIds.forEach(factId => { if (!accumulatedFactIds.includes(factId)) accumulatedFactIds.push(factId); });
       decisionFlowFixture.push({ ...replay, phase: 'fragment-extracted', progress: 60, planPhase: 'highlight-source', fragmentFactIds: [...accumulatedFactIds], progressVisible: true, at: decisionAt });
-      decisionAt += 1500;
+      decisionAt += MIN_DECISION_SOURCE_HOLD_MS + 10;
     }
     const terminal = (phase, progress, extra = {}) => {
       const modelDecisionPhase = Boolean(decisionSemantic) && ['combining', 'decision-ready'].includes(phase);
@@ -8609,7 +8620,7 @@ async function runContractSelfTest() {
         ...extra,
       });
     };
-    decisionFlowFixture.push(terminal('combining', 90)); decisionAt += 1500;
+    decisionFlowFixture.push(terminal('combining', 90)); decisionAt += MIN_DECISION_COMBINE_HOLD_MS + 10;
     decisionFlowFixture.push(terminal('decision-ready', 100)); decisionAt += 1500;
     const receding = terminal('plan-receding', 100, { nodeVisible: false, progressVisible: false });
     decisionFlowFixture.push(receding); decisionAt += MIN_DECISION_PLAN_RECEDE_MS + 20;
@@ -8618,6 +8629,33 @@ async function runContractSelfTest() {
     decisionAt += 1500;
   }
   if (decisionFlowContractViolations(decisionFlowFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).length) throw new Error(`Valid accepted-input decision-flow fixture was rejected: ${JSON.stringify(decisionFlowContractViolations(decisionFlowFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture))}`);
+  const rushedSourcePreviewFixture = structuredClone(decisionFlowFixture);
+  const rushedPreviewOpened = rushedSourcePreviewFixture.find(step => step.phase === 'source-opened');
+  const rushedPreviewHighlight = rushedSourcePreviewFixture.find(step => step.nodeId === rushedPreviewOpened.nodeId && step.stepId === rushedPreviewOpened.stepId && step.phase === 'fragment-extracted');
+  rushedPreviewHighlight.at = rushedPreviewOpened.at + MIN_DECISION_SOURCE_PREVIEW_HOLD_MS - 1;
+  if (!decisionFlowContractViolations(rushedSourcePreviewFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('exact source is not readable'))) throw new Error('Rushed exact-source preview was accepted');
+  const rushedHighlightFixture = structuredClone(decisionFlowFixture);
+  const intakeHighlights = rushedHighlightFixture.filter(step => step.nodeId === 'intake' && step.phase === 'fragment-extracted');
+  const rushedHighlight = intakeHighlights.reduce((latest, step) => step.at > latest.at ? step : latest);
+  const rushedHighlightNext = rushedHighlightFixture.filter(step => step.nodeId === rushedHighlight.nodeId && step.at > rushedHighlight.at).sort((left, right) => left.at - right.at)[0];
+  rushedHighlightNext.at = rushedHighlight.at + MIN_DECISION_SOURCE_HOLD_MS - 1;
+  if (!decisionFlowContractViolations(rushedHighlightFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('accepted input is not readable'))) throw new Error('Rushed highlighted passage was accepted');
+  const rushedDecisionFixture = structuredClone(decisionFlowFixture);
+  const rushedCombining = rushedDecisionFixture.find(step => step.phase === 'combining');
+  const rushedReady = rushedDecisionFixture.find(step => step.nodeId === rushedCombining.nodeId && step.phase === 'decision-ready');
+  rushedReady.at = rushedCombining.at + MIN_DECISION_COMBINE_HOLD_MS - 1;
+  if (!decisionFlowContractViolations(rushedDecisionFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('decision is formed'))) throw new Error('Rushed source-to-decision formation was accepted');
+  const reducedMotionDecisionFixture = structuredClone(decisionFlowFixture).map(step => ({ ...step, reducedMotion: true }));
+  const reducedMotionChangeFixture = structuredClone(decisionChangeFixture);
+  reducedMotionChangeFixture.forEach(change => {
+    const receding = reducedMotionDecisionFixture.find(step => step.nodeId === change.entityId && step.phase === 'plan-receding');
+    const receded = reducedMotionDecisionFixture.find(step => step.nodeId === change.entityId && step.phase === 'plan-receded');
+    receded.at = receding.at;
+    change.at = receded.at;
+  });
+  if (decisionFlowContractViolations(reducedMotionDecisionFixture, reducedMotionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).length) throw new Error(`Reduced-motion semantic decision sequence was rejected: ${JSON.stringify(decisionFlowContractViolations(reducedMotionDecisionFixture, reducedMotionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture))}`);
+  const reducedMotionMissingHighlightFixture = reducedMotionDecisionFixture.filter((step, index) => index !== reducedMotionDecisionFixture.findIndex(item => item.phase === 'fragment-extracted'));
+  if (!decisionFlowContractViolations(reducedMotionMissingHighlightFixture, reducedMotionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('sequentially') || issue.includes('incomplete or out of order'))) throw new Error('Reduced-motion sequence without a highlighted passage was accepted');
   const fakeSourceDecisionFixture = structuredClone(decisionFlowFixture);
   const intakePlan = fakeSourceDecisionFixture.find(step => step.nodeId === 'intake' && step.phase === 'planned');
   Object.assign(intakePlan, { stepKind: 'source', stepId: 'source:message', sourceId: 'message' });

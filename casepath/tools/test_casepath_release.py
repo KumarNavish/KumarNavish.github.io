@@ -571,8 +571,13 @@ def test_process_decisions_integrate_exact_sources_law_and_node_commit() -> None
     assert "emitInteraction('confirm-source', inspectionTarget)" in canvas
     assert "casepath:source-highlighted" in canvas
     assert "casepath:decision-flow-step" in canvas
-    assert "const DECISION_SOURCE_HOLD_MS = 1500;" in canvas
-    assert "const MIN_DECISION_SOURCE_HOLD_MS = 1400;" in browser_gate
+    assert "const DECISION_SOURCE_PREVIEW_HOLD_MS = 1200;" in canvas
+    assert "const DECISION_SOURCE_HOLD_MS = 3200;" in canvas
+    assert "const DECISION_SOURCE_MAX_HOLD_MS = 5200;" in canvas
+    assert "const DECISION_COMBINE_HOLD_MS = 1500;" in canvas
+    assert "const MIN_DECISION_SOURCE_PREVIEW_HOLD_MS = 1100;" in browser_gate
+    assert "const MIN_DECISION_SOURCE_HOLD_MS = 3100;" in browser_gate
+    assert "const MIN_DECISION_COMBINE_HOLD_MS = 1400;" in browser_gate
     assert "Numeric progress remains machine-readable only." in canvas_css
     assert ".casepath-artifact-canvas .ac-process-node-progress{\n  display:none!important;" in canvas_css
     assert '.ac-agent-cursor[data-process-node-progress="active"]>.ac-cursor-role-icon:after' in canvas_css
@@ -645,6 +650,47 @@ def test_process_decisions_integrate_exact_sources_law_and_node_commit() -> None
     assert "Accepted node with a lingering plan was accepted" in browser_gate
     assert "Blocked downstream decision without its waiting basis was accepted" in browser_gate
     assert "function factSourceCinematicContractViolations" not in browser_gate
+
+
+def test_decision_pacing_keeps_source_highlight_reasoning_and_node_legible() -> None:
+    repository = release_tool.REPOSITORY
+    canvas = (repository / "casepath" / "assets" / "artifact-canvas.js").read_text(
+        encoding="utf-8"
+    )
+    canvas_css = (
+        repository / "casepath" / "assets" / "artifact-canvas.css"
+    ).read_text(encoding="utf-8")
+    browser_gate = (
+        repository / "casepath-qa" / "browser-focused-v20.mjs"
+    ).read_text(encoding="utf-8")
+
+    assert "function decisionSourceHoldMs(...values)" in canvas
+    assert "function decisionCombineHoldMs(stepCount, fragmentCount)" in canvas
+    assert "const sourceHoldMs = decisionSourceHoldMs(" in canvas
+    assert "}, sourceHoldMs);" in canvas
+    assert "const settleDelayMs = isDecisionSourceReading" in canvas
+    assert "const baseSettleDelayMs = REDUCED_MOTION ? 0 : CURSOR_SETTLE_MS;" in canvas
+    assert "? DECISION_SOURCE_PREVIEW_HOLD_MS + baseSettleDelayMs" in canvas
+    assert "? decisionCombineHoldMs(steps.length, state.decisionFlowFragments.length)" in canvas
+    assert "const expectedPhases = planned.flatMap(() => ['planned', 'source-opened', 'fragment-extracted'])" in browser_gate
+    assert "MIN_DECISION_SOURCE_PREVIEW_HOLD_MS" in browser_gate
+    assert "MIN_DECISION_SOURCE_HOLD_MS" in browser_gate
+    assert "MIN_DECISION_COMBINE_HOLD_MS" in browser_gate
+    assert "exact source is not readable before its passage is highlighted" in browser_gate
+    assert "source highlights do not remain visible while the decision is formed" in browser_gate
+    assert "keeps its highlighted passage readable, forms the decision, and only then commits the node" in browser_gate
+    assert "Rushed exact-source preview was accepted" in browser_gate
+    assert "Rushed highlighted passage was accepted" in browser_gate
+    assert "Rushed source-to-decision formation was accepted" in browser_gate
+    assert "Reduced-motion semantic decision sequence was rejected" in browser_gate
+    assert "Reduced-motion sequence without a highlighted passage was accepted" in browser_gate
+    assert "reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true" in browser_gate
+    assert '--ac-decision-chapter:"1 of 3  ·  Read the exact source"' in canvas_css
+    assert '--ac-decision-chapter:"2 of 3  ·  Keep only what the source proves"' in canvas_css
+    assert '--ac-decision-chapter:"3 of 3  ·  Form the decision"' in canvas_css
+    assert '--ac-decision-chapter:"Decision ready  ·  Add the grounded node"' in canvas_css
+    assert "@media(prefers-reduced-motion:reduce)" in canvas_css
+    assert "animation:none!important;" in canvas_css
 
 
 def test_opening_claim_card_is_compact_and_source_derived() -> None:
@@ -828,8 +874,8 @@ def test_flagship_surface_is_one_persistent_source_plus_artifact_canvas() -> Non
     assert 'href="http://127.0.0.1:4173/?ui=final"' in index
     assert "python3 -m http.server 4173 --bind 127.0.0.1 --directory casepath" in index
     assert "Claim sources are still loading." in runtime
-    assert "assets/artifact-canvas.css?v=1.0.52" in index
-    assert "assets/artifact-canvas.js?v=1.0.67" in index
+    assert "assets/artifact-canvas.css?v=1.0.53" in index
+    assert "assets/artifact-canvas.js?v=1.0.68" in index
     assert "state.moment === 'understand' && state.factTourRunning" in canvas
     assert "finishFactSourceTour(items);" in canvas
     assert "return factSourceStageMarkup(copy);" in canvas
@@ -901,7 +947,7 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "setAttribute('aria-current', 'step')" in canvas
     assert "tabIndex = state.visibleNodeIds.has(node.node_id) ? 0 : -1" in canvas
     assert 'aria-hidden="true" focusable="false" data-ac-spatial-edges' in canvas
-    assert "const GRAPH_NODE_DWELL_MS = 550;" in canvas
+    assert "const GRAPH_NODE_DWELL_MS = 900;" in canvas
     assert "const GRAPH_SOURCE_DWELL_MS = 1900;" in canvas
     assert "const GRAPH_BRANCH_SOURCE_DWELL_MS = 1900;" in canvas
     assert "casepath.process-node-progress/1.0.0" in canvas
