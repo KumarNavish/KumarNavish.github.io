@@ -543,6 +543,11 @@ def test_process_decisions_integrate_exact_sources_law_and_node_commit() -> None
     assert "const steps = nodeDecisionTrace(node);" in canvas
     assert "stepKind: 'accepted-fact'" in canvas
     assert "stepKind: 'accepted-law'" in canvas
+    assert "function carriedAcceptedFactSourceMarkup(fact, ref)" in canvas
+    assert "Source already checked · carried forward with this fact" in canvas
+    assert 'data-carried-source-locator-id' in canvas
+    assert ".ac-carried-source-highlight" in canvas_css
+    assert ".ac-decision-basis.has-verified-source" in canvas_css
     assert "presentationMode: 'returned-action-replay'" in canvas
     assert "decisionModelContributionAccepted" in canvas
     assert "basisEventId" in canvas
@@ -584,6 +589,8 @@ def test_process_decisions_integrate_exact_sources_law_and_node_commit() -> None
     assert "Numeric progress remains machine-readable only." in canvas_css
     assert ".casepath-artifact-canvas .ac-process-node-progress{\n  display:none!important;" in canvas_css
     assert '.ac-agent-cursor[data-process-node-progress="active"]>.ac-cursor-role-icon:after' in canvas_css
+    assert '.casepath-artifact-canvas[data-graph-inspecting="true"] .ac-agent-cursor{' in canvas_css
+    assert 'height:78%;\n  background:linear-gradient(to bottom' in canvas_css
     complete_start = canvas.index("      const completeDecision = () => {")
     complete_end = canvas.index("      const prepareStep = index => {", complete_start)
     complete_flow = canvas[complete_start:complete_end]
@@ -890,8 +897,8 @@ def test_flagship_surface_is_one_persistent_source_plus_artifact_canvas() -> Non
     assert 'href="http://127.0.0.1:4173/?ui=final"' in index
     assert "python3 -m http.server 4173 --bind 127.0.0.1 --directory casepath" in index
     assert "Claim sources are still loading." in runtime
-    assert "assets/artifact-canvas.css?v=1.0.56" in index
-    assert "assets/artifact-canvas.js?v=1.0.71" in index
+    assert "assets/artifact-canvas.css?v=1.0.57" in index
+    assert "assets/artifact-canvas.js?v=1.0.72" in index
     assert "state.moment === 'understand' && state.factTourRunning" in canvas
     assert "finishFactSourceTour(items);" in canvas
     assert "return factSourceStageMarkup(copy);" in canvas
@@ -902,7 +909,8 @@ def test_flagship_surface_is_one_persistent_source_plus_artifact_canvas() -> Non
         "facts", "orchestrator", "sources", "process", "evidence", "audit",
     ))
     assert "const SOURCE_TYPE_ICONS = Object.freeze({" in canvas
-    assert "const sourceCount = artifacts.length + 1;" in canvas
+    assert "const staticAttachmentCount = document.querySelectorAll('.attachment-row[data-artifact-id]').length;" in canvas
+    assert "const sourceCount = (artifacts.length || staticAttachmentCount) + 1;" in canvas
     assert 'class="ac-source-prelude-plan"' in canvas
     assert "ac-source-prelude-strip" not in canvas[canvas.index("  function sourcePreludeMarkup("):canvas.index("\n  function sourceTrailKind(")]
     assert 'data-source-exact-control="true"' in canvas
@@ -1718,15 +1726,69 @@ def test_first_paint_contains_the_complete_flagship_claim_shell() -> None:
     )
     assert 'class="v20-source-skeleton" aria-hidden="true" hidden' in index
     assert 'class="v20-attachment-skeleton" aria-hidden="true" hidden' in index
+    wake_start = index.index("// Begin the read-only demo hydration")
+    wake_script = index[wake_start : index.index("</script>", wake_start)]
+    assert "window.__CASEPATH_DEMO_REQUEST = fetch" in wake_script
+    assert "}/api/demo`" in wake_script
+    assert "'X-CasePath-Session': sessionId" in wake_script
+    assert ".catch(() => null)" in wake_script
+    assert "await " not in wake_script
+    assert index.index("// Begin the read-only demo hydration") < index.index(
+        'rel="stylesheet"'
+    )
+
+    request_start = renderer.index("  function requestDemo()")
+    request_end = renderer.index("\n  function beginStartupNotice", request_start)
+    request_source = renderer[request_start:request_end]
+    assert "if (!demoRequest)" in request_source
+    assert "window.__CASEPATH_DEMO_REQUEST" in request_source
+    assert ".then(demo => demo || api('/api/demo'))" in request_source
+    assert "demoRequest = null;" in request_source
+    assert renderer.count("api('/api/demo')") == 1
+
     boot_start = renderer.index("  async function boot()")
     boot_end = renderer.index("\n  function renderClaim", boot_start)
     boot_source = renderer[boot_start:boot_end]
     assert boot_source.index("bindGlobalInteractions();") < boot_source.index(
-        "const demo = await api('/api/demo');"
+        "const demo = await requestDemo();"
+    )
+    assert boot_source.index("$('#runCasePath').disabled = false;") < boot_source.index(
+        "const demo = await requestDemo();"
     )
     assert "$('#runCasePath').disabled = false;" in boot_source
     assert "if (state.starting || state.journey !== 'start') return;" in boot_source
     assert "state.polling || state.starting || state.journey !== 'start'" in renderer
+
+    start_run_start = renderer.index("  async function startFlagshipRun()")
+    start_run_end = renderer.index("\n  function parseSseFrames", start_run_start)
+    start_run_source = renderer[start_run_start:start_run_end]
+    before_first_await = start_run_source.split("await ", 1)[0]
+    assert "$('#startState').hidden = true;" in before_first_await
+    assert "$('#liveWorkspace').hidden = false;" in before_first_await
+    assert "document.body.dataset.casepathStartup = 'waking';" in before_first_await
+    assert "setOrchestrator('Preparing the source-grounded review');" in before_first_await
+    assert "beginStartupNotice();" in before_first_await
+    assert "state.demo = state.demo || await requestDemo();" in start_run_source
+
+    notice_start = renderer.index("  function beginStartupNotice()")
+    notice_end = renderer.index("\n  function endStartupNotice", notice_start)
+    notice_source = renderer[notice_start:notice_end]
+    assert "setTimeout(() =>" in notice_source
+    assert "}, 2400);" in notice_source
+    assert (
+        "First visit: waking the secure analysis service · sources remain available"
+        in notice_source
+    )
+
+    rollback_source = start_run_source[start_run_source.index("    } catch (error) {") :]
+    assert "state.starting = false;" in rollback_source
+    assert "endStartupNotice();" in rollback_source
+    assert "delete document.body.dataset.casepathStartup;" in rollback_source
+    assert "$('#startState').hidden = false;" in rollback_source
+    assert "$('#liveWorkspace').hidden = true;" in rollback_source
+    assert "button.disabled = false;" in rollback_source
+    assert "button.querySelector('span').textContent = 'Analyse claim';" in rollback_source
+    assert "toast(`Could not start: ${error.message}`);" in rollback_source
     assert "const starting = /Opening the claim context/i.test" in focus_renderer
     assert "if (!starting && button.disabled === ready)" in focus_renderer
 
@@ -9557,7 +9619,7 @@ def test_handoff_continuity_uses_structured_moments_without_translucent_text() -
         encoding="utf-8"
     )
     assert 'assets/live-v17-continuity.css?v=20.0.0' in index
-    assert 'assets/live-v16.js?v=20.0.36' in index
+    assert 'assets/live-v16.js?v=20.0.37' in index
     live_runtime = (
         release_tool.REPOSITORY / "casepath/assets/live-v16.js"
     ).read_text(encoding="utf-8")
