@@ -7070,7 +7070,7 @@ body[data-casepath-moment="later-work"] .casepath-artifact-canvas .ac-agent-curs
  * surface begins so a node can never look clipped by the source frame.
  */
 .casepath-artifact-canvas[data-graph-inspecting="true"] .ac-spatial-viewport:has(.ac-spatial-detail [data-decision-workspace])::after,
-.casepath-artifact-canvas[data-graph-inspecting="true"] .ac-spatial-viewport:has(.ac-spatial-detail .ac-node-source-preview[data-node-attachment-kind="fact"])::after{
+.casepath-artifact-canvas .ac-spatial-viewport:has(.ac-spatial-detail .ac-node-source-preview[data-node-attachment-kind="fact"])::after{
   content:"";
   position:absolute;
   z-index:3;
@@ -7085,7 +7085,8 @@ body[data-casepath-moment="later-work"] .casepath-artifact-canvas .ac-agent-curs
 .casepath-artifact-canvas .ac-spatial-detail{z-index:5}
 
 /* The cursor has completed its hand-off once the readable source is open. */
-.casepath-artifact-canvas[data-graph-inspecting="true"] .ac-agent-cursor{
+.casepath-artifact-canvas[data-graph-inspecting="true"] .ac-agent-cursor,
+.casepath-artifact-canvas:has(.ac-spatial-detail .ac-node-source-preview[data-node-attachment-kind="fact"]) .ac-agent-cursor{
   visibility:hidden!important;
   opacity:0!important;
   pointer-events:none!important;
