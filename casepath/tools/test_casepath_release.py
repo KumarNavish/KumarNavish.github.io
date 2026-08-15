@@ -874,8 +874,8 @@ def test_flagship_surface_is_one_persistent_source_plus_artifact_canvas() -> Non
     assert 'href="http://127.0.0.1:4173/?ui=final"' in index
     assert "python3 -m http.server 4173 --bind 127.0.0.1 --directory casepath" in index
     assert "Claim sources are still loading." in runtime
-    assert "assets/artifact-canvas.css?v=1.0.53" in index
-    assert "assets/artifact-canvas.js?v=1.0.68" in index
+    assert "assets/artifact-canvas.css?v=1.0.54" in index
+    assert "assets/artifact-canvas.js?v=1.0.69" in index
     assert "state.moment === 'understand' && state.factTourRunning" in canvas
     assert "finishFactSourceTour(items);" in canvas
     assert "return factSourceStageMarkup(copy);" in canvas
@@ -1004,7 +1004,10 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "x > viewportWidth * .56" in canvas
     assert "position:fixed;" in canvas_css
     assert "state.lastCursorKey = '';\n        scheduleCursor();" in canvas
-    assert "One exact source at a time · no conclusion yet" in canvas
+    assert 'class="ac-authority-line"' not in canvas
+    assert "data-ac-proof" not in canvas
+    assert "renderProofLine" not in canvas
+    assert ".ac-authority-line" not in canvas_css
     assert canvas.count("document.querySelectorAll('.is-agent-clicked').forEach") >= 2
     assert "const CURSOR_SETTLE_MS = 260;" in canvas
     assert canvas.count("REDUCED_MOTION ? 0 : CURSOR_TRAVEL_MS") == 1
