@@ -794,21 +794,38 @@ def validate_evidence_model(
             "must exactly match the release evidence-to-law relationship",
             issues,
         )
-        for artifact_index, artifact_id in enumerate(item.get("artifact_ids", [])):
+        artifact_ids = item.get("artifact_ids")
+        _require(
+            isinstance(artifact_ids, list)
+            and all(isinstance(artifact_id, str) for artifact_id in artifact_ids)
+            and len(set(artifact_ids)) == len(artifact_ids),
+            contract,
+            f"items[{index}].artifact_ids",
+            "must be a unique list of artifact IDs",
+            issues,
+        )
+        artifact_values = artifact_ids if isinstance(artifact_ids, list) else []
+        for artifact_index, artifact_id in enumerate(artifact_values):
             _require(artifact_id in allowed_sources, contract, f"items[{index}].artifact_ids[{artifact_index}]", f"unknown artifact {artifact_id!r}", issues)
         if isinstance(status, str) and status.startswith("provided"):
-            _require(bool(item.get("artifact_ids")), contract, f"items[{index}].artifact_ids", "provided evidence requires at least one source artifact", issues)
+            _require(bool(artifact_values), contract, f"items[{index}].artifact_ids", "provided evidence requires at least one source artifact", issues)
             fact_source_ids = {
                 ref.get("artifact_id")
                 for ref in facts_by_id.get(fact_id, {}).get("source_refs", [])
             }
             _require(
-                set(item.get("artifact_ids", [])) <= fact_source_ids,
+                set(artifact_values) <= fact_source_ids,
                 contract,
                 f"items[{index}].artifact_ids",
                 "every provided artifact must ground its linked fact",
                 issues,
             )
+        if status == "missing":
+            _require(not artifact_values, contract, f"items[{index}].artifact_ids", "missing evidence cannot retain a source artifact", issues)
+            _require(item.get("required_level") == "mandatory", contract, f"items[{index}].required_level", "missing evidence must have mandatory required level", issues)
+        if status == "not_applicable":
+            _require(not artifact_values, contract, f"items[{index}].artifact_ids", "not-applicable evidence cannot retain a source artifact", issues)
+            _require(item.get("required_level") == "conditional", contract, f"items[{index}].required_level", "not-applicable evidence must have conditional required level", issues)
         if status == "conditional":
             _require(item.get("required_level") == "conditional", contract, f"items[{index}].required_level", "conditional evidence must have conditional required level", issues)
             _require(item.get("applies_when") not in {None, "", "always"}, contract, f"items[{index}].applies_when", "conditional evidence requires an activation condition", issues)

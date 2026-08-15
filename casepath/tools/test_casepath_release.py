@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from copy import deepcopy
 import hashlib
 import json
@@ -14,6 +15,9 @@ if str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))
 
 import casepath_release as release_tool  # noqa: E402
+from casepath_api.canonicalizer import (  # noqa: E402
+    observable_source_reference_registry,
+)
 
 
 @pytest.mark.parametrize(
@@ -81,6 +85,83 @@ def test_local_preflight_is_loopback_deterministic_and_zero_provider() -> None:
     assert "verify-runtime-causal-evidence" in wrapper
     assert "local model ledger is not fresh" in wrapper
     assert "post-journey model ledger is not exactly empty" in wrapper
+    assert "Run returns four exact official legal-source execution traces" in wrapper
+    assert "browser report lacks four accepted official legal-source traces" in wrapper
+
+
+def test_local_real_nemotron_acceptance_is_explicit_fresh_and_single_pass() -> None:
+    wrapper = (
+        release_tool.REPOSITORY
+        / "casepath-qa"
+        / "run-local-real-nemotron-v20.sh"
+    ).read_text(encoding="utf-8")
+    browser_gate = (
+        release_tool.REPOSITORY / "casepath-qa" / "browser-focused-v20.mjs"
+    ).read_text(encoding="utf-8")
+
+    authorization = '"${CASEPATH_AUTHORIZE_REAL_NEMOTRON:-}" != "1"'
+    preflight = 'bash "$qa_directory/run-local-preflight-v20.sh"'
+    real_runtime = "export CASEPATH_MODEL_MODE=openrouter_nemotron"
+    browser_journey = "node browser-guided-v13-smoke.mjs"
+    assert authorization in wrapper
+    assert wrapper.index(preflight) < wrapper.index(real_runtime)
+    assert "CASEPATH_EXPECT_REAL_NEMOTRON=0" in wrapper[: wrapper.index(real_runtime)]
+    assert 'preflight_frontend_url="${CASEPATH_LOCAL_PREFLIGHT_FRONTEND_URL:-http://127.0.0.1:4173}"' in wrapper
+    assert 'CASEPATH_LOCAL_FRONTEND_URL="$preflight_frontend_url"' in wrapper
+    assert 'preflight_api_port="$("$python_command" - <<\'PY\'' in wrapper
+    assert 'CASEPATH_LOCAL_API_URL="http://127.0.0.1:$preflight_api_port"' in wrapper
+    assert 'CASEPATH_LOCAL_API_URL="http://127.0.0.1:8002"' not in wrapper
+    assert 'frontend_url="http://127.0.0.1:$frontend_port"' in wrapper
+    assert '"$python_command" -m http.server "$frontend_port"' in wrapper
+    assert "Isolated commit-bound frontend" in wrapper
+    assert "Port 4173 is serving a different frontend" not in wrapper
+    assert wrapper.count(browser_journey) == 1
+    assert "CASEPATH_EXPECT_REAL_NEMOTRON=1" in wrapper
+    assert "CASEPATH_ALLOW_PRODUCTION_MUTATION=0" in wrapper
+    assert 'database_path="$acceptance_root/fresh-real-nemotron.db"' in wrapper
+    assert 'if [[ -e "$database_path" ]]' in wrapper
+    assert "initial-model-ledger.json" in wrapper
+    assert 'assert ledger.get("items") == []' in wrapper
+    assert 'assert len(items) == 12 and summary.get("records") == 12' in wrapper
+    assert 'assert summary.get("network_calls") == 6' in wrapper
+    assert 'assert summary.get("outcomes", {}).get("cache_hit") == 6' in wrapper
+    assert 'assert all(item.get("outcome") == "succeeded" for item in cold)' in wrapper
+    assert "capture_runtime_diagnostics" in wrapper
+    assert 'final-health.json' in wrapper
+    assert 'final-readiness.json' in wrapper
+    assert 'final-model-ledger.json' in wrapper
+    assert 'final-run.json' in wrapper
+    assert '"SELECT payload FROM events "' in wrapper
+    assert '"WHERE session_id=? AND run_id=? ORDER BY ordinal"' in wrapper
+    assert "events=events" in wrapper
+    assert wrapper.index("capture_runtime_diagnostics") < wrapper.index('terminate_process "$api_pid"', wrapper.index("finish()"))
+    assert (
+        'assert all(item.get("deterministic_fallback_applied") is False for item in cold)'
+        in wrapper
+    )
+    assert 'assert all(item.get("rejected_fact_count", 0) == 0 for item in cold)' in wrapper
+    assert 'assert all(item.get("rejected_item_count", 0) == 0 for item in cold)' in wrapper
+    assert (
+        'assert all(item.get("source_reference_projection_count", 0) == 0 for item in cold)'
+        in wrapper
+    )
+    assert "verify-runtime-causal-evidence" in wrapper
+    assert "CASEPATH_MODEL_CUMULATIVE_USD_CAP=1" in wrapper
+    assert "automatic_inference_retry" in wrapper
+    assert "REAL_ACCEPTANCE_PARENT_PATTERN" in browser_gate
+    assert "return EXPECT_REAL_NEMOTRON || !isLocal(BASE) || !isLocal(API);" in browser_gate
+    assert "if (EXPECT_REAL_NEMOTRON && (" in browser_gate
+    assert "item.deterministic_fallback_applied !== false" in browser_gate
+    assert "item.rejected_count !== 0" in browser_gate
+    assert "(cacheMode === 'cold' && item.outcome !== 'succeeded')" in browser_gate
+    assert "if (EXPECT_REAL_NEMOTRON && projected.length)" in browser_gate
+    assert (
+        "if ((!isLocal(BASE) || !isLocal(API)) && !ALLOW_PRODUCTION_MUTATION)"
+        in browser_gate
+    )
+    assert "presentationMode !== 'returned-action-replay'" in browser_gate
+    assert "returned-action replay is not visibly labelled" in browser_gate
+    assert "graph replay is not visibly labelled as returned work" in browser_gate
 
 
 def test_sites_delivery_is_same_origin_and_streaming_proxy_safe() -> None:
@@ -331,7 +412,9 @@ def test_north_star_review_and_learning_remain_graph_native() -> None:
     assert "Later causal seam with an unaccepted eligibility rule was accepted" in browser_gate
     assert "Later causal seam with a forged receipt effect count was accepted" in browser_gate
     assert "Later payoff shows one exact guarded action and keeps five technical effects behind closed Inspect proof" in browser_gate
-    assert "function verificationGraphMarkup()" in canvas
+    assert "function verificationGraphMarkup(anchorNodeId = 'causation')" in canvas
+    assert "verificationGraphMarkup(current.node_id)" in canvas
+    assert 'data-spatial-anchor-node-id="${esc(anchorNodeId)}"' in canvas
     assert 'class="ac-graph-verification"' in canvas
     assert 'data-node-attachment-kind="verification"' in canvas
     assert "Final audit" in canvas
@@ -401,7 +484,8 @@ def test_north_star_review_and_learning_remain_graph_native() -> None:
     assert "step.activeSourceIds = window.__casepathActiveSourceIds();" in browser_gate
     assert "memory effect identity" in browser_gate
     assert "exact returned node, fact, page and excerpt or region" in browser_gate
-    assert "unresolved allegations or missing-fact paths" in browser_gate
+    assert "later causal seam source locator is not an exact returned allegation source" in browser_gate
+    assert "later causal seam does not retain the exact source step locator" in browser_gate
     assert "Unresolved allegation" in canvas
     assert "Missing-fact basis" in canvas
     assert "sourceContextAttributes" in canvas
@@ -441,67 +525,217 @@ def test_later_memory_presentation_fails_closed_without_validated_bridge() -> No
     assert "Fail-closed presentation with visible memory effects was accepted" in browser_gate
 
 
-def test_claim_understanding_visibly_binds_five_facts_to_exact_sources() -> None:
+def test_process_decisions_integrate_exact_sources_law_and_node_commit() -> None:
     assets = release_tool.REPOSITORY / "casepath" / "assets"
     canvas = (assets / "artifact-canvas.js").read_text(encoding="utf-8")
+    canvas_css = (assets / "artifact-canvas.css").read_text(encoding="utf-8")
+    live_events = (
+        release_tool.REPOSITORY / "casepath-api" / "casepath_api" / "live_events.py"
+    ).read_text(encoding="utf-8")
     browser_gate = (
         release_tool.REPOSITORY / "casepath-qa" / "browser-focused-v20.mjs"
     ).read_text(encoding="utf-8")
 
-    for fact_id in (
-        "fact_tenancy",
-        "fact_notification",
-        "fact_recurrence",
-        "fact_ventilation_allegation",
-        "fact_cause",
-    ):
-        assert f"'{fact_id}'" in canvas
-        assert f"'{fact_id}'" in browser_gate
-    assert "casepath:fact-source-tour-complete" in canvas
-    assert "function waitForFactSourceTour()" in (
-        assets / "live-v16.js"
-    ).read_text(encoding="utf-8")
-    assert "root.dataset.factSourceTourState" in canvas
-    assert "root.dataset.factSourceTourIndex" in canvas
-    assert "data-fact-inspection-target=\"true\"" in canvas
-    assert 'data-fact-tour-phase="select-source"' in canvas
-    assert 'data-fact-tour-phase="read-source"' in canvas
-    assert 'data-fact-tour-phase="highlight-source"' in canvas
-    assert "state.factTourPhase = 'read-source'" in canvas
-    assert "state.factTourPhase = 'highlight-source'" in canvas
-    assert "emitInteraction('confirm-source', target)" in canvas
+    assert "casepath.decision-flow/1.0.0" in canvas
+    assert "function directFactsForNode(node)" in canvas
+    assert "function nodeDecisionTrace(node)" in canvas
+    assert "if (['responsibility', 'remedy', 'resolution'].includes(node?.node_id)) return [];" in canvas
+    assert "const steps = nodeDecisionTrace(node);" in canvas
+    assert "stepKind: 'accepted-fact'" in canvas
+    assert "stepKind: 'accepted-law'" in canvas
+    assert "presentationMode: 'returned-action-replay'" in canvas
+    assert "decisionModelContributionAccepted" in canvas
+    assert "basisEventId" in canvas
+    assert "const structureLineage = lineageFor('process_node', node?.node_id);" in canvas
+    assert "const decisionLineage = lineageFor('process_decision', node?.node_id);" in canvas
+    assert "const decisionAgentVisible = ['combining', 'decision-ready'].includes(phase)" in canvas
+    assert "structureEventId: structureLineage?.eventId || ''" in canvas
+    assert '"type": "process_decision.accepted"' in live_events
+    assert '"model_owned_fields": ["decision_value"]' in live_events
+    assert '"type": "process_node.created"' in live_events
+    assert '"type": "evidence_fields.accepted"' in live_events
+    assert '"type": "evidence_requirement.linked"' in live_events
+    assert 'data-decision-workspace' in canvas
+    assert 'data-decision-plan' in canvas
+    assert 'data-decision-plan-item' in canvas
+    assert "data-plan-kind=\"${waitingCopy ? 'waiting-decision' : 'evidence-decision'}\"" in canvas
+    assert 'data-decision-waiting-basis' in canvas
+    assert "responsibility: ['Waiting for an earlier answer', 'Cause must be known first.']" in canvas
+    assert "remedy: ['Waiting for an earlier answer', 'Responsibility must be known first.']" in canvas
+    assert "resolution: ['Waiting for an earlier answer', 'The action must be complete first.']" in canvas
+    assert 'data-real-artifact="true"' in canvas
+    assert 'data-extracted-fragment' in canvas
+    assert 'data-fact-combination' in canvas
+    assert "state.decisionFlowPhase = 'read-source'" in canvas
+    assert "state.decisionFlowPhase = 'highlight-source'" in canvas
+    assert "emitInteraction('confirm-source', inspectionTarget)" in canvas
     assert "casepath:source-highlighted" in canvas
-    assert "entityKind: 'fact'" in canvas
-    assert "Fact added from this source" in canvas
-    assert "${sourceContextAttributes(fact, ref)} data-fact-id=" in canvas
-    assert "ref?.authority || 'customer_submission'" in canvas
+    assert "casepath:decision-flow-step" in canvas
+    assert "const DECISION_SOURCE_HOLD_MS = 1500;" in canvas
+    assert "const MIN_DECISION_SOURCE_HOLD_MS = 1400;" in browser_gate
+    assert "Numeric progress remains machine-readable only." in canvas_css
+    assert ".casepath-artifact-canvas .ac-process-node-progress{\n  display:none!important;" in canvas_css
+    assert '.ac-agent-cursor[data-process-node-progress="active"]>.ac-cursor-role-icon:after' in canvas_css
+    complete_start = canvas.index("      const completeDecision = () => {")
+    complete_end = canvas.index("      const prepareStep = index => {", complete_start)
+    complete_flow = canvas[complete_start:complete_end]
+    assert complete_flow.index("clearProcessNodeProgress();") < complete_flow.index(
+        "state.decisionFlowPhase = 'receding';"
+    )
+    after_recede_start = complete_flow.index("              const afterRecede = () => {")
+    after_recede_end = complete_flow.index("              plan.addEventListener('transitionend'", after_recede_start)
+    after_recede = complete_flow[after_recede_start:after_recede_end]
+    assert after_recede.index("plan.dataset.planPhase = 'receded';") < after_recede.index(
+        "emitDecisionFlowStep(node, null, 'plan-receded', 100)"
+    ) < after_recede.index("commitNode();")
+    receding_start = complete_flow.index(
+        "              window.requestAnimationFrame(() => {\n                state.decisionFlowPhase = 'receding';"
+    )
+    receding_flow = complete_flow[receding_start:]
+    assert receding_flow.index("plan.dataset.planPhase = 'receding';") < receding_flow.index(
+        "emitDecisionFlowStep(node, null, 'plan-receding', 100)"
+    ) < receding_flow.index("window.setTimeout(afterRecede")
+    assert "event.target === plan && event.propertyName === 'opacity'" in complete_flow
+
+    assert "function decisionFlowContractViolations" in browser_gate
     assert "function factSourceTourContractViolations" in browser_gate
-    assert "function factSourceCinematicContractViolations" in browser_gate
-    assert "FACT_SOURCE_CINEMATIC_CONTRACT" in browser_gate
-    assert "window.__casepathFactSourceCinematicSteps" in browser_gate
-    assert "exactReference?.authority || 'customer_submission'" in browser_gate
-    assert "['customer_submission', 'generated_demo_reference_only'].includes(attachment.sourceAuthority)" in browser_gate
-    assert "five fact source inspections did not arrive in order" in browser_gate
-    assert "fact artifact does not retain the inspected source binding" in browser_gate
-    assert "source or fact is preselected before the agent click" in browser_gate
-    assert "neutral source read does not visibly follow the exact open-source click" in browser_gate
-    assert "exact source remains unconfirmed before highlight-source" in browser_gate
-    assert "casepath:source-highlighted is absent or not bound to the confirmed source" in browser_gate
-    assert "Valid select-read-confirm-highlight-finding cinematic fixture was rejected" in browser_gate
-    assert "Preselected source cinematic fixture was accepted" in browser_gate
-    assert "Prehighlighted neutral-read cinematic fixture was accepted" in browser_gate
-    assert "Highlight without an exact confirm click was accepted" in browser_gate
-    assert "function isRenderableVisualRef" in canvas
-    assert "String(artifact?.media_type || '').startsWith('image/')" in canvas
-    assert "String(artifact?.sha256 || '') === String(ref?.image_sha256 || '')" in canvas
-    assert "exactText(/residential use/i)" in canvas
-    assert "exactText(/arrange an inspection and repair/i)" in canvas
-    assert "exactText(/insufficient ventilation/i)" in canvas
-    assert "/independent|inspection/i" in canvas
-    assert "includes('customer_objective')" in canvas
-    assert 'class="ac-visual-region-target is-awaiting-click"' in canvas
-    assert 'class="ac-visual-region-target${highlighted' in canvas
-    assert 'data-ac-inspection-read-target="true"' in canvas
+    assert "function officialLawTourContractViolations" in browser_gate
+    assert "function acceptedExecutionFieldOwnershipViolations" in browser_gate
+    assert "window.__casepathDecisionFlowSteps = []" in browser_gate
+    assert "window.__casepathFactTourSnapshots = []" in browser_gate
+    assert "window.__casepathCaptureFactTour" in browser_gate
+    assert "window.addEventListener('casepath:decision-flow-step'" in browser_gate
+    assert "fact tour does not show the exact eight returned facts in order" in browser_gate
+    assert "official-law tour does not show the exact four returned registry sources in order" in browser_gate
+    assert "graph plan does not reuse the accepted fact and checked-law trace" in browser_gate
+    assert "graph decision replay reopens a source or law instead of reusing accepted trace" in browser_gate
+    assert "accepted fact replay is not bound to the exact returned fact event" in browser_gate
+    assert "checked-law replay is not bound to the deterministic official registry event" in browser_gate
+    assert "decision replay is not bound to its run-scoped accepted execution trace and visible mode label" in browser_gate
+    assert "process structure event lacks neutral accepted execution-trace lineage" in browser_gate
+    assert "process model identity is not limited to the accepted decision_value event" in browser_gate
+    assert "accepted decision_value is not visibly owned by Process builder" in browser_gate
+    assert "accepted input or structural replay inherited Process builder identity" in browser_gate
+    assert "fact assertion ownership is not exact" in browser_gate
+    assert "Document finder is not limited to exact accepted status/artifact_ids fields" in browser_gate
+    assert "modelSelectedTextRefs" in browser_gate
+    assert "linkedModelContributionIds" in browser_gate
+    assert "linkedModelFields" in browser_gate
+    assert "structureEventId: detail.structureEventId || ''" in browser_gate
+    assert "blocked downstream step invents accepted input work before causation is resolved" in browser_gate
+    assert "live plan kind does not match the decision state" in browser_gate
+    assert "unresolved downstream decision does not show its exact plain dependency" in browser_gate
+    assert "source is not neutral before it opens" in browser_gate
+    assert "exact returned artifact is not visibly open before selection" in browser_gate
+    assert "exact returned locator was not visibly selected before the fact appeared" in browser_gate
+    assert "exact returned fact does not visibly follow its selected source" in browser_gate
+    assert "live plan is not the one minimal accepted-input-to-decision checklist" in browser_gate
+    assert "progress is not hidden while the live plan recedes before node creation" in browser_gate
+    assert "live plan does not finish receding before node creation" in browser_gate
+    assert "accepted node appears before progress and plan have cleared" in browser_gate
+    assert "notification decision does not reuse the accepted fact with two email locators and one delivery locator" in browser_gate
+    assert "notification decision does not reuse the checked deterministic Article 257g registry trace" in browser_gate
+    assert "Wed, 15 Jul 2026 08:32:00 +0200" in browser_gate
+    assert "Please arrange an inspection and repair." in browser_gate
+    assert "Accepted by recipient mail server" in browser_gate
+    assert "Valid accepted-input decision-flow fixture was rejected" in browser_gate
+    assert "Graph replay with an invented new source read was accepted" in browser_gate
+    assert "Valid eight-fact returned source replay fixture was rejected" in browser_gate
+    assert "Fact tour with a forged source locator was accepted" in browser_gate
+    assert "Accepted node with a lingering plan was accepted" in browser_gate
+    assert "Blocked downstream decision without its waiting basis was accepted" in browser_gate
+    assert "function factSourceCinematicContractViolations" not in browser_gate
+
+
+def test_opening_claim_card_is_compact_and_source_derived() -> None:
+    repository = release_tool.REPOSITORY
+    index = (repository / "casepath" / "index.html").read_text(encoding="utf-8")
+    canvas_css = (repository / "casepath" / "assets" / "artifact-canvas.css").read_text(encoding="utf-8")
+    demo_data = (repository / "casepath-api" / "casepath_api" / "data.py").read_text(encoding="utf-8")
+    browser_gate = (repository / "casepath-qa" / "browser-focused-v20.mjs").read_text(encoding="utf-8")
+
+    card_start = index.index('<article class="start-claim-source" data-opening-claim-source="message"')
+    card_end = index.index("</article>", card_start)
+    card = index[card_start:card_end]
+    subject = "Bedroom condition keeps returning"
+    problem = "The mould in the external corner of our bedroom keeps coming back."
+    outcome = "Please tell me what should happen next. I want the cause clarified and the defect repaired."
+    assert f"<strong>{subject}</strong>" in card
+    assert f"<blockquote>{problem}</blockquote>" in card
+    assert f"<p>{outcome}</p>" in card
+    assert card.count("<blockquote>") == 1
+    assert card.count("<p>") == 1
+    assert all(value in demo_data for value in (subject, problem, outcome))
+    assert "Opening truth: two exact source excerpts, not a generated claim summary." in canvas_css
+    assert "width:min(620px,100%);" in canvas_css
+    assert "function openingClaimCardContractViolations" in browser_gate
+    assert "opening problem sentence is not the exact claim-message sentence" in browser_gate
+    assert "opening requested outcome is not the exact claim-message request" in browser_gate
+    assert "opening claim card adds generated summary prose" in browser_gate
+    assert "Opening shows one compact source-derived claim card" in browser_gate
+    assert "Generated opening claim summary fixture was accepted" in browser_gate
+    assert "Large-prose opening claim card fixture was accepted" in browser_gate
+
+
+def test_reference_path_audit_persists_exact_decision_actions() -> None:
+    repository = release_tool.REPOSITORY
+    canvas = (repository / "casepath" / "assets" / "artifact-canvas.js").read_text(encoding="utf-8")
+    canvas_css = (repository / "casepath" / "assets" / "artifact-canvas.css").read_text(encoding="utf-8")
+    browser_gate = (repository / "casepath-qa" / "browser-focused-v20.mjs").read_text(encoding="utf-8")
+
+    assert "decisionFlowAuditEvents: []" in canvas
+    assert "state.decisionFlowAuditEvents = [];" in canvas
+    assert "if (['source-opened', 'fragment-extracted', 'plan-receded'].includes(phase))" in canvas
+    assert "state.decisionFlowAuditEvents.push({ ...detail });" in canvas
+    assert "function referenceReplayHistoryMarkup(agentId)" in canvas
+    assert "if (agentId !== 'process_decision_mapping') return '';" in canvas
+    assert "data-reference-action-history" in canvas
+    assert "data-reference-action-phase=" in canvas
+    assert "data-source-locator-id=" in canvas
+    assert "data-reference-action-provenance" in canvas
+    assert "No provider call · accepted reference output replay" in canvas
+    assert "reference-replay-actions" in canvas
+    assert "No agent calls were made" not in canvas
+    assert ".casepath-artifact-canvas .ac-reference-action-history{" in canvas_css
+    assert ".casepath-artifact-canvas .ac-reference-action-provenance{" in canvas_css
+    assert "reference Path audit actions do not equal the exact persisted decision flow" in browser_gate
+    assert "reference Path audit provenance footer is absent or inexact" in browser_gate
+    assert "primary reference Path audit falls back to No agent calls were made" in browser_gate
+    assert "Reference Path history missing a decision action was accepted" in browser_gate
+
+
+def test_claim_reader_live_wait_uses_one_call_bound_plan() -> None:
+    repository = release_tool.REPOSITORY
+    canvas = (repository / "casepath" / "assets" / "artifact-canvas.js").read_text(encoding="utf-8")
+    canvas_css = (repository / "casepath" / "assets" / "artifact-canvas.css").read_text(encoding="utf-8")
+    live = (repository / "casepath" / "assets" / "live-v16.js").read_text(encoding="utf-8")
+    browser_gate = (repository / "casepath-qa" / "browser-focused-v20.mjs").read_text(encoding="utf-8")
+
+    assert "const LIVE_WORK_PLAN_CONTRACT = 'casepath.live-work-plan/1.0.0';" in canvas
+    assert "liveModelCall: null" in canvas
+    assert "function liveWorkingCall()" in canvas
+    assert "function liveWorkPlanMarkup()" in canvas
+    assert "data-ac-live-work-plan" in canvas
+    assert 'data-contract="${LIVE_WORK_PLAN_CONTRACT}"' in canvas
+    assert 'data-run-id="${esc(call.runId)}"' in canvas
+    assert 'data-call-id="${esc(call.callId)}"' in canvas
+    assert 'data-event-id="${esc(call.eventId)}"' in canvas
+    assert "['package', 'Claim package sent', 'complete']" in canvas
+    assert "['choose', 'Choose source-backed facts', 'active']" in canvas
+    assert "['return', 'Show each fact with its source', 'waiting']" in canvas
+    assert "state.currentEvent = null;" in canvas
+    assert "if (!agent || !SUCCESS_STATES.has(eventStatus(event))) return '';" in canvas
+    assert 'data-live-agent-work-state="working"' in canvas_css
+    assert ".ac-live-work-plan" in canvas_css
+    assert "inputArtifact: returnedValue(event, 'input_artifact')" in live
+    assert "function canonicalFactsLiveWorkPlanContractViolations" in browser_gate
+    assert "live work plan persists after the fact tour starts" in browser_gate
+    live_plan_start = canvas.index("  function liveWorkPlanMarkup()")
+    live_plan_end = canvas.index("\n  function stageFocalMarkup()", live_plan_start)
+    live_plan = canvas[live_plan_start:live_plan_end]
+    assert "%" not in live_plan
+    assert "progressbar" not in live_plan
+    assert "sourcePreludeMarkup" not in live_plan
 
 
 def test_default_reference_surface_hides_ranking_numbers_but_keeps_audit_truth() -> None:
@@ -533,14 +767,17 @@ def test_default_reference_surface_hides_ranking_numbers_but_keeps_audit_truth()
     assert "score_basis_points" in browser_gate
 
 
-def test_flagship_timing_gate_is_the_90_to_150_second_band() -> None:
+def test_flagship_timing_gate_keeps_readable_holds_without_capping_provider_latency() -> None:
     browser_gate = (
         release_tool.REPOSITORY / "casepath-qa" / "browser-focused-v20.mjs"
     ).read_text(encoding="utf-8")
     assert "const MIN_FLAGSHIP_PRESENTATION_MS = 90000;" in browser_gate
     assert "const MAX_FLAGSHIP_PRESENTATION_MS = 150000;" in browser_gate
     assert "MIN_PRODUCTION_FLAGSHIP_PRESENTATION_MS" not in browser_gate
-    assert "inside the 90–150 second deliberate desktop-story band" in browser_gate
+    assert "routeStory.flagshipCausation ? MIN_FLAGSHIP_PRESENTATION_MS : 30000" in browser_gate
+    assert "const presentationUpperBoundApplies = !isProductionJourney();" in browser_gate
+    assert "!presentationUpperBoundApplies || flagshipPresentationMs <= MAX_FLAGSHIP_PRESENTATION_MS" in browser_gate
+    assert "without treating real provider latency as presentation failure" in browser_gate
 
 
 def test_flagship_surface_is_one_persistent_source_plus_artifact_canvas() -> None:
@@ -584,8 +821,10 @@ def test_flagship_surface_is_one_persistent_source_plus_artifact_canvas() -> Non
     assert "Management alleges insufficient ventilation and declines inspection" not in index
     assert "assets/artifact-canvas.css" in index
     assert "assets/artifact-canvas.js" in index
-    assert "assets/artifact-canvas.css?v=1.0.44" in index
-    assert "assets/artifact-canvas.js?v=1.0.53" in index
+    assert "assets/artifact-canvas.css?v=1.0.50" in index
+    assert "assets/artifact-canvas.js?v=1.0.65" in index
+    assert "state.moment === 'understand' && (state.factTourRunning || state.factTourComplete)" in canvas
+    assert "return factSourceStageMarkup(copy);" in canvas
     assert "const CURSOR_AVATARS = Object.freeze({" in canvas
     assert "data-ac-cursor-avatar" in canvas
     assert "function setCursorAvatar(" in canvas
@@ -604,23 +843,25 @@ def test_flagship_surface_is_one_persistent_source_plus_artifact_canvas() -> Non
     assert 'data-rejected-item-id=' in canvas
     assert "Opening source package has seven type-correct source icons and no checkbox-shaped control semantics" in browser_gate
     assert "Every call-bound specialist cursor uses its exact distinct role icon" in browser_gate
-    assert "Each visible specialist opens an exact call-bound activity history" in browser_gate
+    assert "Each visible specialist opens an exact call-bound history; reference replay keeps the exact Path actions" in browser_gate
     assert "Main focal work never shows a large generic agent why paragraph" in browser_gate
-    assert "Neutral source rendered as a preselected mark was accepted" in browser_gate
-    assert "Selected source without one highlighted mark was accepted" in browser_gate
-    assert "factSourceTrailMarkup" in canvas
-    assert 'class="ac-source-inspection-trail"' in canvas
-    assert ".ac-source-inspection-trail" in canvas_css
+    assert "Valid eight-fact returned source replay fixture was rejected" in browser_gate
+    assert "Fact tour with a forged source locator was accepted" in browser_gate
+    assert 'data-decision-workspace' in canvas
+    assert 'data-decision-plan' in canvas
+    assert ".ac-decision-workspace" in canvas_css
+    assert ".ac-decision-plan" in canvas_css
     assert '.ac-source-page-excerpt>button.ac-source-exact-control[data-source-exact-control="true"]' in canvas_css
     assert '.ac-source-page-excerpt>mark.ac-source-exact-mark.is-highlighted[data-source-exact-mark="true"]' in canvas_css
-    assert "opened sources do not accumulate in one ordered trail" in browser_gate
+    assert "fact tour does not show the exact eight returned facts in order" in browser_gate
+    assert "graph decision replay reopens a source or law instead of reusing accepted trace" in browser_gate
     assert index.index("assets/process-story.js") < index.index("assets/artifact-canvas.js")
     assert "source claim and work canvas are not simultaneously visible" in browser_gate
     assert "artifact canvas root was replaced" in browser_gate
     assert "process graph root was replaced" in browser_gate
     assert "primary artifact count" in browser_gate
     assert "primary action count" in browser_gate
-    assert "exact ten-node handling spine monotonically" in browser_gate
+    assert "only the returned route story monotonically" in browser_gate
 
 
 def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
@@ -652,7 +893,7 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "setAttribute('aria-current', 'step')" in canvas
     assert "tabIndex = state.visibleNodeIds.has(node.node_id) ? 0 : -1" in canvas
     assert 'aria-hidden="true" focusable="false" data-ac-spatial-edges' in canvas
-    assert "const GRAPH_NODE_DWELL_MS = 1300;" in canvas
+    assert "const GRAPH_NODE_DWELL_MS = 550;" in canvas
     assert "const GRAPH_SOURCE_DWELL_MS = 1900;" in canvas
     assert "const GRAPH_BRANCH_SOURCE_DWELL_MS = 1900;" in canvas
     assert "casepath.process-node-progress/1.0.0" in canvas
@@ -662,11 +903,10 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert ".ac-process-node-progress" in canvas_css
     assert '.ac-spatial-branch:not([data-branch-state="selected"]){\n  opacity:1;' in canvas_css
     assert "border-color:#d4d8de;\n  color:#626873;" in canvas_css
-    assert "#777e87" not in canvas_css
     assert canvas_css.count("color:#6b727c;") >= 3
-    assert "setProcessNodeProgress('search', 0" in canvas
-    assert "setProcessNodeProgress('read', 38" in canvas
-    assert "setProcessNodeProgress('extract', 72" in canvas
+    assert "setProcessNodeProgress('search', searchProgress" in canvas
+    assert "setProcessNodeProgress('read', progress)" in canvas
+    assert "setProcessNodeProgress('extract', progress)" in canvas
     assert "setProcessNodeProgress('form', 90" in canvas
     assert "setProcessNodeProgress('complete', 100" in canvas
     progress_finish = canvas.index("function finishProcessNodeProgress")
@@ -771,7 +1011,8 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "toggleLooksDropdown" in browser_gate
     assert "processNodeSourcePreviews" in browser_gate
     assert "postConstructionSourceUse" in browser_gate
-    assert ".v21-source-summary-toggle.is-active[data-active-source-id]" in browser_gate
+    assert "document.querySelectorAll('[data-source-rail-item][data-source-id]')" in browser_gate
+    assert "target.classList.contains('is-active')" in browser_gate
     assert "window.__casepathActiveSourceIds" in browser_gate
     assert "window.__casepathSourceTargetExists" in browser_gate
     assert "inspectionSourceHasTarget" in browser_gate
@@ -783,7 +1024,7 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "sourceWindowTruth" in browser_gate
     assert "noGeneratedContext" in browser_gate
     assert "exactPassage" in browser_gate
-    assert "Clicked process source without a matching active source target was accepted" in browser_gate
+    assert "Graph replay with a fake new source read was accepted" in browser_gate
     assert "Fact/source basis preview without a matching exact source target was accepted" in browser_gate
     assert "Fact/source basis preview with an altered returned passage was accepted" in browser_gate
     assert "Intake construction and ready preview both show the exact returned customer-message passage and locator" in browser_gate
@@ -833,6 +1074,22 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert ".ac-spatial-law-marker" in canvas_css and ".ac-evidence-relationship" in canvas_css
     assert "function spatialGraphGeometryContractViolations" in browser_gate
     assert "function spatialGraphGeometrySnapshot" in browser_gate
+    assert "function processRouteStory(" in browser_gate
+    assert "function processRouteStoryContractViolations(" in browser_gate
+    assert "Valid scope_unverified route fixture was rejected" in browser_gate
+    assert "Contradictory scope route fixture was accepted" in browser_gate
+    assert "Scope-unverified fixture with unrelated causation UI was accepted" in browser_gate
+    assert "Valid non-evidence-gap causation canvas route was rejected" in browser_gate
+    assert "Model-owned permanent process structure was accepted" in browser_gate
+    assert "Conservative Documents preserves every exact returned item, status, fact, and process owner" in browser_gate
+    assert "processRegion.dataset.processRouteMode" in canvas
+    assert "processRegion.dataset.processSelectedPath" in canvas
+    assert "processRegion.dataset.processCurrentNodeId" in canvas
+    assert "processRegion.dataset.processNextActionNodeId" in canvas
+    assert "processRegion.dataset.processSelectedBranchId" in canvas
+    assert "processRegion.dataset.processFocalNodeId" in canvas
+    assert "processRegion.dataset.processTerminalState" in canvas
+    assert "journeyNext.dataset.casepathRouteTerminal" in canvas
     assert "process graph does not occupy the majority of the artifact canvas" in browser_gate
     assert "spine is a vertical list instead of a horizontal process" in browser_gate
     assert "uncertainty branches do not physically diverge" in browser_gate
@@ -841,43 +1098,40 @@ def test_flagship_process_is_a_truthful_accessible_spatial_graph() -> None:
     assert "visible spatial objects overlap" in browser_gate
     assert "permanent node lineage is incomplete" in browser_gate
     assert "title is clipped or below 12px" in browser_gate
-    assert "legal grounding is not physically above" in browser_gate
-    assert "evidence requirements are not physically below" in browser_gate
-    assert "compact next action beneath the unresolved causation decision" in browser_gate
-    assert "sourceInspectionContractViolations" in browser_gate
-    assert "a confirm click visibly highlights the exact source" in browser_gate
-    assert "highlight-source did not visibly precede the node inspection" in browser_gate
-    assert "highlight-source did not visibly precede the branch inspection" in browser_gate
-    assert "Node commit without source-highlighted was accepted" in browser_gate
-    assert "source inspections did not precede all four causation branches in order" in browser_gate
+    assert "legal grounding is not truthfully placed above the returned current node" in browser_gate
+    assert "evidence requirements are not truthfully placed below the returned current node" in browser_gate
+    assert "compact next action does not equal the returned next action" in browser_gate
+    assert "decisionFlowContractViolations" in browser_gate
+    assert "integrated decision trace does not cover the returned route decisions in order" in browser_gate
+    assert "graph plan does not reuse the accepted fact and checked-law trace" in browser_gate
+    assert "accepted input is not replayed sequentially" in browser_gate
+    assert "accepted-input replay falsely claims a new source opening" in browser_gate
+    assert "progress is not hidden while the live plan recedes before node creation" in browser_gate
+    assert "accepted node appears before progress and plan have cleared" in browser_gate
     assert "factId: detail.factId || ''" in browser_gate
-    assert "Valid claim-source inspection fixture was rejected" in browser_gate
-    assert "Factless claim-source inspection fixture was accepted" in browser_gate
-    assert "Cross-node evidence-derived claim-source inspection was accepted" in browser_gate
-    assert "Source-free process inspection fixture was accepted" in browser_gate
-    assert "Fabricated source-inspection fixture was accepted" in browser_gate
-    assert "Cursor-unbound source-inspection fixture was accepted" in browser_gate
+    assert "blocked downstream step invents accepted input work before causation is resolved" in browser_gate
+    assert "Invented work for a blocked downstream decision was accepted" in browser_gate
+    assert "returned route branches appear, without invented source reads or progress cycles" in browser_gate
     assert "function processNodeProgressContractViolations" in browser_gate
     assert "window.__casepathProcessNodeProgress = []" in browser_gate
     assert "window.addEventListener('casepath:process-node-progress'" in browser_gate
-    assert "progress does not cover the ten spine nodes and four causation branches in order" in browser_gate
-    assert "one visible progress indicator is not inside the agent cursor" in browser_gate
-    assert "100 percent was not visibly reached" in browser_gate
+    assert "progress does not cover the returned route decisions in order" in browser_gate
+    assert "decision progress does not replay accepted inputs before form, 100, and cleared" in browser_gate
+    assert "one calm cursor working cue is not visible while its semantic progress element stays hidden" in browser_gate
+    assert "analysis indicator did not semantically reach completion before clearing" in browser_gate
+    assert "numeric percentage is visible in the live node flow" in browser_gate
     assert "progress was not cleared while the output was still absent" in browser_gate
     assert "progress indicator remains visible when the output appears" in browser_gate
     assert "completed process leaves progress visible or active" in browser_gate
-    assert "Valid evidence-bound process-node progress fixture was rejected" in browser_gate
-    assert "Process progress with a missing extraction phase was accepted" in browser_gate
-    assert "Process progress owned by the wrong specialist was accepted" in browser_gate
+    assert "Valid execution-trace-bound process-node progress fixture was rejected" in browser_gate
+    assert "Process progress with a missing accepted-input phase was accepted" in browser_gate
+    assert "Accepted decision_value progress owned by the wrong specialist was accepted" in browser_gate
+    assert "Accepted-input progress with an inflated Process builder identity was accepted" in browser_gate
+    assert "Visible numeric process percentage fixture was accepted" in browser_gate
+    assert "Blocked downstream decision without its waiting basis was accepted" in browser_gate
     assert "Process output visible before progress cleared was accepted" in browser_gate
     assert "Process progress still visible when the node appeared was accepted" in browser_gate
-    assert "'evidence-requirement': { search: 'Checking evidence need', read: 'Reading requirement', extract: 'Confirming gap' }" in canvas
-    assert "'evidence-requirement': ['Evidence still needed', 'Inspect requirement']" in canvas
     assert "basisKind: detail.basisKind || ''" in browser_gate
-    assert "event.inspectionPrompt !== 'Evidence still needed'" in browser_gate
-    assert "/Finding source|Source for the next decision/i" in browser_gate
-    assert "Evidence requirement mislabeled as a source was accepted" in browser_gate
-    assert "no evidence-requirement process basis was visibly analyzed" in browser_gate
     assert "node.dataset.artifactChangeId === detail.changeId" in browser_gate
     assert "for (const kind of ['law', 'evidence', 'precedent', 'verification'])" in browser_gate
     assert "casepath:artifact-process-complete" in canvas
@@ -929,19 +1183,24 @@ def test_flagship_presentation_holds_work_and_artifacts_for_clarity() -> None:
     assert "function waitForProcessStoryOnce()" in renderer
     assert "function processStoryDrawing()" in renderer
     assert "if (processStoryWaitPromise) return processStoryWaitPromise;" in renderer
-    assert "const onStarted = () => armTimeout();" in renderer
-    assert "if (processStoryDrawing()) armTimeout();" in renderer
+    assert "const onStarted = event => {" in renderer
+    assert "if (String(event.detail?.runId || '') === runId) armTimeout();" in renderer
+    assert "window.addEventListener('casepath:artifact-process-started', onStarted);" in renderer
+    assert "      armTimeout();" in renderer
     assert "const noteDelay = () => {" in renderer
-    assert "Review remains locked until it completes." in renderer
+    assert "The accepted process trace did not complete. Nothing was substituted." in renderer
     process_wait = renderer[
         renderer.index("  function waitForProcessStory()") : renderer.index(
             "\n  function waitForProcessStoryOnce()"
         )
     ]
-    assert "finish('timed-out')" not in process_wait
+    assert "finish('timed-out')" in process_wait
     assert "if (!processStoryComplete()) {" in renderer
     assert "window.removeEventListener('casepath:artifact-process-started', onStarted);" in renderer
-    assert "const acceptedProjectionComplete = SIMPLIFIED_SPINE_IDS.every" in canvas
+    assert "const acceptedProjectionComplete = projectedProcessNodeIds().every" in canvas
+    assert "const acceptedProjectionComplete = SIMPLIFIED_SPINE_IDS.every" not in canvas
+    assert "function projectedProcessNodeIds()" in canvas
+    assert "function processProjectionReady()" in canvas
     assert "acceptedProjectionComplete ? 'complete' : 'pending'" in canvas
     assert "if (nodeId && !state.graphRevealRunning) state.selectedNodeId = nodeId;" in canvas
     assert "state.pendingGraphNodeId || state.pendingBranchNodeId || state.selectedNodeId" in canvas
@@ -949,7 +1208,8 @@ def test_flagship_presentation_holds_work_and_artifacts_for_clarity() -> None:
     assert "[data-process-build-state=\"built\"]').length >= 10" in renderer
     assert "function waitsForCompletedProcess(event)" in renderer
     assert "await waitForProcessStoryOnce();" in renderer
-    assert "if (processArtifact) await waitForProcessStoryOnce();" in renderer
+    assert "if (processArtifact) {" in renderer
+    assert "const processStoryStatus = await waitForProcessStoryOnce();" in renderer
     focus = (
         release_tool.REPOSITORY / "casepath" / "assets" / "live-v20-focus.js"
     ).read_text(encoding="utf-8")
@@ -987,22 +1247,25 @@ def test_flagship_presentation_holds_work_and_artifacts_for_clarity() -> None:
     assert "Cached exact official source" in renderer
     assert "Verify on official website ↗" in renderer
     assert "function waitForOfficialLawTour()" in renderer
-    assert "entry.event.stage === 'research') await waitForOfficialLawTour()" in renderer
+    assert "if (phase === 'artifact' && entry.event.stage === 'research') {" in renderer
+    assert "const lawTourStatus = await waitForOfficialLawTour();" in renderer
     assert "casepath:official-source-tour-complete" in renderer
     assert "function startOfficialLawTour()" in canvas
-    assert "OFFICIAL_LAW_DWELL_MS = 1900" in canvas
-    assert "if (!document.querySelector('.official-source-browser')) return;" not in canvas
-    assert "if (source === 'render' && state.moment === 'research') startOfficialLawTour();" not in canvas
-    assert "detail.phase === 'artifact' && detail.moment === 'research'" in canvas
-    assert "tourOwner: CONTRACT" in canvas
+    assert "presentation: 'deterministic-projection'" in canvas
+    assert "function nodeDecisionTrace(node)" in canvas
+    assert "emitDecisionFlowStep(node, step, 'source-opened', progress)" in canvas
+    assert "function officialLawTourContractViolations" in browser_gate
+    assert "official-law tour does not show the exact four returned registry sources in order" in browser_gate
+    assert "official law is visually misrepresented as Nemotron work" in browser_gate
+    assert "checked-law replay is not bound to the deterministic official registry event" in browser_gate
     assert "Why it matters" in focus
     assert "Doing now" in focus
     assert "Unsupported conclusions must fail closed before review." in focus
     assert "window.__casepathPresentationTimeline" in browser_gate
     assert "working frame ${workMs.toFixed(0)}ms" in browser_gate
     assert "artifact frame ${artifactMs.toFixed(0)}ms" in browser_gate
-    assert "const minimumWorkMs = concise ? 1000 : 2300;" in browser_gate
-    assert "const minimumArtifactMs = concise ? 1600 : 5500;" in browser_gate
+    assert "const minimumWorkMs = concise ? 500 : 2300;" in browser_gate
+    assert "const minimumArtifactMs = concise ? 800 : 5500;" in browser_gate
 
 
 def test_unified_audit_preserves_the_live_orchestration_proof() -> None:
@@ -1175,7 +1438,8 @@ def test_cursor_exposes_exact_six_call_bound_agents_without_synthetic_seven() ->
     assert "data-ac-cursor-agent" in canvas
     assert "data-ac-cursor-action" in canvas
     assert "function specialistForCursorTarget(target)" in canvas
-    assert "let agentId = AGENTS[lineage?.agentId]" in canvas
+    assert "const agentId = AGENTS[lineage?.agentId]" in canvas
+    assert "lineage.modelSelectedLocatorIds.includes(locatorId)" in canvas
     assert "cursor.dataset.specialistBound = String(Boolean(specialist));" in canvas
     assert "cursorActionLabel(identityTarget, specialist)" in canvas
     for agent_id, (_audit_role, short, monogram, signature) in identities.items():
@@ -1226,7 +1490,7 @@ def test_cursor_exposes_exact_six_call_bound_agents_without_synthetic_seven() ->
     assert "production cursor did not present exact six model identities" in browser_gate
 
 
-def test_browser_gate_observes_single_focus_graph_steps_and_official_url_truth() -> None:
+def test_browser_gate_observes_single_focus_graph_steps_and_integrated_law_truth() -> None:
     browser_gate = (
         release_tool.REPOSITORY / "casepath-qa" / "browser-focused-v20.mjs"
     ).read_text(encoding="utf-8")
@@ -1248,26 +1512,24 @@ def test_browser_gate_observes_single_focus_graph_steps_and_official_url_truth()
     assert "cursorInsideFocus" in browser_gate
     assert "semantic cursor activation repeated" in browser_gate
     assert "cursor never followed graph step" in browser_gate
-    assert "ten-node projection did not arrive in the pinned order" in browser_gate
+    assert "process story did not arrive in the returned route order" in browser_gate
     assert "provenance kinds absent or invalid" in browser_gate
     assert "process rationale absent" in browser_gate
     assert "process artifact hold" in browser_gate
     assert "The complete process appears only after explicit exploration" in browser_gate
     assert "detailed provenance floods the live region" in browser_gate
-    assert "source, tab, passage, address, and verify-URL truth" in browser_gate
-    assert "sourceSurface: lawSurface ? 'artifact-canvas' : ''" in browser_gate
-    assert "source was not visited on the primary artifact canvas" in browser_gate
-    assert "#artifactCanvas .ac-law-focus[data-ac-law-id]" in browser_gate
-    assert "officialStepHolds.some(value => value < 1850)" in browser_gate
+    assert "window.__casepathDecisionFlowSteps = [];" in browser_gate
+    assert "window.addEventListener('casepath:decision-flow-step'" in browser_gate
+    assert "function officialLawTourContractViolations" in browser_gate
+    assert "official-law tour does not show the exact four returned registry sources in order" in browser_gate
+    assert "official law is visually misrepresented as Nemotron work" in browser_gate
+    assert "graph decision replay reopens a source or law instead of reusing accepted trace" in browser_gate
+    assert "checked-law replay is not bound to the deterministic official registry event" in browser_gate
     assert "versioned_official_source_registry_lookup" in browser_gate
-    assert "reliable_same-source_reuse" in browser_gate
-    assert "fedlex.admin.ch" in browser_gate
-    assert "bwo.admin.ch" in browser_gate
     assert "data-official-source-url" in renderer
     assert "data-official-source-panel" in renderer
     assert "data-official-browser-url" in renderer
     assert "Verify on official website ↗" in renderer
-    assert "casepath:official-source-step" in renderer
     assert "data-agent-cursor-target" in controller
     assert "casepath:graph-step" in controller
     assert "casepath:artifact-change" in browser_gate
@@ -1283,6 +1545,44 @@ def test_browser_gate_observes_single_focus_graph_steps_and_official_url_truth()
     assert "attachment change is not tied to its agent cursor event" in browser_gate
     assert "Every visible official Swiss-law attachment opens its exact source section" in browser_gate
     assert "Authenticated stream exposes the complete semantic claim-handling vocabulary" in browser_gate
+
+
+def test_compact_persistent_source_rail_is_runtime_guarded() -> None:
+    repository = release_tool.REPOSITORY
+    browser_gate = (repository / "casepath-qa" / "browser-focused-v20.mjs").read_text(
+        encoding="utf-8"
+    )
+    product_source = "\n".join(
+        (repository / path).read_text(encoding="utf-8")
+        for path in (
+            "casepath/index.html",
+            "casepath/assets/live-v16.js",
+            "casepath/assets/live-v20-focus.js",
+            "casepath/assets/artifact-canvas.css",
+        )
+    )
+
+    assert "const SOURCE_RAIL_CONTRACT = 'casepath.source-rail/1.0.0';" in browser_gate
+    assert "const SOURCE_RAIL_VIEWPORTS = Object.freeze([" in browser_gate
+    assert "Object.freeze({ width: 1280, height: 720 })" in browser_gate
+    assert "Object.freeze({ width: 1440, height: 900 })" in browser_gate
+    assert "function sourceRailContractViolations(" in browser_gate
+    assert "window.__casepathCaptureSourceRail" in browser_gate
+    assert "String(sourceId || '') === 'intake' ? 'message'" in browser_gate
+    assert "requestAnimationFrame(() => requestAnimationFrame(() => resolve(captureSourceRailNow" in browser_gate
+    assert "source rail retains dropdown, expander, or collapse semantics" in browser_gate
+    assert "source use does not select exactly one matching reading row" in browser_gate
+    assert "source rail overlaps the work canvas or an open inspection surface" in browser_gate
+    assert "legacyRailFixture.dropdownCount = 1;" in browser_gate
+    assert "ambiguousActiveRailFixture.workOverlapArea = 120;" in browser_gate
+    assert "casepath.source-rail/1.0.0" in product_source
+    assert "data-source-rail-contract" in product_source
+    assert "data-source-rail-list" in product_source
+    assert "data-source-rail-item" in product_source
+    assert "data-source-icon-kind" in product_source
+    assert "data-source-name" in product_source
+    assert "data-source-meta" in product_source
+    assert "data-source-status" in product_source
 
 
 def test_browser_gate_requires_authenticated_sse_and_causal_memory_delta() -> None:
@@ -1389,7 +1689,7 @@ def test_later_result_keeps_returned_comparison_hashes_visible() -> None:
     assert '.stage-canvas:focus-visible' in focus_css
     assert 'v20-artifact-header:has([data-v20-open-documents])' in focus_css
     assert 'justify-content:flex-end' in focus_css
-    assert 'assets/live-v20-focus.js?v=20.0.21' in index
+    assert 'assets/live-v20-focus.js?v=20.0.22' in index
     compact_held_out_truth = "\n".join((renderer, focus_js, canvas))
     assert "held-out later demo claim" in compact_held_out_truth
     assert "The later claim remains source-isolated while eligible guidance is evaluated." in compact_held_out_truth
@@ -3817,6 +4117,76 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         )
         for fact_id in sorted(required_primary_fact_ids - existing_primary_fact_ids)
     )
+    source_registry = observable_source_reference_registry(
+        release_tool.observable_claim_package(
+            release_tool.CASEPATH_CLAIMS["DEF-027-E0-DEMO"]
+        )
+    )
+    text_ref_by_artifact = {
+        entry["artifact_id"]: {
+            "artifact_id": entry["artifact_id"],
+            "locator_kind": "text_quote",
+            "page": entry["page"],
+            "excerpt": entry["excerpt"],
+            "agent": fixture_agent,
+        }
+        for entry in reversed(source_registry)
+    }
+    bounded_artifact_ids_by_fact: dict[str, set[str]] = {}
+    for item_id, fact_id in release_tool.RELEASE_EVIDENCE_FACT_ID_BY_CLAIM[
+        "DEF-027-E0-DEMO"
+    ].items():
+        bounded_artifact_ids_by_fact.setdefault(fact_id, set()).update(
+            release_tool.RELEASE_EVIDENCE_ARTIFACT_IDS_BY_CLAIM[
+                "DEF-027-E0-DEMO"
+            ][item_id]
+        )
+    for fact in canonical_facts:
+        existing_artifact_ids = {
+            ref["artifact_id"] for ref in fact["source_refs"]
+        }
+        for artifact_id in sorted(
+            bounded_artifact_ids_by_fact.get(fact["fact_id"], set())
+            - existing_artifact_ids
+        ):
+            if artifact_id == "intake":
+                fact["source_refs"].append(deepcopy(metadata_ref))
+            elif artifact_id == "art_photo":
+                fact["source_refs"].append(deepcopy(visual_ref))
+            else:
+                fact["source_refs"].append(
+                    deepcopy(text_ref_by_artifact[artifact_id])
+                )
+    canonical_diagnostics = {
+        "authority_mode": "hybrid_guarded",
+        "accepted_fact_ids": [fact["fact_id"] for fact in canonical_facts],
+        "accepted_fact_count": len(canonical_facts),
+        "rejected_facts": [],
+        "rejected_fact_count": 0,
+        "source_reference_projection_fact_ids": [],
+        "source_reference_projection_count": 0,
+        "deterministic_fallback_applied": False,
+        "ignored_noncontrolling_normalized_proposals": 0,
+    }
+    assertion_selections = [
+        {
+            "fact_id": fact["fact_id"],
+            "assertion_id": release_tool._canonical_assertion_id(
+                fact, "fixture.canonical_fact"
+            ),
+            "model_owned_fields": (
+                ["assertion_id", "source_ref_ids", "confidence"]
+                if fact["controls_process"]
+                else ["source_ref_ids", "confidence"]
+            ),
+            "materialized_fields": deepcopy(
+                release_tool.CANONICAL_ASSERTION_MATERIALIZED_FIELDS
+            ),
+            "attribution": "OpenRouter Nemotron Canonicalizer",
+            "deterministic_fallback_applied": False,
+        }
+        for fact in canonical_facts
+    ]
 
     source_artifact = {
         "artifacts": [
@@ -3905,7 +4275,7 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         normalized_value,
         source_ref_ids,
     ) in enumerate(decision_specs):
-        fallback = index == len(decision_specs) - 1
+        fallback = False
         process_decisions.append(
             {
                 "fact_id": fact_id,
@@ -3964,7 +4334,7 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
                 "DEF-027-E0-DEMO"
             ][item_id],
             source_ref_ids,
-            fallback,
+            False,
         )
         for (
             item_id,
@@ -4083,7 +4453,7 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
             "final:upstream_contributions",
             False,
         ),
-        ("audit_check_ids", "final:audit_checks", True),
+        ("audit_check_ids", "final:audit_checks", False),
     ]
     final_claim_brief = {
         "current_node_id": "causation",
@@ -4114,8 +4484,8 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
             for field, contribution_id, fallback in final_fields
         ],
         "confidence_basis_points": 9200,
-        "attribution": "mixed_model_and_deterministic",
-        "deterministic_fallback_applied": True,
+        "attribution": "Final Claim Brief Agent",
+        "deterministic_fallback_applied": False,
     }
     specialist_artifacts = {
         "orchestrator_plan": plan_artifact,
@@ -4152,9 +4522,9 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         "canonical_facts": 0,
         "orchestrator_plan": 0,
         "document_source_integrity": 0,
-        "process_decision_mapping": 1,
-        "evidence_checklist": 1,
-        "final_claim_brief_audit": 1,
+        "process_decision_mapping": 0,
+        "evidence_checklist": 0,
+        "final_claim_brief_audit": 0,
     }
     records = []
     for index, item in enumerate(required_agents, start=1):
@@ -4176,7 +4546,7 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
                 "acceptance_scope": "pre_review_model_output",
                 "model": release_tool.REQUIRED_PRODUCTION_MODEL,
                 "provider": "openrouter",
-                "upstream_provider": "DeepInfra",
+                "upstream_provider": "Together",
                 "requested_model": release_tool.REQUIRED_PRODUCTION_MODEL,
                 "response_model": release_tool.REQUIRED_PRODUCTION_MODEL,
                 "finish_reason": "stop",
@@ -4363,8 +4733,8 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         "agent_contribution": {
             "authority": "hybrid_guarded_model_contribution",
             "model_owned_fields": ["decision_value"],
-            "deterministic_fallback_fields": ["fact_cause.decision_value"],
-            "deterministic_fallback_count": 1,
+            "deterministic_fallback_fields": [],
+            "deterministic_fallback_count": 0,
             "derived_from": "accepted_or_fallback_specialist_artifact",
             "artifact": process_artifact,
             "provenance": lineage("process_decision_mapping"),
@@ -4374,6 +4744,24 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
             ),
         },
     }
+    fixture_projection = release_tool.decision_projection(
+        [
+            {
+                "controls_process": True,
+                "decision_key": item["decision_key"],
+                "decision_value": item["decision_value"],
+            }
+            for item in process_decisions
+        ]
+    )
+    process["current_node"] = fixture_projection["current_node"]
+    process["selected_path"] = fixture_projection["selected_path"]
+    process["current_overlay"] = release_tool.apply_process_projection(
+        process["nodes"],
+        process["edges"],
+        fixture_projection,
+        process["main_spine"],
+    )
     public_evidence_items = []
     fact_by_evidence_item = {item_id: fact_id for item_id, fact_id, *_ in evidence_specs}
     active_nodes = set(selected_path)
@@ -4446,8 +4834,8 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         "agent_contribution": {
             "authority": "hybrid_guarded_model_contribution",
             "model_owned_fields": ["status", "artifact_ids"],
-            "deterministic_fallback_fields": ["item:defect_notice:status"],
-            "deterministic_fallback_count": 1,
+            "deterministic_fallback_fields": [],
+            "deterministic_fallback_count": 0,
             "derived_from": "accepted_or_fallback_specialist_artifact",
             "artifact": evidence_artifact,
             "provenance": lineage("evidence_checklist"),
@@ -4509,8 +4897,12 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
             "evidence_checklist",
         ),
         "whole_playbook_gate": (
-            "final_claim_brief",
-            final_claim_brief,
+            "verified_claim_playbook",
+            {
+                "process": release_tool._semantic_process_dto(process),
+                "checklist": release_tool._semantic_checklist_dto(checklist),
+                "final_brief": final_claim_brief,
+            },
             "final_claim_brief_audit",
         ),
     }
@@ -4528,7 +4920,7 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
         "raw_output_storage": False,
         "deterministic_safety_authority": True,
         "execution_topology": deepcopy(release_tool.REQUIRED_EXECUTION_TOPOLOGY),
-        "guarded_fallback_count": 3,
+        "guarded_fallback_count": 0,
         "agents": records,
         "deterministic_gates": [
             {
@@ -4571,9 +4963,18 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
                 ),
                 **(
                     {
+                        "output_projection_contract": (
+                            release_tool.WHOLE_PLAYBOOK_OUTPUT_PROJECTION_CONTRACT
+                        ),
+                        "final_brief_artifact_hash": release_tool.accepted_artifact_hash(
+                            final_claim_brief
+                        ),
                         "verification_report_hash": release_tool.accepted_artifact_hash(
                             verification
                         ),
+                        "verification_whole_playbook_hash": verification[
+                            "whole_playbook_hash"
+                        ],
                         "accepted_verification_ids": [
                             item["name"] for item in verification["checks"]
                         ],
@@ -4604,6 +5005,7 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
             "category": "Rental defect - mould and moisture",
             "subcategory": "Recurring moisture with disputed causation",
             "dispute": "Concrete dispute appears to exist",
+            "issues": [],
             "process": process,
             "checklist": checklist,
             "legal_research": legal,
@@ -4620,9 +5022,39 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
                 "agent_brief_contribution": final_claim_brief,
             },
             "agent_orchestration": audit,
-            "audit": {"agent_orchestration": audit},
+            "audit": {
+                "agent_orchestration": audit,
+                "canonicalization": {
+                    "mode": release_tool.REQUIRED_PRODUCTION_MODE,
+                    "authority_mode": release_tool.REQUIRED_AUTHORITY_MODE,
+                    "diagnostics": canonical_diagnostics,
+                    "assertion_selections": assertion_selections,
+                },
+            },
         },
     }
+    flagship_result = flagship_run["result"]
+    flagship_run.update(
+        {
+            "understanding": {
+                "summary": flagship_result["summary"],
+                "category": flagship_result["category"],
+                "subcategory": flagship_result["subcategory"],
+                "scope": flagship_result["scope"],
+                "dispute": flagship_result["dispute"],
+                "facts": flagship_result["facts"],
+                "issues": flagship_result["issues"],
+                "observable_only": True,
+                "canonicalization": flagship_result["audit"]["canonicalization"],
+            },
+            "process": flagship_result["process"],
+            "checklist": flagship_result["checklist"],
+            "precedents": flagship_result["precedents"],
+            "precedent_ranking": flagship_result["precedent_ranking"],
+            "verification": flagship_result["verification"],
+        }
+    )
+    _refresh_causal_artifact_hashes({"flagship-run.json": flagship_run})
     by_agent["canonical_facts"]["output_artifact_hash"] = (
         release_tool.runtime_artifact_hash(flagship_run["result"]["facts"])
     )
@@ -4648,7 +5080,7 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
                 "response_id": agent["response_id"],
                 "response_model": agent["response_model"],
                 "outcome": agent["outcome"],
-                "upstream_provider": "DeepInfra",
+                "upstream_provider": "Together",
                 "usage_source": "response",
                 "finish_reason": "stop",
                 "prompt_tokens": 100 + index,
@@ -5136,7 +5568,7 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
                     "origin_call_id": cold_agent["call_id"],
                     "response_id": cold_agent["response_id"],
                     "response_model": cold_agent["response_model"],
-                    "upstream_provider": "DeepInfra",
+                    "upstream_provider": "Together",
                     "origin_usage": origin_usage,
                     "origin_finish_reason": cold_item["finish_reason"],
                     "usage_source": "cache",
@@ -5526,11 +5958,23 @@ def successful_dynamic_qa_evidence(contract: dict) -> tuple[dict, dict, dict, by
     manifest_bytes = f"{json.dumps(manifest, indent=2)}\n".encode()
     report_checks = [
         {
+            "name": "Eight returned facts each show their exact source first, then the accepted fact, with run-bound replay lineage",
+            "passed": True,
+            "detail": "Returned semantic work is visibly labelled and bound to the cold run.",
+        },
+        {
+            "name": "The visible graph replays accepted facts and checked law without inventing new source reads, then clears its plan before each node",
+            "passed": True,
+            "detail": "Cached graph actions are visibly labelled returned-action replay.",
+        },
+        *[
+        {
             "name": f"Production browser acceptance check {index:03d}",
             "passed": True,
             "detail": "Verified by the production-shaped runtime fixture.",
         }
-        for index in range(1, 219)
+        for index in range(3, 219)
+        ],
     ]
     report = {
         "status": "passed",
@@ -5673,12 +6117,67 @@ def _refresh_causal_artifact_hashes(retained: dict) -> None:
     gates["deterministic_evidence_gate"]["output_artifact_hash"] = (
         release_tool.accepted_artifact_hash(result["checklist"])
     )
+    result["verification"]["whole_playbook_hash"] = (
+        release_tool.runtime_artifact_hash(
+            {
+                "understanding": {
+                    "summary": result["summary"],
+                    "category": result["category"],
+                    "subcategory": result["subcategory"],
+                    "scope": result["scope"],
+                    "dispute": result["dispute"],
+                    "facts": release_tool._runtime_canonical_facts_value(
+                        result["facts"], "fixture.result.facts"
+                    ),
+                    "issues": result["issues"],
+                    "observable_only": True,
+                    "canonicalization": result["audit"]["canonicalization"],
+                },
+                "legal": result["legal_research"],
+                "process": result["process"],
+                "checklist": result["checklist"],
+                "precedents": result["precedents"],
+                "precedent_ranking": result["precedent_ranking"],
+            }
+        )
+    )
+    accepted_bundle = {
+        "process": release_tool._semantic_process_dto(result["process"]),
+        "checklist": release_tool._semantic_checklist_dto(result["checklist"]),
+        "final_brief": final_artifact,
+    }
     gates["whole_playbook_gate"]["output_artifact_hash"] = (
+        release_tool.accepted_artifact_hash(accepted_bundle)
+    )
+    gates["whole_playbook_gate"]["final_brief_artifact_hash"] = (
         release_tool.accepted_artifact_hash(final_artifact)
     )
     gates["whole_playbook_gate"]["verification_report_hash"] = (
         release_tool.accepted_artifact_hash(result["verification"])
     )
+    gates["whole_playbook_gate"]["verification_whole_playbook_hash"] = result[
+        "verification"
+    ]["whole_playbook_hash"]
+    run = retained["flagship-run.json"]
+    run["understanding"] = {
+        "summary": result["summary"],
+        "category": result["category"],
+        "subcategory": result["subcategory"],
+        "scope": result["scope"],
+        "dispute": result["dispute"],
+        "facts": result["facts"],
+        "issues": result["issues"],
+        "observable_only": True,
+        "canonicalization": result["audit"]["canonicalization"],
+    }
+    for key in (
+        "process",
+        "checklist",
+        "precedents",
+        "precedent_ranking",
+        "verification",
+    ):
+        run[key] = result[key]
 
 
 def test_dynamic_runtime_acceptance_passes_without_source_promotion() -> None:
@@ -5709,6 +6208,511 @@ def test_dynamic_runtime_acceptance_passes_without_source_promotion() -> None:
         != release_tool.runtime_artifact_hash(retained_facts)
     )
     assert contract == original
+
+
+def test_release_assertion_id_matches_backend_versioned_algorithm() -> None:
+    canonicalizer_path = (
+        release_tool.API_SOURCE_ROOT / "casepath_api" / "canonicalizer.py"
+    )
+    tree = ast.parse(canonicalizer_path.read_text(encoding="utf-8"))
+    schema_version = next(
+        node.value.value
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "SCHEMA_VERSION"
+            for target in node.targets
+        )
+        and isinstance(node.value, ast.Constant)
+    )
+    assertion_function = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_assertion_id"
+    )
+    isolated_module = ast.fix_missing_locations(
+        ast.Module(body=[assertion_function], type_ignores=[])
+    )
+    backend: dict[str, object] = {"json": json, "sha256": hashlib.sha256}
+    exec(compile(isolated_module, str(canonicalizer_path), "exec"), backend)
+    backend_assertion_id = backend["_assertion_id"]
+
+    fact = {
+        "fact_id": "fact_unicode",
+        "state": "known",
+        "value": "Mould observed in Zürich",
+        "normalized_value": "supported",
+    }
+    assert release_tool.CANONICAL_ASSERTION_ID_CONTRACT == (
+        f"{schema_version}#assertion-id"
+    )
+    assert release_tool._canonical_assertion_id(fact, "fixture.fact") == (
+        backend_assertion_id(
+            fact_id=fact["fact_id"],
+            state=fact["state"],
+            value=fact["value"],
+            normalized_value=fact["normalized_value"],
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    ("tamper", "expected_path"),
+    [
+        ("forged_id", r"canonicalization\.assertion_selections"),
+        ("missing_receipt", r"assertion_selections\.fact_membership"),
+        ("duplicate_receipt", r"assertion_selections"),
+        ("controlling_fields", r"canonicalization\.assertion_selections"),
+        ("noncontrolling_fields", r"canonicalization\.assertion_selections"),
+        ("materialized_fields", r"canonicalization\.assertion_selections"),
+        ("attribution", r"canonicalization\.assertion_selections"),
+        ("fallback", r"canonicalization\.assertion_selections"),
+        ("diagnostics", r"canonicalization\.diagnostics\.fact_membership"),
+    ],
+)
+def test_dynamic_runtime_rejects_forged_assertion_selection_receipt(
+    tamper: str,
+    expected_path: str,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    result, _audit = _runtime_result_and_audit(retained)
+    canonicalization = result["audit"]["canonicalization"]
+    selections = canonicalization["assertion_selections"]
+    controlling = next(
+        item
+        for item in selections
+        if next(
+            fact
+            for fact in result["facts"]
+            if fact["fact_id"] == item["fact_id"]
+        )["controls_process"]
+    )
+    noncontrolling = next(
+        item
+        for item in selections
+        if not next(
+            fact
+            for fact in result["facts"]
+            if fact["fact_id"] == item["fact_id"]
+        )["controls_process"]
+    )
+    if tamper == "forged_id":
+        controlling["assertion_id"] = "assert_" + "f" * 24
+    elif tamper == "missing_receipt":
+        selections.pop()
+    elif tamper == "duplicate_receipt":
+        selections.append(deepcopy(selections[0]))
+    elif tamper == "controlling_fields":
+        controlling["model_owned_fields"] = ["source_ref_ids", "confidence"]
+    elif tamper == "noncontrolling_fields":
+        noncontrolling["model_owned_fields"] = [
+            "assertion_id",
+            "source_ref_ids",
+            "confidence",
+        ]
+    elif tamper == "materialized_fields":
+        controlling["materialized_fields"] = ["value", "state"]
+    elif tamper == "attribution":
+        controlling["attribution"] = "deterministic_application"
+    elif tamper == "fallback":
+        controlling["deterministic_fallback_applied"] = True
+    elif tamper == "diagnostics":
+        canonicalization["diagnostics"]["accepted_fact_ids"].pop()
+        canonicalization["diagnostics"]["accepted_fact_count"] -= 1
+    else:  # pragma: no cover - parametrization is the closed mutation catalog
+        raise AssertionError(tamper)
+
+    with pytest.raises(release_tool.VerificationError, match=expected_path):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+def _apply_fixture_process_decisions(result: dict, decisions: list[dict]) -> None:
+    projection = release_tool.decision_projection(
+        [
+            {
+                "controls_process": True,
+                "decision_key": item["decision_key"],
+                "decision_value": item["decision_value"],
+            }
+            for item in decisions
+        ]
+    )
+    process = result["process"]
+    process["current_node"] = projection["current_node"]
+    process["selected_path"] = projection["selected_path"]
+    process["current_overlay"] = release_tool.apply_process_projection(
+        process["nodes"], process["edges"], projection, process["main_spine"]
+    )
+
+
+def test_process_verifier_accepts_key_specific_conservative_route() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    _report, _manifest, retained, _manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    result, audit = _runtime_result_and_audit(retained)
+    decisions = audit["specialist_artifacts"]["process_decision_mapping"][
+        "decisions"
+    ]
+    scope = next(item for item in decisions if item["decision_key"] == "scope")
+    scope["decision_value"] = "scope_unverified"
+    _apply_fixture_process_decisions(result, decisions)
+    _refresh_causal_artifact_hashes(retained)
+    agents = {item["agent_id"]: item for item in audit["agents"]}
+    returned = release_tool._verify_process_artifact(
+        result,
+        audit["specialist_artifacts"]["process_decision_mapping"],
+        audit["specialist_artifacts"]["document_source_integrity"],
+        agents["process_decision_mapping"],
+        agents["document_source_integrity"],
+    )
+    assert next(item for item in returned if item["decision_key"] == "scope")[
+        "decision_value"
+    ] == "scope_unverified"
+    assert result["process"]["current_overlay"]["decisions"]["scope"] == (
+        "scope_unverified"
+    )
+
+
+def test_process_verifier_rejects_contradictory_bounded_route() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    _report, _manifest, retained, _manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    result, audit = _runtime_result_and_audit(retained)
+    decisions = audit["specialist_artifacts"]["process_decision_mapping"][
+        "decisions"
+    ]
+    next(item for item in decisions if item["decision_key"] == "scope")[
+        "decision_value"
+    ] = "out_of_scope"
+    _refresh_causal_artifact_hashes(retained)
+    agents = {item["agent_id"]: item for item in audit["agents"]}
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=r"process_decision_mapping\.decisions\[\]\.decision_value",
+    ):
+        release_tool._verify_process_artifact(
+            result,
+            audit["specialist_artifacts"]["process_decision_mapping"],
+            audit["specialist_artifacts"]["document_source_integrity"],
+            agents["process_decision_mapping"],
+            agents["document_source_integrity"],
+        )
+
+
+def test_evidence_verifier_accepts_alternate_bounded_status() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    _report, _manifest, retained, _manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    result, audit = _runtime_result_and_audit(retained)
+    item = next(
+        value
+        for value in audit["specialist_artifacts"]["evidence_checklist"]["items"]
+        if value["item_id"] == "claim_message"
+    )
+    item["status"] = "provided_insufficient"
+    _refresh_causal_artifact_hashes(retained)
+    agent = next(
+        value for value in audit["agents"] if value["agent_id"] == "evidence_checklist"
+    )
+    returned = release_tool._verify_evidence_artifact(
+        result,
+        audit["specialist_artifacts"]["evidence_checklist"],
+        agent,
+    )
+    assert next(value for value in returned if value["item_id"] == "claim_message")[
+        "status"
+    ] == "provided_insufficient"
+
+
+def _set_bounded_claim_message_status(run: dict, status: str) -> None:
+    result = run["result"]
+    audit = result["audit"]["agent_orchestration"]
+    item = next(
+        value
+        for value in audit["specialist_artifacts"]["evidence_checklist"]["items"]
+        if value["item_id"] == "claim_message"
+    )
+    item["status"] = status
+    wrapper = {"flagship-run.json": run}
+    _refresh_causal_artifact_hashes(wrapper)
+    ranked = release_tool.rank_precedents(
+        current_claim_id=result["claim_id"],
+        understanding={
+            "category": result["category"],
+            "subcategory": result["subcategory"],
+            "facts": result["facts"],
+        },
+        process=result["process"],
+        checklist=result["checklist"],
+        memories=[],
+        corpus=release_tool.GOVERNED_PRECEDENT_CORPUS,
+    )
+    result["precedents"] = ranked["results"]
+    result["precedent_ranking"] = ranked["receipt"]
+    _refresh_causal_artifact_hashes(wrapper)
+
+
+def test_dynamic_runtime_acceptance_allows_alternate_bounded_evidence_end_to_end() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    _set_bounded_claim_message_status(
+        retained["flagship-run.json"], "provided_insufficient"
+    )
+    _set_bounded_claim_message_status(
+        retained["isolation-run.json"], "provided_insufficient"
+    )
+    accepted = release_tool.verify_dynamic_runtime_acceptance(
+        contract,
+        report,
+        manifest,
+        retained,
+        evidence_manifest_bytes=manifest_bytes,
+    )
+    assert accepted["status"] == "passed"
+    assert next(
+        item
+        for item in retained["flagship-run.json"]["result"]["checklist"]["items"]
+        if item["item_id"] == "claim_message"
+    )["status"] == "provided_insufficient"
+
+
+@pytest.mark.parametrize("tamper", ["artifact", "status", "branch", "derived"])
+def test_evidence_verifier_rejects_contradictory_bounded_fields(tamper: str) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    _report, _manifest, retained, _manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    result, audit = _runtime_result_and_audit(retained)
+    artifact_item = next(
+        value
+        for value in audit["specialist_artifacts"]["evidence_checklist"]["items"]
+        if value["item_id"] == "claim_message"
+    )
+    if tamper == "artifact":
+        artifact_item["artifact_ids"] = ["art_photo"]
+    elif tamper == "status":
+        artifact_item["status"] = "missing"
+    _refresh_causal_artifact_hashes(retained)
+    if tamper == "branch":
+        public_item = next(
+            value
+            for value in result["checklist"]["items"]
+            if value["item_id"] == "technical_assessment"
+        )
+        public_item["current_path"] = False
+    elif tamper == "derived":
+        result["checklist"]["summary"]["provided_sufficient"] += 1
+    agent = next(
+        value for value in audit["agents"] if value["agent_id"] == "evidence_checklist"
+    )
+    with pytest.raises(release_tool.VerificationError):
+        release_tool._verify_evidence_artifact(
+            result,
+            audit["specialist_artifacts"]["evidence_checklist"],
+            agent,
+        )
+
+
+def test_whole_playbook_gate_keeps_four_exact_distinct_hash_domains() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    _report, _manifest, retained, _manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    result, audit = _runtime_result_and_audit(retained)
+    whole_gate = next(
+        gate
+        for gate in audit["deterministic_gates"]
+        if gate["agent_id"] == "whole_playbook_gate"
+    )
+    accepted_bundle = {
+        "process": release_tool._semantic_process_dto(result["process"]),
+        "checklist": release_tool._semantic_checklist_dto(result["checklist"]),
+        "final_brief": audit["final_claim_brief"],
+    }
+    assert whole_gate["output_projection_contract"] == (
+        release_tool.WHOLE_PLAYBOOK_OUTPUT_PROJECTION_CONTRACT
+    )
+    assert whole_gate["output_artifact_hash"] == (
+        release_tool.accepted_artifact_hash(accepted_bundle)
+    )
+    assert whole_gate["final_brief_artifact_hash"] == (
+        release_tool.accepted_artifact_hash(audit["final_claim_brief"])
+    )
+    assert whole_gate["verification_report_hash"] == (
+        release_tool.accepted_artifact_hash(result["verification"])
+    )
+    assert whole_gate["verification_whole_playbook_hash"] == result["verification"][
+        "whole_playbook_hash"
+    ]
+    assert len(
+        {
+            whole_gate["output_artifact_hash"],
+            whole_gate["final_brief_artifact_hash"],
+            whole_gate["verification_report_hash"],
+            result["verification"]["whole_playbook_hash"],
+        }
+    ) == 4
+
+
+@pytest.mark.parametrize(
+    ("field", "expected"),
+    [
+        ("understanding", r"run\.understanding"),
+        ("precedents", r"run\.precedents"),
+        ("precedent_ranking", r"run\.precedent_ranking"),
+    ],
+)
+def test_dynamic_runtime_rejects_stale_top_level_accepted_siblings(
+    field: str,
+    expected: str,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    flagship = retained["flagship-run.json"]
+    if field == "understanding":
+        flagship[field] = {**flagship[field], "summary": "stale stage snapshot"}
+    elif field == "precedents":
+        flagship[field] = list(reversed(flagship[field]))
+    else:
+        flagship[field] = {**flagship[field], "context_hash": "0" * 64}
+
+    with pytest.raises(release_tool.VerificationError, match=expected):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+@pytest.mark.parametrize(
+    ("forgery", "expected"),
+    [
+        ("bundle", r"whole_playbook_gate\.output_artifact_hash"),
+        ("brief", r"whole_playbook_gate\.final_brief_artifact_hash"),
+        ("report", r"whole_playbook_gate\.verification_report_hash"),
+        (
+            "gate_whole",
+            r"whole_playbook_gate\.verification_whole_playbook_hash",
+        ),
+        ("whole", r"result\.verification\.whole_playbook_hash"),
+        ("projection", r"whole_playbook_gate\.output_projection_contract"),
+    ],
+)
+def test_dynamic_runtime_rejects_conflated_whole_playbook_hashes(
+    forgery: str,
+    expected: str,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    result, audit = _runtime_result_and_audit(retained)
+    whole_gate = next(
+        gate
+        for gate in audit["deterministic_gates"]
+        if gate["agent_id"] == "whole_playbook_gate"
+    )
+    if forgery == "bundle":
+        whole_gate["output_artifact_hash"] = whole_gate["final_brief_artifact_hash"]
+    elif forgery == "brief":
+        whole_gate["final_brief_artifact_hash"] = whole_gate["output_artifact_hash"]
+    elif forgery == "report":
+        whole_gate["verification_report_hash"] = result["verification"][
+            "whole_playbook_hash"
+        ]
+    elif forgery == "gate_whole":
+        whole_gate["verification_whole_playbook_hash"] = whole_gate[
+            "output_artifact_hash"
+        ]
+    elif forgery == "whole":
+        result["verification"]["whole_playbook_hash"] = whole_gate[
+            "output_artifact_hash"
+        ]
+        whole_gate["verification_report_hash"] = release_tool.accepted_artifact_hash(
+            result["verification"]
+        )
+    else:
+        whole_gate["output_projection_contract"] = "ambiguous-full-dto"
+
+    with pytest.raises(release_tool.VerificationError, match=expected):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+@pytest.mark.parametrize(
+    "forgery",
+    ["agent_outcome", "agent_rejection", "agent_fallback", "source_projection", "ledger_outcome"],
+)
+def test_dynamic_runtime_requires_six_clean_model_calls(forgery: str) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    result, audit = _runtime_result_and_audit(retained)
+    canonical = next(
+        agent for agent in audit["agents"] if agent["agent_id"] == "canonical_facts"
+    )
+    if forgery == "agent_outcome":
+        canonical["outcome"] = "succeeded_with_guarded_fallback"
+    elif forgery == "agent_rejection":
+        canonical["rejected_count"] = 1
+    elif forgery == "agent_fallback":
+        canonical["deterministic_fallback_applied"] = True
+    elif forgery == "source_projection":
+        canonical["source_reference_projection_fact_ids"] = [canonical["accepted_ids"][0]]
+        canonical["source_reference_projection_count"] = 1
+    else:
+        retained["flagship-cold-model-ledger.json"]["items"][0]["outcome"] = (
+            "succeeded_with_guarded_fallback"
+        )
+
+    with pytest.raises(release_tool.VerificationError):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
+
+
+def test_dynamic_runtime_requires_visible_returned_action_replay_checks() -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
+        contract
+    )
+    report["checks"][0]["name"] = "Generic semantic replay check"
+    with pytest.raises(release_tool.VerificationError, match="report integrity"):
+        release_tool.verify_dynamic_runtime_acceptance(
+            contract,
+            report,
+            manifest,
+            retained,
+            evidence_manifest_bytes=manifest_bytes,
+        )
 
 
 @pytest.mark.parametrize(
@@ -5813,7 +6817,15 @@ def test_dynamic_runtime_acceptance_rejects_self_consistent_semantic_fact_rebind
         )
 
 
-@pytest.mark.parametrize("forgery", ["same_fact_source_swap", "artifact_append", "status_promotion"])
+@pytest.mark.parametrize(
+    "forgery",
+    [
+        "same_fact_source_swap",
+        "fact_unbound_capability",
+        "artifact_append",
+        "status_promotion",
+    ],
+)
 def test_dynamic_runtime_acceptance_rejects_self_consistent_evidence_forgery(
     forgery: str,
 ) -> None:
@@ -5821,22 +6833,48 @@ def test_dynamic_runtime_acceptance_rejects_self_consistent_evidence_forgery(
     report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
         contract
     )
-    _result, audit = _runtime_result_and_audit(retained)
+    result, audit = _runtime_result_and_audit(retained)
     by_id = {
         item["item_id"]: item
         for item in audit["specialist_artifacts"]["evidence_checklist"]["items"]
     }
     if forgery == "same_fact_source_swap":
         by_id["defect_notice"]["artifact_ids"] = ["art_delivery"]
+    elif forgery == "fact_unbound_capability":
+        by_id["customer_objective"]["artifact_ids"] = [
+            "art_notification",
+            "message",
+        ]
+        public_item = next(
+            item
+            for item in result["checklist"]["items"]
+            if item["item_id"] == "customer_objective"
+        )
+        public_item["artifact_ids"] = ["art_notification", "message"]
     elif forgery == "artifact_append":
         by_id["technical_assessment"]["artifact_ids"] = ["art_photo"]
     else:
         by_id["technical_assessment"]["status"] = "provided_sufficient"
     _refresh_causal_artifact_hashes(retained)
+    ranked = release_tool.rank_precedents(
+        current_claim_id=result["claim_id"],
+        understanding={
+            "category": result["category"],
+            "subcategory": result["subcategory"],
+            "facts": result["facts"],
+        },
+        process=result["process"],
+        checklist=result["checklist"],
+        memories=[],
+        corpus=release_tool.GOVERNED_PRECEDENT_CORPUS,
+    )
+    result["precedents"] = ranked["results"]
+    result["precedent_ranking"] = ranked["receipt"]
+    _refresh_causal_artifact_hashes(retained)
 
     with pytest.raises(
         release_tool.VerificationError,
-        match=r"result\.fact_relationships",
+        match=r"evidence_checklist\.items\[.*\]\.coherence",
     ):
         release_tool.verify_dynamic_runtime_acceptance(
             contract,
@@ -6111,6 +7149,7 @@ def test_dynamic_runtime_acceptance_allows_integral_fact_float_round_trip() -> N
     result, audit = _runtime_result_and_audit(retained)
     fact = result["facts"][0]
     fact["confidence"] = 1
+    _refresh_causal_artifact_hashes(retained)
     server_facts = deepcopy(result["facts"])
     server_facts[0]["confidence"] = 1.0
     canonical_agent = next(
@@ -6713,7 +7752,7 @@ def test_dynamic_runtime_acceptance_rejects_unbound_final_next_action() -> None:
     ("actor", "expected_path"),
     [
         ("agent", "Dynamic flagship agent orchestrator_plan role"),
-        ("gate", "Dynamic flagship gate deterministic_process_gate role"),
+        ("gate", r"Dynamic flagship gate deterministic_process_gate\.role"),
     ],
 )
 def test_dynamic_runtime_acceptance_rejects_relabelled_runtime_roles(
@@ -6983,11 +8022,11 @@ def test_dynamic_runtime_acceptance_rejects_valid_but_unpinned_upstream() -> Non
     audit_agent = retained["flagship-run.json"]["result"]["audit"][
         "agent_orchestration"
     ]["agents"][0]
-    audit_agent["upstream_provider"] = "Together"
+    audit_agent["upstream_provider"] = "DeepInfra"
 
     with pytest.raises(
         release_tool.VerificationError,
-        match="upstream_provider must be 'DeepInfra'",
+        match="upstream_provider must be 'Together'",
     ):
         release_tool.verify_dynamic_runtime_acceptance(
             contract,
@@ -7027,7 +8066,7 @@ def test_public_ledger_accepts_bounded_unknown_cost_upstream_rejection() -> None
                 "response_id": "gen-1786483159-hyYthqPv76o6PHXpGLzl",
                 "provider_error_code": 429,
                 "provider_boundary": "openrouter",
-                "expected_upstream_provider": "DeepInfra",
+                "expected_upstream_provider": "Together",
                 "latency_ms": 2777.996,
                 "actual_cost_usd": None,
                 "created_at": "2026-08-12T00:49:55.141493+00:00",
@@ -7764,6 +8803,42 @@ def test_cold_warm_pair_rejects_cross_agent_lineage_bindings(
         )
 
 
+@pytest.mark.parametrize(
+    ("field", "forged_value"),
+    [
+        ("input_artifact_hash", "a" * 64),
+        ("output_artifact_hash", "b" * 64),
+        ("accepted_ids", ["forged_cached_acceptance"]),
+    ],
+)
+def test_cold_warm_pair_rejects_changed_cached_artifact(
+    field: str,
+    forged_value: object,
+) -> None:
+    contract = release_tool.load_json(release_tool.RELEASE_PATH)
+    _, _, retained, _ = successful_dynamic_qa_evidence(contract)
+    cold_run = retained["flagship-run.json"]
+    warm_run = retained["isolation-run.json"]
+    process_agent = next(
+        item
+        for item in warm_run["agent_orchestration"]["agents"]
+        if item["agent_id"] == "process_decision_mapping"
+    )
+    process_agent[field] = forged_value
+
+    with pytest.raises(
+        release_tool.VerificationError,
+        match=r"process_decision_mapping warm agent lineage is invalid",
+    ):
+        release_tool._verify_cold_warm_model_pair(
+            cold_run=cold_run,
+            warm_run=warm_run,
+            cold_items=retained["flagship-cold-model-ledger.json"]["items"],
+            warm_items=retained["isolation-model-ledger.json"]["items"][6:],
+            label="Adversarial cache pair",
+        )
+
+
 def test_dynamic_runtime_acceptance_rejects_cache_lineage_tamper() -> None:
     contract = release_tool.load_json(release_tool.RELEASE_PATH)
     report, manifest, retained, manifest_bytes = successful_dynamic_qa_evidence(
@@ -8224,7 +9299,7 @@ def test_definitive_qa_runs_zero_provider_browser_preflight_before_production() 
     assert script.index("CASEPATH_ALLOW_PRODUCTION_MUTATION=0") < script.index(
         production_marker
     )
-    assert script.index("BASE_URL=https://casepath-swiss-claim-lab.onrender.com") > script.index(
+    assert script.index("BASE_URL=https://casepath.kumarnavish.chatgpt.site") > script.index(
         production_marker
     )
     assert "unset OPENROUTER_API_KEY" in script
@@ -8356,7 +9431,17 @@ def test_accessibility_audit_waits_for_stable_animations_and_keeps_diagnostics()
     required_visual_source = browser_gate[
         required_visual_start:required_visual_end
     ]
-    assert required_visual_source.count(".png'") == 12
+    assert required_visual_source.count(".png'") == 8
+    assert "acceptedJourneyMode === 'flagship-review-learning'" in browser_gate
+    assert all(
+        filename in browser_gate
+        for filename in (
+            "04-review-desktop.png",
+            "05-review-applied-desktop.png",
+            "06-learning-desktop.png",
+            "07-later-result-desktop.png",
+        )
+    )
     assert "requiredVisualEvidence.push('02-live-nemotron-agent.png', '03-deterministic-accepted-artifact.png')" in browser_gate
     assert "setViewportSize({ width: 390" not in browser_gate
     assert "setViewportSize({ width: 320" not in browser_gate
@@ -8399,10 +9484,30 @@ def test_handoff_continuity_uses_structured_moments_without_translucent_text() -
         encoding="utf-8"
     )
     assert 'assets/live-v17-continuity.css?v=20.0.0' in index
-    assert 'assets/live-v16.js?v=20.0.26' in index
+    assert 'assets/live-v16.js?v=20.0.33' in index
+    live_runtime = (
+        release_tool.REPOSITORY / "casepath/assets/live-v16.js"
+    ).read_text(encoding="utf-8")
+    assert "state.eventQueue = state.eventQueue.filter(entry => entry.later !== later);" in live_runtime
+    assert "if (activeRun?.status === 'failed')" in live_runtime
+    assert "if (updatedRun?.status === 'failed')" in live_runtime
+    assert "function terminalFailureReceipts(run)" in live_runtime
+    assert "function showTerminalFailure(run, later = false)" in live_runtime
+    assert "for (const event of terminalFailureReceipts(run)) rememberPresentedEvent(event);" in live_runtime
+    assert "renderFailure(SAFE_MODEL_FAILURE_MESSAGE, run);" in live_runtime
+    assert "cached: 'Cached replay'" in live_runtime
+    assert "failed: 'Stopped'" in live_runtime
+    assert "live: 'Live'" in live_runtime
+    assert "cachedReplay ? 'cached' : 'returned'" in live_runtime
+    assert 'data-terminal-failure="true"' in live_runtime
+    assert 'id="retryFailedRun"' in live_runtime
+    assert 'onclick="location.reload()"' not in live_runtime
     assert 'assets/live-v17.js?v=20.0.5' in index
     assert 'assets/live-v18.js?v=20.0.2' in index
-    assert 'assets/live-v16.css?v=20.0.0' in index
+    assert 'assets/live-v16.css?v=20.0.1' in index
+    assert '.live-chip[data-orchestration-mode="live"]:before' in runtime_css
+    assert '.live-chip[data-orchestration-mode="cached"]' in runtime_css
+    assert '.live-chip[data-orchestration-mode="failed"]' in runtime_css
 
 
 @pytest.mark.parametrize(

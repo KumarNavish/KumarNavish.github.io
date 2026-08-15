@@ -9,15 +9,18 @@
   // change the run, its provider calls, or its persisted result.
   const WORKING_FRAME_MS = 2300;
   const ARTIFACT_FRAME_MS = 5500;
-  const CONCISE_WORKING_FRAME_MS = 1000;
-  const CONCISE_ARTIFACT_FRAME_MS = 1600;
+  const CONCISE_WORKING_FRAME_MS = 500;
+  const CONCISE_ARTIFACT_FRAME_MS = 800;
   // Source opening is part of the story, so it keeps the full readable hold.
   // These graph-native summaries can remain concise without hiding causal work.
   const CONCISE_GRAPH_STAGES = new Set(['evidence', 'experience', 'verify']);
   const RESEARCH_ARTIFACT_FRAME_MS = 9000;
   const PROCESS_STORY_TIMEOUT_MS = 120000;
   const OFFICIAL_LAW_TOUR_TIMEOUT_MS = 120000;
-  const FACT_SOURCE_TOUR_TIMEOUT_MS = 45000;
+  // A real six-specialist run can return the accepted fact batch after the
+  // downstream calls have finished. Wait for that exact run-bound batch rather
+  // than silently advancing to a theatrical deterministic substitute.
+  const FACT_SOURCE_TOUR_TIMEOUT_MS = 180000;
   const AGENT_RECEIPT_BEAT_MS = reduceMotion ? 20 : 800;
   const BACKGROUND_BEAT_MS = reduceMotion ? 20 : 120;
   const KNOWLEDGE_BEAT_MS = 1200;
@@ -36,6 +39,15 @@
     'evidence_checklist',
     'final_claim_brief_audit',
   ]);
+  const FAILURE_AGENT_LABELS = Object.freeze({
+    canonical_facts: 'Claim reader',
+    orchestrator_plan: 'Work planner',
+    document_source_integrity: 'Source checker',
+    process_decision_mapping: 'Process builder',
+    evidence_checklist: 'Document finder',
+    final_claim_brief_audit: 'Result checker',
+  });
+  const SAFE_MODEL_FAILURE_MESSAGE = 'The model provider did not return an accepted result. No fact, process, or document state was changed.';
 
   function createSessionId() {
     const token = crypto.randomUUID?.() || [...crypto.getRandomValues(new Uint8Array(16))].map(value => value.toString(16).padStart(2, '0')).join('');
@@ -209,6 +221,14 @@
 
   function eventSucceeded(event) {
     return SUCCESS_EVENT_STATES.has(eventState(event).toLowerCase());
+  }
+
+  function eventIsCachedReplay(event) {
+    return event?.cache_hit === true
+      || returnedValue(event, 'cache_hit').toLowerCase() === 'true'
+      || eventState(event).toLowerCase() === 'cache_hit'
+      || (returnedValue(event, 'call_count') === '0'
+        && returnedValue(event, 'usage_source').toLowerCase() === 'cache');
   }
 
   function eventArtifacts(event) {
@@ -619,7 +639,8 @@
       } }));
     } catch (error) {
       if (state.starting || state.journey !== 'start') return;
-      $('#startState').innerHTML = `<div class="start-copy"><span class="quiet-label">CasePath could not open</span><h2>The claim workspace is unavailable.</h2><p>${esc(error.message)}</p></div><button class="primary-button" type="button" onclick="location.reload()">Retry</button>`;
+      $('#startState').innerHTML = `<div class="start-copy"><span class="quiet-label">CasePath could not open</span><h2>The claim workspace is unavailable.</h2><p>${esc(error.message)}</p></div><button class="primary-button" id="retryBoot" type="button">Try again</button>`;
+      $('#retryBoot')?.addEventListener('click', () => location.reload(), { once: true });
     }
   }
 
@@ -646,7 +667,7 @@
       if (artifact.media_type === 'application/pdf') thumb = `<img src="${pageUrl(artifact.artifact_id, 1)}" alt="">`;
       if (artifact.media_type?.startsWith('image/')) thumb = `<img src="${artifactUrl(artifact.artifact_id)}" alt="">`;
       return `
-        <button class="attachment-row" type="button" data-artifact-id="${esc(artifact.artifact_id)}">
+        <button class="attachment-row" type="button" data-artifact-id="${esc(artifact.artifact_id)}" data-source-rail-item data-source-id="${esc(artifact.artifact_id)}">
           <span class="attachment-thumb">${thumb}</span>
           <span><span class="attachment-title">${esc(artifact.title)}</span><span class="attachment-meta">${esc(artifact.filename)} · ${esc(mimeLabel(artifact))}</span></span>
           <span class="attachment-open">Open</span>
@@ -672,10 +693,22 @@
     return state.journey === 'later' ? state.laterRun : state.run;
   }
 
-  function setOrchestrator(status, done = false) {
+  function setOrchestrator(status, done = false, requestedMode = '') {
+    const mode = requestedMode || (done ? 'ready' : 'working');
+    const chipLabels = {
+      cached: 'Cached replay',
+      failed: 'Stopped',
+      live: 'Live',
+      ready: 'Ready',
+      returned: 'Returned',
+      working: 'Working',
+    };
+    const chip = $('#liveChip');
     $('#orchestratorStatus').textContent = status;
-    $('#liveChip').textContent = done ? 'Ready' : 'Live';
-    $('#liveChip').classList.toggle('done', done);
+    chip.textContent = chipLabels[mode] || chipLabels.working;
+    chip.dataset.orchestrationMode = mode;
+    chip.classList.toggle('done', mode === 'ready');
+    document.body.dataset.orchestrationMode = mode;
   }
 
   async function startFlagshipRun() {
@@ -777,7 +810,10 @@
     }
     publishRunSnapshot(run, { later, terminal: true });
     enqueueNewEvents(run, later);
-    if (run.status === 'failed') throw new Error(run.error || 'The run stopped safely.');
+    if (run.status === 'failed') {
+      showTerminalFailure(run, later);
+      throw new Error(run.error || 'The run stopped safely.');
+    }
     if (run.status !== 'complete') throw new Error('The live run stream closed before a terminal result was available.');
     if (later) state.laterRunComplete = true;
     else state.runComplete = true;
@@ -822,7 +858,6 @@
           const run = await api(`/api/runs/${encodeURIComponent(runId)}`);
           if (run.status === 'failed') throw new Error(run.error || 'Comparison run failed.');
           if (run.status !== 'complete') throw new Error('The comparison stream closed before completion.');
-          publishRunSnapshot(run, { later: false, terminal: true });
           return run;
         }
         retries += 1;
@@ -831,7 +866,15 @@
       }
     } catch (error) {
       state.polling = false;
-      if (present) renderFailure(error.message);
+      if (present) {
+        const run = later ? state.laterRun : state.run;
+        if (run?.status === 'failed') showTerminalFailure(run, later);
+        else {
+          state.eventQueue = state.eventQueue.filter(entry => entry.later !== later);
+          state.presenting = false;
+          renderFailure(SAFE_MODEL_FAILURE_MESSAGE);
+        }
+      }
       throw error;
     }
   }
@@ -850,11 +893,14 @@
     const moment = explicitMoment || $('#stageCanvas')?.dataset.casepathMoment || '';
     window.dispatchEvent(new CustomEvent('casepath:presentation', { detail: {
       phase, moment, eventId: returnedValue(event, 'event_id'), stage: returnedValue(event, 'stage'),
+      runId: state.runId,
     } }));
   }
 
   function processStoryComplete() {
-    return document.querySelectorAll('#artifactProcessGraph[data-process-construction-state="complete"] [data-process-build-state="built"]').length >= 10;
+    const canvas = document.querySelector('#artifactCanvas');
+    return canvas?.dataset.processStoryRunId === processStoryRunId()
+      && document.querySelectorAll('#artifactProcessGraph[data-process-construction-state="complete"] [data-process-build-state="built"]').length >= 10;
   }
 
   function processStoryDrawing() {
@@ -889,26 +935,30 @@
         document.body.dataset.casepathProcessStoryWait = status;
         resolve(status);
       };
-      const onComplete = () => { if (processStoryComplete()) finish('complete'); };
+      const onComplete = event => {
+        if (String(event.detail?.runId || '') === runId && processStoryComplete()) finish('complete');
+      };
       const noteDelay = () => {
         if (settled) return;
-        timeout = 0;
-        document.body.dataset.casepathProcessStoryWait = 'drawing-overdue';
-        setOrchestrator('Process drawing is taking longer than expected. Review remains locked until it completes.');
-        toast('Still drawing the accepted process. Review remains locked.');
+        document.body.dataset.casepathProcessStoryWait = 'timed-out';
+        setOrchestrator('The accepted process trace did not complete for this run.');
+        toast('The accepted process trace did not complete. Nothing was substituted.');
         window.dispatchEvent(new CustomEvent('casepath:artifact-process-timeout', {
           detail: { runId, timeoutMs: PROCESS_STORY_TIMEOUT_MS },
         }));
+        finish('timed-out');
       };
       const armTimeout = () => {
         if (settled || timeout) return;
         document.body.dataset.casepathProcessStoryWait = 'drawing';
         timeout = window.setTimeout(noteDelay, PROCESS_STORY_TIMEOUT_MS);
       };
-      const onStarted = () => armTimeout();
-      window.addEventListener('casepath:artifact-process-complete', onComplete, { once: true });
-      window.addEventListener('casepath:artifact-process-started', onStarted, { once: true });
-      if (processStoryDrawing()) armTimeout();
+      const onStarted = event => {
+        if (String(event.detail?.runId || '') === runId) armTimeout();
+      };
+      window.addEventListener('casepath:artifact-process-complete', onComplete);
+      window.addEventListener('casepath:artifact-process-started', onStarted);
+      armTimeout();
     });
     return processStoryWaitPromise;
   }
@@ -921,25 +971,35 @@
   }
 
   function waitForOfficialLawTour() {
-    const complete = () => document.querySelector('#artifactCanvas[data-official-law-tour-state="complete"]');
-    if (complete()) return Promise.resolve();
+    const runId = processStoryRunId();
+    const complete = () => {
+      const canvas = document.querySelector('#artifactCanvas[data-official-law-tour-state="complete"]');
+      return canvas?.dataset.officialLawTourRunId === runId;
+    };
+    if (complete()) return Promise.resolve('complete');
     return new Promise(resolve => {
       let settled = false;
-      const finish = () => {
+      const finish = status => {
         if (settled) return;
         settled = true;
         window.removeEventListener('casepath:official-source-tour-complete', onComplete);
         window.clearTimeout(timeout);
-        resolve();
+        resolve(status);
       };
-      const onComplete = () => finish();
-      const timeout = window.setTimeout(finish, OFFICIAL_LAW_TOUR_TIMEOUT_MS);
-      window.addEventListener('casepath:official-source-tour-complete', onComplete, { once: true });
+      const onComplete = event => {
+        if (String(event.detail?.runId || '') === runId) finish('complete');
+      };
+      const timeout = window.setTimeout(() => finish('timed-out'), OFFICIAL_LAW_TOUR_TIMEOUT_MS);
+      window.addEventListener('casepath:official-source-tour-complete', onComplete);
     });
   }
 
   function waitForFactSourceTour() {
-    const complete = () => document.querySelector('#artifactCanvas[data-fact-source-tour-state="complete"]');
+    const runId = processStoryRunId();
+    const complete = () => {
+      const canvas = document.querySelector('#artifactCanvas[data-fact-source-tour-state="complete"]');
+      return canvas?.dataset.factSourceTourRunId === runId;
+    };
     if (complete()) return Promise.resolve('complete');
     document.body.dataset.casepathFactSourceTourWait = 'waiting';
     return new Promise(resolve => {
@@ -952,9 +1012,11 @@
         document.body.dataset.casepathFactSourceTourWait = status;
         resolve(status);
       };
-      const onComplete = () => finish('complete');
+      const onComplete = event => {
+        if (String(event.detail?.runId || '') === runId) finish('complete');
+      };
       const timeout = window.setTimeout(() => finish('timed-out'), FACT_SOURCE_TOUR_TIMEOUT_MS);
-      window.addEventListener('casepath:fact-source-tour-complete', onComplete, { once: true });
+      window.addEventListener('casepath:fact-source-tour-complete', onComplete);
     });
   }
 
@@ -968,13 +1030,24 @@
     if (state.presenting) return;
     state.presenting = true;
     while (state.eventQueue.length) {
+      const activeRun = later ? state.laterRun : state.run;
+      if (activeRun?.status === 'failed') {
+        showTerminalFailure(activeRun, later);
+        return;
+      }
       const entry = state.eventQueue.shift();
       if (entry.later !== later) {
         state.eventQueue.push(entry);
         break;
       }
       if (!later && waitsForCompletedProcess(entry.event) && processStoryAwaitedRunId !== processStoryRunId()) {
-        await waitForProcessStoryOnce();
+        const processStoryStatus = await waitForProcessStoryOnce();
+        if (processStoryStatus !== 'complete') {
+          state.eventQueue = [];
+          state.presenting = false;
+          renderFailure('The accepted process trace did not complete for this exact run. Nothing was substituted.');
+          return;
+        }
       }
       let phase = 'background';
       if (later) {
@@ -984,7 +1057,10 @@
         announcePresentation(phase, entry.event);
       }
       const conciseGraphStage = CONCISE_GRAPH_STAGES.has(entry.event.stage);
-      const frameMs = phase === 'working'
+      const integratedDecisionPrelude = ['read', 'understand', 'research'].includes(entry.event.stage);
+      const frameMs = integratedDecisionPrelude
+        ? BACKGROUND_BEAT_MS
+        : phase === 'working'
         ? conciseGraphStage ? CONCISE_WORKING_FRAME_MS : WORKING_FRAME_MS
         : phase === 'receipt'
           ? AGENT_RECEIPT_BEAT_MS
@@ -997,9 +1073,38 @@
             : BACKGROUND_BEAT_MS;
       const processArtifact = phase === 'artifact' && entry.event.stage === 'process';
       if (!processArtifact) await wait(frameMs);
-      if (phase === 'artifact' && entry.event.stage === 'understand') await waitForFactSourceTour();
-      if (phase === 'artifact' && entry.event.stage === 'research') await waitForOfficialLawTour();
-      if (processArtifact) await waitForProcessStoryOnce();
+      const updatedRun = later ? state.laterRun : state.run;
+      if (updatedRun?.status === 'failed') {
+        showTerminalFailure(updatedRun, later);
+        return;
+      }
+      if (phase === 'artifact' && entry.event.stage === 'understand') {
+        const factTourStatus = await waitForFactSourceTour();
+        if (factTourStatus !== 'complete') {
+          state.eventQueue = [];
+          state.presenting = false;
+          renderFailure('The accepted fact trace did not arrive for this exact run. Nothing was substituted.');
+          return;
+        }
+      }
+      if (phase === 'artifact' && entry.event.stage === 'research') {
+        const lawTourStatus = await waitForOfficialLawTour();
+        if (lawTourStatus !== 'complete') {
+          state.eventQueue = [];
+          state.presenting = false;
+          renderFailure('The official-law trace did not complete for this exact run. Nothing was substituted.');
+          return;
+        }
+      }
+      if (processArtifact) {
+        const processStoryStatus = await waitForProcessStoryOnce();
+        if (processStoryStatus !== 'complete') {
+          state.eventQueue = [];
+          state.presenting = false;
+          renderFailure('The accepted process trace did not complete for this exact run. Nothing was substituted.');
+          return;
+        }
+      }
     }
     state.presenting = false;
     const run = later ? state.laterRun : state.run;
@@ -1021,24 +1126,74 @@
       return 'working';
     }
     if (event.stage === 'complete') {
-      setOrchestrator(returnedValue(event, 'headline', 'label') || 'Final run event returned', false);
+      setOrchestrator(returnedValue(event, 'headline', 'label') || 'Final run event returned', false, 'returned');
       return 'background';
     }
     const returnedAgentId = returnedValue(event, 'agent_id', 'actor_id');
-    if (event.stage === 'agent_orchestration'
-      && eventKind(event) === 'nemotron_agent'
-      && NEMOTRON_AGENT_IDS.has(returnedAgentId)
-      && eventSucceeded(event)) {
+    const modelAgentEvent = eventKind(event) === 'nemotron_agent'
+      && NEMOTRON_AGENT_IDS.has(returnedAgentId);
+    const modelAgentStarted = modelAgentEvent
+      && ['started', 'running', 'in_progress'].includes(eventState(event).toLowerCase());
+    if (modelAgentStarted) {
       const canvas = $('#stageCanvas');
       if (canvas) canvas.dataset.casepathActiveAgentId = returnedAgentId;
-      setOrchestrator(`${returnedActorName(event)} returned a bounded contribution`);
+      setOrchestrator(`${returnedActorName(event)} is working`, false, 'live');
       window.dispatchEvent(new CustomEvent('casepath:agent-focus', { detail: {
         agentId: returnedAgentId,
         callId: returnedValue(event, 'call_id'),
         outputArtifact: eventArtifacts(event).join(', '),
         eventId: returnedValue(event, 'event_id'),
+        runId: state.runId,
+        status: 'started',
+        inputArtifact: returnedValue(event, 'input_artifact'),
+        inputArtifactHash: returnedValue(event, 'input_artifact_hash', 'input_hash'),
+        provider: returnedValue(event, 'provider'),
+        requestedModel: returnedValue(event, 'requested_model', 'model'),
+        callCount: returnedValue(event, 'call_count'),
+        cacheHit: false,
+      } }));
+      return 'working';
+    }
+    if (event.stage === 'agent_orchestration'
+      && modelAgentEvent
+      && eventSucceeded(event)) {
+      const cachedReplay = eventIsCachedReplay(event);
+      const canvas = $('#stageCanvas');
+      if (canvas) canvas.dataset.casepathActiveAgentId = returnedAgentId;
+      setOrchestrator(cachedReplay
+        ? `${returnedActorName(event)} reused a verified cached contribution · no provider call`
+        : `${returnedActorName(event)} returned a bounded contribution`, false, cachedReplay ? 'cached' : 'returned');
+      window.dispatchEvent(new CustomEvent('casepath:agent-focus', { detail: {
+        agentId: returnedAgentId,
+        callId: returnedValue(event, 'call_id'),
+        outputArtifact: eventArtifacts(event).join(', '),
+        eventId: returnedValue(event, 'event_id'),
+        runId: state.runId,
+        status: cachedReplay ? 'cache_hit' : 'completed',
+        cacheHit: cachedReplay,
+        callCount: returnedValue(event, 'call_count'),
+        usageSource: returnedValue(event, 'usage_source'),
+        outcome: eventState(event),
       } }));
       return 'receipt';
+    }
+    if (modelAgentEvent && eventSucceeded(event)) {
+      const cachedReplay = eventIsCachedReplay(event);
+      setOrchestrator(cachedReplay
+        ? `${returnedActorName(event)} reused a verified cached contribution · no provider call`
+        : `${returnedActorName(event)} returned a bounded contribution`, false, cachedReplay ? 'cached' : 'returned');
+      window.dispatchEvent(new CustomEvent('casepath:agent-focus', { detail: {
+        agentId: returnedAgentId,
+        callId: returnedValue(event, 'call_id'),
+        outputArtifact: eventArtifacts(event).join(', '),
+        eventId: returnedValue(event, 'event_id'),
+        runId: state.runId,
+        status: cachedReplay ? 'cache_hit' : 'completed',
+        cacheHit: cachedReplay,
+        callCount: returnedValue(event, 'call_count'),
+        usageSource: returnedValue(event, 'usage_source'),
+        outcome: eventState(event),
+      } }));
     }
     const stage = STAGES.find(item => item.id === event.stage);
     if (!stage) return 'background';
@@ -1050,7 +1205,11 @@
     state.stageMode = stage.id;
     const actor = returnedActorName(event);
     const update = returnedValue(event, 'headline', 'detail', 'question', 'label');
-    setOrchestrator([actor, update].filter(Boolean).join(': ') || 'Returned run event received');
+    setOrchestrator(
+      [actor, update].filter(Boolean).join(': ') || 'Returned run event received',
+      false,
+      eventIsCachedReplay(event) ? 'cached' : modelAgentEvent && eventSucceeded(event) ? 'returned' : 'working',
+    );
     renderProgress(stage.id);
     if (started) renderStageStarted(stage, event);
     else renderStageCompleted(stage, event);
@@ -1581,6 +1740,7 @@
     if (!processStoryComplete()) {
       waitForProcessStory().then(status => {
         if (status === 'complete') finishFlagshipRun();
+        else renderFailure('The accepted process trace did not complete for this exact run. Nothing was substituted.');
       });
       return;
     }
@@ -2101,9 +2261,27 @@
     location.href = url.toString();
   }
 
-  function renderFailure(message) {
-    setOrchestrator('CasePath stopped safely', true);
-    renderCanvas(`<div class="stage-shell">${stageHeader({ label: 'Safe failure', short: '!', job: 'No canonical state was changed' }, 'The claim was not changed.', message)}<button class="primary-button" type="button" onclick="location.reload()">Retry</button></div>`, 'failure');
+  function terminalFailureReceipts(run) {
+    return (run?.events || []).filter(event => (
+      event?.status === 'failed'
+      && (event?.receipt_type === 'agent_failed' || event?.stage === 'failed')
+    ));
+  }
+
+  function showTerminalFailure(run, later = false) {
+    for (const event of terminalFailureReceipts(run)) rememberPresentedEvent(event);
+    state.eventQueue = state.eventQueue.filter(entry => entry.later !== later);
+    state.presenting = false;
+    renderOrchestrationProof();
+    renderFailure(SAFE_MODEL_FAILURE_MESSAGE, run);
+  }
+
+  function renderFailure(message, run = null) {
+    const failureAgent = FAILURE_AGENT_LABELS[run?.failure_stage] || '';
+    const title = failureAgent ? `${failureAgent} stopped before a result was accepted.` : 'No result was accepted.';
+    setOrchestrator('CasePath stopped safely', false, 'failed');
+    renderCanvas(`<div class="stage-shell" data-terminal-failure="true" data-failure-stage="${esc(NEMOTRON_AGENT_IDS.has(run?.failure_stage) ? run.failure_stage : '')}">${stageHeader({ label: 'Stopped safely', short: '!', job: 'No claim state was changed' }, title, message)}<button class="primary-button" id="retryFailedRun" type="button">Try again</button></div>`, 'failure');
+    $('#retryFailedRun')?.addEventListener('click', restartDemo, { once: true });
   }
 
   function bindSourceLinks(root = document) {
@@ -2461,12 +2639,7 @@
 
   function bindGlobalInteractions() {
     $('#runCasePath').addEventListener('click', startFlagshipRun);
-    $('#toggleSource').addEventListener('click', () => {
-      const pane = $('.submission-pane');
-      const expanded = $('#toggleSource').getAttribute('aria-expanded') === 'true';
-      $('#toggleSource').setAttribute('aria-expanded', String(!expanded));
-      pane.classList.toggle('collapsed', expanded);
-    });
+    $('#toggleSource').addEventListener('click', () => openSource('message', 1));
     $('#attachmentList').addEventListener('click', event => {
       const row = event.target.closest('[data-artifact-id]');
       if (row) openSource(row.dataset.artifactId, 1);

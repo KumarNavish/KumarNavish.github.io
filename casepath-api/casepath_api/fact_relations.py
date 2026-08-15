@@ -291,10 +291,6 @@ def validate_fact_relations(
         item.get("item_id"): item.get("artifact_ids")
         for item in checklist.get("items", [])
     }
-    actual_statuses = {
-        item.get("item_id"): item.get("status")
-        for item in checklist.get("items", [])
-    }
     actual_roles = {
         fact.get("semantic_role"): fact.get("fact_id")
         for fact in facts
@@ -304,11 +300,14 @@ def validate_fact_relations(
         raise ValueError("process_fact_relationship")
     if actual_evidence != expected_evidence:
         raise ValueError("evidence_fact_relationship")
-    if actual_artifacts != expected_artifacts:
-        raise ValueError("evidence_artifact_relationship")
-    if actual_statuses not in expected_evidence_status_variants(
-        claim_id, include_governed_extension=include_memory_extension
+    # These maps define the bounded semantic artifact domain for each item, not
+    # an answer key. The evidence gate may retain any coherent subset and status;
+    # validate_evidence_model owns those dynamic status/artifact invariants.
+    if set(actual_artifacts) != set(expected_artifacts) or any(
+        not isinstance(actual_artifacts[item_id], list)
+        or set(actual_artifacts[item_id]) - set(expected_artifacts[item_id])
+        for item_id in expected_artifacts
     ):
-        raise ValueError("evidence_status_relationship")
+        raise ValueError("evidence_artifact_relationship")
     if actual_roles != expected_roles:
         raise ValueError("semantic_fact_relationship")

@@ -44,6 +44,10 @@ from casepath_api.evidence_relations import (  # noqa: E402
 )
 from casepath_api.law_registry import legal_context as governed_legal_context  # noqa: E402
 from casepath_api.precedent_ranking import rank_precedents  # noqa: E402
+from casepath_api.projections import (  # noqa: E402
+    apply_process_projection,
+    decision_projection,
+)
 from casepath_api.validation import (  # noqa: E402
     LEARNING_SNAPSHOT_FIELDS,
     REQUIRED_PLAYBOOK_CHECK_NAMES,
@@ -67,6 +71,8 @@ DEFINITIVE_QA_BUILD_COMMAND = (
 DEFINITIVE_QA_START_COMMAND = "node casepath-qa/serve-evidence.mjs"
 REQUIRED_PRODUCTION_MODE = "openrouter_nemotron"
 REQUIRED_PRODUCTION_MODEL = "nvidia/nemotron-3-ultra-550b-a55b"
+REQUIRED_PROVIDER_ENDPOINT_TAG = "together"
+REQUIRED_UPSTREAM_PROVIDER = "Together"
 DETERMINISTIC_REFERENCE_MODE = "deterministic_reference"
 DETERMINISTIC_REFERENCE_PROFILE = "deterministic-reference-playbook"
 ACCEPTED_PRODUCTION_RESPONSE_MODELS = {
@@ -266,6 +272,9 @@ REQUIRED_DETERMINISTIC_GATES = (
         "role": "Deterministic Whole-Playbook Gate",
     },
 )
+WHOLE_PLAYBOOK_OUTPUT_PROJECTION_CONTRACT = (
+    "casepath.accepted-playbook-projection/1.0.0"
+)
 SPECIALIST_ARTIFACT_IDS = (
     "orchestrator_plan",
     "document_source_integrity",
@@ -304,6 +313,84 @@ ACCEPTED_EVIDENCE_STATUSES = {
     "missing",
     "conditional",
     "not_applicable",
+}
+CANONICAL_ASSERTION_ID_CONTRACT = "casepath.canonical-facts/1.8.0#assertion-id"
+CANONICAL_ASSERTION_MATERIALIZED_FIELDS = [
+    "value",
+    "state",
+    "explanation",
+    "normalized_value",
+    "decision_value",
+]
+RELEASE_DECISION_OPTIONS = {
+    "scope": {
+        "supported_in_scope": "in_scope",
+        "supported_out_of_scope": "out_of_scope",
+        "unverified": "scope_unverified",
+    },
+    "dispute": {
+        "present": "dispute_present",
+        "absent": "no_dispute",
+        "unverified": "dispute_unverified",
+    },
+    "urgency": {
+        "urgent": "urgent",
+        "not_urgent": "not_urgent",
+        "unverified": "urgency_unverified",
+    },
+    "notification": {
+        "notified": "notified",
+        "not_notified": "not_notified",
+        "unverified": "notification_unverified",
+    },
+    "recurrence": {
+        "supported": "recurrence_supported",
+        "not_supported": "recurrence_not_supported",
+        "unverified": "recurrence_unverified",
+    },
+    "causation": {
+        "building": "cause_building",
+        "tenant_use": "cause_tenant_use",
+        "mixed": "cause_mixed",
+        "unresolved": "cause_unresolved",
+    },
+}
+RELEASE_CONSERVATIVE_DECISIONS = {
+    "scope": "scope_unverified",
+    "dispute": "dispute_unverified",
+    "urgency": "urgency_unverified",
+    "notification": "notification_unverified",
+    "recurrence": "recurrence_unverified",
+    "causation": "cause_unresolved",
+}
+RELEASE_EVIDENCE_ARTIFACT_CAPABILITIES = {
+    "claim_message": frozenset({"claim_message"}),
+    "source_integrity": frozenset({"submitted_source"}),
+    "lease": frozenset({"lease"}),
+    "policy_reference": frozenset({"policy_reference"}),
+    "customer_objective": frozenset(
+        {"claim_message", "customer_correspondence"}
+    ),
+    "management_position": frozenset({"management_correspondence"}),
+    "health_safety_statement": frozenset(
+        {"claim_message", "customer_correspondence", "medical"}
+    ),
+    "defect_notice": frozenset({"defect_notice", "customer_correspondence"}),
+    "proof_of_delivery": frozenset({"delivery_proof"}),
+    "dated_photos": frozenset({"photo"}),
+    "recurrence_chronology": frozenset({"timeline"}),
+    "technical_assessment": frozenset({"technical_report", "inspection_report"}),
+    "moisture_measurements": frozenset({"measurement_report"}),
+    "building_envelope": frozenset({"building_report", "technical_report"}),
+    "repair_history": frozenset(
+        {"maintenance_record", "management_correspondence"}
+    ),
+    "use_evidence": frozenset({"use_log", "utility_record"}),
+    "remediation_plan": frozenset({"remediation_plan", "maintenance_record"}),
+    "financial_impact": frozenset({"invoice", "financial_record"}),
+    "settlement_proposal": frozenset({"settlement_record", "correspondence"}),
+    "conciliation_bundle": frozenset({"legal_filing"}),
+    "completion_record": frozenset({"completion_record", "maintenance_record"}),
 }
 ACCEPTED_SOURCE_INTEGRITY_CLASSES = {
     "text_grounded",
@@ -2585,8 +2672,10 @@ def _verify_successful_provider_provenance(record: Any, label: str) -> None:
             raise VerificationError(
                 f"{label} {field} violates the provider-provenance sanitizer"
             )
-    if record.get("upstream_provider") != "DeepInfra":
-        raise VerificationError(f"{label} upstream_provider must be 'DeepInfra'")
+    if record.get("upstream_provider") != REQUIRED_UPSTREAM_PROVIDER:
+        raise VerificationError(
+            f"{label} upstream_provider must be '{REQUIRED_UPSTREAM_PROVIDER}'"
+        )
 
 
 def _verify_bounded_origin_usage(value: Any, label: str) -> None:
@@ -2725,7 +2814,8 @@ def _verify_public_model_ledger(ledger: Any, label: str) -> None:
                 upstream_rejection
                 and (
                     item.get("provider_boundary") != "openrouter"
-                    or item.get("expected_upstream_provider") != "DeepInfra"
+                    or item.get("expected_upstream_provider")
+                    != REQUIRED_UPSTREAM_PROVIDER
                 )
             )
         ):
@@ -7217,14 +7307,16 @@ def runtime_artifact_hash(value: Any) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def _runtime_canonical_facts_hash(facts: list[Any], path: str) -> str:
+def _runtime_canonical_facts_value(facts: list[Any], path: str) -> list[Any]:
     """Rebuild the backend fact hash after a JSON/JavaScript round trip.
 
     JavaScript serializes integral floats such as ``0.0`` as ``0``.  The
     backend fact schema owns two numeric float surfaces (fact confidence and
     visual-reference region coordinates), so restore only those declared
     fields before hashing.  Every claim-bearing string and all other fields
-    remain byte-for-byte hash bound.
+    remain byte-for-byte hash bound.  The normalized value is also reused by
+    composite runtime hashes so JSON's ``1.0`` to ``1`` round trip cannot
+    create a false mismatch.
     """
 
     normalized = deepcopy(facts)
@@ -7259,7 +7351,11 @@ def _runtime_canonical_facts_hash(facts: list[Any], path: str) -> str:
             ):
                 _causal_failure(f"{ref_path}.region")
             ref["region"] = [float(coordinate) for coordinate in region]
-    return runtime_artifact_hash(normalized)
+    return normalized
+
+
+def _runtime_canonical_facts_hash(facts: list[Any], path: str) -> str:
+    return runtime_artifact_hash(_runtime_canonical_facts_value(facts, path))
 
 
 def _causal_runtime_hash(value: Any, path: str) -> str:
@@ -7660,14 +7756,10 @@ def _verify_release_fact_relationships(
 ) -> None:
     expected_process = deepcopy(RELEASE_PROCESS_FACT_IDS_BY_CLAIM.get(claim_id))
     expected_evidence = RELEASE_EVIDENCE_FACT_ID_BY_CLAIM.get(claim_id)
-    expected_artifacts = RELEASE_EVIDENCE_ARTIFACT_IDS_BY_CLAIM.get(claim_id)
-    expected_base_statuses = RELEASE_BASE_EVIDENCE_STATUS_BY_CLAIM.get(claim_id)
     expected_roles = RELEASE_SEMANTIC_FACT_ID_BY_CLAIM.get(claim_id)
     if (
         not isinstance(expected_process, dict)
         or not isinstance(expected_evidence, dict)
-        or not isinstance(expected_artifacts, dict)
-        or not isinstance(expected_base_statuses, dict)
         or not isinstance(expected_roles, dict)
     ):
         _causal_failure(f"{path}.claim_id")
@@ -7685,16 +7777,6 @@ def _verify_release_fact_relationships(
         for item in checklist.get("items", [])
         if isinstance(item, Mapping)
     }
-    actual_artifacts = {
-        item.get("item_id"): item.get("artifact_ids")
-        for item in checklist.get("items", [])
-        if isinstance(item, Mapping)
-    }
-    actual_statuses = {
-        item.get("item_id"): item.get("status")
-        for item in checklist.get("items", [])
-        if isinstance(item, Mapping)
-    }
     actual_roles = {
         fact.get("semantic_role"): fact.get("fact_id")
         for fact in facts
@@ -7706,22 +7788,9 @@ def _verify_release_fact_relationships(
     referenced_fact_ids = {
         fact_id for values in expected_process.values() for fact_id in values
     } | set(expected_evidence.values()) | set(expected_roles.values())
-    allowed_statuses = [deepcopy(expected_base_statuses)]
-    if include_memory_extension:
-        conditional = deepcopy(expected_base_statuses)
-        conditional["building_envelope"] = "conditional"
-        conditional["use_evidence"] = "conditional"
-        if claim_id == "DEMO-MOULD-002":
-            allowed_statuses = [conditional]
-        else:
-            required_now = deepcopy(conditional)
-            required_now["building_envelope"] = "missing"
-            allowed_statuses = [conditional, required_now]
     if (
         actual_process != expected_process
         or actual_evidence != expected_evidence
-        or actual_artifacts != expected_artifacts
-        or actual_statuses not in allowed_statuses
         or actual_roles != expected_roles
         or not referenced_fact_ids <= fact_ids
     ):
@@ -8872,6 +8941,336 @@ def _verify_unit_accounting(
         _causal_failure(path)
 
 
+def _canonical_assertion_id(fact: Mapping[str, Any], path: str) -> str:
+    """Mirror canonicalizer._assertion_id under the canonical-facts 1.6 contract."""
+
+    fact_id = fact.get("fact_id")
+    state = fact.get("state")
+    value = fact.get("value")
+    normalized_value = fact.get("normalized_value")
+    if (
+        not isinstance(fact_id, str)
+        or not fact_id
+        or not isinstance(state, str)
+        or not state
+        or not isinstance(value, str)
+        or normalized_value is not None
+        and not isinstance(normalized_value, str)
+    ):
+        _causal_failure(path)
+    material = {
+        "fact_id": fact_id,
+        "state": state,
+        "value": value,
+        "normalized_value": normalized_value,
+    }
+    encoded = json.dumps(
+        material,
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return f"assert_{hashlib.sha256(encoded).hexdigest()[:24]}"
+
+
+def _verify_assertion_selection_receipts(
+    result: Mapping[str, Any],
+    canonical_agent: Mapping[str, Any],
+) -> None:
+    path = "result.audit.canonicalization"
+    result_audit = _causal_mapping(result.get("audit"), "result.audit")
+    canonicalization = _causal_mapping(
+        result_audit.get("canonicalization"), path
+    )
+    diagnostics = _causal_mapping(
+        canonicalization.get("diagnostics"), f"{path}.diagnostics"
+    )
+    facts = _causal_list(result.get("facts"), "result.facts")
+    facts_by_id: dict[str, Mapping[str, Any]] = {}
+    for index, raw_fact in enumerate(facts):
+        fact = _causal_mapping(raw_fact, f"result.facts[{index}]")
+        fact_id = fact.get("fact_id")
+        if (
+            not isinstance(fact_id, str)
+            or not fact_id
+            or fact_id in facts_by_id
+        ):
+            _causal_failure(f"result.facts[{index}].fact_id")
+        facts_by_id[fact_id] = fact
+
+    accepted_ids = _causal_text_list(
+        diagnostics.get("accepted_fact_ids"),
+        f"{path}.diagnostics.accepted_fact_ids",
+    )
+    rejected_values = _causal_list(
+        diagnostics.get("rejected_facts"),
+        f"{path}.diagnostics.rejected_facts",
+    )
+    rejected_ids: list[str] = []
+    for index, raw_rejection in enumerate(rejected_values):
+        rejection_path = f"{path}.diagnostics.rejected_facts[{index}]"
+        rejection = _causal_mapping(raw_rejection, rejection_path)
+        fact_id = rejection.get("fact_id")
+        if (
+            set(rejection) != {"fact_id", "invariant"}
+            or not isinstance(fact_id, str)
+            or not fact_id
+            or fact_id in rejected_ids
+            or not isinstance(rejection.get("invariant"), str)
+            or not rejection["invariant"]
+        ):
+            _causal_failure(rejection_path)
+        rejected_ids.append(fact_id)
+    if (
+        set(accepted_ids) & set(rejected_ids)
+        or set(accepted_ids) | set(rejected_ids) != set(facts_by_id)
+        or diagnostics.get("accepted_fact_count") != len(accepted_ids)
+        or diagnostics.get("rejected_fact_count") != len(rejected_ids)
+        or diagnostics.get("deterministic_fallback_applied")
+        is not bool(rejected_ids)
+        or canonical_agent.get("accepted_ids") != accepted_ids
+        or canonical_agent.get("accepted_count") != len(accepted_ids)
+        or canonical_agent.get("rejected_count") != len(rejected_ids)
+        or canonical_agent.get("deterministic_fallback_applied")
+        is not bool(rejected_ids)
+    ):
+        _causal_failure(f"{path}.diagnostics.fact_membership")
+
+    selections = _causal_list(
+        canonicalization.get("assertion_selections"),
+        f"{path}.assertion_selections",
+    )
+    exact_fields = {
+        "fact_id",
+        "assertion_id",
+        "model_owned_fields",
+        "materialized_fields",
+        "attribution",
+        "deterministic_fallback_applied",
+    }
+    by_fact: dict[str, Mapping[str, Any]] = {}
+    for index, raw_selection in enumerate(selections):
+        selection_path = f"{path}.assertion_selections[{index}]"
+        selection = _causal_mapping(raw_selection, selection_path)
+        fact_id = selection.get("fact_id")
+        if (
+            set(selection) != exact_fields
+            or not isinstance(fact_id, str)
+            or fact_id not in facts_by_id
+            or fact_id in by_fact
+        ):
+            _causal_failure(selection_path)
+        by_fact[fact_id] = selection
+    if len(selections) != len(facts) or set(by_fact) != set(facts_by_id):
+        _causal_failure(f"{path}.assertion_selections.fact_membership")
+
+    accepted = set(accepted_ids)
+    for fact_id, fact in facts_by_id.items():
+        selection = by_fact[fact_id]
+        selection_path = f"{path}.assertion_selections[{fact_id}]"
+        expected_model_fields = (
+            ["assertion_id", "source_ref_ids", "confidence"]
+            if fact.get("controls_process") is True
+            else ["source_ref_ids", "confidence"]
+        )
+        is_accepted = fact_id in accepted
+        if (
+            selection.get("assertion_id")
+            != _canonical_assertion_id(fact, f"{selection_path}.assertion_id")
+            or selection.get("model_owned_fields") != expected_model_fields
+            or selection.get("materialized_fields")
+            != CANONICAL_ASSERTION_MATERIALIZED_FIELDS
+            or any(field not in fact for field in CANONICAL_ASSERTION_MATERIALIZED_FIELDS)
+            or selection.get("attribution")
+            != (
+                "OpenRouter Nemotron Canonicalizer"
+                if is_accepted
+                else "deterministic_application"
+            )
+            or selection.get("deterministic_fallback_applied")
+            is not (not is_accepted)
+        ):
+            _causal_failure(selection_path)
+
+
+def _compatible_release_process_decisions(
+    fact: Mapping[str, Any], path: str
+) -> tuple[str, set[str]]:
+    decision_key = fact.get("decision_key")
+    normalized_value = fact.get("normalized_value")
+    try:
+        exact = RELEASE_DECISION_OPTIONS[decision_key][normalized_value]
+        conservative = RELEASE_CONSERVATIVE_DECISIONS[decision_key]
+    except (KeyError, TypeError):
+        _causal_failure(path)
+    return exact, {exact, conservative}
+
+
+def _verify_accepted_process_projection(
+    process: Mapping[str, Any],
+    decisions: list[Mapping[str, Any]],
+) -> None:
+    path = "result.process"
+    projection_facts = [
+        {
+            "controls_process": True,
+            "decision_key": item["decision_key"],
+            "decision_value": item["decision_value"],
+        }
+        for item in decisions
+    ]
+    try:
+        projection = decision_projection(projection_facts)
+        expected_nodes = deepcopy(_causal_list(process.get("nodes"), f"{path}.nodes"))
+        expected_edges = deepcopy(_causal_list(process.get("edges"), f"{path}.edges"))
+        expected_overlay = apply_process_projection(
+            expected_nodes,
+            expected_edges,
+            projection,
+            list(_causal_list(process.get("main_spine"), f"{path}.main_spine")),
+        )
+    except (KeyError, TypeError, ValueError):
+        _causal_failure(f"{path}.accepted_decision_projection")
+    if (
+        process.get("current_node") != projection["current_node"]
+        or process.get("selected_path") != projection["selected_path"]
+        or process.get("current_overlay") != expected_overlay
+        or process.get("nodes") != expected_nodes
+        or process.get("edges") != expected_edges
+    ):
+        _causal_failure(f"{path}.accepted_decision_projection")
+
+
+def _release_artifact_capabilities(artifact: Mapping[str, Any]) -> set[str]:
+    """Mirror the reusable backend capability resolver without claim-ID oracles."""
+
+    artifact_id = str(artifact.get("artifact_id", "")).casefold()
+    filename = str(artifact.get("filename", "")).casefold()
+    media_type = str(artifact.get("media_type", "")).casefold()
+    text = f"{artifact_id} {filename}"
+    capabilities = {"submitted_source"}
+    if artifact_id == "message":
+        capabilities.update(
+            {"claim_message", "customer_correspondence", "correspondence"}
+        )
+    if artifact_id == "intake":
+        capabilities.add("policy_reference")
+    if media_type.startswith("image/") or any(
+        word in text for word in ("photo", "image", "photograph")
+    ):
+        capabilities.add("photo")
+    if any(
+        word in text for word in ("lease", "tenancy", "rental_agreement", "contract")
+    ):
+        capabilities.add("lease")
+    if any(word in text for word in ("delivery", "receipt", "registered_mail")):
+        capabilities.add("delivery_proof")
+    if any(word in text for word in ("timeline", "chronology")):
+        capabilities.add("timeline")
+    if any(word in text for word in ("notification", "notice", "reported_defect")):
+        capabilities.update(
+            {"defect_notice", "customer_correspondence", "correspondence"}
+        )
+    if any(
+        word in text
+        for word in ("management_reply", "landlord_reply", "property_manager")
+    ):
+        capabilities.update({"management_correspondence", "correspondence"})
+    if any(
+        word in text for word in ("inspection", "technical", "expert", "building_physics")
+    ):
+        capabilities.update({"technical_report", "inspection_report"})
+    if any(
+        word in text for word in ("moisture", "humidity", "temperature", "measurement")
+    ):
+        capabilities.add("measurement_report")
+    if any(
+        word in text for word in ("envelope", "facade", "window_seal", "thermal_bridge")
+    ):
+        capabilities.add("building_report")
+    if any(
+        word in text for word in ("maintenance", "repair", "work_order", "contractor")
+    ):
+        capabilities.add("maintenance_record")
+    if any(
+        word in text for word in ("ventilation_log", "heating", "occupancy", "use_log")
+    ):
+        capabilities.add("use_log")
+    if any(word in text for word in ("utility", "energy_bill")):
+        capabilities.add("utility_record")
+    if any(word in text for word in ("remediation_plan", "scope_of_work")):
+        capabilities.add("remediation_plan")
+    if any(word in text for word in ("invoice", "rent_record", "financial", "loss")):
+        capabilities.update({"invoice", "financial_record"})
+    if any(word in text for word in ("settlement", "mediation", "proposal")):
+        capabilities.add("settlement_record")
+    if any(word in text for word in ("conciliation", "court", "filing")):
+        capabilities.add("legal_filing")
+    if any(word in text for word in ("completion", "closure", "completed")):
+        capabilities.add("completion_record")
+    if any(word in text for word in ("medical", "doctor", "health_report")):
+        capabilities.add("medical")
+    return capabilities
+
+
+def _release_evidence_candidates(claim_id: str) -> dict[str, list[str]]:
+    claim = CASEPATH_CLAIMS.get(claim_id)
+    if not isinstance(claim, Mapping):
+        _causal_failure("result.claim_id")
+    package = observable_claim_package(claim)
+    inventory: list[Mapping[str, Any]] = [
+        {
+            "artifact_id": "message",
+            "filename": "Claim message",
+            "media_type": "text/plain",
+        },
+        {
+            "artifact_id": "intake",
+            "filename": "Claim intake",
+            "media_type": "application/casepath-intake+json",
+        },
+        *_causal_list(package.get("artifacts"), "result.observable_package.artifacts"),
+    ]
+    by_id: dict[str, set[str]] = {}
+    for index, raw_artifact in enumerate(inventory):
+        path = f"result.observable_package.artifacts[{index}]"
+        artifact = _causal_mapping(raw_artifact, path)
+        artifact_id = artifact.get("artifact_id")
+        if (
+            not isinstance(artifact_id, str)
+            or not artifact_id
+            or artifact_id in by_id
+            or not isinstance(artifact.get("filename"), str)
+            or not artifact["filename"]
+            or not isinstance(artifact.get("media_type"), str)
+            or not artifact["media_type"]
+        ):
+            _causal_failure(path)
+        by_id[artifact_id] = _release_artifact_capabilities(artifact)
+
+    candidates: dict[str, list[str]] = {}
+    synthetic_allowed = {
+        "claim_message",
+        "policy_reference",
+        "customer_objective",
+        "health_safety_statement",
+        "defect_notice",
+    }
+    for item_id, required_capabilities in RELEASE_EVIDENCE_ARTIFACT_CAPABILITIES.items():
+        candidates[item_id] = sorted(
+            artifact_id
+            for artifact_id, capabilities in by_id.items()
+            if required_capabilities & capabilities
+            and (
+                item_id == "source_integrity"
+                and artifact_id not in {"message", "intake"}
+                or artifact_id not in {"message", "intake"}
+                or item_id in synthetic_allowed
+            )
+        )
+    return candidates
+
+
 def _checklist_derived_sections(items: list[Mapping[str, Any]]) -> dict[str, Any]:
     present: list[dict[str, Any]] = []
     required: list[dict[str, Any]] = []
@@ -9178,14 +9577,18 @@ def _verify_process_artifact(
         _causal_failure(f"{path}.decisions[].fact_id")
     for fact_id, decision in by_fact.items():
         fact = controlling_facts[fact_id]
-        for field in (
-            "decision_key",
-            "decision_value",
-            "state",
-            "normalized_value",
-        ):
+        for field in ("decision_key", "state", "normalized_value"):
             if decision.get(field) != fact.get(field):
                 _causal_failure(f"{path}.decisions[].{field}")
+        exact, compatible = _compatible_release_process_decisions(
+            fact, f"{path}.decisions[].decision_value"
+        )
+        if (
+            decision.get("decision_value") not in compatible
+            or decision.get("deterministic_fallback_applied") is True
+            and decision.get("decision_value") != exact
+        ):
+            _causal_failure(f"{path}.decisions[].decision_value")
 
     process = _causal_mapping(result.get("process"), "result.process")
     contribution = _causal_mapping(
@@ -9228,6 +9631,7 @@ def _verify_process_artifact(
             _causal_failure(f"{node_path}.agent_decision_contributions")
     if attached_fact_ids != set(by_fact):
         _causal_failure("result.process.nodes.agent_decision_contributions")
+    _verify_accepted_process_projection(process, decisions)
     return decisions
 
 
@@ -9384,12 +9788,82 @@ def _verify_evidence_artifact(
         public_by_id[item_id] = item
     if set(public_by_id) != set(by_id):
         _causal_failure("result.checklist.items.item_id")
+    candidates = _release_evidence_candidates(str(result.get("claim_id", "")))
+    facts_by_id: dict[str, Mapping[str, Any]] = {}
+    for index, raw_fact in enumerate(
+        _causal_list(result.get("facts"), "result.facts")
+    ):
+        fact_path = f"result.facts[{index}]"
+        fact = _causal_mapping(raw_fact, fact_path)
+        fact_id = fact.get("fact_id")
+        if not isinstance(fact_id, str) or not fact_id or fact_id in facts_by_id:
+            _causal_failure(f"{fact_path}.fact_id")
+        facts_by_id[fact_id] = fact
+    process = _causal_mapping(result.get("process"), "result.process")
+    selected_path = set(
+        _causal_text_list(process.get("selected_path"), "result.process.selected_path")
+    )
+    overlay = _causal_mapping(
+        process.get("current_overlay"), "result.process.current_overlay"
+    )
+    next_action_node_id = overlay.get("next_action_node_id")
+    if not isinstance(next_action_node_id, str) or not next_action_node_id:
+        _causal_failure("result.process.current_overlay.next_action_node_id")
+    active_nodes = {*selected_path, next_action_node_id}
     for item_id, accepted_item in by_id.items():
         public_item = public_by_id[item_id]
         public_artifact_ids = _causal_text_list(
             public_item.get("artifact_ids"),
             "result.checklist.items[].artifact_ids",
         )
+        artifact_ids = accepted_item["artifact_ids"]
+        required_level = public_item.get("required_level")
+        status = accepted_item["status"]
+        owner_node_ids = _causal_text_list(
+            public_item.get("node_ids"), "result.checklist.items[].node_ids"
+        )
+        fact_id = public_item.get("fact_id")
+        fact = facts_by_id.get(fact_id) if isinstance(fact_id, str) else None
+        if fact is None:
+            _causal_failure("result.checklist.items[].fact_id")
+        fact_artifact_ids = {
+            ref.get("artifact_id")
+            for ref in (
+                _causal_mapping(raw_ref, "result.facts[].source_refs[]")
+                for raw_ref in _causal_list(
+                    fact.get("source_refs"), "result.facts[].source_refs"
+                )
+            )
+            if isinstance(ref.get("artifact_id"), str)
+        }
+        grounded_candidates = set(candidates.get(item_id, [])) & fact_artifact_ids
+        expected_current_path = bool(active_nodes.intersection(owner_node_ids))
+        if artifact_ids:
+            coherent_statuses = {
+                "provided_sufficient",
+                "provided_insufficient",
+            }
+            if required_level == "conditional":
+                coherent_statuses.add("conditional")
+        elif required_level == "mandatory":
+            coherent_statuses = {"missing"}
+        elif required_level == "conditional":
+            coherent_statuses = {"conditional", "not_applicable"}
+        else:
+            _causal_failure("result.checklist.items[].required_level")
+        if (
+            item_id not in candidates
+            or set(artifact_ids) - grounded_candidates
+            or status not in coherent_statuses
+            or public_item.get("current_path") is not expected_current_path
+            or status == "missing"
+            and not expected_current_path
+            or status == "conditional"
+            and public_item.get("applies_when") in {None, "", "always"}
+        ):
+            _causal_failure(
+                f"audit.specialist_artifacts.evidence_checklist.items[{item_id}].coherence"
+            )
         if (
             public_item.get("status") != accepted_item["status"]
             or sorted(public_artifact_ids) != accepted_item["artifact_ids"]
@@ -9643,6 +10117,7 @@ def _verify_hybrid_causal_artifacts(
         facts, "result.facts"
     ):
         _causal_failure("audit.agents.canonical_facts.output_artifact_hash")
+    _verify_assertion_selection_receipts(result, canonical_agent)
 
     artifacts = _causal_mapping(
         audit.get("specialist_artifacts"), "audit.specialist_artifacts"
@@ -9748,12 +10223,93 @@ def _verify_hybrid_causal_artifacts(
 
     verification = _causal_mapping(result.get("verification"), "result.verification")
     whole_gate = gates_by_id["whole_playbook_gate"]
-    if whole_gate.get("verification_report_hash") != _causal_hash(
+    process = _causal_mapping(result.get("process"), "result.process")
+    checklist = _causal_mapping(result.get("checklist"), "result.checklist")
+    accepted_bundle = {
+        "process": _semantic_process_dto(process),
+        "checklist": _semantic_checklist_dto(checklist),
+        "final_brief": final_artifact,
+    }
+    expected_bundle_hash = _causal_hash(
+        accepted_bundle,
+        "audit.deterministic_gates.whole_playbook_gate.output_artifact_hash",
+    )
+    expected_final_brief_hash = _causal_hash(
+        final_artifact,
+        "audit.deterministic_gates.whole_playbook_gate.final_brief_artifact_hash",
+    )
+    expected_verification_report_hash = _causal_hash(
         verification,
         "audit.deterministic_gates.whole_playbook_gate.verification_report_hash",
+    )
+    result_audit = _causal_mapping(result.get("audit"), "result.audit")
+    canonicalization = _causal_mapping(
+        result_audit.get("canonicalization"),
+        "result.audit.canonicalization",
+    )
+    effective_understanding = {
+        "summary": result.get("summary"),
+        "category": result.get("category"),
+        "subcategory": result.get("subcategory"),
+        "scope": result.get("scope"),
+        "dispute": result.get("dispute"),
+        "facts": _runtime_canonical_facts_value(
+            _causal_list(result.get("facts"), "result.facts"),
+            "result.facts",
+        ),
+        "issues": result.get("issues"),
+        "observable_only": True,
+        "canonicalization": canonicalization,
+    }
+    expected_whole_playbook_hash = _causal_runtime_hash(
+        {
+            "understanding": effective_understanding,
+            "legal": result.get("legal_research"),
+            "process": process,
+            "checklist": checklist,
+            "precedents": result.get("precedents"),
+            "precedent_ranking": result.get("precedent_ranking"),
+        },
+        "result.verification.whole_playbook_hash",
+    )
+    if whole_gate.get("output_artifact_hash") != expected_bundle_hash:
+        _causal_failure(
+            "audit.deterministic_gates.whole_playbook_gate.output_artifact_hash"
+        )
+    if (
+        whole_gate.get("output_projection_contract")
+        != WHOLE_PLAYBOOK_OUTPUT_PROJECTION_CONTRACT
     ):
         _causal_failure(
+            "audit.deterministic_gates.whole_playbook_gate.output_projection_contract"
+        )
+    if whole_gate.get("final_brief_artifact_hash") != expected_final_brief_hash:
+        _causal_failure(
+            "audit.deterministic_gates.whole_playbook_gate.final_brief_artifact_hash"
+        )
+    if whole_gate.get("verification_report_hash") != expected_verification_report_hash:
+        _causal_failure(
             "audit.deterministic_gates.whole_playbook_gate.verification_report_hash"
+        )
+    if (
+        whole_gate.get("verification_whole_playbook_hash")
+        != expected_whole_playbook_hash
+    ):
+        _causal_failure(
+            "audit.deterministic_gates.whole_playbook_gate.verification_whole_playbook_hash"
+        )
+    if verification.get("whole_playbook_hash") != expected_whole_playbook_hash:
+        _causal_failure("result.verification.whole_playbook_hash")
+    if len(
+        {
+            expected_bundle_hash,
+            expected_final_brief_hash,
+            expected_verification_report_hash,
+            expected_whole_playbook_hash,
+        }
+    ) != 4:
+        _causal_failure(
+            "audit.deterministic_gates.whole_playbook_gate.distinct_hash_domains"
         )
     checks = _causal_list(verification.get("checks"), "result.verification.checks")
     check_ids = [
@@ -9840,8 +10396,10 @@ def _verify_cold_flagship_evidence(
                 raise VerificationError(
                     f"Dynamic flagship agent {agent_id} {key} must be {expected!r}"
                 )
-        if agent.get("outcome") not in {"succeeded", "succeeded_with_guarded_fallback"}:
-            raise VerificationError(f"Dynamic flagship agent {agent_id} did not succeed")
+        if agent.get("outcome") != "succeeded":
+            raise VerificationError(
+                f"Dynamic flagship agent {agent_id} must be a clean succeeded call"
+            )
         _verify_successful_provider_provenance(
             agent,
             f"Dynamic flagship agent {agent_id}",
@@ -9867,8 +10425,7 @@ def _verify_cold_flagship_evidence(
             or accepted_count < 1
             or not isinstance(rejected_count, int)
             or isinstance(rejected_count, bool)
-            or rejected_count < 0
-            or accepted_count <= rejected_count
+            or rejected_count != 0
         ):
             raise VerificationError(
                 f"Dynamic flagship agent {agent_id} lacks a strict accepted majority"
@@ -9884,9 +10441,9 @@ def _verify_cold_flagship_evidence(
                 f"Dynamic flagship agent {agent_id} accepted IDs are unbound"
             )
         fallback_applied = agent.get("deterministic_fallback_applied")
-        if fallback_applied is not (rejected_count > 0):
+        if fallback_applied is not False:
             raise VerificationError(
-                f"Dynamic flagship agent {agent_id} fallback disclosure is inconsistent"
+                f"Dynamic flagship agent {agent_id} must not use deterministic fallback"
             )
         fallback_count += int(fallback_applied)
         if agent_id == "canonical_facts":
@@ -9895,8 +10452,8 @@ def _verify_cold_flagship_evidence(
             if (
                 not isinstance(projected, list)
                 or len(set(projected)) != len(projected)
-                or any(item not in accepted_ids for item in projected)
-                or projection_count != len(projected)
+                or projected != []
+                or projection_count != 0
             ):
                 raise VerificationError(
                     "Canonical facts source-reference projection disclosure is invalid"
@@ -9945,6 +10502,38 @@ def _verify_cold_flagship_evidence(
         item["gate_id"]: item["role"] for item in REQUIRED_DETERMINISTIC_GATES
     }
     result = run["result"]
+    if not isinstance(result.get("process"), Mapping) or not isinstance(
+        result.get("checklist"), Mapping
+    ):
+        raise VerificationError("Dynamic flagship accepted DTO is missing")
+    result_audit = _causal_mapping(result.get("audit"), "result.audit")
+    expected_understanding = {
+        "summary": result.get("summary"),
+        "category": result.get("category"),
+        "subcategory": result.get("subcategory"),
+        "scope": result.get("scope"),
+        "dispute": result.get("dispute"),
+        "facts": result.get("facts"),
+        "issues": result.get("issues"),
+        "observable_only": True,
+        "canonicalization": result_audit.get("canonicalization"),
+    }
+    if run.get("understanding") != expected_understanding:
+        _causal_failure("run.understanding")
+    for key in (
+        "process",
+        "checklist",
+        "precedents",
+        "precedent_ranking",
+        "verification",
+    ):
+        if run.get(key) != result.get(key):
+            _causal_failure(f"run.{key}")
+    accepted_bundle = {
+        "process": _semantic_process_dto(result.get("process")),
+        "checklist": _semantic_checklist_dto(result.get("checklist")),
+        "final_brief": audit.get("final_claim_brief"),
+    }
     gate_bindings = {
         "deterministic_process_gate": (
             "process_graph",
@@ -9957,8 +10546,8 @@ def _verify_cold_flagship_evidence(
             "evidence_checklist",
         ),
         "whole_playbook_gate": (
-            "final_claim_brief",
-            audit.get("final_claim_brief"),
+            "verified_claim_playbook",
+            accepted_bundle,
             "final_claim_brief_audit",
         ),
     }
@@ -9984,10 +10573,14 @@ def _verify_cold_flagship_evidence(
             "output_artifact": output_artifact,
             "output_artifact_hash": accepted_artifact_hash(artifact_value),
         }
+        if gate_id == "whole_playbook_gate":
+            expected_pairs["output_projection_contract"] = (
+                WHOLE_PLAYBOOK_OUTPUT_PROJECTION_CONTRACT
+            )
         for key, expected in expected_pairs.items():
             if gate.get(key) != expected:
                 raise VerificationError(
-                    f"Dynamic flagship gate {gate_id} {key} must be {expected!r}"
+                    f"Dynamic flagship gate {gate_id}.{key} must be {expected!r}"
                 )
         if not re.fullmatch(r"[0-9a-f]{64}", str(gate.get("input_artifact_hash", ""))):
             raise VerificationError(f"Dynamic flagship gate {gate_id} lacks an input hash")
@@ -10040,8 +10633,10 @@ def _verify_cold_flagship_evidence(
                 raise VerificationError(
                     f"Dynamic flagship ledger {agent_id} {key} must be {expected!r}"
                 )
-        if item.get("outcome") not in {"succeeded", "succeeded_with_guarded_fallback"}:
-            raise VerificationError(f"Dynamic flagship ledger {agent_id} did not succeed")
+        if item.get("outcome") != "succeeded":
+            raise VerificationError(
+                f"Dynamic flagship ledger {agent_id} must be a clean succeeded call"
+            )
         _verify_successful_provider_provenance(
             item,
             f"Dynamic flagship ledger {agent_id}",
@@ -10217,6 +10812,11 @@ def _verify_cold_warm_model_pair(
     }
     if cold_static_audit != warm_static_audit:
         raise VerificationError(f"{label} warm replay changed cached orchestration output")
+    if (
+        cold_audit.get("guarded_fallback_count") != 0
+        or warm_audit.get("guarded_fallback_count") != 0
+    ):
+        raise VerificationError(f"{label} must contain zero guarded fallbacks")
 
     agent_dynamic_fields = {
         "call_id",
@@ -10278,8 +10878,7 @@ def _verify_cold_warm_model_pair(
         }
         if (
             any(cold_agent.get(key) != value for key, value in expected_cold_agent.items())
-            or cold_agent.get("outcome")
-            not in {"succeeded", "succeeded_with_guarded_fallback"}
+            or cold_agent.get("outcome") != "succeeded"
             or not isinstance(cold_call_id, str)
             or not cold_call_id
             or cold_agent.get("origin_call_id") != cold_call_id
@@ -10305,10 +10904,8 @@ def _verify_cold_warm_model_pair(
             or any(not isinstance(value, str) or not value for value in accepted_ids)
             or not isinstance(rejected_count, int)
             or isinstance(rejected_count, bool)
-            or rejected_count < 0
-            or accepted_count <= rejected_count
-            or cold_agent.get("deterministic_fallback_applied")
-            is not (rejected_count > 0)
+            or rejected_count != 0
+            or cold_agent.get("deterministic_fallback_applied") is not False
             or any(
                 re.fullmatch(r"[0-9a-f]{64}", str(cold_agent.get(field, "")))
                 is None
@@ -10316,6 +10913,13 @@ def _verify_cold_warm_model_pair(
             )
         ):
             raise VerificationError(f"{label} {agent_id} cold contribution is invalid")
+        if agent_id == "canonical_facts" and (
+            cold_agent.get("source_reference_projection_fact_ids") != []
+            or cold_agent.get("source_reference_projection_count") != 0
+        ):
+            raise VerificationError(
+                f"{label} canonical facts must contain zero source projections"
+            )
 
         cold_static_agent = {
             key: value
@@ -10341,6 +10945,10 @@ def _verify_cold_warm_model_pair(
         }
         if (
             cold_static_agent != warm_static_agent
+            or warm_agent.get("input_artifact_hash")
+            != cold_agent.get("input_artifact_hash")
+            or warm_agent.get("output_artifact_hash")
+            != cold_agent.get("output_artifact_hash")
             or not isinstance(warm_call_id, str)
             or not warm_call_id
             or warm_call_id == cold_call_id
@@ -10409,7 +11017,7 @@ def _verify_cold_warm_model_pair(
             "outcome": cold_agent.get("outcome"),
             "response_id": cold_agent.get("response_id"),
             "response_model": cold_agent.get("response_model"),
-            "upstream_provider": "DeepInfra",
+            "upstream_provider": REQUIRED_UPSTREAM_PROVIDER,
             "finish_reason": "stop",
             "usage_source": cold_usage.get("usage_source"),
             "prompt_tokens": cold_usage.get("prompt_tokens"),
@@ -10466,7 +11074,7 @@ def _verify_cold_warm_model_pair(
             "origin_call_id": cold_call_id,
             "response_id": cold_item.get("response_id"),
             "response_model": cold_item.get("response_model"),
-            "upstream_provider": "DeepInfra",
+            "upstream_provider": REQUIRED_UPSTREAM_PROVIDER,
             "origin_usage": origin_usage,
             "origin_finish_reason": cold_item.get("finish_reason"),
             "usage_source": "cache",
@@ -10537,6 +11145,10 @@ def _verify_cold_warm_model_pair(
                 "accepted_ids": source_agent.get("accepted_ids"),
                 "accepted_count": source_agent.get("accepted_count"),
             }
+            if gate_id == "whole_playbook_gate":
+                expected_gate["output_projection_contract"] = (
+                    WHOLE_PLAYBOOK_OUTPUT_PROJECTION_CONTRACT
+                )
             if (
                 any(gate.get(key) != value for key, value in expected_gate.items())
                 or any(
@@ -10818,6 +11430,19 @@ def _verify_dynamic_report_integrity(
 ) -> None:
     checks = report.get("checks")
     failures = report.get("failures")
+    required_visible_replay_checks = {
+        "Eight returned facts each show their exact source first, then the accepted fact, with run-bound replay lineage",
+        "The visible graph replays accepted facts and checked law without inventing new source reads, then clears its plan before each node",
+    }
+    check_names = (
+        {
+            check.get("name")
+            for check in checks
+            if isinstance(check, Mapping)
+        }
+        if isinstance(checks, list)
+        else set()
+    )
     if (
         not isinstance(checks, list)
         or not checks
@@ -10842,6 +11467,7 @@ def _verify_dynamic_report_integrity(
             baseline_run.get("run_id"),
             later_run.get("run_id"),
         ]
+        or not required_visible_replay_checks.issubset(check_names)
     ):
         raise VerificationError("Dynamic QA report integrity or run lineage is invalid")
 
@@ -10876,8 +11502,8 @@ def _expected_public_agentic_runtime() -> dict[str, Any]:
             "external_key_hard_limit_guard": "configured",
             "credential_configured": True,
             "provider_routing": {
-                "endpoint_tag": "deepinfra/fp4",
-                "expected_upstream_provider": "DeepInfra",
+                "endpoint_tag": REQUIRED_PROVIDER_ENDPOINT_TAG,
+                "expected_upstream_provider": REQUIRED_UPSTREAM_PROVIDER,
                 "allow_fallbacks": False,
                 "require_parameters": True,
                 "data_collection": "deny",
@@ -11536,6 +12162,33 @@ def verify_release_contract() -> None:
     for path, pattern, label in marker_checks:
         if not path.is_file() or not pattern.search(path.read_text(encoding="utf-8")):
             raise VerificationError(f"Missing {label} in {relative(path)}")
+
+    exact_static_contract_markers = {
+        REPOSITORY / "casepath-qa" / "run-local-real-nemotron-v20.sh": (
+            'assert all(item.get("outcome") == "succeeded" for item in cold)',
+            'assert all(item.get("deterministic_fallback_applied") is False for item in cold)',
+            'assert all(item.get("rejected_fact_count", 0) == 0 for item in cold)',
+            'assert all(item.get("rejected_item_count", 0) == 0 for item in cold)',
+            'assert all(item.get("source_reference_projection_count", 0) == 0 for item in cold)',
+        ),
+        REPOSITORY / "casepath-qa" / "browser-focused-v20.mjs": (
+            "if (EXPECT_REAL_NEMOTRON && (",
+            "item.deterministic_fallback_applied !== false",
+            "item.rejected_count !== 0",
+            "(cacheMode === 'cold' && item.outcome !== 'succeeded')",
+            "if (EXPECT_REAL_NEMOTRON && projected.length)",
+            "presentationMode !== 'returned-action-replay'",
+            "returned-action replay is not visibly labelled",
+            "graph replay is not visibly labelled as returned work",
+        ),
+    }
+    for path, markers in exact_static_contract_markers.items():
+        source = path.read_text(encoding="utf-8") if path.is_file() else ""
+        missing = [marker for marker in markers if marker not in source]
+        if missing:
+            raise VerificationError(
+                f"Static real-run/replay contract is incomplete in {relative(path)}: {missing}"
+            )
 
     def pinned_requirements(path: Path) -> dict[str, str]:
         pins: dict[str, str] = {}

@@ -120,7 +120,7 @@ def test_health_and_release_metadata_expose_semantic_identity(client: TestClient
     assert value["agentic_runtime"]["safety"]["provider_max_in_flight"] == 1
     assert value["configured_model_identity"] == OPENROUTER_MODEL
     assert value["components"] == COMPONENT_VERSIONS
-    assert value["components"]["agent_graph"] == MULTI_AGENT_VERSION == "1.2.2"
+    assert value["components"]["agent_graph"] == MULTI_AGENT_VERSION
     deployment = client.get("/deployment-health").json()
     assert deployment["source_commit"] == source_commit
     assert deployment["api_release"] == "15.2.0"
@@ -160,8 +160,8 @@ def test_model_ready_requires_exact_runtime_profile_and_secret_presence(
     assert ready.json()["agentic_runtime"]["safety"]["credential_configured"] is True
     health = client.get("/healthz").json()
     assert health["agentic_runtime"]["safety"]["provider_routing"] == {
-        "endpoint_tag": "deepinfra/fp4",
-        "expected_upstream_provider": "DeepInfra",
+        "endpoint_tag": "together",
+        "expected_upstream_provider": "Together",
         "allow_fallbacks": False,
         "require_parameters": True,
         "data_collection": "deny",

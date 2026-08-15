@@ -204,7 +204,7 @@ printf 'Deterministic preflight cleared; starting the one authorized production 
 (
   cd "$qa_directory"
   CASEPATH_QA_OUT="$qa_output" \
-  BASE_URL=https://casepath-swiss-claim-lab.onrender.com \
+  BASE_URL=https://casepath.kumarnavish.chatgpt.site \
   API_URL=https://casepath-agentic-api.onrender.com \
   node browser-guided-v13-smoke.mjs
 )

@@ -7,6 +7,7 @@ const port = Number(process.env.PORT || 10000);
 const allowedOrigins = new Set([
   'https://casepath.onrender.com',
   'https://casepath-swiss-claim-lab.onrender.com',
+  'https://casepath.kumarnavish.chatgpt.site',
 ]);
 const mediaTypes = Object.freeze({
   '.json': 'application/json; charset=utf-8',

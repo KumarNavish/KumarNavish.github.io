@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from casepath_api.data import ARTIFACTS, CLAIMS
+from casepath_api.data import ARTIFACTS, CLAIMS, HISTORICAL_CASES
 from casepath_api.evidence_relations import (
     derive_evidence_relations,
     apply_evidence_relations,
@@ -17,6 +17,8 @@ from casepath_api.pipeline_v15 import (
     semantic_checklist_dto,
     semantic_process_dto,
 )
+from casepath_api.precedent_ranking import rank_precedents
+from casepath_api.projections import checklist_derived_sections
 from casepath_api.storage import Storage
 from casepath_api.validation import ContractValidationError
 
@@ -450,6 +452,41 @@ def test_terminal_verifier_rejects_self_consistent_grounding_forgery(
 
     with pytest.raises(ContractValidationError):
         _verify_result(pipeline, storage, run, forged)
+
+
+def test_terminal_verifier_accepts_bounded_dynamic_evidence_choices(runtime):
+    storage, pipeline = runtime
+    run = _wait(storage, pipeline.create("DEF-027-E0-DEMO"))
+    dynamic = deepcopy(run["result"])
+    items = {item["item_id"]: item for item in dynamic["checklist"]["items"]}
+    items["recurrence_chronology"]["status"] = "provided_sufficient"
+    items["repair_history"]["artifact_ids"] = []
+    for item_id in ("use_evidence", "remediation_plan", "completion_record"):
+        items[item_id]["status"] = "conditional"
+        items[item_id]["artifact_ids"] = []
+    dynamic["checklist"].update(
+        checklist_derived_sections(dynamic["checklist"]["items"])
+    )
+    understanding = {
+        "facts": dynamic["facts"],
+        "category": dynamic["category"],
+        "subcategory": dynamic["subcategory"],
+    }
+    reranked = rank_precedents(
+        current_claim_id=dynamic["claim_id"],
+        understanding=understanding,
+        process=dynamic["process"],
+        checklist=dynamic["checklist"],
+        memories=storage.memories(),
+        corpus=HISTORICAL_CASES,
+    )
+    dynamic["precedents"] = reranked["results"]
+    dynamic["precedent_ranking"] = reranked["receipt"]
+
+    report = _verify_result(pipeline, storage, run, dynamic)
+
+    assert report["valid"] is True
+    assert report["computed"] is True
 
 
 @pytest.mark.parametrize("claim_id", ["DEF-027-E0-DEMO", "DEMO-MOULD-002"])
