@@ -7429,3 +7429,210 @@ html[data-casepath-release="20.0.0"] .casepath-artifact-canvas .ac-source-prelud
     animation:none!important;
   }
 }
+
+/*
+ * Read -> prove -> place.
+ *
+ * Keep the real source as the dominant object while a node is being built.
+ * The chapter line explains what is happening in plain language; the quieter
+ * process map remains visible as context, never as competition.
+ */
+.casepath-artifact-canvas .ac-decision-workspace{
+  --ac-decision-chapter:"1 of 3  ·  Choose the exact source";
+  --ac-decision-note:"One source is opened at a time.";
+  --ac-decision-progress:16%;
+  position:relative;
+  box-sizing:border-box;
+  padding-top:30px;
+}
+
+.casepath-artifact-canvas .ac-decision-workspace[data-decision-flow-state="read-source"]{
+  --ac-decision-chapter:"1 of 3  ·  Read the exact source";
+  --ac-decision-note:"Read the full context before any words move forward.";
+  --ac-decision-progress:34%;
+}
+
+.casepath-artifact-canvas .ac-decision-workspace[data-decision-flow-state="highlight-source"]{
+  --ac-decision-chapter:"2 of 3  ·  Keep only what the source proves";
+  --ac-decision-note:"Only the highlighted passage will support this decision.";
+  --ac-decision-progress:66%;
+}
+
+.casepath-artifact-canvas .ac-decision-workspace[data-decision-flow-state="combine"]{
+  --ac-decision-chapter:"3 of 3  ·  Form the decision";
+  --ac-decision-note:"The accepted evidence is becoming one bounded answer.";
+  --ac-decision-progress:86%;
+}
+
+.casepath-artifact-canvas .ac-decision-workspace:is(
+  [data-decision-flow-state="complete"],
+  [data-decision-flow-state="receding"]
+){
+  --ac-decision-chapter:"Decision ready  ·  Add the grounded node";
+  --ac-decision-note:"This node can now join the handling path.";
+  --ac-decision-progress:100%;
+}
+
+.casepath-artifact-canvas .ac-decision-workspace-waiting{
+  --ac-decision-chapter:"Guardrail  ·  Keep this decision open";
+  --ac-decision-note:"An earlier answer is missing, so CasePath does not guess.";
+  --ac-decision-progress:66%;
+}
+
+.casepath-artifact-canvas .ac-decision-workspace:before{
+  content:var(--ac-decision-chapter);
+  position:absolute;
+  top:0;
+  right:0;
+  left:0;
+  height:20px;
+  border-bottom:1px solid #e1e4e8;
+  color:#59606a;
+  font:720 9px/1.2 Inter,ui-sans-serif,system-ui,sans-serif;
+  letter-spacing:.025em;
+}
+
+.casepath-artifact-canvas .ac-decision-workspace:after{
+  content:"";
+  position:absolute;
+  top:19px;
+  left:0;
+  width:var(--ac-decision-progress);
+  height:2px;
+  border-radius:2px;
+  background:#a81f22;
+  transition:width .72s var(--ac-ease);
+}
+
+.casepath-artifact-canvas .ac-decision-source-stage:after{
+  content:var(--ac-decision-note);
+  display:block;
+  min-height:14px;
+  margin:8px 4px 0;
+  color:#6b727c;
+  font:560 9px/1.45 Inter,ui-sans-serif,system-ui,sans-serif;
+}
+
+/* Give the reader's eye a stable document surface and a clear next action. */
+.casepath-artifact-canvas .ac-decision-real-source>.ac-source-document-preview,
+.casepath-artifact-canvas .ac-decision-real-source>.ac-visual-source{
+  border-color:#cfd4d9;
+  box-shadow:0 1px 2px rgba(20,24,29,.035),0 18px 46px rgba(20,24,29,.065);
+  transition:border-color .34s ease,box-shadow .42s var(--ac-ease),transform .42s var(--ac-ease);
+}
+
+.casepath-artifact-canvas .ac-decision-workspace[data-decision-flow-state="read-source"] .ac-decision-real-source>.ac-source-document-preview,
+.casepath-artifact-canvas .ac-decision-workspace[data-decision-flow-state="read-source"] .ac-decision-real-source>.ac-visual-source{
+  border-color:#b8bec5;
+  box-shadow:0 1px 2px rgba(20,24,29,.035),0 22px 54px rgba(20,24,29,.085);
+}
+
+.casepath-artifact-canvas .ac-decision-workspace[data-decision-flow-state="read-source"] .ac-source-exact-control.is-awaiting-click{
+  border-radius:2px;
+  background:linear-gradient(180deg,transparent 78%,rgba(168,31,34,.11) 78%);
+  transition:background-color .2s ease,color .2s ease;
+}
+
+.casepath-artifact-canvas .ac-decision-workspace[data-decision-flow-state="highlight-source"] .ac-source-passage{
+  border-left-color:#a81f22;
+  background:#fdfbfb;
+}
+
+.casepath-artifact-canvas .ac-decision-workspace[data-decision-flow-state="highlight-source"] mark.is-highlighted{
+  border-radius:2px;
+  background-image:linear-gradient(rgba(168,31,34,.17),rgba(168,31,34,.17));
+  box-shadow:0 0 0 4px rgba(168,31,34,.025);
+  animation-duration:.9s;
+}
+
+.casepath-artifact-canvas .ac-decision-workspace[data-decision-flow-state="highlight-source"] .ac-visual-region-target.is-highlighted{
+  box-shadow:0 0 0 4px rgba(255,255,255,.88),0 0 0 6px rgba(168,31,34,.34),0 12px 30px rgba(72,23,28,.13);
+  animation-duration:.8s;
+}
+
+/* The plan answers the viewer's question: what did CasePath do with the source? */
+.casepath-artifact-canvas .ac-decision-plan li{
+  transition:color .25s ease,background-color .25s ease,opacity .25s ease;
+}
+
+.casepath-artifact-canvas .ac-decision-plan li[data-step-state="waiting"]{
+  opacity:.58;
+}
+
+.casepath-artifact-canvas .ac-decision-plan li[data-step-state="active"]{
+  background:#fcf8f8;
+}
+
+.casepath-artifact-canvas .ac-decision-plan li[data-step-state="complete"]{
+  background:#fbfcfb;
+}
+
+/* Show evidence becoming a bounded answer before the graph node appears. */
+.casepath-artifact-canvas .ac-decision-fragments>span,
+.casepath-artifact-canvas .ac-decision-fragments>i{
+  transition:opacity .55s ease,transform .72s var(--ac-ease),border-color .4s ease,background-color .4s ease,box-shadow .55s var(--ac-ease);
+}
+
+.casepath-artifact-canvas .ac-decision-workspace[data-decision-flow-state="combine"] .ac-decision-fragments>span:not(.ac-decision-ghost){
+  opacity:.62;
+  transform:translateX(5px) scale(.985);
+}
+
+.casepath-artifact-canvas .ac-decision-workspace[data-decision-flow-state="combine"] .ac-decision-fragments>i{
+  border-color:#a81f22;
+  opacity:1;
+  animation:ac-decision-proof-breathe 1.35s ease-in-out infinite;
+}
+
+.casepath-artifact-canvas .ac-decision-workspace:is(
+  [data-decision-flow-state="combine"],
+  [data-decision-flow-state="complete"]
+) .ac-decision-ghost{
+  border-color:#a81f22;
+  background:#fffdfd;
+  box-shadow:0 0 0 4px rgba(168,31,34,.045),0 16px 34px rgba(72,23,28,.075);
+  transform:scale(1.025);
+}
+
+/* Let the committed node visibly land before attention moves to the next source. */
+.casepath-artifact-canvas .ac-process-track li[data-process-build-state="building"] button{
+  animation-duration:1.15s;
+}
+
+.casepath-artifact-canvas .ac-process-track li[data-process-build-state="building"]:after{
+  animation-duration:1.3s;
+}
+
+@keyframes ac-decision-proof-breathe{
+  0%,100%{opacity:.38;transform:scaleX(.72)}
+  50%{opacity:1;transform:scaleX(1)}
+}
+
+@media(max-height:760px){
+  .casepath-artifact-canvas .ac-decision-workspace{
+    padding-top:25px;
+  }
+
+  .casepath-artifact-canvas .ac-decision-workspace:before{
+    height:17px;
+    font-size:8px;
+  }
+
+  .casepath-artifact-canvas .ac-decision-workspace:after{top:16px}
+  .casepath-artifact-canvas .ac-decision-source-stage:after{margin-top:5px;font-size:8px}
+}
+
+@media(prefers-reduced-motion:reduce){
+  .casepath-artifact-canvas .ac-decision-workspace:after,
+  .casepath-artifact-canvas .ac-decision-real-source>.ac-source-document-preview,
+  .casepath-artifact-canvas .ac-decision-real-source>.ac-visual-source,
+  .casepath-artifact-canvas .ac-decision-plan li,
+  .casepath-artifact-canvas .ac-decision-fragments>span,
+  .casepath-artifact-canvas .ac-decision-fragments>i{
+    transition:none!important;
+  }
+
+  .casepath-artifact-canvas .ac-decision-workspace[data-decision-flow-state="combine"] .ac-decision-fragments>i{
+    animation:none!important;
+  }
+}
