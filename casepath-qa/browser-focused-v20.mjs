@@ -192,8 +192,9 @@ const EXPECTED_LATER_MEMORY_DELTA = Object.freeze({
   ],
   evidenceIds: ['building_envelope', 'management_position', 'use_evidence'],
 });
-const MIN_DECISION_SOURCE_PREVIEW_HOLD_MS = 1100;
-const MIN_DECISION_SOURCE_HOLD_MS = 3100;
+const MIN_DECISION_READER_GATE_PROOF_MS = 5400;
+const QA_DECISION_SOURCE_READ_MS = 1200;
+const QA_DECISION_HIGHLIGHT_READ_MS = 3200;
 const MIN_DECISION_COMBINE_HOLD_MS = 1400;
 const MIN_DECISION_PLAN_RECEDE_MS = 170;
 const SOURCE_PRELUDE_ICON_KINDS = Object.freeze([
@@ -3901,6 +3902,8 @@ function decisionFlowContractViolations(steps, nodeChanges, highlights, interact
     if (events.some(event => event.planCount !== 1 || !event.planVisible || event.planNodeId !== nodeId
       || event.planParagraphCount !== 0 || event.planButtonCount !== 0
       || event.planItemCount !== planned.length + 2)) issues.push(`${nodeId}: live plan is not the one minimal accepted-input-to-decision checklist`);
+    if (reducedMotion && (interactions || []).filter(item => item.action === 'qa-reader-gate' && item.nodeId === nodeId)
+      .some(item => item.reducedMotion !== true)) issues.push(`${nodeId}: reduced motion bypasses the manual reader gate`);
 
     const decisionFacts = decisionFactsForReturnedNode(runResult, node);
     const blockedDownstream = BLOCKED_DOWNSTREAM_DECISION_IDS.includes(nodeId);
@@ -3934,8 +3937,14 @@ function decisionFlowContractViolations(steps, nodeChanges, highlights, interact
         issues.push(`${nodeId}:${plan.stepId}: accepted input is not replayed sequentially`);
         return;
       }
-      if (extracted.at - opened.at < MIN_DECISION_SOURCE_PREVIEW_HOLD_MS) {
-        issues.push(`${nodeId}:${plan.stepId}: exact source is not readable before its passage is highlighted`);
+      if (opened.readerControlCount !== 1 || opened.readerControlAdvance !== 'highlight'
+        || opened.readerControlDisabled || !opened.readerControlAccessibleName) {
+        issues.push(`${nodeId}:${plan.stepId}: readable source does not wait behind one accessible highlight action`);
+      }
+      const expectedAdvance = index === planned.length - 1 ? 'build' : 'continue';
+      if (extracted.readerControlCount !== 1 || extracted.readerControlAdvance !== expectedAdvance
+        || extracted.readerControlDisabled || !extracted.readerControlAccessibleName) {
+        issues.push(`${nodeId}:${plan.stepId}: highlighted evidence does not wait behind one accessible continue action`);
       }
       if (plan.realArtifactVisible || opened.realArtifactVisible || extracted.realArtifactVisible
         || plan.sourceRowActive || opened.sourceRowActive || extracted.sourceRowActive
@@ -3964,8 +3973,6 @@ function decisionFlowContractViolations(steps, nodeChanges, highlights, interact
           issues.push(`${nodeId}:${plan.stepId}: checked-law replay is not bound to the deterministic official registry event`);
         }
       }
-      const nextEvent = events.find(event => event.at > extracted.at);
-      if (!nextEvent || nextEvent.at - extracted.at < MIN_DECISION_SOURCE_HOLD_MS) issues.push(`${nodeId}:${plan.stepId}: accepted input is not readable before the next reasoning step`);
     });
 
     const expectedPhases = planned.flatMap(() => ['planned', 'source-opened', 'fragment-extracted'])
@@ -3975,6 +3982,10 @@ function decisionFlowContractViolations(steps, nodeChanges, highlights, interact
     const ready = events.find(event => event.phase === 'decision-ready');
     const receding = events.find(event => event.phase === 'plan-receding');
     const receded = events.find(event => event.phase === 'plan-receded');
+    if (events.filter(event => ['combining', 'decision-ready', 'plan-receding', 'plan-receded'].includes(event.phase))
+      .some(event => event.readerControlCount || event.readerControlAdvance || event.readerControlAccessibleName)) {
+      issues.push(`${nodeId}: reader continue action remains after decision formation starts`);
+    }
     const expectedFactIds = blockedDownstream ? [] : decisionFacts.map(fact => fact.fact_id);
     if (!combining || (expectedFactIds.length && (!combining.combinationVisible
       || combining.combineState !== 'combining' || stableJson(combining.fragmentFactIds) !== stableJson(expectedFactIds)))) {
@@ -3991,6 +4002,25 @@ function decisionFlowContractViolations(steps, nodeChanges, highlights, interact
       || change.indicatorVisible || change.planVisible || change.decisionFlowState !== 'idle'
       || !change.outputVisible || !change.graphVisible) issues.push(`${nodeId}: accepted node appears before progress and plan have cleared`);
   });
+
+  const manualGateInteractions = (interactions || []).filter(item => item.action === 'qa-reader-gate');
+  const expectedManualGateCount = relevantSteps.filter(step => ['source-opened', 'fragment-extracted'].includes(step.phase)).length;
+  if (manualGateInteractions.length !== expectedManualGateCount) {
+    issues.push('reader-controlled replay does not expose exactly one activation for every source and highlight gate');
+  }
+  if (manualGateInteractions.some(item => item.controlCount !== 1 || !item.accessibleName
+    || item.disabled || item.connectedBeforeClick !== true || item.visibleBeforeClick !== true
+    || item.connectedAfterClick !== false || item.clickAttempts !== 2)) {
+    issues.push('reader continue action is not accessible, single-use, and removed after activation');
+  }
+  if (manualGateInteractions.some(item => item.phaseStableBeforeClick !== true)) {
+    issues.push('reader continue action auto-advanced before explicit activation');
+  }
+  const noTimerProof = manualGateInteractions.find(item => item.advance !== 'highlight' && item.provesNoTimerAdvance === true);
+  if (!noTimerProof || noTimerProof.heldMs < MIN_DECISION_READER_GATE_PROOF_MS
+    || noTimerProof.phaseStableBeforeClick !== true) {
+    issues.push('highlighted evidence was not proven to remain until the viewer continued');
+  }
 
   if (!storyNodeIds.includes(NOTIFICATION_DECISION_NODE_ID)) return [...new Set(issues)];
   const notification = returnedNodes.get(NOTIFICATION_DECISION_NODE_ID);
@@ -4486,7 +4516,7 @@ async function execute() {
     } catch (_) {}
   });
 
-  await page.addInitScript(({ sessionId, decisionFlowContract, processPreviewGeometrySelectors, processPreviewBottomInset, sourceRailContract }) => {
+  await page.addInitScript(({ sessionId, decisionFlowContract, decisionReaderGateProofMs, decisionSourceReadMs, decisionHighlightReadMs, processPreviewGeometrySelectors, processPreviewBottomInset, sourceRailContract }) => {
     sessionStorage.setItem('casepath:demo-session', sessionId);
     window.__casepathReleaseMutations = [];
     window.__casepathMomentHistory = [];
@@ -5172,6 +5202,8 @@ async function execute() {
         ? plan?.querySelector(`[data-decision-plan-item][data-step-id="${CSS.escape(String(detail.stepId))}"]`)
         : null;
       const exactControl = workspace?.querySelector('button.ac-source-exact-control[data-source-exact-control="true"],button.ac-visual-region-target[data-ac-inspection-read-target="true"]');
+      const readerControls = [...(workspace?.querySelectorAll('button.ac-decision-reader-continue[data-ac-action="advance-decision-flow"]') || [])].filter(visible);
+      const readerControl = readerControls[0] || null;
       const realArtifact = workspace?.querySelector('[data-real-artifact="true"]');
       const visualArtifact = workspace?.querySelector('.ac-visual-source[data-source-id]');
       const artifactSurface = realArtifact || visualArtifact;
@@ -5244,6 +5276,10 @@ async function execute() {
         exactControlCount: exactControl && visible(exactControl) ? 1 : 0,
         exactControlTag: exactControl?.tagName || '',
         exactControlText: exactControl?.textContent?.trim() || '',
+        readerControlCount: readerControls.length,
+        readerControlAdvance: readerControl?.dataset.decisionAdvance || '',
+        readerControlAccessibleName: readerControl?.getAttribute('aria-label')?.trim() || readerControl?.textContent?.trim() || '',
+        readerControlDisabled: readerControl?.disabled === true || readerControl?.getAttribute('aria-disabled') === 'true',
         highlightVisible: highlighted.length > 0,
         highlightCount: highlighted.length,
         fragmentFactIds: [...(workspace?.querySelectorAll('[data-extracted-fragment][data-fact-id]') || [])].filter(visible).map(item => item.dataset.factId || ''),
@@ -5258,8 +5294,61 @@ async function execute() {
         at: performance.now(),
       };
     };
+    const automatedReaderControls = new WeakSet();
+    let noTimerAdvanceProven = false;
+    const automateDecisionReaderGate = snapshot => {
+      if (!['source-opened', 'fragment-extracted'].includes(snapshot.phase)) return;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        const workspace = document.querySelector('#artifactProcessGraph [data-decision-workspace]');
+        const button = workspace?.querySelector('button.ac-decision-reader-continue[data-ac-action="advance-decision-flow"]');
+        if (!button || automatedReaderControls.has(button)) return;
+        automatedReaderControls.add(button);
+        const proveNoTimerAdvance = snapshot.phase === 'fragment-extracted' && !noTimerAdvanceProven;
+        if (proveNoTimerAdvance) noTimerAdvanceProven = true;
+        const appearedAt = performance.now();
+        const expectedState = snapshot.phase === 'source-opened' ? 'read-source' : 'highlight-source';
+        const interaction = {
+          action: 'qa-reader-gate',
+          nodeId: snapshot.nodeId,
+          stepId: snapshot.stepId,
+          phase: snapshot.phase,
+          advance: button.dataset.decisionAdvance || '',
+          controlCount: [...workspace.querySelectorAll('button.ac-decision-reader-continue[data-ac-action="advance-decision-flow"]')].filter(visible).length,
+          accessibleName: button.getAttribute('aria-label')?.trim() || button.textContent?.trim() || '',
+          disabled: button.disabled === true || button.getAttribute('aria-disabled') === 'true',
+          reducedMotion: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true,
+          provesNoTimerAdvance: proveNoTimerAdvance,
+          connectedBeforeClick: false,
+          visibleBeforeClick: false,
+          phaseStableBeforeClick: false,
+          connectedAfterClick: true,
+          clickAttempts: 0,
+          heldMs: 0,
+          at: appearedAt,
+        };
+        window.__casepathArtifactInteractions.push(interaction);
+        const holdMs = proveNoTimerAdvance
+          ? decisionReaderGateProofMs + 100
+          : snapshot.phase === 'source-opened' ? decisionSourceReadMs : decisionHighlightReadMs;
+        setTimeout(() => {
+          interaction.heldMs = performance.now() - appearedAt;
+          interaction.connectedBeforeClick = button.isConnected;
+          interaction.visibleBeforeClick = visible(button);
+          interaction.phaseStableBeforeClick = workspace?.dataset.decisionFlowState === expectedState;
+          if (!interaction.connectedBeforeClick || !interaction.visibleBeforeClick || !interaction.phaseStableBeforeClick) return;
+          interaction.clickAttempts = 2;
+          button.click();
+          button.click();
+          setTimeout(() => {
+            interaction.connectedAfterClick = button.isConnected;
+          }, 350);
+        }, holdMs);
+      }));
+    };
     window.addEventListener('casepath:decision-flow-step', event => {
-      window.__casepathDecisionFlowSteps.push(decisionFlowSnapshot(event.detail || {}));
+      const snapshot = decisionFlowSnapshot(event.detail || {});
+      window.__casepathDecisionFlowSteps.push(snapshot);
+      automateDecisionReaderGate(snapshot);
     });
     window.addEventListener('casepath:process-node-progress', event => {
       const detail = event.detail || {};
@@ -5465,6 +5554,9 @@ async function execute() {
   }, {
     sessionId: QA_SESSION_ID,
     decisionFlowContract: DECISION_FLOW_CONTRACT,
+    decisionReaderGateProofMs: MIN_DECISION_READER_GATE_PROOF_MS,
+    decisionSourceReadMs: QA_DECISION_SOURCE_READ_MS,
+    decisionHighlightReadMs: QA_DECISION_HIGHLIGHT_READ_MS,
     processPreviewGeometrySelectors: PROCESS_PREVIEW_GEOMETRY_SELECTORS,
     processPreviewBottomInset: PROCESS_PREVIEW_BOTTOM_INSET_PX,
     sourceRailContract: SOURCE_RAIL_CONTRACT,
@@ -8531,6 +8623,7 @@ async function runContractSelfTest() {
   const decisionHighlightFixture = [];
   const decisionInteractionFixture = [];
   let decisionAt = 1000;
+  let decisionNoTimerProofAdded = false;
   for (const [nodeIndex, node] of decisionNodes.entries()) {
     const nodeFacts = decisionFactsForReturnedNode(decisionRunFixture, node);
     const blockedDownstream = BLOCKED_DOWNSTREAM_DECISION_IDS.includes(node.node_id);
@@ -8580,11 +8673,15 @@ async function runContractSelfTest() {
       planButtonCount: 0,
       waitingBasisVisible: blockedDownstream,
       waitingBasisText: blockedDownstream ? BLOCKED_DOWNSTREAM_WAITING_COPY[node.node_id] : '',
+      readerControlCount: 0,
+      readerControlAdvance: '',
+      readerControlAccessibleName: '',
+      readerControlDisabled: false,
       nodeVisible: false,
       reducedMotion: false,
     };
     const accumulatedFactIds = [];
-    for (const plan of plans) {
+    for (const [planIndex, plan] of plans.entries()) {
       const basis = plan.basis;
       const replay = {
         ...common,
@@ -8597,11 +8694,26 @@ async function runContractSelfTest() {
       };
       decisionFlowFixture.push({ ...replay, phase: 'planned', progress: 0, planPhase: 'select-source', fragmentFactIds: [...accumulatedFactIds], progressVisible: true, at: decisionAt });
       decisionAt += 1500;
-      decisionFlowFixture.push({ ...replay, phase: 'source-opened', progress: 30, planPhase: 'read-source', fragmentFactIds: [...accumulatedFactIds], progressVisible: true, at: decisionAt });
-      decisionAt += MIN_DECISION_SOURCE_PREVIEW_HOLD_MS + 10;
+      decisionFlowFixture.push({ ...replay, phase: 'source-opened', progress: 30, planPhase: 'read-source', fragmentFactIds: [...accumulatedFactIds], progressVisible: true, readerControlCount: 1, readerControlAdvance: 'highlight', readerControlAccessibleName: 'Highlight this evidence', at: decisionAt });
+      decisionInteractionFixture.push({
+        action: 'qa-reader-gate', nodeId: node.node_id, stepId: plan.stepId, phase: 'source-opened', advance: 'highlight',
+        controlCount: 1, accessibleName: 'Highlight this evidence', disabled: false, connectedBeforeClick: true,
+        visibleBeforeClick: true, connectedAfterClick: false, clickAttempts: 2, phaseStableBeforeClick: true,
+        provesNoTimerAdvance: false, heldMs: 120, reducedMotion: false,
+      });
+      decisionAt += 130;
       plan.factIds.forEach(factId => { if (!accumulatedFactIds.includes(factId)) accumulatedFactIds.push(factId); });
-      decisionFlowFixture.push({ ...replay, phase: 'fragment-extracted', progress: 60, planPhase: 'highlight-source', fragmentFactIds: [...accumulatedFactIds], progressVisible: true, at: decisionAt });
-      decisionAt += MIN_DECISION_SOURCE_HOLD_MS + 10;
+      const readerAdvance = planIndex === plans.length - 1 ? 'build' : 'continue';
+      decisionFlowFixture.push({ ...replay, phase: 'fragment-extracted', progress: 60, planPhase: 'highlight-source', fragmentFactIds: [...accumulatedFactIds], progressVisible: true, readerControlCount: 1, readerControlAdvance: readerAdvance, readerControlAccessibleName: 'Continue building', at: decisionAt });
+      const provesNoTimerAdvance = !decisionNoTimerProofAdded;
+      if (provesNoTimerAdvance) decisionNoTimerProofAdded = true;
+      decisionInteractionFixture.push({
+        action: 'qa-reader-gate', nodeId: node.node_id, stepId: plan.stepId, phase: 'fragment-extracted', advance: readerAdvance,
+        controlCount: 1, accessibleName: 'Continue building', disabled: false, connectedBeforeClick: true,
+        visibleBeforeClick: true, connectedAfterClick: false, clickAttempts: 2, phaseStableBeforeClick: true,
+        provesNoTimerAdvance, heldMs: provesNoTimerAdvance ? MIN_DECISION_READER_GATE_PROOF_MS + 100 : 120, reducedMotion: false,
+      });
+      decisionAt += 130;
     }
     const terminal = (phase, progress, extra = {}) => {
       const modelDecisionPhase = Boolean(decisionSemantic) && ['combining', 'decision-ready'].includes(phase);
@@ -8629,23 +8741,28 @@ async function runContractSelfTest() {
     decisionAt += 1500;
   }
   if (decisionFlowContractViolations(decisionFlowFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).length) throw new Error(`Valid accepted-input decision-flow fixture was rejected: ${JSON.stringify(decisionFlowContractViolations(decisionFlowFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture))}`);
-  const rushedSourcePreviewFixture = structuredClone(decisionFlowFixture);
-  const rushedPreviewOpened = rushedSourcePreviewFixture.find(step => step.phase === 'source-opened');
-  const rushedPreviewHighlight = rushedSourcePreviewFixture.find(step => step.nodeId === rushedPreviewOpened.nodeId && step.stepId === rushedPreviewOpened.stepId && step.phase === 'fragment-extracted');
-  rushedPreviewHighlight.at = rushedPreviewOpened.at + MIN_DECISION_SOURCE_PREVIEW_HOLD_MS - 1;
-  if (!decisionFlowContractViolations(rushedSourcePreviewFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('exact source is not readable'))) throw new Error('Rushed exact-source preview was accepted');
-  const rushedHighlightFixture = structuredClone(decisionFlowFixture);
-  const intakeHighlights = rushedHighlightFixture.filter(step => step.nodeId === 'intake' && step.phase === 'fragment-extracted');
-  const rushedHighlight = intakeHighlights.reduce((latest, step) => step.at > latest.at ? step : latest);
-  const rushedHighlightNext = rushedHighlightFixture.filter(step => step.nodeId === rushedHighlight.nodeId && step.at > rushedHighlight.at).sort((left, right) => left.at - right.at)[0];
-  rushedHighlightNext.at = rushedHighlight.at + MIN_DECISION_SOURCE_HOLD_MS - 1;
-  if (!decisionFlowContractViolations(rushedHighlightFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('accepted input is not readable'))) throw new Error('Rushed highlighted passage was accepted');
+  const missingReaderActionFixture = structuredClone(decisionFlowFixture);
+  const missingReaderAction = missingReaderActionFixture.find(step => step.phase === 'fragment-extracted');
+  Object.assign(missingReaderAction, { readerControlCount: 0, readerControlAdvance: '', readerControlAccessibleName: '' });
+  if (!decisionFlowContractViolations(missingReaderActionFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('one accessible continue action'))) throw new Error('Highlighted evidence without its explicit Continue action was accepted');
+  const autoAdvanceInteractionFixture = structuredClone(decisionInteractionFixture);
+  const noTimerInteraction = autoAdvanceInteractionFixture.find(item => item.provesNoTimerAdvance);
+  Object.assign(noTimerInteraction, { phaseStableBeforeClick: false, heldMs: 100 });
+  if (!decisionFlowContractViolations(decisionFlowFixture, decisionChangeFixture, decisionHighlightFixture, autoAdvanceInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('remain until the viewer continued'))) throw new Error('Timer-driven highlighted evidence advance was accepted');
+  const reusableReaderActionFixture = structuredClone(decisionInteractionFixture);
+  reusableReaderActionFixture[0].connectedAfterClick = true;
+  if (!decisionFlowContractViolations(decisionFlowFixture, decisionChangeFixture, decisionHighlightFixture, reusableReaderActionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('single-use'))) throw new Error('Reader Continue action that remained after activation was accepted');
+  const duplicateReaderPhaseFixture = structuredClone(decisionFlowFixture);
+  const firstExtractedIndex = duplicateReaderPhaseFixture.findIndex(step => step.phase === 'fragment-extracted');
+  duplicateReaderPhaseFixture.splice(firstExtractedIndex + 1, 0, structuredClone(duplicateReaderPhaseFixture[firstExtractedIndex]));
+  if (!decisionFlowContractViolations(duplicateReaderPhaseFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('incomplete or out of order'))) throw new Error('Double-click duplicate decision phase was accepted');
   const rushedDecisionFixture = structuredClone(decisionFlowFixture);
   const rushedCombining = rushedDecisionFixture.find(step => step.phase === 'combining');
   const rushedReady = rushedDecisionFixture.find(step => step.nodeId === rushedCombining.nodeId && step.phase === 'decision-ready');
   rushedReady.at = rushedCombining.at + MIN_DECISION_COMBINE_HOLD_MS - 1;
   if (!decisionFlowContractViolations(rushedDecisionFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('decision is formed'))) throw new Error('Rushed source-to-decision formation was accepted');
   const reducedMotionDecisionFixture = structuredClone(decisionFlowFixture).map(step => ({ ...step, reducedMotion: true }));
+  const reducedMotionDecisionInteractionFixture = structuredClone(decisionInteractionFixture).map(item => ({ ...item, reducedMotion: true }));
   const reducedMotionChangeFixture = structuredClone(decisionChangeFixture);
   reducedMotionChangeFixture.forEach(change => {
     const receding = reducedMotionDecisionFixture.find(step => step.nodeId === change.entityId && step.phase === 'plan-receding');
@@ -8653,9 +8770,13 @@ async function runContractSelfTest() {
     receded.at = receding.at;
     change.at = receded.at;
   });
-  if (decisionFlowContractViolations(reducedMotionDecisionFixture, reducedMotionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).length) throw new Error(`Reduced-motion semantic decision sequence was rejected: ${JSON.stringify(decisionFlowContractViolations(reducedMotionDecisionFixture, reducedMotionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture))}`);
+  if (decisionFlowContractViolations(reducedMotionDecisionFixture, reducedMotionChangeFixture, decisionHighlightFixture, reducedMotionDecisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).length) throw new Error(`Reduced-motion semantic decision sequence was rejected: ${JSON.stringify(decisionFlowContractViolations(reducedMotionDecisionFixture, reducedMotionChangeFixture, decisionHighlightFixture, reducedMotionDecisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture))}`);
+  const reducedMotionMissingReaderGateFixture = structuredClone(reducedMotionDecisionFixture);
+  const reducedMotionMissingReaderGate = reducedMotionMissingReaderGateFixture.find(step => step.phase === 'source-opened');
+  Object.assign(reducedMotionMissingReaderGate, { readerControlCount: 0, readerControlAdvance: '', readerControlAccessibleName: '' });
+  if (!decisionFlowContractViolations(reducedMotionMissingReaderGateFixture, reducedMotionChangeFixture, decisionHighlightFixture, reducedMotionDecisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('accessible highlight action'))) throw new Error('Reduced-motion sequence without its manual reader gate was accepted');
   const reducedMotionMissingHighlightFixture = reducedMotionDecisionFixture.filter((step, index) => index !== reducedMotionDecisionFixture.findIndex(item => item.phase === 'fragment-extracted'));
-  if (!decisionFlowContractViolations(reducedMotionMissingHighlightFixture, reducedMotionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('sequentially') || issue.includes('incomplete or out of order'))) throw new Error('Reduced-motion sequence without a highlighted passage was accepted');
+  if (!decisionFlowContractViolations(reducedMotionMissingHighlightFixture, reducedMotionChangeFixture, decisionHighlightFixture, reducedMotionDecisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('sequentially') || issue.includes('incomplete or out of order'))) throw new Error('Reduced-motion sequence without a highlighted passage was accepted');
   const fakeSourceDecisionFixture = structuredClone(decisionFlowFixture);
   const intakePlan = fakeSourceDecisionFixture.find(step => step.nodeId === 'intake' && step.phase === 'planned');
   Object.assign(intakePlan, { stepKind: 'source', stepId: 'source:message', sourceId: 'message' });
