@@ -15,15 +15,16 @@ concurrency:
 
 jobs:
   publish:
+    if: github.repository == 'KumarNavish/KumarNavish.github.io'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
       SOURCE_SHA: 4f7f07d653379aa97a8574788c6df20d336d8ce5
       IMAGE: ghcr.io/kumarnavish/casepath-agentic-api
-      IMAGE_TAG: sha-4f7f07d653379aa97a8574788c6df20d336d8ce5
+      IMAGE_TAG: source-4f7f07d653379aa97a8574788c6df20d336d8ce5
     steps:
       - name: Check out exact accepted source
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ env.SOURCE_SHA }}
           path: source
@@ -36,33 +37,64 @@ jobs:
           test "$(git -C source rev-parse HEAD)" = "$SOURCE_SHA"
           test -z "$(git -C source status --porcelain --untracked-files=normal)"
 
-      - name: Define immutable runtime image
+      - name: Define immutable two-stage runtime image
         shell: bash
         run: |
           set -euo pipefail
           cat > source/.casepath-runtime.Dockerfile <<'DOCKERFILE'
-          FROM --platform=linux/amd64 python:3.13.9-slim-bookworm@sha256:8cdd496996889eef0a8a7921c152c0a4a9f18a26c7a5e7257d3c90b431891894
+          FROM python:3.13.9-slim-bookworm@sha256:8cdd496996889eef0a8a7921c152c0a4a9f18a26c7a5e7257d3c90b431891894 AS build
 
-          ENV PYTHONDONTWRITEBYTECODE=1 \
+          ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+              PIP_NO_CACHE_DIR=1 \
+              PYTHONDONTWRITEBYTECODE=1 \
               PYTHONUNBUFFERED=1 \
               SOURCE_DATE_EPOCH=1786406400 \
-              CASEPATH_SOURCE_COMMIT=4f7f07d653379aa97a8574788c6df20d336d8ce5
-          WORKDIR /app
-          COPY . /app
-          RUN bash casepath-api/render-build.sh \
+              CASEPATH_SOURCE_COMMIT=4f7f07d653379aa97a8574788c6df20d336d8ce5 \
+              CASEPATH_MODEL_MODE=deterministic_reference \
+              CASEPATH_DB_PATH=/tmp/casepath-build/image.db
+          RUN apt-get update \
+              && apt-get install --yes --no-install-recommends git \
+              && rm -rf /var/lib/apt/lists/* \
+              && python -m venv /opt/venv
+          ENV PATH=/opt/venv/bin:$PATH
+          WORKDIR /workspace
+          COPY . /workspace
+          RUN test "$(git rev-parse HEAD)" = "$CASEPATH_SOURCE_COMMIT" \
+              && bash casepath-api/render-build.sh \
               && rm -rf /root/.cache /tmp/casepath-build.*
-          RUN useradd --system --uid 10001 --create-home casepath \
-              && chown -R casepath:casepath /app
-          USER 10001
+
+          FROM python:3.13.9-slim-bookworm@sha256:8cdd496996889eef0a8a7921c152c0a4a9f18a26c7a5e7257d3c90b431891894 AS runtime
+
+          ENV PATH=/opt/venv/bin:$PATH \
+              HOME=/tmp \
+              PYTHONDONTWRITEBYTECODE=1 \
+              PYTHONUNBUFFERED=1 \
+              PORT=10000 \
+              CASEPATH_DB_PATH=/tmp/casepath-api/casepath.db \
+              CASEPATH_SOURCE_COMMIT=4f7f07d653379aa97a8574788c6df20d336d8ce5 \
+              CASEPATH_MODEL_MODE=deterministic_reference \
+              CASEPATH_AGENT_RUNTIME_PROFILE=nemotron_langgraph_multi_agent_hybrid_guarded \
+              CASEPATH_RELEASE_ID=casepath-v20-reference-20260811 \
+              CASEPATH_MODEL_CUMULATIVE_USD_CAP=25 \
+              LANGSMITH_TRACING=false
+          WORKDIR /app
+          COPY --from=build /opt/venv /opt/venv
+          COPY --from=build /workspace/casepath-api/casepath_api /app/casepath-api/casepath_api
+          COPY --from=build /workspace/casepath-api/artifacts /app/casepath-api/artifacts
+          COPY --from=build /workspace/casepath-api/start.sh /app/casepath-api/start.sh
+          USER 10001:10001
           EXPOSE 10000
-          CMD ["bash", "casepath-api/start.sh"]
+          STOPSIGNAL SIGTERM
+          HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+            CMD python -c 'import os,urllib.request; urllib.request.urlopen("http://127.0.0.1:" + os.environ.get("PORT", "10000") + "/readyz", timeout=3).read()'
+          CMD ["/app/casepath-api/start.sh"]
           DOCKERFILE
           cat > source/.dockerignore <<'DOCKERIGNORE'
-          .git
           .github
           dist
           __pycache__
           .pytest_cache
+          .ruff_cache
           *.pyc
           DOCKERIGNORE
 
@@ -72,7 +104,7 @@ jobs:
           set -euo pipefail
           printf '%s' "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io --username "${{ github.actor }}" --password-stdin
 
-      - name: Build and publish immutable image
+      - name: Build, test, and publish immutable image
         shell: bash
         run: |
           set -euo pipefail
@@ -82,14 +114,49 @@ jobs:
             --file source/.casepath-runtime.Dockerfile \
             --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
             --label "org.opencontainers.image.revision=$SOURCE_SHA" \
-            --label "org.opencontainers.image.version=$IMAGE_TAG" \
+            --label "org.opencontainers.image.version=15.2.0" \
+            --label "io.casepath.product.source-commit=$SOURCE_SHA" \
             --tag "$ref" \
             source
           docker push "$ref" | tee /tmp/casepath-image-push.log
           digest="$(awk '/digest: sha256:/ {print $3}' /tmp/casepath-image-push.log | tail -1)"
-          test "${digest#sha256:}" != "$digest"
-          image_ref="$ref@$digest"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          image_ref="$IMAGE@$digest"
           printf '%s\n' "$image_ref" | tee /tmp/casepath-image-ref.txt
+
+      - name: Smoke-test exact runtime image
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_ref="$(cat /tmp/casepath-image-ref.txt)"
+          test "$(docker image inspect "$IMAGE:$IMAGE_TAG" --format '{{.Os}}/{{.Architecture}}')" = "linux/amd64"
+          test "$(docker image inspect "$IMAGE:$IMAGE_TAG" --format '{{.Config.User}}')" = "10001:10001"
+          test "$(docker image inspect "$IMAGE:$IMAGE_TAG" --format '{{index .Config.Labels "io.casepath.product.source-commit"}}')" = "$SOURCE_SHA"
+          container_id="$(docker run --detach --read-only --tmpfs /tmp:rw,noexec,nosuid,size=256m --publish 127.0.0.1:18080:10000 "$image_ref")"
+          cleanup() { docker rm --force "$container_id" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          ready=0
+          for _ in $(seq 1 90); do
+            if curl --fail --silent --show-error http://127.0.0.1:18080/readyz > /tmp/casepath-ready.json 2>/dev/null; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" = 1
+          curl --fail --silent --show-error http://127.0.0.1:18080/healthz > /tmp/casepath-health.json
+          jq -e --arg sha "$SOURCE_SHA" '.status == "ok" and .release == "15.2.0" and .source_commit == $sha and .source_commit_aligned == true and .source_commit_conflict == false and .model_mode == "deterministic_reference"' /tmp/casepath-health.json
+          jq -e '.status == "ready" and .claims == 2 and .artifacts == 12 and .model_budget.network_calls == 0' /tmp/casepath-ready.json
+
+      - name: Require public anonymous immutable pull
+        shell: bash
+        run: |
+          set -euo pipefail
+          image_ref="$(cat /tmp/casepath-image-ref.txt)"
+          anonymous_config="$RUNNER_TEMP/docker-anonymous"
+          mkdir -p "$anonymous_config"
+          docker logout ghcr.io
+          DOCKER_CONFIG="$anonymous_config" docker manifest inspect "$image_ref" >/dev/null
           {
             echo '### Exact CasePath API image'
             echo
@@ -97,12 +164,3 @@ jobs:
             echo
             echo "Canonical source: \`$SOURCE_SHA\`"
           } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Verify anonymous immutable pull
-        shell: bash
-        run: |
-          set -euo pipefail
-          image_ref="$(cat /tmp/casepath-image-ref.txt)"
-          docker logout ghcr.io
-          docker manifest inspect "$image_ref" >/dev/null
-          test "$(docker manifest inspect "$image_ref" | python -c 'import json,sys; print(json.load(sys.stdin)["schemaVersion"])')" = "2"
