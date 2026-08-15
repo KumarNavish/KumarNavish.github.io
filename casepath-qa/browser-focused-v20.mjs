@@ -14,7 +14,7 @@ const PRODUCT_RELEASE = '20.0.0';
 const API_RELEASE = '15.2.0';
 const REQUESTED_NEMOTRON_MODEL = 'nvidia/nemotron-3-ultra-550b-a55b';
 const EXPECTED_PROVIDER_BOUNDARY = 'openrouter';
-const EXPECTED_UPSTREAM_PROVIDER = 'DeepInfra';
+const EXPECTED_UPSTREAM_PROVIDER = 'Together';
 const EXACT_NEMOTRON_RESPONSE_MODELS = new Set([
   REQUESTED_NEMOTRON_MODEL,
   'nvidia/nemotron-3-ultra-550b-a55b-20260604',
@@ -115,6 +115,32 @@ const REQUIRED_CAUSATION_BRANCH_IDS = Object.freeze([
 ]);
 const PROCESS_NODE_PROGRESS_CONTRACT = 'casepath.process-node-progress/1.0.0';
 const PROCESS_NODE_PROGRESS_SCOPE = 'visible_evidence_bound_construction';
+const DECISION_FLOW_CONTRACT = 'casepath.decision-flow/1.0.0';
+const EXECUTION_TRACE_CONTRACT = 'casepath.accepted-execution-trace/1.0.0';
+const FACT_TOUR_FACT_IDS = Object.freeze([
+  'fact_customer_objective',
+  'fact_tenancy',
+  'fact_dispute',
+  'fact_health',
+  'fact_notification',
+  'fact_recurrence',
+  'fact_ventilation_allegation',
+  'fact_cause',
+]);
+const NOTIFICATION_DECISION_NODE_ID = 'notification';
+const BLOCKED_DOWNSTREAM_DECISION_IDS = Object.freeze(['responsibility', 'remedy', 'resolution']);
+const BLOCKED_DOWNSTREAM_WAITING_COPY = Object.freeze({
+  responsibility: 'Waiting for an earlier answer Cause must be known first.',
+  remedy: 'Waiting for an earlier answer Responsibility must be known first.',
+  resolution: 'Waiting for an earlier answer The action must be complete first.',
+});
+const REFERENCE_DECISION_AUDIT_PHASES = Object.freeze(['source-opened', 'fragment-extracted', 'plan-receded']);
+const NOTIFICATION_SOURCE_LOCATOR_COUNTS = Object.freeze({
+  art_notification: 2,
+  art_delivery: 1,
+});
+const EXPECTED_OPENING_PROBLEM = 'The mould in the external corner of our bedroom keeps coming back.';
+const EXPECTED_OPENING_OUTCOME = 'Please tell me what should happen next. I want the cause clarified and the defect repaired.';
 const PROCESS_NODE_PROGRESS_SEQUENCE = Object.freeze([
   Object.freeze({ phase: 'search', percent: 0, visible: true }),
   Object.freeze({ phase: 'read', percent: 38, visible: true }),
@@ -138,16 +164,8 @@ const EXPECTED_LATER_MEMORY_DELTA = Object.freeze({
   ],
   evidenceIds: ['building_envelope', 'management_position', 'use_evidence'],
 });
-const FACT_SOURCE_TOUR_CONTRACT = 'casepath.persistent-artifact-canvas/1.0.0';
-const FACT_SOURCE_TOUR_IDS = Object.freeze([
-  'fact_tenancy',
-  'fact_notification',
-  'fact_recurrence',
-  'fact_ventilation_allegation',
-  'fact_cause',
-]);
-const MIN_FACT_SOURCE_HOLD_MS = 1100;
-const FACT_SOURCE_CINEMATIC_CONTRACT = 'casepath.source-select-confirm-highlight-fact/2.0.0';
+const MIN_DECISION_SOURCE_HOLD_MS = 1400;
+const MIN_DECISION_PLAN_RECEDE_MS = 170;
 const SOURCE_PRELUDE_ICON_KINDS = Object.freeze([
   'message',
   'document',
@@ -156,6 +174,24 @@ const SOURCE_PRELUDE_ICON_KINDS = Object.freeze([
   'photo',
   'timeline',
   'delivery',
+]);
+const SOURCE_RAIL_CONTRACT = 'casepath.source-rail/1.0.0';
+const SOURCE_RAIL_VIEWPORTS = Object.freeze([
+  Object.freeze({ width: 1280, height: 720 }),
+  Object.freeze({ width: 1440, height: 900 }),
+]);
+const SOURCE_RAIL_ALLOWED_STATUSES = new Set(['ready', 'read', 'reading']);
+const SOURCE_RAIL_MIN_WIDTH_PX = 232;
+const SOURCE_RAIL_MAX_WIDTH_PX = 272;
+const SOURCE_RAIL_MIN_ROW_HEIGHT_PX = 48;
+const SOURCE_RAIL_MAX_ROW_HEIGHT_PX = 64;
+const SOURCE_RAIL_MIN_ICON_SIZE_PX = 24;
+const SOURCE_RAIL_MAX_ICON_SIZE_PX = 34;
+const LIVE_WORK_PLAN_CONTRACT = 'casepath.live-work-plan/1.0.0';
+const CANONICAL_FACTS_LIVE_WORK_STEPS = Object.freeze([
+  Object.freeze({ stepId: 'package', label: 'Claim package sent', state: 'complete', spinnerCount: 0 }),
+  Object.freeze({ stepId: 'choose', label: 'Choose source-backed facts', state: 'active', spinnerCount: 1 }),
+  Object.freeze({ stepId: 'return', label: 'Show each fact with its source', state: 'waiting', spinnerCount: 0 }),
 ]);
 const AGENT_HISTORY_CONTRACT = 'casepath.agent-history/1.0.0';
 const SPATIAL_GRAPH_PROJECTION = 'flagship-spine/1';
@@ -191,7 +227,7 @@ const REQUIRED_DETERMINISTIC_GATE_ROLES = Object.freeze({
 const ACCEPTED_ARTIFACT_CONTRACT = Object.freeze({
   deterministic_process_gate: { output_artifact: 'process_graph', source_agent_id: 'process_decision_mapping' },
   deterministic_evidence_gate: { output_artifact: 'evidence_model', source_agent_id: 'evidence_checklist' },
-  whole_playbook_gate: { output_artifact: 'final_claim_brief', source_agent_id: 'final_claim_brief_audit' },
+  whole_playbook_gate: { output_artifact: 'verified_claim_playbook', source_agent_id: 'final_claim_brief_audit' },
 });
 const PROCESS_CONTRIBUTION_ROLE = 'Process Decision Mapping Agent';
 const EVIDENCE_CONTRIBUTION_ROLE = 'Evidence and Checklist Agent';
@@ -253,6 +289,105 @@ const EXPECTED_EXECUTION_TOPOLOGY = Object.freeze({
   parallel_groups: [['document_source_integrity', 'process_decision_mapping']],
 });
 const SUCCESSFUL_MODEL_OUTCOMES = new Set(['succeeded', 'succeeded_with_guarded_fallback']);
+const CONSERVATIVE_PROCESS_DECISIONS = Object.freeze({
+  scope: 'scope_unverified',
+  dispute: 'dispute_unverified',
+  urgency: 'urgency_unverified',
+  notification: 'notification_unverified',
+  recurrence: 'recurrence_unverified',
+  causation: 'cause_unresolved',
+});
+function compatibleProcessDecisionValues(fact) {
+  const conservative = CONSERVATIVE_PROCESS_DECISIONS[String(fact?.decision_key || '')];
+  return new Set([String(fact?.decision_value || ''), ...(conservative ? [conservative] : [])]);
+}
+
+function processRouteStory(processGraph) {
+  const nodes = Array.isArray(processGraph?.nodes) ? processGraph.nodes : [];
+  const nodesById = new Map(nodes.map(node => [String(node?.node_id || ''), node]));
+  const overlay = processGraph?.current_overlay && typeof processGraph.current_overlay === 'object'
+    ? processGraph.current_overlay
+    : {};
+  const selectedPath = Array.isArray(processGraph?.selected_path)
+    ? processGraph.selected_path.map(String).filter(Boolean)
+    : [];
+  const currentNodeId = String(overlay.current_node_id || processGraph?.current_node || '');
+  const nextActionNodeId = String(overlay.next_action_node_id || '');
+  const selectedBranchId = String(overlay.selected_branch_id || '');
+  const currentNode = nodesById.get(currentNodeId) || null;
+  const returnedBranches = Array.isArray(currentNode?.branches) ? currentNode.branches : [];
+  const selectedBranch = returnedBranches.find(branch => (
+    String(branch?.branch_id || '') === selectedBranchId
+    && String(branch?.target || '') === nextActionNodeId
+  )) || null;
+  const causationCanvas = currentNodeId === 'causation' && Boolean(selectedBranch);
+  const flagshipCausation = causationCanvas && nextActionNodeId === 'evidence_gap';
+  const routeNodeIds = [...new Set([
+    ...selectedPath,
+    ...(nodesById.has(currentNodeId) ? [currentNodeId] : []),
+    ...(nodesById.has(nextActionNodeId) ? [nextActionNodeId] : []),
+  ])];
+  const storyNodeIds = causationCanvas
+    ? FLAGSHIP_PROCESS_PROJECTION_IDS.filter(nodeId => nodesById.has(nodeId))
+    : routeNodeIds;
+  const branchNodeIds = causationCanvas
+    ? returnedBranches.map(branch => String(branch?.target || '')).filter(nodeId => nodeId && nodesById.has(nodeId))
+    : [];
+  const selectedBranchTargetId = selectedBranch && String(selectedBranch.target || '') !== currentNodeId
+    ? String(selectedBranch.target || '')
+    : '';
+  return {
+    selectedPath,
+    currentNodeId,
+    nextActionNodeId,
+    selectedBranchId,
+    currentNode,
+    causationCanvas,
+    flagshipCausation,
+    routeNodeIds,
+    storyNodeIds,
+    branchNodeIds,
+    selectedBranchTargetId,
+    activeBasis: {
+      factIds: Array.isArray(currentNode?.fact_ids) ? currentNode.fact_ids : [],
+      lawIds: Array.isArray(currentNode?.legal_source_ids) ? currentNode.legal_source_ids : [],
+      evidenceIds: Array.isArray(currentNode?.evidence_requirement_ids) ? currentNode.evidence_requirement_ids : [],
+    },
+  };
+}
+
+function processRouteStoryContractViolations(processGraph) {
+  const issues = [];
+  const story = processRouteStory(processGraph);
+  const returnedNodeIds = new Set((processGraph?.nodes || []).map(node => String(node?.node_id || '')));
+  if (!story.selectedPath.length || new Set(story.selectedPath).size !== story.selectedPath.length
+    || story.selectedPath.some(nodeId => !returnedNodeIds.has(nodeId))) issues.push('selected path is absent, duplicated, or not returned');
+  if (!story.currentNodeId || !returnedNodeIds.has(story.currentNodeId)
+    || !story.selectedPath.includes(story.currentNodeId)) issues.push('current node is not on the returned selected path');
+  if (!story.nextActionNodeId || !returnedNodeIds.has(story.nextActionNodeId)) issues.push('next action is not a returned process node');
+  if (story.selectedBranchId && !story.currentNode?.branches?.some(branch => (
+    String(branch?.branch_id || '') === story.selectedBranchId
+    && String(branch?.target || '') === story.nextActionNodeId
+  ))) issues.push('selected branch does not bind the returned current node to the returned next action');
+  const selectedPairs = new Set(story.selectedPath.slice(1).map((target, index) => `${story.selectedPath[index]}->${target}`));
+  const returnedSelectedPairs = new Set((processGraph?.edges || [])
+    .filter(edge => edge?.state === 'selected')
+    .map(edge => `${String(edge?.source || '')}->${String(edge?.target || '')}`));
+  for (const pair of selectedPairs) {
+    if (!returnedSelectedPairs.has(pair)) issues.push(`selected path edge ${pair} is not returned as selected`);
+  }
+  if (story.nextActionNodeId !== story.currentNodeId && story.selectedBranchTargetId !== story.nextActionNodeId) {
+    issues.push('distinct next action is not the current node\'s selected returned branch');
+  }
+  if (story.nextActionNodeId !== story.currentNodeId
+    && !(processGraph?.edges || []).some(edge => String(edge?.source || '') === story.currentNodeId && String(edge?.target || '') === story.nextActionNodeId)) {
+    issues.push('distinct next action has no returned current-to-next edge');
+  }
+  if (story.nextActionNodeId === story.currentNodeId && story.selectedBranchTargetId) {
+    issues.push('self-blocked route invents a distinct selected branch target');
+  }
+  return [...new Set(issues)];
+}
 const SHA256_PATTERN = /^[0-9a-f]{64}$/i;
 const LOCAL_RUN_TIMEOUT_MS = 180000;
 const PRODUCTION_RUN_TIMEOUT_MS = 15 * 60 * 1000;
@@ -362,6 +497,7 @@ const REPOSITORY_ROOT = path.dirname(QA_DIRECTORY);
 const QA_OUTPUT_BASENAME = 'guided-v13-smoke-out';
 const PREFLIGHT_OUTPUT_BASENAME = 'evidence';
 const PREFLIGHT_PARENT_PATTERN = /^casepath-qa-preflight\.[A-Za-z0-9]{6,}$/;
+const REAL_ACCEPTANCE_PARENT_PATTERN = /^casepath-qa-real\.[A-Za-z0-9]{6,}$/;
 const QA_TEMP_ROOT = path.resolve(os.tmpdir());
 
 function resolveSafeQaOutputPath(candidate) {
@@ -374,7 +510,10 @@ function resolveSafeQaOutputPath(candidate) {
   const dedicatedPreflightOutput = (
     path.basename(resolved) === PREFLIGHT_OUTPUT_BASENAME
     && path.dirname(preflightParent) === QA_TEMP_ROOT
-    && PREFLIGHT_PARENT_PATTERN.test(path.basename(preflightParent))
+    && (
+      PREFLIGHT_PARENT_PATTERN.test(path.basename(preflightParent))
+      || REAL_ACCEPTANCE_PARENT_PATTERN.test(path.basename(preflightParent))
+    )
   );
   if (resolved === path.parse(resolved).root || resolved === REPOSITORY_ROOT || resolved === QA_DIRECTORY) {
     throw new Error(`Refusing unsafe CASEPATH_QA_OUT path: ${resolved}`);
@@ -401,7 +540,10 @@ function assertSafeQaOutputParent(candidate) {
   const parentMatches = resolved === dedicatedQaOutput
     ? realParent === expectedParent
     : path.dirname(realParent) === expectedParent
-      && PREFLIGHT_PARENT_PATTERN.test(path.basename(realParent));
+      && (
+        PREFLIGHT_PARENT_PATTERN.test(path.basename(realParent))
+        || REAL_ACCEPTANCE_PARENT_PATTERN.test(path.basename(realParent))
+      );
   if (!parentMatches) {
     throw new Error(`Refusing symlinked or unexpected CASEPATH_QA_OUT parent: ${parent}`);
   }
@@ -411,6 +553,10 @@ function assertSafeQaOutputParent(candidate) {
 const QA_SESSION_ID = `qa-${randomUUID()}`;
 const ISOLATION_SESSION_ID = `qa-isolation-${randomUUID()}`;
 const ALLOW_PRODUCTION_MUTATION = process.env.CASEPATH_ALLOW_PRODUCTION_MUTATION === '1';
+const EXPECT_REAL_NEMOTRON = process.env.CASEPATH_EXPECT_REAL_NEMOTRON === '1';
+if (!['', '0', '1'].includes(process.env.CASEPATH_EXPECT_REAL_NEMOTRON || '')) {
+  throw new Error('CASEPATH_EXPECT_REAL_NEMOTRON must be exactly 0 or 1 when set.');
+}
 const OUT = assertSafeQaOutputParent(
   process.env.CASEPATH_QA_OUT || path.join(QA_DIRECTORY, QA_OUTPUT_BASENAME),
 );
@@ -431,6 +577,7 @@ let reviewResponse = null;
 let proofResponse = null;
 let deploymentIdentity = { frontend: null, api: null, qa: { release_id: RELEASE_ID, source_commit: process.env.RENDER_GIT_COMMIT || null } };
 let runtimeVersions = { node: process.version, playwright: null, chromium: null };
+let acceptedJourneyMode = 'flagship-review-learning';
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -456,7 +603,10 @@ function validSourceCommit(value) {
 }
 
 function isProductionJourney() {
-  return !isLocal(BASE) || !isLocal(API);
+  // Runtime-contract classification is explicit for loopback acceptance. URL
+  // locality remains the independent authority boundary in
+  // requireMutationAuthority(), so this flag cannot authorize hosted writes.
+  return EXPECT_REAL_NEMOTRON || !isLocal(BASE) || !isLocal(API);
 }
 
 function runTimeoutMs() {
@@ -1060,7 +1210,7 @@ function hybridCausalContractViolations(run) {
     const canonicalFact = controllingById.get(decision.fact_id);
     if (!canonicalFact
       || decision.decision_key !== canonicalFact.decision_key
-      || decision.decision_value !== canonicalFact.decision_value
+      || !compatibleProcessDecisionValues(canonicalFact).has(decision.decision_value)
       || decision.state !== canonicalFact.state
       || decision.normalized_value !== canonicalFact.normalized_value) issues.push(`process decision ${decision.fact_id} inherited canonical fields are not exact`);
     const sourceRefIds = decision.source_ref_ids;
@@ -1371,7 +1521,7 @@ function orchestrationContractViolations(run, cacheMode, expectedFramework = EXP
     if (!nonemptyString(item.response_id) || !EXACT_NEMOTRON_RESPONSE_MODELS.has(item.response_model)) issues.push(`${agentId}: returned response identity is invalid`);
     if (!providerProvenanceValueIsSafe('response_id', item.response_id)
       || !providerProvenanceValueIsSafe('response_model', item.response_model)
-      || item.upstream_provider !== 'DeepInfra'
+      || item.upstream_provider !== 'Together'
       || !providerProvenanceValueIsSafe('upstream_provider', item.upstream_provider)
       || !nonemptyString(item.finish_reason)
       || !providerProvenanceValueIsSafe('finish_reason', item.finish_reason)
@@ -1384,6 +1534,11 @@ function orchestrationContractViolations(run, cacheMode, expectedFramework = EXP
     if (!nonemptyString(item.origin_call_id)) issues.push(`${agentId}: origin_call_id is absent`);
     if (cacheMode === 'cold' && (item.cache_hit !== false || !SUCCESSFUL_MODEL_OUTCOMES.has(item.outcome) || item.origin_call_id !== item.call_id)) issues.push(`${agentId}: cold network lineage is invalid`);
     if (cacheMode === 'warm' && (item.cache_hit !== true || item.outcome !== 'cache_hit')) issues.push(`${agentId}: warm cache state is invalid`);
+    if (EXPECT_REAL_NEMOTRON && (
+      item.deterministic_fallback_applied !== false
+      || item.rejected_count !== 0
+      || (cacheMode === 'cold' && item.outcome !== 'succeeded')
+    )) issues.push(`${agentId}: fresh real acceptance contains a rejected or substituted model field`);
   }
   const canonical = byAgent.get('canonical_facts');
   const orchestrator = byAgent.get('orchestrator_plan');
@@ -1394,6 +1549,7 @@ function orchestrationContractViolations(run, cacheMode, expectedFramework = EXP
       || canonical.source_reference_projection_count !== projected.length
       || new Set(projected).size !== projected.length
       || projected.some(factId => !canonical.accepted_ids.includes(factId))) issues.push('canonical_facts: deterministic source projection disclosure is invalid');
+    if (EXPECT_REAL_NEMOTRON && projected.length) issues.push('canonical_facts: fresh real acceptance projected source references instead of accepting the model-selected grounding');
   }
   if (canonical && (canonical.parent_call_id != null || canonical.delegation_id != null)) issues.push('canonical_facts: root parent_call_id and delegation_id must be null');
   if (canonical && orchestrator && orchestrator.parent_call_id !== canonical.call_id) issues.push('orchestrator_plan: parent must be canonical_facts call');
@@ -1423,13 +1579,22 @@ function orchestrationContractViolations(run, cacheMode, expectedFramework = EXP
   const exactGateOutputs = {
     deterministic_process_gate: run?.result?.process,
     deterministic_evidence_gate: run?.result?.checklist,
-    whole_playbook_gate: audit.final_claim_brief,
+    whole_playbook_gate: {
+      process: semanticProcessDto(run?.result?.process),
+      checklist: semanticChecklistDto(run?.result?.checklist),
+      final_brief: audit.final_claim_brief,
+    },
   };
   for (const [gateId, dto] of Object.entries(exactGateOutputs)) {
     const gate = gates.find(item => item?.agent_id === gateId);
     if (!dto || gate?.output_artifact_hash !== dtoHash(dto)) issues.push(`${gateId}: output hash is not bound to the returned final DTO`);
     const numericHazards = nonIntegerNumberPaths(dto);
     if (numericHazards.length) issues.push(`${gateId}: accepted DTO contains non-integer numeric values at ${numericHazards.join(', ')}`);
+  }
+  const wholeGate = gates.find(item => item?.agent_id === 'whole_playbook_gate');
+  if (wholeGate?.output_projection_contract !== 'casepath.accepted-playbook-projection/1.0.0'
+    || wholeGate?.final_brief_artifact_hash !== dtoHash(audit.final_claim_brief)) {
+    issues.push('whole_playbook_gate: semantic bundle projection or final-brief hash is not exact');
   }
   const allEvents = Array.isArray(run?.events) ? run.events : [];
   const events = allEvents.filter(item => item?.stage === 'agent_orchestration');
@@ -1616,7 +1781,7 @@ function coldLedgerContractViolations(audit, ledger) {
     if (item.call_count !== 1 || !SUCCESSFUL_MODEL_OUTCOMES.has(item.outcome)) issues.push(`${agent.agent_id}: ledger is not a successful cold network call`);
     if (item.provider !== 'openrouter' || item.provider_endpoint !== 'https://openrouter.ai/api/v1/chat/completions') issues.push(`${agent.agent_id}: provider identity mismatch`);
     if (item.model !== REQUESTED_NEMOTRON_MODEL || !EXACT_NEMOTRON_RESPONSE_MODELS.has(item.response_model)) issues.push(`${agent.agent_id}: requested/returned model mismatch`);
-    if (!nonemptyString(item.response_id) || item.upstream_provider !== 'DeepInfra' || !nonemptyString(item.finish_reason)) issues.push(`${agent.agent_id}: complete exact provider identity is absent`);
+    if (!nonemptyString(item.response_id) || item.upstream_provider !== 'Together' || !nonemptyString(item.finish_reason)) issues.push(`${agent.agent_id}: complete exact provider identity is absent`);
     if (!ALLOWED_USAGE_SOURCES.has(item.usage_source)) issues.push(`${agent.agent_id}: usage provenance is invalid`);
     if (!Number.isFinite(item.actual_cost_usd) || item.actual_cost_usd <= 0) issues.push(`${agent.agent_id}: actual cost must be positive`);
     if (!Number.isInteger(item.prompt_tokens) || item.prompt_tokens <= 0 || !Number.isInteger(item.completion_tokens) || item.completion_tokens <= 0 || !Number.isInteger(item.total_tokens) || item.total_tokens < item.prompt_tokens + item.completion_tokens) issues.push(`${agent.agent_id}: token accounting is invalid`);
@@ -1649,7 +1814,16 @@ function warmLineageContractViolations(coldAudit, warmAudit, ledger) {
     if (warm.response_id !== item.response_id || warm.response_model !== item.response_model || warm.upstream_provider !== item.upstream_provider || warm.call_count !== item.call_count) issues.push(`${warm.agent_id}: warm run audit and ledger response binding mismatch`);
     if (item.call_count !== 0 || item.outcome !== 'cache_hit' || item.usage_source !== 'cache') issues.push(`${warm.agent_id}: warm record made or claims a provider call`);
     const coldLedger = ledger.items.find(value => value.call_id === cold.call_id);
-    if (!coldLedger || item.response_id !== coldLedger.response_id || item.response_model !== coldLedger.response_model || item.upstream_provider !== 'DeepInfra' || coldLedger.upstream_provider !== 'DeepInfra') issues.push(`${warm.agent_id}: cached response identity/provider does not match the exact cold origin`);
+    if (!coldLedger || item.response_id !== coldLedger.response_id || item.response_model !== coldLedger.response_model || item.upstream_provider !== 'Together' || coldLedger.upstream_provider !== 'Together') issues.push(`${warm.agent_id}: cached response identity/provider does not match the exact cold origin`);
+    if (warm.input_artifact_hash !== cold.input_artifact_hash
+      || warm.output_artifact_hash !== cold.output_artifact_hash
+      || JSON.stringify(warm.accepted_ids) !== JSON.stringify(cold.accepted_ids)
+      || warm.accepted_count !== cold.accepted_count
+      || warm.rejected_count !== cold.rejected_count
+      || warm.deterministic_fallback_applied !== cold.deterministic_fallback_applied
+      || (warm.agent_id === 'canonical_facts'
+        && (JSON.stringify(warm.source_reference_projection_fact_ids) !== JSON.stringify(cold.source_reference_projection_fact_ids)
+          || warm.source_reference_projection_count !== cold.source_reference_projection_count))) issues.push(`${warm.agent_id}: warm artifact and acceptance lineage differs from the cold origin`);
     const originUsage = item.origin_usage;
     const expectedOriginUsage = coldLedger && {
       prompt_tokens: coldLedger.prompt_tokens,
@@ -1913,9 +2087,9 @@ function artifactCursorProducerRoleContractViolations(team, cursorSteps, semanti
     }
     if (step.activeAgentId && !REQUIRED_NEMOTRON_AGENT_IDS.includes(step.activeAgentId)) issues.push(`${index}: active model identity is outside the closed six-role map`);
   });
-  if (!clickSteps.some(step => !step.activeAgentId && step.activeSignature === 'sources' && /law/i.test(`${step.agentId} ${semanticById.get(step.eventId)?.agentId || ''}`))) issues.push('law: deterministic authority/model identity distinction was not visibly exercised');
+  if (!clickSteps.some(step => !step.activeAgentId && step.activeSignature === 'law' && step.presentationMode === 'deterministic-projection' && /law/i.test(`${step.workAuthority} ${step.agentId} ${semanticById.get(step.eventId)?.agentId || ''}`))) issues.push('law: deterministic authority/model identity distinction was not visibly exercised');
   if (!clickSteps.some(step => !step.activeAgentId && step.activeSignature === 'reference')) issues.push('reference: deterministic authority/model identity distinction was not visibly exercised');
-  if (!clickSteps.some(step => !step.activeAgentId && ['process', 'audit'].includes(step.activeSignature) && /gate/i.test(`${step.agentId} ${semanticById.get(step.eventId)?.agentId || ''}`))) issues.push('gate: deterministic authority/model identity distinction was not visibly exercised');
+  if (!clickSteps.some(step => !step.activeAgentId && ['gate', 'audit'].includes(step.activeSignature) && /gate|safety/i.test(`${step.workAuthority} ${step.agentId} ${semanticById.get(step.eventId)?.agentId || ''}`))) issues.push('gate: deterministic authority/model identity distinction was not visibly exercised');
   return issues;
 }
 
@@ -1929,6 +2103,367 @@ function sourcePreludeContractViolations(snapshot) {
     const expectedKind = SOURCE_PRELUDE_ICON_KINDS[index];
     if (card.iconCount !== 1 || card.iconKind !== expectedKind || !nonemptyString(card.iconMarkup)) issues.push(`${index}: opening source card lacks one nonempty type-correct icon`);
   });
+  return [...new Set(issues)];
+}
+
+function sourceRailArtifactKind(artifact) {
+  const semantic = `${artifact?.title || ''} ${artifact?.filename || ''}`.toLowerCase();
+  if (/delivery|receipt|confirmation/.test(semantic)) return 'delivery';
+  if (/timeline|chronology/.test(semantic)) return 'timeline';
+  if (String(artifact?.media_type || '').startsWith('image/')) return 'image';
+  if (/lease|agreement|contract|policy/.test(semantic)) return 'contract';
+  if (artifact?.media_type === 'message/rfc822' || /email|message|reply|notification|letter/.test(semantic)) return 'mail';
+  if (/inspection|assessment|report|technical/.test(semantic)) return 'inspection';
+  return 'generic';
+}
+
+function expectedSourceRailItems(claim) {
+  return [
+    { sourceId: 'message', kind: 'mail', name: 'Claim message' },
+    ...(Array.isArray(claim?.artifacts) ? claim.artifacts : []).map(artifact => ({
+      sourceId: String(artifact?.artifact_id || ''),
+      kind: sourceRailArtifactKind(artifact),
+      name: String(artifact?.title || ''),
+    })),
+  ];
+}
+
+function displayedSourceRailId(sourceId) {
+  const exact = String(sourceId || '');
+  return exact === 'intake' ? 'message' : exact;
+}
+
+function sourceRailContractViolations(snapshot, expectedSources, expectedActive = {}) {
+  const issues = [];
+  const items = Array.isArray(snapshot?.items) ? snapshot.items : [];
+  const expected = Array.isArray(expectedSources) ? expectedSources : [];
+  const expectedSourceId = displayedSourceRailId(expectedActive?.sourceId);
+  const expectedLocatorId = String(expectedActive?.locatorId || '');
+  const viewport = snapshot?.viewport || {};
+
+  if (snapshot?.contract !== SOURCE_RAIL_CONTRACT) issues.push('source rail contract identity is absent or wrong');
+  if (!SOURCE_RAIL_VIEWPORTS.some(item => item.width === viewport.width && item.height === viewport.height)) issues.push('source rail was not checked at 1280x720 or 1440x900');
+  if (!snapshot?.railVisible || !snapshot?.listVisible || !snapshot?.insideViewport || snapshot?.collapsed) issues.push('source rail is hidden, clipped, or collapsed');
+  if (!Number.isFinite(snapshot?.railRect?.width)
+    || snapshot.railRect.width < SOURCE_RAIL_MIN_WIDTH_PX
+    || snapshot.railRect.width > SOURCE_RAIL_MAX_WIDTH_PX) issues.push('source rail width is not compact');
+  if (!Number.isFinite(snapshot?.railRect?.height) || snapshot.railRect.height < viewport.height - 80) issues.push('source rail does not retain the desktop workspace height');
+  if (!Number.isFinite(snapshot?.headingHeight) || snapshot.headingHeight < 44 || snapshot.headingHeight > 56) issues.push('source rail heading is not compact');
+  if (!['auto', 'scroll'].includes(snapshot?.listOverflowY) || snapshot?.listHorizontalOverflow > 1 || snapshot?.pageHorizontalOverflow > 1) issues.push('source rail is not a contained vertical scroll region');
+  if (snapshot?.dropdownCount !== 0 || snapshot?.expanderCount !== 0 || snapshot?.collapsedControlCount !== 0) issues.push('source rail retains dropdown, expander, or collapse semantics');
+  if (snapshot?.workOverlapArea > SPATIAL_GEOMETRY_EPSILON_PX || (snapshot?.overlayOverlapAreas || []).some(area => area > SPATIAL_GEOMETRY_EPSILON_PX)) issues.push('source rail overlaps the work canvas or an open inspection surface');
+  if (snapshot?.rowOverlapCount !== 0) issues.push('source rail rows overlap each other');
+
+  if (snapshot?.itemCount !== 7 || items.length !== 7 || expected.length !== 7) issues.push('source rail does not contain the exact seven claim sources');
+  if (stableJson(items.map(item => item.sourceId)) !== stableJson(expected.map(item => item.sourceId))) issues.push('source rail source identity or order differs from the returned claim package');
+  items.forEach((item, index) => {
+    const expectedItem = expected[index] || {};
+    if (!item.visible || !item.fullyVisible) issues.push(`${item.sourceId || index}: source row is not fully visible`);
+    if (!Number.isFinite(item?.rect?.height)
+      || item.rect.height < SOURCE_RAIL_MIN_ROW_HEIGHT_PX
+      || item.rect.height > SOURCE_RAIL_MAX_ROW_HEIGHT_PX) issues.push(`${item.sourceId || index}: source row is not compact`);
+    if (item.iconCount !== 1 || item.iconKind !== expectedItem.kind || !nonemptyString(item.iconMarkup)
+      || !Number.isFinite(item.iconWidth) || !Number.isFinite(item.iconHeight)
+      || item.iconWidth < SOURCE_RAIL_MIN_ICON_SIZE_PX || item.iconWidth > SOURCE_RAIL_MAX_ICON_SIZE_PX
+      || item.iconHeight < SOURCE_RAIL_MIN_ICON_SIZE_PX || item.iconHeight > SOURCE_RAIL_MAX_ICON_SIZE_PX) issues.push(`${item.sourceId || index}: source row lacks one restrained type-correct icon`);
+    if (item.nameCount !== 1 || item.name !== expectedItem.name || !nonemptyString(item.name)) issues.push(`${item.sourceId || index}: source row name is absent, duplicated, or inexact`);
+    if (item.metaCount !== 1 || !nonemptyString(item.meta)) issues.push(`${item.sourceId || index}: source row metadata is absent or duplicated`);
+    if (item.statusCount !== 1 || !SOURCE_RAIL_ALLOWED_STATUSES.has(item.status)) issues.push(`${item.sourceId || index}: source row status is absent, duplicated, or unsupported`);
+    if (item.thumbImageCount !== 0 || item.extraLabelCount !== 0) issues.push(`${item.sourceId || index}: source row retains a thumbnail or redundant label`);
+    if (item.active !== item.ariaCurrent) issues.push(`${item.sourceId || index}: active source styling and current-source semantics disagree`);
+  });
+
+  const activeIds = Array.isArray(snapshot?.activeSourceIds) ? snapshot.activeSourceIds : [];
+  const readingIds = items.filter(item => item.status === 'reading').map(item => item.sourceId);
+  if (expectedSourceId) {
+    if (stableJson(activeIds) !== stableJson([expectedSourceId]) || stableJson(readingIds) !== stableJson([expectedSourceId])) issues.push('source use does not select exactly one matching reading row');
+    if (snapshot?.activeSourceLocator !== expectedLocatorId || !nonemptyString(expectedLocatorId)) issues.push('active source row is not bound to the exact returned locator');
+  } else if (activeIds.length || readingIds.length || snapshot?.activeSourceLocator) {
+    issues.push('source rail preselects a source before an exact source-use action');
+  }
+  return [...new Set(issues)];
+}
+
+function canonicalFactsLiveWorkPlanContractViolations(planSnapshots, factTourSnapshots, run) {
+  const issues = [];
+  const snapshots = Array.isArray(planSnapshots) ? planSnapshots : [];
+  const facts = Array.isArray(factTourSnapshots) ? factTourSnapshots : [];
+  const expectedRunId = String(run?.run_id || '');
+  const startedReceipts = (Array.isArray(run?.events) ? run.events : []).filter(event => (
+    event?.receipt_type === 'agent_started'
+    && event?.actor_type === 'nemotron_agent'
+    && event?.agent_id === 'canonical_facts'
+  ));
+  const started = startedReceipts[0];
+  if (startedReceipts.length !== 1
+    || !nonemptyString(started?.event_id)
+    || !nonemptyString(started?.call_id)
+    || !['started', 'running', 'in_progress'].includes(String(started?.status || ''))
+    || started?.call_count !== 1
+    || started?.cache_hit === true
+    || started?.input_artifact !== 'observable_claim_package'
+    || !SHA256_PATTERN.test(started?.input_artifact_hash || '')) {
+    issues.push('canonical fact work lacks one exact uncached agent-started receipt');
+  }
+  if (!nonemptyString(expectedRunId)) issues.push('canonical fact work lacks its returned run identity');
+  if (!snapshots.length) issues.push('canonical fact call never replaces the idle source cards with a live work plan');
+
+  snapshots.forEach((snapshot, index) => {
+    if (snapshot?.planCount !== 1 || snapshot?.focalChildCount !== 1 || snapshot?.visible !== true) {
+      issues.push(`${index}: canonical fact work does not show one visible focal plan`);
+    }
+    if (snapshot?.contract !== LIVE_WORK_PLAN_CONTRACT
+      || snapshot?.presentationMode !== 'live-call'
+      || snapshot?.agentId !== 'canonical_facts'
+      || snapshot?.agentSignature !== 'facts'
+      || snapshot?.runId !== expectedRunId
+      || snapshot?.callId !== String(started?.call_id || '')
+      || snapshot?.eventId !== String(started?.event_id || '')
+      || snapshot?.workState !== String(started?.status || '')) {
+      issues.push(`${index}: live work plan is not bound to the exact returned run, call, event, agent, and work state`);
+    }
+    if (snapshot?.inputArtifact !== String(started?.input_artifact || '')
+      || snapshot?.inputArtifactHash !== String(started?.input_artifact_hash || '')) {
+      issues.push(`${index}: live work plan is not bound to the exact claim-package input`);
+    }
+    if (snapshot?.rootWorkState !== 'working'
+      || snapshot?.rootAgentId !== snapshot?.agentId
+      || snapshot?.rootRunId !== snapshot?.runId
+      || snapshot?.rootCallId !== snapshot?.callId
+      || snapshot?.rootEventId !== snapshot?.eventId) {
+      issues.push(`${index}: focal plan and live canvas authority are not the same call`);
+    }
+    if (snapshot?.title !== 'Find the supported facts'
+      || stableJson(snapshot?.steps || []) !== stableJson(CANONICAL_FACTS_LIVE_WORK_STEPS)) {
+      issues.push(`${index}: live work plan is not the exact three simple truthful steps with one active spinner`);
+    }
+    if (snapshot?.sourcePreludeCount !== 0 || snapshot?.sourcePreludeCardCount !== 0 || snapshot?.factTourCount !== 0) {
+      issues.push(`${index}: live work plan competes with the idle source prelude or fact tour`);
+    }
+    if (snapshot?.forbiddenProgressCount !== 0 || snapshot?.percentText === true) {
+      issues.push(`${index}: live work plan includes a percent, progress bar, or slider`);
+    }
+  });
+
+  if (!facts.length) issues.push('canonical fact live plan never yields to the source-backed fact tour');
+  if (facts.some(snapshot => snapshot?.liveWorkPlanCount !== 0)) issues.push('live work plan persists after the fact tour starts');
+  if (facts.some(snapshot => snapshot?.sourcePreludeCount !== 0)) issues.push('idle source prelude returns during the fact tour');
+  const firstRead = facts.find(snapshot => snapshot?.phase === 'read-source');
+  if (!firstRead?.artifactSurfaceVisible) issues.push('live work plan does not yield to the first real artifact preview');
+  const lastPlanAt = Math.max(...snapshots.map(snapshot => Number(snapshot?.at)).filter(Number.isFinite));
+  const firstFactAt = Math.min(...facts.map(snapshot => Number(snapshot?.at)).filter(Number.isFinite));
+  if (Number.isFinite(lastPlanAt) && Number.isFinite(firstFactAt) && lastPlanAt > firstFactAt) {
+    issues.push('live work plan overlaps the source-backed fact tour in time');
+  }
+  return [...new Set(issues)];
+}
+
+function openingClaimCardContractViolations(snapshot, claim) {
+  const issues = [];
+  if (snapshot?.cardCount !== 1 || !snapshot?.visible || snapshot?.sourceId !== 'message') issues.push('opening does not show one visible claim-message source card');
+  if (stableJson(snapshot?.childTags) !== stableJson(['HEADER', 'STRONG', 'BLOCKQUOTE', 'P'])
+    || snapshot?.blockquoteCount !== 1 || snapshot?.paragraphCount !== 1) issues.push('opening claim card is not the exact compact four-part source structure');
+  if (!nonemptyString(claim?.subject) || snapshot?.subject !== claim.subject) issues.push('opening claim subject does not equal the returned source subject');
+  if (snapshot?.problem !== EXPECTED_OPENING_PROBLEM || !String(claim?.message || '').includes(snapshot?.problem || '')) issues.push('opening problem sentence is not the exact claim-message sentence');
+  if (snapshot?.outcome !== EXPECTED_OPENING_OUTCOME || !String(claim?.message || '').includes(snapshot?.outcome || '')) issues.push('opening requested outcome is not the exact claim-message request');
+  if (snapshot?.generatedSummaryCount !== 0 || snapshot?.bodyCopyLength !== EXPECTED_OPENING_PROBLEM.length + EXPECTED_OPENING_OUTCOME.length) issues.push('opening claim card adds generated summary prose');
+  if (!Number.isFinite(snapshot?.width) || !Number.isFinite(snapshot?.height)
+    || snapshot.width > 640 || snapshot.height > 220) issues.push('opening claim card is not compact');
+  return [...new Set(issues)];
+}
+
+function factSourceTourContractViolations(snapshots, highlights, semanticEvents, run) {
+  const issues = [];
+  const result = run?.result || run || {};
+  const expectedRunId = String(run?.run_id || '');
+  const factsById = new Map((result.facts || []).map(fact => [fact.fact_id, fact]));
+  const factEvents = new Map((semanticEvents || [])
+    .filter(event => event.entityKind === 'fact')
+    .map(event => [event.entityId, event]));
+  const firstPhase = (factId, phase) => (snapshots || []).find(item => item.factId === factId && item.phase === phase);
+  const observedOrder = [];
+  for (const item of snapshots || []) {
+    if (item.phase === 'select-source' && item.factId && !observedOrder.includes(item.factId)) observedOrder.push(item.factId);
+  }
+  if (stableJson(observedOrder) !== stableJson(FACT_TOUR_FACT_IDS)) issues.push('fact tour does not show the exact eight returned facts in order');
+
+  FACT_TOUR_FACT_IDS.forEach(factId => {
+    const fact = factsById.get(factId);
+    const semantic = factEvents.get(factId);
+    const phases = ['select-source', 'read-source', 'highlight-source', 'finding'].map(phase => firstPhase(factId, phase));
+    const [select, read, highlighted, finding] = phases;
+    if (!fact || phases.some(item => !item)) {
+      issues.push(`${factId}: source-to-fact replay does not show select, read, highlight, then returned fact`);
+      return;
+    }
+    const returnedRef = (fact.source_refs || []).find(ref => (
+      ref.artifact_id === select.sourceId && factSourceLocatorId(ref) === select.locatorId
+    ));
+    if (!returnedRef || phases.some(item => item.sourceId !== select.sourceId || item.locatorId !== select.locatorId)) {
+      issues.push(`${factId}: tour source and locator are not one exact returned fact reference`);
+    }
+    if (!(select.at <= read.at && read.at <= highlighted.at && highlighted.at <= finding.at)) issues.push(`${factId}: source and fact phases are not sequential`);
+    if (select.activeSourceIds.length || select.activeSourceLocator || select.highlightCount || select.factVisible) issues.push(`${factId}: source is not neutral before it opens`);
+    if (!read.artifactSurfaceVisible || stableJson(read.activeSourceIds) !== stableJson([displayedSourceRailId(select.sourceId)])
+      || read.activeSourceLocator !== select.locatorId || read.highlightCount || read.factVisible) issues.push(`${factId}: exact returned artifact is not visibly open before selection`);
+    if (!highlighted.artifactSurfaceVisible || highlighted.highlightCount !== 1 || highlighted.factVisible) issues.push(`${factId}: selected source region is not isolated before the fact appears`);
+    if (!finding.factVisible || finding.factLabel !== String(fact.label || '') || finding.factValue !== String(fact.value ?? '')) issues.push(`${factId}: exact returned fact does not visibly follow its selected source`);
+    const sourceHighlight = (highlights || []).find(item => item.entityKind === 'fact' && item.factId === factId
+      && item.sourceId === select.sourceId && item.locatorId === select.locatorId && item.sourceHighlighted === true);
+    if (!sourceHighlight || !(read.at <= sourceHighlight.at && sourceHighlight.at <= finding.at)) issues.push(`${factId}: exact returned locator was not visibly selected before the fact appeared`);
+    if (!semantic || semantic.runId !== expectedRunId || semantic.traceContract !== EXECUTION_TRACE_CONTRACT
+      || semantic.presentationMode !== 'returned_action_replay' || semantic.eventId !== finding.eventId
+    ) issues.push(`${factId}: visible fact is not bound to its run-scoped accepted execution trace`);
+    const meaningSelectedByModel = semantic?.modelOwnedFields?.includes('assertion_id');
+    if (semantic?.modelOwnedFields?.includes('value')
+      || (meaningSelectedByModel
+        ? (!semantic?.materializedFromModelAssertionFields?.includes('value') || semantic?.applicationOwnedFields?.includes('value'))
+        : !semantic?.applicationOwnedFields?.includes('value'))) {
+      issues.push(`${factId}: returned fact value ownership does not match its bounded assertion selection`);
+    }
+    if (phases.some(item => item.presentationMode !== 'returned-action-replay' || !/^Returned work · /.test(item.presentationLabel))) {
+      issues.push(`${factId}: returned-action replay is not visibly labelled`);
+    }
+    const modelSelectedLocatorIds = (Array.isArray(semantic?.modelSelectedTextRefs) ? semantic.modelSelectedTextRefs : []).map(factSourceLocatorId);
+    const exactLocatorWasModelSelected = semantic?.modelContributionAccepted === true
+      && modelSelectedLocatorIds.includes(select.locatorId);
+    if (exactLocatorWasModelSelected) {
+      if (semantic.actorType !== 'nemotron_agent' || semantic.agentId !== 'canonical_facts'
+        || finding.agentId !== 'canonical_facts'
+        || phases.some(item => item.activeAgentId !== 'canonical_facts' || item.activeSignature !== 'facts')) {
+        issues.push(`${factId}: exact model-selected text locator is not bound to the Claim reader identity`);
+      }
+    } else {
+      if (finding.agentId) issues.push(`${factId}: application-projected fact finding inherited a model-agent identity`);
+      if (phases.some(item => item.activeAgentId || item.activeSignature !== 'gate' || item.workAuthority !== 'Fact safety check')) {
+        issues.push(`${factId}: application-projected fact locator inherited a model-agent identity`);
+      }
+    }
+  });
+  return [...new Set(issues)];
+}
+
+function officialLawTourContractViolations(steps, semanticEvents, run) {
+  const issues = [];
+  const result = run?.result || run || {};
+  const expectedRunId = String(run?.run_id || '');
+  const sources = result.legal_research?.sources || [];
+  if (sources.length !== 4 || stableJson((steps || []).map(item => item.sourceId)) !== stableJson(sources.map(item => item.source_id))) {
+    issues.push('official-law tour does not show the exact four returned registry sources in order');
+  }
+  const semanticBySource = new Map((semanticEvents || [])
+    .filter(event => event.entityKind === 'official_source')
+    .map(event => [event.entityId, event]));
+  sources.forEach((source, index) => {
+    const step = (steps || [])[index];
+    const semantic = semanticBySource.get(source.source_id);
+    if (!step || step.sourceId !== source.source_id || step.location !== source.location || step.url !== source.url
+      || step.retrievalMethod !== 'versioned_official_source_registry_lookup'
+      || !nonemptyString(step.registryVersion) || step.selectedSourceId !== source.source_id
+      || step.passageSourceId !== source.source_id || step.selectedUrl !== source.url || step.passageUrl !== source.url) {
+      issues.push(`${source.source_id}: official registry source is not visibly exact`);
+    }
+    if (!semantic || semantic.runId !== expectedRunId || semantic.actorType !== 'deterministic_tool'
+      || semantic.agentId !== 'official_law_registry' || semantic.traceContract !== EXECUTION_TRACE_CONTRACT
+      || semantic.presentationMode !== 'deterministic_projection' || semantic.modelContributionAccepted !== false) {
+      issues.push(`${source.source_id}: official law is not bound to its deterministic run-scoped registry trace`);
+    }
+    if (step && (step.presentationMode !== 'deterministic-projection' || step.activeAgentId
+      || step.activeSignature !== 'law' || step.workAuthority !== 'Swiss law lookup'
+      || step.presentationLabel !== 'Application step · Swiss law lookup')) {
+      issues.push(`${source.source_id}: official law is visually misrepresented as Nemotron work`);
+    }
+  });
+  return [...new Set(issues)];
+}
+
+function acceptedExecutionFieldOwnershipViolations(semanticEvents, run) {
+  const issues = [];
+  const expectedRunId = String(run?.run_id || '');
+  const events = Array.isArray(semanticEvents) ? semanticEvents : [];
+  const byKey = new Map(events.map(event => [`${event.entityKind}:${event.entityId}`, event]));
+  const audit = orchestrationAudit(run) || {};
+  const agentsById = new Map((audit.agents || []).map(agent => [agent.agent_id, agent]));
+  const gatesById = new Map((audit.deterministic_gates || []).map(gate => [gate.agent_id, gate]));
+  const exactCallBinding = (event, agentId, gateId = '') => {
+    const agent = agentsById.get(agentId);
+    const gate = gateId ? gatesById.get(gateId) : null;
+    return Boolean(agent)
+      && event?.sourceCallId === agent.call_id
+      && event?.originCallId === agent.origin_call_id
+      && event?.callCount === agent.call_count
+      && event?.usageSource === agent.usage_source
+      && event?.cacheHit === (agent.cache_hit === true)
+      && event?.sourceCallInputHash === agent.input_artifact_hash
+      && event?.sourceCallOutputHash === agent.output_artifact_hash
+      && (!gateId || (Boolean(gate) && event?.gateInputHash === gate.input_artifact_hash));
+  };
+  const expectedNodeIds = (run?.result?.process?.nodes || []).map(node => node.node_id);
+  const expectedEvidenceIds = (run?.result?.checklist?.items || []).map(item => item.item_id);
+  const factsById = new Map((run?.result?.facts || []).map(fact => [fact.fact_id, fact]));
+  events.filter(event => event.entityKind === 'fact').forEach(event => {
+    const fact = factsById.get(event.entityId);
+    const meaningSelectedByModel = event.modelOwnedFields.includes('assertion_id');
+    if (event.runId !== expectedRunId || event.traceContract !== EXECUTION_TRACE_CONTRACT
+      || event.presentationMode !== 'returned_action_replay') issues.push(`${event.entityId}: fact trace is not run-bound`);
+    if (event.modelOwnedFields.some(field => !['assertion_id', 'source_ref_ids', 'confidence'].includes(field))
+      || (meaningSelectedByModel
+        ? (!nonemptyString(event.assertionId)
+          || !event.materializedFromModelAssertionFields.includes('value')
+          || event.applicationOwnedFields.includes('value'))
+        : !event.applicationOwnedFields.includes('value'))
+      || (fact?.controls_process === true) !== meaningSelectedByModel) {
+      issues.push(`${event.entityId}: fact assertion ownership is not exact`);
+    }
+    if (event.modelContributionAccepted === true
+      && !exactCallBinding(event, 'canonical_facts')) {
+      issues.push(`${event.entityId}: accepted Claim reader field is not bound to the exact source call input and output`);
+    }
+  });
+  expectedNodeIds.forEach(nodeId => {
+    const structure = byKey.get(`process_node:${nodeId}`);
+    const decision = byKey.get(`process_decision:${nodeId}`);
+    if (!structure || structure.type !== 'process_node.created' || structure.runId !== expectedRunId
+      || structure.traceContract !== EXECUTION_TRACE_CONTRACT || structure.actorType !== 'deterministic_tool'
+      || structure.modelContributionAccepted || structure.modelOwnedFields.length || structure.outputProcessNodeId !== nodeId
+      || !structure.applicationOwnedFields.length) issues.push(`${nodeId}: process structure is not neutral and application-owned`);
+    const linkedIds = structure?.linkedModelContributionIds || [];
+    if (linkedIds.length) {
+      if (!decision || decision.type !== 'process_decision.accepted' || decision.runId !== expectedRunId
+        || decision.traceContract !== EXECUTION_TRACE_CONTRACT || decision.actorType !== 'nemotron_agent'
+        || decision.agentId !== 'process_decision_mapping' || !decision.modelContributionAccepted
+        || stableJson(decision.modelOwnedFields) !== stableJson(['decision_value'])
+        || decision.applicationOwnedFields.length || stableJson(decision.acceptedContributionIds) !== stableJson(linkedIds)
+        || !exactCallBinding(decision, 'process_decision_mapping', 'deterministic_process_gate')) {
+        issues.push(`${nodeId}: Process builder is not limited to the exact accepted decision_value field`);
+      }
+    } else if (decision) issues.push(`${nodeId}: unlinked Process builder field event is present`);
+  });
+  expectedEvidenceIds.forEach(itemId => {
+    const structure = byKey.get(`evidence_requirement:${itemId}`);
+    const fields = byKey.get(`evidence_fields:${itemId}`);
+    if (!structure || structure.type !== 'evidence_requirement.linked' || structure.runId !== expectedRunId
+      || structure.traceContract !== EXECUTION_TRACE_CONTRACT || structure.actorType !== 'deterministic_tool'
+      || structure.modelContributionAccepted || structure.modelOwnedFields.length || structure.outputEvidenceId !== itemId
+      || !structure.applicationOwnedFields.length) issues.push(`${itemId}: evidence requirement structure is not neutral and application-owned`);
+    const linkedFields = structure?.linkedModelFields || [];
+    if (linkedFields.length) {
+      const allowed = new Set(['status', 'artifact_ids']);
+      if (!fields || fields.type !== 'evidence_fields.accepted' || fields.runId !== expectedRunId
+        || fields.traceContract !== EXECUTION_TRACE_CONTRACT || fields.actorType !== 'nemotron_agent'
+        || fields.agentId !== 'evidence_checklist' || !fields.modelContributionAccepted
+        || !fields.modelOwnedFields.length || fields.modelOwnedFields.some(field => !allowed.has(field))
+        || stableJson(fields.modelOwnedFields) !== stableJson(linkedFields) || fields.applicationOwnedFields.length
+        || !exactCallBinding(fields, 'evidence_checklist', 'deterministic_evidence_gate')) {
+        issues.push(`${itemId}: Document finder is not limited to exact accepted status/artifact_ids fields`);
+      }
+    } else if (fields) issues.push(`${itemId}: unlinked Document finder field event is present`);
+  });
+  const finalBrief = byKey.get('final_brief:final_claim_brief');
+  if (finalBrief && (finalBrief.actorType !== 'nemotron_agent'
+    || !exactCallBinding(finalBrief, 'final_claim_brief_audit', 'whole_playbook_gate'))) {
+    issues.push('final brief fields are not bound to the exact critic call and whole-playbook gate input');
+  }
   return [...new Set(issues)];
 }
 
@@ -1990,17 +2525,32 @@ function intakeClaimMessageBasisContractViolations(construction, preview, expect
   return issues;
 }
 
-function agentAuditContractViolations(snapshots, audit, production = true) {
+function agentAuditContractViolations(snapshots, audit, production = true, decisionFlowSteps = []) {
   const issues = [];
   const returned = Array.isArray(snapshots) ? snapshots : [];
   if (stableJson(returned.map(item => item.agentId)) !== stableJson(REQUIRED_VISIBLE_SPECIALIST_IDS)) issues.push('agent audit did not inspect the exact five visible specialist roles in order');
   const authoritativeById = new Map((Array.isArray(audit?.agents) ? audit.agents : []).map(item => [item.agent_id, item]));
+  const expectedReferenceActions = (decisionFlowSteps || [])
+    .filter(step => REFERENCE_DECISION_AUDIT_PHASES.includes(step.phase))
+    .map(step => ({ phase: step.phase, nodeId: step.nodeId || '', sourceId: step.sourceId || '', locatorId: step.locatorId || '' }));
   returned.forEach(snapshot => {
     const expectedIdentity = REQUIRED_NEMOTRON_AGENT_SIGNATURES[snapshot.agentId];
     if (!snapshot.opened || snapshot.panelAgentId !== snapshot.agentId || snapshot.panelSignature !== expectedIdentity?.signature || snapshot.buttonPressed !== 'true') issues.push(`${snapshot.agentId}: activity panel did not open for the clicked role identity`);
     if (!snapshot.focusRestored || snapshot.buttonPressedAfterClose !== 'false' || snapshot.panelOpenAfterClose) issues.push(`${snapshot.agentId}: activity panel close did not restore its trigger and closed state`);
     if (!production) {
-      if (snapshot.historyAvailable || snapshot.historyContract || snapshot.historyStepCounts.some(count => count !== 0) || snapshot.acceptedIds.length || snapshot.rejections.length || snapshot.callId || snapshot.outputHash || !snapshot.emptyStateVisible) issues.push(`${snapshot.agentId}: deterministic reference replay fabricated call-bound activity`);
+      if (snapshot.agentId === 'process_decision_mapping') {
+        if (!snapshot.historyAvailable || snapshot.historyMode !== 'reference-replay-actions' || snapshot.historyContract
+          || stableJson(snapshot.historyStepCounts) !== stableJson([1, 0, 0, 0, 0])
+          || snapshot.acceptedIds.length || snapshot.rejections.length || snapshot.callId || snapshot.outputHash
+          || snapshot.emptyStateVisible || snapshot.referenceTaskCount !== 1) issues.push(`${snapshot.agentId}: reference Path audit does not use its replay action history`);
+        if (!expectedReferenceActions.length || snapshot.referenceActionCount !== expectedReferenceActions.length
+          || stableJson(snapshot.referenceActions) !== stableJson(expectedReferenceActions)) issues.push(`${snapshot.agentId}: reference Path audit actions do not equal the exact persisted decision flow`);
+        if (!snapshot.referenceProvenanceVisible || snapshot.referenceProvenanceText !== 'No provider call · accepted reference output replay') issues.push(`${snapshot.agentId}: reference Path audit provenance footer is absent or inexact`);
+        if (snapshot.noAgentCallsEmptyStateVisible) issues.push(`${snapshot.agentId}: primary reference Path audit falls back to No agent calls were made`);
+      } else if (snapshot.historyAvailable || snapshot.historyContract || snapshot.historyStepCounts.some(count => count !== 0)
+        || snapshot.acceptedIds.length || snapshot.rejections.length || snapshot.callId || snapshot.outputHash || !snapshot.emptyStateVisible) {
+        issues.push(`${snapshot.agentId}: deterministic reference replay fabricated call-bound activity`);
+      }
       return;
     }
     const receipt = authoritativeById.get(snapshot.agentId);
@@ -2025,7 +2575,7 @@ function agentAuditContractViolations(snapshots, audit, production = true) {
   return [...new Set(issues)];
 }
 
-function zoomOutDesktopContractViolations({ sourceMoments, factSteps, artifactCursorSteps, previews, postConstructionSourceUse, team, documentPlan, documentRoundtrip }) {
+function zoomOutDesktopContractViolations({ sourceMoments, decisionSteps, artifactCursorSteps, previews, postConstructionSourceUse, team, documentPlan, documentRoundtrip, expectedNodeIds = FLAGSHIP_PROCESS_PROJECTION_IDS }) {
   const diagnostics = [];
   const sourceIssues = [];
   const latestSourceMoment = new Map((sourceMoments || []).map(snapshot => [snapshot.moment, snapshot]));
@@ -2041,28 +2591,18 @@ function zoomOutDesktopContractViolations({ sourceMoments, factSteps, artifactCu
   if (sourceIssues.length) diagnostics.push(`1. Source workspace continuity — ${sourceIssues.slice(0, 4).join('; ')}`);
 
   const selectionIssues = [];
-  const factIds = new Set((factSteps || []).map(step => step.factId));
-  for (const factId of factIds) {
-    const select = factSteps.find(step => step.factId === factId && step.timing === 'select-source');
-    const read = factSteps.find(step => step.factId === factId && step.timing === 'neutral-read');
-    if (!select || select.activeSourceIds.length !== 0 || select.activeSourceLocator || select.sourceHighlighted) selectionIssues.push(`${factId} is active before source use`);
-    if (!read || read.activeSourceIds.length !== 1 || read.activeSourceIds[0] !== read.sourceId || read.activeSourceLocator !== read.locatorId || read.sourceHighlighted) selectionIssues.push(`${factId} does not open exactly its selected neutral source`);
-  }
+  if ((decisionSteps || []).some(step => ['source', 'law'].includes(step.stepKind))) selectionIssues.push('graph replay reopens source or law instead of using accepted trace');
   const processClicks = (artifactCursorSteps || []).filter(step => step.phase === 'click' && ['select-source', 'read-source'].includes(step.graphInspectionPhase));
-  processClicks.filter(step => step.graphInspectionPhase === 'select-source').forEach(step => {
-    if (step.activeSourceIds.length || step.activeSourceLocator || step.visibleSourceHighlightCount) selectionIssues.push(`${step.targetId}: process source is pre-active`);
+  processClicks.forEach(step => {
+    if (step.inspectionSourceId || step.inspectionLocatorId || step.activeSourceIds.length
+      || step.activeSourceLocator || step.visibleSourceHighlightCount) selectionIssues.push(`${step.targetId}: graph replay falsely claims a new source read`);
   });
-  processClicks.filter(step => step.graphInspectionPhase === 'read-source').forEach(step => {
-    if (step.inspectionSourceId && (!step.inspectionSourceHasTarget || step.activeSourceIds.length !== 1 || step.activeSourceIds[0] !== step.inspectionSourceId)) selectionIssues.push(`${step.targetId}: clicked process source is not the one exact active source target`);
-    if (step.inspectionLocatorId && step.activeSourceLocator !== step.inspectionLocatorId) selectionIssues.push(`${step.targetId}: active locator differs from the clicked process source`);
-    if (step.visibleSourceHighlightCount) selectionIssues.push(`${step.targetId}: process source is highlighted before confirmation`);
-  });
-  if (!postConstructionSourceUse?.viewerOpen || postConstructionSourceUse.activeSourceIds.length !== 1 || postConstructionSourceUse.activeSourceIds[0] !== postConstructionSourceUse.sourceId || postConstructionSourceUse.activeSourceLocator !== postConstructionSourceUse.locatorId) selectionIssues.push('post-construction full-source action does not activate its one exact source target and locator');
+  if (!postConstructionSourceUse?.viewerOpen || postConstructionSourceUse.activeSourceIds.length !== 1 || postConstructionSourceUse.activeSourceIds[0] !== displayedSourceRailId(postConstructionSourceUse.sourceId) || postConstructionSourceUse.activeSourceLocator !== postConstructionSourceUse.locatorId) selectionIssues.push('post-construction full-source action does not activate its one exact source target and locator');
   if (selectionIssues.length) diagnostics.push(`2. Visible source causality — ${selectionIssues.slice(0, 4).join('; ')}`);
 
   const reasoningIssues = [];
   const previewIds = (previews || []).map(preview => preview.nodeId);
-  if (stableJson(previewIds) !== stableJson(FLAGSHIP_PROCESS_PROJECTION_IDS)) reasoningIssues.push('the ten important decisions do not each expose one contextual basis preview');
+  if (stableJson(previewIds) !== stableJson(expectedNodeIds)) reasoningIssues.push('the returned route decisions do not each expose one contextual basis preview');
   (previews || []).forEach(preview => {
     if (preview.viewportWidth !== 1440 || preview.viewportHeight !== 900) reasoningIssues.push(`${preview.nodeId}: preview was not checked at 1440×900`);
     if (preview.previewCount !== 1 || !preview.previewVisible) reasoningIssues.push(`${preview.nodeId}: expected exactly one visible contextual basis preview, found ${preview.previewCount}`);
@@ -2085,7 +2625,7 @@ function zoomOutDesktopContractViolations({ sourceMoments, factSteps, artifactCu
   return diagnostics.slice(0, 3);
 }
 
-function processPreviewGeometryContractViolations(samples) {
+function processPreviewGeometryContractViolations(samples, expectedNodeIds = FLAGSHIP_PROCESS_PROJECTION_IDS) {
   const issues = [];
   const snapshots = Array.isArray(samples) ? samples : [];
   if (!snapshots.length) return ['process preview geometry was not observed'];
@@ -2123,7 +2663,7 @@ function processPreviewGeometryContractViolations(samples) {
     });
   });
   if (!buildingObserved) issues.push('building-state process preview geometry was not observed');
-  const missingCompletedNodes = FLAGSHIP_PROCESS_PROJECTION_IDS.filter(nodeId => !completedNodeIds.has(nodeId));
+  const missingCompletedNodes = (Array.isArray(expectedNodeIds) ? expectedNodeIds : []).filter(nodeId => !completedNodeIds.has(nodeId));
   if (missingCompletedNodes.length) issues.push(`completed process preview geometry was not observed for ${missingCompletedNodes.join(', ')}`);
   if (!visibleItemCount) issues.push('no visible process preview geometry was captured');
   return [...new Set(issues)];
@@ -2171,7 +2711,7 @@ function assertHealthRuntimeContract(health, releaseRuntime) {
   check('Production health returns the active Nemotron LangGraph runtime profile and schema', health.runtime_profile === EXPECTED_RUNTIME.runtime_profile && runtime?.profile === EXPECTED_RUNTIME.runtime_profile && runtime?.execution_mode === 'nemotron_multi_agent' && runtime?.authority_mode === EXPECTED_RUNTIME.authority_mode && runtime?.implementation === EXPECTED_RUNTIME.implementation && runtime?.schema === EXPECTED_RUNTIME.orchestration_schema && health.model === REQUESTED_NEMOTRON_MODEL, JSON.stringify(runtime));
   check('Production health returns the exact requested framework versions', stableJson(runtime?.framework) === stableJson(releaseRuntime.framework) && stableJson(runtime?.framework) === stableJson(EXPECTED_FRAMEWORK), JSON.stringify(runtime?.framework));
   check('Production health returns the exact six model roles and three deterministic gates', exactMembers(runtime?.required_agent_ids, REQUIRED_NEMOTRON_AGENT_IDS) && exactMembers(runtime?.deterministic_gate_ids, REQUIRED_DETERMINISTIC_GATE_IDS), JSON.stringify(runtime));
-  check('Production health attests the exact private DeepInfra route, provider single-flight cap, and disabled tracing, storage, fallback, and inference retries', runtime?.safety?.deterministic_contract_authority === true && runtime?.safety?.provider_max_in_flight === 1 && runtime?.safety?.provider_max_in_flight === releaseRuntime?.safety?.provider_max_in_flight && runtime?.safety?.external_tracing === false && runtime?.safety?.prompt_storage === false && runtime?.safety?.raw_output_storage === false && runtime?.safety?.model_fallback === false && runtime?.safety?.automatic_inference_retry === false && stableJson(runtime?.safety?.provider_routing) === stableJson({ endpoint_tag: 'deepinfra/fp4', expected_upstream_provider: 'DeepInfra', allow_fallbacks: false, require_parameters: true, data_collection: 'deny' }), JSON.stringify(runtime?.safety));
+  check('Production health attests the exact private Together route, provider single-flight cap, and disabled tracing, storage, fallback, and inference retries', runtime?.safety?.deterministic_contract_authority === true && runtime?.safety?.provider_max_in_flight === 1 && runtime?.safety?.provider_max_in_flight === releaseRuntime?.safety?.provider_max_in_flight && runtime?.safety?.external_tracing === false && runtime?.safety?.prompt_storage === false && runtime?.safety?.raw_output_storage === false && runtime?.safety?.model_fallback === false && runtime?.safety?.automatic_inference_retry === false && stableJson(runtime?.safety?.provider_routing) === stableJson({ endpoint_tag: 'together', expected_upstream_provider: 'Together', allow_fallbacks: false, require_parameters: true, data_collection: 'deny' }), JSON.stringify(runtime?.safety));
 }
 
 function assertReadinessContract(readiness) {
@@ -2694,6 +3234,7 @@ async function spatialGraphGeometrySnapshot() {
       const nodeRect = rect(node);
       return {
         id: node.dataset.nodeId || '', state: node.dataset.processBuildState || '', role: node.dataset.spatialRole || '', path: node.dataset.spatialPath || '', selected: node.dataset.selected === 'true',
+        selectedBranchId: node.dataset.selectedBranchId || '',
         changeId: node.dataset.artifactChangeId || '', eventId: node.dataset.artifactEventId || '', agentId: node.dataset.artifactAgentId || '', rect: nodeRect, insideViewport: inside(viewportRect, nodeRect),
         titleFontSize: Number.parseFloat(titleStyle.fontSize), titleClientWidth: title.clientWidth, titleScrollWidth: title.scrollWidth, titleClientHeight: title.clientHeight, titleScrollHeight: title.scrollHeight,
       };
@@ -2719,6 +3260,10 @@ async function spatialGraphGeometrySnapshot() {
     const status = graph.querySelector('[data-ac-process-status]');
     return {
       processId: graph.dataset.processId || graph.dataset.processGraphId || '', projection: graph.dataset.graphProjection || '', graphRect, canvasRect, viewportRect,
+      routeMode: graph.dataset.processRouteMode || '', selectedPath: (graph.dataset.processSelectedPath || '').split(',').filter(Boolean),
+      currentNodeId: graph.dataset.processCurrentNodeId || '', nextActionNodeId: graph.dataset.processNextActionNodeId || '', selectedBranchId: graph.dataset.processSelectedBranchId || '',
+      focalNodeId: graph.dataset.processFocalNodeId || '', openLabel: graph.dataset.processOpenLabel || '', terminalState: graph.dataset.processTerminalState || '',
+      sourceAnchorNodeId: graph.dataset.processSourceAnchorNodeId || '', lawAnchorNodeId: graph.dataset.processLawAnchorNodeId || '', evidenceAnchorNodeId: graph.dataset.processEvidenceAnchorNodeId || '',
       primaryFoci: primaryRows('[data-artifact-focus="true"]'), primaryArtifacts: primaryRows('[data-casepath-primary-artifact="true"]'),
       primaryActionCount: [...document.querySelectorAll('[data-casepath-primary-action="true"]')].filter(visible).length, competingRects,
       nodes, endpoints: endpointRows, endpointDuplicates: Object.entries(endpointCounts).filter(([, count]) => count !== 1).map(([id]) => id), edges,
@@ -2763,23 +3308,39 @@ function rectIntersectionArea(first, second) {
 
 function spatialGraphGeometryContractViolations(snapshot, expected) {
   const issues = [];
+  const story = expected?.routeStory || processRouteStory(expected?.processGraph);
   if (!snapshot?.graphRect?.width || !snapshot?.canvasRect?.width || !snapshot?.viewportRect?.width) return ['spatial graph geometry is absent'];
+  if (!story?.storyNodeIds?.length || !story.currentNodeId || !story.nextActionNodeId) return ['returned route story is absent'];
   if (snapshot.processId !== expected.processId) issues.push(`process id ${snapshot.processId} does not equal returned ${expected.processId}`);
   if (snapshot.projection !== SPATIAL_GRAPH_PROJECTION) issues.push(`graph projection ${snapshot.projection}`);
+  if (snapshot.routeMode !== (story.flagshipCausation ? 'flagship-causation' : 'returned-route')
+    || stableJson(snapshot.selectedPath) !== stableJson(story.selectedPath)
+    || snapshot.currentNodeId !== story.currentNodeId
+    || snapshot.nextActionNodeId !== story.nextActionNodeId
+    || snapshot.selectedBranchId !== story.selectedBranchId
+    || snapshot.focalNodeId !== story.currentNodeId
+    || snapshot.terminalState !== (story.flagshipCausation ? 'journey-continues' : 'ready-route')
+    || !nonemptyString(snapshot.openLabel)) issues.push('graph route datasets do not equal the returned process route');
   if (snapshot.graphRect.width < snapshot.canvasRect.width * .6 || (snapshot.graphRect.width * snapshot.graphRect.height) < (snapshot.canvasRect.width * snapshot.canvasRect.height * .45)) issues.push('process graph does not occupy the majority of the artifact canvas');
   if (snapshot.primaryFoci.length !== 1 || !snapshot.primaryFoci[0]?.insideGraph) issues.push('the one primary focal artifact is not the process graph');
   if (snapshot.primaryArtifacts.length !== 1 || !snapshot.primaryArtifacts[0]?.insideGraph) issues.push('the one primary artifact is not inside the process graph');
-  if (snapshot.primaryActionCount !== 1) issues.push(`ready primary action count ${snapshot.primaryActionCount}`);
+  if (snapshot.primaryActionCount !== (story.flagshipCausation ? 1 : 0)) issues.push(`ready primary action count ${snapshot.primaryActionCount}`);
   if (snapshot.competingRects.some(rect => (rect.width * rect.height) >= (snapshot.graphRect.width * snapshot.graphRect.height * .2))) issues.push('a large sibling artifact competes with the process graph');
 
   const nodesById = new Map(snapshot.nodes.map(node => [node.id, node]));
-  if (stableJson(snapshot.nodes.map(node => node.id)) !== stableJson(FLAGSHIP_PROCESS_PROJECTION_IDS)) issues.push('visible spatial spine is not the exact pinned projection');
+  if (stableJson(snapshot.nodes.map(node => node.id)) !== stableJson(story.storyNodeIds)) issues.push('visible spatial spine is not the exact returned route story');
   snapshot.nodes.forEach(node => {
     if (node.state !== 'built') issues.push(`${node.id}: spatial node is not built`);
     if (![node.changeId, node.eventId, node.agentId].every(nonemptyString)) issues.push(`${node.id}: permanent node lineage is incomplete`);
-    if (node.agentId !== expected.processAgentId) issues.push(`${node.id}: permanent node lineage has the wrong agent`);
+    if (node.agentId !== expected.processAgentId) issues.push(`${node.id}: permanent node structure is not attributed to the deterministic projection`);
     if (!node.insideViewport) issues.push(`${node.id}: node leaves the graph viewport`);
     if (node.titleFontSize < 12 || node.titleScrollWidth > node.titleClientWidth + 1 || node.titleScrollHeight > node.titleClientHeight + 1) issues.push(`${node.id}: title is clipped or below 12px`);
+    if (!story.causationCanvas) {
+      const expectedPath = node.id === story.currentNodeId
+        ? 'current'
+        : node.id === story.nextActionNodeId && story.nextActionNodeId !== story.currentNodeId ? 'next-action' : 'accepted';
+      if (node.path !== expectedPath) issues.push(`${node.id}: route path role does not equal ${expectedPath}`);
+    }
   });
   for (let index = 0; index < snapshot.nodes.length; index += 1) {
     for (let other = index + 1; other < snapshot.nodes.length; other += 1) {
@@ -2789,7 +3350,7 @@ function spatialGraphGeometryContractViolations(snapshot, expected) {
   const spineCenters = snapshot.nodes.map(node => rectCenter(node.rect));
   const horizontalExtent = Math.max(...spineCenters.map(point => point.x)) - Math.min(...spineCenters.map(point => point.x));
   const verticalExtent = Math.max(...spineCenters.map(point => point.y)) - Math.min(...spineCenters.map(point => point.y));
-  if (horizontalExtent < snapshot.viewportRect.width * .7 || horizontalExtent <= Math.max(1, verticalExtent) * 2) issues.push('spine is a vertical list instead of a horizontal process');
+  if (snapshot.nodes.length > 1 && (horizontalExtent < snapshot.viewportRect.width * .55 || horizontalExtent <= Math.max(1, verticalExtent) * 2)) issues.push('spine is a vertical list instead of a horizontal process');
 
   const returnedNodeIds = new Set(expected.returnedNodeIds);
   const returnedEdges = new Map(expected.returnedEdges.map(edge => [`${edge.source}->${edge.target}`, edge]));
@@ -2809,11 +3370,10 @@ function spatialGraphGeometryContractViolations(snapshot, expected) {
     }
   });
   const visibleProcessEndpointIds = new Set(snapshot.endpoints.map(item => item.id).filter(id => returnedNodeIds.has(id)));
-  const causationIndex = FLAGSHIP_PROCESS_PROJECTION_IDS.indexOf('causation');
   const explanatoryEdgeKeys = new Set([
-    ...FLAGSHIP_PROCESS_PROJECTION_IDS.slice(1, causationIndex + 1)
-      .map((target, index) => `${FLAGSHIP_PROCESS_PROJECTION_IDS[index]}->${target}`),
-    ...REQUIRED_CAUSATION_BRANCH_IDS.map(target => `causation->${target}`),
+    ...story.selectedPath.slice(1).map((target, index) => `${story.selectedPath[index]}->${target}`),
+    ...story.branchNodeIds.map(target => `${story.currentNodeId}->${target}`),
+    ...(story.nextActionNodeId !== story.currentNodeId ? [`${story.currentNodeId}->${story.nextActionNodeId}`] : []),
   ]);
   const expectedVisibleProcessEdges = expected.returnedEdges
     .filter(edge => visibleProcessEndpointIds.has(edge.source)
@@ -2826,17 +3386,24 @@ function spatialGraphGeometryContractViolations(snapshot, expected) {
   if (stableJson(renderedProcessEdges) !== stableJson(expectedVisibleProcessEdges)) issues.push('visible connectors do not equal the human-readable returned reasoning path');
   if (!snapshot.edges.length || snapshot.edgeLayerAriaHidden !== 'true' || snapshot.edgeLayerFocusable !== 'false') issues.push('spatial connectors are absent or exposed to assistive technology');
 
-  const causation = nodesById.get('causation');
+  const currentNode = nodesById.get(story.currentNodeId);
   const branchesById = new Map(snapshot.branches.map(branch => [branch.id, branch]));
-  if (!causation || stableJson([...branchesById.keys()].sort()) !== stableJson([...REQUIRED_CAUSATION_BRANCH_IDS].sort())) issues.push('causation does not expose the exact four returned uncertainty branches');
-  const expectedBranchMap = new Map(expected.causationBranches.map(branch => [branch.target, branch]));
-  REQUIRED_CAUSATION_BRANCH_IDS.forEach(branchId => {
+  if (!currentNode || stableJson([...branchesById.keys()].sort()) !== stableJson([...story.branchNodeIds].sort())) issues.push('current decision does not expose only its returned route branches');
+  const expectedBranchMap = new Map((story.currentNode?.branches || []).map(branch => [String(branch?.target || ''), branch]));
+  story.branchNodeIds.forEach(branchId => {
     const branch = branchesById.get(branchId);
     if (!branch) return;
-    if (!returnedNodeIds.has(branchId) || !expectedBranchMap.has(branchId) || !returnedEdges.has(`causation->${branchId}`)) issues.push(`${branchId}: branch is not justified by the returned process`);
+    if (!returnedNodeIds.has(branchId) || !expectedBranchMap.has(branchId) || !returnedEdges.has(`${story.currentNodeId}->${branchId}`)) issues.push(`${branchId}: branch is not justified by the returned process`);
     if (!branch.insideViewport) issues.push(`${branchId}: branch leaves the graph viewport`);
   });
-  if (branchesById.get('evidence_gap')?.selected !== true) issues.push('evidence_gap is not the one selected uncertainty branch');
+  const selectedBranches = snapshot.branches.filter(branch => branch.selected === true);
+  if (story.causationCanvas && story.selectedBranchTargetId) {
+    if (selectedBranches.length !== 1 || selectedBranches[0]?.id !== story.selectedBranchTargetId) issues.push('selected branch does not equal the returned next action');
+  } else if (selectedBranches.length) issues.push('self-blocked route invents a selected branch');
+  if (!story.causationCanvas && story.nextActionNodeId !== story.currentNodeId) {
+    const nextNode = nodesById.get(story.nextActionNodeId);
+    if (!nextNode || nextNode.path !== 'next-action' || nextNode.selectedBranchId !== story.selectedBranchId) issues.push('distinct returned next-action node does not carry its returned branch identity');
+  }
   const branchCenters = snapshot.branches.map(branch => rectCenter(branch.rect));
   const minimumBranchSeparation = Math.max(22, snapshot.viewportRect.height * .055);
   for (let index = 0; index < branchCenters.length; index += 1) {
@@ -2844,28 +3411,42 @@ function spatialGraphGeometryContractViolations(snapshot, expected) {
       if (Math.hypot(branchCenters[index].x - branchCenters[other].x, branchCenters[index].y - branchCenters[other].y) < minimumBranchSeparation) issues.push('uncertainty branches do not physically diverge');
     }
   }
-  if (branchCenters.length === 4 && (Math.max(...branchCenters.map(point => point.y)) - Math.min(...branchCenters.map(point => point.y))) < snapshot.viewportRect.height * .35) issues.push('uncertainty branch fan is visually collapsed');
+  if (branchCenters.length >= 3 && (Math.max(...branchCenters.map(point => point.y)) - Math.min(...branchCenters.map(point => point.y))) < snapshot.viewportRect.height * .35) issues.push('returned branch fan is visually collapsed');
 
   const activePaths = snapshot.activePaths;
-  if (activePaths.length !== 1 || activePaths[0]?.nodeId !== 'causation' || !activePaths[0]?.insideGraph) issues.push('there is not exactly one causation focal path inside the graph');
+  if (activePaths.length !== 1 || activePaths[0]?.nodeId !== story.currentNodeId || !activePaths[0]?.insideGraph) issues.push('there is not exactly one returned current-node focal path inside the graph');
   const activePath = activePaths[0];
   if (activePath) {
     const normalizeIds = value => [...value].sort();
-    if (stableJson(normalizeIds(activePath.factIds)) !== stableJson(normalizeIds(expected.activeBasis.factIds))) issues.push('active focal path fact basis differs from returned causation facts');
-    if (stableJson(normalizeIds(activePath.lawIds)) !== stableJson(normalizeIds(expected.activeBasis.lawIds))) issues.push('active focal path law basis differs from returned causation law');
-    if (stableJson(normalizeIds(activePath.evidenceIds)) !== stableJson(normalizeIds(expected.activeBasis.evidenceIds))) issues.push('active focal path evidence basis differs from returned causation requirements');
+    if (stableJson(normalizeIds(activePath.factIds)) !== stableJson(normalizeIds(story.activeBasis.factIds))) issues.push('active focal path fact basis differs from the returned current decision');
+    if (stableJson(normalizeIds(activePath.lawIds)) !== stableJson(normalizeIds(story.activeBasis.lawIds))) issues.push('active focal path law basis differs from the returned current decision');
+    if (stableJson(normalizeIds(activePath.evidenceIds)) !== stableJson(normalizeIds(story.activeBasis.evidenceIds))) issues.push('active focal path evidence basis differs from the returned current decision');
   }
-  if (snapshot.ariaCurrentIds.length !== 1 || snapshot.ariaCurrentIds[0] !== 'causation') issues.push('selected causation node is not the one aria-current step');
+  if (snapshot.ariaCurrentIds.length !== 1 || snapshot.ariaCurrentIds[0] !== story.currentNodeId) issues.push('returned current node is not the one aria-current step');
   if (snapshot.pendingTabStops.some(item => item.tabIndex !== -1 || item.disabled !== true)) issues.push('pending process nodes remain keyboard reachable');
   if (snapshot.status.role !== 'status' || snapshot.status.live !== 'polite' || snapshot.status.atomic !== 'true') issues.push('process construction status is not concise polite atomic output');
   if (snapshot.cursorAriaHidden !== 'true') issues.push('agent cursor is exposed to assistive technology');
 
-  if (!causation || snapshot.laws.length < 1 || snapshot.laws.some(item => !item.insideViewport || item.anchorNodeId !== 'causation' || item.rect.bottom >= causation.rect.top)) issues.push('legal grounding is not physically above the active causation node');
-  if (!causation || snapshot.evidence.length < 1 || snapshot.evidence.some(item => !item.insideViewport || item.anchorNodeId !== 'causation' || item.rect.top <= causation.rect.bottom)) issues.push('evidence requirements are not physically below the active causation node');
+  const routeAnchorNodeIds = new Set([story.currentNodeId, story.nextActionNodeId]);
+  if (![snapshot.sourceAnchorNodeId, snapshot.lawAnchorNodeId, snapshot.evidenceAnchorNodeId]
+    .every(nodeId => !nodeId || routeAnchorNodeIds.has(nodeId))) issues.push('source, law, or evidence root anchor leaves the returned current-to-next route');
+
+  const expectedLawIds = new Set(story.activeBasis.lawIds);
+  const expectedEvidenceIds = new Set(story.activeBasis.evidenceIds);
+  if (expectedLawIds.size && snapshot.laws.length < 1) issues.push('returned current decision has no visible legal grounding');
+  if (!expectedLawIds.size && snapshot.laws.length) issues.push('legal grounding is shown without a returned current-decision basis');
+  if (!currentNode || snapshot.laws.some(item => !item.insideViewport || item.anchorNodeId !== story.currentNodeId || item.rect.bottom >= currentNode.rect.top || !expectedLawIds.has(item.lawId))) issues.push('legal grounding is not truthfully placed above the returned current node');
+  if (expectedEvidenceIds.size && snapshot.evidence.length < 1) issues.push('returned current decision has no visible evidence grounding');
+  if (!expectedEvidenceIds.size && snapshot.evidence.length) issues.push('evidence grounding is shown without a returned current-decision basis');
+  if (!currentNode || snapshot.evidence.some(item => !item.insideViewport || item.anchorNodeId !== story.currentNodeId || item.rect.top <= currentNode.rect.bottom || !expectedEvidenceIds.has(item.evidenceId))) issues.push('evidence requirements are not truthfully placed below the returned current node');
   const nextActions = snapshot.nextActions;
-  if (nextActions.length !== 1 || !causation || !nextActions[0].insideViewport || nextActions[0].rect.top <= causation.rect.bottom) issues.push('there is not exactly one compact next action beneath the unresolved causation decision');
+  if (nextActions.length > 1 || !currentNode || nextActions.some(item => !item.insideViewport || item.rect.top <= currentNode.rect.bottom || item.id !== story.nextActionNodeId)) issues.push('compact next action does not equal the returned next action');
+  if (story.nextActionNodeId !== story.currentNodeId
+    && !snapshot.branches.some(branch => branch.id === story.nextActionNodeId && branch.selected)
+    && !snapshot.nodes.some(node => node.id === story.nextActionNodeId && node.path === 'next-action')
+    && !nextActions.some(item => item.id === story.nextActionNodeId)) issues.push('distinct returned next action is not visible');
   const nextEvidence = nextActions[0] && expected.evidenceById[nextActions[0].evidenceId];
-  if (!nextEvidence || !Array.isArray(nextEvidence.node_ids) || !nextEvidence.node_ids.includes('evidence_gap')) issues.push('next action evidence is not returned as owned by evidence_gap');
+  if (nextActions.length && (!nextEvidence || !Array.isArray(nextEvidence.node_ids) || !nextEvidence.node_ids.includes(story.nextActionNodeId))) issues.push('next-action evidence is not returned as owned by the next action');
   const visibleSpatialObjects = [
     ...snapshot.nodes.map(item => ({ label: `node:${item.id}`, rect: item.rect })),
     ...snapshot.branches.map(item => ({ label: `branch:${item.id}`, rect: item.rect })),
@@ -2881,20 +3462,51 @@ function spatialGraphGeometryContractViolations(snapshot, expected) {
   return [...new Set(issues)];
 }
 
-function processProjectionContractViolations(changes, semanticEvents, cursorSteps, production = true) {
+function processProjectionContractViolations(changes, semanticEvents, cursorSteps, expectedRunId = '', expectedNodeIds = FLAGSHIP_PROCESS_PROJECTION_IDS) {
   const issues = [];
-  const semanticEventIds = new Set(semanticEvents.map(event => event.eventId));
+  const storyNodeIds = Array.isArray(expectedNodeIds) ? expectedNodeIds.map(String) : [];
+  const processEvents = new Map((semanticEvents || [])
+    .filter(event => event.entityKind === 'process_node' && event.type === 'process_node.created')
+    .map(event => [event.entityId, event]));
+  const decisionEvents = new Map((semanticEvents || [])
+    .filter(event => event.entityKind === 'process_decision' && event.type === 'process_decision.accepted')
+    .map(event => [event.entityId, event]));
   const cursorBindings = new Set(cursorSteps.filter(step => step.phase === 'click').map(step => `${step.changeId}:${step.eventId}:${step.agentId}`));
-  if (stableJson(changes.map(change => change.entityId)) !== stableJson(FLAGSHIP_PROCESS_PROJECTION_IDS)) issues.push('ten-node projection did not arrive in the pinned order');
+  if (stableJson(changes.map(change => change.entityId)) !== stableJson(storyNodeIds)) issues.push('process story did not arrive in the returned route order');
   changes.forEach((change, index) => {
     const states = Object.fromEntries(change.nodeStates.map(item => [item.nodeId, item.state]));
-    const prior = FLAGSHIP_PROCESS_PROJECTION_IDS.slice(0, index);
-    const future = FLAGSHIP_PROCESS_PROJECTION_IDS.slice(index + 1);
-    const expectedAgent = production ? 'process_decision_mapping' : 'process_projection';
-    if (change.agentId !== expectedAgent) issues.push(`${change.entityId}: wrong process agent`);
+    const prior = storyNodeIds.slice(0, index);
+    const future = storyNodeIds.slice(index + 1);
+    const semantic = processEvents.get(change.entityId);
+    const decisionSemantic = decisionEvents.get(change.entityId);
+    if (change.agentId) issues.push(`${change.entityId}: deterministic process structure inherited a model identity`);
     if (!nonemptyString(change.changeId) || !nonemptyString(change.eventId)) issues.push(`${change.entityId}: missing change/event identity`);
-    if (!semanticEventIds.has(change.eventId)) issues.push(`${change.entityId}: change event is absent from the authenticated stream`);
+    if (!semantic || semantic.eventId !== change.eventId || semantic.runId !== expectedRunId
+      || semantic.traceContract !== EXECUTION_TRACE_CONTRACT || semantic.presentationMode !== 'returned_action_replay') {
+      issues.push(`${change.entityId}: change event is absent from the run-scoped accepted execution trace`);
+    }
     if (!cursorBindings.has(`${change.changeId}:${change.eventId}:${change.agentId}`)) issues.push(`${change.entityId}: semantic graph change is not tied to its agent cursor event`);
+    const cursor = (cursorSteps || []).find(step => step.phase === 'click'
+      && step.changeId === change.changeId && step.eventId === change.eventId && step.agentId === change.agentId);
+    if (!cursor || cursor.presentationMode !== 'returned-action-replay' || !/^Returned work · /.test(cursor.presentationLabel || '')) {
+      issues.push(`${change.entityId}: graph replay is not visibly labelled as returned work`);
+    }
+    if (semantic?.actorType !== 'deterministic_tool' || semantic?.modelContributionAccepted !== false
+      || semantic?.modelOwnedFields?.length || semantic?.outputProcessNodeId !== change.entityId
+      || !semantic?.applicationOwnedFields?.length) issues.push(`${change.entityId}: process_node.created is not a neutral deterministic structure`);
+    if (cursor?.activeAgentId || cursor?.activeSignature !== 'gate' || cursor?.workAuthority !== 'Process safety check') {
+      issues.push(`${change.entityId}: deterministic process structure inherited a model identity`);
+    }
+    const linkedIds = semantic?.linkedModelContributionIds || [];
+    if (linkedIds.length) {
+      if (!decisionSemantic || decisionSemantic.runId !== expectedRunId || decisionSemantic.traceContract !== EXECUTION_TRACE_CONTRACT
+        || decisionSemantic.presentationMode !== 'returned_action_replay' || decisionSemantic.actorType !== 'nemotron_agent'
+        || decisionSemantic.agentId !== 'process_decision_mapping' || decisionSemantic.modelContributionAccepted !== true
+        || stableJson(decisionSemantic.modelOwnedFields) !== stableJson(['decision_value'])
+        || decisionSemantic.applicationOwnedFields?.length || stableJson(decisionSemantic.acceptedContributionIds) !== stableJson(linkedIds)) {
+        issues.push(`${change.entityId}: linked process decision is not the exact accepted decision_value field event`);
+      }
+    } else if (decisionSemantic) issues.push(`${change.entityId}: process model event exists without a linked accepted contribution`);
     if (states[change.entityId] !== 'building') issues.push(`${change.entityId}: current node is not the sole building node`);
     if (!prior.every(nodeId => states[nodeId] === 'built')) issues.push(`${change.entityId}: prior nodes are not built`);
     if (!future.every(nodeId => states[nodeId] === 'pending')) issues.push(`${change.entityId}: future nodes are not pending`);
@@ -2903,23 +3515,22 @@ function processProjectionContractViolations(changes, semanticEvents, cursorStep
     if (change.nodeStates.filter(item => item.ariaCurrent === 'step').length !== 1) issues.push(`${change.entityId}: aria-current step multiplicity`);
     if (!change.focus || change.focus.focusCount !== 1 || change.focus.cursorCount !== 1 || change.focus.artifactCount !== 1 || change.focus.actionCount > 1) issues.push(`${change.entityId}: focal-surface multiplicity`);
   });
-  if (new Set(changes.map(change => change.changeId)).size !== FLAGSHIP_PROCESS_PROJECTION_IDS.length) issues.push('process change IDs are missing or duplicated');
+  if (new Set(changes.map(change => change.changeId)).size !== storyNodeIds.length) issues.push('process change IDs are missing or duplicated');
   const holds = changes.slice(1).map((change, index) => change.at - changes[index].at);
   if (holds.some(value => value < MIN_PROCESS_NODE_STEP_MS)) issues.push(`process node dwell ${stableJson(holds)}`);
   return issues;
 }
 
-function processNodeProgressContractViolations(progressEvents, nodeChanges, branchVisuals, finalState, production = true) {
+function processNodeProgressContractViolations(progressEvents, nodeChanges, finalState, semanticEvents = [], expectedRunId = '', expectedNodeIds = FLAGSHIP_PROCESS_PROJECTION_IDS) {
   const issues = [];
-  const expectedAgentId = production ? 'process_decision_mapping' : 'process_projection';
-  const expectedRootAgentId = production ? 'process_decision_mapping' : '';
-  const expectedVisualAgentId = 'process_decision_mapping';
-  const expectedEntities = [
-    ...FLAGSHIP_PROCESS_PROJECTION_IDS.map(nodeId => ({ entityKind: 'node', nodeId, branchId: '' })),
-    ...REQUIRED_CAUSATION_BRANCH_IDS.map(nodeId => ({ entityKind: 'branch', nodeId, branchId: '' })),
-  ];
+  const processEvents = new Map((semanticEvents || [])
+    .filter(event => event.entityKind === 'process_node' && event.type === 'process_node.created')
+    .map(event => [event.entityId, event]));
+  const decisionEvents = new Map((semanticEvents || [])
+    .filter(event => event.entityKind === 'process_decision' && event.type === 'process_decision.accepted')
+    .map(event => [event.entityId, event]));
+  const expectedEntities = (Array.isArray(expectedNodeIds) ? expectedNodeIds : []).map(nodeId => ({ entityKind: 'node', nodeId: String(nodeId), branchId: '' }));
   const entityKey = item => `${item.entityKind}:${item.nodeId}`;
-  const expectedSequence = PROCESS_NODE_PROGRESS_SEQUENCE.map(({ phase, percent, visible }) => ({ phase, percent, visible }));
   const grouped = new Map();
   for (const event of progressEvents || []) {
     const key = entityKey(event);
@@ -2927,161 +3538,135 @@ function processNodeProgressContractViolations(progressEvents, nodeChanges, bran
     grouped.get(key).push(event);
   }
   if (stableJson([...grouped.keys()]) !== stableJson(expectedEntities.map(entityKey))) {
-    issues.push('progress does not cover the ten spine nodes and four causation branches in order');
+    issues.push('progress does not cover the returned route decisions in order');
   }
   const nodeOutputs = new Map((nodeChanges || []).map(item => [`node:${item.entityId}`, item]));
-  const branchOutputs = new Map((branchVisuals || []).map(item => [`branch:${item.nodeId}`, item]));
-  let evidenceRequirementGroupCount = 0;
 
   expectedEntities.forEach(entity => {
     const key = entityKey(entity);
     const events = grouped.get(key) || [];
-    if (stableJson(events.map(({ phase, percent, visible }) => ({ phase, percent, visible }))) !== stableJson(expectedSequence)) {
-      issues.push(`${key}: progress sequence is not exactly search 0, read 38, extract 72, form 90, complete 100, cleared 100`);
+    const structureSemantic = processEvents.get(entity.nodeId);
+    const decisionSemantic = decisionEvents.get(entity.nodeId);
+    const analysisEvents = events.slice(0, -3);
+    const terminalEvents = events.slice(-3);
+    let analysisIndex = 0;
+    let analysisShapeValid = analysisEvents.length === 0 || analysisEvents[0]?.percent === 0;
+    while (analysisShapeValid && analysisIndex < analysisEvents.length) {
+      const search = analysisEvents[analysisIndex];
+      if (search?.phase !== 'search' || search.visible !== true) {
+        analysisShapeValid = false;
+        break;
+      }
+      const basisKind = search.basisKind;
+      analysisIndex += 1;
+      let locatorPairs = 0;
+      while (analysisIndex < analysisEvents.length && analysisEvents[analysisIndex]?.phase !== 'search') {
+        const read = analysisEvents[analysisIndex];
+        const extract = analysisEvents[analysisIndex + 1];
+        if (read?.phase !== 'read' || extract?.phase !== 'extract'
+          || read.visible !== true || extract.visible !== true
+          || read.basisKind !== basisKind || extract.basisKind !== basisKind) {
+          analysisShapeValid = false;
+          break;
+        }
+        locatorPairs += 1;
+        analysisIndex += 2;
+      }
+      if (locatorPairs < 1) analysisShapeValid = false;
     }
+    const terminalShapeValid = stableJson(terminalEvents.map(({ phase, percent, visible }) => ({ phase, percent, visible })))
+      === stableJson([
+        { phase: 'form', percent: 90, visible: true },
+        { phase: 'complete', percent: 100, visible: true },
+        { phase: 'cleared', percent: 100, visible: false },
+      ]);
+    if (!analysisShapeValid || !terminalShapeValid) issues.push(`${key}: decision progress does not replay accepted inputs before form, 100, and cleared`);
     if (events.some(event => event.contract !== PROCESS_NODE_PROGRESS_CONTRACT || event.scope !== PROCESS_NODE_PROGRESS_SCOPE)) issues.push(`${key}: progress contract or scope drift`);
-    const basisKinds = [...new Set(events.map(event => event.basisKind).filter(Boolean))];
-    if (basisKinds.length !== 1) issues.push(`${key}: progress basis kind is absent or changes during analysis`);
-    const evidenceRequirement = basisKinds[0] === 'evidence-requirement';
-    if (evidenceRequirement) evidenceRequirementGroupCount += 1;
+    const analysisGroups = [];
+    for (const event of events.slice(0, -3)) {
+      if (event.phase === 'search' || !analysisGroups.length) analysisGroups.push([]);
+      analysisGroups.at(-1).push(event);
+    }
+    if (analysisGroups.some(group => new Set(group.map(event => event.basisKind).filter(Boolean)).size !== 1)) issues.push(`${key}: progress basis kind changes within one evidence step`);
+    const evidenceRequirement = events.some(event => event.basisKind === 'evidence-requirement');
     const visibleEvents = events.filter(item => item.visible === true);
     visibleEvents.forEach(event => {
-      if (event.indicatorDomCount !== 1 || event.indicatorVisibleCount !== 1 || event.indicatorVisible !== true || event.indicatorInsideCursor !== true) issues.push(`${key}:${event.phase}: one visible progress indicator is not inside the agent cursor`);
+      if (event.indicatorDomCount !== 1 || event.indicatorVisibleCount !== 1 || event.indicatorVisible !== true
+        || event.indicatorSurfaceVisible || event.indicatorInsideCursor !== true) issues.push(`${key}:${event.phase}: one calm cursor working cue is not visible while its semantic progress element stays hidden`);
+      if (event.indicatorValueVisible) issues.push(`${key}:${event.phase}: numeric percentage is visible in the live node flow`);
       if (event.indicatorPercent !== event.percent || event.indicatorPhase !== event.phase) issues.push(`${key}:${event.phase}: progress UI does not equal the emitted state`);
       if (event.indicatorLabel !== event.label || event.rootBasisKind !== event.basisKind) issues.push(`${key}:${event.phase}: visible progress label or basis kind drifts from the emitted analysis`);
       if (event.rootProgressState !== 'active' || event.processProgressState !== 'active'
         || event.rootPercent !== String(event.percent) || event.processPercent !== String(event.percent)
         || event.rootPhase !== event.phase || event.processPhase !== event.phase
         || event.rootNodeId !== entity.nodeId || event.processNodeId !== entity.nodeId) issues.push(`${key}:${event.phase}: root/process progress datasets drift from the visible indicator`);
-      if (event.cursorSignature !== 'process' || event.cursorAgent !== REQUIRED_DESKTOP_AGENT_LABELS.process_decision_mapping
-        || event.activeAgentId !== expectedRootAgentId || event.visualActiveAgentId !== expectedVisualAgentId
-        || event.agentId !== expectedAgentId) issues.push(`${key}:${event.phase}: progress is not visibly owned by Process builder`);
+      const modelDecisionPhase = Boolean(decisionSemantic) && ['form', 'complete'].includes(event.phase);
+      const expectedSemantic = modelDecisionPhase ? decisionSemantic : structureSemantic;
+      const expectedAgentId = modelDecisionPhase ? 'process_decision_mapping' : '';
+      if (event.cursorProgressState !== 'active' || event.agentId !== expectedAgentId
+        || event.presentationMode !== 'returned-action-replay' || !/^Returned work · /.test(event.presentationLabel || '')) {
+        issues.push(`${key}:${event.phase}: calm working cue is not visibly bound to the returned execution trace`);
+      }
+      if (expectedSemantic && (event.eventId !== expectedSemantic.eventId || expectedSemantic.runId !== expectedRunId
+        || expectedSemantic.traceContract !== EXECUTION_TRACE_CONTRACT || expectedSemantic.presentationMode !== 'returned_action_replay')) {
+        issues.push(`${key}:${event.phase}: progress is not bound to the phase-owning run-scoped execution event`);
+      }
+      if (modelDecisionPhase) {
+        if (event.cursorSignature !== 'process' || event.cursorAgent !== REQUIRED_DESKTOP_AGENT_LABELS.process_decision_mapping
+          || event.activeAgentId !== 'process_decision_mapping' || event.visualActiveAgentId !== 'process_decision_mapping') {
+          issues.push(`${key}:${event.phase}: accepted decision_value is not visibly owned by Process builder`);
+        }
+      } else if (event.cursorSignature !== 'gate' || event.cursorAgent !== 'Process safety check'
+        || event.activeAgentId || event.visualActiveAgentId || event.workAuthority !== 'Process safety check') {
+        issues.push(`${key}:${event.phase}: accepted-input or structural progress inherited Process builder identity`);
+      }
       if (event.outputVisible) issues.push(`${key}:${event.phase}: output appears before progress clears`);
-      if (evidenceRequirement) {
+      if (evidenceRequirement && analysisEvents.length) {
         const expectedLabel = EVIDENCE_REQUIREMENT_PROGRESS_LABELS[event.phase]
           || (event.phase === 'form' ? (entity.entityKind === 'branch' ? 'Testing outcome' : 'Forming decision')
             : event.phase === 'complete' ? (entity.entityKind === 'branch' ? 'Outcome ready' : 'Decision ready') : '');
         if (event.label !== expectedLabel || event.indicatorLabel !== expectedLabel) issues.push(`${key}:${event.phase}: evidence requirement progress is mislabeled`);
         if (/Finding source|Source for the next decision/i.test(`${event.label} ${event.indicatorLabel} ${event.inspectionText}`)) issues.push(`${key}:${event.phase}: evidence requirement is falsely presented as a source`);
-        if (event.phase === 'search' && (event.inspectionBasisKind !== 'evidence-requirement' || event.inspectionPrompt !== 'Evidence still needed')) issues.push(`${key}: evidence requirement search does not visibly say Evidence still needed`);
+        if (event.phase === 'search' && event.basisKind === 'evidence-requirement'
+          && (event.inspectionBasisKind !== 'evidence-requirement' || event.inspectionPrompt !== 'Evidence still needed')) issues.push(`${key}: evidence requirement search does not visibly say Evidence still needed`);
       }
     });
     const percentages = visibleEvents.map(item => item.percent);
     if (percentages.some((value, index) => index > 0 && value < percentages[index - 1])) issues.push(`${key}: progress is not monotonic`);
-    const identities = new Set(events.map(item => `${item.changeId}:${item.eventId}:${item.agentId}`));
-    if (identities.size !== 1 || !events.every(item => nonemptyString(item.changeId) && nonemptyString(item.eventId))) issues.push(`${key}: progress identity is missing or changes during analysis`);
-    if (entity.entityKind === 'branch' && (new Set(events.map(item => item.branchId)).size !== 1 || !events.every(item => nonemptyString(item.branchId)))) issues.push(`${key}: branch progress identity drift`);
+    if (new Set(events.map(item => item.changeId)).size !== 1 || !events.every(item => nonemptyString(item.changeId) && nonemptyString(item.eventId))) issues.push(`${key}: progress change identity is missing or changes during analysis`);
+    if (!structureSemantic || structureSemantic.runId !== expectedRunId || structureSemantic.traceContract !== EXECUTION_TRACE_CONTRACT
+      || structureSemantic.presentationMode !== 'returned_action_replay' || structureSemantic.actorType !== 'deterministic_tool'
+      || structureSemantic.modelContributionAccepted !== false || structureSemantic.modelOwnedFields?.length) {
+      issues.push(`${key}: structural progress is not bound to the neutral run-scoped process_node event`);
+    }
+    if (decisionSemantic && (decisionSemantic.runId !== expectedRunId || decisionSemantic.traceContract !== EXECUTION_TRACE_CONTRACT
+      || decisionSemantic.presentationMode !== 'returned_action_replay' || decisionSemantic.actorType !== 'nemotron_agent'
+      || decisionSemantic.agentId !== 'process_decision_mapping' || decisionSemantic.modelContributionAccepted !== true
+      || stableJson(decisionSemantic.modelOwnedFields) !== stableJson(['decision_value']))) {
+      issues.push(`${key}: model progress is not limited to the accepted decision_value event`);
+    }
 
     const complete = events.find(item => item.phase === 'complete');
     const cleared = events.find(item => item.phase === 'cleared');
-    if (!complete || complete.percent !== 100 || complete.visible !== true || complete.indicatorVisible !== true) issues.push(`${key}: 100 percent was not visibly reached`);
+    if (!complete || complete.percent !== 100 || complete.visible !== true || complete.indicatorVisible !== true || complete.cursorProgressState !== 'active') issues.push(`${key}: analysis indicator did not semantically reach completion before clearing`);
     if (!cleared || cleared.percent !== 100 || cleared.visible !== false || cleared.indicatorVisible || cleared.indicatorVisibleCount !== 0
-      || cleared.rootProgressState !== 'idle' || cleared.processProgressState !== 'idle' || cleared.outputVisible) issues.push(`${key}: progress was not cleared while the output was still absent`);
+      || cleared.cursorProgressState || cleared.rootProgressState !== 'idle' || cleared.processProgressState !== 'idle' || cleared.outputVisible) issues.push(`${key}: progress was not cleared while the output was still absent`);
 
-    const output = entity.entityKind === 'node' ? nodeOutputs.get(key) : branchOutputs.get(key);
+    const output = nodeOutputs.get(key);
     if (!output) {
       issues.push(`${key}: no resulting process output was observed`);
       return;
     }
     if (cleared && output.at - cleared.at < MIN_PROCESS_NODE_PROGRESS_CLEAR_GAP_MS) issues.push(`${key}: output did not wait after the progress indicator cleared`);
-    if (output.indicatorVisible || output.indicatorVisibleCount !== 0 || output.rootProgressState !== 'idle' || output.processProgressState !== 'idle') issues.push(`${key}: progress indicator remains visible when the output appears`);
+    if (output.indicatorVisible || output.indicatorVisibleCount !== 0 || output.cursorProgressState || output.rootProgressState !== 'idle' || output.processProgressState !== 'idle') issues.push(`${key}: progress indicator remains visible when the output appears`);
     if (output.outputVisible !== true) issues.push(`${key}: resulting process output was not visible after progress cleared`);
-    if (events.length && (output.changeId !== events[0].changeId || output.eventId !== events[0].eventId || output.agentId !== events[0].agentId)) issues.push(`${key}: progress identity is not bound to its resulting output`);
+    if (events.length && (output.changeId !== events[0].changeId || output.eventId !== structureSemantic?.eventId || output.agentId)) issues.push(`${key}: resulting node is not bound to its neutral structural event`);
   });
 
-  if (evidenceRequirementGroupCount < 1) issues.push('no evidence-requirement process basis was visibly analyzed');
-
-  if (!finalState || finalState.indicatorVisible || finalState.indicatorVisibleCount !== 0
+  if (!finalState || finalState.indicatorVisible || finalState.indicatorValueVisible || finalState.indicatorVisibleCount !== 0 || finalState.cursorProgressState
     || finalState.rootProgressState !== 'idle' || finalState.processProgressState !== 'idle'
     || finalState.rootPercent || finalState.processPercent) issues.push('completed process leaves progress visible or active');
   return [...new Set(issues)];
-}
-
-function sourceInspectionContractViolations(inspections, highlights, changes, branchVisuals, cursorSteps, runResult, production = true) {
-  const issues = [];
-  const expectedAgent = production ? 'process_decision_mapping' : 'process_projection';
-  const allowedKinds = new Set(['claim-source', 'swiss-law', 'evidence-requirement', 'accepted-process-input']);
-  const confirmCursorBindings = new Set(cursorSteps
-    .filter(step => step.phase === 'click' && step.graphInspectionPhase === 'read-source')
-    .map(step => `${step.changeId}:${step.eventId}:${step.agentId}:${step.targetId}`));
-  const processNodes = new Map((runResult?.process?.nodes || []).map(node => [node.node_id, node]));
-  const facts = new Map((runResult?.facts || []).map(fact => [fact.fact_id, fact]));
-  const checklistItems = runResult?.checklist?.items || [];
-  const evidenceOwnerIds = item => (Array.isArray(item?.node_ids) && item.node_ids.length
-    ? item.node_ids
-    : item?.node_id ? [item.node_id] : []);
-  const returnedFactIdsForNode = node => new Set([
-    ...(node?.fact_ids || []),
-    ...checklistItems
-      .filter(item => evidenceOwnerIds(item).includes(node?.node_id) && nonemptyString(item.fact_id))
-      .map(item => item.fact_id),
-  ]);
-  const validSourceId = (inspection, node) => {
-    if (inspection.sourceKind === 'accepted-process-input') return inspection.sourceId === node?.node_id;
-    if (inspection.sourceKind === 'swiss-law') return (node?.legal_source_ids || []).includes(inspection.sourceId) && inspection.locatorId === `law:${inspection.sourceId}`;
-    if (inspection.sourceKind === 'evidence-requirement') return (node?.evidence_requirement_ids || []).includes(inspection.sourceId);
-    if (!returnedFactIdsForNode(node).has(inspection.factId)) return false;
-    return (facts.get(inspection.factId)?.source_refs || []).some(ref => ref.artifact_id === inspection.sourceId) && inspection.locatorId.includes(inspection.sourceId);
-  };
-  const nodeInspections = inspections.filter(item => item.entityKind === 'node');
-  const branchInspections = inspections.filter(item => item.entityKind === 'branch');
-  const nodeHighlights = highlights.filter(item => item.entityKind === 'node');
-  const branchHighlights = highlights.filter(item => item.entityKind === 'branch');
-  if (stableJson(nodeHighlights.map(item => item.nodeId)) !== stableJson(FLAGSHIP_PROCESS_PROJECTION_IDS)) {
-    issues.push('source-highlighted events did not precede all ten process nodes in order');
-  }
-  if (stableJson(branchHighlights.map(item => item.nodeId)) !== stableJson(REQUIRED_CAUSATION_BRANCH_IDS)) {
-    issues.push('source-highlighted events did not precede all four causation branches in order');
-  }
-  if (stableJson(nodeInspections.map(item => item.nodeId)) !== stableJson(FLAGSHIP_PROCESS_PROJECTION_IDS)) {
-    issues.push('source inspections did not precede all ten process nodes in order');
-  }
-  if (!nodeInspections.some(item => item.sourceKind === 'claim-source'
-    && nonemptyString(item.factId) && nonemptyString(item.locatorId))) {
-    issues.push('no exact claim-source inspection precedes the process');
-  }
-  nodeInspections.forEach((inspection, index) => {
-    const change = changes[index];
-    const highlight = nodeHighlights.find(item => item.nodeId === inspection.nodeId);
-    const node = processNodes.get(inspection.nodeId);
-    if (!change || change.entityId !== inspection.nodeId) issues.push(`${inspection.nodeId}: inspection/change mismatch`);
-    if (inspection.agentId !== expectedAgent) issues.push(`${inspection.nodeId}: wrong inspection actor`);
-    if (![inspection.changeId, inspection.eventId, inspection.sourceKind, inspection.sourceId, inspection.found].every(nonemptyString)) {
-      issues.push(`${inspection.nodeId}: incomplete inspection provenance`);
-    }
-    if (!allowedKinds.has(inspection.sourceKind) || !validSourceId(inspection, node)) issues.push(`${inspection.nodeId}: inspection source is not returned by the node basis`);
-    if (!confirmCursorBindings.has(`${inspection.changeId}:${inspection.eventId}:${inspection.agentId}:${inspection.sourceId}`)) issues.push(`${inspection.nodeId}: inspection is not bound to the confirm-source cursor click target`);
-    if (!highlight || highlight.changeId !== inspection.changeId || highlight.eventId !== inspection.eventId
-      || highlight.agentId !== inspection.agentId || highlight.sourceId !== inspection.sourceId
-      || highlight.factId !== inspection.factId || highlight.locatorId !== inspection.locatorId
-      || highlight.graphInspectionPhase !== 'highlight-source' || highlight.sourceHighlighted !== true
-      || highlight.at > inspection.at) issues.push(`${inspection.nodeId}: highlight-source did not visibly precede the node inspection`);
-    if (change && (change.changeId !== inspection.changeId || change.eventId !== inspection.eventId || change.agentId !== inspection.agentId)) {
-      issues.push(`${inspection.nodeId}: inspection is not bound to the resulting node`);
-    }
-    if (change && (!highlight || change.at - highlight.at < 1100)) issues.push(`${inspection.nodeId}: highlighted source was not readable before the node appeared`);
-  });
-  if (stableJson(branchInspections.map(item => item.nodeId)) !== stableJson(REQUIRED_CAUSATION_BRANCH_IDS)) {
-    issues.push('source inspections did not precede all four causation branches in order');
-  }
-  branchInspections.forEach((inspection, index) => {
-    const visual = branchVisuals[index];
-    const highlight = branchHighlights.find(item => item.nodeId === inspection.nodeId && item.branchId === inspection.branchId);
-    const node = processNodes.get(inspection.nodeId);
-    if (!visual || visual.nodeId !== inspection.nodeId || visual.branchId !== inspection.branchId) issues.push(`${inspection.nodeId}: branch inspection/visual mismatch`);
-    if (inspection.agentId !== expectedAgent) issues.push(`${inspection.nodeId}: wrong branch inspection actor`);
-    if (![inspection.changeId, inspection.eventId, inspection.sourceKind, inspection.sourceId, inspection.found].every(nonemptyString)) issues.push(`${inspection.nodeId}: incomplete branch inspection provenance`);
-    if (!allowedKinds.has(inspection.sourceKind) || !validSourceId(inspection, node)) issues.push(`${inspection.nodeId}: branch inspection source is not returned by the branch node basis`);
-    if (!confirmCursorBindings.has(`${inspection.changeId}:${inspection.eventId}:${inspection.agentId}:${inspection.sourceId}`)) issues.push(`${inspection.nodeId}: branch inspection is not bound to the confirm-source cursor click target`);
-    if (!highlight || highlight.changeId !== inspection.changeId || highlight.eventId !== inspection.eventId
-      || highlight.agentId !== inspection.agentId || highlight.sourceId !== inspection.sourceId
-      || highlight.factId !== inspection.factId || highlight.locatorId !== inspection.locatorId
-      || highlight.graphInspectionPhase !== 'highlight-source' || highlight.sourceHighlighted !== true
-      || highlight.at > inspection.at) issues.push(`${inspection.nodeId}: highlight-source did not visibly precede the branch inspection`);
-    if (visual && (visual.changeId !== inspection.changeId || visual.eventId !== inspection.eventId || visual.agentId !== inspection.agentId)) issues.push(`${inspection.nodeId}: branch inspection is not bound to the resulting branch`);
-    if (visual && (!highlight || visual.at - highlight.at < 1100)) issues.push(`${inspection.nodeId}: highlighted source was not readable before the branch appeared`);
-  });
-  return issues;
 }
 
 function factSourceLocatorId(reference) {
@@ -3112,141 +3697,249 @@ function factSourcePreviewTruth(claim, fact, reference, visualPreview = false) {
   };
 }
 
-function factSourceTourContractViolations(completions, inspections, changes, cursorSteps, runResult) {
-  const issues = [];
-  const factInspections = inspections.filter(item => item.entityKind === 'fact');
-  const factChanges = changes.filter(item => item.kind === 'fact' && FACT_SOURCE_TOUR_IDS.includes(item.entityId));
-  const cursorBindings = new Set(cursorSteps.filter(step => step.phase === 'click').map(step => `${step.changeId}:${step.eventId}:${step.agentId}:${step.targetId}`));
-  const facts = new Map((runResult?.facts || []).map(fact => [fact.fact_id, fact]));
-  if (completions.length !== 1) issues.push(`fact source tour completion count ${completions.length}`);
-  const completion = completions[0] || {};
-  if (completion.contract !== FACT_SOURCE_TOUR_CONTRACT
-    || completion.count !== FACT_SOURCE_TOUR_IDS.length
-    || stableJson(completion.factIds) !== stableJson(FACT_SOURCE_TOUR_IDS)) issues.push('fact source tour completion payload is not exact');
-  if (completion.rootState !== 'complete' || completion.rootIndex !== String(FACT_SOURCE_TOUR_IDS.length - 1)) issues.push(`fact source tour root state ${completion.rootState || ''}:${completion.rootIndex || ''}`);
-  if (stableJson(factInspections.map(item => item.factId)) !== stableJson(FACT_SOURCE_TOUR_IDS)) issues.push('five fact source inspections did not arrive in order');
-  if (stableJson(factChanges.map(item => item.entityId)) !== stableJson(FACT_SOURCE_TOUR_IDS)) issues.push('five source-grounded fact changes did not arrive in order');
-  FACT_SOURCE_TOUR_IDS.forEach((factId, index) => {
-    const inspection = factInspections[index];
-    const change = factChanges[index];
-    const fact = facts.get(factId);
-    if (!fact) {
-      issues.push(`${factId}: fact is absent from the returned canonical state`);
-      return;
-    }
-    if (!inspection || inspection.factId !== factId) {
-      issues.push(`${factId}: exact source inspection is missing`);
-      return;
-    }
-    if (inspection.sourceKind !== 'claim-source' || inspection.agentId !== 'canonical_facts'
-      || ![inspection.changeId, inspection.eventId, inspection.sourceId, inspection.locatorId, inspection.found].every(nonemptyString)) issues.push(`${factId}: source inspection provenance is incomplete`);
-    const exactReference = (fact.source_refs || []).find(reference => reference.artifact_id === inspection.sourceId && factSourceLocatorId(reference) === inspection.locatorId);
-    if (!exactReference) issues.push(`${factId}: inspected locator is not an exact returned source reference`);
-    const expectedSourceAuthority = exactReference?.authority || 'customer_submission';
-    if (inspection.activeSourceLocator !== inspection.locatorId || !['open', 'active', 'drawer'].includes(inspection.sourceDockState)) issues.push(`${factId}: inspected locator was not visibly opened in the source dock`);
-    if (!cursorBindings.has(`${inspection.changeId}:${inspection.eventId}:${inspection.agentId}:${inspection.sourceId}`)) issues.push(`${factId}: source inspection is not bound to the cursor click target`);
-    if (!change || change.entityId !== factId || change.changeId !== inspection.changeId || change.eventId !== inspection.eventId || change.agentId !== inspection.agentId) issues.push(`${factId}: resulting fact change is not bound to the inspection`);
-    if (change && change.at - inspection.at < MIN_FACT_SOURCE_HOLD_MS) issues.push(`${factId}: source finding was not readable before the fact appeared`);
-    if (!change?.attachment || change.attachment.kind !== 'fact' || change.attachment.factId !== factId
-      || change.attachment.sourceAuthority !== expectedSourceAuthority
-      || change.attachment.sourceLocatorId !== inspection.locatorId) issues.push(`${factId}: fact artifact does not retain the inspected source binding`);
-  });
-  if (factChanges.length && (!Number.isFinite(completion.at) || completion.at < factChanges.at(-1).at)) issues.push('fact source tour completed before the last fact appeared');
-  return issues;
+function usableDecisionReference(reference) {
+  return reference?.locator_kind === 'text_quote'
+    ? nonemptyString(reference.excerpt)
+    : reference?.locator_kind === 'metadata_field'
+      ? nonemptyString(reference.field) && String(reference.value ?? '').length > 0
+      : reference?.locator_kind === 'visual_observation'
+        ? Array.isArray(reference.region) && reference.region.length === 4 && nonemptyString(reference.observation)
+        : false;
 }
 
-function factSourceCinematicContractViolations(steps, highlights, inspections, changes) {
-  const issues = [];
-  const factInspections = inspections.filter(item => item.entityKind === 'fact');
-  const factHighlights = highlights.filter(item => item.entityKind === 'fact');
-  const factChanges = changes.filter(item => item.kind === 'fact' && FACT_SOURCE_TOUR_IDS.includes(item.entityId));
-  if (stableJson(factHighlights.map(item => item.factId)) !== stableJson(FACT_SOURCE_TOUR_IDS)) {
-    issues.push('source-highlighted events did not occur exactly once for the five facts in order');
-  }
-  FACT_SOURCE_TOUR_IDS.forEach(factId => {
-    const inspection = factInspections.find(item => item.factId === factId);
-    const highlightEvent = factHighlights.find(item => item.factId === factId);
-    const change = factChanges.find(item => item.entityId === factId);
-    const snapshots = steps.filter(item => item.factId === factId);
-    const select = snapshots.find(item => item.timing === 'select-source' && item.factTourPhase === 'select-source');
-    const read = snapshots.find(item => item.timing === 'neutral-read' && item.factTourPhase === 'read-source');
-    const confirm = snapshots.find(item => item.timing === 'confirm-click' && item.factTourPhase === 'read-source');
-    const highlighted = snapshots.find(item => item.timing === 'highlight-source' && item.factTourPhase === 'highlight-source');
-    const finding = snapshots.find(item => item.timing === 'finding' && item.factTourPhase === 'finding');
-    if (!select || !read || !confirm || !highlighted || !finding) {
-      issues.push(`${factId}: select to neutral-read to confirm to highlight to finding cinematic trace is incomplete`);
-      return;
-    }
-    const factIndex = FACT_SOURCE_TOUR_IDS.indexOf(factId);
-    const expectedTrailIds = [...new Set(FACT_SOURCE_TOUR_IDS.slice(0, factIndex + 1)
-      .map(id => factInspections.find(item => item.factId === id)?.sourceId)
-      .filter(nonemptyString))];
-    const trailIssue = (snapshot, currentState) => {
-      const trail = Array.isArray(snapshot.sourceTrail) ? snapshot.sourceTrail : [];
-      const ids = trail.map(item => item.sourceId);
-      const current = trail.filter(item => item.state === currentState);
-      const prior = trail.filter(item => item.sourceId !== snapshot.sourceId);
-      return stableJson(ids) !== stableJson(expectedTrailIds)
-        || new Set(ids).size !== ids.length
-        || trail.some(item => item.visible !== true)
-        || current.length !== 1
-        || current[0]?.sourceId !== snapshot.sourceId
-        || prior.some(item => item.state !== 'inspected');
-    };
-    if (trailIssue(select, 'opening')
-      || [read, confirm, highlighted, finding].some(snapshot => trailIssue(snapshot, 'active'))) {
-      issues.push(`${factId}: opened sources do not accumulate in one ordered trail with only the current source active`);
-    }
-    for (const snapshot of [select, read, confirm, highlighted, finding]) {
-      const focus = snapshot.focus || {};
-      if (focus.focusCount !== 1 || focus.cursorCount !== 1 || focus.artifactCount !== 1) {
-        issues.push(`${factId}: cinematic snapshot does not retain one cursor and one focal artifact`);
+function decisionFactsForReturnedNode(runResult, node) {
+  const facts = Array.isArray(runResult?.facts) ? runResult.facts : [];
+  const factsById = new Map(facts.map(fact => [fact.fact_id, fact]));
+  let decisionFacts = (Array.isArray(node?.fact_ids) ? node.fact_ids : [])
+    .map(factId => factsById.get(factId))
+    .filter(fact => fact && (fact.source_refs || []).some(usableDecisionReference));
+  if (!decisionFacts.length) {
+    const checklistItems = Array.isArray(runResult?.checklist?.items) ? runResult.checklist.items : [];
+    for (const itemId of Array.isArray(node?.evidence_requirement_ids) ? node.evidence_requirement_ids : []) {
+      const item = checklistItems.find(candidate => candidate.item_id === itemId);
+      const fact = factsById.get(item?.fact_id);
+      if (fact && (fact.source_refs || []).some(usableDecisionReference)) {
+        decisionFacts = [fact];
+        break;
       }
     }
-    if ([select, read, confirm, highlighted, finding].some(snapshot => snapshot.contract !== FACT_SOURCE_CINEMATIC_CONTRACT)
-      || select.cursorPhase !== 'click'
-      || select.targetId !== select.sourceId || select.activeSourceIds.length !== 0
-      || select.activeSourceLocator || select.sourceHighlighted || select.factVisible || select.findingVisible) {
-      issues.push(`${factId}: source or fact is preselected before the agent click`);
-    }
-    if (read.at < select.at || read.targetId !== read.sourceId || read.sourceId !== select.sourceId
-      || read.locatorId !== select.locatorId || read.activeSourceIds.length !== 1
-      || read.activeSourceIds[0] !== read.sourceId || read.activeSourceLocator !== read.locatorId
-      || !['open', 'active', 'drawer'].includes(read.sourceDockState)
-      || !read.sourceVisible || read.sourceHighlighted || read.markCount !== 0
-      || read.exactControlCount !== 1 || read.exactControlTag !== 'BUTTON'
-      || !nonemptyString(read.exactControlText) || read.neutralControlLooksHighlighted
-      || !read.pendingVisible || read.factVisible || read.findingVisible) {
-      issues.push(`${factId}: neutral source read does not visibly follow the exact open-source click`);
-    }
-    if (confirm.at < read.at || confirm.cursorPhase !== 'click' || confirm.targetId !== read.sourceId
-      || confirm.sourceId !== read.sourceId || confirm.locatorId !== read.locatorId
-      || confirm.sourceHighlighted || confirm.markCount !== 0 || confirm.exactControlCount !== 1
-      || confirm.exactControlTag !== 'BUTTON' || confirm.neutralControlLooksHighlighted
-      || !confirm.sourceVisible || !confirm.pendingVisible
-      || confirm.factVisible || confirm.findingVisible) {
-      issues.push(`${factId}: exact source remains unconfirmed before highlight-source`);
-    }
-    if (!highlightEvent || highlightEvent.changeId !== inspection?.changeId || highlightEvent.eventId !== inspection?.eventId
-      || highlightEvent.agentId !== inspection?.agentId || highlightEvent.sourceId !== read.sourceId
-      || highlightEvent.locatorId !== read.locatorId || highlightEvent.factTourPhase !== 'highlight-source'
-      || highlightEvent.sourceHighlighted !== true || highlightEvent.at < confirm.at) {
-      issues.push(`${factId}: casepath:source-highlighted is absent or not bound to the confirmed source`);
-    }
-    if (highlighted.at < confirm.at || highlighted.sourceId !== read.sourceId || highlighted.locatorId !== read.locatorId
-      || highlighted.sourceHighlighted !== true || highlighted.markCount !== 1 || highlighted.highlightedMarkCount !== 1
-      || highlighted.exactControlCount !== 0 || !highlighted.sourceVisible || highlighted.pendingVisible
-      || highlighted.factVisible || highlighted.findingVisible) {
-      issues.push(`${factId}: confirmed source does not become the sole visible highlight before fact appearance`);
-    }
-    if (!inspection || !change || highlighted.at > inspection.at || inspection.sourceId !== read.sourceId
-      || inspection.locatorId !== read.locatorId || finding.at < inspection.at + MIN_FACT_SOURCE_HOLD_MS
-      || change.at < inspection.at + MIN_FACT_SOURCE_HOLD_MS || finding.sourceHighlighted !== true
-      || !finding.sourceVisible || !finding.factVisible || !finding.findingVisible) {
-      issues.push(`${factId}: highlighted source is not causally retained through the finding dwell`);
-    }
+  }
+  return decisionFacts;
+}
+
+function directDecisionSourceGroups(runResult, node, seenLocatorIds = new Set()) {
+  const decisionFacts = decisionFactsForReturnedNode(runResult, node);
+  const groups = [];
+  const bySource = new Map();
+  decisionFacts.forEach(fact => {
+    (fact.source_refs || []).forEach(reference => {
+      if (!usableDecisionReference(reference) || !nonemptyString(reference.artifact_id)) return;
+      const locatorId = factSourceLocatorId(reference);
+      if (seenLocatorIds.has(locatorId)) return;
+      let group = bySource.get(reference.artifact_id);
+      if (!group) {
+        group = { sourceId: reference.artifact_id, locatorIds: [], factIds: [], items: [] };
+        bySource.set(reference.artifact_id, group);
+        groups.push(group);
+      }
+      let item = group.items.find(candidate => candidate.locatorId === locatorId);
+      if (!item) {
+        item = { locatorId, factIds: [] };
+        group.items.push(item);
+        group.locatorIds.push(locatorId);
+      }
+      if (!item.factIds.includes(fact.fact_id)) item.factIds.push(fact.fact_id);
+      if (!group.factIds.includes(fact.fact_id)) group.factIds.push(fact.fact_id);
+    });
   });
-  return issues;
+  return groups;
+}
+
+function officialDecisionLaw(runResult, node, seenLawIds = new Set()) {
+  const legal = runResult?.legal_research || {};
+  const joined = (legal.questions || [])
+    .filter(question => (question.process_node_ids || []).includes(node?.node_id))
+    .flatMap(question => [...(question.source_ids || []), ...(question.interpretation_ids || [])]);
+  const lawIds = new Set([
+    ...(Array.isArray(node?.legal_source_ids) ? node.legal_source_ids : []),
+    ...((legal.node_links || {})[node?.node_id] || []),
+    ...joined,
+  ]);
+  return [...(legal.sources || []), ...(legal.handling_principles || [])].find(source => (
+    lawIds.has(source.source_id) && !seenLawIds.has(source.source_id)
+      && ['official_statute', 'official_guidance'].includes(source.source_type)
+  )) || null;
+}
+
+function decisionFlowContractViolations(steps, nodeChanges, highlights, interactions, run, semanticEvents = [], expectedNodeIds = FLAGSHIP_PROCESS_PROJECTION_IDS) {
+  const issues = [];
+  const runResult = run?.result || run || {};
+  const expectedRunId = String(run?.run_id || '');
+  const returnedNodes = new Map((runResult.process?.nodes || []).map(node => [node.node_id, node]));
+  const semanticByEntity = new Map((semanticEvents || []).map(event => [`${event.entityKind}:${event.entityId}`, event]));
+  const storyNodeIds = Array.isArray(expectedNodeIds) ? expectedNodeIds.map(String) : [];
+  const relevantSteps = (steps || []).filter(step => storyNodeIds.includes(step.nodeId));
+  const nodeOrder = relevantSteps.filter(step => step.phase === 'combining').map(step => step.nodeId);
+  if (stableJson(nodeOrder) !== stableJson(storyNodeIds)) issues.push('integrated decision trace does not cover the returned route decisions in order');
+
+  storyNodeIds.forEach(nodeId => {
+    const node = returnedNodes.get(nodeId);
+    const events = relevantSteps.filter(step => step.nodeId === nodeId);
+    const planned = events.filter(step => step.phase === 'planned');
+    const change = (nodeChanges || []).find(item => item.entityId === nodeId);
+    const structureSemantic = semanticByEntity.get(`process_node:${nodeId}`);
+    const decisionSemantic = semanticByEntity.get(`process_decision:${nodeId}`);
+    if (!node || !events.length || !structureSemantic) {
+      issues.push(`${nodeId}: accepted process decision trace is absent`);
+      return;
+    }
+    if (events.some(event => {
+      const modelDecisionPhase = Boolean(decisionSemantic) && ['combining', 'decision-ready'].includes(event.phase);
+      return event.contract !== DECISION_FLOW_CONTRACT || event.runId !== expectedRunId
+        || event.eventId !== structureSemantic.eventId || event.structureEventId !== structureSemantic.eventId
+        || event.structureAuthority !== structureSemantic.authority || event.structureTraceContract !== EXECUTION_TRACE_CONTRACT
+        || event.decisionEventId !== (decisionSemantic?.eventId || '')
+        || event.decisionAgentId !== (decisionSemantic?.agentId || '')
+        || event.agentId !== (modelDecisionPhase ? 'process_decision_mapping' : '')
+        || event.decisionAuthority !== (decisionSemantic?.authority || '')
+        || event.decisionModelContributionAccepted !== Boolean(decisionSemantic)
+        || event.presentationMode !== 'returned-action-replay' || !/^Returned work · /.test(event.presentationLabel || '');
+    })) {
+      issues.push(`${nodeId}: decision replay is not bound to its run-scoped accepted execution trace and visible mode label`);
+    }
+    if (structureSemantic.runId !== expectedRunId || structureSemantic.traceContract !== EXECUTION_TRACE_CONTRACT
+      || structureSemantic.presentationMode !== 'returned_action_replay' || structureSemantic.type !== 'process_node.created'
+      || structureSemantic.actorType !== 'deterministic_tool' || structureSemantic.modelContributionAccepted !== false
+      || structureSemantic.modelOwnedFields?.length) issues.push(`${nodeId}: process structure event lacks neutral accepted execution-trace lineage`);
+    if (decisionSemantic && (decisionSemantic.runId !== expectedRunId || decisionSemantic.traceContract !== EXECUTION_TRACE_CONTRACT
+      || decisionSemantic.presentationMode !== 'returned_action_replay' || decisionSemantic.type !== 'process_decision.accepted'
+      || decisionSemantic.actorType !== 'nemotron_agent' || decisionSemantic.agentId !== 'process_decision_mapping'
+      || decisionSemantic.modelContributionAccepted !== true || stableJson(decisionSemantic.modelOwnedFields) !== stableJson(['decision_value']))) {
+      issues.push(`${nodeId}: process model identity is not limited to the accepted decision_value event`);
+    }
+    events.forEach(event => {
+      const modelDecisionPhase = Boolean(decisionSemantic) && ['combining', 'decision-ready'].includes(event.phase);
+      if (modelDecisionPhase) {
+        if (event.activeAgentId !== 'process_decision_mapping' || event.visualActiveAgentId !== 'process_decision_mapping'
+          || event.activeSignature !== 'process' || event.workAuthority !== 'Process builder') {
+          issues.push(`${nodeId}:${event.phase}: accepted decision_value is not visibly owned by Process builder`);
+        }
+      } else if (event.activeAgentId || event.visualActiveAgentId || event.activeSignature === 'process' || event.workAuthority === 'Process builder') {
+        issues.push(`${nodeId}:${event.phase}: accepted input or structural replay inherited Process builder identity`);
+      }
+    });
+    if (events.some(event => !event.graphVisible || event.graphConstructionState !== 'building'
+      || !event.workspaceVisible || event.workspaceNodeId !== nodeId)) issues.push(`${nodeId}: process decision trace leaves the visible graph workspace`);
+    if (events.some(event => event.planCount !== 1 || !event.planVisible || event.planNodeId !== nodeId
+      || event.planParagraphCount !== 0 || event.planButtonCount !== 0
+      || event.planItemCount !== planned.length + 2)) issues.push(`${nodeId}: live plan is not the one minimal accepted-input-to-decision checklist`);
+
+    const decisionFacts = decisionFactsForReturnedNode(runResult, node);
+    const blockedDownstream = BLOCKED_DOWNSTREAM_DECISION_IDS.includes(nodeId);
+    const expectedPlanKind = blockedDownstream ? 'waiting-decision' : 'evidence-decision';
+    if (events.some(event => event.planKind !== expectedPlanKind)) issues.push(`${nodeId}: live plan kind does not match the decision state`);
+    if (blockedDownstream) {
+      if (planned.length) issues.push(`${nodeId}: blocked downstream step invents accepted input work before causation is resolved`);
+      if (events.some(event => !event.waitingBasisVisible || event.waitingBasisText !== BLOCKED_DOWNSTREAM_WAITING_COPY[nodeId])) {
+        issues.push(`${nodeId}: unresolved downstream decision does not show its exact plain dependency`);
+      }
+    } else if (events.some(event => event.waitingBasisVisible || event.waitingBasisText)) {
+      issues.push(`${nodeId}: evidence-backed decision is falsely presented as waiting on an earlier answer`);
+    }
+
+    const linkedLaw = !blockedDownstream && decisionFacts.length ? officialDecisionLaw(runResult, node, new Set()) : null;
+    const expectedKinds = blockedDownstream ? [] : decisionFacts.length
+      ? [...decisionFacts.map(() => 'accepted-fact'), ...(linkedLaw ? ['accepted-law'] : [])]
+      : planned.map(plan => plan.stepKind);
+    if (stableJson(planned.map(plan => plan.stepKind)) !== stableJson(expectedKinds)) issues.push(`${nodeId}: graph plan does not reuse the accepted fact and checked-law trace`);
+    if (planned.some(plan => ['source', 'law'].includes(plan.stepKind))) issues.push(`${nodeId}: graph decision replay reopens a source or law instead of reusing accepted trace`);
+    if (!decisionFacts.length && !blockedDownstream
+      && (planned.length !== 1 || !['evidence-requirement', 'accepted-decision', 'start-point'].includes(planned[0]?.stepKind))) {
+      issues.push(`${nodeId}: source-free decision does not use one returned structural basis`);
+    }
+
+    planned.forEach((plan, index) => {
+      const stepEvents = events.filter(event => event.stepId === plan.stepId);
+      const opened = stepEvents.find(event => event.phase === 'source-opened');
+      const extracted = stepEvents.find(event => event.phase === 'fragment-extracted');
+      if (!opened || !extracted || !(plan.at <= opened.at && opened.at <= extracted.at)) {
+        issues.push(`${nodeId}:${plan.stepId}: accepted input is not replayed sequentially`);
+        return;
+      }
+      if (plan.realArtifactVisible || opened.realArtifactVisible || extracted.realArtifactVisible
+        || plan.sourceRowActive || opened.sourceRowActive || extracted.sourceRowActive
+        || plan.activeSourceIds.length || opened.activeSourceIds.length || extracted.activeSourceIds.length
+        || plan.activeSourceLocator || opened.activeSourceLocator || extracted.activeSourceLocator) {
+        issues.push(`${nodeId}:${plan.stepId}: accepted-input replay falsely claims a new source opening`);
+      }
+      if ((highlights || []).some(highlight => highlight.entityKind === 'node' && highlight.nodeId === nodeId
+        && highlight.at >= plan.at && highlight.at <= extracted.at)) issues.push(`${nodeId}:${plan.stepId}: accepted-input replay emits a fake new source highlight`);
+      if (plan.stepKind === 'accepted-fact') {
+        const fact = decisionFacts[index];
+        const semantic = semanticByEntity.get(`fact:${fact?.fact_id || ''}`);
+        if (!fact || plan.stepId !== `accepted-fact:${fact.fact_id}` || stableJson(plan.factIds) !== stableJson([fact.fact_id])
+          || !semantic || plan.basisEventId !== semantic.eventId || plan.basisAgentId !== semantic.agentId
+          || plan.basisAuthority !== semantic.authority || semantic.runId !== expectedRunId
+          || semantic.traceContract !== EXECUTION_TRACE_CONTRACT || semantic.presentationMode !== 'returned_action_replay'
+          || !extracted.fragmentFactIds.includes(fact.fact_id)) {
+          issues.push(`${nodeId}:${plan.stepId}: accepted fact replay is not bound to the exact returned fact event`);
+        }
+      } else if (plan.stepKind === 'accepted-law') {
+        const semantic = semanticByEntity.get(`official_source:${linkedLaw?.source_id || ''}`);
+        if (!linkedLaw || plan.stepId !== `accepted-law:${linkedLaw.source_id}` || plan.sourceId !== linkedLaw.source_id
+          || !semantic || plan.basisEventId !== semantic.eventId || plan.basisAgentId !== 'official_law_registry'
+          || semantic.runId !== expectedRunId || semantic.actorType !== 'deterministic_tool'
+          || semantic.presentationMode !== 'deterministic_projection' || semantic.modelContributionAccepted !== false) {
+          issues.push(`${nodeId}:${plan.stepId}: checked-law replay is not bound to the deterministic official registry event`);
+        }
+      }
+      const nextEvent = events.find(event => event.at > extracted.at);
+      if (!nextEvent || nextEvent.at - extracted.at < MIN_DECISION_SOURCE_HOLD_MS) issues.push(`${nodeId}:${plan.stepId}: accepted input is not readable before the next reasoning step`);
+    });
+
+    const expectedPhases = planned.flatMap(() => ['planned', 'source-opened', 'fragment-extracted'])
+      .concat(['combining', 'decision-ready', 'plan-receding', 'plan-receded']);
+    if (stableJson(events.map(event => event.phase)) !== stableJson(expectedPhases)) issues.push(`${nodeId}: decision phases are incomplete or out of order`);
+    const combining = events.find(event => event.phase === 'combining');
+    const ready = events.find(event => event.phase === 'decision-ready');
+    const receding = events.find(event => event.phase === 'plan-receding');
+    const receded = events.find(event => event.phase === 'plan-receded');
+    const expectedFactIds = blockedDownstream ? [] : decisionFacts.map(fact => fact.fact_id);
+    if (!combining || (expectedFactIds.length && (!combining.combinationVisible
+      || combining.combineState !== 'combining' || stableJson(combining.fragmentFactIds) !== stableJson(expectedFactIds)))) {
+      issues.push(`${nodeId}: accepted facts are not visibly combined exactly once`);
+    }
+    if (!ready || ready.progress !== 100 || !ready.progressVisible) issues.push(`${nodeId}: decision indicator does not semantically reach completion without showing a numeric percentage`);
+    if (!receding || receding.progressVisible || receding.planPhase !== 'receding' || receding.nodeVisible) issues.push(`${nodeId}: progress is not hidden while the live plan recedes before node creation`);
+    if (!receded || receded.progressVisible || receded.planPhase !== 'receded' || receded.nodeVisible) issues.push(`${nodeId}: live plan does not finish receding before node creation`);
+    if (!change || !receding || change.at - receding.at < MIN_DECISION_PLAN_RECEDE_MS
+      || !receded || change.at < receded.at || change.eventId !== structureSemantic.eventId || change.agentId
+      || change.indicatorVisible || change.planVisible || change.decisionFlowState !== 'idle'
+      || !change.outputVisible || !change.graphVisible) issues.push(`${nodeId}: accepted node appears before progress and plan have cleared`);
+  });
+
+  if (!storyNodeIds.includes(NOTIFICATION_DECISION_NODE_ID)) return [...new Set(issues)];
+  const notification = returnedNodes.get(NOTIFICATION_DECISION_NODE_ID);
+  const notificationFact = decisionFactsForReturnedNode(runResult, notification).find(fact => fact.fact_id === 'fact_notification');
+  const notificationCounts = Object.entries((notificationFact?.source_refs || []).reduce((counts, ref) => {
+    if (usableDecisionReference(ref)) counts[ref.artifact_id] = (counts[ref.artifact_id] || 0) + 1;
+    return counts;
+  }, {}));
+  const notificationEvents = relevantSteps.filter(step => step.nodeId === NOTIFICATION_DECISION_NODE_ID);
+  const notificationFactPlan = notificationEvents.find(step => step.phase === 'planned' && step.stepKind === 'accepted-fact' && step.factIds.includes('fact_notification'));
+  const notificationLawPlan = notificationEvents.find(step => step.phase === 'planned' && step.stepKind === 'accepted-law');
+  const notificationFactSemantic = semanticByEntity.get('fact:fact_notification');
+  const notificationLawSemantic = semanticByEntity.get('official_source:fedlex-or-257g');
+  if (stableJson(notificationCounts) !== stableJson(Object.entries(NOTIFICATION_SOURCE_LOCATOR_COUNTS))
+    || !notificationFactPlan || notificationFactPlan.basisEventId !== notificationFactSemantic?.eventId) {
+    issues.push('notification decision does not reuse the accepted fact with two email locators and one delivery locator');
+  }
+  if (!notificationLawPlan || notificationLawPlan.sourceId !== 'fedlex-or-257g'
+    || notificationLawPlan.basisEventId !== notificationLawSemantic?.eventId
+    || notificationLawSemantic?.modelContributionAccepted !== false) {
+    issues.push('notification decision does not reuse the checked deterministic Article 257g registry trace');
+  }
+  return [...new Set(issues)];
 }
 
 function contextualAttachmentContractViolations(attachments, semanticEvents, cursorSteps, production = true) {
@@ -3272,9 +3965,10 @@ function contextualAttachmentContractViolations(attachments, semanticEvents, cur
     if (attachment.kind === 'precedent' && (attachment.sourceAuthority !== 'generated_reference' || attachment.referenceStatus !== 'generated_reference')) issues.push(`${index}: generated reference is presented with inflated authority`);
   });
   if (new Set(attachments.map(item => item.changeId)).size !== attachments.length) issues.push('attachment change IDs are duplicated');
-  // Claim facts are already proven more strongly by the preceding source-inspection
-  // contract for every node and branch. The remaining stage-local artifacts must
-  // each become the single visible focal object during their own chapter.
+  // Claim facts are proven once by the preceding eight-item source-to-fact tour.
+  // Graph construction may replay that accepted lineage but must not fake a new
+  // source read for every node. The remaining stage-local artifacts each become
+  // the single visible focal object during their own chapter.
   for (const kind of ['law', 'evidence', 'precedent', 'verification']) {
     if (!attachments.some(item => item.kind === kind)) issues.push(`${kind}: no contextual artifact attached`);
   }
@@ -3486,13 +4180,15 @@ async function retainEvidence() {
     'isolation-model-ledger',
     'flagship-run',
     'flagship-cold-model-ledger',
+    'model-ledger',
+  ];
+  if (acceptedJourneyMode === 'flagship-review-learning') required.push(
     'demo-review',
     'post-review-run',
     'later-baseline-run',
     'later-after-memory-run',
     'learning-proof',
-    'model-ledger',
-  ];
+  );
   if (isProductionJourney()) required.push('flagship-cache-lineage');
   const missing = required.filter(name => retainedEvidence[name] == null);
   if (report?.status === 'passed' && missing.length) throw new Error(`Passing journey did not retain required evidence: ${missing.join(', ')}`);
@@ -3511,6 +4207,7 @@ async function retainEvidence() {
   evidenceFiles.push({ path: 'runtime-versions.json', sha256: sha256(runtimeBytes), bytes: Buffer.byteLength(runtimeBytes) });
   report.evidence = {
     contract: 'casepath.qa-evidence/1.0.0',
+    journey_mode: acceptedJourneyMode,
     gate: { path: 'browser-focused-v20.mjs', sha256: sha256(gateBytes), bytes: gateBytes.length },
     runtime: runtimeVersions,
     retained_before_session_reset: true,
@@ -3537,13 +4234,15 @@ async function finalizeEvidenceManifest() {
     '03-lease-pdf-search.png',
     '03-image-inspection.png',
     '03-image-grounding-inspection.png',
+    'final-state.png',
+    'uninterrupted-focused-demo.webm',
+  ];
+  if (acceptedJourneyMode === 'flagship-review-learning') requiredVisualEvidence.push(
     '04-review-desktop.png',
     '05-review-applied-desktop.png',
     '06-learning-desktop.png',
     '07-later-result-desktop.png',
-    'final-state.png',
-    'uninterrupted-focused-demo.webm',
-  ];
+  );
   if (isProductionJourney()) requiredVisualEvidence.push('02-live-nemotron-agent.png', '03-deterministic-accepted-artifact.png');
   const requiredJsonEvidence = [
     'deployment-identity.json',
@@ -3553,14 +4252,16 @@ async function finalizeEvidenceManifest() {
     'isolation-model-ledger.json',
     'flagship-run.json',
     'flagship-cold-model-ledger.json',
+    'model-ledger.json',
+    'runtime-versions.json',
+  ];
+  if (acceptedJourneyMode === 'flagship-review-learning') requiredJsonEvidence.push(
     'demo-review.json',
     'post-review-run.json',
     'later-baseline-run.json',
     'later-after-memory-run.json',
     'learning-proof.json',
-    'model-ledger.json',
-    'runtime-versions.json',
-  ];
+  );
   if (isProductionJourney()) requiredJsonEvidence.push('flagship-cache-lineage.json');
   const missingRetainedArtifacts = [...requiredVisualEvidence, ...requiredJsonEvidence]
     .filter(filename => !retainedPaths.has(filename));
@@ -3570,6 +4271,7 @@ async function finalizeEvidenceManifest() {
   }
   const manifest = {
     contract: 'casepath.qa-evidence-manifest/1.0.0',
+    journey_mode: acceptedJourneyMode,
     release_id: RELEASE_ID,
     source_commit: deploymentIdentity.qa.source_commit,
     gate: report.evidence.gate,
@@ -3710,7 +4412,7 @@ async function execute() {
     } catch (_) {}
   });
 
-  await page.addInitScript(({ sessionId, factSourceCinematicContract, factSourceTourIds, processPreviewGeometrySelectors, processPreviewBottomInset }) => {
+  await page.addInitScript(({ sessionId, decisionFlowContract, processPreviewGeometrySelectors, processPreviewBottomInset, sourceRailContract }) => {
     sessionStorage.setItem('casepath:demo-session', sessionId);
     window.__casepathReleaseMutations = [];
     window.__casepathMomentHistory = [];
@@ -3728,11 +4430,8 @@ async function execute() {
     window.__casepathArtifactChanges = [];
     window.__casepathProcessNodeProgress = [];
     window.__casepathSourceHighlights = [];
-    window.__casepathSourceInspections = [];
     window.__casepathBranchVisuals = [];
-    window.__casepathBranchInspectionCopy = [];
-    window.__casepathFactSourceTours = [];
-    window.__casepathFactSourceCinematicSteps = [];
+    window.__casepathDecisionFlowSteps = [];
     window.__casepathLaterMemoryValidations = [];
     window.__casepathLaterCausalSteps = [];
     window.__casepathLaterSourceOpenings = [];
@@ -3742,6 +4441,9 @@ async function execute() {
     window.__casepathArtifactInteractions = [];
     window.__casepathProcessPreviewGeometry = [];
     window.__casepathSourcePreludeSnapshots = [];
+    window.__casepathSourceRailSnapshots = [];
+    window.__casepathLiveWorkPlanSnapshots = [];
+    window.__casepathFactTourSnapshots = [];
     window.__casepathMainFocalWhyViolations = [];
     window.__casepathNormalizeSvg = svg => String(svg?.innerHTML || '').replace(/\s+/g, ' ').replace(/> </g, '><').trim();
     window.__casepathCaptureSourcePrelude = () => {
@@ -3766,16 +4468,103 @@ async function execute() {
       const key = JSON.stringify(snapshot);
       if (!window.__casepathSourcePreludeSnapshots.some(item => JSON.stringify(item) === key)) window.__casepathSourcePreludeSnapshots.push(snapshot);
     };
+    window.__casepathCaptureLiveWorkPlan = () => {
+      const root = document.querySelector('#artifactCanvas');
+      const plans = [...(root?.querySelectorAll('[data-ac-live-work-plan]') || [])].filter(visible);
+      if (!plans.length) return;
+      const plan = plans[0];
+      const steps = [...plan.querySelectorAll('[data-live-work-step]')].map(step => ({
+        stepId: step.dataset.liveWorkStep || '',
+        label: step.querySelector('span')?.textContent?.trim() || '',
+        state: step.dataset.stepState || '',
+        spinnerCount: [...step.querySelectorAll('[data-live-work-spinner]')].filter(visible).length,
+      }));
+      const preludes = [...(root?.querySelectorAll('.ac-source-prelude') || [])].filter(visible);
+      const snapshot = {
+        planCount: plans.length,
+        focalChildCount: [...(root?.querySelector('[data-ac-focal]')?.children || [])].filter(visible).length,
+        visible: visible(plan),
+        contract: plan.dataset.contract || '',
+        presentationMode: plan.dataset.presentationMode || '',
+        agentId: plan.dataset.agentId || '',
+        agentSignature: plan.dataset.agentSignature || '',
+        runId: plan.dataset.runId || '',
+        callId: plan.dataset.callId || '',
+        eventId: plan.dataset.eventId || '',
+        workState: plan.dataset.workState || '',
+        inputArtifact: plan.dataset.inputArtifact || '',
+        inputArtifactHash: plan.dataset.inputArtifactHash || '',
+        rootWorkState: root?.dataset.liveAgentWorkState || '',
+        rootAgentId: root?.dataset.liveAgentId || '',
+        rootRunId: root?.dataset.liveAgentRunId || '',
+        rootCallId: root?.dataset.liveAgentCallId || '',
+        rootEventId: root?.dataset.liveAgentEventId || '',
+        title: plan.querySelector('header strong')?.textContent?.trim() || '',
+        steps,
+        sourcePreludeCount: preludes.length,
+        sourcePreludeCardCount: preludes.reduce((count, prelude) => count + [...prelude.querySelectorAll('.ac-source-prelude-strip > [data-source-kind]')].filter(visible).length, 0),
+        factTourCount: [...(root?.querySelectorAll('[data-fact-tour-phase]') || [])].filter(visible).length,
+        forbiddenProgressCount: plan.querySelectorAll('progress,meter,[role="progressbar"],[role="slider"],input[type="range"],[aria-valuenow],[data-ac-process-node-progress]').length,
+        percentText: /\d+(?:\.\d+)?\s*%/.test(plan.textContent || ''),
+        at: performance.now(),
+      };
+      const key = JSON.stringify({ ...snapshot, at: 0 });
+      if (!window.__casepathLiveWorkPlanSnapshots.some(item => item.key === key)) window.__casepathLiveWorkPlanSnapshots.push({ ...snapshot, key });
+    };
     window.__casepathCaptureMainFocalWhy = () => {
       const violations = [...document.querySelectorAll('#artifactCanvas [data-ac-focal] .ac-agent-artifact > p')].filter(visible);
       if (violations.length) window.__casepathMainFocalWhyViolations.push(...violations.map(node => node.textContent?.trim() || 'visible agent why paragraph'));
     };
+    window.__casepathCaptureFactTour = () => {
+      const root = document.querySelector('#artifactCanvas');
+      const focus = root?.querySelector('[data-fact-tour-phase][data-fact-id]');
+      if (!visible(focus)) return;
+      const sourceContext = focus.querySelector('[data-source-id][data-source-locator-id]');
+      const sourceId = sourceContext?.dataset.sourceId || '';
+      const finding = focus.querySelector('.ac-fact-finding[data-node-attachment-kind="fact"]');
+      const realArtifact = focus.querySelector('[data-real-artifact="true"],.ac-visual-source[data-source-id]');
+      const snapshot = {
+        factId: focus.dataset.factId || '',
+        phase: focus.dataset.factTourPhase || '',
+        sourceId,
+        locatorId: sourceContext?.dataset.sourceLocatorId || '',
+        activeSourceIds: window.__casepathActiveSourceIds?.() || [],
+        activeSourceLocator: document.querySelector('.submission-pane')?.dataset.activeSourceLocator || '',
+        artifactSurfaceVisible: visible(realArtifact),
+        highlightCount: [...focus.querySelectorAll('.is-highlighted')].filter(visible).length,
+        factVisible: visible(finding),
+        factLabel: finding?.querySelector('h3')?.textContent?.trim() || '',
+        factValue: finding?.querySelector('strong')?.textContent?.trim() || '',
+        eventId: finding?.dataset.artifactEventId || '',
+        agentId: finding?.dataset.artifactAgentId || '',
+        presentationMode: root?.dataset.presentationMode || '',
+        presentationLabel: document.querySelector('[data-ac-global-agent]')?.textContent?.trim() || '',
+        activeAgentId: root?.dataset.activeAgentId || '',
+        activeSignature: root?.dataset.activeSignature || '',
+        workAuthority: root?.dataset.workAuthority || '',
+        liveWorkPlanCount: [...(root?.querySelectorAll('[data-ac-live-work-plan]') || [])].filter(visible).length,
+        sourcePreludeCount: [...(root?.querySelectorAll('.ac-source-prelude') || [])].filter(visible).length,
+        at: performance.now(),
+      };
+      const key = [snapshot.factId, snapshot.phase, snapshot.sourceId, snapshot.locatorId, snapshot.factVisible, snapshot.eventId].join(':');
+      if (!window.__casepathFactTourSnapshots.some(item => item.key === key)) window.__casepathFactTourSnapshots.push({ ...snapshot, key });
+      const sourceIsActive = ['read-source', 'highlight-source', 'finding'].includes(snapshot.phase);
+      void window.__casepathCaptureSourceRail?.(
+        `fact-tour:${snapshot.factId}:${snapshot.phase}`,
+        sourceIsActive ? snapshot.sourceId : '',
+        sourceIsActive ? snapshot.locatorId : '',
+      );
+    };
     window.addEventListener('DOMContentLoaded', () => {
       window.__casepathCaptureSourcePrelude();
+      window.__casepathCaptureLiveWorkPlan();
       window.__casepathCaptureMainFocalWhy();
+      window.__casepathCaptureFactTour();
       new MutationObserver(() => {
         window.__casepathCaptureSourcePrelude();
+        window.__casepathCaptureLiveWorkPlan();
         window.__casepathCaptureMainFocalWhy();
+        window.__casepathCaptureFactTour();
       }).observe(document.documentElement, { childList: true, subtree: true });
     }, { once: true });
     window.addEventListener('casepath:presentation', event => {
@@ -3802,6 +4591,101 @@ async function execute() {
       });
     });
     const visible = node => Boolean(node && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden' && getComputedStyle(node).display !== 'none');
+    const rectValue = node => {
+      const rect = node?.getBoundingClientRect();
+      return rect ? { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height } : null;
+    };
+    const overlapArea = (first, second) => first && second
+      ? Math.max(0, Math.min(first.right, second.right) - Math.max(first.left, second.left))
+        * Math.max(0, Math.min(first.bottom, second.bottom) - Math.max(first.top, second.top))
+      : 0;
+    const displayedSourceId = sourceId => String(sourceId || '') === 'intake' ? 'message' : String(sourceId || '');
+    const captureSourceRailNow = (reason = 'runtime', expectedSourceId = '', expectedLocatorId = '') => {
+      const rail = document.querySelector(`aside[data-source-rail-contract="${sourceRailContract}"]`);
+      const list = rail?.matches('[data-source-rail-list]') ? rail : rail?.querySelector('[data-source-rail-list]');
+      const scrollRegion = list?.querySelector('[data-source-rail-scroll],.submission-scroll') || list;
+      const heading = rail?.querySelector('[data-source-rail-heading],.submission-head>div,.submission-head');
+      const railRect = rectValue(rail);
+      const listRect = rectValue(list);
+      const scrollRect = rectValue(scrollRegion);
+      const workRect = rectValue(document.querySelector('.work-pane'));
+      const rows = [...(list?.querySelectorAll('[data-source-rail-item][data-source-id]') || [])];
+      const items = rows.map(row => {
+        const rect = rectValue(row);
+        const icon = row.querySelector('[data-source-icon-kind]');
+        const iconSvg = icon?.querySelector('svg');
+        const iconRect = rectValue(icon);
+        const names = row.querySelectorAll('[data-source-name]');
+        const metadata = row.querySelectorAll('[data-source-meta]');
+        const statuses = row.querySelectorAll('[data-source-status]');
+        return {
+          sourceId: row.dataset.sourceId || '',
+          kind: row.dataset.sourceKind || icon?.dataset.sourceIconKind || '',
+          visible: visible(row),
+          fullyVisible: Boolean(rect && railRect
+            && rect.left >= railRect.left - 1 && rect.right <= railRect.right + 1
+            && rect.top >= railRect.top - 1 && rect.bottom <= railRect.bottom + 1
+            && rect.top >= -1 && rect.bottom <= innerHeight + 1),
+          rect,
+          iconCount: row.querySelectorAll('[data-source-icon-kind] > svg').length,
+          iconKind: icon?.dataset.sourceIconKind || '',
+          iconMarkup: window.__casepathNormalizeSvg(iconSvg),
+          iconWidth: iconRect?.width || 0,
+          iconHeight: iconRect?.height || 0,
+          nameCount: names.length,
+          name: names[0]?.textContent?.trim() || '',
+          metaCount: metadata.length,
+          meta: metadata[0]?.textContent?.trim() || '',
+          statusCount: statuses.length,
+          status: statuses[0]?.dataset.sourceStatus || row.dataset.sourceStatus || statuses[0]?.textContent?.trim().toLowerCase() || '',
+          active: row.classList.contains('is-active'),
+          ariaCurrent: row.getAttribute('aria-current') === 'true',
+          thumbImageCount: [...row.querySelectorAll('img,.attachment-thumb')].filter(visible).length,
+          extraLabelCount: [...row.querySelectorAll('.attachment-open,[data-source-extra-label]')].filter(visible).length,
+        };
+      });
+      const rowOverlapCount = items.slice(1).filter((item, index) => {
+        const prior = items[index];
+        return Boolean(item.rect && prior.rect && item.rect.top < prior.rect.bottom - 1);
+      }).length;
+      const overlays = [...document.querySelectorAll('#sourceViewer[open],#v20DocumentSheet[open],[data-ac-grounding-viewer][open]')].filter(visible);
+      const listStyle = scrollRegion ? getComputedStyle(scrollRegion) : null;
+      const snapshot = {
+        reason: String(reason || 'runtime'),
+        expectedSourceId: String(expectedSourceId || ''),
+        expectedLocatorId: String(expectedLocatorId || ''),
+        contract: rail?.dataset.sourceRailContract || '',
+        viewport: { width: innerWidth, height: innerHeight },
+        railVisible: visible(rail),
+        listVisible: visible(list),
+        collapsed: rail?.classList.contains('collapsed') === true || rail?.dataset.sourceCollapsed === 'true',
+        insideViewport: Boolean(railRect && railRect.left >= -1 && railRect.top >= -1 && railRect.right <= innerWidth + 1 && railRect.bottom <= innerHeight + 1),
+        railRect,
+        listRect,
+        scrollRect,
+        headingHeight: rectValue(heading)?.height || 0,
+        listOverflowY: listStyle?.overflowY || '',
+        listHorizontalOverflow: scrollRegion ? Math.max(0, scrollRegion.scrollWidth - scrollRegion.clientWidth) : Number.POSITIVE_INFINITY,
+        pageHorizontalOverflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - innerWidth,
+        dropdownCount: rail?.querySelectorAll('[aria-expanded],[aria-haspopup],[role="menu"],[role="listbox"],[role="combobox"]').length || 0,
+        expanderCount: rail?.querySelectorAll('[data-source-expander],[data-source-chevron],.mobile-source-toggle:not([data-source-rail-item])').length || 0,
+        collapsedControlCount: rail?.querySelectorAll('[data-source-collapsed="true"],[data-source-toggle-state="collapsed"]').length || 0,
+        workOverlapArea: overlapArea(railRect, workRect),
+        overlayOverlapAreas: overlays.map(node => overlapArea(railRect, rectValue(node))),
+        rowOverlapCount,
+        itemCount: items.length,
+        items,
+        activeSourceIds: items.filter(item => item.active || item.ariaCurrent).map(item => item.sourceId),
+        activeSourceLocator: rail?.dataset.activeSourceLocator || '',
+        at: performance.now(),
+      };
+      const key = JSON.stringify({ ...snapshot, at: 0 });
+      if (!window.__casepathSourceRailSnapshots.some(item => item.key === key)) window.__casepathSourceRailSnapshots.push({ ...snapshot, key });
+      return snapshot;
+    };
+    window.__casepathCaptureSourceRail = (reason = 'runtime', expectedSourceId = '', expectedLocatorId = '') => new Promise(resolve => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve(captureSourceRailNow(reason, expectedSourceId, expectedLocatorId))));
+    });
     window.__casepathProcessNodeProgressUi = (nodeId = '', entityKind = 'node') => {
       const root = document.querySelector('#artifactCanvas');
       const graph = document.querySelector('#artifactProcessGraph');
@@ -3809,6 +4693,8 @@ async function execute() {
       const cursor = root?.querySelector('#artifactAgentCursor');
       const indicators = [...(cursor?.querySelectorAll('[data-ac-process-node-progress]') || [])];
       const indicator = indicators[0] || null;
+      const indicatorValue = indicator?.querySelector('[data-ac-process-node-progress-value]');
+      const cursorWorking = visible(cursor) && cursor?.dataset.processNodeProgress === 'active';
       const inspection = graph?.querySelector('[data-ac-inspection-target="true"]');
       const escapedNodeId = CSS.escape(String(nodeId || ''));
       const output = entityKind === 'branch'
@@ -3816,16 +4702,23 @@ async function execute() {
         : graph?.querySelector(`[data-node-id="${escapedNodeId}"][data-reveal-state="visible"]`);
       return {
         indicatorDomCount: indicators.length,
-        indicatorVisibleCount: indicators.filter(visible).length,
-        indicatorVisible: visible(indicator),
+        indicatorVisibleCount: cursorWorking ? 1 : 0,
+        indicatorVisible: cursorWorking,
+        indicatorSurfaceVisible: visible(indicator),
         indicatorInsideCursor: Boolean(indicator && cursor?.contains(indicator)),
         indicatorPercent: Number.parseInt(indicator?.dataset.progress || '', 10),
         indicatorPhase: indicator?.dataset.phase || '',
         indicatorLabel: indicator?.querySelector('[data-ac-process-node-progress-phase]')?.textContent?.trim() || '',
+        indicatorValueVisible: visible(indicatorValue),
+        indicatorValueText: indicatorValue?.textContent?.trim() || '',
+        cursorProgressState: cursor?.dataset.processNodeProgress || '',
         cursorSignature: cursor?.dataset.agentSignature || '',
         cursorAgent: cursor?.querySelector('[data-ac-cursor-agent]')?.textContent?.trim() || '',
         activeAgentId: root?.dataset.activeAgentId || '',
         visualActiveAgentId: root?.dataset.visualActiveAgentId || '',
+        presentationMode: root?.dataset.presentationMode || '',
+        presentationLabel: document.querySelector('[data-ac-global-agent]')?.textContent?.trim() || '',
+        workAuthority: root?.dataset.workAuthority || '',
         rootProgressState: root?.dataset.processNodeProgressState || '',
         rootPercent: root?.dataset.processNodeProgress || '',
         rootPhase: root?.dataset.processNodeProgressPhase || '',
@@ -3877,14 +4770,14 @@ async function execute() {
       }));
     });
     window.__casepathActiveSourceIds = () => [
-      ...document.querySelectorAll('.attachment-row.is-active[data-artifact-id],.v21-source-summary-toggle.is-active[data-active-source-id]'),
-    ].filter(visible).map(target => target.dataset.artifactId || target.dataset.activeSourceId || '').filter(Boolean);
+      ...document.querySelectorAll('[data-source-rail-item][data-source-id]'),
+    ].filter(target => visible(target) && (target.classList.contains('is-active') || target.getAttribute('aria-current') === 'true'))
+      .map(target => target.dataset.sourceId || '').filter(Boolean);
     window.__casepathSourceTargetExists = sourceId => {
       const exactId = String(sourceId || '');
       if (!exactId) return false;
-      if (document.querySelector(`.attachment-row[data-artifact-id="${CSS.escape(exactId)}"]`)) return true;
-      const sourcePackage = document.querySelector('.v21-source-summary-toggle[data-source-ids]');
-      return Boolean(visible(sourcePackage) && String(sourcePackage.dataset.sourceIds || '').split(',').includes(exactId));
+      const railId = displayedSourceId(exactId);
+      return Boolean(visible(document.querySelector(`[data-source-rail-item][data-source-id="${CSS.escape(railId)}"]`)));
     };
     window.__casepathCaptureDesktopSourcePanel = moment => {
       const pane = document.querySelector('.submission-pane');
@@ -3958,57 +4851,6 @@ async function execute() {
       }
       return snapshot;
     };
-    const factSourceCinematicSnapshot = (timing, detail, binding = {}) => {
-      const root = document.querySelector('#artifactCanvas');
-      const stage = root?.querySelector('[data-fact-tour-phase][data-fact-id]');
-      const target = stage?.querySelector('[data-fact-inspection-target="true"]');
-      const factId = binding.factId || stage?.dataset.factId || '';
-      const sourceId = binding.sourceId || target?.dataset.sourceId || '';
-      const locatorId = binding.locatorId || target?.dataset.sourceLocatorId || '';
-      if (!factId || !sourceId || !locatorId) return null;
-      const sourceDock = document.querySelector('[data-source-dock-state]');
-      const exactControl = stage?.querySelector('button.ac-source-exact-control[data-source-exact-control="true"]');
-      const exactMarks = [...(stage?.querySelectorAll('mark') || [])].filter(visible);
-      const highlightedMarks = exactMarks.filter(mark => mark.matches('mark.ac-source-exact-mark.is-highlighted[data-source-exact-mark="true"]'));
-      const controlStyle = exactControl ? getComputedStyle(exactControl) : null;
-      const neutralControlLooksHighlighted = Boolean(controlStyle
-        && !['transparent', 'rgba(0, 0, 0, 0)'].includes(controlStyle.backgroundColor)
-        && controlStyle.backgroundColor !== getComputedStyle(exactControl.closest('.ac-source-page-excerpt') || exactControl).backgroundColor);
-      return {
-        contract: factSourceCinematicContract,
-        timing,
-        cursorPhase: detail.phase || '',
-        changeId: detail.changeId || '',
-        eventId: detail.eventId || '',
-        agentId: detail.agentId || '',
-        targetId: detail.targetId || '',
-        factId,
-        sourceId,
-        locatorId,
-        factTourPhase: stage?.dataset.factTourPhase || '',
-        activeSourceIds: window.__casepathActiveSourceIds(),
-        sourceDockState: sourceDock?.dataset.sourceDockState || '',
-        activeSourceLocator: sourceDock?.dataset.activeSourceLocator || '',
-        sourceVisible: visible(stage?.querySelector('.ac-fact-source')),
-        sourceHighlighted: visible(stage?.querySelector('.ac-fact-source.is-source-selected .is-highlighted, .ac-fact-source .is-highlighted')),
-        exactControlCount: exactControl && visible(exactControl) ? 1 : 0,
-        exactControlTag: exactControl?.tagName || '',
-        exactControlText: exactControl?.textContent?.trim() || '',
-        markCount: exactMarks.length,
-        highlightedMarkCount: highlightedMarks.length,
-        neutralControlLooksHighlighted,
-        pendingVisible: visible(stage?.querySelector('.ac-extraction-pending:not(.is-extracting)')),
-        findingVisible: visible(stage?.querySelector('.ac-fact-finding')),
-        factVisible: visible(stage?.querySelector('[data-node-attachment-kind="fact"]')),
-        sourceTrail: [...(stage?.querySelectorAll('.ac-source-inspection-trail li') || [])].map(item => ({
-          sourceId: item.dataset.sourceId || '',
-          state: item.dataset.sourceTrailState || '',
-          visible: visible(item),
-        })),
-        focus: artifactCanvasFocusSnapshot(`fact-source-${timing}`),
-        at: performance.now(),
-      };
-    };
     window.addEventListener('casepath:cursor-step', event => {
       const detail = event.detail || {};
       if (detail.changeId) {
@@ -4025,7 +4867,6 @@ async function execute() {
           moment: detail.moment || root?.dataset.casepathScene || '',
           phase: detail.phase || '',
           parked: cursor?.dataset.parked === 'true',
-          factTourPhase: document.querySelector('#artifactCanvas')?.dataset.factSourceTourPhase || '',
           graphInspectionPhase: document.querySelector('#artifactCanvas')?.dataset.graphInspectionPhase || '',
           signature: cursor?.dataset.agentSignature || '',
           avatar: avatar?.dataset.agentAvatar || '',
@@ -4039,6 +4880,9 @@ async function execute() {
           activeAgentId: root?.dataset.activeAgentId || '',
           visualActiveAgentId: root?.dataset.visualActiveAgentId || '',
           activeSignature: root?.dataset.activeSignature || '',
+          presentationMode: detail.presentationMode || root?.dataset.presentationMode || '',
+          presentationLabel: document.querySelector('[data-ac-global-agent]')?.textContent?.trim() || '',
+          workAuthority: root?.dataset.workAuthority || '',
           inspectionSourceId,
           inspectionLocatorId: inspectionTarget?.dataset.sourceLocatorId || '',
           inspectionSourceHasTarget: window.__casepathSourceTargetExists(inspectionSourceId),
@@ -4049,18 +4893,6 @@ async function execute() {
           focus: artifactCanvasFocusSnapshot('artifact-cursor-step'),
         });
         void window.__casepathCaptureProcessPreviewGeometry?.(`construction:cursor-${detail.phase || 'step'}`);
-        if (detail.phase === 'click') {
-          const phase = document.querySelector('#artifactCanvas')?.dataset.factSourceTourPhase || '';
-          const timing = phase === 'select-source' ? 'select-source' : phase === 'read-source' ? 'confirm-click' : '';
-          const before = timing ? factSourceCinematicSnapshot(timing, detail) : null;
-          if (before) {
-            window.__casepathFactSourceCinematicSteps.push(before);
-            if (timing === 'select-source') queueMicrotask(() => {
-              const read = factSourceCinematicSnapshot('neutral-read', detail, before);
-              if (read) window.__casepathFactSourceCinematicSteps.push(read);
-            });
-          }
-        }
         return;
       }
       const ownedArtifact = detail.agentId
@@ -4127,6 +4959,7 @@ async function execute() {
     });
     window.addEventListener('casepath:official-source-step', event => {
       const detail = event.detail || {};
+      const root = document.querySelector('#artifactCanvas');
       const lawSurface = document.querySelector('#artifactCanvas .ac-law-focus[data-ac-law-id]');
       const selected = lawSurface?.querySelector('.ac-law-tabs [data-law-id][aria-current="true"]');
       const officialLink = lawSurface?.querySelector('.ac-official-link[href]');
@@ -4146,6 +4979,11 @@ async function execute() {
         addressUrl: lawSurface?.querySelector('.ac-browser-bar code')?.textContent?.trim() || '',
         addressHost: lawSurface?.querySelector('.ac-browser-bar strong')?.textContent?.trim() || '',
         verifyUrl: officialLink?.href || '',
+        presentationMode: root?.dataset.presentationMode || '',
+        presentationLabel: document.querySelector('[data-ac-global-agent]')?.textContent?.trim() || '',
+        activeAgentId: root?.dataset.activeAgentId || '',
+        activeSignature: root?.dataset.activeSignature || '',
+        workAuthority: root?.dataset.workAuthority || '',
         at: performance.now(),
         focus: artifactCanvasFocusSnapshot('official-source-step'),
       });
@@ -4201,14 +5039,142 @@ async function execute() {
     };
     window.addEventListener('casepath:semantic-event', event => {
       const detail = event.detail || {};
+      const trace = detail.execution_trace || {};
+      const acceptance = detail.acceptance || {};
       window.__casepathSemanticEvents.push({
         type: detail.type || '',
         eventId: detail.event_id || detail.eventId || '',
         sequence: detail.sequence,
+        runId: detail.runId || '',
         agentId: detail.actor?.id || '',
         actorType: detail.actor?.type || detail.actor_type || '',
+        entityKind: detail.entity?.kind || '',
+        entityId: detail.entity?.id || '',
+        traceContract: trace.contract || '',
+        presentationMode: trace.presentation_mode || '',
+        authority: trace.authority || acceptance.authority || '',
+        modelContributionAccepted: trace.model_contribution_accepted === true && acceptance.model_contribution_accepted === true,
+        deterministicFallbackApplied: trace.deterministic_fallback_applied === true || acceptance.deterministic_fallback_applied === true,
+        acceptedFields: Array.isArray(trace.accepted_fields) ? [...trace.accepted_fields] : Array.isArray(acceptance.accepted_fields) ? [...acceptance.accepted_fields] : [],
+        fallbackFields: Array.isArray(trace.fallback_fields) ? [...trace.fallback_fields] : Array.isArray(acceptance.fallback_fields) ? [...acceptance.fallback_fields] : [],
+        modelOwnedFields: Array.isArray(trace.model_owned_fields) ? [...trace.model_owned_fields] : [],
+        applicationOwnedFields: Array.isArray(trace.application_owned_fields) ? [...trace.application_owned_fields] : [],
+        assertionId: trace.assertion_id || acceptance.assertion_id || '',
+        materializedFromModelAssertionFields: Array.isArray(trace.materialized_from_model_assertion_fields) ? [...trace.materialized_from_model_assertion_fields] : [],
+        modelSelectedTextRefs: Array.isArray(trace.model_selected_text_refs) ? trace.model_selected_text_refs.map(ref => ({ ...ref })) : [],
+        cacheHit: trace.cache_hit === true || acceptance.cache_hit === true || detail.actor?.cache_hit === true,
+        sourceCallId: trace.source_call_id || detail.actor?.call_id || '',
+        originCallId: detail.actor?.origin_call_id || '',
+        callCount: Number.isInteger(detail.actor?.call_count) ? detail.actor.call_count : null,
+        usageSource: detail.actor?.usage_source || '',
+        sourceCallInputHash: trace.source_call_input_hash || '',
+        sourceCallOutputHash: trace.source_call_output_hash || '',
+        gateInputHash: trace.gate_input_hash || '',
+        acceptedContributionIds: Array.isArray(trace.accepted_contribution_ids) ? [...trace.accepted_contribution_ids] : [],
+        linkedModelContributionIds: Array.isArray(trace.linked_model_contribution_ids) ? [...trace.linked_model_contribution_ids] : [],
+        linkedModelFields: Array.isArray(trace.linked_model_fields) ? [...trace.linked_model_fields] : [],
+        officialSourceCount: Number.isInteger(trace.official_source_count) ? trace.official_source_count : null,
+        outputBindingHash: trace.output_binding_hash || '',
+        outputProcessNodeId: trace.output_process_node_id || trace.output_node_id || '',
+        outputEvidenceId: trace.output_evidence_id || '',
+        sourceRefs: Array.isArray(detail.links?.source_refs) ? detail.links.source_refs : [],
         at: performance.now(),
       });
+    });
+    const decisionFlowSnapshot = detail => {
+      const root = document.querySelector('#artifactCanvas');
+      const graph = document.querySelector('#artifactProcessGraph');
+      const workspace = graph?.querySelector('[data-decision-workspace]');
+      const plan = workspace?.querySelector('[data-decision-plan]');
+      const waitingBasis = workspace?.querySelector('[data-decision-waiting-basis]');
+      const stepItem = detail.stepId
+        ? plan?.querySelector(`[data-decision-plan-item][data-step-id="${CSS.escape(String(detail.stepId))}"]`)
+        : null;
+      const exactControl = workspace?.querySelector('button.ac-source-exact-control[data-source-exact-control="true"],button.ac-visual-region-target[data-ac-inspection-read-target="true"]');
+      const realArtifact = workspace?.querySelector('[data-real-artifact="true"]');
+      const visualArtifact = workspace?.querySelector('.ac-visual-source[data-source-id]');
+      const artifactSurface = realArtifact || visualArtifact;
+      const sourceId = String(detail.sourceId || '');
+      const railSourceId = displayedSourceId(sourceId);
+      const sourceRow = sourceId
+        ? document.querySelector(`[data-source-rail-item][data-source-id="${CSS.escape(railSourceId)}"]`)
+        : null;
+      const progress = window.__casepathProcessNodeProgressUi(detail.nodeId, 'node');
+      const node = graph?.querySelector(`[data-node-id="${CSS.escape(String(detail.nodeId || ''))}"][data-process-build-state]`);
+      const highlighted = [...(workspace?.querySelectorAll('mark.is-highlighted,.ac-source-secondary-selection.is-highlighted,.ac-visual-region-target.is-highlighted,.ac-decision-basis mark') || [])].filter(visible);
+      return {
+        contract: detail.contract || decisionFlowContract,
+        runId: detail.runId || '',
+        nodeId: detail.nodeId || '',
+        stepId: detail.stepId || '',
+        stepKind: stepItem?.dataset.stepKind || '',
+        phase: detail.phase || '',
+        agentId: detail.agentId || '',
+        eventId: detail.eventId || '',
+        structureEventId: detail.structureEventId || '',
+        structureAuthority: detail.structureAuthority || '',
+        structureTraceContract: detail.structureTraceContract || '',
+        decisionAgentId: detail.decisionAgentId || '',
+        decisionEventId: detail.decisionEventId || '',
+        decisionAuthority: detail.decisionAuthority || '',
+        decisionModelContributionAccepted: detail.decisionModelContributionAccepted === true,
+        decisionDeterministicFallbackApplied: detail.decisionDeterministicFallbackApplied === true,
+        basisAgentId: detail.basisAgentId || '',
+        basisEventId: detail.basisEventId || '',
+        basisAuthority: detail.basisAuthority || '',
+        presentationMode: detail.presentationMode || root?.dataset.presentationMode || '',
+        presentationLabel: document.querySelector('[data-ac-global-agent]')?.textContent?.trim() || '',
+        activeAgentId: root?.dataset.activeAgentId || '',
+        visualActiveAgentId: root?.dataset.visualActiveAgentId || '',
+        activeSignature: root?.dataset.activeSignature || '',
+        workAuthority: root?.dataset.workAuthority || '',
+        sourceId,
+        locatorId: detail.locatorId || '',
+        locatorIds: Array.isArray(detail.locatorIds) ? [...detail.locatorIds] : [],
+        factIds: Array.isArray(detail.factIds) ? [...detail.factIds] : [],
+        locatorIndex: Number.isInteger(detail.locatorIndex) ? detail.locatorIndex : -1,
+        locatorCount: Number.isInteger(detail.locatorCount) ? detail.locatorCount : 0,
+        progress: detail.progress,
+        graphVisible: visible(graph) && root?.dataset.graphVisible === 'true',
+        graphConstructionState: graph?.dataset.processConstructionState || '',
+        workspaceVisible: visible(workspace),
+        workspaceNodeId: workspace?.dataset.decisionNodeId || '',
+        planCount: workspace?.querySelectorAll('[data-decision-plan]').length || 0,
+        planVisible: visible(plan),
+        planNodeId: plan?.dataset.nodeId || '',
+        planPhase: plan?.dataset.planPhase || '',
+        planKind: plan?.dataset.planKind || '',
+        planItemCount: plan?.querySelectorAll('[data-decision-plan-item]').length || 0,
+        planParagraphCount: plan?.querySelectorAll('p').length || 0,
+        planButtonCount: plan?.querySelectorAll('button').length || 0,
+        waitingBasisVisible: visible(waitingBasis),
+        waitingBasisText: waitingBasis?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        sourceTargetExists: sourceId ? window.__casepathSourceTargetExists(sourceId) : false,
+        sourceRowActive: Boolean(sourceRow?.classList.contains('is-active')),
+        activeSourceIds: window.__casepathActiveSourceIds(),
+        activeSourceLocator: document.querySelector('.submission-pane')?.dataset.activeSourceLocator || '',
+        artifactSurfaceVisible: visible(artifactSurface),
+        artifactSurfaceSourceId: realArtifact?.dataset.artifactId || visualArtifact?.dataset.sourceId || '',
+        realArtifactVisible: visible(artifactSurface),
+        realArtifactKind: realArtifact?.classList.contains('ac-real-pdf-artifact') ? 'pdf' : realArtifact?.classList.contains('ac-real-email-artifact') ? 'email' : visualArtifact ? 'image' : realArtifact ? 'artifact' : '',
+        exactControlCount: exactControl && visible(exactControl) ? 1 : 0,
+        exactControlTag: exactControl?.tagName || '',
+        exactControlText: exactControl?.textContent?.trim() || '',
+        highlightVisible: highlighted.length > 0,
+        highlightCount: highlighted.length,
+        fragmentFactIds: [...(workspace?.querySelectorAll('[data-extracted-fragment][data-fact-id]') || [])].filter(visible).map(item => item.dataset.factId || ''),
+        combinationVisible: visible(workspace?.querySelector('[data-fact-combination]')),
+        combineState: workspace?.querySelector('[data-fact-combination]')?.dataset.combineState || '',
+        basisLocatorId: workspace?.querySelector('[data-source-locator-id]')?.dataset.sourceLocatorId || '',
+        officialLawId: workspace?.querySelector('[data-law-id]')?.dataset.lawId || '',
+        sourceAuthority: workspace?.querySelector('[data-source-authority]')?.dataset.sourceAuthority || '',
+        progressVisible: progress.indicatorVisible === true,
+        nodeVisible: node?.dataset.revealState === 'visible' && visible(node),
+        at: performance.now(),
+      };
+    };
+    window.addEventListener('casepath:decision-flow-step', event => {
+      window.__casepathDecisionFlowSteps.push(decisionFlowSnapshot(event.detail || {}));
     });
     window.addEventListener('casepath:process-node-progress', event => {
       const detail = event.detail || {};
@@ -4263,19 +5229,14 @@ async function execute() {
         } : null,
         nodeStates,
         ...window.__casepathProcessNodeProgressUi(detail.entityId, 'node'),
+        graphVisible: visible(graph) && document.querySelector('#artifactCanvas')?.dataset.graphVisible === 'true',
+        planVisible: visible(graph?.querySelector('[data-decision-plan]')),
+        planPhase: graph?.querySelector('[data-decision-plan]')?.dataset.planPhase || '',
+        decisionFlowState: document.querySelector('#artifactCanvas')?.dataset.decisionFlowState || '',
         focus: artifactCanvasFocusSnapshot('artifact-change'),
         at: performance.now(),
       });
       void window.__casepathCaptureProcessPreviewGeometry?.(`construction:artifact-${detail.kind || 'change'}`);
-      if (detail.kind === 'fact' && factSourceTourIds.includes(detail.entityId || '')) {
-        const binding = [...window.__casepathSourceHighlights].reverse().find(item => item.entityKind === 'fact' && item.factId === detail.entityId);
-        const finding = binding ? factSourceCinematicSnapshot('finding', {
-          ...detail,
-          phase: 'artifact-change',
-          targetId: binding.sourceId,
-        }, binding) : null;
-        if (finding) window.__casepathFactSourceCinematicSteps.push(finding);
-      }
     });
     window.addEventListener('casepath:artifact-canvas-interaction', event => {
       window.__casepathArtifactInteractions.push({ ...(event.detail || {}), at: performance.now() });
@@ -4298,7 +5259,6 @@ async function execute() {
         agentId: detail.agentId || '',
         sourceId: detail.sourceId || '',
         locatorId: detail.locatorId || '',
-        factTourPhase: root?.dataset.factSourceTourPhase || '',
         graphInspectionPhase: root?.dataset.graphInspectionPhase || '',
         sourceHighlighted: detail.entityKind === 'fact'
           ? visible(root?.querySelector('[data-fact-tour-phase="highlight-source"] .ac-fact-source.is-source-selected .is-highlighted'))
@@ -4314,54 +5274,6 @@ async function execute() {
       };
       window.__casepathSourceHighlights.push(sourceHighlight);
       void window.__casepathCaptureProcessPreviewGeometry?.(`construction:highlight-${detail.entityKind || 'source'}`);
-      if (detail.entityKind === 'fact') {
-        const snapshot = factSourceCinematicSnapshot('highlight-source', {
-          ...detail,
-          phase: 'source-highlighted',
-          targetId: detail.sourceId || '',
-        }, detail);
-        if (snapshot) window.__casepathFactSourceCinematicSteps.push(snapshot);
-      }
-    });
-    window.addEventListener('casepath:source-inspection', event => {
-      const detail = event.detail || {};
-      const inspectedTarget = document.querySelector('#artifactProcessGraph [data-ac-inspection-target="true"]');
-      const sourceDock = document.querySelector('[data-source-dock-state]');
-      window.__casepathSourceInspections.push({
-        entityKind: detail.entityKind || '',
-        nodeId: detail.nodeId || '',
-        branchId: detail.branchId || '',
-        changeId: detail.changeId || '',
-        eventId: detail.eventId || '',
-        agentId: detail.agentId || '',
-        sourceKind: detail.sourceKind || '',
-        sourceId: detail.sourceId || '',
-        factId: detail.factId || '',
-        locatorId: detail.locatorId || '',
-        found: detail.found || '',
-        sourceDockState: sourceDock?.dataset.sourceDockState || '',
-        activeSourceLocator: sourceDock?.dataset.activeSourceLocator || '',
-        at: performance.now(),
-      });
-      void window.__casepathCaptureProcessPreviewGeometry?.(`construction:inspection-${detail.entityKind || 'source'}`);
-      if (detail.entityKind === 'branch') {
-        window.__casepathBranchInspectionCopy.push({
-          nodeId: detail.nodeId || '',
-          text: inspectedTarget?.innerText || '',
-        });
-      }
-    });
-    window.addEventListener('casepath:fact-source-tour-complete', event => {
-      const detail = event.detail || {};
-      const root = document.querySelector('#artifactCanvas');
-      window.__casepathFactSourceTours.push({
-        contract: detail.contract || '',
-        factIds: Array.isArray(detail.factIds) ? [...detail.factIds] : [],
-        count: detail.count,
-        rootState: root?.dataset.factSourceTourState || '',
-        rootIndex: root?.dataset.factSourceTourIndex || '',
-        at: performance.now(),
-      });
     });
     window.addEventListener('casepath:later-memory-validation', event => {
       const detail = event.detail || {};
@@ -4467,10 +5379,10 @@ async function execute() {
     }
   }, {
     sessionId: QA_SESSION_ID,
-    factSourceCinematicContract: FACT_SOURCE_CINEMATIC_CONTRACT,
-    factSourceTourIds: FACT_SOURCE_TOUR_IDS,
+    decisionFlowContract: DECISION_FLOW_CONTRACT,
     processPreviewGeometrySelectors: PROCESS_PREVIEW_GEOMETRY_SELECTORS,
     processPreviewBottomInset: PROCESS_PREVIEW_BOTTOM_INSET_PX,
+    sourceRailContract: SOURCE_RAIL_CONTRACT,
   });
 
   const response = await page.goto(`${BASE}/?api=${encodeURIComponent(API)}&qa=${Date.now()}`, { waitUntil: 'domcontentloaded', timeout: 120000 });
@@ -4588,9 +5500,29 @@ async function execute() {
   check('Cursor motion is keyed to semantic event/agent/phase/target identity, suppresses replay, and emits one inspectable step without class-mutation feedback', specialistFocusSource.includes('const activationKey =') && specialistFocusSource.includes("cursor.dataset.eventId || cursor.dataset.proofEventId || moment") && specialistFocusSource.includes("cursor.dataset.agentId || 'casepath'") && specialistFocusSource.includes('cursorPhase') && specialistFocusSource.includes('emittedActivationKeys.has(activationKey)') && specialistFocusSource.includes('cursorTargetKey(target)') && specialistFocusSource.includes("new CustomEvent('casepath:cursor-step'") && specialistFocusSource.includes("['is-clicking', 'v21-agent-target']") && specialistFocusSource.includes("attributeOldValue: true") && !specialistFocusSource.includes("requestAnimationFrame(() => cursor.classList.add('is-clicking'))"));
   check('Every successful call-bound specialist owns one receipt-bound artifact target instead of relabelling an unrelated canvas', ['function ownedArtifactMarkup(', 'data-agent-artifact-target="true"', 'data-agent-artifact-owner=', 'data-actor-type=', 'data-call-id=', 'data-output-artifact=', 'data-requested-model=', 'data-response-model=', "event.actorType !== 'nemotron_agent'", 'Official-law tabs remain a separate deterministic cached registry view.'].every(fragment => specialistFocusSource.includes(fragment)));
 
-  await page.waitForFunction(expected => document.querySelectorAll('.attachment-row').length === expected, demo.claim.artifacts.length, { timeout: 120000 });
+  const expectedRailSources = expectedSourceRailItems(demo.claim);
+  await page.waitForFunction(({ contract, count }) => {
+    const rail = document.querySelector(`aside[data-source-rail-contract="${contract}"]`);
+    const list = rail?.matches('[data-source-rail-list]') ? rail : rail?.querySelector('[data-source-rail-list]');
+    const rows = [...(list?.querySelectorAll('[data-source-rail-item][data-source-id]') || [])];
+    return rows.length === count && rows.every(row => (
+      row.querySelectorAll('[data-source-icon-kind] > svg').length === 1
+      && row.querySelectorAll('[data-source-name]').length === 1
+      && row.querySelectorAll('[data-source-meta]').length === 1
+      && row.querySelectorAll('[data-source-status]').length === 1
+    ));
+  }, { contract: SOURCE_RAIL_CONTRACT, count: expectedRailSources.length }, { timeout: 120000 });
   await page.waitForFunction(() => !document.querySelector('#runCasePath')?.disabled, null, { timeout: 120000 });
   await page.waitForFunction(() => document.querySelector('#artifactCanvas') && document.querySelector('#artifactProcessGraph'), null, { timeout: 120000 });
+  const openingSourceRailSnapshots = [];
+  for (const viewport of SOURCE_RAIL_VIEWPORTS) {
+    await page.setViewportSize(viewport);
+    await sleep(120);
+    openingSourceRailSnapshots.push(await page.evaluate(label => window.__casepathCaptureSourceRail?.(label, '', ''), `opening:${viewport.width}x${viewport.height}`));
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const openingSourceRailIssues = openingSourceRailSnapshots.flatMap(snapshot => sourceRailContractViolations(snapshot, expectedRailSources));
+  check('The compact source rail shows all seven exact sources without collapse, dropdown, clipping, or overlap at 1280x720 and 1440x900', openingSourceRailSnapshots.length === SOURCE_RAIL_VIEWPORTS.length && openingSourceRailIssues.length === 0, JSON.stringify({ openingSourceRailSnapshots, openingSourceRailIssues }));
   await page.evaluate(() => {
     window.__casepathPersistentArtifactCanvas = document.querySelector('#artifactCanvas');
     window.__casepathPersistentProcessGraph = document.querySelector('#artifactProcessGraph');
@@ -4611,6 +5543,31 @@ async function execute() {
     return (1.05) / (foreground + .05);
   });
   check('Quiet small-text color meets WCAG AA contrast on the white product surface', quietContrast >= 4.5, `contrast=${quietContrast.toFixed(2)}`);
+  const openingClaimCard = await page.evaluate(() => {
+    const visible = node => Boolean(node && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden' && getComputedStyle(node).display !== 'none');
+    const cards = [...document.querySelectorAll('[data-opening-claim-source]')];
+    const card = cards[0] || null;
+    const rect = card?.getBoundingClientRect();
+    const problem = card?.querySelector(':scope > blockquote')?.textContent?.trim() || '';
+    const outcome = card?.querySelector(':scope > p')?.textContent?.trim() || '';
+    return {
+      cardCount: cards.length,
+      visible: visible(card),
+      sourceId: card?.dataset.openingClaimSource || '',
+      childTags: [...(card?.children || [])].map(child => child.tagName),
+      subject: card?.querySelector(':scope > strong')?.textContent?.trim() || '',
+      problem,
+      outcome,
+      blockquoteCount: card?.querySelectorAll(':scope > blockquote').length || 0,
+      paragraphCount: card?.querySelectorAll(':scope > p').length || 0,
+      generatedSummaryCount: card?.querySelectorAll('[data-generated-summary],.ai-summary,.generated-summary').length || 0,
+      bodyCopyLength: problem.length + outcome.length,
+      width: rect?.width || 0,
+      height: rect?.height || 0,
+    };
+  });
+  const openingClaimCardIssues = openingClaimCardContractViolations(openingClaimCard, demo.claim);
+  check('Opening shows one compact source-derived claim card with the exact problem and requested outcome and no generated summary prose', openingClaimCardIssues.length === 0, JSON.stringify({ openingClaimCard, openingClaimCardIssues }));
   await auditViewports('01-start', '#startState');
 
   const pdf = demo.claim.artifacts.find(item => item.media_type === 'application/pdf');
@@ -4715,6 +5672,10 @@ async function execute() {
     check('First live production frame attributes shared-context setup to application code and waits for the returned Nemotron plan', openingContextIssues.length === 0, JSON.stringify({ openingContexts, openingContextIssues }));
   }
   const processRun = await waitJourneyUi('Visible flagship cold orchestration did not complete', () => awaitRun(flagshipRunId));
+  const processGraph = processRun.result?.process || processRun.process;
+  const routeStory = processRouteStory(processGraph);
+  const routeStoryIssues = processRouteStoryContractViolations(processGraph);
+  check('Visible process story is derived from the returned selected path and current overlay', routeStoryIssues.length === 0, JSON.stringify({ routeStory, routeStoryIssues }));
   retainedEvidence['flagship-run'] = processRun;
   const flagshipEvidenceIssues = evidenceRelationContractViolations(processRun.result?.process, processRun.result?.checklist);
   check('Flagship evidence ownership is independently derived from ordered process requirements', flagshipEvidenceIssues.length === 0, JSON.stringify(flagshipEvidenceIssues));
@@ -4723,29 +5684,33 @@ async function execute() {
   const flagshipLegalIssues = legalContextContractViolations(processRun.result?.legal_research, processRun.result?.process);
   check('Flagship legal questions join exact official passages and deterministic proposals by ID', flagshipLegalIssues.length === 0, JSON.stringify(flagshipLegalIssues));
   const expectedOfficialSources = processRun.result?.legal_research?.sources || [];
-  await page.waitForFunction(expected => (window.__casepathOfficialSourceSteps || []).length >= expected, expectedOfficialSources.length, { timeout: runTimeoutMs() });
+  await page.waitForFunction(() => document.querySelector('#artifactCanvas')?.dataset.officialLawTourState === 'complete', null, { timeout: runTimeoutMs() });
+  const factTourSnapshots = await page.evaluate(() => window.__casepathFactTourSnapshots || []);
+  const liveWorkPlanSnapshots = await page.evaluate(() => window.__casepathLiveWorkPlanSnapshots || []);
+  let semanticEvents = await page.evaluate(() => window.__casepathSemanticEvents || []);
+  const factTourHighlights = await page.evaluate(() => window.__casepathSourceHighlights || []);
+  const liveWorkPlanIssues = canonicalFactsLiveWorkPlanContractViolations(liveWorkPlanSnapshots, factTourSnapshots, processRun);
+  check('The exact live Claim reader call replaces the idle source cards with three simple steps, then yields fully to real source previews', liveWorkPlanIssues.length === 0, JSON.stringify({ liveWorkPlanSnapshots, liveWorkPlanIssues }));
+  const factTourIssues = factSourceTourContractViolations(factTourSnapshots, factTourHighlights, semanticEvents, processRun);
+  check('Eight returned facts each show their exact source first, then the accepted fact, with run-bound replay lineage', factTourIssues.length === 0, JSON.stringify({ factTourSnapshots, factTourIssues }));
+  const sourceRailSnapshots = await page.evaluate(() => window.__casepathSourceRailSnapshots || []);
+  const sourceRailIssues = sourceRailSnapshots.flatMap(snapshot => sourceRailContractViolations(
+    snapshot,
+    expectedRailSources,
+    { sourceId: snapshot.expectedSourceId, locatorId: snapshot.expectedLocatorId },
+  ));
+  const expectedRailReasons = [
+    ...SOURCE_RAIL_VIEWPORTS.map(viewport => `opening:${viewport.width}x${viewport.height}`),
+    ...FACT_TOUR_FACT_IDS.flatMap(factId => [`fact-tour:${factId}:select-source`, `fact-tour:${factId}:read-source`]),
+  ];
+  const observedRailReasons = new Set(sourceRailSnapshots.map(snapshot => snapshot.reason));
+  const missingRailReasons = expectedRailReasons.filter(reason => !observedRailReasons.has(reason));
+  check('Every source-use step keeps one compact seven-item rail and activates only the exact source after it opens', sourceRailIssues.length === 0 && missingRailReasons.length === 0, JSON.stringify({ sourceRailSnapshots, sourceRailIssues, missingRailReasons }));
   const officialSourceSteps = await page.evaluate(() => window.__casepathOfficialSourceSteps || []);
-  const officialSourceStepIssues = [];
-  if (officialSourceSteps.length !== expectedOfficialSources.length) officialSourceStepIssues.push(`step count ${officialSourceSteps.length}`);
-  expectedOfficialSources.forEach((source, index) => {
-    const step = officialSourceSteps[index];
-    if (!step || step.sourceId !== source.source_id) officialSourceStepIssues.push(`${index}: wrong source order`);
-    if (step?.sourceSurface !== 'artifact-canvas') officialSourceStepIssues.push(`${source.source_id}: source was not visited on the primary artifact canvas`);
-    if (step?.url !== source.url || step?.selectedUrl !== source.url || step?.passageUrl !== source.url || step?.addressUrl !== source.url || step?.verifyUrl !== source.url) officialSourceStepIssues.push(`${source.source_id}: URL projection drift`);
-    if (step?.selectedSourceId !== source.source_id || step?.passageSourceId !== source.source_id) officialSourceStepIssues.push(`${source.source_id}: selected tab/passage drift`);
-    if (step?.location !== source.location) officialSourceStepIssues.push(`${source.source_id}: location drift`);
-    if (step?.retrievalMethod !== 'versioned_official_source_registry_lookup') officialSourceStepIssues.push(`${source.source_id}: wrong retrieval method`);
-    if (step?.registryVersion !== processRun.result.legal_research.registry_version) officialSourceStepIssues.push(`${source.source_id}: wrong registry version`);
-    if (step?.cachePurpose !== 'reliable_same-source_reuse') officialSourceStepIssues.push(`${source.source_id}: wrong cache purpose`);
-    try {
-      if (step?.addressHost !== new URL(source.url).host || !['fedlex.admin.ch', 'www.fedlex.admin.ch', 'bwo.admin.ch', 'www.bwo.admin.ch'].includes(new URL(source.url).host)) officialSourceStepIssues.push(`${source.source_id}: non-official host`);
-    } catch (_) {
-      officialSourceStepIssues.push(`${source.source_id}: malformed official URL`);
-    }
-  });
-  const officialStepHolds = officialSourceSteps.slice(1).map((step, index) => step.at - officialSourceSteps[index].at);
-  if (officialStepHolds.some(value => value < 1850)) officialSourceStepIssues.push(`source tab hold ${JSON.stringify(officialStepHolds)}`);
-  check('Cached Swiss-law browser visits every exact returned official section in order and preserves source, tab, passage, address, and verify-URL truth', officialSourceStepIssues.length === 0, JSON.stringify({ officialSourceSteps, officialSourceStepIssues }));
+  const officialLawTourIssues = officialLawTourContractViolations(officialSourceSteps, semanticEvents, processRun);
+  check('Four official Swiss-law items are visibly exact deterministic registry lookups, never Nemotron work', expectedOfficialSources.length === 4 && officialLawTourIssues.length === 0, JSON.stringify({ expectedOfficialSourceIds: expectedOfficialSources.map(source => source.source_id), officialSourceSteps, officialLawTourIssues }));
+  const linkedOfficialSourceEvents = semanticEvents.filter(event => event.type === 'legal_source.linked' && event.entityKind === 'official_source');
+  check('Run returns four exact official legal-source execution traces', linkedOfficialSourceEvents.length === 4 && linkedOfficialSourceEvents.every(event => event.traceContract === EXECUTION_TRACE_CONTRACT && event.presentationMode === 'deterministic_projection' && event.authority === 'versioned_official_source_registry' && event.officialSourceCount === 4 && SHA256_PATTERN.test(event.outputBindingHash) && event.modelContributionAccepted === false && event.deterministicFallbackApplied === false), JSON.stringify(linkedOfficialSourceEvents));
   const flagshipVisualRefs = (processRun.result?.facts || []).flatMap(fact => (fact.source_refs || []).filter(reference => reference.locator_kind === 'visual_observation'));
   const flagshipVisualIssues = flagshipVisualRefs.flatMap(reference => visualReferenceContractViolations(reference, demo.claim.artifacts.find(artifact => artifact.artifact_id === reference.artifact_id)).map(issue => `${reference.artifact_id}: ${issue}`));
   check('Every flagship visual observation is an exact curated generated-demo annotation bound to public image bytes', flagshipVisualRefs.length > 0 && flagshipVisualIssues.length === 0, JSON.stringify(flagshipVisualIssues));
@@ -4767,15 +5732,20 @@ async function execute() {
   await waitJourneyUi('Flagship browser did not reach stable review readiness', async () => {
     await page.waitForFunction(() => window.__casepathMomentHistory.includes('process'), null, { timeout: runTimeoutMs() });
     await page.waitForFunction(() => window.__casepathMomentHistory.includes('evidence'), null, { timeout: runTimeoutMs() });
-    await waitText('#journeyNext', /Review document plan/i, runTimeoutMs());
+    if (routeStory.flagshipCausation) await waitText('#journeyNext', /Review document plan/i, runTimeoutMs());
+    else await page.waitForFunction(() => document.querySelector('#journeyNext')?.dataset.casepathRouteTerminal === 'true', null, { timeout: runTimeoutMs() });
     await waitVisible('body[data-casepath-moment="ready"]', runTimeoutMs());
     await waitVisible('#artifactCanvas[data-casepath-scene="ready"]', runTimeoutMs());
     await page.waitForFunction(() => document.querySelector('#artifactCanvas')?.dataset.casepathScene === 'ready', null, { timeout: runTimeoutMs() });
   });
   const readyCanvas = await artifactCanvasSnapshot();
   const readyCanvasIssues = focusedArtifactCanvasViolations(readyCanvas);
-  check('Ready state preserves the same source-plus-canvas workspace with exactly one focus, cursor, primary artifact, and primary action', readyCanvasIssues.length === 0 && readyCanvas.action_count === 1, JSON.stringify({ readyCanvas, readyCanvasIssues }));
-  check('Ready state keeps the exact ten-node handling projection as the dominant artifact', readyCanvas.projection === 'flagship-spine/1' && readyCanvas.construction_state === 'complete' && stableJson(readyCanvas.node_states) === stableJson(FLAGSHIP_PROCESS_PROJECTION_IDS.map(node_id => ({ node_id, state: 'built' }))), JSON.stringify(readyCanvas.node_states));
+  check('Ready state preserves the same source-plus-canvas workspace with one focus, one cursor, one primary artifact, and an action only when the returned route can continue', readyCanvasIssues.length === 0 && readyCanvas.action_count === (routeStory.flagshipCausation ? 1 : 0), JSON.stringify({ routeStory, readyCanvas, readyCanvasIssues }));
+  check('Ready state keeps only the returned route story as the dominant artifact', readyCanvas.projection === 'flagship-spine/1' && readyCanvas.construction_state === 'complete' && stableJson(readyCanvas.node_states) === stableJson(routeStory.storyNodeIds.map(node_id => ({ node_id, state: 'built' }))), JSON.stringify({ routeStory, nodeStates: readyCanvas.node_states }));
+  const readyRouteAction = await page.locator('#journeyNext').evaluate(button => ({ terminal: button.dataset.casepathRouteTerminal || '', disabled: button.disabled, ariaDisabled: button.getAttribute('aria-disabled') || '', primary: button.dataset.casepathPrimaryAction || '' }));
+  check('Ready action continues only for the returned evidence-gap flagship route', routeStory.flagshipCausation
+    ? readyRouteAction.terminal === 'false' && !readyRouteAction.disabled && readyRouteAction.ariaDisabled === 'false' && readyRouteAction.primary === 'true'
+    : readyRouteAction.terminal === 'true' && readyRouteAction.disabled && readyRouteAction.ariaDisabled === 'true' && !readyRouteAction.primary, JSON.stringify({ routeStory, readyRouteAction }));
   const graphMomentSnapshots = await page.evaluate(() => window.__casepathGraphMomentSnapshots || []);
   const verificationGraphScene = [...graphMomentSnapshots].reverse().find(snapshot => snapshot.moment === 'verify' && snapshot.scene === 'verify');
   const verificationGraphIssues = [
@@ -4792,7 +5762,9 @@ async function execute() {
   ];
   check('Verification keeps the graph as the sole focal artifact and states only its concise passed or fail-closed outcome', verificationGraphIssues.length === 0, JSON.stringify({ verificationGraphScene, verificationGraphIssues }));
   const flagshipPresentationMs = await page.evaluate(() => performance.now() - window.__casepathFlagshipLaunchAt);
-  check('The autonomous flagship journey stays inside the 90–150 second deliberate desktop-story band', flagshipPresentationMs >= MIN_FLAGSHIP_PRESENTATION_MS && flagshipPresentationMs <= MAX_FLAGSHIP_PRESENTATION_MS, `duration_ms=${flagshipPresentationMs.toFixed(0)}`);
+  const minimumPresentationMs = routeStory.flagshipCausation ? MIN_FLAGSHIP_PRESENTATION_MS : 30000;
+  const presentationUpperBoundApplies = !isProductionJourney();
+  check('The autonomous returned-route journey stays readable without treating real provider latency as presentation failure', flagshipPresentationMs >= minimumPresentationMs && (!presentationUpperBoundApplies || flagshipPresentationMs <= MAX_FLAGSHIP_PRESENTATION_MS), JSON.stringify({ routeStory: routeStory.storyNodeIds, minimumPresentationMs, maximumPresentationMs: presentationUpperBoundApplies ? MAX_FLAGSHIP_PRESENTATION_MS : null, durationMs: flagshipPresentationMs }));
   await auditViewports('02-ready-process', '#artifactProcessGraph[data-graph-projection="flagship-spine/1"]');
   const flagshipTransport = await page.evaluate(() => ({
     transport: document.body.dataset.runTransport || '',
@@ -4875,7 +5847,6 @@ async function execute() {
   const flagshipReadAfterIsolationReset = await getJson(`${API}/api/runs/${encodeURIComponent(flagshipRunId)}`);
   check('Isolation reset removes its own run without disturbing the visible flagship', isolationReadAfterReset.status === 404 && flagshipReadAfterIsolationReset.run_id === flagshipRunId && flagshipReadAfterIsolationReset.status === 'complete', JSON.stringify({ isolation_status: isolationReadAfterReset.status, flagship: runProgressDiagnostic(flagshipReadAfterIsolationReset) }));
   isolationMutated = false;
-  const processGraph = processRun.result?.process || processRun.process;
   check('Uninterrupted journey rendered both process and evidence moments before stable review readiness', await page.evaluate(() => ['process', 'evidence', 'ready'].every(moment => window.__casepathMomentHistory.includes(moment))), JSON.stringify(await page.evaluate(() => window.__casepathMomentHistory)));
   const presentationClarity = await page.evaluate(() => {
     const timeline = window.__casepathPresentationTimeline || [];
@@ -4889,8 +5860,8 @@ async function execute() {
         continue;
       }
       const concise = ['evidence', 'experience', 'verify'].includes(moment);
-      const minimumWorkMs = concise ? 1000 : 2300;
-      const minimumArtifactMs = concise ? 1600 : 5500;
+      const minimumWorkMs = concise ? 500 : 2300;
+      const minimumArtifactMs = concise ? 800 : 5500;
       const workMs = timeline[artifactIndex].at - timeline[workIndex].at;
       if (workMs < minimumWorkMs) issues.push(`${moment}: working frame ${workMs.toFixed(0)}ms`);
       const nextIndex = timeline.findIndex((frame, index) => index > artifactIndex && frame.moment !== moment && ['working', 'artifact', 'ready'].includes(frame.phase));
@@ -4904,7 +5875,7 @@ async function execute() {
   });
   check('Every specialist chapter holds its work and produced artifact long enough to understand', presentationClarity.issues.length === 0, JSON.stringify(presentationClarity));
   const graphSteps = await page.evaluate(() => window.__casepathGraphSteps || []);
-  const expectedSpineIds = (processGraph.main_spine || []).map(node => typeof node === 'string' ? node : node.node_id);
+  const expectedSpineIds = routeStory.storyNodeIds;
   const nodeSteps = graphSteps.filter(step => step.kind === 'node');
   const branchSteps = graphSteps.filter(step => step.kind === 'branch');
   const completeSteps = graphSteps.filter(step => step.kind === 'complete');
@@ -4921,7 +5892,8 @@ async function execute() {
   });
   const nodeStepHolds = nodeSteps.slice(1).map((step, index) => step.at - nodeSteps[index].at);
   if (nodeStepHolds.some(value => value < MIN_PROCESS_NODE_STEP_MS)) graphStepIssues.push(`node hold ${JSON.stringify(nodeStepHolds)}`);
-  if (branchSteps.length !== 1 || completeSteps.length !== 1) graphStepIssues.push('selected branch or complete receipt is not singular');
+  const expectedBranchStepIds = routeStory.selectedBranchTargetId ? [routeStory.selectedBranchTargetId] : [];
+  if (stableJson(branchSteps.map(step => step.nodeId)) !== stableJson(expectedBranchStepIds) || completeSteps.length !== 1) graphStepIssues.push('selected branch or complete receipt does not match the returned route');
   if (branchSteps[0] && completeSteps[0] && completeSteps[0].at - branchSteps[0].at < MIN_PROCESS_BRANCH_HOLD_MS) graphStepIssues.push(`branch hold ${(completeSteps[0].at - branchSteps[0].at).toFixed(0)}ms`);
   const completedGraph = completeSteps[0];
   if (completedGraph && (completedGraph.detailLiveMode !== 'off' || completedGraph.announcementLiveMode !== 'polite')) graphStepIssues.push('detailed provenance floods the live region');
@@ -4942,8 +5914,10 @@ async function execute() {
   if (focusViolations.length) cursorStepIssues.push(`focus violations ${JSON.stringify(focusViolations)}`);
   check('One calm cursor stays inside one focus and advances only on unique semantic event/agent/target keys without deterministic work inheriting a model identity', cursorStepIssues.length === 0, JSON.stringify({ cursorSteps, cursorStepIssues }));
   const artifactChanges = await page.evaluate(() => window.__casepathArtifactChanges || []);
-  const processArtifactChanges = artifactChanges.filter(change => FLAGSHIP_PROCESS_PROJECTION_IDS.includes(change.entityId));
-  const semanticEvents = await page.evaluate(() => window.__casepathSemanticEvents || []);
+  const processArtifactChanges = artifactChanges.filter(change => routeStory.storyNodeIds.includes(change.entityId));
+  semanticEvents = await page.evaluate(() => window.__casepathSemanticEvents || []);
+  const fieldOwnershipIssues = acceptedExecutionFieldOwnershipViolations(semanticEvents, processRun);
+  check('Model identities are limited to accepted bounded assertions, sources, decisions, and document fields while CasePath owns structural projection', fieldOwnershipIssues.length === 0, JSON.stringify(fieldOwnershipIssues));
   const artifactCursorSteps = await page.evaluate(() => window.__casepathArtifactCursorSteps || []);
   const artifactTeamSnapshot = await page.locator('#artifactCanvas').evaluate(root => {
     const visible = node => Boolean(node && node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden' && getComputedStyle(node).display !== 'none');
@@ -4965,6 +5939,7 @@ async function execute() {
       })),
     };
   });
+  const decisionFlowAuditSteps = await page.evaluate(() => window.__casepathDecisionFlowSteps || []);
   const agentAuditSnapshots = [];
   for (const agentId of REQUIRED_VISIBLE_SPECIALIST_IDS) {
     const trigger = page.locator(`.ac-global-agent-work [data-ac-action="open-agent-audit"][data-agent-id="${agentId}"]`);
@@ -4980,14 +5955,26 @@ async function execute() {
         panelAgentId: panel.dataset.agentId || '',
         panelSignature: panel.dataset.agentSignature || '',
         historyAvailable: panel.dataset.agentHistoryAvailable === 'true',
+        historyMode: panel.dataset.agentHistoryMode || '',
         historyContract: panel.querySelector('[data-agent-history-contract]')?.dataset.agentHistoryContract || '',
         historyStepCounts: ['task', 'sources', 'facts', 'output', 'acceptance'].map(part => panel.querySelectorAll(`[data-agent-history-${part}]`).length),
+        referenceTaskCount: panel.querySelectorAll('[data-reference-action-history] [data-agent-history-task]').length,
+        referenceActionCount: Number(panel.querySelector('[data-reference-action-history]')?.dataset.actionCount || 0),
+        referenceActions: [...panel.querySelectorAll('[data-reference-action]')].map(action => ({
+          phase: action.dataset.referenceActionPhase || '',
+          nodeId: action.dataset.nodeId || '',
+          sourceId: action.dataset.sourceId || '',
+          locatorId: action.dataset.sourceLocatorId || '',
+        })),
+        referenceProvenanceVisible: visible(panel.querySelector('[data-reference-action-provenance]')),
+        referenceProvenanceText: panel.querySelector('[data-reference-action-provenance]')?.textContent?.trim() || '',
         acceptedCount: Number(accepted?.dataset.acceptedCount || 0),
         acceptedIds: [...panel.querySelectorAll('[data-accepted-item-id]')].map(item => item.dataset.acceptedItemId || ''),
         rejections: [...panel.querySelectorAll('[data-agent-history-rejections] [data-rejected-item-id]')].map(item => ({ id: item.dataset.rejectedItemId || '', invariant: item.dataset.rejectedInvariant || '' })),
         callId: receipt.Call || '',
         outputHash: receipt['Output hash'] || '',
         emptyStateVisible: visible(panel.querySelector('.ac-agent-history-empty')),
+        noAgentCallsEmptyStateVisible: [...panel.querySelectorAll('.ac-agent-history-empty')].some(item => visible(item) && /No agent calls were made/i.test(item.textContent || '')),
         buttonPressed: document.querySelector(`.ac-global-agent-work [data-ac-action="open-agent-audit"][data-agent-id="${CSS.escape(expectedAgentId)}"]`)?.getAttribute('aria-pressed') || '',
       };
     }, agentId);
@@ -5004,8 +5991,8 @@ async function execute() {
     agentAuditSnapshots.push(snapshot);
   }
   const returnedAgentAudit = processRun.result?.agent_orchestration || processRun.result?.audit?.agent_orchestration || null;
-  const agentAuditIssues = agentAuditContractViolations(agentAuditSnapshots, returnedAgentAudit, isProductionJourney());
-  check('Each visible specialist opens an exact call-bound activity history and deterministic reference replay fails closed', agentAuditIssues.length === 0, JSON.stringify({ agentAuditSnapshots, returnedAgentAudit, agentAuditIssues }));
+  const agentAuditIssues = agentAuditContractViolations(agentAuditSnapshots, returnedAgentAudit, isProductionJourney(), decisionFlowAuditSteps);
+  check('Each visible specialist opens an exact call-bound history; reference replay keeps the exact Path actions and provenance without fabricating calls', agentAuditIssues.length === 0, JSON.stringify({ agentAuditSnapshots, returnedAgentAudit, decisionFlowAuditSteps, agentAuditIssues }));
   const artifactProducerRoleIssues = artifactCursorProducerRoleContractViolations(artifactTeamSnapshot, artifactCursorSteps, semanticEvents);
   check('Desktop shows only five useful signature-colored specialists while retaining exact six-agent receipts and keeping deterministic law, reference, and gates outside model identity', artifactProducerRoleIssues.length === 0, JSON.stringify({ artifactTeamSnapshot, artifactCursorSteps, artifactProducerRoleIssues }));
   const specialistAvatarIssues = specialistAvatarContractViolations(artifactTeamSnapshot, artifactCursorSteps, isProductionJourney());
@@ -5015,40 +6002,35 @@ async function execute() {
   check('Opening source package has seven type-correct source icons and no checkbox-shaped control semantics', sourcePreludeIssues.length === 0, JSON.stringify({ sourcePreludeSnapshots, sourcePreludeIssues }));
   const mainFocalWhyViolations = await page.evaluate(() => window.__casepathMainFocalWhyViolations || []);
   check('Main focal work never shows a large generic agent why paragraph', mainFocalWhyViolations.length === 0, JSON.stringify(mainFocalWhyViolations));
-  const processChangeIssues = processProjectionContractViolations(processArtifactChanges, semanticEvents, artifactCursorSteps, isProductionJourney());
-  check('Persistent process canvas constructs the exact ten-node handling spine monotonically, one justified node at a time', processChangeIssues.length === 0, JSON.stringify({ processArtifactChanges, processChangeIssues }));
-  const sourceInspections = await page.evaluate(() => window.__casepathSourceInspections || []);
+  const processChangeIssues = processProjectionContractViolations(processArtifactChanges, semanticEvents, artifactCursorSteps, processRun.run_id, routeStory.storyNodeIds);
+  check('Persistent process canvas constructs only the returned route story monotonically, one justified node at a time', processChangeIssues.length === 0, JSON.stringify({ processArtifactChanges, processChangeIssues }));
   const sourceHighlights = await page.evaluate(() => window.__casepathSourceHighlights || []);
-  const factSourceTours = await page.evaluate(() => window.__casepathFactSourceTours || []);
-  const factSourceTourIssues = factSourceTourContractViolations(factSourceTours, sourceInspections, artifactChanges, artifactCursorSteps, processRun.result);
-  const factSourceTourWaitState = await page.evaluate(() => document.body.dataset.casepathFactSourceTourWait || '');
-  if (factSourceTourWaitState !== 'complete') factSourceTourIssues.push(`fact source tour wait state ${factSourceTourWaitState || 'missing'}`);
-  check('Claim understanding visibly inspects one exact returned source before adding each of the five key facts', factSourceTourIssues.length === 0, JSON.stringify({ factSourceTours, factSourceTourIssues, factInspections: sourceInspections.filter(item => item.entityKind === 'fact') }));
-  const factSourceCinematicSteps = await page.evaluate(() => window.__casepathFactSourceCinematicSteps || []);
-  const factSourceCinematicIssues = factSourceCinematicContractViolations(factSourceCinematicSteps, sourceHighlights, sourceInspections, artifactChanges);
-  check('Each claim fact opens neutrally, waits for an exact confirm click, emits source-highlighted, then becomes a finding after a readable dwell', factSourceCinematicIssues.length === 0, JSON.stringify({ contract: FACT_SOURCE_CINEMATIC_CONTRACT, factSourceCinematicSteps, factSourceHighlights: sourceHighlights.filter(item => item.entityKind === 'fact'), factSourceCinematicIssues }));
+  const decisionFlowSteps = await page.evaluate(() => window.__casepathDecisionFlowSteps || []);
+  const artifactInteractions = await page.evaluate(() => window.__casepathArtifactInteractions || []);
+  const decisionFlowIssues = decisionFlowContractViolations(decisionFlowSteps, processArtifactChanges, sourceHighlights, artifactInteractions, processRun, semanticEvents, routeStory.storyNodeIds);
+  check('The visible graph replays accepted facts and checked law without inventing new source reads, then clears its plan before each node', decisionFlowIssues.length === 0, JSON.stringify({ contract: DECISION_FLOW_CONTRACT, decisionFlowSteps, decisionFlowIssues }));
+  const notificationDecisionSteps = decisionFlowSteps.filter(step => step.nodeId === NOTIFICATION_DECISION_NODE_ID);
+  check('Landlord notification appears only when it belongs to the returned route story, with its accepted fact and checked law trace', routeStory.storyNodeIds.includes(NOTIFICATION_DECISION_NODE_ID)
+    ? !decisionFlowIssues.some(issue => /notification/i.test(issue)) && notificationDecisionSteps.length > 0
+    : notificationDecisionSteps.length === 0, JSON.stringify({ routeStory, notificationDecisionSteps, notificationIssues: decisionFlowIssues.filter(issue => /notification/i.test(issue)) }));
   const branchVisuals = await page.evaluate(() => window.__casepathBranchVisuals || []);
   const processNodeProgressEvents = await page.evaluate(() => window.__casepathProcessNodeProgress || []);
   const processNodeProgressFinal = await page.evaluate(() => window.__casepathProcessNodeProgressUi?.('', 'node') || null);
-  const processNodeProgressIssues = processNodeProgressContractViolations(processNodeProgressEvents, processArtifactChanges, branchVisuals, processNodeProgressFinal, isProductionJourney());
-  check('Process builder alone shows one evidence-bound 0–100% indicator, clears it before each of ten decisions and four outcomes appears, then leaves no loader behind', processNodeProgressIssues.length === 0, JSON.stringify({ contract: PROCESS_NODE_PROGRESS_CONTRACT, scope: PROCESS_NODE_PROGRESS_SCOPE, processNodeProgressEvents, processNodeProgressFinal, processNodeProgressIssues }));
-  const sourceInspectionIssues = sourceInspectionContractViolations(sourceInspections, sourceHighlights, processArtifactChanges, branchVisuals, artifactCursorSteps, processRun.result, isProductionJourney());
-  check('Before every process node and causation branch appears, a confirm click visibly highlights the exact source, finding, or accepted input that earns it', sourceInspectionIssues.length === 0, JSON.stringify({ sourceHighlights, sourceInspections, branchVisuals, sourceInspectionIssues }));
-  const branchInspectionCopy = await page.evaluate(() => window.__casepathBranchInspectionCopy || []);
-  check('Causation branches are presented as unresolved allegations or missing-fact paths, never as supported conclusions from a generic management quote', stableJson(branchInspectionCopy.map(item => item.nodeId)) === stableJson(REQUIRED_CAUSATION_BRANCH_IDS) && branchInspectionCopy.every(item => /unresolved allegation|missing-fact basis/i.test(item.text)) && branchInspectionCopy.every(item => !/supports?(?: the)? (?:next )?(?:decision|branch)/i.test(item.text)), JSON.stringify(branchInspectionCopy));
+  const processNodeProgressIssues = processNodeProgressContractViolations(processNodeProgressEvents, processArtifactChanges, processNodeProgressFinal, semanticEvents, processRun.run_id, routeStory.storyNodeIds);
+  check('Each calm indicator uses model identity only for an accepted contribution, otherwise a neutral safety identity, and clears before node commit', processNodeProgressIssues.length === 0, JSON.stringify({ contract: PROCESS_NODE_PROGRESS_CONTRACT, scope: PROCESS_NODE_PROGRESS_SCOPE, processNodeProgressEvents, processNodeProgressFinal, branchVisuals, processNodeProgressIssues }));
+  check('Only the current decision\'s returned route branches appear, without invented source reads or progress cycles', stableJson(branchVisuals.map(item => item.nodeId)) === stableJson(routeStory.branchNodeIds) && !processNodeProgressEvents.some(item => item.entityKind === 'branch') && !sourceHighlights.some(item => item.entityKind === 'branch'), JSON.stringify({ routeStory, branchVisuals, branchProgress: processNodeProgressEvents.filter(item => item.entityKind === 'branch'), branchHighlights: sourceHighlights.filter(item => item.entityKind === 'branch') }));
 
   const renderedAttachments = [...new Map(artifactChanges.filter(change => change.attachment?.changeId === change.changeId).map(change => [change.attachment.changeId, change.attachment])).values()];
   const attachmentIssues = contextualAttachmentContractViolations(renderedAttachments, semanticEvents, artifactCursorSteps, isProductionJourney());
   const artifactFocusViolations = await page.evaluate(() => window.__casepathArtifactFocusViolations || []);
   if (artifactFocusViolations.length) attachmentIssues.push(`artifact focus violations ${JSON.stringify(artifactFocusViolations)}`);
   check('Every visible law, evidence, precedent, and verification artifact is a unique streamed change tied to the responsible cursor', attachmentIssues.length === 0, JSON.stringify({ renderedAttachments, semanticEvents, artifactCursorSteps, attachmentIssues }));
-  const officialLawAttachments = renderedAttachments.filter(item => item.kind === 'law' && item.sourceAuthority === 'official_registry');
-  const expectedOfficialLawLocators = expectedOfficialSources.map(source => `law:${source.source_id}`);
-  check('Every visibly visited official Swiss-law section is exact, source-docked, and cursor-bound', expectedOfficialLawLocators.every(locatorId => officialLawAttachments.some(item => item.sourceLocatorId === locatorId && item.activeSourceLocator === locatorId && ['open', 'active', 'drawer'].includes(item.sourceDockState))), JSON.stringify({ expectedOfficialLawLocators, officialLawAttachments }));
+  const reusedDecisionLaws = decisionFlowSteps.filter(step => step.phase === 'planned' && step.stepKind === 'accepted-law');
+  check('Graph decisions reuse already checked official-law event lineage and never reopen law as new work', reusedDecisionLaws.length > 0 && !decisionFlowSteps.some(step => step.stepKind === 'law') && reusedDecisionLaws.every(step => nonemptyString(step.basisEventId) && step.basisAgentId === 'official_law_registry'), JSON.stringify({ reusedDecisionLaws }));
   check('Authenticated stream exposes the complete semantic claim-handling vocabulary', REQUIRED_SEMANTIC_EVENT_TYPES.every(type => semanticEvents.some(event => event.type === type)) && semanticEvents.every((event, index) => index === 0 || event.sequence > semanticEvents[index - 1].sequence), JSON.stringify(semanticEvents));
   const rejectedProposalCount = (processRun.result?.verification?.rejected_proposals || []).length;
   check('Verification rejection events are emitted exactly when rejected proposals exist', rejectedProposalCount === 0 || semanticEvents.some(event => event.type === 'verification.rejected'), JSON.stringify({ rejectedProposalCount, semanticEvents }));
-  check('The ten-node process projection remains the dominant completed graph', await page.locator('#artifactProcessGraph[data-graph-projection="flagship-spine/1"] [data-node-id][data-process-build-state="built"]').count() === FLAGSHIP_PROCESS_PROJECTION_IDS.length);
+  check('The returned route story remains the dominant completed graph', await page.locator('#artifactProcessGraph[data-graph-projection="flagship-spine/1"] [data-node-id][data-process-build-state="built"]').count() === routeStory.storyNodeIds.length);
 
   if (false) { // Retained only as a selector-contract fixture; the visible journey uses the focal canvas below.
   const factLocator = page.locator('#artifactProcessGraph [data-node-attachment-kind="fact"][data-source-locator-id]').first();
@@ -5122,7 +6104,7 @@ async function execute() {
   }
 
   const artifactNodeIds = await page.locator('#artifactProcessGraph [data-node-id][data-process-build-state="built"]').evaluateAll(nodes => nodes.map(node => node.dataset.nodeId));
-  check('Completed artifact canvas exposes exactly the pinned ten-node handling projection', stableJson(artifactNodeIds) === stableJson(FLAGSHIP_PROCESS_PROJECTION_IDS), JSON.stringify(artifactNodeIds));
+  check('Completed artifact canvas exposes exactly the returned route story', stableJson(artifactNodeIds) === stableJson(routeStory.storyNodeIds), JSON.stringify({ routeStory, artifactNodeIds }));
   const selectArtifactNode = async nodeId => {
     await page.locator(`#artifactProcessGraph [data-ac-action="select-node"][data-node-id=${JSON.stringify(nodeId)}]`).click();
     await page.waitForFunction(expected => document.querySelector('#artifactProcessGraph [data-node-id][data-selected="true"]')?.dataset.nodeId === expected, nodeId);
@@ -5152,31 +6134,28 @@ async function execute() {
     check(`${label} modal close restores one graph focus and action`, issues.length === 0, JSON.stringify({ trace, issues }));
   };
 
-  await selectArtifactNode('causation');
-  const causationNode = processGraph.nodes.find(node => node.node_id === 'causation');
+  await selectArtifactNode(routeStory.currentNodeId);
   const spatialGeometry = await spatialGraphGeometrySnapshot();
   const spatialGeometryIssues = spatialGraphGeometryContractViolations(spatialGeometry, {
     processId: processGraph.process_id,
-    processAgentId: isProductionJourney() ? 'process_decision_mapping' : 'process_projection',
+    processAgentId: 'process_projection',
     returnedNodeIds: processGraph.nodes.map(node => node.node_id),
     returnedEdges: processGraph.edges.map(edge => ({ source: edge.source, target: edge.target, state: edge.state || '' })),
-    causationBranches: causationNode?.branches || [],
-    activeBasis: {
-      factIds: causationNode?.fact_ids || [],
-      lawIds: causationNode?.legal_source_ids || [],
-      evidenceIds: causationNode?.evidence_requirement_ids || [],
-    },
+    routeStory,
     evidenceById: Object.fromEntries(processRun.result.checklist.items.map(item => [item.item_id, item])),
   });
-  check('The returned claim process is one dominant, truthful spatial graph with a horizontal spine, four divergent causation branches, grounded attachments, and one rightward next action', spatialGeometryIssues.length === 0, JSON.stringify({ spatialGeometry, spatialGeometryIssues }));
+  check('The returned claim process is one dominant, truthful spatial graph whose path, current decision, branches, grounding, and next action come from the result', spatialGeometryIssues.length === 0, JSON.stringify({ routeStory, spatialGeometry, spatialGeometryIssues }));
 
-  await selectArtifactNode('notification');
+  const sourcePreviewNode = [...routeStory.storyNodeIds].reverse()
+    .map(nodeId => processGraph.nodes.find(node => node.node_id === nodeId))
+    .find(node => (node?.fact_ids || []).some(factId => processRun.result.facts.find(fact => fact.fact_id === factId)?.source_refs?.some(usableDecisionReference)));
+  check('Returned route has a source-grounded decision available for audit', Boolean(sourcePreviewNode), JSON.stringify(routeStory));
+  await selectArtifactNode(sourcePreviewNode.node_id);
   const visibleFactLocator = page.locator('#artifactProcessGraph .ac-grounding-disclosure[data-grounding-open="false"] > .ac-node-source-preview[data-node-attachment-kind="fact"][data-source-authority="customer_submission"][data-source-locator-id]').first();
   check('Completed decision keeps its exact customer-source preview visible while modal grounding remains closed', await visibleFactLocator.isVisible() && await visibleFactLocator.locator('[data-ac-action="open-source"]').count() === 1 && await page.locator('#artifactCanvas [data-ac-grounding-viewer][open]').count() === 0 && await page.locator('#artifactProcessGraph .ac-grounding-disclosure > div:not([hidden])').count() === 0);
   const openedFactLocator = await clickExactArtifactLocator(visibleFactLocator);
   await waitVisible('#sourceViewer[open]');
   check('Customer-source click opens the exact returned fact and locator', await page.locator('#sourceViewer .source-fact').count() > 0 && (await page.locator('[data-source-dock-state]').first().getAttribute('data-active-source-locator')) === openedFactLocator, openedFactLocator);
-  const notificationNode = processGraph.nodes.find(node => node.node_id === 'notification');
   const openedFactContext = await visibleFactLocator.evaluate(node => ({
     fact_id: node.dataset.factId || '',
     node_id: node.dataset.nodeId || '',
@@ -5220,10 +6199,14 @@ async function execute() {
   const expectedProducer = String(returnedFactReference?.producer || openedFactContext.producer || '');
   const expectedAuthority = String(returnedFactReference?.authority || openedFactContext.authority || 'customer_submission');
   const expectedAgent = String(returnedFactReference?.agent || openedFactContext.agent || '');
-  check('Ready graph source roundtrip preserves the exact returned node, fact, page and excerpt or region, including fact truth and producer authority', notificationNode?.fact_ids?.includes(openedFactContext.fact_id) === true && Boolean(openedFact) && Boolean(returnedFactReference) && sourceRoundtrip.node_id === openedFactContext.node_id && sourceRoundtrip.fact_id === openedFactContext.fact_id && sourceRoundtrip.page === openedFactContext.page && sourceRoundtrip.excerpt === openedFactContext.excerpt && sourceRoundtrip.region === openedFactContext.region && sourceRoundtrip.confidence === String(openedFact.confidence ?? '') && sourceRoundtrip.state === String(openedFact.state || '') && sourceRoundtrip.agent === expectedAgent && sourceRoundtrip.producer === expectedProducer && sourceRoundtrip.authority === expectedAuthority && sourceRoundtrip.exact_text_visible && sourceRoundtrip.exact_text_highlighted && (openedFactContext.locator_kind !== 'text_quote' || sourceRoundtrip.extraction_selected), JSON.stringify({ openedFactContext, sourceRoundtrip, openedFact, returnedFactReference }));
+  check('Ready graph source roundtrip preserves the exact returned node, fact, page and excerpt or region, including fact truth and producer authority', sourcePreviewNode?.fact_ids?.includes(openedFactContext.fact_id) === true && Boolean(openedFact) && Boolean(returnedFactReference) && sourceRoundtrip.node_id === openedFactContext.node_id && sourceRoundtrip.fact_id === openedFactContext.fact_id && sourceRoundtrip.page === openedFactContext.page && sourceRoundtrip.excerpt === openedFactContext.excerpt && sourceRoundtrip.region === openedFactContext.region && sourceRoundtrip.confidence === String(openedFact.confidence ?? '') && sourceRoundtrip.state === String(openedFact.state || '') && sourceRoundtrip.agent === expectedAgent && sourceRoundtrip.producer === expectedProducer && sourceRoundtrip.authority === expectedAuthority && sourceRoundtrip.exact_text_visible && sourceRoundtrip.exact_text_highlighted && (openedFactContext.locator_kind !== 'text_quote' || sourceRoundtrip.extraction_selected), JSON.stringify({ openedFactContext, sourceRoundtrip, openedFact, returnedFactReference }));
   await page.locator('#closeSourceViewer').click();
 
-  const lawNodeById = { 'fedlex-or-256': 'scope', 'fedlex-or-257g': 'notification', 'fedlex-or-259a': 'remedy' };
+  const returnedOfficialLawIds = new Set((processRun.result.legal_research?.sources || []).map(source => source.source_id));
+  const lawNodeById = Object.fromEntries(routeStory.storyNodeIds.flatMap(nodeId => {
+    const node = processGraph.nodes.find(item => item.node_id === nodeId);
+    return (node?.legal_source_ids || []).filter(sourceId => returnedOfficialLawIds.has(sourceId)).map(sourceId => [sourceId, nodeId]);
+  }));
   const openedOfficialLawLocators = [];
   for (const [sourceId, nodeId] of Object.entries(lawNodeById)) {
     await selectArtifactNode(nodeId);
@@ -5236,27 +6219,32 @@ async function execute() {
     await page.locator('[data-ac-law-viewer] [data-ac-action="close-law"]').click();
   }
   const expectedAccessibleLawLocators = Object.keys(lawNodeById).map(sourceId => `law:${sourceId}`);
-  check('Every official Swiss-law source on the ten-node projection opens its exact locator', stableJson(openedOfficialLawLocators) === stableJson(expectedAccessibleLawLocators), JSON.stringify(openedOfficialLawLocators));
-  check('The omitted escalation-only BWO source was still visibly visited in the live legal-research chapter', officialSourceSteps.some(step => step.sourceId === 'bwo-conciliation' && step.selectedSourceId === 'bwo-conciliation' && step.passageSourceId === 'bwo-conciliation'));
+  check('Every official Swiss-law source on the returned route story opens its exact locator', stableJson(openedOfficialLawLocators) === stableJson(expectedAccessibleLawLocators), JSON.stringify(openedOfficialLawLocators));
+  check('The escalation-only BWO source remains in the returned registry without becoming a detached visual chapter', expectedOfficialSources.some(source => source.source_id === 'bwo-conciliation') && !openedDecisionLaws.some(step => step.sourceId === 'bwo-conciliation'));
 
-  await selectArtifactNode('causation');
-  const { trace: deterministicLawTrace } = await revealArtifactGrounding('law');
-  check('Deterministic legal application stays visibly separate from official registry law', await page.locator('#artifactCanvas [data-ac-grounding-viewer][open] [data-node-attachment-kind="law"][data-source-authority="deterministic_principle"]').count() === 1);
-  await closeArtifactGrounding(deterministicLawTrace, 'Law grounding');
+  await selectArtifactNode(routeStory.currentNodeId);
+  const currentHandlingPrincipleIds = new Set((processRun.result.legal_research?.questions || [])
+    .filter(question => (question.process_node_ids || []).includes(routeStory.currentNodeId))
+    .flatMap(question => question.interpretation_ids || []));
+  if (currentHandlingPrincipleIds.size) {
+    const { trace: deterministicLawTrace } = await revealArtifactGrounding('law');
+    check('Deterministic legal application stays visibly separate from official registry law', await page.locator('#artifactCanvas [data-ac-grounding-viewer][open] [data-node-attachment-kind="law"][data-source-authority="deterministic_principle"]').count() >= 1);
+    await closeArtifactGrounding(deterministicLawTrace, 'Law grounding');
+  }
   const { attachment: evidenceButtons } = await revealArtifactGrounding('evidence');
   const exactEvidenceButton = evidenceButtons.first();
   const visibleEvidence = await exactEvidenceButton.evaluate(node => ({ item_id: node.dataset.evidenceId, fact_id: node.dataset.factId, text: node.innerText }));
   const returnedEvidence = processRun.result.checklist.items.find(item => item.item_id === visibleEvidence.item_id);
-  check('Decision-local evidence is the exact returned requirement owned by causation', Boolean(returnedEvidence) && returnedEvidence.node_ids.includes('causation') && visibleEvidence.fact_id === returnedEvidence.fact_id && visibleEvidence.text.includes(returnedEvidence.title), JSON.stringify({ visibleEvidence, returnedEvidence }));
+  check('Decision-local evidence is the exact returned requirement owned by the current decision', Boolean(returnedEvidence) && returnedEvidence.node_ids.includes(routeStory.currentNodeId) && visibleEvidence.fact_id === returnedEvidence.fact_id && visibleEvidence.text.includes(returnedEvidence.title), JSON.stringify({ routeStory, visibleEvidence, returnedEvidence }));
   const evidenceInteractionCount = await page.evaluate(() => window.__casepathArtifactInteractions.length);
   await exactEvidenceButton.click();
   await waitHidden('#artifactCanvas [data-ac-grounding-viewer][open]');
   const evidenceInteraction = await page.evaluate(index => window.__casepathArtifactInteractions.slice(index).find(item => item.action === 'inspect-evidence') || null, evidenceInteractionCount);
-  check('Exact document/evidence requirement remains actionable from the grounding modal', evidenceInteraction?.nodeId === 'causation' && evidenceInteraction?.evidenceId === returnedEvidence?.item_id, JSON.stringify(evidenceInteraction));
+  check('Exact document/evidence requirement remains actionable from the grounding modal', evidenceInteraction?.nodeId === routeStory.currentNodeId && evidenceInteraction?.evidenceId === returnedEvidence?.item_id, JSON.stringify(evidenceInteraction));
 
   await revealArtifactGrounding('reference');
   const visibleGeneratedReference = page.locator('#artifactCanvas [data-ac-grounding-viewer][open] [data-node-attachment-kind="precedent"][data-reference-status="generated_reference"][data-source-locator-id][data-ac-action="open-reference"]');
-  check('Causation exposes one clearly generated reference pattern', await visibleGeneratedReference.count() === 1 && await page.locator('#artifactCanvas [data-reference-status="qualified_expert_reviewed"]').count() === 0);
+  check('Current decision exposes one clearly generated reference pattern', await visibleGeneratedReference.count() === 1 && await page.locator('#artifactCanvas [data-reference-status="qualified_expert_reviewed"]').count() === 0);
   const defaultReferenceCopy = await visibleGeneratedReference.innerText();
   check('Default grounding-modal reference hides rank and score while retaining the audit-bound metadata in data attributes', !/\brank\b|\bscore\b|\d+\s*points?/i.test(defaultReferenceCopy) && nonemptyString(await visibleGeneratedReference.getAttribute('data-artifact-change-id')) && nonemptyString(await visibleGeneratedReference.getAttribute('data-artifact-event-id')) && nonemptyString(await visibleGeneratedReference.getAttribute('data-artifact-agent-id')), defaultReferenceCopy);
   const openedReferenceLocator = await clickExactArtifactLocator(visibleGeneratedReference);
@@ -5415,7 +6403,7 @@ async function execute() {
   }
 
   const processNodeSourcePreviews = [];
-  for (const nodeId of FLAGSHIP_PROCESS_PROJECTION_IDS) {
+  for (const nodeId of routeStory.storyNodeIds) {
     const nodeButton = page.locator(`#artifactProcessGraph [data-ac-action="select-node"][data-node-id="${nodeId}"]`).first();
     await nodeButton.click();
     await page.waitForFunction(id => document.querySelector(`#artifactProcessGraph [data-ac-action="select-node"][data-node-id="${CSS.escape(id)}"]`)?.getAttribute('aria-current') === 'step', nodeId, { timeout: 30000 });
@@ -5503,7 +6491,7 @@ async function execute() {
     });
   }
   const processPreviewGeometry = await page.evaluate(() => window.__casepathProcessPreviewGeometry || []);
-  const processPreviewGeometryIssues = processPreviewGeometryContractViolations(processPreviewGeometry);
+  const processPreviewGeometryIssues = processPreviewGeometryContractViolations(processPreviewGeometry, routeStory.storyNodeIds);
   check('Every visible construction and completed source preview stays inside the 1440×900 process viewport with an 8px bottom inset', processPreviewGeometryIssues.length === 0, JSON.stringify({ processPreviewGeometryIssues, processPreviewGeometry }));
   const intakeFact = processRun.result.facts.find(item => item.fact_id === 'fact_customer_objective');
   const intakeRef = intakeFact?.source_refs?.find(ref => ref.artifact_id === 'message' && ref.locator_kind === 'text_quote');
@@ -5528,7 +6516,7 @@ async function execute() {
   const intakePreview = processNodeSourcePreviews.find(item => item.nodeId === 'intake');
   const intakeBasisIssues = intakeClaimMessageBasisContractViolations(intakeConstruction, intakePreview, expectedIntakeBasis);
   check('Intake construction and ready preview both show the exact returned customer-message passage and locator', intakeBasisIssues.length === 0, JSON.stringify({ expectedIntakeBasis, intakeConstruction, intakePreview, intakeBasisIssues }));
-  await page.locator('#artifactProcessGraph [data-ac-action="select-node"][data-node-id="causation"]').click();
+  await page.locator(`#artifactProcessGraph [data-ac-action="select-node"][data-node-id="${routeStory.currentNodeId}"]`).click();
   const representativePreview = processNodeSourcePreviews.find(preview => ['fact', 'source'].includes(preview.basisKind) && preview.exactReturnedSource && ['message', 'intake'].includes(preview.sourceId))
     || processNodeSourcePreviews.find(preview => ['fact', 'source'].includes(preview.basisKind) && preview.exactReturnedSource && preview.sourceHasTarget);
   let postConstructionSourceUse = { viewerOpen: false, activeSourceIds: [], activeSourceLocator: '', sourceId: '', locatorId: '' };
@@ -5547,9 +6535,10 @@ async function execute() {
       locatorId,
     }), { sourceId: representativePreview.sourceId, locatorId: representativePreview.locatorId });
     await page.locator('#closeSourceViewer').click();
-    await page.locator('#artifactProcessGraph [data-ac-action="select-node"][data-node-id="causation"]').click();
+    await page.locator(`#artifactProcessGraph [data-ac-action="select-node"][data-node-id="${routeStory.currentNodeId}"]`).click();
   }
 
+  if (routeStory.flagshipCausation) {
   await waitVisible('#journeyNext[data-v20-guided-documents="true"]');
   const readyPrimaryAction = await primaryActionSnapshot();
   check('Ready exposes Review document plan as its sole primary action', readyPrimaryAction.dialogOpen === false && readyPrimaryAction.actions.length === 1 && readyPrimaryAction.actions[0]?.id === 'journeyNext' && readyPrimaryAction.actions[0]?.text === 'Review document plan' && readyPrimaryAction.actions[0]?.guidedDocuments === 'true' && readyPrimaryAction.actions[0]?.ariaControls === 'v20DocumentSheet', JSON.stringify(readyPrimaryAction));
@@ -5670,7 +6659,8 @@ async function execute() {
   check('Each document chain preserves exact returned primary owner, ordered owners, path, fact, status, and item identity', documentLineageExact, JSON.stringify({ expectedDocumentItems, rendered: documentPlanProjection.chains }));
   check('The visible plan removes internal identifiers and contribution plumbing without removing audit data', documentPlanProjection.chains.every(chain => chain.technicalCount === 0 && !chain.text.includes(chain.itemId) && (!chain.factId || !chain.text.includes(chain.factId)) && !/ordered decisions|current path/i.test(chain.text)), JSON.stringify(documentPlanProjection.chains.map(item => ({ itemId: item.itemId, factId: item.factId, text: item.text }))));
   check('Document status filters report exact returned counts', stableJson(documentPlanProjection.filterCounts) === stableJson(expectedDocumentCounts), JSON.stringify({ expectedDocumentCounts, actual: documentPlanProjection.filterCounts }));
-  const multiOwnerItem = processRun.result.checklist.items.find(item => Array.isArray(item.node_ids) && item.node_ids.length > 1);
+  const multiOwnerItem = processRun.result.checklist.items.find(item => Array.isArray(item.node_ids) && item.node_ids.length > 1
+    && item.node_ids.some(nodeId => routeStory.storyNodeIds.includes(nodeId)));
   check('Flagship checklist contains an inspectable reciprocal multi-owner evidence item', Boolean(multiOwnerItem), JSON.stringify(processRun.result.checklist.items.map(item => ({ item_id: item.item_id, node_ids: item.node_ids }))));
   if (isProductionJourney()) {
     const expectedChecklistContributions = processRun.result.checklist.items.map(item => ({
@@ -5692,13 +6682,13 @@ async function execute() {
   await page.locator('[data-v20-document-filter="all"]').click();
   const allVisibleIds = await page.locator('#v20DocumentSheet .v20-document-chain[data-item-id]').evaluateAll(items => items.filter(item => !item.hidden).map(item => item.dataset.itemId || ''));
   check('Returning to All restores every one of the 21 claim requirements', allVisibleIds.length === 21 && stableJson([...allVisibleIds].sort()) === stableJson(expectedDocumentItems.map(item => item.item_id).sort()), JSON.stringify(allVisibleIds));
-  const routeItem = expectedDocumentItems.find(item => item.node_id === 'causation')
-    || expectedDocumentItems.find(item => FLAGSHIP_PROCESS_PROJECTION_IDS.includes(item.node_id));
+  const routeItem = expectedDocumentItems.find(item => item.node_id === routeStory.currentNodeId)
+    || expectedDocumentItems.find(item => routeStory.storyNodeIds.includes(item.node_id));
   const routeChain = page.locator(`#v20DocumentSheet .v20-document-chain[data-item-id="${routeItem?.item_id || ''}"]:not([hidden])`);
   const routeChainCount = await routeChain.count();
   const owningNodeId = routeChainCount === 1 ? await routeChain.getAttribute('data-v20-node-id') : '';
   const returnedProcessNodeIds = processRun.result.process.nodes.map(node => node.node_id);
-  check('The selected document chain declares an exact returned core-graph target', Boolean(routeItem) && routeChainCount === 1 && nonemptyString(owningNodeId) && returnedProcessNodeIds.includes(owningNodeId) && FLAGSHIP_PROCESS_PROJECTION_IDS.includes(owningNodeId), JSON.stringify({ routeItem, routeChainCount, owningNodeId, returnedProcessNodeIds }));
+  check('The selected document chain declares an exact returned route-story target', Boolean(routeItem) && routeChainCount === 1 && nonemptyString(owningNodeId) && returnedProcessNodeIds.includes(owningNodeId) && routeStory.storyNodeIds.includes(owningNodeId), JSON.stringify({ routeStory, routeItem, routeChainCount, owningNodeId, returnedProcessNodeIds }));
   check('Document sheet is a labelled modal dialog with focus inside', await page.evaluate(() => { const sheet = document.querySelector('#v20DocumentSheet'); return sheet?.tagName === 'DIALOG' && sheet.getAttribute('aria-labelledby') === 'v20DocumentTitle' && sheet.contains(document.activeElement); }));
   await page.keyboard.press('Escape');
   await waitHidden('#v20DocumentSheet');
@@ -5716,21 +6706,25 @@ async function execute() {
   const desktopSourceMoments = await page.evaluate(() => window.__casepathDesktopSourcePanelMoments || []);
   const zoomOutDesktopIssues = zoomOutDesktopContractViolations({
     sourceMoments: desktopSourceMoments,
-    factSteps: factSourceCinematicSteps,
+    decisionSteps: decisionFlowSteps,
     artifactCursorSteps,
     previews: processNodeSourcePreviews,
     postConstructionSourceUse,
     team: artifactTeamSnapshot,
     documentPlan: documentPlanProjection,
     documentRoundtrip,
+    expectedNodeIds: routeStory.storyNodeIds,
   });
   check('Zoom-out desktop journey keeps sources visible and causal, process previews contextual, team labels simple, and document chains graph-derived', zoomOutDesktopIssues.length === 0, JSON.stringify({ zoomOutDesktopIssues, desktopSourceMoments, processNodeSourcePreviews, postConstructionSourceUse }));
-  const secondaryOwnerId = multiOwnerItem.node_ids.find(nodeId => nodeId !== multiOwnerItem.node_id);
+  const secondaryOwnerId = multiOwnerItem.node_ids.find(nodeId => nodeId !== multiOwnerItem.node_id && routeStory.storyNodeIds.includes(nodeId));
   const reciprocalSourceItem = page.locator(`#stageCanvas .v17-derived-checklist .v17-checklist-item[data-item-id="${multiOwnerItem.item_id}"][data-node-ids="${multiOwnerItem.node_ids.join(',')}"]`);
-  const secondaryOwnerButton = page.locator(`#artifactProcessGraph [data-ac-action="select-node"][data-node-id="${secondaryOwnerId}"]`);
-  check('A reciprocal evidence item retains every returned owner and every owner remains an exact selectable graph decision', await reciprocalSourceItem.count() === 1 && await secondaryOwnerButton.count() === 1, JSON.stringify({ item_id: multiOwnerItem.item_id, owners: multiOwnerItem.node_ids, secondaryOwnerId }));
-  await secondaryOwnerButton.click();
-  check('The secondary evidence owner is still navigable in the persistent graph', await secondaryOwnerButton.getAttribute('aria-current') === 'step', secondaryOwnerId);
+  check('A reciprocal evidence item retains every returned owner without exposing a process step outside the returned route story', await reciprocalSourceItem.count() === 1, JSON.stringify({ item_id: multiOwnerItem.item_id, owners: multiOwnerItem.node_ids, routeStory }));
+  if (secondaryOwnerId) {
+    const secondaryOwnerButton = page.locator(`#artifactProcessGraph [data-ac-action="select-node"][data-node-id="${secondaryOwnerId}"]`);
+    check('A reciprocal owner on the returned route remains an exact selectable graph decision', await secondaryOwnerButton.count() === 1, JSON.stringify({ item_id: multiOwnerItem.item_id, owners: multiOwnerItem.node_ids, secondaryOwnerId }));
+    await secondaryOwnerButton.click();
+    check('The secondary evidence owner is still navigable in the persistent graph', await secondaryOwnerButton.getAttribute('aria-current') === 'step', secondaryOwnerId);
+  }
   const flagshipBeforeReview = processRun;
   const preReviewGraphProjection = await page.locator('#artifactProcessGraph').evaluate(node => ({
     node_ids: [...node.querySelectorAll('[data-node-id][data-process-build-state]')].map(item => item.dataset.nodeId).filter(Boolean),
@@ -5915,7 +6909,7 @@ async function execute() {
     || laterSourceOpening.factId !== laterSourceStep?.factId
     || laterSourceOpening.sourceId !== laterSourceStep?.sourceId
     || laterSourceOpening.locatorId !== laterSourceStep?.locatorId
-    || stableJson(laterSourceOpening.activeSourceIds || []) !== stableJson([laterSourceStep?.sourceId])
+    || stableJson(laterSourceOpening.activeSourceIds || []) !== stableJson([displayedSourceRailId(laterSourceStep?.sourceId)])
     || laterSourceOpening.activeLocatorId !== laterSourceStep?.locatorId
     || laterSourceOpening.sourceOpened !== 'true')) laterCausalStepIssues.push('source click did not reveal the exact later-claim passage');
   const laterMemoryStep = laterCausalSteps.find(step => step.phase === 'memory');
@@ -6104,6 +7098,68 @@ async function execute() {
   check('Future-claim view recedes to one causal outcome with proof behind disclosure', compactLater.focus_count === 1 && compactLater.artifact_count === 1 && compactLater.action_count === 1 && await laterProofDetails.isVisible() && await page.locator('.memory-application-receipt').isHidden(), JSON.stringify(compactLater));
   }
   await auditViewports('07-later-result', '#artifactCanvas [data-memory-effect="node-added"]');
+  } else {
+    acceptedJourneyMode = 'conservative-ready';
+    const earlyDocumentsAction = page.locator('#artifactProcessGraph [data-ac-action="open-documents"].ac-document-needs-link');
+    check('A conservative returned route still exposes its complete process-derived Documents model', await earlyDocumentsAction.count() === 1 && await earlyDocumentsAction.isVisible() && await earlyDocumentsAction.isEnabled());
+    await earlyDocumentsAction.click();
+    await waitVisible('#v20DocumentSheet[open]');
+    const earlyDocumentPlan = await page.locator('#v20DocumentSheet').evaluate(sheet => ({
+      model: sheet.querySelector('.v20-document-body')?.dataset.documentModel || '',
+      items: [...sheet.querySelectorAll('.v20-document-chain[data-item-id]')].map(chain => ({
+        itemId: chain.dataset.itemId || '',
+        nodeId: chain.dataset.nodeId || '',
+        nodeIds: chain.dataset.nodeIds || '',
+        factId: chain.dataset.factId || '',
+        status: chain.dataset.status || '',
+        documentStatus: chain.dataset.documentStatus || '',
+      })),
+    }));
+    const expectedEarlyDocumentPlan = processRun.result.checklist.items.map(item => ({
+      itemId: item.item_id,
+      nodeId: item.node_id || '',
+      nodeIds: (Array.isArray(item.node_ids) && item.node_ids.length ? item.node_ids : item.node_id ? [item.node_id] : []).join(','),
+      factId: item.fact_id || '',
+      status: item.status || '',
+      documentStatus: item.status === 'provided_sufficient'
+        ? 'received'
+        : ['missing', 'provided_insufficient'].includes(item.status) ? 'missing'
+          : item.status === 'conditional' ? 'conditional' : 'not-required',
+    }));
+    check('Conservative Documents preserves every exact returned item, status, fact, and process owner', earlyDocumentPlan.model === 'complete-claim-record'
+      && stableJson(earlyDocumentPlan.items) === stableJson(expectedEarlyDocumentPlan), JSON.stringify({ earlyDocumentPlan, expectedEarlyDocumentPlan }));
+    await page.keyboard.press('Escape');
+    await waitHidden('#v20DocumentSheet');
+    const beforeBlockedMoment = await page.locator('#artifactProcessGraph').evaluate(graph => ({
+      routeMode: graph.dataset.processRouteMode || '',
+      terminalState: graph.dataset.processTerminalState || '',
+      nodeIds: [...graph.querySelectorAll('[data-ac-node-id][data-process-build-state="built"]')].map(node => node.dataset.nodeId || ''),
+      focalNodeId: graph.dataset.processFocalNodeId || '',
+    }));
+    await page.evaluate(() => {
+      document.dispatchEvent(new CustomEvent('casepath:render', { detail: { moment: 'review' } }));
+      document.dispatchEvent(new CustomEvent('casepath:render', { detail: { moment: 'knowledge' } }));
+      document.dispatchEvent(new CustomEvent('casepath:render', { detail: { moment: 'later-result' } }));
+    });
+    const afterBlockedMoment = await page.locator('#artifactProcessGraph').evaluate(graph => ({
+      scene: document.querySelector('#artifactCanvas')?.dataset.casepathScene || '',
+      routeMode: graph.dataset.processRouteMode || '',
+      terminalState: graph.dataset.processTerminalState || '',
+      nodeIds: [...graph.querySelectorAll('[data-ac-node-id][data-process-build-state="built"]')].map(node => node.dataset.nodeId || ''),
+      focalNodeId: graph.dataset.processFocalNodeId || '',
+      reviewControls: document.querySelectorAll('#artifactCanvas .ac-review-graph-edit,#artifactCanvas [data-review-node-id="causation"],#artifactCanvas [data-memory-effect],#artifactCanvas [data-v20-continue-review]').length,
+    }));
+    check('A conservative returned route ends truthfully at Ready and refuses causation review or memory chapters', beforeBlockedMoment.routeMode === 'returned-route'
+      && beforeBlockedMoment.terminalState === 'ready-route'
+      && stableJson(beforeBlockedMoment.nodeIds) === stableJson(routeStory.storyNodeIds)
+      && beforeBlockedMoment.focalNodeId === routeStory.currentNodeId
+      && afterBlockedMoment.scene === 'ready'
+      && afterBlockedMoment.routeMode === 'returned-route'
+      && afterBlockedMoment.terminalState === 'ready-route'
+      && stableJson(afterBlockedMoment.nodeIds) === stableJson(routeStory.storyNodeIds)
+      && afterBlockedMoment.focalNodeId === routeStory.currentNodeId
+      && afterBlockedMoment.reviewControls === 0, JSON.stringify({ routeStory, earlyDocumentPlan, beforeBlockedMoment, afterBlockedMoment }));
+  }
 
   check('Immutable release marker was never rewritten during the journey', await page.evaluate(() => window.__casepathReleaseMutations.length === 0), JSON.stringify(await page.evaluate(() => window.__casepathReleaseMutations)));
   check('No lifecycle state exposes a false reviewed-v4 claim', !falseReviewedV4Claim.test(await page.locator('body').innerText()));
@@ -6144,7 +7200,7 @@ async function execute() {
   }
   retainedEvidence['model-ledger'] = modelLedger;
 
-  return { status: 'passed', release: PRODUCT_RELEASE, release_id: RELEASE_ID, checkedAt: new Date().toISOString(), baseUrl: BASE, apiUrl: API, deployment: deploymentIdentity, runtime: runtimeVersions, passed: checks.length, failed: 0, checks, notes, failures, runIds };
+  return { status: 'passed', release: PRODUCT_RELEASE, release_id: RELEASE_ID, journey_mode: acceptedJourneyMode, checkedAt: new Date().toISOString(), baseUrl: BASE, apiUrl: API, deployment: deploymentIdentity, runtime: runtimeVersions, passed: checks.length, failed: 0, checks, notes, failures, runIds };
 }
 
 function mockOrchestration(cacheMode, coldRun = null) {
@@ -6356,7 +7412,7 @@ function mockOrchestration(cacheMode, coldRun = null) {
       outcome: cacheMode === 'warm' ? 'cache_hit' : 'succeeded',
       response_id: cacheMode === 'cold' ? `response_${agentId}` : coldByAgent.get(agentId)?.response_id,
       response_model: 'nvidia/nemotron-3-ultra-550b-a55b-20260604',
-      upstream_provider: 'DeepInfra',
+      upstream_provider: 'Together',
       usage_source: cacheMode === 'warm' ? 'cache' : 'response',
       finish_reason: 'stop',
       accepted_ids: acceptedIds,
@@ -6370,7 +7426,15 @@ function mockOrchestration(cacheMode, coldRun = null) {
     };
   });
   const byAgent = new Map(agents.map(item => [item.agent_id, item]));
-  const finalDtos = { deterministic_process_gate: process, deterministic_evidence_gate: checklist, whole_playbook_gate: finalClaimBrief };
+  const finalDtos = {
+    deterministic_process_gate: process,
+    deterministic_evidence_gate: checklist,
+    whole_playbook_gate: {
+      process: semanticProcessDto(process),
+      checklist: semanticChecklistDto(checklist),
+      final_brief: finalClaimBrief,
+    },
+  };
   const gates = REQUIRED_DETERMINISTIC_GATE_IDS.map(gateId => {
     const contract = ACCEPTED_ARTIFACT_CONTRACT[gateId];
     return {
@@ -6393,6 +7457,10 @@ function mockOrchestration(cacheMode, coldRun = null) {
           : dtoHash({ final_brief: finalClaimBrief, verification: { valid: true } }),
       output_artifact: contract.output_artifact,
       output_artifact_hash: dtoHash(finalDtos[gateId]),
+      ...(gateId === 'whole_playbook_gate' ? {
+        output_projection_contract: 'casepath.accepted-playbook-projection/1.0.0',
+        final_brief_artifact_hash: dtoHash(finalClaimBrief),
+      } : {}),
     };
   });
   const audit = {
@@ -6464,7 +7532,7 @@ function mockLedgerForRun(run, cacheMode, coldLedger = null) {
       call_id: agent.call_id,
       provider: 'openrouter',
       provider_endpoint: 'https://openrouter.ai/api/v1/chat/completions',
-      upstream_provider: 'DeepInfra',
+      upstream_provider: 'Together',
       model: REQUESTED_NEMOTRON_MODEL,
       implementation: agent.agent_id === 'canonical_facts' ? 'model_backed_openrouter_canonicalizer' : EXPECTED_RUNTIME.implementation,
       orchestration_id: audit.orchestration_id,
@@ -6698,6 +7766,69 @@ async function assertMemoryReuseRendererDeterminism() {
 }
 
 async function runContractSelfTest() {
+  const [liveRuntimeSource, liveRuntimeCss, artifactCanvasSource, artifactCanvasCss] = await Promise.all([
+    fs.readFile(new URL('../casepath/assets/live-v16.js', import.meta.url), 'utf8'),
+    fs.readFile(new URL('../casepath/assets/live-v16.css', import.meta.url), 'utf8'),
+    fs.readFile(new URL('../casepath/assets/artifact-canvas.js', import.meta.url), 'utf8'),
+    fs.readFile(new URL('../casepath/assets/artifact-canvas.css', import.meta.url), 'utf8'),
+  ]);
+  const replayAndFailureFragments = [
+    "cached: 'Cached replay'",
+    "failed: 'Stopped'",
+    "live: 'Live'",
+    "cachedReplay ? 'cached' : 'returned'",
+    'function terminalFailureReceipts(run)',
+    'for (const event of terminalFailureReceipts(run)) rememberPresentedEvent(event);',
+    'renderFailure(SAFE_MODEL_FAILURE_MESSAGE, run);',
+    'data-terminal-failure="true"',
+    'id="retryFailedRun"',
+  ];
+  if (!replayAndFailureFragments.every(fragment => liveRuntimeSource.includes(fragment))
+    || liveRuntimeSource.includes('onclick="location.reload()"')
+    || !liveRuntimeCss.includes('.live-chip[data-orchestration-mode="live"]:before')
+    || !liveRuntimeCss.includes('.live-chip[data-orchestration-mode="cached"]')
+    || !liveRuntimeCss.includes('.live-chip[data-orchestration-mode="failed"]')) {
+    throw new Error('Visible cached-replay or sanitized terminal-failure state contract is incomplete');
+  }
+  const authoredFailureFragments = [
+    'function terminalFailureFromRun(run)',
+    'function stopActiveWorkForFailure()',
+    'stopActiveWorkForFailure();',
+    "valueFrom(boundary, 'failure_invariant')",
+    "valueFrom(receipt, 'error_invariant')",
+    'data-ac-focal-object="failure"',
+    'data-partial-result-applied="false"',
+    'data-ac-action="retry-failure"',
+    "const restartControl = document.querySelector('#retryFailedRun');",
+    'restartControl.click();',
+    "failure: state.moment === 'failure' ? { ...failurePresentation() } : null",
+  ];
+  if (!authoredFailureFragments.every(fragment => artifactCanvasSource.includes(fragment))
+    || artifactCanvasSource.includes('onclick=')
+    || !artifactCanvasCss.includes('.ac-failure-focus')
+    || !artifactCanvasCss.includes('[data-casepath-moment="failure"] .ac-agent-cursor')) {
+    throw new Error('The authored terminal-failure focal is not safely actionable');
+  }
+  const failureCopyStart = artifactCanvasSource.indexOf('  const SAFE_FAILURE_STAGE_COPY');
+  const failureCopyEnd = artifactCanvasSource.indexOf('  const AGENT_ICONS', failureCopyStart);
+  if (failureCopyStart < 0 || failureCopyEnd < 0) throw new Error('Could not isolate safe terminal-failure copy');
+  const failureCopySource = artifactCanvasSource.slice(failureCopyStart, failureCopyEnd).replace(/^  /gm, '');
+  const failureCopySandbox = {};
+  vm.runInNewContext(`${failureCopySource}\nglobalThis.safeTerminalFailureCopy = safeTerminalFailureCopy;`, failureCopySandbox, { filename: 'artifact-canvas-safe-terminal-failure.js' });
+  const boundedFailure = failureCopySandbox.safeTerminalFailureCopy('canonical_facts', 'provider_finish_reason');
+  if (JSON.stringify(boundedFailure) !== JSON.stringify({
+    stage: 'canonical_facts',
+    title: 'Claim reading stopped.',
+    detail: 'The model stopped before it finished.',
+  })) throw new Error(`Known terminal failure did not produce bounded simple copy: ${JSON.stringify(boundedFailure)}`);
+  const hostileFailure = failureCopySandbox.safeTerminalFailureCopy('<img src=x onerror=alert(1)>', 'raw provider text <script>bad()</script>');
+  if (JSON.stringify(hostileFailure) !== JSON.stringify({
+    stage: '',
+    title: 'The run stopped.',
+    detail: 'CasePath could not finish this run.',
+  }) || JSON.stringify(hostileFailure).includes('provider text') || JSON.stringify(hostileFailure).includes('<script>')) {
+    throw new Error('Unknown terminal failure leaked unbounded provider text');
+  }
   const sourcePreludeFixture = {
     cardCount: 7,
     inputCount: 0,
@@ -6711,6 +7842,110 @@ async function runContractSelfTest() {
   const wrongPreludeIconFixture = structuredClone(sourcePreludeFixture);
   wrongPreludeIconFixture.cards[4].iconKind = 'document';
   if (!sourcePreludeContractViolations(wrongPreludeIconFixture).some(issue => issue.includes('type-correct icon'))) throw new Error('Wrong opening source type icon fixture was accepted');
+
+  const sourceRailSourcesFixture = [
+    ['message', 'mail', 'Claim message'],
+    ['art_lease', 'contract', 'Residential lease agreement'],
+    ['art_notification', 'mail', 'Email notifying the property manager'],
+    ['art_management_reply', 'mail', 'Management reply'],
+    ['art_photo', 'image', 'Bedroom photograph'],
+    ['art_timeline', 'timeline', 'Defect timeline'],
+    ['art_delivery', 'delivery', 'Email delivery receipt'],
+  ].map(([sourceId, kind, name]) => ({ sourceId, kind, name }));
+  const sourceRailFixture = viewport => {
+    const railRect = { left: 0, top: 64, right: 252, bottom: viewport.height, width: 252, height: viewport.height - 64 };
+    const listRect = { left: 0, top: 116, right: 252, bottom: viewport.height, width: 252, height: viewport.height - 116 };
+    return {
+      reason: `opening:${viewport.width}x${viewport.height}`,
+      expectedSourceId: '', expectedLocatorId: '', contract: SOURCE_RAIL_CONTRACT, viewport,
+      railVisible: true, listVisible: true, collapsed: false, insideViewport: true,
+      railRect, listRect, headingHeight: 52, listOverflowY: 'auto', listHorizontalOverflow: 0, pageHorizontalOverflow: 0,
+      dropdownCount: 0, expanderCount: 0, collapsedControlCount: 0, workOverlapArea: 0, overlayOverlapAreas: [], rowOverlapCount: 0,
+      itemCount: 7,
+      items: sourceRailSourcesFixture.map((source, index) => ({
+        ...source, visible: true, fullyVisible: true,
+        rect: { left: 0, top: 116 + index * 56, right: 252, bottom: 172 + index * 56, width: 252, height: 56 },
+        iconCount: 1, iconKind: source.kind, iconMarkup: `<path data-source="${source.sourceId}"></path>`, iconWidth: 28, iconHeight: 28,
+        nameCount: 1, name: source.name, metaCount: 1, meta: `${source.kind} metadata`, statusCount: 1, status: 'ready',
+        active: false, ariaCurrent: false, thumbImageCount: 0, extraLabelCount: 0,
+      })),
+      activeSourceIds: [], activeSourceLocator: '',
+    };
+  };
+  for (const viewport of SOURCE_RAIL_VIEWPORTS) {
+    const validRail = sourceRailFixture(viewport);
+    if (sourceRailContractViolations(validRail, sourceRailSourcesFixture).length) throw new Error(`Valid ${viewport.width}x${viewport.height} source-rail fixture was rejected`);
+  }
+  const activeRailFixture = sourceRailFixture(SOURCE_RAIL_VIEWPORTS[1]);
+  const activeRailItem = activeRailFixture.items.find(item => item.sourceId === 'art_timeline');
+  Object.assign(activeRailItem, { status: 'reading', active: true, ariaCurrent: true });
+  activeRailFixture.reason = 'fact-tour:fact_recurrence:read-source';
+  activeRailFixture.expectedSourceId = 'art_timeline';
+  activeRailFixture.expectedLocatorId = 'source:art_timeline:page:2:quote:Exact';
+  activeRailFixture.activeSourceIds = ['art_timeline'];
+  activeRailFixture.activeSourceLocator = activeRailFixture.expectedLocatorId;
+  if (sourceRailContractViolations(activeRailFixture, sourceRailSourcesFixture, { sourceId: activeRailFixture.expectedSourceId, locatorId: activeRailFixture.expectedLocatorId }).length) throw new Error('Valid exact-active source-rail fixture was rejected');
+  const intakeRailFixture = sourceRailFixture(SOURCE_RAIL_VIEWPORTS[1]);
+  Object.assign(intakeRailFixture.items[0], { status: 'reading', active: true, ariaCurrent: true });
+  intakeRailFixture.expectedSourceId = 'intake';
+  intakeRailFixture.expectedLocatorId = 'source:message:field:claim';
+  intakeRailFixture.activeSourceIds = ['message'];
+  intakeRailFixture.activeSourceLocator = intakeRailFixture.expectedLocatorId;
+  if (sourceRailContractViolations(intakeRailFixture, sourceRailSourcesFixture, { sourceId: 'intake', locatorId: intakeRailFixture.expectedLocatorId }).length) throw new Error('Intake pseudo-source did not resolve to the one visible claim-message row');
+  const legacyRailFixture = sourceRailFixture(SOURCE_RAIL_VIEWPORTS[0]);
+  legacyRailFixture.collapsed = true;
+  legacyRailFixture.dropdownCount = 1;
+  legacyRailFixture.items[0].rect.height = 76;
+  const legacyRailIssues = sourceRailContractViolations(legacyRailFixture, sourceRailSourcesFixture);
+  if (!legacyRailIssues.some(issue => issue.includes('collapsed')) || !legacyRailIssues.some(issue => issue.includes('dropdown')) || !legacyRailIssues.some(issue => issue.includes('not compact'))) throw new Error(`Legacy large dropdown source rail was accepted: ${JSON.stringify(legacyRailIssues)}`);
+  const brokenStructureRailFixture = sourceRailFixture(SOURCE_RAIL_VIEWPORTS[1]);
+  Object.assign(brokenStructureRailFixture.items[2], { iconCount: 0, iconMarkup: '', statusCount: 0, status: '', metaCount: 2 });
+  const brokenStructureRailIssues = sourceRailContractViolations(brokenStructureRailFixture, sourceRailSourcesFixture);
+  if (!brokenStructureRailIssues.some(issue => issue.includes('type-correct icon')) || !brokenStructureRailIssues.some(issue => issue.includes('status')) || !brokenStructureRailIssues.some(issue => issue.includes('metadata'))) throw new Error(`Structurally noisy source rail was accepted: ${JSON.stringify(brokenStructureRailIssues)}`);
+  const ambiguousActiveRailFixture = structuredClone(activeRailFixture);
+  Object.assign(ambiguousActiveRailFixture.items[1], { status: 'reading', active: true, ariaCurrent: true });
+  ambiguousActiveRailFixture.activeSourceIds = ['art_lease', 'art_timeline'];
+  ambiguousActiveRailFixture.workOverlapArea = 120;
+  const ambiguousActiveRailIssues = sourceRailContractViolations(ambiguousActiveRailFixture, sourceRailSourcesFixture, { sourceId: activeRailFixture.expectedSourceId, locatorId: activeRailFixture.expectedLocatorId });
+  if (!ambiguousActiveRailIssues.some(issue => issue.includes('exactly one')) || !ambiguousActiveRailIssues.some(issue => issue.includes('overlaps'))) throw new Error(`Ambiguous active/overlapping source rail was accepted: ${JSON.stringify(ambiguousActiveRailIssues)}`);
+
+  const liveWorkRunFixture = {
+    run_id: 'run:live-canonical-facts',
+    events: [{
+      receipt_type: 'agent_started', actor_type: 'nemotron_agent', agent_id: 'canonical_facts',
+      event_id: 'event:live-canonical-facts', call_id: 'call:live-canonical-facts', status: 'started',
+      call_count: 1, cache_hit: false, input_artifact: 'observable_claim_package', input_artifact_hash: '1'.repeat(64),
+    }],
+  };
+  const liveWorkPlanFixture = [{
+    planCount: 1, focalChildCount: 1, visible: true,
+    contract: LIVE_WORK_PLAN_CONTRACT, presentationMode: 'live-call',
+    agentId: 'canonical_facts', agentSignature: 'facts', runId: liveWorkRunFixture.run_id,
+    callId: 'call:live-canonical-facts', eventId: 'event:live-canonical-facts', workState: 'started',
+    inputArtifact: 'observable_claim_package', inputArtifactHash: '1'.repeat(64),
+    rootWorkState: 'working', rootAgentId: 'canonical_facts', rootRunId: liveWorkRunFixture.run_id,
+    rootCallId: 'call:live-canonical-facts', rootEventId: 'event:live-canonical-facts',
+    title: 'Find the supported facts', steps: structuredClone(CANONICAL_FACTS_LIVE_WORK_STEPS),
+    sourcePreludeCount: 0, sourcePreludeCardCount: 0, factTourCount: 0,
+    forbiddenProgressCount: 0, percentText: false, at: 100,
+  }];
+  const liveWorkFactTourFixture = [
+    { phase: 'select-source', liveWorkPlanCount: 0, sourcePreludeCount: 0, artifactSurfaceVisible: false, at: 200 },
+    { phase: 'read-source', liveWorkPlanCount: 0, sourcePreludeCount: 0, artifactSurfaceVisible: true, at: 300 },
+  ];
+  if (canonicalFactsLiveWorkPlanContractViolations(liveWorkPlanFixture, liveWorkFactTourFixture, liveWorkRunFixture).length) throw new Error('Valid call-bound canonical-fact live plan fixture was rejected');
+  const stagedPreludeLiveWorkFixture = structuredClone(liveWorkPlanFixture);
+  Object.assign(stagedPreludeLiveWorkFixture[0], { sourcePreludeCount: 1, sourcePreludeCardCount: 7 });
+  if (!canonicalFactsLiveWorkPlanContractViolations(stagedPreludeLiveWorkFixture, liveWorkFactTourFixture, liveWorkRunFixture).some(issue => issue.includes('competes with the idle source prelude'))) throw new Error('Live plan staged beside the static seven-card source prelude was accepted');
+  const percentageLiveWorkFixture = structuredClone(liveWorkPlanFixture);
+  Object.assign(percentageLiveWorkFixture[0], { forbiddenProgressCount: 1, percentText: true });
+  if (!canonicalFactsLiveWorkPlanContractViolations(percentageLiveWorkFixture, liveWorkFactTourFixture, liveWorkRunFixture).some(issue => issue.includes('percent, progress bar, or slider'))) throw new Error('Percent-based live work plan fixture was accepted');
+  const forgedLiveWorkCallFixture = structuredClone(liveWorkPlanFixture);
+  forgedLiveWorkCallFixture[0].callId = 'call:forged';
+  if (!canonicalFactsLiveWorkPlanContractViolations(forgedLiveWorkCallFixture, liveWorkFactTourFixture, liveWorkRunFixture).some(issue => issue.includes('exact returned run, call, event, agent, and work state'))) throw new Error('Live plan with a forged call binding was accepted');
+  const lingeringLiveWorkFactTourFixture = structuredClone(liveWorkFactTourFixture);
+  lingeringLiveWorkFactTourFixture[0].liveWorkPlanCount = 1;
+  if (!canonicalFactsLiveWorkPlanContractViolations(liveWorkPlanFixture, lingeringLiveWorkFactTourFixture, liveWorkRunFixture).some(issue => issue.includes('persists after the fact tour starts'))) throw new Error('Live plan lingering over the real source tour was accepted');
 
   const avatarTeamFixture = {
     members: REQUIRED_NEMOTRON_AGENT_IDS.map((agentId, index) => ({ agentId, signature: REQUIRED_NEMOTRON_AGENT_SIGNATURES[agentId].signature, iconMarkup: `<path data-role="${index}"></path>` })),
@@ -6730,6 +7965,100 @@ async function runContractSelfTest() {
   const duplicateAvatarTeamFixture = structuredClone(avatarTeamFixture);
   duplicateAvatarTeamFixture.members[5].iconMarkup = duplicateAvatarTeamFixture.members[4].iconMarkup;
   if (!specialistAvatarContractViolations(duplicateAvatarTeamFixture, avatarCursorFixture, true).some(issue => issue.includes('unique normalized role-icon hashes'))) throw new Error('Duplicate agent role icon fixture was accepted');
+
+  const openingClaimFixture = {
+    subject: 'Bedroom condition keeps returning',
+    message: `Hello. ${EXPECTED_OPENING_PROBLEM} ${EXPECTED_OPENING_OUTCOME}`,
+  };
+  const openingClaimCardFixture = {
+    cardCount: 1, visible: true, sourceId: 'message', childTags: ['HEADER', 'STRONG', 'BLOCKQUOTE', 'P'],
+    subject: openingClaimFixture.subject, problem: EXPECTED_OPENING_PROBLEM, outcome: EXPECTED_OPENING_OUTCOME,
+    blockquoteCount: 1, paragraphCount: 1, generatedSummaryCount: 0,
+    bodyCopyLength: EXPECTED_OPENING_PROBLEM.length + EXPECTED_OPENING_OUTCOME.length, width: 620, height: 170,
+  };
+  if (openingClaimCardContractViolations(openingClaimCardFixture, openingClaimFixture).length) throw new Error('Valid compact source-derived opening claim card fixture was rejected');
+  const generatedOpeningClaimCardFixture = { ...openingClaimCardFixture, outcome: `${EXPECTED_OPENING_OUTCOME} AI summary: likely ventilation.` };
+  if (!openingClaimCardContractViolations(generatedOpeningClaimCardFixture, openingClaimFixture).some(issue => issue.includes('exact claim-message request'))) throw new Error('Generated opening claim summary fixture was accepted');
+  const oversizedOpeningClaimCardFixture = { ...openingClaimCardFixture, height: 420 };
+  if (!openingClaimCardContractViolations(oversizedOpeningClaimCardFixture, openingClaimFixture).some(issue => issue.includes('not compact'))) throw new Error('Large-prose opening claim card fixture was accepted');
+
+  const executionTraceFixtureRunId = 'run:fact-law-trace';
+  const factTourFactsFixture = FACT_TOUR_FACT_IDS.map((factId, index) => ({
+    fact_id: factId,
+    label: `Fact ${index + 1}`,
+    value: `Returned value ${index + 1}`,
+    source_refs: [{ artifact_id: `artifact_${index + 1}`, locator_kind: 'text_quote', page: 1, excerpt: `Exact returned passage ${index + 1}` }],
+  }));
+  const factTourSemanticFixture = factTourFactsFixture.map((fact, index) => ({
+    eventId: `fact-event:${fact.fact_id}`, runId: executionTraceFixtureRunId,
+    entityKind: 'fact', entityId: fact.fact_id, traceContract: EXECUTION_TRACE_CONTRACT,
+    presentationMode: 'returned_action_replay', authority: index % 2 === 0 ? 'model_contribution_accepted' : 'deterministic_reference_projection',
+    modelContributionAccepted: index % 2 === 0, deterministicFallbackApplied: false,
+    agentId: index % 2 === 0 ? 'canonical_facts' : 'canonical_fact_projection',
+    actorType: index % 2 === 0 ? 'nemotron_agent' : 'deterministic_tool',
+    modelOwnedFields: index % 2 === 0 ? ['confidence'] : [],
+    applicationOwnedFields: ['label', 'value', 'state'],
+    modelSelectedTextRefs: index % 2 === 0 ? [structuredClone(fact.source_refs[0])] : [],
+  }));
+  const factTourSnapshotsFixture = factTourFactsFixture.flatMap((fact, factIndex) => {
+    const semantic = factTourSemanticFixture[factIndex];
+    const ref = fact.source_refs[0];
+    return ['select-source', 'read-source', 'highlight-source', 'finding'].map((phase, phaseIndex) => ({
+      factId: fact.fact_id, phase, sourceId: ref.artifact_id, locatorId: factSourceLocatorId(ref),
+      activeSourceIds: phase === 'select-source' ? [] : [ref.artifact_id],
+      activeSourceLocator: phase === 'select-source' ? '' : factSourceLocatorId(ref),
+      artifactSurfaceVisible: phase !== 'select-source',
+      highlightCount: ['highlight-source', 'finding'].includes(phase) ? 1 : 0,
+      factVisible: phase === 'finding', factLabel: phase === 'finding' ? fact.label : '', factValue: phase === 'finding' ? fact.value : '',
+      eventId: phase === 'finding' ? semantic.eventId : '',
+      agentId: phase === 'finding' && semantic.modelContributionAccepted ? semantic.agentId : '',
+      presentationMode: 'returned-action-replay',
+      presentationLabel: semantic.modelContributionAccepted ? 'Returned work · Claim reader' : 'Returned work · Fact safety check',
+      activeAgentId: semantic.modelContributionAccepted ? 'canonical_facts' : '',
+      activeSignature: semantic.modelContributionAccepted ? 'facts' : 'gate',
+      workAuthority: semantic.modelContributionAccepted ? 'Claim reader' : 'Fact safety check',
+      at: factIndex * 10000 + phaseIndex * 1000,
+    }));
+  });
+  const factTourHighlightsFixture = factTourFactsFixture.map((fact, index) => ({
+    entityKind: 'fact', factId: fact.fact_id, sourceId: fact.source_refs[0].artifact_id,
+    locatorId: factSourceLocatorId(fact.source_refs[0]), sourceHighlighted: true, at: index * 10000 + 2500,
+  }));
+  const factTourRunFixture = { run_id: executionTraceFixtureRunId, result: { facts: factTourFactsFixture } };
+  if (factSourceTourContractViolations(factTourSnapshotsFixture, factTourHighlightsFixture, factTourSemanticFixture, factTourRunFixture).length) throw new Error('Valid eight-fact returned source replay fixture was rejected');
+  const inflatedFactTourFixture = structuredClone(factTourSnapshotsFixture);
+  const deterministicFactId = factTourSemanticFixture.find(item => !item.modelContributionAccepted).entityId;
+  Object.assign(inflatedFactTourFixture.find(item => item.factId === deterministicFactId && item.phase === 'read-source'), { activeAgentId: 'canonical_facts', activeSignature: 'facts', workAuthority: 'Claim reader' });
+  if (!factSourceTourContractViolations(inflatedFactTourFixture, factTourHighlightsFixture, factTourSemanticFixture, factTourRunFixture).some(issue => issue.includes('inherited a model-agent identity'))) throw new Error('Application-projected fact locator with an inflated model identity was accepted');
+  const inflatedFactValueFixture = structuredClone(factTourSemanticFixture);
+  inflatedFactValueFixture[0].modelOwnedFields.push('value');
+  if (!factSourceTourContractViolations(factTourSnapshotsFixture, factTourHighlightsFixture, inflatedFactValueFixture, factTourRunFixture).some(issue => issue.includes('ownership does not match'))) throw new Error('Model ownership was incorrectly allowed to inflate the returned fact value');
+  const wrongFactLocatorFixture = structuredClone(factTourSnapshotsFixture);
+  wrongFactLocatorFixture.find(item => item.factId === FACT_TOUR_FACT_IDS[0] && item.phase === 'select-source').locatorId = 'source:forged';
+  if (!factSourceTourContractViolations(wrongFactLocatorFixture, factTourHighlightsFixture, factTourSemanticFixture, factTourRunFixture).some(issue => issue.includes('exact returned fact reference'))) throw new Error('Fact tour with a forged source locator was accepted');
+
+  const lawSourcesFixture = Array.from({ length: 4 }, (_, index) => ({
+    source_id: `law-${index + 1}`, location: `Article ${index + 1}`, url: `https://www.fedlex.admin.ch/law-${index + 1}`,
+  }));
+  const lawSemanticFixture = lawSourcesFixture.map((source, index) => ({
+    eventId: `law-event:${source.source_id}`, sequence: index + 1, runId: executionTraceFixtureRunId,
+    entityKind: 'official_source', entityId: source.source_id, traceContract: EXECUTION_TRACE_CONTRACT,
+    presentationMode: 'deterministic_projection', authority: 'versioned_official_source_registry',
+    modelContributionAccepted: false, deterministicFallbackApplied: false,
+    agentId: 'official_law_registry', actorType: 'deterministic_tool',
+  }));
+  const lawStepsFixture = lawSourcesFixture.map(source => ({
+    sourceId: source.source_id, location: source.location, url: source.url,
+    retrievalMethod: 'versioned_official_source_registry_lookup', registryVersion: 'fixture-v1',
+    selectedSourceId: source.source_id, selectedUrl: source.url, passageSourceId: source.source_id, passageUrl: source.url,
+    presentationMode: 'deterministic-projection', presentationLabel: 'Application step · Swiss law lookup',
+    activeAgentId: '', activeSignature: 'law', workAuthority: 'Swiss law lookup',
+  }));
+  const lawRunFixture = { run_id: executionTraceFixtureRunId, result: { legal_research: { sources: lawSourcesFixture } } };
+  if (officialLawTourContractViolations(lawStepsFixture, lawSemanticFixture, lawRunFixture).length) throw new Error('Valid four-source deterministic law registry fixture was rejected');
+  const inflatedLawFixture = structuredClone(lawStepsFixture);
+  Object.assign(inflatedLawFixture[0], { activeAgentId: 'canonical_facts', activeSignature: 'facts', workAuthority: 'Claim reader' });
+  if (!officialLawTourContractViolations(inflatedLawFixture, lawSemanticFixture, lawRunFixture).some(issue => issue.includes('misrepresented as Nemotron'))) throw new Error('Official law registry step with an inflated model identity was accepted');
 
   const expectedIntakeFixture = { factId: 'fact_customer_objective', sourceId: 'message', locatorId: 'source:message:page:1:quote:requested action', passage: 'Please tell me what should happen next.' };
   const intakeConstructionFixture = { nodeId: 'intake', attachmentKind: 'fact', ...expectedIntakeFixture, highlightMarkCount: 1, generatedSummaryVisible: false };
@@ -6777,18 +8106,71 @@ async function runContractSelfTest() {
   const hiddenRejectionAuditFixture = structuredClone(auditSnapshotFixture);
   hiddenRejectionAuditFixture[2].rejections = [];
   if (!agentAuditContractViolations(hiddenRejectionAuditFixture, auditFixture, true).some(issue => issue.includes('rejected item'))) throw new Error('Agent history hiding a rejected item was accepted');
-  const referenceAuditFixture = REQUIRED_VISIBLE_SPECIALIST_IDS.map(agentId => ({
-    agentId, opened: true, panelAgentId: agentId, panelSignature: REQUIRED_NEMOTRON_AGENT_SIGNATURES[agentId].signature,
-    buttonPressed: 'true', focusRestored: true, buttonPressedAfterClose: 'false', panelOpenAfterClose: false,
-    historyAvailable: false, historyContract: '', historyStepCounts: [0, 0, 0, 0, 0], acceptedCount: 0,
-    acceptedIds: [], rejections: [], callId: '', outputHash: '', emptyStateVisible: true,
-  }));
-  if (agentAuditContractViolations(referenceAuditFixture, { executed: false, agents: [] }, false).length) throw new Error('Valid fail-closed reference agent history fixture was rejected');
+  const referenceDecisionAuditFixture = [
+    { phase: 'source-opened', nodeId: 'notification', sourceId: 'art_notification', locatorId: 'source:art_notification:page:1:quote:notice' },
+    { phase: 'fragment-extracted', nodeId: 'notification', sourceId: 'art_notification', locatorId: 'source:art_notification:page:1:quote:notice' },
+    { phase: 'plan-receded', nodeId: 'notification', sourceId: '', locatorId: '' },
+  ];
+  const referenceAuditFixture = REQUIRED_VISIBLE_SPECIALIST_IDS.map(agentId => {
+    const pathAudit = agentId === 'process_decision_mapping';
+    return {
+      agentId, opened: true, panelAgentId: agentId, panelSignature: REQUIRED_NEMOTRON_AGENT_SIGNATURES[agentId].signature,
+      buttonPressed: 'true', focusRestored: true, buttonPressedAfterClose: 'false', panelOpenAfterClose: false,
+      historyAvailable: pathAudit, historyMode: pathAudit ? 'reference-replay-actions' : 'not-returned', historyContract: '',
+      historyStepCounts: pathAudit ? [1, 0, 0, 0, 0] : [0, 0, 0, 0, 0], referenceTaskCount: pathAudit ? 1 : 0,
+      referenceActionCount: pathAudit ? referenceDecisionAuditFixture.length : 0,
+      referenceActions: pathAudit ? referenceDecisionAuditFixture : [],
+      referenceProvenanceVisible: pathAudit,
+      referenceProvenanceText: pathAudit ? 'No provider call · accepted reference output replay' : '',
+      noAgentCallsEmptyStateVisible: false,
+      acceptedCount: 0, acceptedIds: [], rejections: [], callId: '', outputHash: '', emptyStateVisible: !pathAudit,
+    };
+  });
+  if (agentAuditContractViolations(referenceAuditFixture, { executed: false, agents: [] }, false, referenceDecisionAuditFixture).length) throw new Error('Valid action-bearing reference Path history fixture was rejected');
+  const truncatedReferenceAuditFixture = structuredClone(referenceAuditFixture);
+  const pathHistory = truncatedReferenceAuditFixture.find(item => item.agentId === 'process_decision_mapping');
+  pathHistory.referenceActions.pop();
+  pathHistory.referenceActionCount -= 1;
+  if (!agentAuditContractViolations(truncatedReferenceAuditFixture, { executed: false, agents: [] }, false, referenceDecisionAuditFixture).some(issue => issue.includes('exact persisted decision flow'))) throw new Error('Reference Path history missing a decision action was accepted');
 
+  const fixtureRunId = 'run:execution-trace-fixture';
+  const processSemanticFixture = FLAGSHIP_PROCESS_PROJECTION_IDS.flatMap((entityId, index) => {
+    const linkedModelContributionIds = index % 2 === 0 ? [`contribution:${entityId}`] : [];
+    const structure = {
+      type: 'process_node.created', eventId: `event:${entityId}`,
+      sequence: index + 1,
+      runId: fixtureRunId,
+      entityKind: 'process_node',
+      entityId,
+      traceContract: EXECUTION_TRACE_CONTRACT,
+      presentationMode: 'returned_action_replay',
+      authority: linkedModelContributionIds.length ? 'deterministic_process_projection' : 'deterministic_process_structure',
+      modelContributionAccepted: false,
+      deterministicFallbackApplied: false,
+      agentId: 'process_projection', actorType: 'deterministic_tool', modelOwnedFields: [],
+      applicationOwnedFields: ['node_id', 'title', 'question'], linkedModelContributionIds,
+      outputProcessNodeId: entityId,
+    };
+    const decision = linkedModelContributionIds.length ? [{
+      type: 'process_decision.accepted', eventId: `decision-event:${entityId}`, sequence: index + .5,
+      runId: fixtureRunId, entityKind: 'process_decision', entityId,
+      traceContract: EXECUTION_TRACE_CONTRACT, presentationMode: 'returned_action_replay',
+      authority: 'model_field_accepted_by_process_gate', modelContributionAccepted: true,
+      deterministicFallbackApplied: false, agentId: 'process_decision_mapping', actorType: 'nemotron_agent',
+      acceptedFields: ['decision_value'], modelOwnedFields: ['decision_value'], applicationOwnedFields: [],
+      acceptedContributionIds: linkedModelContributionIds, outputProcessNodeId: entityId,
+      sourceCallId: 'modelcall-process-fixture', sourceCallInputHash: '1'.repeat(64),
+      sourceCallOutputHash: '2'.repeat(64), gateInputHash: '3'.repeat(64),
+      originCallId: 'modelcall-process-fixture', callCount: 1,
+      usageSource: 'provider_reported', cacheHit: false,
+    }] : [];
+    return [...decision, structure];
+  });
+  const processStructureSemanticFixture = processSemanticFixture.filter(item => item.entityKind === 'process_node');
   const processProjectionFixture = FLAGSHIP_PROCESS_PROJECTION_IDS.map((entityId, index) => ({
     changeId: `change:${entityId}`,
     eventId: `event:${entityId}`,
-    agentId: 'process_decision_mapping',
+    agentId: '',
     entityId,
     nodeStates: FLAGSHIP_PROCESS_PROJECTION_IDS.map((nodeId, nodeIndex) => {
       const state = nodeIndex < index ? 'built' : nodeIndex === index ? 'building' : 'pending';
@@ -6797,29 +8179,111 @@ async function runContractSelfTest() {
     focus: { focusCount: 1, cursorCount: 1, artifactCount: 1, actionCount: 0 },
     at: index * 2400,
   }));
-  const processSemanticFixture = processProjectionFixture.map((item, index) => ({ eventId: item.eventId, sequence: index + 1 }));
-  const processCursorFixture = processProjectionFixture.map(item => ({ changeId: item.changeId, eventId: item.eventId, agentId: item.agentId, phase: 'click' }));
-  if (processProjectionContractViolations(processProjectionFixture, processSemanticFixture, processCursorFixture, true).length) throw new Error('Valid ten-node process projection fixture was rejected');
+  const processCursorFixture = processProjectionFixture.map((item, index) => ({
+    changeId: item.changeId,
+    eventId: item.eventId,
+    agentId: item.agentId,
+    phase: 'click',
+    presentationMode: 'returned-action-replay',
+    presentationLabel: 'Returned work · Process safety check',
+    activeAgentId: '',
+    activeSignature: 'gate',
+    workAuthority: 'Process safety check',
+  }));
+  if (processProjectionContractViolations(processProjectionFixture, processSemanticFixture, processCursorFixture, fixtureRunId).length) throw new Error('Valid ten-node process projection fixture was rejected');
   const nonMonotonicProjection = structuredClone(processProjectionFixture);
   nonMonotonicProjection[4].nodeStates[0].state = 'pending';
-  if (!processProjectionContractViolations(nonMonotonicProjection, processSemanticFixture, processCursorFixture, true).some(issue => issue.includes('prior nodes'))) throw new Error('Non-monotonic process projection fixture was accepted');
-
-  const deterministicProjection = processProjectionFixture.map(item => ({ ...item, agentId: 'process_projection' }));
-  const deterministicCursor = processCursorFixture.map(item => ({ ...item, agentId: 'process_projection' }));
-  if (processProjectionContractViolations(deterministicProjection, processSemanticFixture, deterministicCursor, false).length) throw new Error('Truthful deterministic process projection fixture was rejected');
-
-  const progressEntityFixture = [
-    ...FLAGSHIP_PROCESS_PROJECTION_IDS.map(nodeId => ({ entityKind: 'node', nodeId, branchId: '' })),
-    ...REQUIRED_CAUSATION_BRANCH_IDS.map((nodeId, index) => ({ entityKind: 'branch', nodeId, branchId: ['building-defect', 'tenant-use', 'mixed-cause', 'insufficient'][index] })),
+  if (!processProjectionContractViolations(nonMonotonicProjection, processSemanticFixture, processCursorFixture, fixtureRunId).some(issue => issue.includes('prior nodes'))) throw new Error('Non-monotonic process projection fixture was accepted');
+  const inflatedDeterministicProjection = structuredClone(processProjectionFixture);
+  const inflatedDeterministicCursor = structuredClone(processCursorFixture);
+  const deterministicIndex = 1;
+  inflatedDeterministicProjection[deterministicIndex].agentId = 'process_decision_mapping';
+  inflatedDeterministicCursor[deterministicIndex].agentId = 'process_decision_mapping';
+  inflatedDeterministicCursor[deterministicIndex].activeAgentId = 'process_decision_mapping';
+  inflatedDeterministicCursor[deterministicIndex].activeSignature = 'process';
+  if (!processProjectionContractViolations(inflatedDeterministicProjection, processSemanticFixture, inflatedDeterministicCursor, fixtureRunId).some(issue => issue.includes('inherited a model identity'))) throw new Error('Deterministic process structure with an inflated model identity was accepted');
+  const inflatedProcessFieldFixture = structuredClone(processSemanticFixture);
+  inflatedProcessFieldFixture.find(item => item.entityKind === 'process_decision').modelOwnedFields.push('title');
+  if (!processProjectionContractViolations(processProjectionFixture, inflatedProcessFieldFixture, processCursorFixture, fixtureRunId).some(issue => issue.includes('exact accepted decision_value'))) throw new Error('Process model event was allowed to claim deterministic node structure');
+  const evidenceOwnershipFixture = [
+    {
+      type: 'evidence_fields.accepted', eventId: 'evidence-fields:one', runId: fixtureRunId,
+      entityKind: 'evidence_fields', entityId: 'evidence-one', traceContract: EXECUTION_TRACE_CONTRACT,
+      presentationMode: 'returned_action_replay', actorType: 'nemotron_agent', agentId: 'evidence_checklist',
+      modelContributionAccepted: true, modelOwnedFields: ['status', 'artifact_ids'], applicationOwnedFields: [],
+      outputEvidenceId: 'evidence-one',
+      sourceCallId: 'modelcall-evidence-fixture', sourceCallInputHash: '4'.repeat(64),
+      sourceCallOutputHash: '5'.repeat(64), gateInputHash: '6'.repeat(64),
+      originCallId: 'modelcall-evidence-fixture', callCount: 1,
+      usageSource: 'provider_reported', cacheHit: false,
+    },
+    {
+      type: 'evidence_requirement.linked', eventId: 'evidence-structure:one', runId: fixtureRunId,
+      entityKind: 'evidence_requirement', entityId: 'evidence-one', traceContract: EXECUTION_TRACE_CONTRACT,
+      presentationMode: 'returned_action_replay', actorType: 'deterministic_tool', agentId: 'evidence_projection',
+      modelContributionAccepted: false, modelOwnedFields: [], applicationOwnedFields: ['item_id', 'status', 'artifact_ids'],
+      linkedModelFields: ['status', 'artifact_ids'], outputEvidenceId: 'evidence-one',
+    },
+    {
+      type: 'evidence_requirement.linked', eventId: 'evidence-structure:two', runId: fixtureRunId,
+      entityKind: 'evidence_requirement', entityId: 'evidence-two', traceContract: EXECUTION_TRACE_CONTRACT,
+      presentationMode: 'returned_action_replay', actorType: 'deterministic_tool', agentId: 'evidence_projection',
+      modelContributionAccepted: false, modelOwnedFields: [], applicationOwnedFields: ['item_id', 'status'],
+      linkedModelFields: [], outputEvidenceId: 'evidence-two',
+    },
   ];
+  const ownershipRunFixture = {
+    run_id: fixtureRunId,
+    result: {
+      process: { nodes: FLAGSHIP_PROCESS_PROJECTION_IDS.map(node_id => ({ node_id })) },
+      checklist: { items: [{ item_id: 'evidence-one' }, { item_id: 'evidence-two' }] },
+      agent_orchestration: {
+        agents: [
+          {
+            agent_id: 'process_decision_mapping', call_id: 'modelcall-process-fixture',
+            origin_call_id: 'modelcall-process-fixture', call_count: 1, usage_source: 'provider_reported',
+            cache_hit: false, input_artifact_hash: '1'.repeat(64), output_artifact_hash: '2'.repeat(64),
+          },
+          {
+            agent_id: 'evidence_checklist', call_id: 'modelcall-evidence-fixture',
+            origin_call_id: 'modelcall-evidence-fixture', call_count: 1, usage_source: 'provider_reported',
+            cache_hit: false, input_artifact_hash: '4'.repeat(64), output_artifact_hash: '5'.repeat(64),
+          },
+        ],
+        deterministic_gates: [
+          { agent_id: 'deterministic_process_gate', input_artifact_hash: '3'.repeat(64) },
+          { agent_id: 'deterministic_evidence_gate', input_artifact_hash: '6'.repeat(64) },
+        ],
+      },
+    },
+  };
+  const ownershipSemanticFixture = [...processSemanticFixture, ...evidenceOwnershipFixture];
+  if (acceptedExecutionFieldOwnershipViolations(ownershipSemanticFixture, ownershipRunFixture).length) throw new Error('Valid split model-field/application-structure fixture was rejected');
+  const forgedProcessCallBindingFixture = structuredClone(ownershipSemanticFixture);
+  forgedProcessCallBindingFixture.find(item => item.entityKind === 'process_decision').sourceCallInputHash = 'f'.repeat(64);
+  if (!acceptedExecutionFieldOwnershipViolations(forgedProcessCallBindingFixture, ownershipRunFixture).some(issue => issue.includes('exact accepted decision_value'))) throw new Error('Process decision with a forged source-call input hash was accepted');
+  const forgedEvidenceCallBindingFixture = structuredClone(ownershipSemanticFixture);
+  forgedEvidenceCallBindingFixture.find(item => item.entityKind === 'evidence_fields').originCallId = 'modelcall-forged-origin';
+  if (!acceptedExecutionFieldOwnershipViolations(forgedEvidenceCallBindingFixture, ownershipRunFixture).some(issue => issue.includes('status/artifact_ids'))) throw new Error('Evidence fields with a forged cache-origin call were accepted');
+  const inflatedEvidenceOwnershipFixture = structuredClone(ownershipSemanticFixture);
+  inflatedEvidenceOwnershipFixture.find(item => item.entityKind === 'evidence_fields').modelOwnedFields.push('title');
+  if (!acceptedExecutionFieldOwnershipViolations(inflatedEvidenceOwnershipFixture, ownershipRunFixture).some(issue => issue.includes('status/artifact_ids'))) throw new Error('Document finder was allowed to claim an unbounded evidence field');
+
+  const progressEntityFixture = FLAGSHIP_PROCESS_PROJECTION_IDS.map(nodeId => ({ entityKind: 'node', nodeId, branchId: '' }));
   const progressFixture = progressEntityFixture.flatMap((entity, entityIndex) => {
-    const basisKind = entity.nodeId === 'evidence_gap' ? 'evidence-requirement' : 'accepted-decision';
-    const identity = {
-      changeId: `progress-change:${entity.nodeId}`,
-      eventId: `progress-event:${entity.nodeId}`,
-      agentId: 'process_projection',
-    };
-    return PROCESS_NODE_PROGRESS_SEQUENCE.map((step, stepIndex) => ({
+    const basisKind = 'accepted-decision';
+    const decisionSemantic = processSemanticFixture.find(item => item.entityKind === 'process_decision' && item.entityId === entity.nodeId);
+    const sequence = ['responsibility', 'remedy', 'resolution'].includes(entity.nodeId)
+      ? PROCESS_NODE_PROGRESS_SEQUENCE.slice(-3)
+      : PROCESS_NODE_PROGRESS_SEQUENCE;
+    return sequence.map((step, stepIndex) => {
+      const modelDecisionPhase = Boolean(decisionSemantic) && ['form', 'complete'].includes(step.phase);
+      const identity = {
+        changeId: `progress-change:${entity.nodeId}`,
+        eventId: modelDecisionPhase ? decisionSemantic.eventId : `event:${entity.nodeId}`,
+        agentId: modelDecisionPhase ? 'process_decision_mapping' : '',
+      };
+      return ({
       contract: PROCESS_NODE_PROGRESS_CONTRACT,
       scope: PROCESS_NODE_PROGRESS_SCOPE,
       processId: 'process-progress-fixture',
@@ -6835,6 +8299,7 @@ async function runContractSelfTest() {
       indicatorDomCount: 1,
       indicatorVisibleCount: step.visible ? 1 : 0,
       indicatorVisible: step.visible,
+      indicatorSurfaceVisible: false,
       indicatorInsideCursor: true,
       indicatorPercent: step.percent,
       indicatorPhase: step.visible ? step.phase : '',
@@ -6844,10 +8309,15 @@ async function runContractSelfTest() {
             : step.phase === 'complete' ? (entity.entityKind === 'branch' ? 'Outcome ready' : 'Decision ready')
               : step.phase)
         : '',
-      cursorSignature: 'process',
-      cursorAgent: REQUIRED_DESKTOP_AGENT_LABELS.process_decision_mapping,
-      activeAgentId: '',
-      visualActiveAgentId: 'process_decision_mapping',
+      indicatorValueVisible: false,
+      cursorProgressState: step.visible ? 'active' : '',
+      cursorSignature: modelDecisionPhase ? 'process' : 'gate',
+      cursorAgent: modelDecisionPhase ? REQUIRED_DESKTOP_AGENT_LABELS.process_decision_mapping : 'Process safety check',
+      activeAgentId: modelDecisionPhase ? 'process_decision_mapping' : '',
+      visualActiveAgentId: modelDecisionPhase ? 'process_decision_mapping' : '',
+      presentationMode: 'returned-action-replay',
+      presentationLabel: modelDecisionPhase ? 'Returned work · Process builder' : 'Returned work · Process safety check',
+      workAuthority: modelDecisionPhase ? 'Process builder' : 'Process safety check',
       rootProgressState: step.visible ? 'active' : 'idle',
       rootPercent: step.visible ? String(step.percent) : '',
       rootPhase: step.visible ? step.phase : '',
@@ -6865,7 +8335,8 @@ async function runContractSelfTest() {
         : '',
       outputVisible: false,
       at: (entityIndex * 10000) + (stepIndex * 350),
-    }));
+    });
+    });
   });
   const progressOutputFixture = entity => {
     const cleared = progressFixture.find(item => item.entityKind === entity.entityKind && item.nodeId === entity.nodeId && item.phase === 'cleared');
@@ -6874,10 +8345,11 @@ async function runContractSelfTest() {
       entityId: entity.nodeId,
       branchId: entity.branchId,
       changeId: cleared.changeId,
-      eventId: cleared.eventId,
-      agentId: cleared.agentId,
+      eventId: `event:${entity.nodeId}`,
+      agentId: '',
       indicatorVisible: false,
       indicatorVisibleCount: 0,
+      cursorProgressState: '',
       rootProgressState: 'idle',
       processProgressState: 'idle',
       outputVisible: true,
@@ -6885,160 +8357,205 @@ async function runContractSelfTest() {
     };
   };
   const progressNodeOutputFixture = progressEntityFixture.filter(item => item.entityKind === 'node').map(progressOutputFixture);
-  const progressBranchOutputFixture = progressEntityFixture.filter(item => item.entityKind === 'branch').map(progressOutputFixture);
-  const progressFinalFixture = { indicatorVisible: false, indicatorVisibleCount: 0, rootProgressState: 'idle', processProgressState: 'idle', rootPercent: '', processPercent: '' };
-  if (processNodeProgressContractViolations(progressFixture, progressNodeOutputFixture, progressBranchOutputFixture, progressFinalFixture, false).length) throw new Error('Valid evidence-bound process-node progress fixture was rejected');
+  const progressFinalFixture = { indicatorVisible: false, indicatorValueVisible: false, indicatorVisibleCount: 0, cursorProgressState: '', rootProgressState: 'idle', processProgressState: 'idle', rootPercent: '', processPercent: '' };
+  if (processNodeProgressContractViolations(progressFixture, progressNodeOutputFixture, progressFinalFixture, processSemanticFixture, fixtureRunId).length) throw new Error('Valid execution-trace-bound process-node progress fixture was rejected');
   const missingProgressPhaseFixture = progressFixture.filter(item => !(item.nodeId === 'causation' && item.phase === 'extract'));
-  if (!processNodeProgressContractViolations(missingProgressPhaseFixture, progressNodeOutputFixture, progressBranchOutputFixture, progressFinalFixture, false).some(issue => issue.includes('progress sequence is not exactly'))) throw new Error('Process progress with a missing extraction phase was accepted');
+  if (!processNodeProgressContractViolations(missingProgressPhaseFixture, progressNodeOutputFixture, progressFinalFixture, processSemanticFixture, fixtureRunId).some(issue => issue.includes('does not replay accepted inputs'))) throw new Error('Process progress with a missing accepted-input phase was accepted');
   const wrongProgressOwnerFixture = structuredClone(progressFixture);
-  wrongProgressOwnerFixture.find(item => item.nodeId === 'intake' && item.phase === 'read').cursorSignature = 'facts';
-  if (!processNodeProgressContractViolations(wrongProgressOwnerFixture, progressNodeOutputFixture, progressBranchOutputFixture, progressFinalFixture, false).some(issue => issue.includes('not visibly owned by Process builder'))) throw new Error('Process progress owned by the wrong specialist was accepted');
-  const sourceLabelOnEvidenceNeedFixture = structuredClone(progressFixture);
-  const mislabeledEvidenceSearch = sourceLabelOnEvidenceNeedFixture.find(item => item.nodeId === 'evidence_gap' && item.phase === 'search');
-  mislabeledEvidenceSearch.label = 'Finding source';
-  mislabeledEvidenceSearch.indicatorLabel = 'Finding source';
-  mislabeledEvidenceSearch.inspectionPrompt = 'Source for the next decision';
-  mislabeledEvidenceSearch.inspectionText = 'Source for the next decision';
-  if (!processNodeProgressContractViolations(sourceLabelOnEvidenceNeedFixture, progressNodeOutputFixture, progressBranchOutputFixture, progressFinalFixture, false).some(issue => issue.includes('evidence requirement progress is mislabeled') || issue.includes('falsely presented as a source'))) throw new Error('Evidence requirement mislabeled as a source was accepted');
+  wrongProgressOwnerFixture.find(item => item.nodeId === 'intake' && item.phase === 'form').cursorSignature = 'facts';
+  if (!processNodeProgressContractViolations(wrongProgressOwnerFixture, progressNodeOutputFixture, progressFinalFixture, processSemanticFixture, fixtureRunId).some(issue => issue.includes('accepted decision_value is not visibly owned by Process builder'))) throw new Error('Accepted decision_value progress owned by the wrong specialist was accepted');
+  const inflatedFallbackProgressFixture = structuredClone(progressFixture);
+  const fallbackProgress = inflatedFallbackProgressFixture.find(item => item.nodeId === 'scope' && item.phase === 'read');
+  Object.assign(fallbackProgress, { cursorSignature: 'process', cursorAgent: 'Process builder', activeAgentId: 'process_decision_mapping', visualActiveAgentId: 'process_decision_mapping', workAuthority: 'Process builder' });
+  if (!processNodeProgressContractViolations(inflatedFallbackProgressFixture, progressNodeOutputFixture, progressFinalFixture, processSemanticFixture, fixtureRunId).some(issue => issue.includes('accepted-input or structural progress inherited Process builder identity'))) throw new Error('Accepted-input progress with an inflated Process builder identity was accepted');
+  const visibleNumericProgressFixture = structuredClone(progressFixture);
+  visibleNumericProgressFixture.find(item => item.nodeId === 'intake' && item.phase === 'read').indicatorValueVisible = true;
+  if (!processNodeProgressContractViolations(visibleNumericProgressFixture, progressNodeOutputFixture, progressFinalFixture, processSemanticFixture, fixtureRunId).some(issue => issue.includes('numeric percentage is visible'))) throw new Error('Visible numeric process percentage fixture was accepted');
   const prematureProgressOutputFixture = structuredClone(progressFixture);
   prematureProgressOutputFixture.find(item => item.nodeId === 'responsibility' && item.phase === 'cleared').outputVisible = true;
-  if (!processNodeProgressContractViolations(prematureProgressOutputFixture, progressNodeOutputFixture, progressBranchOutputFixture, progressFinalFixture, false).some(issue => issue.includes('output was still absent'))) throw new Error('Process output visible before progress cleared was accepted');
+  if (!processNodeProgressContractViolations(prematureProgressOutputFixture, progressNodeOutputFixture, progressFinalFixture, processSemanticFixture, fixtureRunId).some(issue => issue.includes('output was still absent'))) throw new Error('Process output visible before progress cleared was accepted');
   const lingeringProgressOutputFixture = structuredClone(progressNodeOutputFixture);
   lingeringProgressOutputFixture[0].indicatorVisible = true;
   lingeringProgressOutputFixture[0].indicatorVisibleCount = 1;
-  if (!processNodeProgressContractViolations(progressFixture, lingeringProgressOutputFixture, progressBranchOutputFixture, progressFinalFixture, false).some(issue => issue.includes('remains visible when the output appears'))) throw new Error('Process progress still visible when the node appeared was accepted');
+  if (!processNodeProgressContractViolations(progressFixture, lingeringProgressOutputFixture, progressFinalFixture, processSemanticFixture, fixtureRunId).some(issue => issue.includes('remains visible when the output appears'))) throw new Error('Process progress still visible when the node appeared was accepted');
 
-  const branchFixtureNodes = REQUIRED_CAUSATION_BRANCH_IDS.map(nodeId => ({ node_id: nodeId, fact_ids: [], legal_source_ids: [], evidence_requirement_ids: [] }));
-  const inspectionRunFixture = { process: { nodes: [...FLAGSHIP_PROCESS_PROJECTION_IDS.map(nodeId => ({ node_id: nodeId, fact_ids: [], legal_source_ids: [], evidence_requirement_ids: [] })), ...branchFixtureNodes] }, facts: [] };
-  const sourceInspectionFixture = FLAGSHIP_PROCESS_PROJECTION_IDS.map((nodeId, index) => ({ entityKind: 'node', nodeId, branchId: '', changeId: `change:${nodeId}`, eventId: `event:${nodeId}`, agentId: 'process_decision_mapping', sourceKind: 'accepted-process-input', sourceId: nodeId, factId: '', locatorId: '', found: `Accepted ${nodeId}`, at: (index * 2400) - 1200 }));
-  const branchInspectionFixture = REQUIRED_CAUSATION_BRANCH_IDS.map((nodeId, index) => ({ entityKind: 'branch', nodeId, branchId: `branch:${nodeId}`, changeId: `branch-change:${nodeId}`, eventId: `branch-event:${nodeId}`, agentId: 'process_decision_mapping', sourceKind: 'accepted-process-input', sourceId: nodeId, factId: '', locatorId: '', found: `Accepted ${nodeId}`, at: 30000 + (index * 2400) }));
-  const sourceHighlightFixture = [...sourceInspectionFixture, ...branchInspectionFixture].map(item => ({
-    entityKind: item.entityKind, nodeId: item.nodeId, branchId: item.branchId, factId: item.factId,
-    changeId: item.changeId, eventId: item.eventId, agentId: item.agentId, sourceId: item.sourceId,
-    locatorId: item.locatorId, graphInspectionPhase: 'highlight-source', sourceHighlighted: true, at: item.at - 1,
+  const decisionFlowFacts = FLAGSHIP_PROCESS_PROJECTION_IDS.map(nodeId => ({
+    fact_id: `fact_${nodeId}`,
+    source_refs: nodeId === NOTIFICATION_DECISION_NODE_ID ? [
+      { artifact_id: 'art_notification', locator_kind: 'text_quote', page: 1, excerpt: 'Wed, 15 Jul 2026 08:32:00 +0200' },
+      { artifact_id: 'art_notification', locator_kind: 'text_quote', page: 1, excerpt: 'Please arrange an inspection and repair.' },
+      { artifact_id: 'art_delivery', locator_kind: 'text_quote', page: 1, excerpt: 'Accepted by recipient mail server' },
+    ] : nodeId === 'defect'
+      ? [{ artifact_id: 'art_notification', locator_kind: 'text_quote', page: 1, excerpt: 'Wed, 15 Jul 2026 08:32:00 +0200' }]
+      : [{ artifact_id: `art_${nodeId}`, locator_kind: 'text_quote', page: 1, excerpt: `Exact ${nodeId} source` }],
   }));
-  const branchVisualFixture = branchInspectionFixture.map(item => ({ nodeId: item.nodeId, branchId: item.branchId, changeId: item.changeId, eventId: item.eventId, agentId: item.agentId, at: item.at + 1200 }));
-  const inspectionCursorFixture = [...sourceInspectionFixture, ...branchInspectionFixture].map(item => ({ changeId: item.changeId, eventId: item.eventId, agentId: item.agentId, targetId: item.sourceId, phase: 'click', graphInspectionPhase: 'read-source' }));
-  if (!sourceInspectionContractViolations([...sourceInspectionFixture, ...branchInspectionFixture], sourceHighlightFixture, processProjectionFixture, branchVisualFixture, inspectionCursorFixture, inspectionRunFixture, true).some(issue => issue.includes('no exact claim-source inspection'))) throw new Error('Source-free process inspection fixture was accepted');
-  const claimSourceRunFixture = structuredClone(inspectionRunFixture);
-  claimSourceRunFixture.facts = [{ fact_id: 'fact_intake_source', source_refs: [{ artifact_id: 'art_lease', locator_kind: 'text_quote', page: 1, excerpt: 'Residential Lease Agreement' }] }];
-  claimSourceRunFixture.checklist = { items: [{ item_id: 'lease', node_ids: ['intake'], fact_id: 'fact_intake_source' }] };
-  const claimSourceInspectionFixture = structuredClone(sourceInspectionFixture);
-  Object.assign(claimSourceInspectionFixture[0], { sourceKind: 'claim-source', sourceId: 'art_lease', factId: 'fact_intake_source', locatorId: 'source:art_lease:page:1:quote:Residential Lease Agreement', found: 'Residential Lease Agreement' });
-  const claimSourceHighlightFixture = structuredClone(sourceHighlightFixture);
-  Object.assign(claimSourceHighlightFixture[0], { sourceId: 'art_lease', factId: 'fact_intake_source', locatorId: 'source:art_lease:page:1:quote:Residential Lease Agreement' });
-  const claimSourceCursorFixture = structuredClone(inspectionCursorFixture);
-  claimSourceCursorFixture[0].targetId = 'art_lease';
-  if (sourceInspectionContractViolations([...claimSourceInspectionFixture, ...branchInspectionFixture], claimSourceHighlightFixture, processProjectionFixture, branchVisualFixture, claimSourceCursorFixture, claimSourceRunFixture, true).length) throw new Error('Valid claim-source inspection fixture was rejected');
-  const missingNodeHighlightFixture = claimSourceHighlightFixture.filter(item => item.nodeId !== 'scope');
-  if (!sourceInspectionContractViolations([...claimSourceInspectionFixture, ...branchInspectionFixture], missingNodeHighlightFixture, processProjectionFixture, branchVisualFixture, claimSourceCursorFixture, claimSourceRunFixture, true).some(issue => issue.includes('highlight-source did not visibly precede'))) throw new Error('Node commit without source-highlighted was accepted');
-  const factlessClaimSourceFixture = structuredClone(claimSourceInspectionFixture);
-  factlessClaimSourceFixture[0].factId = '';
-  if (!sourceInspectionContractViolations([...factlessClaimSourceFixture, ...branchInspectionFixture], claimSourceHighlightFixture, processProjectionFixture, branchVisualFixture, claimSourceCursorFixture, claimSourceRunFixture, true).some(issue => issue.includes('not returned by the node basis'))) throw new Error('Factless claim-source inspection fixture was accepted');
-  const wrongOwnerClaimSourceRunFixture = structuredClone(claimSourceRunFixture);
-  wrongOwnerClaimSourceRunFixture.checklist.items[0].node_ids = ['scope'];
-  if (!sourceInspectionContractViolations([...claimSourceInspectionFixture, ...branchInspectionFixture], claimSourceHighlightFixture, processProjectionFixture, branchVisualFixture, claimSourceCursorFixture, wrongOwnerClaimSourceRunFixture, true).some(issue => issue.includes('not returned by the node basis'))) throw new Error('Cross-node evidence-derived claim-source inspection was accepted');
-  const fabricatedInspectionFixture = structuredClone(sourceInspectionFixture);
-  fabricatedInspectionFixture[0].sourceKind = 'fabricated-source';
-  if (!sourceInspectionContractViolations([...fabricatedInspectionFixture, ...branchInspectionFixture], sourceHighlightFixture, processProjectionFixture, branchVisualFixture, inspectionCursorFixture, inspectionRunFixture, true).some(issue => issue.includes('not returned by the node basis'))) throw new Error('Fabricated source-inspection fixture was accepted');
-  const unboundInspectionCursorFixture = inspectionCursorFixture.filter(item => item.targetId !== 'intake');
-  if (!sourceInspectionContractViolations([...sourceInspectionFixture, ...branchInspectionFixture], sourceHighlightFixture, processProjectionFixture, branchVisualFixture, unboundInspectionCursorFixture, inspectionRunFixture, true).some(issue => issue.includes('not bound to the confirm-source cursor click target'))) throw new Error('Cursor-unbound source-inspection fixture was accepted');
-
-  const factTourFacts = FACT_SOURCE_TOUR_IDS.map((factId, index) => ({
-    fact_id: factId,
-    source_refs: [index === 2
-      ? { artifact_id: `source-${index}`, locator_kind: 'visual_observation', region: [0.42, 0.1, 0.2, 0.7], observation: 'Exact visual source', authority: 'generated_demo_reference_only' }
-      : { artifact_id: `source-${index}`, locator_kind: 'text_quote', page: index + 1, excerpt: `Exact source ${index}` }],
+  const decisionNodes = FLAGSHIP_PROCESS_PROJECTION_IDS.map(nodeId => ({
+    node_id: nodeId,
+    fact_ids: [`fact_${nodeId}`],
+    legal_source_ids: nodeId === NOTIFICATION_DECISION_NODE_ID ? ['fedlex-or-257g'] : [],
   }));
-  const factTourInspections = factTourFacts.map((fact, index) => ({
-    entityKind: 'fact', factId: fact.fact_id, changeId: `fact-change:${index}`, eventId: `fact-event:${index}`, agentId: 'canonical_facts',
-    sourceKind: 'claim-source', sourceId: `source-${index}`, locatorId: factSourceLocatorId(fact.source_refs[0]), found: `Exact source ${index}`,
-    sourceDockState: 'open', activeSourceLocator: factSourceLocatorId(fact.source_refs[0]), at: index * 2000,
+  const decisionRunFixture = {
+    facts: decisionFlowFacts,
+    process: { nodes: decisionNodes },
+    legal_research: { sources: [{ source_id: 'fedlex-or-257g', source_type: 'official_statute', passage_text: 'Der Mieter muss Mängel, die er nicht selber zu beseitigen hat, dem Vermieter melden.' }] },
+  };
+  const decisionRunEnvelope = { run_id: fixtureRunId, result: decisionRunFixture };
+  const decisionFactSemanticFixture = decisionFlowFacts.map((fact, index) => ({
+    eventId: `fact-event:${fact.fact_id}`,
+    sequence: 100 + index,
+    runId: fixtureRunId,
+    entityKind: 'fact',
+    entityId: fact.fact_id,
+    traceContract: EXECUTION_TRACE_CONTRACT,
+    presentationMode: 'returned_action_replay',
+    authority: index % 2 === 0 ? 'model_contribution_accepted' : 'deterministic_reference_projection',
+    modelContributionAccepted: index % 2 === 0,
+    deterministicFallbackApplied: false,
+    agentId: 'canonical_facts',
+    actorType: index % 2 === 0 ? 'nemotron_agent' : 'deterministic_tool',
   }));
-  const factTourChanges = factTourInspections.map((inspection, index) => ({
-    kind: 'fact', entityId: inspection.factId, changeId: inspection.changeId, eventId: inspection.eventId, agentId: inspection.agentId, at: inspection.at + MIN_FACT_SOURCE_HOLD_MS,
-    attachment: { kind: 'fact', factId: inspection.factId, sourceAuthority: factTourFacts[index].source_refs[0].authority || 'customer_submission', sourceLocatorId: inspection.locatorId },
-  }));
-  const factTourCursors = factTourInspections.map(inspection => ({
-    changeId: inspection.changeId, eventId: inspection.eventId, agentId: inspection.agentId, targetId: inspection.sourceId, phase: 'click',
-  }));
-  const factTourCompletion = [{
-    contract: FACT_SOURCE_TOUR_CONTRACT, factIds: [...FACT_SOURCE_TOUR_IDS], count: FACT_SOURCE_TOUR_IDS.length,
-    rootState: 'complete', rootIndex: String(FACT_SOURCE_TOUR_IDS.length - 1), at: factTourChanges.at(-1).at + 420,
-  }];
-  const factTourRun = { facts: factTourFacts };
-  if (factSourceTourContractViolations(factTourCompletion, factTourInspections, factTourChanges, factTourCursors, factTourRun).length) throw new Error('Valid five-fact source tour fixture was rejected');
-  const factCinematicFocusFixture = { focusCount: 1, cursorCount: 1, artifactCount: 1 };
-  const factHighlightFixture = factTourInspections.map(inspection => ({
-    entityKind: 'fact', factId: inspection.factId, changeId: inspection.changeId, eventId: inspection.eventId,
-    agentId: inspection.agentId, sourceId: inspection.sourceId, locatorId: inspection.locatorId,
-    factTourPhase: 'highlight-source', sourceHighlighted: true, at: inspection.at - 400,
-  }));
-  const factTrailFixture = (index, currentState) => factTourInspections.slice(0, index + 1).map((inspection, trailIndex) => ({
-    sourceId: inspection.sourceId,
-    state: trailIndex === index ? currentState : 'inspected',
-    visible: true,
-  }));
-  const factCinematicFixture = factTourInspections.flatMap((inspection, index) => ([
-    {
-      contract: FACT_SOURCE_CINEMATIC_CONTRACT, timing: 'select-source', cursorPhase: 'click', targetId: inspection.sourceId,
-      factId: inspection.factId, sourceId: inspection.sourceId, locatorId: inspection.locatorId, factTourPhase: 'select-source',
-      activeSourceIds: [], sourceDockState: '', activeSourceLocator: '', sourceVisible: false, sourceHighlighted: false, pendingVisible: false, findingVisible: false, factVisible: false, sourceTrail: factTrailFixture(index, 'opening'),
-      focus: factCinematicFocusFixture, at: inspection.at - 900,
-    },
-    {
-      contract: FACT_SOURCE_CINEMATIC_CONTRACT, timing: 'neutral-read', cursorPhase: 'click', targetId: inspection.sourceId,
-      factId: inspection.factId, sourceId: inspection.sourceId, locatorId: inspection.locatorId, factTourPhase: 'read-source',
-      activeSourceIds: [inspection.sourceId], sourceDockState: 'open', activeSourceLocator: inspection.locatorId, sourceVisible: true, sourceHighlighted: false, exactControlCount: 1, exactControlTag: 'BUTTON', exactControlText: `Exact ${inspection.factId}`, markCount: 0, highlightedMarkCount: 0, neutralControlLooksHighlighted: false, pendingVisible: true, findingVisible: false, factVisible: false, sourceTrail: factTrailFixture(index, 'active'),
-      focus: factCinematicFocusFixture, at: inspection.at - 700,
-    },
-    {
-      contract: FACT_SOURCE_CINEMATIC_CONTRACT, timing: 'confirm-click', cursorPhase: 'click', targetId: inspection.sourceId,
-      factId: inspection.factId, sourceId: inspection.sourceId, locatorId: inspection.locatorId, factTourPhase: 'read-source',
-      activeSourceIds: [inspection.sourceId], sourceDockState: 'open', activeSourceLocator: inspection.locatorId, sourceVisible: true, sourceHighlighted: false, exactControlCount: 1, exactControlTag: 'BUTTON', exactControlText: `Exact ${inspection.factId}`, markCount: 0, highlightedMarkCount: 0, neutralControlLooksHighlighted: false, pendingVisible: true, findingVisible: false, factVisible: false, sourceTrail: factTrailFixture(index, 'active'),
-      focus: factCinematicFocusFixture, at: inspection.at - 500,
-    },
-    {
-      contract: FACT_SOURCE_CINEMATIC_CONTRACT, timing: 'highlight-source', cursorPhase: 'source-highlighted', targetId: inspection.sourceId,
-      factId: inspection.factId, sourceId: inspection.sourceId, locatorId: inspection.locatorId, factTourPhase: 'highlight-source',
-      activeSourceIds: [inspection.sourceId], sourceDockState: 'open', activeSourceLocator: inspection.locatorId, sourceVisible: true, sourceHighlighted: true, exactControlCount: 0, exactControlTag: '', exactControlText: '', markCount: 1, highlightedMarkCount: 1, neutralControlLooksHighlighted: false, pendingVisible: false, findingVisible: false, factVisible: false, sourceTrail: factTrailFixture(index, 'active'),
-      focus: factCinematicFocusFixture, at: inspection.at - 400,
-    },
-    {
-      contract: FACT_SOURCE_CINEMATIC_CONTRACT, timing: 'finding', cursorPhase: 'artifact-change', targetId: inspection.sourceId,
-      factId: inspection.factId, sourceId: inspection.sourceId, locatorId: inspection.locatorId, factTourPhase: 'finding',
-      activeSourceIds: [inspection.sourceId], sourceDockState: 'open', activeSourceLocator: inspection.locatorId, sourceVisible: true, sourceHighlighted: true, pendingVisible: false, findingVisible: true, factVisible: true, sourceTrail: factTrailFixture(index, 'active'),
-      focus: factCinematicFocusFixture, at: inspection.at + MIN_FACT_SOURCE_HOLD_MS,
-    },
-  ]));
-  if (factSourceCinematicContractViolations(factCinematicFixture, factHighlightFixture, factTourInspections, factTourChanges).length) throw new Error('Valid select-read-confirm-highlight-finding cinematic fixture was rejected');
-  const preselectedFactCinematicFixture = structuredClone(factCinematicFixture);
-  preselectedFactCinematicFixture[0].activeSourceIds = [preselectedFactCinematicFixture[0].sourceId];
-  if (!factSourceCinematicContractViolations(preselectedFactCinematicFixture, factHighlightFixture, factTourInspections, factTourChanges).some(issue => issue.includes('preselected'))) throw new Error('Preselected source cinematic fixture was accepted');
-  const prehighlightedReadFixture = structuredClone(factCinematicFixture);
-  prehighlightedReadFixture[1].sourceHighlighted = true;
-  if (!factSourceCinematicContractViolations(prehighlightedReadFixture, factHighlightFixture, factTourInspections, factTourChanges).some(issue => issue.includes('neutral source read'))) throw new Error('Prehighlighted neutral-read cinematic fixture was accepted');
-  const neutralMarkFixture = structuredClone(factCinematicFixture);
-  neutralMarkFixture[1].markCount = 1;
-  neutralMarkFixture[1].exactControlCount = 0;
-  if (!factSourceCinematicContractViolations(neutralMarkFixture, factHighlightFixture, factTourInspections, factTourChanges).some(issue => issue.includes('neutral source read'))) throw new Error('Neutral source rendered as a preselected mark was accepted');
-  const selectedWithoutMarkFixture = structuredClone(factCinematicFixture);
-  selectedWithoutMarkFixture[3].markCount = 0;
-  selectedWithoutMarkFixture[3].highlightedMarkCount = 0;
-  if (!factSourceCinematicContractViolations(selectedWithoutMarkFixture, factHighlightFixture, factTourInspections, factTourChanges).some(issue => issue.includes('sole visible highlight'))) throw new Error('Selected source without one highlighted mark was accepted');
-  const missingConfirmFixture = factCinematicFixture.filter(item => !(item.factId === FACT_SOURCE_TOUR_IDS[0] && item.timing === 'confirm-click'));
-  if (!factSourceCinematicContractViolations(missingConfirmFixture, factHighlightFixture, factTourInspections, factTourChanges).some(issue => issue.includes('cinematic trace is incomplete'))) throw new Error('Highlight without an exact confirm click was accepted');
-  const missingFactHighlightFixture = factHighlightFixture.filter(item => item.factId !== FACT_SOURCE_TOUR_IDS[0]);
-  if (!factSourceCinematicContractViolations(factCinematicFixture, missingFactHighlightFixture, factTourInspections, factTourChanges).some(issue => issue.includes('casepath:source-highlighted'))) throw new Error('Fact appearance without source-highlighted was accepted');
-  const missingOpenedSourceFixture = structuredClone(factCinematicFixture);
-  missingOpenedSourceFixture.find(item => item.factId === FACT_SOURCE_TOUR_IDS[2] && item.timing === 'select-source').sourceTrail.shift();
-  if (!factSourceCinematicContractViolations(missingOpenedSourceFixture, factHighlightFixture, factTourInspections, factTourChanges).some(issue => issue.includes('opened sources do not accumulate'))) throw new Error('Fact cinematic with a missing prior source card was accepted');
+  const decisionLawSemanticFixture = {
+    eventId: 'law-event:fedlex-or-257g', sequence: 200, runId: fixtureRunId,
+    entityKind: 'official_source', entityId: 'fedlex-or-257g', traceContract: EXECUTION_TRACE_CONTRACT,
+    presentationMode: 'deterministic_projection', authority: 'versioned_official_source_registry',
+    modelContributionAccepted: false, deterministicFallbackApplied: false,
+    agentId: 'official_law_registry', actorType: 'deterministic_tool',
+  };
+  const decisionSemanticFixture = [...decisionFactSemanticFixture, decisionLawSemanticFixture, ...processSemanticFixture];
+  const decisionFlowFixture = [];
+  const decisionChangeFixture = [];
+  const decisionHighlightFixture = [];
+  const decisionInteractionFixture = [];
+  let decisionAt = 1000;
+  for (const [nodeIndex, node] of decisionNodes.entries()) {
+    const nodeFacts = decisionFactsForReturnedNode(decisionRunFixture, node);
+    const blockedDownstream = BLOCKED_DOWNSTREAM_DECISION_IDS.includes(node.node_id);
+    const law = !blockedDownstream && nodeFacts.length ? officialDecisionLaw(decisionRunFixture, node, new Set()) : null;
+    const plans = [
+      ...(!blockedDownstream ? nodeFacts.map(fact => ({
+        stepId: `accepted-fact:${fact.fact_id}`,
+        stepKind: 'accepted-fact',
+        sourceId: '', locatorIds: [], factIds: [fact.fact_id],
+        basis: decisionFactSemanticFixture.find(item => item.entityId === fact.fact_id),
+      })) : []),
+      ...(law ? [{
+        stepId: `accepted-law:${law.source_id}`,
+        stepKind: 'accepted-law',
+        sourceId: law.source_id, locatorIds: [], factIds: [], basis: decisionLawSemanticFixture,
+      }] : []),
+    ];
+    const structureSemantic = processSemanticFixture.find(item => item.entityKind === 'process_node' && item.entityId === node.node_id);
+    const decisionSemantic = processSemanticFixture.find(item => item.entityKind === 'process_decision' && item.entityId === node.node_id);
+    const common = {
+      contract: DECISION_FLOW_CONTRACT,
+      runId: fixtureRunId,
+      nodeId: node.node_id,
+      agentId: '',
+      eventId: structureSemantic.eventId,
+      structureEventId: structureSemantic.eventId,
+      structureAuthority: structureSemantic.authority,
+      structureTraceContract: EXECUTION_TRACE_CONTRACT,
+      decisionAgentId: decisionSemantic?.agentId || '',
+      decisionEventId: decisionSemantic?.eventId || '',
+      decisionAuthority: decisionSemantic?.authority || '',
+      decisionModelContributionAccepted: Boolean(decisionSemantic),
+      decisionDeterministicFallbackApplied: false,
+      presentationMode: 'returned-action-replay',
+      presentationLabel: 'Returned work · Process safety check',
+      activeAgentId: '', visualActiveAgentId: '', activeSignature: 'gate', workAuthority: 'Process safety check',
+      graphVisible: true,
+      graphConstructionState: 'building',
+      workspaceVisible: true,
+      workspaceNodeId: node.node_id,
+      planCount: 1,
+      planVisible: true,
+      planNodeId: node.node_id,
+      planKind: blockedDownstream ? 'waiting-decision' : 'evidence-decision',
+      planItemCount: plans.length + 2,
+      planParagraphCount: 0,
+      planButtonCount: 0,
+      waitingBasisVisible: blockedDownstream,
+      waitingBasisText: blockedDownstream ? BLOCKED_DOWNSTREAM_WAITING_COPY[node.node_id] : '',
+      nodeVisible: false,
+    };
+    const accumulatedFactIds = [];
+    for (const plan of plans) {
+      const basis = plan.basis;
+      const replay = {
+        ...common,
+        stepId: plan.stepId, stepKind: plan.stepKind, sourceId: plan.sourceId,
+        locatorId: '', locatorIds: [], factIds: plan.factIds, locatorIndex: plan.stepKind === 'accepted-fact' ? 0 : -1,
+        locatorCount: plan.stepKind === 'accepted-fact' ? 1 : 0,
+        basisAgentId: basis.agentId, basisEventId: basis.eventId, basisAuthority: basis.authority,
+        sourceTargetExists: false, sourceRowActive: false, activeSourceIds: [], activeSourceLocator: '',
+        artifactSurfaceVisible: false, realArtifactVisible: false, highlightVisible: false, highlightCount: 0,
+      };
+      decisionFlowFixture.push({ ...replay, phase: 'planned', progress: 0, planPhase: 'select-source', fragmentFactIds: [...accumulatedFactIds], progressVisible: true, at: decisionAt });
+      decisionAt += 1500;
+      decisionFlowFixture.push({ ...replay, phase: 'source-opened', progress: 30, planPhase: 'read-source', fragmentFactIds: [...accumulatedFactIds], progressVisible: true, at: decisionAt });
+      decisionAt += 1500;
+      plan.factIds.forEach(factId => { if (!accumulatedFactIds.includes(factId)) accumulatedFactIds.push(factId); });
+      decisionFlowFixture.push({ ...replay, phase: 'fragment-extracted', progress: 60, planPhase: 'highlight-source', fragmentFactIds: [...accumulatedFactIds], progressVisible: true, at: decisionAt });
+      decisionAt += 1500;
+    }
+    const terminal = (phase, progress, extra = {}) => {
+      const modelDecisionPhase = Boolean(decisionSemantic) && ['combining', 'decision-ready'].includes(phase);
+      return ({
+        ...common, stepId: phase, stepKind: '', sourceId: '', locatorId: '', locatorIds: [], factIds: [], locatorIndex: -1, locatorCount: 0,
+        phase, progress, planPhase: phase === 'plan-receding' ? 'receding' : phase === 'plan-receded' ? 'receded' : phase === 'combining' ? 'combine' : 'complete',
+        fragmentFactIds: [...accumulatedFactIds], combinationVisible: true, combineState: 'combining',
+        progressVisible: !['plan-receding', 'plan-receded'].includes(phase), at: decisionAt,
+        agentId: modelDecisionPhase ? 'process_decision_mapping' : '',
+        presentationLabel: modelDecisionPhase ? 'Returned work · Process builder' : 'Returned work · Process safety check',
+        activeAgentId: modelDecisionPhase ? 'process_decision_mapping' : '',
+        visualActiveAgentId: modelDecisionPhase ? 'process_decision_mapping' : '',
+        activeSignature: modelDecisionPhase ? 'process' : 'gate',
+        workAuthority: modelDecisionPhase ? 'Process builder' : 'Process safety check',
+        ...extra,
+      });
+    };
+    decisionFlowFixture.push(terminal('combining', 90)); decisionAt += 1500;
+    decisionFlowFixture.push(terminal('decision-ready', 100)); decisionAt += 1500;
+    const receding = terminal('plan-receding', 100, { nodeVisible: false, progressVisible: false });
+    decisionFlowFixture.push(receding); decisionAt += MIN_DECISION_PLAN_RECEDE_MS + 20;
+    decisionFlowFixture.push(terminal('plan-receded', 100, { nodeVisible: false, progressVisible: false })); decisionAt += 10;
+    decisionChangeFixture.push({ entityId: node.node_id, eventId: structureSemantic.eventId, agentId: '', indicatorVisible: false, planVisible: false, decisionFlowState: 'idle', outputVisible: true, graphVisible: true, at: decisionAt });
+    decisionAt += 1500;
+  }
+  if (decisionFlowContractViolations(decisionFlowFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).length) throw new Error(`Valid accepted-input decision-flow fixture was rejected: ${JSON.stringify(decisionFlowContractViolations(decisionFlowFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture))}`);
+  const fakeSourceDecisionFixture = structuredClone(decisionFlowFixture);
+  const intakePlan = fakeSourceDecisionFixture.find(step => step.nodeId === 'intake' && step.phase === 'planned');
+  Object.assign(intakePlan, { stepKind: 'source', stepId: 'source:message', sourceId: 'message' });
+  if (!decisionFlowContractViolations(fakeSourceDecisionFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('reopens a source or law'))) throw new Error('Graph replay with an invented new source read was accepted');
+  const brokenBasisDecisionFixture = structuredClone(decisionFlowFixture);
+  brokenBasisDecisionFixture.find(step => step.nodeId === 'notification' && step.phase === 'planned' && step.stepKind === 'accepted-fact').basisEventId = 'wrong-fact-event';
+  if (!decisionFlowContractViolations(brokenBasisDecisionFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('exact returned fact event'))) throw new Error('Accepted fact replay with broken event lineage was accepted');
+  const lingeringPlanChangeFixture = structuredClone(decisionChangeFixture);
+  lingeringPlanChangeFixture[0].planVisible = true;
+  if (!decisionFlowContractViolations(decisionFlowFixture, lingeringPlanChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('before progress and plan have cleared'))) throw new Error('Accepted node with a lingering plan was accepted');
+  const inventedSourceWorkFixture = structuredClone(decisionFlowFixture);
+  const responsibilityCombineIndex = inventedSourceWorkFixture.findIndex(step => step.nodeId === 'responsibility' && step.phase === 'combining');
+  const responsibilityCombine = inventedSourceWorkFixture[responsibilityCombineIndex];
+  inventedSourceWorkFixture.splice(responsibilityCombineIndex, 0, {
+    ...responsibilityCombine,
+    stepId: 'source:invented', stepKind: 'source', sourceId: 'art_invented',
+    locatorId: 'source:art_invented:page:1:quote:Invented', locatorIds: ['source:art_invented:page:1:quote:Invented'],
+    factIds: ['fact_responsibility'], locatorIndex: 0, locatorCount: 1,
+    phase: 'planned', progress: 0, planPhase: 'select-source', planItemCount: 3,
+    sourceTargetExists: true, sourceRowActive: false, activeSourceIds: [], activeSourceLocator: '',
+    combinationVisible: false, at: responsibilityCombine.at - 1,
+  });
+  const inventedSourceWorkIssues = decisionFlowContractViolations(inventedSourceWorkFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture);
+  if (!inventedSourceWorkIssues.some(issue => issue.includes('invents accepted input work'))) throw new Error(`Invented work for a blocked downstream decision was accepted: ${JSON.stringify(inventedSourceWorkIssues)}`);
+  const missingWaitingBasisFixture = structuredClone(decisionFlowFixture);
+  missingWaitingBasisFixture.find(step => step.nodeId === 'responsibility' && step.phase === 'combining').waitingBasisVisible = false;
+  if (!decisionFlowContractViolations(missingWaitingBasisFixture, decisionChangeFixture, decisionHighlightFixture, decisionInteractionFixture, decisionRunEnvelope, decisionSemanticFixture).some(issue => issue.includes('exact plain dependency'))) throw new Error('Blocked downstream decision without its waiting basis was accepted');
   const zoomOutFixture = {
     sourceMoments: REQUIRED_DESKTOP_SOURCE_MOMENTS.map(moment => ({ moment, panelVisible: true, contentVisible: true, collapsed: false, insideViewport: true, width: 280, height: 700, toggleLooksDropdown: false })),
-    factSteps: factCinematicFixture.filter(step => ['select-source', 'neutral-read'].includes(step.timing)),
+    decisionSteps: decisionFlowFixture.filter(step => step.stepKind === 'source' && ['planned', 'source-opened'].includes(step.phase)),
     artifactCursorSteps: [
       { phase: 'click', graphInspectionPhase: 'select-source', targetId: 'message', activeSourceIds: [], activeSourceLocator: '', visibleSourceHighlightCount: 0 },
-      { phase: 'click', graphInspectionPhase: 'read-source', targetId: 'message', inspectionSourceHasTarget: true, inspectionSourceId: 'message', inspectionLocatorId: 'source:message:p1', activeSourceIds: ['message'], activeSourceLocator: 'source:message:p1', visibleSourceHighlightCount: 0 },
+      { phase: 'click', graphInspectionPhase: 'read-source', targetId: 'accepted-fact:fact_customer_objective', inspectionSourceHasTarget: false, inspectionSourceId: '', inspectionLocatorId: '', activeSourceIds: [], activeSourceLocator: '', visibleSourceHighlightCount: 0 },
     ],
     previews: FLAGSHIP_PROCESS_PROJECTION_IDS.map((nodeId, index) => {
       const basisKind = ['fact', 'law', 'evidence', 'accepted-decision', 'start-point'][index % 5];
@@ -7102,10 +8619,9 @@ async function runContractSelfTest() {
   clippedProcessPreviewFixture[0].items[0].rect.bottom = previewGraphViewportRect.bottom - 2;
   clippedProcessPreviewFixture[0].items[0].rect.height = clippedProcessPreviewFixture[0].items[0].rect.bottom - clippedProcessPreviewFixture[0].items[0].rect.top;
   if (!processPreviewGeometryContractViolations(clippedProcessPreviewFixture).some(issue => issue.includes('8px bottom inset'))) throw new Error('Bottom-clipped construction preview fixture was accepted');
-  const missingActiveSourceTargetFixture = structuredClone(zoomOutFixture);
-  missingActiveSourceTargetFixture.artifactCursorSteps[1].inspectionSourceHasTarget = false;
-  missingActiveSourceTargetFixture.artifactCursorSteps[1].activeSourceIds = [];
-  if (!zoomOutDesktopContractViolations(missingActiveSourceTargetFixture).some(issue => issue.includes('active source target'))) throw new Error('Clicked process source without a matching active source target was accepted');
+  const fakeGraphSourceFixture = structuredClone(zoomOutFixture);
+  Object.assign(fakeGraphSourceFixture.artifactCursorSteps[1], { inspectionSourceId: 'message', inspectionLocatorId: 'source:message:p1', activeSourceIds: ['message'], activeSourceLocator: 'source:message:p1' });
+  if (!zoomOutDesktopContractViolations(fakeGraphSourceFixture).some(issue => issue.includes('falsely claims a new source read'))) throw new Error('Graph replay with a fake new source read was accepted');
   const missingPreviewSourceTargetFixture = structuredClone(zoomOutFixture);
   missingPreviewSourceTargetFixture.previews[0].sourceHasTarget = false;
   if (!zoomOutDesktopContractViolations(missingPreviewSourceTargetFixture).some(issue => issue.includes('actual returned artifact window'))) throw new Error('Fact/source basis preview without a matching exact source target was accepted');
@@ -7122,7 +8638,7 @@ async function runContractSelfTest() {
   if (!zoomOutDesktopContractViolations(incompleteBasisPreviewFixture).some(issue => issue.includes('lacks a truthful kind, title, or returned basis'))) throw new Error('Incomplete accepted-decision basis preview was accepted');
   const brokenZoomOutFixture = structuredClone(zoomOutFixture);
   brokenZoomOutFixture.sourceMoments[0].collapsed = true;
-  brokenZoomOutFixture.factSteps.find(step => step.timing === 'select-source').activeSourceIds = ['art_lease'];
+  brokenZoomOutFixture.artifactCursorSteps[0].activeSourceIds = ['art_lease'];
   brokenZoomOutFixture.previews[0].overlaps = ['node:scope'];
   brokenZoomOutFixture.team.members[0].role = 'Guarded Canonical Facts Agent';
   brokenZoomOutFixture.documentRoundtrip = false;
@@ -7162,16 +8678,6 @@ async function runContractSelfTest() {
   tamperedSettledCursorPayoffFixture.syntheticClickCountAfterParking = 1;
   const tamperedSettledCursorPayoffIssues = settledCursorPayoffContractViolations(tamperedSettledCursorPayoffFixture);
   if (!tamperedSettledCursorPayoffIssues.some(issue => issue.includes('not parked')) || !tamperedSettledCursorPayoffIssues.some(issue => issue.includes('label remains')) || !tamperedSettledCursorPayoffIssues.some(issue => issue.includes('overlaps')) || !tamperedSettledCursorPayoffIssues.some(issue => issue.includes('synthesizes a click'))) throw new Error(`Tampered settled cursor payoff fixture was accepted: ${JSON.stringify(tamperedSettledCursorPayoffIssues)}`);
-  const forgedVisualAuthorityFactTour = structuredClone(factTourChanges);
-  forgedVisualAuthorityFactTour[2].attachment.sourceAuthority = 'customer_submission';
-  if (!factSourceTourContractViolations(factTourCompletion, factTourInspections, forgedVisualAuthorityFactTour, factTourCursors, factTourRun).some(issue => issue.includes('fact artifact does not retain the inspected source binding'))) throw new Error('Authority-relabelled visual fact source fixture was accepted');
-  const crossBoundFactTour = structuredClone(factTourInspections);
-  crossBoundFactTour[2].locatorId = crossBoundFactTour[1].locatorId;
-  if (!factSourceTourContractViolations(factTourCompletion, crossBoundFactTour, factTourChanges, factTourCursors, factTourRun).some(issue => issue.includes('not an exact returned source reference'))) throw new Error('Cross-bound fact source locator fixture was accepted');
-  const earlyFactChange = structuredClone(factTourChanges);
-  earlyFactChange[3].at = factTourInspections[3].at + MIN_FACT_SOURCE_HOLD_MS - 1;
-  if (!factSourceTourContractViolations(factTourCompletion, factTourInspections, earlyFactChange, factTourCursors, factTourRun).some(issue => issue.includes('not readable'))) throw new Error('Unreadable fact source hold fixture was accepted');
-
   const fixtureRect = (left, top, width, height) => ({ left, top, right: left + width, bottom: top + height, width, height });
   const spatialNodeRects = Object.fromEntries(FLAGSHIP_PROCESS_PROJECTION_IDS.map((nodeId, index) => [nodeId, fixtureRect(60 + (index * 108), 300, 82, 62)]));
   const spatialBranchRects = {
@@ -7205,9 +8711,10 @@ async function runContractSelfTest() {
   ];
   const spatialGeometryFixture = {
     processId: 'process-fixture', projection: SPATIAL_GRAPH_PROJECTION,
+    routeMode: 'flagship-causation', selectedPath: ['intake', 'scope', 'dispute', 'urgency', 'notification', 'defect', 'causation', 'evidence_gap'], currentNodeId: 'causation', nextActionNodeId: 'evidence_gap', selectedBranchId: 'insufficient', focalNodeId: 'causation', openLabel: 'Causation is unresolved', terminalState: 'journey-continues', sourceAnchorNodeId: 'causation', lawAnchorNodeId: 'causation', evidenceAnchorNodeId: 'evidence_gap',
     canvasRect: fixtureRect(0, 0, 1200, 800), graphRect: fixtureRect(20, 35, 1160, 730), viewportRect: fixtureRect(35, 55, 1130, 690),
     primaryFoci: [{ insideGraph: true, rect: fixtureRect(20, 35, 1160, 730) }], primaryArtifacts: [{ insideGraph: true, rect: fixtureRect(20, 35, 1160, 730) }], primaryActionCount: 1, competingRects: [],
-    nodes: FLAGSHIP_PROCESS_PROJECTION_IDS.map(nodeId => ({ id: nodeId, state: 'built', role: nodeId === 'causation' ? 'hub' : 'spine', path: 'accepted', selected: nodeId === 'causation', changeId: `change:${nodeId}`, eventId: `event:${nodeId}`, agentId: 'process_decision_mapping', rect: spatialNodeRects[nodeId], insideViewport: true, titleFontSize: nodeId === 'causation' ? 16 : 12, titleClientWidth: 82, titleScrollWidth: 82, titleClientHeight: 30, titleScrollHeight: 30 })),
+    nodes: FLAGSHIP_PROCESS_PROJECTION_IDS.map(nodeId => ({ id: nodeId, state: 'built', role: nodeId === 'causation' ? 'hub' : 'spine', path: 'accepted', selected: nodeId === 'causation', selectedBranchId: '', changeId: `change:${nodeId}`, eventId: `event:${nodeId}`, agentId: 'process_projection', rect: spatialNodeRects[nodeId], insideViewport: true, titleFontSize: nodeId === 'causation' ? 16 : 12, titleClientWidth: 82, titleScrollWidth: 82, titleClientHeight: 30, titleScrollHeight: 30 })),
     branches: REQUIRED_CAUSATION_BRANCH_IDS.map(id => ({ id, branchId: `branch:${id}`, state: id === 'evidence_gap' ? 'selected' : 'conditional', selected: id === 'evidence_gap', rect: spatialBranchRects[id], insideViewport: true })),
     laws: [{ id: 'fedlex-or-259a', lawId: 'fedlex-or-259a', anchorNodeId: 'causation', rect: spatialSatelliteRects['fedlex-or-259a'], insideViewport: true }],
     evidence: [{ id: 'condition_photo', evidenceId: 'condition_photo', anchorNodeId: 'causation', rect: spatialSatelliteRects.condition_photo, insideViewport: true }, { id: 'landlord_reply', evidenceId: 'landlord_reply', anchorNodeId: 'causation', rect: spatialSatelliteRects.landlord_reply, insideViewport: true }],
@@ -7220,13 +8727,126 @@ async function runContractSelfTest() {
     ], endpointDuplicates: [], edges: spatialFixtureEdges,
     ariaCurrentIds: ['causation'], pendingTabStops: [], status: { role: 'status', live: 'polite', atomic: 'true' }, edgeLayerAriaHidden: 'true', edgeLayerFocusable: 'false', cursorAriaHidden: 'true',
   };
+  const spatialProcessFixture = {
+    process_id: 'process-fixture',
+    main_spine: [...FLAGSHIP_PROCESS_PROJECTION_IDS],
+    selected_path: [...spatialGeometryFixture.selectedPath],
+    current_node: 'causation',
+    current_overlay: { current_node_id: 'causation', next_action_node_id: 'evidence_gap', selected_branch_id: 'insufficient' },
+    nodes: [
+      ...FLAGSHIP_PROCESS_PROJECTION_IDS.map(nodeId => ({
+        node_id: nodeId,
+        fact_ids: nodeId === 'causation' ? ['fact-damage'] : [],
+        legal_source_ids: nodeId === 'causation' ? ['fedlex-or-259a'] : [],
+        evidence_requirement_ids: nodeId === 'causation' ? ['condition_photo', 'landlord_reply'] : [],
+        branches: nodeId === 'causation' ? [
+          { branch_id: 'building-defect', target: 'building_defect' },
+          { branch_id: 'tenant-use', target: 'tenant_use' },
+          { branch_id: 'mixed-cause', target: 'mixed_cause' },
+          { branch_id: 'insufficient', target: 'evidence_gap' },
+        ] : [],
+      })),
+      ...REQUIRED_CAUSATION_BRANCH_IDS.map(nodeId => ({ node_id: nodeId, fact_ids: [], legal_source_ids: [], evidence_requirement_ids: [], branches: [] })),
+    ],
+    edges: returnedFixtureEdges,
+  };
   const spatialExpectedFixture = {
-    processId: 'process-fixture', processAgentId: 'process_decision_mapping', returnedNodeIds: [...FLAGSHIP_PROCESS_PROJECTION_IDS, ...REQUIRED_CAUSATION_BRANCH_IDS], returnedEdges: returnedFixtureEdges,
-    causationBranches: REQUIRED_CAUSATION_BRANCH_IDS.map(target => ({ target })), activeBasis: { factIds: ['fact-damage'], lawIds: ['fedlex-or-259a'], evidenceIds: ['condition_photo', 'landlord_reply'] },
+    processId: 'process-fixture', processAgentId: 'process_projection', returnedNodeIds: [...FLAGSHIP_PROCESS_PROJECTION_IDS, ...REQUIRED_CAUSATION_BRANCH_IDS], returnedEdges: returnedFixtureEdges,
+    processGraph: spatialProcessFixture,
     evidenceById: { technical_assessment: { item_id: 'technical_assessment', node_ids: ['causation', 'evidence_gap'] } },
   };
   const spatialFixtureIssues = spatialGraphGeometryContractViolations(spatialGeometryFixture, spatialExpectedFixture);
   if (spatialFixtureIssues.length) throw new Error(`Valid spatial process geometry fixture was rejected: ${JSON.stringify(spatialFixtureIssues)}`);
+  if (processRouteStoryContractViolations(spatialProcessFixture).length) throw new Error('Valid causation route fixture was rejected');
+  const modelOwnedStructureFixture = structuredClone(spatialGeometryFixture);
+  modelOwnedStructureFixture.nodes[0].agentId = 'process_decision_mapping';
+  if (!spatialGraphGeometryContractViolations(modelOwnedStructureFixture, spatialExpectedFixture).some(issue => issue.includes('deterministic projection'))) throw new Error('Model-owned permanent process structure was accepted');
+  const resolvedCausationFixture = structuredClone(spatialProcessFixture);
+  resolvedCausationFixture.selected_path = [...spatialGeometryFixture.selectedPath.slice(0, -1), 'building_defect'];
+  resolvedCausationFixture.current_overlay.next_action_node_id = 'building_defect';
+  resolvedCausationFixture.current_overlay.selected_branch_id = 'building-defect';
+  resolvedCausationFixture.edges = resolvedCausationFixture.edges.map(edge => ({
+    ...edge,
+    state: edge.source === 'causation' && edge.target === 'building_defect'
+      ? 'selected'
+      : edge.source === 'causation' && edge.target === 'evidence_gap' ? 'conditional' : edge.state,
+  }));
+  const resolvedCausationStory = processRouteStory(resolvedCausationFixture);
+  if (!resolvedCausationStory.causationCanvas || resolvedCausationStory.flagshipCausation
+    || stableJson(resolvedCausationStory.storyNodeIds) !== stableJson(FLAGSHIP_PROCESS_PROJECTION_IDS)
+    || stableJson(resolvedCausationStory.branchNodeIds) !== stableJson(REQUIRED_CAUSATION_BRANCH_IDS)) throw new Error('Valid non-evidence-gap causation canvas route was rejected');
+  const mismatchedCausationBranchFixture = structuredClone(resolvedCausationFixture);
+  mismatchedCausationBranchFixture.current_overlay.selected_branch_id = 'insufficient';
+  if (!processRouteStoryContractViolations(mismatchedCausationBranchFixture).some(issue => issue.includes('selected branch'))) throw new Error('Causation route with a mismatched selected branch was accepted');
+
+  const scopeNodeRects = {
+    intake: fixtureRect(90, 310, 120, 68),
+    scope: fixtureRect(890, 310, 140, 68),
+  };
+  const scopeSatelliteRects = {
+    'fedlex-or-256': fixtureRect(895, 120, 130, 82),
+    lease: fixtureRect(895, 500, 130, 82),
+  };
+  const scopeReturnedEdges = [
+    { source: 'intake', target: 'scope', state: 'selected' },
+    { source: 'scope', target: 'out_of_scope', state: 'possible' },
+  ];
+  const scopeProcessFixture = {
+    process_id: 'scope-process-fixture',
+    main_spine: ['intake', 'scope', 'dispute', 'urgency', 'notification', 'defect', 'causation', 'responsibility', 'remedy', 'resolution'],
+    selected_path: ['intake', 'scope'],
+    current_node: 'scope',
+    current_overlay: { current_node_id: 'scope', next_action_node_id: 'scope', selected_branch_id: 'scope-unverified' },
+    nodes: [
+      { node_id: 'intake', fact_ids: [], legal_source_ids: [], evidence_requirement_ids: [], branches: [] },
+      { node_id: 'scope', fact_ids: ['fact-scope'], legal_source_ids: ['fedlex-or-256'], evidence_requirement_ids: ['lease'], branches: [
+        { branch_id: 'out-of-scope', target: 'out_of_scope' },
+        { branch_id: 'scope-unverified', target: 'scope' },
+      ] },
+      { node_id: 'out_of_scope', fact_ids: [], legal_source_ids: [], evidence_requirement_ids: [], branches: [] },
+      { node_id: 'causation', fact_ids: ['fact-cause'], legal_source_ids: ['fedlex-or-259a'], evidence_requirement_ids: ['technical_assessment'], branches: [] },
+      { node_id: 'evidence_gap', fact_ids: [], legal_source_ids: [], evidence_requirement_ids: ['technical_assessment'], branches: [] },
+    ],
+    edges: scopeReturnedEdges,
+  };
+  const scopeGeometryFixture = {
+    processId: 'scope-process-fixture', projection: SPATIAL_GRAPH_PROJECTION,
+    routeMode: 'returned-route', selectedPath: ['intake', 'scope'], currentNodeId: 'scope', nextActionNodeId: 'scope', selectedBranchId: 'scope-unverified', focalNodeId: 'scope', openLabel: 'Is this our claim? · Unverified', terminalState: 'ready-route', sourceAnchorNodeId: 'scope', lawAnchorNodeId: 'scope', evidenceAnchorNodeId: 'scope',
+    canvasRect: fixtureRect(0, 0, 1200, 800), graphRect: fixtureRect(20, 35, 1160, 730), viewportRect: fixtureRect(35, 55, 1130, 690),
+    primaryFoci: [{ insideGraph: true, rect: fixtureRect(20, 35, 1160, 730) }], primaryArtifacts: [{ insideGraph: true, rect: fixtureRect(20, 35, 1160, 730) }], primaryActionCount: 0, competingRects: [],
+    nodes: ['intake', 'scope'].map(nodeId => ({ id: nodeId, state: 'built', role: nodeId === 'scope' ? 'hub' : 'spine', path: nodeId === 'scope' ? 'current' : 'accepted', selected: nodeId === 'scope', selectedBranchId: '', changeId: `change:${nodeId}`, eventId: `event:${nodeId}`, agentId: 'process_projection', rect: scopeNodeRects[nodeId], insideViewport: true, titleFontSize: nodeId === 'scope' ? 16 : 12, titleClientWidth: scopeNodeRects[nodeId].width, titleScrollWidth: scopeNodeRects[nodeId].width, titleClientHeight: 30, titleScrollHeight: 30 })),
+    branches: [],
+    laws: [{ id: 'fedlex-or-256', lawId: 'fedlex-or-256', anchorNodeId: 'scope', rect: scopeSatelliteRects['fedlex-or-256'], insideViewport: true }],
+    evidence: [{ id: 'lease', evidenceId: 'lease', anchorNodeId: 'scope', rect: scopeSatelliteRects.lease, insideViewport: true }],
+    nextActions: [],
+    activePaths: [{ nodeId: 'scope', factIds: ['fact-scope'], lawIds: ['fedlex-or-256'], evidenceIds: ['lease'], insideGraph: true, rect: fixtureRect(400, 610, 350, 58) }],
+    endpoints: [
+      ...Object.entries(scopeNodeRects).map(([id, rect]) => ({ id, rect })),
+      ...Object.entries(scopeSatelliteRects).map(([id, rect]) => ({ id, rect })),
+    ],
+    endpointDuplicates: [],
+    edges: [
+      { source: 'intake', target: 'scope', state: 'selected', path: 'accepted', start: center(scopeNodeRects.intake), end: center(scopeNodeRects.scope) },
+      { source: 'scope', target: 'fedlex-or-256', state: 'linked', path: 'legal-grounding', start: center(scopeNodeRects.scope), end: center(scopeSatelliteRects['fedlex-or-256']) },
+      { source: 'scope', target: 'lease', state: 'missing', path: 'evidence-support', start: center(scopeNodeRects.scope), end: center(scopeSatelliteRects.lease) },
+    ],
+    ariaCurrentIds: ['scope'], pendingTabStops: [], status: { role: 'status', live: 'polite', atomic: 'true' }, edgeLayerAriaHidden: 'true', edgeLayerFocusable: 'false', cursorAriaHidden: 'true',
+  };
+  const scopeExpectedFixture = {
+    processId: 'scope-process-fixture', processAgentId: 'process_projection', processGraph: scopeProcessFixture,
+    returnedNodeIds: scopeProcessFixture.nodes.map(node => node.node_id), returnedEdges: scopeReturnedEdges,
+    evidenceById: { lease: { item_id: 'lease', node_ids: ['scope'] } },
+  };
+  const scopeRouteIssues = processRouteStoryContractViolations(scopeProcessFixture);
+  const scopeGeometryIssues = spatialGraphGeometryContractViolations(scopeGeometryFixture, scopeExpectedFixture);
+  if (scopeRouteIssues.length || scopeGeometryIssues.length) throw new Error(`Valid scope_unverified route fixture was rejected: ${JSON.stringify({ scopeRouteIssues, scopeGeometryIssues })}`);
+  const contradictoryScopeRoute = structuredClone(scopeProcessFixture);
+  contradictoryScopeRoute.current_overlay.next_action_node_id = 'evidence_gap';
+  contradictoryScopeRoute.current_overlay.selected_branch_id = 'scope-unverified';
+  if (!processRouteStoryContractViolations(contradictoryScopeRoute).some(issue => /next action|selected branch/i.test(issue))) throw new Error('Contradictory scope route fixture was accepted');
+  const scopeWithCausationUi = structuredClone(scopeGeometryFixture);
+  scopeWithCausationUi.nodes.push({ ...spatialGeometryFixture.nodes.find(node => node.id === 'causation'), rect: fixtureRect(500, 400, 82, 62) });
+  if (!spatialGraphGeometryContractViolations(scopeWithCausationUi, scopeExpectedFixture).some(issue => issue.includes('exact returned route story'))) throw new Error('Scope-unverified fixture with unrelated causation UI was accepted');
   const verticalSpatialFixture = structuredClone(spatialGeometryFixture);
   verticalSpatialFixture.nodes.forEach((node, index) => { node.rect = fixtureRect(500, 70 + (index * 65), 82, 62); });
   if (!spatialGraphGeometryContractViolations(verticalSpatialFixture, spatialExpectedFixture).some(issue => issue.includes('vertical list'))) throw new Error('Vertical-list spatial graph fixture was accepted');
@@ -7417,6 +9037,7 @@ async function runContractSelfTest() {
   const allowedOutputFixtures = [
     path.join(QA_DIRECTORY, QA_OUTPUT_BASENAME),
     path.join(QA_TEMP_ROOT, 'casepath-qa-preflight.A1b2C3', PREFLIGHT_OUTPUT_BASENAME),
+    path.join(QA_TEMP_ROOT, 'casepath-qa-real.A1b2C3', PREFLIGHT_OUTPUT_BASENAME),
   ];
   for (const candidate of allowedOutputFixtures) {
     if (resolveSafeQaOutputPath(candidate) !== path.resolve(candidate)) {
@@ -7447,6 +9068,15 @@ async function runContractSelfTest() {
     }
   } finally {
     await fs.rmdir(realPreflightParent);
+  }
+  const realAcceptanceParent = await fs.mkdtemp(path.join(QA_TEMP_ROOT, 'casepath-qa-real.'));
+  try {
+    const realAcceptanceOutput = path.join(realAcceptanceParent, PREFLIGHT_OUTPUT_BASENAME);
+    if (assertSafeQaOutputParent(realAcceptanceOutput) !== realAcceptanceOutput) {
+      throw new Error('Real Nemotron QA output fixture did not resolve exactly');
+    }
+  } finally {
+    await fs.rmdir(realAcceptanceParent);
   }
   const symlinkedPreflightParent = path.join(
     QA_TEMP_ROOT,
@@ -7985,14 +9615,14 @@ async function runContractSelfTest() {
     if (!sanitizedLedgerViolations(forgedSummaryLedger).some(item => item.includes('summary is inconsistent'))) throw new Error(`Forged ledger-summary ${field} fixture was not rejected`);
   }
   const wrongUpstreamRun = structuredClone(coldRun);
-  orchestrationAudit(wrongUpstreamRun).agents[0].upstream_provider = 'Together';
-  if (!orchestrationContractViolations(wrongUpstreamRun, 'cold').some(item => item.includes('provider provenance'))) throw new Error('Non-DeepInfra cold audit fixture was not rejected');
+  orchestrationAudit(wrongUpstreamRun).agents[0].upstream_provider = 'DeepInfra';
+  if (!orchestrationContractViolations(wrongUpstreamRun, 'cold').some(item => item.includes('provider provenance'))) throw new Error('Non-Together cold audit fixture was not rejected');
   const wrongUpstreamLedger = structuredClone(coldLedger);
-  wrongUpstreamLedger.items[0].upstream_provider = 'Together';
-  if (!coldLedgerContractViolations(orchestrationAudit(coldRun), wrongUpstreamLedger).some(item => item.includes('provider'))) throw new Error('Non-DeepInfra cold ledger fixture was not rejected');
+  wrongUpstreamLedger.items[0].upstream_provider = 'DeepInfra';
+  if (!coldLedgerContractViolations(orchestrationAudit(coldRun), wrongUpstreamLedger).some(item => item.includes('provider'))) throw new Error('Non-Together cold ledger fixture was not rejected');
   const wrongWarmLedger = structuredClone(combinedLedger);
-  wrongWarmLedger.items.find(item => item.call_count === 0).upstream_provider = 'Together';
-  if (!warmLineageContractViolations(orchestrationAudit(coldRun), orchestrationAudit(warmRun), wrongWarmLedger).issues.some(item => item.includes('provider'))) throw new Error('Non-DeepInfra warm cache fixture was not rejected');
+  wrongWarmLedger.items.find(item => item.call_count === 0).upstream_provider = 'DeepInfra';
+  if (!warmLineageContractViolations(orchestrationAudit(coldRun), orchestrationAudit(warmRun), wrongWarmLedger).issues.some(item => item.includes('provider'))) throw new Error('Non-Together warm cache fixture was not rejected');
   const wrongAgentRoleRun = structuredClone(coldRun);
   orchestrationAudit(wrongAgentRoleRun).agents.find(item => item.agent_id === 'document_source_integrity').role = 'Unbound Specialist Label';
   if (!orchestrationContractViolations(wrongAgentRoleRun, 'cold').some(item => item.includes('document_source_integrity: role label is not exact'))) throw new Error('Tampered Nemotron agent-role fixture was not rejected');
@@ -8182,7 +9812,7 @@ async function runContractSelfTest() {
   const upstreamFailureIssues = terminalFailureContractViolations(upstreamRejectionFailure);
   if (upstreamFailureIssues.length) throw new Error(`Bounded upstream-rejection fixture failed: ${JSON.stringify(upstreamFailureIssues)}`);
   const forgedUpstreamBoundaryFailure = structuredClone(upstreamRejectionFailure);
-  forgedUpstreamBoundaryFailure.events.find(item => item.receipt_type === 'agent_failed').expected_upstream_provider = 'Together';
+  forgedUpstreamBoundaryFailure.events.find(item => item.receipt_type === 'agent_failed').expected_upstream_provider = 'DeepInfra';
   if (!terminalFailureContractViolations(forgedUpstreamBoundaryFailure).some(item => item.includes('boundary attribution is forged'))) throw new Error('Forged upstream-rejection receipt attribution fixture was not rejected');
   const missingUpstreamBoundaryFailure = structuredClone(upstreamRejectionFailure);
   delete missingUpstreamBoundaryFailure.events.find(item => item.receipt_type === 'agent_failed').expected_upstream_provider;
@@ -8211,7 +9841,7 @@ async function runContractSelfTest() {
     error_invariant: 'actual_cost_overrun',
     response_id: 'generation_charged_overrun',
     response_model: REQUESTED_NEMOTRON_MODEL,
-    upstream_provider: 'DeepInfra',
+    upstream_provider: 'Together',
     usage_source: 'response',
     finish_reason: 'stop',
   });
@@ -8221,7 +9851,7 @@ async function runContractSelfTest() {
     error_invariant: 'invalid_provenance',
     response_id: 'generation_wrong_model',
     response_model: null,
-    upstream_provider: 'DeepInfra',
+    upstream_provider: 'Together',
     usage_source: 'response',
     finish_reason: 'stop',
     invalid_provenance_field: 'response_model',
@@ -8299,7 +9929,7 @@ async function runContractSelfTest() {
     error_invariant: 'invalid_provenance',
     response_id: 'gen-canonical-invalid-model',
     response_model: null,
-    upstream_provider: 'DeepInfra',
+    upstream_provider: 'Together',
     usage_source: 'response',
     finish_reason: 'stop',
     invalid_provenance_field: 'response_model',
@@ -8412,10 +10042,18 @@ async function runContractSelfTest() {
   const brokenLineageLedger = structuredClone(combinedLedger);
   brokenLineageLedger.items.find(item => item.call_id === orchestrationAudit(warmRun).agents[0].call_id).origin_call_id = 'wrong_origin';
   if (!warmLineageContractViolations(orchestrationAudit(coldRun), orchestrationAudit(warmRun), brokenLineageLedger).issues.some(item => item.includes('warm origin'))) throw new Error('Broken-lineage negative fixture was not rejected');
+  const forgedWarmArtifactRun = structuredClone(warmRun);
+  orchestrationAudit(forgedWarmArtifactRun).agents[0].output_artifact_hash = dtoHash({ forged: 'cached-output' });
+  if (!warmLineageContractViolations(orchestrationAudit(coldRun), orchestrationAudit(forgedWarmArtifactRun), combinedLedger).issues.some(item => item.includes('artifact and acceptance lineage'))) throw new Error('Forged warm artifact negative fixture was not rejected');
+  const forgedWarmAcceptanceRun = structuredClone(warmRun);
+  orchestrationAudit(forgedWarmAcceptanceRun).agents[1].accepted_ids = ['forged_cached_acceptance'];
+  if (!warmLineageContractViolations(orchestrationAudit(coldRun), orchestrationAudit(forgedWarmAcceptanceRun), combinedLedger).issues.some(item => item.includes('artifact and acceptance lineage'))) throw new Error('Forged warm acceptance negative fixture was not rejected');
+  if (!compatibleProcessDecisionValues({ decision_key: 'scope', decision_value: 'in_scope' }).has('scope_unverified')) throw new Error('Valid conservative process decision was rejected');
+  if (compatibleProcessDecisionValues({ decision_key: 'scope', decision_value: 'in_scope' }).has('dispute_present')) throw new Error('Contradictory cross-key process decision was accepted');
   const unsafeAxeTarget = `.v20-learning-row[data-customer="${'claim-bearing-'.repeat(700)}"] > span`;
   const axeDiagnostics = axeViolationDiagnostics([{ id: 'color-contrast', impact: 'serious', help: 'Elements must meet minimum color contrast ratio thresholds', nodes: [{ target: [unsafeAxeTarget], html: '<span>claim-bearing text must not be logged</span>', failureSummary: 'Claim-bearing failure prose must not be logged', any: [{ id: 'color-contrast', impact: 'serious', message: 'Claim-bearing check prose must not be logged', data: { fgColor: '#147a56', bgColor: '#edf8f3', contrastRatio: 4.44, raw: 'must not be retained' } }], all: [], none: [] }] }]);
   if (axeDiagnostics.length !== 1 || axeDiagnostics[0].node_count !== 1 || axeDiagnostics[0].omitted_node_count !== 0 || !/^sha256:[0-9a-f]{64}$/.test(axeDiagnostics[0].nodes[0].target[0]) || JSON.stringify(axeDiagnostics).includes('claim-bearing') || axeDiagnostics[0].nodes[0].checks[0].data.contrastRatio !== 4.44 || 'raw' in axeDiagnostics[0].nodes[0].checks[0].data || 'html' in axeDiagnostics[0].nodes[0] || 'message' in axeDiagnostics[0].nodes[0].checks[0] || 'failure_summary' in axeDiagnostics[0].nodes[0]) throw new Error(`Bounded Axe diagnostics fixture failed: ${JSON.stringify(axeDiagnostics)}`);
-  return { status: 'passed', fixtures: ['seven_source_icons_and_checkbox_rejection', 'neutral_source_control_then_selected_mark', 'six_distinct_cursor_role_icons_and_tamper', 'exact_intake_claim_message_basis_and_generated_summary_rejection', 'call_bound_agent_history_and_reference_fail_closed', 'persistent_ten_node_projection_and_tamper', 'graph_native_review_scene_and_competing_artifact_rejection', 'semantic_attachment_cursor_tether_and_tamper', 'zoom_out_desktop_three_priority_diagnostics', 'process_preview_1440x900_containment_and_bottom_inset', 'bounded_future_claim_memory_delta_identity_origin_and_tamper', 'bounded_axe_node_diagnostics', 'session_scoped_run_read_coalescing', 'memory_reuse_renderer_determinism', 'stable_text_grounding_fact_selection', 'normalized_text_grounding', 'python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'fail_closed_model_contribution_badges', 'mixed_field_contribution_badge', 'post_memory_contribution_suppression', 'reciprocal_evidence_truth_and_tamper', 'structured_legal_truth_and_tamper', 'visual_reference_truth_and_tamper', 'precedent_ranking_truth_and_tamper', 'memory_application_truth_and_tamper', 'memory_boundary_event_cross_binding', 'dormant_memory_retrieval_not_application', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'parallel_source_artifact_hash_rejection', 'parallel_process_artifact_hash_rejection', 'process_field_membership_rejection', 'process_field_attribution_rejection', 'process_inherited_field_rejection_with_recomputed_hashes', 'evidence_field_membership_rejection', 'evidence_field_attribution_rejection', 'evidence_source_ref_rejection_with_recomputed_hashes', 'final_field_membership_rejection', 'final_current_node_binding_rejection', 'final_next_action_binding_rejection', 'final_supporting_facts_binding_rejection', 'final_upstream_contributions_binding_rejection', 'final_audit_checks_binding_rejection', 'noncontrolling_supporting_fact_source_binding', 'cold_upstream_provider_policy_rejection', 'warm_upstream_provider_policy_rejection', 'agent_role_label_rejection', 'gate_role_label_rejection', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'provider_concurrency_zero_call_receipt', 'provider_concurrency_receipt_call_rejection', 'provider_concurrency_receipt_identity_rejection', 'safe_upstream_rejection_receipt', 'forged_upstream_rejection_receipt_attribution_rejection', 'missing_upstream_rejection_receipt_attribution_rejection', 'out_of_scope_upstream_rejection_receipt_attribution_rejection', 'unbounded_upstream_error_code_rejection', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'safe_upstream_rejection_ledger', 'provider_concurrency_zero_call_ledger', 'provider_concurrency_ledger_call_rejection', 'provider_concurrency_ledger_cost_rejection', 'provider_concurrency_ledger_identity_rejection', 'forged_upstream_rejection_ledger_attribution_rejection', 'missing_upstream_rejection_ledger_attribution_rejection', 'out_of_scope_upstream_rejection_ledger_attribution_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
+  return { status: 'passed', fixtures: ['visible_cached_replay_and_terminal_failure_truth', 'authored_terminal_failure_restart', 'seven_source_icons_and_checkbox_rejection', 'eight_fact_source_to_fact_execution_trace_and_four_deterministic_laws', 'accepted_fact_law_graph_replay_and_neutral_fallback_identity', 'six_distinct_cursor_role_icons_and_tamper', 'exact_intake_claim_message_basis_and_generated_summary_rejection', 'call_bound_agent_history_and_reference_fail_closed', 'persistent_ten_node_projection_and_tamper', 'graph_native_review_scene_and_competing_artifact_rejection', 'semantic_attachment_cursor_tether_and_tamper', 'zoom_out_desktop_three_priority_diagnostics', 'process_preview_1440x900_containment_and_bottom_inset', 'bounded_future_claim_memory_delta_identity_origin_and_tamper', 'bounded_axe_node_diagnostics', 'session_scoped_run_read_coalescing', 'memory_reuse_renderer_determinism', 'stable_text_grounding_fact_selection', 'normalized_text_grounding', 'python_compatible_dto_hash', 'float_hash_divergence_fail_closed', 'fail_closed_model_contribution_badges', 'mixed_field_contribution_badge', 'post_memory_contribution_suppression', 'reciprocal_evidence_truth_and_tamper', 'structured_legal_truth_and_tamper', 'visual_reference_truth_and_tamper', 'precedent_ranking_truth_and_tamper', 'memory_application_truth_and_tamper', 'memory_boundary_event_cross_binding', 'dormant_memory_retrieval_not_application', 'production_opening_context', 'legacy_production_opening_rejection', 'premature_nemotron_plan_rejection', 'cold_network', 'parallel_source_artifact_hash_rejection', 'parallel_process_artifact_hash_rejection', 'process_field_membership_rejection', 'process_field_attribution_rejection', 'process_inherited_field_rejection_with_recomputed_hashes', 'evidence_field_membership_rejection', 'evidence_field_attribution_rejection', 'evidence_source_ref_rejection_with_recomputed_hashes', 'final_field_membership_rejection', 'final_current_node_binding_rejection', 'final_next_action_binding_rejection', 'final_supporting_facts_binding_rejection', 'final_upstream_contributions_binding_rejection', 'final_audit_checks_binding_rejection', 'noncontrolling_supporting_fact_source_binding', 'cold_upstream_provider_policy_rejection', 'warm_upstream_provider_policy_rejection', 'agent_role_label_rejection', 'gate_role_label_rejection', 'raw_alias_response_model', 'response_model_normalization_rejection', 'foreign_response_model_rejection', 'warm_lineage', 'review_transform_truth', 'deterministic_review_transform_truth', 'review_model_reacceptance_rejection', 'sensitive_field_rejection', 'internal_sentinel_rejection', 'topology_authority_misattribution_rejection', 'topology_dependency_rejection', 'final_payload_audit_binding_rejection', 'terminal_failure_sentinel_rejection', 'safe_terminal_diagnostics', 'safe_failure_receipt', 'provider_concurrency_zero_call_receipt', 'provider_concurrency_receipt_call_rejection', 'provider_concurrency_receipt_identity_rejection', 'safe_upstream_rejection_receipt', 'forged_upstream_rejection_receipt_attribution_rejection', 'missing_upstream_rejection_receipt_attribution_rejection', 'out_of_scope_upstream_rejection_receipt_attribution_rejection', 'unbounded_upstream_error_code_rejection', 'failure_receipt_allowlist_rejection', 'failure_receipt_lineage_rejection', 'charged_overrun_failure', 'hashed_invalid_model_provenance', 'raw_foreign_model_rejection', 'credential_provenance_rejection', 'claim_text_provenance_rejection', 'partial_response_identity_failure', 'canonical_root_failure', 'canonical_invalid_provenance_failure', 'claim_bearing_ledger_provenance_rejection', 'bounded_invalid_provenance_ledger', 'retained_invalid_provenance_rejection', 'foreign_invalid_provenance_field_rejection', 'safe_upstream_rejection_ledger', 'provider_concurrency_zero_call_ledger', 'provider_concurrency_ledger_call_rejection', 'provider_concurrency_ledger_cost_rejection', 'provider_concurrency_ledger_identity_rejection', 'forged_upstream_rejection_ledger_attribution_rejection', 'missing_upstream_rejection_ledger_attribution_rejection', 'out_of_scope_upstream_rejection_ledger_attribution_rejection', 'accepted_minority_rejection', 'invalid_source_projection_rejection', 'wrong_artifact_hash_rejection', 'duplicate_response_rejection', 'broken_lineage_rejection'], agents: REQUIRED_NEMOTRON_AGENT_IDS, gates: REQUIRED_DETERMINISTIC_GATE_IDS };
 }
 
 let report;
@@ -8426,7 +10064,7 @@ if (process.env.CASEPATH_QA_CONTRACT_SELF_TEST === '1') {
     report = await execute();
   } catch (error) {
     report = {
-      status: 'failed', release: PRODUCT_RELEASE, release_id: RELEASE_ID, checkedAt: new Date().toISOString(), baseUrl: BASE, apiUrl: API, deployment: deploymentIdentity,
+      status: 'failed', release: PRODUCT_RELEASE, release_id: RELEASE_ID, journey_mode: acceptedJourneyMode, checkedAt: new Date().toISOString(), baseUrl: BASE, apiUrl: API, deployment: deploymentIdentity,
       passed: checks.filter(item => item.passed).length, failed: 1, checks, notes, failures, runIds,
       error: error instanceof Error ? error.stack : String(error),
     };

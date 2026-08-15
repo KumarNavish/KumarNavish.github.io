@@ -20,8 +20,8 @@ from openrouter.errors import (
 
 
 NEMOTRON_MODEL = "nvidia/nemotron-3-ultra-550b-a55b"
-OPENROUTER_ENDPOINT_TAG = "deepinfra/fp4"
-OPENROUTER_EXPECTED_UPSTREAM_PROVIDER = "DeepInfra"
+OPENROUTER_ENDPOINT_TAG = "together"
+OPENROUTER_EXPECTED_UPSTREAM_PROVIDER = "Together"
 OPENROUTER_PROVIDER_BOUNDARY = "openrouter"
 OPENROUTER_PROVIDER_POLICY = {
     "only": [OPENROUTER_ENDPOINT_TAG],
@@ -29,7 +29,7 @@ OPENROUTER_PROVIDER_POLICY = {
     "require_parameters": True,
     "data_collection": "deny",
 }
-OPENROUTER_REASONING = {"effort": "medium"}
+OPENROUTER_REASONING = {"effort": "low"}
 OPENROUTER_TIMEOUT_MILLISECONDS = 180_000
 OPENROUTER_PROVIDER_MAX_IN_FLIGHT = 1
 OPENROUTER_SEND_ADMISSION_TIMEOUT_SECONDS = 190.0
@@ -308,8 +308,8 @@ def _metadata_field(value: Any, field: str) -> Any:
     return getattr(value, field, None)
 
 
-def _synchronous_deepinfra_provider(response: Any) -> str | None:
-    """Project only an exact DeepInfra selection from router metadata.
+def _synchronous_expected_provider(response: Any) -> str | None:
+    """Project only the exact approved provider from router metadata.
 
     OpenRouter's generated SDK retains ``openrouter_metadata`` on ``ChatResult``,
     while ``langchain-openrouter`` currently drops that top-level field when it
@@ -450,7 +450,7 @@ def _recover_openrouter_response(
         usage = _bounded_usage(payload.get("usage"))
         if usage is not None:
             recovered["usage"] = usage
-        provider_name = _synchronous_deepinfra_provider(payload)
+        provider_name = _synchronous_expected_provider(payload)
         if provider_name is not None:
             recovered["openrouter_metadata"] = {"provider_name": provider_name}
         return recovered
@@ -514,7 +514,7 @@ class ChatOpenRouter(_LangChainChatOpenRouter):
     """OpenRouter chat adapter that retains one bounded routing attestation."""
 
     def _create_chat_result(self, response: Any):
-        provider_name = _synchronous_deepinfra_provider(response)
+        provider_name = _synchronous_expected_provider(response)
         result = super()._create_chat_result(response)
         if provider_name is not None:
             for generation in result.generations:

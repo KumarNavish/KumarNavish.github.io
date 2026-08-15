@@ -8,6 +8,7 @@
   const LATER_MEMORY_VALIDATION_CONTRACT = 'casepath.later-memory-validation/1.0.0';
   const LATER_CAUSAL_STEP_CONTRACT = 'casepath.later-causal-step/1.0.0';
   const PROCESS_NODE_PROGRESS_CONTRACT = 'casepath.process-node-progress/1.0.0';
+  const DECISION_FLOW_CONTRACT = 'casepath.decision-flow/1.0.0';
   const VISUAL_ANNOTATION_CONTRACT = 'casepath.visual-reference-annotation/1.0.0';
   const VISUAL_ANNOTATION_VERSION = 'generated-demo-reference/2026-08-12';
   const VISUAL_ANNOTATION_PRODUCER = 'deterministic_reference_annotation';
@@ -16,12 +17,15 @@
   const SUCCESS_STATES = new Set(['accepted', 'complete', 'completed', 'passed', 'produced', 'succeeded', 'verified']);
   const PROCESS_GATE_ID = 'deterministic_process_gate';
   const PROCESS_ARTIFACT_IDS = new Set(['process_graph', 'accepted_process_graph']);
-  const GRAPH_NODE_DWELL_MS = 1300;
+  const GRAPH_NODE_DWELL_MS = 550;
   const GRAPH_SOURCE_DWELL_MS = 1900;
   const GRAPH_BRANCH_SOURCE_DWELL_MS = 1900;
   const PROCESS_NODE_PROGRESS_FORM_MS = 900;
-  const PROCESS_NODE_PROGRESS_COMPLETE_MS = 500;
-  const PROCESS_NODE_PROGRESS_HOLD_MS = 320;
+  const PROCESS_NODE_PROGRESS_COMPLETE_MS = 360;
+  const PROCESS_NODE_PROGRESS_HOLD_MS = 240;
+  const DECISION_SOURCE_HOLD_MS = 1500;
+  const DECISION_COMBINE_HOLD_MS = 520;
+  const DECISION_PLAN_RECEDE_MS = 240;
   const OFFICIAL_LAW_DWELL_MS = 1900;
   const FACT_SOURCE_DWELL_MS = 1600;
   const FACT_NEUTRAL_READ_DWELL_MS = 900;
@@ -31,7 +35,10 @@
   const CURSOR_TRAVEL_MS = 620;
   const CURSOR_SETTLE_MS = 260;
   const FACT_STORY_IDS = Object.freeze([
+    'fact_customer_objective',
     'fact_tenancy',
+    'fact_dispute',
+    'fact_health',
     'fact_notification',
     'fact_recurrence',
     'fact_ventilation_allegation',
@@ -79,8 +86,8 @@
       short: 'Claim',
       monogram: 'CF',
       signature: 'facts',
-      task: 'Reading the claim and keeping only source-backed facts',
-      why: 'Each fact must come from an exact passage, field, or image region.',
+      task: 'Choosing what each source proves',
+      why: 'It reads the claim, chooses the best fact, and points to the exact text. CasePath checks the choice.',
     },
     orchestrator_plan: {
       order: 2,
@@ -106,8 +113,8 @@
       short: 'Path',
       monogram: 'PM',
       signature: 'process',
-      task: 'Building the claim-handling steps',
-      why: 'Each step appears only after its reason has been inspected.',
+      task: 'Choosing a bounded answer for each process question',
+      why: 'CasePath checks the answer, then places it in the process structure.',
     },
     evidence_checklist: {
       order: 5,
@@ -115,8 +122,8 @@
       short: 'Docs',
       monogram: 'EC',
       signature: 'evidence',
-      task: 'Working out which documents each step needs',
-      why: 'Every document need comes from a fact the process must establish.',
+      task: 'Matching received files to each document need',
+      why: 'It returns status and file IDs. CasePath owns the requirement structure.',
     },
     final_claim_brief_audit: {
       order: 6,
@@ -124,10 +131,43 @@
       short: 'Check',
       monogram: 'FB',
       signature: 'audit',
-      task: 'Checking the full result before review',
-      why: 'Anything unsupported must stop before it reaches the reviewer.',
+      task: 'Returning the bounded final route and support IDs',
+      why: 'A separate CasePath gate verifies the full result before review.',
     },
   });
+
+  const SAFE_FAILURE_STAGE_COPY = Object.freeze({
+    canonical_facts: 'Claim reading stopped.',
+    orchestrator_plan: 'Planning stopped.',
+    document_source_integrity: 'Source checking stopped.',
+    process_decision_mapping: 'Process building stopped.',
+    evidence_checklist: 'Document checking stopped.',
+    final_claim_brief_audit: 'Final checking stopped.',
+  });
+
+  const SAFE_FAILURE_REASON_COPY = Object.freeze({
+    provider_finish_reason: 'The model stopped before it finished.',
+    provider_invocation: 'The model call did not finish.',
+    provider_concurrency_timeout: 'The model service was busy for too long.',
+    provider_upstream_rejection: 'The model service did not accept this run.',
+    missing_credential: 'The model connection is not ready.',
+    cost_guard: 'The run reached its safety limit.',
+    actual_cost_overrun: 'The run reached its safety limit.',
+    response_model: 'The returned work could not be verified.',
+    response_identity: 'The returned work could not be verified.',
+    invalid_provenance: 'The returned work could not be verified.',
+  });
+
+  function safeTerminalFailureCopy(stage, invariant) {
+    const safeStage = Object.prototype.hasOwnProperty.call(SAFE_FAILURE_STAGE_COPY, stage) ? stage : '';
+    const safeInvariant = Object.prototype.hasOwnProperty.call(SAFE_FAILURE_REASON_COPY, invariant) ? invariant : '';
+    return {
+      stage: safeStage,
+      title: SAFE_FAILURE_STAGE_COPY[safeStage] || 'The run stopped.',
+      detail: SAFE_FAILURE_REASON_COPY[safeInvariant] || 'CasePath could not finish this run.',
+    };
+  }
+
   const AGENT_ICONS = Object.freeze({
     facts: '<path d="M4 5.5h16v11H9l-4.5 3v-3H4z"></path><path d="M8 10h.01M12 10h.01M16 10h.01"></path>',
     orchestrator: '<circle cx="12" cy="5.5" r="2.5"></circle><circle cx="5.5" cy="17.5" r="2.5"></circle><circle cx="18.5" cy="17.5" r="2.5"></circle><path d="m10.8 7.7-4 7.5M13.2 7.7l4 7.5M8 17.5h8"></path>',
@@ -176,6 +216,18 @@
     process_decision_mapping: 'Process decision contribution',
     evidence_checklist: 'Evidence requirement contribution',
     final_claim_brief_audit: 'Final claim brief audit',
+  });
+  const LIVE_AGENT_STATES = new Set(['started', 'running', 'in_progress']);
+  const LIVE_WORK_PLAN_CONTRACT = 'casepath.live-work-plan/1.0.0';
+  const LIVE_WORK_PLANS = Object.freeze({
+    canonical_facts: Object.freeze({
+      title: 'Find the supported facts',
+      steps: Object.freeze([
+        ['package', 'Claim package sent', 'complete'],
+        ['choose', 'Choose source-backed facts', 'active'],
+        ['return', 'Show each fact with its source', 'waiting'],
+      ]),
+    }),
   });
 
   const DEFAULT_NODE_COPY = Object.freeze({
@@ -299,7 +351,10 @@
     currentSemanticChangeId: '',
     entityLineage: new Map(),
     agentLineage: new Map(),
+    liveModelCall: null,
     eventKeys: new Set(),
+    primaryRunId: '',
+    laterRunId: '',
     result: null,
     laterResult: null,
     laterMemoryValidation: null,
@@ -324,21 +379,25 @@
     officialLawTourRunning: false,
     officialLawTourComplete: false,
     officialLawTourIndex: 0,
+    officialLawTourRunId: '',
     officialLawTourVisitedIds: new Set(),
     factTourEligible: false,
     factTourRunning: false,
     factTourComplete: false,
     factTourIndex: 0,
+    factTourRunId: '',
     factTourPhase: 'select-source',
     factTourReadArmed: false,
     factTourTimer: 0,
     pendingFactId: '',
+    pendingFactRefModelSelected: false,
     focusEvidenceId: '',
     focusPrecedentId: '',
     visibleNodeIds: new Set(),
     graphRevealTimer: 0,
     graphRevealIndex: 0,
     graphRevealRunning: false,
+    graphRevealRunId: '',
     pendingGraphNodeId: '',
     pendingBranchNodeId: '',
     visibleBranchIds: new Set(),
@@ -346,6 +405,15 @@
     graphInspecting: false,
     graphInspectionPhase: 'select-source',
     processNodeProgress: null,
+    decisionFlowNodeId: '',
+    decisionFlowSteps: [],
+    decisionFlowIndex: 0,
+    decisionFlowLocatorIndex: 0,
+    decisionFlowFragments: [],
+    decisionFlowAuditEvents: [],
+    decisionFlowPhase: 'idle',
+    decisionFlowSeenLocatorIds: new Set(),
+    decisionFlowSeenLawIds: new Set(),
     groundingOpen: false,
     manualNodeInspection: false,
     agentAuditOpenId: '',
@@ -364,6 +432,7 @@
     sourceExtractions: new Map(),
     sourceExtractionRequests: new Map(),
     claim: null,
+    terminalFailure: null,
   };
 
   function esc(value) {
@@ -377,10 +446,14 @@
 
   function processNodeProgressLabel(phase, entityKind, basisKind = 'fact') {
     const labels = {
+      source: { search: 'Finding source', read: 'Reading source', extract: 'Extracting fact' },
       fact: { search: 'Finding source', read: 'Reading source', extract: 'Extracting fact' },
+      source: { search: 'Finding source', read: 'Reading source', extract: 'Extracting fact' },
       law: { search: 'Finding law', read: 'Reading law', extract: 'Extracting rule' },
       'evidence-requirement': { search: 'Checking evidence need', read: 'Reading requirement', extract: 'Confirming gap' },
       'accepted-decision': { search: 'Finding prior step', read: 'Reading prior step', extract: 'Using accepted answer' },
+      'accepted-fact': { search: 'Finding accepted fact', read: 'Reading accepted fact', extract: 'Using accepted fact' },
+      'accepted-law': { search: 'Finding checked law', read: 'Reading checked law', extract: 'Using checked law' },
     };
     if (labels[basisKind]?.[phase]) return labels[basisKind][phase];
     if (phase === 'form') return entityKind === 'branch' ? 'Testing outcome' : 'Forming decision';
@@ -551,18 +624,121 @@
     return detail?.later === true || claimId === 'DEMO-MOULD-002' || normalizeMoment(detail?.moment) === 'later-result';
   }
 
+  function resetPrimaryRunPresentation(runId) {
+    window.clearTimeout(state.factTourTimer);
+    window.clearTimeout(state.officialLawTourTimer);
+    window.clearTimeout(state.graphRevealTimer);
+    state.primaryRunId = runId;
+    state.result = null;
+    state.facts = [];
+    state.process = null;
+    state.legal = null;
+    state.checklist = null;
+    state.precedents = [];
+    state.verification = null;
+    state.processAccepted = false;
+    state.entityLineage.clear();
+    state.agentLineage.clear();
+    state.liveModelCall = null;
+    state.eventKeys.clear();
+    state.completedAgents.clear();
+    state.activeAgentId = '';
+    state.currentEvent = null;
+    state.currentSemanticEventId = '';
+    state.currentSemanticChangeId = '';
+    state.terminalFailure = null;
+    state.factTourEligible = false;
+    state.factTourRunning = false;
+    state.factTourComplete = false;
+    state.factTourRunId = '';
+    state.pendingFactId = '';
+    state.pendingFactRefModelSelected = false;
+    state.officialLawTourRunning = false;
+    state.officialLawTourComplete = false;
+    state.officialLawTourRunId = '';
+    state.officialLawTourVisitedIds.clear();
+    state.graphRevealRunning = false;
+    state.graphRevealRunId = '';
+    state.visibleNodeIds.clear();
+    state.visibleBranchIds.clear();
+    state.decisionFlowSeenLocatorIds.clear();
+    state.decisionFlowSeenLawIds.clear();
+    state.decisionFlowAuditEvents = [];
+    state.lastCursorAgentId = '';
+    state.lastCursorEventId = '';
+    state.lastCursorChangeId = '';
+    state.cursorCommit = null;
+    resetProcessNodeProgress();
+    clearActiveSource();
+  }
+
+  function stopActiveWorkForFailure() {
+    window.clearTimeout(state.factTourTimer);
+    window.clearTimeout(state.officialLawTourTimer);
+    window.clearTimeout(state.graphRevealTimer);
+    window.clearTimeout(state.cursorTimer);
+    window.clearTimeout(state.cursorArrivalTimer);
+    window.clearTimeout(state.cursorSettleTimer);
+    window.clearTimeout(state.cursorClickTimer);
+    state.factTourRunning = false;
+    state.officialLawTourRunning = false;
+    state.graphRevealRunning = false;
+    state.graphInspecting = false;
+    state.pendingFactId = '';
+    state.pendingLawId = '';
+    state.pendingGraphNodeId = '';
+    state.pendingBranchNodeId = '';
+    state.cursorCommit = null;
+    state.liveModelCall = null;
+    state.processAccepted = false;
+    state.visibleNodeIds.clear();
+    state.visibleBranchIds.clear();
+    resetProcessNodeProgress();
+    clearActiveSource();
+  }
+
+  function terminalFailureFromRun(run) {
+    if (String(valueFrom(run, 'status', 'state') || '').toLowerCase() !== 'failed') return null;
+    const events = asArray(run?.events);
+    const boundary = [...events].reverse().find(event => (
+      event?.stage === 'failed'
+      && eventStatus(event) === 'failed'
+      && eventActorType(event) === 'deterministic_gate'
+    ));
+    const stage = String(valueFrom(run, 'failure_stage') || valueFrom(boundary, 'failure_stage') || '');
+    const receipt = [...events].reverse().find(event => (
+      valueFrom(event, 'receipt_type', 'receiptType') === 'agent_failed'
+      && (!stage || eventAgentId(event) === stage)
+    ));
+    const invariant = String(
+      valueFrom(run, 'failure_invariant')
+      || valueFrom(boundary, 'failure_invariant')
+      || valueFrom(receipt, 'error_invariant')
+      || '',
+    );
+    return {
+      ...safeTerminalFailureCopy(stage, invariant),
+      runId: String(valueFrom(run, 'run_id', 'runId') || ''),
+    };
+  }
+
   function mergeCanonicalResult(detail) {
     const storeRun = storeRunFromDetail(detail);
     const result = resultFromDetail(detail) || asObject(storeRun?.result) || null;
     const direct = asObject(detail?.dto) || asObject(detail?.artifact);
     const source = result || direct || asObject(storeRun);
     if (!source) return;
+    const runId = String(valueFrom(detail, 'runId', 'run_id') || valueFrom(detail?.run, 'run_id') || valueFrom(storeRun, 'run_id') || '');
 
     if (isLaterPayload(detail, source)) {
+      if (runId) state.laterRunId = runId;
       state.laterResult = { ...(state.laterResult || {}), ...source };
       return;
     }
 
+    if (runId && state.primaryRunId && runId !== state.primaryRunId) {
+      resetPrimaryRunPresentation(runId);
+    } else if (runId) state.primaryRunId = runId;
     state.result = { ...(state.result || {}), ...source };
     const understanding = asObject(source.understanding);
     const facts = asArray(source.facts).length ? source.facts : asArray(understanding?.facts);
@@ -601,7 +777,11 @@
   }
 
   function setMoment(moment) {
-    const normalized = normalizeMoment(moment);
+    const requestedMoment = normalizeMoment(moment);
+    const causationChapter = ['review', 'review-applied', 'knowledge', 'later-work', 'later-result'].includes(requestedMoment);
+    const normalized = causationChapter && !returnedProcessRoute().flagshipCausation
+      ? state.processAccepted ? 'ready' : state.moment
+      : requestedMoment;
     if (!normalized) return;
     if (normalized !== state.moment) {
       state.manualNodeInspection = false;
@@ -622,9 +802,10 @@
       if (asObject(later.verification)) state.verification = later.verification;
       state.processAccepted = Boolean(state.process);
       const laterNodeIds = new Set(asArray(state.process?.nodes).map(node => node.node_id));
-      state.visibleNodeIds = new Set(SIMPLIFIED_SPINE_IDS.filter(nodeId => laterNodeIds.has(nodeId)));
-      if (laterNodeIds.has('ventilation_dispute')) state.visibleNodeIds.add('ventilation_dispute');
-      state.selectedNodeId = laterNodeIds.has('ventilation_dispute') ? 'ventilation_dispute' : (state.process?.current_node || 'causation');
+      state.visibleNodeIds = new Set(projectedProcessNodeIds());
+      state.selectedNodeId = laterNodeIds.has('ventilation_dispute')
+        ? 'ventilation_dispute'
+        : (state.process?.current_overlay?.current_node_id || state.process?.current_node || '');
     }
     if (normalized === 'evidence' && state.focusEvidenceId) {
       const focusedEvidence = asArray(state.checklist?.items).find(item => item.item_id === state.focusEvidenceId);
@@ -650,9 +831,14 @@
       state.activeAgentId === 'final_claim_brief_audit' || state.completedAgents.has('final_claim_brief_audit')
     ) ? '' : 'whole-playbook-gate';
     else if (normalized === 'later-work') state.neutralAuthority = 'case-memory-comparison';
+    else if (normalized === 'failure') {
+      state.neutralAuthority = 'failure-boundary';
+      state.activeAgentId = '';
+      stopActiveWorkForFailure();
+    }
     else state.neutralAuthority = '';
     chooseChainForMoment();
-    if (normalized === 'process' && state.processAccepted && processProjectionReady() && !state.graphRevealRunning && state.visibleNodeIds.size === 0) {
+    if (normalized === 'process' && state.processAccepted && decisionTraceProjectionReady() && !state.graphRevealRunning && state.visibleNodeIds.size === 0) {
       startGraphReveal();
     }
   }
@@ -676,13 +862,33 @@
     state.neutralAuthority = '';
     const eventId = String(valueFrom(event, 'event_id', 'eventId', 'dedupe_key') || '');
     if (eventId) {
+      const prior = state.agentLineage.get(agentId) || {};
       state.agentLineage.set(agentId, {
+        ...prior,
         eventId,
         changeId: `event:${eventId}:agent:${agentId}`,
         agentId,
+        actorType: eventActorType(event) || prior.actorType || '',
+        eventType: String(event?.type || prior.eventType || 'run.activity'),
+        runId: String(valueFrom(event, 'run_id', 'runId') || prior.runId || state.primaryRunId || ''),
+        callId: String(valueFrom(event, 'call_id', 'callId') || prior.callId || ''),
+        status: eventStatus(event),
       });
     }
     if (SUCCESS_STATES.has(eventStatus(event))) state.completedAgents.add(agentId);
+  }
+
+  function liveWorkingCall() {
+    const call = asObject(state.liveModelCall);
+    if (!call || !LIVE_WORK_PLANS[call.agentId]) return null;
+    if (state.factTourRunning || state.factTourComplete) return null;
+    if (!LIVE_AGENT_STATES.has(String(call.status || ''))) return null;
+    if (!call.runId || !call.callId || !call.eventId) return null;
+    if (state.primaryRunId && call.runId !== state.primaryRunId) return null;
+    if (call.actorType !== 'nemotron_agent' || call.cacheHit === true || call.callCount !== 1) return null;
+    if (call.receiptType !== 'agent_started') return null;
+    if (call.agentId === 'canonical_facts' && call.inputArtifact !== 'observable_claim_package') return null;
+    return call;
   }
 
   function entitySurfaceKind(kind) {
@@ -696,17 +902,37 @@
     return `${entitySurfaceKind(String(kind || ''))}:${String(entityId || '')}`;
   }
 
-  function rememberSemanticLineage(event) {
+  function rememberSemanticLineage(event, detail = {}) {
     const entity = asObject(event?.entity);
     const eventId = String(valueFrom(event, 'event_id', 'eventId', 'dedupe_key') || '');
     if (!entity?.kind || !entity?.id || !eventId) return;
     const agentId = eventAgentId(event);
+    const acceptance = asObject(event?.acceptance) || {};
+    const executionTrace = asObject(event?.execution_trace) || {};
+    const runId = String(valueFrom(detail, 'runId', 'run_id') || state.primaryRunId || '');
     const lineage = {
       eventId,
       changeId: `semantic:${eventId}`,
       agentId,
       actorType: eventActorType(event),
       eventType: String(event.type || ''),
+      runId,
+      traceContract: String(executionTrace.contract || ''),
+      presentationMode: String(executionTrace.presentation_mode || ''),
+      authority: String(executionTrace.authority || acceptance.authority || ''),
+      inputBindingsHash: String(executionTrace.input_bindings_hash || ''),
+      outputBindingHash: String(executionTrace.output_binding_hash || ''),
+      modelOwnedFields: asArray(executionTrace.model_owned_fields).map(String),
+      assertionId: String(executionTrace.assertion_id || acceptance.assertion_id || ''),
+      materializedFromModelAssertionFields: asArray(executionTrace.materialized_from_model_assertion_fields).map(String),
+      modelSelectedLocatorIds: asArray(executionTrace.model_selected_text_refs).map(sourceLocatorId),
+      sourceReferenceProjectionApplied: executionTrace.source_reference_projection_applied === true,
+      officialSourceCount: Number(executionTrace.official_source_count) || 0,
+      modelContributionAccepted: acceptance.model_contribution_accepted === true,
+      deterministicFallbackApplied: acceptance.deterministic_fallback_applied === true,
+      cacheHit: executionTrace.cache_hit === true
+        || acceptance.cache_hit === true
+        || event?.actor?.cache_hit === true,
     };
     state.entityLineage.set(entityLineageKey(entity.kind, entity.id), lineage);
     if (agentId) {
@@ -719,21 +945,99 @@
 
   function lineageFor(kind, entityId) {
     const exact = state.entityLineage.get(entityLineageKey(kind, entityId));
-    if (exact) return exact;
-    if (kind === 'agent_output') return state.agentLineage.get(String(entityId || '')) || null;
+    const expectedRunId = ['later-work', 'later-result'].includes(state.moment)
+      ? state.laterRunId
+      : state.primaryRunId;
+    const belongsToExpectedRun = lineage => Boolean(lineage)
+      && (!expectedRunId || (lineage.runId && lineage.runId === expectedRunId));
+    if (belongsToExpectedRun(exact)) return exact;
+    if (kind === 'agent_output') {
+      const agentOutput = state.agentLineage.get(String(entityId || '')) || null;
+      return belongsToExpectedRun(agentOutput) ? agentOutput : null;
+    }
     if (kind === 'verification') {
-      return state.entityLineage.get(entityLineageKey('verification', 'whole_playbook_verification'))
-        || state.agentLineage.get('final_claim_brief_audit')
-        || null;
+      const verification = state.entityLineage.get(entityLineageKey('verification', 'whole_playbook_verification'));
+      if (belongsToExpectedRun(verification)) return verification;
+      const finalAgent = state.agentLineage.get('final_claim_brief_audit');
+      return belongsToExpectedRun(finalAgent) ? finalAgent : null;
     }
     return null;
   }
 
+  function returnedProcessRoute() {
+    const process = asObject(state.process) || {};
+    const overlay = asObject(process.current_overlay) || {};
+    const returnedNodeIds = new Set(asArray(process.nodes).map(node => String(node?.node_id || '')).filter(Boolean));
+    const selectedPath = unique(asArray(process.selected_path)
+      .map(nodeId => String(nodeId || ''))
+      .filter(nodeId => nodeId && returnedNodeIds.has(nodeId)));
+    const currentNodeId = String(overlay.current_node_id || process.current_node || '');
+    const nextActionNodeId = String(overlay.next_action_node_id || '');
+    const selectedBranchId = String(overlay.selected_branch_id || '');
+    const routeNodeIds = unique([
+      ...selectedPath,
+      ...(returnedNodeIds.has(currentNodeId) ? [currentNodeId] : []),
+      ...(returnedNodeIds.has(nextActionNodeId) ? [nextActionNodeId] : []),
+    ]);
+    const currentNode = asArray(process.nodes).find(node => node?.node_id === currentNodeId);
+    const selectedBranch = asArray(currentNode?.branches).find(branch => (
+      branch?.branch_id === selectedBranchId
+      && branch?.target === nextActionNodeId
+      && returnedNodeIds.has(String(branch.target || ''))
+    )) || null;
+    const usesCausationCanvas = currentNodeId === 'causation' && Boolean(selectedBranch);
+    return {
+      selectedPath,
+      currentNodeId,
+      nextActionNodeId,
+      selectedBranchId,
+      selectedBranch,
+      routeNodeIds,
+      returnedNodeIds,
+      usesCausationCanvas,
+      flagshipCausation: usesCausationCanvas && nextActionNodeId === 'evidence_gap',
+    };
+  }
+
+  function projectedProcessNodeIds() {
+    const route = returnedProcessRoute();
+    const ids = route.usesCausationCanvas
+      ? SIMPLIFIED_SPINE_IDS.filter(nodeId => route.returnedNodeIds.has(nodeId))
+      : route.routeNodeIds;
+    if (route.returnedNodeIds.has('ventilation_dispute')
+      && state.moment !== 'later-work'
+      && (state.result?.review_transform || state.moment === 'later-result')) {
+      const afterId = route.usesCausationCanvas ? 'causation' : route.currentNodeId;
+      const insertion = Math.max(0, ids.indexOf(afterId) + 1);
+      ids.splice(insertion, 0, 'ventilation_dispute');
+    }
+    return unique(ids);
+  }
+
+  function returnedRouteOpenLabel() {
+    const route = returnedProcessRoute();
+    const current = nodeById(route.currentNodeId);
+    const answer = String(current?.answer || '').trim();
+    if (route.flagshipCausation) return 'Causation is unresolved';
+    if (!current) return 'Current step not returned';
+    if (answer && answer !== 'Not reached') return `${nodeLabel(current.node_id)} · ${answer}`;
+    return `${nodeLabel(current.node_id)} is open`;
+  }
+
   function processProjectionReady() {
-    return SIMPLIFIED_SPINE_IDS.every(nodeId => (
-      state.entityLineage.has(entityLineageKey('process_node', nodeId))
+    const projectedIds = projectedProcessNodeIds();
+    return projectedIds.length > 0 && projectedIds.every(nodeId => (
+      Boolean(lineageFor('process_node', nodeId))
       && Boolean(nodeById(nodeId))
     ));
+  }
+
+  function decisionTraceProjectionReady() {
+    return processProjectionReady()
+      && projectedProcessNodeIds().every(nodeId => {
+        const node = nodeById(nodeId);
+        return asArray(node?.evidence_requirement_ids).length === 0 || evidenceForNode(nodeId).length > 0;
+      });
   }
 
   function updateSemanticFocus(detail, event) {
@@ -760,10 +1064,16 @@
     if (key && dedupeEvent) state.eventKeys.add(key);
 
     mergeCanonicalResult(detail);
+    const detailRun = storeRunFromDetail(detail);
+    const terminalFailure = terminalFailureFromRun(detailRun);
+    if (terminalFailure) state.terminalFailure = terminalFailure;
     if (detail?.later === true && (source === 'semantic' || source === 'snapshot')) return;
     if (source === 'run') {
       const runAgentId = eventAgentId(event);
       const runEventId = String(valueFrom(event, 'event_id', 'eventId', 'dedupe_key') || '');
+      const runCallId = String(valueFrom(event, 'call_id', 'callId') || '');
+      const runId = String(valueFrom(event, 'run_id', 'runId') || valueFrom(detail, 'runId', 'run_id') || state.primaryRunId || '');
+      const runStatus = eventStatus(event);
       if (eventActorType(event) === 'nemotron_agent' && AGENTS[runAgentId] && runEventId) {
         state.agentLineage.set(runAgentId, {
           eventId: runEventId,
@@ -771,20 +1081,52 @@
           agentId: runAgentId,
           actorType: 'nemotron_agent',
           eventType: 'run.activity',
+          runId,
+          callId: runCallId,
+          status: runStatus,
         });
+        const exactLiveStart = LIVE_AGENT_STATES.has(runStatus)
+          && LIVE_WORK_PLANS[runAgentId]
+          && runCallId
+          && valueFrom(event, 'receipt_type', 'receiptType') === 'agent_started'
+          && event.cache_hit !== true;
+        if (exactLiveStart) {
+          state.liveModelCall = {
+            agentId: runAgentId,
+            actorType: 'nemotron_agent',
+            runId,
+            callId: runCallId,
+            eventId: runEventId,
+            status: runStatus,
+            receiptType: 'agent_started',
+            cacheHit: false,
+            callCount: Number(valueFrom(event, 'call_count', 'callCount') || 0),
+            inputArtifact: String(valueFrom(event, 'input_artifact', 'inputArtifact') || ''),
+            inputArtifactHash: String(valueFrom(event, 'input_artifact_hash', 'inputHash') || ''),
+          };
+          state.currentEvent = null;
+          setMoment(AGENT_MOMENTS[runAgentId] || state.moment);
+          setAgent(runAgentId, event);
+        } else if (state.liveModelCall
+          && state.liveModelCall.runId === runId
+          && state.liveModelCall.callId === runCallId) {
+          state.liveModelCall = null;
+          if (!SUCCESS_STATES.has(runStatus)) state.activeAgentId = '';
+        }
       }
+      render();
       return;
     }
     if (source !== 'render' && source !== 'semantic' && source !== 'snapshot') state.currentEvent = event;
     if (source === 'semantic') {
       state.currentSemanticEventId = String(valueFrom(event, 'event_id', 'eventId', 'dedupe_key') || '');
       state.currentSemanticChangeId = `semantic:${state.currentSemanticEventId || eventKey(event, source)}`;
-      rememberSemanticLineage(event);
+      rememberSemanticLineage(event, detail);
       mergeSemanticEntity(event);
       if (isAcceptedProcessGate(event, detail)) state.processAccepted = true;
       updateSemanticFocus(detail, event);
       maybeStartFactSourceTour();
-      if (state.moment === 'process' && state.processAccepted && processProjectionReady()
+      if (state.moment === 'process' && state.processAccepted && decisionTraceProjectionReady()
         && !state.graphRevealRunning && state.visibleNodeIds.size === 0) {
         startGraphReveal();
       }
@@ -823,11 +1165,16 @@
     const actorType = eventActorType(event);
     const agentId = eventAgentId(event);
     if (actorType === 'nemotron_agent' && AGENTS[agentId]) setAgent(agentId, event);
-    if (source === 'agent-focus' && AGENTS[String(detail?.agentId || '')]) setAgent(String(detail.agentId), event);
+    if (source === 'agent-focus' && detail?.cacheHit === true) {
+      state.activeAgentId = '';
+      state.neutralAuthority = 'cached-model-replay';
+    } else if (source === 'agent-focus' && AGENTS[String(detail?.agentId || '')]) {
+      setAgent(String(detail.agentId), event);
+    }
 
     if (isAcceptedProcessGate(event, detail)) acceptProcess();
     if (detail?.processAccepted === true && state.process) acceptProcess();
-    const run = storeRunFromDetail(detail);
+    const run = detailRun;
     const runStatus = String(valueFrom(run, 'status', 'state') || '').toLowerCase();
     const terminalSnapshot = source === 'snapshot'
       && (detail?.terminal === true || ['complete', 'completed', 'succeeded'].includes(runStatus));
@@ -898,37 +1245,19 @@
   function acceptProcess() {
     if (!state.process || !asArray(state.process.nodes).length) return;
     if (state.processAccepted) {
-      if (state.moment === 'process' && processProjectionReady() && !state.graphRevealRunning && state.visibleNodeIds.size === 0) startGraphReveal();
+      if (state.moment === 'process' && decisionTraceProjectionReady() && !state.graphRevealRunning && state.visibleNodeIds.size === 0) startGraphReveal();
       reconcileGraph();
       return;
     }
     state.processAccepted = true;
-    state.selectedNodeId = state.process.current_overlay?.current_node_id || state.process.current_node || 'causation';
-    if (state.moment === 'process' && processProjectionReady()) startGraphReveal();
+    state.selectedNodeId = state.process.current_overlay?.current_node_id || state.process.current_node || '';
+    if (state.moment === 'process' && decisionTraceProjectionReady()) startGraphReveal();
     else reconcileGraph();
   }
 
   function simplifiedNodes() {
     const byId = new Map(asArray(state.process?.nodes).map(node => [node.node_id, node]));
-    const projectedIds = [...SIMPLIFIED_SPINE_IDS];
-    if (byId.has('ventilation_dispute')
-      && state.moment !== 'later-work'
-      && (state.result?.review_transform || state.moment === 'later-result')) {
-      projectedIds.splice(projectedIds.indexOf('causation') + 1, 0, 'ventilation_dispute');
-    }
-    return projectedIds.map(nodeId => {
-      const returned = byId.get(nodeId);
-      const fallback = DEFAULT_NODE_COPY[nodeId] || [nodeId.replaceAll('_', ' '), ''];
-      return returned || {
-        node_id: nodeId,
-        title: fallback[0],
-        question: fallback[1],
-        state: 'future',
-        fact_ids: [],
-        legal_source_ids: [],
-        evidence_requirement_ids: [],
-      };
-    });
+    return projectedProcessNodeIds().map(nodeId => byId.get(nodeId)).filter(Boolean);
   }
 
   function startGraphReveal() {
@@ -937,38 +1266,64 @@
     state.visibleBranchIds.clear();
     state.graphRevealIndex = 0;
     state.graphRevealRunning = true;
+    state.graphRevealRunId = state.primaryRunId;
     state.pendingGraphNodeId = '';
     state.graphDwell = false;
     state.graphInspecting = false;
     state.graphInspectionPhase = 'select-source';
+    state.decisionFlowLocatorIndex = 0;
+    state.decisionFlowAuditEvents = [];
     resetProcessNodeProgress();
     state.cursorCommit = null;
     const nodes = simplifiedNodes();
     window.dispatchEvent(new CustomEvent('casepath:artifact-process-started', { detail: {
+      runId: state.graphRevealRunId,
       processId: state.process?.process_id || '',
       nodeCount: nodes.length,
     } }));
     const revealNext = () => {
       const node = nodes[state.graphRevealIndex];
       if (!node) {
+        state.decisionFlowNodeId = '';
+        state.decisionFlowSteps = [];
+        state.decisionFlowLocatorIndex = 0;
+        state.decisionFlowFragments = [];
+        state.decisionFlowPhase = 'idle';
         startBranchReveal();
         return;
       }
       const lineage = lineageFor('process_node', node.node_id);
-      const inspectionBasis = nodeInspectionBasis(node);
+      const decisionLineage = lineageFor('process_decision', node.node_id);
+      const steps = nodeDecisionTrace(node);
+      const inspectionBasis = steps[0]?.basis || nodeInspectionBasis(node);
+      const locatorUnits = steps.map(step => Math.max(1, asArray(step.items).length));
+      const completedLocatorsBefore = index => locatorUnits.slice(0, index).reduce((sum, count) => sum + count, 0);
+      const totalMilestones = Math.max(1, locatorUnits.reduce((sum, count) => sum + count, 0) * 2 + 2);
       state.pendingGraphNodeId = node.node_id;
       state.selectedNodeId = node.node_id;
       state.lastCursorChangeId = visibleChangeId('process_node', node.node_id, lineage);
       state.lastCursorEventId = lineage?.eventId || '';
-      state.lastCursorAgentId = lineage?.agentId || '';
+      state.lastCursorAgentId = '';
       state.graphInspecting = true;
       state.graphInspectionPhase = 'select-source';
+      state.decisionFlowNodeId = node.node_id;
+      state.decisionFlowSteps = steps;
+      state.decisionFlowIndex = 0;
+      state.decisionFlowLocatorIndex = 0;
+      state.decisionFlowFragments = [];
+      state.decisionFlowPhase = 'select-source';
       clearActiveSource();
       const commitNode = () => {
         if (state.pendingGraphNodeId !== node.node_id) return;
         state.pendingGraphNodeId = '';
         state.graphInspecting = false;
         state.graphInspectionPhase = 'select-source';
+        state.decisionFlowNodeId = '';
+        state.decisionFlowSteps = [];
+        state.decisionFlowIndex = 0;
+        state.decisionFlowLocatorIndex = 0;
+        state.decisionFlowFragments = [];
+        state.decisionFlowPhase = 'idle';
         state.visibleNodeIds.add(node.node_id);
         state.graphRevealIndex += 1;
         state.graphDwell = true;
@@ -978,13 +1333,96 @@
           revealNext();
         }, GRAPH_NODE_DWELL_MS);
       };
+      const completeDecision = () => {
+        const decisionHoldMs = steps.length ? DECISION_COMBINE_HOLD_MS : 1000;
+        state.lastCursorEventId = decisionLineage?.eventId || lineage?.eventId || '';
+        state.lastCursorAgentId = decisionLineage?.modelContributionAccepted
+          ? decisionLineage.agentId
+          : '';
+        state.decisionFlowPhase = 'combine';
+        state.graphInspectionPhase = 'highlight-source';
+        setProcessNodeProgress('form', 90);
+        emitDecisionFlowStep(node, null, 'combining', 90);
+        state.graphRevealTimer = window.setTimeout(() => {
+          state.decisionFlowPhase = 'complete';
+          setProcessNodeProgress('complete', 100);
+          emitDecisionFlowStep(node, null, 'decision-ready', 100);
+          state.graphRevealTimer = window.setTimeout(() => {
+            clearProcessNodeProgress();
+            render();
+            window.requestAnimationFrame(() => {
+              const plan = state.root?.querySelector('[data-decision-plan][data-plan-phase="complete"]');
+              if (!plan) {
+                commitNode();
+                return;
+              }
+              let committed = false;
+              let fallbackTimer = 0;
+              const afterRecede = () => {
+                if (committed) return;
+                committed = true;
+                window.clearTimeout(fallbackTimer);
+                plan.dataset.planPhase = 'receded';
+                emitDecisionFlowStep(node, null, 'plan-receded', 100);
+                commitNode();
+              };
+              plan.addEventListener('transitionend', event => {
+                if (event.target === plan && event.propertyName === 'opacity') afterRecede();
+              });
+              window.requestAnimationFrame(() => {
+                state.decisionFlowPhase = 'receding';
+                plan.dataset.planPhase = 'receding';
+                const addStep = plan.querySelector('[data-step-id="add-node"]');
+                if (addStep) {
+                  addStep.dataset.stepState = 'complete';
+                  addStep.removeAttribute('aria-current');
+                  const icon = addStep.querySelector('i');
+                  if (icon) icon.textContent = '✓';
+                }
+                emitDecisionFlowStep(node, null, 'plan-receding', 100);
+                fallbackTimer = window.setTimeout(afterRecede, DECISION_PLAN_RECEDE_MS + 160);
+              });
+            });
+          }, PROCESS_NODE_PROGRESS_HOLD_MS);
+        }, decisionHoldMs);
+      };
+      const prepareStep = index => {
+        const step = steps[index];
+        if (!step) {
+          completeDecision();
+          return;
+        }
+        state.decisionFlowIndex = index;
+        state.decisionFlowLocatorIndex = 0;
+        state.decisionFlowPhase = 'select-source';
+        state.graphInspectionPhase = 'select-source';
+        clearActiveSource();
+        const completedMilestones = completedLocatorsBefore(index) * 2;
+        const searchProgress = Math.round((completedMilestones / totalMilestones) * 82);
+        setProcessNodeProgress('search', searchProgress, {
+          entityKind: 'node',
+          nodeId: node.node_id,
+          basisKind: step.stepKind,
+          changeId: state.lastCursorChangeId,
+          eventId: state.lastCursorEventId,
+          agentId: state.lastCursorAgentId,
+        });
+        emitDecisionFlowStep(node, step, 'planned', searchProgress);
+        state.cursorCommit = openStep;
+      };
       const highlightSource = () => {
         if (state.pendingGraphNodeId !== node.node_id) return;
         const inspectionTarget = state.root?.querySelector('[data-ac-inspection-target="true"]');
         if (!inspectionTarget || inspectionTarget.dataset.inspectionPhase !== 'read-source') return;
-        const sourceKind = inspectionTarget.dataset.sourceId
-          ? 'claim-source'
-          : inspectionTarget.dataset.lawId
+        const step = steps[state.decisionFlowIndex];
+        if (!step) return;
+        const sourceKind = step.stepKind === 'accepted-fact'
+          ? 'accepted-fact'
+          : step.stepKind === 'accepted-law'
+            ? 'accepted-law'
+            : inspectionTarget.dataset.sourceId
+              ? 'claim-source'
+              : inspectionTarget.dataset.lawId
             ? 'swiss-law'
             : inspectionTarget.dataset.evidenceId
               ? 'evidence-requirement'
@@ -994,57 +1432,78 @@
           || inspectionTarget.dataset.evidenceId
           || inspectionTarget.dataset.inspectionId
           || '';
-        const factId = inspectionTarget.dataset.factId || '';
-        const locatorId = inspectionTarget.dataset.sourceLocatorId || '';
-        const found = inspectionBasis.finding || '';
+        const activeItem = asArray(step.items)[state.decisionFlowLocatorIndex] || asArray(step.items)[0] || null;
+        const activeFacts = asArray(activeItem?.facts).length ? activeItem.facts : activeItem?.fact ? [activeItem.fact] : [];
+        const factId = inspectionTarget.dataset.factId || activeFacts[0]?.fact_id || '';
+        const locatorId = inspectionTarget.dataset.sourceLocatorId || activeItem?.locatorId || '';
+        const found = activeItem ? sourceFinding(activeItem.ref) : step.basis?.finding || '';
         emitInteraction('confirm-source', inspectionTarget);
         state.graphInspectionPhase = 'highlight-source';
+        state.decisionFlowPhase = 'highlight-source';
         state.cursorCommit = null;
+        if (activeItem && !state.decisionFlowFragments.some(fragment => fragment.locatorId === activeItem.locatorId)) {
+          state.decisionFlowFragments.push(activeItem);
+        }
+        if (activeItem?.locatorId) state.decisionFlowSeenLocatorIds.add(activeItem.locatorId);
+        if (step.stepKind === 'law' && step.sourceId) state.decisionFlowSeenLawIds.add(step.sourceId);
         render();
-        window.dispatchEvent(new CustomEvent('casepath:source-highlighted', { detail: {
-          entityKind: 'node', nodeId: node.node_id, changeId: state.lastCursorChangeId,
-          eventId: state.lastCursorEventId, agentId: state.lastCursorAgentId,
-          sourceId, factId, locatorId,
-        } }));
-        window.dispatchEvent(new CustomEvent('casepath:source-inspection', { detail: {
-          entityKind: 'node',
-          nodeId: node.node_id,
-          changeId: state.lastCursorChangeId,
-          eventId: state.lastCursorEventId,
-          agentId: state.lastCursorAgentId,
-          sourceKind,
-          sourceId,
-          factId,
-          locatorId,
-          found,
-        } }));
-        setProcessNodeProgress('extract', 72);
-        finishProcessNodeProgress(GRAPH_SOURCE_DWELL_MS, commitNode);
+        const inspectedFacts = activeFacts.length ? activeFacts : [{ fact_id: factId }];
+        inspectedFacts.forEach(fact => {
+          if (['accepted-fact', 'accepted-law'].includes(step.stepKind)) return;
+          window.dispatchEvent(new CustomEvent('casepath:source-highlighted', { detail: {
+            entityKind: 'node', nodeId: node.node_id, changeId: state.lastCursorChangeId,
+            eventId: state.lastCursorEventId, agentId: state.lastCursorAgentId,
+            sourceId: step.sourceId || sourceId, factId: fact?.fact_id || factId, locatorId,
+          } }));
+          window.dispatchEvent(new CustomEvent('casepath:source-inspection', { detail: {
+            entityKind: 'node', nodeId: node.node_id, changeId: state.lastCursorChangeId,
+            eventId: state.lastCursorEventId, agentId: state.lastCursorAgentId,
+            sourceKind, sourceId: step.sourceId || sourceId, factId: fact?.fact_id || factId,
+            locatorId, found,
+          } }));
+        });
+        const completedMilestones = (completedLocatorsBefore(state.decisionFlowIndex) + state.decisionFlowLocatorIndex + 1) * 2;
+        const progress = Math.min(82, Math.round((completedMilestones / totalMilestones) * 82));
+        setProcessNodeProgress('extract', progress);
+        emitDecisionFlowStep(node, step, 'fragment-extracted', progress);
+        state.graphRevealTimer = window.setTimeout(() => {
+          if (state.decisionFlowLocatorIndex + 1 < asArray(step.items).length) {
+            state.decisionFlowLocatorIndex += 1;
+            const nextItem = asArray(step.items)[state.decisionFlowLocatorIndex];
+            if (nextItem?.locatorId) setActiveSourceLocator(nextItem.locatorId);
+            state.graphInspectionPhase = 'read-source';
+            state.decisionFlowPhase = 'read-source';
+            state.cursorCommit = highlightSource;
+            const nextMilestone = completedLocatorsBefore(state.decisionFlowIndex) * 2 + state.decisionFlowLocatorIndex * 2 + 1;
+            setProcessNodeProgress('read', Math.min(72, Math.round((nextMilestone / totalMilestones) * 82)));
+            emitDecisionFlowStep(node, step, 'next-locator', Math.min(72, Math.round((nextMilestone / totalMilestones) * 82)));
+          } else prepareStep(state.decisionFlowIndex + 1);
+        }, DECISION_SOURCE_HOLD_MS);
       };
-      state.cursorCommit = () => {
+      const openStep = () => {
         if (state.pendingGraphNodeId !== node.node_id) return;
         const inspectionTarget = state.root?.querySelector('[data-ac-inspection-target="true"]');
         if (!inspectionTarget || inspectionTarget.dataset.inspectionPhase !== 'select-source') return;
-        if (inspectionTarget.dataset.sourceId) markSubmissionSource(inspectionTarget.dataset.sourceId);
-        if (inspectionTarget.dataset.sourceLocatorId) setActiveSourceLocator(inspectionTarget.dataset.sourceLocatorId);
+        const step = steps[state.decisionFlowIndex];
+        if (!step) return;
+        if (step.stepKind === 'source' && inspectionTarget.dataset.sourceId) markSubmissionSource(inspectionTarget.dataset.sourceId);
+        if (step.stepKind === 'source' && inspectionTarget.dataset.sourceLocatorId) setActiveSourceLocator(inspectionTarget.dataset.sourceLocatorId);
         emitInteraction(inspectionTarget.dataset.acAction || 'inspect', inspectionTarget);
         state.graphInspectionPhase = 'read-source';
+        state.decisionFlowPhase = 'read-source';
         state.cursorCommit = highlightSource;
-        setProcessNodeProgress('read', 38);
+        const completedMilestones = completedLocatorsBefore(state.decisionFlowIndex) * 2 + state.decisionFlowLocatorIndex * 2 + 1;
+        const progress = Math.min(72, Math.round((completedMilestones / totalMilestones) * 82));
+        setProcessNodeProgress('read', progress);
+        emitDecisionFlowStep(node, step, 'source-opened', progress);
       };
-      setProcessNodeProgress('search', 0, {
-        entityKind: 'node',
-        nodeId: node.node_id,
-        basisKind: inspectionBasis.basisKind,
-        changeId: state.lastCursorChangeId,
-        eventId: state.lastCursorEventId,
-        agentId: state.lastCursorAgentId,
-      });
+      prepareStep(0);
     };
     revealNext();
   }
 
   function branchRevealItems() {
+    if (!returnedProcessRoute().usesCausationCanvas) return [];
     const causation = nodeById('causation');
     return CAUSATION_BRANCH_LAYOUT.flatMap(([nodeId]) => {
       const node = nodeById(nodeId);
@@ -1061,13 +1520,20 @@
     state.graphDwell = false;
     state.graphInspecting = false;
     state.graphInspectionPhase = 'select-source';
+    state.decisionFlowNodeId = '';
+    state.decisionFlowSteps = [];
+    state.decisionFlowIndex = 0;
+    state.decisionFlowLocatorIndex = 0;
+    state.decisionFlowFragments = [];
+    state.decisionFlowPhase = 'idle';
     resetProcessNodeProgress();
     state.cursorCommit = null;
     clearActiveSource();
-    state.selectedNodeId = state.process?.current_overlay?.current_node_id || state.process?.current_node || 'causation';
+    state.selectedNodeId = state.process?.current_overlay?.current_node_id || state.process?.current_node || '';
     state.activeChainKind = 'source';
     render();
     window.dispatchEvent(new CustomEvent('casepath:artifact-process-complete', { detail: {
+      runId: state.graphRevealRunId,
       processId: state.process?.process_id || '',
       nodeCount: simplifiedNodes().length,
     } }));
@@ -1075,92 +1541,41 @@
 
   function startBranchReveal() {
     const items = branchRevealItems().filter(({ node }) => !state.visibleBranchIds.has(node.node_id));
-    const current = items[0];
-    if (!current) {
+    if (!items.length) {
       finishGraphReveal();
       return;
     }
-    const { node, branch } = current;
-    const lineage = lineageFor('process_node', node.node_id) || lineageFor('branch', branch.branch_id);
-    const inspectionBasis = nodeInspectionBasis(node);
     state.pendingGraphNodeId = '';
-    state.pendingBranchNodeId = node.node_id;
-    state.selectedNodeId = node.node_id;
-    state.lastCursorChangeId = visibleChangeId('branch', branch.branch_id, lineage);
-    state.lastCursorEventId = lineage?.eventId || '';
-    state.lastCursorAgentId = lineage?.agentId || '';
-    state.graphInspecting = true;
-    state.graphInspectionPhase = 'select-source';
+    state.pendingBranchNodeId = '';
+    state.selectedNodeId = 'causation';
+    state.graphInspecting = false;
+    state.graphInspectionPhase = 'highlight-source';
+    state.cursorCommit = null;
+    resetProcessNodeProgress();
     clearActiveSource();
-    const highlightSource = () => {
-      if (state.pendingBranchNodeId !== node.node_id) return;
-      const inspectionTarget = state.root?.querySelector('[data-ac-inspection-target="true"]');
-      if (!inspectionTarget || inspectionTarget.dataset.inspectionPhase !== 'read-source') return;
-      const sourceKind = inspectionTarget.dataset.sourceId ? 'claim-source' : inspectionTarget.dataset.lawId ? 'swiss-law' : inspectionTarget.dataset.evidenceId ? 'evidence-requirement' : 'accepted-process-input';
-      const sourceId = inspectionTarget.dataset.sourceId || inspectionTarget.dataset.lawId || inspectionTarget.dataset.evidenceId || inspectionTarget.dataset.inspectionId || '';
-      const factId = inspectionTarget.dataset.factId || '';
-      const locatorId = inspectionTarget.dataset.sourceLocatorId || '';
-      const found = inspectionBasis.finding || '';
-      emitInteraction('confirm-source', inspectionTarget);
-      state.graphInspectionPhase = 'highlight-source';
-      state.cursorCommit = null;
+    const revealBranch = index => {
+      const current = items[index];
+      if (!current) {
+        state.graphRevealTimer = window.setTimeout(finishGraphReveal, 420);
+        return;
+      }
+      const { node, branch } = current;
+      const lineage = lineageFor('process_branch', `causation:${branch.branch_id}`);
+      state.lastCursorChangeId = visibleChangeId('branch', branch.branch_id, lineage);
+      state.lastCursorEventId = lineage?.eventId || '';
+      state.lastCursorAgentId = lineage?.modelContributionAccepted ? lineage.agentId : '';
+      state.visibleBranchIds.add(node.node_id);
       render();
-      window.dispatchEvent(new CustomEvent('casepath:source-highlighted', { detail: {
-        entityKind: 'branch', nodeId: node.node_id, branchId: branch.branch_id,
-        changeId: state.lastCursorChangeId, eventId: state.lastCursorEventId,
-        agentId: state.lastCursorAgentId, sourceId, factId, locatorId,
-      } }));
-      window.dispatchEvent(new CustomEvent('casepath:source-inspection', { detail: {
-        entityKind: 'branch',
+      window.dispatchEvent(new CustomEvent('casepath:branch-visualized', { detail: {
         nodeId: node.node_id,
         branchId: branch.branch_id,
         changeId: state.lastCursorChangeId,
         eventId: state.lastCursorEventId,
         agentId: state.lastCursorAgentId,
-        sourceKind,
-        sourceId,
-        factId,
-        locatorId,
-        found,
       } }));
-      setProcessNodeProgress('extract', 72);
-      finishProcessNodeProgress(GRAPH_BRANCH_SOURCE_DWELL_MS, () => {
-        state.visibleBranchIds.add(node.node_id);
-        state.pendingBranchNodeId = '';
-        state.graphInspecting = false;
-        state.graphInspectionPhase = 'select-source';
-        state.cursorCommit = null;
-        render();
-        window.dispatchEvent(new CustomEvent('casepath:branch-visualized', { detail: {
-          nodeId: node.node_id,
-          branchId: branch.branch_id,
-          changeId: state.lastCursorChangeId,
-          eventId: state.lastCursorEventId,
-          agentId: state.lastCursorAgentId,
-        } }));
-        state.graphRevealTimer = window.setTimeout(startBranchReveal, 350);
-      });
+      state.graphRevealTimer = window.setTimeout(() => revealBranch(index + 1), 460);
     };
-    state.cursorCommit = () => {
-      if (state.pendingBranchNodeId !== node.node_id) return;
-      const inspectionTarget = state.root?.querySelector('[data-ac-inspection-target="true"]');
-      if (!inspectionTarget || inspectionTarget.dataset.inspectionPhase !== 'select-source') return;
-      if (inspectionTarget.dataset.sourceId) markSubmissionSource(inspectionTarget.dataset.sourceId);
-      if (inspectionTarget.dataset.sourceLocatorId) setActiveSourceLocator(inspectionTarget.dataset.sourceLocatorId);
-      emitInteraction(inspectionTarget.dataset.acAction || 'inspect', inspectionTarget);
-      state.graphInspectionPhase = 'read-source';
-      state.cursorCommit = highlightSource;
-      setProcessNodeProgress('read', 38);
-    };
-    setProcessNodeProgress('search', 0, {
-      entityKind: 'branch',
-      nodeId: node.node_id,
-      branchId: branch.branch_id,
-      basisKind: inspectionBasis.basisKind,
-      changeId: state.lastCursorChangeId,
-      eventId: state.lastCursorEventId,
-      agentId: state.lastCursorAgentId,
-    });
+    revealBranch(0);
   }
 
   function nodeById(nodeId) {
@@ -1187,6 +1602,207 @@
   function directFactsForNode(node) {
     const ids = new Set(asArray(node?.fact_ids));
     return state.facts.filter(fact => ids.has(fact.fact_id));
+  }
+
+  function isUsableDecisionRef(ref) {
+    if (!ref) return false;
+    if (ref.locator_kind === 'visual_observation') return isRenderableVisualRef(ref);
+    if (ref.locator_kind === 'metadata_field') {
+      return Boolean(String(ref.field || '').trim() && String(ref.value ?? '').trim());
+    }
+    return ref.locator_kind === 'text_quote' && Boolean(String(ref.excerpt || '').trim());
+  }
+
+  function decisionFactsForNode(node) {
+    const direct = directFactsForNode(node).filter(fact => asArray(fact.source_refs).some(isUsableDecisionRef));
+    if (direct.length) return direct;
+    const requirements = asArray(node?.evidence_requirement_ids);
+    for (const itemId of requirements) {
+      const item = asArray(state.checklist?.items).find(candidate => candidate.item_id === itemId);
+      const fact = state.facts.find(candidate => candidate.fact_id === item?.fact_id);
+      if (fact && asArray(fact.source_refs).some(isUsableDecisionRef)) return [fact];
+    }
+    return [];
+  }
+
+  function decisionSourceGroups(node) {
+    const groups = [];
+    const bySource = new Map();
+    // Prefer the facts returned directly for the decision. When a process DTO is
+    // intentionally sparse (for example intake), take only the first usable fact
+    // from its ordered evidence requirements. This keeps the plan causal and
+    // prevents a source-integrity check from turning one decision into a tour of
+    // the entire package.
+    decisionFactsForNode(node).forEach(fact => {
+      asArray(fact.source_refs).filter(isUsableDecisionRef).forEach(ref => {
+        const sourceId = String(ref.artifact_id || '');
+        if (!sourceId) return;
+        const locatorId = sourceLocatorId(ref);
+        if (state.decisionFlowSeenLocatorIds.has(locatorId)) return;
+        let group = bySource.get(sourceId);
+        if (!group) {
+          group = {
+            stepId: `source:${sourceId}`,
+            stepKind: 'source',
+            sourceId,
+            title: sourceDisplayTitle(sourceId),
+            items: [],
+          };
+          bySource.set(sourceId, group);
+          groups.push(group);
+        }
+        const existing = group.items.find(item => item.locatorId === locatorId);
+        if (existing) {
+          if (!existing.facts.some(candidate => candidate.fact_id === fact.fact_id)) existing.facts.push(fact);
+        } else group.items.push({ fact, facts: [fact], ref, locatorId });
+      });
+    });
+    return groups.filter(group => group.items.length);
+  }
+
+  function nodeDecisionTrace(node) {
+    // These steps are intentionally blocked by the unresolved cause. Showing a
+    // fresh source search here would imply work the accepted process has not
+    // authorized. Keep their plan visible, then place them as waiting steps.
+    if (['responsibility', 'remedy', 'resolution'].includes(node?.node_id)) return [];
+    const decisionFacts = decisionFactsForNode(node);
+    if (decisionFacts.length) {
+      const factSteps = decisionFacts.map(fact => {
+        const ref = representativeFactRef(fact);
+        const factLineage = lineageFor('fact', fact.fact_id);
+        return {
+          stepId: `accepted-fact:${fact.fact_id}`,
+          stepKind: 'accepted-fact',
+          sourceId: '',
+          title: fact.label || fact.fact_id,
+          basisLineage: factLineage,
+          basis: {
+            basisKind: 'accepted-fact',
+            action: 'use-accepted-fact',
+            attributes: `data-fact-id="${esc(fact.fact_id)}" data-inspection-id="${esc(fact.fact_id)}"`,
+            sourceLabel: 'accepted claim fact',
+            title: fact.label || fact.fact_id,
+            location: ref ? sourceDisplayTitle(ref.artifact_id) : 'accepted claim state',
+            finding: String(fact.value ?? fact.label ?? fact.fact_id),
+            fact,
+          },
+          items: [{ fact, facts: [fact], acceptedFact: true, locatorId: '' }],
+        };
+      });
+      const checkedLaw = lawsForNode(node).find(source => (
+        isOfficialLaw(source) && state.officialLawTourVisitedIds.has(source.source_id)
+      ));
+      if (!checkedLaw) return factSteps;
+      const lawLineage = lineageFor('law', checkedLaw.source_id);
+      return [...factSteps, {
+        stepId: `accepted-law:${checkedLaw.source_id}`,
+        stepKind: 'accepted-law',
+        sourceId: checkedLaw.source_id,
+        title: checkedLaw.location || checkedLaw.title,
+        basisLineage: lawLineage,
+        basis: {
+          basisKind: 'accepted-law',
+          action: 'use-accepted-law',
+          attributes: `data-law-id="${esc(checkedLaw.source_id)}" data-inspection-id="${esc(checkedLaw.source_id)}"`,
+          sourceLabel: 'checked Swiss law',
+          law: checkedLaw,
+          title: checkedLaw.location || checkedLaw.title,
+          location: 'official source already checked',
+          finding: checkedLaw.passage_text || checkedLaw.passage_summary || checkedLaw.title,
+        },
+        items: [],
+      }];
+    }
+    const basis = nodeInspectionBasis(node);
+    return [{
+      stepId: `${basis.basisKind}:${basis.law?.source_id || basis.ref?.artifact_id || node.node_id}`,
+      stepKind: basis.basisKind,
+      sourceId: basis.ref?.artifact_id || basis.law?.source_id || '',
+      title: basis.title,
+      basis,
+      items: basis.fact && basis.ref ? [{ fact: basis.fact, ref: basis.ref, locatorId: sourceLocatorId(basis.ref) }] : [],
+    }];
+  }
+
+  function decisionStepLabel(step) {
+    if (step.stepKind === 'source') {
+      const title = String(step.title || 'source')
+        .replace(/^Email notifying the property manager$/i, 'notice email')
+        .replace(/^Residential lease agreement$/i, 'lease')
+        .replace(/^Bedroom photograph$/i, 'photo')
+        .replace(/^Email delivery receipt$/i, 'delivery proof');
+      return `Read ${title}`;
+    }
+    if (step.stepKind === 'law') {
+      const article = String(step.basis?.location || step.title || '').match(/Article\s+\d+[a-z]?/i)?.[0];
+      return `Check ${article || 'Swiss law'}`;
+    }
+    if (step.stepKind === 'accepted-fact') return 'Use the accepted fact';
+    if (step.stepKind === 'accepted-law') return 'Use the checked law';
+    if (step.stepKind === 'accepted-decision') return 'Use the earlier answer';
+    if (step.stepKind === 'evidence-requirement') return 'Check what is missing';
+    return 'Check the known fact';
+  }
+
+  function decisionFlowStepState(index) {
+    if (index < state.decisionFlowIndex) return 'complete';
+    if (index > state.decisionFlowIndex) return 'waiting';
+    return ['highlight-source', 'combine', 'complete', 'receding'].includes(state.decisionFlowPhase)
+      ? 'complete'
+      : 'active';
+  }
+
+  function emitDecisionFlowStep(node, step, phase, progress) {
+    const items = asArray(step?.items);
+    const activeItem = items[state.decisionFlowLocatorIndex] || items[0] || null;
+    const activeFacts = asArray(activeItem?.facts).length ? activeItem.facts : activeItem?.fact ? [activeItem.fact] : [];
+    const structureLineage = lineageFor('process_node', node?.node_id);
+    const decisionLineage = lineageFor('process_decision', node?.node_id);
+    const decisionAgentVisible = ['combining', 'decision-ready'].includes(phase)
+      && decisionLineage?.modelContributionAccepted === true;
+    const basisLineage = step?.basisLineage || null;
+    const detail = {
+      contract: DECISION_FLOW_CONTRACT,
+      runId: decisionLineage?.runId || state.primaryRunId || '',
+      nodeId: node?.node_id || '',
+      nodeQuestion: node ? nodeQuestion(node) : '',
+      stepId: step?.stepId || phase,
+      phase,
+      agentId: decisionAgentVisible ? decisionLineage.agentId : '',
+      eventId: structureLineage?.eventId || state.lastCursorEventId || '',
+      structureEventId: structureLineage?.eventId || '',
+      structureAuthority: structureLineage?.authority || '',
+      structureTraceContract: structureLineage?.traceContract || '',
+      structureInputBindingsHash: structureLineage?.inputBindingsHash || '',
+      structureOutputBindingHash: structureLineage?.outputBindingHash || '',
+      decisionAgentId: decisionLineage?.agentId || '',
+      decisionEventId: decisionLineage?.eventId || '',
+      decisionAuthority: decisionLineage?.authority || '',
+      decisionTraceContract: decisionLineage?.traceContract || '',
+      decisionInputBindingsHash: decisionLineage?.inputBindingsHash || '',
+      decisionOutputBindingHash: decisionLineage?.outputBindingHash || '',
+      decisionModelContributionAccepted: decisionLineage?.modelContributionAccepted === true,
+      decisionDeterministicFallbackApplied: decisionLineage?.deterministicFallbackApplied === true,
+      basisAgentId: basisLineage?.agentId || '',
+      basisEventId: basisLineage?.eventId || '',
+      basisAuthority: basisLineage?.authority || '',
+      basisTraceContract: basisLineage?.traceContract || '',
+      basisOutputBindingHash: basisLineage?.outputBindingHash || '',
+      presentationMode: 'returned-action-replay',
+      sourceId: step?.sourceId || '',
+      sourceTitle: step?.title || '',
+      locatorId: activeItem?.locatorId || '',
+      locatorIds: activeItem ? [activeItem.locatorId] : [],
+      factIds: unique(activeFacts.map(item => item.fact_id).filter(Boolean)),
+      factSummaries: unique(activeFacts.map(item => [item.label, item.value].filter(Boolean).join(': ')).filter(Boolean)),
+      locatorIndex: activeItem ? state.decisionFlowLocatorIndex : -1,
+      locatorCount: items.length,
+      progress,
+    };
+    if (['source-opened', 'fragment-extracted', 'plan-receded'].includes(phase)) {
+      state.decisionFlowAuditEvents.push({ ...detail });
+    }
+    window.dispatchEvent(new CustomEvent('casepath:decision-flow-step', { detail }));
   }
 
   function lawsForNode(node) {
@@ -1263,7 +1879,9 @@
     if (state.root) state.root.dataset.officialLawTourState = 'complete';
     window.dispatchEvent(new CustomEvent('casepath:official-source-tour-complete', { detail: {
       contract: CONTRACT,
+      runId: state.officialLawTourRunId,
       sourceIds: sources.map(source => source.source_id),
+      presentation: 'deterministic-projection',
     } }));
   }
 
@@ -1287,6 +1905,7 @@
       state.pendingLawId = '';
       state.focusLawId = sourceId;
       state.officialLawTourVisitedIds.add(sourceId);
+      state.decisionFlowSeenLawIds.add(sourceId);
       setActiveSourceLocator(lawLocatorId(source));
       mirrorOfficialLawSource(source);
       render();
@@ -1311,11 +1930,18 @@
   function startOfficialLawTour() {
     if (state.officialLawTourRunning || state.officialLawTourComplete) return;
     const sources = asArray(state.legal?.sources).filter(isOfficialLaw);
-    if (!sources.length) return;
+    const expectedCount = Math.max(
+      0,
+      ...sources.map(source => lineageFor('law', source.source_id)?.officialSourceCount || 0),
+    );
+    if (!sources.length || !expectedCount || sources.length !== expectedCount
+      || sources.some(source => !lineageFor('law', source.source_id)?.eventId)) return;
     state.officialLawTourRunning = true;
+    state.officialLawTourRunId = state.primaryRunId;
+    state.officialLawTourComplete = false;
     state.officialLawTourIndex = 0;
     state.officialLawTourVisitedIds.clear();
-    state.focusLawId = '';
+    if (state.root) state.root.dataset.officialLawTourState = 'running';
     beginOfficialLawStep(sources, 0);
   }
 
@@ -1562,7 +2188,7 @@
           ? `<button type="button" class="ac-visual-region-target is-awaiting-click" ${targetAttributes} style="--region-x:${x * 100}%;--region-y:${y * 100}%;--region-width:${width * 100}%;--region-height:${height * 100}%" aria-label="Select this exact image region"></button>`
           : `<span class="ac-visual-region-target${highlighted ? ' is-highlighted' : ''}" style="--region-x:${x * 100}%;--region-y:${y * 100}%;--region-width:${width * 100}%;--region-height:${height * 100}%" aria-hidden="true"></span>`}
       </div>
-      <figcaption><span>${esc(sourceMeta.title)}</span><small>Image</small><strong>${esc(label)}</strong></figcaption>
+      <figcaption><span class="ac-visual-source-title"><i aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false">${SOURCE_TYPE_ICONS.image}</svg></i><b>${esc(sourceMeta.title)}</b></span><small>Photograph · exact region</small><strong>${esc(label)}</strong></figcaption>
     </figure>`;
   }
 
@@ -1570,6 +2196,10 @@
     if (ref?.locator_kind === 'visual_observation') return visualSourceMarkup(fact, ref, interactive, highlighted);
     const finding = sourceFinding(ref);
     const sourceMeta = sourceArtifactMeta(ref);
+    const artifact = asArray(state.claim?.artifacts)
+      .find(item => String(item?.artifact_id || '') === String(ref?.artifact_id || ''));
+    const extraction = state.sourceExtractions.get(String(ref?.artifact_id || ''));
+    const email = asObject(extraction?.email);
     const page = Math.max(1, Number(ref?.page) || 1);
     const pageLabel = ref?.locator_kind === 'metadata_field'
       ? 'Returned field'
@@ -1592,7 +2222,23 @@
       : interactive
         ? `<button type="button" class="ac-fact-reading-target ac-source-exact-control is-awaiting-click" data-source-exact-control="true" ${targetAttributes}>${exactText}</button>`
         : `<span class="ac-source-exact-text">${exactText}</span>`;
-    return `<div class="ac-source-document-preview">${documentHead}<blockquote class="ac-source-passage ac-source-page-excerpt">${sourceWindow.before ? `<span>${esc(sourceWindow.before)}</span>` : ''}${exactMarkup}${sourceWindow.after ? `<span>${esc(sourceWindow.after)}</span>` : ''}</blockquote></div>`;
+    const passage = `<blockquote class="ac-source-passage ac-source-page-excerpt">${sourceWindow.before ? `<span>${esc(sourceWindow.before)}</span>` : ''}${exactMarkup}${sourceWindow.after ? `<span>${esc(sourceWindow.after)}</span>` : ''}</blockquote>`;
+    if (String(artifact?.media_type || '') === 'application/pdf') {
+      const pageUrl = `${API}/api/artifacts/${encodeURIComponent(String(ref.artifact_id || ''))}/pages/${page}`;
+      const passageLabel = highlighted ? 'Selected passage' : interactive ? 'Passage to select' : 'Source passage';
+      return `<div class="ac-source-document-preview ac-real-artifact ac-real-pdf-artifact" data-real-artifact="true" data-artifact-id="${esc(ref.artifact_id || '')}" data-artifact-page="${esc(page)}">${documentHead}<div class="ac-real-pdf-layout"><figure><img src="${esc(pageUrl)}" alt="Actual ${esc(sourceMeta.title)} page ${esc(page)}"><figcaption>Original page</figcaption></figure><div><small>${passageLabel}</small>${passage}</div></div></div>`;
+    }
+    if (email) {
+      return `<div class="ac-source-document-preview ac-real-artifact ac-real-email-artifact" data-real-artifact="true" data-artifact-id="${esc(ref.artifact_id || '')}">${documentHead}<dl class="ac-real-email-head">${email.from ? `<div><dt>From</dt><dd>${esc(email.from)}</dd></div>` : ''}${email.to ? `<div><dt>To</dt><dd>${esc(email.to)}</dd></div>` : ''}${email.date ? `<div><dt>Date</dt><dd>${esc(email.date)}</dd></div>` : ''}${email.subject ? `<div><dt>Subject</dt><dd>${esc(email.subject)}</dd></div>` : ''}</dl>${passage}</div>`;
+    }
+    return `<div class="ac-source-document-preview ac-real-artifact" data-real-artifact="true" data-artifact-id="${esc(ref?.artifact_id || '')}">${documentHead}${passage}</div>`;
+  }
+
+  function sourceGroupReadingMarkup(step, interactive = true, highlighted = false) {
+    const items = asArray(step?.items);
+    const primary = items[Math.min(state.decisionFlowLocatorIndex, Math.max(0, items.length - 1))];
+    if (!primary) return '';
+    return sourceReadingMarkup(primary.fact, primary.ref, interactive, highlighted);
   }
 
   function finishFactSourceTour(items) {
@@ -1601,13 +2247,16 @@
     state.factTourComplete = true;
     state.factTourPhase = 'finding';
     state.factTourReadArmed = false;
+    state.pendingFactRefModelSelected = false;
     state.cursorCommit = null;
     clearActiveSource();
     render();
     window.dispatchEvent(new CustomEvent('casepath:fact-source-tour-complete', { detail: {
       contract: CONTRACT,
+      runId: state.factTourRunId,
       factIds: items.map(item => item.fact.fact_id),
       count: items.length,
+      presentation: 'returned-action-replay',
     } }));
   }
 
@@ -1622,10 +2271,14 @@
     state.factTourPhase = 'select-source';
     state.factTourReadArmed = false;
     state.pendingFactId = fact.fact_id;
+    state.pendingFactRefModelSelected = Boolean(
+      lineage.modelContributionAccepted
+      && lineage.modelSelectedLocatorIds.includes(sourceLocatorId(ref))
+    );
     state.focusFactId = fact.fact_id;
     state.lastCursorChangeId = visibleChangeId('fact', fact.fact_id, lineage);
     state.lastCursorEventId = lineage.eventId;
-    state.lastCursorAgentId = lineage.agentId;
+    state.lastCursorAgentId = state.pendingFactRefModelSelected ? lineage.agentId : '';
     clearActiveSource();
     const highlightSource = () => {
       if (!state.factTourRunning || state.pendingFactId !== fact.fact_id || state.factTourPhase !== 'read-source') return;
@@ -1652,6 +2305,7 @@
         locatorId: target.dataset.sourceLocatorId || '',
         found: sourceFinding(ref),
       } }));
+      state.decisionFlowSeenLocatorIds.add(sourceLocatorId(ref));
       state.factTourTimer = window.setTimeout(() => {
         if (!state.factTourRunning || state.pendingFactId !== fact.fact_id) return;
         state.factTourPhase = 'finding';
@@ -1688,8 +2342,11 @@
     const items = factStoryItems();
     if (items.length !== FACT_STORY_IDS.length) return;
     state.factTourRunning = true;
+    state.factTourRunId = state.primaryRunId;
+    state.factTourComplete = false;
     state.factTourIndex = 0;
     state.factTourPhase = 'select-source';
+    render();
     beginFactSourceStep(items, 0);
   }
 
@@ -1827,7 +2484,7 @@
         <b class="ac-cursor-role-icon" data-ac-cursor-monogram data-ac-cursor-avatar data-agent-avatar="casepath" data-agent-monogram="CP"><svg viewBox="0 0 24 24" focusable="false">${CURSOR_AVATARS.casepath}</svg></b>
         <span class="ac-agent-cursor-label">
           <span class="ac-agent-cursor-copy"><strong data-ac-cursor-agent>CasePath</strong><small data-ac-cursor-action>Opening the claim</small></span>
-          <span class="ac-process-node-progress" data-ac-process-node-progress hidden><small data-ac-process-node-progress-phase></small><strong data-ac-process-node-progress-value>0%</strong></span>
+          <span class="ac-process-node-progress" data-ac-process-node-progress hidden><small data-ac-process-node-progress-phase></small></span>
         </span>
       </div>`;
     renderTeam();
@@ -1903,10 +2560,38 @@
     let emptySources = 'No source citation accepted';
     if (agentId === 'canonical_facts') {
       const acceptedFacts = flagshipFacts.filter(fact => acceptedIds.has(String(fact?.fact_id || '')));
+      const selections = new Map(asArray(
+        state.result?.understanding?.canonicalization?.assertion_selections
+        || state.result?.canonicalization?.assertion_selections
+        || state.result?.audit?.canonicalization?.assertion_selections
+      ).map(item => [String(item?.fact_id || ''), item]));
+      const projectedFactIds = new Set(asArray(entry.source_reference_projection_fact_ids).map(String));
       factIds = acceptedFacts.map(fact => fact.fact_id).filter(Boolean);
-      sourceIds = sourceIdsFromFacts(acceptedFacts);
-      extracted = acceptedFacts.map(fact => `${fact.label}: ${fact.value}`).filter(Boolean);
-      affected = ['Shared fact state', 'Internal work plan'];
+      const exactModelRefs = acceptedFacts.flatMap(fact => (
+        projectedFactIds.has(String(fact?.fact_id || ''))
+          ? []
+          : asArray(fact?.source_refs).filter(ref => (
+            ref?.locator_kind === 'text_quote'
+            && ref?.agent === 'OpenRouter Nemotron Canonicalizer'
+          ))
+      ));
+      sourceIds = unique(exactModelRefs.map(ref => String(ref?.artifact_id || '')).filter(Boolean));
+      extracted = acceptedFacts.map(fact => {
+        const factId = String(fact?.fact_id || '');
+        const selection = selections.get(factId);
+        const selectedMeaning = asArray(selection?.model_owned_fields).includes('assertion_id');
+        if (projectedFactIds.has(factId)) {
+          return selectedMeaning
+            ? `${fact.label}: meaning selected; source match replaced by CasePath`
+            : `${fact.label}: source match replaced by CasePath`;
+        }
+        return selectedMeaning
+          ? `${fact.label}: meaning selected from the matched evidence`
+          : `${fact.label}: exact source match accepted`;
+      }).filter(Boolean);
+      affected = ['Selected bounded meanings, source matches, and confidence'];
+      sourcesLabel = 'Exact source matches';
+      emptySources = 'No exact model-selected text source was accepted';
     } else if (agentId === 'orchestrator_plan') {
       const planAccepted = acceptedIds.has('model_priority_order');
       factIds = planAccepted ? asArray(artifact.model_priority_fact_ids).map(String) : [];
@@ -1918,11 +2603,14 @@
       const acceptedArtifacts = asArray(artifact.artifacts).filter(item => acceptedIds.has(String(item?.artifact_id || '')));
       sourceIds = acceptedArtifacts.map(item => String(item?.artifact_id || '')).filter(Boolean);
       extracted = acceptedArtifacts.map(item => `${sourceDisplayTitle(item?.artifact_id)}: ${String(item?.integrity_class || 'checked').replaceAll('_', ' ')}`);
+      sourcesLabel = 'Artifact records checked';
       affected = ['Process gate source check'];
     } else if (agentId === 'process_decision_mapping') {
       const decisions = asArray(artifact.decisions).filter(item => acceptedIds.has(String(item?.contribution_id || '')));
       factIds = decisions.map(item => String(item?.fact_id || '')).filter(Boolean);
-      sourceIds = sourceIdsFromFacts(flagshipFacts.filter(fact => factIds.includes(fact.fact_id)));
+      sourceIds = factIds;
+      sourcesLabel = 'Fact records received';
+      emptySources = 'No fact record was handed to this call';
       extracted = decisions.map(item => String(item?.decision_value || item?.fact_id || '')).filter(Boolean);
       affected = asArray(flagshipProcess.nodes).filter(node => asArray(node.fact_ids).some(factId => factIds.includes(factId))).map(node => nodeQuestion(node));
     } else if (agentId === 'evidence_checklist') {
@@ -1933,11 +2621,15 @@
       });
       factIds = acceptedItems.map(({ item }) => String(item?.fact_id || '')).filter(Boolean);
       sourceIds = unique(acceptedItems.filter(({ fields }) => fields.includes('artifact_ids')).flatMap(({ item }) => asArray(item?.artifact_ids).map(String)));
+      sourcesLabel = 'Artifact IDs selected';
+      emptySources = 'No artifact ID field was accepted';
       extracted = acceptedItems.map(({ item, fields }) => `${String(item?.item_id || '')}: ${fields.join(' + ')}`);
       affected = asArray(flagshipChecklist.items).filter(item => acceptedItems.some(({ item: accepted }) => accepted?.item_id === item?.item_id)).map(item => item.title).filter(Boolean);
     } else if (agentId === 'final_claim_brief_audit') {
       factIds = acceptedIds.has('final:supporting_facts') ? asArray(artifact.supporting_fact_ids).map(String) : [];
-      sourceIds = sourceIdsFromFacts(flagshipFacts.filter(fact => factIds.includes(fact.fact_id)));
+      sourceIds = factIds;
+      sourcesLabel = 'Fact record IDs received';
+      emptySources = 'No supporting fact ID was accepted';
       extracted = acceptedIds.has('final:audit_checks') ? asArray(artifact.audit_check_ids).map(String) : [];
       affected = [
         acceptedIds.has('final:current_node') ? nodeLabel(artifact.current_node_id) : '',
@@ -1993,6 +2685,29 @@
     return `<details data-agent-history-rejections data-rejected-count="${esc(returned.length)}"><summary>Rejected items · ${esc(returned.length)}</summary><ul>${returned.map(item => `<li data-rejected-item-id="${esc(item.itemId)}" data-rejected-invariant="${esc(item.invariant)}"><strong>${esc(item.itemId)}</strong>${item.invariant || item.reason ? `<span>${esc([item.invariant, item.reason].filter(Boolean).join(' · '))}</span>` : ''}</li>`).join('')}</ul></details>`;
   }
 
+  function referenceReplayHistoryMarkup(agentId) {
+    if (agentId !== 'process_decision_mapping') return '';
+    const actions = asArray(state.decisionFlowAuditEvents);
+    if (!actions.length) return '';
+    const rows = actions.map((action, index) => {
+      const opened = action.phase === 'source-opened';
+      const extracted = action.phase === 'fragment-extracted';
+      const label = opened ? 'Opened' : extracted ? 'Extracted' : 'Added';
+      const value = opened
+        ? action.sourceTitle || sourceDisplayTitle(action.sourceId)
+        : extracted
+          ? asArray(action.factSummaries).join(' · ') || 'Exact returned fact'
+          : action.nodeQuestion || action.nodeId;
+      const detail = opened && action.locatorCount > 1
+        ? `Exact part ${Number(action.locatorIndex || 0) + 1} of ${action.locatorCount}`
+        : extracted
+          ? action.sourceTitle || sourceDisplayTitle(action.sourceId)
+          : 'Placed in the accepted reference path';
+      return `<li data-reference-action data-reference-action-phase="${esc(action.phase)}" data-node-id="${esc(action.nodeId)}" data-source-id="${esc(action.sourceId)}" data-source-locator-id="${esc(action.locatorId)}"><i>${esc(index + 1)}</i><div><small>${esc(label)}</small><strong>${esc(value)}</strong><span>${esc(detail)}</span></div></li>`;
+    }).join('');
+    return `<ol class="ac-agent-history ac-reference-action-history" data-reference-action-history data-agent-id="${esc(agentId)}" data-action-count="${esc(actions.length)}"><li data-agent-history-task><i>✓</i><div><small>Task</small><strong>Build the accepted claim path</strong><span>Open exact sources, extract facts, then place each decision.</span></div></li>${rows}</ol><p class="ac-reference-action-provenance" data-reference-action-provenance>No provider call · accepted reference output replay</p>`;
+  }
+
   function renderAgentAudit() {
     const panel = state.root?.querySelector('[data-ac-agent-audit]');
     if (!panel) return;
@@ -2006,24 +2721,31 @@
     }
     const audit = orchestrationAudit();
     const history = agentHistoryData(agentId);
+    const referenceHistory = audit?.executed === false ? referenceReplayHistoryMarkup(agentId) : '';
     panel.hidden = false;
     panel.dataset.agentId = agentId;
     panel.dataset.agentSignature = agent.signature;
-    panel.dataset.agentHistoryAvailable = String(Boolean(history));
-    const runId = document.body.dataset.casepathActiveRunId || '';
+    panel.dataset.agentHistoryAvailable = String(Boolean(history || referenceHistory));
+    panel.dataset.agentHistoryMode = history ? 'call-bound' : referenceHistory ? 'reference-replay-actions' : 'not-returned';
+    const runId = state.primaryRunId || document.body.dataset.casepathActiveRunId || '';
+    const showingOriginalClaimRun = ['later-work', 'later-result'].includes(state.moment)
+      && Boolean(state.laterRunId)
+      && state.laterRunId !== runId;
     const receipt = history?.entry || {};
     const sources = history?.sourceIds.map(sourceId => sourceId.startsWith('art_') || ['message', 'intake'].includes(sourceId) ? sourceDisplayTitle(sourceId) : sourceId) || [];
     const acceptedIds = acceptedIdsMarkup(receipt);
     const rejectedItems = rejectedItemsMarkup(receipt);
-    panel.innerHTML = `<header><div><span data-agent-signature="${esc(agent.signature)}"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">${AGENT_ICONS[agent.signature] || ''}</svg></span><div><small>${esc(agent.label)}</small><h2 id="artifactAgentAuditTitle">${esc(agent.short)} activity</h2></div></div><button type="button" data-ac-action="close-agent-audit" aria-label="Close agent activity">×</button></header>
+    panel.dataset.historyRunId = runId;
+    panel.dataset.historyClaimScope = showingOriginalClaimRun ? 'original-claim' : 'current-claim';
+    panel.innerHTML = `<header><div><span data-agent-signature="${esc(agent.signature)}"><svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">${AGENT_ICONS[agent.signature] || ''}</svg></span><div><small>${esc(agent.label)}${showingOriginalClaimRun ? ' · original claim run' : ''}</small><h2 id="artifactAgentAuditTitle">${esc(agent.short)} activity</h2></div></div><button type="button" data-ac-action="close-agent-audit" aria-label="Close agent activity">×</button></header>
       ${history ? `<ol class="ac-agent-history" data-agent-history-contract="casepath.agent-history/1.0.0" data-run-id="${esc(runId)}" data-agent-id="${esc(agentId)}">
         <li data-agent-history-task><i>1</i><div><small>Task</small><strong>${esc(agent.task)}</strong><span>${esc(agent.why)}</span></div></li>
         <li data-agent-history-sources><i>2</i><div><small>${esc(history.sourcesLabel)}</small>${compactHistoryList(sources, history.emptySources)}</div></li>
-        <li data-agent-history-facts><i>3</i><div><small>${agentId === 'canonical_facts' ? 'Extracted' : 'Used'}</small>${compactHistoryList(history.extracted, 'No bounded item returned')}</div></li>
+        <li data-agent-history-facts><i>3</i><div><small>${agentId === 'canonical_facts' ? 'Selected' : 'Used'}</small>${compactHistoryList(history.extracted, 'No bounded item returned')}</div></li>
         <li data-agent-history-output><i>4</i><div><small>Produced</small><strong>${esc(history.output.replaceAll('_', ' '))}</strong>${compactHistoryList(history.affected, 'No downstream entity returned')}</div></li>
         <li data-agent-history-acceptance><i>5</i><div><small>Accepted</small><strong>${esc(String(receipt.outcome || 'outcome not returned').replaceAll('_', ' '))}</strong><span>${esc(String(receipt.accepted_count ?? 0))} accepted · ${esc(String(receipt.rejected_count ?? 0))} rejected${receipt.deterministic_fallback_applied === true ? ' · CasePath replaced rejected fields' : ''} · next: ${esc(history.downstream)}</span>${acceptedIds}</div></li>
       </ol>${rejectedItems}<details data-agent-history-receipt><summary>Technical receipt</summary><dl><div><dt>Call</dt><dd>${esc(receipt.call_id || 'not returned')}</dd></div><div><dt>Output hash</dt><dd>${esc(receipt.output_artifact_hash || 'not returned')}</dd></div><div><dt>Fallback</dt><dd>${esc(String(receipt.deterministic_fallback_applied === true))}</dd></div></dl></details>`
-        : `<div class="ac-agent-history-empty"><small>Activity record</small><strong>${audit?.executed === false ? 'No agent calls were made in this reference replay.' : 'Call-bound history has not been returned yet.'}</strong><p>${audit?.executed === false ? 'This screen replays accepted reference output; it does not invent agent activity.' : 'This panel will fill only when exact call receipts arrive.'}</p></div>`}`;
+        : referenceHistory || `<div class="ac-agent-history-empty"><small>${audit?.executed === false ? 'Reference replay' : 'Activity record'}</small><strong>${audit?.executed === false ? 'No replay actions were recorded for this role.' : 'Call-bound history has not been returned yet.'}</strong><p>${audit?.executed === false ? 'Provider calls are off in this local reference run.' : 'This panel will fill only when exact call receipts arrive.'}</p></div>`}`;
   }
 
   function openAgentAudit(agentId) {
@@ -2046,17 +2768,33 @@
   function renderHeader() {
     const root = state.root;
     if (!root) return;
-    const graphProjectionActorId = state.graphRevealRunning
-      ? lineageFor('process_node', state.pendingGraphNodeId || state.selectedNodeId)?.agentId || ''
-      : '';
-    const acceptedProcessAgentId = state.agentLineage.get('process_decision_mapping')?.actorType === 'nemotron_agent'
-      ? 'process_decision_mapping'
+    const liveCall = liveWorkingCall();
+    const graphNodeId = state.pendingGraphNodeId || state.selectedNodeId;
+    const graphProjectionLineage = state.graphRevealRunning
+      ? lineageFor('process_decision', graphNodeId)
+      : null;
+    const decisionPhaseOwnsCursor = ['combine', 'complete'].includes(state.decisionFlowPhase);
+    const graphProjectionActorId = decisionPhaseOwnsCursor
+      && graphProjectionLineage?.actorType === 'nemotron_agent'
+      && graphProjectionLineage?.modelContributionAccepted
+      ? graphProjectionLineage.agentId
       : '';
     const graphActorId = AGENTS[graphProjectionActorId]
       ? graphProjectionActorId
-      : state.graphRevealRunning ? acceptedProcessAgentId : '';
+      : '';
     const factLineage = state.factTourRunning ? lineageFor('fact', state.pendingFactId) : null;
-    const factActorId = AGENTS[factLineage?.agentId] ? factLineage.agentId : '';
+    const factActorId = state.pendingFactRefModelSelected
+      && factLineage?.actorType === 'nemotron_agent'
+      && AGENTS[factLineage?.agentId]
+      ? factLineage.agentId
+      : '';
+    const cachedModelReplay = Boolean(
+      state.factTourRunning
+        ? state.pendingFactRefModelSelected && factLineage?.cacheHit
+        : state.graphRevealRunning && decisionPhaseOwnsCursor
+          ? graphProjectionLineage?.cacheHit
+          : false
+    );
     const effectiveAgentId = AGENTS[factActorId]
       ? factActorId
       : AGENTS[graphActorId]
@@ -2064,20 +2802,31 @@
         : state.activeAgentId;
     const agent = AGENTS[effectiveAgentId];
     const copy = momentCopy();
-    const neutral = state.factTourRunning && !factActorId
-      ? { label: 'Claim reader', monogram: 'CF', signature: 'facts', visualAgentId: 'canonical_facts', task: 'Showing the exact source behind a returned fact', why: 'The fact appears only after the passage, field, or image region is selected.' }
+    const activeDecisionStepKind = state.decisionFlowSteps[state.decisionFlowIndex]?.stepKind || '';
+    const neutral = cachedModelReplay
+      ? { label: 'Cached result replay', monogram: '↺', signature: 'memory', task: 'Reusing a verified contribution', why: 'No provider call was made for this exact cached result.' }
+      : state.factTourRunning && !factActorId
+      ? { label: 'Fact safety check', monogram: '✓', signature: 'gate', task: 'Showing an accepted source-backed fact', why: 'This exact source region was projected by the application, not selected by the model.' }
+      : state.graphRevealRunning && activeDecisionStepKind === 'accepted-fact' && !decisionPhaseOwnsCursor
+        ? { label: 'Accepted claim fact', monogram: '✓', signature: 'gate', task: 'Using a checked fact record', why: 'The fact value is application-owned; any accepted model source match is recorded separately.' }
+      : state.graphRevealRunning && activeDecisionStepKind === 'accepted-law' && !decisionPhaseOwnsCursor
+        ? { label: 'Swiss law lookup', monogram: '§', signature: 'law', task: 'Using the checked registry section', why: 'This law lookup is deterministic, not a model agent action.' }
       : state.graphRevealRunning && !graphActorId
-      ? { label: 'Process builder', monogram: 'PM', signature: 'process', visualAgentId: 'process_decision_mapping', task: 'Building the handling path', why: 'Each step appears after the source or earlier decision that supports it.' }
+      ? { label: 'Process safety check', monogram: '✓', signature: 'gate', task: 'Placing an application-defined process step', why: 'No accepted model field is claimed for this structural step.' }
       : state.neutralAuthority === 'official-law-registry'
-      ? { label: 'Source checker', monogram: 'DS', signature: 'sources', visualAgentId: 'document_source_integrity', task: 'Showing the exact Swiss-law section', why: 'The official text is shown directly; legal interpretation still needs qualified review.' }
+      ? { label: 'Swiss law lookup', monogram: '§', signature: 'law', task: 'Showing the exact registry section', why: 'This is a deterministic official-source lookup, not a model agent call.' }
       : state.neutralAuthority === 'historical-ranking'
         ? { label: 'Reference lookup', monogram: '↗', signature: 'reference', task: copy.title, why: copy.detail }
       : state.neutralAuthority === 'whole-playbook-gate'
-        ? { label: 'Result checker', monogram: 'FB', signature: 'audit', visualAgentId: 'final_claim_brief_audit', task: 'Checking the full result', why: 'A deterministic safety check still decides whether it may proceed.' }
+        ? { label: 'Final safety gate', monogram: '✓', signature: 'gate', task: 'Checking the full result', why: 'This application gate decides whether the returned result may proceed.' }
       : state.neutralAuthority === 'case-memory-comparison'
         ? { label: 'Saved-case comparison', monogram: '↺', signature: 'memory', task: copy.title, why: copy.detail }
+      : state.neutralAuthority === 'failure-boundary'
+        ? { label: 'Stopped safely', monogram: '!', signature: 'gate', task: failurePresentation().title, why: 'No result was applied.' }
+      : state.neutralAuthority === 'cached-model-replay'
+        ? { label: 'Cached result replay', monogram: '↺', signature: 'memory', task: 'Reusing a verified contribution', why: 'No provider call was made for this exact cached result.' }
       : state.moment === 'ready'
-        ? { label: 'Result checker', monogram: 'FB', signature: 'audit', visualAgentId: 'final_claim_brief_audit', task: 'The checked result is ready', why: 'Every source, process step, and document need remains open for review.' }
+        ? { label: 'Ready for review', monogram: '✓', signature: 'casepath', task: 'The checked result is ready', why: 'Every source, process step, and document need remains open for review.' }
         : null;
     const identity = neutral || (agent ? {
       label: agent.label,
@@ -2095,12 +2844,41 @@
     root.dataset.casepathMoment = state.moment;
     root.dataset.casepathScene = state.moment;
     const referenceReplay = orchestrationAudit()?.executed === false;
+    const presentationMode = cachedModelReplay
+      ? 'cached-result-replay'
+      : liveCall
+        ? 'live-call'
+      : state.factTourRunning || state.graphRevealRunning
+      ? 'returned-action-replay'
+      : state.officialLawTourRunning || state.neutralAuthority
+        ? 'deterministic-projection'
+        : state.activeAgentId && state.agentLineage.get(state.activeAgentId)?.actorType === 'nemotron_agent'
+          ? 'live-event'
+          : 'deterministic-projection';
     root.dataset.referenceReplay = String(referenceReplay);
+    root.dataset.presentationMode = presentationMode;
+    root.dataset.liveAgentWorkState = liveCall ? 'working' : 'idle';
+    if (liveCall) {
+      root.dataset.liveAgentId = liveCall.agentId;
+      root.dataset.liveAgentRunId = liveCall.runId;
+      root.dataset.liveAgentCallId = liveCall.callId;
+      root.dataset.liveAgentEventId = liveCall.eventId;
+    } else {
+      delete root.dataset.liveAgentId;
+      delete root.dataset.liveAgentRunId;
+      delete root.dataset.liveAgentCallId;
+      delete root.dataset.liveAgentEventId;
+    }
     root.dataset.factSourceTourState = state.factTourComplete ? 'complete' : state.factTourRunning ? 'running' : state.factTourEligible ? 'waiting' : 'idle';
     root.dataset.factSourceTourIndex = String(state.factTourIndex);
     root.dataset.factSourceTourPhase = state.factTourPhase;
+    root.dataset.factSourceTourRunId = state.factTourRunId;
+    root.dataset.officialLawTourRunId = state.officialLawTourRunId;
+    root.dataset.processStoryRunId = state.graphRevealRunId;
     root.dataset.graphInspectionPhase = state.graphInspectionPhase;
     root.dataset.graphInspecting = String(state.graphInspecting);
+    root.dataset.decisionFlowState = state.decisionFlowPhase;
+    root.dataset.decisionNodeId = state.decisionFlowNodeId;
     root.dataset.manualNodeInspection = String(state.manualNodeInspection);
     const nodeProgress = state.processNodeProgress;
     root.dataset.processNodeProgressState = nodeProgress ? 'active' : 'idle';
@@ -2148,7 +2926,6 @@
       progressIndicator.dataset.phase = nodeProgress.phase;
       progressIndicator.dataset.nodeId = nodeProgress.nodeId;
       progressIndicator.querySelector('[data-ac-process-node-progress-phase]').textContent = nodeProgress.label;
-      progressIndicator.querySelector('[data-ac-process-node-progress-value]').textContent = `${nodeProgress.percent}%`;
     } else {
       delete cursor.dataset.processNodeProgress;
       cursor.style.removeProperty('--ac-process-node-progress');
@@ -2168,12 +2945,30 @@
     const globalAgent = document.querySelector('[data-ac-global-agent]');
     const globalTask = document.querySelector('[data-ac-global-task]');
     const globalHost = document.querySelector('[data-ac-global-agent-work]');
-    if (globalHost) globalHost.dataset.referenceReplay = String(referenceReplay);
-    if (globalAgent) globalAgent.textContent = referenceReplay ? `Reference preview · ${identity.label}` : identity.label;
+    if (globalHost) {
+      globalHost.dataset.referenceReplay = String(referenceReplay);
+      globalHost.dataset.presentationMode = presentationMode;
+    }
+    const presentationLabel = {
+      'live-event': 'Live receipt',
+      'returned-action-replay': 'Returned work',
+      'cached-result-replay': 'Cached result replay',
+      'deterministic-projection': 'Application step',
+    }[presentationMode] || 'Application step';
+    if (globalAgent) globalAgent.textContent = `${presentationLabel} · ${identity.label}`;
     if (globalTask) globalTask.textContent = identity.task;
   }
 
   function spatialPosition(nodeId) {
+    const route = returnedProcessRoute();
+    if (!route.usesCausationCanvas && !['review-applied', 'knowledge', 'later-work', 'later-result'].includes(state.moment)) {
+      const routeIds = projectedProcessNodeIds();
+      const index = routeIds.indexOf(nodeId);
+      if (index >= 0) {
+        const x = routeIds.length === 1 ? 50 : 10 + (80 * index / (routeIds.length - 1));
+        return [x, 18];
+      }
+    }
     const branchPosition = CAUSATION_BRANCH_LAYOUT.find(([branchNodeId]) => branchNodeId === nodeId);
     if (branchPosition) return [branchPosition[2], branchPosition[3]];
     return SPATIAL_SPINE_POSITIONS[nodeId] || [50, 50];
@@ -2325,6 +3120,19 @@
 
   function momentCopy() {
     const copy = MOMENT_COPY[state.moment] || MOMENT_COPY.opening;
+    if (state.moment === 'ready' && state.processAccepted && !returnedProcessRoute().flagshipCausation) {
+      const route = returnedProcessRoute();
+      const current = nodeLabel(route.currentNodeId);
+      const next = nodeLabel(route.nextActionNodeId);
+      return {
+        ...copy,
+        title: 'The handling path is ready for review',
+        detail: route.currentNodeId === route.nextActionNodeId
+          ? `Current step: ${current}. More evidence is needed before the path can move on.`
+          : `Current step: ${current}. Next step: ${next}.`,
+        authority: 'Handling path ready for review',
+      };
+    }
     if (state.moment === 'review-applied' && !reviewAppliedTruth().verified) {
       return {
         ...copy,
@@ -2360,12 +3168,12 @@
       || 'What must this step establish?';
   }
 
-  function verificationGraphMarkup() {
+  function verificationGraphMarkup(anchorNodeId = 'causation') {
     const verification = asObject(state.verification) || {};
     const checksTotal = asArray(verification.checks).length || Number(verification.checks_total) || 0;
     const rejectedCount = asArray(verification.rejected_proposals).length || Number(verification.rejected_count) || 0;
     const verified = verification.valid === true && verification.computed === true && checksTotal > 0;
-    return `<section class="ac-graph-verification" style="--spatial-x:49;--spatial-y:72" data-spatial-anchor-node-id="causation" data-node-attachment-kind="verification" ${lineageAttributes('verification', 'whole_playbook_verification')} data-verification-status="${verified ? 'accepted' : 'incomplete'}" data-verification-check-count="${esc(checksTotal)}" data-verification-rejected-count="${esc(rejectedCount)}" data-ac-cursor-target="true">
+    return `<section class="ac-graph-verification" style="--spatial-x:49;--spatial-y:72" data-spatial-anchor-node-id="${esc(anchorNodeId)}" data-node-attachment-kind="verification" ${lineageAttributes('verification', 'whole_playbook_verification')} data-verification-status="${verified ? 'accepted' : 'incomplete'}" data-verification-check-count="${esc(checksTotal)}" data-verification-rejected-count="${esc(rejectedCount)}" data-ac-cursor-target="true">
       <small>Final audit</small>
       <strong>${verified ? `${esc(checksTotal)} checks agree` : 'Verification incomplete'}</strong>
       <span>${verified ? rejectedCount ? `${esc(rejectedCount)} unsupported proposal${rejectedCount === 1 ? '' : 's'} rejected` : 'No unsupported proposals retained' : 'No complete result is claimed.'}</span>
@@ -2537,6 +3345,31 @@
   function spatialEdgesMarkup(nodes) {
     const visible = new Set(nodes.filter(node => state.visibleNodeIds.has(node.node_id)).map(node => node.node_id));
     const paths = [];
+    const route = returnedProcessRoute();
+    if (!route.usesCausationCanvas) {
+      const selectedPairs = route.selectedPath.slice(1).map((target, index) => [route.selectedPath[index], target]);
+      if (route.currentNodeId && route.nextActionNodeId && route.currentNodeId !== route.nextActionNodeId
+        && !selectedPairs.some(([source, target]) => source === route.currentNodeId && target === route.nextActionNodeId)) {
+        selectedPairs.push([route.currentNodeId, route.nextActionNodeId]);
+      }
+      selectedPairs.forEach(([source, target]) => {
+        if (!visible.has(source) || !visible.has(target)) return;
+        const edge = asArray(state.process?.edges).find(item => item.source === source && item.target === target);
+        if (!edge) return;
+        const selectedBranch = source === route.currentNodeId && target === route.nextActionNodeId
+          ? `data-selected-branch-id="${esc(route.selectedBranchId)}"`
+          : '';
+        paths.push(edgeMarkup(source, target, 'accepted', edge.state || 'selected', null, null, selectedBranch));
+      });
+      const detailNodeId = state.graphInspecting
+        ? state.pendingGraphNodeId || state.selectedNodeId
+        : state.selectedNodeId;
+      if (visible.has(detailNodeId) && !['review', 'review-applied', 'later-work'].includes(state.moment)) {
+        const [detailX, detailY] = spatialPosition(detailNodeId);
+        paths.push(`<path d="M ${detailX * 10} ${detailY * 6.2} L ${detailX * 10} ${63 * 6.2}" data-spatial-edge="source-proof" data-spatial-path="source-proof" data-source-proof="true"></path>`);
+      }
+      return paths.join('');
+    }
     const explanatorySpineEdges = new Set(
       SIMPLIFIED_SPINE_IDS.slice(1, SIMPLIFIED_SPINE_IDS.indexOf('causation') + 1)
         .map((target, index) => `${SIMPLIFIED_SPINE_IDS[index]}:${target}`),
@@ -2629,11 +3462,43 @@
     return paths.join('');
   }
 
+  function routeSatellitesMarkup(route) {
+    if (!state.visibleNodeIds.has(route.currentNodeId)) return '';
+    const current = nodeById(route.currentNodeId);
+    const next = nodeById(route.nextActionNodeId);
+    if (!current || !next) return '';
+    const currentLaws = lawsForNode(current);
+    const lawOwner = currentLaws.length ? current : null;
+    const law = relevantLaw(currentLaws);
+    const nextEvidence = next.node_id !== current.node_id
+      ? priorityEvidence(evidenceForNode(next.node_id))[0] || null
+      : null;
+    const supportingEvidence = priorityEvidence(evidenceForNode(current.node_id))
+      .filter(item => item.item_id !== nextEvidence?.item_id)
+      .slice(0, 2);
+    const [currentX] = spatialPosition(current.node_id);
+    const lawX = Math.max(10, Math.min(90, currentX + 10));
+    const lawLabel = law?.location?.match(/Art(?:icle)?\.?\s*\d+/i)?.[0]?.replace(/^Article/i, 'Art.') || 'Swiss law';
+    const lawMarkup = !state.graphRevealRunning && law && lawOwner ? `<button type="button" class="ac-spatial-law-marker" style="--spatial-x:${lawX}!important;--spatial-y:5!important" data-ac-action="open-law" data-law-id="${esc(law.source_id)}" data-spatial-id="${esc(law.source_id)}" data-spatial-anchor-node-id="${esc(lawOwner.node_id)}" data-spatial-role="law" data-spatial-path="legal-grounding" data-node-attachment-kind="law" ${lineageAttributes('law', law.source_id)} data-source-authority="${isOfficialLaw(law) ? 'official_registry' : 'deterministic_principle'}" data-source-locator-id="${esc(lawLocatorId(law))}" aria-label="${esc(`${law.title || law.source_id} ${law.location || ''}`)}"><span aria-hidden="true">§</span><strong>${esc(lawLabel)}</strong></button>` : '';
+    const evidenceMarkup = supportingEvidence.map(item => `<button type="button" class="ac-evidence-chip" data-ac-action="inspect-evidence" data-evidence-id="${esc(item.item_id)}" data-spatial-id="${esc(item.item_id)}" data-spatial-anchor-node-id="${esc(current.node_id)}" data-spatial-role="evidence" data-spatial-path="evidence-support" data-node-attachment-kind="evidence" ${lineageAttributes('evidence', item.item_id)} data-evidence-status="${esc(item.status || '')}" data-fact-id="${esc(item.fact_id || '')}" aria-label="${esc(`${item.title} · ${statusLabel(item.status)}`)}">${esc(SPATIAL_EVIDENCE_LABELS[item.item_id] || item.title)}</button>`).join('<span aria-hidden="true">·</span>');
+    const nextEvidenceLabel = nextEvidence && ['missing', 'provided_insufficient'].includes(nextEvidence.status)
+      ? (route.currentNodeId === route.nextActionNodeId ? 'Needed here' : 'Needed next')
+      : 'Evidence for this step';
+    const nextMarkup = nextEvidence ? `<button type="button" class="ac-evidence-need" data-ac-action="inspect-evidence" data-spatial-id="${esc(nextEvidence.item_id)}" data-spatial-role="next-action" data-spatial-path="next-action" data-spatial-next-action="true" data-spatial-anchor-node-id="${esc(next.node_id)}" data-node-attachment-kind="evidence" ${lineageAttributes('evidence', nextEvidence.item_id)} data-node-id="${esc(next.node_id)}" data-evidence-id="${esc(nextEvidence.item_id)}"><span>${esc(nextEvidenceLabel)}</span><strong>${esc(SPATIAL_EVIDENCE_LABELS[nextEvidence.item_id] || nextEvidence.title)}</strong><b aria-hidden="true">→</b></button>` : '';
+    const checklistCount = asArray(state.checklist?.items).length;
+    const evidencePanel = !state.graphRevealRunning && (nextMarkup || evidenceMarkup) ? `<section class="ac-evidence-relationship" style="--spatial-x:53;--spatial-y:75" aria-label="Documents created by the current process decision" data-spatial-anchor-node-id="${esc(nextEvidence ? next.node_id : current.node_id)}"><small>Documents from this decision</small><p class="ac-evidence-origin">${esc(returnedRouteOpenLabel())}</p>${nextMarkup}${evidenceMarkup ? `<div><span>Also checked here</span>${evidenceMarkup}</div>` : ''}${state.moment === 'ready' && checklistCount ? `<button type="button" class="ac-document-needs-link" data-ac-action="open-documents" aria-controls="v20DocumentSheet" aria-haspopup="dialog">See all ${checklistCount} across the process</button>` : ''}</section>` : '';
+    if (state.moment === 'verify') return `${lawMarkup}${verificationGraphMarkup(current.node_id)}`;
+    return `${lawMarkup}${evidencePanel}`;
+  }
+
   function spatialSatellitesMarkup() {
-    if (!state.processAccepted || !state.visibleNodeIds.has('causation')) return '';
+    if (!state.processAccepted) return '';
+    const route = returnedProcessRoute();
+    if (!route.usesCausationCanvas) return routeSatellitesMarkup(route);
+    if (!state.visibleNodeIds.has('causation')) return '';
     const causation = nodeById('causation');
     const law = relevantLaw(lawsForNode(causation));
-    const next = relevantEvidence(evidenceForNode('evidence_gap'));
+    const next = relevantEvidence(evidenceForNode(route.nextActionNodeId));
     const evidence = priorityEvidence(evidenceForNode('causation')).filter(item => item.item_id !== next?.item_id).slice(0, 2);
     const branchMarkup = CAUSATION_BRANCH_LAYOUT.map(([nodeId, shortLabel, x, y], index) => {
       if (state.moment === 'review' && nodeId !== 'evidence_gap') return '';
@@ -2649,9 +3514,9 @@
     const lawLabel = law?.location?.match(/Art(?:icle)?\.?\s*\d+/i)?.[0]?.replace(/^Article/i, 'Art.') || 'Swiss law';
     const lawMarkup = !state.graphRevealRunning && law ? `<button type="button" class="ac-spatial-law-marker" style="--spatial-x:62;--spatial-y:27" data-ac-action="open-law" data-law-id="${esc(law.source_id)}" data-spatial-id="${esc(law.source_id)}" data-spatial-anchor-node-id="causation" data-spatial-role="law" data-spatial-path="legal-grounding" data-node-attachment-kind="law" ${lineageAttributes('law', law.source_id)} data-source-authority="${isOfficialLaw(law) ? 'official_registry' : 'deterministic_principle'}" data-source-locator-id="${esc(lawLocatorId(law))}" aria-label="${esc(`${law.title || law.source_id} ${law.location || ''}`)}"><span aria-hidden="true">§</span><strong>${esc(lawLabel)}</strong></button>` : '';
     const evidenceMarkup = evidence.map(item => `<button type="button" class="ac-evidence-chip" data-ac-action="inspect-evidence" data-evidence-id="${esc(item.item_id)}" data-spatial-id="${esc(item.item_id)}" data-spatial-anchor-node-id="causation" data-spatial-role="evidence" data-spatial-path="evidence-support" data-node-attachment-kind="evidence" ${lineageAttributes('evidence', item.item_id)} data-evidence-status="${esc(item.status || '')}" data-fact-id="${esc(item.fact_id || '')}" aria-label="${esc(`${item.title} · ${statusLabel(item.status)}`)}">${esc(SPATIAL_EVIDENCE_LABELS[item.item_id] || item.title)}</button>`).join('<span aria-hidden="true">·</span>');
-    const nextMarkup = next && nodeById('evidence_gap') && evidenceOwnerIds(next).includes('evidence_gap') ? `<button type="button" class="ac-evidence-need" data-ac-action="inspect-evidence" data-spatial-id="${esc(next.item_id)}" data-spatial-role="next-action" data-spatial-path="next-action" data-spatial-next-action="true" data-spatial-anchor-node-id="causation" data-node-attachment-kind="evidence" ${lineageAttributes('evidence', next.item_id)} data-node-id="evidence_gap" data-evidence-id="${esc(next.item_id)}"><span>Needed next</span><strong>${esc(SPATIAL_EVIDENCE_LABELS[next.item_id] || next.title)}</strong><b aria-hidden="true">→</b></button>` : '';
+    const nextMarkup = next && nodeById(route.nextActionNodeId) && evidenceOwnerIds(next).includes(route.nextActionNodeId) ? `<button type="button" class="ac-evidence-need" data-ac-action="inspect-evidence" data-spatial-id="${esc(next.item_id)}" data-spatial-role="next-action" data-spatial-path="next-action" data-spatial-next-action="true" data-spatial-anchor-node-id="causation" data-node-attachment-kind="evidence" ${lineageAttributes('evidence', next.item_id)} data-node-id="${esc(route.nextActionNodeId)}" data-evidence-id="${esc(next.item_id)}"><span>Needed next</span><strong>${esc(SPATIAL_EVIDENCE_LABELS[next.item_id] || next.title)}</strong><b aria-hidden="true">→</b></button>` : '';
     const checklistCount = asArray(state.checklist?.items).length;
-    const evidencePanel = !state.graphRevealRunning && (nextMarkup || evidenceMarkup) ? `<section class="ac-evidence-relationship" style="--spatial-x:53;--spatial-y:75" aria-label="Documents created by the current process decision"><small>Documents created by this decision</small><p class="ac-evidence-origin">Causation is unresolved</p>${nextMarkup}${evidenceMarkup ? `<div><span>Later, if required</span>${evidenceMarkup}</div>` : ''}${state.moment === 'ready' && checklistCount ? `<button type="button" class="ac-document-needs-link" data-ac-action="open-documents" aria-controls="v20DocumentSheet" aria-haspopup="dialog">See all ${checklistCount} across the process</button>` : ''}</section>` : '';
+    const evidencePanel = !state.graphRevealRunning && (nextMarkup || evidenceMarkup) ? `<section class="ac-evidence-relationship" style="--spatial-x:53;--spatial-y:75" aria-label="Documents created by the current process decision" data-spatial-anchor-node-id="${esc(route.nextActionNodeId)}"><small>Documents created by this decision</small><p class="ac-evidence-origin">${esc(returnedRouteOpenLabel())}</p>${nextMarkup}${evidenceMarkup ? `<div><span>Later, if required</span>${evidenceMarkup}</div>` : ''}${state.moment === 'ready' && checklistCount ? `<button type="button" class="ac-document-needs-link" data-ac-action="open-documents" aria-controls="v20DocumentSheet" aria-haspopup="dialog">See all ${checklistCount} across the process</button>` : ''}</section>` : '';
     if (state.moment === 'review') return `${branchMarkup}${reviewGraphEditMarkup()}`;
     if (state.moment === 'review-applied') return `${branchMarkup}${reviewAppliedMarkup()}`;
     if (state.moment === 'verify') return `${lawMarkup}${branchMarkup}${verificationGraphMarkup()}`;
@@ -2893,7 +3758,85 @@
     };
   }
 
+  function decisionFlowPlanMarkup(node) {
+    const steps = asArray(state.decisionFlowSteps);
+    const waitingCopy = {
+      responsibility: ['Cause must be known first', 'Keep responsibility open'],
+      remedy: ['Responsibility must be known first', 'Keep the next action open'],
+      resolution: ['The action must be complete first', 'Keep the claim open'],
+    }[node.node_id] || null;
+    const sourceRows = steps.map((step, index) => {
+      const stepState = decisionFlowStepState(index);
+      const symbol = stepState === 'complete' ? '✓' : '';
+      return `<li data-decision-plan-item data-step-id="${esc(step.stepId)}" data-step-kind="${esc(step.stepKind)}" data-step-state="${esc(stepState)}"${stepState === 'active' ? ' aria-current="step"' : ''}><i aria-hidden="true">${symbol}</i><span>${esc(decisionStepLabel(step))}</span></li>`;
+    }).join('');
+    const combining = ['combine', 'complete', 'receding'].includes(state.decisionFlowPhase);
+    const combineState = combining ? (state.decisionFlowPhase === 'combine' ? 'active' : 'complete') : 'waiting';
+    const addState = state.decisionFlowPhase === 'complete'
+      ? 'active'
+      : state.decisionFlowPhase === 'receding' ? 'complete' : 'waiting';
+    const factCount = unique(state.decisionFlowFragments.flatMap(item => (
+      asArray(item.facts).length ? item.facts : item.fact ? [item.fact] : []
+    )).map(item => item.fact_id).filter(Boolean)).length;
+    return `<aside class="ac-decision-plan" data-decision-plan data-node-id="${esc(node.node_id)}" data-plan-phase="${esc(state.decisionFlowPhase)}" data-plan-kind="${waitingCopy ? 'waiting-decision' : 'evidence-decision'}">
+      <header><small>Building</small><strong>“${esc(nodeQuestion(node))}”</strong></header>
+      <ol>${sourceRows}<li data-decision-plan-item data-step-id="combine" data-step-kind="combine" data-step-state="${combineState}"${combineState === 'active' ? ` aria-current="step" data-ac-cursor-target="true" data-process-decision-id="${esc(node.node_id)}"` : ''}><i aria-hidden="true">${combineState === 'complete' ? '✓' : ''}</i><span>${esc(waitingCopy?.[0] || 'Put the facts together')}</span></li><li data-decision-plan-item data-step-id="add-node" data-step-kind="decision" data-step-state="${addState}"${addState === 'active' ? ' aria-current="step"' : ''}><i aria-hidden="true">${addState === 'complete' ? '✓' : ''}</i><span>${esc(waitingCopy?.[1] || 'Add this step')}</span></li></ol>
+    </aside>`;
+  }
+
+  function decisionFragmentsMarkup(node) {
+    const facts = [];
+    state.decisionFlowFragments.forEach(item => {
+      const itemFacts = asArray(item.facts).length ? item.facts : item.fact ? [item.fact] : [];
+      itemFacts.forEach(fact => {
+        if (fact && !facts.some(candidate => candidate.fact_id === fact.fact_id)) facts.push(fact);
+      });
+    });
+    if (!facts.length) return '';
+    const combining = ['combine', 'complete', 'receding'].includes(state.decisionFlowPhase);
+    return `<div class="ac-decision-fragments" data-fact-combination data-combine-state="${combining ? 'combining' : 'collecting'}">${facts.map(fact => `<span data-extracted-fragment data-fact-id="${esc(fact.fact_id)}"><small>Extracted fact</small><strong>${esc(fact.label)}</strong><em>${esc(fact.value)}</em></span>`).join('<b aria-hidden="true">+</b>')}<i aria-hidden="true"></i><span class="ac-decision-ghost" data-node-commit-target data-node-id="${esc(node.node_id)}"><small>Next decision</small><strong>${esc(nodeQuestion(node))}</strong></span></div>`;
+  }
+
+  function decisionFlowInspectionMarkup(node) {
+    const step = state.decisionFlowSteps[state.decisionFlowIndex];
+    const phase = state.decisionFlowPhase;
+    if (!step) {
+      const dependency = {
+        responsibility: ['Waiting for an earlier answer', 'Cause must be known first.'],
+        remedy: ['Waiting for an earlier answer', 'Responsibility must be known first.'],
+        resolution: ['Waiting for an earlier answer', 'The action must be complete first.'],
+      }[node.node_id] || ['Waiting for an earlier answer', 'This step stays open.'];
+      return `<div class="ac-decision-workspace ac-decision-workspace-waiting" data-decision-workspace data-decision-flow-state="${esc(phase)}" data-decision-node-id="${esc(node.node_id)}"><div class="ac-decision-source-stage"><section class="ac-decision-waiting-basis" data-decision-waiting-basis><small>${esc(dependency[0])}</small><strong>${esc(dependency[1])}</strong></section></div>${decisionFlowPlanMarkup(node)}</div>`;
+    }
+    const selecting = phase === 'select-source';
+    const highlighted = ['highlight-source', 'combine', 'complete', 'receding'].includes(phase);
+    const primary = asArray(step.items)[state.decisionFlowLocatorIndex] || asArray(step.items)[0];
+    const basis = step.basis || nodeInspectionBasis(node);
+    const inspectionAttributes = step.stepKind === 'source' && primary
+      ? sourceContextAttributes(primary.fact, primary.ref)
+      : basis.attributes;
+    const common = `data-ac-inspection-target="true" data-inspection-phase="${esc(selecting ? 'select-source' : 'read-source')}" data-inspection-basis-kind="${esc(step.stepKind)}" data-node-id="${esc(node.node_id)}" data-step-id="${esc(step.stepId)}" data-ac-action="${esc(step.stepKind === 'source' ? 'open-source' : basis.action)}" ${inspectionAttributes}`;
+    let source = '';
+    if (selecting) {
+      const selectorCopy = step.stepKind === 'accepted-fact'
+        ? ['Accepted fact', 'Use this fact →']
+        : step.stepKind === 'accepted-law'
+          ? ['Checked law', 'Use this law →']
+          : ['Next source', 'Open exact source →'];
+      source = `<button type="button" class="ac-decision-source-picker" ${common}><i aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false">${SOURCE_TYPE_ICONS[sourceTrailKind(primary?.ref)[0]] || SOURCE_TYPE_ICONS.document}</svg></i><span><small>${esc(selectorCopy[0])}</small><strong>${esc(step.title)}</strong><em>${esc(selectorCopy[1])}</em></span></button>`;
+    } else if (step.stepKind === 'source') {
+      source = `<section class="ac-decision-real-source">${sourceGroupReadingMarkup(step, !highlighted, highlighted)}</section>`;
+    } else {
+      const exact = esc(basis.finding || basis.title || 'Returned basis');
+      source = `<section class="ac-decision-real-source ac-decision-basis" ${highlighted ? '' : common}><header><small>${esc(basis.sourceLabel)}</small><strong>${esc(basis.title)}</strong></header>${highlighted ? `<mark class="is-highlighted">${exact}</mark>` : `<button type="button" class="ac-source-exact-control is-awaiting-click" data-source-exact-control="true">${exact}</button>`}</section>`;
+    }
+    return `<div class="ac-decision-workspace" data-decision-workspace data-decision-flow-state="${esc(phase)}" data-decision-node-id="${esc(node.node_id)}"><div class="ac-decision-source-stage">${source}${decisionFragmentsMarkup(node)}</div>${decisionFlowPlanMarkup(node)}</div>`;
+  }
+
   function nodeInspectionMarkup(node) {
+    if (state.decisionFlowNodeId === node?.node_id) {
+      return decisionFlowInspectionMarkup(node);
+    }
     const basis = nodeInspectionBasis(node);
     const common = `data-ac-inspection-target="true" data-inspection-phase="${esc(state.graphInspectionPhase)}" data-inspection-basis-kind="${esc(basis.basisKind)}" data-node-id="${esc(node.node_id)}" data-ac-action="${esc(basis.action)}" ${basis.attributes}`;
     if (state.graphInspectionPhase === 'select-source') {
@@ -2940,6 +3883,7 @@
     const detail = state.root?.querySelector('[data-ac-spatial-detail]');
     const status = state.root?.querySelector('[data-ac-process-status]');
     if (!processRegion || !track || !buildTarget || !edgeLayer || !satellites || !detail || !status) return;
+    const route = returnedProcessRoute();
     const graphVisible = state.processAccepted && (state.graphRevealRunning || GRAPH_MOMENTS.has(state.moment));
     processRegion.hidden = !graphVisible;
     state.root.dataset.graphVisible = String(graphVisible);
@@ -2964,7 +3908,15 @@
     processRegion.dataset.reviewEditState = state.moment === 'review-applied'
       ? 'applied'
       : state.moment === 'review' ? 'pending' : 'not-active';
-    const acceptedProjectionComplete = SIMPLIFIED_SPINE_IDS.every(nodeId => state.visibleNodeIds.has(nodeId));
+    processRegion.dataset.processRouteMode = route.flagshipCausation ? 'flagship-causation' : 'returned-route';
+    processRegion.dataset.processSelectedPath = route.selectedPath.join(',');
+    processRegion.dataset.processCurrentNodeId = route.currentNodeId;
+    processRegion.dataset.processNextActionNodeId = route.nextActionNodeId;
+    processRegion.dataset.processSelectedBranchId = route.selectedBranchId;
+    processRegion.dataset.processFocalNodeId = state.selectedNodeId;
+    processRegion.dataset.processOpenLabel = returnedRouteOpenLabel();
+    processRegion.dataset.processTerminalState = route.flagshipCausation ? 'journey-continues' : 'ready-route';
+    const acceptedProjectionComplete = projectedProcessNodeIds().every(nodeId => state.visibleNodeIds.has(nodeId));
     processRegion.dataset.processConstructionState = !state.processAccepted
       ? 'pending'
       : state.graphRevealRunning
@@ -2981,8 +3933,9 @@
       delete processRegion.dataset.processNodeProgressNodeId;
     }
     if (!state.processAccepted) return;
-    if (!state.graphRevealRunning && ['evidence', 'experience'].includes(state.moment) && nodeById('causation')) {
-      state.selectedNodeId = 'causation';
+    if (!state.graphRevealRunning && ['evidence', 'experience'].includes(state.moment)
+      && !projectedProcessNodeIds().includes(state.selectedNodeId)) {
+      state.selectedNodeId = route.currentNodeId;
     }
     if (state.moment === 'review-applied' && nodeById('ventilation_dispute')) {
       state.visibleNodeIds.add('ventilation_dispute');
@@ -3009,10 +3962,17 @@
       const [spatialX, spatialY] = spatialPosition(node.node_id);
       item.style.setProperty('--spatial-x', spatialX);
       item.style.setProperty('--spatial-y', spatialY);
-      item.dataset.spatialRole = node.node_id === 'causation' ? 'hub' : 'spine';
-      item.dataset.spatialPath = SIMPLIFIED_SPINE_IDS.indexOf(node.node_id) > SIMPLIFIED_SPINE_IDS.indexOf('causation')
-        ? 'future'
-        : 'accepted';
+      item.dataset.spatialRole = route.usesCausationCanvas
+        ? node.node_id === 'causation' ? 'hub' : 'spine'
+        : node.node_id === route.currentNodeId ? 'hub' : 'spine';
+      item.dataset.spatialPath = route.usesCausationCanvas
+        ? SIMPLIFIED_SPINE_IDS.indexOf(node.node_id) > SIMPLIFIED_SPINE_IDS.indexOf('causation') ? 'future' : 'accepted'
+        : node.node_id === route.currentNodeId
+          ? 'current'
+          : node.node_id === route.nextActionNodeId
+            ? 'next-action'
+            : route.selectedPath.includes(node.node_id) ? 'accepted' : 'future';
+      item.dataset.selectedBranchId = node.node_id === route.nextActionNodeId ? route.selectedBranchId : '';
       item.dataset.nodeState = nodeState(node);
       item.dataset.reviewChange = node.node_id === 'ventilation_dispute' && state.result?.review_transform ? 'added' : '';
       const laterDelta = state.moment === 'later-result' ? laterMemoryDelta() : null;
@@ -3068,18 +4028,20 @@
         count.textContent = `Testing causation branch ${branchNumber} of ${CAUSATION_BRANCH_LAYOUT.length}`;
         focus.textContent = pendingBranch[1];
         status.textContent = state.processNodeProgress
-          ? `${state.processNodeProgress.label} · ${state.processNodeProgress.percent}% · ${focus.textContent}`
+          ? `${state.processNodeProgress.label} · ${focus.textContent}`
           : `Causation branch ${branchNumber} of ${CAUSATION_BRANCH_LAYOUT.length}: ${focus.textContent}`;
       } else {
         const decisionNumber = Math.min(state.graphRevealIndex + (state.graphDwell ? 0 : 1), nodes.length);
         count.textContent = `Building decision ${decisionNumber} of ${nodes.length}`;
         focus.textContent = nodeLabel(state.selectedNodeId) || 'Grounded decision';
         status.textContent = state.processNodeProgress
-          ? `${state.processNodeProgress.label} · ${state.processNodeProgress.percent}% · ${focus.textContent}`
+          ? `${state.processNodeProgress.label} · ${focus.textContent}`
           : `Decision ${decisionNumber} of ${nodes.length}: ${focus.textContent}`;
       }
     } else {
-      count.textContent = `${nodes.length} decisions · core handling spine`;
+      count.textContent = route.flagshipCausation
+        ? `${nodes.length} decisions · core handling spine`
+        : `${nodes.length} returned steps · selected path`;
       focus.textContent = nodeLabel(state.selectedNodeId) || 'Select one decision';
       if (state.moment === 'review') {
         count.textContent = 'Expert correction';
@@ -3091,8 +4053,10 @@
           ? 'Ventilation check added · broader testing remains conditional'
           : 'No process correction is claimed';
       } else if (state.moment === 'verify') {
-        count.textContent = 'Final audit · complete graph';
-        focus.textContent = 'Causation stays open · unsupported conclusions fail closed';
+        count.textContent = route.flagshipCausation ? 'Final audit · complete graph' : 'Final audit · returned route';
+        focus.textContent = route.flagshipCausation
+          ? 'Causation stays open · unsupported conclusions fail closed'
+          : returnedRouteOpenLabel();
       } else if (state.moment === 'knowledge') {
         count.textContent = 'One correction saved for governed reuse';
         focus.textContent = 'Check ventilation allegations separately · unverified case memory';
@@ -3111,8 +4075,22 @@
           ? 'One conditional ventilation check · qualified review still required'
           : 'No memory-driven change claimed';
       }
-      status.textContent = `${nodes.length} accepted decisions. Current decision: ${focus.textContent}.`;
+      status.textContent = route.flagshipCausation
+        ? `${nodes.length} accepted decisions. Current decision: ${focus.textContent}.`
+        : `Current step: ${nodeLabel(route.currentNodeId)}. Next step: ${nodeLabel(route.nextActionNodeId)}.`;
     }
+    processRegion.dataset.processFocalNodeId = state.selectedNodeId;
+    const selectedNode = nodeById(state.selectedNodeId);
+    const sourceAnchorNodeId = selectedNode && projectedProcessNodeIds().includes(selectedNode.node_id)
+      ? selectedNode.node_id
+      : route.currentNodeId;
+    const lawAnchorNodeId = lawsForNode(nodeById(route.currentNodeId)).length ? route.currentNodeId : '';
+    const evidenceAnchorNodeId = evidenceForNode(route.nextActionNodeId).length
+      ? route.nextActionNodeId
+      : evidenceForNode(route.currentNodeId).length ? route.currentNodeId : '';
+    processRegion.dataset.processSourceAnchorNodeId = sourceAnchorNodeId;
+    processRegion.dataset.processLawAnchorNodeId = lawAnchorNodeId;
+    processRegion.dataset.processEvidenceAnchorNodeId = evidenceAnchorNodeId;
     edgeLayer.innerHTML = spatialEdgesMarkup(nodes);
     satellites.innerHTML = spatialSatellitesMarkup();
     const detailNodeId = state.graphInspecting
@@ -3122,11 +4100,26 @@
     emitGraphContextualArtifact(detail, satellites);
   }
 
+  function liveWorkPlanMarkup() {
+    const call = liveWorkingCall();
+    if (!call) return '';
+    const agent = AGENTS[call.agentId];
+    const plan = LIVE_WORK_PLANS[call.agentId];
+    return `<article class="ac-decision-plan ac-live-work-plan" data-ac-live-work-plan data-ac-focal-object="live-work-plan" data-contract="${LIVE_WORK_PLAN_CONTRACT}" data-agent-id="${esc(call.agentId)}" data-agent-signature="${esc(agent.signature)}" data-run-id="${esc(call.runId)}" data-call-id="${esc(call.callId)}" data-event-id="${esc(call.eventId)}" data-work-state="${esc(call.status)}" data-input-artifact="${esc(call.inputArtifact)}" data-input-artifact-hash="${esc(call.inputArtifactHash)}" data-presentation-mode="live-call" aria-live="polite">
+      <header><span class="ac-live-work-agent" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false">${AGENT_ICONS[agent.signature] || ''}</svg></span><div><small>${esc(agent.label)} · working now</small><strong>${esc(plan.title)}</strong></div></header>
+      <ol>${plan.steps.map(([stepId, label, stepState]) => `<li data-live-work-step="${esc(stepId)}" data-step-state="${esc(stepState)}"><i ${stepState === 'active' ? 'data-live-work-spinner' : ''} aria-hidden="true">${stepState === 'complete' ? '✓' : ''}</i><span>${esc(label)}</span></li>`).join('')}</ol>
+    </article>`;
+  }
+
   function stageFocalMarkup() {
     const copy = momentCopy();
+    if (state.moment === 'failure') return failureFocalMarkup();
     if (['opening', 'read'].includes(state.moment)) return sourcePreludeMarkup();
-    if (state.moment === 'understand' && !state.factTourRunning && !state.factTourComplete) return sourcePreludeMarkup({ readyToInspect: true });
-    if (state.moment === 'understand' && (state.factTourRunning || state.factTourComplete)) return factSourceStageMarkup(copy);
+    if (state.moment === 'understand' && (state.factTourRunning || state.factTourComplete)) {
+      return factSourceStageMarkup(copy);
+    }
+    if (state.moment === 'understand' && liveWorkingCall()) return liveWorkPlanMarkup();
+    if (state.moment === 'understand') return sourcePreludeMarkup({ readyToInspect: true });
     if (state.moment === 'research') return lawStageMarkup(copy);
     if (state.moment === 'evidence') return evidenceStageMarkup(copy);
     if (state.moment === 'experience') return referenceStageMarkup(copy);
@@ -3144,6 +4137,20 @@
       <h3>${esc(headline)}</h3>
       <p>${esc(detail)}</p>
       ${output ? `<strong data-ac-output-artifact="${esc(output)}">Produced · ${esc(output.replaceAll('_', ' '))}</strong>` : ''}
+    </article>`;
+  }
+
+  function failurePresentation() {
+    return state.terminalFailure || safeTerminalFailureCopy('', '');
+  }
+
+  function failureFocalMarkup() {
+    const failure = failurePresentation();
+    return `<article class="ac-stage-focus ac-failure-focus" data-ac-focal-object="failure" data-terminal-failure="true" data-failure-stage="${esc(failure.stage)}" data-partial-result-applied="false">
+      <span>Stopped safely</span>
+      <h3>${esc(failure.title)}</h3>
+      <p>${esc(failure.detail)} No result was applied.</p>
+      <button type="button" class="primary-button ac-failure-retry" data-ac-action="retry-failure" data-casepath-primary-action="true">Try again</button>
     </article>`;
   }
 
@@ -3226,7 +4233,8 @@
     const finding = sourceFinding(ref);
     const sourceTitle = sourceDisplayTitle(ref.artifact_id);
     const step = state.factTourIndex + 1;
-    const sourceHeader = `<header><span>Source ${step} of ${FACT_STORY_IDS.length}</span><strong>${esc(sourceTitle)}</strong><small>${esc(sourceLocation(ref))}</small></header>`;
+    const totalSteps = items.length || FACT_STORY_IDS.length;
+    const sourceHeader = `<header><span>Fact ${step} of ${totalSteps}</span><strong>${esc(sourceTitle)}</strong><small>${esc(sourceLocation(ref))}</small></header>`;
     const sourceReading = sourceReadingMarkup(fact, ref, state.factTourReadArmed, false);
     const sourceHighlight = sourceReadingMarkup(fact, ref, false, true);
     const sourceFindingMarkup = sourceReadingMarkup(fact, ref, false, true);
@@ -3242,7 +4250,7 @@
         <h3>Open the source.</h3>
         ${sourceTrail}
         <button type="button" class="ac-fact-source-picker" data-ac-action="open-source" data-ac-inspection-target="true" data-fact-inspection-target="true" data-inspection-phase="select-source" data-ac-cursor-target="true" ${sourceContextAttributes(fact, ref)}>
-          <small>Source ${step} of ${FACT_STORY_IDS.length}</small><strong>${esc(sourceTitle)}</strong><span>Open ${esc(sourceLocation(ref))}</span>
+          <small>Fact ${step} of ${totalSteps}</small><strong>${esc(sourceTitle)}</strong><span>Open ${esc(sourceLocation(ref))}</span>
         </button>
       </article>`;
     }
@@ -3254,7 +4262,7 @@
         <section class="ac-fact-source" data-source-authority="${esc(ref.authority || 'customer_submission')}">
           ${sourceHeader}
           ${sourceReading || unverifiedVisual}
-          <div class="ac-extraction-pending"><span>Nothing selected yet</span><strong>The fact will appear only after this source is selected.</strong></div>
+          <div class="ac-extraction-pending"><span>Not selected</span><strong>Select the relevant passage.</strong></div>
         </section>
       </article>`;
     }
@@ -3314,7 +4322,7 @@
     const event = state.currentEvent || {};
     const agentId = eventAgentId(event);
     const agent = AGENTS[agentId];
-    if (!agent) return '';
+    if (!agent || !SUCCESS_STATES.has(eventStatus(event))) return '';
     const returnedOutput = eventOutputArtifacts(event)[0] || '';
     const artifactLabel = AGENT_ARTIFACT_LABELS[agentId] || returnedOutput.replaceAll('_', ' ') || 'Bounded specialist contribution';
     const finalLineage = agentId === 'final_claim_brief_audit'
@@ -3525,10 +4533,17 @@
     const specialMoment = ['verify', 'review', 'review-applied', 'knowledge', 'later-work', 'later-result', 'failure'].includes(state.moment);
     const semanticArtifactMoment = ['evidence', 'experience'].includes(state.moment);
     const factTourMoment = state.moment === 'understand' && (state.factTourRunning || state.factTourComplete);
+    const liveWorkPlan = !factTourMoment && Boolean(liveWorkingCall());
     const node = nodeById(state.selectedNodeId);
-    const modelArtifact = eventActorType(state.currentEvent) === 'nemotron_agent' && AGENTS[eventAgentId(state.currentEvent)];
+    const currentEventRunId = String(valueFrom(state.currentEvent, 'run_id', 'runId') || '');
+    const modelArtifact = eventActorType(state.currentEvent) === 'nemotron_agent'
+      && AGENTS[eventAgentId(state.currentEvent)]
+      && SUCCESS_STATES.has(eventStatus(state.currentEvent))
+      && (!state.primaryRunId || currentEventRunId === state.primaryRunId);
     const markup = factTourMoment
       ? stageFocalMarkup()
+      : liveWorkPlan
+      ? liveWorkPlanMarkup()
       : state.graphRevealRunning && node
       ? graphBuildFocalMarkup(node)
       : semanticArtifactMoment
@@ -3630,9 +4645,11 @@
       }
       const current = state.process?.current_overlay?.current_node_id || state.process?.current_node || 'not returned';
       const next = state.process?.current_overlay?.next_action_node_id || 'not returned';
-      proof.textContent = ['causation', 'evidence_gap'].includes(current)
+      proof.textContent = returnedProcessRoute().flagshipCausation
         ? 'Cause not proven → independent check needed → responsibility waits'
-        : `Verified path · ${nodeLabel(current)} open · ${nodeLabel(next)} next`;
+        : current === next
+          ? `Verified path · ${nodeLabel(current)} needs more evidence`
+          : `Verified path · ${nodeLabel(current)} open · ${nodeLabel(next)} next`;
     } else {
       proof.textContent = 'Only validated outputs are shown.';
     }
@@ -3655,7 +4672,13 @@
     renderProofLine();
     const journeyNext = document.querySelector('#journeyNext');
     if (journeyNext) {
-      if (['ready', 'review-applied', 'knowledge', 'later-result'].includes(state.moment)) journeyNext.dataset.casepathPrimaryAction = 'true';
+      const routeTerminal = state.processAccepted
+        && !returnedProcessRoute().flagshipCausation
+        && state.moment === 'ready';
+      journeyNext.dataset.casepathRouteTerminal = String(routeTerminal);
+      journeyNext.disabled = routeTerminal;
+      journeyNext.setAttribute('aria-disabled', String(routeTerminal));
+      if (!routeTerminal && ['ready', 'review-applied', 'knowledge', 'later-result'].includes(state.moment)) journeyNext.dataset.casepathPrimaryAction = 'true';
       else journeyNext.removeAttribute('data-casepath-primary-action');
     }
     scheduleCursor();
@@ -3845,6 +4868,15 @@
       closeAgentAudit();
       return;
     }
+    if (action === 'retry-failure') {
+      event.preventDefault();
+      if (state.moment !== 'failure') return;
+      const restartControl = document.querySelector('#retryFailedRun');
+      if (!restartControl || restartControl === button) return;
+      emitInteraction(action, button);
+      restartControl.click();
+      return;
+    }
     if (action === 'open-agent-audit') {
       openAgentAudit(button.dataset.agentId || '');
       return;
@@ -3927,13 +4959,13 @@
   }
 
   function specialistForCursorTarget(target) {
-    if (state.graphRevealRunning) {
-      return { agentId: 'process_decision_mapping', agent: AGENTS.process_decision_mapping };
-    }
+    const basisKind = String(target?.dataset.inspectionBasisKind || '');
+    if (['accepted-fact', 'accepted-law'].includes(basisKind) || target?.dataset.lawId) return null;
     const candidates = [
+      ['process_decision', target?.dataset.processDecisionId],
+      ['fact', target?.dataset.factId],
       ['process_node', target?.dataset.nodeId],
       ['evidence_requirement', target?.dataset.evidenceId],
-      ['fact', target?.dataset.factId],
       ['verification', target?.dataset.verificationId],
       ['agent_output', target?.dataset.agentId],
     ];
@@ -3947,17 +4979,24 @@
       const agentLineage = state.agentLineage.get(state.lastCursorAgentId);
       if (agentLineage?.eventId && agentLineage.eventId === state.lastCursorEventId) lineage = agentLineage;
     }
-    const acceptedAgentLineage = lineage?.agentId ? state.agentLineage.get(lineage.agentId) : null;
-    let agentId = AGENTS[lineage?.agentId]
-      && (Boolean(lineage.eventId)
-        || (acceptedAgentLineage?.actorType === 'nemotron_agent'
-          && acceptedAgentLineage.agentId === lineage.agentId))
+    const semanticEntity = [
+      'fact.accepted',
+      'process_decision.accepted',
+      'process_node.created',
+      'evidence_fields.accepted',
+      'evidence_requirement.linked',
+      'final_brief.accepted',
+      'verification.accepted',
+    ].includes(lineage?.eventType);
+    if (lineage?.eventType === 'fact.accepted') {
+      const locatorId = String(target?.dataset.sourceLocatorId || '');
+      if (!locatorId || !lineage.modelSelectedLocatorIds.includes(locatorId)) return null;
+    }
+    const agentId = AGENTS[lineage?.agentId]
+      && lineage?.actorType === 'nemotron_agent'
+      && (!semanticEntity || lineage.modelContributionAccepted === true)
       ? lineage.agentId
       : '';
-    if (!agentId && state.graphRevealRunning
-      && state.agentLineage.get('process_decision_mapping')?.actorType === 'nemotron_agent') {
-      agentId = 'process_decision_mapping';
-    }
     return agentId ? { agentId, agent: AGENTS[agentId] } : null;
   }
 
@@ -4002,7 +5041,8 @@
     const x = Math.round(Math.max(18, Math.min(viewportWidth - 56, targetBox.right - 22)) / 2) * 2;
     const y = Math.round(Math.max(18, Math.min(viewportHeight - 52, targetBox.top + Math.min(targetBox.height * .55, 54))) / 2) * 2;
     const identityTarget = target.closest?.('[data-ac-inspection-target="true"]') || target;
-    const targetId = identityTarget.dataset.lawId
+    const targetId = identityTarget.dataset.sourceLocatorId
+      || identityTarget.dataset.lawId
       || identityTarget.dataset.sourceId
       || identityTarget.dataset.evidenceId
       || identityTarget.dataset.inspectionId
@@ -4027,7 +5067,6 @@
     cursor.style.setProperty('--ac-cursor-y', `${y}px`);
     cursor.dataset.changeId = state.lastCursorChangeId;
     cursor.dataset.eventId = state.lastCursorEventId;
-    cursor.dataset.agentId = state.lastCursorAgentId;
     cursor.dataset.targetId = targetId;
     cursor.dataset.cursorPhase = 'moving';
     cursor.dataset.parked = String(parked);
@@ -4040,18 +5079,29 @@
       cursor.dataset.agentSignature = specialist.agent.signature;
       setCursorAvatar(cursor, specialist.agent);
       if (cursorAgent) cursorAgent.textContent = specialist.agent.short;
+    } else {
+      const neutralIdentity = {
+        signature: root.dataset.activeSignature || 'casepath',
+        monogram: root.querySelector('[data-ac-active-monogram]')?.textContent || 'CP',
+      };
+      cursor.dataset.agentSignature = neutralIdentity.signature;
+      setCursorAvatar(cursor, neutralIdentity);
+      if (cursorAgent) cursorAgent.textContent = root.dataset.workAuthority || 'CasePath';
     }
+    cursor.dataset.agentId = specialist?.agentId || '';
     if (cursorAction) cursorAction.textContent = cursorActionLabel(identityTarget, specialist);
     const cursorDetail = () => ({
       changeId: state.lastCursorChangeId,
       eventId: state.lastCursorEventId,
-      agentId: state.lastCursorAgentId,
+      agentId: specialist?.agentId || '',
       targetId,
       moment: state.moment,
       action: identityTarget.dataset.acAction || target.dataset.acAction || '',
       inspectionPhase: identityTarget.dataset.inspectionPhase || target.dataset.inspectionPhase || '',
+      presentationMode: root.dataset.presentationMode || '',
     });
     window.dispatchEvent(new CustomEvent('casepath:cursor-step', { detail: { ...cursorDetail(), phase: 'move' } }));
+    const scheduledCommit = state.cursorCommit;
     state.cursorArrivalTimer = window.setTimeout(() => {
       if (!cursor.isConnected || !target.isConnected) {
         state.lastCursorKey = '';
@@ -4072,9 +5122,10 @@
         target.classList.add('is-agent-clicked');
         visualTarget?.classList.add('is-agent-clicked');
         window.dispatchEvent(new CustomEvent('casepath:cursor-step', { detail: { ...cursorDetail(), phase: 'click' } }));
-        const commit = state.cursorCommit;
-        state.cursorCommit = null;
-        commit?.();
+        if (state.cursorCommit === scheduledCommit) {
+          state.cursorCommit = null;
+          scheduledCommit?.();
+        }
         state.cursorClickTimer = window.setTimeout(() => {
           cursor.classList.remove('is-clicking');
           target.classList.remove('is-agent-clicked');
@@ -4125,6 +5176,7 @@
   }
 
   function snapshot() {
+    const route = returnedProcessRoute();
     return {
       contract: CONTRACT,
       moment: state.moment,
@@ -4134,10 +5186,20 @@
       selectedNodeId: state.selectedNodeId,
       activeChainKind: state.activeChainKind,
       visibleNodeIds: [...state.visibleNodeIds],
+      processRoute: {
+        selectedPath: [...route.selectedPath],
+        currentNodeId: route.currentNodeId,
+        nextActionNodeId: route.nextActionNodeId,
+        selectedBranchId: route.selectedBranchId,
+        routeNodeIds: [...route.routeNodeIds],
+        flagshipCausation: route.flagshipCausation,
+        terminalState: route.flagshipCausation ? 'journey-continues' : 'ready-route',
+      },
       factSourceTourState: state.factTourComplete ? 'complete' : state.factTourRunning ? 'running' : state.factTourEligible ? 'waiting' : 'idle',
       factSourceTourIndex: state.factTourIndex,
       hasResult: Boolean(state.result),
       hasLaterResult: Boolean(state.laterResult),
+      failure: state.moment === 'failure' ? { ...failurePresentation() } : null,
     };
   }
 
@@ -4149,14 +5211,24 @@
     const detail = event.detail || {};
     const moment = AGENT_MOMENTS[detail.agentId] || state.moment;
     ingest({ ...detail, event: {
+      type: 'run.activity',
       stage: 'agent_orchestration',
       moment,
-      actor_type: 'nemotron_agent',
+      actor_type: detail.cacheHit === true ? 'cached_model_replay' : 'nemotron_agent',
       agent_id: detail.agentId,
       call_id: detail.callId,
       event_id: detail.eventId,
+      run_id: detail.runId,
       output_artifact: detail.outputArtifact,
-      status: 'completed',
+      status: detail.status || 'completed',
+      cache_hit: detail.cacheHit === true,
+      call_count: detail.callCount,
+      input_artifact: detail.inputArtifact,
+      input_artifact_hash: detail.inputArtifactHash,
+      provider: detail.provider,
+      requested_model: detail.requestedModel,
+      usage_source: detail.usageSource,
+      outcome: detail.outcome,
     }, moment }, 'agent-focus');
   }
 
@@ -4188,6 +5260,11 @@
   window.addEventListener('casepath:later-causal-step', event => {
     const step = acceptedLaterCausalStep(asObject(event.detail));
     if (!step) return;
+    if (!returnedProcessRoute().flagshipCausation) {
+      state.moment = 'ready';
+      render();
+      return;
+    }
     state.laterCausalStep = step;
     if (step.phase === 'source') state.laterCausalSource = step;
     state.moment = 'later-work';
@@ -4200,7 +5277,9 @@
       : step.phase === 'eligibility'
         ? `later-memory-eligibility:${step.ruleId}`
         : `later-memory-retrieval:${step.memoryOriginId}`;
-    state.lastCursorEventId = step.runId;
+    // The later causal bridge is a client presentation over the returned run;
+    // a run ID is not an execution-event ID and must never be presented as one.
+    state.lastCursorEventId = '';
     state.lastCursorAgentId = '';
     clearActiveSource();
     const highlightLaterSource = () => {
@@ -4213,7 +5292,7 @@
       render();
       window.dispatchEvent(new CustomEvent('casepath:source-highlighted', { detail: {
         entityKind: 'later-fact', factId: step.fact.fact_id,
-        changeId: state.lastCursorChangeId, eventId: step.runId, agentId: '',
+        changeId: state.lastCursorChangeId, eventId: '', agentId: '',
         sourceId: step.ref.artifact_id, locatorId: sourceLocatorId(step.ref),
       } }));
       window.dispatchEvent(new CustomEvent('casepath:later-source-opened', { detail: {
@@ -4261,7 +5340,8 @@
       state.factTourEligible = true;
       maybeStartFactSourceTour();
     }
-    if (detail.phase === 'artifact' && detail.moment === 'research') startOfficialLawTour();
+    if (detail.phase === 'artifact' && detail.moment === 'research'
+      && (!detail.runId || detail.runId === state.primaryRunId)) startOfficialLawTour();
   });
   window.addEventListener('casepath:official-source-step', event => ingest({ ...event.detail, moment: 'research' }, 'law-step'));
   window.addEventListener('resize', scheduleCursor, { passive: true });

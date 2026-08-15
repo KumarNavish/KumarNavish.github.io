@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { chromium } from 'playwright';
 
-const BASE_URL = (process.env.BASE_URL || 'https://casepath-swiss-claim-lab.onrender.com').replace(/\/$/, '');
+const BASE_URL = (process.env.BASE_URL || 'https://casepath.kumarnavish.chatgpt.site').replace(/\/$/, '');
 const API_URL = (process.env.API_URL || 'https://casepath-agentic-api.onrender.com').replace(/\/$/, '');
 const OUT = path.resolve('browser-qa-out');
 const checks = [];

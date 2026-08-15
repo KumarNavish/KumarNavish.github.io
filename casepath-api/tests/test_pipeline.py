@@ -16,6 +16,7 @@ from casepath_api.canonicalizer import (
     OPENROUTER_MODEL,
     ModelResponseError,
     OpenRouterNemotronCanonicalizer,
+    bounded_fact_assertion_catalog,
     observable_source_reference_registry,
     resolve_observable_source_reference_id,
 )
@@ -38,6 +39,7 @@ from casepath_api.multi_agent import (
     accepted_artifact_hash,
 )
 from casepath_api.precedent_ranking import rank_precedents
+from casepath_api.projections import DECISION_OPTIONS
 from casepath_api.storage import Storage
 from casepath_api.validation import ContractValidationError
 
@@ -85,19 +87,96 @@ def provider_fact_proposals(oracle_facts: list[dict]) -> list[dict]:
     registry = observable_source_reference_registry(
         observable_claim_package(CLAIMS["DEF-027-E0-DEMO"])
     )
+    contracts = [
+        {
+            "fact_id": value["fact_id"],
+            "label": value["label"],
+            "controls_process": value["controls_process"],
+            "decision_key": value["decision_key"],
+            "normalized_options": DECISION_OPTIONS.get(value["decision_key"], {}),
+            "admissible_normalized_values": (
+                [value["normalized_value"]] if value["controls_process"] else []
+            ),
+            "expected_state": value["state"],
+            "canonical_value": value["value"],
+            "canonical_explanation": value["explanation"],
+            "semantic_role": value["semantic_role"],
+            "deterministic_confidence": value["confidence"],
+            "admissible_text_refs": [
+                {
+                    "artifact_id": ref["artifact_id"],
+                    "page": ref["page"],
+                    "excerpt": ref["excerpt"],
+                }
+                for ref in value["source_refs"]
+                if ref["locator_kind"] == "text_quote"
+            ],
+            "deterministic_text_refs": [
+                ref
+                for ref in value["source_refs"]
+                if ref["locator_kind"] == "text_quote"
+            ],
+            "bounded_enrichments": [
+                ref
+                for ref in value["source_refs"]
+                if ref["locator_kind"] in {"visual_observation", "metadata_field"}
+            ],
+        }
+        for value in oracle_facts
+    ]
+    slots = {
+        slot["fact_id"]: slot
+        for slot in bounded_fact_assertion_catalog(contracts, registry)
+    }
     proposals = []
     for value in oracle_facts:
+        assertion = next(
+            candidate
+            for candidate in slots[value["fact_id"]]["assertions"]
+            if candidate["state"] == value["state"]
+            and candidate["value"] == value["value"]
+            and candidate["normalized_value"] == value["normalized_value"]
+        )
         proposal = {
             "fact_id": value["fact_id"],
+            "assertion_id": assertion["assertion_id"],
             "confidence": deepcopy(value["confidence"]),
         }
+        selected_ref_by_artifact: dict[str, str] = {}
+        for ref in value["source_refs"]:
+            if ref["locator_kind"] != "text_quote":
+                continue
+            selected_ref_by_artifact.setdefault(
+                ref["artifact_id"],
+                resolve_observable_source_reference_id(ref, registry),
+            )
         proposal["source_ref_ids"] = [
-            resolve_observable_source_reference_id(ref, registry)
-            for ref in value["source_refs"]
-            if ref["locator_kind"] == "text_quote"
+            selected_ref_by_artifact[artifact_id]
+            for artifact_id in sorted(selected_ref_by_artifact)
         ]
         proposals.append(proposal)
     return proposals
+
+
+def provider_wire_facts(proposals: list[dict]) -> dict[str, dict]:
+    """Encode normalized proposal fixtures in the strict provider-native shape."""
+
+    registry = observable_source_reference_registry(
+        observable_claim_package(CLAIMS["DEF-027-E0-DEMO"])
+    )
+    artifact_by_ref_id = {
+        item["source_ref_id"]: item["artifact_id"] for item in registry
+    }
+    return {
+        proposal["fact_id"]: {
+            **proposal,
+            "source_ref_ids": {
+                artifact_by_ref_id[ref_id]: ref_id
+                for ref_id in proposal["source_ref_ids"]
+            },
+        }
+        for proposal in proposals
+    }
 
 
 class StubAgentOrchestrator:
@@ -271,6 +350,17 @@ class StubAgentOrchestrator:
             "attribution": "Final Claim Brief Agent",
             "deterministic_fallback_applied": False,
         }
+        gate_outputs = {
+            "deterministic_process_gate": accepted_artifact_hash(process),
+            "deterministic_evidence_gate": accepted_artifact_hash(checklist),
+            "whole_playbook_gate": accepted_artifact_hash(
+                {
+                    "process": process,
+                    "checklist": checklist,
+                    "final_brief": final_brief,
+                }
+            ),
+        }
         gates = [
             {
                 "agent_id": gate_id,
@@ -279,7 +369,7 @@ class StubAgentOrchestrator:
                 "model": None,
                 "outcome": "passed",
                 "input_artifact_hash": "3" * 64,
-                "output_artifact_hash": "4" * 64,
+                "output_artifact_hash": gate_outputs[gate_id],
             }
             for gate_id in (
                 "deterministic_process_gate",
@@ -1682,8 +1772,8 @@ def test_model_mode_retains_process_owned_visual_locator_and_passes_grounding(tm
         return {
             "id": "mock-flagship-model-call",
             "model": OPENROUTER_MODEL,
-            "provider": "DeepInfra",
-            "choices": [{"finish_reason": "stop", "message": {"content": json.dumps({"facts": raw_facts})}}],
+            "provider": "Together",
+            "choices": [{"finish_reason": "stop", "message": {"content": json.dumps({"facts": provider_wire_facts(raw_facts)})}}],
             "usage": {
                 "prompt_tokens": 1000,
                 "completion_tokens": 2500,
@@ -1772,8 +1862,43 @@ def test_model_mode_retains_process_owned_visual_locator_and_passes_grounding(tm
         accepted_artifact_hash(run["result"]["checklist"])
     )
     assert gates["whole_playbook_gate"]["output_artifact_hash"] == (
+        accepted_artifact_hash(
+            {
+                "process": semantic_process_dto(run["result"]["process"]),
+                "checklist": semantic_checklist_dto(run["result"]["checklist"]),
+                "final_brief": run["result"]["agent_orchestration"]["final_claim_brief"],
+            }
+        )
+    )
+    assert gates["whole_playbook_gate"]["final_brief_artifact_hash"] == (
         accepted_artifact_hash(run["result"]["agent_orchestration"]["final_claim_brief"])
     )
+    assert gates["whole_playbook_gate"]["verification_report_hash"] == digest(
+        run["result"]["verification"]
+    )
+    assert gates["whole_playbook_gate"]["verification_whole_playbook_hash"] == (
+        run["result"]["verification"]["whole_playbook_hash"]
+    )
+    whole_playbook_event = next(
+        item
+        for item in run["events"]
+        if item.get("output_artifact") == "verified_claim_playbook"
+    )
+    assert whole_playbook_event["verification_whole_playbook_hash"] == (
+        run["result"]["verification"]["whole_playbook_hash"]
+    )
+    assert run["precedents"] == run["result"]["precedents"]
+    assert run["precedent_ranking"] == run["result"]["precedent_ranking"]
+    for key in (
+        "summary",
+        "category",
+        "subcategory",
+        "scope",
+        "dispute",
+        "facts",
+        "issues",
+    ):
+        assert run["understanding"][key] == run["result"][key]
     assert all(
         item["acceptance_scope"] == "pre_review_model_output"
         for item in run["result"]["agent_orchestration"]["agents"]
@@ -1794,7 +1919,9 @@ def test_model_mode_retains_process_owned_visual_locator_and_passes_grounding(tm
     assert reviewed["next_action"]["agent_brief_contribution"] is None
 
 
-def test_production_shaped_canonical_source_projection_succeeds_17_to_1(tmp_path: Path):
+def test_production_shaped_missing_grounding_fails_closed_without_projection(
+    tmp_path: Path,
+):
     oracle_storage = Storage(str(tmp_path / "oracle-projection.db"))
     oracle = ClaimPipeline(oracle_storage, pace_seconds=0)
     oracle_result = wait(oracle_storage, oracle.create("DEF-027-E0-DEMO"))["result"]
@@ -1815,11 +1942,11 @@ def test_production_shaped_canonical_source_projection_succeeds_17_to_1(tmp_path
         return {
             "id": "mock-production-shaped-projection",
             "model": OPENROUTER_MODEL,
-            "provider": "DeepInfra",
+            "provider": "Together",
             "choices": [
                 {
                     "finish_reason": "stop",
-                    "message": {"content": json.dumps({"facts": proposals})},
+                    "message": {"content": json.dumps({"facts": provider_wire_facts(proposals)})},
                 }
             ],
             "usage": {
@@ -1843,34 +1970,18 @@ def test_production_shaped_canonical_source_projection_succeeds_17_to_1(tmp_path
         pace_seconds=0,
     )
     run = wait(model_storage, pipeline.create("DEF-027-E0-DEMO"))
-    assert run["status"] == "complete", run.get("error")
-    diagnostics = run["result"]["audit"]["canonicalization"]["diagnostics"]
-    assert diagnostics["accepted_fact_count"] == 17
-    assert diagnostics["rejected_facts"] == [
-        {"fact_id": "fact_date_conflict", "invariant": "confidence_contract"}
-    ]
-    assert diagnostics["rejected_fact_count"] == 1
-    expected_projections = sorted(text_grounded_fact_ids - {"fact_date_conflict"})
-    assert sorted(diagnostics["source_reference_projection_fact_ids"]) == (
-        expected_projections
-    )
-    assert diagnostics["source_reference_projection_count"] == 10
-    oracle_by_id = {value["fact_id"]: value for value in oracle_result["facts"]}
-    model_by_id = {value["fact_id"]: value for value in run["result"]["facts"]}
-    for fact_id in expected_projections:
-        assert sorted(
-            json.dumps(ref, sort_keys=True) for ref in model_by_id[fact_id]["source_refs"]
-        ) == sorted(
-            json.dumps(ref, sort_keys=True) for ref in oracle_by_id[fact_id]["source_refs"]
-        )
-    assert "projected 10 authoritative citation sets" in run["result"]["summary"]
+    assert run["status"] == "failed"
+    assert run["error"] == "ModelResponseError: provider_native_schema"
+    assert "result" not in run
     ledger = model_storage.model_calls()[0]
-    assert ledger["outcome"] == "succeeded_with_guarded_fallback"
-    assert ledger["accepted_fact_count"] == 17
-    assert ledger["source_reference_projection_count"] == 10
+    assert ledger["outcome"] == "failed"
+    assert ledger["error_invariant"] == "provider_native_schema"
+    assert "accepted_fact_count" not in ledger
+    assert "rejected_facts" not in ledger
+    assert model_storage.cached_model_output(ledger["cache_key"]) is None
 
 
-def test_hybrid_rejected_controlling_fact_uses_exact_oracle_fallback(tmp_path: Path):
+def test_hybrid_rejected_controlling_fact_fails_without_oracle_fallback(tmp_path: Path):
     oracle_storage = Storage(str(tmp_path / "oracle.db"))
     oracle = ClaimPipeline(oracle_storage, pace_seconds=0)
     oracle_result = wait(oracle_storage, oracle.create("DEF-027-E0-DEMO"))["result"]
@@ -1884,11 +1995,11 @@ def test_hybrid_rejected_controlling_fact_uses_exact_oracle_fallback(tmp_path: P
         return {
             "id": "mock-hybrid-fallback-call",
             "model": OPENROUTER_MODEL,
-            "provider": "DeepInfra",
+            "provider": "Together",
             "choices": [
                 {
                     "finish_reason": "stop",
-                    "message": {"content": json.dumps({"facts": proposals})},
+                    "message": {"content": json.dumps({"facts": provider_wire_facts(proposals)})},
                 }
             ],
             "usage": {
@@ -1912,62 +2023,19 @@ def test_hybrid_rejected_controlling_fact_uses_exact_oracle_fallback(tmp_path: P
         pace_seconds=0,
     )
     run = wait(model_storage, pipeline.create("DEF-027-E0-DEMO"))
-    assert run["status"] == "complete", run.get("error")
-    result = run["result"]
-    oracle_facts = {value["fact_id"]: value for value in oracle_result["facts"]}
-    hybrid_facts = {value["fact_id"]: value for value in result["facts"]}
-    assert hybrid_facts["fact_dispute"] == oracle_facts["fact_dispute"]
-    assert hybrid_facts["fact_tenancy"]["confidence"] == 0.41
-    assert {
-        ref["agent"]
-        for ref in hybrid_facts["fact_tenancy"]["source_refs"]
-        if ref["locator_kind"] == "text_quote"
-    } == {"OpenRouter Nemotron Canonicalizer"}
-    assert result["process"]["current_overlay"] == oracle_result["process"]["current_overlay"]
-    assert [
-        (item["source"], item["target"], item["state"])
-        for item in result["process"]["edges"]
-    ] == [
-        (item["source"], item["target"], item["state"])
-        for item in oracle_result["process"]["edges"]
-    ]
-    process_contribution = result["process"]["agent_contribution"]
-    assert process_contribution["authority"] == (
-        "hybrid_guarded_model_contribution"
-    )
-    assert process_contribution["model_owned_fields"] == ["decision_value"]
-    assert process_contribution["deterministic_fallback_fields"] == []
-    assert process_contribution["deterministic_fallback_count"] == 0
-    assert process_contribution["derived_from"] == (
-        "accepted_or_fallback_specialist_artifact"
-    )
-    checklist_contribution = result["checklist"]["agent_contribution"]
-    assert checklist_contribution["authority"] == (
-        "hybrid_guarded_model_contribution"
-    )
-    assert checklist_contribution["model_owned_fields"] == [
-        "status",
-        "artifact_ids",
-    ]
-    assert checklist_contribution["derived_from"] == (
-        "accepted_or_fallback_specialist_artifact"
-    )
-    assert result["verification"]["valid"] is True
-    assert result["verification"]["computed"] is True
-    assert len(result["verification"]["checks"]) == 11
-    diagnostics = result["audit"]["canonicalization"]["diagnostics"]
-    assert diagnostics["authority_mode"] == "hybrid_guarded"
-    assert diagnostics["accepted_fact_count"] == len(proposals) - 1
-    assert diagnostics["rejected_facts"] == [
+    assert run["status"] == "failed"
+    assert run["error"] == "ModelResponseError: hybrid_model_contribution"
+    assert "result" not in run
+    ledger = model_storage.model_calls()[0]
+    assert ledger["outcome"] == "failed"
+    assert ledger["authority_mode"] == "hybrid_guarded"
+    assert ledger["accepted_fact_count"] == len(proposals) - 1
+    assert ledger["rejected_facts"] == [
         {"fact_id": "fact_dispute", "invariant": "confidence_contract"}
     ]
-    assert diagnostics["rejected_fact_count"] == 1
-    assert "Model-assisted hybrid canonicalization" in result["summary"]
-    assert "deterministic fallback replaced 1 rejected proposals" in result["summary"]
-    ledger = model_storage.model_calls()[0]
-    assert ledger["outcome"] == "succeeded_with_guarded_fallback"
-    assert ledger["authority_mode"] == "hybrid_guarded"
-    assert ledger["rejected_facts"] == diagnostics["rejected_facts"]
+    assert ledger["rejected_fact_count"] == 1
+    assert ledger["deterministic_fallback_applied"] is False
+    assert model_storage.cached_model_output(ledger["cache_key"]) is None
 
 
 def test_late_specialist_failure_keeps_bounded_partial_truth_and_no_final_result(
@@ -1984,11 +2052,11 @@ def test_late_specialist_failure_keeps_bounded_partial_truth_and_no_final_result
         return {
             "id": "gen-late-failure",
             "model": OPENROUTER_MODEL,
-            "provider": "DeepInfra",
+            "provider": "Together",
             "choices": [
                 {
                     "finish_reason": "stop",
-                    "message": {"content": json.dumps({"facts": raw_facts})},
+                    "message": {"content": json.dumps({"facts": provider_wire_facts(raw_facts)})},
                 }
             ],
             "usage": {
@@ -2009,7 +2077,7 @@ def test_late_specialist_failure_keeps_bounded_partial_truth_and_no_final_result
                     "parent_call_id": "modelcall-plan",
                     "response_id": "gen-failed-specialist",
                     "response_model": OPENROUTER_MODEL,
-                    "upstream_provider": "DeepInfra",
+                    "upstream_provider": "Together",
                     "usage_source": "response",
                     "finish_reason": "stop",
                     "outcome": "failed",
@@ -2030,7 +2098,7 @@ def test_late_specialist_failure_keeps_bounded_partial_truth_and_no_final_result
                     "parent_call_id": "modelcall-plan",
                     "response_id": "gen-failed-specialist",
                     "response_model": OPENROUTER_MODEL,
-                    "upstream_provider": "DeepInfra",
+                    "upstream_provider": "Together",
                     "usage_source": "response",
                     "outcome": "failed",
                     "error_type": "AgentInvocationFailure",
@@ -2089,7 +2157,7 @@ def test_canonical_paid_failure_emits_joinable_safe_agent_receipt(tmp_path: Path
         return {
             "id": "gen-canonical-wrong-model",
             "model": "different/model",
-            "provider": "DeepInfra",
+            "provider": "Together",
             "choices": [
                 {
                     "finish_reason": "stop",
@@ -2194,7 +2262,7 @@ def test_canonical_upstream_rejection_receipt_exposes_only_bounded_status(
                 "response_id": "gen-1786483164-EEEEEEEEEEEEEEEEEEEE",
                 "provider_error_code": 429,
                 "provider_boundary": "openrouter",
-                "expected_upstream_provider": "DeepInfra",
+                "expected_upstream_provider": "Together",
             },
         )
 
@@ -2225,7 +2293,7 @@ def test_canonical_upstream_rejection_receipt_exposes_only_bounded_status(
     assert receipt["response_id"] == "gen-1786483164-EEEEEEEEEEEEEEEEEEEE"
     assert receipt["provider_error_code"] == 429
     assert receipt["provider_boundary"] == "openrouter"
-    assert receipt["expected_upstream_provider"] == "DeepInfra"
+    assert receipt["expected_upstream_provider"] == "Together"
     assert receipt["call_count"] == 1
     assert receipt["response_model"] is None
     assert receipt["upstream_provider"] is None
@@ -2233,7 +2301,7 @@ def test_canonical_upstream_rejection_receipt_exposes_only_bounded_status(
     ledger = storage.sanitized_model_ledger()[0]
     assert ledger["provider_error_code"] == 429
     assert ledger["provider_boundary"] == "openrouter"
-    assert ledger["expected_upstream_provider"] == "DeepInfra"
+    assert ledger["expected_upstream_provider"] == "Together"
     assert ledger["actual_cost_usd"] is None
     assert storage.model_call_summary()["actual_cost_complete"] is False
     serialized = json.dumps(run)

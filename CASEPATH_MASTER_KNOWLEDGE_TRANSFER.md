@@ -4471,9 +4471,9 @@ charge remains unknown and is not included in the aggregate. No canonical
 result was accepted and no model-backed release evidence was established. The
 sanitized record is retained at
 `casepath/releases/model-validation-attempt-20260811-09.json`. The current
-source now pins the exact `deepinfra/fp4` endpoint tag, disables provider
+source now pins the exact `together` endpoint tag, disables provider
 fallbacks, requires parameter support, denies provider data collection, and
-accepts successful provenance only from `DeepInfra`. It enables generation
+accepts successful provenance only from `Together`. It enables generation
 metadata through the `X-OpenRouter-Metadata: enabled` request header, never the
 prompt or JSON body. Those controls are locally verified but do not promote the
 failed attempt; CP-022 remains production-unverified until a same-commit
