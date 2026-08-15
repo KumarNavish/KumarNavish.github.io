@@ -1138,20 +1138,6 @@ body[data-casepath-artifact-canvas="ready"] .v21-source-summary-toggle{
   line-height:1.4;
 }
 
-.ac-authority-line{
-  min-height:38px;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:20px;
-  padding:8px clamp(24px,4.2vw,58px);
-  border-top:1px solid var(--ac-line);
-  background:#fff;
-  color:var(--ac-quiet);
-  font-size:8px;
-  line-height:1.35;
-}
-
 .ac-agent-cursor{
   --ac-cursor-x:calc(100% - 58px);
   --ac-cursor-y:96px;
@@ -1278,7 +1264,6 @@ html[data-casepath-release="20.0.0"] body[data-casepath-artifact-canvas="ready"]
   .ac-spatial-detail{left:18px;width:300px}
   .ac-stage-focus h3,.ac-decision-focus h3{font-size:clamp(31px,10vw,45px)}
   .ac-chain-tabs{gap:14px;overflow-x:auto}
-  .ac-authority-line{align-items:flex-start;flex-direction:column;gap:3px;padding:9px 18px}
   .ac-memory-effects{grid-template-columns:1fr 1fr}
 }
 
@@ -3693,13 +3678,6 @@ body[data-casepath-moment="review-applied"] .casepath-artifact-canvas .ac-proces
 
 body[data-casepath-moment="review-applied"] .casepath-artifact-canvas .ac-spatial-viewport{
   height:430px;
-}
-
-.casepath-artifact-canvas .ac-authority-line{
-  min-height:34px;
-  padding:7px 44px;
-  color:var(--ac-quiet);
-  font-size:9px;
 }
 
 .casepath-artifact-canvas .ac-agent-cursor{
