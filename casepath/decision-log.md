@@ -265,3 +265,21 @@ updated as implementation and validation progress.
 - **Validation:** shell and source-order tests, exact Blueprint tamper rejection,
   full deterministic browser report, zero-record/zero-network/zero-cost ledger,
   then one separately aligned production journey.
+
+## CPD-012 — Pin the current run to Together after DeepInfra rejection
+
+- **Problem:** a fresh exact-model call failed closed at the first role with an
+  external DeepInfra 429 even though the OpenRouter account and local admission
+  controls were healthy.
+- **Decision:** pin the current exact Nemotron route to OpenRouter endpoint tag
+  `together`, require upstream identity `Together`, and retain parameter,
+  privacy, single-flight, no-retry, and no-fallback guards unchanged.
+- **Evidence:** OpenRouter's endpoint metadata lists Together as the only current
+  non-DeepInfra route for this model that advertises both `response_format` and
+  `structured_outputs` together with the active reasoning parameters.
+- **Rejected:** generic provider fallback, because it weakens route provenance;
+  BaseTen and Venice, because their advertised parameter sets do not satisfy the
+  strict structured-output contract.
+- **Validation:** exact wire-body and provider-metadata tests, current health and
+  release-contract checks, deterministic browser self-test, then one separately
+  authorized fresh six-call acceptance run.

@@ -206,7 +206,7 @@
     }
   },
   "services": {
-    "frontend": "https://casepath-swiss-claim-lab.onrender.com",
+    "frontend": "https://casepath.kumarnavish.chatgpt.site",
     "api": "https://casepath-agentic-api.onrender.com",
     "qa": "https://casepath-guided-canonical-qa.onrender.com"
   }

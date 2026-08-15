@@ -7,7 +7,7 @@ import os
 import threading
 import time
 from datetime import datetime
-from typing import Any, Literal, TypedDict
+from typing import Any, Callable, Literal, TypedDict
 
 from .canonicalizer import (
     CANONICALIZER_VERSION,
@@ -36,6 +36,7 @@ from .multi_agent import (
     MULTI_AGENT_IMPLEMENTATION,
     MULTI_AGENT_VERSION,
     NemotronMultiAgentOrchestrator,
+    _evidence_candidate_artifact_ids,
     accepted_artifact_hash,
     apply_evidence_contribution,
     apply_process_contribution,
@@ -222,7 +223,12 @@ def _accepted_agent_lineage(value: dict[str, Any]) -> dict[str, Any]:
             "agent_id",
             "call_id",
             "origin_call_id",
+            "cache_hit",
+            "call_count",
+            "usage_source",
             "response_id",
+            "input_artifact_hash",
+            "output_artifact_hash",
             "delegation_id",
             "parent_call_id",
             "outcome",
@@ -1429,6 +1435,33 @@ class ClaimPipeline:
                 precedent_ranking,
                 memories,
             )
+
+            def rebuild_agent_verification(
+                accepted_process: dict[str, Any],
+                accepted_checklist: dict[str, Any],
+            ) -> dict[str, Any]:
+                reranked = rank_precedents(
+                    current_claim_id=claim["claim_id"],
+                    understanding=understanding,
+                    process=accepted_process,
+                    checklist=accepted_checklist,
+                    memories=memories,
+                    corpus=HISTORICAL_CASES,
+                )
+                precedents[:] = reranked["results"]
+                precedent_ranking.clear()
+                precedent_ranking.update(reranked["receipt"])
+                return self._verification_report(
+                    claim,
+                    understanding,
+                    legal,
+                    accepted_process,
+                    accepted_checklist,
+                    precedents,
+                    precedent_ranking,
+                    memories,
+                )
+
             agent_orchestration = self._agent_orchestration_stage(
                 run_id,
                 claim,
@@ -1436,6 +1469,7 @@ class ClaimPipeline:
                 process,
                 checklist,
                 verification,
+                verification_builder=rebuild_agent_verification,
             )
             # Bind the execution authority at the run boundary in every mode.
             # OpenRouter runs add accepted candidates below; deterministic
@@ -1458,8 +1492,11 @@ class ClaimPipeline:
                 self.storage.patch_run(
                     run_id,
                     patch={
+                        "understanding": understanding,
                         "process": process,
                         "checklist": checklist,
+                        "precedents": precedents,
+                        "precedent_ranking": precedent_ranking,
                         "verification": verification,
                         "agent_orchestration": agent_orchestration,
                     },
@@ -1483,16 +1520,22 @@ class ClaimPipeline:
                     ),
                     (
                         "whole_playbook_gate",
-                        "final_claim_brief",
-                        agent_orchestration["final_claim_brief"],
+                        "verified_claim_playbook",
+                        None,
                         "Final claim brief and recomputed verification accepted after the Nemotron critic and whole-playbook gate",
                     ),
                 ]
                 for gate_id, artifact_name, artifact_value, headline in accepted_artifacts:
                     gate = gate_by_id[gate_id]
-                    gate["output_artifact_hash"] = accepted_artifact_hash(artifact_value)
-                    if gate_id == "whole_playbook_gate":
+                    if gate_id != "whole_playbook_gate":
+                        gate["output_artifact_hash"] = accepted_artifact_hash(
+                            artifact_value
+                        )
+                    else:
                         gate["verification_report_hash"] = digest(verification)
+                        gate["verification_whole_playbook_hash"] = verification[
+                            "whole_playbook_hash"
+                        ]
                         gate["accepted_verification_ids"] = [
                             item["name"] for item in verification["checks"]
                         ]
@@ -1522,6 +1565,9 @@ class ClaimPipeline:
                             **(
                                 {
                                     "verification_report_hash": gate["verification_report_hash"],
+                                    "verification_whole_playbook_hash": gate[
+                                        "verification_whole_playbook_hash"
+                                    ],
                                     "accepted_verification_ids": gate["accepted_verification_ids"],
                                 }
                                 if gate_id == "whole_playbook_gate"
@@ -1533,8 +1579,11 @@ class ClaimPipeline:
                 self.storage.patch_run(
                     run_id,
                     patch={
+                        "understanding": understanding,
                         "process": process,
                         "checklist": checklist,
+                        "precedents": precedents,
+                        "precedent_ranking": precedent_ranking,
                         "verification": verification,
                         "agent_orchestration": agent_orchestration,
                     },
@@ -1556,8 +1605,11 @@ class ClaimPipeline:
             self.storage.patch_run(
                 run_id,
                 patch={
+                    "understanding": understanding,
                     "process": process,
                     "checklist": checklist,
+                    "precedents": precedents,
+                    "precedent_ranking": precedent_ranking,
                     "verification": verification,
                     "agent_orchestration": agent_orchestration,
                 },
@@ -1567,6 +1619,7 @@ class ClaimPipeline:
                     checklist,
                     agent_orchestration,
                     verification,
+                    memory_application,
                 ),
             )
             result = self._final_result(
@@ -2041,11 +2094,44 @@ class ClaimPipeline:
             ]
             canonical_input = observable_claim_package(claim)
             canonical_input_hash = digest(canonical_input)
+            def emit_canonical_provider_start(receipt: dict[str, Any]) -> None:
+                self.emit(
+                    run_id,
+                    stage,
+                    label,
+                    "Guarded Canonical Facts Agent",
+                    "started",
+                    headline="Selecting bounded fact meanings from exact source text",
+                    detail=(
+                        "A fresh Nemotron call selects a bounded meaning, exact source references and confidence for controlling facts. "
+                        "CasePath validates each selection and materializes the fact fields; non-controlling meanings remain application-owned."
+                    ),
+                    implementation="hybrid_guarded_openrouter_canonicalizer",
+                    model=OPENROUTER_MODEL,
+                    actor_type="nemotron_agent",
+                    agent_id="canonical_facts",
+                    receipt_type="agent_started",
+                    root_agent=True,
+                    acceptance_scope="pre_review_model_output",
+                    input_artifact="observable_claim_package",
+                    input_artifact_hash=canonical_input_hash,
+                    provider=OPENROUTER_PROVIDER,
+                    requested_model=OPENROUTER_MODEL,
+                    call_id=receipt.get("call_id"),
+                    call_count=1,
+                    cache_hit=False,
+                    parent_call_id=None,
+                    delegation_id=None,
+                    handoff_from="observable_claim_package",
+                    handoff_to="orchestrator_plan",
+                    external_tracing=False,
+                )
             try:
                 model_result = self.canonicalizer.canonicalize(
                     canonical_input,
                     run_id=run_id,
                     allowed_fact_catalog=catalog,
+                    progress_sink=emit_canonical_provider_start,
                 )
             except CanonicalizerError as exc:
                 safe_context = exc.safe_context
@@ -2142,6 +2228,8 @@ class ClaimPipeline:
                 **model_result,
                 "mode": MODEL_MODE_OPENROUTER,
                 "authority_mode": "hybrid_guarded",
+                "input_artifact_hash": canonical_input_hash,
+                "output_artifact_hash": digest(facts),
             }
         understanding = {
             "summary": summary,
@@ -2221,6 +2309,16 @@ class ClaimPipeline:
                     "provider": canonicalization.get("provider"),
                     "requested_model": OPENROUTER_MODEL,
                     "call_count": 0 if canonicalization.get("cache_hit") else 1,
+                    "cache_hit": canonicalization.get("cache_hit", False),
+                    "outcome": (
+                        "cache_hit"
+                        if canonicalization.get("cache_hit") is True
+                        else "succeeded_with_guarded_fallback"
+                        if canonicalization.get("diagnostics", {}).get(
+                            "rejected_fact_count"
+                        )
+                        else "succeeded"
+                    ),
                     "finish_reason": canonicalization.get("finish_reason")
                     or canonicalization.get("origin_finish_reason"),
                     "usage": canonicalization.get("usage")
@@ -3127,6 +3225,11 @@ class ClaimPipeline:
         process: dict[str, Any],
         checklist: dict[str, Any],
         verification: dict[str, Any],
+        *,
+        verification_builder: Callable[
+            [dict[str, Any], dict[str, Any]], dict[str, Any]
+        ]
+        | None = None,
     ) -> dict[str, Any]:
         if self.model_mode != MODEL_MODE_OPENROUTER:
             return {
@@ -3204,6 +3307,10 @@ class ClaimPipeline:
                             "input_artifact_hash",
                             "output_artifact",
                             "output_artifact_hash",
+                            "output_projection_contract",
+                            "final_brief_artifact_hash",
+                            "verification_report_hash",
+                            "verification_whole_playbook_hash",
                             "error_type",
                             "error_invariant",
                             "invalid_provenance_field",
@@ -3227,6 +3334,7 @@ class ClaimPipeline:
             process=process,
             checklist=checklist,
             verification=verification,
+            verification_builder=verification_builder,
             progress_sink=persist_receipt,
         )
         if audit.get("all_required_agents_contributed") is not True:
@@ -3240,8 +3348,32 @@ class ClaimPipeline:
         )
         process.clear()
         process.update(accepted_process)
+        accepted_checklist_template = deepcopy(checklist)
+        apply_evidence_relations(
+            process, accepted_checklist_template["items"]
+        )
+        apply_evidence_projection(
+            accepted_checklist_template["items"], process
+        )
+        apply_evidence_relations(
+            process, accepted_checklist_template["items"]
+        )
+        accepted_checklist_template.update(
+            checklist_derived_sections(accepted_checklist_template["items"])
+        )
         accepted_checklist = apply_evidence_contribution(
-            checklist, artifacts["evidence_checklist"]
+            accepted_checklist_template,
+            artifacts["evidence_checklist"],
+            candidate_artifact_ids_by_item=_evidence_candidate_artifact_ids(
+                {
+                    "observable_package": observable_claim_package(claim),
+                    "source_integrity": artifacts[
+                        "document_source_integrity"
+                    ],
+                    "facts": understanding["facts"],
+                    "checklist": accepted_checklist_template,
+                }
+            ),
         )
         checklist.clear()
         checklist.update(accepted_checklist)
@@ -3309,7 +3441,7 @@ class ClaimPipeline:
                 "evidence_checklist",
             ),
             "whole_playbook_gate": (
-                "final_claim_brief",
+                "verified_claim_playbook",
                 audit["final_claim_brief"],
                 "final_claim_brief_audit",
             ),
@@ -3317,19 +3449,46 @@ class ClaimPipeline:
         for gate in audit["deterministic_gates"]:
             output_artifact, artifact_value, source_agent_id = gate_bindings[gate["agent_id"]]
             source_agent = agents[source_agent_id]
-            gate.update(
-                {
-                    "receipt_type": "accepted_artifact",
-                    "acceptance_scope": "pre_review_model_output",
-                    "output_artifact": output_artifact,
-                    "output_artifact_hash": accepted_artifact_hash(artifact_value),
-                    "source_agent_id": source_agent_id,
-                    "source_call_id": source_agent["call_id"],
-                    "delegation_id": source_agent.get("delegation_id"),
-                    "accepted_ids": source_agent.get("accepted_ids", []),
-                    "accepted_count": source_agent.get("accepted_count", 0),
-                }
-            )
+            accepted_binding = {
+                "receipt_type": "accepted_artifact",
+                "acceptance_scope": "pre_review_model_output",
+                "output_artifact": output_artifact,
+                "source_agent_id": source_agent_id,
+                "source_call_id": source_agent["call_id"],
+                "delegation_id": source_agent.get("delegation_id"),
+                "accepted_ids": source_agent.get("accepted_ids", []),
+                "accepted_count": source_agent.get("accepted_count", 0),
+            }
+            if gate["agent_id"] == "whole_playbook_gate":
+                # Preserve the graph gate's hash of the complete accepted
+                # process+checklist+brief bundle. The model brief is a
+                # separate join and must never replace that bundle hash.
+                accepted_binding["final_brief_artifact_hash"] = (
+                    accepted_artifact_hash(artifact_value)
+                )
+                accepted_binding.update(
+                    {
+                        "output_projection_contract": "casepath.accepted-playbook-projection/1.0.0",
+                        "published_process_hash": accepted_artifact_hash(
+                            process
+                        ),
+                        "published_checklist_hash": accepted_artifact_hash(
+                            checklist
+                        ),
+                        "published_bundle_hash": accepted_artifact_hash(
+                            {
+                                "process": process,
+                                "checklist": checklist,
+                                "final_brief": artifact_value,
+                            }
+                        ),
+                    }
+                )
+            else:
+                accepted_binding["output_artifact_hash"] = (
+                    accepted_artifact_hash(artifact_value)
+                )
+            gate.update(accepted_binding)
         understanding["summary"] = (
             f"{understanding['summary']} Nemotron specialists supplied bounded process decisions, evidence "
             "statuses, artifact selections and final-brief audit fields through a guarded LangGraph DAG; the "

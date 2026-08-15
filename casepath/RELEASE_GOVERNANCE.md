@@ -438,12 +438,12 @@ the unchanged 4,096-token response limit; the cache key binds the exact prompt,
 output limit, and reasoning policy. These source changes are locally
 regression-tested but are not production acceptance evidence.
 
-The current source pins OpenRouter to the exact `deepinfra/fp4` endpoint tag,
+The current source pins OpenRouter to the exact `together` endpoint tag,
 sets `allow_fallbacks: false`, keeps `require_parameters: true`, and denies
 provider data collection. It also preserves logical specialist fan-out while
 pinning physical provider admission to one in-flight send. A successful call
 is accepted only when retained generation metadata identifies the upstream
-provider as `DeepInfra`. The same
+provider as `Together`. The same
 request also enables OpenRouter generation metadata through the
 `X-OpenRouter-Metadata: enabled` header; that control is not serialized into the
 prompt or JSON request body. These routing controls are locally tested but are

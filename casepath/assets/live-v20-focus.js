@@ -229,6 +229,41 @@
     return `<strong class="v20-document-name" data-document-icon-kind="${esc(icon.key)}"><svg class="v20-document-type-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icon.paths}</svg><span class="v20-document-name-copy">${esc(documentName)}</span></strong>`;
   }
 
+  function sourceIconMarkup(documentName, ...semanticContext) {
+    const icon = resolveDocumentIcon(documentName, ...semanticContext);
+    return `<span class="v21-source-icon" data-source-icon-kind="${esc(icon.key)}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icon.paths}</svg></span>`;
+  }
+
+  function decorateSourceRailItem(row) {
+    if (!row) return;
+    const isMessage = row.id === 'toggleSource';
+    const name = isMessage
+      ? 'Claim message'
+      : row.querySelector('.attachment-title')?.textContent?.trim() || 'Source';
+    const meta = isMessage
+      ? row.querySelector('[data-source-meta]')?.textContent?.trim() || ''
+      : row.querySelector('.attachment-meta')?.textContent?.trim() || '';
+    const sourceId = isMessage ? 'message' : String(row.dataset.artifactId || '');
+    const icon = resolveDocumentIcon(name, meta);
+    row.dataset.sourceRailItem = 'true';
+    row.dataset.sourceId = sourceId;
+    const oldIcon = row.querySelector('.attachment-thumb,.v21-source-icon');
+    if (oldIcon && (oldIcon.dataset.sourceIconKind !== icon.key || !oldIcon.querySelector('svg'))) {
+      oldIcon.outerHTML = sourceIconMarkup(name, meta);
+    }
+    const nameNode = isMessage ? row.querySelector('.v21-source-summary-copy strong') : row.querySelector('.attachment-title');
+    const metaNode = isMessage ? row.querySelector('.v21-source-summary-copy small') : row.querySelector('.attachment-meta');
+    if (nameNode) nameNode.dataset.sourceName = '';
+    if (metaNode) metaNode.dataset.sourceMeta = '';
+    let status = row.querySelector('[data-source-status]');
+    if (!status) {
+      status = document.createElement('span');
+      status.className = 'v21-source-status';
+      status.dataset.sourceStatus = '';
+      row.append(status);
+    }
+  }
+
   function visible(element) {
     return Boolean(element && !element.hidden && element.getAttribute('aria-hidden') !== 'true');
   }
@@ -289,8 +324,11 @@
   function normalizeSourceRail(moment) {
     const pane = $('.submission-pane');
     if (!pane) return;
-    const desktopRail = window.matchMedia('(min-width: 761px)').matches;
     pane.dataset.v21SourceRail = 'true';
+    pane.dataset.sourceRailContract = 'casepath.source-rail/1.0.0';
+    pane.dataset.sourceRailList = '';
+    pane.dataset.v21PersistentSourceRail = 'true';
+    pane.classList.remove('collapsed');
     const label = pane.querySelector('.submission-head .quiet-label');
     if (label && label.textContent !== 'Sources') label.textContent = 'Sources';
     const toggle = $('#toggleSource', pane);
@@ -298,57 +336,50 @@
     if (!toggle.classList.contains('v21-source-summary-toggle')) {
       toggle.classList.add('v21-source-summary-toggle');
       toggle.innerHTML = `
-        <span class="v21-source-summary-copy"><strong>Claim message</strong><small>Opening source package…</small></span>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>`;
-      toggle.setAttribute('aria-controls', 'submissionContent');
-      toggle.setAttribute('aria-label', 'Show or hide the customer claim source package');
+        ${sourceIconMarkup('Claim message')}
+        <span class="v21-source-summary-copy"><strong data-source-name>Claim message</strong><small data-source-meta>Opening source package…</small></span>
+        <span class="v21-source-status" data-source-status>Ready</span>`;
     }
     toggle.dataset.sourceIds = 'message,intake';
+    toggle.dataset.sourceRailItem = 'true';
+    toggle.dataset.sourceId = 'message';
+    toggle.disabled = false;
+    toggle.tabIndex = 0;
+    toggle.removeAttribute('aria-expanded');
+    toggle.removeAttribute('aria-controls');
+    toggle.setAttribute('aria-label', 'Open customer message');
     const subject = pane.querySelector('.email-subject')?.textContent?.trim() || 'Customer message';
-    const sourceCount = $('#attachmentCount')?.textContent?.trim() || 'Opening source package…';
     const summaryTitle = toggle.querySelector('.v21-source-summary-copy strong');
     const summaryMeta = toggle.querySelector('.v21-source-summary-copy small');
     if (summaryTitle && summaryTitle.textContent !== 'Claim message') summaryTitle.textContent = 'Claim message';
-    if (summaryMeta) {
-      const sourceMeta = `${subject} · ${sourceCount}`;
-      if (summaryMeta.textContent !== sourceMeta) summaryMeta.textContent = sourceMeta;
-    }
+    if (summaryMeta && summaryMeta.textContent !== subject) summaryMeta.textContent = subject;
 
     const rows = [toggle, ...$$('.attachment-row[data-artifact-id]', pane)];
+    rows.forEach(decorateSourceRailItem);
+    const count = pane.querySelector('[data-source-rail-count]');
+    if (count) count.textContent = String(rows.length);
     const activeRow = rows.find(row => row.classList.contains('is-active')) || null;
+    const previousActiveId = pane.dataset.v21ActiveSource || '';
+    const activeId = activeRow?.dataset.activeSourceId || activeRow?.dataset.artifactId || '';
+    if (previousActiveId && previousActiveId !== activeId) {
+      const previousRow = rows.find(row => (row.dataset.activeSourceId || row.dataset.artifactId || row.dataset.sourceId) === previousActiveId);
+      if (previousRow) previousRow.dataset.sourceRead = 'true';
+    }
     rows.forEach(row => {
-      if (row === activeRow) row.setAttribute('aria-current', 'true');
+      const active = row === activeRow;
+      if (active) row.setAttribute('aria-current', 'true');
       else row.removeAttribute('aria-current');
+      const status = row.querySelector('[data-source-status]');
+      if (status) {
+        const statusValue = active ? 'reading' : row.dataset.sourceRead === 'true' ? 'read' : 'ready';
+        status.dataset.sourceStatus = statusValue;
+        status.textContent = statusValue[0].toUpperCase() + statusValue.slice(1);
+      }
     });
-    if (activeRow) pane.dataset.v21ActiveSource = activeRow.dataset.activeSourceId || activeRow.dataset.artifactId || '';
+    if (activeRow) pane.dataset.v21ActiveSource = activeId;
     else delete pane.dataset.v21ActiveSource;
-
-    if (desktopRail) {
-      pane.classList.remove('collapsed');
-      pane.dataset.v21DesktopSourceRail = 'true';
-      toggle.disabled = true;
-      toggle.tabIndex = -1;
-      toggle.setAttribute('aria-expanded', 'true');
-      toggle.setAttribute('aria-label', 'Customer claim source package');
-      toggle.removeAttribute('aria-controls');
-      delete pane.dataset.v21AutoCollapsed;
-      return;
-    }
-    delete pane.dataset.v21DesktopSourceRail;
-    toggle.disabled = false;
-    toggle.tabIndex = 0;
-    toggle.setAttribute('aria-controls', 'submissionContent');
-    toggle.setAttribute('aria-label', 'Show or hide the customer claim source package');
-
-    if (moment === 'start') {
-      pane.classList.remove('collapsed');
-      toggle.setAttribute('aria-expanded', 'true');
-      delete pane.dataset.v21AutoCollapsed;
-    } else if (pane.dataset.v21AutoCollapsed !== 'true') {
-      pane.classList.add('collapsed');
-      toggle.setAttribute('aria-expanded', 'false');
-      pane.dataset.v21AutoCollapsed = 'true';
-    }
+    pane.dataset.v21DesktopSourceRail = 'true';
+    delete pane.dataset.v21AutoCollapsed;
   }
 
   function ensureFlagshipFocus(canvas, moment) {
@@ -1079,13 +1110,6 @@
   }
 
   function onClick(event) {
-    const sourceToggle = event.target.closest?.('#toggleSource');
-    if (sourceToggle && window.matchMedia('(min-width: 761px)').matches) {
-      const pane = sourceToggle.closest('.submission-pane');
-      pane?.classList.remove('collapsed');
-      sourceToggle.setAttribute('aria-expanded', 'true');
-      return;
-    }
     const open = event.target.closest?.('[data-v20-open-documents]');
     if (open) {
       event.preventDefault();

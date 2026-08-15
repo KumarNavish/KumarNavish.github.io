@@ -9,14 +9,14 @@
   <title>CasePath — Analyse one claim</title>
   <link rel="preconnect" href="https://casepath-agentic-api.onrender.com" crossorigin>
   <link rel="dns-prefetch" href="//casepath-agentic-api.onrender.com">
-  <link rel="stylesheet" href="assets/live-v16.css?v=20.0.0">
+  <link rel="stylesheet" href="assets/live-v16.css?v=20.0.1">
   <link rel="stylesheet" href="assets/live-v17.css">
   <link rel="stylesheet" href="assets/live-v17-continuity.css?v=20.0.0">
   <link rel="stylesheet" href="assets/live-v18.css">
   <link rel="stylesheet" href="assets/live-v19.css">
   <link rel="stylesheet" href="assets/live-v20-focus.css?v=20.0.20">
   <link rel="stylesheet" href="assets/process-story.css?v=1.0.1">
-  <link rel="stylesheet" href="assets/artifact-canvas.css?v=1.0.44">
+  <link rel="stylesheet" href="assets/artifact-canvas.css?v=1.0.50">
 </head>
 <body>
   <a class="skip-link" href="#casepathWork">Skip to CasePath</a>
@@ -35,14 +35,17 @@
   </header>
 
   <main class="claim-workspace" id="casepathWork">
-    <aside class="submission-pane" aria-labelledby="submissionHeading">
+    <aside class="submission-pane" aria-labelledby="submissionHeading" data-source-rail-contract="casepath.source-rail/1.0.0" data-source-rail-list>
       <header class="submission-head">
         <div>
           <span class="quiet-label">Sources</span>
+          <span class="source-rail-count" data-source-rail-count>7</span>
           <h1 id="submissionHeading">What arrived</h1>
         </div>
-        <button class="icon-button mobile-source-toggle" id="toggleSource" type="button" aria-expanded="true" aria-label="Show or hide customer submission">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+        <button class="v21-source-summary-toggle" id="toggleSource" type="button" aria-label="Open customer message" data-source-rail-item data-source-id="message">
+          <span class="v21-source-icon" data-source-icon-kind="mail"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="m5 7 7 5 7-5"/></svg></span>
+          <span class="v21-source-summary-copy"><strong data-source-name>Claim message</strong><small data-source-meta>Bedroom condition keeps returning</small></span>
+          <span class="v21-source-status" data-source-status>Ready</span>
         </button>
       </header>
       <div class="submission-scroll" id="submissionContent">
@@ -121,6 +124,12 @@ Alex Morgan</div>
         <div class="start-copy">
           <span class="quiet-label">Flagship claim</span>
           <h2>What should CasePath do with this claim?</h2>
+          <article class="start-claim-source" data-opening-claim-source="message" aria-label="Claim message excerpt">
+            <header><span>Claim message</span><small>Alex Morgan · 1 Aug 2026, 11:03</small></header>
+            <strong>Bedroom condition keeps returning</strong>
+            <blockquote>The mould in the external corner of our bedroom keeps coming back.</blockquote>
+            <p>Please tell me what should happen next. I want the cause clarified and the defect repaired.</p>
+          </article>
         </div>
         <button class="primary-button" id="runCasePath" type="button" disabled>
           <span>Analyse claim</span>
@@ -136,7 +145,7 @@ Alex Morgan</div>
             <span class="quiet-label" id="orchestratorLabel">Orchestration status</span>
             <strong id="orchestratorStatus">Opening one shared claim context</strong>
           </div>
-          <span class="live-chip" id="liveChip">Live</span>
+          <span class="live-chip" id="liveChip" data-orchestration-mode="working">Working</span>
         </header>
 
         <section class="orchestration-proof" id="orchestrationProof" aria-labelledby="orchestrationProofTitle" hidden>
@@ -215,15 +224,15 @@ Alex Morgan</div>
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/live-v16.js?v=20.0.26"></script>
+  <script src="assets/live-v16.js?v=20.0.33"></script>
   <script src="assets/live-v16-stability.js?v=20.0.2"></script>
   <script src="assets/live-v18-insertion-guard.js"></script>
   <script src="assets/live-v17.js?v=20.0.5"></script>
   <script src="assets/live-v18.js?v=20.0.2"></script>
   <script src="assets/live-v18-handoff.js?v=20.0.1"></script>
   <script src="assets/live-v19-active-stage.js"></script>
-  <script src="assets/live-v20-focus.js?v=20.0.21"></script>
+  <script src="assets/live-v20-focus.js?v=20.0.22"></script>
   <script src="assets/process-story.js?v=1.0.1"></script>
-  <script src="assets/artifact-canvas.js?v=1.0.53"></script>
+  <script src="assets/artifact-canvas.js?v=1.0.65"></script>
 </body>
 </html>

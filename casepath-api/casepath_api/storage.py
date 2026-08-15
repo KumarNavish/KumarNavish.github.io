@@ -768,7 +768,7 @@ class Storage:
                 item.pop("provider_boundary", None)
             if (
                 item.get("error_invariant") != "provider_upstream_rejection"
-                or item.get("expected_upstream_provider") != "DeepInfra"
+                or item.get("expected_upstream_provider") != "Together"
             ):
                 item.pop("expected_upstream_provider", None)
             sanitized.append(item)

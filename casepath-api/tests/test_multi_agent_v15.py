@@ -20,7 +20,10 @@ from casepath_api import langchain_runtime
 from casepath_api import multi_agent as multi_agent_module
 from casepath_api.canonicalizer import OPENROUTER_MODEL
 from casepath_api.data import CLAIMS, observable_claim_package
-from casepath_api.evidence_relations import EVIDENCE_ITEM_IDS_BY_CLAIM
+from casepath_api.evidence_relations import (
+    EVIDENCE_ITEM_IDS_BY_CLAIM,
+    apply_evidence_relations,
+)
 from casepath_api.multi_agent import (
     AI_AGENT_IDS,
     AgentBoundaryError,
@@ -41,10 +44,15 @@ from casepath_api.multi_agent import (
     SOURCE_INTEGRITY_PROPOSAL_COUNT,
     SOURCE_INTEGRITY_REASONING_EFFORT,
     SourceIntegrityResponse,
+    _bounded_evidence_checklist_schema,
     _bounded_source_integrity_schema,
+    _evidence_candidate_artifact_ids,
+    _compatible_process_decision_values,
     _default_runnable_factory,
     _evidence_provider_payload,
+    _evidence_selection_id,
     _final_brief_provider_payload,
+    _normalize_evidence_checklist_response,
     _plan_validator,
     _require_exact_proposal_membership,
     _source_registry,
@@ -53,6 +61,7 @@ from casepath_api.multi_agent import (
     apply_process_contribution,
 )
 from casepath_api.pipeline_v15 import ClaimPipeline
+from casepath_api.projections import apply_evidence_projection
 from casepath_api.storage import Storage
 
 
@@ -63,6 +72,10 @@ def wait(storage: Storage, run_id: str) -> dict[str, Any]:
             return run
         time.sleep(0.01)
     raise AssertionError("run timeout")
+
+
+def assert_together_compatible_schema(schema: dict[str, Any]) -> None:
+    assert '"uniqueItems"' not in json.dumps(schema, sort_keys=True)
 
 
 def oracle_result(tmp_path: Path) -> dict[str, Any]:
@@ -107,7 +120,7 @@ class FakeStructuredRunnable:
                 "id": f"gen-{self.agent_id}",
                 "model_name": OPENROUTER_MODEL,
                 "finish_reason": "stop",
-                "provider_name": "DeepInfra",
+                "provider_name": "Together",
                 "usage": {
                     "prompt_tokens": 100,
                     "completion_tokens": 40,
@@ -170,6 +183,15 @@ def graph_fixture(tmp_path: Path):
     current_node = next(
         node for node in process["nodes"] if node["node_id"] == current["current_node_id"]
     )
+    evidence_slots = {
+        proposal["item_id"]: {
+            "selection_id": _evidence_selection_id(
+                proposal["status"], tuple(proposal["artifact_ids"])
+            ),
+            "confidence": proposal["confidence"],
+        }
+        for proposal in evidence_proposals
+    }
     responses = {
         "orchestrator_plan": {
             "priority_fact_ids": [fact["fact_id"] for fact in facts[:6]],
@@ -182,7 +204,7 @@ def graph_fixture(tmp_path: Path):
         },
         "document_source_integrity": {"proposals": source_proposals},
         "process_decision_mapping": {"proposals": process_proposals},
-        "evidence_checklist": {"proposals": evidence_proposals},
+        "evidence_checklist": {"items": evidence_slots},
         "final_claim_brief_audit": {
             "proposal": {
                 "current_node_id": current["current_node_id"],
@@ -216,7 +238,23 @@ def graph_fixture(tmp_path: Path):
         runnable_factory=factory,
         api_key_provider=lambda: "runtime-only-test-value",
     )
-    orchestrator = NemotronMultiAgentOrchestrator(storage, agent_runner=runner)
+    def rebuild_verification(
+        accepted_process: dict[str, Any], accepted_checklist: dict[str, Any]
+    ) -> dict[str, Any]:
+        fresh = json.loads(json.dumps(result["verification"]))
+        fresh["whole_playbook_hash"] = accepted_artifact_hash(
+            {
+                "process": accepted_process,
+                "checklist": accepted_checklist,
+            }
+        )
+        return fresh
+
+    orchestrator = NemotronMultiAgentOrchestrator(
+        storage,
+        agent_runner=runner,
+        verification_builder=rebuild_verification,
+    )
     canonicalization = {
         "model": OPENROUTER_MODEL,
         "call_id": "modelcall-canonical",
@@ -224,7 +262,7 @@ def graph_fixture(tmp_path: Path):
         "origin_call_id": "modelcall-canonical",
         "response_id": "gen-canonical",
         "response_model": OPENROUTER_MODEL,
-        "upstream_provider": "DeepInfra",
+        "upstream_provider": "Together",
         "usage_source": "response",
         "finish_reason": "stop",
         "usage": {
@@ -242,6 +280,27 @@ def graph_fixture(tmp_path: Path):
         },
     }
     return orchestrator, storage, captures, responses, package, canonicalization, result
+
+
+def evidence_candidate_contracts(
+    package: dict[str, Any], result: dict[str, Any]
+) -> dict[str, dict[str, Any]]:
+    candidate_ids = _evidence_candidate_artifact_ids(
+        {
+            "observable_package": package,
+            "source_integrity": {"artifacts": []},
+            "facts": result["facts"],
+            "checklist": result["checklist"],
+        }
+    )
+    return {
+        item["item_id"]: {
+            "item_id": item["item_id"],
+            "required_level": item["required_level"],
+            "candidate_artifact_ids": candidate_ids[item["item_id"]],
+        }
+        for item in result["checklist"]["items"]
+    }
 
 
 def test_compiled_langgraph_fanout_join_and_bounded_payloads(tmp_path: Path):
@@ -415,6 +474,7 @@ def test_compiled_langgraph_fanout_join_and_bounded_payloads(tmp_path: Path):
         "required_item_ids",
         "evidence_candidates",
         "allowed_statuses",
+        "selection_id_format",
         "canonical_fact_handoff",
         "source_integrity_artifact_inventory",
     }
@@ -428,6 +488,9 @@ def test_compiled_langgraph_fanout_join_and_bounded_payloads(tmp_path: Path):
         "status" not in item
         and "artifact_ids" not in item
         and "why" not in item
+        and isinstance(item["candidate_artifact_ids"], list)
+        and set(item["status_choices"])
+        == {"with_artifacts", "without_artifacts"}
         for item in evidence_payload["evidence_candidates"]
     )
     assert all(
@@ -473,11 +536,10 @@ def test_compiled_langgraph_fanout_join_and_bounded_payloads(tmp_path: Path):
         "minItems": 1,
         "title": "Priority Fact Ids",
         "type": "array",
-        "uniqueItems": True,
     }
     assert plan_schema["properties"]["priority_task_codes"]["maxItems"] == 4
     assert plan_schema["properties"]["priority_task_codes"]["minItems"] == 4
-    assert plan_schema["properties"]["priority_task_codes"]["uniqueItems"] is True
+    assert_together_compatible_schema(plan_schema)
     assert set(plan_payload) == {
         "schema_version",
         "max_priority_fact_count",
@@ -593,7 +655,7 @@ def _replace_process_decisions_with_valid_alternatives(
             for candidate in PROCESS_DECISION_VALUE_CANDIDATES[
                 fact["decision_key"]
             ]
-            if candidate != fact["decision_value"]
+            if candidate not in _compatible_process_decision_values(fact)
         )
 
 
@@ -728,7 +790,7 @@ def test_process_specialist_three_of_six_fails_without_cache_or_raw_diagnostics(
         assert "excerpt" not in serialized_ledger
 
 
-def test_evidence_specialist_scores_status_and_artifacts_independently(
+def test_evidence_specialist_accepts_valid_alternate_bounded_status(
     tmp_path: Path,
 ):
     (
@@ -740,11 +802,19 @@ def test_evidence_specialist_scores_status_and_artifacts_independently(
         canonicalization,
         result,
     ) = graph_fixture(tmp_path)
-    proposal = responses["evidence_checklist"]["proposals"][0]
-    proposal["status"] = next(
-        status
-        for status in EVIDENCE_STATUS_CANDIDATES
-        if status != proposal["status"]
+    item_id = EVIDENCE_ITEM_IDS[0]
+    source_item = next(
+        item for item in result["checklist"]["items"] if item["item_id"] == item_id
+    )
+    alternate_status = (
+        "provided_insufficient"
+        if source_item["status"] == "provided_sufficient"
+        else "provided_sufficient"
+    )
+    responses["evidence_checklist"]["items"][item_id]["selection_id"] = (
+        _evidence_selection_id(
+            alternate_status, tuple(sorted(source_item.get("artifact_ids", [])))
+        )
     )
 
     audit = orchestrator.invoke(
@@ -763,18 +833,18 @@ def test_evidence_specialist_scores_status_and_artifacts_independently(
         for item in audit["agents"]
         if item["agent_id"] == "evidence_checklist"
     )
-    assert evidence_audit["accepted_count"] == 41
-    assert evidence_audit["rejected_count"] == 1
+    assert evidence_audit["accepted_count"] == 42
+    assert evidence_audit["rejected_count"] == 0
     accepted_item = audit["specialist_artifacts"]["evidence_checklist"][
         "items"
     ][0]
     contributions = {
         item["field"]: item for item in accepted_item["field_contributions"]
     }
-    assert contributions["status"]["deterministic_fallback_applied"] is True
+    assert contributions["status"]["deterministic_fallback_applied"] is False
     assert contributions["artifact_ids"]["deterministic_fallback_applied"] is False
-    assert accepted_item["attribution"] == "mixed_model_and_deterministic"
-    assert accepted_item["status"] == result["checklist"]["items"][0]["status"]
+    assert accepted_item["attribution"] == "Evidence and Checklist Agent"
+    assert accepted_item["status"] == alternate_status
 
 
 def test_coverage_schemas_require_exact_bounded_cardinality_and_ids():
@@ -788,7 +858,7 @@ def test_coverage_schemas_require_exact_bounded_cardinality_and_ids():
         ]
         assert proposals_schema["minItems"] == expected_count
         assert proposals_schema["maxItems"] == expected_count
-        assert proposals_schema["uniqueItems"] is True
+        assert_together_compatible_schema(response_schema.model_json_schema())
         with pytest.raises(ValidationError):
             response_schema.model_validate({"proposals": []})
 
@@ -856,6 +926,126 @@ def test_coverage_schemas_require_exact_bounded_cardinality_and_ids():
             EvidenceChecklistResponse.model_validate({"proposals": malformed})
 
 
+def test_all_specialist_wire_schemas_avoid_unsupported_unique_items():
+    bounded_source_response = _bounded_source_integrity_schema(
+        artifact_ids=tuple(f"artifact-{index}" for index in range(6)),
+        source_ref_ids=("src-a", "src-b"),
+    )
+    bounded_evidence_response = _bounded_evidence_checklist_schema(
+        {
+            item_id: {
+                "item_id": item_id,
+                "required_level": "mandatory",
+                "candidate_artifact_ids": [],
+            }
+            for item_id in EVIDENCE_ITEM_IDS
+        }
+    )
+    for response_schema in (
+        OrchestratorPlan,
+        SourceIntegrityResponse,
+        bounded_source_response,
+        ProcessDecisionResponse,
+        EvidenceChecklistResponse,
+        bounded_evidence_response,
+        multi_agent_module.FinalClaimBriefResponse,
+    ):
+        assert_together_compatible_schema(response_schema.model_json_schema())
+
+
+def test_evidence_wire_schema_has_exact_slots_and_coherent_item_enums(
+    tmp_path: Path,
+):
+    (
+        _orchestrator,
+        _storage,
+        _captures,
+        responses,
+        package,
+        _canonicalization,
+        result,
+    ) = graph_fixture(tmp_path)
+    contracts = evidence_candidate_contracts(package, result)
+    response_schema = _bounded_evidence_checklist_schema(contracts)
+    schema = response_schema.model_json_schema()
+    serialized_schema = json.dumps(schema, sort_keys=True)
+    for unsupported in ("uniqueItems", '"oneOf"', '"anyOf"', '"const"'):
+        assert unsupported not in serialized_schema
+
+    items_ref = schema["properties"]["items"]["$ref"].rsplit("/", 1)[-1]
+    items_schema = schema["$defs"][items_ref]
+    assert set(items_schema["properties"]) == set(EVIDENCE_ITEM_IDS)
+    assert set(items_schema["required"]) == set(EVIDENCE_ITEM_IDS)
+    assert items_schema["additionalProperties"] is False
+    assert len(responses["evidence_checklist"]["items"]) == 21
+    parsed = response_schema.model_validate(responses["evidence_checklist"])
+    normalized = _normalize_evidence_checklist_response(
+        parsed.model_dump(mode="json"),
+        candidate_contracts=contracts,
+    )
+    assert len(normalized["proposals"]) == 21
+    assert {
+        item["item_id"]: (item["status"], item["artifact_ids"])
+        for item in normalized["proposals"]
+    } == {
+        item["item_id"]: (item["status"], sorted(item.get("artifact_ids", [])))
+        for item in result["checklist"]["items"]
+    }
+    facts_by_id = {fact["fact_id"]: fact for fact in result["facts"]}
+    checklist_by_id = {
+        item["item_id"]: item for item in result["checklist"]["items"]
+    }
+    for item_id, contract in contracts.items():
+        linked_fact = facts_by_id[checklist_by_id[item_id]["fact_id"]]
+        grounded_artifact_ids = {
+            ref["artifact_id"] for ref in linked_fact["source_refs"]
+        }
+        assert set(contract["candidate_artifact_ids"]) <= grounded_artifact_ids
+        assert set(checklist_by_id[item_id]["artifact_ids"]) <= set(
+            contract["candidate_artifact_ids"]
+        )
+    assert contracts["customer_objective"]["candidate_artifact_ids"] == [
+        "message"
+    ]
+    assert contracts["defect_notice"]["candidate_artifact_ids"] == [
+        "art_notification"
+    ]
+    assert contracts["health_safety_statement"]["candidate_artifact_ids"] == [
+        "message"
+    ]
+    assert contracts["settlement_proposal"]["candidate_artifact_ids"] == []
+
+    for item_id, artifact_ids in (
+        ("customer_objective", ("art_notification", "message")),
+        ("defect_notice", ("art_notification", "message")),
+    ):
+        fact_unbound = json.loads(json.dumps(responses["evidence_checklist"]))
+        fact_unbound["items"][item_id]["selection_id"] = _evidence_selection_id(
+            "provided_sufficient", artifact_ids
+        )
+        with pytest.raises(ValidationError):
+            response_schema.model_validate(fact_unbound)
+
+    invalid_reuse = json.loads(json.dumps(responses["evidence_checklist"]))
+    invalid_reuse["items"]["lease"]["selection_id"] = invalid_reuse["items"][
+        "claim_message"
+    ]["selection_id"]
+    with pytest.raises(ValidationError):
+        response_schema.model_validate(invalid_reuse)
+
+    invalid_status_pair = json.loads(json.dumps(responses["evidence_checklist"]))
+    invalid_status_pair["items"]["source_integrity"]["selection_id"] = (
+        "provided_sufficient::none"
+    )
+    with pytest.raises(ValidationError):
+        response_schema.model_validate(invalid_status_pair)
+
+    omitted = json.loads(json.dumps(responses["evidence_checklist"]))
+    omitted["items"].pop("completion_record")
+    with pytest.raises(ValidationError):
+        response_schema.model_validate(omitted)
+
+
 def test_source_schema_finitely_binds_request_artifacts_refs_and_confidence():
     artifact_ids = tuple(f"artifact-{index}" for index in range(6))
     source_ref_ids = ("src-a", "src-b", "src-c")
@@ -874,8 +1064,8 @@ def test_source_schema_finitely_binds_request_artifacts_refs_and_confidence():
         "maxItems": 1,
         "title": "Source Ref Ids",
         "type": "array",
-        "uniqueItems": True,
     }
+    assert_together_compatible_schema(schema)
     assert properties["confidence_basis_points"]["type"] == "integer"
     assert properties["confidence_basis_points"]["minimum"] == 0
     assert properties["confidence_basis_points"]["maximum"] == 10_000
@@ -929,7 +1119,7 @@ def test_source_role_uses_bounded_reasoning_without_changing_other_roles(monkeyp
     assert ROLE_REASONING["document_source_integrity"] == {"effort": "none"}
     assert captured[0]["reasoning"] == {"effort": "none"}
     assert captured[0]["max_tokens"] == 4_096
-    assert captured[1]["reasoning"] == {"effort": "medium"}
+    assert captured[1]["reasoning"] == {"effort": "low"}
 
 
 @pytest.mark.parametrize("claim_id", sorted(CLAIMS))
@@ -999,7 +1189,7 @@ def test_evidence_specialist_rejects_empty_native_output_without_cache_or_retry(
         canonicalization,
         result,
     ) = graph_fixture(tmp_path)
-    responses["evidence_checklist"]["proposals"] = []
+    responses["evidence_checklist"]["items"] = {}
 
     for ordinal in range(2):
         with pytest.raises(
@@ -1030,7 +1220,7 @@ def test_evidence_specialist_rejects_empty_native_output_without_cache_or_retry(
     assert all(storage.cached_model_output(item["cache_key"]) is None for item in ledger)
 
 
-def test_evidence_specialist_equal_field_split_fails_strict_majority(
+def test_evidence_specialist_rejects_cross_slot_and_status_artifact_mismatch(
     tmp_path: Path,
 ):
     (
@@ -1042,15 +1232,19 @@ def test_evidence_specialist_equal_field_split_fails_strict_majority(
         canonicalization,
         result,
     ) = graph_fixture(tmp_path)
-    for proposal in responses["evidence_checklist"]["proposals"]:
-        proposal["status"] = next(
-            status
-            for status in EVIDENCE_STATUS_CANDIDATES
-            if status != proposal["status"]
-        )
+    message_selection = responses["evidence_checklist"]["items"]["claim_message"][
+        "selection_id"
+    ]
+    assert "message" in message_selection
+    responses["evidence_checklist"]["items"]["lease"]["selection_id"] = (
+        message_selection
+    )
+    responses["evidence_checklist"]["items"]["source_integrity"][
+        "selection_id"
+    ] = "provided_sufficient::none"
 
     with pytest.raises(
-        AgentInvocationFailure, match="model_contribution_majority"
+        AgentInvocationFailure, match="provider_native_schema"
     ):
         orchestrator.invoke(
             run_id="run-evidence-equal-split",
@@ -1067,10 +1261,9 @@ def test_evidence_specialist_equal_field_split_fails_strict_majority(
         for item in storage.model_calls()
         if item["agent_id"] == "evidence_checklist"
     )
-    assert (ledger["accepted_item_count"], ledger["rejected_item_count"]) == (
-        21,
-        21,
-    )
+    assert ledger["error_invariant"] == "provider_native_schema"
+    assert "accepted_item_count" not in ledger
+    assert "rejected_item_count" not in ledger
     assert storage.cached_model_output(ledger["cache_key"]) is None
 
 
@@ -1088,7 +1281,8 @@ def test_final_specialist_accepts_three_of_five_independent_audit_units(
     ) = graph_fixture(tmp_path)
     proposal = responses["final_claim_brief_audit"]["proposal"]
     proposal["current_node_id"] = "scope"
-    proposal["supporting_fact_ids"] = []
+    supporting_fact_id = proposal["supporting_fact_ids"][0]
+    proposal["supporting_fact_ids"] = [supporting_fact_id, supporting_fact_id]
 
     audit = orchestrator.invoke(
         run_id="run-final-three-of-five",
@@ -1257,19 +1451,238 @@ def test_hybrid_materializers_rebuild_routes_and_checklist_aggregates_fail_close
     poisoned_checklist["required"] = []
     poisoned_checklist["summary"] = {"missing": 999}
     rebuilt_checklist = apply_evidence_contribution(
-        poisoned_checklist, evidence_contribution
+        poisoned_checklist,
+        evidence_contribution,
+        candidate_artifact_ids_by_item=_evidence_candidate_artifact_ids(
+            {
+                "observable_package": observable_claim_package(
+                    CLAIMS["DEF-027-E0-DEMO"]
+                ),
+                "source_integrity": {"artifacts": []},
+                "facts": result["facts"],
+                "checklist": result["checklist"],
+            }
+        ),
     )
     assert rebuilt_checklist["present"] == result["checklist"]["present"]
     assert rebuilt_checklist["required"] == result["checklist"]["required"]
     assert rebuilt_checklist["summary"] == result["checklist"]["summary"]
-    tampered_evidence = json.loads(json.dumps(evidence_contribution))
-    tampered_evidence["items"][0]["status"] = next(
-        value
-        for value in EVIDENCE_STATUS_CANDIDATES
-        if value != tampered_evidence["items"][0]["status"]
+    duplicate_evidence = json.loads(json.dumps(evidence_contribution))
+    duplicate_artifacts = next(
+        item for item in duplicate_evidence["items"] if item["artifact_ids"]
     )
-    with pytest.raises(AgentBoundaryError, match="evidence_contract_binding"):
-        apply_evidence_contribution(result["checklist"], tampered_evidence)
+    artifact_id = duplicate_artifacts["artifact_ids"][0]
+    duplicate_artifacts["artifact_ids"] = [artifact_id, artifact_id]
+    with pytest.raises(AgentBoundaryError, match="evidence_artifact_order"):
+        apply_evidence_contribution(
+            result["checklist"],
+            duplicate_evidence,
+            candidate_artifact_ids_by_item=_evidence_candidate_artifact_ids(
+                {
+                    "observable_package": observable_claim_package(
+                        CLAIMS["DEF-027-E0-DEMO"]
+                    ),
+                    "source_integrity": {"artifacts": []},
+                    "facts": result["facts"],
+                    "checklist": result["checklist"],
+                }
+            ),
+        )
+    tampered_evidence = json.loads(json.dumps(evidence_contribution))
+    tampered_evidence["items"][0]["artifact_ids"] = ["art_photo"]
+    with pytest.raises(AgentBoundaryError, match="evidence_candidate_binding"):
+        apply_evidence_contribution(
+            result["checklist"],
+            tampered_evidence,
+            candidate_artifact_ids_by_item=_evidence_candidate_artifact_ids(
+                {
+                    "observable_package": observable_claim_package(
+                        CLAIMS["DEF-027-E0-DEMO"]
+                    ),
+                    "source_integrity": {"artifacts": []},
+                    "facts": result["facts"],
+                    "checklist": result["checklist"],
+                }
+            ),
+        )
+
+
+def test_valid_alternate_process_decision_changes_path_and_refreshes_verification(
+    tmp_path: Path,
+):
+    (
+        orchestrator,
+        _storage,
+        _captures,
+        responses,
+        package,
+        canonicalization,
+        result,
+    ) = graph_fixture(tmp_path)
+    facts_by_id = {fact["fact_id"]: fact for fact in result["facts"]}
+    scope_fact = next(
+        fact
+        for fact in result["facts"]
+        if fact.get("decision_key") == "scope"
+    )
+    assert scope_fact["decision_value"] != "scope_unverified"
+    scope_proposal = next(
+        proposal
+        for proposal in responses["process_decision_mapping"]["proposals"]
+        if proposal["fact_id"] == scope_fact["fact_id"]
+    )
+    scope_proposal["decision_value"] = "scope_unverified"
+    process_contribution = {
+        "decisions": [
+            {
+                "fact_id": proposal["fact_id"],
+                "decision_key": facts_by_id[proposal["fact_id"]]["decision_key"],
+                "decision_value": proposal["decision_value"],
+            }
+            for proposal in responses["process_decision_mapping"]["proposals"]
+        ]
+    }
+    expected_process = apply_process_contribution(
+        result["process"], process_contribution, result["facts"]
+    )
+    assert expected_process["selected_path"] != result["process"]["selected_path"]
+    assert accepted_artifact_hash(expected_process) != accepted_artifact_hash(
+        result["process"]
+    )
+    expected_checklist = json.loads(json.dumps(result["checklist"]))
+    apply_evidence_relations(expected_process, expected_checklist["items"])
+    apply_evidence_projection(expected_checklist["items"], expected_process)
+    apply_evidence_relations(expected_process, expected_checklist["items"])
+    for item in expected_checklist["items"]:
+        responses["evidence_checklist"]["items"][item["item_id"]][
+            "selection_id"
+        ] = _evidence_selection_id(
+            item["status"], tuple(sorted(item.get("artifact_ids", [])))
+        )
+    current_id = expected_process["current_overlay"]["current_node_id"]
+    current_node = next(
+        node for node in expected_process["nodes"] if node["node_id"] == current_id
+    )
+    responses["final_claim_brief_audit"]["proposal"].update(
+        {
+            "current_node_id": current_id,
+            "next_action_node_id": expected_process["current_overlay"][
+                "next_action_node_id"
+            ],
+            "supporting_fact_ids": sorted(current_node.get("fact_ids", [])),
+        }
+    )
+    verification_inputs: list[tuple[dict[str, Any], dict[str, Any]]] = []
+
+    def rebuild_verification(
+        accepted_process: dict[str, Any], accepted_checklist: dict[str, Any]
+    ) -> dict[str, Any]:
+        verification_inputs.append(
+            (
+                json.loads(json.dumps(accepted_process)),
+                json.loads(json.dumps(accepted_checklist)),
+            )
+        )
+        fresh = json.loads(json.dumps(result["verification"]))
+        fresh["whole_playbook_hash"] = accepted_artifact_hash(
+            {
+                "process": accepted_process,
+                "checklist": accepted_checklist,
+            }
+        )
+        return fresh
+
+    orchestrator.verification_builder = rebuild_verification
+    audit = orchestrator.invoke(
+        run_id="run-valid-alternate-process",
+        orchestration_id="orch-valid-alternate-process",
+        observable_package=package,
+        canonicalization=canonicalization,
+        facts=result["facts"],
+        process=result["process"],
+        checklist=result["checklist"],
+        verification=result["verification"],
+    )
+
+    assert verification_inputs
+    verified_process, verified_checklist = verification_inputs[-1]
+    assert verified_process == expected_process
+    fresh_hash = accepted_artifact_hash(
+        {"process": verified_process, "checklist": verified_checklist}
+    )
+    whole_gate = next(
+        gate
+        for gate in audit["deterministic_gates"]
+        if gate["agent_id"] == "whole_playbook_gate"
+    )
+    assert whole_gate["output_projection_contract"] == (
+        "casepath.accepted-playbook-projection/1.0.0"
+    )
+    assert whole_gate["verification_whole_playbook_hash"] == fresh_hash
+    assert whole_gate["verification_whole_playbook_hash"] != result["verification"][
+        "whole_playbook_hash"
+    ]
+
+
+def test_valid_alternate_evidence_status_changes_derived_checklist_state(
+    tmp_path: Path,
+):
+    result = oracle_result(tmp_path)
+    contribution = {
+        "items": [
+            {
+                "item_id": item["item_id"],
+                "status": item["status"],
+                "artifact_ids": sorted(item.get("artifact_ids", [])),
+            }
+            for item in result["checklist"]["items"]
+        ]
+    }
+    chronology = next(
+        item
+        for item in contribution["items"]
+        if item["item_id"] == "recurrence_chronology"
+    )
+    assert chronology["status"] == "provided_insufficient"
+    chronology["status"] = "provided_sufficient"
+    candidate_map = _evidence_candidate_artifact_ids(
+        {
+            "observable_package": observable_claim_package(
+                CLAIMS["DEF-027-E0-DEMO"]
+            ),
+            "source_integrity": {"artifacts": []},
+            "facts": result["facts"],
+            "checklist": result["checklist"],
+        }
+    )
+
+    accepted = apply_evidence_contribution(
+        result["checklist"],
+        contribution,
+        candidate_artifact_ids_by_item=candidate_map,
+    )
+
+    before_present = next(
+        item
+        for item in result["checklist"]["present"]
+        if item["item_id"] == "recurrence_chronology"
+    )
+    after_present = next(
+        item
+        for item in accepted["present"]
+        if item["item_id"] == "recurrence_chronology"
+    )
+    assert before_present["status"] == "insufficient"
+    assert after_present["status"] == "available"
+    assert accepted["summary"]["provided_sufficient"] == (
+        result["checklist"]["summary"]["provided_sufficient"] + 1
+    )
+    assert accepted["summary"]["provided_insufficient"] == (
+        result["checklist"]["summary"]["provided_insufficient"] - 1
+    )
+    assert accepted_artifact_hash(accepted) != accepted_artifact_hash(
+        result["checklist"]
+    )
 
 
 def test_evidence_payload_omits_poisoned_private_answers_and_plan_changes_order(
@@ -1350,6 +1763,8 @@ def test_evidence_payload_omits_poisoned_private_answers_and_plan_changes_order(
             "applies_when",
             "required_level",
             "current_path",
+            "candidate_artifact_ids",
+            "status_choices",
         }
         for item in forward["evidence_candidates"]
     )
@@ -1558,15 +1973,15 @@ def test_shared_langchain_adapter_has_exact_nonretrying_private_configuration(mo
     assert sdk_kwargs["timeout_ms"] == 180_000
     assert sdk_kwargs["x_open_router_title"] == "CasePath"
     assert "client" not in sdk_kwargs
-    assert langchain_runtime.OPENROUTER_ENDPOINT_TAG == "deepinfra/fp4"
+    assert langchain_runtime.OPENROUTER_ENDPOINT_TAG == "together"
     assert chat_kwargs["model"] == OPENROUTER_MODEL
     assert chat_kwargs["max_retries"] == 0
     assert chat_kwargs["timeout"] == 180_000
     assert chat_kwargs["max_tokens"] == 777
-    assert chat_kwargs["reasoning"] == {"effort": "medium"}
+    assert chat_kwargs["reasoning"] == {"effort": "low"}
     assert set(chat_kwargs["reasoning"]) == {"effort"}
     assert chat_kwargs["openrouter_provider"] == {
-        "only": ["deepinfra/fp4"],
+        "only": ["together"],
         "allow_fallbacks": False,
         "require_parameters": True,
         "data_collection": "deny",
@@ -1580,7 +1995,7 @@ def test_shared_langchain_adapter_has_exact_nonretrying_private_configuration(mo
     assert components.ProviderPreferences.model_validate(
         chat_kwargs["openrouter_provider"]
     ).model_dump(exclude_none=True, by_alias=True) == {
-        "only": ["deepinfra/fp4"],
+        "only": ["together"],
         "allow_fallbacks": False,
         "require_parameters": True,
         "data_collection": "deny",
@@ -1757,7 +2172,7 @@ def test_shared_runnable_forwards_exact_private_route_in_one_sdk_send(monkeypatc
                         "available": [
                             {
                                 "model": OPENROUTER_MODEL,
-                                "provider": "DeepInfra",
+                                "provider": "Together",
                                 "selected": True,
                             }
                         ],
@@ -1813,7 +2228,7 @@ def test_shared_runnable_forwards_exact_private_route_in_one_sdk_send(monkeypatc
     )
 
     assert envelope["parsed"] == {"answer": "bounded"}
-    assert envelope["raw"].response_metadata["provider_name"] == "DeepInfra"
+    assert envelope["raw"].response_metadata["provider_name"] == "Together"
     assert "RAW_ROUTER_SUMMARY_SENTINEL" not in repr(
         envelope["raw"].response_metadata
     )
@@ -1821,12 +2236,12 @@ def test_shared_runnable_forwards_exact_private_route_in_one_sdk_send(monkeypatc
     body = json.loads(requests[0].content)
     assert body["model"] == OPENROUTER_MODEL
     assert body["provider"] == {
-        "only": ["deepinfra/fp4"],
+        "only": ["together"],
         "allow_fallbacks": False,
         "require_parameters": True,
         "data_collection": "deny",
     }
-    assert body["reasoning"] == {"effort": "medium"}
+    assert body["reasoning"] == {"effort": "low"}
     assert "max_tokens" not in body["reasoning"]
     assert "exclude" not in body["reasoning"]
     assert "x_open_router_metadata" not in body
@@ -1879,7 +2294,7 @@ def test_source_role_wire_request_is_finite_strict_and_disables_reasoning(
                         "available": [
                             {
                                 "model": OPENROUTER_MODEL,
-                                "provider": "DeepInfra",
+                                "provider": "Together",
                                 "selected": True,
                             }
                         ],
@@ -1935,7 +2350,7 @@ def test_source_role_wire_request_is_finite_strict_and_disables_reasoning(
     assert body["max_tokens"] == 4_096
     assert body["reasoning"] == {"effort": "none"}
     assert body["provider"] == {
-        "only": ["deepinfra/fp4"],
+        "only": ["together"],
         "allow_fallbacks": False,
         "require_parameters": True,
         "data_collection": "deny",
@@ -2214,7 +2629,7 @@ def test_response_bridge_ignores_nonconsumed_envelope_field_drift(variant):
                 "response_id": "gen-1786483159-hyYthqPv76o6PHXpGLzl",
                 "provider_error_code": 400,
                 "provider_boundary": "openrouter",
-                "expected_upstream_provider": "DeepInfra",
+                "expected_upstream_provider": "Together",
             },
         ),
         (
@@ -2223,7 +2638,7 @@ def test_response_bridge_ignores_nonconsumed_envelope_field_drift(variant):
             {
                 "provider_error_code": 400,
                 "provider_boundary": "openrouter",
-                "expected_upstream_provider": "DeepInfra",
+                "expected_upstream_provider": "Together",
             },
         ),
         (
@@ -2232,7 +2647,7 @@ def test_response_bridge_ignores_nonconsumed_envelope_field_drift(variant):
             {
                 "provider_error_code": 400,
                 "provider_boundary": "openrouter",
-                "expected_upstream_provider": "DeepInfra",
+                "expected_upstream_provider": "Together",
             },
         ),
         (
@@ -2241,7 +2656,7 @@ def test_response_bridge_ignores_nonconsumed_envelope_field_drift(variant):
             {
                 "provider_error_code": 400,
                 "provider_boundary": "openrouter",
-                "expected_upstream_provider": "DeepInfra",
+                "expected_upstream_provider": "Together",
             },
         ),
         (
@@ -2249,7 +2664,7 @@ def test_response_bridge_ignores_nonconsumed_envelope_field_drift(variant):
             100_000,
             {
                 "provider_boundary": "openrouter",
-                "expected_upstream_provider": "DeepInfra",
+                "expected_upstream_provider": "Together",
             },
         ),
     ],
@@ -2348,7 +2763,7 @@ def test_response_bridge_classifies_sdk_429_once_without_raw_provider_material(
     expected_context = {
         "provider_error_code": 429,
         "provider_boundary": "openrouter",
-        "expected_upstream_provider": "DeepInfra",
+        "expected_upstream_provider": "Together",
     }
     if expected_response_id is not None:
         expected_context["response_id"] = expected_response_id
@@ -2489,7 +2904,7 @@ def test_response_bridge_classifies_non_2xx_validation_failure_without_body():
     assert captured.value.safe_context == {
         "provider_error_code": 503,
         "provider_boundary": "openrouter",
-        "expected_upstream_provider": "DeepInfra",
+        "expected_upstream_provider": "Together",
     }
     assert captured.value.__cause__ is None
     assert captured.value.__context__ is None
@@ -2571,14 +2986,14 @@ def test_provider_provenance_field_grammars_accept_real_ids_and_hash_credentials
         sanitized, violation = langchain_runtime.sanitize_provider_provenance(
             response_id="gen-1786460163-SVSIhqiSG3ko4ZbBb0IS",
             response_model=response_model,
-            upstream_provider="DeepInfra",
+            upstream_provider="Together",
             finish_reason="stop",
         )
         assert violation is None
         assert sanitized == {
             "response_id": "gen-1786460163-SVSIhqiSG3ko4ZbBb0IS",
             "response_model": response_model,
-            "upstream_provider": "DeepInfra",
+            "upstream_provider": "Together",
             "finish_reason": "stop",
         }
 
@@ -2593,7 +3008,7 @@ def test_provider_provenance_field_grammars_accept_real_ids_and_hash_credentials
         values = {
             "response_id": "gen-safe-id",
             "response_model": OPENROUTER_MODEL,
-            "upstream_provider": "DeepInfra",
+            "upstream_provider": "Together",
             "finish_reason": "stop",
         }
         values[field] = invalid_value
@@ -2671,7 +3086,7 @@ def test_openrouter_sdk_non_2xx_bridge_makes_one_attempt_and_retains_only_bounde
         "response_id": generation_id,
         "provider_error_code": status_code,
         "provider_boundary": "openrouter",
-        "expected_upstream_provider": "DeepInfra",
+        "expected_upstream_provider": "Together",
     }
     assert captured.value.__cause__ is None
     assert captured.value.__context__ is None
@@ -2779,7 +3194,7 @@ def test_specialist_requires_strict_accepted_majority_and_never_caches_minority(
                         "id": f"gen-majority-{calls}",
                         "model_name": OPENROUTER_MODEL,
                         "finish_reason": "stop",
-                        "provider_name": "DeepInfra",
+                        "provider_name": "Together",
                         "usage": {
                             "prompt_tokens": 10,
                             "completion_tokens": 5,
@@ -2871,10 +3286,10 @@ def test_evidence_role_reserves_large_answer_headroom(tmp_path: Path):
         checklist=result["checklist"],
         verification=result["verification"],
     )
-    proposals = responses["evidence_checklist"]["proposals"]
-    assert len(proposals) == len(result["checklist"]["items"]) == 21
+    slots = responses["evidence_checklist"]["items"]
+    assert len(slots) == len(result["checklist"]["items"]) == 21
     conservative_tokens = (
-        len(json.dumps({"proposals": proposals}, separators=(",", ":")).encode()) + 2
+        len(json.dumps({"items": slots}, separators=(",", ":")).encode()) + 2
     ) // 3
     assert conservative_tokens * 2 < ROLE_OUTPUT_TOKENS["evidence_checklist"] == 8_192
 
@@ -3061,7 +3476,7 @@ def _plan_envelope(
     *,
     response_id: str | None = "gen-plan",
     response_model: str = OPENROUTER_MODEL,
-    provider_name: str | None = "DeepInfra",
+    provider_name: str | None = "Together",
     finish_reason: str | None = "stop",
     usage: dict[str, Any] | None = None,
     parsed: bool = True,
@@ -3100,6 +3515,7 @@ def _invoke_plan(
     run_id: str = "run-plan",
     agent_id: str = "orchestrator_plan",
     system_prompt: str = "bounded",
+    progress_sink=None,
 ):
     return runner.invoke(
         run_id=run_id,
@@ -3110,7 +3526,47 @@ def _invoke_plan(
         provider_payload={"observable": True},
         validator=_accepted_plan_validator,
         private_contract_hash="2" * 64,
+        progress_sink=progress_sink,
     )
+
+
+def test_specialist_cost_preflight_includes_serialized_provider_schema(
+    tmp_path: Path,
+    monkeypatch,
+):
+    estimated_inputs: list[str] = []
+    original = multi_agent_module._input_token_estimate
+
+    def capture_estimate(value: str) -> int:
+        estimated_inputs.append(value)
+        return original(value)
+
+    class Runnable:
+        def invoke(self, *_args, **_kwargs):
+            return _plan_envelope(
+                usage={
+                    "prompt_tokens": 20,
+                    "completion_tokens": 10,
+                    "total_tokens": 30,
+                    "cost": 0.001,
+                }
+            )
+
+    monkeypatch.setattr(
+        multi_agent_module,
+        "_input_token_estimate",
+        capture_estimate,
+    )
+    runner = InstrumentedStructuredAgent(
+        Storage(str(tmp_path / "schema-cost.db")),
+        runnable_factory=lambda *_args: Runnable(),
+        api_key_provider=lambda: "runtime-only-test-value",
+    )
+    _invoke_plan(runner, run_id="run-schema-cost")
+
+    assert len(estimated_inputs) == 1
+    assert '"priority_fact_ids"' in estimated_inputs[0]
+    assert '"maxItems":6' in estimated_inputs[0]
 
 
 def test_orchestrator_plan_accepts_completion_above_legacy_ceiling_with_exact_new_cap(
@@ -3142,7 +3598,6 @@ def test_orchestrator_plan_accepts_completion_above_legacy_ceiling_with_exact_ne
         runnable_factory=factory,
         api_key_provider=lambda: "runtime-only-test-value",
     )
-
     result = _invoke_plan(runner, run_id="run-expanded-plan-ceiling")
 
     assert ROLE_OUTPUT_TOKENS["orchestrator_plan"] == 4_096
@@ -3181,19 +3636,32 @@ def test_multi_agent_version_bump_invalidates_success_cache(
         runnable_factory=lambda *_args: Runnable(),
         api_key_provider=lambda: "runtime-only-test-value",
     )
+    progress_receipts: list[dict[str, Any]] = []
 
-    assert multi_agent_module.MULTI_AGENT_VERSION == "1.2.2"
+    assert multi_agent_module.MULTI_AGENT_VERSION == "1.5.0"
     assert multi_agent_module.MULTI_AGENT_SCHEMA_VERSION.endswith("/1.0.0")
-    first = _invoke_plan(runner, run_id="run-version-cache-first")
-    cached = _invoke_plan(runner, run_id="run-version-cache-hit")
+    first = _invoke_plan(
+        runner,
+        run_id="run-version-cache-first",
+        progress_sink=progress_receipts.append,
+    )
+    cached = _invoke_plan(
+        runner,
+        run_id="run-version-cache-hit",
+        progress_sink=progress_receipts.append,
+    )
     assert first["cache_hit"] is False
     assert cached["cache_hit"] is True
     assert provider_calls == 1
+    assert len(progress_receipts) == 1
+    assert progress_receipts[0]["receipt_type"] == "agent_started"
+    assert progress_receipts[0]["call_id"] == first["call_id"]
+    assert progress_receipts[0]["cache_hit"] is False
 
     monkeypatch.setattr(
         multi_agent_module,
         "MULTI_AGENT_VERSION",
-        "1.2.2-test-cache-invalidation",
+        "1.3.0-test-cache-invalidation",
     )
     invalidated = _invoke_plan(runner, run_id="run-version-cache-invalidated")
     assert invalidated["cache_hit"] is False
@@ -3201,7 +3669,7 @@ def test_multi_agent_version_bump_invalidates_success_cache(
     assert provider_calls == 2
 
 
-def test_prompt_reasoning_and_token_policy_are_part_of_specialist_cache_identity(
+def test_prompt_reasoning_token_and_provider_policy_are_specialist_cache_identity(
     tmp_path: Path, monkeypatch
 ):
     provider_calls = 0
@@ -3246,18 +3714,30 @@ def test_prompt_reasoning_and_token_policy_are_part_of_specialist_cache_identity
         4_097,
     )
     changed_ceiling = _invoke_plan(runner, run_id="run-policy-ceiling")
+    monkeypatch.setattr(
+        multi_agent_module,
+        "openrouter_provider_policy",
+        lambda: {
+            "only": ["alternate-provider-test"],
+            "allow_fallbacks": False,
+            "require_parameters": True,
+            "data_collection": "deny",
+        },
+    )
+    changed_provider = _invoke_plan(runner, run_id="run-policy-provider")
 
     assert baseline["cache_hit"] is False
     assert cached["cache_hit"] is True
-    assert provider_calls == 4
+    assert provider_calls == 5
     assert len(
         {
             baseline["cache_key"],
             changed_prompt["cache_key"],
             changed_reasoning["cache_key"],
             changed_ceiling["cache_key"],
+            changed_provider["cache_key"],
         }
-    ) == 4
+    ) == 5
 
 
 @pytest.mark.parametrize(
@@ -3334,7 +3814,7 @@ def test_specialist_wrong_model_metadata_billing_and_missing_id_sync_billing_are
             "data": {
                 "id": "gen-plan",
                 "model": "nvidia/nemotron-3-ultra-550b-a55b-20260604",
-                "provider_name": "DeepInfra",
+                "provider_name": "Together",
                 "native_tokens_prompt": 41,
                 "native_tokens_completion": 17,
                 "total_cost": 0.0041,
@@ -3421,7 +3901,7 @@ def test_specialist_missing_upstream_provider_uses_generation_metadata(
             "data": {
                 "id": "gen-plan",
                 "model": "nvidia/nemotron-3-ultra-550b-a55b-20260604",
-                "provider_name": "DeepInfra",
+                "provider_name": "Together",
                 "native_tokens_prompt": 41,
                 "native_tokens_completion": 17,
                 "total_cost": 0.0041,
@@ -3440,11 +3920,11 @@ def test_specialist_missing_upstream_provider_uses_generation_metadata(
     result = _invoke_plan(runner, run_id="run-missing-specialist-provider")
 
     assert inference_calls == metadata_calls == 1
-    assert result["upstream_provider"] == "DeepInfra"
+    assert result["upstream_provider"] == "Together"
     assert result["usage_source"] == "generation_metadata"
     ledger = storage.sanitized_model_ledger()[0]
     assert ledger["outcome"] == "succeeded"
-    assert ledger["upstream_provider"] == "DeepInfra"
+    assert ledger["upstream_provider"] == "Together"
     assert ledger["usage_source"] == "generation_metadata"
 
 
@@ -3478,7 +3958,7 @@ def test_specialist_generation_metadata_eventual_consistency_uses_bounded_backof
             "data": {
                 "id": "gen-plan",
                 "model": "nvidia/nemotron-3-ultra-550b-a55b-20260604",
-                "provider_name": "DeepInfra",
+                "provider_name": "Together",
                 "native_tokens_prompt": 31,
                 "native_tokens_completion": 11,
                 "total_cost": 0.0031,
@@ -3500,7 +3980,7 @@ def test_specialist_generation_metadata_eventual_consistency_uses_bounded_backof
     assert inference_calls == 1
     assert metadata_calls == 8
     assert sleeps == [0.5, 1.0, 2.0, 4.0, 8.0, 8.0, 8.0]
-    assert result["upstream_provider"] == "DeepInfra"
+    assert result["upstream_provider"] == "Together"
     assert result["usage_source"] == "generation_metadata"
     ledger = storage.sanitized_model_ledger()[0]
     assert ledger["outcome"] == "succeeded"
@@ -3593,7 +4073,7 @@ def test_specialist_invalid_generation_usage_retains_bounded_poll_evidence(
             "data": {
                 "id": "gen-plan",
                 "model": "nvidia/nemotron-3-ultra-550b-a55b-20260604",
-                "provider_name": "DeepInfra",
+                "provider_name": "Together",
                 "native_tokens_prompt": 31,
                 "native_tokens_completion": 11,
                 "total_cost": 0.0,
@@ -3799,7 +4279,7 @@ def test_specialist_sdk_drift_nonstop_retains_billing_before_rejection(
             "data": {
                 "id": "gen-plan-drift",
                 "model": OPENROUTER_MODEL,
-                "provider_name": "DeepInfra",
+                "provider_name": "Together",
                 "native_tokens_prompt": 31,
                 "native_tokens_completion": 11,
                 "total_cost": 0.0033,
@@ -3886,14 +4366,14 @@ def test_specialist_upstream_rejection_retains_only_safe_unknown_cost_evidence(
     )
     assert captured.value.safe_context["provider_error_code"] == 429
     assert captured.value.safe_context["provider_boundary"] == "openrouter"
-    assert captured.value.safe_context["expected_upstream_provider"] == "DeepInfra"
+    assert captured.value.safe_context["expected_upstream_provider"] == "Together"
     ledger = storage.sanitized_model_ledger()[0]
     assert ledger["outcome"] == "failed"
     assert ledger["error_invariant"] == "provider_upstream_rejection"
     assert ledger["response_id"] == "gen-1786483162-CCCCCCCCCCCCCCCCCCCC"
     assert ledger["provider_error_code"] == 429
     assert ledger["provider_boundary"] == "openrouter"
-    assert ledger["expected_upstream_provider"] == "DeepInfra"
+    assert ledger["expected_upstream_provider"] == "Together"
     assert ledger["actual_cost_usd"] is None
     assert "usage_source" not in ledger
     assert "prompt_tokens" not in ledger
@@ -3923,7 +4403,7 @@ def test_specialist_upstream_rejection_receipt_exposes_only_bounded_status(
                     "response_id": "gen-1786483163-DDDDDDDDDDDDDDDDDDDD",
                     "provider_error_code": 429,
                     "provider_boundary": "openrouter",
-                    "expected_upstream_provider": "DeepInfra",
+                    "expected_upstream_provider": "Together",
                     "outcome": "failed",
                 },
             )
@@ -3954,7 +4434,7 @@ def test_specialist_upstream_rejection_receipt_exposes_only_bounded_status(
     assert failure["response_id"] == "gen-1786483163-DDDDDDDDDDDDDDDDDDDD"
     assert failure["provider_error_code"] == 429
     assert failure["provider_boundary"] == "openrouter"
-    assert failure["expected_upstream_provider"] == "DeepInfra"
+    assert failure["expected_upstream_provider"] == "Together"
     assert "response_model" not in failure
     assert "upstream_provider" not in failure
     assert "usage_source" not in failure
@@ -3970,7 +4450,7 @@ def test_specialist_success_rejects_nonpinned_upstream_after_retaining_billing(
             nonlocal inference_calls
             inference_calls += 1
             return _plan_envelope(
-                provider_name="Together",
+                provider_name="DeepInfra",
                 usage={
                     "prompt_tokens": 31,
                     "completion_tokens": 11,
@@ -3998,7 +4478,7 @@ def test_specialist_success_rejects_nonpinned_upstream_after_retaining_billing(
     assert ledger["error_invariant"] == "upstream_provider_policy"
     assert ledger["response_id"] == "gen-plan"
     assert ledger["response_model"] == OPENROUTER_MODEL
-    assert ledger["upstream_provider"] == "Together"
+    assert ledger["upstream_provider"] == "DeepInfra"
     assert ledger["actual_cost_usd"] == pytest.approx(0.0031)
     assert ledger["usage_source"] == "response"
     assert storage.cached_model_output(ledger["cache_key"]) is None

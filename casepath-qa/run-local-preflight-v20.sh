@@ -231,6 +231,16 @@ from urllib.request import Request, urlopen
 report = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 if report.get("status") != "passed" or report.get("failed") != 0:
     raise SystemExit("browser report is not an exact pass")
+legal_trace_check = next(
+    (
+        item
+        for item in report.get("checks", [])
+        if item.get("name") == "Run returns four exact official legal-source execution traces"
+    ),
+    None,
+)
+if legal_trace_check is None or legal_trace_check.get("passed") is not True:
+    raise SystemExit("browser report lacks four accepted official legal-source traces")
 
 request = Request(
     f"{sys.argv[2].rstrip('/')}/api/model-ledger",

@@ -3,7 +3,9 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass
+from enum import Enum
 from hashlib import sha256
+from itertools import combinations
 import json
 import math
 import operator
@@ -40,10 +42,12 @@ from .canonicalizer import (
 from .storage import Storage
 from .projections import (
     DECISION_OPTIONS,
+    apply_evidence_projection,
     apply_process_projection,
     checklist_derived_sections,
     decision_projection,
 )
+from .evidence_relations import apply_evidence_relations
 from .langchain_runtime import (
     OPENROUTER_EXPECTED_UPSTREAM_PROVIDER,
     OPENROUTER_REASONING,
@@ -51,12 +55,13 @@ from .langchain_runtime import (
     OpenRouterSendAdmissionTimeoutError,
     OpenRouterUpstreamRejectionError,
     assert_external_tracing_disabled,
+    openrouter_provider_policy,
     sanitize_provider_provenance,
     structured_nemotron_runnable,
 )
 
 
-MULTI_AGENT_VERSION = "1.2.2"
+MULTI_AGENT_VERSION = "1.5.0"
 MULTI_AGENT_SCHEMA_VERSION = "casepath.nemotron-agent-dag/1.0.0"
 MULTI_AGENT_AUTHORITY_MODE = "multi_agent_hybrid_guarded"
 MULTI_AGENT_IMPLEMENTATION = "langgraph_stategraph_langchain_openrouter"
@@ -96,6 +101,7 @@ EVIDENCE_STATUS_CANDIDATES = [
     "conditional",
     "not_applicable",
 ]
+EVIDENCE_ARTIFACT_SELECTION_CAP = 8
 EvidenceItemId = Literal[
     "claim_message",
     "source_integrity",
@@ -120,6 +126,29 @@ EvidenceItemId = Literal[
     "completion_record",
 ]
 EVIDENCE_ITEM_IDS = tuple(get_args(EvidenceItemId))
+EVIDENCE_ARTIFACT_CAPABILITIES: dict[str, frozenset[str]] = {
+    "claim_message": frozenset({"claim_message"}),
+    "source_integrity": frozenset({"submitted_source"}),
+    "lease": frozenset({"lease"}),
+    "policy_reference": frozenset({"policy_reference"}),
+    "customer_objective": frozenset({"claim_message", "customer_correspondence"}),
+    "management_position": frozenset({"management_correspondence"}),
+    "health_safety_statement": frozenset({"claim_message", "customer_correspondence", "medical"}),
+    "defect_notice": frozenset({"defect_notice", "customer_correspondence"}),
+    "proof_of_delivery": frozenset({"delivery_proof"}),
+    "dated_photos": frozenset({"photo"}),
+    "recurrence_chronology": frozenset({"timeline"}),
+    "technical_assessment": frozenset({"technical_report", "inspection_report"}),
+    "moisture_measurements": frozenset({"measurement_report"}),
+    "building_envelope": frozenset({"building_report", "technical_report"}),
+    "repair_history": frozenset({"maintenance_record", "management_correspondence"}),
+    "use_evidence": frozenset({"use_log", "utility_record"}),
+    "remediation_plan": frozenset({"remediation_plan", "maintenance_record"}),
+    "financial_impact": frozenset({"invoice", "financial_record"}),
+    "settlement_proposal": frozenset({"settlement_record", "correspondence"}),
+    "conciliation_bundle": frozenset({"legal_filing"}),
+    "completion_record": frozenset({"completion_record", "maintenance_record"}),
+}
 SOURCE_INTEGRITY_PROPOSAL_COUNT = 6
 PROCESS_DECISION_PROPOSAL_COUNT = 6
 PRIORITY_TASK_CODES = (
@@ -208,18 +237,20 @@ class _StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+# Together's structured-output grammar does not implement JSON Schema's
+# ``uniqueItems`` keyword.  Keep wire schemas within that supported subset;
+# the validators below and each contribution gate enforce list uniqueness
+# before any model-owned value is accepted.
 class OrchestratorPlan(_StrictModel):
     priority_fact_ids: list[str] = Field(
         min_length=1,
         max_length=6,
-        json_schema_extra={"uniqueItems": True},
     )
     priority_task_codes: list[
         Literal["source_integrity", "process_decisions", "evidence_gaps", "final_brief"]
     ] = Field(
         min_length=4,
         max_length=4,
-        json_schema_extra={"uniqueItems": True},
     )
 
 
@@ -228,7 +259,6 @@ class SourceIntegrityProposal(_StrictModel):
     integrity_class: Literal["text_grounded", "visual_only", "metadata_only"]
     source_ref_ids: list[str] = Field(
         max_length=1,
-        json_schema_extra={"uniqueItems": True},
     )
     confidence_basis_points: int = Field(ge=0, le=10_000)
 
@@ -237,7 +267,6 @@ class SourceIntegrityResponse(_StrictModel):
     proposals: list[SourceIntegrityProposal] = Field(
         min_length=SOURCE_INTEGRITY_PROPOSAL_COUNT,
         max_length=SOURCE_INTEGRITY_PROPOSAL_COUNT,
-        json_schema_extra={"uniqueItems": True},
     )
 
     @model_validator(mode="after")
@@ -267,7 +296,7 @@ def _bounded_source_integrity_schema(
         artifact_id=(artifact_id_type, ...),
         source_ref_ids=(
             list[source_ref_id_type],
-            Field(max_length=1, json_schema_extra={"uniqueItems": True}),
+            Field(max_length=1),
         ),
     )
     return create_model(
@@ -278,7 +307,6 @@ def _bounded_source_integrity_schema(
             Field(
                 min_length=SOURCE_INTEGRITY_PROPOSAL_COUNT,
                 max_length=SOURCE_INTEGRITY_PROPOSAL_COUNT,
-                json_schema_extra={"uniqueItems": True},
             ),
         ),
     )
@@ -317,7 +345,6 @@ class ProcessDecisionResponse(_StrictModel):
     proposals: list[ProcessDecisionProposal] = Field(
         min_length=PROCESS_DECISION_PROPOSAL_COUNT,
         max_length=PROCESS_DECISION_PROPOSAL_COUNT,
-        json_schema_extra={"uniqueItems": True},
     )
 
     @model_validator(mode="after")
@@ -339,7 +366,6 @@ class EvidenceChecklistProposal(_StrictModel):
     ]
     artifact_ids: list[str] = Field(
         max_length=8,
-        json_schema_extra={"uniqueItems": True},
     )
     confidence: float = Field(ge=0, le=1)
 
@@ -348,7 +374,6 @@ class EvidenceChecklistResponse(_StrictModel):
     proposals: list[EvidenceChecklistProposal] = Field(
         min_length=len(EVIDENCE_ITEM_IDS),
         max_length=len(EVIDENCE_ITEM_IDS),
-        json_schema_extra={"uniqueItems": True},
     )
 
     @model_validator(mode="after")
@@ -361,12 +386,179 @@ class EvidenceChecklistResponse(_StrictModel):
         return self
 
 
+def _coherent_evidence_statuses(
+    *, required_level: str, has_artifacts: bool
+) -> tuple[str, ...]:
+    """Return only status choices coherent with one checklist slot state."""
+
+    if required_level not in {"mandatory", "conditional"}:
+        raise AgentBoundaryError("evidence_checklist", "evidence_required_level")
+    if has_artifacts:
+        choices = {"provided_sufficient", "provided_insufficient"}
+        if required_level == "conditional":
+            choices.add("conditional")
+    elif required_level == "mandatory":
+        choices = {"missing"}
+    else:
+        choices = {"conditional", "not_applicable"}
+    return tuple(status for status in EVIDENCE_STATUS_CANDIDATES if status in choices)
+
+
+def _evidence_selection_id(status: str, artifact_ids: tuple[str, ...]) -> str:
+    """Encode one self-describing provider choice without relying on parsing it."""
+
+    artifacts = "+".join(artifact_ids) if artifact_ids else "none"
+    return f"{status}::{artifacts}"
+
+
+def _evidence_selection_catalog(
+    *, required_level: str, candidate_artifact_ids: list[str]
+) -> dict[str, dict[str, Any]]:
+    """Enumerate every bounded, status/artifact-coherent choice for one slot."""
+
+    if (
+        any(
+            not isinstance(artifact_id, str) or not artifact_id
+            for artifact_id in candidate_artifact_ids
+        )
+        or candidate_artifact_ids != sorted(set(candidate_artifact_ids))
+        or len(candidate_artifact_ids) > EVIDENCE_ARTIFACT_SELECTION_CAP
+    ):
+        raise AgentBoundaryError(
+            "evidence_checklist", "evidence_candidate_artifact_cap"
+        )
+    selections: list[tuple[str, tuple[str, ...]]] = [
+        (status, ())
+        for status in _coherent_evidence_statuses(
+            required_level=required_level, has_artifacts=False
+        )
+    ]
+    for size in range(1, len(candidate_artifact_ids) + 1):
+        for artifact_ids in combinations(candidate_artifact_ids, size):
+            selections.extend(
+                (status, artifact_ids)
+                for status in _coherent_evidence_statuses(
+                    required_level=required_level, has_artifacts=True
+                )
+            )
+    catalog = {
+        _evidence_selection_id(status, artifact_ids): {
+            "status": status,
+            "artifact_ids": list(artifact_ids),
+        }
+        for status, artifact_ids in selections
+    }
+    if len(catalog) != len(selections):
+        raise AgentBoundaryError("evidence_checklist", "evidence_selection_identity")
+    return dict(sorted(catalog.items()))
+
+
+def _evidence_selection_catalogs(
+    candidate_contracts: Mapping[str, Mapping[str, Any]],
+) -> dict[str, dict[str, dict[str, Any]]]:
+    if set(candidate_contracts) != set(EVIDENCE_ITEM_IDS):
+        raise AgentBoundaryError("evidence_checklist", "evidence_candidate_membership")
+    catalogs: dict[str, dict[str, dict[str, Any]]] = {}
+    for item_id in EVIDENCE_ITEM_IDS:
+        contract = candidate_contracts[item_id]
+        if contract.get("item_id") != item_id:
+            raise AgentBoundaryError(
+                "evidence_checklist", "evidence_candidate_membership"
+            )
+        candidate_artifact_ids = contract.get("candidate_artifact_ids")
+        if not isinstance(candidate_artifact_ids, list):
+            raise AgentBoundaryError(
+                "evidence_checklist", "evidence_candidate_artifacts"
+            )
+        catalogs[item_id] = _evidence_selection_catalog(
+            required_level=contract.get("required_level"),
+            candidate_artifact_ids=candidate_artifact_ids,
+        )
+    return catalogs
+
+
+def _bounded_evidence_checklist_schema(
+    candidate_contracts: Mapping[str, Mapping[str, Any]],
+) -> type[BaseModel]:
+    """Create fixed provider slots whose enums permit only coherent selections."""
+
+    catalogs = _evidence_selection_catalogs(candidate_contracts)
+    item_fields: dict[str, tuple[type[BaseModel], Any]] = {}
+    for item_id in EVIDENCE_ITEM_IDS:
+        class_suffix = "".join(part.title() for part in item_id.split("_"))
+        selection_enum = Enum(
+            f"BoundedEvidence{class_suffix}SelectionId",
+            {
+                f"option_{index:03d}": selection_id
+                for index, selection_id in enumerate(catalogs[item_id])
+            },
+        )
+        slot_schema = create_model(
+            f"BoundedEvidence{class_suffix}Slot",
+            __base__=_StrictModel,
+            selection_id=(selection_enum, ...),
+            confidence=(float, Field(ge=0, le=1)),
+        )
+        item_fields[item_id] = (slot_schema, ...)
+    items_schema = create_model(
+        "BoundedEvidenceChecklistItems",
+        __base__=_StrictModel,
+        **item_fields,
+    )
+    return create_model(
+        "BoundedEvidenceChecklistResponse",
+        __base__=_StrictModel,
+        items=(items_schema, ...),
+    )
+
+
+def _normalize_evidence_checklist_response(
+    value: Mapping[str, Any],
+    *,
+    candidate_contracts: Mapping[str, Mapping[str, Any]],
+) -> dict[str, list[dict[str, Any]]]:
+    """Restore the internal proposal list after validating fixed provider slots."""
+
+    catalogs = _evidence_selection_catalogs(candidate_contracts)
+    if set(value) != {"items"}:
+        raise AgentBoundaryError("evidence_checklist", "evidence_wire_slots")
+    items = value.get("items")
+    if not isinstance(items, Mapping) or set(items) != set(EVIDENCE_ITEM_IDS):
+        raise AgentBoundaryError("evidence_checklist", "evidence_wire_slots")
+    proposals: list[dict[str, Any]] = []
+    for item_id in EVIDENCE_ITEM_IDS:
+        slot = items.get(item_id)
+        if not isinstance(slot, Mapping) or set(slot) != {
+            "selection_id",
+            "confidence",
+        }:
+            raise AgentBoundaryError("evidence_checklist", "evidence_wire_slots")
+        selection_id = slot.get("selection_id")
+        selection = catalogs[item_id].get(selection_id)
+        confidence = slot.get("confidence")
+        if selection is None or (
+            not isinstance(confidence, (int, float))
+            or isinstance(confidence, bool)
+            or not math.isfinite(float(confidence))
+            or not 0 <= float(confidence) <= 1
+        ):
+            raise AgentBoundaryError("evidence_checklist", "evidence_wire_selection")
+        proposals.append(
+            {
+                "item_id": item_id,
+                "status": selection["status"],
+                "artifact_ids": list(selection["artifact_ids"]),
+                "confidence": float(confidence),
+            }
+        )
+    return {"proposals": proposals}
+
+
 class FinalClaimBriefProposal(_StrictModel):
     current_node_id: str
     next_action_node_id: str
     supporting_fact_ids: list[str] = Field(
         max_length=6,
-        json_schema_extra={"uniqueItems": True},
     )
     upstream_contribution_ids: list[
         Literal[
@@ -374,7 +566,7 @@ class FinalClaimBriefProposal(_StrictModel):
             "process_decision_mapping",
             "evidence_checklist",
         ]
-    ] = Field(max_length=3, json_schema_extra={"uniqueItems": True})
+    ] = Field(max_length=3)
     audit_check_ids: list[
         Literal[
             "current_node_supported_by_canonical_facts",
@@ -382,7 +574,7 @@ class FinalClaimBriefProposal(_StrictModel):
             "evidence_items_bound_to_process_nodes",
             "upstream_contribution_lineage_complete",
         ]
-    ] = Field(max_length=4, json_schema_extra={"uniqueItems": True})
+    ] = Field(max_length=4)
     confidence: float = Field(ge=0, le=1)
 
 
@@ -399,6 +591,11 @@ class AgentGraphState(TypedDict, total=False):
     process: dict[str, Any]
     checklist: dict[str, Any]
     verification: dict[str, Any]
+    verification_builder: Callable[
+        [dict[str, Any], dict[str, Any]], dict[str, Any]
+    ]
+    seed_process_hash: str
+    seed_checklist_hash: str
     source_registry: list[dict[str, Any]]
     orchestrator_plan: dict[str, Any]
     orchestrator_call_id: str
@@ -507,6 +704,158 @@ def _integrity_class(media_type: str) -> str:
     return "metadata_only"
 
 
+def _artifact_capabilities(artifact: Mapping[str, Any]) -> set[str]:
+    """Resolve reusable semantic capabilities without claim-specific IDs."""
+
+    artifact_id = str(artifact.get("artifact_id", "")).casefold()
+    filename = str(artifact.get("filename", "")).casefold()
+    media_type = str(artifact.get("media_type", "")).casefold()
+    text = f"{artifact_id} {filename}"
+    capabilities = {"submitted_source"}
+    if artifact_id == "message":
+        capabilities.update({"claim_message", "customer_correspondence", "correspondence"})
+    if artifact_id == "intake":
+        capabilities.add("policy_reference")
+    if media_type.startswith("image/") or any(word in text for word in ("photo", "image", "photograph")):
+        capabilities.add("photo")
+    if any(word in text for word in ("lease", "tenancy", "rental_agreement", "contract")):
+        capabilities.add("lease")
+    if any(word in text for word in ("delivery", "receipt", "registered_mail")):
+        capabilities.add("delivery_proof")
+    if any(word in text for word in ("timeline", "chronology")):
+        capabilities.add("timeline")
+    if any(word in text for word in ("notification", "notice", "reported_defect")):
+        capabilities.update({"defect_notice", "customer_correspondence", "correspondence"})
+    if any(word in text for word in ("management_reply", "landlord_reply", "property_manager")):
+        capabilities.update({"management_correspondence", "correspondence"})
+    if any(word in text for word in ("inspection", "technical", "expert", "building_physics")):
+        capabilities.update({"technical_report", "inspection_report"})
+    if any(word in text for word in ("moisture", "humidity", "temperature", "measurement")):
+        capabilities.add("measurement_report")
+    if any(word in text for word in ("envelope", "facade", "window_seal", "thermal_bridge")):
+        capabilities.add("building_report")
+    if any(word in text for word in ("maintenance", "repair", "work_order", "contractor")):
+        capabilities.add("maintenance_record")
+    if any(word in text for word in ("ventilation_log", "heating", "occupancy", "use_log")):
+        capabilities.add("use_log")
+    if any(word in text for word in ("utility", "energy_bill")):
+        capabilities.add("utility_record")
+    if any(word in text for word in ("remediation_plan", "scope_of_work")):
+        capabilities.add("remediation_plan")
+    if any(word in text for word in ("invoice", "rent_record", "financial", "loss")):
+        capabilities.update({"invoice", "financial_record"})
+    if any(word in text for word in ("settlement", "mediation", "proposal")):
+        capabilities.add("settlement_record")
+    if any(word in text for word in ("conciliation", "court", "filing")):
+        capabilities.add("legal_filing")
+    if any(word in text for word in ("completion", "closure", "completed")):
+        capabilities.add("completion_record")
+    if any(word in text for word in ("medical", "doctor", "health_report")):
+        capabilities.add("medical")
+    return capabilities
+
+
+def _evidence_artifact_catalog(state: AgentGraphState) -> list[dict[str, Any]]:
+    inventory = [
+        {
+            "artifact_id": "message",
+            "filename": "Claim message",
+            "media_type": "text/plain",
+            "integrity_class": "text_grounded",
+        },
+        {
+            "artifact_id": "intake",
+            "filename": "Claim intake",
+            "media_type": "application/casepath-intake+json",
+            "integrity_class": "metadata_only",
+        },
+    ]
+    integrity = {
+        item["artifact_id"]: item
+        for item in state.get("source_integrity", {}).get("artifacts", [])
+    }
+    for artifact in state["observable_package"].get("artifacts", []):
+        accepted = integrity.get(artifact["artifact_id"], {})
+        inventory.append(
+            {
+                "artifact_id": artifact["artifact_id"],
+                "filename": artifact["filename"],
+                "media_type": artifact["media_type"],
+                "integrity_class": accepted.get(
+                    "integrity_class", _integrity_class(artifact["media_type"])
+                ),
+            }
+        )
+    return [
+        {**item, "capabilities": sorted(_artifact_capabilities(item))}
+        for item in inventory
+    ]
+
+
+def _compatible_evidence_artifact_ids(
+    item_id: str, artifact_catalog: list[dict[str, Any]]
+) -> list[str]:
+    capabilities = EVIDENCE_ARTIFACT_CAPABILITIES.get(item_id)
+    if capabilities is None:
+        raise AgentBoundaryError("evidence_checklist", "evidence_item_capability")
+    return sorted(
+        item["artifact_id"]
+        for item in artifact_catalog
+        if capabilities & set(item["capabilities"])
+        and (
+            (item_id == "source_integrity" and item["artifact_id"] not in {"message", "intake"})
+            or item["artifact_id"] not in {"message", "intake"}
+            or item_id in {
+                "claim_message",
+                "policy_reference",
+                "customer_objective",
+                "health_safety_statement",
+                "defect_notice",
+            }
+        )
+    )
+
+
+def _evidence_candidate_artifact_ids(
+    state: AgentGraphState,
+) -> dict[str, list[str]]:
+    artifact_catalog = _evidence_artifact_catalog(state)
+    facts = state.get("facts")
+    checklist = state.get("checklist")
+    if not isinstance(facts, list) or not isinstance(checklist, Mapping):
+        raise AgentBoundaryError("evidence_checklist", "evidence_candidate_context")
+    items = checklist.get("items")
+    if not isinstance(items, list):
+        raise AgentBoundaryError("evidence_checklist", "evidence_candidate_items")
+    facts_by_id = {
+        fact.get("fact_id"): fact
+        for fact in facts
+        if isinstance(fact, Mapping) and isinstance(fact.get("fact_id"), str)
+    }
+    candidates: dict[str, list[str]] = {}
+    for item in items:
+        if not isinstance(item, Mapping):
+            raise AgentBoundaryError("evidence_checklist", "evidence_candidate_item")
+        item_id = item.get("item_id")
+        fact = facts_by_id.get(item.get("fact_id"))
+        if not isinstance(item_id, str) or not isinstance(fact, Mapping):
+            raise AgentBoundaryError("evidence_checklist", "evidence_candidate_fact")
+        grounded_artifact_ids = {
+            ref.get("artifact_id")
+            for ref in fact.get("source_refs", [])
+            if isinstance(ref, Mapping) and isinstance(ref.get("artifact_id"), str)
+        }
+        candidates[item_id] = sorted(
+            set(_compatible_evidence_artifact_ids(item_id, artifact_catalog))
+            & grounded_artifact_ids
+        )
+    if set(candidates) != set(EVIDENCE_ITEM_IDS):
+        raise AgentBoundaryError(
+            "evidence_checklist", "evidence_candidate_membership"
+        )
+    return candidates
+
+
 def _expected_text_ref_ids(
     refs: list[dict[str, Any]],
     registry: list[dict[str, Any]],
@@ -558,57 +907,47 @@ def _evidence_provider_payload(state: AgentGraphState) -> dict[str, Any]:
         fact_id: index
         for index, fact_id in enumerate(state["orchestrator_plan"]["focus_fact_ids"])
     }
-    source_integrity = {
-        item["artifact_id"]: item
-        for item in state.get("source_integrity", {}).get("artifacts", [])
-    }
-    artifact_inventory = [
-        {
-            "artifact_id": "message",
-            "media_type": "text/plain",
-            "integrity_class": "text_grounded",
-        },
-        {
-            "artifact_id": "intake",
-            "media_type": "application/casepath-intake+json",
-            "integrity_class": "metadata_only",
-        },
-    ]
-    for artifact in state["observable_package"].get("artifacts", []):
-        accepted = source_integrity.get(artifact["artifact_id"], {})
-        artifact_inventory.append(
+    artifact_inventory = _evidence_artifact_catalog(state)
+    candidate_artifact_ids_by_item = _evidence_candidate_artifact_ids(state)
+    evidence_candidates = []
+    for item in sorted(
+        state["checklist"]["items"],
+        key=lambda value: (focus_rank[value["fact_id"]], value["item_id"]),
+    ):
+        candidate_artifact_ids = candidate_artifact_ids_by_item[item["item_id"]]
+        evidence_candidates.append(
             {
-                "artifact_id": artifact["artifact_id"],
-                "filename": artifact["filename"],
-                "media_type": artifact["media_type"],
-                "integrity_class": accepted.get(
-                    "integrity_class", _integrity_class(artifact["media_type"])
-                ),
-                "source_integrity_fallback_applied": bool(
-                    accepted.get("deterministic_fallback_applied", True)
-                ),
+                **{
+                    key: deepcopy(item[key])
+                    for key in (
+                        "item_id",
+                        "title",
+                        "fact_id",
+                        "node_id",
+                        "legal_basis_ids",
+                        "acceptable_alternatives",
+                        "applies_when",
+                        "required_level",
+                        "current_path",
+                    )
+                },
+                "candidate_artifact_ids": candidate_artifact_ids,
+                "status_choices": {
+                    "with_artifacts": list(
+                        _coherent_evidence_statuses(
+                            required_level=item["required_level"],
+                            has_artifacts=True,
+                        )
+                    ),
+                    "without_artifacts": list(
+                        _coherent_evidence_statuses(
+                            required_level=item["required_level"],
+                            has_artifacts=False,
+                        )
+                    ),
+                },
             }
         )
-    evidence_candidates = [
-        {
-            key: deepcopy(item[key])
-            for key in (
-                "item_id",
-                "title",
-                "fact_id",
-                "node_id",
-                "legal_basis_ids",
-                "acceptable_alternatives",
-                "applies_when",
-                "required_level",
-                "current_path",
-            )
-        }
-        for item in sorted(
-            state["checklist"]["items"],
-            key=lambda value: (focus_rank[value["fact_id"]], value["item_id"]),
-        )
-    ]
     required_item_ids = [item["item_id"] for item in evidence_candidates]
     if (
         len(required_item_ids) != len(EVIDENCE_ITEM_IDS)
@@ -639,6 +978,10 @@ def _evidence_provider_payload(state: AgentGraphState) -> dict[str, Any]:
         "required_item_ids": required_item_ids,
         "evidence_candidates": evidence_candidates,
         "allowed_statuses": EVIDENCE_STATUS_CANDIDATES,
+        "selection_id_format": (
+            "status::artifact_id+artifact_id; use status::none when no artifact "
+            "is selected"
+        ),
         "canonical_fact_handoff": [
             {
                 "fact_id": fact["fact_id"],
@@ -961,6 +1304,28 @@ def _require_contribution_majority(agent_id: str, diagnostics: Mapping[str, Any]
         raise AgentBoundaryError(agent_id, "model_contribution_majority")
 
 
+def _compatible_process_decision_values(fact: Mapping[str, Any]) -> set[str]:
+    decision_key = fact.get("decision_key")
+    normalized_value = fact.get("normalized_value")
+    try:
+        exact = DECISION_OPTIONS[decision_key][normalized_value]
+    except (KeyError, TypeError) as exc:
+        raise AgentBoundaryError(
+            "process_decision_mapping", "accepted_fact_decision_binding"
+        ) from exc
+    conservative = {
+        "scope": "scope_unverified",
+        "dispute": "dispute_unverified",
+        "urgency": "urgency_unverified",
+        "notification": "notification_unverified",
+        "recurrence": "recurrence_unverified",
+        "causation": "cause_unresolved",
+    }[decision_key]
+    # A specialist may preserve the exact assertion or conservatively stop at
+    # the key's unresolved outcome. It may never choose a contradictory branch.
+    return {exact, conservative}
+
+
 def apply_process_contribution(
     process: Mapping[str, Any],
     contribution: Mapping[str, Any],
@@ -988,10 +1353,9 @@ def apply_process_contribution(
     projection_facts: list[dict[str, Any]] = []
     for fact_id, fact in expected.items():
         item = by_fact[fact_id]
-        if (
-            item.get("decision_key") != fact.get("decision_key")
-            or item.get("decision_value") != fact.get("decision_value")
-        ):
+        if item.get("decision_key") != fact.get("decision_key") or item.get(
+            "decision_value"
+        ) not in _compatible_process_decision_values(fact):
             raise AgentBoundaryError(
                 "deterministic_process_gate", "canonical_decision_binding"
             )
@@ -1019,7 +1383,10 @@ def apply_process_contribution(
 
 
 def apply_evidence_contribution(
-    checklist: Mapping[str, Any], contribution: Mapping[str, Any]
+    checklist: Mapping[str, Any],
+    contribution: Mapping[str, Any],
+    *,
+    candidate_artifact_ids_by_item: Mapping[str, list[str]],
 ) -> dict[str, Any]:
     """Build the accepted checklist from model-owned or fallback field units."""
 
@@ -1062,17 +1429,46 @@ def apply_evidence_contribution(
             raise AgentBoundaryError(
                 "deterministic_evidence_gate", "evidence_artifact_order"
             )
-        if status != source.get("status") or artifact_ids != sorted(
-            source.get("artifact_ids", [])
+        effective_candidates = candidate_artifact_ids_by_item.get(item["item_id"])
+        if (
+            not isinstance(effective_candidates, list)
+            or any(not isinstance(value, str) for value in effective_candidates)
+            or effective_candidates != sorted(set(effective_candidates))
         ):
             raise AgentBoundaryError(
-                "deterministic_evidence_gate", "evidence_contract_binding"
+                "deterministic_evidence_gate", "evidence_candidate_catalog"
+            )
+        candidate_artifact_ids = set(effective_candidates)
+        if set(artifact_ids) - candidate_artifact_ids:
+            raise AgentBoundaryError(
+                "deterministic_evidence_gate", "evidence_candidate_binding"
+            )
+        if artifact_ids:
+            coherent_statuses = {
+                "provided_sufficient",
+                "provided_insufficient",
+            }
+            if source.get("required_level") == "conditional":
+                coherent_statuses.add("conditional")
+        elif source.get("required_level") == "mandatory":
+            coherent_statuses = {"missing"}
+        else:
+            coherent_statuses = {"conditional", "not_applicable"}
+        if status not in coherent_statuses:
+            raise AgentBoundaryError(
+                "deterministic_evidence_gate", "evidence_status_coherence"
             )
         item["status"] = status
-        # Artifact IDs are a set-like model contribution. Preserve the
-        # authoritative checklist order so the primary/source-integrity view
-        # remains stable after the guarded set comparison.
-        item["artifact_ids"] = list(source.get("artifact_ids", []))
+        selected_ids = set(artifact_ids)
+        source_order = [
+            artifact_id
+            for artifact_id in source.get("artifact_ids", [])
+            if artifact_id in selected_ids
+        ]
+        item["artifact_ids"] = [
+            *source_order,
+            *sorted(selected_ids - set(source_order)),
+        ]
         accepted_items.append(item)
     accepted["items"] = accepted_items
     accepted.update(checklist_derived_sections(accepted_items))
@@ -1100,6 +1496,7 @@ class InstrumentedStructuredAgent:
         private_contract_hash: str,
         parent_call_id: str | None = None,
         delegation_id: str | None = None,
+        progress_sink: Callable[[dict[str, Any]], None] | None = None,
     ) -> dict[str, Any]:
         if agent_id not in MODEL_AGENT_IDS:
             raise AgentBoundaryError(agent_id, "registered_agent")
@@ -1115,6 +1512,7 @@ class InstrumentedStructuredAgent:
                 ).hexdigest(),
                 "max_tokens": ROLE_OUTPUT_TOKENS[agent_id],
                 "reasoning": ROLE_REASONING[agent_id],
+                "provider_policy": openrouter_provider_policy(),
                 "payload": provider_payload,
                 "private_contract_hash": private_contract_hash,
             }
@@ -1186,6 +1584,7 @@ class InstrumentedStructuredAgent:
                 cache_key=cache_key,
                 parent_call_id=parent_call_id,
                 delegation_id=delegation_id,
+                progress_sink=progress_sink,
             )
 
     def _invoke_uncached(
@@ -1201,11 +1600,15 @@ class InstrumentedStructuredAgent:
         cache_key: str,
         parent_call_id: str | None,
         delegation_id: str | None,
+        progress_sink: Callable[[dict[str, Any]], None] | None,
     ) -> dict[str, Any]:
         assert_external_tracing_disabled()
         user_prompt = _json(provider_payload)
+        provider_schema = _json(schema.model_json_schema())
         max_tokens = ROLE_OUTPUT_TOKENS[agent_id]
-        estimated_tokens = _input_token_estimate(system_prompt + "\n" + user_prompt)
+        estimated_tokens = _input_token_estimate(
+            system_prompt + "\n" + user_prompt + "\n" + provider_schema
+        )
         estimated_cost = _estimated_cost(estimated_tokens, max_tokens)
         cap = cumulative_usd_cap()
         key = self.api_key_provider()
@@ -1282,6 +1685,25 @@ class InstrumentedStructuredAgent:
                 agent_role=ROLE_LABELS[agent_id],
                 parent_call_id=parent_call_id,
                 delegation_id=delegation_id,
+            )
+        if progress_sink is not None:
+            progress_sink(
+                {
+                    "receipt_type": "agent_started",
+                    "agent_id": agent_id,
+                    "role": ROLE_LABELS[agent_id],
+                    "actor_type": "nemotron_agent",
+                    "delegation_id": delegation_id,
+                    "parent_call_id": parent_call_id,
+                    "call_id": call_id,
+                    "call_count": 1,
+                    "cache_hit": False,
+                    "status": "started",
+                    "handoff_from": ROLE_HANDOFFS[agent_id][0],
+                    "handoff_to": ROLE_HANDOFFS[agent_id][1],
+                    "input_artifact": "bounded_provider_payload",
+                    "input_artifact_hash": _safe_hash(provider_payload),
+                }
             )
         started = perf_counter()
         provider_patch: dict[str, Any] = {}
@@ -1683,6 +2105,9 @@ def _plan_validator(
 class NemotronMultiAgentOrchestrator:
     storage: Storage
     agent_runner: InstrumentedStructuredAgent | None = None
+    verification_builder: Callable[
+        [dict[str, Any], dict[str, Any]], dict[str, Any]
+    ] | None = None
 
     def __post_init__(self) -> None:
         self.agent_runner = self.agent_runner or InstrumentedStructuredAgent(self.storage)
@@ -1722,6 +2147,10 @@ class NemotronMultiAgentOrchestrator:
         process: dict[str, Any],
         checklist: dict[str, Any],
         verification: dict[str, Any],
+        verification_builder: Callable[
+            [dict[str, Any], dict[str, Any]], dict[str, Any]
+        ]
+        | None = None,
         progress_sink: Callable[[dict[str, Any]], None] | None = None,
     ) -> dict[str, Any]:
         input_state: AgentGraphState = {
@@ -1733,9 +2162,16 @@ class NemotronMultiAgentOrchestrator:
             "process": process,
             "checklist": checklist,
             "verification": verification,
+            "seed_process_hash": accepted_artifact_hash(process),
+            "seed_checklist_hash": accepted_artifact_hash(checklist),
             "source_registry": _source_registry(observable_package),
             "audit_entries": [],
         }
+        effective_verification_builder = (
+            verification_builder or self.verification_builder
+        )
+        if effective_verification_builder is not None:
+            input_state["verification_builder"] = effective_verification_builder
         audit: dict[str, Any] | None = None
         assert_external_tracing_disabled()
         for chunk in self.graph.stream(
@@ -1766,7 +2202,8 @@ class NemotronMultiAgentOrchestrator:
         if (
             canonicalization.get("model") != OPENROUTER_MODEL
             or diagnostics.get("accepted_fact_count", 0)
-            <= diagnostics.get("rejected_fact_count", 0)
+            + diagnostics.get("rejected_fact_count", 0)
+            != len(state["facts"])
         ):
             raise AgentBoundaryError("canonical_facts", "model_contribution")
         return {
@@ -1841,21 +2278,6 @@ class NemotronMultiAgentOrchestrator:
             if agent_id == "orchestrator_plan"
             else state.get("orchestrator_call_id")
         )
-        writer(
-            {
-                "receipt_type": "agent_started",
-                "agent_id": agent_id,
-                "role": ROLE_LABELS[agent_id],
-                "actor_type": "nemotron_agent",
-                "delegation_id": delegation_id,
-                "parent_call_id": parent_call_id,
-                "status": "started",
-                "handoff_from": ROLE_HANDOFFS[agent_id][0],
-                "handoff_to": ROLE_HANDOFFS[agent_id][1],
-                "input_artifact": "bounded_provider_payload",
-                "input_artifact_hash": _safe_hash(provider_payload),
-            }
-        )
         try:
             result = self.agent_runner.invoke(
                 run_id=state["run_id"],
@@ -1868,6 +2290,7 @@ class NemotronMultiAgentOrchestrator:
                 private_contract_hash=_safe_hash(private_contract),
                 parent_call_id=parent_call_id,
                 delegation_id=delegation_id,
+                progress_sink=writer,
             )
         except Exception as exc:
             safe_context = (
@@ -1973,6 +2396,8 @@ class NemotronMultiAgentOrchestrator:
                 "parent_call_id": parent_call_id,
                 "response_id": result.get("response_id"),
                 "outcome": result["outcome"],
+                "cache_hit": result["cache_hit"],
+                "call_count": 0 if result["cache_hit"] else 1,
                 "response_model": result.get("response_model"),
                 "upstream_provider": result.get("upstream_provider"),
                 "usage_source": result.get("usage_source"),
@@ -2183,10 +2608,10 @@ class NemotronMultiAgentOrchestrator:
                 state["orchestrator_plan"]["focus_fact_ids"]
             )
         }
-        expected: dict[str, dict[str, Any]] = {}
+        controlling_facts: dict[str, dict[str, Any]] = {}
         for fact in state["facts"]:
             if fact.get("controls_process") is True:
-                expected[fact["fact_id"]] = {
+                controlling_facts[fact["fact_id"]] = {
                     "fact_id": fact["fact_id"],
                     "decision_key": fact["decision_key"],
                     "decision_value": fact["decision_value"],
@@ -2196,7 +2621,7 @@ class NemotronMultiAgentOrchestrator:
                         fact.get("source_refs", []), state["source_registry"]
                     ),
                 }
-        if len(expected) != PROCESS_DECISION_PROPOSAL_COUNT:
+        if len(controlling_facts) != PROCESS_DECISION_PROPOSAL_COUNT:
             raise AgentBoundaryError(
                 "process_decision_mapping", "process_candidate_membership"
             )
@@ -2224,20 +2649,23 @@ class NemotronMultiAgentOrchestrator:
             _require_exact_proposal_membership(
                 proposed,
                 duplicates=duplicates,
-                expected_ids=set(expected),
+                expected_ids=set(controlling_facts),
                 agent_id="process_decision_mapping",
                 invariant="process_proposal_membership",
             )
             accepted: list[str] = []
             rejected: list[dict[str, str]] = []
             output: list[dict[str, Any]] = []
-            for item_id, oracle in expected.items():
+            for item_id, accepted_fact in controlling_facts.items():
                 proposal = proposed.get(item_id)
                 contribution_id = f"fact:{item_id}:decision_value"
+                compatible_decisions = _compatible_process_decision_values(
+                    accepted_fact
+                )
                 matches = (
                     proposal is not None
                     and proposal.get("fact_id") == item_id
-                    and proposal.get("decision_value") == oracle["decision_value"]
+                    and proposal.get("decision_value") in compatible_decisions
                 )
                 if matches:
                     accepted.append(contribution_id)
@@ -2250,7 +2678,12 @@ class NemotronMultiAgentOrchestrator:
                     )
                 output.append(
                     {
-                        **oracle,
+                        **accepted_fact,
+                        "decision_value": (
+                            proposal["decision_value"]
+                            if matches
+                            else accepted_fact["decision_value"]
+                        ),
                         "contribution_id": contribution_id,
                         "contribution_scope": "canonical_to_process_decision_mapping",
                         "model_owned_fields": ["decision_value"],
@@ -2261,7 +2694,7 @@ class NemotronMultiAgentOrchestrator:
                         "deterministic_fallback_applied": not matches,
                     }
                 )
-            ignored = len(set(proposed) - set(expected)) + duplicates
+            ignored = len(set(proposed) - set(controlling_facts)) + duplicates
             return {"decisions": output}, _diagnostics(accepted, rejected, ignored_count=ignored)
 
         contribution, audit = self._run_agent(
@@ -2288,7 +2721,16 @@ class NemotronMultiAgentOrchestrator:
                 "decision_value_vocabulary": PROCESS_DECISION_VALUE_CANDIDATES,
             },
             validator=validate,
-            private_contract=expected,
+            private_contract={
+                "fact_slots": [
+                    {
+                        "fact_id": fact_id,
+                        "decision_key": value["decision_key"],
+                    }
+                    for fact_id, value in sorted(controlling_facts.items())
+                ],
+                "decision_value_catalog": PROCESS_DECISION_VALUE_CANDIDATES,
+            },
         )
         return {"process_mapping": contribution, "audit_entries": [audit]}
 
@@ -2301,6 +2743,14 @@ class NemotronMultiAgentOrchestrator:
             raise AgentBoundaryError("deterministic_process_gate", "process_contribution")
         accepted_process = apply_process_contribution(
             state["process"], state["process_mapping"], state["facts"]
+        )
+        accepted_checklist = deepcopy(state["checklist"])
+        accepted_checklist["items"] = deepcopy(state["checklist"]["items"])
+        apply_evidence_relations(accepted_process, accepted_checklist["items"])
+        apply_evidence_projection(accepted_checklist["items"], accepted_process)
+        apply_evidence_relations(accepted_process, accepted_checklist["items"])
+        accepted_checklist.update(
+            checklist_derived_sections(accepted_checklist["items"])
         )
         current = accepted_process["current_overlay"]["current_node_id"]
         if current != accepted_process["current_node"]:
@@ -2326,6 +2776,7 @@ class NemotronMultiAgentOrchestrator:
         )
         return {
             "process": accepted_process,
+            "checklist": accepted_checklist,
             "audit_entries": [
                 {
                     "agent_id": "deterministic_process_gate",
@@ -2349,33 +2800,60 @@ class NemotronMultiAgentOrchestrator:
                 for artifact in state["observable_package"].get("artifacts", [])
             ),
         }
-        expected: dict[str, dict[str, Any]] = {}
+        candidate_contracts: dict[str, dict[str, Any]] = {}
+        candidate_artifact_ids_by_item = _evidence_candidate_artifact_ids(state)
         for item in state["checklist"]["items"]:
             fact = facts[item["fact_id"]]
-            expected[item["item_id"]] = {
+            candidate_artifact_ids = candidate_artifact_ids_by_item[
+                item["item_id"]
+            ]
+            if (
+                len(set(candidate_artifact_ids)) != len(candidate_artifact_ids)
+                or set(candidate_artifact_ids) - allowed_artifact_ids
+            ):
+                raise AgentBoundaryError(
+                    "evidence_checklist", "evidence_candidate_artifacts"
+                )
+            if set(item.get("artifact_ids", [])) - set(candidate_artifact_ids):
+                raise AgentBoundaryError(
+                    "evidence_checklist", "evidence_reference_catalog_binding"
+                )
+            candidate_contracts[item["item_id"]] = {
                 "item_id": item["item_id"],
-                "status": item["status"],
-                "artifact_ids": sorted(item.get("artifact_ids", [])),
+                "fact_id": item["fact_id"],
+                "required_level": item["required_level"],
+                "current_path": item["current_path"],
+                "candidate_artifact_ids": candidate_artifact_ids,
                 "source_ref_ids": _expected_text_ref_ids(
                     fact.get("source_refs", []), state["source_registry"]
                 ),
             }
+        evidence_wire_schema = _bounded_evidence_checklist_schema(
+            candidate_contracts
+        )
 
         def validate(value: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+            value = _normalize_evidence_checklist_response(
+                value,
+                candidate_contracts=candidate_contracts,
+            )
             proposed, duplicates = _proposal_map(
                 value.get("proposals"), "item_id", "evidence_checklist"
             )
             _require_exact_proposal_membership(
                 proposed,
                 duplicates=duplicates,
-                expected_ids=set(expected),
+                expected_ids=set(candidate_contracts),
                 agent_id="evidence_checklist",
                 invariant="evidence_proposal_membership",
             )
             accepted: list[str] = []
             rejected: list[dict[str, str]] = []
             output: list[dict[str, Any]] = []
-            for item_id, oracle in expected.items():
+            source_items = {
+                item["item_id"]: item for item in state["checklist"]["items"]
+            }
+            for item_id, contract in candidate_contracts.items():
                 proposal = proposed.get(item_id)
                 proposed_artifacts = (
                     proposal.get("artifact_ids") if proposal is not None else None
@@ -2385,26 +2863,33 @@ class NemotronMultiAgentOrchestrator:
                     and all(isinstance(value, str) for value in proposed_artifacts)
                     and len(set(proposed_artifacts)) == len(proposed_artifacts)
                     and set(proposed_artifacts) <= allowed_artifact_ids
+                    and set(proposed_artifacts)
+                    <= set(contract["candidate_artifact_ids"])
                 )
                 canonical_artifacts = (
                     sorted(proposed_artifacts) if artifacts_well_formed else []
                 )
+                proposed_status = proposal.get("status") if proposal is not None else None
+                coherent_statuses = set(
+                    _coherent_evidence_statuses(
+                        required_level=contract["required_level"],
+                        has_artifacts=bool(canonical_artifacts),
+                    )
+                )
                 status_matches = (
-                    proposal is not None and proposal.get("status") == oracle["status"]
-                )
-                artifacts_match = (
                     proposal is not None
-                    and artifacts_well_formed
-                    and canonical_artifacts == oracle["artifact_ids"]
+                    and proposed_status in coherent_statuses
                 )
+                artifacts_match = proposal is not None and artifacts_well_formed
+                pair_matches = status_matches and artifacts_match
                 status_id = f"item:{item_id}:status"
                 artifacts_id = f"item:{item_id}:artifacts"
                 field_contributions: list[dict[str, Any]] = []
-                for contribution_id, field, matches in (
-                    (status_id, "status", status_matches),
-                    (artifacts_id, "artifact_ids", artifacts_match),
+                for contribution_id, field in (
+                    (status_id, "status"),
+                    (artifacts_id, "artifact_ids"),
                 ):
-                    if matches:
+                    if pair_matches:
                         accepted.append(contribution_id)
                     else:
                         rejected.append(
@@ -2419,27 +2904,29 @@ class NemotronMultiAgentOrchestrator:
                             "field": field,
                             "attribution": (
                                 ROLE_LABELS["evidence_checklist"]
-                                if matches
+                                if pair_matches
                                 else "deterministic_application"
                             ),
                             "confidence_basis_points": _confidence_basis_points(
                                 proposal["confidence"]
-                                if matches and proposal is not None
+                                if pair_matches and proposal is not None
                                 else 1
                             ),
-                            "deterministic_fallback_applied": not matches,
+                            "deterministic_fallback_applied": not pair_matches,
                         }
                     )
+                fallback = source_items[item_id]
                 output.append(
                     {
-                        **oracle,
+                        "item_id": item_id,
+                        "source_ref_ids": contract["source_ref_ids"],
                         "status": (
-                            proposal["status"] if status_matches else oracle["status"]
+                            proposal["status"] if pair_matches else fallback["status"]
                         ),
                         "artifact_ids": (
                             canonical_artifacts
-                            if artifacts_match
-                            else oracle["artifact_ids"]
+                            if pair_matches
+                            else sorted(fallback.get("artifact_ids", []))
                         ),
                         "field_contributions": field_contributions,
                         "model_owned_fields": ["status", "artifact_ids"],
@@ -2448,35 +2935,50 @@ class NemotronMultiAgentOrchestrator:
                         ),
                         "attribution": (
                             ROLE_LABELS["evidence_checklist"]
-                            if status_matches and artifacts_match
-                            else "mixed_model_and_deterministic"
-                            if status_matches or artifacts_match
+                            if pair_matches
                             else "deterministic_application"
                         ),
-                        "deterministic_fallback_applied": not (
-                            status_matches and artifacts_match
-                        ),
+                        "deterministic_fallback_applied": not pair_matches,
                     }
                 )
-            ignored = len(set(proposed) - set(expected)) + duplicates
+            ignored = len(set(proposed) - set(candidate_contracts)) + duplicates
             return {"items": output}, _diagnostics(accepted, rejected, ignored_count=ignored)
 
         contribution, audit = self._run_agent(
             state,
             agent_id="evidence_checklist",
-            schema=EvidenceChecklistResponse,
+            schema=evidence_wire_schema,
             system_prompt=(
-                "Return exactly 21 proposals: exactly one for every required_item_id and no duplicates or omissions. "
-                "For each evidence candidate, classify its bounded status and select only supporting artifact IDs "
-                "from the accepted inventory. Use the verified process overlay, applicability metadata, accepted "
-                "canonical facts, and fact-to-artifact bindings. Return only item_id, status, artifact_ids, and "
-                "confidence. Never return an empty or partial proposal list. The application independently verifies "
-                "each field, binds canonical source references, and rebuilds checklist aggregates. Return no "
-                "source-reference IDs, raw excerpts, deterministic why, requests, legal conclusions, or prose."
+                "Fill every predeclared property in the fixed items object. Each item slot returns only selection_id "
+                "and confidence. Choose selection_id only from that exact slot's enum. Each selection_id is a complete "
+                "status::artifact selection: its status is coherent with whether artifacts are selected, and every "
+                "artifact is capability-compatible with that item. Use the verified process overlay, applicability "
+                "metadata, accepted canonical facts, and fact-to-artifact bindings. Never omit an item, repeat an "
+                "item ID, copy a selection from another slot unless that slot permits it, or return a partial items "
+                "object. The application decodes selections, binds canonical source references, and rebuilds checklist "
+                "aggregates. Return no item_id fields, source-reference IDs, raw excerpts, deterministic why, requests, "
+                "legal conclusions, or prose."
             ),
             provider_payload=_evidence_provider_payload(state),
             validator=validate,
-            private_contract=expected,
+            private_contract={
+                "item_catalog": [
+                    {
+                        key: value[key]
+                        for key in (
+                            "item_id",
+                            "fact_id",
+                            "required_level",
+                            "current_path",
+                            "candidate_artifact_ids",
+                        )
+                    }
+                    for _, value in sorted(candidate_contracts.items())
+                ],
+                "allowed_statuses": EVIDENCE_STATUS_CANDIDATES,
+                "allowed_artifact_ids": sorted(allowed_artifact_ids),
+                "wire_contract": "fixed_item_coherent_selection/1.0.0",
+            },
         )
         return {"evidence_checklist": contribution, "audit_entries": [audit]}
 
@@ -2488,8 +2990,37 @@ class NemotronMultiAgentOrchestrator:
         if state["verification"].get("valid") is not True:
             raise AgentBoundaryError("deterministic_evidence_gate", "playbook_verification")
         accepted_checklist = apply_evidence_contribution(
-            state["checklist"], state["evidence_checklist"]
+            state["checklist"],
+            state["evidence_checklist"],
+            candidate_artifact_ids_by_item=_evidence_candidate_artifact_ids(
+                state
+            ),
         )
+        verification_builder = state.get("verification_builder")
+        changed = (
+            accepted_artifact_hash(state["process"])
+            != state.get("seed_process_hash")
+            or accepted_artifact_hash(accepted_checklist)
+            != state.get("seed_checklist_hash")
+        )
+        if callable(verification_builder):
+            fresh_verification = verification_builder(
+                state["process"], accepted_checklist
+            )
+        elif changed:
+            raise AgentBoundaryError(
+                "deterministic_evidence_gate", "verification_recompute_required"
+            )
+        else:
+            fresh_verification = deepcopy(state["verification"])
+        if (
+            not isinstance(fresh_verification, dict)
+            or fresh_verification.get("valid") is not True
+            or fresh_verification.get("computed") is not True
+        ):
+            raise AgentBoundaryError(
+                "deterministic_evidence_gate", "fresh_playbook_verification"
+            )
         input_hash = _safe_hash(state["evidence_checklist"])
         output_hash = accepted_artifact_hash(accepted_checklist)
         writer(
@@ -2509,6 +3040,7 @@ class NemotronMultiAgentOrchestrator:
         )
         return {
             "checklist": accepted_checklist,
+            "verification": fresh_verification,
             "audit_entries": [
                 {
                     "agent_id": "deterministic_evidence_gate",
@@ -2700,6 +3232,16 @@ class NemotronMultiAgentOrchestrator:
             "outcome": "passed",
             "input_artifact_hash": input_hash,
             "output_artifact_hash": output_hash,
+            "output_projection_contract": "casepath.accepted-playbook-projection/1.0.0",
+            "final_brief_artifact_hash": accepted_artifact_hash(
+                state["final_brief"]
+            ),
+            "verification_report_hash": accepted_artifact_hash(
+                state["verification"]
+            ),
+            "verification_whole_playbook_hash": state["verification"].get(
+                "whole_playbook_hash"
+            ),
         }
         writer(
             {
@@ -2714,6 +3256,18 @@ class NemotronMultiAgentOrchestrator:
                 "output_artifact": "verified_claim_playbook",
                 "input_artifact_hash": input_hash,
                 "output_artifact_hash": output_hash,
+                "output_projection_contract": gate[
+                    "output_projection_contract"
+                ],
+                "final_brief_artifact_hash": gate[
+                    "final_brief_artifact_hash"
+                ],
+                "verification_report_hash": gate[
+                    "verification_report_hash"
+                ],
+                "verification_whole_playbook_hash": gate[
+                    "verification_whole_playbook_hash"
+                ],
             }
         )
         entries = [*state["audit_entries"], gate]
@@ -2751,7 +3305,14 @@ class NemotronMultiAgentOrchestrator:
                 }
                 == set(AI_AGENT_IDS)
                 and all(
-                    item.get("accepted_count", 0) > item.get("rejected_count", 0)
+                    (
+                        item.get("accepted_count", 0)
+                        + item.get("rejected_count", 0)
+                        > 0
+                        if item.get("agent_id") == "canonical_facts"
+                        else item.get("accepted_count", 0)
+                        > item.get("rejected_count", 0)
+                    )
                     for item in agent_entries
                 ),
                 "guarded_fallback_count": sum(

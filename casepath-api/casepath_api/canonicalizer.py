@@ -18,7 +18,6 @@ from pydantic import BaseModel
 
 from .langchain_runtime import (
     OPENROUTER_EXPECTED_UPSTREAM_PROVIDER,
-    OPENROUTER_REASONING,
     OpenRouterProtocolError,
     OpenRouterSendAdmissionTimeoutError,
     OpenRouterUpstreamRejectionError,
@@ -28,6 +27,7 @@ from .langchain_runtime import (
     structured_nemotron_runnable,
 )
 from .storage import Storage
+from .projections import DECISION_OPTIONS
 from .validation import ContractValidationError, validate_claim_state, validate_source_grounding
 
 
@@ -40,34 +40,40 @@ OPENROUTER_ACCEPTED_RESPONSE_MODELS = {OPENROUTER_MODEL, OPENROUTER_CANONICAL_MO
 OPENROUTER_PROVIDER = "openrouter"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENROUTER_GENERATION_URL = "https://openrouter.ai/api/v1/generation"
-CANONICALIZER_VERSION = "1.7.0"
-PROMPT_VERSION = "canonical-facts/1.6.0"
-SCHEMA_VERSION = "casepath.canonical-facts/1.5.0"
+CANONICALIZER_VERSION = "1.10.0"
+PROMPT_VERSION = "canonical-facts/1.9.0"
+SCHEMA_VERSION = "casepath.canonical-facts/1.8.0"
 PROVIDER_FACT_FIELDS = {
     "fact_id",
+    "assertion_id",
     "source_ref_ids",
     "confidence",
 }
 CANONICAL_SYSTEM_PROMPT = (
     "You are the bounded CasePath canonical-facts component. Read only the supplied observable claim package. "
-    "Return exactly one bounded evidence proposal for every supplied fact ID: source-reference IDs and confidence only. "
-    "The application exclusively owns labels, canonical states, normalized values, display prose, and process metadata; "
-    "do not return any of those fields. Never infer a process, legal conclusion, responsibility, remedy, checklist, "
+    "Fill every predeclared property in the fixed facts object. Return exactly one bounded assertion selection for each "
+    "fact slot: its repeated fact_id, assertion_id, source_ref_ids object, and confidence only. Choose assertion_id only "
+    "from that fact slot's finite ASSERTION CATALOG. The catalog contains "
+    "all available bounded assertions and does not identify a preferred or expected answer. The application exclusively "
+    "materializes labels, canonical states, normalized values, display prose, and process metadata from the accepted "
+    "assertion; do not return any of those fields. Never infer a process, legal conclusion, responsibility, remedy, checklist, "
     "precedent, or knowledge update. Use only the supplied fact IDs. Select source_ref_ids only from the global "
     "SOURCE REFERENCE REGISTRY; each ID deterministically maps "
     "to one exact observable artifact, page, and excerpt. Binary images expose no textual content in "
-    "this package: do not cite or describe their pixels. Select the smallest nonredundant exact passage or passages "
-    "that support the bounded fact concept, including the smallest passage from every observable side when sources "
-    "conflict, and return an empty array when no textual candidate supports it. "
-    "Treat source_ref_ids as bounded evidence proposals: the application independently validates them and "
-    "projects the authoritative exact source bindings. "
-    "Confidence expresses only the strength of the returned evidence proposal for that fact concept."
+    "this package: do not cite or describe their pixels. Each property in a fact's fixed source_ref_ids object names one "
+    "required artifact. Select exactly one source-reference ID from that property's enum. An empty source_ref_ids object "
+    "means that fact has no text source to select. A conflicting assertion necessarily has source selections for at least "
+    "two different artifacts. "
+    "The application independently validates assertion membership, registry binding, eligible source selection, "
+    "and structural artifact coverage. Confidence expresses "
+    "only the strength of the returned assertion selection."
 )
 MODEL_SINGLE_FLIGHT_LOCK = threading.RLock()
 
 INPUT_USD_PER_MILLION_TOKENS = 0.625
 OUTPUT_USD_PER_MILLION_TOKENS = 3.60
 MAX_OUTPUT_TOKENS = 8_192
+CANONICAL_REASONING = {"effort": "none"}
 DEFAULT_CUMULATIVE_USD_CAP = 25.0
 ABSOLUTE_CUMULATIVE_USD_CAP = 400.0
 GENERATION_METADATA_POLL_ATTEMPTS = 8
@@ -165,6 +171,7 @@ def _default_structured_invoker(
         api_key=api_key,
         orchestration_id=orchestration_id,
         max_tokens=max_tokens,
+        reasoning=CANONICAL_REASONING,
     )
     assert_external_tracing_disabled()
     protocol_invariant: str | None = None
@@ -253,49 +260,361 @@ def _default_metadata_transport(url: str, headers: dict[str, str], timeout: floa
 
 
 def canonical_facts_schema(
-    source_reference_ids: list[str],
-    fact_ids: list[str],
+    source_reference_registry: list[dict[str, Any]],
+    assertion_catalog: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    registry_by_id = {
+        item.get("source_ref_id"): item
+        for item in source_reference_registry
+        if isinstance(item, dict)
+        and isinstance(item.get("source_ref_id"), str)
+        and item.get("source_ref_id", "").strip()
+        and isinstance(item.get("artifact_id"), str)
+        and item.get("artifact_id", "").strip()
+    }
+    if len(registry_by_id) != len(source_reference_registry):
+        raise ModelConfigurationError(
+            "Canonical-facts schema requires a valid source-reference registry"
+        )
+    if not isinstance(assertion_catalog, list) or not assertion_catalog:
+        raise ModelConfigurationError("Canonical-facts schema requires fact slots")
+
+    fact_ids = [
+        slot.get("fact_id") if isinstance(slot, dict) else None
+        for slot in assertion_catalog
+    ]
     if (
-        not fact_ids
-        or any(not isinstance(fact_id, str) or not fact_id.strip() for fact_id in fact_ids)
+        any(not isinstance(fact_id, str) or not fact_id.strip() for fact_id in fact_ids)
         or len(set(fact_ids)) != len(fact_ids)
     ):
         raise ModelConfigurationError(
             "Canonical-facts schema requires nonempty unique fact identifiers"
         )
-    source_ref_ids: dict[str, Any] = {
-        "type": "array",
-        "items": {"type": "string"},
-        "uniqueItems": True,
-    }
-    if source_reference_ids:
-        source_ref_ids["items"]["enum"] = source_reference_ids
-    else:
-        source_ref_ids["maxItems"] = 0
-    fact = {
-        "type": "object",
-        "properties": {
-            "fact_id": {"type": "string", "enum": fact_ids},
-            "source_ref_ids": source_ref_ids,
-            "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-        },
-        "required": sorted(PROVIDER_FACT_FIELDS),
-        "additionalProperties": False,
-    }
+
+    fact_properties: dict[str, Any] = {}
+    all_assertion_ids: list[str] = []
+    for slot, fact_id in zip(assertion_catalog, fact_ids, strict=True):
+        assertions = slot.get("assertions")
+        assertion_ids = [
+            item.get("assertion_id") if isinstance(item, dict) else None
+            for item in assertions
+        ] if isinstance(assertions, list) else []
+        if (
+            not assertion_ids
+            or any(
+                not isinstance(assertion_id, str) or not assertion_id.strip()
+                for assertion_id in assertion_ids
+            )
+            or len(set(assertion_ids)) != len(assertion_ids)
+        ):
+            raise ModelConfigurationError(
+                "Canonical-facts schema requires bounded assertion identifiers"
+            )
+        all_assertion_ids.extend(assertion_ids)
+
+        eligible_source_ref_ids = slot.get("eligible_source_ref_ids")
+        if (
+            not isinstance(eligible_source_ref_ids, list)
+            or eligible_source_ref_ids != sorted(set(eligible_source_ref_ids))
+            or any(not isinstance(ref_id, str) for ref_id in eligible_source_ref_ids)
+            or set(eligible_source_ref_ids) - set(registry_by_id)
+        ):
+            raise ModelConfigurationError(
+                "Canonical-facts schema requires bounded source-reference identifiers"
+            )
+        refs_by_artifact: dict[str, list[str]] = {}
+        for ref_id in eligible_source_ref_ids:
+            artifact_id = registry_by_id[ref_id]["artifact_id"]
+            refs_by_artifact.setdefault(artifact_id, []).append(ref_id)
+        artifact_ids = sorted(refs_by_artifact)
+        source_ref_ids = {
+            "type": "object",
+            "properties": {
+                artifact_id: {
+                    "type": "string",
+                    "enum": sorted(refs_by_artifact[artifact_id]),
+                }
+                for artifact_id in artifact_ids
+            },
+            "required": artifact_ids,
+            "additionalProperties": False,
+        }
+        fact_properties[fact_id] = {
+            "type": "object",
+            "properties": {
+                "fact_id": {"type": "string", "enum": [fact_id]},
+                "assertion_id": {"type": "string", "enum": assertion_ids},
+                "source_ref_ids": source_ref_ids,
+                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+            },
+            "required": sorted(PROVIDER_FACT_FIELDS),
+            "additionalProperties": False,
+        }
+    if len(set(all_assertion_ids)) != len(all_assertion_ids):
+        raise ModelConfigurationError(
+            "Canonical-facts schema requires globally unique assertion identifiers"
+        )
+
     return {
         "type": "object",
         "properties": {
             "facts": {
-                "type": "array",
-                "minItems": len(fact_ids),
-                "maxItems": len(fact_ids),
-                "items": fact,
+                "type": "object",
+                "properties": fact_properties,
+                "required": fact_ids,
+                "additionalProperties": False,
             }
         },
         "required": ["facts"],
         "additionalProperties": False,
     }
+
+
+def _normalize_canonical_facts_response(
+    output: dict[str, Any],
+    *,
+    fact_ids: list[str],
+    provider_schema: dict[str, Any],
+) -> dict[str, Any]:
+    """Validate fixed provider slots, then restore the internal facts list."""
+
+    def native_schema_error() -> ModelResponseError:
+        return ModelResponseError(
+            "provider_native_schema invariant failed",
+            invariant="provider_native_schema",
+        )
+
+    if set(output) != {"facts"}:
+        raise native_schema_error()
+    wire_facts = output.get("facts")
+    if not isinstance(wire_facts, dict) or set(wire_facts) != set(fact_ids):
+        raise native_schema_error()
+    try:
+        fact_schemas = provider_schema["properties"]["facts"]["properties"]
+    except (KeyError, TypeError) as exc:  # pragma: no cover - local construction invariant
+        raise ModelConfigurationError("Canonical-facts provider schema is invalid") from exc
+    if not isinstance(fact_schemas, dict) or set(fact_schemas) != set(fact_ids):
+        raise ModelConfigurationError("Canonical-facts provider schema is invalid")
+
+    normalized: list[dict[str, Any]] = []
+    for fact_id in fact_ids:
+        value = wire_facts.get(fact_id)
+        if not isinstance(value, dict) or value.get("fact_id") != fact_id:
+            raise native_schema_error()
+        fact = dict(value)
+        refs_by_artifact = fact.get("source_ref_ids")
+        try:
+            source_schema = fact_schemas[fact_id]["properties"]["source_ref_ids"]
+            artifact_schemas = source_schema["properties"]
+            required_artifact_ids = source_schema["required"]
+        except (KeyError, TypeError) as exc:  # pragma: no cover - local construction invariant
+            raise ModelConfigurationError("Canonical-facts provider schema is invalid") from exc
+        if (
+            not isinstance(refs_by_artifact, dict)
+            or not isinstance(artifact_schemas, dict)
+            or not isinstance(required_artifact_ids, list)
+            or set(refs_by_artifact) != set(required_artifact_ids)
+            or set(artifact_schemas) != set(required_artifact_ids)
+            or any(
+                not isinstance(refs_by_artifact.get(artifact_id), str)
+                or refs_by_artifact[artifact_id]
+                not in artifact_schemas[artifact_id].get("enum", [])
+                for artifact_id in required_artifact_ids
+            )
+        ):
+            raise native_schema_error()
+        fact["source_ref_ids"] = [
+            refs_by_artifact[artifact_id]
+            for artifact_id in sorted(required_artifact_ids)
+        ]
+        normalized.append(fact)
+    return {"facts": normalized}
+
+
+def _assertion_id(
+    *,
+    fact_id: str,
+    state: str,
+    value: str,
+    normalized_value: str | None,
+) -> str:
+    material = {
+        "fact_id": fact_id,
+        "state": state,
+        "value": value,
+        "normalized_value": normalized_value,
+    }
+    encoded = json.dumps(
+        material, sort_keys=True, ensure_ascii=False, separators=(",", ":")
+    ).encode("utf-8")
+    return f"assert_{sha256(encoded).hexdigest()[:24]}"
+
+
+def _alternative_assertion_material(
+    *,
+    label: str,
+    normalized_value: str,
+    decision_value: str,
+) -> tuple[str, str, str]:
+    unknown = normalized_value in {"unverified", "unresolved"}
+    state = "unknown" if unknown else "known"
+    readable = normalized_value.replace("_", " ")
+    value = f"{label}: {readable}"
+    explanation = (
+        f"The selected bounded assertion leaves {label.lower()} unresolved."
+        if unknown
+        else f"The selected bounded assertion supports {label.lower()} as {readable}."
+    )
+    return state, value, explanation
+
+
+def bounded_fact_assertion_catalog(
+    fact_catalog: list[dict[str, Any]],
+    source_reference_registry: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Build a finite answer-neutral assertion catalog for each fact slot.
+
+    The catalog contains materialization data for every bounded choice, but no
+    expected/preferred marker. Candidate order is identifier order so the
+    current deterministic reference value is not signalled positionally.
+    """
+
+    registry_ids = {
+        item.get("source_ref_id")
+        for item in source_reference_registry
+        if isinstance(item, dict)
+        and isinstance(item.get("source_ref_id"), str)
+    }
+    result: list[dict[str, Any]] = []
+    for contract in fact_catalog:
+        fact_id = contract.get("fact_id")
+        label = contract.get("label")
+        controls_process = contract.get("controls_process")
+        decision_key = contract.get("decision_key")
+        normalized_options = contract.get("normalized_options")
+        current_values = contract.get("admissible_normalized_values")
+        current_state = contract.get("expected_state")
+        current_value = contract.get("canonical_value")
+        current_explanation = contract.get("canonical_explanation")
+        if (
+            not isinstance(fact_id, str)
+            or not fact_id
+            or not isinstance(label, str)
+            or not label
+            or not isinstance(controls_process, bool)
+            or not isinstance(normalized_options, dict)
+            or not isinstance(current_values, list)
+            or current_state
+            not in {"known", "unknown", "conflicting", "not_applicable"}
+            or not isinstance(current_value, str)
+            or not isinstance(current_explanation, str)
+            or not current_explanation.strip()
+        ):
+            raise ModelConfigurationError("Fact catalog assertion metadata is invalid")
+        if controls_process:
+            if (
+                len(current_values) != 1
+                or not isinstance(decision_key, str)
+                or normalized_options != DECISION_OPTIONS.get(decision_key)
+                or current_values[0] not in normalized_options
+            ):
+                raise ModelConfigurationError(
+                    "Controlling fact assertion catalog is invalid"
+                )
+            conservative_normalized = {
+                "scope": "unverified",
+                "dispute": "unverified",
+                "urgency": "unverified",
+                "notification": "unverified",
+                "recurrence": "unverified",
+                "causation": "unresolved",
+            }[decision_key]
+            normalized_candidates = sorted(
+                {current_values[0], conservative_normalized}
+            )
+        else:
+            if decision_key is not None or normalized_options or current_values:
+                raise ModelConfigurationError(
+                    "Non-controlling fact assertion catalog is invalid"
+                )
+            normalized_candidates = [None]
+
+        admissible_refs = contract.get("admissible_text_refs")
+        if not isinstance(admissible_refs, list):
+            raise ModelConfigurationError("Fact assertion grounding is invalid")
+        related_artifact_ids = {
+            ref.get("artifact_id")
+            for ref in admissible_refs
+            if isinstance(ref, dict) and isinstance(ref.get("artifact_id"), str)
+        }
+        eligible_source_ref_ids = sorted(
+            item["source_ref_id"]
+            for item in source_reference_registry
+            if item.get("artifact_id") in related_artifact_ids
+        )
+        if set(eligible_source_ref_ids) - registry_ids:
+            raise ModelConfigurationError("Fact assertion grounding is invalid")
+        candidates: list[dict[str, Any]] = []
+        for normalized_value in normalized_candidates:
+            is_reference_material = (
+                normalized_value is None
+                or normalized_value == current_values[0]
+            )
+            if is_reference_material:
+                state = current_state
+                value = current_value
+                explanation = current_explanation
+            else:
+                state, value, explanation = _alternative_assertion_material(
+                    label=label,
+                    normalized_value=str(normalized_value),
+                    decision_value=normalized_options[str(normalized_value)],
+                )
+            decision_value = (
+                normalized_options[normalized_value]
+                if isinstance(normalized_value, str)
+                else None
+            )
+            candidates.append(
+                {
+                    "assertion_id": _assertion_id(
+                        fact_id=fact_id,
+                        state=state,
+                        value=value,
+                        normalized_value=normalized_value,
+                    ),
+                    "fact_id": fact_id,
+                    "assertion_label": (
+                        f"{label}: {str(normalized_value).replace('_', ' ')}"
+                        if normalized_value is not None
+                        else f"{label}: {state}"
+                    ),
+                    "state": state,
+                    "value": value,
+                    "explanation": explanation,
+                    "normalized_value": normalized_value,
+                    "decision_value": decision_value,
+                }
+            )
+        result.append(
+            {
+                "fact_id": fact_id,
+                "label": label,
+                "model_selects_meaning": controls_process,
+                "eligible_source_ref_ids": eligible_source_ref_ids,
+                "assertions": sorted(
+                    candidates, key=lambda item: item["assertion_id"]
+                ),
+            }
+        )
+    assertion_ids = [
+        assertion["assertion_id"]
+        for slot in result
+        for assertion in slot["assertions"]
+    ]
+    if len(set(assertion_ids)) != len(assertion_ids):
+        raise ModelConfigurationError("Assertion identifier collision")
+    return result
 
 
 def _fact_catalog_identity(fact_catalog: list[dict[str, Any]]) -> list[str]:
@@ -348,7 +667,7 @@ def _cache_key(
         "provider_schema": provider_schema,
         "system_prompt_sha256": sha256(system_prompt.encode("utf-8")).hexdigest(),
         "max_tokens": MAX_OUTPUT_TOKENS,
-        "reasoning": dict(OPENROUTER_REASONING),
+        "reasoning": dict(CANONICAL_REASONING),
         "provider_policy": openrouter_provider_policy(),
         "temperature": 0,
         "strict_schema": True,
@@ -765,8 +1084,9 @@ def _merge_fact_contracts(
     output: dict[str, Any],
     fact_catalog: list[dict[str, Any]],
     source_reference_registry: list[dict[str, Any]],
+    assertion_catalog: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Accept guarded provider contributions and deterministically replace rejections."""
+    """Materialize one complete, strictly validated finite assertion response."""
 
     if set(output) != {"facts"} or not isinstance(output.get("facts"), list):
         raise ModelResponseError("Canonical-facts response must contain only a facts array")
@@ -801,6 +1121,40 @@ def _merge_fact_contracts(
         )
     ):
         raise ModelConfigurationError("Source-reference registry is invalid")
+
+    assertion_slots = {
+        slot.get("fact_id"): slot
+        for slot in assertion_catalog
+        if isinstance(slot, dict)
+    }
+    if set(assertion_slots) != set(catalog_by_id) or len(assertion_slots) != len(
+        assertion_catalog
+    ):
+        raise ModelConfigurationError("Assertion catalog fact membership is invalid")
+    assertions_by_slot: dict[str, dict[str, dict[str, Any]]] = {}
+    eligible_source_ids_by_slot: dict[str, list[str]] = {}
+    for fact_id, slot in assertion_slots.items():
+        candidates = slot.get("assertions")
+        if not isinstance(candidates, list) or not candidates:
+            raise ModelConfigurationError("Assertion catalog slot is invalid")
+        by_id = {
+            candidate.get("assertion_id"): candidate
+            for candidate in candidates
+            if isinstance(candidate, dict)
+            and isinstance(candidate.get("assertion_id"), str)
+        }
+        if len(by_id) != len(candidates):
+            raise ModelConfigurationError("Assertion catalog identifiers are invalid")
+        eligible_source_ids = slot.get("eligible_source_ref_ids")
+        if (
+            not isinstance(eligible_source_ids, list)
+            or eligible_source_ids != sorted(set(eligible_source_ids))
+            or any(not isinstance(ref_id, str) for ref_id in eligible_source_ids)
+            or set(eligible_source_ids) - set(registry_by_id)
+        ):
+            raise ModelConfigurationError("Eligible source-selection policy is invalid")
+        assertions_by_slot[fact_id] = by_id
+        eligible_source_ids_by_slot[fact_id] = eligible_source_ids
 
     merged: list[dict[str, Any]] = []
     accepted_fact_ids: list[str] = []
@@ -861,6 +1215,23 @@ def _merge_fact_contracts(
             }
         ):
             raise ModelConfigurationError("Fact catalog canonical truth metadata is invalid")
+        related_artifact_ids = {
+            ref["artifact_id"] for ref in admissible_text_refs
+        }
+        expected_eligible_source_ids = sorted(
+            ref_id
+            for ref_id, ref in registry_by_id.items()
+            if ref["artifact_id"] in related_artifact_ids
+        )
+        eligible_source_ids = eligible_source_ids_by_slot[fact_id]
+        if eligible_source_ids != expected_eligible_source_ids:
+            raise ModelConfigurationError(
+                "Eligible source-selection policy does not match fact artifacts"
+            )
+        required_source_artifact_ids = {
+            registry_by_id[ref_id]["artifact_id"]
+            for ref_id in eligible_source_ids
+        }
         controls_process = contract.get("controls_process")
         decision_key = contract.get("decision_key")
         normalized_options = contract.get("normalized_options")
@@ -875,8 +1246,8 @@ def _merge_fact_contracts(
                 or any(value not in normalized_options for value in admissible_values)
             ):
                 raise ModelConfigurationError("Controlling fact admissibility metadata is invalid")
-            normalized_value = admissible_values[0]
-            decision_value = normalized_options[normalized_value]
+            fallback_normalized_value = admissible_values[0]
+            fallback_decision_value = normalized_options[fallback_normalized_value]
         else:
             if (
                 decision_key is not None
@@ -884,8 +1255,8 @@ def _merge_fact_contracts(
                 or contract.get("admissible_normalized_values")
             ):
                 raise ModelConfigurationError("Non-controlling fact process metadata must remain empty")
-            normalized_value = None
-            decision_value = None
+            fallback_normalized_value = None
+            fallback_decision_value = None
         enrichments = contract.get("bounded_enrichments", [])
         if not isinstance(enrichments, list) or any(
             not isinstance(ref, dict)
@@ -894,12 +1265,32 @@ def _merge_fact_contracts(
         ):
             raise ModelConfigurationError("Fact catalog bounded enrichments are invalid")
 
+        fallback_assertion = next(
+            (
+                candidate
+                for candidate in assertions_by_slot[fact_id].values()
+                if candidate.get("state") == expected_state
+                and candidate.get("value") == canonical_value
+                and candidate.get("explanation") == canonical_explanation
+                and candidate.get("normalized_value") == fallback_normalized_value
+                and candidate.get("decision_value") == fallback_decision_value
+            ),
+            None,
+        )
+        if fallback_assertion is None:
+            raise ModelConfigurationError(
+                "Fact catalog fallback assertion is not structurally represented"
+            )
+
         rejection_invariant: str | None = None
-        source_reference_projection_required = False
         returned_ref_ids = returned_fact.get("source_ref_ids")
         provider_confidence = returned_fact.get("confidence")
+        returned_assertion_id = returned_fact.get("assertion_id")
+        selected_assertion = assertions_by_slot[fact_id].get(returned_assertion_id)
         if set(returned_fact) != PROVIDER_FACT_FIELDS:
             rejection_invariant = "provider_fact_fields"
+        elif selected_assertion is None:
+            rejection_invariant = "assertion_membership"
         elif (
             not isinstance(provider_confidence, (int, float))
             or isinstance(provider_confidence, bool)
@@ -914,46 +1305,60 @@ def _merge_fact_contracts(
             rejection_invariant = "source_reference_ids"
         elif set(returned_ref_ids) - set(registry_by_id):
             rejection_invariant = "source_reference_registry"
-        else:
-            source_reference_projection_required = set(returned_ref_ids) != {
-                resolve_observable_source_reference_id(ref, source_reference_registry)
-                for ref in admissible_text_refs
-            }
+        elif set(returned_ref_ids) - set(eligible_source_ids):
+            rejection_invariant = "eligible_source_selection"
+        elif bool(returned_ref_ids) != bool(eligible_source_ids):
+            rejection_invariant = "eligible_source_selection"
+        elif len(returned_ref_ids) != len(required_source_artifact_ids):
+            rejection_invariant = "eligible_source_selection"
+        elif {
+            registry_by_id[ref_id]["artifact_id"] for ref_id in returned_ref_ids
+        } != required_source_artifact_ids:
+            rejection_invariant = "eligible_source_selection"
+        elif (
+            selected_assertion.get("state") == "conflicting"
+            and len(
+                {
+                    registry_by_id[ref_id]["artifact_id"]
+                    for ref_id in returned_ref_ids
+                }
+            )
+            < 2
+        ):
+            rejection_invariant = "eligible_source_selection"
 
         if rejection_invariant is None:
             accepted_fact_ids.append(fact_id)
-            if source_reference_projection_required:
-                source_reference_projection_fact_ids.append(fact_id)
-                fact_refs = deterministic_text_refs
-            else:
-                fact_refs = [
-                    {
-                        "artifact_id": registry_by_id[ref_id]["artifact_id"],
-                        "locator_kind": "text_quote",
-                        "page": registry_by_id[ref_id]["page"],
-                        "excerpt": registry_by_id[ref_id]["excerpt"],
-                        "agent": "OpenRouter Nemotron Canonicalizer",
-                    }
-                    for ref_id in returned_ref_ids
-                ]
+            material = selected_assertion
+            fact_refs = [
+                {
+                    "artifact_id": registry_by_id[ref_id]["artifact_id"],
+                    "locator_kind": "text_quote",
+                    "page": registry_by_id[ref_id]["page"],
+                    "excerpt": registry_by_id[ref_id]["excerpt"],
+                    "agent": "OpenRouter Nemotron Canonicalizer",
+                }
+                for ref_id in returned_ref_ids
+            ]
             confidence = provider_confidence
         else:
             rejected_facts.append({"fact_id": fact_id, "invariant": rejection_invariant})
+            material = fallback_assertion
             fact_refs = deterministic_text_refs
             confidence = deterministic_confidence
         merged.append(
             {
                 "fact_id": fact_id,
                 "label": label,
-                "value": canonical_value,
-                "state": expected_state,
-                "explanation": canonical_explanation,
+                "value": material["value"],
+                "state": material["state"],
+                "explanation": material["explanation"],
                 "source_refs": [*fact_refs, *enrichments],
                 "confidence": confidence,
                 "controls_process": controls_process,
                 "decision_key": decision_key,
-                "normalized_value": normalized_value,
-                "decision_value": decision_value,
+                "normalized_value": material["normalized_value"],
+                "decision_value": material["decision_value"],
                 "semantic_role": semantic_role,
             }
         )
@@ -965,12 +1370,12 @@ def _merge_fact_contracts(
         "rejected_fact_count": len(rejected_facts),
         "source_reference_projection_fact_ids": source_reference_projection_fact_ids,
         "source_reference_projection_count": len(source_reference_projection_fact_ids),
-        "deterministic_fallback_applied": bool(rejected_facts),
+        "deterministic_fallback_applied": False,
         "ignored_noncontrolling_normalized_proposals": (
             ignored_noncontrolling_normalized_proposals
         ),
     }
-    if len(accepted_fact_ids) <= len(rejected_facts):
+    if rejected_facts:
         raise ModelResponseError(
             "hybrid_model_contribution invariant failed",
             invariant="hybrid_model_contribution",
@@ -1007,7 +1412,7 @@ def _validated_hybrid_diagnostics(
         or any(not isinstance(fact_id, str) or fact_id not in allowed_fact_ids for fact_id in accepted)
         or len(set(accepted)) != len(accepted)
         or value["accepted_fact_count"] != len(accepted)
-        or len(accepted) <= len(rejected)
+        or rejected
         or not isinstance(rejected, list)
         or any(
             not isinstance(item, dict)
@@ -1028,13 +1433,101 @@ def _validated_hybrid_diagnostics(
         )
         or len(set(projected)) != len(projected)
         or value["source_reference_projection_count"] != len(projected)
-        or value["deterministic_fallback_applied"] is not bool(rejected)
+        or value["deterministic_fallback_applied"] is not False
         or not isinstance(value["ignored_noncontrolling_normalized_proposals"], int)
         or isinstance(value["ignored_noncontrolling_normalized_proposals"], bool)
         or value["ignored_noncontrolling_normalized_proposals"] < 0
     ):
         raise ModelConfigurationError("Cached hybrid diagnostics are invalid")
     return value
+
+
+def _assertion_selection_receipts(
+    *,
+    output: dict[str, Any],
+    merged_facts: list[dict[str, Any]],
+    assertion_catalog: list[dict[str, Any]],
+    accepted_fact_ids: list[str],
+) -> list[dict[str, Any]]:
+    returned = {
+        item.get("fact_id"): item
+        for item in output.get("facts", [])
+        if isinstance(item, dict)
+    }
+    accepted = set(accepted_fact_ids)
+    materialized = {item["fact_id"]: item for item in merged_facts}
+    receipts: list[dict[str, Any]] = []
+    for slot in assertion_catalog:
+        fact_id = slot["fact_id"]
+        if fact_id not in accepted or fact_id not in materialized:
+            raise ModelConfigurationError(
+                "Assertion selection receipts require complete model acceptance"
+            )
+        assertion_id = returned[fact_id]["assertion_id"]
+        receipts.append(
+            {
+                "fact_id": fact_id,
+                "assertion_id": assertion_id,
+                "model_owned_fields": (
+                    ["assertion_id", "source_ref_ids", "confidence"]
+                    if slot["model_selects_meaning"]
+                    else ["source_ref_ids", "confidence"]
+                ),
+                "materialized_fields": [
+                    "value",
+                    "state",
+                    "explanation",
+                    "normalized_value",
+                    "decision_value",
+                ],
+                "attribution": "OpenRouter Nemotron Canonicalizer",
+                "deterministic_fallback_applied": False,
+            }
+        )
+    return receipts
+
+
+def _validated_assertion_selection_receipts(
+    value: Any, *, allowed_fact_ids: set[str]
+) -> list[dict[str, Any]]:
+    expected_fields = {
+        "fact_id",
+        "assertion_id",
+        "model_owned_fields",
+        "materialized_fields",
+        "attribution",
+        "deterministic_fallback_applied",
+    }
+    if (
+        not isinstance(value, list)
+        or len(value) != len(allowed_fact_ids)
+        or {item.get("fact_id") for item in value if isinstance(item, dict)}
+        != allowed_fact_ids
+        or any(
+            not isinstance(item, dict)
+            or set(item) != expected_fields
+            or not isinstance(item.get("assertion_id"), str)
+            or not item["assertion_id"].startswith("assert_")
+            or item.get("model_owned_fields")
+            not in (
+                ["assertion_id", "source_ref_ids", "confidence"],
+                ["source_ref_ids", "confidence"],
+            )
+            or item.get("materialized_fields")
+            != [
+                "value",
+                "state",
+                "explanation",
+                "normalized_value",
+                "decision_value",
+            ]
+            or item.get("attribution") != "OpenRouter Nemotron Canonicalizer"
+            or item.get("deterministic_fallback_applied") is not False
+            for item in value
+        )
+    ):
+        raise ModelConfigurationError("Cached assertion selections are invalid")
+    return [dict(item) for item in value]
 
 
 @dataclass
@@ -1062,6 +1555,7 @@ class OpenRouterNemotronCanonicalizer:
         *,
         run_id: str,
         allowed_fact_catalog: list[dict[str, Any]],
+        progress_sink: Callable[[dict[str, Any]], None] | None = None,
     ) -> dict[str, Any]:
         # One worker serves two fixed fixtures. Serializing cache misses prevents
         # concurrent sessions from duplicating the same paid request; the cache is
@@ -1071,6 +1565,7 @@ class OpenRouterNemotronCanonicalizer:
                 package,
                 run_id=run_id,
                 allowed_fact_catalog=allowed_fact_catalog,
+                progress_sink=progress_sink,
             )
 
     def _canonicalize_locked(
@@ -1079,6 +1574,7 @@ class OpenRouterNemotronCanonicalizer:
         *,
         run_id: str,
         allowed_fact_catalog: list[dict[str, Any]],
+        progress_sink: Callable[[dict[str, Any]], None] | None,
     ) -> dict[str, Any]:
         if self.model != OPENROUTER_MODEL:
             raise ModelConfigurationError("OpenRouter canonicalizer must use the configured Nemotron alias")
@@ -1098,25 +1594,55 @@ class OpenRouterNemotronCanonicalizer:
         package_text = json.dumps(package, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
         orchestration_id = f"orch_{sha256(run_id.encode('utf-8')).hexdigest()[:16]}"
         source_reference_registry = observable_source_reference_registry(package)
-        source_reference_ids = [item["source_ref_id"] for item in source_reference_registry]
         registry_text = json.dumps(
             source_reference_registry,
             sort_keys=True,
             ensure_ascii=False,
             separators=(",", ":"),
         )
-        model_fact_catalog = [
+        assertion_catalog = bounded_fact_assertion_catalog(
+            allowed_fact_catalog, source_reference_registry
+        )
+        provider_assertion_catalog = [
             {
-                "fact_id": item["fact_id"],
-                "label": item["label"],
+                "fact_id": slot["fact_id"],
+                "label": slot["label"],
+                "assertions": [
+                    {"assertion_id": assertion["assertion_id"]}
+                    | (
+                        {
+                            "assertion_label": (
+                                f"{slot['label']}: "
+                                f"{str(assertion['normalized_value']).replace('_', ' ')}"
+                            ),
+                            "state": assertion["state"],
+                            "normalized_value": assertion["normalized_value"],
+                        }
+                        if slot["model_selects_meaning"]
+                        else {"assertion_label": "source match only"}
+                    )
+                    for assertion in slot["assertions"]
+                ],
+                "model_selects_meaning": slot["model_selects_meaning"],
             }
-            for item in allowed_fact_catalog
+            for slot in assertion_catalog
         ]
-        catalog_text = json.dumps(model_fact_catalog, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
-        provider_schema = canonical_facts_schema(source_reference_ids, fact_ids)
+        catalog_text = json.dumps(
+            provider_assertion_catalog,
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        provider_schema = canonical_facts_schema(
+            source_reference_registry,
+            assertion_catalog,
+        )
         system_prompt = CANONICAL_SYSTEM_PROMPT
         cache_key = _cache_key(
-            {"package": package, "fact_catalog": allowed_fact_catalog},
+            {
+                "package": package,
+                "bounded_assertion_catalog": provider_assertion_catalog,
+            },
             provider_schema=provider_schema,
             system_prompt=system_prompt,
         )
@@ -1124,6 +1650,10 @@ class OpenRouterNemotronCanonicalizer:
         if cached is not None:
             diagnostics = _validated_hybrid_diagnostics(
                 cached.get("diagnostics"),
+                allowed_fact_ids=set(fact_ids),
+            )
+            assertion_selections = _validated_assertion_selection_receipts(
+                cached.get("assertion_selections"),
                 allowed_fact_ids=set(fact_ids),
             )
             call_id = self.storage.create_model_call(
@@ -1164,6 +1694,7 @@ class OpenRouterNemotronCanonicalizer:
             )
             return {
                 "facts": cached["facts"],
+                "assertion_selections": assertion_selections,
                 "diagnostics": diagnostics,
                 "authority_mode": "hybrid_guarded",
                 "orchestration_id": orchestration_id,
@@ -1179,13 +1710,21 @@ class OpenRouterNemotronCanonicalizer:
             }
 
         user_prompt = (
-            f"FACT CATALOG:\n{catalog_text}\n\n"
+            f"ASSERTION CATALOG:\n{catalog_text}\n\n"
             f"SOURCE REFERENCE REGISTRY:\n{registry_text}\n\n"
             f"OBSERVABLE CLAIM PACKAGE:\n{package_text}"
         )
         prompt_text = system_prompt + "\n" + user_prompt
         assert_external_tracing_disabled()
-        estimated_input_tokens = _input_token_estimate(prompt_text)
+        provider_schema_text = json.dumps(
+            provider_schema,
+            sort_keys=True,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        estimated_input_tokens = _input_token_estimate(
+            prompt_text + "\n" + provider_schema_text
+        )
         estimated_cost_usd = _estimated_cost(estimated_input_tokens)
         cap = cumulative_usd_cap()
         key = self.api_key_provider()
@@ -1271,6 +1810,24 @@ class OpenRouterNemotronCanonicalizer:
                 agent_id="canonical_facts",
                 agent_role="guarded_canonical_facts",
             )
+        if progress_sink is not None:
+            progress_sink(
+                {
+                    "receipt_type": "agent_started",
+                    "agent_id": "canonical_facts",
+                    "role": "Guarded Canonical Facts Agent",
+                    "actor_type": "nemotron_agent",
+                    "status": "started",
+                    "call_id": call_id,
+                    "call_count": 1,
+                    "cache_hit": False,
+                    "orchestration_id": orchestration_id,
+                    "input_artifact": "observable_claim_package",
+                    "input_artifact_hash": sha256(
+                        package_text.encode("utf-8")
+                    ).hexdigest(),
+                }
+            )
         request_payload = {
             "model": self.model,
             "messages": [
@@ -1280,7 +1837,7 @@ class OpenRouterNemotronCanonicalizer:
             "stream": False,
             "temperature": 0,
             "max_tokens": MAX_OUTPUT_TOKENS,
-            "reasoning": dict(OPENROUTER_REASONING),
+            "reasoning": dict(CANONICAL_REASONING),
             "response_format": {
                 "type": "json_schema",
                 "json_schema": {
@@ -1396,11 +1953,22 @@ class OpenRouterNemotronCanonicalizer:
                     "provider_finish_reason invariant failed",
                     invariant="provider_finish_reason",
                 )
-            output = _response_content(response)
+            output = _normalize_canonical_facts_response(
+                _response_content(response),
+                fact_ids=fact_ids,
+                provider_schema=provider_schema,
+            )
             merged_facts, diagnostics = _merge_fact_contracts(
                 output,
                 allowed_fact_catalog,
                 source_reference_registry,
+                assertion_catalog,
+            )
+            assertion_selections = _assertion_selection_receipts(
+                output=output,
+                merged_facts=merged_facts,
+                assertion_catalog=assertion_catalog,
+                accepted_fact_ids=diagnostics["accepted_fact_ids"],
             )
             understanding = {"facts": merged_facts}
             validate_claim_state(
@@ -1411,19 +1979,15 @@ class OpenRouterNemotronCanonicalizer:
             )
             validate_exact_source_excerpts(package, merged_facts)
             with self.storage.lock:
-                success_outcome = (
-                    "succeeded"
-                    if diagnostics["rejected_fact_count"] == 0
-                    else "succeeded_with_guarded_fallback"
-                )
                 self.storage.finish_model_call(
                     call_id,
-                    outcome="actual_cost_overrun" if actual_overrun else success_outcome,
+                    outcome="actual_cost_overrun" if actual_overrun else "succeeded",
                     **provider_ledger_patch,
                     **diagnostics,
                     canonical_output={
                         "facts": merged_facts,
                         "diagnostics": diagnostics,
+                        "assertion_selections": assertion_selections,
                         "origin": {
                             "origin_call_id": call_id,
                             "response_id": provider_ledger_patch["response_id"],
@@ -1465,6 +2029,7 @@ class OpenRouterNemotronCanonicalizer:
                 )
             return {
                 "facts": merged_facts,
+                "assertion_selections": assertion_selections,
                 "diagnostics": diagnostics,
                 "authority_mode": "hybrid_guarded",
                 "orchestration_id": orchestration_id,
