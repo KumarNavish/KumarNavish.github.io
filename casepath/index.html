@@ -9,6 +9,28 @@
   <title>CasePath — Analyse one claim</title>
   <script>
     if (location.protocol === 'file:') document.documentElement.dataset.casepathFileEntry = 'true';
+    // Begin the read-only demo hydration while the static claim shell renders.
+    // This wakes the free service early, performs no model work, and is reused
+    // by the application instead of issuing a duplicate startup request.
+    if (location.protocol === 'http:' || location.protocol === 'https:') {
+      try {
+        const requestedApi = new URLSearchParams(location.search).get('api');
+        const wakeBase = requestedApi || (location.hostname.endsWith('.chatgpt.site') ? location.origin : 'https://casepath-agentic-api.onrender.com');
+        const sessionKey = 'casepath:demo-session';
+        let sessionId = sessionStorage.getItem(sessionKey);
+        if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(sessionId || '')) {
+          const token = crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+          sessionId = `ui-${token}`;
+          sessionStorage.setItem(sessionKey, sessionId);
+        }
+        window.__CASEPATH_DEMO_REQUEST = fetch(`${wakeBase.replace(/\/$/, '')}/api/demo`, {
+          cache: 'no-store',
+          headers: { 'X-CasePath-Session': sessionId },
+        }).then(response => response.ok ? response.json() : null).catch(() => null);
+      } catch (_) {
+        window.__CASEPATH_DEMO_REQUEST = Promise.resolve(null);
+      }
+    }
   </script>
   <style>
     #localFileLaunch{display:none}
@@ -35,7 +57,7 @@
   <link rel="stylesheet" href="assets/live-v19.css">
   <link rel="stylesheet" href="assets/live-v20-focus.css?v=20.0.22">
   <link rel="stylesheet" href="assets/process-story.css?v=1.0.1">
-  <link rel="stylesheet" href="assets/artifact-canvas.css?v=1.0.56">
+  <link rel="stylesheet" href="assets/artifact-canvas.css?v=1.0.57">
 </head>
 <body>
   <section id="localFileLaunch" aria-labelledby="localFileLaunchTitle">
@@ -253,7 +275,7 @@ Alex Morgan</div>
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="assets/live-v16.js?v=20.0.36"></script>
+  <script src="assets/live-v16.js?v=20.0.37"></script>
   <script src="assets/live-v16-stability.js?v=20.0.2"></script>
   <script src="assets/live-v18-insertion-guard.js"></script>
   <script src="assets/live-v17.js?v=20.0.5"></script>
@@ -262,6 +284,6 @@ Alex Morgan</div>
   <script src="assets/live-v19-active-stage.js"></script>
   <script src="assets/live-v20-focus.js?v=20.0.22"></script>
   <script src="assets/process-story.js?v=1.0.1"></script>
-  <script src="assets/artifact-canvas.js?v=1.0.71"></script>
+  <script src="assets/artifact-canvas.js?v=1.0.72"></script>
 </body>
 </html>

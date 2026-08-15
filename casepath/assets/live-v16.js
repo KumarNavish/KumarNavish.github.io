@@ -110,6 +110,38 @@
     viewer: { artifact: null, extraction: null, page: 1, zoom: 1, tab: 'original', context: null, searchMatches: [] },
   };
 
+  // Reuse the page-load request if the viewer starts immediately. A cold API
+  // must never create a second competing demo request or keep the UI on the
+  // disabled start button while the service wakes.
+  let demoRequest = null;
+  let startupNoticeTimer = 0;
+
+  function requestDemo() {
+    if (!demoRequest) {
+      const earlyRequest = window.__CASEPATH_DEMO_REQUEST;
+      demoRequest = Promise.resolve(earlyRequest)
+        .then(demo => demo || api('/api/demo'))
+        .catch(error => {
+          demoRequest = null;
+          throw error;
+        });
+    }
+    return demoRequest;
+  }
+
+  function beginStartupNotice() {
+    clearTimeout(startupNoticeTimer);
+    startupNoticeTimer = setTimeout(() => {
+      if (document.body.dataset.casepathStartup !== 'waking') return;
+      setOrchestrator('First visit: waking the secure analysis service · sources remain available');
+    }, 2400);
+  }
+
+  function endStartupNotice() {
+    clearTimeout(startupNoticeTimer);
+    startupNoticeTimer = 0;
+  }
+
   // One browser-owned run store is the shared source of truth for every
   // presentation layer.  Legacy enhancers may read it, but only this module
   // writes it from the authenticated run stream or the terminal hydration.
@@ -627,7 +659,7 @@
     bindGlobalInteractions();
     $('#runCasePath').disabled = false;
     try {
-      const demo = await api('/api/demo');
+      const demo = await requestDemo();
       if (state.starting || state.journey !== 'start') return;
       state.demo = demo;
       state.flagshipClaim = state.demo.claim;
@@ -718,10 +750,20 @@
     state.starting = true;
     const button = $('#runCasePath');
     button.disabled = true;
-    button.querySelector('span').textContent = 'Opening the claim context…';
+    button.querySelector('span').textContent = 'Starting analysis…';
+    // The claim is already rendered. Move to the truthful opening workspace
+    // immediately; network wake-up must not look like a frozen primary action.
+    $('#startState').hidden = true;
+    $('#liveWorkspace').hidden = false;
+    $('#journeyActions').hidden = true;
+    document.body.dataset.casepathStartup = 'waking';
+    setOrchestrator('Preparing the source-grounded review');
+    beginStartupNotice();
+    renderProgress();
+    announceRender('opening');
     try {
       if (!params.has('preserve')) await api('/api/demo/reset', { method: 'POST' });
-      state.demo = await api('/api/demo');
+      state.demo = state.demo || await requestDemo();
       state.flagshipClaim = state.demo.claim;
       state.claim = state.flagshipClaim;
       renderClaim(state.claim);
@@ -729,6 +771,8 @@
       state.runId = created.run_id;
       document.body.dataset.casepathActiveRunId = created.run_id;
       state.journey = 'live';
+      endStartupNotice();
+      delete document.body.dataset.casepathStartup;
       state.starting = false;
       state.eventQueue = [];
       state.queuedEventIds.clear();
@@ -737,8 +781,6 @@
       state.run = { run_id: created.run_id, events: [], status: created.status || 'queued', ...created };
       state.flagshipRun = state.run;
       publishRunSnapshot(state.run);
-      $('#startState').hidden = true;
-      $('#liveWorkspace').hidden = false;
       $('#openAudit').disabled = false;
       $('#journeyActions').hidden = true;
       setOrchestrator('Opening one shared claim context');
@@ -747,6 +789,10 @@
       streamRun(state.runId, false).catch(() => {});
     } catch (error) {
       state.starting = false;
+      endStartupNotice();
+      delete document.body.dataset.casepathStartup;
+      $('#startState').hidden = false;
+      $('#liveWorkspace').hidden = true;
       button.disabled = false;
       button.querySelector('span').textContent = 'Analyse claim';
       toast(`Could not start: ${error.message}`);

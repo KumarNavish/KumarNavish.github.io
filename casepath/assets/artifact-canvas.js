@@ -1744,6 +1744,7 @@
             location: ref ? sourceDisplayTitle(ref.artifact_id) : 'accepted claim state',
             finding: String(fact.value ?? fact.label ?? fact.fact_id),
             fact,
+            ref,
           },
           items: [{ fact, facts: [fact], acceptedFact: true, locatorId: '' }],
         };
@@ -2291,6 +2292,29 @@
       return `<div class="ac-source-document-preview ac-real-artifact ac-real-email-artifact" data-real-artifact="true" data-artifact-id="${esc(ref.artifact_id || '')}">${documentHead}<dl class="ac-real-email-head">${email.from ? `<div><dt>From</dt><dd>${esc(email.from)}</dd></div>` : ''}${email.to ? `<div><dt>To</dt><dd>${esc(email.to)}</dd></div>` : ''}${email.date ? `<div><dt>Date</dt><dd>${esc(email.date)}</dd></div>` : ''}${email.subject ? `<div><dt>Subject</dt><dd>${esc(email.subject)}</dd></div>` : ''}</dl>${passage}</div>`;
     }
     return `<div class="ac-source-document-preview ac-real-artifact" data-real-artifact="true" data-artifact-id="${esc(ref?.artifact_id || '')}">${documentHead}${passage}</div>`;
+  }
+
+  function carriedAcceptedFactSourceMarkup(fact, ref) {
+    if (!fact || !ref) return '';
+    const sourceMeta = sourceArtifactMeta(ref);
+    const carriedAttributes = `data-carried-source-id="${esc(ref.artifact_id || '')}" data-carried-source-locator-id="${esc(sourceLocatorId(ref))}" data-carried-source-authority="${esc(ref.authority || 'customer_submission')}" data-carried-fact-id="${esc(fact.fact_id || '')}"`;
+    if (ref.locator_kind === 'visual_observation') {
+      const region = normalizedVisualRegion(ref);
+      const imageSource = visualSourceImage(ref);
+      if (!region || !imageSource) return '';
+      const [x, y, width, height] = region;
+      return `<figure class="ac-carried-source-context ac-carried-source-visual" ${carriedAttributes}>
+        <div><img src="${esc(imageSource)}" alt="Previously checked source region"><span style="--region-x:${x * 100}%;--region-y:${y * 100}%;--region-width:${width * 100}%;--region-height:${height * 100}%" aria-hidden="true"></span></div>
+        <figcaption><header><strong>${esc(sourceMeta.title)}</strong><small>Image region</small></header><p>${esc(ref.observation || 'Returned image observation')}</p></figcaption>
+      </figure>`;
+    }
+    if (ref.locator_kind === 'metadata_field') {
+      const field = String(ref.field || 'Returned field').replaceAll('_', ' ');
+      return `<div class="ac-carried-source-context ac-carried-source-field" ${carriedAttributes}><header><strong>${esc(sourceMeta.title)}</strong><small>Returned field</small></header><dl><dt>${esc(field)}</dt><dd>${esc(String(ref.value ?? 'Value not returned'))}</dd></dl></div>`;
+    }
+    const sourceWindow = sourceTextWindow(ref);
+    const exact = sourceWindow.exact || sourceFinding(ref);
+    return `<div class="ac-carried-source-context ac-carried-source-passage" ${carriedAttributes}><header><strong>${esc(sourceMeta.title)}</strong><small>${esc(sourceLocation(ref))}</small></header><blockquote>${sourceWindow.before ? `<span>${esc(sourceWindow.before)}</span> ` : ''}<mark class="ac-carried-source-highlight">${esc(exact)}</mark>${sourceWindow.after ? ` <span>${esc(sourceWindow.after)}</span>` : ''}</blockquote></div>`;
   }
 
   function sourceGroupReadingMarkup(step, interactive = true, highlighted = false) {
@@ -3897,9 +3921,26 @@
       source = `<section class="ac-decision-real-source">${sourceGroupReadingMarkup(step, !highlighted, highlighted)}</section>`;
     } else {
       const exact = esc(basis.finding || basis.title || 'Returned basis');
-      source = `<section class="ac-decision-real-source ac-decision-basis" ${highlighted ? '' : common}><header><small>${esc(basis.sourceLabel)}</small><strong>${esc(basis.title)}</strong></header>${highlighted ? `<mark class="is-highlighted">${exact}</mark>` : `<button type="button" class="ac-source-exact-control is-awaiting-click" data-source-exact-control="true">${exact}</button>`}</section>`;
+      const acceptedInput = ['accepted-fact', 'accepted-law'].includes(step.stepKind);
+      const originLabel = step.stepKind === 'accepted-law' ? 'Checked earlier in' : acceptedInput ? 'Accepted earlier from' : 'Grounded in';
+      const valueLabel = step.stepKind === 'accepted-law' ? 'Exact rule carried forward' : acceptedInput ? 'Recorded value' : 'Bounded input';
+      const routeLabel = step.stepKind === 'accepted-law' ? 'Checked law' : acceptedInput ? 'Verified fact' : 'Accepted input';
+      const verifiedSource = step.stepKind === 'accepted-fact' && basis.fact && basis.ref
+        ? carriedAcceptedFactSourceMarkup(basis.fact, basis.ref)
+        : '';
+      source = `<section class="ac-decision-real-source ac-decision-basis${verifiedSource ? ' has-verified-source' : ''}" data-decision-basis-kind="${esc(step.stepKind)}">
+        <header>
+          <div class="ac-decision-basis-copy"><small>${esc(basis.sourceLabel)}</small><strong>${esc(basis.title)}</strong></div>
+          <div class="ac-decision-basis-origin"><small>${esc(originLabel)}</small><strong>${esc(basis.location || 'accepted claim state')}</strong></div>
+        </header>
+        <div class="ac-decision-basis-body">
+          <div class="ac-decision-basis-value"><small>${esc(valueLabel)}</small>${highlighted ? `<mark class="is-highlighted">${exact}</mark>` : `<button type="button" class="ac-source-exact-control is-awaiting-click" data-source-exact-control="true" ${common}>${exact}</button>`}</div>
+          ${verifiedSource ? `<div class="ac-decision-basis-source"><small>Source already checked · carried forward with this fact</small>${verifiedSource}</div>` : ''}
+        </div>
+        <footer><span>${esc(routeLabel)}</span><i aria-hidden="true"></i><strong>Decision input</strong></footer>
+      </section>`;
     }
-    return `<div class="ac-decision-workspace" data-decision-workspace data-decision-flow-state="${esc(phase)}" data-decision-node-id="${esc(node.node_id)}"><div class="ac-decision-source-stage">${source}${decisionFragmentsMarkup(node)}</div>${decisionFlowPlanMarkup(node)}</div>`;
+    return `<div class="ac-decision-workspace" data-decision-workspace data-decision-flow-state="${esc(phase)}" data-decision-step-kind="${esc(step.stepKind)}" data-decision-node-id="${esc(node.node_id)}"><div class="ac-decision-source-stage">${source}${decisionFragmentsMarkup(node)}</div>${decisionFlowPlanMarkup(node)}</div>`;
   }
 
   function nodeInspectionMarkup(node) {
@@ -4226,7 +4267,8 @@
 
   function sourcePreludeMarkup({ readyToInspect = false } = {}) {
     const artifacts = asArray(state.claim?.artifacts);
-    const sourceCount = artifacts.length + 1;
+    const staticAttachmentCount = document.querySelectorAll('.attachment-row[data-artifact-id]').length;
+    const sourceCount = (artifacts.length || staticAttachmentCount) + 1;
     return `<article class="ac-source-prelude" data-ac-focal-object="source-prelude" data-source-count="${esc(sourceCount)}" data-ac-cursor-target="true">
       <header><span>Path builder</span><strong>Build the claim path</strong></header>
       <ol class="ac-source-prelude-plan" aria-label="Path-building plan">

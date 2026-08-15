@@ -7065,21 +7065,31 @@ body[data-casepath-moment="later-work"] .casepath-artifact-canvas .ac-agent-curs
   margin-left:0;
 }
 
-/* Source inspection intentionally takes focus over the lower graph lane. */
-.casepath-artifact-canvas .ac-spatial-viewport:has(.ac-spatial-detail [data-decision-workspace])::after,
-.casepath-artifact-canvas .ac-spatial-viewport:has(.ac-spatial-detail .ac-node-source-preview[data-node-attachment-kind="fact"])::after{
+/*
+ * Source inspection owns the foreground. Fade the graph before the document
+ * surface begins so a node can never look clipped by the source frame.
+ */
+.casepath-artifact-canvas[data-graph-inspecting="true"] .ac-spatial-viewport:has(.ac-spatial-detail [data-decision-workspace])::after,
+.casepath-artifact-canvas[data-graph-inspecting="true"] .ac-spatial-viewport:has(.ac-spatial-detail .ac-node-source-preview[data-node-attachment-kind="fact"])::after{
   content:"";
   position:absolute;
   z-index:3;
   right:0;
   bottom:0;
   left:0;
-  height:62%;
-  background:linear-gradient(to bottom,rgba(255,255,255,0),rgba(255,255,255,.97) 13%,#fff 25%);
+  height:78%;
+  background:linear-gradient(to bottom,rgba(255,255,255,0),rgba(255,255,255,.97) 10%,#fff 19%);
   pointer-events:none;
 }
 
 .casepath-artifact-canvas .ac-spatial-detail{z-index:5}
+
+/* The cursor has completed its hand-off once the readable source is open. */
+.casepath-artifact-canvas[data-graph-inspecting="true"] .ac-agent-cursor{
+  visibility:hidden!important;
+  opacity:0!important;
+  pointer-events:none!important;
+}
 
 .casepath-artifact-canvas .ac-failure-focus>.ac-failure-retry,
 .casepath-artifact-canvas .ac-failure-focus>.ac-failure-retry:hover{
@@ -7631,4 +7641,351 @@ html[data-casepath-release="20.0.0"] .casepath-artifact-canvas .ac-source-prelud
 
 .casepath-artifact-canvas .ac-decision-workspace[data-decision-flow-state="highlight-source"]{
   --ac-decision-note:"Keeping only the highlighted evidence before forming the decision.";
+}
+
+/*
+ * Accepted inputs are carried-forward records, not tiny document cards.
+ * Keep the record, its origin, and its route into the decision visible as one
+ * composed object; source documents continue to use the document treatment.
+ */
+.casepath-artifact-canvas .ac-decision-workspace[data-decision-step-kind="accepted-fact"][data-decision-flow-state="select-source"]{
+  --ac-decision-chapter:"1 of 3  ·  Bring forward a verified fact";
+  --ac-decision-note:"This fact was already checked against the original claim source.";
+}
+
+.casepath-artifact-canvas .ac-decision-workspace[data-decision-step-kind="accepted-fact"][data-decision-flow-state="read-source"]{
+  --ac-decision-chapter:"1 of 3  ·  Review the verified fact";
+  --ac-decision-note:"The recorded value and its source stay together before the decision is formed.";
+}
+
+.casepath-artifact-canvas .ac-decision-workspace[data-decision-step-kind="accepted-fact"][data-decision-flow-state="highlight-source"]{
+  --ac-decision-chapter:"2 of 3  ·  Keep the bounded fact";
+  --ac-decision-note:"Only this accepted value moves into the next decision.";
+}
+
+.casepath-artifact-canvas .ac-decision-workspace[data-decision-step-kind="accepted-law"][data-decision-flow-state="select-source"]{
+  --ac-decision-chapter:"1 of 3  ·  Bring forward checked Swiss law";
+  --ac-decision-note:"The official passage was checked earlier and stays attached to this step.";
+}
+
+.casepath-artifact-canvas .ac-decision-workspace[data-decision-step-kind="accepted-law"][data-decision-flow-state="read-source"]{
+  --ac-decision-chapter:"1 of 3  ·  Review the checked rule";
+  --ac-decision-note:"The exact rule and its official location stay together.";
+}
+
+.casepath-artifact-canvas .ac-decision-workspace[data-decision-step-kind="accepted-law"][data-decision-flow-state="highlight-source"]{
+  --ac-decision-chapter:"2 of 3  ·  Keep the checked rule";
+  --ac-decision-note:"Only this checked legal input moves into the next decision.";
+}
+
+.casepath-artifact-canvas .ac-decision-basis{
+  position:relative;
+  box-sizing:border-box;
+  width:min(820px,calc(100% - 8px));
+  min-height:172px;
+  gap:0;
+  margin:auto;
+  padding:0;
+  overflow:hidden;
+  border:1px solid #d8dce1;
+  border-left:0;
+  border-radius:10px;
+  background:#fff;
+  box-shadow:0 2px 4px rgba(20,24,29,.025),0 24px 62px rgba(20,24,29,.075);
+}
+
+.casepath-artifact-canvas .ac-decision-basis:before{
+  content:"";
+  position:absolute;
+  z-index:2;
+  top:0;
+  bottom:0;
+  left:0;
+  width:3px;
+  background:#a81f22;
+}
+
+.casepath-artifact-canvas .ac-decision-basis>header{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(150px,210px);
+  align-items:end;
+  gap:22px;
+  padding:20px 24px 17px 26px;
+  border-bottom:1px solid #e6e8eb;
+  background:linear-gradient(90deg,#fff 0%,#fff 67%,#fbfbfc 100%);
+}
+
+.casepath-artifact-canvas .ac-decision-basis-copy,
+.casepath-artifact-canvas .ac-decision-basis-origin{
+  display:grid;
+  min-width:0;
+  gap:4px;
+}
+
+.casepath-artifact-canvas .ac-decision-basis-copy small,
+.casepath-artifact-canvas .ac-decision-basis-origin small,
+.casepath-artifact-canvas .ac-decision-basis-value>small{
+  color:#777e87;
+  font:760 8px/1.25 Inter,ui-sans-serif,system-ui,sans-serif;
+  letter-spacing:.075em;
+  text-transform:uppercase;
+}
+
+.casepath-artifact-canvas .ac-decision-basis-copy small{color:#8f1924}
+
+.casepath-artifact-canvas .ac-decision-basis-copy strong{
+  overflow:hidden;
+  color:#202328;
+  font-size:18px;
+  line-height:1.22;
+  font-weight:720;
+  letter-spacing:-.025em;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.casepath-artifact-canvas .ac-decision-basis-origin{
+  padding-left:18px;
+  border-left:1px solid #e0e3e7;
+}
+
+.casepath-artifact-canvas .ac-decision-basis-origin strong{
+  overflow:hidden;
+  color:#4f555e;
+  font-size:10px;
+  line-height:1.35;
+  font-weight:650;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.casepath-artifact-canvas .ac-decision-basis-body{
+  display:grid;
+  min-width:0;
+}
+
+.casepath-artifact-canvas .ac-decision-basis.has-verified-source .ac-decision-basis-body{
+  grid-template-columns:minmax(150px,.68fr) minmax(0,1.32fr);
+}
+
+.casepath-artifact-canvas .ac-decision-basis-value{
+  display:grid;
+  gap:7px;
+  min-height:74px;
+  align-content:center;
+  padding:16px 26px;
+  background:#fff;
+}
+
+.casepath-artifact-canvas .ac-decision-basis-source{
+  display:grid;
+  min-width:0;
+  align-content:center;
+  padding:12px 16px;
+  border-left:1px solid #e6e8eb;
+  background:#fbfbfc;
+}
+
+.casepath-artifact-canvas .ac-decision-basis-source>small{
+  color:#6b727c;
+  font:700 8px/1.3 Inter,ui-sans-serif,system-ui,sans-serif;
+  letter-spacing:.035em;
+}
+
+.casepath-artifact-canvas .ac-decision-basis-source>.ac-carried-source-context{
+  width:100%;
+  min-height:0;
+  max-height:154px;
+  margin:7px 0 0;
+  overflow:hidden;
+  border:1px solid #e1e4e7;
+  border-radius:5px;
+  background:#fff;
+  box-shadow:none;
+}
+
+.casepath-artifact-canvas .ac-carried-source-context>header{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:14px;
+  padding:7px 10px 6px;
+  border-bottom:1px solid #eceef0;
+}
+
+.casepath-artifact-canvas .ac-carried-source-context>header strong{
+  overflow:hidden;
+  color:#30343a;
+  font-size:9.5px;
+  line-height:1.3;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.casepath-artifact-canvas .ac-carried-source-context>header small{
+  flex:0 0 auto;
+  color:#777e87;
+  font-size:7.5px;
+}
+
+.casepath-artifact-canvas .ac-carried-source-passage blockquote{
+  max-height:88px;
+  margin:0;
+  padding:11px 12px 12px 14px;
+  overflow:hidden;
+  border-left:2px solid #b9bec5;
+  color:#4f555e;
+  font-family:Georgia,"Times New Roman",serif;
+  font-size:10.5px;
+  line-height:1.55;
+}
+
+.casepath-artifact-canvas .ac-carried-source-highlight{
+  padding:1px 2px;
+  border-radius:2px;
+  background:linear-gradient(180deg,transparent 36%,rgba(168,31,34,.14) 36%,rgba(168,31,34,.14) 94%,transparent 94%);
+  color:#24272c;
+  font-weight:700;
+  box-decoration-break:clone;
+  -webkit-box-decoration-break:clone;
+}
+
+.casepath-artifact-canvas .ac-carried-source-field dl{
+  display:grid;
+  grid-template-columns:minmax(100px,.6fr) minmax(0,1fr);
+  align-items:center;
+  gap:12px;
+  min-height:66px;
+  margin:0;
+  padding:10px 12px;
+}
+
+.casepath-artifact-canvas .ac-carried-source-field dt{color:#777e87;font-size:8px;text-transform:capitalize}
+.casepath-artifact-canvas .ac-carried-source-field dd{margin:0;color:#25282d;font-size:12px;font-weight:700}
+
+.casepath-artifact-canvas .ac-carried-source-visual{
+  display:grid;
+  grid-template-columns:minmax(0,1.1fr) minmax(150px,.9fr);
+  gap:0;
+  align-items:stretch;
+}
+
+.casepath-artifact-canvas .ac-carried-source-visual>div{
+  position:relative;
+  min-height:112px;
+  overflow:hidden;
+  border-right:1px solid #e1e4e7;
+}
+
+.casepath-artifact-canvas .ac-carried-source-visual img{display:block;width:100%;height:100%;object-fit:cover}
+
+.casepath-artifact-canvas .ac-carried-source-visual>div>span{
+  position:absolute;
+  left:var(--region-x);
+  top:var(--region-y);
+  width:var(--region-width);
+  height:var(--region-height);
+  border:2px solid #a81f22;
+  border-radius:3px;
+  background:rgba(168,31,34,.12);
+  box-shadow:0 0 0 3px rgba(255,255,255,.72);
+}
+
+.casepath-artifact-canvas .ac-carried-source-visual figcaption{display:grid;align-content:center;padding:10px 12px}
+.casepath-artifact-canvas .ac-carried-source-visual figcaption>header{display:grid;gap:2px;padding:0;border:0}
+.casepath-artifact-canvas .ac-carried-source-visual figcaption p{margin:9px 0 0;color:#3f444b;font-size:9.5px;line-height:1.45}
+
+.casepath-artifact-canvas .ac-decision-basis-value>.ac-source-exact-control,
+.casepath-artifact-canvas .ac-decision-basis-value>mark{
+  display:block;
+  width:100%;
+  min-height:0;
+  margin:0;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  color:#25282d;
+  font:680 clamp(19px,1.7vw,25px)/1.28 Inter,ui-sans-serif,system-ui,sans-serif;
+  letter-spacing:-.025em;
+  text-align:left;
+}
+
+.casepath-artifact-canvas .ac-decision-basis-value>.ac-source-exact-control.is-awaiting-click{
+  background:linear-gradient(180deg,transparent 82%,rgba(168,31,34,.1) 82%);
+  background-position:left bottom;
+  background-repeat:no-repeat;
+  background-size:max(88px,32%) 100%;
+}
+
+.casepath-artifact-canvas .ac-decision-basis-value>mark.is-highlighted{
+  width:max-content;
+  max-width:100%;
+  padding:2px 4px 3px;
+  margin-left:-4px;
+  background-image:linear-gradient(rgba(168,31,34,.15),rgba(168,31,34,.15));
+  box-decoration-break:clone;
+  -webkit-box-decoration-break:clone;
+}
+
+.casepath-artifact-canvas .ac-decision-basis>footer{
+  display:grid;
+  grid-template-columns:auto minmax(36px,1fr) auto;
+  align-items:center;
+  gap:10px;
+  min-height:32px;
+  padding:0 24px 0 26px;
+  border-top:1px solid #eceef0;
+  background:#fafafa;
+  color:#69707a;
+  font-size:8px;
+  line-height:1.2;
+  font-weight:700;
+}
+
+.casepath-artifact-canvas .ac-decision-basis>footer i{
+  position:relative;
+  height:1px;
+  background:#c9ced4;
+}
+
+.casepath-artifact-canvas .ac-decision-basis>footer i:after{
+  content:"";
+  position:absolute;
+  top:-3px;
+  right:0;
+  width:6px;
+  height:6px;
+  border-top:1px solid #aeb4bc;
+  border-right:1px solid #aeb4bc;
+  transform:rotate(45deg);
+}
+
+.casepath-artifact-canvas .ac-decision-basis>footer strong{
+  color:#8f1924;
+  font-size:8px;
+  font-weight:760;
+}
+
+/* The highlighted record remains visible long enough to be read. */
+.casepath-artifact-canvas .ac-decision-workspace[data-decision-flow-state="highlight-source"] .ac-decision-basis{
+  display:grid;
+}
+
+@media(max-width:1100px){
+  .casepath-artifact-canvas .ac-decision-basis{width:calc(100% - 8px)}
+  .casepath-artifact-canvas .ac-decision-basis>header{grid-template-columns:minmax(0,1fr) 160px;gap:16px}
+  .casepath-artifact-canvas .ac-decision-basis.has-verified-source .ac-decision-basis-body{grid-template-columns:minmax(135px,.58fr) minmax(0,1.42fr)}
+}
+
+@media(max-height:760px){
+  .casepath-artifact-canvas .ac-decision-basis{min-height:148px}
+  .casepath-artifact-canvas .ac-decision-basis>header{padding-block:14px 12px}
+  .casepath-artifact-canvas .ac-decision-basis-value{min-height:58px;padding-block:11px}
+  .casepath-artifact-canvas .ac-decision-basis-source{padding-block:9px}
+  .casepath-artifact-canvas .ac-decision-basis-source>.ac-carried-source-context{max-height:122px}
+  .casepath-artifact-canvas .ac-carried-source-passage blockquote{max-height:72px;padding-block:8px;font-size:10px}
+  .casepath-artifact-canvas .ac-carried-source-visual>div{min-height:90px}
+  .casepath-artifact-canvas .ac-decision-basis-value>.ac-source-exact-control,
+  .casepath-artifact-canvas .ac-decision-basis-value>mark{font-size:18px}
 }
