@@ -2529,10 +2529,6 @@
         <article data-ac-grounding-viewer-detail></article>
       </dialog>
       <aside class="ac-agent-audit" data-ac-agent-audit aria-labelledby="artifactAgentAuditTitle" hidden></aside>
-      <footer class="ac-authority-line">
-        <span data-ac-authority>Application source parser</span>
-        <span data-ac-proof>Only validated outputs are shown.</span>
-      </footer>
       <div class="ac-agent-cursor" id="artifactAgentCursor" aria-hidden="true" data-ac-cursor data-agent-signature="casepath">
         <b class="ac-cursor-role-icon" data-ac-cursor-monogram data-ac-cursor-avatar data-agent-avatar="casepath" data-agent-monogram="CP"><svg viewBox="0 0 24 24" focusable="false">${CURSOR_AVATARS.casepath}</svg></b>
         <span class="ac-agent-cursor-label">
@@ -2970,7 +2966,6 @@
     root.querySelector('[data-ac-position]').textContent = identity.label;
     root.querySelector('[data-ac-task]').textContent = identity.task;
     root.querySelector('[data-ac-why]').textContent = identity.why;
-    root.querySelector('[data-ac-authority]').textContent = copy.authority;
     const cursor = root.querySelector('[data-ac-cursor]');
     cursor.dataset.agentSignature = identity.signature;
     setCursorAvatar(cursor, identity);
@@ -4667,54 +4662,6 @@
     } }));
   }
 
-  function renderProofLine() {
-    const proof = state.root?.querySelector('[data-ac-proof]');
-    if (!proof) return;
-    if (['opening', 'read'].includes(state.moment)) {
-      proof.textContent = 'Original claim package · no conclusion yet';
-      return;
-    }
-    if (state.moment === 'understand') {
-      proof.textContent = 'One exact source at a time · no conclusion yet';
-      return;
-    }
-    if (state.moment === 'research') {
-      proof.textContent = 'Checking exact Swiss-law sections · process path not shown yet';
-      return;
-    }
-    if (state.processAccepted) {
-      if (state.moment === 'review-applied') {
-        proof.textContent = reviewAppliedTruth().verified
-          ? 'Unverified correction · ventilation check added · responsibility still blocked'
-          : 'Correction not verified · existing process retained';
-        return;
-      }
-      if (state.moment === 'knowledge') {
-        proof.textContent = 'Unverified case memory saved · shared playbook unchanged';
-        return;
-      }
-      if (state.moment === 'later-work') {
-        proof.textContent = 'New claim source → saved lesson → confirmed graph change';
-        return;
-      }
-      if (state.moment === 'later-result') {
-        proof.textContent = validatedLaterMemory()
-          ? 'Saved lesson used here · responsibility still blocked'
-          : 'No saved-memory change was proven';
-        return;
-      }
-      const current = state.process?.current_overlay?.current_node_id || state.process?.current_node || 'not returned';
-      const next = state.process?.current_overlay?.next_action_node_id || 'not returned';
-      proof.textContent = returnedProcessRoute().flagshipCausation
-        ? 'Cause not proven → independent check needed → responsibility waits'
-        : current === next
-          ? `Verified path · ${nodeLabel(current)} needs more evidence`
-          : `Verified path · ${nodeLabel(current)} open · ${nodeLabel(next)} next`;
-    } else {
-      proof.textContent = 'Only validated outputs are shown.';
-    }
-  }
-
   function render() {
     mount();
     if (!state.root) return;
@@ -4729,7 +4676,6 @@
     reconcileGraph();
     renderFocal();
     syncGraphCursorTarget();
-    renderProofLine();
     const journeyNext = document.querySelector('#journeyNext');
     if (journeyNext) {
       const routeTerminal = state.processAccepted
