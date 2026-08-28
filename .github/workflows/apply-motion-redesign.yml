@@ -18,11 +18,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Reassemble and apply redesign patch
+      - name: Decode and apply redesign patch
         run: |
-          cat motion-redesign.patch.[0-9][0-9] > /tmp/motion-redesign.patch
+          cat motion-redesign.patch.gz.b64.[0-9][0-9] | base64 -d | gzip -d > /tmp/motion-redesign.patch
           git apply --index --binary /tmp/motion-redesign.patch
-          git rm motion-redesign.patch.[0-9][0-9] motion-redesign.patch.ready
+          git rm motion-redesign.patch.gz.b64.[0-9][0-9] motion-redesign.patch.ready
 
       - name: Commit redesign
         run: |
