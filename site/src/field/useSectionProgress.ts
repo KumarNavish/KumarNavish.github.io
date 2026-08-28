@@ -8,11 +8,10 @@ export function useSectionProgress(
   ref: RefObject<HTMLElement | null>,
   reducedMotion: boolean,
 ): number {
-  const [progress, setProgress] = useState(reducedMotion ? 1 : 0)
+  const [progress, setProgress] = useState(0)
 
   useEffect(() => {
     if (reducedMotion) {
-      setProgress(1)
       return undefined
     }
 
@@ -37,7 +36,7 @@ export function useSectionProgress(
       frame = window.requestAnimationFrame(measure)
     }
 
-    measure()
+    scheduleMeasure()
     window.addEventListener('scroll', scheduleMeasure, { passive: true })
     window.addEventListener('resize', scheduleMeasure)
 
@@ -50,7 +49,7 @@ export function useSectionProgress(
     }
   }, [reducedMotion, ref])
 
-  return progress
+  return reducedMotion ? 1 : progress
 }
 
 export function useActiveChapter(
