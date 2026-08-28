@@ -1,5 +1,5 @@
+/* eslint-disable react-refresh/only-export-components */
 import {
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -72,7 +72,6 @@ export function useChapterProgress(
 }
 
 export function useActiveChapter(onChange: (id: ChapterId) => void): void {
-  const stableOnChange = useCallback(onChange, [onChange])
   useEffect(() => {
     const ids: ChapterId[] = [
       'entry',
@@ -92,14 +91,14 @@ export function useActiveChapter(onChange: (id: ChapterId) => void): void {
           .filter((entry) => entry.isIntersecting)
           .sort((left, right) => right.intersectionRatio - left.intersectionRatio)[0]
         if (active?.target.id) {
-          stableOnChange(active.target.id as ChapterId)
+          onChange(active.target.id as ChapterId)
         }
       },
       { rootMargin: '-42% 0px -42% 0px', threshold: [0, 0.2, 0.5, 0.8] },
     )
     elements.forEach((element) => observer.observe(element))
     return () => observer.disconnect()
-  }, [stableOnChange])
+  }, [onChange])
 }
 
 export function useInterval(callback: () => void, delay: number | null): void {
