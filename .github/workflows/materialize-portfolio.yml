@@ -59,7 +59,12 @@ jobs:
               target.parent.mkdir(parents=True, exist_ok=True)
               target.write_bytes(data)
 
-          index = Path("site/index.html").read_text()
+          content = "\n".join(
+              [
+                  Path("site/index.html").read_text(),
+                  Path("site/src/portfolio.js").read_text(),
+              ]
+          )
           required = [
               "I build learning systems that can change without losing what made them useful.",
               "https://openreview.net/forum?id=yCe0QP7OJQ",
@@ -68,7 +73,7 @@ jobs:
               "Generative AI × spatial computing",
               "navish.kumar@unibas.ch",
           ]
-          missing = [fragment for fragment in required if fragment not in index]
+          missing = [fragment for fragment in required if fragment not in content]
           if missing:
               raise SystemExit(f"Required portfolio content missing: {missing}")
 
