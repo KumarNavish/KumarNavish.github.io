@@ -1,0 +1,131 @@
+name: validate-motion-mobile-once
+
+on:
+  push:
+    branches: [motion-native-research-instrument-v2]
+    paths: [validate-motion-mobile.ready]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Build production application
+        id: build
+        continue-on-error: true
+        working-directory: site
+        run: |
+          npm install
+          npm run build
+
+      - name: Install Playwright Chromium
+        id: browser
+        if: steps.build.outcome == 'success'
+        continue-on-error: true
+        working-directory: site
+        run: |
+          npm install --no-save @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start SPA-aware production preview
+        id: preview
+        if: steps.browser.outcome == 'success'
+        continue-on-error: true
+        working-directory: site
+        run: |
+          nohup npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/motion-mobile-preview.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/motion-mobile-preview.log
+          exit 1
+
+      - name: Run mobile and direct-route QA
+        id: qa
+        if: steps.preview.outcome == 'success'
+        continue-on-error: true
+        working-directory: site
+        run: |
+          mkdir -p mobile-qa
+          cat > mobile-qa.cjs <<'EOF'
+          const { chromium } = require('@playwright/test')
+          const fs = require('node:fs')
+
+          ;(async () => {
+            const browser = await chromium.launch()
+            const page = await browser.newPage({ viewport: { width: 390, height: 844 } })
+            const failures = []
+            page.on('console', message => {
+              if (message.type() === 'error' || message.type() === 'warning') failures.push(`${message.type()}: ${message.text()}`)
+            })
+            page.on('pageerror', error => failures.push(`pageerror: ${error.message}`))
+
+            await page.goto('http://127.0.0.1:4173/research/experience-replay-optimization', { waitUntil: 'networkidle' })
+            await page.locator('#replay').waitFor({ state: 'visible' })
+            await page.getByRole('heading', { name: /Which memories make the next update/i }).waitFor({ state: 'visible' })
+            await page.screenshot({ path: 'mobile-qa/mobile-replay.png', fullPage: false })
+            const replayOverflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+
+            await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' })
+            await page.getByRole('heading', { name: /Difficult ideas, made operable/i }).waitFor({ state: 'visible' })
+            await page.screenshot({ path: 'mobile-qa/mobile-entry.png', fullPage: false })
+            const entryOverflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+            const safePatchCount = await page.getByText('SafePatch', { exact: false }).count()
+
+            const result = { failures, replayOverflow, entryOverflow, safePatchCount, url: page.url() }
+            fs.writeFileSync('mobile-qa/mobile-result.json', JSON.stringify(result, null, 2))
+            await browser.close()
+
+            if (failures.length || replayOverflow > 1 || entryOverflow > 1 || safePatchCount !== 0) {
+              console.error(JSON.stringify(result, null, 2))
+              process.exit(1)
+            }
+          })().catch(error => {
+            console.error(error)
+            process.exit(1)
+          })
+          EOF
+          node mobile-qa.cjs
+          rm mobile-qa.cjs
+
+      - name: Record outcomes
+        if: always()
+        run: |
+          mkdir -p site/mobile-qa
+          cat > site/mobile-qa/summary.json <<EOF
+          {
+            "build": "${{ steps.build.outcome }}",
+            "browser_install": "${{ steps.browser.outcome }}",
+            "preview": "${{ steps.preview.outcome }}",
+            "mobile_deep_link_qa": "${{ steps.qa.outcome }}",
+            "commit": "${{ github.sha }}"
+          }
+          EOF
+          rm -f site/mobile-qa.cjs
+
+      - name: Upload mobile QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: motion-v2-mobile-validation
+          path: |
+            site/mobile-qa
+            /tmp/motion-mobile-preview.log
+          if-no-files-found: warn
+          retention-days: 2
