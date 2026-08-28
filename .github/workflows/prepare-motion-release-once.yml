@@ -1,0 +1,52 @@
+name: prepare-motion-release-once
+
+on:
+  push:
+    branches: [motion-native-research-instrument-v2]
+    paths: [prepare-motion-release.ready]
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use SPA-aware preview and remove SafePatch completely
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          workflow = Path('.github/workflows/validate-motion-v2-once.yml')
+          text = workflow.read_text()
+          old = """          nohup python3 -m http.server 4173 --directory site/dist > /tmp/motion-preview.log 2>&1 &
+          echo $! > /tmp/motion-preview.pid
+          for attempt in $(seq 1 30); do
+"""
+          new = """          cd site
+          nohup npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/motion-preview.log 2>&1 &
+          echo $! > /tmp/motion-preview.pid
+          cd ..
+          for attempt in $(seq 1 30); do
+"""
+          assert old in text
+          workflow.write_text(text.replace(old, new))
+
+          prune = Path('site/scripts/prune-legacy-surfaces.mjs')
+          prune_text = prune.read_text().replace("  'public/safepatch',\n", '')
+          prune.write_text(prune_text)
+          PY
+          rm -rf site/demos/safepatch site/vite.safepatch.config.ts site/public/safepatch
+          ! grep -R -i --exclude='*.map' --exclude-dir=node_modules 'SafePatch' site
+
+      - name: Remove one-shot machinery and commit
+        run: |
+          git rm .github/workflows/prepare-motion-release-once.yml prepare-motion-release.ready
+          git add -A
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix: prepare motion-native release and remove SafePatch"
+          git push
