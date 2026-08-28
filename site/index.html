@@ -20,14 +20,14 @@
       content="An interactive atlas of research, systems, and emerging interfaces."
     />
     <meta property="og:url" content="https://kumarnavish.github.io/" />
-    <meta property="og:image" content="https://kumarnavish.github.io/portfolio/og-atlas.png" />
+    <meta property="og:image" content="https://kumarnavish.github.io/social-card.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Navish Kumar — Research Systems & Spatial Intelligence" />
     <meta
       name="twitter:description"
       content="An interactive atlas of research, systems, and emerging interfaces."
     />
-    <meta name="twitter:image" content="https://kumarnavish.github.io/portfolio/og-atlas.png" />
+    <meta name="twitter:image" content="https://kumarnavish.github.io/social-card.png" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preload" href="/portfolio/atlas.css" as="style" />
     <link rel="stylesheet" href="/portfolio/atlas.css" />
@@ -162,18 +162,12 @@
           <button type="button" class="text-action" data-film-replay>Replay the sequence <span aria-hidden="true">↺</span></button>
         </div>
         <div class="film-frame">
-          <video
+          <canvas
+            id="atlas-film-canvas"
             data-atlas-film
-            muted
-            autoplay
-            loop
-            playsinline
-            preload="metadata"
-            poster="/portfolio/atlas-film-poster.webp"
+            role="img"
             aria-label="Animated map showing research questions becoming papers, systems, and future directions"
-          >
-            <source src="/portfolio/atlas-film.mp4" type="video/mp4" />
-          </video>
+          ></canvas>
           <div class="film-caption">
             <span>Research atlas / generated motion study</span>
             <span>10 seconds · muted</span>
@@ -400,6 +394,7 @@
       </div>
     </noscript>
 
+    <script src="/portfolio/atlas-film.js" defer></script>
     <script src="/portfolio/atlas.js" defer></script>
   </body>
 </html>

@@ -2316,3 +2316,12 @@ html.motion-paused *::after {
     display: none;
   }
 }
+
+
+/* immersive atlas native film */
+.film-frame canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #020305;
+}
