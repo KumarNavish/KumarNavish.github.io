@@ -54,7 +54,13 @@ describe('replay geometry', () => {
   })
 
   it('keeps exact selection no worse than greedy and greedy no worse than the locked random control', () => {
-    const argumentsTuple = [candidates, [0.55, 0.25], [0.92, 0.78], 0.4, 3] as const
+    const argumentsTuple: [
+    ReplayCandidate[],
+    [number, number],
+    [number, number],
+    number,
+    number,
+  ] = [candidates, [0.55, 0.25], [0.92, 0.78], 0.4, 3]
     const exact = selectReplaySubset(...argumentsTuple, 'exact')
     const greedy = selectReplaySubset(...argumentsTuple, 'greedy')
     const random = selectReplaySubset(...argumentsTuple, 'random', 23)
