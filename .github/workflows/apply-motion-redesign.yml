@@ -3,7 +3,7 @@ name: apply-motion-redesign
 on:
   push:
     branches: [motion-native-research-instrument]
-    paths: [motion-redesign.patch]
+    paths: [motion-redesign.patch.ready]
 
 permissions:
   contents: write
@@ -18,11 +18,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply redesign patch
+      - name: Reassemble and apply redesign patch
         run: |
-          git apply --index --binary motion-redesign.patch
-          git rm --cached motion-redesign.patch
-          rm motion-redesign.patch
+          cat motion-redesign.patch.[0-9][0-9] > /tmp/motion-redesign.patch
+          git apply --index --binary /tmp/motion-redesign.patch
+          git rm motion-redesign.patch.[0-9][0-9] motion-redesign.patch.ready
 
       - name: Commit redesign
         run: |
