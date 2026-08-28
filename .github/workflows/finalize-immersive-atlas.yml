@@ -1,0 +1,258 @@
+name: Finalize immersive portfolio atlas
+
+on:
+  push:
+    branches:
+      - portfolio-immersive-atlas-2026
+    paths:
+      - .github/workflows/finalize-immersive-atlas.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finalize-immersive-atlas-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Patch the cinematic layer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          index_path = Path('site/index.html')
+          index = index_path.read_text()
+          index = index.replace(
+              'https://kumarnavish.github.io/portfolio/og-atlas.png',
+              'https://kumarnavish.github.io/social-card.png',
+          )
+          canvas = '''          <canvas
+                      id="atlas-film-canvas"
+                      data-atlas-film
+                      role="img"
+                      aria-label="Animated map showing research questions becoming papers, systems, and future directions"
+                    ></canvas>'''
+          index, replaced = re.subn(
+              r'          <video\n            data-atlas-film[\s\S]*?          </video>',
+              canvas,
+              index,
+              count=1,
+          )
+          if replaced == 0 and 'id="atlas-film-canvas"' not in index:
+              raise SystemExit('Unable to locate the original film surface.')
+          if '/portfolio/atlas-film.js' not in index:
+              index = index.replace(
+                  '    <script src="/portfolio/atlas.js" defer></script>',
+                  '    <script src="/portfolio/atlas-film.js" defer></script>\n'
+                  '    <script src="/portfolio/atlas.js" defer></script>',
+              )
+          index_path.write_text(index)
+
+          css_path = Path('site/public/portfolio/atlas.css')
+          css = css_path.read_text()
+          marker = '/* immersive atlas native film */'
+          if marker not in css:
+              css += '''
+
+          /* immersive atlas native film */
+          .film-frame canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: #020305;
+          }
+          '''
+          css_path.write_text(css)
+          PY
+
+          cat > site/public/portfolio/atlas-film.js <<'JS'
+          (() => {
+            'use strict'
+            const canvas = document.getElementById('atlas-film-canvas')
+            if (!(canvas instanceof HTMLCanvasElement)) return
+            const ctx = canvas.getContext('2d', { alpha: false })
+            if (!ctx) return
+
+            const TAU = Math.PI * 2
+            const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v))
+            const mix = (a, b, t) => a + (b - a) * t
+            const ease = (v) => 1 - Math.pow(1 - clamp(v), 3)
+            const easeIO = (v) => {
+              const t = clamp(v)
+              return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+            }
+            const colors = {
+              cyan: '95,212,255', violet: '159,140,255', mint: '134,247,212',
+              text: '242,247,252', muted: '141,153,166',
+            }
+            const nodes = {
+              core: ['Navish Kumar', colors.cyan], ngvi: ['Natural-gradient VI', colors.cyan],
+              er: ['Experience Replay', colors.cyan], rank: ['Rank Feasibility', colors.cyan],
+              ticlm: ['Counterfactual Replay', colors.violet], casepath: ['CasePath', colors.mint],
+              spatial: ['GenAI × Spatial', colors.violet],
+            }
+            const a = { core:[480,280], ngvi:[525,115], er:[290,190], rank:[690,175], ticlm:[305,395], casepath:[570,420], spatial:[750,350] }
+            const b = { core:[75,270], ngvi:[195,270], er:[335,270], rank:[475,270], ticlm:[620,270], casepath:[790,205], spatial:[790,345] }
+            const edges = [['core','ngvi'],['ngvi','er'],['er','rank'],['rank','ticlm'],['ticlm','casepath'],['ticlm','spatial']]
+
+            let width = 1
+            let height = 1
+            let dpr = 1
+            let time = 0
+            let paused = matchMedia('(prefers-reduced-motion: reduce)').matches
+            let visible = false
+            let last = performance.now()
+
+            function resize() {
+              const rect = canvas.getBoundingClientRect()
+              width = Math.max(1, rect.width)
+              height = Math.max(1, rect.height)
+              dpr = Math.min(devicePixelRatio || 1, 1.5)
+              canvas.width = Math.round(width * dpr)
+              canvas.height = Math.round(height * dpr)
+              ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+            }
+
+            function point(from, to, t) {
+              const mx = (from.x + to.x) / 2 + (to.y - from.y) * 0.08
+              const my = (from.y + to.y) / 2 - (to.x - from.x) * 0.04
+              const u = 1 - t
+              return { x:u*u*from.x + 2*u*t*mx + t*t*to.x, y:u*u*from.y + 2*u*t*my + t*t*to.y }
+            }
+
+            function curve(from, to, color, alpha, progress = 1, lineWidth = 1) {
+              const steps = 48
+              const count = Math.max(2, Math.floor(steps * clamp(progress)))
+              ctx.beginPath()
+              for (let i = 0; i < count; i += 1) {
+                const p = point(from, to, i / (steps - 1))
+                i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)
+              }
+              ctx.strokeStyle = `rgba(${color},${alpha})`
+              ctx.lineWidth = lineWidth
+              ctx.stroke()
+            }
+
+            function node(position, label, color, alpha, active) {
+              if (alpha <= 0) return
+              const compact = width < 620
+              const font = compact ? 9 : 12
+              ctx.font = `500 ${font}px Inter,ui-sans-serif,sans-serif`
+              const w = Math.max(compact ? 92 : 118, ctx.measureText(label).width + (compact ? 35 : 46))
+              const h = compact ? 34 : 44
+              const x = position.x - w / 2
+              const y = position.y - h / 2
+              ctx.save()
+              ctx.globalAlpha = alpha
+              ctx.shadowBlur = active ? 18 : 9
+              ctx.shadowColor = active ? `rgba(${color},.35)` : 'rgba(0,0,0,.45)'
+              ctx.fillStyle = 'rgba(10,14,21,.94)'
+              ctx.strokeStyle = `rgba(${color},${active ? .78 : .34})`
+              ctx.lineWidth = active ? 1.6 : 1
+              ctx.beginPath(); ctx.roundRect(x, y, w, h, compact ? 7 : 8); ctx.fill(); ctx.stroke()
+              ctx.shadowBlur = 0
+              const orbX = x + (compact ? 13 : 17)
+              ctx.beginPath(); ctx.arc(orbX, position.y, compact ? 4 : 5, 0, TAU); ctx.strokeStyle = `rgba(${color},.82)`; ctx.stroke()
+              ctx.beginPath(); ctx.arc(orbX, position.y, 1.6, 0, TAU); ctx.fillStyle = `rgb(${color})`; ctx.fill()
+              ctx.fillStyle = `rgb(${colors.text})`; ctx.textBaseline = 'middle'; ctx.fillText(label, x + (compact ? 23 : 31), position.y)
+              ctx.restore()
+            }
+
+            function draw() {
+              const t = time % 10
+              const scale = Math.min(width / 960, height / 540)
+              const ox = (width - 960 * scale) / 2
+              const oy = (height - 540 * scale) / 2
+              const map = ([x,y]) => ({ x:ox + x*scale, y:oy + y*scale })
+              const compact = width < 620
+
+              ctx.fillStyle = '#020305'; ctx.fillRect(0, 0, width, height)
+              const glow = ctx.createRadialGradient(width*.58,height*.53,0,width*.58,height*.53,Math.max(width,height)*.58)
+              glow.addColorStop(0,'rgba(95,212,255,.11)'); glow.addColorStop(.38,'rgba(36,74,101,.05)'); glow.addColorStop(1,'rgba(0,0,0,0)')
+              ctx.fillStyle = glow; ctx.fillRect(0,0,width,height)
+              ctx.lineWidth = .6
+              for (let x=0; x<width; x+=Math.max(32,40*scale)) { ctx.strokeStyle='rgba(140,180,205,.04)'; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,height); ctx.stroke() }
+              for (let y=0; y<height; y+=Math.max(32,40*scale)) { ctx.strokeStyle='rgba(140,180,205,.04)'; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(width,y); ctx.stroke() }
+
+              ctx.fillStyle=`rgba(${colors.text},.76)`; ctx.font=`600 ${Math.max(8,11*scale)}px Inter,sans-serif`; ctx.fillText('N  /  RESEARCH ATLAS',ox+34*scale,oy+30*scale)
+              ctx.textAlign='right'; ctx.fillStyle=`rgba(${colors.muted},.64)`; ctx.font=`400 ${Math.max(7,9*scale)}px Inter,sans-serif`; ctx.fillText('RESEARCH → SYSTEMS → INTERFACES',ox+926*scale,oy+30*scale); ctx.textAlign='left'
+
+              const title = 1 - ease((t-1.15)/.35)
+              if (title > .01) {
+                ctx.globalAlpha=title; ctx.textAlign='center'; ctx.fillStyle=`rgb(${colors.text})`; ctx.font=`500 ${Math.max(24,35*scale)}px Inter,sans-serif`; ctx.fillText('A body of work, not a list.',width/2,height/2-18*scale)
+                ctx.fillStyle=`rgb(${colors.muted})`; ctx.font=`500 ${Math.max(8,11*scale)}px Inter,sans-serif`; ctx.fillText('relationships become visible before detail becomes dense',width/2,height/2+27*scale); ctx.globalAlpha=1; ctx.textAlign='left'
+              }
+
+              const morph = easeIO((t-6.7)/1.4)
+              const pos = {}
+              Object.keys(nodes).forEach(id => pos[id] = map([mix(a[id][0],b[id][0],morph),mix(a[id][1],b[id][1],morph)]))
+              const edgeProgress = ease((t-2.35)/1.25)
+              edges.forEach(([from,to],i) => {
+                const activeIndex = t>=4 && t<6.7 ? Math.floor((t-4)/.55) : -1
+                const active = i===activeIndex
+                curve(pos[from],pos[to],nodes[to][1],active?.7:.2,clamp(edgeProgress*1.45-i*.08),active?2:1)
+                if (active && !paused) { const p=point(pos[from],pos[to],(t*1.5)%1); ctx.fillStyle=`rgb(${nodes[to][1]})`; ctx.beginPath(); ctx.arc(p.x,p.y,Math.max(2,3*scale),0,TAU); ctx.fill() }
+              })
+              Object.keys(nodes).forEach((id,i) => {
+                const reveal=ease((t-1.25-i*.13)/.48)
+                const target=pos[id]
+                const p={x:mix(width/2,target.x,reveal),y:mix(height/2,target.y,reveal)}
+                const activeIndex=t>=4&&t<6.7?Math.floor((t-4)/.55):-1
+                node(p,nodes[id][0],nodes[id][1],reveal,id!=='core'&&i-1===activeIndex)
+              })
+
+              let caption=''; let alpha=0
+              if(t>=1.8&&t<3.5){caption='questions assemble into papers, systems, and frontier directions';alpha=ease((t-1.8)/.3)*(1-ease((t-3.2)/.3))}
+              else if(t>=3.5&&t<6.8){caption='color appears only when a causal path is active';alpha=ease((t-3.5)/.3)*(1-ease((t-6.5)/.3))}
+              else if(t>=6.5&&t<8.2){caption='the same work reorganizes around trajectory';alpha=ease((t-6.5)/.3)*(1-ease((t-7.95)/.3))}
+              if(caption){ctx.globalAlpha=alpha;ctx.textAlign='center';ctx.fillStyle=`rgb(${colors.muted})`;ctx.font=`500 ${Math.max(8,11*scale)}px Inter,sans-serif`;ctx.fillText(caption,width/2,oy+506*scale);ctx.globalAlpha=1;ctx.textAlign='left'}
+
+              const finale=ease((t-8.05)/.45)
+              if(finale>.01){ctx.fillStyle=`rgba(5,7,11,${.72*finale})`;ctx.fillRect(0,0,width,height);ctx.globalAlpha=finale;ctx.textAlign='center';ctx.fillStyle=`rgb(${colors.text})`;ctx.font=`500 ${Math.max(25,43*scale)}px Inter,sans-serif`;ctx.fillText(compact?'research → spatial intelligence':'research → systems → spatial intelligence',width/2,height/2-22*scale);ctx.fillStyle=`rgb(${colors.cyan})`;ctx.font=`500 ${Math.max(8,11*scale)}px Inter,sans-serif`;ctx.fillText('one trajectory, progressively disclosed',width/2,height/2+30*scale);ctx.globalAlpha=1;ctx.textAlign='left'}
+            }
+
+            function frame(now) {
+              const delta = Math.min((now-last)/1000,.05); last=now
+              if (visible && !paused) time += delta
+              if (visible) draw()
+              requestAnimationFrame(frame)
+            }
+
+            canvas.play = () => { paused=false; return Promise.resolve() }
+            canvas.pause = () => { paused=true }
+            Object.defineProperty(canvas,'currentTime',{get:()=>time,set:(value)=>{time=Number.isFinite(Number(value))?Number(value):0}})
+            new ResizeObserver(resize).observe(canvas)
+            new IntersectionObserver(entries=>{visible=entries[0]?.isIntersecting??false;if(visible)draw()},{threshold:.05}).observe(canvas)
+            resize(); requestAnimationFrame(frame)
+          })()
+          JS
+
+          node --check site/public/portfolio/atlas-film.js
+          grep -q 'id="atlas-film-canvas"' site/index.html
+          grep -q '/portfolio/atlas-film.js' site/index.html
+
+      - name: Commit final implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add site/index.html site/public/portfolio/atlas.css site/public/portfolio/atlas-film.js
+          if git diff --cached --quiet; then
+            echo "The cinematic layer is already finalized."
+            exit 0
+          fi
+          git commit -m "fix(portfolio): finalize native cinematic atlas"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
