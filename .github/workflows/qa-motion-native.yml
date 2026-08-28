@@ -1,0 +1,49 @@
+name: qa-motion-native
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: pipeline/pyproject.toml
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Validate repository and scientific models
+        run: make check
+
+      - name: Assert SafePatch removal
+        run: |
+          test ! -e site/demos/safepatch
+          test ! -e site/public/safepatch
+          test ! -e site/vite.safepatch.config.ts
+          ! grep -RIl --exclude='package-lock.json' --exclude-dir='.git' --exclude-dir='node_modules' -i 'safepatch' site/src site/public site/package.json Makefile .github/workflows/pages.yml
+
+      - name: Assert motion-native chapters
+        run: |
+          grep -q 'Graph Laplacians' site/src/motion/MotionPortfolio.tsx
+          grep -q 'Experience Replay' site/src/motion/MotionPortfolio.tsx
+          grep -q 'Rank Feasibility' site/src/motion/MotionPortfolio.tsx
+          grep -q 'TiC-LM' site/src/motion/MotionPortfolio.tsx
+          grep -q 'CasePath' site/src/motion/MotionPortfolio.tsx
+          grep -q 'Spatial computing' site/src/motion/MotionPortfolio.tsx
