@@ -1,5 +1,5 @@
-import { lazy, Suspense } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { lazy, Suspense, useEffect } from 'react'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 
 const MotionNativePage = lazy(() => import('./motion/MotionNativePage'))
 
@@ -22,6 +22,38 @@ function LoadingSurface() {
 }
 
 function InstrumentPage() {
+  const location = useLocation()
+
+  useEffect(() => {
+    const targetId = location.hash.replace(/^#/, '')
+    if (!targetId) {
+      return undefined
+    }
+
+    let frame = 0
+    let attempts = 0
+    const restoreChapter = () => {
+      const target = document.getElementById(targetId)
+      if (!target && attempts < 120) {
+        attempts += 1
+        frame = window.requestAnimationFrame(restoreChapter)
+        return
+      }
+      if (!target) {
+        return
+      }
+
+      const root = document.documentElement
+      const previousBehavior = root.style.scrollBehavior
+      root.style.scrollBehavior = 'auto'
+      target.scrollIntoView({ block: 'start', behavior: 'auto' })
+      root.style.scrollBehavior = previousBehavior
+    }
+
+    frame = window.requestAnimationFrame(restoreChapter)
+    return () => window.cancelAnimationFrame(frame)
+  }, [location.hash])
+
   return (
     <Suspense fallback={<LoadingSurface />}>
       <MotionNativePage />
