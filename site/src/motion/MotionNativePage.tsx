@@ -404,6 +404,31 @@ export default function MotionNativePage() {
   }, [reducedMotion])
 
   useEffect(() => {
+    let frame = 0
+    const scrollToHash = () => {
+      const targetId = window.location.hash.replace(/^#/, '')
+      if (!targetId) {
+        return
+      }
+      if (frame !== 0) {
+        window.cancelAnimationFrame(frame)
+      }
+      frame = window.requestAnimationFrame(() => {
+        document.getElementById(targetId)?.scrollIntoView({ block: 'start' })
+      })
+    }
+
+    scrollToHash()
+    window.addEventListener('hashchange', scrollToHash)
+    return () => {
+      window.removeEventListener('hashchange', scrollToHash)
+      if (frame !== 0) {
+        window.cancelAnimationFrame(frame)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
       const target = event.target
       const isTyping =
