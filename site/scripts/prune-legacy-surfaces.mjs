@@ -3,7 +3,6 @@ import { resolve } from 'node:path'
 
 const root = resolve(import.meta.dirname, '..')
 const obsolete = [
-  'public/safepatch',
   'public/assets/folio.css',
   'public/assets/folio.js',
 ]
