@@ -1,0 +1,115 @@
+diff --git a/site/src/motion/mechanisms.test.ts b/site/src/motion/mechanisms.test.ts
+index 0000000..0000000 100644
+--- a/site/src/motion/mechanisms.test.ts
++++ b/site/src/motion/mechanisms.test.ts
+@@ -66,7 +66,7 @@ describe('rank feasibility', () => {
+   ]
+   const constraints: RankConstraint[] = [
+     { id: 'old-a', label: 'old A', gradient: [1, 0.1, 0.1, 0], requiredDecrease: 0.32 },
+-    { id: 'old-b', label: 'old B', gradient: [0.1, 1, 0.15, 0], requiredDecrease: 0.3 },
++    { id: 'old-b', label: 'old B', gradient: [-0.1, 1, 0.15, 0], requiredDecrease: 0.3 },
+     { id: 'old-c', label: 'old C', gradient: [0.05, 0.1, 1, 0.1], requiredDecrease: 0.28 },
+   ]
+ 
+diff --git a/site/src/motion/ReplayChapter.tsx b/site/src/motion/ReplayChapter.tsx
+index 0000000..0000000 100644
+--- a/site/src/motion/ReplayChapter.tsx
++++ b/site/src/motion/ReplayChapter.tsx
+@@ -90,11 +90,6 @@ export function ReplayChapter({
+     [alpha, desired],
+   )
+ 
+-  useEffect(() => {
+-    setVisibleSteps(count)
+-    setPlaying(false)
+-  }, [alpha, count, difficulty, method])
+-
+   useEffect(() => {
+     if (!playing || reducedMotion) {
+       return undefined
+@@ -136,7 +131,11 @@ export function ReplayChapter({
+                 { value: 'greedy', label: 'Greedy' },
+                 { value: 'exact', label: 'Exact' },
+               ]}
+-              onChange={setMethod}
++              onChange={(value) => {
++                setMethod(value)
++                setVisibleSteps(count)
++                setPlaying(false)
++              }}
+             />
+             <RangeControl
+               label="Replay batch k"
+@@ -145,7 +144,12 @@ export function ReplayChapter({
+               maximum={5}
+               step={1}
+               display={`${count} examples`}
+-              onChange={(value) => setCount(Math.round(value))}
++              onChange={(value) => {
++                const next = Math.round(value)
++                setCount(next)
++                setVisibleSteps(next)
++                setPlaying(false)
++              }}
+             />
+             <RangeControl
+               label="Replay weight α"
+@@ -154,7 +158,11 @@ export function ReplayChapter({
+               maximum={0.8}
+               step={0.05}
+               display={alpha.toFixed(2)}
+-              onChange={setAlpha}
++              onChange={(value) => {
++                setAlpha(value)
++                setVisibleSteps(count)
++                setPlaying(false)
++              }}
+             />
+           </div>
+@@ -334,7 +342,11 @@ export function ReplayChapter({
+               maximum={1}
+               step={0.02}
+               display={difficulty.toFixed(2)}
+-              onChange={setDifficulty}
++              onChange={(value) => {
++                setDifficulty(value)
++                setVisibleSteps(count)
++                setPlaying(false)
++              }}
+             />
+             <button
+               type="button"
+diff --git a/site/src/motion/SpatialChapter.tsx b/site/src/motion/SpatialChapter.tsx
+index 0000000..0000000 100644
+--- a/site/src/motion/SpatialChapter.tsx
++++ b/site/src/motion/SpatialChapter.tsx
+@@ -68,13 +68,6 @@ export function SpatialChapter({
+     window.localStorage.setItem('motion-native-spatial-intent', intent)
+   }, [intent])
+ 
+-  useEffect(() => {
+-    if (!selectedId || !plan.entities.some((entity) => entity.id === selectedId)) {
+-      setSelectedId(plan.entities[0]?.id ?? null)
+-    }
+-  }, [plan.entities, selectedId])
+-
+   return (
+     <ChapterShell chapterId="spatial" reducedMotion={reducedMotion}>
+       {({ activeStage, progress }) => (
+diff --git a/site/src/motion/shared.tsx b/site/src/motion/shared.tsx
+index 0000000..0000000 100644
+--- a/site/src/motion/shared.tsx
++++ b/site/src/motion/shared.tsx
+@@ -467,12 +467,6 @@ export function ResearchIndex({
+     })
+   }, [normalized])
+ 
+-  useEffect(() => {
+-    if (!open) {
+-      setQuery('')
+-    }
+-  }, [open])
+-
+   if (!open) {
+     return null
+   }
