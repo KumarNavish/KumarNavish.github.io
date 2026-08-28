@@ -1,0 +1,29 @@
+name: export-motion-v2
+
+on:
+  push:
+    branches: [motion-native-research-instrument-v2]
+    paths:
+      - .github/workflows/export-motion-v2.yml
+      - export-motion-v2.ready
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Archive tracked source
+        run: git archive --format=tar.gz --output=/tmp/motion-v2-source.tgz HEAD
+
+      - name: Upload source archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: motion-v2-source
+          path: /tmp/motion-v2-source.tgz
+          if-no-files-found: error
+          retention-days: 1
