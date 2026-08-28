@@ -1,0 +1,38 @@
+name: fix-motion-hash-once
+
+on:
+  push:
+    branches: [motion-native-research-instrument-v2]
+    paths: [fix-motion-hash.ready]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Repair delayed hash navigation
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('site/src/motion/MotionNativePage.tsx')
+          text = path.read_text()
+          needle = "  useEffect(() => {\n    document.documentElement.dataset.motion = reducedMotion ? 'reduced' : 'full'\n    return () => {\n      delete document.documentElement.dataset.motion\n    }\n  }, [reducedMotion])\n\n"
+          addition = "  useEffect(() => {\n    let frame = 0\n    const scrollToHash = () => {\n      const targetId = window.location.hash.replace(/^#/, '')\n      if (!targetId) {\n        return\n      }\n      if (frame !== 0) {\n        window.cancelAnimationFrame(frame)\n      }\n      frame = window.requestAnimationFrame(() => {\n        document.getElementById(targetId)?.scrollIntoView({ block: 'start' })\n      })\n    }\n\n    scrollToHash()\n    window.addEventListener('hashchange', scrollToHash)\n    return () => {\n      window.removeEventListener('hashchange', scrollToHash)\n      if (frame !== 0) {\n        window.cancelAnimationFrame(frame)\n      }\n    }\n  }, [])\n\n"
+          assert needle in text
+          assert 'const scrollToHash' not in text
+          path.write_text(text.replace(needle, needle + addition))
+          PY
+
+      - name: Remove one-shot machinery and commit
+        run: |
+          git rm .github/workflows/fix-motion-hash-once.yml fix-motion-hash.ready
+          git add site/src/motion/MotionNativePage.tsx
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix: scroll lazy-loaded research deep links to their chapter"
+          git push
