@@ -1,0 +1,31 @@
+name: apply-motion-fixes
+
+on:
+  push:
+    branches: [motion-native-research-instrument-v2]
+    paths: [motion-fixes.patch]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply fixes
+        run: |
+          git apply --index motion-fixes.patch
+          git rm motion-fixes.patch .github/workflows/apply-motion-fixes.yml
+
+      - name: Commit fixes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Harden motion-native research instruments"
+          git push
