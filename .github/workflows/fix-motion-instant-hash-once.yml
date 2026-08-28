@@ -1,0 +1,53 @@
+name: fix-motion-instant-hash-once
+
+on:
+  push:
+    branches: [motion-native-research-instrument-v2]
+    paths: [fix-motion-instant-hash.ready]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Force immediate route restoration without changing user navigation motion
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('site/src/motion/MotionNativePage.tsx')
+          text = path.read_text()
+          old = """      frame = window.requestAnimationFrame(() => {
+        document.getElementById(targetId)?.scrollIntoView({ block: 'start' })
+      })
+"""
+          new = """      frame = window.requestAnimationFrame(() => {
+        const target = document.getElementById(targetId)
+        if (!target) {
+          return
+        }
+        const root = document.documentElement
+        const previousBehavior = root.style.scrollBehavior
+        root.style.scrollBehavior = 'auto'
+        target.scrollIntoView({ block: 'start', behavior: 'auto' })
+        frame = window.requestAnimationFrame(() => {
+          root.style.scrollBehavior = previousBehavior
+        })
+      })
+"""
+          assert old in text
+          path.write_text(text.replace(old, new))
+          PY
+
+      - name: Remove one-shot machinery and commit
+        run: |
+          git rm .github/workflows/fix-motion-instant-hash-once.yml fix-motion-instant-hash.ready
+          git add site/src/motion/MotionNativePage.tsx
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix: restore deep-linked research chapters immediately"
+          git push
