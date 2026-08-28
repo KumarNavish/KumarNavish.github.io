@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://kumarnavish.github.io/sitemap.xml
