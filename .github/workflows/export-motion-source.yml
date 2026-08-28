@@ -15,13 +15,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Archive source tree
-        run: tar --exclude='.git' --exclude='node_modules' --exclude='site/dist' -czf motion-source.tgz .
+      - name: Archive tracked source tree
+        run: git archive --format=tar.gz --output=/tmp/motion-source.tgz HEAD
 
       - name: Upload source archive
         uses: actions/upload-artifact@v4
         with:
           name: motion-source
-          path: motion-source.tgz
+          path: /tmp/motion-source.tgz
           if-no-files-found: error
           retention-days: 1
