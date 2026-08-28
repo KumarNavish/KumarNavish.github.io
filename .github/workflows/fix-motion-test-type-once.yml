@@ -1,0 +1,44 @@
+name: fix-motion-test-type-once
+
+on:
+  push:
+    branches: [motion-native-research-instrument-v2]
+    paths: [fix-motion-test-type.ready]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Repair replay test tuple typing
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('site/src/motion/mechanisms.test.ts')
+          text = path.read_text()
+          old = "    const argumentsTuple = [candidates, [0.55, 0.25], [0.92, 0.78], 0.4, 3] as const\n"
+          new = """    const argumentsTuple: [
+              ReplayCandidate[],
+              [number, number],
+              [number, number],
+              number,
+              number,
+            ] = [candidates, [0.55, 0.25], [0.92, 0.78], 0.4, 3]
+          """
+          assert old in text
+          path.write_text(text.replace(old, new))
+          PY
+
+      - name: Remove one-shot machinery and commit
+        run: |
+          git rm .github/workflows/fix-motion-test-type-once.yml fix-motion-test-type.ready
+          git add site/src/motion/mechanisms.test.ts
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix: type replay test arguments as mutable tuples"
+          git push
