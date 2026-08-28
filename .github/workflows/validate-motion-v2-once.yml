@@ -1,0 +1,260 @@
+name: validate-motion-v2-once
+
+on:
+  push:
+    branches: [motion-native-research-instrument-v2]
+    paths: [validate-motion-v2.ready]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Run complete repository quality gates
+        id: quality
+        continue-on-error: true
+        run: make check
+
+      - name: Assert SafePatch is absent from the production artifact
+        id: safepatch
+        if: steps.quality.outcome == 'success'
+        continue-on-error: true
+        run: |
+          test ! -e site/dist/safepatch
+          ! grep -R -i --exclude='*.map' 'SafePatch' site/dist
+
+      - name: Install Playwright Chromium
+        id: browser
+        if: steps.quality.outcome == 'success' && steps.safepatch.outcome == 'success'
+        continue-on-error: true
+        working-directory: site
+        run: |
+          npm install --no-save @playwright/test@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start production preview
+        id: preview
+        if: steps.browser.outcome == 'success'
+        continue-on-error: true
+        run: |
+          nohup python3 -m http.server 4173 --directory site/dist > /tmp/motion-preview.log 2>&1 &
+          echo $! > /tmp/motion-preview.pid
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/motion-preview.log
+          exit 1
+
+      - name: Author rendered interaction QA
+        id: author
+        if: steps.preview.outcome == 'success'
+        continue-on-error: true
+        working-directory: site
+        run: |
+          mkdir -p qa-artifacts
+          cat > playwright.motion.config.cjs <<'EOF'
+          module.exports = {
+            testDir: '.',
+            testMatch: 'motion-native.qa.spec.cjs',
+            timeout: 60000,
+            expect: { timeout: 10000 },
+            workers: 1,
+            retries: 0,
+            reporter: [['line']],
+            use: {
+              baseURL: 'http://127.0.0.1:4173',
+              browserName: 'chromium',
+              trace: 'retain-on-failure',
+              screenshot: 'only-on-failure',
+            },
+          }
+          EOF
+
+          cat > motion-native.qa.spec.cjs <<'EOF'
+          const { test, expect } = require('@playwright/test')
+          const fs = require('node:fs')
+
+          const setRange = async (scope, label, value) => {
+            const input = scope.locator('label').filter({ hasText: label }).locator('input[type="range"]')
+            await expect(input).toHaveCount(1)
+            await input.evaluate((element, next) => {
+              element.value = String(next)
+              element.dispatchEvent(new Event('input', { bubbles: true }))
+              element.dispatchEvent(new Event('change', { bubbles: true }))
+            }, value)
+          }
+
+          test('desktop scientific instruments and evidence flow', async ({ page }) => {
+            const consoleFailures = []
+            page.on('console', (message) => {
+              if (message.type() === 'error' || message.type() === 'warning') {
+                consoleFailures.push(`${message.type()}: ${message.text()}`)
+              }
+            })
+            page.on('pageerror', (error) => consoleFailures.push(`pageerror: ${error.message}`))
+
+            await page.setViewportSize({ width: 1440, height: 1000 })
+            await page.goto('/')
+            await expect(page).toHaveTitle(/Navish Kumar/i)
+            await expect(page.getByRole('heading', { name: /Difficult ideas, made operable/i })).toBeVisible()
+            await expect(page.getByText('SafePatch', { exact: false })).toHaveCount(0)
+            await page.screenshot({ path: 'qa-artifacts/desktop-entry.png', fullPage: false })
+
+            await page.getByRole('button', { name: /Index/ }).click()
+            const search = page.getByPlaceholder('Search a question, method, system, or source')
+            await expect(search).toBeVisible()
+            await search.fill('rank feasibility')
+            await expect(page.getByRole('link', { name: /Rank Feasibility/i }).first()).toBeVisible()
+            await page.getByRole('button', { name: 'Close index' }).click()
+
+            const graph = page.locator('#graph')
+            await graph.scrollIntoViewIfNeeded()
+            await expect(graph.getByRole('heading', { name: /graph operator preserve/i })).toBeVisible()
+            await graph.getByRole('button', { name: 'Flip one edge sign' }).click()
+            await expect(graph.getByRole('button', { name: 'Signed edge active' })).toBeVisible()
+            await graph.getByRole('button', { name: 'D − A' }).click()
+            await setRange(graph, 'Diffusion time', 1.65)
+            await expect(graph.getByText('Spectral energy')).toBeVisible()
+            await page.screenshot({ path: 'qa-artifacts/desktop-graph.png', fullPage: false })
+
+            await graph.getByRole('button', { name: /Normalized Laplacians for gain graphs/i }).click()
+            await expect(page.getByRole('heading', { name: /Normalized Laplacians for gain graphs/i })).toBeVisible()
+            await expect(page.getByText('What it does not establish')).toBeVisible()
+            await page.getByRole('button', { name: 'Close evidence' }).click()
+
+            const replay = page.locator('#replay')
+            await replay.scrollIntoViewIfNeeded()
+            await replay.getByRole('button', { name: 'Exact' }).click()
+            await setRange(replay, 'Replay batch', 4)
+            await setRange(replay, 'Replay weight', 0.55)
+            await replay.getByRole('button', { name: /Run selection/ }).click()
+            await expect(replay.getByText('Correction residual')).toBeVisible()
+            await expect(replay.getByText('Selection sequence')).toBeVisible()
+            await page.screenshot({ path: 'qa-artifacts/desktop-replay.png', fullPage: false })
+
+            const rank = page.locator('#rank')
+            await rank.scrollIntoViewIfNeeded()
+            await rank.getByRole('button', { name: 'r = 1' }).click()
+            await expect(rank.getByText('Infeasible', { exact: true })).toBeVisible()
+            await rank.getByRole('button', { name: 'r = 3' }).click()
+            await expect(rank.getByText(/Feasible/).first()).toBeVisible()
+            await page.screenshot({ path: 'qa-artifacts/desktop-rank.png', fullPage: false })
+
+            const temporal = page.locator('#temporal')
+            await temporal.scrollIntoViewIfNeeded()
+            await setRange(temporal, 'Replay budget', 0.42)
+            await setRange(temporal, 'Stream volatility', 0.72)
+            await expect(temporal.getByText('Regret matrix')).toBeVisible()
+            await expect(temporal.getByText(/not reported experimental data/i)).toBeVisible()
+            await page.screenshot({ path: 'qa-artifacts/desktop-temporal.png', fullPage: false })
+
+            const casepath = page.locator('#casepath')
+            await casepath.scrollIntoViewIfNeeded()
+            const fragment = casepath.locator('article').filter({ hasText: 'Message fragment' }).first()
+            await fragment.getByRole('checkbox', { name: 'Relevant to claim' }).check()
+            await expect(casepath.getByText('Fail', { exact: true }).first()).toBeVisible()
+            await expect(casepath.getByText('Not emitted')).toBeVisible()
+            await casepath.getByRole('button', { name: 'Restore verified source state' }).click()
+            await expect(casepath.getByText('Reviewable and source-bound')).toBeVisible()
+            await page.screenshot({ path: 'qa-artifacts/desktop-casepath.png', fullPage: false })
+
+            const spatial = page.locator('#spatial')
+            await spatial.scrollIntoViewIfNeeded()
+            const intent = spatial.getByRole('textbox', { name: /Describe the environment/i })
+            await intent.fill('Create an instrumented laboratory to inspect a research process and its evidence.')
+            await expect(spatial.getByText('instrumented laboratory').first()).toBeVisible()
+            await spatial.getByRole('button', { name: 'Evidence axis' }).click()
+            await expect(spatial.getByText('Evidence axis').first()).toBeVisible()
+            await page.screenshot({ path: 'qa-artifacts/desktop-spatial.png', fullPage: false })
+
+            const motionButton = page.getByRole('button', { name: /Motion full/ })
+            await motionButton.click()
+            await expect(page.getByRole('button', { name: /Motion reduced/ })).toBeVisible()
+
+            const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+            expect(overflow).toBeLessThanOrEqual(1)
+            expect(consoleFailures, consoleFailures.join('\n')).toEqual([])
+            fs.writeFileSync('qa-artifacts/desktop-result.json', JSON.stringify({ consoleFailures, overflow, url: page.url() }, null, 2))
+          })
+
+          test('deep-link recovery and mobile experience', async ({ page }) => {
+            const consoleFailures = []
+            page.on('console', (message) => {
+              if (message.type() === 'error' || message.type() === 'warning') {
+                consoleFailures.push(`${message.type()}: ${message.text()}`)
+              }
+            })
+            page.on('pageerror', (error) => consoleFailures.push(`pageerror: ${error.message}`))
+
+            await page.setViewportSize({ width: 390, height: 844 })
+            await page.goto('/research/experience-replay-optimization')
+            await expect(page.locator('#replay')).toBeVisible()
+            await expect(page.getByRole('heading', { name: /Which memories make the next update/i })).toBeVisible()
+            await page.screenshot({ path: 'qa-artifacts/mobile-replay.png', fullPage: false })
+
+            await page.goto('/')
+            await expect(page.getByRole('heading', { name: /Difficult ideas, made operable/i })).toBeVisible()
+            await page.screenshot({ path: 'qa-artifacts/mobile-entry.png', fullPage: false })
+            const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+            expect(overflow).toBeLessThanOrEqual(1)
+            expect(consoleFailures, consoleFailures.join('\n')).toEqual([])
+            fs.writeFileSync('qa-artifacts/mobile-result.json', JSON.stringify({ consoleFailures, overflow, url: page.url() }, null, 2))
+          })
+          EOF
+
+      - name: Run rendered interaction QA
+        id: rendered
+        if: steps.author.outcome == 'success'
+        continue-on-error: true
+        working-directory: site
+        run: npx playwright test --config=playwright.motion.config.cjs
+
+      - name: Record validation outcomes
+        if: always()
+        run: |
+          mkdir -p site/qa-artifacts
+          cat > site/qa-artifacts/validation-summary.json <<EOF
+          {
+            "quality": "${{ steps.quality.outcome }}",
+            "safepatch": "${{ steps.safepatch.outcome }}",
+            "browser_install": "${{ steps.browser.outcome }}",
+            "preview": "${{ steps.preview.outcome }}",
+            "qa_authoring": "${{ steps.author.outcome }}",
+            "rendered_qa": "${{ steps.rendered.outcome }}",
+            "commit": "${{ github.sha }}"
+          }
+          EOF
+          rm -f site/motion-native.qa.spec.cjs site/playwright.motion.config.cjs
+
+      - name: Upload validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: motion-v2-validation
+          path: |
+            site/dist
+            site/qa-artifacts
+            /tmp/motion-preview.log
+          if-no-files-found: warn
+          retention-days: 2
