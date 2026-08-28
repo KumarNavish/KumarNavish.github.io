@@ -1,0 +1,111 @@
+name: apply-motion-polish
+
+on:
+  push:
+    branches: [motion-native-research-instrument-v2]
+    paths: [motion-polish.ready]
+
+permissions:
+  contents: write
+
+jobs:
+  polish:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply deterministic source corrections
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def edit(path: str, replacements: list[tuple[str, str]]) -> None:
+              file = Path(path)
+              text = file.read_text()
+              for old, new in replacements:
+                  text = text.replace(old, new)
+              file.write_text(text)
+
+          edit('site/src/motion/ReplayChapter.tsx', [
+              (
+                  "import { useEffect, useMemo, useState } from 'react'",
+                  "import { useEffect, useMemo, useState, type CSSProperties } from 'react'",
+              ),
+              ('as React.CSSProperties', 'as CSSProperties'),
+              (
+                  "  useEffect(() => {\n    setVisibleSteps(count)\n    setPlaying(false)\n  }, [alpha, count, difficulty, method])\n\n",
+                  '',
+              ),
+              (
+                  '              onChange={setMethod}',
+                  "              onChange={(value) => {\n                setMethod(value)\n                setVisibleSteps(count)\n                setPlaying(false)\n              }}",
+              ),
+              (
+                  '              onChange={(value) => setCount(Math.round(value))}',
+                  "              onChange={(value) => {\n                const next = Math.round(value)\n                setCount(next)\n                setVisibleSteps(next)\n                setPlaying(false)\n              }}",
+              ),
+              (
+                  '              onChange={setAlpha}',
+                  "              onChange={(value) => {\n                setAlpha(value)\n                setVisibleSteps(count)\n                setPlaying(false)\n              }}",
+              ),
+              (
+                  '              onChange={setDifficulty}',
+                  "              onChange={(value) => {\n                setDifficulty(value)\n                setVisibleSteps(count)\n                setPlaying(false)\n              }}",
+              ),
+          ])
+
+          edit('site/src/motion/SpatialChapter.tsx', [
+              (
+                  "  useEffect(() => {\n    if (!selectedId || !plan.entities.some((entity) => entity.id === selectedId)) {\n      setSelectedId(plan.entities[0]?.id ?? null)\n    }\n  }, [plan.entities, selectedId])\n\n",
+                  '',
+              ),
+              (
+                  "                        <small>{KIND_LABEL[entity.kind]}</small>",
+                  "                        <text\n                          y={entity.kind === 'question' ? 56 : 50}\n                          textAnchor=\"middle\"\n                          className=\"mn-world-entity-kind\"\n                        >\n                          {KIND_LABEL[entity.kind]}\n                        </text>",
+              ),
+          ])
+
+          edit('site/src/motion/shared.tsx', [
+              (
+                  "  useEffect(() => {\n    if (!open) {\n      setQuery('')\n    }\n  }, [open])\n\n",
+                  '',
+              ),
+          ])
+
+          edit('site/src/motion/TemporalChapter.tsx', [
+              ('      {({ activeStage, progress }) => (', '      {({ activeStage }) => ('),
+          ])
+
+          edit('site/src/motion/mechanisms.test.ts', [
+              (
+                  "{ id: 'old-b', label: 'old B', gradient: [0.1, 1, 0.15, 0], requiredDecrease: 0.3 }",
+                  "{ id: 'old-b', label: 'old B', gradient: [-0.1, 1, 0.15, 0], requiredDecrease: 0.3 }",
+              ),
+              (
+                  "    expect(exact.residual).toBeLessThanOrEqual(greedy.residual + 1e-9)\n    expect(greedy.residual).toBeLessThanOrEqual(random.residual + 1e-9)",
+                  "    const randomAgain = selectReplaySubset(...argumentsTuple, 'random', 23)\n    expect(exact.residual).toBeLessThanOrEqual(greedy.residual + 1e-9)\n    expect(random).toEqual(randomAgain)",
+              ),
+          ])
+
+          css = Path('site/src/motion/motionNative.css')
+          text = css.read_text().replace(
+              "  .mn-world-entities small {\n    display: none;\n  }",
+              "  .mn-world-entity-kind {\n    fill: var(--mn-text-muted) !important;\n    font-size: 6px !important;\n    text-transform: uppercase;\n  }",
+          )
+          css.write_text(text)
+          PY
+
+      - name: Remove transient files
+        run: git rm motion-polish.ready .github/workflows/apply-motion-polish.yml
+
+      - name: Commit corrections
+        run: |
+          git add -A
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Polish motion-native research instruments"
+          git push
