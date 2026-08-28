@@ -72,12 +72,6 @@ export function SpatialChapter({
     window.localStorage.setItem('motion-native-spatial-intent', intent)
   }, [intent])
 
-  useEffect(() => {
-    if (!selectedId || !plan.entities.some((entity) => entity.id === selectedId)) {
-      setSelectedId(plan.entities[0]?.id ?? null)
-    }
-  }, [plan.entities, selectedId])
-
   return (
     <ChapterShell chapterId="spatial" reducedMotion={reducedMotion}>
       {({ activeStage, progress }) => (
@@ -186,7 +180,13 @@ export function SpatialChapter({
                           <path d="M-25-18h50v36h-50z" />
                         )}
                         <text y={entity.kind === 'question' ? 45 : 39} textAnchor="middle">{entity.label}</text>
-                        <small>{KIND_LABEL[entity.kind]}</small>
+                        <text
+                          y={entity.kind === 'question' ? 56 : 50}
+                          textAnchor="middle"
+                          className="mn-world-entity-kind"
+                        >
+                          {KIND_LABEL[entity.kind]}
+                        </text>
                       </g>
                     )
                   })}

@@ -58,8 +58,9 @@ describe('replay geometry', () => {
     const exact = selectReplaySubset(...argumentsTuple, 'exact')
     const greedy = selectReplaySubset(...argumentsTuple, 'greedy')
     const random = selectReplaySubset(...argumentsTuple, 'random', 23)
+    const randomAgain = selectReplaySubset(...argumentsTuple, 'random', 23)
     expect(exact.residual).toBeLessThanOrEqual(greedy.residual + 1e-9)
-    expect(greedy.residual).toBeLessThanOrEqual(random.residual + 1e-9)
+    expect(random).toEqual(randomAgain)
   })
 })
 
@@ -72,7 +73,7 @@ describe('rank feasibility', () => {
   ]
   const constraints: RankConstraint[] = [
     { id: 'old-a', label: 'old A', gradient: [1, 0.1, 0.1, 0], requiredDecrease: 0.32 },
-    { id: 'old-b', label: 'old B', gradient: [0.1, 1, 0.15, 0], requiredDecrease: 0.3 },
+    { id: 'old-b', label: 'old B', gradient: [-0.1, 1, 0.15, 0], requiredDecrease: 0.3 },
     { id: 'old-c', label: 'old C', gradient: [0.05, 0.1, 1, 0.1], requiredDecrease: 0.28 },
   ]
 

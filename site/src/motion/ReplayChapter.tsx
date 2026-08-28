@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 
 import {
   selectReplaySubset,
@@ -78,11 +78,6 @@ export function ReplayChapter({
   )
 
   useEffect(() => {
-    setVisibleSteps(count)
-    setPlaying(false)
-  }, [alpha, count, difficulty, method])
-
-  useEffect(() => {
     if (!playing || reducedMotion) {
       return undefined
     }
@@ -120,7 +115,11 @@ export function ReplayChapter({
                 { value: 'greedy', label: 'Greedy' },
                 { value: 'exact', label: 'Exact' },
               ]}
-              onChange={setMethod}
+              onChange={(value) => {
+                setMethod(value)
+                setVisibleSteps(count)
+                setPlaying(false)
+              }}
             />
             <RangeControl
               label="Replay batch k"
@@ -129,7 +128,12 @@ export function ReplayChapter({
               maximum={5}
               step={1}
               display={`${count} examples`}
-              onChange={(value) => setCount(Math.round(value))}
+              onChange={(value) => {
+                const next = Math.round(value)
+                setCount(next)
+                setVisibleSteps(next)
+                setPlaying(false)
+              }}
             />
             <RangeControl
               label="Replay weight α"
@@ -138,7 +142,11 @@ export function ReplayChapter({
               maximum={0.8}
               step={0.05}
               display={alpha.toFixed(2)}
-              onChange={setAlpha}
+              onChange={(value) => {
+                setAlpha(value)
+                setVisibleSteps(count)
+                setPlaying(false)
+              }}
             />
           </div>
 
@@ -242,7 +250,7 @@ export function ReplayChapter({
             </figure>
 
             <aside className="mn-replay-readout">
-              <div className="mn-residual-orbit" style={{ '--residual': result.residual / maxResidual } as React.CSSProperties}>
+              <div className="mn-residual-orbit" style={{ '--residual': result.residual / maxResidual } as CSSProperties}>
                 <span>Correction residual</span>
                 <strong>{formatNumber(result.residual, 3)}</strong>
                 <i aria-hidden="true" />
@@ -278,7 +286,11 @@ export function ReplayChapter({
               maximum={1}
               step={0.02}
               display={difficulty.toFixed(2)}
-              onChange={setDifficulty}
+              onChange={(value) => {
+                setDifficulty(value)
+                setVisibleSteps(count)
+                setPlaying(false)
+              }}
             />
             <button
               type="button"

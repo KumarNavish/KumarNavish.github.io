@@ -539,12 +539,6 @@ export function ResearchIndex({
     })
   }, [normalized])
 
-  useEffect(() => {
-    if (!open) {
-      setQuery('')
-    }
-  }, [open])
-
   if (!open) {
     return null
   }

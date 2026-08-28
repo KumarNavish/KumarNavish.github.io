@@ -118,7 +118,7 @@ export function TemporalChapter({
 
   return (
     <ChapterShell chapterId="temporal" reducedMotion={reducedMotion}>
-      {({ activeStage, progress }) => (
+      {({ activeStage }) => (
         <div className="mn-instrument mn-temporal-instrument" data-active-stage={activeStage}>
           <div className="mn-instrument-toolbar">
             <RangeControl

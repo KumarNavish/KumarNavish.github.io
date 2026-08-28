@@ -2240,8 +2240,10 @@
     stroke-width: 4px;
   }
 
-  .mn-world-entities small {
-    display: none;
+  .mn-world-entity-kind {
+    fill: var(--mn-text-muted) !important;
+    font-size: 6px !important;
+    text-transform: uppercase;
   }
 
   .mn-spatial-inspector {
