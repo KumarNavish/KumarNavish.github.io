@@ -1,311 +1,583 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f3f3ef" />
-    <meta name="color-scheme" content="light dark" />
-    <meta
-      name="description"
-      content="Navish Kumar builds research systems for intelligent change: continual learning, inspectable agents, constrained updates, and emerging spatial interfaces."
-    />
-    <meta
-      name="keywords"
-      content="Navish Kumar, continual learning, optimization, agentic systems, research engineering, spatial computing, generative AI, VR"
-    />
-    <meta name="author" content="Navish Kumar" />
-    <link rel="canonical" href="https://kumarnavish.github.io/" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="stylesheet" href="/src/portfolio.css" />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://kumarnavish.github.io/" />
-    <meta property="og:site_name" content="Navish Kumar — Research systems" />
-    <meta property="og:title" content="Navish Kumar — Research systems for intelligent change" />
-    <meta
-      property="og:description"
-      content="A research atlas connecting optimization, continual learning, inspectable systems, and spatial intelligence."
-    />
-    <meta property="og:image" content="https://kumarnavish.github.io/og-portfolio.png" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Navish Kumar research systems portfolio preview" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Navish Kumar — Research systems for intelligent change" />
-    <meta
-      name="twitter:description"
-      content="A research atlas connecting optimization, continual learning, inspectable systems, and spatial intelligence."
-    />
-    <meta name="twitter:image" content="https://kumarnavish.github.io/og-portfolio.png" />
-    <title>Navish Kumar — Research systems for intelligent change</title>
-    <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "Person",
-        "name": "Navish Kumar",
-        "url": "https://kumarnavish.github.io/",
-        "jobTitle": "PhD Researcher and Research Engineer",
-        "affiliation": { "@type": "Organization", "name": "University of Basel" },
-        "email": "mailto:navish.kumar@unibas.ch",
-        "sameAs": [
-          "https://github.com/KumarNavish",
-          "https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en"
-        ],
-        "knowsAbout": [
-          "Continual learning",
-          "Optimization",
-          "Agentic systems",
-          "Spatial computing",
-          "Human-computer interaction"
-        ]
-      }
-    </script>
-  </head>
-  <body>
-    <a class="skip-link" href="#main-content">Skip to main content</a>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f2efe7">
+  <meta name="color-scheme" content="light">
+  <title>Navish Kumar — Research Architecture for Learning Under Change</title>
+  <meta name="description" content="The research and engineering folio of Navish Kumar: continual learning, optimization, feasible adaptation, inspectable agents, and spatial intelligence.">
+  <meta name="author" content="Navish Kumar">
+  <meta name="robots" content="index,follow,max-image-preview:large">
+  <link rel="canonical" href="https://kumarnavish.github.io/">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="manifest" href="/site.webmanifest">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Navish Kumar">
+  <meta property="og:url" content="https://kumarnavish.github.io/">
+  <meta property="og:title" content="Navish Kumar — Research Architecture for Learning Under Change">
+  <meta property="og:description" content="A spatial research folio spanning continual learning, optimization, agentic systems, and generative interfaces.">
+  <meta property="og:image" content="https://kumarnavish.github.io/social-card.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Navish Kumar research architecture folio">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Navish Kumar — Research Architecture">
+  <meta name="twitter:description" content="Continual learning, optimization, inspectable agents, and spatial intelligence.">
+  <meta name="twitter:image" content="https://kumarnavish.github.io/social-card.png">
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Person",
+      "name": "Navish Kumar",
+      "url": "https://kumarnavish.github.io/",
+      "email": "mailto:navish.kumar@unibas.ch",
+      "jobTitle": "PhD Researcher in Machine Learning",
+      "affiliation": {"@type": "Organization", "name": "University of Basel"},
+      "sameAs": [
+        "https://github.com/KumarNavish",
+        "https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en",
+        "https://openreview.net/profile?id=~Navish_Kumar1"
+      ],
+      "knowsAbout": [
+        "Continual learning",
+        "Experience replay",
+        "Optimization",
+        "Parameter-efficient fine-tuning",
+        "Agentic systems",
+        "Spatial computing",
+        "Research engineering"
+      ]
+    }
+  </script>
+  <link rel="stylesheet" href="/assets/folio.css">
+  <script type="module">
+    import katex from "katex";
+    window.katex = katex;
+    window.dispatchEvent(new Event("katex-ready"));
+  </script>
+<script defer src="/assets/folio.js"></script>
+</head>
+<body data-scale="evidence">
+  <a class="skip-link" href="#main">Skip to the folio</a>
+  <div class="drafting-grid" aria-hidden="true"></div>
+  <div class="scroll-ruler" aria-hidden="true"><span id="scroll-progress"></span></div>
 
-    <header class="site-header" data-site-header>
-      <div class="site-header__inner">
-        <a class="brand" href="#top" aria-label="Navish Kumar, return to top">
-          <strong>Navish Kumar</strong>
-          <span>Research systems</span>
-        </a>
+  <header class="site-header">
+    <a class="identity" href="#top" aria-label="Navish Kumar — top of page">
+      <span class="identity-mark">NK</span>
+      <span class="identity-copy">
+        <strong>Navish Kumar</strong>
+        <small>Research architecture · Basel</small>
+      </span>
+    </a>
 
-        <nav class="desktop-nav" aria-label="Primary navigation">
-          <a href="#trajectory" data-nav-section="trajectory">Trajectory</a>
-          <a href="#systems" data-nav-section="systems">Systems</a>
-          <a href="#research" data-nav-section="research">Research</a>
-          <a href="#frontier" data-nav-section="frontier">Frontier</a>
-        </nav>
+    <nav class="site-nav" aria-label="Primary navigation">
+      <a href="#trajectory">Trajectory</a>
+      <a href="#monographs">Monographs</a>
+      <a href="#folio">Research folio</a>
+      <a href="#frontier">Frontier</a>
+    </nav>
 
-        <button class="command-button" type="button" data-open-command aria-label="Explore the portfolio">
-          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="3.8" fill="none" stroke="currentColor"/><path d="m10 10 3 3" stroke="currentColor"/></svg>
-          <span>Explore</span><kbd>⌘ K</kbd>
-        </button>
-
-        <details class="mobile-nav" data-mobile-nav>
-          <summary aria-label="Open navigation"><span></span><span></span></summary>
-          <nav aria-label="Mobile navigation">
-            <a href="#trajectory">Trajectory</a>
-            <a href="#systems">Systems</a>
-            <a href="#research">Research</a>
-            <a href="#frontier">Frontier</a>
-            <a href="#contact">Contact</a>
-          </nav>
-        </details>
+    <div class="header-tools">
+      <div class="scale-control" aria-label="Choose reading scale">
+        <span>Scale</span>
+        <button type="button" data-scale-value="signal" aria-pressed="false">1:100</button>
+        <button type="button" data-scale-value="evidence" aria-pressed="true">1:20</button>
+        <button type="button" data-scale-value="detail" aria-pressed="false">1:1</button>
       </div>
-    </header>
+      <button class="index-trigger" type="button" data-index-trigger>Index <kbd>⌘K</kbd></button>
+    </div>
+  </header>
 
-    <main id="main-content">
-      <section class="hero section-shell" id="top" aria-labelledby="hero-title">
-        <div class="hero__copy reveal visible">
-          <p class="hero__identity">PhD researcher <span>·</span> Research engineer <span>·</span> Basel, Switzerland</p>
-          <h1 id="hero-title">I build learning systems that can change without losing what made them useful.</h1>
-          <p class="hero__lede">
-            My work moves from optimization theory to continual learning, agentic systems, and the next spatial interfaces for intelligent tools. I use research to decide what should exist—and engineering to make the decision inspectable.
-          </p>
-          <div class="hero__actions">
-            <a class="primary-action" href="#research">Enter the research atlas <span aria-hidden="true">→</span></a>
-            <a class="secondary-action" href="#systems">Inspect selected systems</a>
+  <main id="main">
+    <section class="hero plate" id="top" aria-labelledby="hero-title">
+      <span class="crosshair crosshair-nw" aria-hidden="true"></span>
+      <span class="crosshair crosshair-ne" aria-hidden="true"></span>
+      <span class="crosshair crosshair-sw" aria-hidden="true"></span>
+      <span class="crosshair crosshair-se" aria-hidden="true"></span>
+
+      <div class="plate-coordinate coordinate-top">PLATE P.00 / POSITION</div>
+      <div class="hero-copy">
+        <p class="folio-kicker">Machine learning research · systems engineering · spatial interaction</p>
+        <h1 id="hero-title"><span>Research systems</span><span>for a world</span><span>that does not stand still.</span></h1>
+        <p class="hero-thesis">I investigate how intelligent systems should remember, adapt, and expose their reasoning—then turn those mechanisms into precise products, experiments, and interfaces.</p>
+        <div class="hero-actions">
+          <a class="text-action" href="#monographs">Inspect the work <span aria-hidden="true">↘</span></a>
+          <a class="text-action quiet" href="mailto:navish.kumar@unibas.ch">Start a conversation <span aria-hidden="true">↗</span></a>
+        </div>
+      </div>
+
+      <figure class="maquette" aria-labelledby="maquette-caption">
+        <div class="maquette-toolbar">
+          <span>Spatial research index</span>
+          <span id="maquette-status">Ambient orbit</span>
+        </div>
+        <canvas id="maquette-canvas" aria-label="Interactive three-dimensional research maquette. Drag to orbit, Shift-drag to pan, Alt-drag to roll, and use the wheel to zoom."></canvas>
+        <div class="maquette-axis axis-x" aria-hidden="true">X</div>
+        <div class="maquette-axis axis-y" aria-hidden="true">Y</div>
+        <div class="maquette-axis axis-z" aria-hidden="true">Z</div>
+        <div class="maquette-instructions">DRAG orbit · SHIFT pan · ALT roll · WHEEL depth · SELECT a structure</div>
+        <figcaption id="maquette-caption">A functional 6DoF maquette: each structure is a research program, each splat field is an unresolved space around it.</figcaption>
+        <div class="maquette-fallback" aria-label="Research program shortcuts">
+          <button type="button" data-maquette-target="replay"><span>01</span> Replay geometry</button>
+          <button type="button" data-maquette-target="rank"><span>02</span> Feasible adaptation</button>
+          <button type="button" data-maquette-target="casepath"><span>03</span> Inspectable agents</button>
+          <button type="button" data-maquette-target="ticlm"><span>04</span> Temporal language models</button>
+          <button type="button" data-maquette-target="frontier"><span>05</span> Spatial intelligence</button>
+        </div>
+      </figure>
+
+      <div class="hero-ledger">
+        <article><span>01 / Research</span><p>Continual learning, optimization geometry, PEFT, and temporal language models.</p></article>
+        <article><span>02 / Systems</span><p>Auditable agents, reproducible pipelines, controlled experiments, and live product surfaces.</p></article>
+        <article><span>03 / Interface</span><p>Spatial and embodied ways to inspect, steer, and collaborate with intelligent systems.</p></article>
+        <article class="scale-evidence"><span>04 / Standard</span><p>Claims remain attached to mechanisms, artifacts, empirical evidence, and explicit boundaries.</p></article>
+      </div>
+    </section>
+
+    <section class="trajectory plate" id="trajectory" aria-labelledby="trajectory-title">
+      <div class="plate-coordinate">PLATE P.01 / LONGITUDINAL SECTION</div>
+      <header class="section-heading">
+        <p class="folio-kicker">Intellectual elevation</p>
+        <h2 id="trajectory-title">One structural question, viewed at five scales.</h2>
+        <p>How can a system keep learning without making its past, present, or internal logic invisible?</p>
+      </header>
+
+      <div class="elevation" role="list" aria-label="Research trajectory">
+        <article role="listitem">
+          <span class="elevation-index">A</span>
+          <div><small>Mathematical foundation</small><h3>Structure</h3><p>Spectral and optimization geometry establish what a valid update can be.</p></div>
+        </article>
+        <article role="listitem">
+          <span class="elevation-index">B</span>
+          <div><small>Learning under change</small><h3>Memory</h3><p>Replay decides which previous information deserves influence now.</p></div>
+        </article>
+        <article role="listitem">
+          <span class="elevation-index">C</span>
+          <div><small>Constrained adaptation</small><h3>Feasibility</h3><p>Parameter budget matters only when its subspace contains the required correction.</p></div>
+        </article>
+        <article role="listitem">
+          <span class="elevation-index">D</span>
+          <div><small>Agentic product systems</small><h3>Inspection</h3><p>State, provenance, gates, failure, and intervention become part of the interface.</p></div>
+        </article>
+        <article role="listitem">
+          <span class="elevation-index">E</span>
+          <div><small>Generative spatial interfaces</small><h3>Embodiment</h3><p>Intelligence becomes something a person can navigate, manipulate, and inhabit.</p></div>
+        </article>
+      </div>
+
+      <blockquote class="structural-thesis">A method is complete only when the desired behavior, the available structure, the observed evidence, and the operational decision remain coherent.</blockquote>
+    </section>
+
+    <section class="monographs" id="monographs" aria-labelledby="monographs-title">
+      <div class="monograph-intro plate">
+        <div class="plate-coordinate">SERIES M / PROJECT MONOGRAPHS</div>
+        <header class="section-heading">
+          <p class="folio-kicker">Built evidence</p>
+          <h2 id="monographs-title">Projects are presented as structures, not descriptions.</h2>
+          <p>Each folio exposes the load-bearing problem, the decision that shaped the work, the blueprint that implements it, and the evidence that survives scrutiny.</p>
+        </header>
+      </div>
+
+      <article class="monograph plate" id="replay" data-search-entry="Experience Replay Greedy Ball Replay continual learning optimization">
+        <div class="plate-rail">
+          <span>M.01</span>
+          <small>Revision / 2026</small>
+        </div>
+        <header class="monograph-header">
+          <div>
+            <p class="folio-kicker">Continual learning · update geometry</p>
+            <h2>Experience Replay<br>Through the Lens of Optimization</h2>
           </div>
-          <dl class="hero__facts">
-            <div>
-              <dt>Core question</dt>
-              <dd>How should intelligent systems change under limited memory, evidence, compute, and human attention?</dd>
-            </div>
-            <div>
-              <dt>Current direction</dt>
-              <dd>Continual adaptation, bounded agents, and generative spatial interfaces.</dd>
-            </div>
-          </dl>
-        </div>
-
-        <div class="compass reveal visible" data-stage="adaptation" aria-label="One question, expanding surface">
-          <div class="compass__topline"><span>One question, expanding surface</span><span data-compass-position>02 / 04</span></div>
-          <div class="compass__field">
-            <span class="compass__halo" aria-hidden="true"></span>
-            <span class="compass__line" aria-hidden="true"></span>
-            <div class="compass__nodes">
-              <button type="button" class="compass-node" data-compass-stage="structure" aria-pressed="false">
-                <span class="compass-node__dot"></span><span class="compass-node__number">01</span><strong>Structure</strong><small>Math</small>
-              </button>
-              <button type="button" class="compass-node active" data-compass-stage="adaptation" aria-pressed="true">
-                <span class="compass-node__dot"></span><span class="compass-node__number">02</span><strong>Adaptation</strong><small>Learning</small>
-              </button>
-              <button type="button" class="compass-node" data-compass-stage="assurance" aria-pressed="false">
-                <span class="compass-node__dot"></span><span class="compass-node__number">03</span><strong>Assurance</strong><small>Systems</small>
-              </button>
-              <button type="button" class="compass-node" data-compass-stage="interaction" aria-pressed="false">
-                <span class="compass-node__dot"></span><span class="compass-node__number">04</span><strong>Interaction</strong><small>Space</small>
-              </button>
-            </div>
+          <div class="monograph-links">
+            <a href="https://openreview.net/forum?id=4z7il66fFb" target="_blank" rel="noreferrer">OpenReview ↗</a>
+            <a href="https://openreview.net/pdf?id=4z7il66fFb" target="_blank" rel="noreferrer">Paper PDF ↗</a>
           </div>
-          <div class="compass__detail">
-            <span class="micro-label" data-compass-label>Adaptation</span>
-            <p data-compass-title>Let a system learn new information without silently erasing what still matters.</p>
-          </div>
-        </div>
-      </section>
+        </header>
 
-      <section class="trajectory section-shell numbered-section" id="trajectory" aria-labelledby="trajectory-title">
-        <div class="section-marker" aria-hidden="true">01</div>
-        <div class="section-intro reveal">
-          <p class="micro-label">Trajectory</p>
-          <h2 id="trajectory-title">A trajectory, not a chronology.</h2>
-          <p>The work changes domains, but the reasoning is consistent: expose structure, control adaptation, build inspectable systems, then expand the interface through which people use them.</p>
-        </div>
-        <ol class="trajectory-list">
-          <li class="trajectory-step reveal">
-            <span class="trajectory-step__number">01</span>
-            <div><p class="micro-label">Structure</p><h3>Begin with the geometry of the problem.</h3><p>Spectral graph theory and natural-gradient optimization taught me to look for the structure that determines what an algorithm can and cannot do.</p></div>
-            <ul><li>Gain Laplacians</li><li>Natural-gradient VI</li></ul>
-          </li>
-          <li class="trajectory-step reveal">
-            <span class="trajectory-step__number">02</span>
-            <div><p class="micro-label">Adaptation</p><h3>Control what changes—and what must not.</h3><p>Continual learning became the central question: how can a model absorb new information while preserving capabilities, evidence, and current-task progress?</p></div>
-            <ul><li>Experience replay</li><li>Rank feasibility</li><li>TiC-LM</li></ul>
-          </li>
-          <li class="trajectory-step reveal">
-            <span class="trajectory-step__number">03</span>
-            <div><p class="micro-label">Assurance</p><h3>Turn mathematical intent into inspectable software.</h3><p>The same reasoning now shapes bounded agents, constrained updates, causal policy tools, release gates, and interfaces that expose uncertainty instead of hiding it.</p></div>
-            <ul><li>CasePath</li><li>SafePatch</li><li>EdgeAlign-DR</li></ul>
-          </li>
-          <li class="trajectory-step reveal">
-            <span class="trajectory-step__number">04</span>
-            <div><p class="micro-label">Interaction</p><h3>Make interaction part of the intelligence.</h3><p>My next direction is spatial: intelligent systems that create environments and simulations whose state remains editable, inspectable, and shared.</p></div>
-            <ul><li>Generative AI × VR</li><li>Embodied interfaces</li></ul>
-          </li>
-        </ol>
-      </section>
-
-      <section class="systems section-shell numbered-section" id="systems" aria-labelledby="systems-title">
-        <div class="section-marker" aria-hidden="true">02</div>
-        <div class="section-intro reveal">
-          <p class="micro-label">Selected systems</p>
-          <h2 id="systems-title">Inspect the decision chain.</h2>
-          <p>These are not technology lists. Each system is presented as a sequence of choices: what failed, what was made explicit, how the architecture carries the idea, and what evidence still constrains the claim.</p>
+        <div class="monograph-sequence">
+          <section>
+            <span>01</span><small>Problem</small>
+            <h3>Replay spends a scarce update budget without a precise target.</h3>
+            <p>Current-only learning forgets. Full joint training is unavailable. Random replay preserves examples, but does not ask whether their gradients realize the missing past-task contribution.</p>
+          </section>
+          <div class="sequence-arrow" aria-hidden="true">→</div>
+          <section>
+            <span>02</span><small>Structural decision</small>
+            <h3>Define the desired correction before choosing examples.</h3>
+            <p>Recast replay as a constrained update-matching problem: the replay batch is useful only insofar as its mean gradient approaches the correction induced by the stage objective.</p>
+          </section>
+          <div class="sequence-arrow" aria-hidden="true">→</div>
+          <section>
+            <span>03</span><small>Blueprint</small>
+            <h3>Greedy subset construction with an observable mismatch.</h3>
+            <p>Greedy Ball Replay selects examples one at a time, minimizing the remaining distance to the desired correction while exposing that distance at every step.</p>
+          </section>
+          <div class="sequence-arrow" aria-hidden="true">→</div>
+          <section>
+            <span>04</span><small>Empirical proof</small>
+            <h3>Matched, paired confirmation on S‑TinyImageNet / CI.</h3>
+            <p>The locked 10-seed comparison measures final outcomes rather than relying on the mismatch objective alone.</p>
+          </section>
         </div>
 
-        <div class="systems-workbench">
-          <div class="system-selector" role="tablist" aria-label="Selected systems">
-            <button type="button" role="tab" class="system-selector__item active" data-system="casepath" aria-selected="true"><span>01</span><strong>CasePath</strong><small>Evidence-bounded agentic workflows</small></button>
-            <button type="button" role="tab" class="system-selector__item" data-system="safepatch" aria-selected="false"><span>02</span><strong>SafePatch</strong><small>Constrained model updates you can inspect</small></button>
-            <button type="button" role="tab" class="system-selector__item" data-system="edgealign" aria-selected="false"><span>03</span><strong>EdgeAlign-DR</strong><small>Counterfactual policy design for AI guardrails</small></button>
-          </div>
-
-          <article class="system-stage reveal" id="system-stage" aria-live="polite">
-            <div class="system-stage__head">
-              <div><p class="micro-label" data-system-status>Active research system</p><h3 data-system-title>CasePath</h3></div>
-              <div class="system-stage__links"><a class="text-link" data-system-live href="/casepath/">Open live system ↗</a><a class="text-link" data-system-source href="https://github.com/KumarNavish/KumarNavish.github.io/tree/master/casepath" target="_blank" rel="noreferrer">Inspect source ↗</a></div>
-            </div>
-            <p class="system-thesis" data-system-thesis>A useful agent should not merely produce a plausible answer. It should expose exactly which evidence supports each bounded assertion—and preserve uncertainty when evidence is insufficient.</p>
-            <ol class="decision-chain" data-system-process>
-              <li><span>01</span><strong>Observable sources</strong></li><li><span>02</span><strong>Bounded assertions</strong></li><li><span>03</span><strong>Validation gates</strong></li><li><span>04</span><strong>Deterministic projection</strong></li><li><span>05</span><strong>Reviewable process</strong></li>
-            </ol>
-            <div class="chapter-tabs" role="tablist" aria-label="Inspect system">
-              <button class="chapter-tab active" type="button" data-chapter="problem">Problem</button><button class="chapter-tab" type="button" data-chapter="decision">Decision</button><button class="chapter-tab" type="button" data-chapter="architecture">Architecture</button><button class="chapter-tab" type="button" data-chapter="evidence">Evidence</button><button class="chapter-tab" type="button" data-chapter="next">Next question</button>
-            </div>
-            <div class="system-chapter">
-              <div><p class="micro-label" data-chapter-label>Problem</p><h4 data-chapter-title>Fluent systems can turn missing evidence into confident process advice.</h4><p data-chapter-body>Document-heavy workflows need extraction, synthesis, and procedural guidance, but the cost of a plausible unsupported inference can be much higher than the cost of admitting uncertainty.</p></div>
-              <ul data-chapter-bullets><li>Source artifacts can disagree, omit essential facts, or expose only partial evidence.</li><li>A free-form response makes observation and interpretation difficult to separate.</li><li>A trustworthy product needs useful failure states rather than silent optimism.</li></ul>
-            </div>
-            <div class="role-row"><span class="micro-label">My role</span><p data-system-role>Scientific framing, product architecture, schema design, evaluation design, frontend, backend, release governance, and end-to-end implementation.</p></div>
-          </article>
-        </div>
-      </section>
-
-      <section class="research section-shell numbered-section" id="research" aria-labelledby="research-title">
-        <div class="section-marker" aria-hidden="true">03</div>
-        <div class="section-intro reveal">
-          <p class="micro-label">Research atlas</p>
-          <h2 id="research-title">A living research body, not a bibliography.</h2>
-          <p>Select a node to see the recurring question, contribution, evidence boundary, and what remains unresolved. Connections represent intellectual dependence—not co-occurrence on a résumé.</p>
-        </div>
-
-        <div class="research-thesis reveal"><span class="micro-label">Current thesis</span><p>The durable problem is not how to optimize a static model. It is how to govern change when memory, evidence, compute, and human attention are all limited.</p></div>
-
-        <div class="research-atlas">
-          <div class="research-map reveal" aria-label="Interactive map of research directions">
-            <span class="research-link research-link--a" aria-hidden="true"></span><span class="research-link research-link--b" aria-hidden="true"></span><span class="research-link research-link--c" aria-hidden="true"></span><span class="research-link research-link--d" aria-hidden="true"></span>
-            <button class="research-node research-node--spectral" type="button" data-research="spectral" aria-pressed="false"><strong>Spectral<br/>foundations</strong><small>2020–21</small><i></i></button>
-            <button class="research-node research-node--natural" type="button" data-research="natural" aria-pressed="false"><strong>Natural-gradient<br/>VI</strong><small>2025</small><i></i></button>
-            <button class="research-node research-node--replay active" type="button" data-research="replay" aria-pressed="true"><strong>Replay as<br/>correction</strong><small>2026</small><i></i></button>
-            <button class="research-node research-node--rank" type="button" data-research="rank" aria-pressed="false"><strong>Rank feasibility</strong><small>2026</small><i></i></button>
-            <button class="research-node research-node--temporal" type="button" data-research="temporal" aria-pressed="false"><strong>Temporal replay<br/>value</strong><small>Now</small><i></i></button>
-            <button class="research-node research-node--spatial" type="button" data-research="spatial" aria-pressed="false"><strong>Spatial<br/>intelligence</strong><small>Next</small><i></i></button>
-            <p class="research-map__caption">Mathematical structure → situated interaction</p>
-          </div>
-
-          <article class="research-detail reveal" id="research-detail" data-tone="revision" aria-live="polite">
-            <div class="research-detail__status"><i></i><span data-research-status>Under revision</span><span data-research-year>2026</span></div>
-            <h3 data-research-title>Experience Replay Through the Lens of Optimization</h3>
-            <dl class="research-facts">
-              <div><dt>Question</dt><dd data-research-question>What update is experience replay actually trying to recover?</dd></div>
-              <div><dt>Contribution</dt><dd data-research-contribution>Recasts replay as correction toward the update joint training would have taken, derives a discrete replay selection objective, and introduces Greedy Ball Replay.</dd></div>
-              <div><dt>Evidence boundary</dt><dd data-research-boundary>Mechanism studies and end-to-end experiments connect smaller replay error to better continual-learning outcomes while exposing when the approximation is weak.</dd></div>
-              <div><dt>Still unresolved</dt><dd data-research-unresolved>How far can the correction view scale when representations, optimizers, and data distributions all move at once?</dd></div>
+        <div class="blueprint-grid scale-evidence">
+          <section class="equation-plate">
+            <div class="blueprint-label">INSCRIPTION / UPDATE CORRECTION</div>
+            <div class="equation" data-tex="\tau_t = g^{\star,\mathrm{mb}}_t - g^{\mathrm{mb}}_{t,\mathrm{cur}}">τₜ = g*ₜ (minibatch) − gₜ,current (minibatch)</div>
+            <div class="equation secondary" data-tex="\rho_t(S)=\left\|\frac{1}{|S|}\sum_{i\in S} g_i-\tau_t\right\|_2">ρₜ(S) = ‖ meanᵢ∈S(gᵢ) − τₜ ‖₂</div>
+            <p>The first expression defines what replay must add. The second reports how well a constrained subset realizes it.</p>
+            <dl class="proof-ledger">
+              <div><dt>AvgAcc</dt><dd>+1.389 pp <span>[0.920, 1.858]</span></dd></div>
+              <div><dt>AvgLoss</dt><dd>−0.0456 <span>[−0.0673, −0.0239]</span></dd></div>
+              <div><dt>Forgetting</dt><dd>−1.391 pp <span>[−1.945, −0.837]</span></dd></div>
             </dl>
-            <a class="text-link" data-research-link href="https://openreview.net/forum?id=yCe0QP7OJQ" target="_blank" rel="noreferrer">OpenReview discussion ↗</a>
-          </article>
-        </div>
+            <p class="evidence-note">Paired GBR minus uniform-subset result; seeds 30–39. Positive accuracy and negative loss/forgetting favor GBR.</p>
+          </section>
 
-        <details class="publication-ledger reveal">
-          <summary><span><strong>Publication ledger</strong><small>Five published works · 2020–2025</small></span><span>Expand bibliography</span></summary>
-          <ol>
-            <li><span>2025</span><div><a href="https://arxiv.org/abs/2507.07853" target="_blank" rel="noreferrer">Optimization Guarantees for Square-Root Natural-Gradient Variational Inference ↗</a><small>arXiv preprint</small></div></li>
-            <li><span>2023</span><div><a href="https://arxiv.org/abs/2301.12887" target="_blank" rel="noreferrer">Modelling delivery vehicles across urban micro-regions for cargo-bike logistics ↗</a><small>arXiv preprint</small></div></li>
-            <li><span>2021</span><div><a href="https://www.sciencedirect.com/science/article/pii/S0024379521002111" target="_blank" rel="noreferrer">Bounds for the extremal eigenvalues of gain Laplacian matrices ↗</a><small>Linear Algebra and its Applications</small></div></li>
-            <li><span>2020</span><div><a href="https://arxiv.org/abs/2009.13788" target="_blank" rel="noreferrer">Normalized Laplacians for gain graphs ↗</a><small>arXiv preprint</small></div></li>
-            <li><span>2020</span><div><a href="https://dl.acm.org/doi/abs/10.1145/3371158.3371172" target="_blank" rel="noreferrer">Interaction dynamics between hate and counter users on Twitter ↗</a><small>ACM IKDD CoDS / COMAD</small></div></li>
-          </ol>
-          <a class="text-link" href="https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en" target="_blank" rel="noreferrer">Open Google Scholar ↗</a>
-        </details>
-      </section>
-
-      <section class="frontier" id="frontier" aria-labelledby="frontier-title">
-        <div class="frontier__inner section-shell">
-          <div class="section-marker" aria-hidden="true">04</div>
-          <div class="section-intro reveal">
-            <p class="micro-label">Generative AI × spatial computing</p>
-            <h2 id="frontier-title">The interface should become part of the intelligence.</h2>
-            <p>Today’s AI interfaces compress intelligence into chat. I am exploring systems where language generates spatial worlds, tools, simulations, and agents that can be inhabited, manipulated, and tested.</p>
-          </div>
-
-          <div class="frontier-lab">
-            <div class="spatial-diagram reveal" aria-label="Intent, world, and agent share one spatial state">
-              <span class="spatial-orbit spatial-orbit--one" aria-hidden="true"></span><span class="spatial-orbit spatial-orbit--two" aria-hidden="true"></span>
-              <button type="button" class="spatial-object spatial-object--intent" data-frontier="intent" aria-pressed="false"><span>01</span><strong>Intent</strong></button>
-              <button type="button" class="spatial-object spatial-object--world active" data-frontier="world" aria-pressed="true"><span>02</span><strong>World</strong></button>
-              <button type="button" class="spatial-object spatial-object--agent" data-frontier="agent" aria-pressed="false"><span>03</span><strong>Agent</strong></button>
-              <div class="spatial-core"><span></span><small>Shared<br/>world<br/>state</small></div>
-            </div>
-            <div class="frontier-copy reveal">
-              <div class="frontier-tabs" role="tablist" aria-label="Spatial intelligence layers">
-                <button type="button" data-frontier="intent"><span>01</span>Intent</button><button type="button" class="active" data-frontier="world"><span>02</span>World</button><button type="button" data-frontier="agent"><span>03</span>Agent</button>
+          <section class="replay-instrument" aria-labelledby="replay-instrument-title">
+            <header>
+              <div>
+                <span class="blueprint-label">OPERABLE MODEL / CONCEPTUAL</span>
+                <h3 id="replay-instrument-title">Correction-matching instrument</h3>
               </div>
-              <article class="frontier-detail" aria-live="polite"><p class="micro-label" data-frontier-count>02 / 03</p><h3 data-frontier-title>The world becomes editable.</h3><p data-frontier-body>Generated scenes need spatial semantics, physics, persistence, and direct manipulation so people can revise them through action.</p><ul data-frontier-questions><li>How do we evaluate a generated environment as a useful interface rather than an impressive scene?</li><li>How should a person inspect and revise the hidden state behind spatial generation?</li><li>What must remain deterministic when the world, tools, and agents are model-produced?</li></ul></article>
+              <output id="replay-residual" aria-live="polite">0.000</output>
+            </header>
+            <canvas id="replay-canvas" aria-label="Conceptual replay subset selection visualizer"></canvas>
+            <div class="instrument-controls">
+              <div class="method-control" role="group" aria-label="Replay selection method">
+                <button type="button" data-replay-method="random">Random</button>
+                <button type="button" data-replay-method="greedy" aria-pressed="true">Greedy</button>
+                <button type="button" data-replay-method="dense">Dense</button>
+              </div>
+              <label>Budget <output id="replay-budget-value">5</output><input id="replay-budget" type="range" min="2" max="12" value="5"></label>
+              <button class="draft-button" id="replay-resample" type="button">Resample</button>
             </div>
-          </div>
+            <p id="replay-explanation">Greedy selection adds the candidate that most reduces the remaining correction mismatch.</p>
+          </section>
         </div>
-      </section>
 
-      <section class="contact section-shell numbered-section" id="contact" aria-labelledby="contact-title">
-        <div class="section-marker" aria-hidden="true">05</div>
-        <div class="contact__statement reveal"><h2 id="contact-title">The most interesting work here sits between categories. That is also where I work best.</h2></div>
-        <div class="contact__action reveal"><p>I am interested in research and product environments where mathematical judgment, ambitious engineering, and emerging interaction models have to coexist in one system.</p><a class="contact-email" href="mailto:navish.kumar@unibas.ch"><span>navish.kumar@unibas.ch</span><span aria-hidden="true">→</span></a><nav><a href="https://github.com/KumarNavish" target="_blank" rel="noreferrer">GitHub ↗</a><a href="https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en" target="_blank" rel="noreferrer">Google Scholar ↗</a><a href="/artifacts/resume.pdf">Résumé →</a></nav></div>
-      </section>
-    </main>
+        <div class="boundary scale-detail">
+          <span>BOUNDARY / LOAD CASE</span>
+          <p>The selector is meaningful only when the update must use a constrained replay subset. Dense candidate-gradient weighting remains a necessary reference and must be compared under matched resources.</p>
+        </div>
+      </article>
 
-    <footer class="site-footer"><p>© <span data-year>2026</span> Navish Kumar</p><p>Research, systems, and interfaces for intelligent change.</p><nav><a href="#top">Top ↑</a></nav></footer>
+      <article class="monograph plate" id="rank" data-search-entry="Rank Feasibility continual PEFT LoRA geometric feasibility">
+        <div class="plate-rail">
+          <span>M.02</span>
+          <small>Under review / 2026</small>
+        </div>
+        <header class="monograph-header">
+          <div>
+            <p class="folio-kicker">Continual PEFT · geometric diagnostics</p>
+            <h2>Rank Feasibility<br>in Continual PEFT</h2>
+          </div>
+          <div class="monograph-links">
+            <a href="https://openreview.net/forum?id=CwmHHYCbjK" target="_blank" rel="noreferrer">OpenReview ↗</a>
+            <a href="https://openreview.net/pdf?id=CwmHHYCbjK" target="_blank" rel="noreferrer">Paper PDF ↗</a>
+          </div>
+        </header>
 
-    <dialog class="command-palette" id="command-palette" aria-labelledby="command-title">
-      <div class="command-palette__surface">
-        <div class="command-palette__head"><div><p class="micro-label">Explore the body of work</p><h2 id="command-title">Find a question, system, or paper.</h2></div><button type="button" data-close-command aria-label="Close explorer">Esc</button></div>
-        <label class="command-search"><span aria-hidden="true">⌕</span><span class="sr-only">Search portfolio</span><input type="search" autocomplete="off" placeholder="Try “replay”, “spatial”, or “CasePath”" data-command-input /></label>
-        <div class="command-results" aria-live="polite" data-command-results></div>
-        <p class="command-hint"><kbd>↑</kbd><kbd>↓</kbd> navigate · <kbd>Enter</kbd> open · <kbd>Esc</kbd> close</p>
+        <div class="monograph-sequence">
+          <section><span>01</span><small>Problem</small><h3>LoRA rank is usually selected as capacity, not as geometry.</h3><p>A larger adapter helps only when the added subspace contains directions that can repair old-task loss gaps without erasing current-task progress.</p></section>
+          <div class="sequence-arrow" aria-hidden="true">→</div>
+          <section><span>02</span><small>Structural decision</small><h3>Evaluate the transition after the current task has already been learned.</h3><p>Measure the old-task gaps at the actual checkpoint, project their gradients into each candidate rank, and ask whether one correction can satisfy all tasks.</p></section>
+          <div class="sequence-arrow" aria-hidden="true">→</div>
+          <section><span>03</span><small>Blueprint</small><h3>Solve a minimum-norm feasibility problem over nested LoRA spaces.</h3><p>Infeasibility rejects ranks that lack a necessary direction. Excessive correction norm rejects ranks that would purchase retention by destroying current progress.</p></section>
+          <div class="sequence-arrow" aria-hidden="true">→</div>
+          <section><span>04</span><small>Empirical proof</small><h3>Local diagnosis builds a correction; held-out data decide whether it works.</h3><p>The evaluation separates geometric existence from actual old-task improvement and current-task preservation.</p></section>
+        </div>
+
+        <div class="blueprint-grid rank-blueprint scale-evidence">
+          <section class="equation-plate">
+            <div class="blueprint-label">INSCRIPTION / MINIMUM-NORM CORRECTION</div>
+            <div class="equation" data-tex="\delta_r^*=\arg\min_{\delta\in\mathcal S_r}\frac12\|\delta\|_2^2\quad\mathrm{s.t.}\quad G_r\delta\le -\Delta">δᵣ* = arg min over δ∈Sᵣ of ½‖δ‖₂², subject to Gᵣδ ≤ −Δ</div>
+            <p>The rank is not valuable because it is larger. It is valuable when its subspace first admits a sufficiently small correction that satisfies every old-task constraint.</p>
+            <div class="rank-section-diagram" aria-label="Nested rank spaces">
+              <div class="rank-space r128"><span>r = 128</span>
+                <div class="rank-space r32"><span>r = 32 · first pass</span>
+                  <div class="rank-space r16"><span>r = 16 · feasible / destructive</span>
+                    <div class="rank-space r8"><span>r ≤ 8 · infeasible</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+          <section class="proof-section">
+            <span class="blueprint-label">SECTION / YAHOO ANSWERS CHECKPOINT</span>
+            <div class="rank-ledger">
+              <article><span>01–08</span><h3>No local correction exists.</h3><p>Reject before held-out testing: the projected constraints cannot all be met.</p></article>
+              <article><span>16</span><h3>Correction exists, but costs too much.</h3><p>Only 49.4% / 35.0% of current-task progress remains across the two reported seeds.</p></article>
+              <article class="passing"><span>32</span><h3>First tested rank to pass both requirements.</h3><p>All four old-task losses fall and at least 90% of current-task progress remains in both seeds.</p></article>
+            </div>
+          </section>
+        </div>
+
+        <div class="boundary scale-detail"><span>BOUNDARY / LOCAL MODEL</span><p>The diagnostic does not turn a Taylor approximation into a guarantee about global optimization. It constructs or rejects a checkpoint-level correction; held-out evaluation remains decisive.</p></div>
+      </article>
+
+      <article class="monograph plate" id="casepath" data-search-entry="CasePath agentic system evidence audit Swiss legal process product">
+        <div class="plate-rail">
+          <span>M.03</span>
+          <small>Live system / 2026</small>
+        </div>
+        <header class="monograph-header">
+          <div>
+            <p class="folio-kicker">Agentic systems · procedural intelligence</p>
+            <h2>CasePath<br>Evidence-Bound Process Intelligence</h2>
+          </div>
+          <div class="monograph-links">
+            <a href="https://casepath.kumarnavish.chatgpt.site/" target="_blank" rel="noreferrer">Live product ↗</a>
+            <a href="https://github.com/KumarNavish/KumarNavish.github.io/tree/master/casepath" target="_blank" rel="noreferrer">Repository ↗</a>
+          </div>
+        </header>
+
+        <div class="monograph-sequence">
+          <section><span>01</span><small>Problem</small><h3>Agentic output becomes unsafe when process, sources, and claims drift apart.</h3><p>A fluent answer is insufficient for procedural expertise. The system must preserve canonical facts, source integrity, process decisions, document requirements, and final-claim auditability.</p></section>
+          <div class="sequence-arrow" aria-hidden="true">→</div>
+          <section><span>02</span><small>Structural decision</small><h3>Make evidence and deterministic gates first-class state.</h3><p>Models propose within a typed graph; authority gates fail closed when process or evidence requirements are not satisfied.</p></section>
+          <div class="sequence-arrow" aria-hidden="true">→</div>
+          <section><span>03</span><small>Blueprint</small><h3>Six specialized agents inside one guarded StateGraph.</h3><p>Canonical facts, planning, source integrity, process mapping, evidence checklist, and final audit share context and emit live audit events.</p></section>
+          <div class="sequence-arrow" aria-hidden="true">→</div>
+          <section><span>04</span><small>Empirical proof</small><h3>The deployed workspace exposes the evidence chain directly.</h3><p>Sources → Build → Docs → Check is inspectable as a user workflow rather than hidden behind a single generated response.</p></section>
+        </div>
+
+        <div class="agent-blueprint scale-evidence">
+          <div class="agent-source"><span>INPUT</span><strong>Claim + source artifacts</strong></div>
+          <div class="agent-line" aria-hidden="true"></div>
+          <div class="agent-nodes">
+            <article><span>A.01</span><b>Canonical facts</b></article>
+            <article><span>A.02</span><b>Orchestrator plan</b></article>
+            <article><span>A.03</span><b>Source integrity</b></article>
+            <article><span>A.04</span><b>Process mapping</b></article>
+            <article><span>A.05</span><b>Evidence checklist</b></article>
+            <article><span>A.06</span><b>Final claim audit</b></article>
+          </div>
+          <div class="agent-gates">
+            <article><span>G.01</span><b>Process gate</b><small>deterministic / fail closed</small></article>
+            <article><span>G.02</span><b>Evidence gate</b><small>deterministic / fail closed</small></article>
+            <article><span>G.03</span><b>Whole-playbook gate</b><small>deterministic / fail closed</small></article>
+          </div>
+          <div class="agent-output"><span>OUTPUT</span><strong>Process + documents + auditable brief</strong></div>
+        </div>
+
+        <div class="boundary scale-detail"><span>BOUNDARY / AUTHORITY</span><p>The system is designed to reveal and constrain a process, not to replace legal authority. Source provenance, claim scope, and explicit failure states remain part of the product surface.</p></div>
+      </article>
+
+      <article class="monograph plate" id="ticlm" data-search-entry="TiC-LM time continual language model counterfactual window replay">
+        <div class="plate-rail">
+          <span>M.04</span>
+          <small>Ongoing / 2026</small>
+        </div>
+        <header class="monograph-header">
+          <div>
+            <p class="folio-kicker">Time-continual language models · replay allocation</p>
+            <h2>Counterfactual Window Replay<br>for TiC-LM</h2>
+          </div>
+          <div class="monograph-links">
+            <a href="https://github.com/apple/ml-tic-lm" target="_blank" rel="noreferrer">TiC-LM benchmark ↗</a>
+          </div>
+        </header>
+
+        <div class="monograph-sequence">
+          <section><span>01</span><small>Problem</small><h3>Replay is replacement, not free augmentation.</h3><p>Under a fixed token budget, every historical token displaces a current token. A replay ratio therefore cannot be judged by retention alone.</p></section>
+          <div class="sequence-arrow" aria-hidden="true">→</div>
+          <section><span>02</span><small>Structural decision</small><h3>Value an old window against the current tokens it replaces.</h3><p>The scientific object becomes counterfactual regret-row improvement across backward, current, and forward regions.</p></section>
+          <div class="sequence-arrow" aria-hidden="true">→</div>
+          <section><span>03</span><small>Blueprint</small><h3>Estimate matrix-valued replay effects, then allocate conservatively.</h3><p>Window-specific values, uncertainty penalties, guardrails, and a no-replay solution replace fixed global ratios.</p></section>
+          <div class="sequence-arrow" aria-hidden="true">→</div>
+          <section><span>04</span><small>Validation protocol</small><h3>Predictions must appear in the regret matrix before they become claims.</h3><p>This is an active investigation. The framework and falsifiable predictions are ahead of completed empirical confirmation.</p></section>
+        </div>
+
+        <div class="temporal-blueprint scale-evidence">
+          <section>
+            <span class="blueprint-label">INSCRIPTION / REPLACEMENT DIRECTION</span>
+            <div class="equation" data-tex="G_t(\alpha)=g_t+\sum_{\tau<t}\alpha_{t,\tau}(g_\tau-g_t)">Gₜ(α) = gₜ + Στ&lt;t αₜ,τ(gτ − gₜ)</div>
+            <p>The relevant direction is historical gradient minus displaced current gradient.</p>
+          </section>
+          <div class="regret-matrix" aria-label="Conceptual temporal regret matrix">
+            <div class="matrix-axis matrix-axis-y">checkpoint time</div>
+            <div class="matrix-axis matrix-axis-x">evaluation time</div>
+            <div class="matrix-cells" id="regret-matrix-cells"></div>
+            <div class="matrix-legend"><span>backward</span><span>current</span><span>forward</span></div>
+          </div>
+          <section class="validation-note">
+            <span class="blueprint-label">STATUS / NOT YET ESTABLISHED</span>
+            <h3>Replay should disappear when no historical window has reliably positive row-level value.</h3>
+            <p>The planned test compares predicted replay effects against the next observed regret row, including uncertainty and current/future costs.</p>
+          </section>
+        </div>
+      </article>
+    </section>
+
+    <section class="research-folio plate" id="folio" aria-labelledby="folio-title">
+      <div class="plate-coordinate">SERIES R / RESEARCH BLUEPRINT REGISTER</div>
+      <header class="section-heading research-heading">
+        <div>
+          <p class="folio-kicker">Living intellectual record</p>
+          <h2 id="folio-title">Papers as numbered blueprints.</h2>
+        </div>
+        <p>Published work, revision-stage work, and active investigations occupy the same register—but their evidentiary status remains explicit.</p>
+      </header>
+
+      <div class="folio-controls" role="group" aria-label="Filter research folio">
+        <button type="button" data-folio-filter="all" aria-pressed="true">All plates</button>
+        <button type="button" data-folio-filter="published">Published</button>
+        <button type="button" data-folio-filter="revision">Revision</button>
+        <button type="button" data-folio-filter="ongoing">Ongoing</button>
       </div>
-    </dialog>
 
-    <script type="module" src="/src/portfolio.js"></script>
-  </body>
+      <div class="blueprint-register">
+        <details class="blueprint-row" data-folio-status="revision" open>
+          <summary><span class="blueprint-number">R.01</span><span class="blueprint-status revision">Revision</span><span class="blueprint-title">Experience Replay Through the Lens of Optimization</span><span class="blueprint-year">2026</span><span class="blueprint-toggle">+</span></summary>
+          <div class="blueprint-detail">
+            <div><small>Question</small><p>How can constrained replay steer an online update toward joint-training behavior?</p></div>
+            <div><small>Contribution</small><p>An explicit correction target, greedy subset construction, observable mismatch, and error decomposition.</p></div>
+            <div class="formula-cell"><small>Inscription</small><div data-tex="\min_{|S|=k}\rho_t(S)">min|S|=k ρₜ(S)</div></div>
+            <div><small>Evidence</small><a href="https://openreview.net/forum?id=4z7il66fFb" target="_blank" rel="noreferrer">OpenReview discussion ↗</a></div>
+          </div>
+        </details>
+
+        <details class="blueprint-row" data-folio-status="revision">
+          <summary><span class="blueprint-number">R.02</span><span class="blueprint-status revision">Under review</span><span class="blueprint-title">Rank Feasibility in Continual PEFT</span><span class="blueprint-year">2026</span><span class="blueprint-toggle">+</span></summary>
+          <div class="blueprint-detail">
+            <div><small>Question</small><p>Which LoRA ranks contain a low-norm correction that improves every old task while preserving current progress?</p></div>
+            <div><small>Contribution</small><p>A checkpoint-level geometric feasibility test over nested adapter spaces.</p></div>
+            <div class="formula-cell"><small>Inscription</small><div data-tex="\delta_r^*\in\mathcal S_r">δ*r ∈ Sᵣ</div></div>
+            <div><small>Evidence</small><a href="https://openreview.net/forum?id=CwmHHYCbjK" target="_blank" rel="noreferrer">OpenReview discussion ↗</a></div>
+          </div>
+        </details>
+
+        <details class="blueprint-row" data-folio-status="ongoing">
+          <summary><span class="blueprint-number">R.03</span><span class="blueprint-status ongoing">Ongoing</span><span class="blueprint-title">Counterfactual Window Replay for Time-Continual Language Models</span><span class="blueprint-year">2026</span><span class="blueprint-toggle">+</span></summary>
+          <div class="blueprint-detail">
+            <div><small>Question</small><p>Which historical windows improve the next regret row enough to earn the current tokens they replace?</p></div>
+            <div><small>Contribution</small><p>A counterfactual allocation objective with backward, current, and forward guardrails.</p></div>
+            <div class="formula-cell"><small>Inscription</small><div data-tex="g_\tau-g_t">gτ − gₜ</div></div>
+            <div><small>Status</small><p>Framework and validation plan; empirical claims remain open.</p></div>
+          </div>
+        </details>
+
+        <details class="blueprint-row" data-folio-status="published">
+          <summary><span class="blueprint-number">R.04</span><span class="blueprint-status published">Preprint</span><span class="blueprint-title">Optimization Guarantees for Square-Root Natural-Gradient Variational Inference</span><span class="blueprint-year">2025</span><span class="blueprint-toggle">+</span></summary>
+          <div class="blueprint-detail">
+            <div><small>Question</small><p>Can practical natural-gradient Gaussian variational inference receive formal convergence guarantees?</p></div>
+            <div><small>Contribution</small><p>Square-root covariance geometry for discrete updates and continuous-time flow.</p></div>
+            <div class="formula-cell"><small>Inscription</small><div data-tex="\Sigma=SS^\top">Σ = SSᵀ</div></div>
+            <div><small>Evidence</small><a href="https://arxiv.org/abs/2507.07853" target="_blank" rel="noreferrer">arXiv ↗</a></div>
+          </div>
+        </details>
+
+        <details class="blueprint-row" data-folio-status="published">
+          <summary><span class="blueprint-number">R.05</span><span class="blueprint-status published">Published</span><span class="blueprint-title">Delivery Performance Across Urban Micro-regions</span><span class="blueprint-year">2023</span><span class="blueprint-toggle">+</span></summary>
+          <div class="blueprint-detail">
+            <div><small>Question</small><p>Where can cargo-bike fleets replace vans without treating a city as one homogeneous system?</p></div>
+            <div><small>Contribution</small><p>H3 micro-regions and OpenStreetMap context for operational service-time modeling.</p></div>
+            <div class="formula-cell"><small>Scale</small><div>city → hexagon → decision</div></div>
+            <div><small>Evidence</small><a href="https://arxiv.org/abs/2301.12887" target="_blank" rel="noreferrer">arXiv ↗</a></div>
+          </div>
+        </details>
+
+        <details class="blueprint-row" data-folio-status="published">
+          <summary><span class="blueprint-number">R.06</span><span class="blueprint-status published">Published</span><span class="blueprint-title">Bounds for the Extremal Eigenvalues of Gain Laplacian Matrices</span><span class="blueprint-year">2021</span><span class="blueprint-toggle">+</span></summary>
+          <div class="blueprint-detail">
+            <div><small>Question</small><p>How do imbalance and frustration constrain the extremal spectrum of a gain graph?</p></div>
+            <div><small>Contribution</small><p>Explicit lower and upper eigenvalue bounds linked to graph frustration measures.</p></div>
+            <div class="formula-cell"><small>Inscription</small><div data-tex="L(\Phi)=D(\Phi)-A(\Phi)">L(Φ) = D(Φ) − A(Φ)</div></div>
+            <div><small>Evidence</small><a href="https://www.sciencedirect.com/science/article/pii/S0024379521002111" target="_blank" rel="noreferrer">Journal article ↗</a></div>
+          </div>
+        </details>
+
+        <details class="blueprint-row" data-folio-status="published">
+          <summary><span class="blueprint-number">R.07</span><span class="blueprint-status published">Published</span><span class="blueprint-title">Normalized Laplacians for Gain Graphs</span><span class="blueprint-year">2020</span><span class="blueprint-toggle">+</span></summary>
+          <div class="blueprint-detail">
+            <div><small>Question</small><p>Which normalized operator exposes balance, bipartiteness, and spectral structure in gain graphs?</p></div>
+            <div><small>Contribution</small><p>Operator definitions, bounds, equality cases, and interlacing foundations.</p></div>
+            <div class="formula-cell"><small>Inscription</small><div data-tex="\mathcal L(\Phi)=I-D^{-1/2}A(\Phi)D^{-1/2}">ℒ(Φ) = I − D⁻¹ᐟ²A(Φ)D⁻¹ᐟ²</div></div>
+            <div><small>Evidence</small><a href="https://arxiv.org/abs/2009.13788" target="_blank" rel="noreferrer">arXiv ↗</a></div>
+          </div>
+        </details>
+
+        <details class="blueprint-row" data-folio-status="published">
+          <summary><span class="blueprint-number">R.08</span><span class="blueprint-status published">Published</span><span class="blueprint-title">Interaction Dynamics Between Hate and Counter Users on Twitter</span><span class="blueprint-year">2020</span><span class="blueprint-toggle">+</span></summary>
+          <div class="blueprint-detail">
+            <div><small>Question</small><p>How do harmful and protective speech behaviors differ and interact in online communities?</p></div>
+            <div><small>Contribution</small><p>A paired-user dataset and behavioral, linguistic, and psycholinguistic analysis.</p></div>
+            <div class="formula-cell"><small>Artifact</small><div>data → behavior → intervention</div></div>
+            <div><small>Evidence</small><a href="https://dl.acm.org/doi/10.1145/3371158.3371172" target="_blank" rel="noreferrer">ACM article ↗</a></div>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <section class="frontier plate" id="frontier" aria-labelledby="frontier-title">
+      <div class="plate-coordinate">PLATE F.01 / PROSPECTIVE SECTION</div>
+      <div class="frontier-grid">
+        <header>
+          <p class="folio-kicker">Generative AI × VR / spatial computing</p>
+          <h2 id="frontier-title">The next interface to intelligence may be a place.</h2>
+          <p>Spatial computing is not a keyword appended to the research. It is the next test of the same thesis: can a complex intelligent system expose memory, state, uncertainty, constraints, and possibility in a form a person can actually inhabit?</p>
+        </header>
+        <div class="frontier-section-drawing" aria-hidden="true">
+          <div class="section-ground"></div>
+          <div class="section-volume volume-a"></div>
+          <div class="section-volume volume-b"></div>
+          <div class="section-volume volume-c"></div>
+          <div class="section-sun"></div>
+          <span class="section-person"></span>
+        </div>
+      </div>
+
+      <div class="frontier-programs scale-evidence">
+        <article><span>F.01</span><small>Generative worlds</small><h3>Intent → navigable 6DoF environments.</h3><p>Move beyond flat generated media toward environments that can be entered, altered, and remembered.</p></article>
+        <article><span>F.02</span><small>Embodied inspection</small><h3>State becomes spatially legible.</h3><p>Provenance, memory, uncertainty, and intervention points become objects and relations rather than hidden logs.</p></article>
+        <article><span>F.03</span><small>Adaptive intelligence</small><h3>The environment learns without becoming opaque.</h3><p>Continual-learning diagnostics become interaction primitives inside the experience itself.</p></article>
+      </div>
+
+      <div class="frontier-question scale-detail">
+        <span>CURRENT DESIGN QUESTION</span>
+        <p>What is the smallest spatial prototype that demonstrates a genuine cognitive advantage over chat—not merely a more impressive rendering?</p>
+      </div>
+    </section>
+
+    <section class="contact-plate plate" id="contact" aria-labelledby="contact-title">
+      <div class="plate-coordinate">PLATE C.01 / CONNECTION</div>
+      <div>
+        <p class="folio-kicker">Basel · research · systems · product</p>
+        <h2 id="contact-title">The natural next step is to examine a difficult problem together.</h2>
+      </div>
+      <div class="contact-copy">
+        <p>For research collaboration, technically serious product work, or roles where scientific judgment and implementation must coexist, email is the clearest route.</p>
+        <a class="contact-email" href="mailto:navish.kumar@unibas.ch">navish.kumar@unibas.ch <span>↗</span></a>
+        <button type="button" id="copy-email" data-email="navish.kumar@unibas.ch">Copy address</button>
+        <p id="copy-status" class="copy-status" aria-live="polite"></p>
+        <div class="contact-links">
+          <a href="https://github.com/KumarNavish" target="_blank" rel="noreferrer">GitHub</a>
+          <a href="https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en" target="_blank" rel="noreferrer">Google Scholar</a>
+          <a href="https://openreview.net/profile?id=~Navish_Kumar1" target="_blank" rel="noreferrer">OpenReview</a>
+          <a href="/artifacts/resume.pdf" target="_blank" rel="noreferrer">Résumé PDF</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <span>Navish Kumar · Research architecture for learning under change</span>
+    <span>Basel / <b id="current-year">2026</b> / Plate set 01</span>
+  </footer>
+
+  <dialog class="index-dialog" id="index-dialog">
+    <form method="dialog" class="index-shell">
+      <header>
+        <div><span class="folio-kicker">Drawing index</span><h2>Navigate the body of work.</h2></div>
+        <button type="submit" value="close">Close</button>
+      </header>
+      <label class="index-search"><span>Search</span><input id="index-search" type="search" placeholder="Replay, rank, agents, spatial…" autocomplete="off"></label>
+      <div id="index-results" class="index-results" role="listbox"></div>
+      <footer><span>↑ ↓ select</span><span>Enter open</span><span>Esc close</span></footer>
+    </form>
+  </dialog>
+</body>
 </html>
