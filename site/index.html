@@ -2,12 +2,310 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Navish Kumar | Research Systems</title>
+    <meta name="theme-color" content="#f3f3ef" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="description"
+      content="Navish Kumar builds research systems for intelligent change: continual learning, inspectable agents, constrained updates, and emerging spatial interfaces."
+    />
+    <meta
+      name="keywords"
+      content="Navish Kumar, continual learning, optimization, agentic systems, research engineering, spatial computing, generative AI, VR"
+    />
+    <meta name="author" content="Navish Kumar" />
+    <link rel="canonical" href="https://kumarnavish.github.io/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/src/portfolio.css" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://kumarnavish.github.io/" />
+    <meta property="og:site_name" content="Navish Kumar — Research systems" />
+    <meta property="og:title" content="Navish Kumar — Research systems for intelligent change" />
+    <meta
+      property="og:description"
+      content="A research atlas connecting optimization, continual learning, inspectable systems, and spatial intelligence."
+    />
+    <meta property="og:image" content="https://kumarnavish.github.io/og-portfolio.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Navish Kumar research systems portfolio preview" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Navish Kumar — Research systems for intelligent change" />
+    <meta
+      name="twitter:description"
+      content="A research atlas connecting optimization, continual learning, inspectable systems, and spatial intelligence."
+    />
+    <meta name="twitter:image" content="https://kumarnavish.github.io/og-portfolio.png" />
+    <title>Navish Kumar — Research systems for intelligent change</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Person",
+        "name": "Navish Kumar",
+        "url": "https://kumarnavish.github.io/",
+        "jobTitle": "PhD Researcher and Research Engineer",
+        "affiliation": { "@type": "Organization", "name": "University of Basel" },
+        "email": "mailto:navish.kumar@unibas.ch",
+        "sameAs": [
+          "https://github.com/KumarNavish",
+          "https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en"
+        ],
+        "knowsAbout": [
+          "Continual learning",
+          "Optimization",
+          "Agentic systems",
+          "Spatial computing",
+          "Human-computer interaction"
+        ]
+      }
+    </script>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+
+    <header class="site-header" data-site-header>
+      <div class="site-header__inner">
+        <a class="brand" href="#top" aria-label="Navish Kumar, return to top">
+          <strong>Navish Kumar</strong>
+          <span>Research systems</span>
+        </a>
+
+        <nav class="desktop-nav" aria-label="Primary navigation">
+          <a href="#trajectory" data-nav-section="trajectory">Trajectory</a>
+          <a href="#systems" data-nav-section="systems">Systems</a>
+          <a href="#research" data-nav-section="research">Research</a>
+          <a href="#frontier" data-nav-section="frontier">Frontier</a>
+        </nav>
+
+        <button class="command-button" type="button" data-open-command aria-label="Explore the portfolio">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="3.8" fill="none" stroke="currentColor"/><path d="m10 10 3 3" stroke="currentColor"/></svg>
+          <span>Explore</span><kbd>⌘ K</kbd>
+        </button>
+
+        <details class="mobile-nav" data-mobile-nav>
+          <summary aria-label="Open navigation"><span></span><span></span></summary>
+          <nav aria-label="Mobile navigation">
+            <a href="#trajectory">Trajectory</a>
+            <a href="#systems">Systems</a>
+            <a href="#research">Research</a>
+            <a href="#frontier">Frontier</a>
+            <a href="#contact">Contact</a>
+          </nav>
+        </details>
+      </div>
+    </header>
+
+    <main id="main-content">
+      <section class="hero section-shell" id="top" aria-labelledby="hero-title">
+        <div class="hero__copy reveal visible">
+          <p class="hero__identity">PhD researcher <span>·</span> Research engineer <span>·</span> Basel, Switzerland</p>
+          <h1 id="hero-title">I build learning systems that can change without losing what made them useful.</h1>
+          <p class="hero__lede">
+            My work moves from optimization theory to continual learning, agentic systems, and the next spatial interfaces for intelligent tools. I use research to decide what should exist—and engineering to make the decision inspectable.
+          </p>
+          <div class="hero__actions">
+            <a class="primary-action" href="#research">Enter the research atlas <span aria-hidden="true">→</span></a>
+            <a class="secondary-action" href="#systems">Inspect selected systems</a>
+          </div>
+          <dl class="hero__facts">
+            <div>
+              <dt>Core question</dt>
+              <dd>How should intelligent systems change under limited memory, evidence, compute, and human attention?</dd>
+            </div>
+            <div>
+              <dt>Current direction</dt>
+              <dd>Continual adaptation, bounded agents, and generative spatial interfaces.</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="compass reveal visible" data-stage="adaptation" aria-label="One question, expanding surface">
+          <div class="compass__topline"><span>One question, expanding surface</span><span data-compass-position>02 / 04</span></div>
+          <div class="compass__field">
+            <span class="compass__halo" aria-hidden="true"></span>
+            <span class="compass__line" aria-hidden="true"></span>
+            <div class="compass__nodes">
+              <button type="button" class="compass-node" data-compass-stage="structure" aria-pressed="false">
+                <span class="compass-node__dot"></span><span class="compass-node__number">01</span><strong>Structure</strong><small>Math</small>
+              </button>
+              <button type="button" class="compass-node active" data-compass-stage="adaptation" aria-pressed="true">
+                <span class="compass-node__dot"></span><span class="compass-node__number">02</span><strong>Adaptation</strong><small>Learning</small>
+              </button>
+              <button type="button" class="compass-node" data-compass-stage="assurance" aria-pressed="false">
+                <span class="compass-node__dot"></span><span class="compass-node__number">03</span><strong>Assurance</strong><small>Systems</small>
+              </button>
+              <button type="button" class="compass-node" data-compass-stage="interaction" aria-pressed="false">
+                <span class="compass-node__dot"></span><span class="compass-node__number">04</span><strong>Interaction</strong><small>Space</small>
+              </button>
+            </div>
+          </div>
+          <div class="compass__detail">
+            <span class="micro-label" data-compass-label>Adaptation</span>
+            <p data-compass-title>Let a system learn new information without silently erasing what still matters.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="trajectory section-shell numbered-section" id="trajectory" aria-labelledby="trajectory-title">
+        <div class="section-marker" aria-hidden="true">01</div>
+        <div class="section-intro reveal">
+          <p class="micro-label">Trajectory</p>
+          <h2 id="trajectory-title">A trajectory, not a chronology.</h2>
+          <p>The work changes domains, but the reasoning is consistent: expose structure, control adaptation, build inspectable systems, then expand the interface through which people use them.</p>
+        </div>
+        <ol class="trajectory-list">
+          <li class="trajectory-step reveal">
+            <span class="trajectory-step__number">01</span>
+            <div><p class="micro-label">Structure</p><h3>Begin with the geometry of the problem.</h3><p>Spectral graph theory and natural-gradient optimization taught me to look for the structure that determines what an algorithm can and cannot do.</p></div>
+            <ul><li>Gain Laplacians</li><li>Natural-gradient VI</li></ul>
+          </li>
+          <li class="trajectory-step reveal">
+            <span class="trajectory-step__number">02</span>
+            <div><p class="micro-label">Adaptation</p><h3>Control what changes—and what must not.</h3><p>Continual learning became the central question: how can a model absorb new information while preserving capabilities, evidence, and current-task progress?</p></div>
+            <ul><li>Experience replay</li><li>Rank feasibility</li><li>TiC-LM</li></ul>
+          </li>
+          <li class="trajectory-step reveal">
+            <span class="trajectory-step__number">03</span>
+            <div><p class="micro-label">Assurance</p><h3>Turn mathematical intent into inspectable software.</h3><p>The same reasoning now shapes bounded agents, constrained updates, causal policy tools, release gates, and interfaces that expose uncertainty instead of hiding it.</p></div>
+            <ul><li>CasePath</li><li>SafePatch</li><li>EdgeAlign-DR</li></ul>
+          </li>
+          <li class="trajectory-step reveal">
+            <span class="trajectory-step__number">04</span>
+            <div><p class="micro-label">Interaction</p><h3>Make interaction part of the intelligence.</h3><p>My next direction is spatial: intelligent systems that create environments and simulations whose state remains editable, inspectable, and shared.</p></div>
+            <ul><li>Generative AI × VR</li><li>Embodied interfaces</li></ul>
+          </li>
+        </ol>
+      </section>
+
+      <section class="systems section-shell numbered-section" id="systems" aria-labelledby="systems-title">
+        <div class="section-marker" aria-hidden="true">02</div>
+        <div class="section-intro reveal">
+          <p class="micro-label">Selected systems</p>
+          <h2 id="systems-title">Inspect the decision chain.</h2>
+          <p>These are not technology lists. Each system is presented as a sequence of choices: what failed, what was made explicit, how the architecture carries the idea, and what evidence still constrains the claim.</p>
+        </div>
+
+        <div class="systems-workbench">
+          <div class="system-selector" role="tablist" aria-label="Selected systems">
+            <button type="button" role="tab" class="system-selector__item active" data-system="casepath" aria-selected="true"><span>01</span><strong>CasePath</strong><small>Evidence-bounded agentic workflows</small></button>
+            <button type="button" role="tab" class="system-selector__item" data-system="safepatch" aria-selected="false"><span>02</span><strong>SafePatch</strong><small>Constrained model updates you can inspect</small></button>
+            <button type="button" role="tab" class="system-selector__item" data-system="edgealign" aria-selected="false"><span>03</span><strong>EdgeAlign-DR</strong><small>Counterfactual policy design for AI guardrails</small></button>
+          </div>
+
+          <article class="system-stage reveal" id="system-stage" aria-live="polite">
+            <div class="system-stage__head">
+              <div><p class="micro-label" data-system-status>Active research system</p><h3 data-system-title>CasePath</h3></div>
+              <div class="system-stage__links"><a class="text-link" data-system-live href="/casepath/">Open live system ↗</a><a class="text-link" data-system-source href="https://github.com/KumarNavish/KumarNavish.github.io/tree/master/casepath" target="_blank" rel="noreferrer">Inspect source ↗</a></div>
+            </div>
+            <p class="system-thesis" data-system-thesis>A useful agent should not merely produce a plausible answer. It should expose exactly which evidence supports each bounded assertion—and preserve uncertainty when evidence is insufficient.</p>
+            <ol class="decision-chain" data-system-process>
+              <li><span>01</span><strong>Observable sources</strong></li><li><span>02</span><strong>Bounded assertions</strong></li><li><span>03</span><strong>Validation gates</strong></li><li><span>04</span><strong>Deterministic projection</strong></li><li><span>05</span><strong>Reviewable process</strong></li>
+            </ol>
+            <div class="chapter-tabs" role="tablist" aria-label="Inspect system">
+              <button class="chapter-tab active" type="button" data-chapter="problem">Problem</button><button class="chapter-tab" type="button" data-chapter="decision">Decision</button><button class="chapter-tab" type="button" data-chapter="architecture">Architecture</button><button class="chapter-tab" type="button" data-chapter="evidence">Evidence</button><button class="chapter-tab" type="button" data-chapter="next">Next question</button>
+            </div>
+            <div class="system-chapter">
+              <div><p class="micro-label" data-chapter-label>Problem</p><h4 data-chapter-title>Fluent systems can turn missing evidence into confident process advice.</h4><p data-chapter-body>Document-heavy workflows need extraction, synthesis, and procedural guidance, but the cost of a plausible unsupported inference can be much higher than the cost of admitting uncertainty.</p></div>
+              <ul data-chapter-bullets><li>Source artifacts can disagree, omit essential facts, or expose only partial evidence.</li><li>A free-form response makes observation and interpretation difficult to separate.</li><li>A trustworthy product needs useful failure states rather than silent optimism.</li></ul>
+            </div>
+            <div class="role-row"><span class="micro-label">My role</span><p data-system-role>Scientific framing, product architecture, schema design, evaluation design, frontend, backend, release governance, and end-to-end implementation.</p></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="research section-shell numbered-section" id="research" aria-labelledby="research-title">
+        <div class="section-marker" aria-hidden="true">03</div>
+        <div class="section-intro reveal">
+          <p class="micro-label">Research atlas</p>
+          <h2 id="research-title">A living research body, not a bibliography.</h2>
+          <p>Select a node to see the recurring question, contribution, evidence boundary, and what remains unresolved. Connections represent intellectual dependence—not co-occurrence on a résumé.</p>
+        </div>
+
+        <div class="research-thesis reveal"><span class="micro-label">Current thesis</span><p>The durable problem is not how to optimize a static model. It is how to govern change when memory, evidence, compute, and human attention are all limited.</p></div>
+
+        <div class="research-atlas">
+          <div class="research-map reveal" aria-label="Interactive map of research directions">
+            <span class="research-link research-link--a" aria-hidden="true"></span><span class="research-link research-link--b" aria-hidden="true"></span><span class="research-link research-link--c" aria-hidden="true"></span><span class="research-link research-link--d" aria-hidden="true"></span>
+            <button class="research-node research-node--spectral" type="button" data-research="spectral" aria-pressed="false"><strong>Spectral<br/>foundations</strong><small>2020–21</small><i></i></button>
+            <button class="research-node research-node--natural" type="button" data-research="natural" aria-pressed="false"><strong>Natural-gradient<br/>VI</strong><small>2025</small><i></i></button>
+            <button class="research-node research-node--replay active" type="button" data-research="replay" aria-pressed="true"><strong>Replay as<br/>correction</strong><small>2026</small><i></i></button>
+            <button class="research-node research-node--rank" type="button" data-research="rank" aria-pressed="false"><strong>Rank feasibility</strong><small>2026</small><i></i></button>
+            <button class="research-node research-node--temporal" type="button" data-research="temporal" aria-pressed="false"><strong>Temporal replay<br/>value</strong><small>Now</small><i></i></button>
+            <button class="research-node research-node--spatial" type="button" data-research="spatial" aria-pressed="false"><strong>Spatial<br/>intelligence</strong><small>Next</small><i></i></button>
+            <p class="research-map__caption">Mathematical structure → situated interaction</p>
+          </div>
+
+          <article class="research-detail reveal" id="research-detail" data-tone="revision" aria-live="polite">
+            <div class="research-detail__status"><i></i><span data-research-status>Under revision</span><span data-research-year>2026</span></div>
+            <h3 data-research-title>Experience Replay Through the Lens of Optimization</h3>
+            <dl class="research-facts">
+              <div><dt>Question</dt><dd data-research-question>What update is experience replay actually trying to recover?</dd></div>
+              <div><dt>Contribution</dt><dd data-research-contribution>Recasts replay as correction toward the update joint training would have taken, derives a discrete replay selection objective, and introduces Greedy Ball Replay.</dd></div>
+              <div><dt>Evidence boundary</dt><dd data-research-boundary>Mechanism studies and end-to-end experiments connect smaller replay error to better continual-learning outcomes while exposing when the approximation is weak.</dd></div>
+              <div><dt>Still unresolved</dt><dd data-research-unresolved>How far can the correction view scale when representations, optimizers, and data distributions all move at once?</dd></div>
+            </dl>
+            <a class="text-link" data-research-link href="https://openreview.net/forum?id=yCe0QP7OJQ" target="_blank" rel="noreferrer">OpenReview discussion ↗</a>
+          </article>
+        </div>
+
+        <details class="publication-ledger reveal">
+          <summary><span><strong>Publication ledger</strong><small>Five published works · 2020–2025</small></span><span>Expand bibliography</span></summary>
+          <ol>
+            <li><span>2025</span><div><a href="https://arxiv.org/abs/2507.07853" target="_blank" rel="noreferrer">Optimization Guarantees for Square-Root Natural-Gradient Variational Inference ↗</a><small>arXiv preprint</small></div></li>
+            <li><span>2023</span><div><a href="https://arxiv.org/abs/2301.12887" target="_blank" rel="noreferrer">Modelling delivery vehicles across urban micro-regions for cargo-bike logistics ↗</a><small>arXiv preprint</small></div></li>
+            <li><span>2021</span><div><a href="https://www.sciencedirect.com/science/article/pii/S0024379521002111" target="_blank" rel="noreferrer">Bounds for the extremal eigenvalues of gain Laplacian matrices ↗</a><small>Linear Algebra and its Applications</small></div></li>
+            <li><span>2020</span><div><a href="https://arxiv.org/abs/2009.13788" target="_blank" rel="noreferrer">Normalized Laplacians for gain graphs ↗</a><small>arXiv preprint</small></div></li>
+            <li><span>2020</span><div><a href="https://dl.acm.org/doi/abs/10.1145/3371158.3371172" target="_blank" rel="noreferrer">Interaction dynamics between hate and counter users on Twitter ↗</a><small>ACM IKDD CoDS / COMAD</small></div></li>
+          </ol>
+          <a class="text-link" href="https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en" target="_blank" rel="noreferrer">Open Google Scholar ↗</a>
+        </details>
+      </section>
+
+      <section class="frontier" id="frontier" aria-labelledby="frontier-title">
+        <div class="frontier__inner section-shell">
+          <div class="section-marker" aria-hidden="true">04</div>
+          <div class="section-intro reveal">
+            <p class="micro-label">Generative AI × spatial computing</p>
+            <h2 id="frontier-title">The interface should become part of the intelligence.</h2>
+            <p>Today’s AI interfaces compress intelligence into chat. I am exploring systems where language generates spatial worlds, tools, simulations, and agents that can be inhabited, manipulated, and tested.</p>
+          </div>
+
+          <div class="frontier-lab">
+            <div class="spatial-diagram reveal" aria-label="Intent, world, and agent share one spatial state">
+              <span class="spatial-orbit spatial-orbit--one" aria-hidden="true"></span><span class="spatial-orbit spatial-orbit--two" aria-hidden="true"></span>
+              <button type="button" class="spatial-object spatial-object--intent" data-frontier="intent" aria-pressed="false"><span>01</span><strong>Intent</strong></button>
+              <button type="button" class="spatial-object spatial-object--world active" data-frontier="world" aria-pressed="true"><span>02</span><strong>World</strong></button>
+              <button type="button" class="spatial-object spatial-object--agent" data-frontier="agent" aria-pressed="false"><span>03</span><strong>Agent</strong></button>
+              <div class="spatial-core"><span></span><small>Shared<br/>world<br/>state</small></div>
+            </div>
+            <div class="frontier-copy reveal">
+              <div class="frontier-tabs" role="tablist" aria-label="Spatial intelligence layers">
+                <button type="button" data-frontier="intent"><span>01</span>Intent</button><button type="button" class="active" data-frontier="world"><span>02</span>World</button><button type="button" data-frontier="agent"><span>03</span>Agent</button>
+              </div>
+              <article class="frontier-detail" aria-live="polite"><p class="micro-label" data-frontier-count>02 / 03</p><h3 data-frontier-title>The world becomes editable.</h3><p data-frontier-body>Generated scenes need spatial semantics, physics, persistence, and direct manipulation so people can revise them through action.</p><ul data-frontier-questions><li>How do we evaluate a generated environment as a useful interface rather than an impressive scene?</li><li>How should a person inspect and revise the hidden state behind spatial generation?</li><li>What must remain deterministic when the world, tools, and agents are model-produced?</li></ul></article>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="contact section-shell numbered-section" id="contact" aria-labelledby="contact-title">
+        <div class="section-marker" aria-hidden="true">05</div>
+        <div class="contact__statement reveal"><h2 id="contact-title">The most interesting work here sits between categories. That is also where I work best.</h2></div>
+        <div class="contact__action reveal"><p>I am interested in research and product environments where mathematical judgment, ambitious engineering, and emerging interaction models have to coexist in one system.</p><a class="contact-email" href="mailto:navish.kumar@unibas.ch"><span>navish.kumar@unibas.ch</span><span aria-hidden="true">→</span></a><nav><a href="https://github.com/KumarNavish" target="_blank" rel="noreferrer">GitHub ↗</a><a href="https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en" target="_blank" rel="noreferrer">Google Scholar ↗</a><a href="/artifacts/resume.pdf">Résumé →</a></nav></div>
+      </section>
+    </main>
+
+    <footer class="site-footer"><p>© <span data-year>2026</span> Navish Kumar</p><p>Research, systems, and interfaces for intelligent change.</p><nav><a href="#top">Top ↑</a></nav></footer>
+
+    <dialog class="command-palette" id="command-palette" aria-labelledby="command-title">
+      <div class="command-palette__surface">
+        <div class="command-palette__head"><div><p class="micro-label">Explore the body of work</p><h2 id="command-title">Find a question, system, or paper.</h2></div><button type="button" data-close-command aria-label="Close explorer">Esc</button></div>
+        <label class="command-search"><span aria-hidden="true">⌕</span><span class="sr-only">Search portfolio</span><input type="search" autocomplete="off" placeholder="Try “replay”, “spatial”, or “CasePath”" data-command-input /></label>
+        <div class="command-results" aria-live="polite" data-command-results></div>
+        <p class="command-hint"><kbd>↑</kbd><kbd>↓</kbd> navigate · <kbd>Enter</kbd> open · <kbd>Esc</kbd> close</p>
+      </div>
+    </dialog>
+
+    <script type="module" src="/src/portfolio.js"></script>
   </body>
 </html>
