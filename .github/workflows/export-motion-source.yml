@@ -1,0 +1,27 @@
+name: export-motion-source
+
+on:
+  push:
+    branches: [motion-native-research-instrument]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Archive source tree
+        run: tar --exclude='.git' --exclude='node_modules' --exclude='site/dist' -czf motion-source.tgz .
+
+      - name: Upload source archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: motion-source
+          path: motion-source.tgz
+          if-no-files-found: error
+          retention-days: 1
