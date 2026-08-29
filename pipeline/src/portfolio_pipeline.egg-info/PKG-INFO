@@ -1,0 +1,15 @@
+Metadata-Version: 2.4
+Name: portfolio-pipeline
+Version: 0.1.0
+Summary: Data pipeline for portfolio-as-a-system
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: pydantic<3.0,>=2.8
+Requires-Dist: PyYAML<7.0,>=6.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0.0; extra == "dev"
+Dynamic: requires-python
+
+# Pipeline
+
+Python package for ingestion, normalization, metrics, and artifact emission.
