@@ -1,101 +1,56 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#090b0e" />
-    <meta name="color-scheme" content="dark" />
-    <meta
-      name="description"
-      content="FIELD is Navish Kumar's living research portfolio: continual learning, optimization, inspectable systems, and spatial intelligence, connected through evidence and working mechanisms."
-    />
-    <meta
-      name="keywords"
-      content="Navish Kumar, continual learning, experience replay, optimization, PEFT, research engineering, agentic systems, spatial intelligence"
-    />
+    <meta name="color-scheme" content="light only" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="description" content="Navish Kumar's interactive research instrument for complex unit gain graphs: cycle balance, Hermitian Laplacians, spectra, eigenmodes, heat diffusion, and frustration bounds." />
     <meta name="author" content="Navish Kumar" />
-    <meta name="robots" content="index,follow,max-image-preview:large" />
+    <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://kumarnavish.github.io/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/site.webmanifest" />
-
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://kumarnavish.github.io/" />
-    <meta property="og:site_name" content="Navish Kumar — FIELD" />
-    <meta property="og:title" content="Navish Kumar — FIELD: Learning Systems Under Change" />
-    <meta
-      property="og:description"
-      content="A living map of research questions, mechanisms, evidence, systems, and future directions."
-    />
-    <meta property="og:image" content="https://kumarnavish.github.io/social-card.png" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Navish Kumar FIELD research portfolio" />
-
+    <meta property="og:title" content="Navish Kumar — Operate the idea, not the abstract" />
+    <meta property="og:description" content="A live, permanent-light research instrument for complex unit gain graphs and their spectral structure." />
+    <meta property="og:image" content="https://kumarnavish.github.io/social-card-light.svg" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Navish Kumar — FIELD" />
-    <meta
-      name="twitter:description"
-      content="Continual learning, optimization, inspectable systems, and spatial intelligence—connected through evidence."
-    />
-    <meta name="twitter:image" content="https://kumarnavish.github.io/social-card.png" />
-
-    <title>Navish Kumar — FIELD: Learning Systems Under Change</title>
-
+    <meta name="twitter:title" content="Navish Kumar — Research instruments" />
+    <meta name="twitter:description" content="Operate a complex gain graph and watch its cycles, Laplacian, spectrum, diffusion, and frustration certificate change together." />
+    <meta name="twitter:image" content="https://kumarnavish.github.io/social-card-light.svg" />
+    <script>
+      (function () {
+        var route = sessionStorage.getItem('__gain_graph_route');
+        if (route) {
+          sessionStorage.removeItem('__gain_graph_route');
+          history.replaceState(null, '', route);
+        }
+      }());
+    </script>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "Person",
         "name": "Navish Kumar",
         "url": "https://kumarnavish.github.io/",
-        "email": "mailto:navish.kumar@unibas.ch",
         "jobTitle": "PhD Researcher in Machine Learning",
-        "affiliation": {
-          "@type": "Organization",
-          "name": "University of Basel"
-        },
+        "affiliation": { "@type": "Organization", "name": "University of Basel" },
         "sameAs": [
           "https://github.com/KumarNavish",
           "https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en",
           "https://openreview.net/profile?id=~Navish_Kumar1"
-        ],
-        "knowsAbout": [
-          "Continual learning",
-          "Experience replay",
-          "Optimization",
-          "Parameter-efficient fine-tuning",
-          "Agentic systems",
-          "Spatial computing",
-          "Research engineering"
         ]
       }
     </script>
-
-    <script>
-      ;(() => {
-        const current = new URL(window.location.href)
-        const recoveredRoute = current.searchParams.get('__field_route')
-        if (!recoveredRoute) {
-          return
-        }
-
-        const destination = new URL(recoveredRoute, current.origin)
-        window.history.replaceState(
-          null,
-          '',
-          `${destination.pathname}${destination.search}${destination.hash}`,
-        )
-      })()
-    </script>
+    <style>
+      :root{color-scheme:light only;background:#fff}html,body,#root{min-width:320px;min-height:100%;margin:0;background:#fff;color:#111827}.initial-light-surface{min-height:100vh;display:grid;place-items:center;background:#fff;color:#111827;font:600 14px/1.5 system-ui,sans-serif}
+    </style>
+    <title>Navish Kumar — Interactive research instruments</title>
   </head>
   <body>
-    <div id="root"></div>
-    <noscript>
-      FIELD requires JavaScript for its interactive research scenes. Primary work remains available through
-      <a href="https://github.com/KumarNavish">GitHub</a>,
-      <a href="https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en">Google Scholar</a>, and
-      <a href="https://openreview.net/profile?id=~Navish_Kumar1">OpenReview</a>.
-    </noscript>
+    <div id="root"><div class="initial-light-surface">Loading the gain-graph instrument…</div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
