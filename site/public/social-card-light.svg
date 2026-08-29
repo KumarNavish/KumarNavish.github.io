@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title description">
+  <title id="title">Navish Kumar — Operate the idea, not the abstract</title>
+  <desc id="description">A light editorial research instrument showing a complex unit gain graph and spectral axis.</desc>
+  <rect width="1200" height="630" fill="#ffffff"/>
+  <path d="M0 84H1200M80 0V630" stroke="#dce1e8"/>
+  <text x="80" y="58" fill="#111827" font-family="Georgia, serif" font-size="26">Navish Kumar</text>
+  <text x="1110" y="58" text-anchor="end" fill="#657084" font-family="monospace" font-size="13">RESEARCH INSTRUMENTS</text>
+  <text x="80" y="218" fill="#111827" font-family="Georgia, serif" font-size="82" letter-spacing="-3">Operate the idea,</text>
+  <text x="80" y="302" fill="#111827" font-family="Georgia, serif" font-size="82" letter-spacing="-3">not the abstract.</text>
+  <text x="80" y="356" fill="#657084" font-family="Arial, sans-serif" font-size="21">Complex gain graphs · cycle balance · Hermitian Laplacians · spectra</text>
+  <g transform="translate(760 132)">
+    <g stroke-width="4" fill="none">
+      <path d="M38 178 106 58 247 46 354 158 278 288 112 294Z" stroke="#175ee8"/>
+      <path d="M106 58 278 288M247 46 112 294" stroke="#6077c8"/>
+    </g>
+    <g fill="#ffffff" stroke="#175ee8" stroke-width="5">
+      <circle cx="38" cy="178" r="20"/><circle cx="106" cy="58" r="20"/>
+      <circle cx="247" cy="46" r="20"/><circle cx="354" cy="158" r="20"/>
+      <circle cx="278" cy="288" r="20"/><circle cx="112" cy="294" r="20"/>
+    </g>
+    <g fill="#175ee8">
+      <circle cx="72" cy="118" r="5"/><circle cx="176" cy="52" r="5"/><circle cx="302" cy="101" r="5"/>
+      <circle cx="316" cy="223" r="5"/><circle cx="194" cy="291" r="5"/><circle cx="74" cy="236" r="5"/>
+    </g>
+  </g>
+  <g transform="translate(80 520)">
+    <path d="M0 0H1040" stroke="#b7c0cc"/>
+    <g fill="#175ee8">
+      <circle cx="0" cy="0" r="7"/><circle cx="146" cy="0" r="7"/><circle cx="326" cy="0" r="7"/>
+      <circle cx="540" cy="0" r="7"/><circle cx="770" cy="0" r="7"/><circle cx="1040" cy="0" r="7"/>
+    </g>
+    <text x="0" y="42" fill="#657084" font-family="monospace" font-size="14">0</text>
+    <text x="1040" y="42" text-anchor="end" fill="#657084" font-family="monospace" font-size="14">2</text>
+  </g>
+  <text x="80" y="603" fill="#0b47b7" font-family="monospace" font-size="15">PERMANENT LIGHT INTERFACE · REAL COMPUTATION · EXPLICIT BOUNDARIES</text>
+</svg>
