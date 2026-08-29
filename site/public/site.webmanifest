@@ -1,9 +1,17 @@
 {
   "name": "Navish Kumar — Research Instruments",
   "short_name": "Navish Kumar",
+  "description": "A permanent-light interactive research instrument for complex unit gain graphs.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#ffffff",
-  "icons": []
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
 }
