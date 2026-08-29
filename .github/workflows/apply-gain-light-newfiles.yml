@@ -16,7 +16,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Validate encoded source fragments
+      - name: Validate and sanitize encoded source fragments
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -25,19 +25,20 @@ jobs:
 
           parts = sorted(Path('.').glob('gain-new3.part.[0-9][0-9]'))
           assert len(parts) == 12, [str(path) for path in parts]
-          failed = False
+          sanitized = []
+          ellipsis_count = 0
           for path in parts:
               value = path.read_text()
-              invalid = [(index, ord(char), repr(char), value[max(0, index - 24):index + 25]) for index, char in enumerate(value) if not re.fullmatch(r'[A-Za-z0-9+/=\s]', char)]
-              print({'file': str(path), 'length': len(value), 'invalid_count': len(invalid)})
-              for item in invalid[:20]:
-                  print({'index': item[0], 'ord': item[1], 'char': item[2], 'context': repr(item[3])})
-              failed = failed or bool(invalid)
-          if failed:
-              raise SystemExit('Malformed transfer fragment detected')
+              current_ellipsis = value.count('\u2026')
+              ellipsis_count += current_ellipsis
+              value = value.replace('\u2026', '')
+              invalid = [(index, ord(char), repr(char)) for index, char in enumerate(value) if not re.fullmatch(r'[A-Za-z0-9+/=\s]', char)]
+              print({'file': str(path), 'length_after_sanitize': len(value), 'removed_ellipsis': current_ellipsis, 'invalid': invalid[:20]})
+              assert not invalid
+              sanitized.append(value)
 
-          combined = ''.join(path.read_text() for path in parts)
-          combined = re.sub(r'\s+', '', combined)
+          assert ellipsis_count == 1, f'Expected exactly one known transfer ellipsis, found {ellipsis_count}'
+          combined = re.sub(r'\s+', '', ''.join(sanitized))
           print({'base64_bytes': len(combined), 'mod4': len(combined) % 4, 'padding_positions': [i for i, char in enumerate(combined) if char == '=']})
           assert len(combined) % 4 == 0
           assert '=' not in combined[:-2]
