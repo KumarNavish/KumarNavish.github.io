@@ -23,10 +23,18 @@ jobs:
           parts=(gain-new3.part.[0-9][0-9])
           test "${#parts[@]}" -eq 12
           for file in "${parts[@]}"; do
-            printf '%s bytes=' "$file"
-            wc -c < "$file"
-            if LC_ALL=C grep -n '[^A-Za-z0-9+/=[:space:]]' "$file"; then
-              echo "Invalid base64 character in $file" >&2
+            bytes=$(wc -c < "$file")
+            printf '%s bytes=%s\n' "$file" "$bytes"
+            if LC_ALL=C grep -q '[^A-Za-z0-9+/=[:space:]]' "$file"; then
+              echo "INVALID_FRAGMENT=$file" >&2
+              python3 - "$file" <<'PY'
+          import re, sys
+          from pathlib import Path
+          path = Path(sys.argv[1])
+          value = path.read_text()
+          invalid = [(index, repr(char)) for index, char in enumerate(value) if not re.match(r'[A-Za-z0-9+/=\s]', char)]
+          print({'file': str(path), 'length': len(value), 'invalid': invalid[:20]})
+          PY
               exit 1
             fi
           done
@@ -36,9 +44,7 @@ jobs:
           value = Path('/tmp/gain-newfiles.b64').read_text()
           print({'base64_bytes': len(value), 'mod4': len(value) % 4, 'padding_positions': [i for i, c in enumerate(value) if c == '=']})
           assert len(value) % 4 == 0
-          if '=' in value:
-              assert value.rstrip('=') + value[len(value.rstrip('=')):] == value
-              assert value.find('=') >= len(value) - 2
+          assert '=' not in value[:-2]
           PY
 
       - name: Decode and add flagship source files
