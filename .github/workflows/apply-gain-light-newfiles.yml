@@ -1,0 +1,29 @@
+name: apply-gain-light-newfiles
+
+on:
+  push:
+    branches: [gain-graph-light-flagship]
+    paths: [gain-newfiles.ready]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Decode and add flagship source files
+        run: |
+          cat gain-new3.part.[0-9][0-9] | base64 -d | gzip -d > /tmp/gain-newfiles.patch
+          git apply --check --binary /tmp/gain-newfiles.patch
+          git apply --index --binary /tmp/gain-newfiles.patch
+      - name: Remove transfer machinery and commit
+        run: |
+          git rm gain-new3.part.[0-9][0-9] gain-newfiles.ready .github/workflows/apply-gain-light-newfiles.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Add the live gain-graph computation and interaction system"
+          git push
