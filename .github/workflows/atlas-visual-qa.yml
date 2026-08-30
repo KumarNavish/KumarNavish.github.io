@@ -54,7 +54,7 @@ jobs:
       - name: Run rendered interaction audit
         working-directory: site
         run: |
-          cat > /tmp/atlas-qa.mjs <<'JS'
+          cat > atlas-qa.mjs <<'JS'
           import { chromium } from 'playwright'
           import fs from 'node:fs/promises'
 
@@ -162,7 +162,8 @@ jobs:
             browserErrors,
           }, null, 2))
           JS
-          node /tmp/atlas-qa.mjs
+          node atlas-qa.mjs
+          rm atlas-qa.mjs
 
       - name: Commit QA evidence
         run: |
