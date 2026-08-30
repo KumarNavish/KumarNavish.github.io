@@ -1,0 +1,155 @@
+name: apply-atlas-visual-repairs
+
+on:
+  push:
+    branches: [portfolio-atlas-2026]
+    paths:
+      - '.github/workflows/apply-atlas-visual-repairs.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-atlas-visual-repairs-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  repair-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: portfolio-atlas-2026
+          fetch-depth: 0
+
+      - name: Apply visual repairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: Path, old: str, new: str) -> None:
+              text = path.read_text()
+              if old not in text:
+                  raise SystemExit(f'Expected block not found in {path}: {old[:80]!r}')
+              path.write_text(text.replace(old, new, 1))
+
+          chapters = Path('site/src/chapters/chapters.css')
+          replace_once(
+              chapters,
+              ".chapter-hero {\n  max-width: 1160px;\n  padding: clamp(90px, 12vw, 170px) 0 clamp(78px, 9vw, 130px);\n}",
+              ".chapter-hero {\n  max-width: 1160px;\n  padding: clamp(54px, 6vw, 86px) 0 clamp(48px, 5vw, 72px);\n}",
+          )
+          replace_once(chapters, '  margin-bottom: 46px;\n  color: var(--atlas-muted);', '  margin-bottom: 26px;\n  color: var(--atlas-muted);')
+          replace_once(
+              chapters,
+              "  font-size: clamp(4rem, 8.7vw, 9.7rem);\n  font-weight: 570;\n  letter-spacing: -0.082em;\n  line-height: 0.86;",
+              "  font-size: clamp(3.5rem, 7vw, 7.8rem);\n  font-weight: 570;\n  letter-spacing: -0.078em;\n  line-height: 0.9;",
+          )
+          replace_once(chapters, '  margin: 40px 0 0;\n  color: #2c312b;', '  margin: 28px 0 0;\n  color: #2c312b;')
+          replace_once(chapters, '  margin: 28px 0 0;\n  color: var(--atlas-muted);', '  margin: 18px 0 0;\n  color: var(--atlas-muted);')
+          replace_once(chapters, '  margin-top: 32px;\n}\n\n.chapter-instrument', '  margin-top: 22px;\n}\n\n.chapter-instrument')
+
+          spatial_css = Path('site/src/spatial/spatialLab.css')
+          replace_once(
+              spatial_css,
+              ".spatial-hero {\n  max-width: 1280px;\n  padding: clamp(90px, 12vw, 170px) 0 clamp(70px, 9vw, 124px);\n}",
+              ".spatial-hero {\n  max-width: 1280px;\n  padding: clamp(54px, 6vw, 86px) 0 clamp(48px, 5vw, 72px);\n}",
+          )
+          replace_once(spatial_css, '  margin-bottom: 46px;\n  color: var(--atlas-muted);', '  margin-bottom: 28px;\n  color: var(--atlas-muted);')
+          replace_once(
+              spatial_css,
+              "  font-size: clamp(4rem, 8.9vw, 10rem);\n  font-weight: 570;\n  letter-spacing: -0.085em;\n  line-height: 0.85;",
+              "  font-size: clamp(3.7rem, 7.2vw, 8.2rem);\n  font-weight: 570;\n  letter-spacing: -0.078em;\n  line-height: 0.9;",
+          )
+          replace_once(spatial_css, '  margin: 40px 0 0;\n  color: var(--atlas-muted);', '  margin: 28px 0 0;\n  color: var(--atlas-muted);')
+
+          spatial = Path('site/src/spatial/SpatialLabPage.tsx')
+          text = spatial.read_text()
+          start = text.index('function AgentGlyph(')
+          end = text.index('\nfunction EnvironmentLayer', start)
+          agent = '''function AgentGlyph({ agent, target }: { agent: SceneAgent; target?: SceneObject }) {
+  const moving = agent.action !== 'idle' && target
+  const destinationX = target ? Math.max(96, Math.min(724, target.x - 50)) : agent.x
+  const destinationY = target ? Math.max(100, Math.min(390, target.y + 8)) : agent.y
+  const translateX = moving ? destinationX - agent.x : 0
+  const translateY = moving ? destinationY - agent.y : 0
+  return (
+    <g transform={`translate(${agent.x} ${agent.y})`}>
+      <g
+        className={moving ? 'spatial-agent is-active' : 'spatial-agent'}
+        style={{ '--agent-x': `${translateX}px`, '--agent-y': `${translateY}px` } as CSSProperties}
+      >
+        <circle cx="0" cy="-33" r="14" fill="#f2c4a2" stroke="#2f3430" strokeWidth="2" />
+        <rect x="-13" y="-18" width="26" height="42" rx="11" fill="#1b6b50" />
+        <line x1="-9" y1="24" x2="-17" y2="52" stroke="#2f3430" strokeWidth="6" strokeLinecap="round" />
+        <line x1="9" y1="24" x2="17" y2="52" stroke="#2f3430" strokeWidth="6" strokeLinecap="round" />
+        <line x1="-13" y1="-9" x2="-31" y2="10" stroke="#2f3430" strokeWidth="5" strokeLinecap="round" />
+        <line x1="13" y1="-9" x2="31" y2="10" stroke="#2f3430" strokeWidth="5" strokeLinecap="round" />
+        <rect x="-35" y="57" width="70" height="20" rx="10" fill="#ffffff" stroke="#d9ddd4" />
+        <text x="0" y="71" textAnchor="middle">{agent.action}</text>
+      </g>
+    </g>
+  )
+}
+'''
+          spatial.write_text(text[:start] + agent + text[end:])
+
+          parser = Path('site/src/spatial/sceneParser.ts')
+          replace_once(
+              parser,
+              "        x: target ? Math.max(90, target.x - 118) : 220,\n        y: target ? target.y + 16 : 340,",
+              "        x: target ? Math.max(100, Math.min(720, target.x - 118)) : 220,\n        y: target ? Math.max(112, Math.min(396, target.y + 16)) : 340,",
+          )
+          replace_once(
+              parser,
+              "        ? { ...object, x: Math.max(42, Math.min(778, x)), y: Math.max(92, Math.min(440, y)) }",
+              "        ? { ...object, x: Math.max(72, Math.min(748, x)), y: Math.max(96, Math.min(420, y)) }",
+          )
+
+          graph = Path('site/src/gainGraph/GainGraphPage.tsx')
+          text = graph.read_text()
+          import_anchor = "} from 'react'\n\nimport {\n  analyzeGainGraph,"
+          if import_anchor not in text:
+              raise SystemExit('Gain graph import anchor not found')
+          text = text.replace(
+              import_anchor,
+              "} from 'react'\n\nimport { PortfolioHeader } from '../shared/PortfolioHeader'\nimport {\n  analyzeGainGraph,",
+              1,
+          )
+          header_start = text.index('function Header() {')
+          header_end = text.index('\nfunction PhaseSlider', header_start)
+          text = text[:header_start] + text[header_end + 1:]
+          if '<Header />' not in text:
+              raise SystemExit('Gain graph Header usage not found')
+          text = text.replace('<Header />', '<PortfolioHeader compact />', 1)
+          graph.write_text(text)
+          PY
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: site
+        run: npm ci
+
+      - name: Run complete quality gates
+        working-directory: site
+        run: npm run check
+
+      - name: Commit verified repairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/apply-atlas-visual-repairs.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix(portfolio): surface mechanisms and repair spatial motion'
+          git push origin HEAD:portfolio-atlas-2026
