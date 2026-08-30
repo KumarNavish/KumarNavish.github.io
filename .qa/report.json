@@ -1,0 +1,94 @@
+{
+  "passed": true,
+  "generatedAt": "2026-08-30T18:10:21.455Z",
+  "findings": [
+    {
+      "route": "/",
+      "viewport": {
+        "width": 1280,
+        "height": 820
+      },
+      "overflow": 0,
+      "title": "Navish Kumar — Interactive Research Atlas"
+    },
+    {
+      "route": "/",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "overflow": 0,
+      "title": "Navish Kumar — Interactive Research Atlas"
+    },
+    {
+      "route": "/research/experience-replay-optimization",
+      "viewport": {
+        "width": 1280,
+        "height": 820
+      },
+      "overflow": 0,
+      "title": "Navish Kumar — Interactive Research Atlas"
+    },
+    {
+      "route": "/research/rank-feasibility",
+      "viewport": {
+        "width": 1280,
+        "height": 820
+      },
+      "overflow": 0,
+      "title": "Navish Kumar — Interactive Research Atlas"
+    },
+    {
+      "route": "/research/ticlm",
+      "viewport": {
+        "width": 1280,
+        "height": 820
+      },
+      "overflow": 0,
+      "title": "Navish Kumar — Interactive Research Atlas"
+    },
+    {
+      "route": "/systems/casepath",
+      "viewport": {
+        "width": 1280,
+        "height": 820
+      },
+      "overflow": 0,
+      "title": "Navish Kumar — Interactive Research Atlas"
+    },
+    {
+      "route": "/research/graph-laplacians",
+      "viewport": {
+        "width": 1280,
+        "height": 820
+      },
+      "overflow": 0,
+      "title": "Navish Kumar — Interactive Research Atlas"
+    },
+    {
+      "route": "/research/spatial-intelligence",
+      "viewport": {
+        "width": 1280,
+        "height": 820
+      },
+      "overflow": 0,
+      "title": "Navish Kumar — Interactive Research Atlas"
+    },
+    {
+      "route": "/research/spatial-intelligence",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "overflow": 0,
+      "title": "Navish Kumar — Interactive Research Atlas"
+    }
+  ],
+  "interactions": [
+    "GBR Watch → Manipulate → Inspect",
+    "Spatial flagship generation",
+    "Spatial persistent follow-up edit",
+    "Desktop and mobile overflow checks"
+  ],
+  "browserErrors": []
+}
