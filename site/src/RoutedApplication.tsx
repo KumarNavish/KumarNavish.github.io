@@ -9,16 +9,17 @@ export function RoutedApplication() {
   useEffect(() => {
     const queryChapter = new URLSearchParams(location.search).get('chapter')
     const targetId = location.hash ? location.hash.slice(1) : queryChapter
-    if (!targetId) {
-      return undefined
-    }
 
     const frame = window.requestAnimationFrame(() => {
-      document.getElementById(targetId)?.scrollIntoView({ block: 'start' })
+      if (targetId) {
+        document.getElementById(targetId)?.scrollIntoView({ block: 'start' })
+        return
+      }
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
     })
 
     return () => window.cancelAnimationFrame(frame)
-  }, [location.hash, location.search])
+  }, [location.hash, location.pathname, location.search])
 
   return <App />
 }

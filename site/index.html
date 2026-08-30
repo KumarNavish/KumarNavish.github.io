@@ -1,56 +1,66 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="light only" />
     <meta name="theme-color" content="#ffffff" />
-    <meta name="description" content="Navish Kumar's interactive research instrument for complex unit gain graphs: cycle balance, Hermitian Laplacians, spectra, eigenmodes, heat diffusion, and frustration bounds." />
+    <meta name="color-scheme" content="light" />
+    <meta
+      name="description"
+      content="Navish Kumar's interactive research atlas: living explanations of continual learning, optimization, graph structure, time-continual language models, safe process systems, and generative spatial computing."
+    />
+    <meta
+      name="keywords"
+      content="Navish Kumar, continual learning, experience replay, LoRA, rank feasibility, graph Laplacian, variational inference, TiC-LM, spatial computing, generative AI, research engineering"
+    />
     <meta name="author" content="Navish Kumar" />
-    <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://kumarnavish.github.io/" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="manifest" href="/site.webmanifest" />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://kumarnavish.github.io/" />
-    <meta property="og:title" content="Navish Kumar — Operate the idea, not the abstract" />
-    <meta property="og:description" content="A live, permanent-light research instrument for complex unit gain graphs and their spectral structure." />
-    <meta property="og:image" content="https://kumarnavish.github.io/social-card-light.svg" />
+    <meta property="og:title" content="Navish Kumar — Interactive Research Atlas" />
+    <meta
+      property="og:description"
+      content="Research made directly explorable: motion-native explanations, executable mechanisms, evidence, and a live language-to-world laboratory."
+    />
+    <meta property="og:image" content="https://kumarnavish.github.io/social-preview.svg" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Navish Kumar — Research instruments" />
-    <meta name="twitter:description" content="Operate a complex gain graph and watch its cycles, Laplacian, spectrum, diffusion, and frustration certificate change together." />
-    <meta name="twitter:image" content="https://kumarnavish.github.io/social-card-light.svg" />
-    <script>
-      (function () {
-        var route = sessionStorage.getItem('__gain_graph_route');
-        if (route) {
-          sessionStorage.removeItem('__gain_graph_route');
-          history.replaceState(null, '', route);
-        }
-      }());
-    </script>
+    <meta name="twitter:title" content="Navish Kumar — Interactive Research Atlas" />
+    <meta
+      name="twitter:description"
+      content="Living, interactive explanations across continual learning, optimization, graph structure, safe AI systems, and spatial computing."
+    />
+    <meta name="twitter:image" content="https://kumarnavish.github.io/social-preview.svg" />
+    <link rel="canonical" href="https://kumarnavish.github.io/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Navish Kumar — Interactive Research Atlas</title>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "Person",
         "name": "Navish Kumar",
         "url": "https://kumarnavish.github.io/",
-        "jobTitle": "PhD Researcher in Machine Learning",
-        "affiliation": { "@type": "Organization", "name": "University of Basel" },
         "sameAs": [
           "https://github.com/KumarNavish",
-          "https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en",
-          "https://openreview.net/profile?id=~Navish_Kumar1"
+          "https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en"
+        ],
+        "jobTitle": "Machine Learning Researcher and Product Builder",
+        "affiliation": {
+          "@type": "Organization",
+          "name": "University of Basel"
+        },
+        "knowsAbout": [
+          "Continual learning",
+          "Optimization",
+          "Spectral graph theory",
+          "Language models",
+          "Generative AI",
+          "Spatial computing",
+          "Research engineering"
         ]
       }
     </script>
-    <style>
-      :root{color-scheme:light only;background:#fff}html,body,#root{min-width:320px;min-height:100%;margin:0;background:#fff;color:#111827}.initial-light-surface{min-height:100vh;display:grid;place-items:center;background:#fff;color:#111827;font:600 14px/1.5 system-ui,sans-serif}
-    </style>
-    <title>Navish Kumar — Interactive research instruments</title>
   </head>
   <body>
-    <div id="root"><div class="initial-light-surface">Loading the gain-graph instrument…</div></div>
+    <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

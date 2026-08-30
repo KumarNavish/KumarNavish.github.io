@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title description">
+  <title id="title">Navish Kumar — Interactive Research Atlas</title>
+  <desc id="description">A quiet white research atlas connecting graph structure, optimization, continual learning, temporal language models, safe process systems, and spatial computing.</desc>
+  <rect width="1200" height="630" fill="#ffffff"/>
+  <path d="M0 494C208 448 342 528 518 482C718 430 860 348 1200 404V630H0Z" fill="#f5f4ef"/>
+  <g fill="none" stroke="#d9d7cf" stroke-width="2">
+    <path d="M735 144L836 92L947 140L1010 247L955 353L842 391L738 334L690 232Z"/>
+    <path d="M836 92L842 391M735 144L955 353M947 140L738 334"/>
+  </g>
+  <g fill="#ffffff" stroke="#111111" stroke-width="3">
+    <circle cx="735" cy="144" r="12"/>
+    <circle cx="836" cy="92" r="12"/>
+    <circle cx="947" cy="140" r="12"/>
+    <circle cx="1010" cy="247" r="12"/>
+    <circle cx="955" cy="353" r="12"/>
+    <circle cx="842" cy="391" r="12"/>
+    <circle cx="738" cy="334" r="12"/>
+    <circle cx="690" cy="232" r="12"/>
+  </g>
+  <path d="M836 92L947 140" stroke="#d44a2f" stroke-width="7" stroke-linecap="round"/>
+  <g transform="translate(1072 128)" fill="none" stroke="#2363eb">
+    <circle r="38" stroke-width="3"/>
+    <path d="M0 0L29 -18" stroke-width="6" stroke-linecap="round"/>
+  </g>
+  <g font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" fill="#111111">
+    <text x="88" y="112" font-size="28" font-weight="650" letter-spacing="-.5">Navish Kumar</text>
+    <text x="88" y="242" font-size="72" font-weight="640" letter-spacing="-3.4">Interactive</text>
+    <text x="88" y="322" font-size="72" font-weight="640" letter-spacing="-3.4">research atlas.</text>
+    <text x="91" y="384" font-size="26" fill="#4a4a46">Difficult ideas made directly explorable.</text>
+  </g>
+  <g transform="translate(90 474)" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18" fill="#4a4a46">
+    <text x="0" y="0">GRAPH STRUCTURE</text>
+    <text x="218" y="0">OPTIMIZATION</text>
+    <text x="407" y="0">CONTINUAL LEARNING</text>
+    <text x="687" y="0">SPATIAL INTELLIGENCE</text>
+  </g>
+</svg>
