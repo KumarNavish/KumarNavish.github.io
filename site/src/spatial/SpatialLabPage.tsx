@@ -193,22 +193,25 @@ function ObjectGlyph({ kind }: { kind: SceneObjectKind }) {
 
 function AgentGlyph({ agent, target }: { agent: SceneAgent; target?: SceneObject }) {
   const moving = agent.action !== 'idle' && target
-  const translateX = moving && target ? target.x - agent.x - 50 : 0
-  const translateY = moving && target ? target.y - agent.y + 8 : 0
+  const destinationX = target ? Math.max(96, Math.min(724, target.x - 50)) : agent.x
+  const destinationY = target ? Math.max(100, Math.min(390, target.y + 8)) : agent.y
+  const translateX = moving ? destinationX - agent.x : 0
+  const translateY = moving ? destinationY - agent.y : 0
   return (
-    <g
-      className={moving ? 'spatial-agent is-active' : 'spatial-agent'}
-      transform={`translate(${agent.x} ${agent.y})`}
-      style={{ '--agent-x': `${translateX}px`, '--agent-y': `${translateY}px` } as CSSProperties}
-    >
-      <circle cx="0" cy="-33" r="14" fill="#f2c4a2" stroke="#2f3430" strokeWidth="2" />
-      <rect x="-13" y="-18" width="26" height="42" rx="11" fill="#1b6b50" />
-      <line x1="-9" y1="24" x2="-17" y2="52" stroke="#2f3430" strokeWidth="6" strokeLinecap="round" />
-      <line x1="9" y1="24" x2="17" y2="52" stroke="#2f3430" strokeWidth="6" strokeLinecap="round" />
-      <line x1="-13" y1="-9" x2="-31" y2="10" stroke="#2f3430" strokeWidth="5" strokeLinecap="round" />
-      <line x1="13" y1="-9" x2="31" y2="10" stroke="#2f3430" strokeWidth="5" strokeLinecap="round" />
-      <rect x="-35" y="57" width="70" height="20" rx="10" fill="#ffffff" stroke="#d9ddd4" />
-      <text x="0" y="71" textAnchor="middle">{agent.action}</text>
+    <g transform={`translate(${agent.x} ${agent.y})`}>
+      <g
+        className={moving ? 'spatial-agent is-active' : 'spatial-agent'}
+        style={{ '--agent-x': `${translateX}px`, '--agent-y': `${translateY}px` } as CSSProperties}
+      >
+        <circle cx="0" cy="-33" r="14" fill="#f2c4a2" stroke="#2f3430" strokeWidth="2" />
+        <rect x="-13" y="-18" width="26" height="42" rx="11" fill="#1b6b50" />
+        <line x1="-9" y1="24" x2="-17" y2="52" stroke="#2f3430" strokeWidth="6" strokeLinecap="round" />
+        <line x1="9" y1="24" x2="17" y2="52" stroke="#2f3430" strokeWidth="6" strokeLinecap="round" />
+        <line x1="-13" y1="-9" x2="-31" y2="10" stroke="#2f3430" strokeWidth="5" strokeLinecap="round" />
+        <line x1="13" y1="-9" x2="31" y2="10" stroke="#2f3430" strokeWidth="5" strokeLinecap="round" />
+        <rect x="-35" y="57" width="70" height="20" rx="10" fill="#ffffff" stroke="#d9ddd4" />
+        <text x="0" y="71" textAnchor="middle">{agent.action}</text>
+      </g>
     </g>
   )
 }

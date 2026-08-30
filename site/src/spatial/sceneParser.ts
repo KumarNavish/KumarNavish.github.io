@@ -264,8 +264,8 @@ export function applySceneIntent(world: WorldState, intent: SceneIntent): WorldS
         label: 'Situated agent',
         action: intent.agentAction,
         targetKind: intent.agentTarget,
-        x: target ? Math.max(90, target.x - 118) : 220,
-        y: target ? target.y + 16 : 340,
+        x: target ? Math.max(100, Math.min(720, target.x - 118)) : 220,
+        y: target ? Math.max(112, Math.min(396, target.y + 16)) : 340,
       },
     ]
   }
@@ -285,7 +285,7 @@ export function moveSceneObject(world: WorldState, id: string, x: number, y: num
     ...world,
     objects: world.objects.map((object) =>
       object.id === id
-        ? { ...object, x: Math.max(42, Math.min(778, x)), y: Math.max(92, Math.min(440, y)) }
+        ? { ...object, x: Math.max(72, Math.min(748, x)), y: Math.max(96, Math.min(420, y)) }
         : object,
     ),
     revision: world.revision + 1,

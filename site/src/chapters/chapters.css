@@ -10,7 +10,7 @@
 
 .chapter-hero {
   max-width: 1160px;
-  padding: clamp(90px, 12vw, 170px) 0 clamp(78px, 9vw, 130px);
+  padding: clamp(54px, 6vw, 86px) 0 clamp(48px, 5vw, 72px);
 }
 
 .chapter-hero-meta {
@@ -18,7 +18,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 18px;
-  margin-bottom: 46px;
+  margin-bottom: 26px;
   color: var(--atlas-muted);
   font-family: var(--atlas-mono);
   font-size: 0.66rem;
@@ -59,15 +59,15 @@
 .chapter-hero h1 {
   max-width: 1100px;
   margin: 0;
-  font-size: clamp(4rem, 8.7vw, 9.7rem);
+  font-size: clamp(3.5rem, 7vw, 7.8rem);
   font-weight: 570;
-  letter-spacing: -0.082em;
-  line-height: 0.86;
+  letter-spacing: -0.078em;
+  line-height: 0.9;
 }
 
 .chapter-question {
   max-width: 910px;
-  margin: 40px 0 0;
+  margin: 28px 0 0;
   color: #2c312b;
   font-size: clamp(1.32rem, 2.5vw, 2.25rem);
   font-weight: 610;
@@ -77,7 +77,7 @@
 
 .chapter-thesis {
   max-width: 760px;
-  margin: 28px 0 0;
+  margin: 18px 0 0;
   color: var(--atlas-muted);
   font-size: 1rem;
   line-height: 1.75;
@@ -87,7 +87,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  margin-top: 32px;
+  margin-top: 22px;
 }
 
 .chapter-instrument {

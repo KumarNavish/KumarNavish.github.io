@@ -9,6 +9,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 
+import { PortfolioHeader } from '../shared/PortfolioHeader'
 import {
   analyzeGainGraph,
   c,
@@ -199,26 +200,6 @@ function ThemeLock() {
     }
   }, [])
   return null
-}
-
-function Header() {
-  return (
-    <header className="gain-header">
-      <a className="gain-brand" href="#top" aria-label="Navish Kumar, return to the beginning">
-        <strong>Navish Kumar</strong>
-        <span>Research instruments</span>
-      </a>
-      <nav aria-label="Primary navigation">
-        <a href="#instrument">Instrument</a>
-        <a href="#evidence">Evidence</a>
-        <a href="#continuation">Continuation</a>
-        <a href="#contact">Contact</a>
-      </nav>
-      <a className="gain-resume" href="/artifacts/resume.pdf" target="_blank" rel="noreferrer">
-        Résumé
-      </a>
-    </header>
-  )
 }
 
 function PhaseSlider({ value, onChange, compact = false }: {
@@ -725,7 +706,7 @@ export function GainGraphPage() {
     <div className="gain-page">
       <ThemeLock />
       <a className="gain-skip" href="#instrument">Skip to the live instrument</a>
-      <Header />
+      <PortfolioHeader compact />
       <main>
         <Hero graph={graph} analysis={analysis} phaseOffset={phaseOffset} selectedEdgeId={selectedEdgeId} onPhaseChange={changePhase} onSelectEdge={setSelectedEdgeId} />
         <section id="instrument" className="gain-instrument-story" aria-label="Gain graph explanatory sequence">
