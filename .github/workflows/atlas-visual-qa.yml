@@ -1,0 +1,173 @@
+name: atlas-visual-qa
+
+on:
+  push:
+    branches: [portfolio-atlas-visual-qa]
+    paths:
+      - '.github/workflows/atlas-visual-qa.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  render-and-interact:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout QA branch
+        uses: actions/checkout@v4
+        with:
+          ref: portfolio-atlas-visual-qa
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install application and browser
+        working-directory: site
+        run: |
+          npm ci
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Build production site
+        working-directory: site
+        run: npm run build
+
+      - name: Start production preview
+        working-directory: site
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/atlas-preview.log 2>&1 &
+          echo $! > /tmp/atlas-preview.pid
+          for attempt in {1..30}; do
+            if curl --silent --fail http://127.0.0.1:4173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/atlas-preview.log
+          exit 1
+
+      - name: Run rendered interaction audit
+        working-directory: site
+        run: |
+          cat > /tmp/atlas-qa.mjs <<'JS'
+          import { chromium } from 'playwright'
+          import fs from 'node:fs/promises'
+
+          const base = 'http://127.0.0.1:4173'
+          const output = '../.qa'
+          await fs.mkdir(output, { recursive: true })
+
+          const browser = await chromium.launch({ headless: true })
+          const findings = []
+          const browserErrors = []
+
+          async function openPage(route, viewport, name) {
+            const context = await browser.newContext({
+              viewport,
+              reducedMotion: 'no-preference',
+              colorScheme: 'light',
+            })
+            const page = await context.newPage()
+            page.on('console', (message) => {
+              if (message.type() === 'error') browserErrors.push(`${route}: console: ${message.text()}`)
+            })
+            page.on('pageerror', (error) => browserErrors.push(`${route}: pageerror: ${error.message}`))
+            const response = await page.goto(`${base}${route}`, { waitUntil: 'networkidle' })
+            if (!response || !response.ok()) throw new Error(`${route}: navigation failed`)
+            await page.evaluate(() => document.fonts.ready)
+            const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+            if (overflow > 1) throw new Error(`${route}: horizontal overflow ${overflow}px`)
+            findings.push({ route, viewport, overflow, title: await page.title() })
+            return { context, page, name }
+          }
+
+          async function shot(page, name) {
+            await page.screenshot({
+              path: `${output}/${name}.jpg`,
+              type: 'jpeg',
+              quality: 48,
+              animations: 'disabled',
+            })
+          }
+
+          const home = await openPage('/', { width: 1280, height: 820 }, 'home-desktop')
+          await home.page.getByRole('heading', { name: /research should be understood/i }).waitFor()
+          await shot(home.page, home.name)
+          await home.context.close()
+
+          const mobile = await openPage('/', { width: 390, height: 844 }, 'home-mobile')
+          await mobile.page.getByRole('heading', { name: /research should be understood/i }).waitFor()
+          await shot(mobile.page, mobile.name)
+          await mobile.context.close()
+
+          const gbr = await openPage('/research/experience-replay-optimization', { width: 1280, height: 820 }, 'gbr-watch')
+          await gbr.page.getByRole('tab', { name: 'Manipulate' }).click()
+          const gbrRange = gbr.page.locator('input[type="range"]').first()
+          if (await gbrRange.count()) await gbrRange.fill('7')
+          await gbr.page.waitForTimeout(200)
+          await shot(gbr.page, 'gbr-manipulate')
+          await gbr.page.getByRole('tab', { name: 'Inspect' }).click()
+          await gbr.page.getByText(/exact layer/i).waitFor()
+          await gbr.context.close()
+
+          for (const [route, name] of [
+            ['/research/rank-feasibility', 'rank-feasibility'],
+            ['/research/ticlm', 'ticlm'],
+            ['/systems/casepath', 'casepath'],
+            ['/research/graph-laplacians', 'gain-graph'],
+          ]) {
+            const current = await openPage(route, { width: 1280, height: 820 }, name)
+            await shot(current.page, name)
+            await current.context.close()
+          }
+
+          const spatial = await openPage('/research/spatial-intelligence', { width: 1280, height: 820 }, 'spatial-built')
+          await spatial.page.getByRole('button', { name: 'Build flagship scene' }).click()
+          await spatial.page.waitForTimeout(2300)
+          await spatial.page.getByText(/Revision 1/).waitFor()
+          const objectCount = await spatial.page.locator('.spatial-world-shell footer div').filter({ hasText: 'Objects' }).locator('strong').textContent()
+          if (!objectCount || Number(objectCount) < 3) throw new Error(`spatial: expected generated objects, received ${objectCount}`)
+          await shot(spatial.page, 'spatial-built')
+          await spatial.page.getByRole('button', { name: 'Edit 1' }).click()
+          await spatial.page.getByRole('button', { name: 'Apply to world' }).click()
+          await spatial.page.waitForTimeout(2300)
+          await spatial.page.getByText(/Revision 2/).waitFor()
+          await spatial.page.getByRole('tab', { name: 'World state' }).click()
+          await spatial.page.getByText(/persistent/i).first().waitFor()
+          await spatial.context.close()
+
+          const spatialMobile = await openPage('/research/spatial-intelligence', { width: 390, height: 844 }, 'spatial-mobile')
+          await spatialMobile.page.getByRole('button', { name: 'Build flagship scene' }).click()
+          await spatialMobile.page.waitForTimeout(2300)
+          await shot(spatialMobile.page, 'spatial-mobile')
+          await spatialMobile.context.close()
+
+          await browser.close()
+          if (browserErrors.length) throw new Error(browserErrors.join('\n'))
+          await fs.writeFile(`${output}/report.json`, JSON.stringify({
+            passed: true,
+            generatedAt: new Date().toISOString(),
+            findings,
+            interactions: [
+              'GBR Watch → Manipulate → Inspect',
+              'Spatial flagship generation',
+              'Spatial persistent follow-up edit',
+              'Desktop and mobile overflow checks',
+            ],
+            browserErrors,
+          }, null, 2))
+          JS
+          node /tmp/atlas-qa.mjs
+
+      - name: Commit QA evidence
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .qa
+          git commit -m 'test(portfolio): record rendered interaction evidence'
+          git push origin HEAD:portfolio-atlas-visual-qa
