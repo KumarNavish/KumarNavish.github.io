@@ -1,0 +1,30 @@
+name: export-atlas-qa
+
+on:
+  push:
+    branches: [portfolio-atlas-evidence-export]
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: portfolio-atlas-evidence-export
+      - name: Verify evidence inventory
+        run: |
+          test -f .qa/report.json
+          test -f .qa/home-desktop.jpg
+          test -f .qa/home-mobile.jpg
+          test -f .qa/spatial-built.jpg
+          test -f .qa/spatial-mobile.jpg
+      - name: Upload rendered evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlas-rendered-evidence
+          path: .qa
+          if-no-files-found: error
+          retention-days: 1
