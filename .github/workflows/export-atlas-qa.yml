@@ -27,4 +27,5 @@ jobs:
           name: atlas-rendered-evidence
           path: .qa
           if-no-files-found: error
+          include-hidden-files: true
           retention-days: 1
