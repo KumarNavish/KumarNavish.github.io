@@ -3,8 +3,7 @@ name: atlas-visual-qa
 on:
   push:
     branches: [portfolio-atlas-visual-qa]
-    paths:
-      - '.github/workflows/atlas-visual-qa.yml'
+  workflow_dispatch:
 
 permissions:
   contents: write
