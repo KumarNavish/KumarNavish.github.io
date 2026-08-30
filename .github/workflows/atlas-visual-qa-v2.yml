@@ -105,7 +105,7 @@ jobs:
 
           for (const [route, name] of chapterRoutes) {
             const current = await open(route, desktop)
-            const stage = current.page.locator('.chapter-live-stage').first()
+            const stage = current.page.locator('.chapter-stage-shell').first()
             await stage.waitFor()
             const stageBox = await stage.boundingBox()
             if (!stageBox) throw new Error(`${route}: live stage has no rendered box`)
