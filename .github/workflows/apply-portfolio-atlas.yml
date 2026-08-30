@@ -32,6 +32,26 @@ jobs:
           echo 'a87e6be2c4ea776ef9f718c5cd17d289fc3be564870e072651ac23ef7a7c7c31  /tmp/portfolio_patch.tar.gz' | sha256sum --check
           tar -xzf /tmp/portfolio_patch.tar.gz -C "$GITHUB_WORKSPACE"
 
+      - name: Apply QA repairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('site/src/chapters/ChapterScaffold.tsx')
+          text = path.read_text()
+          text = text.replace(
+              "\n  useEffect(() => {\n    if (mode !== 'watch') setPlaying(false)\n  }, [mode])\n",
+              "\n",
+          )
+          text = text.replace(
+              "                    onClick={() => setMode(item)}\n",
+              "                    onClick={() => {\n                      setMode(item)\n                      if (item !== 'watch') setPlaying(false)\n                    }}\n",
+          )
+          path.write_text(text)
+          PY
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
