@@ -11,7 +11,9 @@ export function PortfolioHeader() {
       </NavLink>
 
       <nav className="portfolio-nav" aria-label="Primary navigation">
-        <NavLink to="/" end>Atlas</NavLink>
+        <NavLink to="/" end>
+          Atlas
+        </NavLink>
         <NavLink to="/research/experience-replay-optimization">Research</NavLink>
         <NavLink to="/research/spatial-intelligence">Spatial lab</NavLink>
         <a href="/#contact">Contact</a>
@@ -36,18 +38,28 @@ export function PortfolioFooter() {
         <p className="portfolio-kicker">The natural conclusion</p>
         <h2>Let’s investigate something difficult together.</h2>
         <p>
-          Research, machine-learning systems, emerging interfaces, and product work where
-          technical depth must become useful.
+          Research, machine-learning systems, emerging interfaces, and product work where technical
+          depth must become useful.
         </p>
       </div>
       <div className="portfolio-footer-actions">
         <a className="portfolio-button is-primary" href="mailto:navish.kumar@unibas.ch">
           navish.kumar@unibas.ch
         </a>
-        <a className="portfolio-button" href="/artifacts/resume.pdf" target="_blank" rel="noreferrer">
+        <a
+          className="portfolio-button"
+          href="/artifacts/resume.pdf"
+          target="_blank"
+          rel="noreferrer"
+        >
           Résumé
         </a>
-        <a className="portfolio-button" href="https://github.com/KumarNavish" target="_blank" rel="noreferrer">
+        <a
+          className="portfolio-button"
+          href="https://github.com/KumarNavish"
+          target="_blank"
+          rel="noreferrer"
+        >
           GitHub
         </a>
       </div>

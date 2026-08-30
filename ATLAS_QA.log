@@ -1,0 +1,155 @@
+
+### make pipe-validate-registry
+cd pipeline && python3 -m pip install ".[dev]"
+Processing ./.
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Collecting pydantic<3.0,>=2.8 (from portfolio-pipeline==0.1.0)
+  Downloading pydantic-2.13.5-py3-none-any.whl.metadata (110 kB)
+Collecting PyYAML<7.0,>=6.0 (from portfolio-pipeline==0.1.0)
+  Using cached pyyaml-6.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)
+Collecting pytest>=8.0.0 (from portfolio-pipeline==0.1.0)
+  Using cached pytest-9.1.1-py3-none-any.whl.metadata (7.6 kB)
+Collecting annotated-types>=0.6.0 (from pydantic<3.0,>=2.8->portfolio-pipeline==0.1.0)
+  Using cached annotated_types-0.8.0-py3-none-any.whl.metadata (15 kB)
+Collecting pydantic-core==2.46.5 (from pydantic<3.0,>=2.8->portfolio-pipeline==0.1.0)
+  Downloading pydantic_core-2.46.5-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.6 kB)
+Collecting typing-extensions>=4.14.1 (from pydantic<3.0,>=2.8->portfolio-pipeline==0.1.0)
+  Using cached typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+Collecting typing-inspection>=0.4.2 (from pydantic<3.0,>=2.8->portfolio-pipeline==0.1.0)
+  Using cached typing_inspection-0.4.4-py3-none-any.whl.metadata (2.6 kB)
+Collecting iniconfig>=1.0.1 (from pytest>=8.0.0->portfolio-pipeline==0.1.0)
+  Using cached iniconfig-2.3.0-py3-none-any.whl.metadata (2.5 kB)
+Collecting packaging>=22 (from pytest>=8.0.0->portfolio-pipeline==0.1.0)
+  Using cached packaging-26.3-py3-none-any.whl.metadata (3.5 kB)
+Collecting pluggy<2,>=1.5 (from pytest>=8.0.0->portfolio-pipeline==0.1.0)
+  Using cached pluggy-1.6.0-py3-none-any.whl.metadata (4.8 kB)
+Collecting pygments>=2.7.2 (from pytest>=8.0.0->portfolio-pipeline==0.1.0)
+  Using cached pygments-2.21.0-py3-none-any.whl.metadata (2.5 kB)
+Downloading pydantic-2.13.5-py3-none-any.whl (472 kB)
+Downloading pydantic_core-2.46.5-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.1/2.1 MB 25.2 MB/s  0:00:00
+Using cached pyyaml-6.0.3-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (806 kB)
+Using cached annotated_types-0.8.0-py3-none-any.whl (13 kB)
+Using cached pytest-9.1.1-py3-none-any.whl (386 kB)
+Using cached pluggy-1.6.0-py3-none-any.whl (20 kB)
+Using cached iniconfig-2.3.0-py3-none-any.whl (7.5 kB)
+Using cached packaging-26.3-py3-none-any.whl (129 kB)
+Using cached pygments-2.21.0-py3-none-any.whl (1.3 MB)
+Using cached typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+Using cached typing_inspection-0.4.4-py3-none-any.whl (14 kB)
+Building wheels for collected packages: portfolio-pipeline
+  Building wheel for portfolio-pipeline (pyproject.toml): started
+  Building wheel for portfolio-pipeline (pyproject.toml): finished with status 'done'
+  Created wheel for portfolio-pipeline: filename=portfolio_pipeline-0.1.0-py3-none-any.whl size=35251 sha256=3488d8da36ce95664389fbe9fab69c8a788248e75500562fae1d63fdb64781e9
+  Stored in directory: /tmp/pip-ephem-wheel-cache-5q80lika/wheels/9a/41/ce/d160acc05051dc812961fee48f03b33631b747f32982cff439
+Successfully built portfolio-pipeline
+Installing collected packages: typing-extensions, PyYAML, pygments, pluggy, packaging, iniconfig, annotated-types, typing-inspection, pytest, pydantic-core, pydantic, portfolio-pipeline
+
+Successfully installed PyYAML-6.0.3 annotated-types-0.8.0 iniconfig-2.3.0 packaging-26.3 pluggy-1.6.0 portfolio-pipeline-0.1.0 pydantic-2.13.5 pydantic-core-2.46.5 pygments-2.21.0 pytest-9.1.1 typing-extensions-4.16.0 typing-inspection-0.4.4
+cd pipeline && PYTHONPATH=src python3 -m pipeline.validate_registry --registry-dir ../registry
+registry validation succeeded: /home/runner/work/KumarNavish.github.io/KumarNavish.github.io/registry
+- github_username: KumarNavish
+- projects: 3
+- experience roles: 1
+- programs: 3
+
+### make site-typecheck
+cd site && npm install
+
+added 360 packages, and audited 361 packages in 5s
+
+71 packages are looking for funding
+  run `npm fund` for details
+
+25 vulnerabilities (1 low, 11 moderate, 12 high, 1 critical)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+cd site && npm run typecheck
+
+> site@0.0.0 typecheck
+> tsc -b --pretty false
+
+src/chapters/CoreResearchChapters.tsx(1027,3): error TS6133: 'drift' is declared but its value is never read.
+make: *** [Makefile:25: site-typecheck] Error 2
+
+### make check
+cd pipeline && python3 -m pip install ".[dev]"
+Processing ./.
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Requirement already satisfied: pydantic<3.0,>=2.8 in /opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages (from portfolio-pipeline==0.1.0) (2.13.5)
+Requirement already satisfied: PyYAML<7.0,>=6.0 in /opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages (from portfolio-pipeline==0.1.0) (6.0.3)
+Requirement already satisfied: pytest>=8.0.0 in /opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages (from portfolio-pipeline==0.1.0) (9.1.1)
+Requirement already satisfied: annotated-types>=0.6.0 in /opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages (from pydantic<3.0,>=2.8->portfolio-pipeline==0.1.0) (0.8.0)
+Requirement already satisfied: pydantic-core==2.46.5 in /opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages (from pydantic<3.0,>=2.8->portfolio-pipeline==0.1.0) (2.46.5)
+Requirement already satisfied: typing-extensions>=4.14.1 in /opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages (from pydantic<3.0,>=2.8->portfolio-pipeline==0.1.0) (4.16.0)
+Requirement already satisfied: typing-inspection>=0.4.2 in /opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages (from pydantic<3.0,>=2.8->portfolio-pipeline==0.1.0) (0.4.4)
+Requirement already satisfied: iniconfig>=1.0.1 in /opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages (from pytest>=8.0.0->portfolio-pipeline==0.1.0) (2.3.0)
+Requirement already satisfied: packaging>=22 in /opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages (from pytest>=8.0.0->portfolio-pipeline==0.1.0) (26.3)
+Requirement already satisfied: pluggy<2,>=1.5 in /opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages (from pytest>=8.0.0->portfolio-pipeline==0.1.0) (1.6.0)
+Requirement already satisfied: pygments>=2.7.2 in /opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages (from pytest>=8.0.0->portfolio-pipeline==0.1.0) (2.21.0)
+Building wheels for collected packages: portfolio-pipeline
+  Building wheel for portfolio-pipeline (pyproject.toml): started
+  Building wheel for portfolio-pipeline (pyproject.toml): finished with status 'done'
+  Created wheel for portfolio-pipeline: filename=portfolio_pipeline-0.1.0-py3-none-any.whl size=35251 sha256=4b98d6643a731bbb08aed7e78d53262e0bbef4d73dca54fcc55a694f93e0cbee
+  Stored in directory: /tmp/pip-ephem-wheel-cache-0r2siusy/wheels/9a/41/ce/d160acc05051dc812961fee48f03b33631b747f32982cff439
+Successfully built portfolio-pipeline
+Installing collected packages: portfolio-pipeline
+  Attempting uninstall: portfolio-pipeline
+    Found existing installation: portfolio-pipeline 0.1.0
+    Uninstalling portfolio-pipeline-0.1.0:
+      Successfully uninstalled portfolio-pipeline-0.1.0
+Successfully installed portfolio-pipeline-0.1.0
+cd pipeline && PYTHONPATH=src python3 -m pipeline.validate_registry --registry-dir ../registry
+registry validation succeeded: /home/runner/work/KumarNavish.github.io/KumarNavish.github.io/registry
+- github_username: KumarNavish
+- projects: 3
+- experience roles: 1
+- programs: 3
+cd pipeline && PYTHONPATH=src python3 -m pytest
+...................                                                      [100%]
+19 passed in 0.22s
+cd site && npm install
+
+up to date, audited 361 packages in 1s
+
+71 packages are looking for funding
+  run `npm fund` for details
+
+25 vulnerabilities (1 low, 11 moderate, 12 high, 1 critical)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+cd site && npm run lint
+
+> site@0.0.0 lint
+> eslint .
+
+
+/home/runner/work/KumarNavish.github.io/KumarNavish.github.io/site/src/chapters/CoreResearchChapters.tsx
+  1027:3  error  'drift' is defined but never used  @typescript-eslint/no-unused-vars
+
+✖ 1 problem (1 error, 0 warnings)
+
+make: *** [Makefile:22: site-lint] Error 1
+ATLAS_QA_STATUS=FAIL

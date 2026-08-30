@@ -27,7 +27,7 @@ export function RoutedApplication() {
       if (targetId) {
         document.getElementById(targetId)?.scrollIntoView({ block: 'start' })
       } else {
-        window.scrollTo({ top: 0, behavior: 'instant' })
+        window.scrollTo({ top: 0, behavior: 'auto' })
       }
     })
     return () => window.cancelAnimationFrame(frame)

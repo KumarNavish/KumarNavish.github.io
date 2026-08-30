@@ -21,7 +21,10 @@ export default function App() {
       <Route path="/" element={<AtlasPage />} />
       <Route path="/research/graph-laplacians" element={<GainGraphPage />} />
       <Route path="/research/natural-gradient-vi" element={<NaturalGradientChapter />} />
-      <Route path="/research/experience-replay-optimization" element={<ReplayOptimizationChapter />} />
+      <Route
+        path="/research/experience-replay-optimization"
+        element={<ReplayOptimizationChapter />}
+      />
       <Route path="/research/rank-feasibility" element={<RankFeasibilityChapter />} />
       <Route path="/research/ticlm" element={<TiCLMChapter />} />
       <Route path="/research/urban-logistics" element={<UrbanLogisticsChapter />} />

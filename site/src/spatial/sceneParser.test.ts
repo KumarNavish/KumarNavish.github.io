@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  DEFAULT_WORLD,
-  applySceneIntent,
-  parseAndApply,
-  parseSceneCommand,
-} from './sceneParser'
+import { DEFAULT_WORLD, applySceneIntent, parseAndApply, parseSceneCommand } from './sceneParser'
 
 describe('scene parser', () => {
   it('parses the flagship mountain laboratory prompt', () => {
@@ -27,10 +22,7 @@ describe('scene parser', () => {
       DEFAULT_WORLD,
       'Create a mountain laboratory with a microscope and a sample.',
     )
-    const second = parseAndApply(
-      first.world,
-      'Add a telescope and change the scene to night.',
-    )
+    const second = parseAndApply(first.world, 'Add a telescope and change the scene to night.')
 
     expect(second.world.objects.some((item) => item.kind === 'microscope')).toBe(true)
     expect(second.world.objects.some((item) => item.kind === 'telescope')).toBe(true)

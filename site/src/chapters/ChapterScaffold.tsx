@@ -1,9 +1,4 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 
 import { PortfolioFooter, PortfolioHeader } from '../shared/PortfolioShell'
@@ -51,19 +46,25 @@ type ChapterScaffoldProps = {
 
 function useStoryObserver(onStepChange: (step: number) => void, count: number): void {
   const callback = useRef(onStepChange)
-  useEffect(() => { callback.current = onStepChange }, [onStepChange])
+  useEffect(() => {
+    callback.current = onStepChange
+  }, [onStepChange])
 
   useEffect(() => {
-    const nodes = Array.from({ length: count }, (_, index) => document.getElementById(`chapter-step-${index}`))
-      .filter((node): node is HTMLElement => node !== null)
+    const nodes = Array.from({ length: count }, (_, index) =>
+      document.getElementById(`chapter-step-${index}`),
+    ).filter((node): node is HTMLElement => node !== null)
     if (!nodes.length) return undefined
-    const observer = new IntersectionObserver((entries) => {
-      const visible = entries
-        .filter((entry) => entry.isIntersecting)
-        .sort((left, right) => right.intersectionRatio - left.intersectionRatio)[0]
-      const index = Number(visible?.target.getAttribute('data-step'))
-      if (Number.isFinite(index)) callback.current(index)
-    }, { rootMargin: '-34% 0px -42% 0px', threshold: [.18, .42, .7] })
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((left, right) => right.intersectionRatio - left.intersectionRatio)[0]
+        const index = Number(visible?.target.getAttribute('data-step'))
+        if (Number.isFinite(index)) callback.current(index)
+      },
+      { rootMargin: '-34% 0px -42% 0px', threshold: [0.18, 0.42, 0.7] },
+    )
     nodes.forEach((node) => observer.observe(node))
     return () => observer.disconnect()
   }, [count])
@@ -84,7 +85,9 @@ export function ChapterScaffold(props: ChapterScaffoldProps) {
 
   const setStep = (index: number) => {
     props.onStepChange(index)
-    document.getElementById(`chapter-step-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    document
+      .getElementById(`chapter-step-${index}`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 
   return (
@@ -104,9 +107,18 @@ export function ChapterScaffold(props: ChapterScaffoldProps) {
 
         <section className="chapter-instrument" id="instrument">
           <div className="chapter-modebar" aria-label="Instrument mode">
-            {(['watch','manipulate','inspect'] as ChapterMode[]).map((item) => (
-              <button key={item} type="button" onClick={() => setMode(item)} className={mode === item ? 'is-active' : ''}>
-                {item === 'watch' ? 'Watch the idea' : item === 'manipulate' ? 'Manipulate it' : 'Inspect evidence'}
+            {(['watch', 'manipulate', 'inspect'] as ChapterMode[]).map((item) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => setMode(item)}
+                className={mode === item ? 'is-active' : ''}
+              >
+                {item === 'watch'
+                  ? 'Watch the idea'
+                  : item === 'manipulate'
+                    ? 'Manipulate it'
+                    : 'Inspect evidence'}
               </button>
             ))}
           </div>
@@ -114,11 +126,18 @@ export function ChapterScaffold(props: ChapterScaffoldProps) {
           <div className="chapter-stage-shell">
             <div className="chapter-stage-head">
               <div>
-                <span>{String(props.activeStep + 1).padStart(2,'0')} / {String(props.steps.length).padStart(2,'0')}</span>
+                <span>
+                  {String(props.activeStep + 1).padStart(2, '0')} /{' '}
+                  {String(props.steps.length).padStart(2, '0')}
+                </span>
                 <strong>{props.steps[props.activeStep]?.label}</strong>
               </div>
               {mode === 'watch' ? (
-                <button type="button" className="chapter-play" onClick={() => setPlaying((value) => !value)}>
+                <button
+                  type="button"
+                  className="chapter-play"
+                  onClick={() => setPlaying((value) => !value)}
+                >
                   {playing ? 'Pause sequence' : 'Play sequence'}
                 </button>
               ) : null}
@@ -132,20 +151,35 @@ export function ChapterScaffold(props: ChapterScaffoldProps) {
               </div>
             </div>
 
-            {mode === 'manipulate' ? <div className="chapter-controls">{props.controls}</div> : null}
+            {mode === 'manipulate' ? (
+              <div className="chapter-controls">{props.controls}</div>
+            ) : null}
             {mode === 'inspect' ? <div className="chapter-inspect">{props.inspect}</div> : null}
 
             <div className="chapter-step-dots" aria-label="Explanatory sequence">
               {props.steps.map((step, index) => (
-                <button key={step.title} type="button" className={props.activeStep === index ? 'is-active' : ''} onClick={() => setStep(index)} aria-label={`Go to ${step.label}`} />
+                <button
+                  key={step.title}
+                  type="button"
+                  className={props.activeStep === index ? 'is-active' : ''}
+                  onClick={() => setStep(index)}
+                  aria-label={`Go to ${step.label}`}
+                />
               ))}
             </div>
           </div>
 
           <aside className="chapter-story" aria-label="Guided explanation">
             {props.steps.map((step, index) => (
-              <article key={step.title} id={`chapter-step-${index}`} data-step={index} className={props.activeStep === index ? 'is-active' : ''}>
-                <span>{String(index+1).padStart(2,'0')} · {step.label}</span>
+              <article
+                key={step.title}
+                id={`chapter-step-${index}`}
+                data-step={index}
+                className={props.activeStep === index ? 'is-active' : ''}
+              >
+                <span>
+                  {String(index + 1).padStart(2, '0')} · {step.label}
+                </span>
                 <h2>{step.title}</h2>
                 <p>{step.body}</p>
                 <em>{step.cue}</em>
@@ -160,7 +194,12 @@ export function ChapterScaffold(props: ChapterScaffoldProps) {
             <h2>{props.contribution[0]}</h2>
           </div>
           <ol>
-            {props.contribution.slice(1).map((item, index) => <li key={item}><span>{index+1}</span><p>{item}</p></li>)}
+            {props.contribution.slice(1).map((item, index) => (
+              <li key={item}>
+                <span>{index + 1}</span>
+                <p>{item}</p>
+              </li>
+            ))}
           </ol>
         </section>
 
@@ -171,8 +210,21 @@ export function ChapterScaffold(props: ChapterScaffoldProps) {
           </header>
           <div className="chapter-evidence-grid">
             {props.evidence.map((item) => {
-              const content = <><span>{item.label}</span><h3>{item.title}</h3><p>{item.note}</p>{item.href ? <b>Open source ↗</b> : null}</>
-              return item.href ? <a key={item.title} href={item.href} target="_blank" rel="noreferrer">{content}</a> : <article key={item.title}>{content}</article>
+              const content = (
+                <>
+                  <span>{item.label}</span>
+                  <h3>{item.title}</h3>
+                  <p>{item.note}</p>
+                  {item.href ? <b>Open source ↗</b> : null}
+                </>
+              )
+              return item.href ? (
+                <a key={item.title} href={item.href} target="_blank" rel="noreferrer">
+                  {content}
+                </a>
+              ) : (
+                <article key={item.title}>{content}</article>
+              )
             })}
           </div>
         </section>
