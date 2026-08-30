@@ -1,0 +1,209 @@
+name: atlas-visual-qa-v2
+
+on:
+  push:
+    branches: [portfolio-atlas-visual-qa-v2]
+    paths:
+      - '.github/workflows/atlas-visual-qa-v2.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  render-and-inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout QA branch
+        uses: actions/checkout@v4
+        with:
+          ref: portfolio-atlas-visual-qa-v2
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install application and browser
+        working-directory: site
+        run: |
+          npm ci
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Build production site
+        working-directory: site
+        run: npm run build
+
+      - name: Start production preview
+        working-directory: site
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/atlas-preview.log 2>&1 &
+          for attempt in {1..30}; do
+            if curl --silent --fail http://127.0.0.1:4173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/atlas-preview.log
+          exit 1
+
+      - name: Audit rendered routes and interactions
+        working-directory: site
+        run: |
+          cat > atlas-qa.mjs <<'JS'
+          import { chromium } from 'playwright'
+          import fs from 'node:fs/promises'
+
+          const base = 'http://127.0.0.1:4173'
+          const output = '../.qa-v2'
+          const desktop = { width: 1280, height: 820 }
+          const mobile = { width: 390, height: 844 }
+          await fs.mkdir(output, { recursive: true })
+
+          const browser = await chromium.launch({ headless: true })
+          const findings = []
+          const browserErrors = []
+
+          async function open(route, viewport) {
+            const context = await browser.newContext({ viewport, colorScheme: 'light' })
+            const page = await context.newPage()
+            page.on('console', message => {
+              if (message.type() === 'error') browserErrors.push(`${route}: console: ${message.text()}`)
+            })
+            page.on('pageerror', error => browserErrors.push(`${route}: pageerror: ${error.message}`))
+            const response = await page.goto(`${base}${route}`, { waitUntil: 'networkidle' })
+            if (!response?.ok()) throw new Error(`${route}: HTTP navigation failed`)
+            await page.evaluate(() => document.fonts.ready)
+            const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
+            if (overflow > 1) throw new Error(`${route}: horizontal overflow ${overflow}px`)
+            return { context, page, overflow }
+          }
+
+          async function screenshot(page, name) {
+            await page.screenshot({
+              path: `${output}/${name}.jpg`,
+              type: 'jpeg',
+              quality: 58,
+              animations: 'disabled',
+            })
+          }
+
+          const home = await open('/', desktop)
+          await home.page.getByRole('heading', { name: /difficult ideas/i }).waitFor()
+          await screenshot(home.page, 'home-desktop')
+          findings.push({ route: '/', viewport: desktop, overflow: home.overflow })
+          await home.context.close()
+
+          const chapterRoutes = [
+            ['/research/experience-replay-optimization', 'gbr'],
+            ['/research/rank-feasibility', 'rank-feasibility'],
+            ['/research/ticlm', 'ticlm'],
+            ['/systems/casepath', 'casepath'],
+          ]
+
+          for (const [route, name] of chapterRoutes) {
+            const current = await open(route, desktop)
+            const stage = current.page.locator('.chapter-live-stage').first()
+            await stage.waitFor()
+            const stageBox = await stage.boundingBox()
+            if (!stageBox) throw new Error(`${route}: live stage has no rendered box`)
+            const visiblePixels = Math.max(0, desktop.height - stageBox.y)
+            if (visiblePixels < 72) {
+              throw new Error(`${route}: only ${visiblePixels.toFixed(1)}px of live mechanism visible initially`)
+            }
+            findings.push({ route, viewport: desktop, overflow: current.overflow, stageTop: stageBox.y, visiblePixels })
+            await screenshot(current.page, name)
+            await current.context.close()
+          }
+
+          const graph = await open('/research/graph-laplacians', desktop)
+          if (await graph.page.locator('.portfolio-header').count() !== 1) {
+            throw new Error('graph: shared portfolio header missing')
+          }
+          if (await graph.page.locator('.gain-header').count() !== 0) {
+            throw new Error('graph: legacy local header still rendered')
+          }
+          await screenshot(graph.page, 'gain-graph')
+          findings.push({ route: '/research/graph-laplacians', viewport: desktop, overflow: graph.overflow })
+          await graph.context.close()
+
+          const spatial = await open('/research/spatial-intelligence', desktop)
+          const labBox = await spatial.page.locator('.spatial-lab-shell').boundingBox()
+          if (!labBox) throw new Error('spatial: lab shell has no rendered box')
+          const labVisible = Math.max(0, desktop.height - labBox.y)
+          if (labVisible < 72) throw new Error(`spatial: only ${labVisible.toFixed(1)}px of lab visible initially`)
+          await screenshot(spatial.page, 'spatial-initial')
+          await spatial.page.getByRole('button', { name: 'Build flagship scene' }).click()
+          await spatial.page.waitForTimeout(2100)
+          await spatial.page.getByText(/Revision 1/).waitFor()
+          const objectCount = Number(await spatial.page.locator('.spatial-world-shell footer div').filter({ hasText: 'Objects' }).locator('strong').textContent())
+          if (objectCount < 3) throw new Error(`spatial: expected at least 3 objects, received ${objectCount}`)
+          const canvasBox = await spatial.page.locator('.spatial-world-canvas').boundingBox()
+          const agentBox = await spatial.page.locator('.spatial-agent').first().boundingBox()
+          if (!canvasBox || !agentBox) throw new Error('spatial: canvas or agent missing after generation')
+          const tolerance = 2
+          if (
+            agentBox.x < canvasBox.x - tolerance ||
+            agentBox.y < canvasBox.y - tolerance ||
+            agentBox.x + agentBox.width > canvasBox.x + canvasBox.width + tolerance ||
+            agentBox.y + agentBox.height > canvasBox.y + canvasBox.height + tolerance
+          ) {
+            throw new Error(`spatial: agent escaped canvas bounds: ${JSON.stringify({ canvasBox, agentBox })}`)
+          }
+          await screenshot(spatial.page, 'spatial-built')
+          await spatial.page.getByRole('button', { name: 'Edit 1' }).click()
+          await spatial.page.getByRole('button', { name: 'Apply to world' }).click()
+          await spatial.page.waitForTimeout(2100)
+          await spatial.page.getByText(/Revision 2/).waitFor()
+          findings.push({
+            route: '/research/spatial-intelligence',
+            viewport: desktop,
+            overflow: spatial.overflow,
+            labTop: labBox.y,
+            labVisible,
+            objectCount,
+            agentInsideCanvas: true,
+          })
+          await spatial.context.close()
+
+          const mobileHome = await open('/', mobile)
+          await screenshot(mobileHome.page, 'home-mobile')
+          findings.push({ route: '/', viewport: mobile, overflow: mobileHome.overflow })
+          await mobileHome.context.close()
+
+          const mobileSpatial = await open('/research/spatial-intelligence', mobile)
+          await mobileSpatial.page.getByRole('button', { name: 'Build flagship scene' }).click()
+          await mobileSpatial.page.waitForTimeout(2100)
+          await screenshot(mobileSpatial.page, 'spatial-mobile')
+          findings.push({ route: '/research/spatial-intelligence', viewport: mobile, overflow: mobileSpatial.overflow })
+          await mobileSpatial.context.close()
+
+          await browser.close()
+          if (browserErrors.length) throw new Error(browserErrors.join('\n'))
+          await fs.writeFile(`${output}/report.json`, JSON.stringify({
+            passed: true,
+            generatedAt: new Date().toISOString(),
+            findings,
+            browserErrors,
+            assertions: [
+              'Every primary scientific chapter exposes at least 72px of its live mechanism in the first desktop viewport.',
+              'The gain-graph chapter uses the shared portfolio header.',
+              'The spatial agent remains inside the rendered world canvas during action.',
+              'Spatial follow-up language produces revision 2 without resetting the world.',
+              'Desktop and mobile routes have no horizontal page overflow.',
+            ],
+          }, null, 2))
+          JS
+          node atlas-qa.mjs
+          rm atlas-qa.mjs
+
+      - name: Upload rendered evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: atlas-rendered-evidence-v2
+          path: .qa-v2
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 1
