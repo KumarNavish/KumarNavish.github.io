@@ -95,12 +95,12 @@ jobs:
           }
 
           const home = await openPage('/', { width: 1280, height: 820 }, 'home-desktop')
-          await home.page.getByRole('heading', { name: /research should be understood/i }).waitFor()
+          await home.page.getByRole('heading', { name: /difficult ideas/i }).waitFor()
           await shot(home.page, home.name)
           await home.context.close()
 
           const mobile = await openPage('/', { width: 390, height: 844 }, 'home-mobile')
-          await mobile.page.getByRole('heading', { name: /research should be understood/i }).waitFor()
+          await mobile.page.getByRole('heading', { name: /difficult ideas/i }).waitFor()
           await shot(mobile.page, mobile.name)
           await mobile.context.close()
 
