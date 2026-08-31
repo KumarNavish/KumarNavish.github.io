@@ -103,6 +103,12 @@ try {
   await firstNode.click()
   assert((await firstNode.getAttribute('aria-pressed')) === 'true', 'trajectory: selection did not update')
   const themeSelect = trajectory.page.locator('.trajectory-controls select').nth(3)
+  if (!(await themeSelect.isVisible())) {
+    const filterDrawer = trajectory.page.locator('.trajectory-filter-drawer')
+    assert((await filterDrawer.count()) === 1, 'trajectory: filter disclosure absent')
+    await filterDrawer.locator('summary').click()
+    await themeSelect.waitFor({ state: 'visible' })
+  }
   const options = await themeSelect.locator('option').count()
   if (options > 1) {
     await themeSelect.selectOption({ index: 1 })
@@ -142,6 +148,9 @@ try {
     'replay-chapter-desktop',
     true,
   )
+  assert((await replay.page.locator('.chapter-stage-layout').count()) === 1, 'chapter: active stage layout absent')
+  assert((await replay.page.locator('.chapter-current-story').count()) === 1, 'chapter: adjacent explanation absent')
+  assert((await replay.page.locator('.chapter-story button').count()) === 6, 'chapter: compact causal sequence incomplete')
   await replay.page.getByRole('button', { name: /Next step/i }).click()
   await replay.page.waitForFunction(() =>
     document.querySelector('.chapter-stage-head span')?.textContent?.includes('02'),
@@ -151,7 +160,7 @@ try {
     document.querySelector('.chapter-stage-head span')?.textContent?.includes('01'),
   )
   await replay.page.getByRole('button', { name: /Restart/i }).click()
-  await replay.page.getByRole('button', { name: /Manipulate it/i }).click()
+  await replay.page.getByRole('button', { name: /Explore mechanism/i }).click()
   assert((await replay.page.locator('.chapter-controls').count()) === 1, 'chapter: manipulate controls absent')
   const slider = replay.page.locator('.chapter-controls input[type="range"]').first()
   if (await slider.count()) await slider.press('ArrowRight')
@@ -203,6 +212,7 @@ try {
 
   const mobileHome = await openRoute(browser, '/', mobile, 'home-mobile', true)
   assert((await mobileHome.page.locator('.portfolio-nav').count()) === 1, 'mobile: navigation absent')
+  assert((await mobileHome.page.locator('.mobile-horizon-inline:visible > span').count()) === 3, 'mobile: past-now-next signal absent from first viewport')
   await mobileHome.context.close()
   const mobileTrajectory = await openRoute(browser, '/trajectory', mobile, 'trajectory-mobile', true)
   assert((await mobileTrajectory.page.locator('.trajectory-node').count()) === 10, 'mobile trajectory: missing works')
