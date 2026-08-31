@@ -1,0 +1,33 @@
+name: apply deep route redesign
+
+on:
+  push:
+    branches: [portfolio-radical-redesign-20260831]
+    paths:
+      - '.redesign/deep-route-redesign.tar.xz'
+      - '.github/workflows/apply-deep-route-redesign.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: portfolio-radical-redesign-20260831
+          fetch-depth: 0
+      - name: Materialize and validate the final deep-route redesign
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '8f19c8773a24cb42b68dc728122cc76f6c805cebf596efa7c56f2796d1bf9593  .redesign/deep-route-redesign.tar.xz' | sha256sum -c -
+          xz -t .redesign/deep-route-redesign.tar.xz
+          xz -dc .redesign/deep-route-redesign.tar.xz | tar -xf -
+          git config user.name 'Navish portfolio redesign bot'
+          git config user.email '43814868+KumarNavish@users.noreply.github.com'
+          git add site/src/chapters/ChapterScaffold.tsx site/src/chapters/chapters.css site/src/rebuilt/ResearchProgrammePages.tsx site/src/shared/portfolio.css
+          git commit -m 'Redesign every research chapter around one active scientific stage'
+          git push origin HEAD:portfolio-radical-redesign-20260831
