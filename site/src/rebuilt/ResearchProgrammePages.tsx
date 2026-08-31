@@ -344,7 +344,7 @@ export function PortfolioHomePage() {
         <section className="current-work-band" aria-labelledby="current-title">
           <header>
             <span>Working now</span>
-            <h2 id="current-title">The current questions remain unfinished—and visible.</h2>
+            <h2 id="current-title">Four live questions are carrying the programme forward.</h2>
           </header>
           <div>
             {current.map((work) => (
@@ -361,8 +361,8 @@ export function PortfolioHomePage() {
         <section className="home-atlas-entry" aria-labelledby="atlas-entry-title">
           <div>
             <span>Complete atlas</span>
-            <h2 id="atlas-entry-title">Ten works, available without competing for the opening moment.</h2>
-            <p>Scan the full record here, or open the larger stage where each work receives its native explanatory grammar.</p>
+            <h2 id="atlas-entry-title">Ten works across structure, adaptation, evidence, and spatial intelligence.</h2>
+            <p>The compact record remains visible; selecting a work opens its native mechanism, contribution, evidence, and boundary.</p>
             <Link to="/work">Open the complete work surface ↗</Link>
           </div>
           <CompactWorkIndex />
@@ -588,9 +588,9 @@ export function WorkIndexPage() {
       <PortfolioHeader />
       <main>
         <GlobalPageIntro
-          title="Ten works. One active stage. No project is reduced to a thumbnail."
+          title="Ten works, each explained through its own scientific object."
           body="Select a work from the index. Its own scientific object takes over the stage, the explanation advances one causal step at a time, and exact evidence remains one route away."
-          aside="The index stays compact so the active idea has room to become clear."
+          aside="The index stays compact so the selected idea has room to unfold."
         />
         <CompactWorkIndex interactive />
       </main>
@@ -711,7 +711,7 @@ export function SystemsPage() {
 
         <section className="portfolio-infrastructure-proof">
           <div>
-            <span>Implementation evidence</span>
+            <span>Engineering evidence</span>
             <h2>The portfolio itself uses the same discipline.</h2>
             <p>A typed work registry generates canonical routes, metadata, status records, deep links, and browser acceptance across desktop, mobile, reduced motion, and persistent world-state interactions.</p>
           </div>

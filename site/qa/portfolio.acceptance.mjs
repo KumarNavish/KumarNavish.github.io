@@ -148,6 +148,9 @@ try {
     'replay-chapter-desktop',
     true,
   )
+  assert((await replay.page.locator('.chapter-stage-layout').count()) === 1, 'chapter: active stage layout absent')
+  assert((await replay.page.locator('.chapter-current-story').count()) === 1, 'chapter: adjacent explanation absent')
+  assert((await replay.page.locator('.chapter-story button').count()) === 6, 'chapter: compact causal sequence incomplete')
   await replay.page.getByRole('button', { name: /Next step/i }).click()
   await replay.page.waitForFunction(() =>
     document.querySelector('.chapter-stage-head span')?.textContent?.includes('02'),
@@ -157,7 +160,7 @@ try {
     document.querySelector('.chapter-stage-head span')?.textContent?.includes('01'),
   )
   await replay.page.getByRole('button', { name: /Restart/i }).click()
-  await replay.page.getByRole('button', { name: /Manipulate it/i }).click()
+  await replay.page.getByRole('button', { name: /Explore mechanism/i }).click()
   assert((await replay.page.locator('.chapter-controls').count()) === 1, 'chapter: manipulate controls absent')
   const slider = replay.page.locator('.chapter-controls input[type="range"]').first()
   if (await slider.count()) await slider.press('ArrowRight')
