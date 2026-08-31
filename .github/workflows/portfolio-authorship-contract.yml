@@ -1,0 +1,93 @@
+name: portfolio authorship contract
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'site/src/portfolio/PortfolioPages.tsx'
+      - 'site/src/portfolio/portfolioPages.css'
+      - 'site/src/shared/PortfolioShell.tsx'
+      - 'site/src/shared/portfolio.css'
+      - 'site/public/authorship-pass.json'
+      - '.github/workflows/portfolio-authorship-contract.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  authorship-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - run: npm ci
+      - name: Validate feedback architecture in source
+        run: |
+          node - <<'JS'
+          const fs = require('node:fs')
+          const page = fs.readFileSync('src/portfolio/PortfolioPages.tsx', 'utf8')
+          const shell = fs.readFileSync('src/shared/PortfolioShell.tsx', 'utf8')
+          const required = [
+            'The connective tissue is more important than the categories.',
+            'All ten works, without ten competing showcases.',
+            'Begin with the programme.',
+            'Depth on demand',
+            'portfolio-mobile-menu',
+          ]
+          for (const phrase of required) {
+            if (!(page + shell).includes(phrase)) throw new Error(`missing authorship contract: ${phrase}`)
+          }
+          const marker = JSON.parse(fs.readFileSync('public/authorship-pass.json', 'utf8'))
+          if (!marker.feedback_executed || marker.featured_work_count !== 4 || marker.complete_work_count !== 10) {
+            throw new Error('authorship marker does not match release contract')
+          }
+          JS
+      - run: npm run check
+      - name: Browser contract
+        run: |
+          npm install --no-save --package-lock=false playwright@1.56.1
+          npx playwright install --with-deps chromium
+          npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/authorship-preview.log 2>&1 &
+          preview_pid=$!
+          trap 'kill $preview_pid 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 60); do
+            curl -fsS http://127.0.0.1:4173/ >/dev/null && break
+            sleep 1
+          done
+          node - <<'JS'
+          const { chromium } = require('playwright')
+          ;(async () => {
+            const browser = await chromium.launch({ headless: true })
+            try {
+              const desktop = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
+              await desktop.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' })
+              if (await desktop.locator('[data-featured-work]').count() !== 4) throw new Error('homepage featured count')
+              if (await desktop.locator('[data-work-id]').count() !== 10) throw new Error('homepage work index count')
+              if (await desktop.locator('.programme-rail li').count() !== 7) throw new Error('programme rail count')
+              await desktop.goto('http://127.0.0.1:4173/trajectory', { waitUntil: 'networkidle' })
+              if (await desktop.locator('.trajectory-overview-note').count() !== 1) throw new Error('trajectory must open in overview')
+              await desktop.locator('.trajectory-node').first().click()
+              if (await desktop.locator('.trajectory-inspector').count() !== 1) throw new Error('trajectory focus did not open')
+              await desktop.goto('http://127.0.0.1:4173/work', { waitUntil: 'networkidle' })
+              if (await desktop.locator('.work-index-placeholder').count() !== 1) throw new Error('work index should begin quiet')
+              await desktop.getByRole('button', { name: 'Preview' }).first().click()
+              if (await desktop.locator('.work-index-inspector.has-selection').count() !== 1) throw new Error('work preview did not open')
+              const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } })
+              await mobile.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' })
+              await mobile.locator('.portfolio-mobile-menu summary').click()
+              if (await mobile.locator('.portfolio-mobile-nav a:visible').count() !== 6) throw new Error('mobile menu contract')
+              const overflow = await mobile.evaluate(() => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - document.documentElement.clientWidth)
+              if (overflow > 1) throw new Error(`mobile overflow ${overflow}`)
+            } finally {
+              await browser.close()
+            }
+          })().catch((error) => { console.error(error); process.exit(1) })
+          JS
