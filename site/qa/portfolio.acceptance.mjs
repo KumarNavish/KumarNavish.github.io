@@ -189,7 +189,7 @@ try {
   )
   const secondCount = await spatial.page.locator('[data-scene-object]').count()
   assert(secondCount > firstCount, 'spatial: follow-up command did not preserve and extend world state')
-  await spatial.page.getByRole('button', { name: /^History$/i }).click()
+  await spatial.page.getByRole('tab', { name: /^History$/i }).click()
   await spatial.page.waitForFunction(
     () => document.querySelectorAll('.spatial-history-item').length >= 2,
     undefined,
