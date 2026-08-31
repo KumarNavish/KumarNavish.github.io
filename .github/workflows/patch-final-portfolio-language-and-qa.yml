@@ -1,0 +1,79 @@
+name: patch final portfolio language and qa
+
+on:
+  push:
+    branches: [portfolio-radical-redesign-20260831]
+    paths:
+      - '.github/workflows/patch-final-portfolio-language-and-qa.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: portfolio-radical-redesign-20260831
+          fetch-depth: 0
+      - name: Apply final public-language and rendered-QA repairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'missing patch target in {path}: {old[:90]!r}')
+              file.write_text(text.replace(old, new), encoding='utf-8')
+
+          pages = 'site/src/rebuilt/ResearchProgrammePages.tsx'
+          replace(pages, 'The current questions remain unfinished—and visible.', 'Four live questions are carrying the programme forward.')
+          replace(pages, 'Ten works, available without competing for the opening moment.', 'Ten works across structure, adaptation, evidence, and spatial intelligence.')
+          replace(
+              pages,
+              'Scan the full record here, or open the larger stage where each work receives its native explanatory grammar.',
+              'The compact record remains visible; selecting a work opens its native mechanism, contribution, evidence, and boundary.',
+          )
+          replace(pages, 'Ten works. One active stage. No project is reduced to a thumbnail.', 'Ten works, each explained through its own scientific object.')
+          replace(pages, 'The index stays compact so the active idea has room to become clear.', 'The index stays compact so the selected idea has room to unfold.')
+          replace(pages, '<span>Implementation evidence</span>', '<span>Engineering evidence</span>')
+
+          qa = 'site/qa/portfolio.acceptance.mjs'
+          replace(
+              qa,
+              """  const replay = await openRoute(
+    browser,
+    '/work/experience-replay-optimization',
+    desktop,
+    'replay-chapter-desktop',
+    true,
+  )
+""",
+              """  const replay = await openRoute(
+    browser,
+    '/work/experience-replay-optimization',
+    desktop,
+    'replay-chapter-desktop',
+    true,
+  )
+  assert((await replay.page.locator('.chapter-stage-layout').count()) === 1, 'chapter: active stage layout absent')
+  assert((await replay.page.locator('.chapter-current-story').count()) === 1, 'chapter: adjacent explanation absent')
+  assert((await replay.page.locator('.chapter-story button').count()) === 6, 'chapter: compact causal sequence incomplete')
+""",
+          )
+          replace(
+              qa,
+              "await replay.page.getByRole('button', { name: /Manipulate it/i }).click()",
+              "await replay.page.getByRole('button', { name: /Explore mechanism/i }).click()",
+          )
+          PY
+          git config user.name 'Navish portfolio redesign bot'
+          git config user.email '43814868+KumarNavish@users.noreply.github.com'
+          git add site/src/rebuilt/ResearchProgrammePages.tsx site/qa/portfolio.acceptance.mjs
+          git commit -m 'Polish the public portfolio language and deep-route acceptance contract'
+          git push origin HEAD:portfolio-radical-redesign-20260831
