@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#fff"/>
+  <text x="72" y="82" fill="#c9472d" font-family="monospace" font-size="18" font-weight="700" letter-spacing="3">RESEARCH TRAJECTORY</text>
+  <text x="68" y="193" fill="#111310" font-family="Arial, sans-serif" font-size="69" font-weight="600" letter-spacing="-4">Questions evolve.</text>
+  <text x="68" y="272" fill="#285ec4" font-family="Arial, sans-serif" font-size="69" font-weight="600" letter-spacing="-4">Evidence compounds.</text>
+  <line x1="92" y1="390" x2="1100" y2="390" stroke="#d9ddd4" stroke-width="3"/>
+  <g font-family="monospace" font-size="15" text-anchor="middle">
+    <circle cx="118" cy="390" r="12" fill="#285ec4"/><text x="118" y="438" fill="#5d625b">interaction</text>
+    <circle cx="300" cy="390" r="12" fill="#285ec4"/><text x="300" y="438" fill="#5d625b">structure</text>
+    <circle cx="482" cy="390" r="12" fill="#c9472d"/><text x="482" y="438" fill="#5d625b">optimization</text>
+    <circle cx="664" cy="390" r="12" fill="#c9472d"/><text x="664" y="438" fill="#5d625b">continual learning</text>
+    <circle cx="846" cy="390" r="12" fill="#1b6b50"/><text x="846" y="438" fill="#5d625b">reviewable agents</text>
+    <circle cx="1074" cy="390" r="12" fill="#1b6b50"/><text x="1074" y="438" fill="#5d625b">persistent worlds</text>
+  </g>
+  <text x="72" y="555" fill="#111310" font-family="Arial, sans-serif" font-size="25" font-weight="700">Navish Kumar</text>
+  <text x="954" y="555" fill="#5d625b" font-family="monospace" font-size="17">browse by year · theme · status</text>
+</svg>
