@@ -82,9 +82,11 @@ export default function App() {
         <Route path="/work/experience-replay-optimization" element={<ReplayOptimizationChapter />} />
         <Route path="/work/rank-feasibility" element={<RankFeasibilityChapter />} />
         <Route path="/work/ticlm-replay-value" element={<TiCLMChapter />} />
-        <Route path="/work/casepath" element={<CasePathChapter />} />
-        <Route path="/work/spatial-intelligence" element={<SpatialLabPage />} />
+        <Route path="/systems/casepath" element={<CasePathChapter />} />
+        <Route path="/frontier/spatial-intelligence" element={<SpatialLabPage />} />
 
+        <Route path="/work/casepath" element={<Navigate to="/systems/casepath" replace />} />
+        <Route path="/work/spatial-intelligence" element={<Navigate to="/frontier/spatial-intelligence" replace />} />
         <Route path="/research/graph-laplacians" element={<Navigate to="/work/gain-graphs" replace />} />
         <Route path="/research/natural-gradient-vi" element={<Navigate to="/work/square-root-natural-gradient" replace />} />
         <Route path="/research/experience-replay-optimization" element={<Navigate to="/work/experience-replay-optimization" replace />} />
@@ -92,8 +94,7 @@ export default function App() {
         <Route path="/research/ticlm" element={<Navigate to="/work/ticlm-replay-value" replace />} />
         <Route path="/research/urban-logistics" element={<Navigate to="/work/urban-microregion-logistics" replace />} />
         <Route path="/research/counterspeech" element={<Navigate to="/work/counterspeech-dynamics" replace />} />
-        <Route path="/systems/casepath" element={<Navigate to="/work/casepath" replace />} />
-        <Route path="/research/spatial-intelligence" element={<Navigate to="/work/spatial-intelligence" replace />} />
+        <Route path="/research/spatial-intelligence" element={<Navigate to="/frontier/spatial-intelligence" replace />} />
         <Route path="/projects" element={<Navigate to="/work" replace />} />
         <Route path="/publications" element={<Navigate to="/research" replace />} />
         <Route path="/experience" element={<Navigate to="/trajectory" replace />} />
