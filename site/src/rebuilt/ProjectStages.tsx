@@ -445,7 +445,7 @@ export function ProjectMechanism({
     default: visual = <NetworkStage step={boundedStep} />
   }
 
-  return <div className={className} data-mechanism={workId} data-step={boundedStep}>{visual}</div>
+  return <div className={className} data-mechanism={workId} data-project-mechanism={workId} data-step={boundedStep}>{visual}</div>
 }
 
 export function GuidedMechanism({
