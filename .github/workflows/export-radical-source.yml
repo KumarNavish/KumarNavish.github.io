@@ -1,0 +1,25 @@
+name: export radical redesign source
+
+on:
+  push:
+    branches: [portfolio-radical-redesign-20260831]
+    paths:
+      - '.github/workflows/export-radical-source.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: portfolio-radical-redesign-20260831
+      - name: Archive current branch source
+        run: tar -czf /tmp/radical-source.tar.gz site package.json Makefile .github/workflows/ci.yml .github/workflows/pages.yml .github/workflows/portfolio-browser-acceptance.yml .github/workflows/portfolio-static-route-contract.yml .github/workflows/portfolio-authorship-contract.yml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: radical-source-${{ github.sha }}
+          path: /tmp/radical-source.tar.gz
+          retention-days: 2
