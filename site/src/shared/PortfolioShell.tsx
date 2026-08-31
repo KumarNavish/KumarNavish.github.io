@@ -21,17 +21,18 @@ export function PortfolioHeader() {
 
       <nav className="portfolio-nav" aria-label="Primary navigation">
         {NAVIGATION.map(([route, label]) => (
-          <NavLink key={route} to={route}>{label}</NavLink>
+          <NavLink key={route} to={route}>
+            {label}
+          </NavLink>
         ))}
       </nav>
 
       <a
         className="portfolio-external"
-        href="https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en"
-        target="_blank"
-        rel="noreferrer"
+        href="mailto:navish.kumar@unibas.ch"
+        aria-label="Email Navish Kumar"
       >
-        Scholar ↗
+        Contact
       </a>
     </header>
   )
@@ -41,15 +42,14 @@ export function PortfolioFooter() {
   return (
     <footer className="portfolio-footer" id="contact">
       <div>
-        <p className="portfolio-kicker">Basel, Switzerland</p>
-        <h2>Let’s investigate something difficult together.</h2>
+        <p className="portfolio-kicker">Navish Kumar · Basel, Switzerland</p>
         <p>
-          Research, applied machine learning, reliable agents, scientific interfaces, and product
-          work where technical depth must become genuinely useful.
+          Machine-learning research and product work across optimisation, continual adaptation,
+          evidence-grounded agents, scientific interfaces, and spatial intelligence.
         </p>
         <p className="portfolio-footer-interests">
-          Current interests: continual adaptation · optimization · evidence-grounded agents ·
-          spatial intelligence · research engineering
+          The best reason to get in touch is a difficult problem whose evidence, method, system, and
+          interface all matter.
         </p>
       </div>
       <div className="portfolio-footer-actions" aria-label="Contact and profile links">
@@ -66,7 +66,7 @@ export function PortfolioFooter() {
           OpenReview
         </a>
         <a className="portfolio-button" href="https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en" target="_blank" rel="noreferrer">
-          Google Scholar
+          Scholar
         </a>
       </div>
     </footer>
