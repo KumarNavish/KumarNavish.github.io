@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#fff"/>
+  <rect x="70" y="72" width="1060" height="486" rx="22" fill="#f5f6f2" stroke="#d9ddd4"/>
+  <text x="108" y="127" fill="#c9472d" font-family="monospace" font-size="17" font-weight="700" letter-spacing="3">RESEARCH RECORD</text>
+  <text x="104" y="244" fill="#111310" font-family="Arial, sans-serif" font-size="74" font-weight="600" letter-spacing="-5">Evidence has a status.</text>
+  <text x="104" y="324" fill="#285ec4" font-family="Arial, sans-serif" font-size="74" font-weight="600" letter-spacing="-5">Questions have a lineage.</text>
+  <g font-family="monospace" font-size="16" font-weight="700">
+    <rect x="108" y="390" width="138" height="40" rx="20" fill="#e8f3ee" stroke="#8db9a8"/><text x="177" y="416" fill="#155840" text-anchor="middle">published</text>
+    <rect x="260" y="390" width="132" height="40" rx="20" fill="#edf2ff" stroke="#9cb4e5"/><text x="326" y="416" fill="#234f9e" text-anchor="middle">preprint</text>
+    <rect x="406" y="390" width="172" height="40" rx="20" fill="#fff0eb" stroke="#d8a18f"/><text x="492" y="416" fill="#a23b26" text-anchor="middle">under review</text>
+    <rect x="592" y="390" width="142" height="40" rx="20" fill="#fbf1dc" stroke="#d4b06b"/><text x="663" y="416" fill="#805405" text-anchor="middle">ongoing</text>
+  </g>
+  <text x="108" y="505" fill="#5d625b" font-family="Arial, sans-serif" font-size="25">Ten first-class works · public evidence · explicit boundaries</text>
+  <text x="972" y="596" fill="#111310" font-family="Arial, sans-serif" font-size="22" font-weight="700">Navish Kumar</text>
+</svg>

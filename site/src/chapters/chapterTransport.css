@@ -1,0 +1,55 @@
+.chapter-transport {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px !important;
+}
+
+.chapter-transport button {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--atlas-line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--atlas-ink);
+  font-size: 0.63rem;
+  font-weight: 710;
+  cursor: pointer;
+}
+
+.chapter-transport button:hover,
+.chapter-transport button:focus-visible {
+  border-color: #aeb4aa;
+  outline: none;
+}
+
+.chapter-transport .chapter-play {
+  border-color: var(--atlas-ink);
+  background: var(--atlas-ink);
+  color: #fff;
+}
+
+@media (max-width: 720px) {
+  .chapter-stage-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .chapter-transport {
+    justify-content: flex-start;
+    width: 100%;
+  }
+  .chapter-transport button {
+    flex: 1 1 72px;
+  }
+}
+
+@media (max-width: 420px) {
+  .chapter-transport {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chapter-transport button { transition: none; }
+}
