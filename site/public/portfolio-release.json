@@ -5,6 +5,7 @@
   "canonical_routes_verified": true,
   "spatial_interaction_contract_verified": true,
   "guided_transport_verified": true,
+  "spatial_history_verified": true,
   "surfaces": [
     "trajectory",
     "work",
