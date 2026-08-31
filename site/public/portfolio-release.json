@@ -4,6 +4,7 @@
   "body_of_work": 10,
   "canonical_routes_verified": true,
   "spatial_interaction_contract_verified": true,
+  "guided_transport_verified": true,
   "surfaces": [
     "trajectory",
     "work",
