@@ -1,0 +1,163 @@
+name: portfolio research status audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [portfolio-atlas-2026]
+    paths:
+      - '.github/workflows/portfolio-research-status-audit.yml'
+      - 'site/src/data/workRegistry.ts'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Query public OpenReview records
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p audit
+          python3 - <<'PY'
+          import json
+          import subprocess
+          import urllib.parse
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          forums = {
+              "experience_replay": "4z7il66fFb",
+              "rank_feasibility": "CwmHHYCbjK",
+          }
+
+          headers = [
+              "-H", "Accept: application/json,text/plain,*/*",
+              "-H", "Referer: https://openreview.net/",
+              "-H", "Origin: https://openreview.net",
+              "-A", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/150 Safari/537.36",
+          ]
+
+          def curl_json(url: str):
+              result = subprocess.run(
+                  ["curl", "--silent", "--show-error", "--location", "--retry", "3", "--retry-all-errors", "--max-time", "60", *headers, url],
+                  text=True,
+                  capture_output=True,
+                  check=False,
+              )
+              if result.returncode != 0:
+                  raise RuntimeError(result.stderr.strip() or f"curl failed for {url}")
+              try:
+                  return json.loads(result.stdout)
+              except json.JSONDecodeError as error:
+                  raise RuntimeError(f"non-JSON response from {url}: {result.stdout[:240]}") from error
+
+          def get_notes(params):
+              query = urllib.parse.urlencode(params)
+              errors = []
+              for base in ("https://api2.openreview.net/notes", "https://api.openreview.net/notes"):
+                  try:
+                      return {"endpoint": base, "payload": curl_json(f"{base}?{query}")}
+                  except Exception as error:
+                      errors.append(f"{base}: {error}")
+              return {"endpoint": None, "payload": {"notes": []}, "errors": errors}
+
+          output = {
+              "audited_at": datetime.now(timezone.utc).isoformat(),
+              "source": "public OpenReview APIs; browser-identifying request headers",
+              "forums": {},
+          }
+          for key, forum_id in forums.items():
+              output["forums"][key] = {
+                  "forum_id": forum_id,
+                  "submission": get_notes({"id": forum_id, "details": "all"}),
+                  "replies": get_notes({"forum": forum_id, "details": "all", "limit": 1000}),
+              }
+
+          Path("audit/openreview-status.json").write_text(
+              json.dumps(output, indent=2, ensure_ascii=False), encoding="utf-8"
+          )
+          PY
+
+      - name: Summarize decision and venue fields
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          raw = json.loads(Path('audit/openreview-status.json').read_text())
+          summary = {"audited_at": raw["audited_at"], "forums": {}}
+
+          def unwrap(value):
+              if isinstance(value, dict) and "value" in value:
+                  return value["value"]
+              return value
+
+          for key, payload in raw["forums"].items():
+              submission_payload = payload["submission"]["payload"]
+              notes = submission_payload.get("notes", [])
+              submission = notes[0] if notes else {}
+              content = submission.get("content", {})
+              replies = payload["replies"]["payload"].get("notes", [])
+              decision_replies = []
+              for reply in replies:
+                  invitations = reply.get("invitations") or [reply.get("invitation", "")]
+                  invitation_blob = " ".join(item for item in invitations if isinstance(item, str))
+                  reply_content = reply.get("content", {})
+                  title_value = unwrap(reply_content.get("title"))
+                  if "Decision" in invitation_blob or (isinstance(title_value, str) and "Decision" in title_value):
+                      decision_replies.append({
+                          "id": reply.get("id"),
+                          "invitations": invitations,
+                          "content": {name: unwrap(value) for name, value in reply_content.items()},
+                          "mdate": reply.get("mdate"),
+                      })
+              summary["forums"][key] = {
+                  "forum_id": payload["forum_id"],
+                  "submission_endpoint": payload["submission"].get("endpoint"),
+                  "replies_endpoint": payload["replies"].get("endpoint"),
+                  "errors": [
+                      *payload["submission"].get("errors", []),
+                      *payload["replies"].get("errors", []),
+                  ],
+                  "title": unwrap(content.get("title")),
+                  "venue": unwrap(content.get("venue")),
+                  "venueid": unwrap(content.get("venueid")),
+                  "authors": unwrap(content.get("authors")),
+                  "submission_mdate": submission.get("mdate"),
+                  "decision_replies": decision_replies,
+                  "reply_count": len(replies),
+              }
+
+          Path('audit/openreview-status-summary.json').write_text(
+              json.dumps(summary, indent=2, ensure_ascii=False), encoding='utf-8'
+          )
+          print(json.dumps(summary, indent=2, ensure_ascii=False))
+          PY
+
+      - name: Validate canonical registry status vocabulary
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          registry = Path('site/src/data/workRegistry.ts')
+          if not registry.exists():
+              print('Registry not created yet; network audit remains informative only.')
+              raise SystemExit(0)
+          text = registry.read_text(encoding='utf-8')
+          required = ['under-revision', 'ongoing', 'prototype', 'direction']
+          missing = [value for value in required if value not in text]
+          if missing:
+              raise SystemExit(f'Missing expected research-status vocabulary: {missing}')
+          PY
+
+      - name: Upload audit evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: portfolio-research-status-audit
+          path: audit/
+          retention-days: 14

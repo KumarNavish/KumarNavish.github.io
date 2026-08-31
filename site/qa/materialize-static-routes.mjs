@@ -205,8 +205,9 @@ const aliasTargets = {
   '/research/ticlm': '/work/ticlm-replay-value',
   '/research/urban-logistics': '/work/urban-microregion-logistics',
   '/research/counterspeech': '/work/counterspeech-dynamics',
-  '/systems/casepath': '/work/casepath',
-  '/research/spatial-intelligence': '/work/spatial-intelligence',
+  '/work/casepath': '/systems/casepath',
+  '/work/spatial-intelligence': '/frontier/spatial-intelligence',
+  '/research/spatial-intelligence': '/frontier/spatial-intelligence',
   '/projects': '/work',
   '/publications': '/research',
   '/experience': '/trajectory',
@@ -215,7 +216,9 @@ const aliasTargets = {
 const registry = await loadRegistry()
 const routeRecords = [...staticRoutes, ...registry.map(workRoute)]
 const canonicalByPath = new Map(routeRecords.map((route) => [route.path, route]))
-const aliases = Object.entries(aliasTargets).map(([pathName, target]) => ({
+const aliases = Object.entries(aliasTargets)
+  .filter(([pathName]) => !canonicalByPath.has(pathName))
+  .map(([pathName, target]) => ({
   ...(canonicalByPath.get(target) || {
     title: 'Navish Kumar | Research and Systems',
     description: 'Motion-native research explanations and evidence-backed systems by Navish Kumar.',
@@ -224,7 +227,7 @@ const aliases = Object.entries(aliasTargets).map(([pathName, target]) => ({
   path: pathName,
   canonicalPath: target,
   kind: 'page',
-}))
+  }))
 const allRoutes = [...routeRecords, ...aliases]
 const rootHtml = await fs.readFile(rootHtmlPath, 'utf8')
 
