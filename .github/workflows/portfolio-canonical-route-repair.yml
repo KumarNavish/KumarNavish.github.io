@@ -1,0 +1,102 @@
+name: portfolio canonical route repair
+
+on:
+  push:
+    branches: [portfolio-atlas-2026]
+    paths:
+      - '.github/workflows/portfolio-canonical-route-repair.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+        with:
+          ref: portfolio-atlas-2026
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Merge deployment contract and repair canonical aliases
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin master
+          git merge --no-edit origin/master
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          materializer = Path('site/qa/materialize-static-routes.mjs')
+          source = materializer.read_text(encoding='utf-8')
+          old_aliases = """  '/systems/casepath': '/work/casepath',
+            '/research/spatial-intelligence': '/work/spatial-intelligence',"""
+          new_aliases = """  '/work/casepath': '/systems/casepath',
+            '/work/spatial-intelligence': '/frontier/spatial-intelligence',
+            '/research/spatial-intelligence': '/frontier/spatial-intelligence',"""
+          old_builder = """const aliases = Object.entries(aliasTargets).map(([pathName, target]) => ({"""
+          new_builder = """const aliases = Object.entries(aliasTargets)
+            .filter(([pathName]) => !canonicalByPath.has(pathName))
+            .map(([pathName, target]) => ({"""
+          old_close = """  kind: 'page',
+          }))
+          const allRoutes"""
+          new_close = """  kind: 'page',
+            }))
+          const allRoutes"""
+
+          if old_aliases not in source:
+              raise SystemExit('Expected canonical alias block not found; refusing unsafe patch.')
+          if old_builder not in source:
+              raise SystemExit('Expected alias builder not found; refusing unsafe patch.')
+          if old_close not in source:
+              raise SystemExit('Expected alias builder close not found; refusing unsafe patch.')
+          source = source.replace(old_aliases, new_aliases, 1)
+          source = source.replace(old_builder, new_builder, 1)
+          source = source.replace(old_close, new_close, 1)
+          materializer.write_text(source, encoding='utf-8')
+
+          metadata = Path('site/src/RoutedApplication.tsx')
+          source = metadata.read_text(encoding='utf-8')
+          old = """  const imageUrl = `${SITE_URL}${meta.image}`
+            document.title = meta.title"""
+          new = """  const imageUrl = `${SITE_URL}${meta.image}`
+            const isWorkRoute =
+              pathname === '/work/gain-graphs' ||
+              WORK_REGISTRY.some((work) => work.route === pathname)
+            document.title = meta.title"""
+          old_type = """  setMeta('meta[property=\"og:type\"]', { property: 'og:type' }, pathname.startsWith('/work/') ? 'article' : 'website')"""
+          new_type = """  setMeta('meta[property=\"og:type\"]', { property: 'og:type' }, isWorkRoute ? 'article' : 'website')"""
+          if old not in source or old_type not in source:
+              raise SystemExit('Expected route metadata block not found; refusing unsafe patch.')
+          source = source.replace(old, new, 1).replace(old_type, new_type, 1)
+          metadata.write_text(source, encoding='utf-8')
+          PY
+
+          cd site
+          npm ci
+          npm run typecheck
+          npm run test
+          npm run build
+          node qa/assert-static-routes.mjs dist qa-artifacts/static-routes.json
+          cd ..
+
+      - name: Commit verified repair and remove one-time workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/portfolio-canonical-route-repair.yml
+          git add site/qa/materialize-static-routes.mjs site/src/RoutedApplication.tsx site/package.json
+          git config user.name 'Navish portfolio release bot'
+          git config user.email '43814868+KumarNavish@users.noreply.github.com'
+          git commit -m 'fix(portfolio): align canonical work routes'
+          git push origin HEAD:portfolio-atlas-2026
