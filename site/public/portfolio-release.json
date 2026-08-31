@@ -1,11 +1,15 @@
 {
   "architecture": "canonical-research-trajectory",
   "release_date": "2026-08-31",
+  "surface_revision": "concentration-and-authorship",
   "body_of_work": 10,
   "canonical_routes_verified": true,
   "spatial_interaction_contract_verified": true,
   "guided_transport_verified": true,
   "spatial_history_verified": true,
+  "authorship_concentration_verified": true,
+  "programme_overview_default": true,
+  "mobile_narrative_order_verified": true,
   "surfaces": [
     "trajectory",
     "work",

@@ -16,43 +16,43 @@ const STATIC_META: Record<string, RouteMeta> = {
   '/': {
     title: 'Navish Kumar | Machine-Learning Researcher and Systems Builder',
     description:
-      'The motion-native portfolio of Navish Kumar: mathematical learning, continual adaptation, evidence-grounded agents, and spatial intelligence.',
+      'Research and systems work connecting mathematical structure, continual adaptation, evidence-grounded agents, and persistent spatial interfaces.',
     image: '/social/root.svg',
   },
   '/trajectory': {
     title: 'Research Trajectory | Navish Kumar',
     description:
-      'Explore Navish Kumar’s intellectual trajectory from interaction evidence and spectral structure to continual learning, inspectable agents, and persistent worlds.',
+      'Explore one research programme across time, recurring questions, methods, systems, and frontier direction.',
     image: '/social/trajectory.svg',
   },
   '/work': {
     title: 'Complete Work | Navish Kumar',
     description:
-      'The complete body of work of Navish Kumar, with verified status, native motion previews, direct evidence, and full project routes.',
+      'A compact atlas of Navish Kumar’s papers, systems, experiments, evidence, limitations, and direct project routes.',
     image: '/social/research.svg',
   },
   '/research': {
     title: 'Research Record | Navish Kumar',
     description:
-      'Published, accepted, preprint, under-review, under-revision, and ongoing research by Navish Kumar, presented with explicit evidence boundaries.',
+      'Research questions, contributions, exact publication and review status, evidence, and unresolved boundaries.',
     image: '/social/research.svg',
   },
   '/systems': {
     title: 'Systems and Product Evidence | Navish Kumar',
     description:
-      'Evidence-grounded systems, deterministic gates, inspectable agents, deployment architecture, and product work by Navish Kumar.',
+      'CasePath and the engineering decisions behind evidence-grounded, replayable, inspectable intelligent systems.',
     image: '/social/casepath.svg',
   },
   '/frontier': {
     title: 'Frontier Work | Navish Kumar',
     description:
-      'Ongoing work on time-continual language models, replay value, persistent spatial worlds, and situated agents.',
+      'Ongoing work on temporal learning, persistent semantic world state, and situated intelligent interfaces.',
     image: '/social/spatial.svg',
   },
   '/about': {
     title: 'About and Contact | Navish Kumar',
     description:
-      'Navish Kumar is a machine-learning researcher and systems builder in Basel, Switzerland, working across optimization, continual learning, reliable agents, and spatial interfaces.',
+      'The intellectual movement behind Navish Kumar’s work across theory, continual learning, systems, and spatial interfaces.',
     image: '/social/root.svg',
   },
   '/work/gain-graphs': {
@@ -61,6 +61,11 @@ const STATIC_META: Record<string, RouteMeta> = {
       'Operate a complex unit gain graph and watch its cycles, Hermitian Laplacians, spectrum, eigenmodes, diffusion, and frustration certificate change together.',
     image: '/social/gain-graphs.svg',
   },
+}
+
+function normalizePath(pathname: string): string {
+  if (pathname === '/') return '/'
+  return pathname.replace(/\/+$/, '') || '/'
 }
 
 function socialImageForWork(work: WorkRegistryEntry): string {
@@ -74,9 +79,10 @@ function socialImageForWork(work: WorkRegistryEntry): string {
 }
 
 function metaForPath(pathname: string): RouteMeta {
-  const staticMeta = STATIC_META[pathname]
+  const normalized = normalizePath(pathname)
+  const staticMeta = STATIC_META[normalized]
   if (staticMeta) return staticMeta
-  const work = WORK_REGISTRY.find((candidate) => candidate.route === pathname)
+  const work = WORK_REGISTRY.find((candidate) => candidate.route === normalized)
   if (work) {
     return {
       title: `${work.shortTitle} | Navish Kumar`,
@@ -91,7 +97,9 @@ function setMeta(selector: string, attributes: Record<string, string>, value: st
   let node = document.head.querySelector<HTMLMetaElement>(selector)
   if (!node) {
     node = document.createElement('meta')
-    for (const [name, attributeValue] of Object.entries(attributes)) node.setAttribute(name, attributeValue)
+    for (const [name, attributeValue] of Object.entries(attributes)) {
+      node.setAttribute(name, attributeValue)
+    }
     document.head.appendChild(node)
   }
   node.setAttribute('content', value)
@@ -133,7 +141,12 @@ function personJsonLd() {
 }
 
 function workJsonLd(work: WorkRegistryEntry) {
-  const type = work.type === 'paper' ? 'ScholarlyArticle' : work.type === 'system' ? 'SoftwareApplication' : 'CreativeWork'
+  const type =
+    work.type === 'paper'
+      ? 'ScholarlyArticle'
+      : work.type === 'system'
+        ? 'SoftwareApplication'
+        : 'CreativeWork'
   return {
     '@context': 'https://schema.org',
     '@type': type,
@@ -154,9 +167,10 @@ function workJsonLd(work: WorkRegistryEntry) {
 }
 
 function pageJsonLd(pathname: string) {
-  const work = WORK_REGISTRY.find((candidate) => candidate.route === pathname)
+  const normalized = normalizePath(pathname)
+  const work = WORK_REGISTRY.find((candidate) => candidate.route === normalized)
   if (work) return [personJsonLd(), workJsonLd(work)]
-  if (pathname === '/') {
+  if (normalized === '/') {
     return [
       personJsonLd(),
       {
@@ -177,21 +191,22 @@ function pageJsonLd(pathname: string) {
     {
       '@context': 'https://schema.org',
       '@type': 'WebPage',
-      name: metaForPath(pathname).title,
-      description: metaForPath(pathname).description,
-      url: `${SITE_URL}${pathname}`,
+      name: metaForPath(normalized).title,
+      description: metaForPath(normalized).description,
+      url: `${SITE_URL}${normalized}`,
       isPartOf: { '@type': 'WebSite', name: 'Navish Kumar Portfolio', url: SITE_URL },
     },
   ]
 }
 
 function updateRouteMetadata(pathname: string): void {
-  const meta = metaForPath(pathname)
-  const canonicalUrl = `${SITE_URL}${pathname === '/' ? '/' : pathname}`
+  const normalized = normalizePath(pathname)
+  const meta = metaForPath(normalized)
+  const canonicalUrl = `${SITE_URL}${normalized}`
   const imageUrl = `${SITE_URL}${meta.image}`
   const isWorkRoute =
-    pathname === '/work/gain-graphs' ||
-    WORK_REGISTRY.some((work) => work.route === pathname)
+    normalized === '/work/gain-graphs' ||
+    WORK_REGISTRY.some((work) => work.route === normalized)
   document.title = meta.title
   document.documentElement.lang = 'en'
   setMeta('meta[name="description"]', { name: 'description' }, meta.description)
@@ -213,7 +228,7 @@ function updateRouteMetadata(pathname: string): void {
     structuredData.type = 'application/ld+json'
     document.head.appendChild(structuredData)
   }
-  structuredData.textContent = JSON.stringify(pageJsonLd(pathname))
+  structuredData.textContent = JSON.stringify(pageJsonLd(normalized))
 }
 
 export function RoutedApplication() {
