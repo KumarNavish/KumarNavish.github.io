@@ -189,6 +189,12 @@ try {
   )
   const secondCount = await spatial.page.locator('[data-scene-object]').count()
   assert(secondCount > firstCount, 'spatial: follow-up command did not preserve and extend world state')
+  await spatial.page.getByRole('button', { name: /^History$/i }).click()
+  await spatial.page.waitForFunction(
+    () => document.querySelectorAll('.spatial-history-item').length >= 2,
+    undefined,
+    { timeout: 5000 },
+  )
   assert((await spatial.page.locator('.spatial-history-item').count()) >= 2, 'spatial: command history did not persist')
   await spatial.page.screenshot({ path: path.join(outputDirectory, 'spatial-after-follow-up.png'), fullPage: true })
   report.screenshots.push(path.join(outputDirectory, 'spatial-after-follow-up.png'))
