@@ -1,0 +1,95 @@
+name: portfolio spatial acceptance repair
+
+on:
+  push:
+    branches: [portfolio-atlas-2026]
+    paths:
+      - '.github/workflows/portfolio-spatial-acceptance-repair.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+        with:
+          ref: portfolio-atlas-2026
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Repair accessible spatial controls and state-aware acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Navish portfolio release bot'
+          git config user.email '43814868+KumarNavish@users.noreply.github.com'
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          spatial = Path('site/src/spatial/SpatialLabPage.tsx')
+          source = spatial.read_text(encoding='utf-8')
+          replacements = [
+              (
+                  '''              key={object.id}\n              onPointerDown={(event) => onDragStart(object.id, event)}''',
+                  '''              key={object.id}\n              data-scene-object={object.id}\n              onPointerDown={(event) => onDragStart(object.id, event)}''',
+              ),
+              (
+                  '''            <div className="spatial-command-label">\n              <span>Describe or edit the world</span>''',
+                  '''            <div className="spatial-command-label">\n              <label htmlFor="spatial-scene-description">Describe the scene</label>''',
+              ),
+              (
+                  '''            <textarea\n              value={prompt}\n              onChange={(event) => setPrompt(event.target.value)}\n              rows={3}\n              aria-label="Scene instruction"\n            />''',
+                  '''            <textarea\n              id="spatial-scene-description"\n              value={prompt}\n              onChange={(event) => setPrompt(event.target.value)}\n              rows={3}\n              aria-label="Describe the scene"\n            />''',
+              ),
+              (
+                  '''              <button type="submit" className="is-primary">\n                Interpret and apply\n              </button>''',
+                  '''              <button\n                type="submit"\n                className="is-primary"\n                aria-label="Build or update world"\n              >\n                Build or update world\n              </button>''',
+              ),
+              (
+                  '''                      <article key={`${command}-${index}`}>''',
+                  '''                      <article className="spatial-history-item" key={`${command}-${index}`}>''',
+              ),
+          ]
+          for old, new in replacements:
+              if old not in source:
+                  raise SystemExit(f'Expected spatial source fragment missing: {old[:80]!r}')
+              source = source.replace(old, new, 1)
+          spatial.write_text(source, encoding='utf-8')
+
+          acceptance = Path('site/qa/portfolio.acceptance.mjs')
+          source = acceptance.read_text(encoding='utf-8')
+          old_first = '''  await spatial.page.getByRole('button', { name: /Build or update world/i }).click()\n  await spatial.page.waitForTimeout(300)\n  const firstCount = await spatial.page.locator('[data-scene-object]').count()'''
+          new_first = '''  await spatial.page.getByRole('button', { name: /Build or update world/i }).click()\n  await spatial.page\n    .locator('[data-scene-object]')\n    .first()\n    .waitFor({ state: 'visible', timeout: 5000 })\n  const firstCount = await spatial.page.locator('[data-scene-object]').count()'''
+          old_second = '''  await spatial.page.getByRole('button', { name: /Build or update world/i }).click()\n  await spatial.page.waitForTimeout(300)\n  const secondCount = await spatial.page.locator('[data-scene-object]').count()'''
+          new_second = '''  await spatial.page.getByRole('button', { name: /Build or update world/i }).click()\n  await spatial.page.waitForFunction(\n    (minimum) => document.querySelectorAll('[data-scene-object]').length > minimum,\n    firstCount,\n    { timeout: 5000 },\n  )\n  const secondCount = await spatial.page.locator('[data-scene-object]').count()'''
+          if old_first not in source or old_second not in source:
+              raise SystemExit('Expected spatial acceptance timing fragments were not found.')
+          source = source.replace(old_first, new_first, 1).replace(old_second, new_second, 1)
+          acceptance.write_text(source, encoding='utf-8')
+          PY
+
+          cd site
+          npm ci
+          npm run typecheck
+          npm run test
+          npm run build
+          cd ..
+
+      - name: Commit verified repair and remove one-time workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/portfolio-spatial-acceptance-repair.yml
+          git add site/src/spatial/SpatialLabPage.tsx site/qa/portfolio.acceptance.mjs
+          git commit -m 'fix(portfolio): align spatial interaction contract'
+          git push origin HEAD:portfolio-atlas-2026
