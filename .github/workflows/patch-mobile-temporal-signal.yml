@@ -1,0 +1,90 @@
+name: patch mobile temporal signal
+
+on:
+  push:
+    branches: [portfolio-radical-redesign-20260831]
+    paths:
+      - '.github/workflows/patch-mobile-temporal-signal.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: portfolio-radical-redesign-20260831
+          fetch-depth: 0
+      - name: Put past now next inside the mobile first viewport
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'missing patch target in {path}: {old[:100]!r}')
+              file.write_text(text.replace(old, new), encoding='utf-8')
+
+          pages = 'site/src/rebuilt/ResearchProgrammePages.tsx'
+          old = '            <span>Navish Kumar · machine-learning researcher and systems builder</span>\n            <h1>'
+          new = '''            <span>Navish Kumar · machine-learning researcher and systems builder</span>
+            <div className="mobile-horizon-inline" aria-label="Past, current, and frontier">
+              <span><b>Past</b><small>Structure + geometry</small></span>
+              <span><b>Now</b><small>Adaptation + authority</small></span>
+              <span><b>Next</b><small>Persistent worlds</small></span>
+            </div>
+            <h1>'''
+          replace(pages, old, new)
+
+          css = 'site/src/rebuilt/researchProgrammePages.css'
+          old = '.programme-hero-actions {\n  display: flex;'
+          new = '.mobile-horizon-inline { display: none; }\n\n.programme-hero-actions {\n  display: flex;'
+          replace(css, old, new)
+          old = '@media (max-width: 480px) {\n  .programme-hero-actions { display: grid; gap: 18px; }'
+          new = '''@media (max-width: 480px) {
+  .programme-hero-copy > span { margin-bottom: 0; }
+  .mobile-horizon-inline {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin: 18px 0 30px;
+    border-top: 1px solid var(--page-line);
+    border-bottom: 1px solid var(--page-line);
+  }
+  .mobile-horizon-inline > span {
+    display: grid;
+    align-content: center;
+    gap: 6px;
+    min-height: 58px;
+    padding: 9px 8px 9px 0;
+    border-right: 1px solid var(--page-line);
+  }
+  .mobile-horizon-inline > span:last-child { padding-left: 8px; border-right: 0; }
+  .mobile-horizon-inline > span:nth-child(2) { padding-left: 8px; }
+  .mobile-horizon-inline b {
+    font: 720 .55rem/1 var(--atlas-mono);
+    letter-spacing: .07em;
+    text-transform: uppercase;
+  }
+  .mobile-horizon-inline small { color: var(--page-muted); font-size: .52rem; line-height: 1.28; }
+  .mobile-horizon-inline > span:first-child b { color: var(--page-gold); }
+  .mobile-horizon-inline > span:nth-child(2) b { color: var(--page-warm); }
+  .mobile-horizon-inline > span:last-child b { color: var(--page-blue); }
+  .programme-hero-actions { display: grid; gap: 18px; }'''
+          replace(css, old, new)
+
+          qa = 'site/qa/portfolio.acceptance.mjs'
+          old = "  assert((await mobileHome.page.locator('.portfolio-nav').count()) === 1, 'mobile: navigation absent')"
+          new = old + "\n  assert((await mobileHome.page.locator('.mobile-horizon-inline:visible > span').count()) === 3, 'mobile: past-now-next signal absent from first viewport')"
+          replace(qa, old, new)
+          PY
+          git config user.name 'Navish portfolio redesign bot'
+          git config user.email '43814868+KumarNavish@users.noreply.github.com'
+          git add site/src/rebuilt/ResearchProgrammePages.tsx site/src/rebuilt/researchProgrammePages.css site/qa/portfolio.acceptance.mjs
+          git commit -m 'Make past, present, and frontier explicit in the mobile first viewport'
+          git push origin HEAD:portfolio-radical-redesign-20260831
