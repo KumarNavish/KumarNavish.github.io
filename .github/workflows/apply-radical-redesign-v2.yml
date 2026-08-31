@@ -1,0 +1,37 @@
+name: apply radical portfolio redesign v2
+
+on:
+  push:
+    branches: [portfolio-radical-redesign-20260831]
+    paths:
+      - '.redesign/chunk-*'
+      - '.github/workflows/apply-radical-redesign-v2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: portfolio-radical-redesign-20260831
+          fetch-depth: 0
+      - name: Reconstruct and materialize the rebuilt experience
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .redesign/chunk-* > /tmp/redesign.tar.xz
+          echo '5ceaa6a3746382f21ff0e0b56796f30736c64490014b53b8020846b131af636a  /tmp/redesign.tar.xz' | sha256sum -c -
+          xz -t /tmp/redesign.tar.xz
+          xz -dc /tmp/redesign.tar.xz | tar -xf -
+          rm -rf .redesign \
+            .github/workflows/apply-radical-redesign.yml \
+            .github/workflows/apply-radical-redesign-v2.yml
+          git config user.name 'Navish portfolio redesign bot'
+          git config user.email '43814868+KumarNavish@users.noreply.github.com'
+          git add -A
+          git commit -m 'Redesign the portfolio as a living research programme'
+          git push origin HEAD:portfolio-radical-redesign-20260831
