@@ -1,0 +1,38 @@
+name: patch portfolio acceptance progressive disclosure
+
+on:
+  push:
+    branches: [portfolio-radical-redesign-20260831]
+    paths:
+      - '.github/workflows/patch-portfolio-acceptance-progressive-disclosure.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: portfolio-radical-redesign-20260831
+          fetch-depth: 0
+      - name: Exercise the filter drawer as rendered
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('site/qa/portfolio.acceptance.mjs')
+          text = path.read_text(encoding='utf-8')
+          old = """  const themeSelect = trajectory.page.locator('.trajectory-controls select').nth(3)\n  const options = await themeSelect.locator('option').count()\n  if (options > 1) {\n    await themeSelect.selectOption({ index: 1 })\n"""
+          new = """  const themeSelect = trajectory.page.locator('.trajectory-controls select').nth(3)\n  if (!(await themeSelect.isVisible())) {\n    const filterDrawer = trajectory.page.locator('.trajectory-filter-drawer')\n    assert((await filterDrawer.count()) === 1, 'trajectory: filter disclosure absent')\n    await filterDrawer.locator('summary').click()\n    await themeSelect.waitFor({ state: 'visible' })\n  }\n  const options = await themeSelect.locator('option').count()\n  if (options > 1) {\n    await themeSelect.selectOption({ index: 1 })\n"""
+          if old not in text:
+              raise SystemExit('portfolio acceptance patch target missing')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+          git config user.name 'Navish portfolio redesign bot'
+          git config user.email '43814868+KumarNavish@users.noreply.github.com'
+          git add site/qa/portfolio.acceptance.mjs
+          git commit -m 'test(portfolio): exercise trajectory filter disclosure'
+          git push origin HEAD:portfolio-radical-redesign-20260831
