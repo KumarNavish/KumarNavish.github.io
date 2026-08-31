@@ -143,9 +143,13 @@ try {
     true,
   )
   await replay.page.getByRole('button', { name: /Next step/i }).click()
-  assert((await replay.page.locator('.chapter-stage-head span').first().textContent())?.includes('02'), 'chapter: next failed')
+  await replay.page.waitForFunction(() =>
+    document.querySelector('.chapter-stage-head span')?.textContent?.includes('02'),
+  )
   await replay.page.getByRole('button', { name: /Back/i }).click()
-  assert((await replay.page.locator('.chapter-stage-head span').first().textContent())?.includes('01'), 'chapter: back failed')
+  await replay.page.waitForFunction(() =>
+    document.querySelector('.chapter-stage-head span')?.textContent?.includes('01'),
+  )
   await replay.page.getByRole('button', { name: /Restart/i }).click()
   await replay.page.getByRole('button', { name: /Manipulate it/i }).click()
   assert((await replay.page.locator('.chapter-controls').count()) === 1, 'chapter: manipulate controls absent')
@@ -209,7 +213,9 @@ try {
   assert((await reduced.page.getByRole('button', { name: /Next step/i }).count()) === 1, 'reduced motion: next absent')
   assert((await reduced.page.getByRole('button', { name: /Back/i }).count()) === 1, 'reduced motion: back absent')
   await reduced.page.getByRole('button', { name: /Next step/i }).click()
-  assert((await reduced.page.locator('.chapter-stage-head span').first().textContent())?.includes('02'), 'reduced motion: sequence lost')
+  await reduced.page.waitForFunction(() =>
+    document.querySelector('.chapter-stage-head span')?.textContent?.includes('02'),
+  )
   await reduced.context.close()
   report.interactions.push('reduced-motion causal sequence')
 

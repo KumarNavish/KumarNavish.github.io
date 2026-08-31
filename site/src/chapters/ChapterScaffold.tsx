@@ -151,7 +151,7 @@ export function ChapterScaffold(props: ChapterScaffoldProps) {
                   <button
                     type="button"
                     aria-label="Back one step"
-                    onClick={() => setStep(props.activeStep - 1)}
+                    onClick={() => setStep(props.activeStep - 1, false)}
                   >
                     Back
                   </button>
@@ -160,7 +160,7 @@ export function ChapterScaffold(props: ChapterScaffoldProps) {
                     aria-label="Restart guided sequence"
                     onClick={() => {
                       setPlaying(false)
-                      setStep(0)
+                      setStep(0, false)
                     }}
                   >
                     Restart
@@ -177,7 +177,7 @@ export function ChapterScaffold(props: ChapterScaffoldProps) {
                   <button
                     type="button"
                     aria-label="Next step"
-                    onClick={() => setStep(props.activeStep + 1)}
+                    onClick={() => setStep(props.activeStep + 1, false)}
                   >
                     Next
                   </button>
