@@ -1,0 +1,45 @@
+name: patch radical redesign type errors
+
+on:
+  push:
+    branches: [portfolio-radical-redesign-20260831]
+    paths:
+      - '.github/workflows/patch-radical-redesign-types.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: portfolio-radical-redesign-20260831
+          fetch-depth: 0
+      - name: Apply strict-TypeScript repairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('site/src/rebuilt/ProjectStages.tsx')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('<text x="18" y="82">e^{-iθ}</text>', '<text x="18" y="82">e⁻ⁱθ</text>')
+          text = text.replace('{cells.map((cell, index) => {', '{cells.map((cell) => {')
+          path.write_text(text, encoding='utf-8')
+
+          path = Path('site/src/rebuilt/ResearchProgrammePages.tsx')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace(
+              'const [activeId, setActiveId] = useState(MEMORY_MOMENTS[0].id)',
+              "const [activeId, setActiveId] = useState<(typeof MEMORY_MOMENTS)[number]['id']>(MEMORY_MOMENTS[0].id)",
+          )
+          path.write_text(text, encoding='utf-8')
+          PY
+          git config user.name 'Navish portfolio redesign bot'
+          git config user.email '43814868+KumarNavish@users.noreply.github.com'
+          git add site/src/rebuilt/ProjectStages.tsx site/src/rebuilt/ResearchProgrammePages.tsx
+          git commit -m 'fix(portfolio): satisfy strict TypeScript in rebuilt stages'
+          git push origin HEAD:portfolio-radical-redesign-20260831
