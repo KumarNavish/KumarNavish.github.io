@@ -2,25 +2,25 @@ import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 
 const PortfolioHomePage = lazy(() =>
-  import('./portfolio/PortfolioPages').then((module) => ({ default: module.PortfolioHomePage })),
+  import('./portfolio/ConcentratedPortfolioPages').then((module) => ({ default: module.PortfolioHomePage })),
 )
 const TrajectoryPage = lazy(() =>
-  import('./portfolio/PortfolioPages').then((module) => ({ default: module.TrajectoryPage })),
+  import('./portfolio/ConcentratedPortfolioPages').then((module) => ({ default: module.TrajectoryPage })),
 )
 const WorkIndexPage = lazy(() =>
-  import('./portfolio/PortfolioPages').then((module) => ({ default: module.WorkIndexPage })),
+  import('./portfolio/ConcentratedPortfolioPages').then((module) => ({ default: module.WorkIndexPage })),
 )
 const ResearchPage = lazy(() =>
-  import('./portfolio/PortfolioPages').then((module) => ({ default: module.ResearchPage })),
+  import('./portfolio/ConcentratedPortfolioPages').then((module) => ({ default: module.ResearchPage })),
 )
 const SystemsPage = lazy(() =>
-  import('./portfolio/PortfolioPages').then((module) => ({ default: module.SystemsPage })),
+  import('./portfolio/ConcentratedPortfolioPages').then((module) => ({ default: module.SystemsPage })),
 )
 const FrontierPage = lazy(() =>
-  import('./portfolio/PortfolioPages').then((module) => ({ default: module.FrontierPage })),
+  import('./portfolio/ConcentratedPortfolioPages').then((module) => ({ default: module.FrontierPage })),
 )
 const AboutPage = lazy(() =>
-  import('./portfolio/PortfolioPages').then((module) => ({ default: module.AboutPage })),
+  import('./portfolio/ConcentratedPortfolioPages').then((module) => ({ default: module.AboutPage })),
 )
 const RegistryWorkPage = lazy(() =>
   import('./portfolio/PortfolioPages').then((module) => ({ default: module.RegistryWorkPage })),
