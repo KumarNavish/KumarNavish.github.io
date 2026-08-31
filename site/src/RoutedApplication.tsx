@@ -189,10 +189,13 @@ function updateRouteMetadata(pathname: string): void {
   const meta = metaForPath(pathname)
   const canonicalUrl = `${SITE_URL}${pathname === '/' ? '/' : pathname}`
   const imageUrl = `${SITE_URL}${meta.image}`
+  const isWorkRoute =
+    pathname === '/work/gain-graphs' ||
+    WORK_REGISTRY.some((work) => work.route === pathname)
   document.title = meta.title
   document.documentElement.lang = 'en'
   setMeta('meta[name="description"]', { name: 'description' }, meta.description)
-  setMeta('meta[property="og:type"]', { property: 'og:type' }, pathname.startsWith('/work/') ? 'article' : 'website')
+  setMeta('meta[property="og:type"]', { property: 'og:type' }, isWorkRoute ? 'article' : 'website')
   setMeta('meta[property="og:title"]', { property: 'og:title' }, meta.title)
   setMeta('meta[property="og:description"]', { property: 'og:description' }, meta.description)
   setMeta('meta[property="og:url"]', { property: 'og:url' }, canonicalUrl)
