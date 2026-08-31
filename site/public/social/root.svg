@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#fff"/>
+  <path d="M0 0H1200V630H0Z" fill="url(#g)" opacity=".72"/>
+  <defs><radialGradient id="g" cx="0" cy="0" r="1" gradientTransform="translate(930 155) rotate(140) scale(780 650)" gradientUnits="userSpaceOnUse"><stop stop-color="#dce7ff"/><stop offset=".5" stop-color="#fff0e8" stop-opacity=".82"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient></defs>
+  <text x="72" y="88" fill="#c9472d" font-family="monospace" font-size="18" font-weight="700" letter-spacing="3">NAVISH KUMAR · RESEARCH + SYSTEMS</text>
+  <text x="68" y="230" fill="#111310" font-family="Arial, sans-serif" font-size="86" font-weight="600" letter-spacing="-6">Difficult systems,</text>
+  <text x="68" y="327" fill="#285ec4" font-family="Arial, sans-serif" font-size="86" font-weight="600" letter-spacing="-6">made inspectable.</text>
+  <text x="72" y="430" fill="#5d625b" font-family="Arial, sans-serif" font-size="27">Mathematical learning · continual adaptation · evidence-grounded agents</text>
+  <text x="72" y="470" fill="#5d625b" font-family="Arial, sans-serif" font-size="27">spatial intelligence · living, motion-native explanations</text>
+  <line x1="72" y1="546" x2="1128" y2="546" stroke="#d9ddd4"/>
+  <text x="72" y="590" fill="#111310" font-family="Arial, sans-serif" font-size="24" font-weight="700">Machine-learning researcher and systems builder</text>
+  <text x="1000" y="590" fill="#5d625b" font-family="monospace" font-size="17">Basel</text>
+</svg>
