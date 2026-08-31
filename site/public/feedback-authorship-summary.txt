@@ -1,0 +1,5 @@
+Homepage: one research thesis, one programme map, four selected works, and a scan-level ten-work index.
+Trajectory: programme overview is the default; project evidence opens only after selection.
+Work index: question/date/status/type first; semantic preview and contribution open on demand.
+Mobile: compact menu replaces six horizontally competing links.
+Infrastructure: typed registry, canonical routes, deep scientific interactions, reduced motion, and deployment workflows remain intact.
