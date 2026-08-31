@@ -1024,13 +1024,11 @@ function replayValues(time: number, drift: number) {
 function TiCStage({
   step,
   time,
-  drift,
   budget,
   values,
 }: {
   step: number
   time: number
-  drift: number
   budget: number
   values: ReturnType<typeof replayValues>
 }) {
@@ -1179,7 +1177,7 @@ export function TiCLMChapter() {
       steps={TIC_STEPS}
       activeStep={step}
       onStepChange={setStep}
-      stage={<TiCStage step={step} time={time} drift={drift} budget={allocation} values={values} />}
+      stage={<TiCStage step={step} time={time} budget={allocation} values={values} />}
       insight={
         [
           `A ${Math.round(budget * 100)}% replay ratio means the same fraction of current-window tokens is removed.`,
