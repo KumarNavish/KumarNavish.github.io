@@ -1,23 +1,25 @@
-name: portfolio authorship contract
+name: portfolio radical redesign contract
 
 on:
   pull_request:
     branches: [master]
     paths:
-      - 'site/src/portfolio/PortfolioPages.tsx'
-      - 'site/src/portfolio/portfolioPages.css'
+      - 'site/src/rebuilt/**'
+      - 'site/src/App.tsx'
       - 'site/src/shared/PortfolioShell.tsx'
       - 'site/src/shared/portfolio.css'
       - 'site/public/authorship-pass.json'
+      - 'site/public/radical-redesign.json'
       - '.github/workflows/portfolio-authorship-contract.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  authorship-contract:
+  radical-redesign:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: site
@@ -29,65 +31,133 @@ jobs:
           cache: npm
           cache-dependency-path: site/package-lock.json
       - run: npm ci
-      - name: Validate feedback architecture in source
+      - name: Validate redesign source contract
         run: |
           node - <<'JS'
           const fs = require('node:fs')
-          const page = fs.readFileSync('src/portfolio/PortfolioPages.tsx', 'utf8')
-          const shell = fs.readFileSync('src/shared/PortfolioShell.tsx', 'utf8')
-          const required = [
-            'The connective tissue is more important than the categories.',
-            'All ten works, without ten competing showcases.',
-            'Begin with the programme.',
-            'Depth on demand',
-            'portfolio-mobile-menu',
-          ]
-          for (const phrase of required) {
-            if (!(page + shell).includes(phrase)) throw new Error(`missing authorship contract: ${phrase}`)
-          }
+          const pages = fs.readFileSync('src/rebuilt/ResearchProgrammePages.tsx', 'utf8')
+          const stages = fs.readFileSync('src/rebuilt/ProjectStages.tsx', 'utf8')
+          const casepath = fs.readFileSync('src/rebuilt/CasePathProductExperience.tsx', 'utf8')
+          const spatial = fs.readFileSync('src/rebuilt/SpatialWorldExperience.tsx', 'utf8')
           const marker = JSON.parse(fs.readFileSync('public/authorship-pass.json', 'utf8'))
-          if (!marker.feedback_executed || marker.featured_work_count !== 4 || marker.complete_work_count !== 10) {
-            throw new Error('authorship marker does not match release contract')
+          for (const phrase of [
+            'Three moments to remember',
+            'Enter through a question',
+            'Apply the authoritative correction',
+            'Language should change a world',
+          ]) {
+            if (!(pages + stages + casepath + spatial).includes(phrase)) throw new Error(`missing experience contract: ${phrase}`)
+          }
+          if (!marker.surface_rebuilt || marker.memory_moments !== 3 || marker.question_portals !== 4 || marker.complete_work_count !== 10) {
+            throw new Error('radical redesign marker mismatch')
           }
           JS
       - run: npm run check
-      - name: Browser contract
+      - name: Install browser verification
         run: |
-          npm install --no-save --package-lock=false playwright@1.56.1
+          npm install --no-save --package-lock=false playwright@1.56.1 lighthouse@12.8.2
           npx playwright install --with-deps chromium
-          npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/authorship-preview.log 2>&1 &
-          preview_pid=$!
-          trap 'kill $preview_pid 2>/dev/null || true' EXIT
+      - name: Start production preview
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/radical-preview.log 2>&1 &
+          echo $! > /tmp/radical-preview.pid
           for attempt in $(seq 1 60); do
-            curl -fsS http://127.0.0.1:4173/ >/dev/null && break
+            curl -fsS http://127.0.0.1:4173/ >/dev/null && exit 0
             sleep 1
           done
+          cat /tmp/radical-preview.log
+          exit 1
+      - name: Exercise the rebuilt experience
+        run: |
           node - <<'JS'
           const { chromium } = require('playwright')
+          const assert = (value, message) => { if (!value) throw new Error(message) }
           ;(async () => {
             const browser = await chromium.launch({ headless: true })
             try {
               const desktop = await browser.newPage({ viewport: { width: 1440, height: 1000 } })
+              const errors = []
+              desktop.on('pageerror', error => errors.push(error.message))
+              desktop.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
+
               await desktop.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' })
-              if (await desktop.locator('[data-featured-work]').count() !== 4) throw new Error('homepage featured count')
-              if (await desktop.locator('[data-work-id]').count() !== 10) throw new Error('homepage work index count')
-              if (await desktop.locator('.programme-rail li').count() !== 7) throw new Error('programme rail count')
+              assert(await desktop.locator('.programme-stage').count() === 1, 'homepage programme stage missing')
+              assert(await desktop.locator('.memory-selector button').count() === 3, 'three memory moments missing')
+              assert(await desktop.locator('.question-portals article').count() === 4, 'question portals missing')
+              assert(await desktop.locator('[data-work-id]').count() === 10, 'complete ten-work index missing')
+              assert(await desktop.locator('.portfolio-period-card').count() === 3, 'past/current/frontier signal missing')
+              const before = await desktop.locator('.programme-stage').getAttribute('data-programme-index')
+              await desktop.getByRole('button', { name: /Next research moment/i }).click()
+              const after = await desktop.locator('.programme-stage').getAttribute('data-programme-index')
+              assert(before !== after, 'programme stage did not advance')
+              await desktop.getByRole('tab', { name: /Correct forgetting/i }).click()
+              assert(await desktop.locator('[data-project-mechanism="experience-replay-optimization"]').count() === 1, 'memory stage did not switch to replay')
+
               await desktop.goto('http://127.0.0.1:4173/trajectory', { waitUntil: 'networkidle' })
-              if (await desktop.locator('.trajectory-overview-note').count() !== 1) throw new Error('trajectory must open in overview')
-              await desktop.locator('.trajectory-node').first().click()
-              if (await desktop.locator('.trajectory-inspector').count() !== 1) throw new Error('trajectory focus did not open')
+              assert(await desktop.locator('.trajectory-node').count() === 10, 'trajectory does not expose ten nodes')
+              assert(await desktop.locator('.trajectory-overview-message').count() === 1, 'trajectory must open at programme level')
+              await desktop.locator('.trajectory-node').nth(5).click()
+              assert(await desktop.locator('.trajectory-selected-work').count() === 1, 'trajectory selection did not open')
+              const nodeLeftBefore = await desktop.locator('.trajectory-node').nth(2).evaluate(node => getComputedStyle(node).left)
+              await desktop.getByRole('tab', { name: 'Questions' }).click()
+              await desktop.waitForTimeout(600)
+              const nodeLeftAfter = await desktop.locator('.trajectory-node').nth(2).evaluate(node => getComputedStyle(node).left)
+              assert(nodeLeftBefore !== nodeLeftAfter, 'trajectory nodes did not reorganize')
+
               await desktop.goto('http://127.0.0.1:4173/work', { waitUntil: 'networkidle' })
-              if (await desktop.locator('.work-index-placeholder').count() !== 1) throw new Error('work index should begin quiet')
-              await desktop.getByRole('button', { name: 'Preview' }).first().click()
-              if (await desktop.locator('.work-index-inspector.has-selection').count() !== 1) throw new Error('work preview did not open')
+              assert(await desktop.locator('.work-index-entry').count() === 10, 'work atlas missing ten entries')
+              await desktop.locator('.work-index-entry').nth(8).click()
+              assert(await desktop.locator('[data-guided-work="casepath"]').count() === 1, 'active work stage did not switch')
+
+              await desktop.goto('http://127.0.0.1:4173/systems/casepath', { waitUntil: 'networkidle' })
+              for (let i = 0; i < 4; i += 1) await desktop.getByRole('button', { name: 'Next', exact: true }).click()
+              assert(await desktop.locator('.case-gate.gate-hold.is-visible').count() === 1, 'CasePath did not hold on conflict')
+              await desktop.getByRole('button', { name: /Apply the authoritative correction/i }).click()
+              assert(await desktop.locator('.case-packet.is-visible').count() === 1, 'CasePath correction did not produce packet')
+              assert(await desktop.locator('.case-gate.gate-accept.is-visible').count() === 1, 'CasePath correction did not admit action')
+
+              await desktop.goto('http://127.0.0.1:4173/frontier/spatial-intelligence', { waitUntil: 'networkidle' })
+              const prompt = desktop.getByLabel(/Describe the scene/i)
+              await prompt.fill('Create a quiet mountain laboratory at sunset. Put a microscope beside a robotic arm. Ask the agent to inspect a sample.')
+              await desktop.getByRole('button', { name: /Build or update world/i }).click()
+              await desktop.locator('[data-scene-object]').first().waitFor({ state: 'visible' })
+              const firstCount = await desktop.locator('[data-scene-object]').count()
+              await prompt.fill('Add a second sample beside the microscope and make the room darker.')
+              await desktop.getByRole('button', { name: /Build or update world/i }).click()
+              await desktop.waitForFunction(minimum => document.querySelectorAll('[data-scene-object]').length > minimum, firstCount)
+              await desktop.getByRole('tab', { name: /^history$/i }).click()
+              assert(await desktop.locator('.spatial-history-item').count() >= 2, 'spatial history did not persist')
+
               const mobile = await browser.newPage({ viewport: { width: 390, height: 844 } })
               await mobile.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' })
-              await mobile.locator('.portfolio-mobile-menu summary').click()
-              if (await mobile.locator('.portfolio-mobile-nav a:visible').count() !== 6) throw new Error('mobile menu contract')
-              const overflow = await mobile.evaluate(() => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - document.documentElement.clientWidth)
-              if (overflow > 1) throw new Error(`mobile overflow ${overflow}`)
+              await mobile.getByRole('button', { name: /Menu/i }).click()
+              assert(await mobile.locator('.portfolio-nav a:visible').count() === 6, 'mobile navigation incomplete')
+              const homeOverflow = await mobile.evaluate(() => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - document.documentElement.clientWidth)
+              assert(homeOverflow <= 1, `mobile home overflow ${homeOverflow}`)
+              await mobile.goto('http://127.0.0.1:4173/trajectory', { waitUntil: 'networkidle' })
+              assert(await mobile.locator('.trajectory-mobile-node:visible').count() === 10, 'mobile timeline does not precede detail')
+              const timelineOverflow = await mobile.evaluate(() => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - document.documentElement.clientWidth)
+              assert(timelineOverflow <= 1, `mobile trajectory overflow ${timelineOverflow}`)
+
+              const reducedContext = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' })
+              const reduced = await reducedContext.newPage()
+              await reduced.goto('http://127.0.0.1:4173/work', { waitUntil: 'networkidle' })
+              assert(await reduced.getByRole('button', { name: /Step mode/i }).count() >= 1, 'reduced motion did not preserve explicit steps')
+              await reducedContext.close()
+
+              assert(errors.length === 0, `browser errors: ${errors.join(' | ')}`)
             } finally {
               await browser.close()
             }
-          })().catch((error) => { console.error(error); process.exit(1) })
+          })().catch(error => { console.error(error); process.exit(1) })
           JS
+      - name: Lighthouse first viewport
+        run: |
+          export CHROME_PATH="$(node -e "console.log(require('playwright').chromium.executablePath())")"
+          npx lighthouse http://127.0.0.1:4173/ --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage" --output=json --output-path=/tmp/radical-lighthouse.json --quiet
+          node qa/assert-lighthouse.mjs /tmp/radical-lighthouse.json /tmp/radical-lighthouse-summary.json
+      - name: Stop preview
+        if: always()
+        run: kill "$(cat /tmp/radical-preview.pid)" 2>/dev/null || true

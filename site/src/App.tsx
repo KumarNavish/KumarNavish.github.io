@@ -2,25 +2,25 @@ import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 
 const PortfolioHomePage = lazy(() =>
-  import('./portfolio/ConcentratedPortfolioPages').then((module) => ({ default: module.PortfolioHomePage })),
+  import('./rebuilt/ResearchProgrammePages').then((module) => ({ default: module.PortfolioHomePage })),
 )
 const TrajectoryPage = lazy(() =>
-  import('./portfolio/ConcentratedPortfolioPages').then((module) => ({ default: module.TrajectoryPage })),
+  import('./rebuilt/ResearchProgrammePages').then((module) => ({ default: module.TrajectoryPage })),
 )
 const WorkIndexPage = lazy(() =>
-  import('./portfolio/ConcentratedPortfolioPages').then((module) => ({ default: module.WorkIndexPage })),
+  import('./rebuilt/ResearchProgrammePages').then((module) => ({ default: module.WorkIndexPage })),
 )
 const ResearchPage = lazy(() =>
-  import('./portfolio/ConcentratedPortfolioPages').then((module) => ({ default: module.ResearchPage })),
+  import('./rebuilt/ResearchProgrammePages').then((module) => ({ default: module.ResearchPage })),
 )
 const SystemsPage = lazy(() =>
-  import('./portfolio/ConcentratedPortfolioPages').then((module) => ({ default: module.SystemsPage })),
+  import('./rebuilt/ResearchProgrammePages').then((module) => ({ default: module.SystemsPage })),
 )
 const FrontierPage = lazy(() =>
-  import('./portfolio/ConcentratedPortfolioPages').then((module) => ({ default: module.FrontierPage })),
+  import('./rebuilt/ResearchProgrammePages').then((module) => ({ default: module.FrontierPage })),
 )
 const AboutPage = lazy(() =>
-  import('./portfolio/ConcentratedPortfolioPages').then((module) => ({ default: module.AboutPage })),
+  import('./rebuilt/ResearchProgrammePages').then((module) => ({ default: module.AboutPage })),
 )
 const RegistryWorkPage = lazy(() =>
   import('./portfolio/PortfolioPages').then((module) => ({ default: module.RegistryWorkPage })),
@@ -46,11 +46,11 @@ const UrbanLogisticsChapter = lazy(() =>
 const CounterspeechChapter = lazy(() =>
   import('./chapters/AppliedResearchChapters').then((module) => ({ default: module.CounterspeechChapter })),
 )
-const CasePathChapter = lazy(() =>
-  import('./chapters/AppliedResearchChapters').then((module) => ({ default: module.CasePathChapter })),
+const CasePathProductPage = lazy(() =>
+  import('./rebuilt/CasePathProductExperience').then((module) => ({ default: module.CasePathProductPage })),
 )
-const SpatialLabPage = lazy(() =>
-  import('./spatial/SpatialLabPage').then((module) => ({ default: module.SpatialLabPage })),
+const SpatialWorldPage = lazy(() =>
+  import('./rebuilt/SpatialWorldExperience').then((module) => ({ default: module.SpatialWorldPage })),
 )
 
 function LoadingSurface() {
@@ -82,8 +82,8 @@ export default function App() {
         <Route path="/work/experience-replay-optimization" element={<ReplayOptimizationChapter />} />
         <Route path="/work/rank-feasibility" element={<RankFeasibilityChapter />} />
         <Route path="/work/ticlm-replay-value" element={<TiCLMChapter />} />
-        <Route path="/systems/casepath" element={<CasePathChapter />} />
-        <Route path="/frontier/spatial-intelligence" element={<SpatialLabPage />} />
+        <Route path="/systems/casepath" element={<CasePathProductPage />} />
+        <Route path="/frontier/spatial-intelligence" element={<SpatialWorldPage />} />
 
         <Route path="/work/casepath" element={<Navigate to="/systems/casepath" replace />} />
         <Route path="/work/spatial-intelligence" element={<Navigate to="/frontier/spatial-intelligence" replace />} />
