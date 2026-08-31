@@ -290,6 +290,11 @@ export function PortfolioHomePage() {
         <section className="programme-hero" id="top">
           <div className="programme-hero-copy">
             <span>Navish Kumar · machine-learning researcher and systems builder</span>
+            <div className="mobile-horizon-inline" aria-label="Past, current, and frontier">
+              <span><b>Past</b><small>Structure + geometry</small></span>
+              <span><b>Now</b><small>Adaptation + authority</small></span>
+              <span><b>Next</b><small>Persistent worlds</small></span>
+            </div>
             <h1>
               I study how intelligent systems change—
               <em>and how to keep that change visible.</em>

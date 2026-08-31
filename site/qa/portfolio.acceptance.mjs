@@ -212,6 +212,7 @@ try {
 
   const mobileHome = await openRoute(browser, '/', mobile, 'home-mobile', true)
   assert((await mobileHome.page.locator('.portfolio-nav').count()) === 1, 'mobile: navigation absent')
+  assert((await mobileHome.page.locator('.mobile-horizon-inline:visible > span').count()) === 3, 'mobile: past-now-next signal absent from first viewport')
   await mobileHome.context.close()
   const mobileTrajectory = await openRoute(browser, '/trajectory', mobile, 'trajectory-mobile', true)
   assert((await mobileTrajectory.page.locator('.trajectory-node').count()) === 10, 'mobile trajectory: missing works')

@@ -124,6 +124,8 @@
   font-size: clamp(1.05rem, 1.55vw, 1.28rem);
   line-height: 1.65;
 }
+.mobile-horizon-inline { display: none; }
+
 .programme-hero-actions {
   display: flex;
   flex-wrap: wrap;
@@ -669,6 +671,29 @@
 }
 
 @media (max-width: 480px) {
+  .programme-hero-copy > span { margin-bottom: 0; }
+  .mobile-horizon-inline {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin: 18px 0 30px;
+    border-top: 1px solid var(--page-line);
+    border-bottom: 1px solid var(--page-line);
+  }
+  .mobile-horizon-inline > span {
+    display: grid;
+    align-content: center;
+    gap: 6px;
+    min-height: 58px;
+    padding: 9px 8px 9px 0;
+    border-right: 1px solid var(--page-line);
+  }
+  .mobile-horizon-inline > span:last-child { padding-left: 8px; border-right: 0; }
+  .mobile-horizon-inline > span:nth-child(2) { padding-left: 8px; }
+  .mobile-horizon-inline b { font: 720 .55rem/1 var(--atlas-mono); letter-spacing: .07em; text-transform: uppercase; }
+  .mobile-horizon-inline small { color: var(--page-muted); font-size: .52rem; line-height: 1.28; }
+  .mobile-horizon-inline > span:first-child b { color: var(--page-gold); }
+  .mobile-horizon-inline > span:nth-child(2) b { color: var(--page-warm); }
+  .mobile-horizon-inline > span:last-child b { color: var(--page-blue); }
   .programme-hero-actions { display: grid; gap: 18px; }
   .programme-hero h1 { font-size: clamp(2.9rem, 15.3vw, 4.2rem); }
   .programme-page-intro { min-height: auto; padding: 56px 0; }
