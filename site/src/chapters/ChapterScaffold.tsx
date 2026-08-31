@@ -44,6 +44,10 @@ type ChapterScaffoldProps = {
   next: ChapterLink
 }
 
+function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
 function useStoryObserver(onStepChange: (step: number) => void, count: number): void {
   const callback = useRef(onStepChange)
   useEffect(() => {
@@ -76,18 +80,27 @@ export function ChapterScaffold(props: ChapterScaffoldProps) {
   useStoryObserver(props.onStepChange, props.steps.length)
 
   useEffect(() => {
-    if (!playing || mode !== 'watch') return undefined
+    if (!playing || mode !== 'watch' || prefersReducedMotion()) return undefined
     const id = window.setInterval(() => {
       props.onStepChange((props.activeStep + 1) % props.steps.length)
     }, 2800)
     return () => window.clearInterval(id)
-  }, [mode, playing, props])
+  }, [mode, playing, props.activeStep, props.onStepChange, props.steps.length])
 
-  const setStep = (index: number) => {
-    props.onStepChange(index)
-    document
-      .getElementById(`chapter-step-${index}`)
-      ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  const setStep = (index: number, scroll = true) => {
+    const normalized = (index + props.steps.length) % props.steps.length
+    props.onStepChange(normalized)
+    if (scroll) {
+      document.getElementById(`chapter-step-${normalized}`)?.scrollIntoView({
+        behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+        block: 'center',
+      })
+    }
+  }
+
+  const setInstrumentMode = (nextMode: ChapterMode) => {
+    setMode(nextMode)
+    if (nextMode !== 'watch') setPlaying(false)
   }
 
   return (
@@ -111,8 +124,9 @@ export function ChapterScaffold(props: ChapterScaffoldProps) {
               <button
                 key={item}
                 type="button"
-                onClick={() => setMode(item)}
+                onClick={() => setInstrumentMode(item)}
                 className={mode === item ? 'is-active' : ''}
+                aria-pressed={mode === item}
               >
                 {item === 'watch'
                   ? 'Watch the idea'
@@ -133,27 +147,40 @@ export function ChapterScaffold(props: ChapterScaffoldProps) {
                 <strong>{props.steps[props.activeStep]?.label}</strong>
               </div>
               {mode === 'watch' ? (
-                <button
-                  type="button"
-                  className="chapter-play"
-                  onClick={() => setPlaying((value) => !value)}
-                >
-                  {playing ? 'Pause sequence' : 'Play sequence'}
-                </button>
+                <div className="chapter-transport" aria-label="Guided sequence controls">
+                  <button type="button" onClick={() => setStep(props.activeStep - 1)}>
+                    Back
+                  </button>
+                  <button type="button" onClick={() => {
+                    setPlaying(false)
+                    setStep(0)
+                  }}>
+                    Restart
+                  </button>
+                  <button
+                    type="button"
+                    className="chapter-play"
+                    onClick={() => setPlaying((value) => !value)}
+                    aria-pressed={playing}
+                  >
+                    {playing ? 'Pause' : 'Play'}
+                  </button>
+                  <button type="button" onClick={() => setStep(props.activeStep + 1)}>
+                    Next
+                  </button>
+                </div>
               ) : null}
             </div>
 
             <div className="chapter-stage" data-mode={mode}>
               {props.stage}
-              <div className="chapter-stage-insight">
+              <div className="chapter-stage-insight" aria-live="polite">
                 <span>What to notice</span>
                 <p>{props.insight}</p>
               </div>
             </div>
 
-            {mode === 'manipulate' ? (
-              <div className="chapter-controls">{props.controls}</div>
-            ) : null}
+            {mode === 'manipulate' ? <div className="chapter-controls">{props.controls}</div> : null}
             {mode === 'inspect' ? <div className="chapter-inspect">{props.inspect}</div> : null}
 
             <div className="chapter-step-dots" aria-label="Explanatory sequence">
@@ -164,6 +191,7 @@ export function ChapterScaffold(props: ChapterScaffoldProps) {
                   className={props.activeStep === index ? 'is-active' : ''}
                   onClick={() => setStep(index)}
                   aria-label={`Go to ${step.label}`}
+                  aria-current={props.activeStep === index ? 'step' : undefined}
                 />
               ))}
             </div>
