@@ -1,0 +1,333 @@
+.work-preview {
+  min-width: 0;
+  margin: 0;
+  color: var(--atlas-ink);
+}
+.work-preview-frame {
+  overflow: hidden;
+  border: 1px solid var(--atlas-line);
+  border-radius: 18px;
+  background: var(--atlas-soft);
+}
+.work-preview svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 154px;
+}
+.work-preview svg line,
+.work-preview svg path,
+.work-preview svg polyline,
+.work-preview svg ellipse,
+.work-preview svg polygon,
+.work-preview svg rect,
+.work-preview svg circle {
+  vector-effect: non-scaling-stroke;
+}
+.work-preview svg line,
+.work-preview svg path,
+.work-preview svg polyline {
+  fill: none;
+  stroke: #aeb4aa;
+  stroke-width: 1.2;
+}
+.work-preview svg circle {
+  fill: #fff;
+  stroke: #70776d;
+  stroke-width: 1.2;
+}
+.work-preview svg text {
+  fill: var(--atlas-muted);
+  font: 600 7px/1 var(--atlas-mono);
+  letter-spacing: 0.015em;
+}
+.work-preview-readout {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 43px;
+  padding: 10px 13px;
+  border-top: 1px solid var(--atlas-line);
+  background: rgba(255, 255, 255, 0.82);
+}
+.work-preview-readout span {
+  color: var(--atlas-muted);
+  font: 700 0.56rem/1 var(--atlas-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.work-preview-readout strong {
+  max-width: 65%;
+  text-align: right;
+  font-size: 0.68rem;
+  line-height: 1.25;
+}
+.work-preview > figcaption {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+.work-preview > figcaption span {
+  padding-top: 3px;
+  color: var(--atlas-warm);
+  font: 700 0.59rem/1 var(--atlas-mono);
+}
+.work-preview > figcaption p {
+  margin: 0;
+  color: var(--atlas-muted);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+.work-preview-step-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+.work-preview-step-controls button {
+  min-height: 44px;
+  border: 1px solid var(--atlas-line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--atlas-ink);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+/* Empirical interaction network */
+.work-preview .preview-harm circle {
+  fill: #fff0ec;
+  stroke: var(--atlas-warm);
+}
+.work-preview .preview-protect circle {
+  fill: #edf3ff;
+  stroke: var(--atlas-blue);
+}
+.work-preview .preview-ring {
+  fill: none !important;
+  opacity: 0.28;
+}
+.work-preview .preview-live {
+  stroke: var(--atlas-blue) !important;
+  stroke-width: 2 !important;
+}
+
+/* Gain graphs */
+.work-preview .preview-phase-edge {
+  stroke: var(--atlas-warm);
+  stroke-width: 3;
+  stroke-dasharray: 4 3;
+}
+.work-preview .preview-cycle {
+  stroke: var(--atlas-warm);
+  stroke-width: 2;
+}
+.work-preview .preview-spectrum-bar {
+  fill: #aeb4aa;
+  stroke: none;
+}
+.work-preview .preview-spectrum-first {
+  fill: var(--atlas-warm);
+  stroke: none;
+}
+
+/* Urban */
+.work-preview .preview-route {
+  stroke: var(--atlas-blue);
+  stroke-width: 3;
+}
+.work-preview .preview-average {
+  fill: rgba(157, 100, 5, 0.08);
+  stroke: var(--atlas-gold);
+  stroke-dasharray: 5 4;
+}
+.work-preview polygon {
+  fill: var(--atlas-blue);
+  stroke: #fff;
+  stroke-width: 1.4;
+}
+
+/* Natural gradient */
+.work-preview ellipse {
+  fill: none;
+  stroke: rgba(40, 94, 196, 0.25);
+}
+.work-preview .preview-euclidean {
+  opacity: 0.16;
+  stroke: var(--atlas-warm);
+  stroke-width: 2;
+}
+.work-preview .preview-natural {
+  opacity: 0.16;
+  stroke: var(--atlas-blue);
+  stroke-width: 2.5;
+}
+.work-preview .preview-visible {
+  opacity: 1;
+}
+.work-preview .preview-guarantee {
+  fill: var(--atlas-ink);
+  stroke: none;
+}
+
+/* Replay */
+.work-preview marker path {
+  fill: currentColor;
+  stroke: none;
+}
+.work-preview .preview-current {
+  color: var(--atlas-warm);
+  stroke: var(--atlas-warm);
+  stroke-width: 2.4;
+}
+.work-preview .preview-old-loss {
+  stroke: var(--atlas-warm);
+  stroke-width: 2;
+}
+.work-preview .preview-target {
+  color: var(--atlas-blue);
+  stroke: var(--atlas-blue);
+  stroke-width: 2.6;
+  stroke-dasharray: 5 4;
+}
+.work-preview .preview-selected line,
+.work-preview .preview-selected circle {
+  stroke: var(--atlas-green);
+  stroke-width: 2;
+}
+.work-preview .preview-residual {
+  stroke: var(--atlas-warm);
+  stroke-width: 2;
+  stroke-dasharray: 3 3;
+}
+
+/* Rank */
+.work-preview .preview-feasible-space {
+  fill: rgba(40, 94, 196, 0.12);
+  stroke: var(--atlas-blue);
+}
+.work-preview .preview-desired {
+  stroke: var(--atlas-ink);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+}
+.work-preview .preview-constraint {
+  stroke: #8d9488;
+}
+.work-preview .preview-blocked-target {
+  fill: #fff0ec;
+  stroke: var(--atlas-warm);
+}
+.work-preview .preview-feasible-target {
+  fill: #e9f6ef;
+  stroke: var(--atlas-green);
+  stroke-width: 2;
+}
+.work-preview .preview-budget {
+  stroke: var(--atlas-gold);
+  stroke-width: 3;
+}
+
+/* Temporal */
+.work-preview .preview-past-window {
+  fill: #e9eef8;
+  stroke: #9aa8c0;
+}
+.work-preview .preview-current-window {
+  fill: #fff0ec;
+  stroke: var(--atlas-warm);
+  stroke-width: 2;
+}
+.work-preview .preview-future-window {
+  fill: #fff;
+  stroke: #b7bcb3;
+  stroke-dasharray: 3 2;
+}
+.work-preview .preview-replay-flow {
+  stroke: var(--atlas-blue);
+  stroke-width: 2.4;
+}
+.work-preview .preview-benefit {
+  stroke: var(--atlas-green);
+  stroke-width: 4;
+}
+.work-preview .preview-cost {
+  stroke: var(--atlas-warm);
+  stroke-width: 4;
+}
+
+/* CasePath */
+.work-preview .preview-complete rect {
+  fill: #eef5ff;
+  stroke: var(--atlas-blue);
+}
+.work-preview .preview-complete path {
+  stroke: var(--atlas-blue);
+  stroke-width: 2;
+}
+.work-preview .preview-proof {
+  stroke: var(--atlas-green);
+  stroke-width: 3;
+}
+
+/* Spatial */
+.work-preview .preview-mountain {
+  fill: #dbe4ef;
+  stroke: #78899a;
+}
+.work-preview .preview-intent {
+  fill: #fff;
+  stroke: var(--atlas-blue);
+}
+.work-preview .preview-lab {
+  fill: rgba(255, 255, 255, 0.86);
+  stroke: #70776d;
+}
+.work-preview .preview-microscope {
+  fill: #fff0ec;
+  stroke: var(--atlas-warm);
+}
+.work-preview .preview-arm {
+  stroke: var(--atlas-blue);
+  stroke-width: 3;
+}
+.work-preview .preview-edit {
+  stroke: var(--atlas-gold);
+  stroke-width: 2.5;
+  stroke-dasharray: 4 3;
+}
+.work-preview .preview-agent {
+  fill: #e9f6ef;
+  stroke: var(--atlas-green);
+}
+.work-preview .preview-agent-path {
+  stroke: var(--atlas-green);
+  stroke-width: 2;
+}
+
+@media (max-width: 560px) {
+  .work-preview-readout {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .work-preview-readout strong {
+    max-width: none;
+    text-align: left;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .work-preview-frame {
+    border-color: #111;
+  }
+  .work-preview svg line,
+  .work-preview svg path,
+  .work-preview svg circle,
+  .work-preview svg polygon,
+  .work-preview svg rect {
+    stroke-width: 2;
+  }
+}
