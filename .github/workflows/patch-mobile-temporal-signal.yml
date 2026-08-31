@@ -33,50 +33,14 @@ jobs:
 
           pages = 'site/src/rebuilt/ResearchProgrammePages.tsx'
           old = '            <span>Navish Kumar · machine-learning researcher and systems builder</span>\n            <h1>'
-          new = '''            <span>Navish Kumar · machine-learning researcher and systems builder</span>
-            <div className="mobile-horizon-inline" aria-label="Past, current, and frontier">
-              <span><b>Past</b><small>Structure + geometry</small></span>
-              <span><b>Now</b><small>Adaptation + authority</small></span>
-              <span><b>Next</b><small>Persistent worlds</small></span>
-            </div>
-            <h1>'''
+          new = '            <span>Navish Kumar · machine-learning researcher and systems builder</span>\n            <div className="mobile-horizon-inline" aria-label="Past, current, and frontier">\n              <span><b>Past</b><small>Structure + geometry</small></span>\n              <span><b>Now</b><small>Adaptation + authority</small></span>\n              <span><b>Next</b><small>Persistent worlds</small></span>\n            </div>\n            <h1>'
           replace(pages, old, new)
 
           css = 'site/src/rebuilt/researchProgrammePages.css'
-          old = '.programme-hero-actions {\n  display: flex;'
-          new = '.mobile-horizon-inline { display: none; }\n\n.programme-hero-actions {\n  display: flex;'
-          replace(css, old, new)
+          replace(css, '.programme-hero-actions {\n  display: flex;', '.mobile-horizon-inline { display: none; }\n\n.programme-hero-actions {\n  display: flex;')
           old = '@media (max-width: 480px) {\n  .programme-hero-actions { display: grid; gap: 18px; }'
-          new = '''@media (max-width: 480px) {
-  .programme-hero-copy > span { margin-bottom: 0; }
-  .mobile-horizon-inline {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    margin: 18px 0 30px;
-    border-top: 1px solid var(--page-line);
-    border-bottom: 1px solid var(--page-line);
-  }
-  .mobile-horizon-inline > span {
-    display: grid;
-    align-content: center;
-    gap: 6px;
-    min-height: 58px;
-    padding: 9px 8px 9px 0;
-    border-right: 1px solid var(--page-line);
-  }
-  .mobile-horizon-inline > span:last-child { padding-left: 8px; border-right: 0; }
-  .mobile-horizon-inline > span:nth-child(2) { padding-left: 8px; }
-  .mobile-horizon-inline b {
-    font: 720 .55rem/1 var(--atlas-mono);
-    letter-spacing: .07em;
-    text-transform: uppercase;
-  }
-  .mobile-horizon-inline small { color: var(--page-muted); font-size: .52rem; line-height: 1.28; }
-  .mobile-horizon-inline > span:first-child b { color: var(--page-gold); }
-  .mobile-horizon-inline > span:nth-child(2) b { color: var(--page-warm); }
-  .mobile-horizon-inline > span:last-child b { color: var(--page-blue); }
-  .programme-hero-actions { display: grid; gap: 18px; }'''
-          replace(css, old, new)
+          mobile = '@media (max-width: 480px) {\n  .programme-hero-copy > span { margin-bottom: 0; }\n  .mobile-horizon-inline {\n    display: grid;\n    grid-template-columns: repeat(3, minmax(0, 1fr));\n    margin: 18px 0 30px;\n    border-top: 1px solid var(--page-line);\n    border-bottom: 1px solid var(--page-line);\n  }\n  .mobile-horizon-inline > span {\n    display: grid;\n    align-content: center;\n    gap: 6px;\n    min-height: 58px;\n    padding: 9px 8px 9px 0;\n    border-right: 1px solid var(--page-line);\n  }\n  .mobile-horizon-inline > span:last-child { padding-left: 8px; border-right: 0; }\n  .mobile-horizon-inline > span:nth-child(2) { padding-left: 8px; }\n  .mobile-horizon-inline b { font: 720 .55rem/1 var(--atlas-mono); letter-spacing: .07em; text-transform: uppercase; }\n  .mobile-horizon-inline small { color: var(--page-muted); font-size: .52rem; line-height: 1.28; }\n  .mobile-horizon-inline > span:first-child b { color: var(--page-gold); }\n  .mobile-horizon-inline > span:nth-child(2) b { color: var(--page-warm); }\n  .mobile-horizon-inline > span:last-child b { color: var(--page-blue); }\n  .programme-hero-actions { display: grid; gap: 18px; }'
+          replace(css, old, mobile)
 
           qa = 'site/qa/portfolio.acceptance.mjs'
           old = "  assert((await mobileHome.page.locator('.portfolio-nav').count()) === 1, 'mobile: navigation absent')"
