@@ -188,7 +188,7 @@ function HorizonSignal() {
 }
 
 function MemoryStage() {
-  const [activeId, setActiveId] = useState(MEMORY_MOMENTS[0].id)
+  const [activeId, setActiveId] = useState<(typeof MEMORY_MOMENTS)[number]['id']>(MEMORY_MOMENTS[0].id)
   const moment = MEMORY_MOMENTS.find((item) => item.id === activeId) ?? MEMORY_MOMENTS[0]
   const work = getWork(moment.id)
 

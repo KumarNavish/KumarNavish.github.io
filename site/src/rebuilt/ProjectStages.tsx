@@ -190,7 +190,7 @@ function GainStage({ step, bounds = false }: { step: number; bounds?: boolean })
             <rect width="142" height="108" />
             <text x="18" y="28">L(θ)</text>
             <text x="18" y="56">off-diagonal</text>
-            <text x="18" y="82">e^{-iθ}</text>
+            <text x="18" y="82">e⁻ⁱθ</text>
           </g>
         ) : null}
         {step >= 4 ? <path className="gain-mode" d="M96 260 C166 194 202 246 270 182 S396 112 512 176" /> : null}
@@ -218,7 +218,7 @@ function UrbanStage({ step }: { step: number }) {
     <div className="urban-stage">
       <svg className="mechanism-svg" viewBox="0 0 620 320" role="img" aria-label="City micro-regions with different operating conditions and vehicle suitability">
         <g transform="translate(34 22)">
-          {cells.map((cell, index) => {
+          {cells.map((cell) => {
             const bikeWins = cell.density - cell.slope > 0.18
             return (
               <g key={cell.label} transform={`translate(${cell.x} ${cell.y})`} className={step >= 3 ? (bikeWins ? 'urban-bike-cell' : 'urban-van-cell') : ''}>
