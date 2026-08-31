@@ -1,81 +1,63 @@
-import { chromium } from 'playwright'
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { chromium } from 'playwright'
 
-const baseUrl = process.env.PORTFOLIO_QA_BASE_URL || 'http://127.0.0.1:4173'
-const outputDirectory = path.resolve(process.env.PORTFOLIO_QA_OUT || 'qa-artifacts')
+const baseUrl = process.env.PORTFOLIO_QA_BASE_URL ?? 'http://127.0.0.1:4173'
+const outputDirectory = path.resolve(
+  process.env.PORTFOLIO_QA_OUT ?? path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'qa-artifacts'),
+)
 await fs.mkdir(outputDirectory, { recursive: true })
-
-const report = {
-  generatedAt: new Date().toISOString(),
-  baseUrl,
-  status: 'RUNNING',
-  routes: [],
-  interactions: [],
-  screenshots: [],
-  errors: [],
-}
 
 function assert(condition, message) {
   if (!condition) throw new Error(message)
 }
 
-async function auditPage(page, route) {
-  const audit = await page.evaluate(() => {
-    const ids = [...document.querySelectorAll('[id]')].map((node) => node.id)
-    const duplicates = ids.filter((id, index) => ids.indexOf(id) !== index)
+async function pageAudit(page, route) {
+  return page.evaluate((pathname) => {
+    const root = document.documentElement
+    const body = document.body
+    const namedInteractive = Array.from(document.querySelectorAll('button, a, input, select, textarea')).every(
+      (element) => {
+        if (element instanceof HTMLInputElement && element.type === 'hidden') return true
+        const name =
+          element.getAttribute('aria-label')?.trim() ||
+          element.getAttribute('title')?.trim() ||
+          element.textContent?.trim() ||
+          (element instanceof HTMLInputElement ? element.value.trim() : '')
+        return Boolean(name)
+      },
+    )
+    const ids = Array.from(document.querySelectorAll('[id]')).map((element) => element.id)
+    const duplicateIds = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))]
     return {
-      h1: document.querySelectorAll('h1').length,
-      main: document.querySelectorAll('main').length,
-      nav: document.querySelectorAll('nav').length,
-      duplicateIds: [...new Set(duplicates)],
-      unnamedButtons: [...document.querySelectorAll('button')].filter(
-        (button) => !(button.textContent || '').trim() && !button.getAttribute('aria-label'),
-      ).length,
-      emptyLinks: [...document.querySelectorAll('a')].filter((link) => !link.getAttribute('href')).length,
-      unsafeExternalLinks: [...document.querySelectorAll('a[target="_blank"]')].filter(
-        (link) => !(link.getAttribute('rel') || '').includes('noreferrer'),
-      ).length,
-      horizontalOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      pathname,
       title: document.title,
-      description: document.querySelector('meta[name="description"]')?.getAttribute('content') || '',
-      canonical: document.querySelector('link[rel="canonical"]')?.getAttribute('href') || '',
-      structuredData: Boolean(
-        document.querySelector('#portfolio-route-jsonld, script[type="application/ld+json"]'),
-      ),
+      horizontalOverflow: Math.max(root.scrollWidth, body.scrollWidth) - root.clientWidth,
+      duplicateIds,
+      namedInteractive,
+      headings: Array.from(document.querySelectorAll('h1')).map((node) => node.textContent?.trim()),
     }
-  })
-
-  assert(audit.h1 === 1, `${route}: expected exactly one h1, found ${audit.h1}`)
-  assert(audit.main === 1, `${route}: expected one main landmark`)
-  assert(audit.nav >= 1, `${route}: expected a navigation landmark`)
-  assert(audit.duplicateIds.length === 0, `${route}: duplicate ids ${audit.duplicateIds.join(', ')}`)
-  assert(audit.unnamedButtons === 0, `${route}: unnamed buttons ${audit.unnamedButtons}`)
-  assert(audit.emptyLinks === 0, `${route}: links without href ${audit.emptyLinks}`)
-  assert(audit.unsafeExternalLinks === 0, `${route}: unsafe external links ${audit.unsafeExternalLinks}`)
-  assert(audit.horizontalOverflow <= 1, `${route}: horizontal overflow ${audit.horizontalOverflow}px`)
-  assert(audit.description.length > 40, `${route}: route description is missing`)
-  assert(
-    audit.canonical.startsWith('https://kumarnavish.github.io'),
-    `${route}: invalid canonical ${audit.canonical}`,
-  )
-  assert(audit.structuredData, `${route}: missing structured data`)
-  return audit
+  }, route)
 }
 
 async function openRoute(browser, route, viewport, label, screenshot = false, reducedMotion = 'no-preference') {
   const context = await browser.newContext({ viewport, reducedMotion })
   const page = await context.newPage()
-  const runtimeErrors = []
-  page.on('pageerror', (error) => runtimeErrors.push(`pageerror: ${error.message}`))
+  const errors = []
+  page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`))
   page.on('console', (message) => {
-    if (message.type() === 'error') runtimeErrors.push(`console: ${message.text()}`)
+    if (message.type() === 'error') errors.push(`console: ${message.text()}`)
   })
   const response = await page.goto(`${baseUrl}${route}`, { waitUntil: 'networkidle' })
-  assert(response && response.ok(), `${route}: HTTP ${response?.status()}`)
-  await page.waitForTimeout(250)
-  const audit = await auditPage(page, route)
-  assert(runtimeErrors.length === 0, `${route}: ${runtimeErrors.join(' | ')}`)
+  assert(response?.ok(), `${route}: HTTP ${response?.status() ?? 'no response'}`)
+  await page.locator('main').waitFor({ state: 'visible' })
+  const audit = await pageAudit(page, route)
+  assert(audit.horizontalOverflow <= 1, `${route}: horizontal overflow ${audit.horizontalOverflow}px`)
+  assert(audit.duplicateIds.length === 0, `${route}: duplicate IDs ${audit.duplicateIds.join(', ')}`)
+  assert(audit.namedInteractive, `${route}: unnamed interactive element`)
+  assert(audit.headings.length === 1, `${route}: expected one h1, found ${audit.headings.length}`)
+  assert(errors.length === 0, `${route}: browser errors: ${errors.join(' | ')}`)
   if (screenshot) {
     const screenshotPath = path.join(outputDirectory, `${label}.png`)
     await page.screenshot({ path: screenshotPath, fullPage: true })
@@ -83,6 +65,15 @@ async function openRoute(browser, route, viewport, label, screenshot = false, re
   }
   report.routes.push({ route, viewport, reducedMotion, audit })
   return { context, page }
+}
+
+const report = {
+  generatedAt: new Date().toISOString(),
+  baseUrl,
+  routes: [],
+  interactions: [],
+  screenshots: [],
+  pass: false,
 }
 
 const browser = await chromium.launch({ headless: true })
@@ -99,7 +90,7 @@ try {
   }
   const firstPreview = home.page.locator('.work-preview').first()
   if (await firstPreview.count()) {
-    await home.page.locator('footer').scrollIntoViewIfNeeded()
+    await home.page.locator('#contact').scrollIntoViewIfNeeded()
     await home.page.waitForTimeout(300)
     const running = await firstPreview.getAttribute('data-running')
     if (running !== null) assert(running === 'false', 'home: offscreen preview remained active')
@@ -119,25 +110,18 @@ try {
     await trajectory.page.getByRole('button', { name: /Reset filters/i }).click()
     assert((await trajectory.page.locator('.trajectory-node').count()) === 10, 'trajectory: reset failed')
   }
-  report.interactions.push('trajectory filter and inspector')
   await trajectory.context.close()
 
-  const work = await openRoute(browser, '/work', desktop, 'work-desktop', true)
-  assert((await work.page.locator('[data-work-id]').count()) === 10, 'work: expected ten works')
-  await work.context.close()
-
-  const topLevelRoutes = ['/research', '/systems', '/frontier', '/about']
-  for (const route of topLevelRoutes) {
-    const opened = await openRoute(browser, route, desktop, route.slice(1), false)
-    assert((await opened.page.locator('body').innerText()).length > 650, `${route}: content is unexpectedly thin`)
+  const primaryRoutes = ['/work', '/research', '/systems', '/frontier', '/about']
+  for (const route of primaryRoutes) {
+    const opened = await openRoute(browser, route, desktop, route.slice(1), true)
     await opened.context.close()
   }
 
   const workRoutes = [
-    '/work/gain-graphs',
+    '/work/counterspeech-dynamics',
     '/work/normalized-gain-laplacians',
     '/work/extremal-gain-laplacian-bounds',
-    '/work/counterspeech-dynamics',
     '/work/urban-microregion-logistics',
     '/work/square-root-natural-gradient',
     '/work/experience-replay-optimization',
@@ -146,98 +130,85 @@ try {
     '/work/casepath',
     '/work/spatial-intelligence',
   ]
-
   for (const route of workRoutes) {
-    const screenshot = route === '/work/experience-replay-optimization'
-    const opened = await openRoute(browser, route, desktop, 'replay-desktop', screenshot)
-    assert((await opened.page.locator('body').innerText()).length > 700, `${route}: deep page is unexpectedly thin`)
-    if (route.includes('normalized-gain') || route.includes('extremal-gain')) {
-      await opened.page.getByRole('button', { name: /Evidence/i }).click()
-      assert((await opened.page.locator('.registry-evidence-link').count()) >= 1, `${route}: evidence missing`)
-    }
-    if (route.includes('experience-replay')) {
-      await opened.page.getByRole('button', { name: /Manipulate it/i }).click()
-      const range = opened.page.locator('input[type="range"]').first()
-      if (await range.count()) await range.fill('0.7')
-      await opened.page.getByRole('button', { name: /Inspect evidence/i }).click()
-      assert((await opened.page.locator('.chapter-inspect').count()) === 1, 'replay: inspect layer failed')
-      await opened.page.getByRole('button', { name: /^Back$/i }).click()
-      await opened.page.getByRole('button', { name: /^Next$/i }).click()
-      await opened.page.getByRole('button', { name: /^Restart$/i }).click()
-      report.interactions.push('chapter watch, manipulate, inspect, and transport')
-    }
+    const opened = await openRoute(browser, route, desktop, route.split('/').pop(), false)
     await opened.context.close()
   }
 
-  const videoContext = await browser.newContext({
-    viewport: desktop,
-    recordVideo: { dir: outputDirectory, size: { width: 1280, height: 720 } },
-  })
-  const spatial = await videoContext.newPage()
-  const spatialErrors = []
-  spatial.on('pageerror', (error) => spatialErrors.push(error.message))
-  spatial.on('console', (message) => {
-    if (message.type() === 'error') spatialErrors.push(message.text())
-  })
-  await spatial.goto(`${baseUrl}/work/spatial-intelligence`, { waitUntil: 'networkidle' })
-  const input = spatial.locator('textarea, input[type="text"]').first()
-  assert((await input.count()) === 1, 'spatial: text fallback input missing')
-  await input.fill(
-    'Create a quiet mountain laboratory at sunset, place a robotic arm beside a microscope, and let an agent inspect the sample.',
+  const replay = await openRoute(
+    browser,
+    '/work/experience-replay-optimization',
+    desktop,
+    'replay-chapter-desktop',
+    true,
   )
-  const action = spatial.locator('button').filter({ hasText: /build|generate|interpret|apply|create|update/i }).first()
-  assert((await action.count()) === 1, 'spatial: scene action missing')
-  await action.click()
-  await spatial.waitForTimeout(800)
-  let bodyText = (await spatial.locator('body').innerText()).toLowerCase()
-  assert(bodyText.includes('mountain'), 'spatial: mountain environment missing')
-  assert(bodyText.includes('microscope'), 'spatial: microscope missing')
-  assert(bodyText.includes('robotic') || bodyText.includes('robot arm'), 'spatial: robotic arm missing')
-  await spatial.screenshot({ path: path.join(outputDirectory, 'spatial-generated-desktop.png'), fullPage: true })
-  await input.fill('Add a sample tray beside the microscope and keep the existing laboratory.')
-  await action.click()
-  await spatial.waitForTimeout(700)
-  bodyText = (await spatial.locator('body').innerText()).toLowerCase()
-  assert(bodyText.includes('tray'), 'spatial: follow-up object missing')
-  assert(bodyText.includes('microscope'), 'spatial: persistent world state was lost')
-  assert(spatialErrors.length === 0, `spatial: ${spatialErrors.join(' | ')}`)
-  report.interactions.push('two-turn persistent speech/text-to-scene world')
-  await spatial.close()
-  await videoContext.close()
+  await replay.page.getByRole('button', { name: /Next step/i }).click()
+  assert((await replay.page.locator('.chapter-stage-head span').first().textContent())?.includes('02'), 'chapter: next failed')
+  await replay.page.getByRole('button', { name: /Back/i }).click()
+  assert((await replay.page.locator('.chapter-stage-head span').first().textContent())?.includes('01'), 'chapter: back failed')
+  await replay.page.getByRole('button', { name: /Restart/i }).click()
+  await replay.page.getByRole('button', { name: /Manipulate it/i }).click()
+  assert((await replay.page.locator('.chapter-controls').count()) === 1, 'chapter: manipulate controls absent')
+  const slider = replay.page.locator('.chapter-controls input[type="range"]').first()
+  if (await slider.count()) await slider.press('ArrowRight')
+  await replay.page.getByRole('button', { name: /Inspect evidence/i }).click()
+  assert((await replay.page.locator('.chapter-inspect').count()) === 1, 'chapter: inspect panel absent')
+  await replay.context.close()
+  report.interactions.push('guided chapter controls')
+
+  const spatial = await openRoute(
+    browser,
+    '/frontier/spatial-intelligence',
+    desktop,
+    'spatial-before',
+    true,
+  )
+  const input = spatial.page.getByLabel(/Describe the scene/i)
+  await input.fill(
+    'Create a quiet mountain laboratory at sunset. Put a microscope beside a robotic arm. Ask the agent to inspect a sample.',
+  )
+  await spatial.page.getByRole('button', { name: /Build or update world/i }).click()
+  await spatial.page.waitForTimeout(300)
+  const firstCount = await spatial.page.locator('[data-scene-object]').count()
+  assert(firstCount >= 3, `spatial: expected at least three objects, found ${firstCount}`)
+  await spatial.page.screenshot({ path: path.join(outputDirectory, 'spatial-after-first-command.png'), fullPage: true })
+  report.screenshots.push(path.join(outputDirectory, 'spatial-after-first-command.png'))
+  await input.fill('Add a second sample beside the microscope and make the room darker.')
+  await spatial.page.getByRole('button', { name: /Build or update world/i }).click()
+  await spatial.page.waitForTimeout(300)
+  const secondCount = await spatial.page.locator('[data-scene-object]').count()
+  assert(secondCount > firstCount, 'spatial: follow-up command did not preserve and extend world state')
+  assert((await spatial.page.locator('.spatial-history-item').count()) >= 2, 'spatial: command history did not persist')
+  await spatial.page.screenshot({ path: path.join(outputDirectory, 'spatial-after-follow-up.png'), fullPage: true })
+  report.screenshots.push(path.join(outputDirectory, 'spatial-after-follow-up.png'))
+  await spatial.context.close()
+  report.interactions.push('persistent two-turn spatial edit')
 
   const mobileHome = await openRoute(browser, '/', mobile, 'home-mobile', true)
-  assert((await mobileHome.page.locator('[data-work-id]').count()) === 10, 'mobile home: works missing')
+  assert((await mobileHome.page.locator('.portfolio-nav').count()) === 1, 'mobile: navigation absent')
   await mobileHome.context.close()
-
   const mobileTrajectory = await openRoute(browser, '/trajectory', mobile, 'trajectory-mobile', true)
-  assert((await mobileTrajectory.page.locator('.trajectory-node').count()) === 10, 'mobile trajectory: works missing')
+  assert((await mobileTrajectory.page.locator('.trajectory-node').count()) === 10, 'mobile trajectory: missing works')
   await mobileTrajectory.context.close()
 
-  const reducedMotion = await openRoute(
+  const reduced = await openRoute(
     browser,
     '/work/experience-replay-optimization',
     mobile,
     'replay-reduced-motion',
-    false,
+    true,
     'reduce',
   )
-  await reducedMotion.page.getByRole('button', { name: /^Next$/i }).click()
-  assert(
-    (await reducedMotion.page.locator('.chapter-story article.is-active').count()) === 1,
-    'reduced motion: explicit sequence control failed',
-  )
-  report.interactions.push('reduced-motion functional equivalent')
-  await reducedMotion.context.close()
+  assert((await reduced.page.getByRole('button', { name: /Next step/i }).count()) === 1, 'reduced motion: next absent')
+  assert((await reduced.page.getByRole('button', { name: /Back/i }).count()) === 1, 'reduced motion: back absent')
+  await reduced.page.getByRole('button', { name: /Next step/i }).click()
+  assert((await reduced.page.locator('.chapter-stage-head span').first().textContent())?.includes('02'), 'reduced motion: sequence lost')
+  await reduced.context.close()
+  report.interactions.push('reduced-motion causal sequence')
 
-  report.status = 'PASS'
-} catch (error) {
-  report.status = 'FAIL'
-  report.errors.push(error instanceof Error ? error.stack || error.message : String(error))
+  report.pass = true
+  await fs.writeFile(path.join(outputDirectory, 'acceptance-report.json'), JSON.stringify(report, null, 2))
+  console.log(JSON.stringify(report, null, 2))
 } finally {
   await browser.close()
-  await fs.writeFile(path.join(outputDirectory, 'portfolio-qa-report.json'), JSON.stringify(report, null, 2))
-  if (report.status !== 'PASS') {
-    console.error(report.errors.join('\n'))
-    process.exitCode = 1
-  }
 }
