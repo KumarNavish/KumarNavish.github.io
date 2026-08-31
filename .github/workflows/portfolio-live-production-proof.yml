@@ -1,0 +1,266 @@
+name: portfolio live production proof
+
+on:
+  push:
+    branches: [portfolio-live-proof-83a891]
+    paths:
+      - '.github/workflows/portfolio-live-production-proof.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact deployed source
+        uses: actions/checkout@v4
+        with:
+          ref: portfolio-live-proof-83a891
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Wait for exact public release marker
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p live-proof
+          release_url='https://kumarnavish.github.io/portfolio-release.json?release=83a891c90dff259b2b872dc68e65dc3459e94c8c'
+          for attempt in $(seq 1 50); do
+            if curl --fail --silent --show-error --location --connect-timeout 10 --max-time 30 "$release_url" -o live-proof/portfolio-release.json; then
+              if python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path('live-proof/portfolio-release.json').read_text())
+          required = {
+              'architecture': 'canonical-research-trajectory',
+              'body_of_work': 10,
+              'canonical_routes_verified': True,
+              'spatial_interaction_contract_verified': True,
+              'guided_transport_verified': True,
+              'spatial_history_verified': True,
+          }
+          for key, expected in required.items():
+              if payload.get(key) != expected:
+                  raise SystemExit(f'{key}: expected {expected!r}, observed {payload.get(key)!r}')
+          print(json.dumps(payload, indent=2))
+          PY
+              then
+                exit 0
+              fi
+            fi
+            sleep 6
+          done
+          echo 'The public domain never exposed the exact release marker.' >&2
+          cat live-proof/portfolio-release.json 2>/dev/null || true
+          exit 1
+
+      - name: Verify public static route documents and metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import html
+          import json
+          import re
+          import urllib.request
+          from pathlib import Path
+
+          base = 'https://kumarnavish.github.io'
+          expected = {
+              '/': 'Navish Kumar | Machine-Learning Researcher and Systems Builder',
+              '/trajectory/': 'Research Trajectory | Navish Kumar',
+              '/work/': 'Complete Work | Navish Kumar',
+              '/research/': 'Research Record | Navish Kumar',
+              '/systems/': 'Systems and Product Evidence | Navish Kumar',
+              '/frontier/': 'Frontier Work | Navish Kumar',
+              '/about/': 'About and Contact | Navish Kumar',
+              '/systems/casepath/': 'CasePath',
+              '/frontier/spatial-intelligence/': 'Navish Kumar',
+              '/work/experience-replay-optimization/': 'Navish Kumar',
+          }
+          results = []
+          for route, required_title_text in expected.items():
+              url = f'{base}{route}?release=83a891c90dff259b2b872dc68e65dc3459e94c8c'
+              request = urllib.request.Request(url, headers={'User-Agent': 'Navish-portfolio-live-proof/1.0'})
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  body = response.read().decode('utf-8')
+                  status = response.status
+              match = re.search(r'<title>(.*?)</title>', body, flags=re.I | re.S)
+              title = html.unescape(match.group(1).strip()) if match else ''
+              if status != 200:
+                  raise SystemExit(f'{route}: HTTP {status}')
+              if required_title_text not in title:
+                  raise SystemExit(f'{route}: required {required_title_text!r} in title, observed {title!r}')
+              canonical = re.search(r'<link[^>]+rel=["\']canonical["\'][^>]+href=["\']([^"\']+)', body, flags=re.I)
+              if not canonical:
+                  raise SystemExit(f'{route}: missing static canonical link')
+              results.append({'route': route, 'status': status, 'title': title, 'canonical': canonical.group(1)})
+          Path('live-proof/static-routes.json').write_text(json.dumps(results, indent=2))
+          print(json.dumps(results, indent=2))
+          PY
+
+      - name: Install browser verification tools
+        working-directory: site
+        run: |
+          npm ci
+          npm install --no-save --package-lock=false playwright@1.56.1
+          npx playwright install --with-deps chromium
+
+      - name: Run live browser and interaction proof
+        working-directory: site
+        env:
+          LIVE_PROOF_OUT: ../live-proof
+        run: |
+          cat > qa/live-production-proof.mjs <<'JS'
+          import fs from 'node:fs/promises'
+          import path from 'node:path'
+          import { chromium } from 'playwright'
+
+          const baseUrl = 'https://kumarnavish.github.io'
+          const release = '83a891c90dff259b2b872dc68e65dc3459e94c8c'
+          const out = path.resolve(process.env.LIVE_PROOF_OUT ?? '../live-proof')
+          await fs.mkdir(out, { recursive: true })
+
+          function assert(condition, message) {
+            if (!condition) throw new Error(message)
+          }
+
+          async function open(page, route) {
+            const errors = []
+            const onPageError = (error) => errors.push(`pageerror: ${error.message}`)
+            const onConsole = (message) => {
+              if (message.type() === 'error') errors.push(`console: ${message.text()}`)
+            }
+            page.on('pageerror', onPageError)
+            page.on('console', onConsole)
+            const response = await page.goto(`${baseUrl}${route}?release=${release}`, {
+              waitUntil: 'networkidle',
+              timeout: 45_000,
+            })
+            assert(response?.ok(), `${route}: HTTP ${response?.status() ?? 'no response'}`)
+            await page.locator('main').waitFor({ state: 'visible', timeout: 15_000 })
+            await page.waitForTimeout(300)
+            assert(errors.length === 0, `${route}: ${errors.join(' | ')}`)
+            page.removeListener('pageerror', onPageError)
+            page.removeListener('console', onConsole)
+          }
+
+          async function auditViewport(page, route) {
+            const audit = await page.evaluate(() => ({
+              title: document.title,
+              pathname: location.pathname,
+              horizontalOverflow:
+                Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) -
+                document.documentElement.clientWidth,
+              h1: Array.from(document.querySelectorAll('h1')).map((node) => node.textContent?.trim()),
+            }))
+            assert(audit.horizontalOverflow <= 1, `${route}: horizontal overflow ${audit.horizontalOverflow}px`)
+            assert(audit.h1.length === 1, `${route}: expected one h1, observed ${audit.h1.length}`)
+            return audit
+          }
+
+          const report = { release, baseUrl, checkedAt: new Date().toISOString(), routes: [], interactions: [] }
+          const browser = await chromium.launch({ headless: true })
+          try {
+            const desktop = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
+            const page = await desktop.newPage()
+
+            await open(page, '/')
+            assert(document !== undefined, 'browser context unavailable')
+            assert((await page.title()) === 'Navish Kumar | Machine-Learning Researcher and Systems Builder', `root title mismatch: ${await page.title()}`)
+            assert((await page.locator('[data-work-id]').count()) === 10, 'root: expected ten first-class works')
+            assert((await page.locator('.portfolio-period-card').count()) === 3, 'root: past/current/frontier signal missing')
+            const nav = await page.locator('.portfolio-nav a').allTextContents()
+            for (const label of ['Trajectory', 'Work', 'Research', 'Systems', 'Frontier', 'About']) {
+              assert(nav.includes(label), `root: missing ${label} navigation`)
+            }
+            report.routes.push({ route: '/', ...(await auditViewport(page, '/')) })
+            await page.screenshot({ path: path.join(out, 'live-root-desktop.png'), fullPage: true })
+
+            await open(page, '/trajectory/')
+            assert((await page.locator('.trajectory-node').count()) === 10, 'trajectory: expected ten works')
+            report.routes.push({ route: '/trajectory/', ...(await auditViewport(page, '/trajectory/')) })
+            await page.screenshot({ path: path.join(out, 'live-trajectory-desktop.png'), fullPage: true })
+
+            await open(page, '/work/experience-replay-optimization/')
+            await page.getByRole('button', { name: /Next step/i }).click()
+            await page.waitForFunction(() => document.querySelector('.chapter-stage-head span')?.textContent?.includes('02'))
+            await page.getByRole('button', { name: /Back one step/i }).click()
+            await page.waitForFunction(() => document.querySelector('.chapter-stage-head span')?.textContent?.includes('01'))
+            await page.getByRole('button', { name: /Manipulate it/i }).click()
+            assert((await page.locator('.chapter-controls').count()) === 1, 'replay: manipulate controls missing')
+            await page.getByRole('button', { name: /Inspect evidence/i }).click()
+            assert((await page.locator('.chapter-inspect').count()) === 1, 'replay: inspect evidence missing')
+            report.interactions.push('guided replay sequence, manipulate, inspect')
+            report.routes.push({ route: '/work/experience-replay-optimization/', ...(await auditViewport(page, '/work/experience-replay-optimization/')) })
+
+            await open(page, '/frontier/spatial-intelligence/')
+            const input = page.getByLabel(/Describe the scene/i)
+            await input.fill('Create a quiet mountain laboratory at sunset. Put a microscope beside a robotic arm. Ask the agent to inspect a sample.')
+            await page.getByRole('button', { name: /Build or update world/i }).click()
+            await page.locator('[data-scene-object]').first().waitFor({ state: 'visible', timeout: 8_000 })
+            const firstCount = await page.locator('[data-scene-object]').count()
+            assert(firstCount >= 3, `spatial: expected at least three objects, observed ${firstCount}`)
+            await page.screenshot({ path: path.join(out, 'live-spatial-first-command.png'), fullPage: true })
+            await input.fill('Add a second sample beside the microscope and make the room darker.')
+            await page.getByRole('button', { name: /Build or update world/i }).click()
+            await page.waitForFunction(
+              (minimum) => document.querySelectorAll('[data-scene-object]').length > minimum,
+              firstCount,
+              { timeout: 8_000 },
+            )
+            const secondCount = await page.locator('[data-scene-object]').count()
+            assert(secondCount > firstCount, 'spatial: follow-up did not preserve and extend world state')
+            await page.getByRole('tab', { name: /^History$/i }).click()
+            await page.waitForFunction(() => document.querySelectorAll('.spatial-history-item').length >= 2, undefined, { timeout: 8_000 })
+            report.interactions.push(`persistent spatial world ${firstCount}→${secondCount} objects with two history entries`)
+            report.routes.push({ route: '/frontier/spatial-intelligence/', ...(await auditViewport(page, '/frontier/spatial-intelligence/')) })
+            await page.screenshot({ path: path.join(out, 'live-spatial-follow-up.png'), fullPage: true })
+            await desktop.close()
+
+            const mobile = await browser.newContext({ viewport: { width: 390, height: 844 } })
+            const mobilePage = await mobile.newPage()
+            await open(mobilePage, '/')
+            assert((await mobilePage.locator('.portfolio-nav').count()) === 1, 'mobile root: navigation missing')
+            report.routes.push({ route: '/ mobile', ...(await auditViewport(mobilePage, '/ mobile')) })
+            await mobilePage.screenshot({ path: path.join(out, 'live-root-mobile.png'), fullPage: true })
+            await open(mobilePage, '/trajectory/')
+            assert((await mobilePage.locator('.trajectory-node').count()) === 10, 'mobile trajectory: expected ten works')
+            report.routes.push({ route: '/trajectory/ mobile', ...(await auditViewport(mobilePage, '/trajectory/ mobile')) })
+            await mobilePage.screenshot({ path: path.join(out, 'live-trajectory-mobile.png'), fullPage: true })
+            await mobile.close()
+
+            const reduced = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' })
+            const reducedPage = await reduced.newPage()
+            await open(reducedPage, '/work/experience-replay-optimization/')
+            assert((await reducedPage.getByRole('button', { name: /Next step/i }).count()) === 1, 'reduced motion: Next missing')
+            await reducedPage.getByRole('button', { name: /Next step/i }).click()
+            await reducedPage.waitForFunction(() => document.querySelector('.chapter-stage-head span')?.textContent?.includes('02'))
+            report.interactions.push('reduced-motion guided sequence preserved')
+            await reducedPage.screenshot({ path: path.join(out, 'live-reduced-motion.png'), fullPage: true })
+            await reduced.close()
+          } finally {
+            await browser.close()
+          }
+
+          await fs.writeFile(path.join(out, 'live-production-report.json'), JSON.stringify(report, null, 2))
+          console.log(JSON.stringify(report, null, 2))
+          JS
+          node qa/live-production-proof.mjs
+
+      - name: Upload public-domain proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: portfolio-live-production-proof-83a891c
+          path: live-proof/
+          if-no-files-found: error
+          retention-days: 30
