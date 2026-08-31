@@ -148,13 +148,21 @@ export function ChapterScaffold(props: ChapterScaffoldProps) {
               </div>
               {mode === 'watch' ? (
                 <div className="chapter-transport" aria-label="Guided sequence controls">
-                  <button type="button" onClick={() => setStep(props.activeStep - 1)}>
+                  <button
+                    type="button"
+                    aria-label="Back one step"
+                    onClick={() => setStep(props.activeStep - 1)}
+                  >
                     Back
                   </button>
-                  <button type="button" onClick={() => {
-                    setPlaying(false)
-                    setStep(0)
-                  }}>
+                  <button
+                    type="button"
+                    aria-label="Restart guided sequence"
+                    onClick={() => {
+                      setPlaying(false)
+                      setStep(0)
+                    }}
+                  >
                     Restart
                   </button>
                   <button
@@ -162,10 +170,15 @@ export function ChapterScaffold(props: ChapterScaffoldProps) {
                     className="chapter-play"
                     onClick={() => setPlaying((value) => !value)}
                     aria-pressed={playing}
+                    aria-label={playing ? 'Pause guided sequence' : 'Play guided sequence'}
                   >
                     {playing ? 'Pause' : 'Play'}
                   </button>
-                  <button type="button" onClick={() => setStep(props.activeStep + 1)}>
+                  <button
+                    type="button"
+                    aria-label="Next step"
+                    onClick={() => setStep(props.activeStep + 1)}
+                  >
                     Next
                   </button>
                 </div>
