@@ -30,6 +30,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git config user.name 'Navish portfolio release bot'
+          git config user.email '43814868+KumarNavish@users.noreply.github.com'
           git fetch origin master
           git merge --no-edit origin/master
 
@@ -96,7 +98,5 @@ jobs:
           set -euo pipefail
           git rm .github/workflows/portfolio-canonical-route-repair.yml
           git add site/qa/materialize-static-routes.mjs site/src/RoutedApplication.tsx site/package.json
-          git config user.name 'Navish portfolio release bot'
-          git config user.email '43814868+KumarNavish@users.noreply.github.com'
           git commit -m 'fix(portfolio): align canonical work routes'
           git push origin HEAD:portfolio-atlas-2026
