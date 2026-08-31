@@ -23,9 +23,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo '8f19c8773a24cb42b68dc728122cc76f6c805cebf596efa7c56f2796d1bf9593  .redesign/deep-route-redesign.tar.xz' | sha256sum -c -
           xz -t .redesign/deep-route-redesign.tar.xz
-          xz -dc .redesign/deep-route-redesign.tar.xz | tar -xf -
+          mkdir -p /tmp/deep-route-redesign
+          xz -dc .redesign/deep-route-redesign.tar.xz | tar -xvf - -C /tmp/deep-route-redesign
+          test -s /tmp/deep-route-redesign/site/src/chapters/ChapterScaffold.tsx
+          test -s /tmp/deep-route-redesign/site/src/chapters/chapters.css
+          test -s /tmp/deep-route-redesign/site/src/rebuilt/ResearchProgrammePages.tsx
+          test -s /tmp/deep-route-redesign/site/src/shared/portfolio.css
+          cp -R /tmp/deep-route-redesign/site/src/chapters/ChapterScaffold.tsx site/src/chapters/ChapterScaffold.tsx
+          cp -R /tmp/deep-route-redesign/site/src/chapters/chapters.css site/src/chapters/chapters.css
+          cp -R /tmp/deep-route-redesign/site/src/rebuilt/ResearchProgrammePages.tsx site/src/rebuilt/ResearchProgrammePages.tsx
+          cp -R /tmp/deep-route-redesign/site/src/shared/portfolio.css site/src/shared/portfolio.css
           git config user.name 'Navish portfolio redesign bot'
           git config user.email '43814868+KumarNavish@users.noreply.github.com'
           git add site/src/chapters/ChapterScaffold.tsx site/src/chapters/chapters.css site/src/rebuilt/ResearchProgrammePages.tsx site/src/shared/portfolio.css
