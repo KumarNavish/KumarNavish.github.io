@@ -103,6 +103,12 @@ try {
   await firstNode.click()
   assert((await firstNode.getAttribute('aria-pressed')) === 'true', 'trajectory: selection did not update')
   const themeSelect = trajectory.page.locator('.trajectory-controls select').nth(3)
+  if (!(await themeSelect.isVisible())) {
+    const filterDrawer = trajectory.page.locator('.trajectory-filter-drawer')
+    assert((await filterDrawer.count()) === 1, 'trajectory: filter disclosure absent')
+    await filterDrawer.locator('summary').click()
+    await themeSelect.waitFor({ state: 'visible' })
+  }
   const options = await themeSelect.locator('option').count()
   if (options > 1) {
     await themeSelect.selectOption({ index: 1 })
