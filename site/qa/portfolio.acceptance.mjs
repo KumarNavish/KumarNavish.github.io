@@ -168,14 +168,21 @@ try {
     'Create a quiet mountain laboratory at sunset. Put a microscope beside a robotic arm. Ask the agent to inspect a sample.',
   )
   await spatial.page.getByRole('button', { name: /Build or update world/i }).click()
-  await spatial.page.waitForTimeout(300)
+  await spatial.page
+    .locator('[data-scene-object]')
+    .first()
+    .waitFor({ state: 'visible', timeout: 5000 })
   const firstCount = await spatial.page.locator('[data-scene-object]').count()
   assert(firstCount >= 3, `spatial: expected at least three objects, found ${firstCount}`)
   await spatial.page.screenshot({ path: path.join(outputDirectory, 'spatial-after-first-command.png'), fullPage: true })
   report.screenshots.push(path.join(outputDirectory, 'spatial-after-first-command.png'))
   await input.fill('Add a second sample beside the microscope and make the room darker.')
   await spatial.page.getByRole('button', { name: /Build or update world/i }).click()
-  await spatial.page.waitForTimeout(300)
+  await spatial.page.waitForFunction(
+    (minimum) => document.querySelectorAll('[data-scene-object]').length > minimum,
+    firstCount,
+    { timeout: 5000 },
+  )
   const secondCount = await spatial.page.locator('[data-scene-object]').count()
   assert(secondCount > firstCount, 'spatial: follow-up command did not preserve and extend world state')
   assert((await spatial.page.locator('.spatial-history-item').count()) >= 2, 'spatial: command history did not persist')

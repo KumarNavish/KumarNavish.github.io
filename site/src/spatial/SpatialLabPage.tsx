@@ -443,6 +443,7 @@ function WorldCanvas({
         ? world.objects.map((object) => (
             <g
               key={object.id}
+              data-scene-object={object.id}
               onPointerDown={(event) => onDragStart(object.id, event)}
               className={dragging === object.id ? 'is-dragging' : ''}
             >
@@ -688,18 +689,23 @@ export function SpatialLabPage() {
         <section className="spatial-lab" id="lab">
           <form className="spatial-command" onSubmit={submit}>
             <div className="spatial-command-label">
-              <span>Describe or edit the world</span>
+              <label htmlFor="spatial-scene-description">Describe the scene</label>
               <i>{world.history.length ? `persistent revision ${world.revision}` : 'new world'}</i>
             </div>
             <textarea
+              id="spatial-scene-description"
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
               rows={3}
-              aria-label="Scene instruction"
+              aria-label="Describe the scene"
             />
             <div className="spatial-command-actions">
-              <button type="submit" className="is-primary">
-                Interpret and apply
+              <button
+                type="submit"
+                className="is-primary"
+                aria-label="Build or update world"
+              >
+                Build or update world
               </button>
               <button
                 type="button"
@@ -784,7 +790,7 @@ export function SpatialLabPage() {
                 <div className="spatial-history">
                   {world.history.length ? (
                     world.history.map((command, index) => (
-                      <article key={`${command}-${index}`}>
+                      <article className="spatial-history-item" key={`${command}-${index}`}>
                         <span>{String(index + 1).padStart(2, '0')}</span>
                         <p>{command}</p>
                       </article>
