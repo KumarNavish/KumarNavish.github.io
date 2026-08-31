@@ -1,0 +1,47 @@
+name: portfolio authorship materialize
+
+on:
+  push:
+    branches: [portfolio-authorship-pass-20260831]
+    paths:
+      - '.github/workflows/portfolio-authorship-materialize.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout staged release branch
+        uses: actions/checkout@v4
+        with:
+          ref: portfolio-authorship-pass-20260831
+          fetch-depth: 0
+
+      - name: Materialize concentrated portfolio source
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/portfolio-authorship-payload/chunk-* > /tmp/portfolio-authorship-payload.b64
+          base64 --decode /tmp/portfolio-authorship-payload.b64 > /tmp/portfolio-authorship-payload.tar.gz
+          echo '1c35d5a5ea8e1fb77754de6400c7b67d97667fa488dffc6eb79e83be9139722b  /tmp/portfolio-authorship-payload.tar.gz' | sha256sum --check
+          tar -xzf /tmp/portfolio-authorship-payload.tar.gz -C .
+          test -f site/src/portfolio/ConcentratedPortfolioPages.tsx
+          test -f site/src/portfolio/concentratedPortfolio.css
+          grep -q 'authorship_concentration_verified' site/public/portfolio-release.json
+          rm -rf .github/portfolio-authorship-payload
+          rm -f .github/workflows/portfolio-authorship-materialize.yml
+
+      - name: Commit exact authored source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Navish portfolio release bot'
+          git config user.email '43814868+KumarNavish@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'feat(portfolio): concentrate the experience around an authored trajectory'
+          git push origin HEAD:portfolio-authorship-pass-20260831
