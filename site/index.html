@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#ffffff" />
     <meta
       name="description"
-      content="Navish Kumar's interactive research instrument for complex unit gain graphs: cycle balance, Hermitian Laplacians, spectra, eigenmodes, heat diffusion, and frustration bounds."
+      content="The motion-native portfolio of Navish Kumar: mathematical learning, continual adaptation, evidence-grounded agents, and spatial intelligence."
     />
     <meta name="author" content="Navish Kumar" />
     <meta name="robots" content="index, follow" />
@@ -16,23 +16,24 @@
     <link rel="manifest" href="/site.webmanifest" />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://kumarnavish.github.io/" />
-    <meta property="og:title" content="Navish Kumar — Operate the idea, not the abstract" />
+    <meta property="og:title" content="Navish Kumar | Machine-Learning Researcher and Systems Builder" />
     <meta
       property="og:description"
-      content="A live, permanent-light research instrument for complex unit gain graphs and their spectral structure."
+      content="A living portfolio spanning mathematical structure, continual adaptation, reviewable agents, and persistent spatial worlds."
     />
-    <meta property="og:image" content="https://kumarnavish.github.io/social-card-light.svg" />
+    <meta property="og:image" content="https://kumarnavish.github.io/social/root.svg" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Navish Kumar — Research instruments" />
+    <meta name="twitter:title" content="Navish Kumar | Research and Systems" />
     <meta
       name="twitter:description"
-      content="Operate a complex gain graph and watch its cycles, Laplacian, spectrum, diffusion, and frustration certificate change together."
+      content="Motion-native research explanations, verified evidence, complete project routes, and a live speech-to-scene laboratory."
     />
-    <meta name="twitter:image" content="https://kumarnavish.github.io/social-card-light.svg" />
+    <meta name="twitter:image" content="https://kumarnavish.github.io/social/root.svg" />
     <script>
       ;(function () {
-        var route = sessionStorage.getItem('__gain_graph_route')
+        var route = sessionStorage.getItem('__portfolio_route') || sessionStorage.getItem('__gain_graph_route')
         if (route) {
+          sessionStorage.removeItem('__portfolio_route')
           sessionStorage.removeItem('__gain_graph_route')
           history.replaceState(null, '', route)
         }
@@ -44,20 +45,26 @@
         "@type": "Person",
         "name": "Navish Kumar",
         "url": "https://kumarnavish.github.io/",
-        "jobTitle": "PhD Researcher in Machine Learning",
+        "jobTitle": "Machine-Learning Researcher and Systems Builder",
+        "homeLocation": { "@type": "Place", "name": "Basel, Switzerland" },
         "affiliation": { "@type": "Organization", "name": "University of Basel" },
         "sameAs": [
           "https://github.com/KumarNavish",
           "https://scholar.google.com/citations?user=BFCHfngAAAAJ&hl=en",
           "https://openreview.net/profile?id=~Navish_Kumar1"
+        ],
+        "knowsAbout": [
+          "Machine learning",
+          "Optimization",
+          "Continual learning",
+          "Spectral graph theory",
+          "Evidence-grounded agents",
+          "Spatial computing"
         ]
       }
     </script>
     <style>
-      :root {
-        color-scheme: light only;
-        background: #fff;
-      }
+      :root { color-scheme: light only; background: #fff; }
       html,
       body,
       #root {
@@ -65,23 +72,21 @@
         min-height: 100%;
         margin: 0;
         background: #fff;
-        color: #111827;
+        color: #111310;
       }
       .initial-light-surface {
         min-height: 100vh;
         display: grid;
         place-items: center;
         background: #fff;
-        color: #111827;
-        font:
-          600 14px/1.5 system-ui,
-          sans-serif;
+        color: #111310;
+        font: 600 14px/1.5 system-ui, sans-serif;
       }
     </style>
-    <title>Navish Kumar — Interactive research instruments</title>
+    <title>Navish Kumar | Machine-Learning Researcher and Systems Builder</title>
   </head>
   <body>
-    <div id="root"><div class="initial-light-surface">Loading the gain-graph instrument…</div></div>
+    <div id="root"><div class="initial-light-surface">Loading the research portfolio…</div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
