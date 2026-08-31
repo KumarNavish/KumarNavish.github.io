@@ -1,0 +1,121 @@
+name: patch radical redesign lint defects
+
+on:
+  push:
+    branches: [portfolio-radical-redesign-20260831]
+    paths:
+      - '.github/workflows/patch-radical-redesign-lint.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: portfolio-radical-redesign-20260831
+          fetch-depth: 0
+      - name: Repair React state and export architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'expected patch target missing in {path}: {old[:80]!r}')
+              file.write_text(text.replace(old, new), encoding='utf-8')
+
+          replace(
+              'site/src/rebuilt/CasePathProductExperience.tsx',
+              """  useEffect(() => {\n    if (!playing || reduced) return undefined\n    const timer = window.setInterval(() => {\n      setStep((current) => (Math.min(5, current + 1) as CaseStep))\n    }, 2600)\n    return () => window.clearInterval(timer)\n  }, [playing, reduced])\n\n  useEffect(() => {\n    if (step === 5) setPlaying(false)\n    if (step < 3) setCorrected(false)\n  }, [step])\n""",
+              """  useEffect(() => {\n    if (!playing || reduced || step >= 5) return undefined\n    const timer = window.setTimeout(() => {\n      const next = Math.min(5, step + 1) as CaseStep\n      setStep(next)\n      if (next === 5) setPlaying(false)\n    }, 2600)\n    return () => window.clearTimeout(timer)\n  }, [playing, reduced, step])\n""",
+          )
+          replace(
+              'site/src/rebuilt/CasePathProductExperience.tsx',
+              """  const activeCopy = STEP_COPY[step]\n\n  const restart = () => {\n""",
+              """  const activeCopy = STEP_COPY[step]\n\n  const selectStep = (next: CaseStep) => {\n    setPlaying(false)\n    if (next < 3) setCorrected(false)\n    setStep(next)\n  }\n\n  const restart = () => {\n""",
+          )
+          replace(
+              'site/src/rebuilt/CasePathProductExperience.tsx',
+              """        <button type=\"button\" onClick={() => { setPlaying(false); setStep((Math.max(0, step - 1) as CaseStep)) }} disabled={step === 0}>\n          Previous\n        </button>\n""",
+              """        <button type=\"button\" onClick={() => selectStep(Math.max(0, step - 1) as CaseStep)} disabled={step === 0}>\n          Previous\n        </button>\n""",
+          )
+          replace(
+              'site/src/rebuilt/CasePathProductExperience.tsx',
+              """        <button type=\"button\" onClick={() => { setPlaying(false); setStep((Math.min(5, step + 1) as CaseStep)) }} disabled={step === 5}>\n          Next\n        </button>\n""",
+              """        <button type=\"button\" onClick={() => selectStep(Math.min(5, step + 1) as CaseStep)} disabled={step === 5}>\n          Next\n        </button>\n""",
+          )
+          replace(
+              'site/src/rebuilt/CasePathProductExperience.tsx',
+              "onClick={() => { setPlaying(false); setStep(index as CaseStep) }}",
+              "onClick={() => selectStep(index as CaseStep)}",
+          )
+
+          replace(
+              'site/src/rebuilt/ProjectStages.tsx',
+              "import { useEffect, useId, useMemo, useState } from 'react'",
+              "import { useCallback, useEffect, useId, useMemo, useState } from 'react'",
+          )
+          replace(
+              'site/src/rebuilt/ProjectStages.tsx',
+              "export const PROJECT_STEP_COPY: Record<string, Array<{ label: string; takeaway: string }>> = {",
+              "const PROJECT_STEP_COPY: Record<string, Array<{ label: string; takeaway: string }>> = {",
+          )
+          replace(
+              'site/src/rebuilt/ProjectStages.tsx',
+              """  const changeIndex = (nextIndex: number) => {\n    if (controlledIndex === undefined) setInternalIndex(nextIndex)\n    onIndexChange?.(nextIndex)\n  }\n""",
+              """  const changeIndex = useCallback((nextIndex: number) => {\n    if (controlledIndex === undefined) setInternalIndex(nextIndex)\n    onIndexChange?.(nextIndex)\n  }, [controlledIndex, onIndexChange])\n""",
+          )
+          replace(
+              'site/src/rebuilt/ProjectStages.tsx',
+              "  }, [index, onIndexChange, playing, reducedMotion])",
+              "  }, [changeIndex, index, playing, reducedMotion])",
+          )
+
+          replace(
+              'site/src/shared/PortfolioShell.tsx',
+              "import { useEffect, useState } from 'react'\nimport { NavLink, useLocation } from 'react-router-dom'",
+              "import { useState } from 'react'\nimport { NavLink } from 'react-router-dom'",
+          )
+          replace(
+              'site/src/shared/PortfolioShell.tsx',
+              """  const [open, setOpen] = useState(false)\n  const location = useLocation()\n\n  useEffect(() => setOpen(false), [location.pathname])\n""",
+              """  const [open, setOpen] = useState(false)\n""",
+          )
+          replace(
+              'site/src/shared/PortfolioShell.tsx',
+              "<NavLink className=\"portfolio-brand\" to=\"/\" aria-label=\"Navish Kumar — portfolio home\">",
+              "<NavLink className=\"portfolio-brand\" to=\"/\" aria-label=\"Navish Kumar — portfolio home\" onClick={() => setOpen(false)}>",
+          )
+          replace(
+              'site/src/shared/PortfolioShell.tsx',
+              "<NavLink key={route} to={route}>",
+              "<NavLink key={route} to={route} onClick={() => setOpen(false)}>",
+          )
+          PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: Validate repairs
+        working-directory: site
+        run: |
+          npm ci
+          npm run lint
+          npm run typecheck
+      - name: Commit validated repairs
+        shell: bash
+        run: |
+          git config user.name 'Navish portfolio redesign bot'
+          git config user.email '43814868+KumarNavish@users.noreply.github.com'
+          git add site/src/rebuilt/CasePathProductExperience.tsx site/src/rebuilt/ProjectStages.tsx site/src/shared/PortfolioShell.tsx
+          git commit -m 'fix(portfolio): align rebuilt React state with lint contract'
+          git push origin HEAD:portfolio-radical-redesign-20260831
