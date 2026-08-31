@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { getWork } from '../data/workRegistry'
@@ -49,7 +49,7 @@ export const PROGRAMME_MOMENTS = [
   },
 ] as const
 
-export const PROJECT_STEP_COPY: Record<string, Array<{ label: string; takeaway: string }>> = {
+const PROJECT_STEP_COPY: Record<string, Array<{ label: string; takeaway: string }>> = {
   'counterspeech-dynamics': [
     { label: 'Observe the network', takeaway: 'Start with who interacts with whom—not with an assumed intervention.' },
     { label: 'Pair comparable users', takeaway: 'Matched groups make behavioural differences easier to inspect.' },
@@ -519,10 +519,10 @@ export function ProgrammeStage({
   const [internalIndex, setInternalIndex] = useState(0)
   const [playing, setPlaying] = useState(autoplay && !reducedMotion)
   const index = controlledIndex ?? internalIndex
-  const changeIndex = (nextIndex: number) => {
+  const changeIndex = useCallback((nextIndex: number) => {
     if (controlledIndex === undefined) setInternalIndex(nextIndex)
     onIndexChange?.(nextIndex)
-  }
+  }, [controlledIndex, onIndexChange])
   const moment = PROGRAMME_MOMENTS[index]
   const work = getWork(moment.id)
   const stageStep = useMemo(() => {
@@ -534,7 +534,7 @@ export function ProgrammeStage({
     if (!playing || reducedMotion) return undefined
     const timer = window.setInterval(() => changeIndex((index + 1) % PROGRAMME_MOMENTS.length), 6500)
     return () => window.clearInterval(timer)
-  }, [index, onIndexChange, playing, reducedMotion])
+  }, [changeIndex, index, playing, reducedMotion])
 
   const move = (delta: number) => {
     setPlaying(false)

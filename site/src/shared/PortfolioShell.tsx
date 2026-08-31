@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { useState } from 'react'
+import { NavLink } from 'react-router-dom'
 
 import './portfolio.css'
 
@@ -14,14 +14,11 @@ const NAVIGATION = [
 
 export function PortfolioHeader() {
   const [open, setOpen] = useState(false)
-  const location = useLocation()
-
-  useEffect(() => setOpen(false), [location.pathname])
 
   return (
     <header className={open ? 'portfolio-header is-menu-open' : 'portfolio-header'}>
       <div className="portfolio-header-inner">
-        <NavLink className="portfolio-brand" to="/" aria-label="Navish Kumar — portfolio home">
+        <NavLink className="portfolio-brand" to="/" aria-label="Navish Kumar — portfolio home" onClick={() => setOpen(false)}>
           <strong>Navish Kumar</strong>
           <span>Research · systems · spatial interfaces</span>
         </NavLink>
@@ -39,7 +36,7 @@ export function PortfolioHeader() {
 
         <nav id="portfolio-primary-navigation" className="portfolio-nav" aria-label="Primary navigation">
           {NAVIGATION.map(([route, label]) => (
-            <NavLink key={route} to={route}>
+            <NavLink key={route} to={route} onClick={() => setOpen(false)}>
               {label}
             </NavLink>
           ))}

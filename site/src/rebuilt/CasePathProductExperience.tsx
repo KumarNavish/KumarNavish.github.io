@@ -187,17 +187,14 @@ export function CasePathProductExperience({ embedded = false }: { embedded?: boo
   const [corrected, setCorrected] = useState(false)
 
   useEffect(() => {
-    if (!playing || reduced) return undefined
-    const timer = window.setInterval(() => {
-      setStep((current) => (Math.min(5, current + 1) as CaseStep))
+    if (!playing || reduced || step >= 5) return undefined
+    const timer = window.setTimeout(() => {
+      const next = Math.min(5, step + 1) as CaseStep
+      setStep(next)
+      if (next === 5) setPlaying(false)
     }, 2600)
-    return () => window.clearInterval(timer)
-  }, [playing, reduced])
-
-  useEffect(() => {
-    if (step === 5) setPlaying(false)
-    if (step < 3) setCorrected(false)
-  }, [step])
+    return () => window.clearTimeout(timer)
+  }, [playing, reduced, step])
 
   const sources = useMemo<SourceRecord[]>(() => {
     if (step < 3) return BASE_SOURCES
@@ -217,6 +214,12 @@ export function CasePathProductExperience({ embedded = false }: { embedded?: boo
   }, [corrected, step])
 
   const activeCopy = STEP_COPY[step]
+
+  const selectStep = (next: CaseStep) => {
+    setPlaying(false)
+    if (next < 3) setCorrected(false)
+    setStep(next)
+  }
 
   const restart = () => {
     setCorrected(false)
@@ -271,13 +274,13 @@ export function CasePathProductExperience({ embedded = false }: { embedded?: boo
       </div>
 
       <div className="casepath-transport" aria-label="CasePath explanation controls">
-        <button type="button" onClick={() => { setPlaying(false); setStep((Math.max(0, step - 1) as CaseStep)) }} disabled={step === 0}>
+        <button type="button" onClick={() => selectStep(Math.max(0, step - 1) as CaseStep)} disabled={step === 0}>
           Previous
         </button>
         <button type="button" onClick={() => setPlaying((value) => !value)} disabled={reduced || step === 5} aria-pressed={playing}>
           {reduced ? 'Step mode' : playing ? 'Pause' : 'Play'}
         </button>
-        <button type="button" onClick={() => { setPlaying(false); setStep((Math.min(5, step + 1) as CaseStep)) }} disabled={step === 5}>
+        <button type="button" onClick={() => selectStep(Math.min(5, step + 1) as CaseStep)} disabled={step === 5}>
           Next
         </button>
         <button type="button" onClick={restart}>Restart</button>
@@ -291,7 +294,7 @@ export function CasePathProductExperience({ embedded = false }: { embedded?: boo
             aria-selected={step === index}
             className={step === index ? 'is-active' : ''}
             key={item.label}
-            onClick={() => { setPlaying(false); setStep(index as CaseStep) }}
+            onClick={() => selectStep(index as CaseStep)}
           >
             <span>{String(index + 1).padStart(2, '0')}</span>
             <strong>{item.label}</strong>
