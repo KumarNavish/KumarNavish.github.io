@@ -1,0 +1,53 @@
+name: portfolio static route contract
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'site/**'
+      - '.github/workflows/portfolio-static-route-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: portfolio-static-routes-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-route-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: site
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and materialize portfolio routes
+        run: npm run build
+
+      - name: Verify route, registry, metadata, and sitemap parity
+        run: node qa/assert-static-routes.mjs dist qa-artifacts/static-routes.json
+
+      - name: Upload static route evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: portfolio-static-routes-${{ github.sha }}
+          path: site/qa-artifacts/static-routes.json
+          if-no-files-found: warn
+          retention-days: 30
