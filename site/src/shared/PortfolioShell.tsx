@@ -20,7 +20,7 @@ export function PortfolioHeader() {
       <div className="portfolio-header-inner">
         <NavLink className="portfolio-brand" to="/" aria-label="Navish Kumar — portfolio home" onClick={() => setOpen(false)}>
           <strong>Navish Kumar</strong>
-          <span>Research · systems · spatial interfaces</span>
+          <span>ML research · systems · spatial interfaces</span>
         </NavLink>
 
         <button
