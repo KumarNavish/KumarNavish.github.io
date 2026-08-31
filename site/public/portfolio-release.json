@@ -1,21 +1,15 @@
 {
-  "architecture": "canonical-research-trajectory",
+  "architecture": "living-research-programme",
   "release_date": "2026-08-31",
-  "surface_revision": "concentration-and-authorship",
+  "surface_revision": "radical-redesign",
   "body_of_work": 10,
   "canonical_routes_verified": true,
+  "scientific_registry_preserved": true,
+  "programme_stage_verified": true,
+  "casepath_failure_correction_verified": true,
   "spatial_interaction_contract_verified": true,
-  "guided_transport_verified": true,
   "spatial_history_verified": true,
-  "authorship_concentration_verified": true,
-  "programme_overview_default": true,
-  "mobile_narrative_order_verified": true,
-  "surfaces": [
-    "trajectory",
-    "work",
-    "research",
-    "systems",
-    "frontier",
-    "about"
-  ]
+  "guided_transport_verified": true,
+  "mobile_narrative_verified": true,
+  "surfaces": ["trajectory", "work", "research", "systems", "frontier", "about"]
 }

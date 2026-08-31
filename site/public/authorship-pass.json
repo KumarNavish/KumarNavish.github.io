@@ -1,10 +1,13 @@
 {
-  "release": "portfolio-authorship-pass-20260831",
+  "release": "portfolio-radical-redesign-20260831",
   "feedback_executed": true,
-  "overview_first": true,
-  "featured_work_count": 4,
+  "surface_rebuilt": true,
+  "programme_stage": true,
+  "memory_moments": 3,
+  "question_portals": 4,
   "complete_work_count": 10,
-  "trajectory_default": "programme-overview",
-  "work_index_mode": "depth-on-demand",
-  "mobile_navigation": "compact-menu"
+  "casepath_failure_correction": true,
+  "persistent_spatial_world": true,
+  "mobile_navigation": "compact-menu",
+  "reduced_motion": "explicit-step-mode"
 }
