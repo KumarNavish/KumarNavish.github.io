@@ -1,0 +1,82 @@
+name: Install verified CasePath Agentic OS v10
+
+on:
+  push:
+    branches: [casepath-agentic-os-v10]
+    paths:
+      - '.github/workflows/install-casepath-v10.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  install-test-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: casepath-agentic-os-v10
+          fetch-depth: 0
+
+      - name: Download and verify source release
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 5 --retry-delay 2 \
+            'https://drive.google.com/uc?export=download&id=10K2210eCrgByTPCfFzsL-ZXX62suJ2jv' \
+            -o /tmp/casepath-v10.zip
+          python -m zipfile -t /tmp/casepath-v10.zip
+          rm -rf /tmp/casepath-v10
+          mkdir -p /tmp/casepath-v10
+          python -m zipfile -e /tmp/casepath-v10.zip /tmp/casepath-v10
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          root = Path('/tmp/casepath-v10/CasePath_Agentic_OS_v10')
+          manifest = json.loads((root / 'SOURCE_MANIFEST.json').read_text())
+          failures=[]
+          for item in manifest['files']:
+              p=root/item['path']
+              if not p.is_file(): failures.append(f"missing:{item['path']}"); continue
+              digest=hashlib.sha256(p.read_bytes()).hexdigest()
+              if digest != item['sha256']: failures.append(f"sha256:{item['path']}")
+          if failures:
+              raise SystemExit('\n'.join(failures))
+          print(f"verified {len(manifest['files'])} source files")
+          PY
+
+      - name: Replace runtime source exactly
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=/tmp/casepath-v10/CasePath_Agentic_OS_v10
+          rm -rf casepath casepath-api
+          cp -a "$root/casepath" ./casepath
+          cp -a "$root/casepath-api" ./casepath-api
+          cp "$root/SOURCE_MANIFEST.json" ./CASEPATH_V10_SOURCE_MANIFEST.json
+
+      - name: Install and verify backend and frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip >/dev/null
+          if [ -f casepath-api/requirements.txt ]; then python -m pip install -r casepath-api/requirements.txt >/dev/null; fi
+          python -m pip install pytest >/dev/null
+          python -m pytest -q
+          python -m compileall -q casepath-api/casepath_api
+          node --check casepath/assets/app.js
+          test -f casepath/index.html
+          test -f casepath-api/casepath_api/app.py
+
+      - name: Commit exact tested source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/install-casepath-v10.yml
+          git config user.name 'CasePath release automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -A
+          git commit -m 'Install tested CasePath Agentic OS v10 source [skip ci]'
+          git push origin HEAD:casepath-agentic-os-v10
