@@ -1,0 +1,38 @@
+name: export visual authorship source
+
+on:
+  push:
+    branches: [portfolio-visual-authorship-20260902]
+    paths:
+      - '.github/workflows/export-visual-authorship-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: portfolio-visual-authorship-20260902
+          fetch-depth: 0
+      - name: Archive repository source
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar \
+            --exclude='.git' \
+            --exclude='site/node_modules' \
+            --exclude='site/dist' \
+            --exclude='site/qa-artifacts' \
+            -czf /tmp/portfolio-source.tar.gz .
+          sha256sum /tmp/portfolio-source.tar.gz > /tmp/portfolio-source.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: portfolio-source-${{ github.sha }}
+          path: |
+            /tmp/portfolio-source.tar.gz
+            /tmp/portfolio-source.sha256
+          retention-days: 3
