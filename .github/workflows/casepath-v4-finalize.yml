@@ -1,0 +1,49 @@
+name: Finalize verified CasePath v4 release
+
+on:
+  push:
+    branches: [casepath-product-v4-20260806]
+    paths:
+      - '.github/workflows/casepath-v4-finalize.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: casepath-product-v4-20260806
+          fetch-depth: 0
+      - name: Wait for and enforce independent live evidence
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 36); do
+            git fetch origin casepath-product-v4-20260806
+            git reset --hard origin/casepath-product-v4-20260806
+            if [ -f casepath-final/reports/live/browser-qa.json ] && [ -f casepath-final/reports/live/asset-audit.json ]; then break; fi
+            sleep 10
+          done
+          python - <<'PY'
+          import json
+          qa=json.load(open('casepath-final/reports/live/browser-qa.json'))
+          assets=json.load(open('casepath-final/reports/live/asset-audit.json'))
+          assert qa['failed']==0, qa
+          assert qa['browserErrors']==[], qa
+          assert qa['mobileOverflowPx']==0, qa
+          assert qa['passed']>=18, qa
+          assert assets['passed'] is True, assets
+          assert all(a['status']==200 for a in assets['assets']), assets
+          PY
+      - name: Fast-forward the verified source to master
+        run: |
+          set -euo pipefail
+          git config user.name 'CasePath release automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git fetch origin master
+          git rebase origin/master
+          git push origin HEAD:master
