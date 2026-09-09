@@ -9,6 +9,7 @@ on:
       - '.redesign/fix_spatial_diff.py'
       - '.redesign/fix_mobile_lazy_trajectory.py'
       - '.redesign/fix_accessibility.py'
+      - '.redesign/fix_motion_qa.py'
       - '.github/workflows/apply-comprehension-pass.yml'
 
 permissions:
@@ -41,6 +42,7 @@ jobs:
           python3 .redesign/fix_spatial_diff.py
           python3 .redesign/fix_mobile_lazy_trajectory.py
           python3 .redesign/fix_accessibility.py
+          python3 .redesign/fix_motion_qa.py
 
       - name: Install and validate source
         working-directory: immersive
