@@ -1,0 +1,79 @@
+name: comprehension release qa
+
+on:
+  push:
+    branches: [comprehension-first-20260909]
+    paths:
+      - 'immersive/**'
+      - '.github/workflows/comprehension-release-qa.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: comprehension-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: immersive
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: immersive/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npx playwright install chromium
+      - name: Serve and verify exact build
+        shell: bash
+        env:
+          QA_OUT: ${{ runner.temp }}/release-qa
+        run: |
+          set -euo pipefail
+          npm run preview >/tmp/release-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill "$PREVIEW_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 40); do
+            curl -fsS http://127.0.0.1:4187/release.json >/dev/null && break
+            sleep 1
+          done
+          npm run qa
+          CHROME_PATH="$(node -e "console.log(require('playwright').chromium.executablePath())")"
+          export CHROME_PATH
+          npx --yes lighthouse@12.8.2 http://127.0.0.1:4187/ \
+            --chrome-flags='--headless --no-sandbox --disable-dev-shm-usage --enable-unsafe-swiftshader' \
+            --output=json --output-path=${{ runner.temp }}/release-qa/lighthouse.json --quiet
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const p=process.env.RUNNER_TEMP+'/release-qa/lighthouse.json';
+          const r=JSON.parse(fs.readFileSync(p,'utf8'));
+          const c=r.categories, a=r.audits;
+          const summary={
+            performance:c.performance.score,
+            accessibility:c.accessibility.score,
+            bestPractices:c['best-practices'].score,
+            seo:c.seo.score,
+            lcpMs:a['largest-contentful-paint'].numericValue,
+            tbtMs:a['total-blocking-time'].numericValue,
+            cls:a['cumulative-layout-shift'].numericValue,
+          };
+          fs.writeFileSync(process.env.RUNNER_TEMP+'/release-qa/lighthouse-summary.json',JSON.stringify(summary,null,2));
+          console.log(summary);
+          if(summary.performance < .90) throw new Error('performance below .90');
+          if(summary.accessibility < 1 || summary.bestPractices < 1 || summary.seo < 1) throw new Error('quality category below 1.0');
+          if(summary.lcpMs >= 2500 || summary.cls >= .05 || summary.tbtMs >= 250) throw new Error('performance metric outside release budget');
+          JS
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: comprehension-release-qa-${{ github.sha }}
+          path: ${{ runner.temp }}/release-qa
+          if-no-files-found: error
+          retention-days: 30
