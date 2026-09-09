@@ -1,0 +1,79 @@
+name: apply comprehension-first portfolio pass
+
+on:
+  push:
+    branches: [comprehension-first-20260909]
+    paths:
+      - '.redesign/apply_comprehension.py'
+      - '.github/workflows/apply-comprehension-pass.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: comprehension-first-20260909
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: immersive/package-lock.json
+
+      - name: Apply comprehension-first source patch
+        run: python3 .redesign/apply_comprehension.py
+
+      - name: Install and validate source
+        working-directory: immersive
+        run: |
+          npm ci
+          npm run check
+
+      - name: Install Chromium
+        working-directory: immersive
+        run: npx playwright install --with-deps chromium
+
+      - name: Exercise exact production build
+        shell: bash
+        working-directory: immersive
+        env:
+          QA_OUT: ${{ runner.temp }}/comprehension-qa
+        run: |
+          set -euo pipefail
+          npm run preview >/tmp/comprehension-preview.log 2>&1 &
+          PREVIEW_PID=$!
+          trap 'kill "$PREVIEW_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:4187/release.json >/dev/null; then break; fi
+            sleep 1
+          done
+          npm run qa
+
+      - name: Preserve rendered evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: comprehension-qa-${{ github.sha }}
+          path: ${{ runner.temp }}/comprehension-qa
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Commit qualified source changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Navish portfolio design bot'
+          git config user.email '43814868+KumarNavish@users.noreply.github.com'
+          git add immersive/src immersive/tests
+          if git diff --cached --quiet; then
+            echo 'No source changes to commit.'
+            exit 0
+          fi
+          git commit -m 'Make the research trajectory and causal meaning explicit'
+          git push origin HEAD:comprehension-first-20260909
