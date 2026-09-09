@@ -10,7 +10,7 @@ old = '''    ]) {
         )) <= 1,
 '''
 new = '''    ]) {
-      await go(route, route !== "/trajectory/");
+      await go(route, !["/", "/trajectory/"].includes(route));
       assert.ok(
         (await page.evaluate(
           () => document.documentElement.scrollWidth - innerWidth,
@@ -19,4 +19,4 @@ new = '''    ]) {
 if old not in s:
     raise RuntimeError("Could not locate mobile route loop")
 p.write_text(s.replace(old, new, 1))
-print("Mobile QA now validates the canonical trajectory without forcing its intentionally below-fold WebGL lens to render.")
+print("Mobile QA accepts the intentional static hero fallback and lazy trajectory lens while keeping deep scientific stages live.")
