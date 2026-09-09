@@ -1,14 +1,44 @@
-import {chromium} from 'playwright';
-import fs from 'node:fs/promises';
-await fs.mkdir('.evidence',{recursive:true});
-const browser=await chromium.launch({headless:true,executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',args:['--ignore-gpu-blocklist']});
-const page=await browser.newPage({viewport:{width:1440,height:1000},deviceScaleFactor:1});
-const errors=[];
-page.on('pageerror',e=>errors.push(e.message));
-page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
-await page.goto('http://127.0.0.1:4187/',{waitUntil:'networkidle'});
+import { chromium } from "playwright";
+import fs from "node:fs/promises";
+await fs.mkdir(".evidence", { recursive: true });
+const browser = await chromium.launch({
+  headless: true,
+  executablePath:
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  args: ["--ignore-gpu-blocklist"],
+});
+const page = await browser.newPage({
+  viewport: { width: 1440, height: 1000 },
+  deviceScaleFactor: 1,
+});
+const errors = [];
+page.on("pageerror", (e) => errors.push(e.message));
+page.on("console", (m) => {
+  if (m.type() === "error") errors.push(m.text());
+});
+await page.goto("http://127.0.0.1:4187/", { waitUntil: "networkidle" });
 await page.waitForTimeout(5000);
-await page.screenshot({path:'.evidence/first-home.png'});
-console.log(JSON.stringify({title:await page.title(),errors,canvas:await page.locator('canvas').count(),state:await page.locator('.scene-stage').getAttribute('data-state'),body:(await page.locator('body').innerText()).slice(0,400)}));
-if(await page.locator('canvas').count())console.log(await page.locator('canvas').evaluate(c=>({renderer:c.dataset.renderer,triangles:c.dataset.triangles,camera:c.dataset.camera,version:c.getContext('webgl2')?.getParameter(c.getContext('webgl2').VERSION)})));
+await page.screenshot({ path: ".evidence/first-home.png" });
+console.log(
+  JSON.stringify({
+    title: await page.title(),
+    errors,
+    canvas: await page.locator("canvas").count(),
+    state: await page.locator(".scene-stage").getAttribute("data-state"),
+    body: (await page.locator("body").innerText()).slice(0, 400),
+  }),
+);
+if (await page.locator("canvas").count())
+  console.log(
+    await page
+      .locator("canvas")
+      .evaluate((c) => ({
+        renderer: c.dataset.renderer,
+        triangles: c.dataset.triangles,
+        camera: c.dataset.camera,
+        version: c
+          .getContext("webgl2")
+          ?.getParameter(c.getContext("webgl2").VERSION),
+      })),
+  );
 await browser.close();
