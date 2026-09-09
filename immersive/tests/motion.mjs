@@ -60,12 +60,17 @@ try {
   await check(
     "camera interpolation produces distinct intermediate and final views",
     async () => {
-      const canvas = page.locator("canvas").first(),
+      const canvas = page.locator(".home-stage canvas"),
         before = await canvas.getAttribute("data-camera");
       await page
+        .locator(".home-stage")
         .getByRole("button", { name: "Rotate view left", exact: true })
         .click();
-      await page.waitForTimeout(150);
+      await page.waitForFunction(
+        (previous) => document.querySelector(".home-stage canvas")?.dataset.camera !== previous,
+        before,
+        { timeout: 3000 },
+      );
       const middle = await canvas.getAttribute("data-camera");
       await page.waitForTimeout(1000);
       const after = await canvas.getAttribute("data-camera");

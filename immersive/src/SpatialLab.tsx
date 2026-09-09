@@ -98,6 +98,18 @@ export function SpatialLab() {
     [world, selected, run, runCycle, mode, reduced],
   );
   const object = world.objects.find((o) => o.id === selected);
+  const lastChange = [...world.history]
+    .reverse()
+    .find((entry) => !entry.text.startsWith("Agent approached ")) ?? world.history.at(-1);
+  const lastDiff = lastChange ? describeHistory(lastChange, world) : [];
+  const relationCount = intent ? intent.move.length : 0;
+  const compilerSteps = [
+    ["Language", listening ? "Listening…" : command.trim() ? "Instruction ready" : "Awaiting instruction"],
+    ["Intent", intent ? `${intent.add.length + intent.move.length + intent.remove.length} parsed edits` : "Not parsed yet"],
+    ["Relations", intent ? `${relationCount} spatial relation${relationCount === 1 ? "" : "s"}` : "Not resolved yet"],
+    ["World", `Revision ${world.revision} · ${world.objects.length} objects`],
+    ["Agent", agent === "done" ? "Action completed" : agent === "walking" ? "Executing path" : world.goal ? "Goal resolved" : "No active goal"],
+  ] as const;
   function commit(next: WorldState, autoRun = false) {
     past.current = [...past.current, world].slice(-20);
     stage.current?.pause(false);
@@ -221,6 +233,15 @@ export function SpatialLab() {
           next instruction edits the same world.
         </p>
       </header>
+      <section className="world-compiler-rail" aria-label="Language to persistent world pipeline">
+        {compilerSteps.map(([label, value], index) => (
+          <article key={label} className={index <= (intent ? 4 : 0) ? "is-resolved" : ""}>
+            <span>{String(index + 1).padStart(2, "0")}</span>
+            <div><strong>{label}</strong><small>{value}</small></div>
+            {index < compilerSteps.length - 1 && <Icon name="arrow" size={14} />}
+          </article>
+        ))}
+      </section>
       <div className="lab-view-controls">
         <div className="segmented">
           <button
@@ -327,6 +348,14 @@ export function SpatialLab() {
               ))}
             </div>
           </form>
+          <section className="world-inline-diff" aria-live="polite">
+            <span>State diff</span>
+            {lastDiff.length ? (
+              <ul>{lastDiff.slice(0, 4).map((item) => <li key={item}>{item}</li>)}</ul>
+            ) : (
+              <p>No edit has been applied yet. The next accepted command will change this same world.</p>
+            )}
+          </section>
           <div className="world-bottom-actions">
             <button onClick={undo} disabled={!past.current.length}>
               <Icon name="back" />

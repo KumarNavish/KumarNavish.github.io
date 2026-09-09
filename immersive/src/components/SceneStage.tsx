@@ -120,8 +120,10 @@ export const SceneStage = forwardRef<StageHandle, Props>(function SceneStage(
       className={`scene-stage ${className}`}
       data-state={status}
       data-world-time={config.world?.time}
+      role="region"
+      aria-label={description}
     >
-      <div className="stage-host" ref={host} aria-label={description} />
+      <div className="stage-host" ref={host} />
       {status !== "ready" && (
         <div className="stage-fallback" role="status">
           <div className="fallback-mark">
