@@ -101,7 +101,7 @@ try {
   });
   const canonical = release.routes.filter((r) => r.route === r.canonical);
   for (const r of canonical) {
-    const graphics = !["/research", "/about"].includes(r.route);
+    const graphics = !["/research", "/about", "/trajectory"].includes(r.route);
     await go(r.route === "/" ? "/" : r.route + "/", graphics);
     assert.equal(await page.locator("h1").count(), 1);
     assert.ok((await page.title()).includes("Navish Kumar"));
@@ -126,7 +126,12 @@ try {
         }));
     if (graphics) {
       assert.equal(stats.renderer, "webgl2");
-      assert.ok(stats.triangles > 100);
+      if (stats.triangles == null) {
+        const box = await page.locator(".scene-stage").first().boundingBox();
+        assert.ok(box && box.y >= 900, r.route + " has an unrendered stage inside the active viewport");
+      } else {
+        assert.ok(stats.triangles > 100);
+      }
     }
     report.routes.push({ route: r.route, pass: true, stats });
     if (
@@ -147,6 +152,37 @@ try {
           : r.route.replaceAll("/", "_").slice(1) + "-desktop",
       );
   }
+  await check("homepage has one canonical temporal spine and one causal proof", async () => {
+    await go("/");
+    assert.equal(await page.locator(".hero-horizons a").count(), 3);
+    assert.equal(await page.locator(".canonical-timeline .timeline-period").count(), 3);
+    assert.equal(await page.locator(".canonical-timeline li").count(), 10);
+    assert.equal(await page.locator(".proof-selector button").count(), 4);
+    assert.equal(await page.locator(".causal-chain article").count(), 4);
+    await page.locator(".proof-selector button").filter({ hasText: "Experience Replay" }).click();
+    await page.locator('[data-work-id="experience-replay-optimization"]').waitFor();
+    assert.match(await page.locator(".causal-chain").innerText(), /destructive change/i);
+    return "Past/Now/Frontier plus a selected problem → intervention → consequence → meaning proof";
+  });
+  await check("deep work exposes position, causal meaning, and authorship before evidence", async () => {
+    await go("/work/experience-replay-optimization/");
+    assert.equal(await page.locator(".work-position > div").count(), 3);
+    assert.equal(await page.locator(".project-causal-summary article").count(), 4);
+    assert.equal(await page.locator(".project-authorship").count(), 1);
+    assert.match(await page.locator(".work-position").innerText(), /Rank Feasibility/);
+    return "came from → this work → leads toward is explicit";
+  });
+  await check("trajectory opens with canonical Past Now Frontier before secondary lenses", async () => {
+    await go("/trajectory/");
+    assert.equal(await page.locator(".canonical-timeline .timeline-period").count(), 3);
+    assert.equal(await page.locator(".canonical-timeline li").count(), 10);
+    const canonical = await page.locator(".canonical-timeline").boundingBox();
+    const lenses = await page.locator(".trajectory-lens-section").boundingBox();
+    assert.ok(canonical && lenses && canonical.y < lenses.y);
+    await page.locator(".canonical-timeline button").filter({ hasText: "Rank Feasibility" }).click();
+    assert.match(await page.locator(".trajectory-selection").innerText(), /correction/i);
+    return "Time is canonical; question/method/system views remain secondary";
+  });
   await check(
     "orbit and camera controls change a real WebGL camera",
     async () => {
@@ -154,6 +190,7 @@ try {
       const c = page.locator("canvas").first(),
         before = await c.getAttribute("data-camera");
       await page
+        .locator(".home-stage")
         .getByRole("button", { name: "Rotate view left", exact: true })
         .click();
       await page.waitForTimeout(150);
@@ -163,23 +200,23 @@ try {
     },
   );
   await check("trajectory lenses reposition the same ten objects", async () => {
-    await go("/trajectory/");
-    const before = JSON.parse(
-      await page.locator("canvas").getAttribute("data-layout"),
-    );
+    await go("/trajectory/", false);
+    await page.locator(".trajectory-lens-section").scrollIntoViewIfNeeded();
+    await page.locator('.trajectory-scene[data-state="ready"]').waitFor({ timeout: 30000 });
+    const canvas = page.locator(".trajectory-scene canvas");
+    await page.waitForFunction(() => {
+      const el = document.querySelector(".trajectory-scene canvas");
+      return Boolean(el?.dataset.layout);
+    });
+    const before = JSON.parse(await canvas.getAttribute("data-layout"));
     assert.equal(before.length, 10);
     await page.getByRole("button", { name: "Questions", exact: true }).click();
-    await page.waitForTimeout(300);
-    const after = JSON.parse(
-      await page.locator("canvas").getAttribute("data-layout"),
-    );
+    await page.waitForTimeout(900);
+    const after = JSON.parse(await canvas.getAttribute("data-layout"));
     assert.notDeepEqual(before, after);
-    assert.deepEqual(
-      before.map((x) => x.id).sort(),
-      after.map((x) => x.id).sort(),
-    );
-    await page.locator(".timeline-item").nth(5).click();
-    await page.locator(".trajectory-detail").waitFor();
+    assert.deepEqual(before.map((x) => x.id).sort(), after.map((x) => x.id).sort());
+    await page.locator(".canonical-timeline button").filter({ hasText: "Experience Replay" }).click();
+    await page.locator(".trajectory-selection").waitFor();
     return { objects: after.length };
   });
   await check(
@@ -231,6 +268,10 @@ try {
   await check(
     "CasePath holds conflict and retains superseded evidence",
     async () => {
+      await go("/systems/");
+      assert.equal(await page.locator(".case-decision-sequence article").count(), 4);
+      assert.match(await page.locator(".case-decision-sequence").innerText(), /HOLD/);
+      assert.match(await page.locator(".case-decision-sequence").innerText(), /READY for review/);
       await go("/systems/casepath/");
       for (let i = 0; i < 3; i++)
         await page
@@ -252,6 +293,9 @@ try {
     "spatial commands preserve identities, relations, changes and reload state",
     async () => {
       await go("/frontier/spatial-intelligence/");
+      assert.equal(await page.locator(".world-compiler-rail article").count(), 5);
+      assert.match(await page.locator(".world-compiler-rail").innerText(), /Language/);
+      assert.match(await page.locator(".world-compiler-rail").innerText(), /World/);
       await page
         .getByRole("button", { name: "Clear objects", exact: true })
         .click();
@@ -260,6 +304,8 @@ try {
       );
       const first = await world();
       assert.ok(first.objects.length >= 5);
+      assert.match(await page.locator(".world-compiler-rail").innerText(), /parsed edits/);
+      assert.match(await page.locator(".world-inline-diff").innerText(), /added|created|environment|lighting/i);
       await apply("Add a second sample beside the microscope.");
       const second = await world();
       assert.equal(second.objects.length, first.objects.length + 1);
@@ -385,7 +431,11 @@ try {
       "/work/experience-replay-optimization/",
       "/frontier/spatial-intelligence/",
     ]) {
-      await go(route);
+      // Mobile narrative blocks deliberately place several scientific stages below
+      // the first viewport. Validate document geometry before asking those lazy
+      // WebGL stages to initialize; desktop and dedicated interaction tests cover
+      // their rendered scientific behavior.
+      await go(route, false);
       assert.ok(
         (await page.evaluate(
           () => document.documentElement.scrollWidth - innerWidth,
@@ -402,12 +452,19 @@ try {
             .click();
         }
       }
-      if (width === 390)
+      if (width === 390) {
+        if (["/work/experience-replay-optimization/", "/frontier/spatial-intelligence/"].includes(route)) {
+          const stage = page.locator(".scene-stage").first();
+          await stage.scrollIntoViewIfNeeded();
+          await stage.waitFor({ state: "visible" });
+          await page.locator('.scene-stage[data-state="ready"]').first().waitFor({ timeout: 30000 });
+        }
         await snap(
           route === "/"
             ? "home-mobile"
             : route.replaceAll("/", "_") + "-mobile",
         );
+      }
       report.routes.push({ route, viewport: [width, height], pass: true });
     }
   }
