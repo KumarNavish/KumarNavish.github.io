@@ -1,4 +1,5 @@
 import * as T from "three";
+import { advanceFrameClock } from "./clock";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { buildScience, type ScienceState } from "./scientificModels";
 import { buildWorld } from "./worldModels";
@@ -475,8 +476,9 @@ export class ResearchRenderer {
     this.raf = 0;
     if (!this.prepared || this.disposed || !this.visible || document.hidden)
       return;
-    const dt = this.last ? Math.min(0.05, (now - this.last) / 1000) : 0.016;
-    this.last = now;
+    const clock = advanceFrameClock(now, this.last);
+    const dt = clock.delta;
+    this.last = clock.timestamp;
     if (!this.paused) this.elapsed += dt;
     let active =
       this.paused || this.dragging
