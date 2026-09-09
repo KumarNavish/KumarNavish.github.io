@@ -122,7 +122,7 @@ export function graphModel(s: ScienceState): Model {
     group,
     update: (seconds) => {
       if (s.reduced || s.step === 0) return false;
-      const t = Math.min(1, seconds / 3),
+      const t = Math.max(0, Math.min(1, seconds / 3)),
         f = t * 6,
         i = Math.min(5, Math.floor(f)),
         a = positions[i],

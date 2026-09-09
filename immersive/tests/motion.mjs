@@ -124,7 +124,11 @@ try {
       await page
         .getByRole("button", { name: "Pause agent", exact: true })
         .click();
-      await page.waitForTimeout(250);
+      await page.waitForFunction(
+        () => document.querySelector("canvas")?.dataset.paused === "true",
+        null,
+        { timeout: 10000 },
+      );
       const canvas = page.locator("canvas");
       const before = await canvas.evaluate((c) => ({
         position: c.dataset.agentPosition,
@@ -196,6 +200,32 @@ try {
         await page.locator(".scene-stage").getAttribute("data-world-time"),
         "night",
       );
+    },
+  );
+  await check(
+    "throttled startup never reverses the animation clock",
+    async () => {
+      const cdp = await context.newCDPSession(page);
+      await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+      try {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          await go("/?clock-regression=" + attempt);
+          const canvas = page.locator("canvas").first();
+          let previous = 0;
+          for (let frame = 0; frame < 12; frame++) {
+            await page.waitForTimeout(100);
+            const elapsed = Number(await canvas.getAttribute("data-elapsed"));
+            assert.ok(
+              Number.isFinite(elapsed) && elapsed >= previous,
+              "Elapsed time must remain nonnegative and monotonic after shader startup",
+            );
+            previous = elapsed;
+          }
+        }
+      } finally {
+        await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+        await cdp.detach();
+      }
     },
   );
   assert.deepEqual(report.errors, []);
