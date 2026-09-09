@@ -6,6 +6,7 @@ on:
     paths:
       - '.redesign/apply_comprehension.py'
       - '.redesign/fix_comprehension_qa.py'
+      - '.redesign/fix_spatial_diff.py'
       - '.github/workflows/apply-comprehension-pass.yml'
 
 permissions:
@@ -31,6 +32,7 @@ jobs:
         run: |
           python3 .redesign/apply_comprehension.py
           python3 .redesign/fix_comprehension_qa.py
+          python3 .redesign/fix_spatial_diff.py
 
       - name: Install and validate source
         working-directory: immersive
