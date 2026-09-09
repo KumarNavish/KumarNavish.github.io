@@ -1,0 +1,84 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 1886 >>
+stream
+BT
+/F1 10 Tf
+13 TL
+50 760 Td
+(Navish Kumar) Tj
+T*
+(Navish Kumar | Research Systems) Tj
+T*
+(GitHub: https://github.com/KumarNavish) Tj
+T*
+(Generated: 2026-08-31T19:56:13.927876+00:00) Tj
+T*
+() Tj
+T*
+(Snapshot: 35 projects | 5 publications | 138 citations) Tj
+T*
+() Tj
+T*
+(Experience) Tj
+T*
+(- PhD Student, University of Basel \(2022-09 - present\)) Tj
+T*
+(  - Researches continual learning, variational inference, and robust optimization methods.) Tj
+T*
+(  - Builds evaluation pipelines that connect theoretical guarantees with operational constraints.) Tj
+T*
+() Tj
+T*
+(Program Map) Tj
+T*
+(- Mathematical Structure for Reliable Learning: Uses spectral and geometric structure to keep optimization behavior stable and explainable.) Tj
+T*
+(- Social Interaction and Counterspeech: Studies harmful and protective speech interactions to support practical harm-reduction policy.) Tj
+T*
+(- Data-Driven Urban Logistics: Models city micro-regions so sustainability transitions can be evaluated as operational decisions.) Tj
+T*
+() Tj
+T*
+(Selected Work) Tj
+T*
+(- Project: bis-continual-process-automation-demo - Process optimisation intake automation: charter + process maps + exportable automation blueprints with regression safety.) Tj
+T*
+(- Project: CL-PLO - Experimental sandbox for continual learning policy optimization strategies.) Tj
+T*
+(- Project: KumarNavish.github.io - Portfolio website rendered from generated public APIs and operations telemetry.) Tj
+T*
+(- Publication: Interaction dynamics between hate and counter users on Twitter \(Proceedings of the 7th ACM IKDD CoDS and 25th COMAD, 2020\) - citations: 130) Tj
+T*
+(- Publication: Normalized laplacians for gain graphs \(arXiv preprint arXiv:2009.13788, 2020\) - citations: 4) Tj
+T*
+(- Publication: Bounds for the extremal eigenvalues of gain Laplacian matrices \(Linear Algebra and its Applications, 2021\) - citations: 3) Tj
+ET
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000000317 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+2254
+%%EOF
