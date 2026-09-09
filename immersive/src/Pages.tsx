@@ -4,6 +4,7 @@ import { SceneStage, useReducedMotion } from "./components/SceneStage";
 import { ScientificPanel } from "./components/ScientificPanel";
 import { BackLink } from "./components/Shell";
 import { Icon } from "./components/Icon";
+import { CanonicalTimeline, ProjectCausalSummary, TrajectorySelection, WorkPosition } from "./components/ResearchStoryBlocks";
 import {
   EXHIBITS,
   PERIOD_NAMES,
@@ -19,11 +20,6 @@ export function EvidenceSection({ exhibit: e }: { exhibit: Exhibit }) {
   ].includes(e.work.id);
   return (
     <section className="work-evidence">
-      <div>
-        <h2>The contribution</h2>
-        <p className="contribution-text">{e.work.contribution}</p>
-        <p className="small">{e.work.role}</p>
-      </div>
       <div>
         <h2>Go to the source</h2>
         <h3>{e.work.title}</h3>
@@ -72,7 +68,14 @@ export function ProjectPage({ exhibit: e }: { exhibit: Exhibit }) {
         </div>
         <p>{e.name}</p>
       </header>
+      <WorkPosition exhibit={e} />
+      <ProjectCausalSummary exhibit={e} />
       <ScientificPanel exhibit={e} />
+      <section className="project-authorship">
+        <span>Navish’s contribution</span>
+        <p>{e.work.contribution}</p>
+        <small>{e.work.role}</small>
+      </section>
       <EvidenceSection exhibit={e} />
       <section className="project-continuation">
         <div>
@@ -153,224 +156,65 @@ export function WorkPage() {
     </main>
   );
 }
-const RELATIONS: Record<string, string> = {
-  "direct-methodological-inheritance": "Methodological inheritance",
-  "recurring-question": "Recurring question",
-  "adjacent-application": "Adjacent application",
-  "later-extension": "Later extension",
-};
 export function TrajectoryPage() {
-  const [selected, setSelected] = useState(""),
-    [lens, setLens] = useState("time");
-  const [period, setPeriod] = useState("all"),
-    [year, setYear] = useState("all"),
-    [status, setStatus] = useState("all");
-  const reduced = useReducedMotion(),
-    e = EXHIBITS.find((w) => w.work.id === selected);
+  const [selected, setSelected] = useState("");
+  const [lens, setLens] = useState("time");
+  const reduced = useReducedMotion();
+  const exhibit = EXHIBITS.find((e) => e.work.id === selected);
   const config = useMemo<SceneConfig>(
-    () => ({
-      kind: "trajectory",
-      step: 4,
-      value: 0,
-      selected,
-      comparison: lens,
-      reduced,
-    }),
+    () => ({ kind: "trajectory", step: 4, value: 0, selected, comparison: lens, reduced }),
     [selected, lens, reduced],
   );
-  const visible = EXHIBITS.filter(
-    (x) =>
-      (period === "all" || x.work.period === period) &&
-      (year === "all" || String(x.work.year) === year) &&
-      (status === "all" || statusLabel(x.work) === status),
-  );
-  const related = e
-    ? [
-        ...new Map(
-          e.work.relations.map((r) => [
-            r.targetId,
-            {
-              relation: r,
-              exhibit: EXHIBITS.find((x) => x.work.id === r.targetId),
-            },
-          ]),
-        ).values(),
-      ]
-    : [];
   return (
     <main id="main" className="trajectory-page page-width">
-      <header className="page-heading">
-        <h1>Follow the question.</h1>
+      <header className="page-heading trajectory-heading">
+        <h1>Past → Now → <span>Frontier.</span></h1>
         <p>
-          From local relationships to learning under change, then evidence-bound
-          action and persistent worlds. These are related questions—not a claim
-          that every paper inherits the previous method.
+          This is the canonical spine of the portfolio: what was established, what is active, and where the work is deliberately moving. Questions, methods, and domains are lenses on this same record.
         </p>
       </header>
-      <div className="horizon-labels">
-        <span>
-          <b>Past</b>Structure & geometry
-        </span>
-        <span>
-          <b>Now</b>Adaptation & evidence
-        </span>
-        <span>
-          <b>Next</b>Persistent worlds
-        </span>
-      </div>
-      <div
-        className="trajectory-lenses"
-        aria-label="Organize the research gallery"
-      >
-        {["time", "questions", "methods", "systems", "frontier"].map((l) => (
-          <button key={l} aria-pressed={lens === l} onClick={() => setLens(l)}>
-            {l[0].toUpperCase() + l.slice(1)}
-          </button>
-        ))}
-        <button
-          className="reset-gallery"
-          onClick={() => {
-            setSelected("");
-            setLens("time");
-          }}
-        >
-          Reset overview
-        </button>
-      </div>
-      <SceneStage
-        config={config}
-        description="Select a research object to move closer. Switch lenses to reorganize the same ten works."
-        className="trajectory-scene"
-        callbacks={{ onPick: setSelected }}
-      />
-      <section className="timeline-section">
-        <header>
-          <h2>The research record</h2>
-          <details className="record-filters">
-            <summary>Filter the record</summary>
-            <div>
-              <label>
-                Period
-                <select
-                  value={period}
-                  onChange={(ev) => setPeriod(ev.target.value)}
-                >
-                  <option value="all">All periods</option>
-                  <option value="foundations">Past</option>
-                  <option value="current">Now</option>
-                  <option value="frontier">Next</option>
-                </select>
-              </label>
-              <label>
-                Year
-                <select
-                  value={year}
-                  onChange={(ev) => setYear(ev.target.value)}
-                >
-                  <option value="all">All years</option>
-                  {[...new Set(EXHIBITS.map((x) => x.work.year))].map((y) => (
-                    <option key={y}>{y}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Status
-                <select
-                  value={status}
-                  onChange={(ev) => setStatus(ev.target.value)}
-                >
-                  <option value="all">All statuses</option>
-                  {[...new Set(EXHIBITS.map((x) => statusLabel(x.work)))].map(
-                    (s) => (
-                      <option key={s}>{s}</option>
-                    ),
-                  )}
-                </select>
-              </label>
-              <button
-                onClick={() => {
-                  setYear("all");
-                  setPeriod("all");
-                  setStatus("all");
-                }}
-              >
-                Clear filters
-              </button>
-            </div>
-          </details>
-        </header>
-        <div className="timeline-record">
-          {visible.map((x) => (
-            <button
-              key={x.work.id}
-              className={
-                selected === x.work.id
-                  ? "timeline-item selected"
-                  : "timeline-item"
-              }
-              aria-pressed={selected === x.work.id}
-              onClick={() => setSelected(x.work.id)}
-            >
-              <span className="timeline-year">{x.work.year}</span>
-              <i aria-hidden="true" />
-              <div>
-                <small>
-                  {PERIOD_NAMES[x.work.period]} · {statusLabel(x.work)}
-                </small>
-                <h3>{x.name}</h3>
-                <p>{x.question}</p>
-              </div>
-              <Icon name="arrow" />
-            </button>
-          ))}
-        </div>
-        {visible.length === 0 && (
-          <p className="empty-note">
-            No work matches these filters. Clear filters to restore the complete
-            record.
-          </p>
-        )}
-      </section>
-      {e ? (
-        <section className="trajectory-detail" aria-live="polite">
-          <div>
-            <span>
-              {PERIOD_NAMES[e.work.period]} · {e.work.dateLabel}
-            </span>
-            <h2>{e.question}</h2>
-            <Link className="button" href={e.work.route}>
-              Enter {e.name}
-              <Icon name="arrow" />
-            </Link>
-          </div>
-          <div>
-            <h3>The contribution</h3>
-            <p>{e.work.contribution}</p>
-            <h3>What came next</h3>
-            <p>{e.work.nextQuestion}</p>
-            <div className="related-works">
-              {related.map(
-                (r) =>
-                  r.exhibit && (
-                    <Link key={r.exhibit.work.id} href={r.exhibit.work.route}>
-                      <span>{RELATIONS[r.relation.kind]}</span>
-                      <strong>
-                        {r.exhibit.name}
-                        <Icon name="arrow" size={14} />
-                      </strong>
-                      <p>{r.relation.note}</p>
-                    </Link>
-                  ),
-              )}
-            </div>
-          </div>
-        </section>
+      <CanonicalTimeline selected={selected} onSelect={setSelected} />
+      {exhibit ? (
+        <TrajectorySelection exhibit={exhibit} />
       ) : (
-        <p className="trajectory-prompt">
-          Choose a work in the gallery or the record to open its contribution,
-          relationships, and next question.
+        <p className="trajectory-prompt canonical-prompt">
+          Select a work in the timeline to reveal its contribution and intellectual position.
         </p>
       )}
+      <section className="trajectory-lens-section">
+        <header>
+          <div>
+            <span className="section-label">Secondary lenses</span>
+            <h2>Reorganize the same body of work.</h2>
+          </div>
+          <p>
+            Time remains canonical. These views expose recurring questions, methods, systems, and frontier connections without creating a second site architecture.
+          </p>
+        </header>
+        <div className="trajectory-lenses" aria-label="Organize the research gallery">
+          {["time", "questions", "methods", "systems", "frontier"].map((item) => (
+            <button key={item} aria-pressed={lens === item} onClick={() => setLens(item)}>
+              {item[0].toUpperCase() + item.slice(1)}
+            </button>
+          ))}
+          <button className="reset-gallery" onClick={() => { setSelected(""); setLens("time"); }}>
+            Reset overview
+          </button>
+        </div>
+        <SceneStage
+          config={config}
+          description="The same ten works reorganize without replacing the canonical timeline. Select a research object to inspect it."
+          className="trajectory-scene"
+          callbacks={{ onPick: setSelected }}
+        />
+      </section>
+      <section className="trajectory-audit-link">
+        <div>
+          <span className="section-label">Exact record</span>
+          <h2>Publication status and evidence stay inspectable.</h2>
+        </div>
+        <Link className="text-link" href="/research">Open the research record <Icon name="arrow" /></Link>
+      </section>
     </main>
   );
 }
@@ -501,52 +345,33 @@ export function SystemsPage() {
   return (
     <main id="main" className="systems-page page-width">
       <header className="page-heading">
-        <h1>
-          Keep the evidence
-          <br />
-          <span>attached to the action.</span>
-        </h1>
+        <h1>Keep the evidence<br /><span>attached to the action.</span></h1>
         <p>
-          CasePath explores the layer before judgment: reconstruct the case
-          state, expose missing evidence, and prepare a reviewable next step
-          without letting a model become the decision-maker.
+          CasePath explores the layer before judgment: reconstruct case state, expose missing evidence, and prepare a reviewable next step without letting a model become the decision-maker.
         </p>
       </header>
       <div className="system-context">
         <span>CasePath · system prototype</span>
-        <p>
-          Try a synthetic conflict between two inspection records. Then apply a
-          superseding correction and watch the admission state change.
-        </p>
-        <Link href="/systems/casepath">
-          Project record
-          <Icon name="arrow" />
-        </Link>
+        <p>Operational question: can a review packet proceed when two source records disagree about the inspection date?</p>
+        <Link href="/systems/casepath">Project record <Icon name="arrow" /></Link>
       </div>
+      <section className="case-decision-sequence" aria-label="CasePath failure and correction sequence">
+        <article><span>01 · Source</span><strong>20 August</strong><p>An identifiable source supplies a bounded fact.</p></article>
+        <article><span>02 · Conflict</span><strong>21 August</strong><p>A second source contradicts the same obligation.</p></article>
+        <article className="is-hold"><span>03 · Gate</span><strong>HOLD</strong><p>Fluent interpretation cannot manufacture permission.</p></article>
+        <article className="is-ready"><span>04 · Correction</span><strong>READY for review</strong><p>A superseding record replays only dependent state.</p></article>
+      </section>
       <ScientificPanel exhibit={e} />
       <div className="system-boundaries">
-        <div>
-          <h2>Model responsibility</h2>
-          <p>
-            Propose bounded interpretations. Preserve the link back to the
-            source. Never manufacture authority from fluency.
-          </p>
-        </div>
-        <div>
-          <h2>Kernel responsibility</h2>
-          <p>
-            Evaluate explicit obligations and source relationships. Hold when
-            the available records conflict.
-          </p>
-        </div>
-        <div>
-          <h2>Human responsibility</h2>
-          <p>
-            Validate the evidence and the judgment. A consistent review packet
-            does not establish real-world truth.
-          </p>
-        </div>
+        <div><h2>Model responsibility</h2><p>Propose bounded interpretations. Preserve the link back to the source. Never manufacture authority from fluency.</p></div>
+        <div><h2>Kernel responsibility</h2><p>Evaluate explicit obligations and source relationships. Hold when the available records conflict.</p></div>
+        <div><h2>Human responsibility</h2><p>Validate the evidence and the judgment. A consistent review packet does not establish real-world truth.</p></div>
       </div>
+      <section className="project-authorship system-authorship">
+        <span>Navish’s role</span>
+        <p>{e.work.contribution}</p>
+        <small>{e.work.role}</small>
+      </section>
       <EvidenceSection exhibit={e} />
     </main>
   );
