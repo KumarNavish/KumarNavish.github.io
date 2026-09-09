@@ -480,7 +480,7 @@ export const EXHIBITS: Exhibit[] = [
 export const PERIOD_NAMES = {
   foundations: "Past",
   current: "Now",
-  frontier: "Next",
+  frontier: "Frontier",
 } as const;
 export const statusLabel = (work: WorkRegistryEntry) =>
   ["experience-replay-optimization", "rank-feasibility"].includes(work.id)

@@ -1,18 +1,40 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigation } from "./navigation";
 import { SceneStage, useReducedMotion } from "./components/SceneStage";
+import { ScientificPanel } from "./components/ScientificPanel";
+import { CanonicalTimeline } from "./components/ResearchStoryBlocks";
 import { Icon } from "./components/Icon";
-import { EXHIBITS, PERIOD_NAMES, statusLabel } from "./data/exhibits";
+import { EXHIBITS, statusLabel } from "./data/exhibits";
+import { narrativeFor } from "./data/workNarrative";
+import type { WorkPeriod } from "./data/legacyRegistry";
 import type { SceneConfig } from "./engine/renderer";
+
+const HORIZON_COPY: Record<WorkPeriod, { title: string; subtitle: string }> = {
+  foundations: { title: "Past", subtitle: "Make hidden structure precise." },
+  current: { title: "Now", subtitle: "Understand and constrain change." },
+  frontier: { title: "Frontier", subtitle: "Build persistent intelligent interfaces." },
+};
+
+const PROOF_IDS = [
+  "normalized-gain-laplacians",
+  "experience-replay-optimization",
+  "rank-feasibility",
+  "casepath",
+];
+
 export function HomePage() {
-  const reduced = useReducedMotion(),
-    { go } = useNavigation();
+  const reduced = useReducedMotion();
+  const { go } = useNavigation();
+  const [proofId, setProofId] = useState(PROOF_IDS[0]);
+  const proof = EXHIBITS.find((e) => e.work.id === proofId)!;
+  const narrative = narrativeFor(proof.work.id);
   const config = useMemo<SceneConfig>(
     () => ({ kind: "atlas", step: 4, value: 0, reduced }),
     [reduced],
   );
+
   return (
-    <main id="main" className="home-page">
+    <main id="main" className="home-page comprehension-home">
       <section className="hero">
         <div className="hero-copy">
           <h1>
@@ -21,21 +43,17 @@ export function HomePage() {
             <span>Seen from within.</span>
           </h1>
           <p className="hero-identity">
-            I’m Navish Kumar, a machine-learning researcher and systems builder
-            at the University of Basel.
+            I’m Navish Kumar, a machine-learning researcher and systems builder at the University of Basel.
           </p>
           <p className="hero-description">
-            I study how systems change—from mathematical structure and continual
-            learning to evidence-grounded agents and persistent worlds.
+            I study what changes inside useful systems—and how to keep the structure, evidence, constraints, and consequences of that change visible.
           </p>
           <div className="hero-actions">
             <Link className="button" href="/trajectory">
-              Explore the trajectory
-              <Icon name="arrow" />
+              Follow the trajectory <Icon name="arrow" />
             </Link>
             <Link className="text-link" href="/frontier/spatial-intelligence">
-              Enter the spatial lab
-              <Icon name="arrow" />
+              Enter the spatial lab <Icon name="arrow" />
             </Link>
           </div>
           <div className="hero-footnote">
@@ -43,104 +61,145 @@ export function HomePage() {
             Research you can inspect, manipulate, and question.
           </div>
         </div>
+
         <div className="hero-gallery">
           <SceneStage
             config={config}
-            description="Three research objects: gain-graph structure, learning geometry, and a persistent laboratory."
+            description="Three-dimensional research objects spanning structural consistency, learning geometry, and persistent worlds."
             className="home-stage"
             quiet
             callbacks={{
               onPick: (id) => {
-                const e = EXHIBITS.find((x) => x.work.id === id);
-                if (e) go(e.work.route);
+                const exhibit = EXHIBITS.find((e) => e.work.id === id);
+                if (exhibit) go(exhibit.work.route);
               },
             }}
           />
-          <div className="gallery-captions">
-            <Link href="/work/normalized-gain-laplacians">
-              <span>Past · 2020–2025</span>
-              <strong>Make structure precise.</strong>
-            </Link>
-            <Link href="/work/experience-replay-optimization">
-              <span>Now · current research</span>
-              <strong>Understand the update.</strong>
-            </Link>
-            <Link href="/frontier/spatial-intelligence">
-              <span>Next · spatial interfaces</span>
-              <strong>Build a persistent world.</strong>
-            </Link>
+          <div className="hero-horizons" aria-label="Past, now, and frontier overview">
+            {(["foundations", "current", "frontier"] as WorkPeriod[]).map((period) => {
+              const works = EXHIBITS.filter((e) => e.work.period === period);
+              return (
+                <Link key={period} href="/trajectory">
+                  <span>{HORIZON_COPY[period].title}</span>
+                  <strong>{HORIZON_COPY[period].subtitle}</strong>
+                  <small>{works.length} {works.length === 1 ? "work" : "works"}</small>
+                </Link>
+              );
+            })}
           </div>
         </div>
       </section>
-      <section
-        className="action-strip"
-        aria-label="Three ways to enter the research"
-      >
-        <Link href="/work/normalized-gain-laplacians">
-          <span>01</span>Break a graph’s consistency
-          <Icon name="arrow" />
-        </Link>
-        <Link href="/work/experience-replay-optimization">
-          <span>02</span>Watch learning become forgetting
-          <Icon name="arrow" />
-        </Link>
-        <Link href="/work/rank-feasibility">
-          <span>03</span>Find room for a correction
-          <Icon name="arrow" />
-        </Link>
-      </section>
-      <section className="home-work section-width">
-        <div className="section-intro">
+
+      <section className="home-journey section-width" aria-labelledby="journey-heading">
+        <header className="journey-heading">
           <div>
-            <h2>
-              Different questions.
-              <br />A connected body of work.
-            </h2>
+            <span className="section-label">The canonical trajectory</span>
+            <h2 id="journey-heading">Past → Now → Frontier</h2>
           </div>
           <p>
-            My early work made local relationships measurable. During the PhD,
-            the question became how a useful system can adapt—and how to see
-            what that change costs.
+            One body of work, ordered by time. Questions, methods, status, and domains are secondary lenses on this same spine.
           </p>
-          <Link className="text-link" href="/work">
-            Open the work atlas
-            <Icon name="arrow" />
+          <Link className="text-link" href="/trajectory">
+            Open the full trajectory <Icon name="arrow" />
           </Link>
+        </header>
+        <CanonicalTimeline />
+      </section>
+
+      <section className="home-proof section-width" aria-labelledby="proof-heading">
+        <header className="proof-heading">
+          <div>
+            <span className="section-label">Understand the contribution through the mechanism</span>
+            <h2 id="proof-heading">Change one thing. Watch the consequence propagate.</h2>
+          </div>
+          <p>
+            Each work earns its own scientific object. The visualization is the explanation—not decoration beside it.
+          </p>
+        </header>
+
+        <div className="proof-selector" role="tablist" aria-label="Choose a defining research explanation">
+          {PROOF_IDS.map((id) => {
+            const e = EXHIBITS.find((x) => x.work.id === id)!;
+            return (
+              <button
+                key={id}
+                role="tab"
+                aria-selected={proofId === id}
+                onClick={() => setProofId(id)}
+              >
+                {e.name}
+              </button>
+            );
+          })}
         </div>
-        <div className="work-overview">
-          {EXHIBITS.map((e, i) => (
-            <Link key={e.work.id} href={e.work.route} className="overview-work">
-              <span className="work-number">
-                {String(i + 1).padStart(2, "0")}
-              </span>
-              <div>
-                <small>
-                  {PERIOD_NAMES[e.work.period]} · {e.work.year} ·{" "}
-                  {statusLabel(e.work)}
-                </small>
-                <h3>{e.name}</h3>
-                <p>{e.question}</p>
-              </div>
-              <Icon name="arrow" />
+
+        <div className="causal-chain" aria-label="Problem, intervention, consequence, and real-world meaning">
+          <article>
+            <span>Problem</span>
+            <p>{proof.question}</p>
+          </article>
+          <article>
+            <span>Intervention</span>
+            <p>{narrative.mechanism}</p>
+          </article>
+          <article>
+            <span>Observable consequence</span>
+            <p>{narrative.observableConsequence}</p>
+          </article>
+          <article>
+            <span>So what?</span>
+            <p>{narrative.realWorldImplication}</p>
+          </article>
+        </div>
+
+        <div className="proof-stage" key={proof.work.id}>
+          <ScientificPanel exhibit={proof} compact />
+          <div className="proof-contribution">
+            <span>Navish’s contribution</span>
+            <p>{proof.work.contribution}</p>
+            <small>{proof.work.role}</small>
+            <Link href={proof.work.route}>
+              Open the full work <Icon name="arrow" size={14} />
             </Link>
-          ))}
+          </div>
         </div>
       </section>
-      <section className="closing-note section-width">
-        <div>
-          <h2>
-            From an idea to something
-            <br />
-            you can actually use.
-          </h2>
+
+      <section className="home-current section-width" aria-labelledby="current-heading">
+        <header>
+          <div>
+            <span className="section-label">Now</span>
+            <h2 id="current-heading">What is active right now.</h2>
+          </div>
           <p>
-            Mathematical models, experiments, and working interfaces—each with
-            its evidence and its limits left visible.
+            Current work stays visibly distinct from published foundations and frontier direction.
+          </p>
+        </header>
+        <div className="current-list">
+          {EXHIBITS.filter((e) => e.work.period === "current").map((e) => {
+            const n = narrativeFor(e.work.id);
+            return (
+              <Link key={e.work.id} href={e.work.route}>
+                <span>{e.work.year} · {statusLabel(e.work)}</span>
+                <h3>{e.name}</h3>
+                <p>{n.currentExperiment ?? e.work.nextQuestion}</p>
+                <Icon name="arrow" />
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="home-atlas-entry section-width">
+        <div>
+          <span className="section-label">Complete record</span>
+          <h2>Ten works. One evolving programme.</h2>
+          <p>
+            Scan every project, its status, evidence, contribution, and native explanation without turning the homepage into an archive.
           </p>
         </div>
-        <Link className="button secondary" href="/systems">
-          See the systems
-          <Icon name="arrow" />
+        <Link className="button secondary" href="/work">
+          Open the work atlas <Icon name="arrow" />
         </Link>
       </section>
     </main>

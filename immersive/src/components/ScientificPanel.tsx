@@ -5,6 +5,7 @@ import { SceneStage, useReducedMotion } from "./SceneStage";
 import { Readouts, Matrix, DEMO_SOURCES, CORRECTION } from "./Readouts";
 import { evidenceGate } from "../engine/science";
 import { Icon } from "./Icon";
+import { narrativeFor } from "../data/workNarrative";
 export function downloadJSON(value: unknown, name: string) {
   const url = URL.createObjectURL(
     new Blob([JSON.stringify(value, null, 2)], { type: "application/json" }),
@@ -92,6 +93,7 @@ export function ScientificPanel({
     reduced,
   ]);
   const current = exhibit.steps[step];
+  const narrative = narrativeFor(exhibit.work.id);
   const jump = (i: number) => {
     setPlaying(false);
     setMode("guide");
@@ -281,6 +283,12 @@ export function ScientificPanel({
               {mode === "guide" ? current.body : exhibit.work.explanation15}
             </p>
           </div>
+          {(mode !== "guide" || step >= Math.floor(exhibit.steps.length / 2)) && (
+            <div className="story-meaning">
+              <div><span>Observable effect</span><p>{narrative.observableConsequence}</p></div>
+              <div><span>Real-world meaning</span><p>{narrative.realWorldImplication}</p></div>
+            </div>
+          )}
           {exhibit.kind === "evidence" && (
             <div className="source-excerpts">
               <article>
