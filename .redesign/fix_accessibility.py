@@ -17,7 +17,7 @@ new = '''    <div
       role="region"
       aria-label={description}
     >
-      <div className="stage-host" ref={host} aria-hidden="true" />'''
+      <div className="stage-host" ref={host} />'''
 if old not in s:
     raise RuntimeError("Could not locate SceneStage semantics target")
 scene.write_text(s.replace(old, new, 1))
@@ -29,4 +29,4 @@ s = s.replace("color: #687c8b;\n  letter-spacing: 0.025em;", "color: #526b7b;\n 
 # visibly secondary, but never by dropping below text contrast requirements.
 s = s.replace("border-left: 1px solid #dce5ec; color: #83919c;", "border-left: 1px solid #dce5ec; color: #526b7b;", 1)
 css.write_text(s)
-print("Moved the accessible scene name to a valid region and raised low-contrast informational text.")
+print("Named the scientific stage with a valid region, kept its focusable renderer exposed, and raised informational text contrast.")
