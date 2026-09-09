@@ -7,6 +7,7 @@ on:
       - '.redesign/apply_comprehension.py'
       - '.redesign/fix_comprehension_qa.py'
       - '.redesign/fix_spatial_diff.py'
+      - '.redesign/fix_mobile_lazy_trajectory.py'
       - '.github/workflows/apply-comprehension-pass.yml'
 
 permissions:
@@ -33,6 +34,7 @@ jobs:
           python3 .redesign/apply_comprehension.py
           python3 .redesign/fix_comprehension_qa.py
           python3 .redesign/fix_spatial_diff.py
+          python3 .redesign/fix_mobile_lazy_trajectory.py
 
       - name: Install and validate source
         working-directory: immersive
