@@ -11,6 +11,8 @@ site-dev: site-install
 
 site-build: site-install
 	cd site && $(NPM) run build
+	cd immersive && $(NPM) ci && $(NPM) run check
+	node immersive/scripts/publish.mjs
 
 demo-build: site-install
 	cd site && $(NPM) run bis-demo:build
