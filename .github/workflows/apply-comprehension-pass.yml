@@ -13,6 +13,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: comprehension-first-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   apply:
     runs-on: ubuntu-latest
@@ -42,9 +46,9 @@ jobs:
           npm ci
           npm run check
 
-      - name: Install Chromium
+      - name: Install Chromium binary
         working-directory: immersive
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: Exercise exact production build
         shell: bash
