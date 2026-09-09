@@ -124,7 +124,11 @@ try {
       await page
         .getByRole("button", { name: "Pause agent", exact: true })
         .click();
-      await page.waitForTimeout(250);
+      await page.waitForFunction(
+        () => document.querySelector("canvas")?.dataset.paused === "true",
+        null,
+        { timeout: 10000 },
+      );
       const canvas = page.locator("canvas");
       const before = await canvas.evaluate((c) => ({
         position: c.dataset.agentPosition,
