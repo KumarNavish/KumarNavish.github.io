@@ -5,6 +5,7 @@ on:
     branches: [comprehension-first-20260909]
     paths:
       - '.redesign/apply_comprehension.py'
+      - '.redesign/fix_comprehension_qa.py'
       - '.github/workflows/apply-comprehension-pass.yml'
 
 permissions:
@@ -27,7 +28,9 @@ jobs:
           cache-dependency-path: immersive/package-lock.json
 
       - name: Apply comprehension-first source patch
-        run: python3 .redesign/apply_comprehension.py
+        run: |
+          python3 .redesign/apply_comprehension.py
+          python3 .redesign/fix_comprehension_qa.py
 
       - name: Install and validate source
         working-directory: immersive
