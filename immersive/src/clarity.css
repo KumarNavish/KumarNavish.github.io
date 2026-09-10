@@ -1,0 +1,227 @@
+/* 2026-09-10: comprehension pass — one timeline, live causal feedback, 3D only where spatial meaning matters. */
+.trajectory-first-hero {
+  align-items: start;
+  grid-template-columns: minmax(330px, .74fr) minmax(0, 1.36fr);
+  gap: 54px;
+  padding-top: 54px;
+  padding-bottom: 52px;
+}
+.trajectory-first-hero .hero-copy { padding-top: 28px; }
+.hero-trajectory {
+  min-width: 0;
+  border-top: 1px solid #dce5ec;
+  border-bottom: 1px solid #dce5ec;
+}
+.hero-trajectory > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 15px 4px 17px;
+}
+.hero-trajectory > header span {
+  color: #315fe8;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.hero-trajectory > header p {
+  max-width: 410px;
+  color: #526b7b;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: right;
+}
+.hero-trajectory .canonical-timeline {
+  grid-template-columns: 1.25fr 1fr .78fr;
+  border-bottom: 0;
+}
+.hero-trajectory .timeline-period { padding: 20px 18px 11px; }
+.hero-trajectory .timeline-period > header { padding-bottom: 15px; }
+.hero-trajectory .timeline-period h2 { font-size: 16px; }
+.hero-trajectory .timeline-period header p { font-size: 10px; }
+.hero-trajectory .timeline-period a,
+.hero-trajectory .timeline-period button {
+  min-height: 52px;
+  grid-template-columns: 38px 1fr;
+  gap: 9px;
+  padding: 8px 0;
+}
+.hero-trajectory .timeline-period a > svg,
+.hero-trajectory .timeline-period button > svg { display: none; }
+.hero-trajectory .timeline-period strong { font-size: 11px; }
+.hero-trajectory .timeline-period small { font-size: 9px; }
+.hero-trajectory .timeline-period a:hover strong { color: #315fe8; }
+
+.clarity-home .home-proof { padding-top: 88px; }
+.clarity-home .proof-heading {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, .72fr);
+  gap: 64px;
+}
+.clarity-home .proof-selector button { min-width: 152px; }
+
+.mechanism-pulse {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 14px;
+  border-top: 1px solid #dce5ec;
+  border-bottom: 1px solid #dce5ec;
+  background: #fbfcfe;
+}
+.mechanism-pulse article {
+  min-width: 0;
+  padding: 16px 16px 18px;
+  border-left: 1px solid #dce5ec;
+}
+.mechanism-pulse article:first-child { border-left: 0; }
+.mechanism-pulse span,
+.case-replay-trace > span {
+  display: block;
+  color: #315fe8;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.mechanism-pulse p {
+  margin-top: 9px;
+  color: #354e60;
+  font-size: 11px;
+  line-height: 1.55;
+}
+.is-compact .mechanism-pulse article { padding: 13px 12px 15px; }
+.is-compact .mechanism-pulse p { font-size: 10.5px; }
+
+.case-replay-trace {
+  margin-top: 16px;
+  padding-top: 15px;
+  border-top: 1px solid #dce5ec;
+}
+.case-replay-trace ol {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+.case-replay-trace li {
+  position: relative;
+  padding: 9px 0 9px 18px;
+  border-top: 1px solid #e7edf3;
+}
+.case-replay-trace li:first-child { border-top: 0; }
+.case-replay-trace li::before {
+  content: "";
+  position: absolute;
+  left: 1px;
+  top: 16px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #416f64;
+}
+.case-replay-trace strong { display: block; font-size: 11px; font-weight: 650; }
+.case-replay-trace small {
+  display: block;
+  margin-top: 3px;
+  color: #526b7b;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.home-spatial {
+  display: grid;
+  grid-template-columns: minmax(0, 1.14fr) minmax(310px, .86fr);
+  gap: 62px;
+  align-items: center;
+  margin-top: 112px;
+  padding: 64px 0 8px;
+  border-top: 1px solid #dce5ec;
+}
+.home-spatial-stage { min-width: 0; }
+.home-spatial-stage .scene-stage { height: 520px; }
+.home-spatial-copy h2 {
+  max-width: 520px;
+  font-size: clamp(31px, 3.4vw, 46px);
+  line-height: 1.1;
+  letter-spacing: -.05em;
+  font-weight: 540;
+}
+.home-spatial-copy > p:not(.small) {
+  max-width: 520px;
+  margin-top: 20px;
+  color: #526b7b;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.spatial-causal-chain {
+  list-style: none;
+  margin: 27px 0 28px;
+  padding: 0;
+  border-top: 1px solid #dce5ec;
+}
+.spatial-causal-chain li {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid #e5ebf0;
+}
+.spatial-causal-chain span { color: #315fe8; font-size: 10px; }
+.spatial-causal-chain strong { font-size: 12px; line-height: 1.45; font-weight: 560; }
+.home-spatial-copy .small { max-width: 520px; margin-top: 14px; line-height: 1.55; }
+.home-record-actions { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+
+.project-page .scientific-panel { margin-top: 30px; }
+.project-page .work-position { margin-bottom: 8px; }
+
+@media (max-width: 1120px) {
+  .trajectory-first-hero { grid-template-columns: minmax(290px, .64fr) minmax(0, 1.36fr); gap: 34px; }
+  .trajectory-first-hero .hero-copy h1 { font-size: 46px; }
+  .hero-trajectory .timeline-period { padding-left: 13px; padding-right: 13px; }
+  .home-spatial { gap: 38px; }
+}
+
+@media (max-width: 900px) {
+  .trajectory-first-hero { display: block; padding-top: 34px; }
+  .trajectory-first-hero .hero-copy { padding-top: 0; max-width: 650px; }
+  .hero-trajectory { margin-top: 34px; }
+  .hero-trajectory .canonical-timeline { grid-template-columns: 1.2fr 1fr .8fr; }
+  .hero-trajectory .timeline-period { border-top: 0; border-left: 1px solid #dce5ec; }
+  .hero-trajectory .timeline-period:first-child { border-left: 0; }
+  .clarity-home .proof-heading { grid-template-columns: 1fr; gap: 17px; }
+  .mechanism-pulse { grid-template-columns: 1fr; }
+  .mechanism-pulse article { border-left: 0; border-top: 1px solid #dce5ec; }
+  .mechanism-pulse article:first-child { border-top: 0; }
+  .home-spatial { grid-template-columns: 1fr; gap: 34px; }
+  .home-spatial-stage .scene-stage { height: 460px; }
+}
+
+@media (max-width: 720px) {
+  .trajectory-first-hero { padding-top: 26px; padding-bottom: 24px; }
+  .hero-trajectory > header { display: block; }
+  .hero-trajectory > header p { margin-top: 7px; text-align: left; }
+  .hero-trajectory .canonical-timeline { display: block; }
+  .hero-trajectory .timeline-period { border-left: 0; border-top: 1px solid #dce5ec; padding: 17px 4px 8px; }
+  .hero-trajectory .timeline-period:first-child { border-top: 0; }
+  .hero-trajectory .timeline-period > header { display: grid; grid-template-columns: 72px 1fr; align-items: baseline; }
+  .hero-trajectory .timeline-period header p { margin-top: 0; }
+  .hero-trajectory .timeline-period a { grid-template-columns: 44px 1fr; min-height: 48px; }
+  .clarity-home .home-proof { padding-top: 62px; }
+  .proof-selector button { min-width: 145px; }
+  .home-spatial { margin-top: 72px; padding-top: 44px; }
+  .home-spatial-stage .scene-stage { height: 355px; }
+  .home-spatial-copy h2 { font-size: 31px; }
+  .home-atlas-entry { margin-top: 62px; }
+  .home-record-actions { align-items: flex-start; }
+}
+
+@media (max-width: 480px) {
+  .clarity-home .hero-description { display: block; font-size: 13px; margin-top: 13px; }
+  .clarity-home .hero-footnote { display: flex; margin-top: 24px; }
+  .trajectory-first-hero .hero-copy h1 { font-size: 40px; }
+  .hero-trajectory { margin-top: 25px; }
+  .hero-trajectory .timeline-period strong { font-size: 11px; }
+  .mechanism-pulse p { font-size: 11px; }
+  .home-spatial-stage .scene-stage { height: 325px; }
+  .spatial-causal-chain strong { font-size: 11px; }
+  .home-record-actions { display: grid; }
+}
