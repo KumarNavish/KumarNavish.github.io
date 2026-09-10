@@ -42,32 +42,39 @@ const check = async (name, fn) => {
 };
 const go = async (route) => {
   await page.goto(base + route, { waitUntil: "networkidle" });
+  const stage = page.locator(".scene-stage").first();
+  await stage.scrollIntoViewIfNeeded();
+  await stage.waitFor({ state: "visible" });
   await page
     .locator('.scene-stage[data-state="ready"]')
     .first()
     .waitFor({ timeout: 30000 });
 };
 try {
-  await check("bounded introductory WebGL motion", async () => {
+  await check("spatial WebGL responds visibly to an intentional camera move", async () => {
     await go("/");
-    const canvas = page.locator("canvas").first(),
+    const stage = page.locator(".home-spatial"),
+      canvas = stage.locator("canvas"),
       before = await canvas.screenshot();
+    await stage
+      .getByRole("button", { name: "Rotate view right", exact: true })
+      .click();
     await page.waitForTimeout(1200);
     const after = await canvas.screenshot();
     assert.notEqual(Buffer.compare(before, after), 0);
-    await page.screenshot({ path: out + "/home-live.png" });
+    await page.screenshot({ path: out + "/home-spatial-live.png" });
   });
   await check(
-    "camera interpolation produces distinct intermediate and final views",
+    "spatial camera interpolation produces distinct intermediate and final views",
     async () => {
-      const canvas = page.locator(".home-stage canvas"),
+      const stage = page.locator(".home-spatial"),
+        canvas = stage.locator("canvas"),
         before = await canvas.getAttribute("data-camera");
-      await page
-        .locator(".home-stage")
+      await stage
         .getByRole("button", { name: "Rotate view left", exact: true })
         .click();
       await page.waitForFunction(
-        (previous) => document.querySelector(".home-stage canvas")?.dataset.camera !== previous,
+        (previous) => document.querySelector(".home-spatial canvas")?.dataset.camera !== previous,
         before,
         { timeout: 3000 },
       );
@@ -143,7 +150,6 @@ try {
       }));
       assert.equal(before.paused, "true");
       assert.ok(before.position);
-      // Pausing the agent must not lock the visitor out of inspecting the scene.
       await page
         .getByRole("button", { name: "Rotate view left", exact: true })
         .click();
@@ -208,14 +214,14 @@ try {
     },
   );
   await check(
-    "throttled startup never reverses the animation clock",
+    "throttled spatial startup never reverses the animation clock",
     async () => {
       const cdp = await context.newCDPSession(page);
       await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
       try {
         for (let attempt = 0; attempt < 3; attempt++) {
           await go("/?clock-regression=" + attempt);
-          const canvas = page.locator("canvas").first();
+          const canvas = page.locator(".home-spatial canvas");
           let previous = 0;
           for (let frame = 0; frame < 12; frame++) {
             await page.waitForTimeout(100);
