@@ -16,7 +16,7 @@ const SystemsPage = lazy(() =>
   import("./Pages").then((m) => ({ default: m.SystemsPage })),
 );
 const FrontierPage = lazy(() =>
-  import("./Pages").then((m) => ({ default: m.FrierPage })),
+  import("./Pages").then((m) => ({ default: m.FrontierPage })),
 );
 const AboutPage = lazy(() =>
   import("./Pages").then((m) => ({ default: m.AboutPage })),
