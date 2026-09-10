@@ -4,27 +4,31 @@ import { SceneStage, useReducedMotion } from "./components/SceneStage";
 import { ScientificPanel } from "./components/ScientificPanel";
 import { CanonicalTimeline } from "./components/ResearchStoryBlocks";
 import { Icon } from "./components/Icon";
-import { EXHIBITS } from "./data/exhibits";
-import { initialWorld } from "./engine/world";
+import { EXHIBITS, PERIOD_NAMES, statusLabel } from "./data/exhibits";
+import { applyCommand, initialWorld } from "./engine/world";
 import type { SceneConfig } from "./engine/renderer";
 
-const PROOF_IDS = [
-  "normalized-gain-laplacians",
-  "experience-replay-optimization",
-  "rank-feasibility",
-  "ticlm-replay-value",
-  "casepath",
-];
-
 export function HomePage() {
-  const [proofId, setProofId] = useState(PROOF_IDS[0]);
-  const proof = EXHIBITS.find((e) => e.work.id === proofId)!;
+  const [activeId, setActiveId] = useState("");
+  const [world, setWorld] = useState(initialWorld);
+  const active = EXHIBITS.find((e) => e.work.id === activeId);
   const reduced = useReducedMotion();
-  const world = useMemo(initialWorld, []);
   const worldConfig = useMemo<SceneConfig>(
-    () => ({ kind: "world", step: 0, value: 0, world, reduced }),
+    () => ({ kind: "world", step: world.revision, value: 0, world, reduced }),
     [world, reduced],
   );
+
+  const selectWork = (id: string) => {
+    setActiveId(id);
+    requestAnimationFrame(() =>
+      document.getElementById("home-work-explanation")?.scrollIntoView({
+        behavior: reduced ? "auto" : "smooth",
+        block: "start",
+      }),
+    );
+  };
+  const editWorld = (text: string) =>
+    setWorld((current) => applyCommand(current, text).world);
 
   return (
     <main id="main" className="home-page comprehension-home clarity-home">
@@ -55,82 +59,91 @@ export function HomePage() {
           </div>
         </div>
 
-        <div className="hero-trajectory" aria-label="Complete research trajectory">
+        <div id="research-timeline" className="hero-trajectory" aria-label="Complete research trajectory">
           <header>
             <span>One evolving body of work</span>
-            <p>Every project has a temporal position. Nothing else becomes a competing architecture.</p>
+            <p>Select any project. Its explanation opens in the same place below.</p>
           </header>
-          <CanonicalTimeline />
+          <CanonicalTimeline selected={activeId} onSelect={selectWork} />
         </div>
       </section>
 
       <section className="home-proof section-width" aria-labelledby="proof-heading">
         <header className="proof-heading">
           <div>
-            <span className="section-label">Operate the idea</span>
-            <h2 id="proof-heading">Change one thing. Watch the consequence propagate.</h2>
+            <span className="section-label">Operate the trajectory</span>
+            <h2 id="proof-heading">Every project gets the same way in.</h2>
           </div>
           <p>
-            The live object is the explanation: problem → intervention → measured response → real-world meaning. The paper or source record remains the evidence.
+            Choose any work in Past, Now, or Frontier. The selected work becomes a guided, computed explanation here; its paper or source record remains the evidence.
           </p>
         </header>
 
-        <div className="proof-selector" role="tablist" aria-label="Choose a defining research explanation">
-          {PROOF_IDS.map((id) => {
-            const exhibit = EXHIBITS.find((item) => item.work.id === id)!;
-            return (
-              <button
-                key={id}
-                role="tab"
-                aria-selected={proofId === id}
-                onClick={() => setProofId(id)}
-              >
-                {exhibit.name}
-              </button>
-            );
-          })}
-        </div>
+        <div id="home-work-explanation" className="home-work-explanation" aria-live="polite">
+          {!active ? (
+            <div className="home-selection-prompt">
+              <span>10 works · one interaction model</span>
+              <h3>Choose any project in the timeline above.</h3>
+              <p>
+                Nothing is preselected. The work you choose becomes the focus without creating a second project hierarchy.
+              </p>
+            </div>
+          ) : (
+            <div className="proof-stage home-selected-work" key={active.work.id}>
+              <header className="selected-work-intro">
+                <div>
+                  <span>
+                    {PERIOD_NAMES[active.work.period]} · {active.work.year} · {statusLabel(active.work)}
+                  </span>
+                  <h3>{active.name}</h3>
+                </div>
+                <p>{active.question}</p>
+                <a href="#research-timeline">Choose another work</a>
+              </header>
 
-        <div className="proof-stage" key={proof.work.id}>
-          <ScientificPanel exhibit={proof} compact />
-          <div className="proof-contribution">
-            <span>Navish’s contribution</span>
-            <p>{proof.work.contribution}</p>
-            <small>{proof.work.role}</small>
-            <Link href={proof.work.route}>
-              Open the full work <Icon name="arrow" size={14} />
-            </Link>
-          </div>
-        </div>
-      </section>
+              {active.work.id === "spatial-intelligence" ? (
+                <div className="home-selected-spatial">
+                  <SceneStage
+                    config={worldConfig}
+                    description="A persistent three-dimensional mountain laboratory whose existing objects survive later instructions."
+                    quiet
+                  />
+                  <div className="home-spatial-controls" aria-label="Edit the persistent example world">
+                    <button type="button" onClick={() => editWorld("Move the microscope beside the window.")}>Move the microscope</button>
+                    <button type="button" onClick={() => editWorld("Add a second sample beside the microscope.")}>Add a sample</button>
+                    <button type="button" onClick={() => editWorld("Make it night.")}>Make it night</button>
+                    <button type="button" onClick={() => setWorld(initialWorld())}>Reset world</button>
+                    <span>{world.objects.length} objects · revision {world.revision}</span>
+                  </div>
+                  <section className="mechanism-pulse" aria-label="Live causal explanation">
+                    <article>
+                      <span>Cause</span>
+                      <p>{world.history.at(-1)?.text ?? "Start from one typed world with stable object identities."}</p>
+                    </article>
+                    <article>
+                      <span>Measured response</span>
+                      <p>{world.objects.length} objects remain in world state · revision {world.revision} · lighting {world.time}.</p>
+                    </article>
+                    <article>
+                      <span>Consequence</span>
+                      <p>Later instructions modify the current world instead of replacing the previous scene with an unrelated one.</p>
+                    </article>
+                  </section>
+                </div>
+              ) : (
+                <ScientificPanel exhibit={active} compact />
+              )}
 
-      <section className="home-spatial section-width" aria-labelledby="spatial-heading">
-        <div className="home-spatial-stage">
-          <SceneStage
-            config={worldConfig}
-            description="A persistent three-dimensional mountain laboratory. The same objects survive the next instruction."
-            quiet
-          />
-        </div>
-        <div className="home-spatial-copy">
-          <span className="section-label">Frontier · spatial intelligence</span>
-          <h2 id="spatial-heading">Language should change a world—not throw the last one away.</h2>
-          <p>
-            This is where 3D earns its place. A command becomes typed objects, relations, coordinates, revision history, and situated action inside one persistent state.
-          </p>
-          <ol className="spatial-causal-chain" aria-label="Language to persistent world sequence">
-            <li><span>01</span><strong>Say what should exist.</strong></li>
-            <li><span>02</span><strong>Inspect the interpreted objects and relations.</strong></li>
-            <li><span>03</span><strong>See them occupy persistent world coordinates.</strong></li>
-            <li><span>04</span><strong>Edit the same objects with the next instruction.</strong></li>
-            <li><span>05</span><strong>Let an agent act on the current revision.</strong></li>
-          </ol>
-          <Link className="button" href="/frontier/spatial-intelligence">
-            Enter the persistent world <Icon name="arrow" />
-          </Link>
-          <p className="small">
-            Real WebGL depth and persistent state; deterministic local parser; no claim of unrestricted scene generation or learned embodiment.
-          </p>
+              <div className="proof-contribution">
+                <span>Navish’s contribution</span>
+                <p>{active.work.contribution}</p>
+                <small>{active.work.role}</small>
+                <Link href={active.work.route}>
+                  Open the full work <Icon name="arrow" size={14} />
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
