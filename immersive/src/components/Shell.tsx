@@ -4,8 +4,6 @@ import { Icon } from "./Icon";
 const links = [
   ["Trajectory", "/trajectory"],
   ["Work", "/work"],
-  ["Research", "/research"],
-  ["Systems", "/systems"],
   ["Spatial lab", "/frontier/spatial-intelligence"],
   ["About", "/about"],
 ];
