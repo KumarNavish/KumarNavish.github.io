@@ -9,7 +9,7 @@
     "preview": "vite preview --host 127.0.0.1 --port 4187",
     "test": "vitest run",
     "check": "npm run test && npm run build",
-    "qa": "node tests/browser-v2.mjs && node tests/motion.mjs"
+    "qa": "node tests/browser-v3.mjs && node tests/motion.mjs"
   },
   "dependencies": {
     "react": "18.3.1",
