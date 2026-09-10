@@ -12,3 +12,8 @@
 .source-excerpts article > span {
   color: #526b7b;
 }
+
+.trajectory-orientation span {
+  text-transform: none;
+  letter-spacing: .02em;
+}
