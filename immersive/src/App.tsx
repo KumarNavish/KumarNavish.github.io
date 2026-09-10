@@ -16,13 +16,13 @@ const SystemsPage = lazy(() =>
   import("./Pages").then((m) => ({ default: m.SystemsPage })),
 );
 const FrontierPage = lazy(() =>
-  import("./Pages").then((m) => ({ default: m.FrontierPage })),
+  import("./Pages").then((m) => ({ default: m.FrierPage })),
 );
 const AboutPage = lazy(() =>
   import("./Pages").then((m) => ({ default: m.AboutPage })),
 );
 const ProjectPage = lazy(() =>
-  import("./Pages").then((m) => ({ default: m.ProjectPage })),
+  import("./ProjectPage").then((m) => ({ default: m.ProjectPage })),
 );
 const NotFoundPage = lazy(() =>
   import("./Pages").then((m) => ({ default: m.NotFoundPage })),
