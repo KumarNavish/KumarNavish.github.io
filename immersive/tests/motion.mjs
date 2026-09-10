@@ -40,7 +40,7 @@ const readyScene = async (root = page) => {
   const stage = root.locator(".scene-stage").first();
   await stage.scrollIntoViewIfNeeded();
   await stage.waitFor({ state: "visible" });
-  await stage.locator('[data-state="ready"]').waitFor({ timeout: 30000 });
+  await root.locator('.scene-stage[data-state="ready"]').first().waitFor({ timeout: 30000 });
   return stage;
 };
 const activateHomeSpatial = async () => {
@@ -51,7 +51,7 @@ const activateHomeSpatial = async () => {
   await root.waitFor();
   const stage = root.locator(".scene-stage");
   await stage.scrollIntoViewIfNeeded();
-  await stage.locator('[data-state="ready"]').waitFor({ timeout: 30000 });
+  await root.locator('.scene-stage[data-state="ready"]').waitFor({ timeout: 30000 });
   return root;
 };
 
