@@ -8,3 +8,7 @@
   text-transform: none;
   letter-spacing: .02em;
 }
+
+.source-excerpts article > span {
+  color: #526b7b;
+}
