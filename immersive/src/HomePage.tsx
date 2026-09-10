@@ -1,41 +1,34 @@
 import { useMemo, useState } from "react";
-import { Link, useNavigation } from "./navigation";
+import { Link } from "./navigation";
 import { SceneStage, useReducedMotion } from "./components/SceneStage";
 import { ScientificPanel } from "./components/ScientificPanel";
 import { CanonicalTimeline } from "./components/ResearchStoryBlocks";
 import { Icon } from "./components/Icon";
-import { EXHIBITS, statusLabel } from "./data/exhibits";
-import { narrativeFor } from "./data/workNarrative";
-import type { WorkPeriod } from "./data/legacyRegistry";
+import { EXHIBITS } from "./data/exhibits";
+import { initialWorld } from "./engine/world";
 import type { SceneConfig } from "./engine/renderer";
-
-const HORIZON_COPY: Record<WorkPeriod, { title: string; subtitle: string }> = {
-  foundations: { title: "Past", subtitle: "Make hidden structure precise." },
-  current: { title: "Now", subtitle: "Understand and constrain change." },
-  frontier: { title: "Frontier", subtitle: "Build persistent intelligent interfaces." },
-};
 
 const PROOF_IDS = [
   "normalized-gain-laplacians",
   "experience-replay-optimization",
   "rank-feasibility",
+  "ticlm-replay-value",
   "casepath",
 ];
 
 export function HomePage() {
-  const reduced = useReducedMotion();
-  const { go } = useNavigation();
   const [proofId, setProofId] = useState(PROOF_IDS[0]);
   const proof = EXHIBITS.find((e) => e.work.id === proofId)!;
-  const narrative = narrativeFor(proof.work.id);
-  const config = useMemo<SceneConfig>(
-    () => ({ kind: "atlas", step: 4, value: 0, reduced }),
-    [reduced],
+  const reduced = useReducedMotion();
+  const world = useMemo(initialWorld, []);
+  const worldConfig = useMemo<SceneConfig>(
+    () => ({ kind: "world", step: 0, value: 0, world, reduced }),
+    [world, reduced],
   );
 
   return (
-    <main id="main" className="home-page comprehension-home">
-      <section className="hero">
+    <main id="main" className="home-page comprehension-home clarity-home">
+      <section className="hero trajectory-first-hero">
         <div className="hero-copy">
           <h1>
             Intelligent systems.
@@ -46,80 +39,45 @@ export function HomePage() {
             I’m Navish Kumar, a machine-learning researcher and systems builder at the University of Basel.
           </p>
           <p className="hero-description">
-            I study what changes inside useful systems—and how to keep the structure, evidence, constraints, and consequences of that change visible.
+            My work moves from mathematical structure, through continual adaptation and evidence-grounded systems, toward persistent spatial interfaces.
           </p>
           <div className="hero-actions">
             <Link className="button" href="/trajectory">
               Follow the trajectory <Icon name="arrow" />
             </Link>
-            <Link className="text-link" href="/frontier/spatial-intelligence">
-              Enter the spatial lab <Icon name="arrow" />
+            <Link className="text-link" href="/work">
+              Open the complete work <Icon name="arrow" />
             </Link>
           </div>
           <div className="hero-footnote">
             <span className="small-rule" />
-            Research you can inspect, manipulate, and question.
+            Past → Now → Frontier is the single spine of the site.
           </div>
         </div>
 
-        <div className="hero-gallery">
-          <SceneStage
-            config={config}
-            description="Three-dimensional research objects spanning structural consistency, learning geometry, and persistent worlds."
-            className="home-stage"
-            quiet
-            callbacks={{
-              onPick: (id) => {
-                const exhibit = EXHIBITS.find((e) => e.work.id === id);
-                if (exhibit) go(exhibit.work.route);
-              },
-            }}
-          />
-          <div className="hero-horizons" aria-label="Past, now, and frontier overview">
-            {(["foundations", "current", "frontier"] as WorkPeriod[]).map((period) => {
-              const works = EXHIBITS.filter((e) => e.work.period === period);
-              return (
-                <Link key={period} href="/trajectory">
-                  <span>{HORIZON_COPY[period].title}</span>
-                  <strong>{HORIZON_COPY[period].subtitle}</strong>
-                  <small>{works.length} {works.length === 1 ? "work" : "works"}</small>
-                </Link>
-              );
-            })}
-          </div>
+        <div className="hero-trajectory" aria-label="Complete research trajectory">
+          <header>
+            <span>One evolving body of work</span>
+            <p>Every project has a temporal position. Nothing else becomes a competing architecture.</p>
+          </header>
+          <CanonicalTimeline />
         </div>
-      </section>
-
-      <section className="home-journey section-width" aria-labelledby="journey-heading">
-        <header className="journey-heading">
-          <div>
-            <span className="section-label">The canonical trajectory</span>
-            <h2 id="journey-heading">Past → Now → Frontier</h2>
-          </div>
-          <p>
-            One body of work, ordered by time. Questions, methods, status, and domains are secondary lenses on this same spine.
-          </p>
-          <Link className="text-link" href="/trajectory">
-            Open the full trajectory <Icon name="arrow" />
-          </Link>
-        </header>
-        <CanonicalTimeline />
       </section>
 
       <section className="home-proof section-width" aria-labelledby="proof-heading">
         <header className="proof-heading">
           <div>
-            <span className="section-label">Understand the contribution through the mechanism</span>
+            <span className="section-label">Operate the idea</span>
             <h2 id="proof-heading">Change one thing. Watch the consequence propagate.</h2>
           </div>
           <p>
-            Each work earns its own scientific object. The visualization is the explanation—not decoration beside it.
+            The live object is the explanation: problem → intervention → measured response → real-world meaning. The paper or source record remains the evidence.
           </p>
         </header>
 
         <div className="proof-selector" role="tablist" aria-label="Choose a defining research explanation">
           {PROOF_IDS.map((id) => {
-            const e = EXHIBITS.find((x) => x.work.id === id)!;
+            const exhibit = EXHIBITS.find((item) => item.work.id === id)!;
             return (
               <button
                 key={id}
@@ -127,29 +85,10 @@ export function HomePage() {
                 aria-selected={proofId === id}
                 onClick={() => setProofId(id)}
               >
-                {e.name}
+                {exhibit.name}
               </button>
             );
           })}
-        </div>
-
-        <div className="causal-chain" aria-label="Problem, intervention, consequence, and real-world meaning">
-          <article>
-            <span>Problem</span>
-            <p>{proof.question}</p>
-          </article>
-          <article>
-            <span>Intervention</span>
-            <p>{narrative.mechanism}</p>
-          </article>
-          <article>
-            <span>Observable consequence</span>
-            <p>{narrative.observableConsequence}</p>
-          </article>
-          <article>
-            <span>So what?</span>
-            <p>{narrative.realWorldImplication}</p>
-          </article>
         </div>
 
         <div className="proof-stage" key={proof.work.id}>
@@ -165,42 +104,52 @@ export function HomePage() {
         </div>
       </section>
 
-      <section className="home-current section-width" aria-labelledby="current-heading">
-        <header>
-          <div>
-            <span className="section-label">Now</span>
-            <h2 id="current-heading">What is active right now.</h2>
-          </div>
+      <section className="home-spatial section-width" aria-labelledby="spatial-heading">
+        <div className="home-spatial-stage">
+          <SceneStage
+            config={worldConfig}
+            description="A persistent three-dimensional mountain laboratory. The same objects survive the next instruction."
+            quiet
+          />
+        </div>
+        <div className="home-spatial-copy">
+          <span className="section-label">Frontier · spatial intelligence</span>
+          <h2 id="spatial-heading">Language should change a world—not throw the last one away.</h2>
           <p>
-            Current work stays visibly distinct from published foundations and frontier direction.
+            This is where 3D earns its place. A command becomes typed objects, relations, coordinates, revision history, and situated action inside one persistent state.
           </p>
-        </header>
-        <div className="current-list">
-          {EXHIBITS.filter((e) => e.work.period === "current").map((e) => {
-            const n = narrativeFor(e.work.id);
-            return (
-              <Link key={e.work.id} href={e.work.route}>
-                <span>{e.work.year} · {statusLabel(e.work)}</span>
-                <h3>{e.name}</h3>
-                <p>{n.currentExperiment ?? e.work.nextQuestion}</p>
-                <Icon name="arrow" />
-              </Link>
-            );
-          })}
+          <ol className="spatial-causal-chain" aria-label="Language to persistent world sequence">
+            <li><span>01</span><strong>Say what should exist.</strong></li>
+            <li><span>02</span><strong>Inspect the interpreted objects and relations.</strong></li>
+            <li><span>03</span><strong>See them occupy persistent world coordinates.</strong></li>
+            <li><span>04</span><strong>Edit the same objects with the next instruction.</strong></li>
+            <li><span>05</span><strong>Let an agent act on the current revision.</strong></li>
+          </ol>
+          <Link className="button" href="/frontier/spatial-intelligence">
+            Enter the persistent world <Icon name="arrow" />
+          </Link>
+          <p className="small">
+            Real WebGL depth and persistent state; deterministic local parser; no claim of unrestricted scene generation or learned embodiment.
+          </p>
         </div>
       </section>
 
       <section className="home-atlas-entry section-width">
         <div>
           <span className="section-label">Complete record</span>
-          <h2>Ten works. One evolving programme.</h2>
+          <h2>Every project remains inspectable without crowding the main story.</h2>
           <p>
-            Scan every project, its status, evidence, contribution, and native explanation without turning the homepage into an archive.
+            The work atlas holds the full ten-work record. Publication status, sources, and limitations stay available as evidence layers rather than a second navigation system.
           </p>
         </div>
-        <Link className="button secondary" href="/work">
-          Open the work atlas <Icon name="arrow" />
-        </Link>
+        <div className="home-record-actions">
+          <Link className="button secondary" href="/work">
+            Open the work atlas <Icon name="arrow" />
+          </Link>
+          <Link className="text-link" href="/research">
+            Research record <Icon name="arrow" />
+          </Link>
+        </div>
       </section>
     </main>
   );
