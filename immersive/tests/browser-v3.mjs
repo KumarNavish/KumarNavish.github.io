@@ -11,7 +11,9 @@ const mac = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const browser = await chromium.launch({
   headless: true,
   executablePath: process.env.CHROME_PATH || (existsSync(mac) ? mac : undefined),
-  args: process.platform === "linux" ? ["--ignore-gpu-blocklist", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] : ["--ignore-gpu-blocklist"],
+  args: process.platform === "linux"
+    ? ["--ignore-gpu-blocklist", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"]
+    : ["--ignore-gpu-blocklist"],
 });
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce" });
 const page = await context.newPage();
@@ -29,18 +31,13 @@ async function check(name, fn) {
     throw error;
   }
 }
-async function go(route, graphics = false) {
+async function go(route) {
   const response = await page.goto(base + route, { waitUntil: "networkidle" });
   assert.equal(response.status(), 200, `${route} HTTP status`);
   await page.locator("h1").waitFor();
   assert.equal(await page.locator("h1").count(), 1);
   assert.ok((await page.locator("body").innerText()).length > 250);
   assert.ok((await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)) <= 1, `${route} overflow`);
-  if (graphics) {
-    const stage = page.locator(".scene-stage").first();
-    await stage.scrollIntoViewIfNeeded();
-    await page.locator('.scene-stage[data-state="ready"]').first().waitFor({ timeout: 30000 });
-  }
 }
 async function snap(name, fullPage = false) {
   await page.screenshot({ path: path.join(out, `${name}.png`), fullPage });
@@ -57,6 +54,7 @@ const apply = async (text) => {
   await page.waitForTimeout(180);
   assert.equal(await page.locator(".command-error").count(), 0);
 };
+const homeChoice = (name) => page.locator(".hero-trajectory .canonical-timeline button").filter({ hasText: name });
 
 try {
   await check("all canonical static routes serve real HTML", async () => {
@@ -79,20 +77,19 @@ try {
     await go("/");
     assert.equal(await page.locator(".hero-trajectory .canonical-timeline").count(), 1);
     assert.equal(await page.locator(".hero-trajectory .timeline-period").count(), 3);
-    assert.equal(await page.locator(".hero-trajectory .canonical-timeline li").count(), 10);
-    assert.equal(await page.locator(".home-journey").count(), 0);
-    assert.equal(await page.locator(".home-current").count(), 0);
-    assert.equal(await page.locator(".hero-gallery").count(), 0);
+    assert.equal(await page.locator(".hero-trajectory .canonical-timeline button").count(), 10);
+    assert.equal(await page.locator(".proof-selector").count(), 0);
+    assert.equal(await page.locator(".home-spatial").count(), 0);
+    assert.equal(await page.locator(".home-selected-work").count(), 0);
+    assert.equal(await page.locator(".home-selection-prompt").count(), 1);
     const text = await page.locator(".hero-trajectory").innerText();
-    assert.match(text, /Past/);
-    assert.match(text, /Now/);
-    assert.match(text, /Frontier/);
+    assert.match(text, /Past/); assert.match(text, /Now/); assert.match(text, /Frontier/);
     const nav = await page.locator(".main-nav a").allTextContents();
     assert.deepEqual(nav, ["Trajectory", "Work", "Frontier", "About"]);
     const hrefs = await page.locator(".main-nav a").evaluateAll((items) => items.map((item) => item.getAttribute("href")));
     assert.deepEqual(hrefs, ["/trajectory", "/work", "/frontier", "/about"]);
     await snap("home-desktop", true);
-    return "single ten-work timeline; no individual project owns primary navigation";
+    return "single ten-work timeline; no second selector and no preselected project";
   });
 
   await check("trajectory page keeps time canonical rather than introducing another visual system", async () => {
@@ -101,28 +98,35 @@ try {
     assert.equal(await page.locator(".trajectory-page-v2 > .canonical-timeline .timeline-period").count(), 3);
     assert.equal(await page.locator(".trajectory-page-v2 .scene-stage").count(), 0);
     const overview = await page.locator(".trajectory-orientation").innerText();
-    assert.match(overview, /Past/);
-    assert.match(overview, /Now/);
-    assert.match(overview, /Frontier/);
+    assert.match(overview, /Past/); assert.match(overview, /Now/); assert.match(overview, /Frontier/);
     await page.locator(".trajectory-page-v2 > .canonical-timeline button").filter({ hasText: "Experience Replay" }).click();
     assert.equal(await page.locator(".trajectory-selected-v2 .work-position > div").count(), 3);
     return "one temporal timeline plus selected came-from/this-work/leads-toward context";
   });
 
-  await check("homepage gives every flagship equal access to a native mechanism", async () => {
+  await check("all ten works share one homepage explanation slot", async () => {
     await go("/");
-    assert.equal(await page.locator(".proof-selector button").count(), 5);
-    for (const name of ["Gain graph structure", "Experience Replay", "Rank Feasibility", "Temporal replay value", "CasePath"]) {
-      await page.locator(".proof-selector button").filter({ hasText: name }).click();
-      const panel = page.locator(".proof-stage .scientific-panel");
-      await panel.waitFor();
-      assert.equal(await panel.locator(".mechanism-pulse article").count(), 3);
-      const pulse = await panel.locator(".mechanism-pulse").innerText();
-      assert.match(pulse, /Cause/i);
-      assert.match(pulse, /Measured response/i);
-      assert.match(pulse, /Consequence/i);
+    const names = [
+      "Interaction dynamics", "Gain graph structure", "Spectral certificates", "Urban micro-regions",
+      "Optimization geometry", "Experience Replay", "Rank Feasibility", "Temporal replay value",
+      "CasePath", "Persistent worlds",
+    ];
+    for (const name of names) {
+      await homeChoice(name).click();
+      const selected = page.locator(".home-selected-work");
+      await selected.waitFor();
+      assert.match(await selected.locator(".selected-work-intro").innerText(), new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+      assert.equal(await page.locator(".home-selection-prompt").count(), 0);
+      assert.equal(await page.locator(".home-selected-work").count(), 1);
+      assert.equal(await selected.locator(".mechanism-pulse article").count(), 3);
+      if (name === "Persistent worlds") {
+        assert.equal(await selected.locator(".home-selected-spatial").count(), 1);
+        assert.equal(await selected.locator(".scientific-panel").count(), 0);
+      } else {
+        assert.equal(await selected.locator(".scientific-panel").count(), 1);
+      }
     }
-    return "five flagship works use the same causal comprehension contract";
+    return "10/10 works selectable through the canonical timeline into one shared explanation region";
   });
 
   await check("gain graph turns one edge change into a measured global certificate", async () => {
@@ -146,8 +150,7 @@ try {
     const deficient = Number(await metric("Gradient residual"));
     assert.ok(deficient > 0.2);
     const pulse = await page.locator(".mechanism-pulse").innerText();
-    assert.match(pulse, /current-only update/i);
-    assert.match(pulse, /old-task loss/i);
+    assert.match(pulse, /current-only update/i); assert.match(pulse, /old-task loss/i);
     return { full, deficient };
   });
 
@@ -155,8 +158,7 @@ try {
     await go("/work/rank-feasibility/");
     await page.getByRole("button", { name: "Explore", exact: true }).click();
     const rank = page.getByRole("slider").first();
-    await rank.focus();
-    await rank.press("Home");
+    await rank.focus(); await rank.press("Home");
     assert.match(await page.locator(".readouts").innerText(), /Infeasible/);
     assert.match(await page.locator(".mechanism-pulse").innerText(), /No optimizer can find a repair/i);
     await rank.press("End");
@@ -169,17 +171,12 @@ try {
     await go("/work/ticlm-replay-value/");
     await page.getByRole("button", { name: "Explore", exact: true }).click();
     const sliders = page.getByRole("slider");
-    await sliders.nth(0).focus();
-    await sliders.nth(0).press("Home");
+    await sliders.nth(0).focus(); await sliders.nth(0).press("Home");
     for (let i = 0; i < 6; i++) await sliders.nth(0).press("ArrowRight");
-    await sliders.nth(1).focus();
-    await sliders.nth(1).press("Home");
-    await sliders.nth(1).press("ArrowRight");
-    const stable = await page.locator(".mechanism-pulse").innerText();
-    assert.match(stable, /earns its budget/i);
+    await sliders.nth(1).focus(); await sliders.nth(1).press("Home"); await sliders.nth(1).press("ArrowRight");
+    assert.match(await page.locator(".mechanism-pulse").innerText(), /earns its budget/i);
     await sliders.nth(1).press("End");
-    const stale = await page.locator(".mechanism-pulse").innerText();
-    assert.match(stale, /net inertia/i);
+    assert.match(await page.locator(".mechanism-pulse").innerText(), /net inertia/i);
     return "same historical allocation changes interpretation as temporal shift increases";
   });
 
@@ -192,33 +189,42 @@ try {
     assert.match(await page.locator(".readouts").innerText(), /READY/);
     assert.equal(await page.locator(".case-replay-trace li").count(), 4);
     const trace = await page.locator(".case-replay-trace").innerText();
-    assert.match(trace, /Dependent obligation/);
-    assert.match(trace, /Unrelated state/);
+    assert.match(trace, /Dependent obligation/); assert.match(trace, /Unrelated state/);
     await snap("casepath-corrected");
     return "HOLD → superseding correction → scoped replay → READY for human review";
   });
 
-  await check("3D is reserved for persistent spatial meaning on the homepage", async () => {
+  await check("homepage spatial explanation edits the same selected world", async () => {
     await go("/");
-    assert.equal(await page.locator(".hero .scene-stage").count(), 0);
-    assert.equal(await page.locator(".home-spatial .scene-stage").count(), 1);
-    await page.locator(".home-spatial .scene-stage").scrollIntoViewIfNeeded();
-    await page.locator('.home-spatial .scene-stage[data-state="ready"]').waitFor({ timeout: 30000 });
-    const canvas = page.locator(".home-spatial canvas");
-    const before = await canvas.getAttribute("data-camera");
-    await page.locator(".home-spatial").getByRole("button", { name: "Rotate view left", exact: true }).click();
-    await page.waitForTimeout(150);
-    const after = await canvas.getAttribute("data-camera");
-    assert.notEqual(before, after);
-    return { before, after };
+    assert.equal(await page.locator(".scene-stage").count(), 0);
+    await homeChoice("Persistent worlds").click();
+    const stage = page.locator(".home-selected-spatial");
+    await stage.locator('.scene-stage[data-state="ready"]').waitFor({ timeout: 30000 });
+    const stateLabel = stage.locator(".home-spatial-controls > span");
+    const parse = async () => {
+      const text = await stateLabel.innerText();
+      const match = text.match(/(\d+) objects · revision (\d+)/);
+      assert.ok(match, text);
+      return { objects: Number(match[1]), revision: Number(match[2]) };
+    };
+    const before = await parse();
+    await stage.getByRole("button", { name: "Move the microscope", exact: true }).click();
+    const moved = await parse();
+    assert.ok(moved.revision > before.revision);
+    await stage.getByRole("button", { name: "Add a sample", exact: true }).click();
+    const added = await parse();
+    assert.ok(added.revision > moved.revision); assert.ok(added.objects > moved.objects);
+    await stage.getByRole("button", { name: "Make it night", exact: true }).click();
+    await page.locator('.home-selected-spatial .scene-stage[data-world-time="night"]').waitFor();
+    assert.equal(await stage.locator(".mechanism-pulse article").count(), 3);
+    return { before, moved, added };
   });
 
   await check("spatial lab preserves identity across language edits and exposes diffs", async () => {
     await go("/frontier/spatial-intelligence/");
     await page.getByRole("button", { name: "Clear objects", exact: true }).click();
     await apply("Create a quiet mountain laboratory at sunset, place a robotic arm beside a microscope, and let an agent inspect the sample.");
-    const first = await world();
-    assert.ok(first.objects.length >= 5);
+    const first = await world(); assert.ok(first.objects.length >= 5);
     await apply("Add a second sample beside the microscope.");
     const second = await world();
     assert.ok(first.objects.every((item) => second.objects.some((candidate) => candidate.id === item.id)));
@@ -226,11 +232,9 @@ try {
     await apply("Move the microscope beside the window.");
     const moved = await world();
     const sameMicroscope = moved.objects.find((item) => item.id === microscope.id);
-    assert.notDeepEqual(sameMicroscope.position, microscope.position);
-    assert.ok(sameMicroscope.relation);
+    assert.notDeepEqual(sameMicroscope.position, microscope.position); assert.ok(sameMicroscope.relation);
     assert.match(await page.locator(".world-inline-diff").innerText(), /changed|microscope/i);
-    await apply("Make it night.");
-    assert.equal((await world()).time, "night");
+    await apply("Make it night."); assert.equal((await world()).time, "night");
     await page.getByRole("button", { name: "History", exact: true }).click();
     assert.ok((await page.locator(".world-history article").count()) >= 4);
     await snap("spatial-persistent-world");
@@ -249,16 +253,16 @@ try {
     return "came from → this work → leads toward plus live-first explanation, contribution and limitation";
   });
 
-  await check("mobile keeps the temporal spine legible without horizontal overflow", async () => {
+  await check("mobile keeps the ten-work temporal spine legible", async () => {
     for (const [width, height] of [[320, 568], [390, 844], [768, 1024]]) {
       await page.setViewportSize({ width, height });
       await go("/");
       assert.equal(await page.locator(".hero-trajectory .timeline-period").count(), 3);
+      assert.equal(await page.locator(".hero-trajectory .canonical-timeline button").count(), 10);
       assert.ok((await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)) <= 1);
       const menu = page.getByRole("button", { name: "Menu", exact: true });
       if (await menu.isVisible()) {
-        await menu.click();
-        assert.equal(await page.locator(".main-nav a:visible").count(), 4);
+        await menu.click(); assert.equal(await page.locator(".main-nav a:visible").count(), 4);
         await page.getByRole("button", { name: "Close", exact: true }).click();
       }
       if (width === 390) await snap("home-mobile", true);
