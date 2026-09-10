@@ -50,12 +50,18 @@ const go = async (route) => {
     .first()
     .waitFor({ timeout: 30000 });
 };
+const activateHomeSpatial = async () => {
+  const stage = page.locator(".home-spatial");
+  await stage.scrollIntoViewIfNeeded();
+  await stage.locator('.scene-stage[data-state="ready"]').waitFor({ timeout: 30000 });
+  return stage;
+};
 try {
   await check("spatial WebGL responds visibly to an intentional camera move", async () => {
     await go("/");
-    const stage = page.locator(".home-spatial"),
-      canvas = stage.locator("canvas"),
-      before = await canvas.screenshot();
+    const stage = await activateHomeSpatial();
+    const canvas = stage.locator("canvas");
+    const before = await canvas.screenshot();
     await stage
       .getByRole("button", { name: "Rotate view right", exact: true })
       .click();
@@ -67,9 +73,9 @@ try {
   await check(
     "spatial camera interpolation produces distinct intermediate and final views",
     async () => {
-      const stage = page.locator(".home-spatial"),
-        canvas = stage.locator("canvas"),
-        before = await canvas.getAttribute("data-camera");
+      const stage = await activateHomeSpatial();
+      const canvas = stage.locator("canvas");
+      const before = await canvas.getAttribute("data-camera");
       await stage
         .getByRole("button", { name: "Rotate view left", exact: true })
         .click();
@@ -221,7 +227,8 @@ try {
       try {
         for (let attempt = 0; attempt < 3; attempt++) {
           await go("/?clock-regression=" + attempt);
-          const canvas = page.locator(".home-spatial canvas");
+          const stage = await activateHomeSpatial();
+          const canvas = stage.locator("canvas");
           let previous = 0;
           for (let frame = 0; frame < 12; frame++) {
             await page.waitForTimeout(100);
