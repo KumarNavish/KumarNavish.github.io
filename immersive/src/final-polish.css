@@ -3,3 +3,8 @@
   letter-spacing: .02em;
   font-size: 10px;
 }
+
+.work-position span {
+  text-transform: none;
+  letter-spacing: .02em;
+}
