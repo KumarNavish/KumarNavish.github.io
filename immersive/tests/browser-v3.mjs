@@ -88,9 +88,25 @@ try {
     assert.match(text, /Now/);
     assert.match(text, /Frontier/);
     const nav = await page.locator(".main-nav a").allTextContents();
-    assert.deepEqual(nav, ["Trajectory", "Work", "Spatial lab", "About"]);
+    assert.deepEqual(nav, ["Trajectory", "Work", "Frontier", "About"]);
+    const hrefs = await page.locator(".main-nav a").evaluateAll((items) => items.map((item) => item.getAttribute("href")));
+    assert.deepEqual(hrefs, ["/trajectory", "/work", "/frontier", "/about"]);
     await snap("home-desktop", true);
-    return "single ten-work timeline; four primary navigation destinations";
+    return "single ten-work timeline; no individual project owns primary navigation";
+  });
+
+  await check("trajectory page keeps time canonical rather than introducing another visual system", async () => {
+    await go("/trajectory/");
+    assert.equal(await page.locator(".trajectory-page-v2 > .canonical-timeline").count(), 1);
+    assert.equal(await page.locator(".trajectory-page-v2 > .canonical-timeline .timeline-period").count(), 3);
+    assert.equal(await page.locator(".trajectory-page-v2 .scene-stage").count(), 0);
+    const overview = await page.locator(".trajectory-orientation").innerText();
+    assert.match(overview, /Past/);
+    assert.match(overview, /Now/);
+    assert.match(overview, /Frontier/);
+    await page.locator(".trajectory-page-v2 > .canonical-timeline button").filter({ hasText: "Experience Replay" }).click();
+    assert.equal(await page.locator(".trajectory-selected-v2 .work-position > div").count(), 3);
+    return "one temporal timeline plus selected came-from/this-work/leads-toward context";
   });
 
   await check("homepage gives every flagship equal access to a native mechanism", async () => {
