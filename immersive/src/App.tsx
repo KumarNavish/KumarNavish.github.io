@@ -7,7 +7,7 @@ const WorkPage = lazy(() =>
   import("./Pages").then((m) => ({ default: m.WorkPage })),
 );
 const TrajectoryPage = lazy(() =>
-  import("./Pages").then((m) => ({ default: m.TrajectoryPage })),
+  import("./TrajectoryPage").then((m) => ({ default: m.TrajectoryPage })),
 );
 const ResearchPage = lazy(() =>
   import("./Pages").then((m) => ({ default: m.ResearchPage })),
