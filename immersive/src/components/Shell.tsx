@@ -4,7 +4,7 @@ import { Icon } from "./Icon";
 const links = [
   ["Trajectory", "/trajectory"],
   ["Work", "/work"],
-  ["Spatial lab", "/frontier/spatial-intelligence"],
+  ["Frontier", "/frontier"],
   ["About", "/about"],
 ];
 export function Header() {
