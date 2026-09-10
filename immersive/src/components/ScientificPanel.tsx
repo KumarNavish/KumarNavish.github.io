@@ -6,6 +6,7 @@ import { Readouts, Matrix, DEMO_SOURCES, CORRECTION } from "./Readouts";
 import { evidenceGate } from "../engine/science";
 import { Icon } from "./Icon";
 import { narrativeFor } from "../data/workNarrative";
+import { MechanismPulse } from "./MechanismPulse";
 export function downloadJSON(value: unknown, name: string) {
   const url = URL.createObjectURL(
     new Blob([JSON.stringify(value, null, 2)], { type: "application/json" }),
@@ -272,6 +273,7 @@ export function ScientificPanel({
         <div className="science-visual">
           <SceneStage config={state} description={current.notice} />
           <Readouts state={state} />
+          <MechanismPulse state={state} />
         </div>
         <aside className="science-story">
           <div className="story-step" aria-live="polite">
@@ -283,7 +285,7 @@ export function ScientificPanel({
               {mode === "guide" ? current.body : exhibit.work.explanation15}
             </p>
           </div>
-          {(mode !== "guide" || step >= Math.floor(exhibit.steps.length / 2)) && (
+          {(mode !== "guide" || step === exhibit.steps.length - 1) && (
             <div className="story-meaning">
               <div><span>Observable effect</span><p>{narrative.observableConsequence}</p></div>
               <div><span>Real-world meaning</span><p>{narrative.realWorldImplication}</p></div>
@@ -323,6 +325,17 @@ export function ScientificPanel({
                   <Icon name="arrow" />
                 </button>
               )}
+            </div>
+          )}
+          {exhibit.kind === "evidence" && state.repaired && (
+            <div className="case-replay-trace" aria-label="Scoped replay after correction">
+              <span>Scoped replay</span>
+              <ol>
+                <li><strong>Source state</strong><small>B becomes historical; C becomes current.</small></li>
+                <li><strong>Dependent obligation</strong><small>The inspection-date check is recomputed.</small></li>
+                <li><strong>Admission gate</strong><small>The packet returns to READY for human review.</small></li>
+                <li><strong>Unrelated state</strong><small>Nothing else is rewritten in this synthetic example.</small></li>
+              </ol>
             </div>
           )}
           <div
