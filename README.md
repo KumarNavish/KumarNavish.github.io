@@ -1,17 +1,23 @@
-# Portfolio-as-a-System
+# Navish Kumar — portfolio
 
-This repository is being transformed into a capability-first portfolio system:
+A deliberately small personal site for research, selected work, publications,
+experience, and contact information.
 
-- `registry/`: curated structured inputs
-- `pipeline/`: typed Python ingestion/normalization/metrics pipeline
-- `site/`: React + TypeScript frontend that renders generated JSON APIs
+## Run locally
 
-Core local commands:
-
-```bash
-make check      # pipeline tests + site lint/test/build
-make pipe-run   # run pipeline entrypoint
-make site-dev   # run frontend locally
+```sh
+python3 -m http.server 4173
 ```
 
-Deployment target: GitHub Pages via Actions with generated static artifacts.
+Open `http://127.0.0.1:4173`.
+
+## Structure
+
+- `index.html` — the complete portfolio
+- `styles.css` — responsive layout and visual system
+- `404.html` — focused error page
+- `favicon.svg`, `robots.txt`, `sitemap.xml` — basic browser and search metadata
+
+There is no package manager, generated source, build step, JavaScript, external
+font, analytics script, or runtime dependency. GitHub Pages publishes the root
+of the `gh-pages` branch.
