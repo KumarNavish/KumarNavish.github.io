@@ -1,18 +1,22 @@
----
-layout: intentional
-permalink: /404.html
-title: Not Found
-description: The requested page does not exist.
----
-
-<article class="intentional-panel" aria-label="Page not found">
-  <section class="intentional-hero">
-    <p class="intentional-kicker">404</p>
-    <h1 class="intentional-title">Page Not Found</h1>
-    <p class="intentional-subtitle">The page you requested does not exist, or its path has changed.</p>
-    <div class="intentional-links">
-      <a class="intentional-link intentional-link-primary" href="{{ '/' | relative_url }}">Return to Overview</a>
-      <a class="intentional-link" href="{{ '/publications/' | relative_url }}">Open Archive</a>
-    </div>
-  </section>
-</article>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/styles.css">
+    <title>Page not found — Navish Kumar</title>
+  </head>
+  <body>
+    <main id="main">
+      <section class="hero error-page">
+        <h1>This page isn’t here.</h1>
+        <div class="hero-detail">
+          <p>The portfolio is now a single, focused page.</p>
+          <div class="hero-actions"><a class="primary-link" href="/">Return home <span aria-hidden="true">↗</span></a></div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
