@@ -28,6 +28,16 @@ changes={
  'package.json':[( '"version":"1.0.0"','"version":"2.0.0"')],
  'sitemap.xml':[( '2026-09-12','2026-09-13')]
 }
+
+changes['modules/world.mjs'].append(('Drag to orbit · Scroll to zoom · Drag an object to move','Drag to orbit · + / − to zoom · Drag an object to move'))
+changes['modules/studio.mjs']=[
+ ("case'time':return {text:s.benefit>=0?", "case'time':return s.month>=10&&!s.stable&&s.benefit>=0?{text:'The drift-aware mixture is working here. Compare it with a fixed allocation.',action:'Try a fixed 50% replay mixture',target:'fixed-mixture'}:{text:s.benefit>=0?"),
+ ("else if(id==='advance'){", "else if(id==='fixed-mixture')input('fraction',50);\n  else if(id==='advance'){"),
+ ("'This is the computed Gaussian update, not an animated promise of convergence.'", "'The target stays fixed. The update moves the approximation toward it.'"),
+ ("action:'Include the missing memory',target:'memories'", "action:'Complete the memory set',target:'memories'"),
+ ("else if(id==='memories')input('memory-b',!state.memories[1],'change');", "else if(id==='memories'){if(state.missing>1e-9){input('memory-a',true,'change');input('memory-b',true,'change');}else input('memory-b',false,'change');}")]
+changes['scripts/browser_acceptance.py']=[("page.locator('.experience').screenshot(path=str(out/(work+'-desktop.png')))", 'page.evaluate("document.activeElement?.blur();window.scrollTo({top:0,behavior:\'instant\'})");page.screenshot(path=str(out/(work+\'-desktop.png\')),full_page=True)'), ("page.locator('.experience').screenshot(path=str(out/(work+'-mobile.png')))", 'page.evaluate("document.activeElement?.blur();window.scrollTo({top:0,behavior:\'instant\'})");page.screenshot(path=str(out/(work+\'-mobile.png\')),full_page=True)'), (" go('spatial-world');page.locator('[data-reset]').click();before=state();", ' go(\'experience-replay\')\n for memories in [(False,False),(False,True),(True,False)]:\n  page.locator(\'[data-stage="2"]\').click()\n  for selector,selected in zip([\'#memory-a\',\'#memory-b\'],memories):page.locator(selector).set_checked(selected)\n  page.locator(\'[data-next]\').click();page.wait_for_timeout(100)\n  check(\'replay / complete memory set \'+str(memories),state()[\'missing\']==0 and all(state()[\'memories\']))\n go(\'spatial-world\');page.locator(\'[data-reset]\').click();before=state();')]
+changes['tests/studio.test.mjs']=[("test('flow motion changes routed geometry without changing the underlying result',()=>{const s=examples.interaction;assert.notDeepEqual(buildScene('interaction',s,0).data,buildScene('interaction',s,1.4).data);assert.equal(s.messages,8);});\n", "test('flow motion changes routed geometry without changing the underlying result',()=>{const s=examples.interaction;assert.notDeepEqual(buildScene('interaction',s,0).data,buildScene('interaction',s,1.4).data);assert.equal(s.messages,8);});\ntest('a drift-adapted final time state suggests a different comparison, not an inert advance',()=>{const s=timeExample(10);const adapted=timeExample(10,s.optimalFraction);assert.equal(sceneAdvice('time',adapted).target,'fixed-mixture');assert.ok(timeExample(10,.5).error>adapted.error);});\n")]
 for filename,pairs in changes.items():
  p=root/filename;s=p.read_text()
  for old,new in pairs:
