@@ -51,12 +51,18 @@ with sync_playwright() as p:
    check(work+' / stage '+str(stage),page.locator('#demo-root').get_attribute('data-state') is not None)
   if work=='spatial-world':page.wait_for_timeout(3000)
   check(work+' / no overflow',page.evaluate('document.documentElement.scrollWidth<=innerWidth'))
-  page.locator('.experience').screenshot(path=str(out/(work+'-desktop.png')))
+  page.evaluate("document.activeElement?.blur();window.scrollTo({top:0,behavior:'instant'})");page.screenshot(path=str(out/(work+'-desktop.png')),full_page=True)
   if work!='spatial-world':
    before=state();camera=page.locator('canvas').get_attribute('data-camera');page.locator('[data-camera="right"]').click()
    check(work+' / orbit preserves result',before==state() and camera!=page.locator('canvas').get_attribute('data-camera'))
    page.locator('[data-next]').click();page.wait_for_timeout(150);check(work+' / contextual action',before!=state())
   print('BROWSER',work,'PASS',modes[work],flush=True)
+ go('experience-replay')
+ for memories in [(False,False),(False,True),(True,False)]:
+  page.locator('[data-stage="2"]').click()
+  for selector,selected in zip(['#memory-a','#memory-b'],memories):page.locator(selector).set_checked(selected)
+  page.locator('[data-next]').click();page.wait_for_timeout(100)
+  check('replay / complete memory set '+str(memories),state()['missing']==0 and all(state()['memories']))
  go('spatial-world');page.locator('[data-reset]').click();before=state();page.locator('[data-command="Move the microscope closer to the window."]').click();after=state()
  check('world / IDs preserved',[o['id'] for o in before['objects']]==[o['id'] for o in after['objects']])
  check('world / one object changed',sum(a!=b for a,b in zip(before['objects'],after['objects']))==1)
@@ -66,7 +72,7 @@ with sync_playwright() as p:
  for work in ids:
   page.set_viewport_size({'width':390,'height':844});go(work);page.locator('[data-stage="2"]').click();page.wait_for_timeout(100)
   check(work+' / mobile no overflow',page.evaluate('document.documentElement.scrollWidth<=innerWidth'))
-  page.locator('.experience').screenshot(path=str(out/(work+'-mobile.png')))
+  page.evaluate("document.activeElement?.blur();window.scrollTo({top:0,behavior:'instant'})");page.screenshot(path=str(out/(work+'-mobile.png')),full_page=True)
  page.goto(base,wait_until='networkidle');page.wait_for_function("document.querySelectorAll('.work-scene-preview[data-rendered=\"true\"]').length===10");page.screenshot(path=str(out/'home-mobile.png'),full_page=True)
  nojs=browser.new_context(java_script_enabled=False);static=nojs.new_page();static.goto(base,wait_until='load');check('no JavaScript / research accessible',static.locator('.work-row').count()==10 and static.locator('noscript a').count()>0);nojs.close()
  check('no uncaught JavaScript errors',not errors);check('no failed resource requests',not requests)
