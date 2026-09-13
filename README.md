@@ -1,43 +1,45 @@
-# Navish Kumar — Living research studio
+# Navish Kumar — Living scientific worlds
 
-A static research portfolio organized around one Past → Now → Frontier timeline. Every project has a state-driven 3D explanation, controls that update an explicit calculation, a contextual next intervention, and its evidence boundary. No model API, runtime package, or paid hosting service is required.
+A static, source-inspectable research portfolio organised by one **Past → Now → Frontier** timeline. Ten native explanations connect an intervention to a computed consequence. Original sources, Navish's role and the limits of each example remain beside the experience.
 
-## Run
+## Run and verify
 
-```sh
+```bash
 npm test
 npm run build
 npm run serve
+# In a separate terminal, with Python Playwright and Chromium installed:
+python scripts/worlds_acceptance.py --url http://127.0.0.1:8765 --out /tmp/worlds-review
 ```
 
-Node 22 runs the tests and generates the static homepage. The browser itself needs no Node runtime. `scripts/browser_acceptance.py` tests a served source tree or the live origin with Playwright 1.57.0. The public-repository workflow uses a standard Ubuntu runner, with screenshots and results retained for one day.
+Node is used for tests and the HTML generator. Serving requires only a static HTTP server. There is no model API, account, paid backend, telemetry or database. Three.js 0.180.0 is vendored with its license; no runtime CDN is required. Interactive worlds use WebGL 2. When it is unavailable, controls and numerical explanations remain available; the interface explicitly identifies the graphics limitation.
 
 ## Architecture
 
-`modules/content.mjs` is the canonical work record: period, role, contribution, evidence, limitation, guide, predecessor and successor. `modules/mechanisms.mjs` holds the pure illustrative calculations. `demos.mjs` connects the controls to those calculations. `studio.mjs` renders each calculation as a scene and selects contextual guidance from its current state. These are deterministic rules, not model-generated answers.
+`modules/content.mjs` is the canonical work record. The timeline, full project pages, roles, evidence and connections derive from those records. `modules/app.mjs` loads each world on demand and disposes it on navigation.
 
-`studio-engine.mjs` supplies native 3D geometry, a perspective camera, normal-based studio lighting, material highlights, depth testing, object picking and keyboard camera controls. It uses WebGL when available and a depth-buffered software renderer otherwise. `project-scenes.mjs` gives the ten works different geometry and semantic labels. `timeline-scenes.mjs` produces lightweight previews from those same scenes, releases each temporary graphics context, and reserves layout space before loading.
+`modules/worlds/math.mjs` separates exact illustrative calculations from rendering. `graph.mjs`, `geometry.mjs`, `temporal.mjs`, `case.mjs` and `spatial.mjs` own distinct project experiences. `stage.mjs` handles Three.js, materials, lighting, picking, camera controls, labels and resource cleanup. `compiler.mjs` contains the atomic scene language, validation and path planning. `laboratory.mjs` constructs the editable instruments and physical environment. `worlds.css` provides project-specific visual systems within the shared portfolio shell.
 
-`world-model.mjs` owns persistent scene state, object IDs, command parsing, collision constraints, path planning and undo/redo. `world-view.mjs` renders it through the shared engine. `world.mjs` owns direct manipulation and commands. A camera change never changes scientific or world state.
+The homepage is generated ordinary HTML, including original-source links without JavaScript. Hash routes require no server rewrite. Earlier studio modules are retained for timeline previews and regression tests; they are not the new project-page renderer.
 
-The homepage is ordinary generated HTML. Hash routes use `#work/<id>`, with full embedded project pages rather than drawers. The readable timeline and source links survive disabled JavaScript. To add a work, add a record, its calculation/control binding, and its scene. Do not introduce a parallel navigation hierarchy.
+## Scientific scope
 
-## Scientific boundaries
+The rendered quantities are **worked examples, not measured paper results**.
 
-Every displayed quantity is a computed illustrative example, not a paper measurement. Published contributions, active questions, applications and prototypes are distinguished in each work. The diagonal natural-gradient example follows the cited algorithm; the low-rank example is a standard approximation, not a new theorem. TiC-LM credits the benchmark authors and labels Navish's work as replication. No acceptance or result is inferred from unretrieved OpenReview records.
+- The gain observatory computes a five-node Hermitian normalized Laplacian and three fundamental cycles. Spanning-tree enumeration finds a minimum-count edge-retuning repair only for this tiny graph.
+- Replay projects a desired correction onto selected memory directions in a three-parameter quadratic problem. A duplicated memory adds no direction. Signed-span projection is not a claim about nonnegative replay weights or a new selection algorithm.
+- Rank solves a three-variable minimum-norm problem in rank-indexed coordinate subspaces. Infeasible spaces have no rendered repair. The separately drawn budget is an illustrative isotropic change cost, not a full nonlinear LoRA model.
+- The temporal example processes exactly 64 simulated observations per period. Replay displaces new observations. The archive is explicitly assumed less noisy; the optimal allocation uses known toy drift. This is not language-model training or a TiC-LM benchmark result. TiC-LM is credited to its original authors; Navish's work is replication/investigation.
+- The posterior world uses the exact diagonal Gaussian specialization of the linked square-root natural-gradient algorithm. Surface height is probability density, not loss. The KL trace does not establish universal speed superiority.
+- The urban and interaction examples use fictional times, accounts and messages. The miniature buildings do not represent a geographic dataset.
+- CasePath is a synthetic document workflow. Visitor review is not authenticated production authority. It sends no payment and makes no legal determination. The source-record hash, cached dependencies and HOLD transitions demonstrate software mechanics only.
 
-The CasePath scene is a synthetic explanation, not the current standalone application or a real payment system. Its model-only correction cannot satisfy human authority. A changed invoice invalidates the action even after a reviewed date correction.
+## Persistent scene and privacy
 
-The spatial editor is a limited local command grammar, not unrestricted generative AI or production VR. Geometry is procedural. The route avoids the modeled fixed workbench; it is not a learned planner or a general robotics guarantee. World edits retain stable object IDs. Undo/redo is per visit; scene persistence uses guarded localStorage. Export preserves the current JSON state.
+The spatial world is a **limited local compiler, not unrestricted generative AI or a learned planner**. Supported clauses are parsed, bound to stable IDs, collision-checked and committed atomically. A rejected clause leaves the scene unchanged. Three.js objects are retained across transform edits. Undo/redo restores scene snapshots; local storage preserves the latest scene when allowed; export writes explicit JSON.
 
-## Privacy and rendering
+Typed commands remain local. Optional speech recognition is initiated only by the visitor and may transmit audio to the browser vendor's recognition provider. Support varies. No microphone success, physical-device GPU performance, Safari compatibility or headset VR validation is inferred from headless tests.
 
-Typed commands and calculations remain local. Optional browser speech recognition may send audio to its provider; this is disclosed before microphone use. No audio permission is requested on page load. Unsupported speech leaves typed commands available.
+## Evidence
 
-Animation pauses when its scene is not visible or the page is hidden. Reduced-motion preference disables automatic flow. Static geometric explanations do not present an inert flow button. Hardware-accelerated performance, microphone recognition and Safari behavior must not be inferred from software-rendered Chromium tests. A lost graphics context is reported visibly without hiding the underlying calculation.
-
-## Validation history
-
-The first release, source `ee4d06d`, passed 25 numerical/state tests and 35 in-memory browser assertions. Those historical checks did not verify HTTP module delivery.
-
-The studio revision adds finite-geometry and state-dependent guidance tests, per-project desktop/mobile acceptance, camera invariance, authority checks, and real-origin reload/persistence verification in the browser workflow. Workflow outcomes and their retained artifacts are the evidence; the existence of a test script is not a passing result. The public website's emotional impact has not been independently evaluated.
+`tests/` covers numerical identities, feasible/infeasible cases, budget accounting, scene compilation and regression behavior. `scripts/worlds_acceptance.py` exercises actual HTTP module delivery, state changes, source preservation, camera independence, mobile layout, persistence and export. GitHub Actions stores the executed reports and screenshots separately from the application. A test pass establishes those checks, not an independent human assessment of explanatory impact.
