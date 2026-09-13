@@ -1,40 +1,43 @@
-# Navish Kumar — Living research timeline
+# Navish Kumar — Living research studio
 
-A dependency-free static portfolio with one canonical **Past → Now → Frontier** timeline and ten native explanatory experiences. GitHub Pages serves the files directly. No build service, API key, paid model, database, or third-party JavaScript is required.
+A static research portfolio organized around one Past → Now → Frontier timeline. Every project has a state-driven 3D explanation, controls that update an explicit calculation, a contextual next intervention, and its evidence boundary. No model API, runtime package, or paid hosting service is required.
 
-## Content and architecture
+## Run
 
-`modules/content.mjs` is the canonical Work record. Each entry contains its period, status, role, contribution, evidence, mechanism, real-world interpretation, limitation, predecessor, successor, current example/question, sources and four guided stages. To add a work, add its record, implement a native mechanism, and register that mechanism in `modules/demos.mjs`. The timeline and contextual navigation derive from the records; do not add a parallel organizational system.
-
-`modules/mechanisms.mjs` contains pure, tested calculations. `modules/demos.mjs` connects controls to those calculations. `modules/render.mjs` renders the site hierarchy. `modules/app.mjs` handles hash routes, back navigation and guided playback. The three `world-*`/`world` modules separate persistent scene state, command interpretation, path planning, rendering and controls.
-
-The homepage is generated as ordinary HTML, so the list and source links survive disabled JavaScript. Project explanations progressively enhance it. Direct links use `#work/<id>` and need no server rewrite.
-
-```
+```sh
 npm test
 npm run build
 npm run serve
 ```
 
-Node is needed only for the tests and HTML generator. Browser delivery does not depend on npm packages. Regenerate `index.html` after changing the content or homepage renderer.
+Node 22 runs the tests and generates the static homepage. The browser itself needs no Node runtime. `scripts/browser_acceptance.py` tests a served source tree or the live origin with Playwright 1.57.0. The public-repository workflow uses a standard Ubuntu runner, with screenshots and results retained for one day.
+
+## Architecture
+
+`modules/content.mjs` is the canonical work record: period, role, contribution, evidence, limitation, guide, predecessor and successor. `modules/mechanisms.mjs` holds the pure illustrative calculations. `demos.mjs` connects the controls to those calculations. `studio.mjs` renders each calculation as a scene and selects contextual guidance from its current state. These are deterministic rules, not model-generated answers.
+
+`studio-engine.mjs` supplies native 3D geometry, a perspective camera, normal-based studio lighting, material highlights, depth testing, object picking and keyboard camera controls. It uses WebGL when available and a depth-buffered software renderer otherwise. `project-scenes.mjs` gives the ten works different geometry and semantic labels. `timeline-scenes.mjs` produces lightweight previews from those same scenes, releases each temporary graphics context, and reserves layout space before loading.
+
+`world-model.mjs` owns persistent scene state, object IDs, command parsing, collision constraints, path planning and undo/redo. `world-view.mjs` renders it through the shared engine. `world.mjs` owns direct manipulation and commands. A camera change never changes scientific or world state.
+
+The homepage is ordinary generated HTML. Hash routes use `#work/<id>`, with full embedded project pages rather than drawers. The readable timeline and source links survive disabled JavaScript. To add a work, add a record, its calculation/control binding, and its scene. Do not introduce a parallel navigation hierarchy.
 
 ## Scientific boundaries
 
-All displayed demo quantities are computed illustrative examples, not paper measurements. Published contributions, applications, active questions and prototype capabilities are separated in each work's evidence section. Author roles are stated conservatively where individual task attribution was not independently available.
+Every displayed quantity is a computed illustrative example, not a paper measurement. Published contributions, active questions, applications and prototypes are distinguished in each work. The diagonal natural-gradient example follows the cited algorithm; the low-rank example is a standard approximation, not a new theorem. TiC-LM credits the benchmark authors and labels Navish's work as replication. No acceptance or result is inferred from unretrieved OpenReview records.
 
-- The natural-gradient example follows the exact diagonal Gaussian specialization of Algorithm 1 in arXiv:2507.07853v1; it is not a universal speed claim.
-- The gain triangle uses its exact normalized spectrum. The signed four-node example uses a basic Rayleigh lower bound and exhaustive tiny-graph repair; it does not pretend to reproduce all stronger paper bounds.
-- Replay and rank examples explain constraints and trade-offs. The linked active OpenReview records could not be independently retrieved during this update; no acceptance, novelty or benchmark result is asserted from them.
-- TiC-LM is credited to the original Li et al. benchmark. Navish's entry is a replication/investigation, not authorship of that benchmark.
-- CasePath's browser example is synthetic and local. It demonstrates an authority gate and dependency replay, not legal correctness, production readiness, or the current standalone application's hosted availability.
-- The spatial editor has a deliberately limited grammar and procedural geometry. It is not an unrestricted generative model, a learned planner, or an evaluated VR system.
+The CasePath scene is a synthetic explanation, not the current standalone application or a real payment system. Its model-only correction cannot satisfy human authority. A changed invoice invalidates the action even after a reviewed date correction.
 
-## Spatial privacy and compatibility
+The spatial editor is a limited local command grammar, not unrestricted generative AI or production VR. Geometry is procedural. The route avoids the modeled fixed workbench; it is not a learned planner or a general robotics guarantee. World edits retain stable object IDs. Undo/redo is per visit; scene persistence uses guarded localStorage. Export preserves the current JSON state.
 
-Typed commands are local. Supported speech is optional and uses the browser's SpeechRecognition API, which may transmit audio to the browser's provider. Permission is requested only after a microphone click. Unsupported or denied speech leaves typed controls available.
+## Privacy and rendering
 
-Objects have stable IDs and explicit coordinates. Local storage is best-effort and guarded. Export preserves scene JSON. Undo/redo covers the current visit. WebGL uses a depth buffer; devices without WebGL use the same 3D geometry with a software depth buffer. Camera motion does not modify world state. Agent motion replays a computed collision-free grid route; reduced-motion preference suppresses animated playback.
+Typed commands and calculations remain local. Optional browser speech recognition may send audio to its provider; this is disclosed before microphone use. No audio permission is requested on page load. Unsupported speech leaves typed commands available.
 
-## Validation scope for the 2026-09-13 revision
+Animation pauses when its scene is not visible or the page is hidden. Reduced-motion preference disables automatic flow. Static geometric explanations do not present an inert flow button. Hardware-accelerated performance, microphone recognition and Safari behavior must not be inferred from software-rendered Chromium tests. A lost graphics context is reported visibly without hiding the underlying calculation.
 
-25 Node tests cover numerical identities, all 64 signed K4 configurations, cost trade-offs, authority/cache invalidation, command parsing, stable object IDs, obstacle avoidance and history restoration. Chromium in-memory fixture checks cover desktop and mobile rendering and 35 interaction assertions. Network navigation to localhost was blocked by the environment's administrator policy; that policy was not altered. In-memory rendering validates interface behavior, not live-origin network loading. Hardware WebGL, microphone recognition and real-origin persistence require separate verification. Deployment checks must be recorded separately rather than inferred from these tests.
+## Validation history
+
+The first release, source `ee4d06d`, passed 25 numerical/state tests and 35 in-memory browser assertions. Those historical checks did not verify HTTP module delivery.
+
+The studio revision adds finite-geometry and state-dependent guidance tests, per-project desktop/mobile acceptance, camera invariance, authority checks, and real-origin reload/persistence verification in the browser workflow. Workflow outcomes and their retained artifacts are the evidence; the existence of a test script is not a passing result. The public website's emotional impact has not been independently evaluated.

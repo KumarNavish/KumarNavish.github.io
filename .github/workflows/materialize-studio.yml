@@ -1,0 +1,42 @@
+name: Materialize and verify authored studio
+on:
+  push:
+    branches: [site/studio-20260913]
+permissions:
+  contents: write
+jobs:
+  materialize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Materialize and check every authored byte
+        run: python .delivery/prepare-studio.py
+      - run: npm test
+      - run: python -m pip install playwright==1.57.0
+      - run: python -m playwright install --with-deps chromium
+      - run: python -m http.server 8765 --bind 127.0.0.1 > /tmp/studio-http.log 2>&1 &
+      - run: python scripts/browser_acceptance.py --url http://127.0.0.1:8765 --out /tmp/studio-http-qa
+      - name: Seal the tested source on this staging branch only
+        run: |
+          git rm -r .delivery
+          git add modules scripts package.json sitemap.xml index.html
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Materialize byte-verified 3D studio; pass HTTP browser acceptance'
+          git push origin HEAD:site/studio-20260913
+          echo "VERIFIED_SOURCE_COMMIT=$(git rev-parse HEAD)"
+          echo "VERIFIED_SOURCE_TREE=$(git rev-parse HEAD^{tree})"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-staging-browser-evidence
+          path: /tmp/studio-http-qa
+          retention-days: 1
