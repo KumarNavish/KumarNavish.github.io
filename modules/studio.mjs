@@ -7,10 +7,10 @@ export function sceneAdvice(type,s){
  case'bounds':return s.frustration?{text:`At least ${s.lowerBound} edge must change; enumeration finds ${s.frustration}.`,action:'Apply a minimum repair',target:'repair'}:{text:'A consistent assignment exists. Try making one relationship disagree.',action:'Flip a relationship',target:'edge-0'};
  case'interaction':return !s.paired?{text:'The aggregate cannot tell you who is actually being reached.',action:'Reveal the people',target:'pairs'}:{text:s.distributed?'Same count. A different pattern of contact.':'Most replies reach one person; the group total hides this.',action:'Redistribute the replies',target:'pattern'};
  case'urban':return {text:s.vanTotal>s.bikeTotal?'Stop overhead reverses the comparison. This is not just a speed contest.':'A faster journey is only part of the delivery.',action:(s.parking||0)<4?'Add parking search':'Remove parking search',target:'parking'};
- case'natural':return {text:s.steps<20?'The distribution must learn its location and its uncertainty together.':'This is the computed Gaussian update, not an animated promise of convergence.',action:s.steps<20?'Run 20 actual steps':'Return to the starting estimate',target:'iterations'};
- case'replay':return s.phase==='old'?{text:'One set of parameters serves both earlier capabilities.',action:'Learn the new task',target:'new'}:s.phase==='new'?{text:'The new task is fitted. Both earlier predictions have moved off target.',action:'Replay one memory',target:'replay'}:s.missing>0?{text:`These memories cannot supply ${s.missing.toFixed(3)} of the desired correction.`,action:'Include the missing memory',target:'memories'}:{text:'Both correction directions are available. The new-task cost remains real.',action:'Remove one memory',target:'memories'};
+ case'natural':return {text:s.steps<20?'The distribution must learn its location and its uncertainty together.':'The target stays fixed. The update moves the approximation toward it.',action:s.steps<20?'Run 20 actual steps':'Return to the starting estimate',target:'iterations'};
+ case'replay':return s.phase==='old'?{text:'One set of parameters serves both earlier capabilities.',action:'Learn the new task',target:'new'}:s.phase==='new'?{text:'The new task is fitted. Both earlier predictions have moved off target.',action:'Replay one memory',target:'replay'}:s.missing>0?{text:`These memories cannot supply ${s.missing.toFixed(3)} of the desired correction.`,action:'Complete the memory set',target:'memories'}:{text:'Both correction directions are available. The new-task cost remains real.',action:'Remove one memory',target:'memories'};
  case'rank':return !s.expressible?{text:'More optimizer steps cannot create a direction the adapter cannot express.',action:'Unlock one more direction',target:'rank'}:!s.affordable?{text:'The repair is expressible, but it exceeds the current-task cost budget.',action:'Test a larger cost budget',target:'budget'}:{text:'Expressible and affordable are two separate conditions. Both hold here.',action:'Restrict the adapter again',target:'rank'};
- case'time':return {text:s.benefit>=0?'Here, old observations remove more noise than the bias they add.':'The historical data did not change. Its relevance to the present did.',action:s.benefit>=0?'Advance into a changing world':'Use the toy-optimal mixture',target:s.benefit>=0?'advance':'oracle'};
+ case'time':return s.month>=10&&!s.stable&&s.benefit>=0?{text:'The drift-aware mixture is working here. Compare it with a fixed allocation.',action:'Try a fixed 50% replay mixture',target:'fixed-mixture'}:{text:s.benefit>=0?'Here, old observations remove more noise than the bias they add.':'The historical data did not change. Its relevance to the present did.',action:s.benefit>=0?'Advance into a changing world':'Use the toy-optimal mixture',target:s.benefit>=0?'advance':'oracle'};
  case'case':return !s.parsed?{text:'The original is evidence. An interpretation is a separate record.',action:'Read the interpretation',target:'interpret'}:!s.nodes.gate.value?{text:s.review?.authority==='human'?'A changed invoice needs its own review; the date correction cannot authorize it.':'A plausible proposal cannot resolve its own contradiction.',action:s.review?.authority==='human'?'Try the blocked action':'Record the reviewed date',target:s.review?.authority==='human'?'attempt':'correct'}:{text:'Date and coverage were replayed. The independent invoice check was retained.',action:'Challenge the invoice',target:'amend'};
  default:return {text:'Change a control to inspect its consequence.',action:'Reset',target:'reset'};
  }
@@ -29,11 +29,12 @@ export function mountProjectScene(work,root){
   else if(id.startsWith('month-'))input('month',+id.slice(6));
   else if(id.startsWith('memory-')){const i=+id.slice(7);input('memory-'+(i?'b':'a'),!state.memories[i],'change');}
   else if(id==='gain-break')input('angle',120);
-  else if(id==='memories')input('memory-b',!state.memories[1],'change');
+  else if(id==='memories'){if(state.missing>1e-9){input('memory-a',true,'change');input('memory-b',true,'change');}else input('memory-b',false,'change');}
   else if(id==='parking')input('parking',state.parking<4?7:0);
   else if(id==='iterations')input('iterations',state.steps<20?20:0);
   else if(id==='rank')input('rank',state.rank===3?1:state.rank+1);
   else if(id==='budget')input('budget',.6);
+  else if(id==='fixed-mixture')input('fraction',50);
   else if(id==='advance'){input('stable',false,'change');input('month',10);}
   else if(id==='pattern')action('pattern');
   else action(id);
