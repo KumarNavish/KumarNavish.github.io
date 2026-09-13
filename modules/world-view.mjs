@@ -1,86 +1,12 @@
-import {esc} from './render.mjs';
-/** Small dependency-free WebGL renderer. Geometry, depth testing and camera are real. */
-const add=(a,b)=>a.map((v,i)=>v+b[i]),sub=(a,b)=>a.map((v,i)=>v-b[i]),mul=(a,s)=>a.map(v=>v*s),dot=(a,b)=>a.reduce((s,v,i)=>s+v*b[i],0),cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],norm=a=>mul(a,1/(Math.hypot(...a)||1));
-const hex=s=>[1,3,5].map(i=>parseInt(s.slice(i,i+2),16)/255);
-function matrixMultiply(a,b){const out=new Float32Array(16);for(let c=0;c<4;c++)for(let r=0;r<4;r++)for(let k=0;k<4;k++)out[c*4+r]+=a[k*4+r]*b[c*4+k];return out;}
-function perspective(f,aspect,near,far){const t=1/Math.tan(f/2);return new Float32Array([t/aspect,0,0,0,0,t,0,0,0,0,(far+near)/(near-far),-1,0,0,2*far*near/(near-far),0]);}
-function lookAt(eye,target){const z=norm(sub(eye,target)),x=norm(cross([0,1,0],z)),y=cross(z,x);return new Float32Array([x[0],y[0],z[0],0,x[1],y[1],z[1],0,x[2],y[2],z[2],0,-dot(x,eye),-dot(y,eye),-dot(z,eye),1]);}
-function geometry(){const data=[];function tri(a,b,c,color,ns){const n=norm(cross(sub(b,a),sub(c,a))),col=typeof color==='string'?hex(color):color;[a,b,c].forEach((p,i)=>data.push(...p,...(ns?ns[i]:n),...col));}
- function quad(a,b,c,d,color){tri(a,b,c,color);tri(a,c,d,color);}
- function box(p,size,color){const[x,y,z]=p,[w,h,d]=size.map(s=>s/2);const v=[[-w,-h,-d],[w,-h,-d],[w,h,-d],[-w,h,-d],[-w,-h,d],[w,-h,d],[w,h,d],[-w,h,d]].map(a=>add(a,p));[[4,5,6,7],[1,0,3,2],[3,7,6,2],[0,1,5,4],[0,4,7,3],[5,1,2,6]].forEach(ids=>quad(...ids.map(i=>v[i]),color));}
- function cylinder(a,b,r,color,n=16){const axis=norm(sub(b,a)),u=norm(cross(axis,Math.abs(axis[1])>.9?[1,0,0]:[0,1,0])),v=cross(axis,u);for(let i=0;i<n;i++){const r1=add(mul(u,Math.cos(i/n*2*Math.PI)*r),mul(v,Math.sin(i/n*2*Math.PI)*r)),r2=add(mul(u,Math.cos((i+1)/n*2*Math.PI)*r),mul(v,Math.sin((i+1)/n*2*Math.PI)*r));quad(add(a,r1),add(a,r2),add(b,r2),add(b,r1),color);tri(a,add(a,r2),add(a,r1),color);tri(b,add(b,r1),add(b,r2),color);}}
- function sphere(p,r,color){const n=14,m=8;const point=(i,j)=>{const t=j/m*Math.PI,q=i/n*2*Math.PI;return[Math.sin(t)*Math.cos(q),Math.cos(t),Math.sin(t)*Math.sin(q)];};for(let j=0;j<m;j++)for(let i=0;i<n;i++){const vs=[point(i,j),point(i+1,j),point(i+1,j+1),point(i,j+1)];tri(...[0,1,2].map(k=>add(p,mul(vs[k],r))),color,[0,1,2].map(k=>vs[k]));tri(...[0,2,3].map(k=>add(p,mul(vs[k],r))),color,[0,2,3].map(k=>vs[k]));}}
- return{data,tri,quad,box,cylinder,sphere};}
-function sceneMesh(s,selected){const g=geometry(),teal='#258b84',dark='#344e54',metal='#d6e1e1',white='#f4f6f4';
- // A cutaway room. Open front and sides preserve sight lines, rather than faking depth.
- g.box([0,-.12,0],[9,.24,8.5],'#dfe5e1');
- for(let x=-4;x<=4;x++)g.box([x,.003,0],[.012,.006,8],'#c8d5cf');for(let z=-4;z<=4;z++)g.box([0,.003,z],[8.8,.006,.012],'#c8d5cf');
- g.box([-3.48,1.65,-4.1],[2.05,3.3,.18],'#e9eddf');g.box([3.48,1.65,-4.1],[2.05,3.3,.18],'#e9eddf');g.box([0,.4,-4.1],[5,.8,.18],'#e9eddf');g.box([0,3.04,-4.1],[5,.53,.18],'#e9eddf');
- const sky=s.lighting==='night'?'#344b64':s.lighting==='day'?'#bcd6da':'#e9bf99';g.box([0,1.82,-4.19],[5,2.05,.03],sky);
- for(const[x,h,z,col]of[[-2,2.5,-4.16,'#809d9a'],[.4,2.65,-4.14,'#637f82'],[1.7,2.1,-4.12,'#92a69a']]){g.tri([x-1.5,.84,z],[x+1.5,.84,z],[x,h,z],col);g.tri([x-.28,h-.32,z+.006],[x+.28,h-.32,z+.006],[x,h,z+.006],'#e8ebe2');}
- g.box([0,.82,-3.98],[5.08,.12,.24],white);g.box([0,2.83,-3.98],[5.08,.12,.16],white);for(const x of[-2.52,0,2.52])g.box([x,1.83,-3.98],[.1,2.08,.12],white);
- if(!s.created)return g.data;
- for(const o of s.objects){const{x,y,z}=o.position;
-  if(o.type==='bench'){g.box([x, .93,z],[4.3,.18,2.05],'#baa587');g.box([x,.81,z],[4,.08,1.83],dark);for(const dx of[-1.8,1.8])for(const dz of[-.72,.72])g.box([x+dx,.41,z+dz],[.12,.82,.12],dark);}
-  if(o.type==='microscope'){g.box([x,y+.07,z],[.48,.12,.36],white);g.cylinder([x+.12,y+.15,z+.04],[x+.12,y+.6,z+.04],.052,dark);g.cylinder([x+.12,y+.58,z+.04],[x-.13,y+.78,z-.03],.063,white);g.cylinder([x-.13,y+.78,z-.03],[x-.22,y+.87,z-.06],.043,dark);g.box([x-.04,y+.33,z-.035],[.29,.055,.26],dark);g.cylinder([x-.09,y+.43,z-.035],[x-.09,y+.56,z-.035],.044,metal);g.sphere([x+.16,y+.38,z+.08],.07,dark);}
-  if(o.type==='arm'){g.cylinder([x,y+.015,z],[x,y+.12,z],.26,dark);const joints=[[x,y+.13,z],[x,y+.56,z],[x-.32,y+.94,z+.02],[x-.63,y+.64,z+.04]];for(let i=0;i<joints.length-1;i++)g.cylinder(joints[i],joints[i+1],.085,teal);joints.forEach(p=>g.sphere(p,.12,dark));g.cylinder(joints.at(-1),[x-.68,y+.5,z+.04],.047,metal);for(const dz of[-.075,.075])g.box([x-.68,y+.48,z+.04+dz],[.04,.17,.03],dark);}
-  if(o.type==='agent'){g.cylinder([x,y+.06,z],[x,y+.25,z],.25,dark);g.sphere([x,y+.32,z],.23,white);g.box([x,y+.36,z+.203],[.22,.07,.04],teal);g.cylinder([x-.27,y+.07,z],[x-.27,y+.15,z],.065,dark);g.cylinder([x+.27,y+.07,z],[x+.27,y+.15,z],.065,dark);}
-  if(o.type==='plant'){g.cylinder([x,.02,z],[x,.4,z],.24,'#b68d74');g.cylinder([x,.4,z],[x,.92,z],.035,teal);for(const[dx,dy,dz]of[[-.18,.67,0],[.2,.8,.08],[0,.96,-.13]])g.sphere([x+dx,dy,z+dz],.2,'#49786b');}
-  if(o.id===selected&&!['bench','window'].includes(o.type)){const r=o.type==='agent'?.38:.42;for(let i=0;i<32;i++){const a=i/32*Math.PI*2,b=(i+1)/32*Math.PI*2;g.cylinder([x+r*Math.cos(a),y+.016,z+r*Math.sin(a)],[x+r*Math.cos(b),y+.016,z+r*Math.sin(b)],.012,teal,5);}}
- }
- for(let i=1;i<s.path.length;i++){const a=s.path[i-1],b=s.path[i];g.cylinder([a.x,.029,a.z],[b.x,.029,b.z],.018,teal,5);}
- return g.data;
-}
+/** The spatial editor and scientific scenes share one renderer, not one scene. */
+import {createStudio} from './studio-engine.mjs?v=studio-2';
+import {buildScene,sceneCameras} from './project-scenes.mjs?v=studio-2';
 export function createWorldView(canvas,labels,callbacks={}){
- const gl=canvas.getContext('webgl',{antialias:true,alpha:false,preserveDrawingBuffer:true});if(!gl)return createSoftwareWorldView(canvas,labels,callbacks);
- function shader(type,code){const sh=gl.createShader(type);gl.shaderSource(sh,code);gl.compileShader(sh);if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(sh));return sh;}
- const vs=shader(gl.VERTEX_SHADER,'attribute vec3 aPosition;attribute vec3 aNormal;attribute vec3 aColor;uniform mat4 uMvp;varying vec3 vNormal;varying vec3 vColor;void main(){gl_Position=uMvp*vec4(aPosition,1.0);vNormal=aNormal;vColor=aColor;}');
- const fs=shader(gl.FRAGMENT_SHADER,'precision mediump float;varying vec3 vNormal;varying vec3 vColor;uniform float uLight;void main(){vec3 n=normalize(vNormal);float diffuse=max(dot(n,normalize(vec3(-0.5,1.0,0.8))),0.0);float light=(0.65+0.35*diffuse)*uLight;gl_FragColor=vec4(vColor*light,1.0);}');
- const program=gl.createProgram();gl.attachShader(program,vs);gl.attachShader(program,fs);gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error('WebGL shader linking failed.');gl.useProgram(program);
- const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);['aPosition','aNormal','aColor'].forEach((name,i)=>{const l=gl.getAttribLocation(program,name);gl.enableVertexAttribArray(l);gl.vertexAttribPointer(l,3,gl.FLOAT,false,36,i*12);});gl.enable(gl.DEPTH_TEST);
- const mvpUniform=gl.getUniformLocation(program,'uMvp'),lightUniform=gl.getUniformLocation(program,'uLight');
- let camera={yaw:.55,pitch:.53,distance:11.5},state=null,selected='microscope-1',matrix,eye,target=[0,.75,-.5],disposed=false,drag=null,lastVertices=0;
- function frame(){if(disposed||!state)return;const w=canvas.clientWidth||640,h=canvas.clientHeight||460,dpr=Math.min(devicePixelRatio||1,2);if(canvas.width!==Math.round(w*dpr)||canvas.height!==Math.round(h*dpr)){canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}gl.viewport(0,0,canvas.width,canvas.height);
- eye=add(target,[camera.distance*Math.sin(camera.yaw)*Math.cos(camera.pitch),camera.distance*Math.sin(camera.pitch),camera.distance*Math.cos(camera.yaw)*Math.cos(camera.pitch)]);matrix=matrixMultiply(perspective(.68,w/h,.1,70),lookAt(eye,target));gl.uniformMatrix4fv(mvpUniform,false,matrix);gl.uniform1f(lightUniform,state.lighting==='night'?.63:1);const bg=state.lighting==='night'?[.14,.2,.24]:[.943,.961,.949];gl.clearColor(...bg,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.drawArrays(gl.TRIANGLES,0,lastVertices);
- labels.innerHTML=state.objects.filter(o=>!['bench','window'].includes(o.type)).map(o=>{const p=project([o.position.x,o.position.y+(o.type==='agent'?.75:1.18),o.position.z]);return p&&p.x>-40&&p.x<w+40&&p.y>0&&p.y<h?`<span class="world-label ${o.id===selected?'selected':''}" style="left:${p.x}px;top:${p.y}px">${esc(o.name)}</span>`:'';}).join('');
- canvas.dataset.rendered='webgl';canvas.dataset.vertices=lastVertices;canvas.dataset.camera=JSON.stringify(camera);
- }
- function project(p){if(!matrix)return null;const v=[...p,1],q=[0,0,0,0];for(let r=0;r<4;r++)for(let c=0;c<4;c++)q[r]+=matrix[c*4+r]*v[c];if(q[3]<=0)return null;return{x:(q[0]/q[3]*.5+.5)*canvas.clientWidth,y:(.5-q[1]/q[3]*.5)*canvas.clientHeight};}
- function rayPlane(x,y,height){const f=norm(sub(target,eye)),right=norm(cross(f,[0,1,0])),up=cross(right,f),t=Math.tan(.68/2),dir=norm(add(f,add(mul(right,(x/canvas.clientWidth*2-1)*t*canvas.clientWidth/canvas.clientHeight),mul(up,(1-y/canvas.clientHeight*2)*t))));if(Math.abs(dir[1])<1e-5)return null;const length=(height-eye[1])/dir[1];return length>0?add(eye,mul(dir,length)):null;}
- function pointer(e){const b=canvas.getBoundingClientRect();return{x:e.clientX-b.left,y:e.clientY-b.top};}
- const down=e=>{if(e.button!==0)return;const p=pointer(e);let hit=null,best=32;for(const o of state?.objects||[]){if(['bench','window'].includes(o.type))continue;const q=project([o.position.x,o.position.y+.4,o.position.z]);const d=q?Math.hypot(p.x-q.x,p.y-q.y):Infinity;if(d<best){hit=o;best=d;}}drag={start:p,last:p,object:hit,changed:false,original:hit?{...hit.position}:null};if(hit)callbacks.select?.(hit.id);canvas.setPointerCapture(e.pointerId);};
- const move=e=>{if(!drag)return;const p=pointer(e),dx=p.x-drag.last.x,dy=p.y-drag.last.y;if(Math.hypot(p.x-drag.start.x,p.y-drag.start.y)>4)drag.changed=true;if(drag.changed){if(drag.object){const a=rayPlane(drag.start.x,drag.start.y,drag.original.y+.4),b=rayPlane(p.x,p.y,drag.original.y+.4);if(a&&b){drag.proposed={x:drag.original.x+b[0]-a[0],z:drag.original.z+b[2]-a[2]};callbacks.move?.(drag.object.id,drag.proposed,false);}}else{camera.yaw-=dx*.008;camera.pitch=Math.max(.2,Math.min(1.24,camera.pitch+dy*.006));frame();callbacks.camera?.();}}drag.last=p;};
- const up=e=>{if(drag?.object&&drag.changed&&drag.proposed)callbacks.move?.(drag.object.id,drag.proposed,true);drag=null;if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);};
- const wheel=e=>{e.preventDefault();camera.distance=Math.max(7,Math.min(17,camera.distance+e.deltaY*.007));frame();callbacks.camera?.();};
- canvas.addEventListener('pointerdown',down);canvas.addEventListener('pointermove',move);canvas.addEventListener('pointerup',up);canvas.addEventListener('pointercancel',up);canvas.addEventListener('wheel',wheel,{passive:false});
- const observer=new ResizeObserver(frame);observer.observe(canvas);
- return{set(s,id=selected){state=s;selected=id;const data=new Float32Array(sceneMesh(state,selected));lastVertices=data.length/9;gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,data,gl.DYNAMIC_DRAW);frame();},project,rotate(delta){camera.yaw+=delta;frame();},zoom(delta){camera.distance=Math.max(7,Math.min(17,camera.distance+delta));frame();},resetCamera(){camera={yaw:.55,pitch:.53,distance:11.5};frame();},dispose(){disposed=true;observer.disconnect();canvas.removeEventListener('pointerdown',down);canvas.removeEventListener('pointermove',move);canvas.removeEventListener('pointerup',up);canvas.removeEventListener('pointercancel',up);canvas.removeEventListener('wheel',wheel);gl.deleteBuffer(buffer);gl.deleteProgram(program);gl.deleteShader(vs);gl.deleteShader(fs);}};
-}
-
-/** Progressive enhancement for devices without WebGL. Same 3D geometry and camera;
- * triangles are rasterized with a per-pixel depth buffer. No network or graphics-policy changes. */
-function createSoftwareWorldView(canvas,labels,callbacks){
- const ctx=canvas.getContext('2d');if(!ctx)throw new Error('This browser cannot create a graphics canvas. Coordinates and scene state still work.');
- let state=null,selected='microscope-1',camera={yaw:.55,pitch:.53,distance:11.5},matrix,eye,target=[0,.75,-.5],vertices=[],drag=null,disposed=false;
- function project(p){if(!matrix)return null;const v=[...p,1],q=[0,0,0,0];for(let r=0;r<4;r++)for(let c=0;c<4;c++)q[r]+=matrix[c*4+r]*v[c];return q[3]>.1?{x:(q[0]/q[3]*.5+.5)*canvas.clientWidth,y:(.5-q[1]/q[3]*.5)*canvas.clientHeight,depth:q[3]}:null;}
- function frame(){if(!state||disposed)return;const w=Math.round(canvas.clientWidth||640),h=Math.round(canvas.clientHeight||460);canvas.width=w;canvas.height=h;
- eye=add(target,[camera.distance*Math.sin(camera.yaw)*Math.cos(camera.pitch),camera.distance*Math.sin(camera.pitch),camera.distance*Math.cos(camera.yaw)*Math.cos(camera.pitch)]);matrix=matrixMultiply(perspective(.68,w/h,.1,70),lookAt(eye,target));const light=norm([-.5,1,.8]),ambient=state.lighting==='night'?.66:1;
- const image=ctx.createImageData(w,h),pixels=image.data,depth=new Float32Array(w*h),bg=state.lighting==='night'?[38,52,64]:[240,245,242];for(let i=0;i<pixels.length;i+=4){pixels[i]=bg[0];pixels[i+1]=bg[1];pixels[i+2]=bg[2];pixels[i+3]=255;}
- const edge=(a,b,x,y)=>(b.x-a.x)*(y-a.y)-(b.y-a.y)*(x-a.x);
- for(let i=0;i<vertices.length;i+=27){const points=[0,9,18].map(j=>project(vertices.slice(i+j,i+j+3)));if(points.some(p=>!p))continue;const [a,b,c]=points,area=edge(a,b,c.x,c.y);if(Math.abs(area)<.001)continue;
- const n=vertices.slice(i+3,i+6),col=vertices.slice(i+6,i+9),shade=(.67+.33*Math.max(0,dot(norm(n),light)))*ambient,rgb=col.map(v=>Math.round(v*shade*255));
- const minX=Math.max(0,Math.floor(Math.min(a.x,b.x,c.x))),maxX=Math.min(w-1,Math.ceil(Math.max(a.x,b.x,c.x))),minY=Math.max(0,Math.floor(Math.min(a.y,b.y,c.y))),maxY=Math.min(h-1,Math.ceil(Math.max(a.y,b.y,c.y)));
- for(let y=minY;y<=maxY;y++)for(let x=minX;x<=maxX;x++){const u=edge(b,c,x+.5,y+.5)/area,v=edge(c,a,x+.5,y+.5)/area,t=1-u-v;if(u<-.00001||v<-.00001||t<-.00001)continue;const z=u/a.depth+v/b.depth+t/c.depth,k=y*w+x;if(z<=depth[k])continue;depth[k]=z;pixels[k*4]=rgb[0];pixels[k*4+1]=rgb[1];pixels[k*4+2]=rgb[2];}
- }
- ctx.putImageData(image,0,0);
- labels.innerHTML=state.objects.filter(o=>!['bench','window'].includes(o.type)).map(o=>{const p=project([o.position.x,o.position.y+(o.type==='agent'?.8:1.2),o.position.z]);return p&&p.x>0&&p.x<w&&p.y>0&&p.y<h?`<span class="world-label ${o.id===selected?'selected':''}" style="left:${p.x}px;top:${p.y}px">${esc(o.name)}</span>`:'';}).join('');canvas.dataset.rendered='software-3d';canvas.dataset.vertices=vertices.length/9;canvas.dataset.camera=JSON.stringify(camera);
- }
- function rayPlane(x,y,height){const f=norm(sub(target,eye)),right=norm(cross(f,[0,1,0])),up=cross(right,f),t=Math.tan(.68/2),dir=norm(add(f,add(mul(right,(x/canvas.clientWidth*2-1)*t*canvas.clientWidth/canvas.clientHeight),mul(up,(1-y/canvas.clientHeight*2)*t))));if(Math.abs(dir[1])<1e-5)return null;const length=(height-eye[1])/dir[1];return length>0?add(eye,mul(dir,length)):null;}
- const pos=e=>{const r=canvas.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top};};
- const down=e=>{if(e.button!==0)return;const p=pos(e);let hit=null,best=34;for(const o of state?.objects||[]){if(['bench','window'].includes(o.type))continue;const q=project([o.position.x,o.position.y+.4,o.position.z]),d=q?Math.hypot(p.x-q.x,p.y-q.y):Infinity;if(d<best){hit=o;best=d;}}drag={start:p,last:p,object:hit,original:hit?{...hit.position}:null,changed:false};if(hit)callbacks.select?.(hit.id);canvas.setPointerCapture(e.pointerId);};
- const move=e=>{if(!drag)return;const p=pos(e);if(Math.hypot(p.x-drag.start.x,p.y-drag.start.y)>4)drag.changed=true;if(drag.changed){if(drag.object){const a=rayPlane(drag.start.x,drag.start.y,drag.original.y+.4),b=rayPlane(p.x,p.y,drag.original.y+.4);if(a&&b){drag.proposed={x:drag.original.x+b[0]-a[0],z:drag.original.z+b[2]-a[2]};callbacks.move?.(drag.object.id,drag.proposed,false);}}else{camera.yaw-=(p.x-drag.last.x)*.008;camera.pitch=Math.max(.2,Math.min(1.24,camera.pitch+(p.y-drag.last.y)*.006));frame();callbacks.camera?.();}}drag.last=p;};
- const up=e=>{if(drag?.object&&drag.changed&&drag.proposed)callbacks.move?.(drag.object.id,drag.proposed,true);drag=null;if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);};
- const wheel=e=>{e.preventDefault();camera.distance=Math.max(7,Math.min(17,camera.distance+e.deltaY*.007));frame();callbacks.camera?.();};
- canvas.addEventListener('pointerdown',down);canvas.addEventListener('pointermove',move);canvas.addEventListener('pointerup',up);canvas.addEventListener('pointercancel',up);canvas.addEventListener('wheel',wheel,{passive:false});const observer=new ResizeObserver(frame);observer.observe(canvas);
- return{set(s,id=selected){state=s;selected=id;vertices=sceneMesh(s,id);frame();},project,rotate(delta){camera.yaw+=delta;frame();},zoom(delta){camera.distance=Math.max(7,Math.min(17,camera.distance+delta));frame();},resetCamera(){camera={yaw:.55,pitch:.53,distance:11.5};frame();},dispose(){disposed=true;observer.disconnect();canvas.removeEventListener('pointerdown',down);canvas.removeEventListener('pointermove',move);canvas.removeEventListener('pointerup',up);canvas.removeEventListener('pointercancel',up);canvas.removeEventListener('wheel',wheel);}};
+ let state=null,selected='microscope-1',dragBase=null;
+ const view=createStudio(canvas,labels,{camera:sceneCameras.world,
+ onPick:id=>callbacks.select?.(id),onCamera:()=>callbacks.camera?.(),
+ onSelect:id=>{dragBase=state.objects.find(o=>o.id===id)?.position;callbacks.select?.(id);},
+ onDrag:(id,delta,done)=>{if(dragBase)callbacks.move?.(id,{x:dragBase.x+delta[0],z:dragBase.z+delta[2]},done);}
+ });
+ return{set(s,id=selected){state=s;selected=id;view.set(buildScene('world',{...s,selected},0));},project(p){return view.project(p);},rotate:delta=>view.orbit(delta),zoom:delta=>view.zoom(delta),resetCamera:()=>view.reset(),dispose:()=>view.dispose()};
 }

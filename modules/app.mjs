@@ -1,6 +1,7 @@
-import {byId} from './content.mjs';
-import {home,detail,notFound,esc,play} from './render.mjs';
-import {mountDemo} from './demos.mjs';
+import {byId} from './content.mjs?v=studio-2';
+import {home,detail,notFound,esc,play} from './render.mjs?v=studio-2';
+import {mountDemo} from './demos.mjs?v=studio-2';
+import {mountTimelineScenes} from './timeline-scenes.mjs?v=studio-2';
 const main=document.querySelector('main');
 let dispose=()=>{},onHome=true,homeY=0,lastWork=null,routeSequence=0;
 try{homeY=Number(sessionStorage.getItem('timeline-y')||0);}catch{}
@@ -29,7 +30,7 @@ async function route(initial=false){
     main.querySelector('[data-reset]').addEventListener('click',()=>{stop();demo?.reset?.();activate(0);});
     dispose=()=>{stop();demo?.dispose?.();};
   }else{
-    const wasHome=onHome;onHome=true;if(!initial||!main.querySelector('.timeline'))main.innerHTML=home();document.title='Navish Kumar — A body of work, in motion';
+    const wasHome=onHome;onHome=true;if(!initial||!main.querySelector('.timeline'))main.innerHTML=home();document.title='Navish Kumar — A body of work, in motion';dispose=mountTimelineScenes(main);
     requestAnimationFrame(()=>{if(seq!==routeSequence)return;if(hash==='contact'){document.querySelector('#contact')?.scrollIntoView();}else if(hash==='top'){window.scrollTo({top:0,behavior:'instant'});}else if(!initial&&!wasHome){window.scrollTo({top:homeY,behavior:'instant'});if(lastWork)main.querySelector(`[data-work="${lastWork}"]`)?.focus({preventScroll:true});}else if(hash && document.getElementById(hash)){document.getElementById(hash).scrollIntoView();}});
   }
 }
