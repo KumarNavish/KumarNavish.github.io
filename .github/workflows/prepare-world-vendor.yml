@@ -1,0 +1,34 @@
+name: Prepare pinned world renderer
+on:
+  push:
+    branches: [site/worlds-vendor-20260913]
+permissions:
+  contents: read
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Fetch pinned Three.js package and preserve license
+        run: |
+          mkdir -p /tmp/world-vendor/vendor
+          cd /tmp/world-vendor
+          npm pack three@0.180.0 --json > package-receipt.json
+          tar -xzf three-0.180.0.tgz
+          cp package/build/three.module.min.js package/build/three.core.min.js vendor/
+          cp package/examples/jsm/controls/OrbitControls.js vendor/
+          cp package/examples/jsm/environments/RoomEnvironment.js vendor/
+          cp package/LICENSE vendor/THREE-LICENSE.txt
+          sed -i "s/from 'three'/from '.\/three.module.min.js'/g" vendor/OrbitControls.js vendor/RoomEnvironment.js
+          sha256sum vendor/* > VENDOR_SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pinned-world-vendor
+          path: |
+            /tmp/world-vendor/vendor
+            /tmp/world-vendor/package-receipt.json
+            /tmp/world-vendor/VENDOR_SHA256.txt
+          retention-days: 1
