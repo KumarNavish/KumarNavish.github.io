@@ -1,0 +1,12 @@
+[
+ {"path":"modules/worlds/spatial.mjs","old":"inside=false;","new":"inside=false,dragging=null;"},
+ {"path":"modules/worlds/spatial.mjs","old":"function onDrag(id,p,done){ui.stop();try","new":"function onDrag(id,p,done){ui.stop();dragging=done?null:id;try"},
+ {"path":"modules/worlds/spatial.mjs","old":"for(const o of tweens){o.g.position.lerpVectors","new":"for(const o of tweens){if(o.g.name===dragging)continue;o.g.position.lerpVectors"},
+ {"path":"modules/worlds/spatial.mjs","old":"g=makeObject(o);view.content.add(g)","new":"g=makeObject({...o,color:null});g.traverse(m=>{if(m.isMesh)m.material.userData.baseColor=m.material.color.getHex();});view.content.add(g)"},
+ {"path":"modules/worlds/spatial.mjs","old":"if(g.userData.lastColor!==o.color&&o.color){g.traverse(m=>{if(m.isMesh)m.material.color.set(o.color);});}","new":"if(g.userData.lastColor!==o.color){g.traverse(m=>{if(m.isMesh)m.material.color.set(o.color||m.material.userData.baseColor);});}"},
+ {"path":"modules/worlds/spatial.mjs","old":"if(pending){clearTimeout(pending);pending=0;}let result;","new":"if(pending){clearTimeout(pending);pending=0;}root.querySelector('.world-language button[type=\"submit\"]').disabled=false;let result;"},
+ {"path":"modules/worlds/temporal.mjs","old":"camera:[8.8,6.0,10.3],target:[0,.6,0]","new":"camera:[8.8,6.0,10.3],target:[0,.6,0],onPick:id=>{ui.stop();month=+id;draw();}"},
+ {"path":"modules/worlds/case.mjs","old":"selectedDate='2026-05-12';refreshCase(s);","new":"selectedDate='2026-05-12',disposed=false;refreshCase(s);"},
+ {"path":"modules/worlds/case.mjs","old":"function draw(){ui.state","new":"function draw(){if(disposed)return;ui.state"},
+ {"path":"modules/worlds/case.mjs","old":"draw();return ui;","new":"const dispose=ui.dispose.bind(ui);ui.dispose=()=>{disposed=true;dispose();};draw();return ui;"}
+]

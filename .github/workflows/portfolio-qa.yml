@@ -1,4 +1,4 @@
-name: Portfolio browser acceptance
+name: Living worlds browser acceptance
 on:
   push:
     branches: [master, gh-pages]
@@ -8,7 +8,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -17,21 +17,23 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: npm test && npm run build
+      - name: Verify calculations and generated HTML
+        run: |
+          npm test
+          npm run build
+          git diff --exit-code -- index.html
       - run: python -m pip install playwright==1.57.0
       - run: python -m playwright install --with-deps chromium
-      - name: Serve checked source
-        run: python -m http.server 8765 --bind 127.0.0.1 > /tmp/site-server.log 2>&1 &
-      - name: Test real HTTP module delivery
-        run: python scripts/browser_acceptance.py --url http://127.0.0.1:8765 --out /tmp/studio-local-qa
-      - name: Verify the published origin
+      - name: Serve the exact source
+        run: python -m http.server 8765 --bind 127.0.0.1 > /tmp/worlds-http.log 2>&1 &
+      - name: Test actual HTTP and WebGL behavior
+        run: python scripts/worlds_acceptance.py --url http://127.0.0.1:8765 --out /tmp/worlds-evidence/local
+      - name: Test the published origin
         if: github.ref == 'refs/heads/gh-pages'
-        run: python scripts/browser_acceptance.py --url https://kumarnavish.github.io/ --wait-release --out /tmp/studio-live-qa
+        run: python scripts/worlds_acceptance.py --url https://kumarnavish.github.io/ --wait-release --out /tmp/worlds-evidence/live
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: studio-browser-evidence-${{ github.run_id }}
-          path: |
-            /tmp/studio-local-qa
-            /tmp/studio-live-qa
-          retention-days: 1
+          name: living-worlds-evidence-${{ github.run_id }}
+          path: /tmp/worlds-evidence
+          retention-days: 7
