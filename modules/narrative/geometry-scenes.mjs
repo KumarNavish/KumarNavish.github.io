@@ -1,6 +1,6 @@
-import {T,group,mesh,box,ball,line,ring,rod,point,segment,vector,alpha,annotation,contentHTML,metric,fmt,V,basePlane} from './scene-kit.mjs?v=scroll-4.2';
-import {constraints,incoming,memories,dot,add,sub,scale,replayState} from '../worlds/math.mjs?v=scroll-4.2';
-import {feasibleGeometry} from './feasible.mjs?v=scroll-4.2';
+import {T,group,mesh,box,ball,line,ring,rod,point,segment,vector,alpha,annotation,contentHTML,metric,fmt,V,basePlane} from './scene-kit.mjs?v=scroll-4.2.1';
+import {constraints,incoming,memories,dot,add,sub,scale,replayState} from '../worlds/math.mjs?v=scroll-4.2.1';
+import {feasibleGeometry} from './feasible.mjs?v=scroll-4.2.1';
 export function replayScene(view,overlay){
  const g=group(view.content),labels=annotation(view),P=v=>[-1.45+v[0]*1.7,.18+v[2]*1.7,-.8+v[1]*1.7];basePlane(g,'#e5ede6');
  const origin=ball(g,P([0,0,0]),.095,'#638573'),current=vector(g,'#3a83ad',.036),oracle=vector(g,'#b98738',.020,true),repair=vector(g,'#328971',.044),residual=segment(g,'#b75844',.026,true),unapplied=segment(g,'#328971',.020,true),wanted=segment(g,'#af8a54',.018,true),actual=ball(g,P([0,0,0]),.13,'#ebf6e7',{metalness:.36,roughness:.18});

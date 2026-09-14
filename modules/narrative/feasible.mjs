@@ -1,5 +1,5 @@
-import {T,V} from './scene-kit.mjs?v=scroll-4.2';
-import {constraints,dot,scale,add,sub,norm} from '../worlds/math.mjs?v=scroll-4.2';
+import {T,V} from './scene-kit.mjs?v=scroll-4.2.1';
+import {constraints,dot,scale,add,sub,norm} from '../worlds/math.mjs?v=scroll-4.2.1';
 export function feasibleGeometry(requirements=constraints,rank=3){
  if(rank===2){const lo=requirements[0].b,hi=-requirements[1].b,y=requirements[2].b,points=lo<=hi?[lo,y,0,hi,y,0,hi,2.6,0,lo,y,0,hi,2.6,0,lo,2.6,0]:[];const geo=new T.BufferGeometry();geo.setAttribute('position',new T.Float32BufferAttribute(points,3));geo.computeVertexNormals();return geo;}
 

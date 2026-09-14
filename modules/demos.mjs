@@ -1,6 +1,6 @@
-import {esc} from './render.mjs?v=scroll-4.2';
-import {mountProjectScene} from './studio.mjs?v=scroll-4.2';
-import {gainTriangle,signedGraph,edges,replayExample,rankExample,timeExample,posteriorExample,urbanExample,interactionExample,newCase,refreshCase,caseAction} from './mechanisms.mjs?v=scroll-4.2';
+import {esc} from './render.mjs?v=scroll-4.2.1';
+import {mountProjectScene} from './studio.mjs?v=scroll-4.2.1';
+import {gainTriangle,signedGraph,edges,replayExample,rankExample,timeExample,posteriorExample,urbanExample,interactionExample,newCase,refreshCase,caseAction} from './mechanisms.mjs?v=scroll-4.2.1';
 const C={ink:'#263b3d',accent:'#087e79',soft:'#d9ece8',muted:'#829596',line:'#cbd9d8',error:'#b74f3c',pale:'#f7f9f8'};
 const f=(n,d=3)=>Number(n).toFixed(d), svg=(body,view='0 0 640 360')=>`<svg class="graphic" viewBox="${view}" role="img">${body}</svg>`;
 const line=(x1,y1,x2,y2,color=C.line,width=2,extra='')=>`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${width}" ${extra}/>`;
@@ -95,4 +95,4 @@ function caseDemo(root,explore){
  ['interpret','attempt','correct','untrusted','amend'].forEach(action=>bind(root,`[data-action="${action}"]`,'click',()=>{caseAction(s,action);explore(action==='untrusted'?'The corrected text alone is not enough. Its authority matters.':action==='amend'?'The changed invoice invalidates the amount obligation without changing the source.':'Follow the journal and the node versions.');draw();}));draw();return{stage:i=>{s=newCase();refreshCase(s);if(i>=1)caseAction(s,'interpret');if(i>=2)caseAction(s,'attempt');if(i===3)caseAction(s,'correct');draw();},reset:()=>{s=newCase();refreshCase(s);draw();}};
 }
 const factories={gain,bounds,interaction,replay,rank,time,natural,urban,case:caseDemo};
-export async function mountDemo(work,root,onExplore){if(work.mechanism==='world'){const{mountWorld}=await import('./world.mjs?v=scroll-4.2');return mountWorld(root,onExplore);}const factory=factories[work.mechanism];if(!factory)throw new Error(`Unknown mechanism: ${work.mechanism}`);const model=factory(root,onExplore),scene=mountProjectScene(work,root);return {...model,dispose(){model.dispose?.();scene.dispose();}};}
+export async function mountDemo(work,root,onExplore){if(work.mechanism==='world'){const{mountWorld}=await import('./world.mjs?v=scroll-4.2.1');return mountWorld(root,onExplore);}const factory=factories[work.mechanism];if(!factory)throw new Error(`Unknown mechanism: ${work.mechanism}`);const model=factory(root,onExplore),scene=mountProjectScene(work,root);return {...model,dispose(){model.dispose?.();scene.dispose();}};}

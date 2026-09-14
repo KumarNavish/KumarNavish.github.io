@@ -1,7 +1,7 @@
-import {T,group,box,ball,line,ring,point,alpha,annotation,contentHTML,metric,fmt,V,clear} from './scene-kit.mjs?v=scroll-4.2';
-import {architecture,landscape,makeObject} from '../worlds/laboratory.mjs?v=scroll-4.2';
-import {initialScene} from './model.mjs?v=scroll-4.2';
-import {esc} from '../render.mjs?v=scroll-4.2';
+import {T,group,box,ball,line,ring,point,alpha,annotation,contentHTML,metric,fmt,V,clear} from './scene-kit.mjs?v=scroll-4.2.1';
+import {architecture,landscape,makeObject} from '../worlds/laboratory.mjs?v=scroll-4.2.1';
+import {initialScene} from './model.mjs?v=scroll-4.2.1';
+import {esc} from '../render.mjs?v=scroll-4.2.1';
 export function spatialScene(view,overlay){
  const root=group(view.content),room=group(root),terrain=group(root),items=group(root),anchors=group(root),map=new Map(),anchorMap=new Map(),labels=annotation(view);architecture(room);landscape(terrain);view.scene.fog.near=65;view.scene.fog.far=175;
  const plan=initialScene();

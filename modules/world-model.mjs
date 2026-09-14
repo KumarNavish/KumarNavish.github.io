@@ -1,5 +1,5 @@
 /** Local scene-state prototype. Deliberately limited grammar; no model, API or hidden action. */
-import {clamp} from './mechanisms.mjs?v=scroll-4.2';
+import {clamp} from './mechanisms.mjs?v=scroll-4.2.1';
 export const emptyWorld=()=>({version:1,created:false,lighting:'sunset',objects:[],relations:[],path:[],revision:0});
 export const copy=x=>JSON.parse(JSON.stringify(x));
 const obj=(id,type,name,x,y,z)=>({id,type,name,position:{x,y,z}});
