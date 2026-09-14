@@ -1,5 +1,5 @@
-import {T,group,mesh,box,ball,line,ring,rod,point,segment,vector,alpha,annotation,contentHTML,metric,fmt,V,basePlane} from './scene-kit.mjs';
-import {meanAt} from '../worlds/math.mjs';
+import {T,group,mesh,box,ball,line,ring,rod,point,segment,vector,alpha,annotation,contentHTML,metric,fmt,V,basePlane} from './scene-kit.mjs?v=scroll-4.2';
+import {meanAt} from '../worlds/math.mjs?v=scroll-4.2';
 export function timeScene(view,overlay){
  const g=group(view.content),labels=annotation(view),windows=[],track=group(g);basePlane(g,'#e8deca',24);
  for(let i=0;i<=10;i++){const w=group(track);box(w,[0,.9,0],[.075,1.55,1.2],'#bba987',{transparent:true,opacity:.7,roughness:.7});for(let j=0;j<5;j++)box(w,[.04,.4+j*.19,0],[.016,.035,.72],'#e9dfcd');windows.push(w);}
@@ -10,7 +10,7 @@ export function timeScene(view,overlay){
   const p=[1.4,.2+s.current*.7,-1.5],e=[1.4,.2+(s.current+s.bias)*.7,-1.5];point(currentMean,p);point(estimate,e);gap.set(p,e);alpha(gap.g,r.risk);currentMean.visible=estimate.visible=r.risk>.01;
   cells.forEach((c,i)=>c.classList.toggle('replay',i<s.replay));budget.querySelector('strong').textContent=`${s.replay} replay + ${s.newUpdates} current = ${s.budget}`;budget.classList.toggle('attention',r.budget>.4);risk.hidden=r.risk<.01;risk.style.opacity=r.risk;
   contentHTML(risk,metric('Current expected error',fmt(s.error,4),s.benefit<0?'danger':'')+metric('Without replay',fmt(s.noReplay,4))+(f.position>=3.7?metric('Archive expected error',fmt(s.archiveError,4)):'')+(f.position>4.7?metric('Optimal replay slots',s.oracle):''));
-  overlay.dataset.windowMeans=JSON.stringify(windows.map((w,i)=>s.stable?0:meanAt(i)));const a=[{text:`Present · period ${s.month}`,pos:[1.4,2.0+(s.stable?0:meanAt(s.month))*.37,-.35],tone:'green'}];if(r.risk>.7&&Math.abs(s.bias)>.02)a.push({text:'The archive pulls toward an outdated mean',pos:[1.4,.55+(s.current+s.bias)*.7,-1.5],tone:'red'});labels(a);
+  overlay.dataset.windowMeans=JSON.stringify(windows.map((w,i)=>s.stable?0:meanAt(i)));const a=[{text:`Present · period ${s.month}`,pos:[1.4,2.0+(s.stable?0:meanAt(s.month))*.37,-.35],tone:'green'}];if(r.risk>.7&&Math.abs(s.bias)>.02)a.push({text:'Pulled toward the past',pos:[1.4,.55+(s.current+s.bias)*.7,-1.5],tone:'red'});labels(a);
  },dispose(){budget.remove();risk.remove();}};
 }
 export function interactionScene(view,overlay){

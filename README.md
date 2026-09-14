@@ -50,3 +50,25 @@ Every numerical display is explicitly classified as a live worked example, a dec
 `scripts/scroll_acceptance.py` validates actual HTTP bytes and rendered WebGL, forward/reverse/slow/fast scrolling, sticky stages, copied progress URLs, reload, idle rendering, withheld/unlocked controls, sandbox preservation and exports. With `--record`, it captures each flagship forwards and backwards on desktop, mobile-sized viewport and reduced motion. `--reference` separately inspects the interaction reference; its appearance and assets are not copied.
 
 Executed evidence is stored outside the application and attached to the delivery. A build or test pass is not an independent assessment of newcomer comprehension or subjective visual impact. Physical-device GPU performance, actual touch hardware, speech recognition, Safari and headset VR require separate validation.
+
+
+## Completion pass: reader continuity and inspection
+
+The director preserves the reader's normalized position across viewport changes. `/explore` is a reconstructible route; each tab retains its non-sensitive simulation inputs through refresh and Back. Optional auto-tour stops when the document is hidden. Mobile view manipulation is opt-in so the scientific canvas does not silently take over page scrolling.
+
+The gain explorer retains an angle for every edge and exposes fundamental-cycle selection and computed Hermitian eigenmodes. Each mode is checked against the live operator using the residual `||Lv - lambda v||`; mode inspection does not alter the graph. Its Jacobi calculation is an inspection layer, not a substitute for the existing eigensystem.
+
+Rank exploration can relax the A/B recovery thresholds. The existing active-set solver accepts those explicit inequalities; both the repair marker and feasible-region geometry use them. Rank-two feasible regions are rendered as the actual planar section, never a three-dimensional proxy. The default mathematical example is unchanged.
+
+CasePath now records an explicit initial synthetic human review, followed by a newer conflicting report that supersedes it. This makes READY -> HOLD -> reviewed admissibility an actual state sequence, not merely changing status text. On small displays, attention moves from the full original header to its relevant source passage; the same DOM source and its date remain preserved. Source citations focus the cited passage.
+
+`chapters.mjs` records each beat's intended incoming/outgoing reader state, camera intent and attention hierarchy. These are authoring contracts, not evidence that independent readers understood the explanation.
+
+Additional acceptance:
+
+```bash
+python scripts/completion_acceptance.py --url http://127.0.0.1:8765 --out /tmp/completion
+python scripts/completion_acceptance.py --url http://127.0.0.1:8765 --out /tmp/completion-webkit --engine webkit
+```
+
+A headless WebKit result is not a physical Safari, iPhone, microphone or headset certification. Browser evidence is stored separately from source.

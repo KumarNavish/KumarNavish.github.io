@@ -67,7 +67,7 @@ with sync_playwright() as p:
   ref.close()
  page=browser.new_page(viewport={'width':1440,'height':1000},reduced_motion='no-preference');attach(page)
  page.goto(base,wait_until='networkidle');page.wait_for_selector('.journey-field[data-active-work]')
- check('new release identity',page.locator('meta[name="portfolio-release"]').get_attribute('content')=='scroll-4.1')
+ check('new release identity',page.locator('meta[name="portfolio-release"]').get_attribute('content')=='scroll-4.2')
  check('all ten works remain in one timeline',page.locator('.work-row').count()==10)
  check('homepage no snapshot thumbnails',page.locator('.work-scene-preview').count()==0)
  page.screenshot(path=str(out/'home-desktop.png'))

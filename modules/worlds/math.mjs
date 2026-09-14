@@ -1,5 +1,5 @@
 /** Exact, small worked examples. These are not measured paper results. */
-import {eigenvaluesSymmetric, signedGraph, posteriorExample, urbanExample, interactionExample} from '../mechanisms.mjs';
+import {eigenvaluesSymmetric, signedGraph, posteriorExample, urbanExample, interactionExample} from '../mechanisms.mjs?v=scroll-4.2';
 export {signedGraph,posteriorExample,urbanExample,interactionExample};
 export const dot=(a,b)=>a.reduce((s,x,i)=>s+x*b[i],0);
 export const add=(a,b)=>a.map((x,i)=>x+b[i]);
@@ -45,15 +45,15 @@ export function replayState(selected=[0],learning=1,correction=1){
 }
 function solve(a,b){a=a.map((r,i)=>[...r,b[i]]);const n=b.length;for(let k=0;k<n;k++){let p=k;for(let i=k+1;i<n;i++)if(Math.abs(a[i][k])>Math.abs(a[p][k]))p=i;if(Math.abs(a[p][k])<1e-10)return null;[a[k],a[p]]=[a[p],a[k]];const d=a[k][k];for(let j=k;j<=n;j++)a[k][j]/=d;for(let i=0;i<n;i++)if(i!==k){const q=a[i][k];for(let j=k;j<=n;j++)a[i][j]-=q*a[k][j];}}return a.map(r=>r[n]);}
 export const constraints=[{n:[1,0,1],b:1.4,name:'Recover A'},{n:[-1,0,1],b:.7,name:'Recover B'},{n:[0,1,0],b:.65,name:'Keep C'}];
-export function rankState(rank=1,budget=.6){
- rank=clamp(Math.round(rank),1,3);const A=constraints.map(c=>c.n.slice(0,rank)),b=constraints.map(c=>c.b);let best=null;
+export function rankState(rank=1,budget=.6,requirements=constraints){
+ rank=clamp(Math.round(rank),1,3);const A=requirements.map(c=>c.n.slice(0,rank)),b=requirements.map(c=>c.b);let best=b.every(v=>v<=0)?Array(rank).fill(0):null;
  for(let k=1;k<=Math.min(3,rank);k++)for(const ids of combinations(3,k)){
   const rows=ids.map(i=>A[i]),lambda=solve(rows.map(a=>rows.map(c=>dot(a,c))),ids.map(i=>b[i]));if(!lambda||lambda.some(x=>x< -1e-8))continue;
   const x=Array(rank).fill(0);rows.forEach((r,i)=>r.forEach((v,j)=>x[j]+=v*lambda[i]));if(A.some((a,i)=>dot(a,x)<b[i]-1e-8))continue;
   if(!best||dot(x,x)<dot(best,best))best=x;
  }
  const repair=best?[...best,...Array(3-rank).fill(0)]:null,cost=repair?.reduce((a,x)=>a+.5*x*x,0)??null;
- return {rank,budget,repair,cost,feasible:!!repair,affordable:cost!==null&&cost<=budget+1e-8,radius:Math.sqrt(2*budget),slack:repair?constraints.map(c=>dot(c.n,repair)-c.b):null};
+ return {rank,budget,repair,cost,feasible:!!repair,affordable:cost!==null&&cost<=budget+1e-8,radius:Math.sqrt(2*budget),slack:repair?requirements.map(c=>dot(c.n,repair)-c.b):null};
 }
 export const meanAt=t=>.32*Math.max(0,t-3);
 export function timeState(month=2,replay=24,budget=64,window=3,stable=false){
