@@ -23,6 +23,7 @@ jobs:
           python .delivery/final_inspection.py
           python .delivery/projection.py
           python .delivery/stable_stage.py
+          python .delivery/ready.py
       - name: Preserve all scientific invariants
         run: |
           mkdir -p /tmp/inspection-review
