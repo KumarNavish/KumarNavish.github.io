@@ -17,4 +17,16 @@ s=s.replace("if(mode!==lastMode&&mode==='explore')renderer.setCamera", "if(mode!
 s=s.replace('if(lastIndex!==f.index||lastMode!==mode)', 'if(lastIndex!==f.index||renderedMode!==mode)')
 p.write_text(s);assert hashlib.sha256(p.read_bytes()).hexdigest()=='b5b96e8e63afe4e3bf53ef9483e8e1444a9ada1767caae7265b4bfc7e254cd70'
 p=Path('scripts/annotation_checks.py');s=p.read_text().replace("'passed':not d['collisions']", "'passed':not d['collisions'] and not d['hiddenPrimary']");p.write_text(s)
-print('COMPACT_LABEL_REFLOW_AND_RENDERED_HANDOFF_VERIFIED')
+p=Path('narrative.css');assert hashlib.sha256(p.read_bytes()).hexdigest()=='c9a38049973fde8226a8ace27d6bac2dd51926bbccd2ca3689b0f177207e0631'
+p.write_text(p.read_text()+'''
+/* On compact screens, the same 64 budget slots become two thin rows.
+   The allocation stays visible without covering the temporal field it explains. */
+@media(max-width:520px){
+ .scroll-narrative .n-render-host .n-budget-cells{grid-template-columns:repeat(32,minmax(0,1fr));gap:1px;margin:5px 0}
+ .scroll-narrative .n-render-host .n-budget-cells i{height:4px;aspect-ratio:auto;border-radius:1px}
+ .scroll-narrative .n-render-host .n-budget>.n-small{font-size:8px}
+ .scroll-narrative .n-render-host .n-budget>strong{font-size:9px}
+}
+''')
+assert hashlib.sha256(p.read_bytes()).hexdigest()=='8f287b5249e38d2aeec6c7b8fd35e75cf634f9d50e4fabe8c723a0323c47aca1'
+print('COMPACT_LABEL_REFLOW_RENDERED_HANDOFF_AND_TEMPORAL_FIELD_VERIFIED')
