@@ -26,10 +26,11 @@ jobs:
           cp package/examples/jsm/controls/OrbitControls.js package/examples/jsm/environments/RoomEnvironment.js "$GITHUB_WORKSPACE/vendor/"
           cp package/LICENSE "$GITHUB_WORKSPACE/vendor/THREE-LICENSE.txt"
           sed -i "s/from 'three'/from '.\/three.module.min.js'/g" "$GITHUB_WORKSPACE/vendor/OrbitControls.js" "$GITHUB_WORKSPACE/vendor/RoomEnvironment.js"
-      - name: Materialize and verify every authored byte
-        run: python .delivery/prepare.py
+      - name: Materialize baseline then verify the authored refinement
+        run: python .delivery/refine.py
       - name: Test mathematical and state invariants
         run: |
+          set -o pipefail
           mkdir -p /tmp/worlds-review
           npm test | tee /tmp/worlds-review/unit-tests.txt
       - run: python -m pip install playwright==1.57.0
@@ -43,7 +44,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add modules scripts tests vendor index.html worlds.css README.md package.json
-          git diff --cached --quiet || git commit -m 'Seal living worlds after authored-byte and HTTP browser checks [skip ci]'
+          git diff --cached --quiet || git commit -m 'Seal refined living worlds after source-hash and browser verification [skip ci]'
           git push origin HEAD:site/living-worlds-20260913
       - name: Preserve source and evidence even after a failed check
         if: always()
