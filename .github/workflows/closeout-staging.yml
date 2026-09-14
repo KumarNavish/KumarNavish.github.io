@@ -1,76 +1,43 @@
-name: Verify complete reader and inspection transitions
+name: Seal the verified application without workflow writes
 on:
   push:
     branches: [site/closeout-20260914]
 permissions:
   contents: write
+  actions: read
 jobs:
-  verify:
+  seal:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - uses: actions/setup-python@v5
+      - uses: actions/download-artifact@v4
         with:
-          python-version: '3.12'
-      - name: Recreate exact reviewed source and deterministic acceptance
-        run: |
-          python .delivery/refine_mode.py
-          python .delivery/compact_mode.py
-          python .delivery/final_inspection.py
-          python .delivery/projection.py
-          python .delivery/stable_stage.py
-          python .delivery/ready.py
-          python .delivery/inspection_completion.py
-          python .delivery/paint_completion.py
-      - name: Preserve scientific invariants
-        run: |
-          set -o pipefail
-          mkdir -p /tmp/closeout-review
-          npm test | tee /tmp/closeout-review/unit-tests.txt
-          npm run build
-      - run: python -m pip install playwright==1.57.0 pillow==11.3.0
-      - run: python -m playwright install --with-deps chromium webkit
-      - name: Serve the exact candidate
-        run: python -m http.server 8765 --bind 127.0.0.1 > /tmp/closeout-http.log 2>&1 &
-      - name: Exercise both engines and preserve every failing path
-        run: |
-          python - <<'PY'
-          import subprocess,json
-          from pathlib import Path
-          records=[]
-          for engine in ['chromium','webkit']:
-            for script,scope in [('referent_checks.py','referents'),('explorer_resize_checks.py','explorer-reflow'),('completion_acceptance.py','visitor'),('scroll_race_checks.py','race'),('handoff_checks.py','handoff')]:
-              command=['python','scripts/'+script,'--engine',engine,'--url','http://127.0.0.1:8765','--out','/tmp/closeout-review/'+engine+'/'+scope]
-              done=subprocess.run(command)
-              records.append({'engine':engine,'scope':scope,'returncode':done.returncode})
-              Path('/tmp/closeout-review/suite.json').write_text(json.dumps(records,indent=2))
-          if any(r['returncode'] for r in records):raise SystemExit(1)
-          PY
-      - name: Review final-size annotations and disclosure
-        run: |
-          python scripts/annotation_checks.py --url http://127.0.0.1:8765 --out /tmp/closeout-review/annotations
-          python scripts/final_scroll_checks.py --url http://127.0.0.1:8765 --out /tmp/closeout-review/regressions
-      - name: Seal application changes only after every check passes
+          name: complete-reading-review-34861841940
+          run-id: 34861841940
+          github-token: ${{ github.token }}
+          path: /tmp/verified-candidate
+      - name: Verify passing receipts and restore their exact source
+        run: python .delivery/seal_verified.py
+      - name: Commit application files only on the existing staging branch
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add modules scripts tests README.md package.json index.html narrative.css .github/workflows/portfolio-qa.yml
-          git diff --cached --quiet || git commit -m 'Seal complete reader and inspection transitions after both-engine acceptance [skip ci]'
+          git add modules scripts tests vendor README.md package.json index.html narrative.css .nojekyll 404.html LICENSE favicon.svg robots.txt sitemap.xml studio.css styles.css worlds.css
+          test -z "$(git diff --cached --name-only -- .github)"
+          git diff --cached --quiet || git commit -m 'Seal exact already-tested application; workflow changes remain outside CI authority [skip ci]'
           git push origin HEAD:site/closeout-20260914
-      - name: Preserve source, receipts and failures
-        if: always()
-        run: |
-          mkdir -p /tmp/closeout-review
-          cp /tmp/closeout-http.log /tmp/closeout-review/http.log 2>/dev/null || true
-          git rev-parse HEAD > /tmp/closeout-review/source-commit.txt
-          python -c "from pathlib import Path;import zipfile;z=zipfile.ZipFile('/tmp/closeout-review/source.zip','w',zipfile.ZIP_DEFLATED);[z.write(p,str(p)) for p in Path('.').rglob('*') if p.is_file() and not any(x in p.parts for x in ['.git','.delivery','__pycache__','node_modules'])];z.close()"
+          git rev-parse HEAD > /tmp/sealed-commit.txt
+          git rev-parse HEAD^{tree} > /tmp/sealed-tree.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: complete-reading-review-${{ github.run_id }}
-          path: /tmp/closeout-review
+          name: verified-application-seal-${{ github.run_id }}
+          path: |
+            /tmp/seal-receipt.json
+            /tmp/sealed-commit.txt
+            /tmp/sealed-tree.txt
           retention-days: 7
