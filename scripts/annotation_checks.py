@@ -14,11 +14,13 @@ with sync_playwright() as pw:
      # A renderer frame follows the director frame; inspect the composited state.
      page.wait_for_timeout(90)
      d=page.evaluate('''()=>{const root=document.querySelector('.n-render-host'),host=root.querySelector('.world-viewport').getBoundingClientRect(),visible=e=>{const s=getComputedStyle(e),r=e.getBoundingClientRect();return !e.hidden&&s.display!=='none'&&s.visibility!=='hidden'&&+s.opacity>=.08&&r.width>0&&r.height>0;},rect=e=>{const r=e.getBoundingClientRect();return{left:r.left,top:r.top,right:r.right,bottom:r.bottom,text:e.textContent};},labels=[...root.querySelectorAll('.spatial-label')].filter(visible).map(rect),panels=[...root.querySelector('.n-scene-overlay').children,root.querySelector('.camera-tools')].filter(e=>e&&visible(e)).map(rect),overlap=(a,b)=>a.left<b.right-1&&a.right>b.left+1&&a.top<b.bottom-1&&a.bottom>b.top+1;return{labels,collisions:labels.flatMap((a,i)=>[...panels,...labels.slice(i+1)].filter(b=>overlap(a,b)).map(b=>[a.text,b.text])),hiddenPrimary:[...root.querySelectorAll('.spatial-label')].filter(e=>e.dataset.occluded==='true').map(e=>e.textContent)}}''')
-     item={'work':work,'at':at,'size':[width,height],'passed':not d['collisions'],'collisions':d['collisions'],'hidden':d['hiddenPrimary']};checks.append(item);(out/'progress.json').write_text(json.dumps(checks,indent=2))
+     item={'work':work,'at':at,'size':[width,height],'passed':not d['collisions'] and not d['hiddenPrimary'],'collisions':d['collisions'],'hidden':d['hiddenPrimary']};checks.append(item);(out/'progress.json').write_text(json.dumps(checks,indent=2))
      if d['collisions'] or d['hiddenPrimary']:
-      page.screenshot(path=str(out/f'{work}-{width}-{at}-issue.png'));raise AssertionError(item)
-     if work=='experience-replay' and at==1 or work=='gain-graphs' and at==.8 or work=='rank-feasibility' and at==1:page.screenshot(path=str(out/f'{work}-{width}-{at}.png'))
+      page.screenshot(path=str(out/f'{work}-{width}-{at}-issue.png'))
+     if work=='tic-lm' and at>=.8 or work=='experience-replay' and at==1 or work=='gain-graphs' and at==.8 or work=='rank-feasibility' and at==1:page.screenshot(path=str(out/f'{work}-{width}-{at}.png'))
+  # Collect all final-size regressions in one pass, then reject the release.
   assert not errors
+  assert all(item['passed'] for item in checks),json.dumps([item for item in checks if not item['passed']])
   (out/'acceptance.json').write_text(json.dumps({'origin':args.url,'checks':checks,'passed':len(checks),'errors':errors},indent=2))
  finally:b.close()
 print('ANNOTATION_CHECKS_PASSED',len(checks),flush=True)

@@ -1,15 +1,17 @@
-import {stories} from './chapters.mjs';
-import {graphState,replayState,rankState,timeState,simulatePeriod,posteriorExample,signedGraph,urbanExample,interactionExample,clamp} from '../worlds/math.mjs';
-import {newCase,refreshCase,caseAction} from '../mechanisms.mjs';
-import {empty,laboratory,compile,route,clone} from '../worlds/compiler.mjs';
+import {gainEigenmode,recoveryConstraints} from './inspection.mjs?v=scroll-4.2';
+import {constraints} from '../worlds/math.mjs?v=scroll-4.2';
+import {stories} from './chapters.mjs?v=scroll-4.2';
+import {graphState,replayState,rankState,timeState,simulatePeriod,posteriorExample,signedGraph,urbanExample,interactionExample,clamp} from '../worlds/math.mjs?v=scroll-4.2';
+import {newCase,refreshCase,caseAction} from '../mechanisms.mjs?v=scroll-4.2';
+import {empty,laboratory,compile,route,clone} from '../worlds/compiler.mjs?v=scroll-4.2';
 export const smooth=x=>{x=clamp(x,0,1);return x*x*(3-2*x);};
 export const mix=(a,b,t)=>a+(b-a)*t;
 export function sample(values,u){const i=Math.min(values.length-1,Math.floor(Math.max(0,u))),j=Math.min(values.length-1,i+1),t=smooth((u-i-.1)/.8);return Array.isArray(values[i])?values[i].map((v,k)=>mix(v,values[j][k],t)):mix(values[i],values[j],t);}
 export function caseAt(chapter=0){
  const s=newCase();s.invoiceReviewed=false;refreshCase(s);
  s.events=['Original customer message received. No source was overwritten.'];
- if(chapter>=1){s.invoiceReviewed=true;s.parsed='2026-05-12';s.events.push('Invoice and policy received. Source-bound date assertion: 12 May.');refreshCase(s);}
- if(chapter>=2){s.parsed='2026-06-12';s.events.push('New repair report says 12 June. Earlier date assertion revoked pending review.');refreshCase(s);}
+ if(chapter>=1){s.invoiceReviewed=true;s.parsed='2026-05-12';s.review={date:'2026-05-12',authority:'human'};s.events.push('Invoice and policy received. Initial reviewer checked 12 May against message-1.');refreshCase(s);}
+ if(chapter>=2){s.parsed='2026-06-12';s.review=null;s.events.push('New repair report says 12 June. Earlier date assertion revoked pending review.');refreshCase(s);}
  if(chapter>=3)caseAction(s,'attempt');
  if(chapter>=4)caseAction(s,'correct');
  if(chapter>=5)s.events.push('Provenance packet assembled. A human decision is admissible; no payment sent.');
@@ -28,15 +30,15 @@ export function evaluateNarrative(key,progress,{reduced=false,explore=null}={}){
  const r=frame.reveal,v=frame.visual;let params={};
  switch(key){
  case'gain':{
-  params={angle:sample([0,60,60,110,110,0],u),edge:1,...explore};const angles=Array(7).fill(0);angles[params.edge]=params.angle;frame.science=graphState(angles);Object.assign(r,{graph:1,transport:at(1.1,1.5),operator:at(2.2,2.85),spectrum:at(2.75,3.1),certificate:at(3.5,4)});v.transport=clamp(u-1,0,1);v.focus=sample([0,1,.3,0,.6,0],u);v.edge=params.edge;v.angle=params.angle;break;}
+  params={angle:sample([0,110,110,110,110,0],u),edge:1,...explore};const angles=params.angles?params.angles.slice():Array(7).fill(0);angles[params.edge]=params.angle;frame.science=graphState(angles);frame.inspection=explore&&params.eigenmode>=0?gainEigenmode(frame.science,params.eigenmode):null;Object.assign(r,{graph:1,transport:at(1.1,1.5),operator:at(2.2,2.85),spectrum:at(3.15,3.85),certificate:at(4.15,4.85)});v.transport=clamp(u-1,0,1);v.focus=sample([0,1,.3,0,.6,0],u);v.edge=params.edge;v.angle=params.angle;v.cycle=params.cycle??-1;break;}
  case'replay':{
   params={learning:sample([0,1,1,1,1,1],u),correction:sample([0,0,0,0,1,1],u),selected:u<3.2?[0]:u<4.5?[0,2,3]:[0,1],...explore};frame.science=replayState(params.selected,params.learning,params.correction);Object.assign(r,{skills:1,current:at(.05,.7),oracle:at(1.3,2),candidates:at(2.6,3.3),correction:at(2.15,2.8),residual:at(4.5,4.8)});v.duplicate=u>=4.5;break;}
  case'rank':{
-  params={rank:u<1.5?1:u<2.6?2:3,budget:sample([.6,.6,.6,.6,1.25,.6],u),...explore};frame.science=rankState(params.rank,params.budget);Object.assign(r,{constraints:at(.25,1),feasible:at(2.5,3.1),solution:at(3.3,4),budget:at(4.15,4.8)});v.opening=sample([1,1,2,3,3,3],u);break;}
+  params={rank:u<1.5?1:u<2.6?2:3,budget:sample([.6,.6,.6,.6,1.25,.6],u),...explore};const rules=recoveryConstraints(constraints,params.tolerance||0);frame.science=rankState(params.rank,params.budget,rules);frame.visual.rules=rules;Object.assign(r,{constraints:at(.25,1),feasible:at(2.5,3.1),solution:at(3.3,4),budget:at(4.15,4.8)});v.opening=sample([1,1,2,3,3,3],u);break;}
  case'time':{
   params={month:Math.round(sample([1,2,3,8,10,10],u)),replay:Math.round(sample([0,24,24,24,24,0],u)),window:5,stable:false,...explore};const s=timeState(params.month,params.replay,64,params.window,params.stable);const observed=simulatePeriod(s,1729+s.month);frame.science={...s,processed:observed.processed,estimate:observed.estimate,archiveError:((1-s.alpha)*s.drift)**2+s.variance,archiveNewOnly:s.drift**2+s.noReplay};Object.assign(r,{windows:1,history:at(.15,.8),budget:at(1.2,1.8),risk:at(2.35,3)});v.time=sample([1,2,3,8,10,10],u);break;}
  case'case':{
-  params={chapter:index,...explore};frame.science=params.state?clone(params.state):caseAt(params.chapter);Object.assign(r,{source:1,assertion:at(.2,.9),conflict:at(1.4,1.95),gate:at(2.3,2.95),packet:at(4.3,5)});break;}
+  params={chapter:index,...explore};frame.science=params.state?clone(params.state):caseAt(params.chapter);Object.assign(r,{source:1,assertion:at(.2,.9),conflict:at(1.4,1.95),gate:at(.5,.95),packet:at(4.3,5)});break;}
  case'world':{
   const s=u>=4?clone(planned):empty();if(u>=4){s.revision=1;
    if(u>=4.05){s.path=clone(routed.path);const distance=at(4.1,4.9)*(s.path.length-1),a=s.path[Math.floor(distance)],b=s.path[Math.min(s.path.length-1,Math.ceil(distance))],t=distance%1;s.objects.find(o=>o.id==='agent-1').position={x:mix(a.x,b.x,t),y:0,z:mix(a.z,b.z,t)};s.revision=2;}

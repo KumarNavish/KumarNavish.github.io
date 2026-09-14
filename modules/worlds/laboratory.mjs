@@ -1,4 +1,4 @@
-import {T,mesh,box,ball,rod,line,ring,material} from './stage.mjs';
+import {T,mesh,box,ball,rod,line,ring,material} from './stage.mjs?v=scroll-4.2';
 /** Procedural, inspectable scene assets. No remote models, textures or generated image substitution. */
 export function landscape(parent){
  // A continuous distant range: open valley in front, identifiable peaks on the horizon.
