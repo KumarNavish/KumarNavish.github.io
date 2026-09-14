@@ -1,9 +1,9 @@
-import {gainEigenmode,recoveryConstraints} from './inspection.mjs?v=scroll-4.2.1';
-import {constraints} from '../worlds/math.mjs?v=scroll-4.2.1';
-import {stories} from './chapters.mjs?v=scroll-4.2.1';
-import {graphState,replayState,rankState,timeState,simulatePeriod,posteriorExample,signedGraph,urbanExample,interactionExample,clamp} from '../worlds/math.mjs?v=scroll-4.2.1';
-import {newCase,refreshCase,caseAction} from '../mechanisms.mjs?v=scroll-4.2.1';
-import {empty,laboratory,compile,route,clone} from '../worlds/compiler.mjs?v=scroll-4.2.1';
+import {gainEigenmode,recoveryConstraints} from './inspection.mjs?v=scroll-4.2.2';
+import {constraints} from '../worlds/math.mjs?v=scroll-4.2.2';
+import {stories} from './chapters.mjs?v=scroll-4.2.2';
+import {graphState,replayState,rankState,timeState,simulatePeriod,posteriorExample,signedGraph,urbanExample,interactionExample,clamp} from '../worlds/math.mjs?v=scroll-4.2.2';
+import {newCase,refreshCase,caseAction} from '../mechanisms.mjs?v=scroll-4.2.2';
+import {empty,laboratory,compile,route,clone} from '../worlds/compiler.mjs?v=scroll-4.2.2';
 export const smooth=x=>{x=clamp(x,0,1);return x*x*(3-2*x);};
 export const mix=(a,b,t)=>a+(b-a)*t;
 export function sample(values,u){const i=Math.min(values.length-1,Math.floor(Math.max(0,u))),j=Math.min(values.length-1,i+1),t=smooth((u-i-.1)/.8);return Array.isArray(values[i])?values[i].map((v,k)=>mix(v,values[j][k],t)):mix(values[i],values[j],t);}
