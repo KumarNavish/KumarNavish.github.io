@@ -1,4 +1,4 @@
-import {T,mesh,box,ball,line,rod,ring,clear,V,createStage} from '../worlds/stage.mjs?v=scroll-4.2.1';
+import {T,mesh,box,ball,line,rod,ring,clear,V,createStage} from '../worlds/stage.mjs?v=scroll-4.2.2';
 export {T,mesh,box,ball,line,rod,ring,clear,V,createStage};
 export const fmt=(x,n=3)=>Number(x).toFixed(n);
 export function group(parent){const g=new T.Group();parent.add(g);return g;}

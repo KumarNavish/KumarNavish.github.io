@@ -1,9 +1,9 @@
-import {positionAtProgress} from './inspection.mjs?v=scroll-4.2.1';
-import {stories} from './chapters.mjs?v=scroll-4.2.1';
-import {evaluateNarrative,progressFromAnchors} from './model.mjs?v=scroll-4.2.1';
-import {createNarrativeRenderer} from './renderer.mjs?v=scroll-4.2.1';
-import {createExplorer} from './explore.mjs?v=scroll-4.2.1';
-import {esc} from '../render.mjs?v=scroll-4.2.1';
+import {positionAtProgress} from './inspection.mjs?v=scroll-4.2.2';
+import {stories} from './chapters.mjs?v=scroll-4.2.2';
+import {evaluateNarrative,progressFromAnchors} from './model.mjs?v=scroll-4.2.2';
+import {createNarrativeRenderer} from './renderer.mjs?v=scroll-4.2.2';
+import {createExplorer} from './explore.mjs?v=scroll-4.2.2';
+import {esc} from '../render.mjs?v=scroll-4.2.2';
 /** One scroll input, one pure frame. Navigation and autoplay move the page, never mutate a chapter. */
 export function mountScrollNarrative(work,root,{at=null,chapter=null,startExploring=false}={}){
  const key=work.mechanism,story=stories[key],count=story.chapters.length;
@@ -33,7 +33,11 @@ export function mountScrollNarrative(work,root,{at=null,chapter=null,startExplor
   // Preserve that newer input, not the obsolete rendered chapter. A real viewport
   // resize is different: its browser-induced scroll must retain the reader's p.
   const viewportChanged=layoutWidth!==innerWidth||layoutHeight!==innerHeight;
-  const pendingScroll=before.length&&!viewportChanged&&Math.abs(scrollY-lastScrollY)>.5;
+  // Shrinking responsive content can clamp a previously valid position to
+  // the new document bottom. That is layout, not an instruction to rewind.
+  const maximumScroll=Math.max(0,document.documentElement.scrollHeight-innerHeight);
+  const clampedByLayout=lastScrollY>maximumScroll+1&&Math.abs(scrollY-maximumScroll)<=1;
+  const pendingScroll=before.length&&!viewportChanged&&!clampedByLayout&&Math.abs(scrollY-lastScrollY)>.5;
   const savedProgress=pendingScroll?progressFromAnchors(scrollY,before):lastProgress;
   const savedMode=pendingScroll?(scrollY>=oldExplore?'explore':'guide'):lastMode;
   const offset=(pendingScroll?scrollY:lastScrollY)-oldExplore;
@@ -88,10 +92,23 @@ export function mountScrollNarrative(work,root,{at=null,chapter=null,startExplor
   else if(chapter!==null)goProgress(Math.max(0,Math.min(count-1,chapter))/(count-1));
   else queue();
  }
+ // Commit readiness only after actual layout has survived a rendering turn.
+ // A numeric p=0 on the initial shell is not a completed navigation.
+ let settleFrame=0,stablePasses=0,previousLayout=null;
+ root.dataset.ready='false';
+ function settleInitial(){
+  if(!ownsRoute())return;
+  measure();positionInitial();frame();
+  const geometry=readLayout(),signature=[innerWidth,innerHeight,...geometry.points,geometry.end];
+  const stable=previousLayout&&signature.every((v,i)=>Math.abs(v-previousLayout[i])<.5);
+  stablePasses=stable?stablePasses+1:0;previousLayout=signature;
+  if(stablePasses>=1){root.dataset.ready='true';return;}
+  settleFrame=requestAnimationFrame(settleInitial);
+ }
  const init=requestAnimationFrame(()=>{
   if(!ownsRoute())return;
   measure();positionInitial();initializing=false;frame();
-  measure();positionInitial();frame();root.dataset.ready='true';
+  settleFrame=requestAnimationFrame(settleInitial);
  });
- return{dispose(){disposed=true;stop();cancelAnimationFrame(raf);cancelAnimationFrame(init);ro.disconnect();window.removeEventListener('scroll',queue);window.removeEventListener('resize',resize);window.removeEventListener('wheel',stop);window.removeEventListener('touchstart',stop);root.removeEventListener('pointerdown',manual);root.removeEventListener('keydown',manual);mql.removeEventListener('change',resize);document.removeEventListener('visibilitychange',visibility);explorer.dispose();renderer.dispose();}};
+ return{dispose(){disposed=true;stop();cancelAnimationFrame(raf);cancelAnimationFrame(init);cancelAnimationFrame(settleFrame);ro.disconnect();window.removeEventListener('scroll',queue);window.removeEventListener('resize',resize);window.removeEventListener('wheel',stop);window.removeEventListener('touchstart',stop);root.removeEventListener('pointerdown',manual);root.removeEventListener('keydown',manual);mql.removeEventListener('change',resize);document.removeEventListener('visibilitychange',visibility);explorer.dispose();renderer.dispose();}};
 }

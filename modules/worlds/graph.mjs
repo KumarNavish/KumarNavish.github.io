@@ -1,6 +1,6 @@
-import {T,box,ball,line,rod,ring,clear,arrow,V} from './stage.mjs?v=scroll-4.2.1';
-import {graphState,graphEdges,signedGraph,wrap} from './math.mjs?v=scroll-4.2.1';
-import {exhibit,slider,btn,stat,fmt} from './ui.mjs?v=scroll-4.2.1';
+import {T,box,ball,line,rod,ring,clear,arrow,V} from './stage.mjs?v=scroll-4.2.2';
+import {graphState,graphEdges,signedGraph,wrap} from './math.mjs?v=scroll-4.2.2';
+import {exhibit,slider,btn,stat,fmt} from './ui.mjs?v=scroll-4.2.2';
 const names='ABCDE',positions=[[-2.5,.9,.8],[-1.3,3.0,-.4],[1.1,3.25,-.45],[2.55,1.0,.4],[0,.45,2.0]];
 const color={blue:'#85cee4',gold:'#efba6a',red:'#ec7f71',ink:'#234759'};
 export function mountGain(root){

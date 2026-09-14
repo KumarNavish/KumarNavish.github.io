@@ -36,7 +36,7 @@ export function createStage(host,{background='#f3f5f4',dark=false,camera=[6,4.5,
  scene.environment=env.texture;scene.environmentIntensity=dark?.24:.34;envScene.dispose();pmrem.dispose();
  const fixed=new T.Group(),content=new T.Group(),transient=new T.Group();scene.add(fixed,content,transient);
  if(floor){const f=mesh(fixed,new T.PlaneGeometry(100,100),dark?'#091923':'#dde6e0',[0,-.16,0],{roughness:.96,metalness:0});f.rotation.x=-Math.PI/2;}
- let labelItems=[],pickables=[],tick=null,tickUntil=Infinity,disposed=false,frame=0,visible=true,last=0,down=null,drag=null,fly=null,paused=false,dirty=true,shadowDirty=true;
+ let labelItems=[],pickables=[],tick=null,tickUntil=Infinity,disposed=false,frame=0,visible=true,last=0,down=null,drag=null,fly=null,paused=false,dirty=true,shadowDirty=true,renderToken='';
  const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches,ray=new T.Raycaster(),ndc=new T.Vector2();
  function invalidate(shadows=true){dirty=true;shadowDirty||=shadows;if(!disposed&&!frame)frame=requestAnimationFrame(loop);}
  function getRay(e){const r=canvas.getBoundingClientRect();ndc.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);ray.setFromCamera(ndc,cam);return ray;}
@@ -103,14 +103,14 @@ export function createStage(host,{background='#f3f5f4',dark=false,camera=[6,4.5,
   if(fly){const a=reduced?1:Math.min(1,(now-fly.start)/850),k=a*a*(3-2*a);cam.position.lerpVectors(fly.a,fly.p,k);controls.target.lerpVectors(fly.b,fly.t,k);if(a===1)fly=null;}
   controls.update();if(!paused)tick?.(reduced?0:now/1000,reduced?0:dt);if(finishing)tick=null;
   if(shadowDirty){renderer.shadowMap.needsUpdate=true;shadowDirty=false;}
-  renderer.render(scene,cam);placeLabels();canvas.dataset.rendered='webgl2';canvas.dataset.camera=cam.position.toArray().map(v=>v.toFixed(3)).join(',');
+  renderer.render(scene,cam);placeLabels();canvas.dataset.rendered='webgl2';canvas.dataset.renderToken=renderToken;canvas.dataset.camera=cam.position.toArray().map(v=>v.toFixed(3)).join(',');canvas.dataset.projection=JSON.stringify({fov:cam.fov,aspect:cam.aspect,near:cam.near,far:cam.far,target:controls.target.toArray()});
   canvas.dataset.calls=renderer.info.render.calls;canvas.dataset.geometries=renderer.info.memory.geometries;canvas.dataset.frame=String(Number(canvas.dataset.frame||0)+1);
   canvas.dataset.pickPoints=JSON.stringify(pickables.filter(o=>o.userData.draggable).map(o=>{const p=o.localToWorld(new T.Vector3(0,.1,0)).project(cam);return{id:o.userData.pick,x:(p.x*.5+.5)*host.clientWidth,y:(-p.y*.5+.5)*host.clientHeight};}));
   if((animated||fly||dirty)&&!frame)frame=requestAnimationFrame(loop);
  }
  size();
  return{T,scene,cam,controls,renderer,fixed,content,transient,key,hemi,rim,go,orbit,invalidate,setLabels,
-  setPickables(a){pickables=a;invalidate();},setTick(f,duration=Infinity){tick=f;tickUntil=duration===Infinity?Infinity:performance.now()+duration;invalidate();},
+  setFrameToken(token){renderToken=String(token);invalidate(false);},setPickables(a){pickables=a;invalidate();},setTick(f,duration=Infinity){tick=f;tickUntil=duration===Infinity?Infinity:performance.now()+duration;invalidate();},
   seekCamera(pos,at){fly=null;controls.enableDamping=false;cam.position.set(...pos);controls.target.set(...at);controls.update();invalidate(false);},
   interactive(v){controls.enabled=v;controls.enableZoom=false;canvas.style.touchAction='pan-y';host.dataset.interactive=String(v);},
   pause(v){paused=v;invalidate(false);},background(color){scene.background.set(color);scene.fog.color.set(color);invalidate();},

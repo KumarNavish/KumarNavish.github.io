@@ -1,4 +1,4 @@
-import {periods,works,byId,checkedAt} from './content.mjs?v=scroll-4.2.1';
+import {periods,works,byId,checkedAt} from './content.mjs?v=scroll-4.2.2';
 export const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export const arrow = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
 export const external = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 18 18 6M6 6h12v12"/></svg>';
