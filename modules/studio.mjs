@@ -1,5 +1,5 @@
-import {createStudio} from './studio-engine.mjs?v=scroll-4.2';
-import {buildScene,sceneCameras} from './project-scenes.mjs?v=scroll-4.2';
+import {createStudio} from './studio-engine.mjs?v=scroll-4.2.1';
+import {buildScene,sceneCameras} from './project-scenes.mjs?v=scroll-4.2.1';
 /** Guidance is selected from the live calculation; it is not a model response. */
 export function sceneAdvice(type,s){
  switch(type){

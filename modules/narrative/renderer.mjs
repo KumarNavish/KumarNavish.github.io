@@ -1,10 +1,10 @@
-import {createStage,clear,metric,fmt} from './scene-kit.mjs?v=scroll-4.2';
-import {stories} from './chapters.mjs?v=scroll-4.2';
-import {gainScene,boundsScene} from './graph-scenes.mjs?v=scroll-4.2';
-import {replayScene,rankScene,naturalScene} from './geometry-scenes.mjs?v=scroll-4.2';
-import {timeScene,urbanScene,interactionScene} from './context-scenes.mjs?v=scroll-4.2';
-import {caseScene} from './case-scene.mjs?v=scroll-4.2';
-import {spatialScene} from './spatial-scene.mjs?v=scroll-4.2';
+import {createStage,clear,metric,fmt} from './scene-kit.mjs?v=scroll-4.2.1';
+import {stories} from './chapters.mjs?v=scroll-4.2.1';
+import {gainScene,boundsScene} from './graph-scenes.mjs?v=scroll-4.2.1';
+import {replayScene,rankScene,naturalScene} from './geometry-scenes.mjs?v=scroll-4.2.1';
+import {timeScene,urbanScene,interactionScene} from './context-scenes.mjs?v=scroll-4.2.1';
+import {caseScene} from './case-scene.mjs?v=scroll-4.2.1';
+import {spatialScene} from './spatial-scene.mjs?v=scroll-4.2.1';
 const palettes={gain:['#0b1d28',true],replay:['#eaf1e9',false],rank:['#151725',true],time:['#eee5d4',false],case:['#edf1f4',false],world:['#d6cec0',false],natural:['#122530',true],bounds:['#eee9df',false],urban:['#e5ecdf',false],interaction:['#ebeee7',false]};
 const factories={gain:gainScene,bounds:boundsScene,replay:replayScene,rank:rankScene,time:timeScene,natural:naturalScene,world:spatialScene,urban:urbanScene,interaction:interactionScene};
 export function createNarrativeRenderer(key,host,{onSelect=()=>{},onDrag=null,compact=false}={}){
