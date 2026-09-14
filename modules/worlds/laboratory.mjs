@@ -1,12 +1,24 @@
 import {T,mesh,box,ball,rod,line,ring,material} from './stage.mjs';
 /** Procedural, inspectable scene assets. No remote models, textures or generated image substitution. */
 export function landscape(parent){
- for(let layer=0;layer<3;layer++){
-  const vertices=[],cols=[],indices=[],nx=60,nz=15,col=new T.Color(['#627984','#8c9d9e','#c0c4b5'][layer]);
-  for(let j=0;j<=nz;j++)for(let i=0;i<=nx;i++){const x=-55+i/nx*110,z=-12-layer*14-j/nz*14;const ridge=3+Math.abs(Math.sin(x*.10+layer*1.7))*8+Math.abs(Math.sin(x*.27+.8))*4,rough=Math.sin(i*2.3+j*1.8)*.48,y=(ridge+rough)*(1-j/nz*.45);vertices.push(x,y-2,z);const c=y>ridge*.82&&ridge>8?col.clone().lerp(new T.Color('#eee8da'),.82):col.clone().multiplyScalar(.8+.17*Math.sin(i*.15+j));cols.push(c.r,c.g,c.b);}
-  for(let j=0;j<nz;j++)for(let i=0;i<nx;i++){const a=j*(nx+1)+i;indices.push(a,a+1,a+nx+1,a+1,a+nx+2,a+nx+1);}const geo=new T.BufferGeometry();geo.setAttribute('position',new T.Float32BufferAttribute(vertices,3));geo.setAttribute('color',new T.Float32BufferAttribute(cols,3));geo.setIndex(indices);geo.computeVertexNormals();const m=new T.Mesh(geo,new T.MeshStandardMaterial({vertexColors:true,roughness:1,side:T.DoubleSide}));parent.add(m);
+ // Solid terrain sheets descend into the valley; no disconnected floating ridge strips.
+ const colors=['#647e82','#8d9e9d','#afb7ad'];
+ for(let layer=2;layer>=0;layer--){
+  const vertices=[],cols=[],indices=[],nx=72,nz=24,base=new T.Color(colors[layer]);
+  for(let j=0;j<=nz;j++)for(let i=0;i<=nx;i++){
+   const x=-55+i/nx*110,depth=j/nz,z=-9-layer*14-depth*26;
+   const ridge=5+layer*2+Math.abs(Math.sin(x*.11+layer*1.7))*7+Math.abs(Math.sin(x*.25+.8))*3;
+   const shape=Math.sin(Math.PI*Math.pow(depth,.78));
+   const rough=Math.sin(i*1.9+j*2.8)*.18+Math.sin(i*.75+j*.31)*.23;
+   const y=-3+Math.max(0,shape)*(ridge+rough),snow=y>8+layer*.8&&depth>.2&&depth<.75;
+   vertices.push(x,y,z);const c=snow?base.clone().lerp(new T.Color('#eee9dc'),.80):base.clone().multiplyScalar(.86+.13*Math.sin(i*.21+j*.3));cols.push(c.r,c.g,c.b);
+  }
+  for(let j=0;j<nz;j++)for(let i=0;i<nx;i++){const a=j*(nx+1)+i;indices.push(a,a+1,a+nx+1,a+1,a+nx+2,a+nx+1);}
+  const geo=new T.BufferGeometry();geo.setAttribute('position',new T.Float32BufferAttribute(vertices,3));geo.setAttribute('color',new T.Float32BufferAttribute(cols,3));geo.setIndex(indices);geo.computeVertexNormals();
+  parent.add(new T.Mesh(geo,new T.MeshStandardMaterial({vertexColors:true,roughness:1,side:T.DoubleSide})));
  }
- ball(parent,[-13,11,-45],1.7,'#f8d9a1',{emissive:'#f8d9a1',emissiveIntensity:1.5,roughness:1});
+ box(parent,[0,-3.5,-30],[115,1,85],'#8b9e8d',{roughness:1});
+ ball(parent,[-14,12,-55],1.8,'#f8d9a1',{emissive:'#f8d9a1',emissiveIntensity:1.15,roughness:1});
 }
 export function architecture(g){
  box(g,[0,-.18,-.15],[8.6,.35,8.6],'#d2c4ad',{roughness:.45});

@@ -4,7 +4,7 @@ import argparse, json, hashlib, time, urllib.request
 from playwright.sync_api import sync_playwright
 p=argparse.ArgumentParser();p.add_argument('--url',required=True);p.add_argument('--out',required=True);p.add_argument('--wait-release',action='store_true');args=p.parse_args()
 base=args.url.rstrip('/')+'/';out=Path(args.out);out.mkdir(parents=True,exist_ok=True);root=Path(__file__).resolve().parents[1]
-ids=['gain-graphs','experience-replay','rank-feasibility','tic-lm','casepath','spatial-world','natural-gradient','spectral-bounds','urban-microregions','interaction-dynamics']
+ids=['gain-graphs','experience-replay','rank-feasibility','tic-lm','casepath','natural-gradient','spatial-world','spectral-bounds','urban-microregions','interaction-dynamics']
 checks=[];errors=[];failures=[];http_errors=[]
 def check(name,condition):
  checks.append({'name':name,'pass':bool(condition)});(out/'progress.json').write_text(json.dumps(checks,indent=2));assert condition,name
@@ -55,7 +55,8 @@ with sync_playwright() as p:
    with page.expect_download() as dl:click('export')
    exported=json.loads(Path(dl.value.path()).read_text());check('scene export matches current state',exported==state())
   elif work=='natural-gradient':
-   click('run');page.wait_for_function("JSON.parse(document.querySelector('#demo-root').dataset.state).steps>=20");check('actual Gaussian optimization reduces KL',state()['kl']<1);shot(work)
+   start=time.monotonic();click('run');page.wait_for_function("JSON.parse(document.querySelector('#demo-root').dataset.state).steps>=20");check('actual Gaussian optimization reduces KL',state()['kl']<1);check('reduced-motion optimizer responds within five seconds',time.monotonic()-start<5);shot(work)
+   count=int(page.locator('.world-canvas').get_attribute('data-geometries'));click('run');page.wait_for_timeout(150);check('repeated steps retain GPU geometry',int(page.locator('.world-canvas').get_attribute('data-geometries'))<=count+1 and state()['steps']==40)
   elif work=='spectral-bounds':
    click('next');check('signed relationship produces positive repair requirement',state()['frustration']>0);shot(work);click('next');check('minimum removal resolves signed graph',state()['frustration']==0)
   elif work=='urban-microregions':
@@ -76,6 +77,11 @@ with sync_playwright() as p:
   elif work=='natural-gradient':page.locator('[data-input="steps"]').evaluate("el=>{el.value=20;el.dispatchEvent(new Event('input',{bubbles:true}));}")
   check(work+' mobile no overflow',page.evaluate('document.documentElement.scrollWidth<=innerWidth'))
   page.locator('.world-exhibit').screenshot(path=str(out/(work+'-mobile.png')))
+ page.set_viewport_size({'width':1440,'height':1040});page.emulate_media(reduced_motion='no-preference')
+ go('natural-gradient');start=time.monotonic();click('run');page.wait_for_function("JSON.parse(document.querySelector('#demo-root').dataset.state).steps===20",timeout=15000);check('normal-motion optimizer finishes 20 actual steps',time.monotonic()-start<15);page.locator('.world-exhibit').screenshot(path=str(out/'natural-gradient-motion.png'))
+ go('gain-graphs');page.locator('[data-chapter="2"]').click();page.wait_for_function("Math.abs(Number(document.querySelector('#demo-root').dataset.transportedAngle)-110)<.1",timeout=10000);check('cycle transport returns with the computed mismatch',state()['inconsistent']==3);page.locator('.world-exhibit').screenshot(path=str(out/'gain-cycle-transport.png'))
+ go('rank-feasibility');c=page.locator('.world-canvas');page.wait_for_timeout(1000);a=int(c.get_attribute('data-frame'));page.wait_for_timeout(500);check('static scene stops redrawing when idle',int(c.get_attribute('data-frame'))-a<3)
+ page.emulate_media(reduced_motion='reduce')
  go('gain-graphs');page.locator('[data-act="play"]').click();page.wait_for_timeout(5500);check('guided playback changes the actual state',state()['inconsistent']>0);click('play')
  page.goto(base,wait_until='networkidle');page.screenshot(path=str(out/'home-mobile.png'),full_page=True)
  c=browser.new_context(java_script_enabled=False);p0=c.new_page();p0.goto(base);check('no JavaScript original sources still accessible',p0.locator('.work-row').count()==10 and p0.locator('noscript a').count()>=9);c.close()
