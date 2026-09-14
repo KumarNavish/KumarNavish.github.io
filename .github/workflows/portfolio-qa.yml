@@ -74,6 +74,10 @@ jobs:
           PY
       - name: Exercise the actual deployed reader and explorer paths
         run: python scripts/completion_acceptance.py --engine ${{ matrix.engine }} --url https://kumarnavish.github.io/ --out /tmp/portfolio-browser/visitor
+      - name: Keep every inspected node and arrow visible
+        run: python scripts/referent_checks.py --engine ${{ matrix.engine }} --url https://kumarnavish.github.io/ --out /tmp/portfolio-browser/referents
+      - name: Preserve exploration when responsive layout clamps the document
+        run: python scripts/explorer_resize_checks.py --engine ${{ matrix.engine }} --url https://kumarnavish.github.io/ --out /tmp/portfolio-browser/explorer-reflow
       - name: Verify competing reflow and scroll without trace-induced timing
         run: python scripts/scroll_race_checks.py --engine ${{ matrix.engine }} --url https://kumarnavish.github.io/ --out /tmp/portfolio-browser/race
       - name: Verify render-side explorer release under late reflow
