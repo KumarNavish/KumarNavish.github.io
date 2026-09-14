@@ -1,4 +1,4 @@
-name: Verify scroll-authored scientific narratives
+name: Finish and verify scroll-authored narratives
 on:
   push:
     branches: [site/scroll-narrative-20260914]
@@ -16,8 +16,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Apply exact authored source and verify generated HTML
-        run: python .delivery/apply_scroll.py
+      - name: Apply exact reviewed completion edits
+        run: python .delivery/finish_scroll.py
       - name: Verify scientific and reversible-state invariants
         run: |
           set -o pipefail
@@ -25,18 +25,20 @@ jobs:
           npm test | tee /tmp/scroll-review/unit-tests.txt
       - run: python -m pip install playwright==1.57.0 pillow==11.3.0
       - run: python -m playwright install --with-deps chromium
-      - name: Serve authored source without browser-policy changes
+      - name: Serve the authored release without browser-policy changes
         run: python -m http.server 8765 --bind 127.0.0.1 > /tmp/scroll-http.log 2>&1 &
-      - name: Inspect the reference and record all six scroll arguments in both directions
-        run: python scripts/scroll_acceptance.py --url http://127.0.0.1:8765 --out /tmp/scroll-review/browser --record --reference
+      - name: Test observed disclosure, geometry and mobile-document regressions
+        run: python scripts/final_scroll_checks.py --url http://127.0.0.1:8765 --out /tmp/scroll-review/regressions
+      - name: Record the six flagship scroll arguments in both directions
+        run: python scripts/scroll_acceptance.py --url http://127.0.0.1:8765 --out /tmp/scroll-review/browser --record
       - name: Seal only tested application files on staging
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add modules scripts tests index.html narrative.css README.md package.json
-          git diff --cached --quiet || git commit -m 'Seal verified scroll-authored application and generated homepage [skip ci]'
+          git diff --cached --quiet || git commit -m 'Seal scroll narratives after exact-source, scientific and rendered acceptance [skip ci]'
           git push origin HEAD:site/scroll-narrative-20260914
-      - name: Preserve source and evidence even after a failed check
+      - name: Preserve source and evidence even when a check fails
         if: always()
         run: |
           mkdir -p /tmp/scroll-review
@@ -45,6 +47,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: scroll-narrative-review-${{ github.run_id }}
+          name: scroll-completion-review-${{ github.run_id }}
           path: /tmp/scroll-review
           retention-days: 7
