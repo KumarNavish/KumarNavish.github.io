@@ -1,0 +1,7 @@
+import {T,V} from './scene-kit.mjs';
+import {constraints,dot,scale,add,sub,norm} from '../worlds/math.mjs';
+export function feasibleGeometry(){
+ const l=-2.4,h=2.6;let faces=[[[l,l,l],[l,l,h],[l,h,h],[l,h,l]],[[h,l,h],[h,l,l],[h,h,l],[h,h,h]],[[l,l,h],[l,l,l],[h,l,l],[h,l,h]],[[l,h,l],[l,h,h],[h,h,h],[h,h,l]],[[l,l,l],[l,h,l],[h,h,l],[h,l,l]],[[l,l,h],[h,l,h],[h,h,h],[l,h,h]]];
+ for(const {n,b} of constraints){const next=[],intersections=[];for(const face of faces){const poly=[];for(let i=0;i<face.length;i++){const a=face[i],c=face[(i+1)%face.length],da=dot(n,a)-b,dc=dot(n,c)-b;if(da>=-1e-8)poly.push(a);if((da>=0)!==(dc>=0)){const t=da/(da-dc),p=add(a,scale(sub(c,a),t));poly.push(p);if(!intersections.some(q=>norm(sub(q,p))<1e-6))intersections.push(p);}}if(poly.length>=3)next.push(poly);}if(intersections.length>=3){const mid=scale(intersections.reduce(add,[0,0,0]),1/intersections.length),normal=V(n).normalize(),u=new T.Vector3().crossVectors(normal,Math.abs(normal.y)<.9?new T.Vector3(0,1,0):new T.Vector3(1,0,0)).normalize(),v=new T.Vector3().crossVectors(normal,u);intersections.sort((a,b)=>Math.atan2(V(sub(a,mid)).dot(v),V(sub(a,mid)).dot(u))-Math.atan2(V(sub(b,mid)).dot(v),V(sub(b,mid)).dot(u)));next.push(intersections);}faces=next;}
+ const data=[];for(const f of faces)for(let i=1;i<f.length-1;i++)data.push(...f[0],...f[i],...f[i+1]);const geo=new T.BufferGeometry();geo.setAttribute('position',new T.Float32BufferAttribute(data,3));geo.computeVertexNormals();return geo;
+}
