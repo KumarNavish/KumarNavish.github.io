@@ -1,0 +1,39 @@
+name: Correct the posterior convergence caption
+on:
+  push:
+    branches: [site/caption-accuracy-20260914]
+permissions:
+  contents: write
+jobs:
+  correct:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply exactly one reviewed explanatory correction
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          p=Path('modules/worlds/geometry.mjs')
+          before=p.read_bytes()
+          assert hashlib.sha256(before).hexdigest()=='34710486abfaca08a82df8201cc40569c33ebaeba10d50e75d2abdc65ff8a477'
+          old=b'The belief now fits the target.'
+          new=b'The belief is approaching the target.'
+          assert before.count(old)==1
+          after=before.replace(old,new)
+          assert hashlib.sha256(after).hexdigest()=='13f93188049009c6573e87ad70b5fd030ae3bfc65b694ef564dc29571cc1f9af'
+          p.write_bytes(after)
+          print('Exactly one caption corrected; numerical code unchanged.')
+          PY
+      - run: npm test
+      - name: Seal the reviewed caption without changing workflows
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add modules/worlds/geometry.mjs
+          git commit -m 'Describe an intermediate Gaussian estimate as approaching, not already fitting, its target [skip ci]'
+          git push origin HEAD:site/caption-accuracy-20260914
