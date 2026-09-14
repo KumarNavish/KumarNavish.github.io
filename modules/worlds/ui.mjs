@@ -1,5 +1,5 @@
-import {esc} from '../render.mjs';
-import {createStage} from './stage.mjs';
+import {esc} from '../render.mjs?v=scroll-4.2';
+import {createStage} from './stage.mjs?v=scroll-4.2';
 export {esc};
 export const fmt=(n,d=3)=>Number(n).toFixed(d);
 export const btn=(id,text,cls='')=>`<button type="button" data-act="${id}" class="${cls}">${text}</button>`;

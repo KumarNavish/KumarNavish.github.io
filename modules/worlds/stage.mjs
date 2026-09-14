@@ -1,3 +1,4 @@
+import {placeAnnotation} from './label-layout.mjs';
 import * as T from '../../vendor/three.module.min.js';
 import {OrbitControls} from '../../vendor/OrbitControls.js';
 import {RoomEnvironment} from '../../vendor/RoomEnvironment.js';
@@ -71,17 +72,27 @@ export function createStage(host,{background='#f3f5f4',dark=false,camera=[6,4.5,
  function setLabels(items){labelItems=items.map(({text,pos,tone='',...rest})=>{const el=document.createElement('span'),leader=document.createElement('i');
   el.className='spatial-label '+tone;el.textContent=text;leader.className='spatial-leader';return{el,leader,pos,...rest};});
   labels.replaceChildren(...labelItems.flatMap(l=>[l.leader,l.el]));invalidate();}
- function placeLabels(){const w=host.clientWidth,h=host.clientHeight,used=[];
+ function placeLabels(){
+  const w=host.clientWidth,h=host.clientHeight,bounds=host.getBoundingClientRect(),used=[];
+  // Labels live below sibling overlays in the DOM. Reserve the overlays' actual
+  // visible rectangles before placing labels, including mobile-wrapped panels.
+  const overlay=host.closest('.n-render-host')?.querySelector('.n-scene-overlay');
+  for(const el of [...(overlay?.children||[]),host.querySelector('.camera-tools')].filter(Boolean)){
+   const style=getComputedStyle(el),r=el.getBoundingClientRect();
+   if(el.hidden||style.display==='none'||style.visibility==='hidden'||Number(style.opacity)<.08||r.width<1||r.height<1)continue;
+   used.push({left:r.left-bounds.left,top:r.top-bounds.top,right:r.right-bounds.left,bottom:r.bottom-bounds.top});
+  }
   for(const l of labelItems){const p=V(typeof l.pos==='function'?l.pos():l.pos).project(cam),x=(p.x*.5+.5)*w,y=(-p.y*.5+.5)*h;
    const off=p.z>1||p.z< -1||Math.abs(p.x)>1.05||Math.abs(p.y)>1.04;l.el.hidden=off;l.leader.hidden=true;if(off)continue;
-   const bw=Math.min(w-24,l.el.offsetWidth||100),bh=l.el.offsetHeight||24,dx=l.dx||0,dy=l.dy||0;
-   let r;
-   for(const [ox,oy] of [[0,0],[0,-30],[0,30],[55,-10],[-55,-10],[0,-62],[0,62],[90,-40],[-90,-40]]){
-    const left=Math.max(12,Math.min(w-12-bw,x-bw/2+dx+ox)),top=Math.max(16,Math.min(h-80-bh,y-bh+dy+oy));
-    r={left,top,right:left+bw,bottom:top+bh};if(!used.some(a=>r.left<a.right+8&&r.right>a.left-8&&r.top<a.bottom+7&&r.bottom>a.top-7))break;
-   }
-   used.push(r);l.el.style.left=r.left+bw/2+'px';l.el.style.top=r.bottom+'px';
-   const ex=r.left+bw/2,ey=r.bottom,dist=Math.hypot(ex-x,ey-y);if(dist>15){l.leader.hidden=false;l.leader.style.left=x+'px';l.leader.style.top=y+'px';l.leader.style.width=dist+'px';l.leader.style.transform=`rotate(${Math.atan2(ey-y,ex-x)}rad)`;}
+   // Preserve type size. When a compact viewport leaves a narrow reading lane,
+   // reflow the label into that lane rather than covering a panel or deleting it.
+   l.el.style.maxWidth='';l.el.dataset.wrapped='false';
+   const place=()=>placeAnnotation({width:w,height:h,labelWidth:l.el.offsetWidth||100,labelHeight:l.el.offsetHeight||24,x,y,dx:l.dx||0,dy:l.dy||0,obstacles:used});
+   let r=place();
+   if(!r){const natural=l.el.offsetWidth;for(const fraction of [.82,.66,.52,.43]){l.el.style.maxWidth=Math.max(82,Math.floor(natural*fraction))+'px';r=place();if(r){l.el.dataset.wrapped='true';break;}}}
+   l.el.dataset.occluded=String(!r);if(!r){l.el.hidden=true;continue;}
+   used.push(r);l.el.style.left=(r.left+r.right)/2+'px';l.el.style.top=r.bottom+'px';
+   const ex=(r.left+r.right)/2,ey=r.bottom,dist=Math.hypot(ex-x,ey-y);if(dist>15){l.leader.hidden=false;l.leader.style.left=x+'px';l.leader.style.top=y+'px';l.leader.style.width=dist+'px';l.leader.style.transform=`rotate(${Math.atan2(ey-y,ex-x)}rad)`;}
   }
  }
  function loop(now){frame=0;if(disposed||!visible||document.hidden)return;
