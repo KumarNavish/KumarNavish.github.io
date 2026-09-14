@@ -1,5 +1,5 @@
 from pathlib import Path
-import hashlib, json
+import hashlib, json, subprocess
 root=Path(__file__).resolve().parents[1]
 for item in json.loads((root/'.delivery/reading-delta.json').read_text()):
     relative=Path(item['path'])
@@ -14,3 +14,4 @@ for item in json.loads((root/'.delivery/reading-delta.json').read_text()):
     assert hashlib.sha256(after).hexdigest()==item['after'],f'Authored bytes differ: {relative}'
     path.write_bytes(after)
 print('EXACT_READING_ANCHOR_FILES 2',flush=True)
+subprocess.run(['python','.delivery/synchronize_checks.py'],cwd=root,check=True)
