@@ -38,9 +38,10 @@ export const memories=[{id:'A',name:'Skill A',v:[1,0,0]},{id:'A2',name:'Another 
 export function replayState(selected=[0],learning=1,correction=1){
  const current=scale(incoming,learning),joint=scale(current,.5),desired=sub(joint,current),basis=[];
  for(const id of selected){let b=memories[id]?.v.slice();if(!b)throw Error('Unknown memory');for(const q of basis)b=sub(b,scale(q,dot(b,q)));if(norm(b)>1e-9)basis.push(scale(b,1/norm(b)));}
- let projected=[0,0,0];for(const b of basis)projected=add(projected,scale(b,dot(desired,b)*correction));
+ let fullProjection=[0,0,0];for(const b of basis)fullProjection=add(fullProjection,scale(b,dot(desired,b)));
+ const projected=scale(fullProjection,correction),unavailable=sub(desired,fullProjection),notApplied=sub(fullProjection,projected);
  const actual=add(current,projected),residual=sub(desired,projected);
- return {selected,learning,correction,current,joint,desired,projected,actual,residual,missing:norm(residual),directions:basis.length,oldLoss:.5*dot(actual,actual),newLoss:.5*dot(sub(actual,incoming),sub(actual,incoming)),jointLoss:.5*dot(actual,actual)+.5*dot(sub(actual,incoming),sub(actual,incoming))};
+ return {selected,learning,correction,current,joint,desired,projected,actual,residual,missing:norm(residual),unavailable:norm(unavailable),notApplied:norm(notApplied),directions:basis.length,oldLoss:.5*dot(actual,actual),newLoss:.5*dot(sub(actual,incoming),sub(actual,incoming)),jointLoss:.5*dot(actual,actual)+.5*dot(sub(actual,incoming),sub(actual,incoming))};
 }
 function solve(a,b){a=a.map((r,i)=>[...r,b[i]]);const n=b.length;for(let k=0;k<n;k++){let p=k;for(let i=k+1;i<n;i++)if(Math.abs(a[i][k])>Math.abs(a[p][k]))p=i;if(Math.abs(a[p][k])<1e-10)return null;[a[k],a[p]]=[a[p],a[k]];const d=a[k][k];for(let j=k;j<=n;j++)a[k][j]/=d;for(let i=0;i<n;i++)if(i!==k){const q=a[i][k];for(let j=k;j<=n;j++)a[i][j]-=q*a[k][j];}}return a.map(r=>r[n]);}
 export const constraints=[{n:[1,0,1],b:1.4,name:'Recover A'},{n:[-1,0,1],b:.7,name:'Recover B'},{n:[0,1,0],b:.65,name:'Keep C'}];

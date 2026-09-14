@@ -1,24 +1,20 @@
 import {T,mesh,box,ball,rod,line,ring,material} from './stage.mjs';
 /** Procedural, inspectable scene assets. No remote models, textures or generated image substitution. */
 export function landscape(parent){
- // Solid terrain sheets descend into the valley; no disconnected floating ridge strips.
- const colors=['#647e82','#8d9e9d','#afb7ad'];
- for(let layer=2;layer>=0;layer--){
-  const vertices=[],cols=[],indices=[],nx=72,nz=24,base=new T.Color(colors[layer]);
-  for(let j=0;j<=nz;j++)for(let i=0;i<=nx;i++){
-   const x=-55+i/nx*110,depth=j/nz,z=-9-layer*14-depth*26;
-   const ridge=5+layer*2+Math.abs(Math.sin(x*.11+layer*1.7))*7+Math.abs(Math.sin(x*.25+.8))*3;
-   const shape=Math.sin(Math.PI*Math.pow(depth,.78));
-   const rough=Math.sin(i*1.9+j*2.8)*.18+Math.sin(i*.75+j*.31)*.23;
-   const y=-3+Math.max(0,shape)*(ridge+rough),snow=y>8+layer*.8&&depth>.2&&depth<.75;
-   vertices.push(x,y,z);const c=snow?base.clone().lerp(new T.Color('#eee9dc'),.80):base.clone().multiplyScalar(.86+.13*Math.sin(i*.21+j*.3));cols.push(c.r,c.g,c.b);
-  }
-  for(let j=0;j<nz;j++)for(let i=0;i<nx;i++){const a=j*(nx+1)+i;indices.push(a,a+1,a+nx+1,a+1,a+nx+2,a+nx+1);}
-  const geo=new T.BufferGeometry();geo.setAttribute('position',new T.Float32BufferAttribute(vertices,3));geo.setAttribute('color',new T.Float32BufferAttribute(cols,3));geo.setIndex(indices);geo.computeVertexNormals();
-  parent.add(new T.Mesh(geo,new T.MeshStandardMaterial({vertexColors:true,roughness:1,side:T.DoubleSide})));
+ // A continuous distant range: open valley in front, identifiable peaks on the horizon.
+ const peaks=[[-38,-60,12,23,24],[-15,-68,18,22,29],[8,-62,15,20,26],[32,-73,19,26,29],[52,-65,13,23,22],[-56,-85,19,29,26]],vertices=[],cols=[],indices=[],nx=96,nz=44;
+ for(let j=0;j<=nz;j++)for(let i=0;i<=nx;i++){
+  const x=-100+i/nx*200,z=-14-j/nz*105;let height=0,relative=0;
+  for(const [px,pz,h,rx,rz] of peaks){const distance=Math.hypot((x-px)/rx,(z-pz)/rz),shape=Math.pow(Math.max(0,1-distance),1.18),candidate=h*shape;if(candidate>height){height=candidate;relative=shape;}}
+  const ridge=height>1?(Math.sin(x*1.7+z*.41)+Math.sin(x*.37-z*.71))*.16:0,y=-4+height+ridge;
+  vertices.push(x,y,z);const rock=new T.Color('#62818a'),snow=new T.Color('#e9e8dc'),foothill=new T.Color('#839b87');
+  const c=relative>.59?rock.lerp(snow,Math.min(1,(relative-.54)*3.7)):foothill.lerp(rock,Math.min(1,height/7));c.multiplyScalar(.94+.05*Math.sin(x*.4+z*.6));cols.push(c.r,c.g,c.b);
  }
- box(parent,[0,-3.5,-30],[115,1,85],'#8b9e8d',{roughness:1});
- ball(parent,[-14,12,-55],1.8,'#f8d9a1',{emissive:'#f8d9a1',emissiveIntensity:1.15,roughness:1});
+ for(let j=0;j<nz;j++)for(let i=0;i<nx;i++){const a=j*(nx+1)+i;indices.push(a,a+1,a+nx+1,a+1,a+nx+2,a+nx+1);}
+ const geo=new T.BufferGeometry();geo.setAttribute('position',new T.Float32BufferAttribute(vertices,3));geo.setAttribute('color',new T.Float32BufferAttribute(cols,3));geo.setIndex(indices);geo.computeVertexNormals();
+ parent.add(new T.Mesh(geo,new T.MeshStandardMaterial({vertexColors:true,roughness:1,side:T.DoubleSide,flatShading:true})));
+ box(parent,[0,-4.45,-61],[205,.8,130],'#82968a',{roughness:1});
+ ball(parent,[-29,13,-83],1.6,'#f7d59d',{emissive:'#f7d59d',emissiveIntensity:1.1,roughness:1});
 }
 export function architecture(g){
  box(g,[0,-.18,-.15],[8.6,.35,8.6],'#d2c4ad',{roughness:.45});
