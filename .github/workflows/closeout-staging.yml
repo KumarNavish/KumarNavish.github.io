@@ -21,6 +21,7 @@ jobs:
           python .delivery/refine_mode.py
           python .delivery/compact_mode.py
           python .delivery/final_inspection.py
+          python .delivery/projection.py
       - name: Preserve all scientific invariants
         run: |
           mkdir -p /tmp/inspection-review
