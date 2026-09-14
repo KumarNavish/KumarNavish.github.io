@@ -1,45 +1,52 @@
-# Navish Kumar — Living scientific worlds
+# Navish Kumar — Scroll-authored scientific worlds
 
-A static, source-inspectable research portfolio organised by one **Past → Now → Frontier** timeline. Ten native explanations connect an intervention to a computed consequence. Original sources, Navish's role and the limits of each example remain beside the experience.
+One canonical **Past → Now → Frontier** timeline, ten living previews, and ten reversible scientific narratives. Scrolling—not a timer—is the default explanation. Each argument ends in an explorer operating on the same scientific model.
 
-## Run and verify
+## Run
 
 ```bash
 npm test
 npm run build
 npm run serve
-# In a separate terminal, with Python Playwright and Chromium installed:
-python scripts/worlds_acceptance.py --url http://127.0.0.1:8765 --out /tmp/worlds-review
+# With Python Playwright, Chromium and Pillow installed:
+python scripts/scroll_acceptance.py --url http://127.0.0.1:8765 --out /tmp/scroll-review --record
 ```
 
-Node is used for tests and the HTML generator. Serving requires only a static HTTP server. There is no model API, account, paid backend, telemetry or database. Three.js 0.180.0 is vendored with its license; no runtime CDN is required. Interactive worlds use WebGL 2. When it is unavailable, controls and numerical explanations remain available; the interface explicitly identifies the graphics limitation.
+This is a static site. Node is required for tests and the HTML generator, not delivery. There is no model API, paid backend, database, analytics or runtime CDN. Three.js 0.180.0 is vendored with its license. Nine scientific viewports use WebGL 2; CasePath uses a persistent document workspace. Without WebGL, the same narrative retains its calculated reading view. Without JavaScript, the generated timeline and original-source links remain readable.
 
-## Architecture
+## Narrative architecture
 
-`modules/content.mjs` is the canonical work record. The timeline, full project pages, roles, evidence and connections derive from those records. `modules/app.mjs` loads each world on demand and disposes it on navigation.
+`modules/content.mjs` remains the canonical record of role, contribution, evidence, status, sources and intellectual connections. Published results, active research, replications and conceptual interfaces are not conflated.
 
-`modules/worlds/math.mjs` separates exact illustrative calculations from rendering. `graph.mjs`, `geometry.mjs`, `temporal.mjs`, `case.mjs` and `spatial.mjs` own distinct project experiences. `stage.mjs` handles Three.js, materials, lighting, picking, camera controls, labels and resource cleanup. `compiler.mjs` contains the atomic scene language, validation and path planning. `laboratory.mjs` constructs the editable instruments and physical environment. `worlds.css` provides project-specific visual systems within the shared portfolio shell.
+`modules/narrative/chapters.mjs` declares reader-facing chapters and camera keyframes. `model.mjs` reconstructs the entire frame from normalized progress: scientific inputs and outputs, chapter, camera, visibility and annotations. `director.mjs` maps measured paragraph anchors to progress and manages sticky layout, reverse traversal, navigation, reduced motion, deep links, optional autoplay and cleanup. Autoplay only scrolls the actual document; it cannot create a competing narrative state.
 
-The homepage is generated ordinary HTML, including original-source links without JavaScript. Hash routes require no server rewrite. Earlier studio modules are retained for timeline previews and regression tests; they are not the new project-page renderer.
+The scene modules retain geometry and update transforms, visibility and computed overlays. Rendering stops when idle or offscreen. Camera choreography and annotation appear only when relevant. The underlying `modules/worlds/math.mjs`, `modules/mechanisms.mjs` and `modules/worlds/compiler.mjs` calculations remain separate from presentation.
 
-## Scientific scope
+`explore.mjs` holds independent sandbox state. Controls unlock after the guided sequence; returning to earlier prose reconstructs the guide without overwriting the sandbox. The spatial sandbox alone persists to local storage when permitted. Its typed language is a limited, atomic local compiler—not a generative model. Unsupported clauses reject the entire edit. Original object IDs, undo/redo, collision checks, path planning and JSON export remain inspectable.
 
-The rendered quantities are **worked examples, not measured paper results**.
+`journey.mjs` uses a single active scientific field for the homepage. As each work crosses the reading zone, its compact preview follows scroll progress. All ten works stay in the same chronological list; no rasterized thumbnails or parallel category systems are added.
 
-- The gain observatory computes a five-node Hermitian normalized Laplacian and three fundamental cycles. Spanning-tree enumeration finds a minimum-count edge-retuning repair only for this tiny graph.
-- Replay projects a desired correction onto selected memory directions in a three-parameter quadratic problem. A duplicated memory adds no direction. Signed-span projection is not a claim about nonnegative replay weights or a new selection algorithm.
-- Rank solves a three-variable minimum-norm problem in rank-indexed coordinate subspaces. Infeasible spaces have no rendered repair. The separately drawn budget is an illustrative isotropic change cost, not a full nonlinear LoRA model.
-- The temporal example processes exactly 64 simulated observations per period. Replay displaces new observations. The archive is explicitly assumed less noisy; the optimal allocation uses known toy drift. This is not language-model training or a TiC-LM benchmark result. TiC-LM is credited to its original authors; Navish's work is replication/investigation.
-- The posterior world uses the exact diagonal Gaussian specialization of the linked square-root natural-gradient algorithm. Surface height is probability density, not loss. The KL trace does not establish universal speed superiority.
-- The urban and interaction examples use fictional times, accounts and messages. The miniature buildings do not represent a geographic dataset.
-- CasePath is a synthetic document workflow. Visitor review is not authenticated production authority. It sends no payment and makes no legal determination. The source-record hash, cached dependencies and HOLD transitions demonstrate software mechanics only.
+## Sharing and accessibility
 
-## Persistent scene and privacy
+Project URLs are `#work/<id>`. During guided reading the URL becomes `#work/<id>/at/<0–1 progress>` so a reload, copied link or new tab reconstructs the same frame. `#work/<id>/chapter/<1-based chapter>` is also supported. Previous/next buttons and keyboard controls move to the same paragraph anchors. Reduced motion uses the same chapters and exact endpoint computations without continuous camera animation. Scrolling over the canvas does not capture the wheel; free inspection is optional after the story.
 
-The spatial world is a **limited local compiler, not unrestricted generative AI or a learned planner**. Supported clauses are parsed, bound to stable IDs, collision-checked and committed atomically. A rejected clause leaves the scene unchanged. Three.js objects are retained across transform edits. Undo/redo restores scene snapshots; local storage preserves the latest scene when allowed; export writes explicit JSON.
+## Scientific boundaries
 
-Typed commands remain local. Optional speech recognition is initiated only by the visitor and may transmit audio to the browser vendor's recognition provider. Support varies. No microphone success, physical-device GPU performance, Safari compatibility or headset VR validation is inferred from headless tests.
+Every numerical display is explicitly classified as a live worked example, a declared simulation, a synthetic deterministic workflow, or a conceptual compiler interface. **None of the browser examples is presented as a paper measurement.**
 
-## Evidence
+- Gain computes the actual five-node Hermitian normalized Laplacian. Cycle transport accumulates directed gains. Repair is exact finite spanning-tree enumeration for this tiny graph, not the paper's entire bound family or a scalable new algorithm.
+- Replay uses a three-parameter quadratic example and signed projection onto selected memory directions. A duplicated memory does not add a direction. Unavailable correction and available-but-unapplied correction remain distinct. The full-history optimum is explicitly an unavailable oracle, not an implementable replay method.
+- Rank solves a minimum-norm linear repair inside rank-indexed coordinate subspaces. No solution is shown in an infeasible space. The cost sphere is a separate illustrative current-task constraint, not a full nonlinear LoRA model.
+- TiC-LM is credited as a replication/investigation. The browser processes a fixed 64-observation synthetic budget: replay displaces new data. An explicitly lower-noise archive can help while stable, then harm after drift. The final known-drift optimum can be zero replay. Backward/archive error and current error are separate exact expectations in the toy model—not language-model benchmark results or a learned policy.
+- Natural gradient uses the exact diagonal Gaussian specialization of the linked algorithm. Surface height is probability density; KL is separately computed. An attractive trajectory is not an unconditional convergence or speed guarantee.
+- Signed bounds, urban context and interaction networks retain their declared tiny-graph or fictional-data scope. Vehicle positions are explanatory progression, not a time-accurate route simulation.
+- CasePath's source, newer report, assertions, reviewed correction, cached obligations and provenance are synthetic. The original source is not overwritten. Visitor review is not authenticated production authority. No payment or legal determination occurs.
+- The spatial world interprets supported text into typed operations, persistent IDs and collision-checked placements. Optional speech recognition may send audio to the browser provider and starts only after a visitor click. No unrestricted language model, autonomous policy or headset-validated VR capability is claimed.
 
-`tests/` covers numerical identities, feasible/infeasible cases, budget accounting, scene compilation and regression behavior. `scripts/worlds_acceptance.py` exercises actual HTTP module delivery, state changes, source preservation, camera independence, mobile layout, persistence and export. GitHub Actions stores the executed reports and screenshots separately from the application. A test pass establishes those checks, not an independent human assessment of explanatory impact.
+## Validation
+
+`tests/narrative.test.mjs` checks path-independent reconstruction, reverse order, chapter endpoints, scientific invariants, exact infeasibility, budget accounting, provenance and persistent identities in addition to the retained regression suite.
+
+`scripts/scroll_acceptance.py` validates actual HTTP bytes and rendered WebGL, forward/reverse/slow/fast scrolling, sticky stages, copied progress URLs, reload, idle rendering, withheld/unlocked controls, sandbox preservation and exports. With `--record`, it captures each flagship forwards and backwards on desktop, mobile-sized viewport and reduced motion. `--reference` separately inspects the interaction reference; its appearance and assets are not copied.
+
+Executed evidence is stored outside the application and attached to the delivery. A build or test pass is not an independent assessment of newcomer comprehension or subjective visual impact. Physical-device GPU performance, actual touch hardware, speech recognition, Safari and headset VR require separate validation.

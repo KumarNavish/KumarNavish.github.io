@@ -100,6 +100,8 @@ export function createStage(host,{background='#f3f5f4',dark=false,camera=[6,4.5,
  size();
  return{T,scene,cam,controls,renderer,fixed,content,transient,key,hemi,rim,go,orbit,invalidate,setLabels,
   setPickables(a){pickables=a;invalidate();},setTick(f,duration=Infinity){tick=f;tickUntil=duration===Infinity?Infinity:performance.now()+duration;invalidate();},
+  seekCamera(pos,at){fly=null;controls.enableDamping=false;cam.position.set(...pos);controls.target.set(...at);controls.update();invalidate(false);},
+  interactive(v){controls.enabled=v;controls.enableZoom=false;canvas.style.touchAction='pan-y';host.dataset.interactive=String(v);},
   pause(v){paused=v;invalidate(false);},background(color){scene.background.set(color);scene.fog.color.set(color);invalidate();},
   dispose(){disposed=true;cancelAnimationFrame(frame);ro.disconnect();io.disconnect();controls.removeEventListener('change',cameraChange);controls.dispose();document.removeEventListener('visibilitychange',visibility);
    canvas.removeEventListener('pointerdown',pointerdown);canvas.removeEventListener('pointermove',pointermove);canvas.removeEventListener('pointerup',pointerup);canvas.removeEventListener('pointercancel',cancel);canvas.removeEventListener('keydown',keydown);
