@@ -41,6 +41,13 @@ with sync_playwright() as pw:
  check('readable mobile records and gate stay inside the sticky viewport',contained)
  check('mobile source date remains exact','12 May 2026' in page.locator('.n-original mark').inner_text())
  page.screenshot(path=str(out/'casepath-mobile-hold.png'))
+ # Inspect every late mobile document chapter for overlap, not just viewport containment.
+ for progress in [.2,.4,.6,.8,1]:
+  start('casepath',progress)
+  bands=page.evaluate('''()=>{const root=document.querySelector('.n-case-canvas'),selectors=['.n-case-records','.n-assertion','.n-case-checks','.n-case-provenance'];const rs=selectors.map(s=>document.querySelector(s).getBoundingClientRect());const source=document.querySelector('.n-original').getBoundingClientRect();const report=document.querySelector('.n-later').getBoundingClientRect();return {separated:rs.every((r,i)=>!i||r.top>=rs[i-1].bottom+3),contentFits:source.bottom<=rs[0].bottom+1&&report.bottom<=rs[0].bottom+1,packetFits:rs.at(-1).bottom<=root.getBoundingClientRect().bottom-3};}''')
+  check(f'CasePath at {progress}: document, assertion, checks and provenance never overlap',bands['separated'] and bands['contentFits'])
+  check(f'CasePath at {progress}: provenance stays inside the viewport',bands['packetFits'])
+  if progress in [.6,1]:page.screenshot(path=str(out/f'casepath-mobile-separated-{progress}.png'))
  # Chapter links are first-class inputs to the same deterministic director.
  page.goto(base+'#work/gain-graphs/chapter/3',wait_until='networkidle');page.wait_for_selector('#demo-root[data-state]');page.wait_for_timeout(150)
  check('explicit chapter link reconstructs the cycle before the operator',abs(float(page.locator('#demo-root').get_attribute('data-progress'))-.4)<.001 and not page.locator('.n-operator').is_visible())
