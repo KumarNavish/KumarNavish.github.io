@@ -1,5 +1,5 @@
 /** Exact, small worked examples. These are not measured paper results. */
-import {eigenvaluesSymmetric, signedGraph, posteriorExample, urbanExample, interactionExample} from '../mechanisms.mjs?v=scroll-4.2.1';
+import {eigenvaluesSymmetric, signedGraph, posteriorExample, urbanExample, interactionExample} from '../mechanisms.mjs?v=scroll-4.2.2';
 export {signedGraph,posteriorExample,urbanExample,interactionExample};
 export const dot=(a,b)=>a.reduce((s,x,i)=>s+x*b[i],0);
 export const add=(a,b)=>a.map((x,i)=>x+b[i]);

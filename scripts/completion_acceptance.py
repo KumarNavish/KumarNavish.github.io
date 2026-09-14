@@ -12,10 +12,10 @@ with sync_playwright() as pw:
  try:
   def state():return json.loads(page.locator('#demo-root').get_attribute('data-state'))
   def go(work,p=.4,explore=False):
-   page.goto(base+'#work/'+work+('/explore' if explore else '/at/'+str(p)),wait_until='networkidle');page.wait_for_selector('#demo-root[data-state]');page.wait_for_function('''target=>{const r=document.querySelector('#demo-root');return r&&(target.explore?r.dataset.mode==='explore':r.dataset.mode==='guide'&&Math.abs(Number(r.dataset.progress)-target.p)<.002)}''',arg={'p':p,'explore':explore})
+   page.goto(base+'#work/'+work+('/explore' if explore else '/at/'+str(p)),wait_until='networkidle');page.wait_for_selector('#demo-root[data-state]');page.wait_for_function('''target=>{const r=document.querySelector('#demo-root');return r&&r.dataset.ready==='true'&&(target.explore?r.dataset.mode==='explore':r.dataset.mode==='guide'&&Math.abs(Number(r.dataset.progress)-target.p)<.002)}''',arg={'p':p,'explore':explore})
   def setparam(k,v):page.locator(f'[data-parameter="{k}"]').evaluate('(el,v)=>{el.value=v;el.dispatchEvent(new Event("input",{bubbles:true}));}',v);page.wait_for_timeout(150)
   def at(p):
-   a=json.loads(page.locator('#demo-root').get_attribute('data-anchors'));u=p*(len(a)-1);i=int(u);j=min(i+1,len(a)-1);page.evaluate('(y)=>scrollTo({top:y,behavior:"instant"})',a[i]+(a[j]-a[i])*(u-i));page.wait_for_function('''p=>Math.abs(Number(document.querySelector('#demo-root')?.dataset.progress)-p)<.002''',arg=p)
+   a=json.loads(page.locator('#demo-root').get_attribute('data-anchors'));u=p*(len(a)-1);i=int(u);j=min(i+1,len(a)-1);page.evaluate('async y=>{scrollTo({top:y,behavior:"instant"});await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);}',a[i]+(a[j]-a[i])*(u-i));page.wait_for_function('''p=>Math.abs(Number(document.querySelector('#demo-root')?.dataset.progress)-p)<.002''',arg=p)
   go('gain-graphs',.6);check('operator is revealed before the spectrum',json.loads(page.locator('#demo-root').get_attribute('data-narrative'))['reveal']['spectrum']==0)
   check('authorship is visible before the narrative',page.locator('.work-byline').inner_text()!='')
   # Exact conceptual position survives desktop -> mobile -> desktop layout changes.
