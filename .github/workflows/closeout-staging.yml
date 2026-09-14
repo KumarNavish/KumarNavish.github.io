@@ -1,0 +1,56 @@
+name: Verify unobstructed scientific inspection
+on:
+  push:
+    branches: [site/closeout-20260914]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply exact authored placement refinement
+        run: python .delivery/refine_mode.py
+      - name: Preserve all scientific invariants
+        run: |
+          mkdir -p /tmp/inspection-review
+          npm test > /tmp/inspection-review/unit-tests.txt
+      - run: python -m pip install playwright==1.57.0 pillow==11.3.0
+      - run: python -m playwright install --with-deps chromium webkit
+      - name: Serve the exact candidate
+        run: python -m http.server 8765 --bind 127.0.0.1 > /tmp/inspection-http.log 2>&1 &
+      - name: Check actual graph referents rather than labels alone
+        run: |
+          python scripts/referent_checks.py --engine chromium --url http://127.0.0.1:8765 --out /tmp/inspection-review/chromium/referents
+          python scripts/referent_checks.py --engine webkit --url http://127.0.0.1:8765 --out /tmp/inspection-review/webkit/referents
+      - name: Retest both real browser visitor paths
+        run: |
+          python scripts/completion_acceptance.py --engine chromium --url http://127.0.0.1:8765 --out /tmp/inspection-review/chromium/visitor
+          python scripts/completion_acceptance.py --engine webkit --url http://127.0.0.1:8765 --out /tmp/inspection-review/webkit/visitor
+      - name: Inspect all guided annotations after camera reframing
+        run: python scripts/annotation_checks.py --url http://127.0.0.1:8765 --out /tmp/inspection-review/annotations
+      - name: Seal only verified application changes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add modules scripts tests README.md package.json index.html narrative.css .github/workflows/portfolio-qa.yml
+          git diff --cached --quiet || git commit -m 'Keep eigenmode geometry unobstructed with measured referent visibility in both engines [skip ci]'
+          git push origin HEAD:site/closeout-20260914
+      - name: Preserve source and review even after failure
+        if: always()
+        run: |
+          mkdir -p /tmp/inspection-review
+          python -c "from pathlib import Path; import zipfile; root=Path('.'); z=zipfile.ZipFile('/tmp/inspection-review/source.zip','w',zipfile.ZIP_DEFLATED); [z.write(p,str(p)) for p in root.rglob('*') if p.is_file() and not any(x in p.parts for x in ['.git','.delivery','__pycache__','node_modules'])]; z.close()"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scientific-inspection-review-${{ github.run_id }}
+          path: /tmp/inspection-review
+          retention-days: 7
