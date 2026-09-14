@@ -1,4 +1,4 @@
-import {meshBuilder,palette as C,V,mix} from './studio-engine.mjs?v=studio-2';
+import {meshBuilder,palette as C,V,mix} from './studio-engine.mjs?v=scroll-4.2';
 const {add}=V;
 const f=(v,n=2)=>Number(v).toFixed(n);
 const lerp=(a,b,t)=>a+(b-a)*t;
