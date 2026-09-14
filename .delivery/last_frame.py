@@ -29,4 +29,6 @@ p.write_text(p.read_text()+'''
 }
 ''')
 assert hashlib.sha256(p.read_bytes()).hexdigest()=='8f287b5249e38d2aeec6c7b8fd35e75cf634f9d50e4fabe8c723a0323c47aca1'
+import runpy
+runpy.run_path('.delivery/compact_reading.py')
 print('COMPACT_LABEL_REFLOW_RENDERED_HANDOFF_AND_TEMPORAL_FIELD_VERIFIED')
