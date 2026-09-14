@@ -1,9 +1,9 @@
-import {positionAtProgress} from './inspection.mjs?v=scroll-4.2';
-import {stories} from './chapters.mjs?v=scroll-4.2';
-import {evaluateNarrative,progressFromAnchors} from './model.mjs?v=scroll-4.2';
-import {createNarrativeRenderer} from './renderer.mjs?v=scroll-4.2';
-import {createExplorer} from './explore.mjs?v=scroll-4.2';
-import {esc} from '../render.mjs?v=scroll-4.2';
+import {positionAtProgress} from './inspection.mjs?v=scroll-4.2.1';
+import {stories} from './chapters.mjs?v=scroll-4.2.1';
+import {evaluateNarrative,progressFromAnchors} from './model.mjs?v=scroll-4.2.1';
+import {createNarrativeRenderer} from './renderer.mjs?v=scroll-4.2.1';
+import {createExplorer} from './explore.mjs?v=scroll-4.2.1';
+import {esc} from '../render.mjs?v=scroll-4.2.1';
 /** One scroll input, one pure frame. Navigation and autoplay move the page, never mutate a chapter. */
 export function mountScrollNarrative(work,root,{at=null,chapter=null,startExploring=false}={}){
  const key=work.mechanism,story=stories[key],count=story.chapters.length;
@@ -79,6 +79,19 @@ export function mountScrollNarrative(work,root,{at=null,chapter=null,startExplor
  const manual=e=>{if(e.type==='keydown'&&['ArrowRight','ArrowLeft'].includes(e.key)&&stage.contains(e.target)&&mode==='guide'){e.preventDefault();root.querySelector(e.key==='ArrowRight'?'[data-next]':'[data-prev]').click();}else if(!e.target?.closest?.('[data-auto]'))stop();};
  window.addEventListener('scroll',queue,{passive:true});window.addEventListener('resize',resize);window.addEventListener('wheel',stop,{passive:true});window.addEventListener('touchstart',stop,{passive:true});root.addEventListener('pointerdown',manual);root.addEventListener('keydown',manual);mql.addEventListener('change',resize);document.addEventListener('visibilitychange',visibility);
  const ro=new ResizeObserver(measure);ro.observe(layout);ro.observe(stage);articles.forEach(a=>ro.observe(a.firstElementChild));measure();
- const init=requestAnimationFrame(()=>{if(!ownsRoute())return;measure();if(startExploring)moveTo(exploreAt+4,{animate:false});else if(at!==null)goProgress(at);else if(chapter!==null)goProgress(Math.max(0,Math.min(count-1,chapter))/(count-1));else queue();initializing=false;frame();root.dataset.ready='true';});
+ // The first rendered cue and overlays can change intrinsic layout in WebKit.
+ // Measure once with those actual contents in place, then commit the requested
+ // reading position. Do not publish readiness against the empty initial shell.
+ function positionInitial(){
+  if(startExploring)moveTo(exploreAt+4,{animate:false});
+  else if(at!==null)goProgress(at);
+  else if(chapter!==null)goProgress(Math.max(0,Math.min(count-1,chapter))/(count-1));
+  else queue();
+ }
+ const init=requestAnimationFrame(()=>{
+  if(!ownsRoute())return;
+  measure();positionInitial();initializing=false;frame();
+  measure();positionInitial();frame();root.dataset.ready='true';
+ });
  return{dispose(){disposed=true;stop();cancelAnimationFrame(raf);cancelAnimationFrame(init);ro.disconnect();window.removeEventListener('scroll',queue);window.removeEventListener('resize',resize);window.removeEventListener('wheel',stop);window.removeEventListener('touchstart',stop);root.removeEventListener('pointerdown',manual);root.removeEventListener('keydown',manual);mql.removeEventListener('change',resize);document.removeEventListener('visibilitychange',visibility);explorer.dispose();renderer.dispose();}};
 }
