@@ -1,0 +1,33 @@
+name: Diagnose public WebKit reading-frame ordering
+on:
+  push:
+    branches: [site/reading-frame-20260914]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install playwright==1.57.0 pillow==11.3.0
+      - run: python -m playwright install --with-deps webkit
+      - name: Preserve original pre-frame measurements and the subsequent real frames
+        run: |
+          for trial in 1 2 3; do
+            python scripts/reading_frame_audit.py --url https://kumarnavish.github.io/ --out /tmp/reading-audit/raw-$trial || exit 1
+          done
+      - name: Require original visibility bounds at actual rendered checkpoints
+        run: |
+          for trial in 1 2 3; do
+            python scripts/reading_frame_audit.py --synchronized --url https://kumarnavish.github.io/ --out /tmp/reading-audit/paint-$trial || exit 1
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-reading-frame-audit-${{ github.run_id }}
+          path: /tmp/reading-audit
+          retention-days: 7
