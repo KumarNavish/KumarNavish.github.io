@@ -1,0 +1,27 @@
+name: Observe production WebKit reading transition
+on:
+  push:
+    branches: [site/closeout-20260914]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install playwright==1.57.0 pillow==11.3.0
+      - run: python -m playwright install --with-deps webkit
+      - name: Two independent traversals with observation only after a failing assertion
+        run: |
+          python .delivery/probe_reading.py --engine webkit --url https://kumarnavish.github.io/ --out /tmp/closeout-probe/first
+          python .delivery/probe_reading.py --engine webkit --url https://kumarnavish.github.io/ --out /tmp/closeout-probe/second
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: closeout-observation-${{ github.run_id }}
+          path: /tmp/closeout-probe
+          retention-days: 7
