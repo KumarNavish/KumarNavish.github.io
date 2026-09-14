@@ -1,5 +1,5 @@
-import {T,group,mesh,box,ball,line,ring,rod,point,segment,vector,alpha,annotation,contentHTML,metric,fmt,V,basePlane} from './scene-kit.mjs?v=scroll-4.2';
-import {meanAt} from '../worlds/math.mjs?v=scroll-4.2';
+import {T,group,mesh,box,ball,line,ring,rod,point,segment,vector,alpha,annotation,contentHTML,metric,fmt,V,basePlane} from './scene-kit.mjs?v=scroll-4.2.1';
+import {meanAt} from '../worlds/math.mjs?v=scroll-4.2.1';
 export function timeScene(view,overlay){
  const g=group(view.content),labels=annotation(view),windows=[],track=group(g);basePlane(g,'#e8deca',24);
  for(let i=0;i<=10;i++){const w=group(track);box(w,[0,.9,0],[.075,1.55,1.2],'#bba987',{transparent:true,opacity:.7,roughness:.7});for(let j=0;j<5;j++)box(w,[.04,.4+j*.19,0],[.016,.035,.72],'#e9dfcd');windows.push(w);}

@@ -1,6 +1,6 @@
-import {T,mesh,box,ball,line,rod,ring,clear,V} from './stage.mjs?v=scroll-4.2';
-import {timeState,meanAt,simulatePeriod,urbanExample,interactionExample} from './math.mjs?v=scroll-4.2';
-import {exhibit,slider,btn,stat,fmt} from './ui.mjs?v=scroll-4.2';
+import {T,mesh,box,ball,line,rod,ring,clear,V} from './stage.mjs?v=scroll-4.2.1';
+import {timeState,meanAt,simulatePeriod,urbanExample,interactionExample} from './math.mjs?v=scroll-4.2.1';
+import {exhibit,slider,btn,stat,fmt} from './ui.mjs?v=scroll-4.2.1';
 export function mountTime(root){
  let month=2,replay=24,budget=64,window=3,stable=false;
  const ui=exhibit(root,{theme:'time-world',title:'Yesterday does not update itself',intro:'The archive stays still. The world moves on.',controls:`<div class="time-selector"><span>Advance the present</span><div>${Array.from({length:10},(_,i)=>btn('month'+(i+1),String(i+1))).join('')}</div></div>${slider('replay','Replay updates',0,48,24)}${slider('window','History window',1,6,3)}${btn('stable','Keep the world stable')}`,math:'<p>One simulated period has a hard budget of 64 observations. Replaying k leaves exactly 64 − k for new observations. Each draw is actually processed by the local mean estimator. The archive in this example has lower noise variance: 0.2 rather than 1. This is an explicit modelling assumption, not a general property of old data.</p><p>If α = k/B and drift is the difference between the current and archived means, expected squared error is α²drift² + [(B−k) + 0.2k]/B². Thus at fixed compute, variance reduction can be overtaken by bias. “Oracle allocation” uses the known toy drift and is not a practical learned replay policy.</p>',boundary:'A synthetic budgeted estimation environment motivated by the TiC-LM replication question. It is not a language-model training run, and no numbers here are TiC-LM benchmark results.'});
