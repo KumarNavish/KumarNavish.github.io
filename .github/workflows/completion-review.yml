@@ -16,8 +16,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Recover the exact reviewed application changes
-        run: python .delivery/apply_completion.py
+      - name: Recover exact reviewed source and reading-anchor refinements
+        run: |
+          python .delivery/apply_completion.py
+          python .delivery/apply_reading.py
       - name: Verify numerical and state invariants
         run: |
           set -o pipefail
@@ -25,24 +27,28 @@ jobs:
           npm test | tee /tmp/completion-review/unit-tests.txt
       - run: python -m pip install playwright==1.57.0 pillow==11.3.0
       - run: python -m playwright install --with-deps chromium webkit
-      - name: Serve authored source without changing browser policies
+      - name: Serve source without changing browser policies
         run: python -m http.server 8765 --bind 127.0.0.1 > /tmp/completion-http.log 2>&1 &
-      - name: Exercise the new end-to-end visitor paths
+      - name: Verify visitor paths and visible mobile headlines in Chromium
         run: python scripts/completion_acceptance.py --url http://127.0.0.1:8765 --out /tmp/completion-review/completion
-      - name: Recheck disclosure and mobile evidence layout
+      - name: Verify the same visitor paths in unmodified Playwright WebKit
+        run: python scripts/completion_acceptance.py --engine webkit --url http://127.0.0.1:8765 --out /tmp/completion-review/webkit
+      - name: Capture ordering diagnostics only after a failed acceptance
+        if: failure()
+        continue-on-error: true
+        run: python scripts/completion_acceptance.py --engine webkit --trace --url http://127.0.0.1:8765 --out /tmp/completion-review/diagnostic-trace
+      - name: Recheck disclosure and compact evidence layout
         run: python scripts/final_scroll_checks.py --url http://127.0.0.1:8765 --out /tmp/completion-review/regressions
       - name: Record all flagship arguments forward and backward
         run: python scripts/scroll_acceptance.py --url http://127.0.0.1:8765 --out /tmp/completion-review/browser --record
-      - name: Cross-check visitor paths in Playwright WebKit
-        run: python scripts/completion_acceptance.py --engine webkit --url http://127.0.0.1:8765 --out /tmp/completion-review/webkit
       - name: Seal only verified application changes
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add modules scripts tests index.html narrative.css README.md package.json
-          git diff --cached --quiet || git commit -m 'Seal exact application after scientific, visitor-journey and cross-engine checks [skip ci]'
+          git diff --cached --quiet || git commit -m 'Seal source after scientific, cross-engine and visible-reading checks [skip ci]'
           git push origin HEAD:site/end-to-end-20260914
-      - name: Preserve evidence and authored source even if a check fails
+      - name: Preserve evidence and source even if a check fails
         if: always()
         run: |
           mkdir -p /tmp/completion-review
