@@ -1,0 +1,50 @@
+name: Verify scroll-authored scientific narratives
+on:
+  push:
+    branches: [site/scroll-narrative-20260914]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply exact authored source and verify generated HTML
+        run: python .delivery/apply_scroll.py
+      - name: Verify scientific and reversible-state invariants
+        run: |
+          set -o pipefail
+          mkdir -p /tmp/scroll-review
+          npm test | tee /tmp/scroll-review/unit-tests.txt
+      - run: python -m pip install playwright==1.57.0 pillow==11.3.0
+      - run: python -m playwright install --with-deps chromium
+      - name: Serve authored source without browser-policy changes
+        run: python -m http.server 8765 --bind 127.0.0.1 > /tmp/scroll-http.log 2>&1 &
+      - name: Inspect the reference and record all six scroll arguments in both directions
+        run: python scripts/scroll_acceptance.py --url http://127.0.0.1:8765 --out /tmp/scroll-review/browser --record --reference
+      - name: Seal only tested application files on staging
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add modules scripts tests index.html narrative.css README.md package.json
+          git diff --cached --quiet || git commit -m 'Seal verified scroll-authored application and generated homepage [skip ci]'
+          git push origin HEAD:site/scroll-narrative-20260914
+      - name: Preserve source and evidence even after a failed check
+        if: always()
+        run: |
+          mkdir -p /tmp/scroll-review
+          cp /tmp/scroll-http.log /tmp/scroll-review/http.log 2>/dev/null || true
+          python -c "from pathlib import Path; import zipfile; root=Path('.'); z=zipfile.ZipFile('/tmp/scroll-review/source.zip','w',zipfile.ZIP_DEFLATED); [z.write(p,str(p)) for p in root.rglob('*') if p.is_file() and not any(x in p.parts for x in ['.git','.delivery','__pycache__','node_modules'])]; z.close()"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scroll-narrative-review-${{ github.run_id }}
+          path: /tmp/scroll-review
+          retention-days: 7
