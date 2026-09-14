@@ -1,4 +1,4 @@
-name: Verify published scroll-authored portfolio
+name: Verify released scientific portfolio end to end
 on:
   push:
     branches: [gh-pages]
@@ -6,7 +6,7 @@ on:
 permissions:
   contents: read
 jobs:
-  verify:
+  narratives:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -17,29 +17,70 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Verify scientific invariants and reproducible HTML
+      - name: Verify scientific invariants and generated HTML
         run: |
           set -o pipefail
-          mkdir -p /tmp/scroll-published
-          npm test | tee /tmp/scroll-published/unit-tests.txt
+          mkdir -p /tmp/portfolio-evidence
+          npm test | tee /tmp/portfolio-evidence/unit-tests.txt
           npm run build
           git diff --exit-code -- index.html
       - run: python -m pip install playwright==1.57.0 pillow==11.3.0
       - run: python -m playwright install --with-deps chromium
-      - name: Record the actual deployed arguments forward and backward
-        run: python scripts/scroll_acceptance.py --url https://kumarnavish.github.io/ --wait-release --out /tmp/scroll-published/live --record
-      - name: Verify final disclosure, geometry and mobile-document regressions on production
-        run: python scripts/final_scroll_checks.py --url https://kumarnavish.github.io/ --out /tmp/scroll-published/regressions
-      - name: Preserve release source and verification receipt
+      - name: Verify and record the actual published narratives
+        run: python scripts/scroll_acceptance.py --url https://kumarnavish.github.io/ --wait-release --out /tmp/portfolio-evidence/live --record
+      - name: Verify final-size annotations against measured overlays
+        run: python scripts/annotation_checks.py --url https://kumarnavish.github.io/ --out /tmp/portfolio-evidence/annotations
+      - name: Recheck visual disclosure and document separation
+        run: python scripts/final_scroll_checks.py --url https://kumarnavish.github.io/ --out /tmp/portfolio-evidence/regressions
+      - name: Preserve exact release source even if a check fails
         if: always()
         run: |
-          mkdir -p /tmp/scroll-published
-          git rev-parse HEAD > /tmp/scroll-published/release-commit.txt
-          git rev-parse HEAD^{tree} > /tmp/scroll-published/release-tree.txt
-          python -c "from pathlib import Path; import zipfile; root=Path('.'); z=zipfile.ZipFile('/tmp/scroll-published/source.zip','w',zipfile.ZIP_DEFLATED); [z.write(p,str(p)) for p in root.rglob('*') if p.is_file() and not any(x in p.parts for x in ['.git','__pycache__','node_modules'])]; z.close()"
+          mkdir -p /tmp/portfolio-evidence
+          git rev-parse HEAD > /tmp/portfolio-evidence/release-commit.txt
+          git rev-parse HEAD^{tree} > /tmp/portfolio-evidence/release-tree.txt
+          python -c "from pathlib import Path; import zipfile; root=Path('.'); z=zipfile.ZipFile('/tmp/portfolio-evidence/source.zip','w',zipfile.ZIP_DEFLATED); [z.write(p,str(p)) for p in root.rglob('*') if p.is_file() and not any(x in p.parts for x in ['.git','__pycache__','node_modules'])]; z.close()"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: published-scroll-narratives-${{ github.run_id }}
-          path: /tmp/scroll-published
+          name: portfolio-narratives-${{ github.run_id }}
+          path: /tmp/portfolio-evidence
+          retention-days: 7
+  browsers:
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [chromium, webkit]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install playwright==1.57.0 pillow==11.3.0
+      - run: python -m playwright install --with-deps ${{ matrix.engine }}
+      - name: Wait for the exact published index
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import time, urllib.request
+          expected=Path('index.html').read_bytes()
+          for attempt in range(40):
+            try:
+              if urllib.request.urlopen('https://kumarnavish.github.io/',timeout=15).read()==expected:break
+            except Exception:pass
+            time.sleep(6)
+          else:raise RuntimeError('The intended release has not reached production.')
+          PY
+      - name: Exercise the actual deployed reader and explorer paths
+        run: python scripts/completion_acceptance.py --engine ${{ matrix.engine }} --url https://kumarnavish.github.io/ --out /tmp/portfolio-browser/visitor
+      - name: Verify competing reflow and scroll without trace-induced timing
+        run: python scripts/scroll_race_checks.py --engine ${{ matrix.engine }} --url https://kumarnavish.github.io/ --out /tmp/portfolio-browser/race
+      - name: Verify render-side explorer release under late reflow
+        run: python scripts/handoff_checks.py --engine ${{ matrix.engine }} --url https://kumarnavish.github.io/ --out /tmp/portfolio-browser/handoff
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: portfolio-browser-${{ matrix.engine }}-${{ github.run_id }}
+          path: /tmp/portfolio-browser
           retention-days: 7
