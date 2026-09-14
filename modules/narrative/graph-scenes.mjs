@@ -1,5 +1,5 @@
-import {T,group,mesh,box,ball,line,ring,rod,point,segment,vector,alpha,annotation,contentHTML,metric,fmt,V} from './scene-kit.mjs?v=scroll-4.2';
-import {graphEdges,graphCycles} from '../worlds/math.mjs?v=scroll-4.2';
+import {T,group,mesh,box,ball,line,ring,rod,point,segment,vector,alpha,annotation,contentHTML,metric,fmt,V} from './scene-kit.mjs?v=scroll-4.2.1';
+import {graphEdges,graphCycles} from '../worlds/math.mjs?v=scroll-4.2.1';
 const pts=[[-2.5,.9,.8],[-1.3,3,-.4],[1.1,3.25,-.45],[2.55,1,.4],[0,.45,2]],names='ABCDE';
 export function gainScene(view,overlay){
  const g=group(view.content),labels=annotation(view),edges=[],nodes=[],orient=[];

@@ -1,6 +1,6 @@
-import {T,box,ball,line,rod,ring,arrow,clear,V,mesh,material} from './stage.mjs?v=scroll-4.2';
-import {replayState,rankState,constraints,memories,incoming,posteriorExample,dot,sub,norm,scale,add} from './math.mjs?v=scroll-4.2';
-import {exhibit,slider,btn,stat,fmt} from './ui.mjs?v=scroll-4.2';
+import {T,box,ball,line,rod,ring,arrow,clear,V,mesh,material} from './stage.mjs?v=scroll-4.2.1';
+import {replayState,rankState,constraints,memories,incoming,posteriorExample,dot,sub,norm,scale,add} from './math.mjs?v=scroll-4.2.1';
+import {exhibit,slider,btn,stat,fmt} from './ui.mjs?v=scroll-4.2.1';
 const colors={current:'#3388bc',joint:'#c08a35',memory:'#278f83',residual:'#d35d4c',violet:'#ae95df'};
 function dashed(g,a,b,color,r=.012){const av=V(a),bv=V(b);for(let j=0;j<14;j+=2)rod(g,av.clone().lerp(bv,j/14).toArray(),av.clone().lerp(bv,(j+1)/14).toArray(),r,color);}
 export function mountReplay(root){
