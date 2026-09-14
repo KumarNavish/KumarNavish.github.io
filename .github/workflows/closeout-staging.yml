@@ -17,7 +17,9 @@ jobs:
         with:
           python-version: '3.12'
       - name: Apply exact authored placement refinement
-        run: python .delivery/refine_mode.py
+        run: |
+          python .delivery/refine_mode.py
+          python .delivery/compact_mode.py
       - name: Preserve all scientific invariants
         run: |
           mkdir -p /tmp/inspection-review
