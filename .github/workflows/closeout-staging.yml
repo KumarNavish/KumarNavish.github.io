@@ -1,4 +1,4 @@
-name: Verify unobstructed inspection and responsive explorer continuity
+name: Verify complete reader and inspection transitions
 on:
   push:
     branches: [site/closeout-20260914]
@@ -7,7 +7,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 18
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -16,7 +16,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Recreate exact authored candidate
+      - name: Recreate exact reviewed source and deterministic acceptance
         run: |
           python .delivery/refine_mode.py
           python .delivery/compact_mode.py
@@ -24,44 +24,52 @@ jobs:
           python .delivery/projection.py
           python .delivery/stable_stage.py
           python .delivery/ready.py
-      - name: Preserve all scientific invariants
+          python .delivery/inspection_completion.py
+      - name: Preserve scientific invariants
         run: |
-          mkdir -p /tmp/inspection-review
-          npm test > /tmp/inspection-review/unit-tests.txt
+          set -o pipefail
+          mkdir -p /tmp/closeout-review
+          npm test | tee /tmp/closeout-review/unit-tests.txt
+          npm run build
       - run: python -m pip install playwright==1.57.0 pillow==11.3.0
       - run: python -m playwright install --with-deps chromium webkit
       - name: Serve the exact candidate
-        run: python -m http.server 8765 --bind 127.0.0.1 > /tmp/inspection-http.log 2>&1 &
-      - name: Verify referents and explorer reflow in both engines
+        run: python -m http.server 8765 --bind 127.0.0.1 > /tmp/closeout-http.log 2>&1 &
+      - name: Exercise both engines and preserve every failing path
         run: |
-          python scripts/referent_checks.py --engine chromium --url http://127.0.0.1:8765 --out /tmp/inspection-review/chromium/referents
-          python scripts/referent_checks.py --engine webkit --url http://127.0.0.1:8765 --out /tmp/inspection-review/webkit/referents
-          python scripts/explorer_resize_checks.py --engine chromium --url http://127.0.0.1:8765 --out /tmp/inspection-review/chromium/explorer-reflow
-          python scripts/explorer_resize_checks.py --engine webkit --url http://127.0.0.1:8765 --out /tmp/inspection-review/webkit/explorer-reflow
-      - name: Preserve visitor and genuine user-input behavior
+          python - <<'PY'
+          import subprocess,json
+          from pathlib import Path
+          records=[]
+          for engine in ['chromium','webkit']:
+            for script,scope in [('referent_checks.py','referents'),('explorer_resize_checks.py','explorer-reflow'),('completion_acceptance.py','visitor'),('scroll_race_checks.py','race'),('handoff_checks.py','handoff')]:
+              command=['python','scripts/'+script,'--engine',engine,'--url','http://127.0.0.1:8765','--out','/tmp/closeout-review/'+engine+'/'+scope]
+              done=subprocess.run(command)
+              records.append({'engine':engine,'scope':scope,'returncode':done.returncode})
+              Path('/tmp/closeout-review/suite.json').write_text(json.dumps(records,indent=2))
+          if any(r['returncode'] for r in records):raise SystemExit(1)
+          PY
+      - name: Review final-size annotations and disclosure
         run: |
-          for engine in chromium webkit; do
-            python scripts/completion_acceptance.py --engine "$engine" --url http://127.0.0.1:8765 --out /tmp/inspection-review/$engine/visitor
-            python scripts/scroll_race_checks.py --engine "$engine" --url http://127.0.0.1:8765 --out /tmp/inspection-review/$engine/race
-            python scripts/handoff_checks.py --engine "$engine" --url http://127.0.0.1:8765 --out /tmp/inspection-review/$engine/handoff
-          done
-      - name: Inspect guided annotations after camera reframing
-        run: python scripts/annotation_checks.py --url http://127.0.0.1:8765 --out /tmp/inspection-review/annotations
-      - name: Seal only verified application changes
+          python scripts/annotation_checks.py --url http://127.0.0.1:8765 --out /tmp/closeout-review/annotations
+          python scripts/final_scroll_checks.py --url http://127.0.0.1:8765 --out /tmp/closeout-review/regressions
+      - name: Seal application changes only after every check passes
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add modules scripts tests README.md package.json index.html narrative.css .github/workflows/portfolio-qa.yml
-          git diff --cached --quiet || git commit -m 'Seal unobstructed inspection and reflow-safe exploration after both browser engines pass [skip ci]'
+          git diff --cached --quiet || git commit -m 'Seal complete reader and inspection transitions after both-engine acceptance [skip ci]'
           git push origin HEAD:site/closeout-20260914
-      - name: Preserve source and all adverse evidence
+      - name: Preserve source, receipts and failures
         if: always()
         run: |
-          mkdir -p /tmp/inspection-review
-          python -c "from pathlib import Path; import zipfile; root=Path('.'); z=zipfile.ZipFile('/tmp/inspection-review/source.zip','w',zipfile.ZIP_DEFLATED); [z.write(p,str(p)) for p in root.rglob('*') if p.is_file() and not any(x in p.parts for x in ['.git','.delivery','__pycache__','node_modules'])]; z.close()"
+          mkdir -p /tmp/closeout-review
+          cp /tmp/closeout-http.log /tmp/closeout-review/http.log 2>/dev/null || true
+          git rev-parse HEAD > /tmp/closeout-review/source-commit.txt
+          python -c "from pathlib import Path;import zipfile;z=zipfile.ZipFile('/tmp/closeout-review/source.zip','w',zipfile.ZIP_DEFLATED);[z.write(p,str(p)) for p in Path('.').rglob('*') if p.is_file() and not any(x in p.parts for x in ['.git','.delivery','__pycache__','node_modules'])];z.close()"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: scientific-inspection-review-${{ github.run_id }}
-          path: /tmp/inspection-review
+          name: complete-reading-review-${{ github.run_id }}
+          path: /tmp/closeout-review
           retention-days: 7
