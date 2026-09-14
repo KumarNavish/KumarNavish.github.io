@@ -1,5 +1,5 @@
 /** A deliberately limited local compiler. Parsing is not delegated to a model. */
-import {clamp,norm} from './math.mjs?v=scroll-4.2.1';
+import {clamp,norm} from './math.mjs?v=scroll-4.2.2';
 export const clone=s=>JSON.parse(JSON.stringify(s));
 export const empty=()=>({version:3,created:false,lighting:'sunset',revision:0,objects:[],relations:[],path:[],selected:'microscope-1'});
 const object=(id,type,name,x,y,z)=>({id,type,name,position:{x,y,z},yaw:0,color:null});
