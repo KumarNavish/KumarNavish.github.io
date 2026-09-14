@@ -25,6 +25,7 @@ jobs:
           python .delivery/stable_stage.py
           python .delivery/ready.py
           python .delivery/inspection_completion.py
+          python .delivery/paint_completion.py
       - name: Preserve scientific invariants
         run: |
           set -o pipefail
