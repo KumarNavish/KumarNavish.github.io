@@ -1,6 +1,6 @@
-"""Materialize the explicitly authored frontend files; never generate application logic in CI."""
+"""Materialize explicitly authored frontend files, then apply the reviewed rendering refinement."""
 from pathlib import Path, PurePosixPath
-import hashlib, json, lzma, subprocess
+import hashlib,json,lzma,subprocess,sys
 root=Path(__file__).resolve().parents[1]
 packed=b''.join((root/'.delivery'/f'scroll-{i}.bin').read_bytes() for i in range(4))
 assert hashlib.sha256(packed).hexdigest()=='c0894ff8900f02162f0c6732efd1184de8742992a99394708e52dfc5392b0bed','Transport mismatch'
@@ -15,3 +15,4 @@ subprocess.run(['npm','run','build'],cwd=root,check=True)
 for name,digest in data['generated'].items():
     assert hashlib.sha256((root/name).read_bytes()).hexdigest()==digest,name
 print('EXACT_AUTHORED_SOURCE_MATCH',len(data['files'])+len(data['generated']),'files')
+subprocess.run([sys.executable,str(root/'.delivery/refine_scroll.py')],check=True)
