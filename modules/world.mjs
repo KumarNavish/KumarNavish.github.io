@@ -1,6 +1,6 @@
-import {esc,arrow} from './render.mjs?v=scroll-4.2.1';
-import {emptyWorld,copy,createLaboratory,moveObject,routeAgent,interpretCommand,diffWorld,validWorld,historyStore} from './world-model.mjs?v=scroll-4.2.1';
-import {createWorldView} from './world-view.mjs?v=scroll-4.2.1';
+import {esc,arrow} from './render.mjs?v=scroll-4.2.2';
+import {emptyWorld,copy,createLaboratory,moveObject,routeAgent,interpretCommand,diffWorld,validWorld,historyStore} from './world-model.mjs?v=scroll-4.2.2';
+import {createWorldView} from './world-view.mjs?v=scroll-4.2.2';
 const CREATE='Create a mountain laboratory at sunset. Put a microscope beside a robotic arm.';
 const KEY='navish-spatial-world-v1';
 export function mountWorld(root,onExplore){

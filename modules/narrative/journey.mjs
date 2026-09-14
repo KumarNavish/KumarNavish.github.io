@@ -1,7 +1,7 @@
-import {works} from '../content.mjs?v=scroll-4.2.1';
-import {stories} from './chapters.mjs?v=scroll-4.2.1';
-import {evaluateNarrative} from './model.mjs?v=scroll-4.2.1';
-import {createNarrativeRenderer} from './renderer.mjs?v=scroll-4.2.1';
+import {works} from '../content.mjs?v=scroll-4.2.2';
+import {stories} from './chapters.mjs?v=scroll-4.2.2';
+import {evaluateNarrative} from './model.mjs?v=scroll-4.2.2';
+import {createNarrativeRenderer} from './renderer.mjs?v=scroll-4.2.2';
 /** One living field, not ten live graphics contexts and not rasterized snapshots. */
 export function mountJourney(main){
  const field=main.querySelector('.journey-field');if(!field)return()=>{};const host=field.querySelector('.journey-render'),rows=[...main.querySelectorAll('.journey-row')],mql=matchMedia('(prefers-reduced-motion: reduce)');let active=null,renderer=null,raf=0,disposed=false,last=-1,forced=null;

@@ -1,8 +1,8 @@
-import {evaluateNarrative,caseAt} from './model.mjs?v=scroll-4.2.1';
-import {clone,compile,move,valid,difference} from '../worlds/compiler.mjs?v=scroll-4.2.1';
-import {caseAction,refreshCase} from '../mechanisms.mjs?v=scroll-4.2.1';
-import {graphState,memories,graphEdges,graphCycles} from '../worlds/math.mjs?v=scroll-4.2.1';
-import {esc} from '../render.mjs?v=scroll-4.2.1';
+import {evaluateNarrative,caseAt} from './model.mjs?v=scroll-4.2.2';
+import {clone,compile,move,valid,difference} from '../worlds/compiler.mjs?v=scroll-4.2.2';
+import {caseAction,refreshCase} from '../mechanisms.mjs?v=scroll-4.2.2';
+import {graphState,memories,graphEdges,graphCycles} from '../worlds/math.mjs?v=scroll-4.2.2';
+import {esc} from '../render.mjs?v=scroll-4.2.2';
 const KEY='navish-scroll-sandbox-v4';
 const b=(id,text)=>`<button type="button" data-explore="${id}">${text}</button>`;
 const slider=(name,label,min,max,value,step=1)=>`<label class="n-control"><span>${label}<output>${value}</output></span><input data-parameter="${name}" type="range" aria-label="${label}" min="${min}" max="${max}" step="${step}" value="${value}"></label>`;

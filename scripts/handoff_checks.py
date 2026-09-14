@@ -11,7 +11,9 @@ with sync_playwright() as pw:
    page.goto(a.url.rstrip('/')+f'/#work/{work}/at/0.2',wait_until='networkidle');page.wait_for_function('document.querySelector("#demo-root")?.dataset.ready==="true"')
    expected=page.evaluate("async key=>(await import('./modules/narrative/chapters.mjs')).stories[key].cameras.at(-1)",key)
    page.evaluate('''()=>{const r=document.querySelector('#demo-root'),y=+r.dataset.exploreAt+6;document.querySelectorAll('.n-chapter').forEach(e=>e.style.minHeight=(e.getBoundingClientRect().height+6)+'px');scrollTo({top:y,behavior:'instant'});}''')
-   page.wait_for_function('document.querySelector("#demo-root").dataset.mode==="explore"');page.wait_for_timeout(120)
+   page.wait_for_function('document.querySelector("#demo-root").dataset.mode==="explore"')
+   if key!='case':
+    page.wait_for_function("()=>{const host=document.querySelector('.n-render-host'),canvas=host?.querySelector('.world-canvas');return !!host?.dataset.renderRevision&&canvas?.dataset.renderToken===host.dataset.renderRevision;}")
    actual=page.locator('.world-canvas').get_attribute('data-camera') if key!='case' else None
    result={'work':work,'expected_camera':expected,'actual_camera':actual,'explorer_unlocked':not page.locator('.n-explorer').evaluate('el=>el.inert'),'announcement':page.locator('.n-accessible-status').inner_text()}
    result['passed']=result['explorer_unlocked'] and result['announcement']=='Explorer unlocked.' and (actual is None or all(abs(x-y)<.002 for x,y in zip(expected,map(float,actual.split(',')))))
