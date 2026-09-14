@@ -1,7 +1,7 @@
-import {T,box,ring,line,clear,V} from './stage.mjs';
-import {exhibit,btn,esc,fmt} from './ui.mjs';
-import {empty,laboratory,valid,clone,move,compile,route,difference,isFree} from './compiler.mjs';
-import {landscape,architecture,makeObject} from './laboratory.mjs';
+import {T,box,ring,line,clear,V} from './stage.mjs?v=scroll-4.2';
+import {exhibit,btn,esc,fmt} from './ui.mjs?v=scroll-4.2';
+import {empty,laboratory,valid,clone,move,compile,route,difference,isFree} from './compiler.mjs?v=scroll-4.2';
+import {landscape,architecture,makeObject} from './laboratory.mjs?v=scroll-4.2';
 const KEY='navish-living-world-v3',CREATE='Create a mountain laboratory at sunset. Put a microscope beside a robotic arm.';
 export function mountSpatial(root){
  let state=empty(),past=[],future=[],records=[],compiled=null,selected='microscope-1',pending=0,recognition=null,disposed=false,inside=false,dragging=null;

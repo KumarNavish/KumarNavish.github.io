@@ -1,6 +1,6 @@
 /** The spatial editor and scientific scenes share one renderer, not one scene. */
-import {createStudio} from './studio-engine.mjs?v=studio-2';
-import {buildScene,sceneCameras} from './project-scenes.mjs?v=studio-2';
+import {createStudio} from './studio-engine.mjs?v=scroll-4.2';
+import {buildScene,sceneCameras} from './project-scenes.mjs?v=scroll-4.2';
 export function createWorldView(canvas,labels,callbacks={}){
  let state=null,selected='microscope-1',dragBase=null;
  const view=createStudio(canvas,labels,{camera:sceneCameras.world,
