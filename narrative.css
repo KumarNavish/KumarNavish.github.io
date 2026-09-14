@@ -47,3 +47,11 @@
  .n-case-provenance p{font-size:8px;line-height:1.5}
  .n-case-provenance span{font-size:10px}
 }
+
+/* Keep source cards, assertion, checks and provenance in disjoint reading bands. */
+@media(max-width:780px){
+.scroll-narrative .n-stage:has(.n-case-canvas){height:64svh;min-height:515px;max-height:620px}
+.scroll-narrative .n-case-records{flex:1 0 auto;min-height:min-content}
+.scroll-narrative .n-case-workspace>div{flex-shrink:0}
+}
+.n-case-side [data-amount]{font:inherit;color:inherit}
