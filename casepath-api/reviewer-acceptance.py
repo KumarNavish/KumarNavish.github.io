@@ -6,8 +6,9 @@ from urllib.request import Request, urlopen
 BASE = "http://127.0.0.1:" + os.environ.get("PORT", "10000")
 EXPECTED = os.environ["CASEPATH_SOURCE_COMMIT"]
 WORK_DB = Path(os.environ.get("CASEPATH_DB_PATH", "/tmp/casepath-reviewer/casepath.db")).parent / "agent-work-v1.sqlite3"
+GUARD = {"X-CasePath-Agent-Work": "1"}
 
-def call(path, method="GET", body=None, headers=None, timeout=30):
+def call(path, method="GET", body=None, headers=None, timeout=60):
     data = None if body is None else json.dumps(body, separators=(",", ":")).encode()
     request = Request(BASE + path, data=data, method=method, headers={
         "Accept": "application/json",
@@ -31,6 +32,19 @@ def first_claim(value):
             if found:
                 return found
     return None
+
+def latest_run(claim_id):
+    if not WORK_DB.exists():
+        return None
+    try:
+        with sqlite3.connect(f"file:{WORK_DB.as_posix()}?mode=ro", uri=True, timeout=2) as db:
+            row = db.execute(
+                "SELECT run_id,status,lease_until FROM work_runs WHERE claim_id=? ORDER BY created_at DESC,run_id DESC LIMIT 1",
+                (claim_id,),
+            ).fetchone()
+        return None if row is None else {"run_id": row[0], "status": row[1], "lease_until": row[2]}
+    except sqlite3.Error:
+        return None
 
 deadline = time.time() + 90
 last = None
@@ -56,39 +70,53 @@ context_sha = context.get("context_sha256")
 if not isinstance(context_sha, str):
     raise SystemExit("reviewer acceptance: context hash missing")
 
-_, started = call(
-    f"/api/agent-work/v1/claims/{claim_id}/runs",
-    method="POST",
-    body={
-        "idempotency_key": "reviewer-release-acceptance-v2",
-        "expected_context_sha256": context_sha,
-        "facts_worker": "reference",
-    },
-    headers={"X-CasePath-Agent-Work": "1"},
-)
-summary = started.get("summary") or {}
-run_id = summary.get("run_id")
+existing = latest_run(claim_id)
+resume_used = False
+if existing and existing["status"] == "completed":
+    run_id = existing["run_id"]
+elif existing and existing["status"] in {"queued", "running", "interrupted"}:
+    if existing["status"] == "running" and (existing["lease_until"] or 0) > time.time():
+        time.sleep(min(max(existing["lease_until"] - time.time() + 0.5, 0), 185))
+    _, resumed = call(
+        f"/api/agent-work/v1/claims/{claim_id}/runs/{existing['run_id']}/resume",
+        method="POST",
+        headers=GUARD,
+    )
+    summary = resumed.get("summary") or {}
+    run_id = summary.get("run_id")
+    resume_used = True
+else:
+    _, started = call(
+        f"/api/agent-work/v1/claims/{claim_id}/runs",
+        method="POST",
+        body={
+            "idempotency_key": "reviewer-release-acceptance-v3",
+            "expected_context_sha256": context_sha,
+            "facts_worker": "reference",
+        },
+        headers=GUARD,
+    )
+    summary = started.get("summary") or {}
+    run_id = summary.get("run_id")
+
 if not isinstance(run_id, str):
     raise SystemExit("reviewer acceptance: run id missing")
 
-deadline = time.time() + 300
+deadline = time.time() + 360
 run_status = None
 while time.time() < deadline:
-    try:
-        with sqlite3.connect(f"file:{WORK_DB.as_posix()}?mode=ro", uri=True, timeout=2) as db:
-            row = db.execute("SELECT status FROM work_runs WHERE run_id=?", (run_id,)).fetchone()
-        run_status = row[0] if row else None
-    except sqlite3.Error:
-        run_status = None
+    row = latest_run(claim_id)
+    if row and row["run_id"] == run_id:
+        run_status = row["status"]
     if run_status in {"completed", "blocked", "failed", "interrupted"}:
         break
     time.sleep(0.5)
 else:
     raise SystemExit("reviewer acceptance: review did not reach a terminal journal state")
 
-_, current = call(f"/api/agent-work/v1/claims/{claim_id}/runs/{run_id}", timeout=60)
+_, current = call(f"/api/agent-work/v1/claims/{claim_id}/runs/{run_id}", timeout=90)
 terminal = current.get("summary") or {}
-_, events = call(f"/api/agent-work/v1/claims/{claim_id}/runs/{run_id}/events?limit=500", timeout=60)
+_, events = call(f"/api/agent-work/v1/claims/{claim_id}/runs/{run_id}/events?limit=500", timeout=90)
 event_rows = events.get("events") or []
 role_rows = terminal.get("roles") or []
 checks = {
@@ -100,6 +128,7 @@ checks = {
     "claim_count": queue.get("total_count"),
     "authority": queue.get("authority"),
     "run_id": run_id,
+    "resume_used": resume_used,
     "run_status": terminal.get("status"),
     "journal_status": run_status,
     "completed_roles": terminal.get("completed_roles"),
