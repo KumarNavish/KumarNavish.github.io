@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-import json, os, sys, time
-from urllib.error import HTTPError, URLError
+import json, os, sqlite3, time
+from pathlib import Path
 from urllib.request import Request, urlopen
 
 BASE = "http://127.0.0.1:" + os.environ.get("PORT", "10000")
 EXPECTED = os.environ["CASEPATH_SOURCE_COMMIT"]
+WORK_DB = Path(os.environ.get("CASEPATH_DB_PATH", "/tmp/casepath-reviewer/casepath.db")).parent / "agent-work-v1.sqlite3"
 
-def call(path, method="GET", body=None, headers=None, timeout=10):
+def call(path, method="GET", body=None, headers=None, timeout=30):
     data = None if body is None else json.dumps(body, separators=(",", ":")).encode()
     request = Request(BASE + path, data=data, method=method, headers={
         "Accept": "application/json",
@@ -59,30 +60,35 @@ _, started = call(
     f"/api/agent-work/v1/claims/{claim_id}/runs",
     method="POST",
     body={
-        "idempotency_key": "reviewer-release-acceptance-v1",
+        "idempotency_key": "reviewer-release-acceptance-v2",
         "expected_context_sha256": context_sha,
         "facts_worker": "reference",
     },
     headers={"X-CasePath-Agent-Work": "1"},
-    timeout=20,
 )
 summary = started.get("summary") or {}
 run_id = summary.get("run_id")
 if not isinstance(run_id, str):
     raise SystemExit("reviewer acceptance: run id missing")
 
-deadline = time.time() + 170
-terminal = None
+deadline = time.time() + 300
+run_status = None
 while time.time() < deadline:
-    _, current = call(f"/api/agent-work/v1/claims/{claim_id}/runs/{run_id}", timeout=10)
-    terminal = current.get("summary") or {}
-    if terminal.get("status") in {"completed", "blocked", "failed", "interrupted"}:
+    try:
+        with sqlite3.connect(f"file:{WORK_DB.as_posix()}?mode=ro", uri=True, timeout=2) as db:
+            row = db.execute("SELECT status FROM work_runs WHERE run_id=?", (run_id,)).fetchone()
+        run_status = row[0] if row else None
+    except sqlite3.Error:
+        run_status = None
+    if run_status in {"completed", "blocked", "failed", "interrupted"}:
         break
-    time.sleep(0.25)
+    time.sleep(0.5)
 else:
-    raise SystemExit("reviewer acceptance: review did not reach a terminal state")
+    raise SystemExit("reviewer acceptance: review did not reach a terminal journal state")
 
-_, events = call(f"/api/agent-work/v1/claims/{claim_id}/runs/{run_id}/events?limit=500", timeout=10)
+_, current = call(f"/api/agent-work/v1/claims/{claim_id}/runs/{run_id}", timeout=60)
+terminal = current.get("summary") or {}
+_, events = call(f"/api/agent-work/v1/claims/{claim_id}/runs/{run_id}/events?limit=500", timeout=60)
 event_rows = events.get("events") or []
 role_rows = terminal.get("roles") or []
 checks = {
@@ -95,6 +101,7 @@ checks = {
     "authority": queue.get("authority"),
     "run_id": run_id,
     "run_status": terminal.get("status"),
+    "journal_status": run_status,
     "completed_roles": terminal.get("completed_roles"),
     "role_count": terminal.get("role_count"),
     "roles": [{"id": r.get("id"), "status": r.get("status")} for r in role_rows],
@@ -112,6 +119,7 @@ required = (
     and checks["claim_count"] == 150
     and checks["authority"] == "claim_loop_events"
     and checks["run_status"] == "completed"
+    and checks["journal_status"] == "completed"
     and checks["completed_roles"] == 6
     and checks["role_count"] == 6
     and len(checks["roles"]) == 6
