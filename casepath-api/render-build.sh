@@ -16,4 +16,7 @@ python casepath-api/replace_photographic_evidence.py .
 python casepath/tools/build_static_site.py --require-known-commit
 python casepath/tools/casepath_release.py generate
 python casepath/tools/casepath_release.py verify
+cp "$ROOT/casepath-api/reviewer.html" "$TARGET/casepath-public/reviewer.html"
+cp "$ROOT/casepath-api/benchmark.html" "$TARGET/casepath-public/benchmark.html"
+sha256sum "$TARGET/casepath-public/reviewer.html" "$TARGET/casepath-public/benchmark.html"
 printf '%s\n' "$CASEPATH_SOURCE_COMMIT" > "$ROOT/current-casepath-commit.txt"
