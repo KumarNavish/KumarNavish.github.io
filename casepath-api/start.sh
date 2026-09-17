@@ -6,6 +6,7 @@ cd "$TARGET"
 export PYTHONPATH="$TARGET/casepath-api"
 export CASEPATH_MODEL_MODE=deterministic_reference
 export CASEPATH_SOURCE_COMMIT="$(git rev-parse HEAD)"
+unset RENDER_GIT_COMMIT
 export CASEPATH_DB_PATH=/tmp/casepath-reviewer/casepath.db
 export CASEPATH_ARTIFACT_REGISTRY_PATH=/tmp/casepath-reviewer/artifact-registry
 export CASEPATH_LOCAL_STATIC_ROOT="$TARGET/casepath-public"
